@@ -1,0 +1,6 @@
+[package]
+name = "horned-owl-index"
+version = "0.1.0"
+authors = ["Phillip Lord <phillip.lord@russet.org.uk>"]
+
+[dependencies]
