@@ -21,8 +21,6 @@ pub fn main(){
 
     let sc = o.subclass(c,d);
     
-    println!("sc to_index {:?}",sc.to_index().collect::<Vec<usize>>());
-
     println!("sc is {:?}", sc);
     let dsc = o.direct_subclass(c);
 

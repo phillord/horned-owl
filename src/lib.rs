@@ -5,8 +5,8 @@ use std::collections::HashSet;
 
 static mut COUNTER: usize = 0;
 
-pub trait Indexable{
-    fn to_index(&self) -> Box<Iterator<Item=usize>>;
+pub trait Checkable{
+    fn check(&self, ont: &MutableOntology)-> ();
 }
 
 #[derive(Eq,PartialEq,Hash,Copy,Clone,Debug)]
@@ -15,18 +15,22 @@ pub struct IRI(usize);
 #[derive(Eq,PartialEq,Hash,Copy,Clone,Debug)]
 pub struct Class(usize);
 
-impl Indexable for Class{
-    fn to_index(&self) -> Box<Iterator<Item=usize>>{
-        Box::new(vec![self.0].into_iter())
+impl Checkable for Class{
+    fn check(&self, ont: &MutableOntology){
+        if !ont.contains_id(self.0){
+            panic!("Attempt to add class to wrong ontology");
+        }
     }
 }
 
 #[derive(Eq,PartialEq,Hash,Copy,Clone,Debug)]
 pub struct ObjectProperty(usize);
 
-impl Indexable for ObjectProperty{
-    fn to_index(&self) -> Box<Iterator<Item=usize>>{
-        Box::new(vec![self.0].into_iter())
+impl Checkable for ObjectProperty{
+    fn check(&self, ont: &MutableOntology){
+        if !ont.contains_id(self.0){
+            panic!("Attempt to add object property to wrong ontology");
+        }
     }
 }
 
@@ -36,11 +40,10 @@ pub struct SubClass{
     subclass: ClassExpression,
 }
 
-impl Indexable for SubClass{
-    fn to_index(&self) -> Box<Iterator<Item=usize>>{
-        Box::new(self
-                 .superclass.to_index()
-                 .chain(self.subclass.to_index()))
+impl Checkable for SubClass{
+    fn check(&self, ont: &MutableOntology){
+        self.superclass.check(ont);
+        self.subclass.check(ont);
     }
 }
 
@@ -50,12 +53,14 @@ pub struct Some{
     filler: Box<ClassExpression>
 }
 
-impl Indexable for Some{
-    fn to_index(&self) -> Box<Iterator<Item=usize>>{
-        Box::new(self.object_property.to_index()
-                 .chain(self.filler.to_index()))
+impl Checkable for Some{
+    fn check(&self, ont:&MutableOntology) -> ()
+    {
+        self.object_property.check(ont);
+        self.filler.check(ont);
     }
 }
+
 #[derive(Eq,PartialEq,Hash,Clone,Debug)]
 pub enum ClassExpression
 {
@@ -63,14 +68,16 @@ pub enum ClassExpression
     Some(Some)
 }
 
-impl Indexable for ClassExpression{
-    fn to_index(&self) -> Box<Iterator<Item=usize>>{
+impl Checkable for ClassExpression{
+    fn check(&self, ont:&MutableOntology) -> ()
+    {
         match self{
-            &ClassExpression::Class(ref i) => i.to_index(),
-            &ClassExpression::Some(ref i)  => i.to_index(),
+            &ClassExpression::Class(ref i) => i.check(ont),
+            &ClassExpression::Some(ref i)  => i.check(ont),
         }
     }
 }
+
 pub struct MutableOntology
 {
     str_iri: HashMap<String,IRI>,
@@ -100,6 +107,10 @@ impl MutableOntology {
         }
     }
 
+    pub fn contains_id(&self, id:usize)-> bool {
+        self.id_str.contains_key(&id)
+    }
+
     pub fn contains_iri(&self, iri:String) -> bool {
         self.str_iri.contains_key(&iri)
     }
@@ -118,6 +129,7 @@ impl MutableOntology {
 
     pub fn class(&mut self, i: IRI) -> Class {
         let c = Class(i.0);
+        c.check(self);
 
         if let Some(_) = self.class.get(&c)
         {return c;}
@@ -128,6 +140,7 @@ impl MutableOntology {
 
     pub fn object_property(&mut self, i: IRI) -> ObjectProperty{
         let o = ObjectProperty(i.0);
+        o.check(self);
 
         if let Some(_) = self.object_property.get(&o)
         {return o;};
@@ -147,6 +160,7 @@ impl MutableOntology {
                         subclass: ClassExpression) -> SubClass
     {
         let sc = SubClass{superclass:superclass,subclass:subclass};
+        sc.check(self);
 
         if let Some(_) = self.subclass.get(&sc)
         {return sc;}
@@ -167,6 +181,8 @@ impl MutableOntology {
             ClassExpression::Some(
                 Some{object_property:object_property,
                      filler:Box::new(filler)});
+
+        some.check(self);
 
         if let Some(_) = self.some.get(&some)
         {return some;}
