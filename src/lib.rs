@@ -3,19 +3,45 @@
 use std::collections::HashMap;
 use std::collections::HashSet;
 
+static mut COUNTER: usize = 0;
+
+pub trait Indexable{
+    fn to_index(&self) -> Box<Iterator<Item=usize>>;
+}
+
 #[derive(Eq,PartialEq,Hash,Copy,Clone,Debug)]
 pub struct IRI(usize);
 
 #[derive(Eq,PartialEq,Hash,Copy,Clone,Debug)]
 pub struct Class(usize);
 
+impl Indexable for Class{
+    fn to_index(&self) -> Box<Iterator<Item=usize>>{
+        Box::new(vec![self.0].into_iter())
+    }
+}
+
 #[derive(Eq,PartialEq,Hash,Copy,Clone,Debug)]
 pub struct ObjectProperty(usize);
+
+impl Indexable for ObjectProperty{
+    fn to_index(&self) -> Box<Iterator<Item=usize>>{
+        Box::new(vec![self.0].into_iter())
+    }
+}
 
 #[derive(Eq,PartialEq,Hash,Clone,Debug)]
 pub struct SubClass{
     superclass: ClassExpression,
     subclass: ClassExpression,
+}
+
+impl Indexable for SubClass{
+    fn to_index(&self) -> Box<Iterator<Item=usize>>{
+        Box::new(self
+                 .superclass.to_index()
+                 .chain(self.subclass.to_index()))
+    }
 }
 
 #[derive(Eq,PartialEq,Hash,Clone,Debug)]
@@ -24,6 +50,12 @@ pub struct Some{
     filler: Box<ClassExpression>
 }
 
+impl Indexable for Some{
+    fn to_index(&self) -> Box<Iterator<Item=usize>>{
+        Box::new(self.object_property.to_index()
+                 .chain(self.filler.to_index()))
+    }
+}
 #[derive(Eq,PartialEq,Hash,Clone,Debug)]
 pub enum ClassExpression
 {
@@ -31,33 +63,41 @@ pub enum ClassExpression
     Some(Some)
 }
 
+impl Indexable for ClassExpression{
+    fn to_index(&self) -> Box<Iterator<Item=usize>>{
+        match self{
+            &ClassExpression::Class(ref i) => i.to_index(),
+            &ClassExpression::Some(ref i)  => i.to_index(),
+        }
+    }
+}
 pub struct MutableOntology
 {
     str_iri: HashMap<String,IRI>,
-    iri_str: HashMap<IRI,String>,
+    id_str: HashMap<usize,String>,
     class: HashSet<Class>,
     subclass: HashSet<SubClass>,
     object_property: HashSet<ObjectProperty>,
     some: HashSet<ClassExpression>,
-    next: usize,
 }
 
 impl MutableOntology {
     pub fn new() -> MutableOntology{
         MutableOntology{
             str_iri: HashMap::new(),
-            iri_str: HashMap::new(),
+            id_str: HashMap::new(),
             class: HashSet::new(),
             subclass: HashSet::new(),
             object_property: HashSet::new(),
             some: HashSet::new(),
-            next: 0
         }
     }
 
     fn next_id(&mut self) -> usize{
-        self.next = self.next + 1;
-        self.next
+        unsafe{
+            COUNTER = COUNTER + 1;
+            COUNTER
+        }
     }
 
     pub fn contains_iri(&self, iri:String) -> bool {
@@ -69,9 +109,10 @@ impl MutableOntology {
             let iri = self.str_iri.get(&s);
             if let Some(res) = iri {return res.clone();}
         }
-        let iri = IRI(self.next_id());
+        let id = self.next_id();
+        let iri = IRI(id);
         self.str_iri.insert(s.clone(),iri);
-        self.iri_str.insert(iri,s);
+        self.id_str.insert(id,s);
         iri
     }
 

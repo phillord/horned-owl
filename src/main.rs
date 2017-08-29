@@ -1,9 +1,11 @@
 extern crate horned_owl_index;
 
+
 use horned_owl_index::*;
 
 
 pub fn main(){
+
     let mut o = MutableOntology::new();
 
     let i = o.iri("http://example.com/c".to_string());
@@ -18,6 +20,9 @@ pub fn main(){
     let d = o.class(i);
 
     let sc = o.subclass(c,d);
+    
+    println!("sc to_index {:?}",sc.to_index().collect::<Vec<usize>>());
+
     println!("sc is {:?}", sc);
     let dsc = o.direct_subclass(c);
 
