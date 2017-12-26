@@ -62,10 +62,49 @@ impl Checkable for Some{
 }
 
 #[derive(Eq,PartialEq,Hash,Clone,Debug)]
+pub struct And{
+    operands: Vec<ClassExpression>
+}
+
+impl Checkable for And
+{
+    fn check(&self, ont: &MutableOntology) -> (){
+        for i in &self.operands{
+            i.check(ont);
+        }
+    }
+}
+
+#[derive(Eq,PartialEq,Hash,Clone,Debug)]
+pub struct Or{
+    operands: Vec<ClassExpression>
+}
+
+impl Checkable for Or
+{
+    fn check(&self, ont: &MutableOntology) -> (){
+        for i in &self.operands{
+            i.check(ont);
+        }
+    }
+}
+
+#[derive(Eq,PartialEq,Hash,Clone,Debug)]
+
+impl Checkable for Not
+{
+    fn check(&self, ont:&MutableOntology) -> (){
+        self.operand.check(ont)
+    }
+}
+
+#[derive(Eq,PartialEq,Hash,Clone,Debug)]
 pub enum ClassExpression
 {
     Class(Class),
-    Some(Some)
+    Some(Some),
+    And(And),
+    Or(And),
 }
 
 impl Checkable for ClassExpression{
@@ -74,6 +113,8 @@ impl Checkable for ClassExpression{
         match self{
             &ClassExpression::Class(ref i) => i.check(ont),
             &ClassExpression::Some(ref i)  => i.check(ont),
+            &ClassExpression::And(ref i) => i.check(ont),
+            &ClassExpression::Or(ref i) => i.check(ont)
         }
     }
 }
@@ -86,6 +127,7 @@ pub struct MutableOntology
     subclass: HashSet<SubClass>,
     object_property: HashSet<ObjectProperty>,
     some: HashSet<ClassExpression>,
+    and: HashSet<And>
 }
 
 impl MutableOntology {
@@ -97,6 +139,7 @@ impl MutableOntology {
             subclass: HashSet::new(),
             object_property: HashSet::new(),
             some: HashSet::new(),
+            and: HashSet::new(),
         }
     }
 
@@ -236,5 +279,69 @@ impl MutableOntology {
 mod tests {
     #[test]
     fn it_works() {
+    }
+}
+
+mod bench{
+    use super::*;
+
+    #[test]
+    fn build_bench(){
+        let mut o = MutableOntology::new();
+        let mut i = 6_000_000;
+        create_tree(&mut o, &mut i);
+    }
+
+    fn create_tree(o:&mut MutableOntology, n:&mut i32){
+        let i = o.iri(format!("http://example.com/a{}", n));
+        let c = o.class(i);
+        create_tree_0(o, vec![c], n );
+    }
+
+    fn create_tree_0(o:&mut MutableOntology,
+                     current:Vec<Class>, remaining:&mut i32){
+        let mut next = vec![];
+
+        for curr in current.into_iter() {
+            let i = o.iri(format!("http://example.com/a{}", remaining));
+            let c = o.class(i);
+            *remaining = *remaining - 1;
+            let i = o.iri(format!("http://example.com/a{}",
+                                  remaining));
+            let d = o.class(i);
+            *remaining = *remaining - 1;
+
+            next.push(c);
+            next.push(d);
+
+            o.subclass(curr, c);
+            o.subclass(curr, d);
+
+            if *remaining < 0 {
+                return
+            }
+        }
+        create_tree_0(o, next, remaining);
+    }
+
+    #[test]
+    fn is_subclass_with_many_direct_subclasses(){
+        let mut o = MutableOntology::new();
+        let i = o.iri("http://example.com/a".to_string());
+        let c = o.class(i);
+
+        let n = 1_000;
+        for m in 1..n {
+            let i =
+                o.iri(format!("http://example.com/b{}", m));
+            let d = o.class(i);
+            o.subclass(c,d);
+        }
+
+        let i = o.iri(format!("http://example.com/b{}", n - 1));
+        let d = o.class(i);
+
+        assert!(!o.is_subclass(d,c));
+        assert!(o.is_subclass(c,d));
     }
 }
