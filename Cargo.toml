@@ -1,6 +1,11 @@
 [package]
-name = "horned-owl-index"
+name = "horned-owl"
 version = "0.1.0"
 authors = ["Phillip Lord <phillip.lord@russet.org.uk>"]
 
-[dependencies]
+[dev-dependencies]
+bencher = "0.1.4"
+
+[[bench]]
+name = "horned"
+harness = false
