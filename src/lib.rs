@@ -12,23 +12,31 @@ pub trait Checkable{
 #[derive(Eq,PartialEq,Hash,Copy,Clone,Debug)]
 pub struct IRI(usize);
 
+impl Checkable for IRI{
+    fn check(&self, ont: &MutableOntology){
+        if !ont.contains_id(self.0){
+            panic!("Attempt to add IRI to wrong ontology")
+        }
+    }
+}
+
 #[derive(Eq,PartialEq,Hash,Copy,Clone,Debug)]
-pub struct Class(usize);
+pub struct Class(IRI);
 
 impl Checkable for Class{
     fn check(&self, ont: &MutableOntology){
-        if !ont.contains_id(self.0){
+        if !ont.contains_id((self.0).0){
             panic!("Attempt to add class to wrong ontology");
         }
     }
 }
 
 #[derive(Eq,PartialEq,Hash,Copy,Clone,Debug)]
-pub struct ObjectProperty(usize);
+pub struct ObjectProperty(IRI);
 
 impl Checkable for ObjectProperty{
     fn check(&self, ont: &MutableOntology){
-        if !ont.contains_id(self.0){
+        if !ont.contains_id((self.0).0){
             panic!("Attempt to add object property to wrong ontology");
         }
     }
@@ -174,7 +182,7 @@ impl MutableOntology {
     }
 
     pub fn class(&mut self, i: IRI) -> Class {
-        let c = Class(i.0);
+        let c = Class(i);
         c.check(self);
 
         if let Some(_) = self.class.get(&c)
@@ -185,7 +193,7 @@ impl MutableOntology {
     }
 
     pub fn object_property(&mut self, i: IRI) -> ObjectProperty{
-        let o = ObjectProperty(i.0);
+        let o = ObjectProperty(i);
         o.check(self);
 
         if let Some(_) = self.object_property.get(&o)
