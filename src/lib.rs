@@ -6,14 +6,14 @@ use std::collections::HashSet;
 static mut COUNTER: usize = 0;
 
 pub trait Checkable{
-    fn check(&self, ont: &MutableOntology)-> ();
+    fn check(&self, ont: &Ontology)-> ();
 }
 
 #[derive(Eq,PartialEq,Hash,Copy,Clone,Debug)]
 pub struct IRI(usize);
 
 impl Checkable for IRI{
-    fn check(&self, ont: &MutableOntology){
+    fn check(&self, ont: &Ontology){
         if !ont.contains_id(self.0){
             panic!("Attempt to add IRI to wrong ontology")
         }
@@ -24,7 +24,7 @@ impl Checkable for IRI{
 pub struct Class(IRI);
 
 impl Checkable for Class{
-    fn check(&self, ont: &MutableOntology){
+    fn check(&self, ont: &Ontology){
         if !ont.contains_id((self.0).0){
             panic!("Attempt to add class to wrong ontology");
         }
@@ -35,7 +35,7 @@ impl Checkable for Class{
 pub struct ObjectProperty(IRI);
 
 impl Checkable for ObjectProperty{
-    fn check(&self, ont: &MutableOntology){
+    fn check(&self, ont: &Ontology){
         if !ont.contains_id((self.0).0){
             panic!("Attempt to add object property to wrong ontology");
         }
@@ -49,7 +49,7 @@ pub struct SubClass{
 }
 
 impl Checkable for SubClass{
-    fn check(&self, ont: &MutableOntology){
+    fn check(&self, ont: &Ontology){
         self.superclass.check(ont);
         self.subclass.check(ont);
     }
@@ -62,7 +62,7 @@ pub struct Some{
 }
 
 impl Checkable for Some{
-    fn check(&self, ont:&MutableOntology) -> ()
+    fn check(&self, ont:&Ontology) -> ()
     {
         self.object_property.check(ont);
         self.filler.check(ont);
@@ -76,7 +76,7 @@ pub struct And{
 
 impl Checkable for And
 {
-    fn check(&self, ont: &MutableOntology) -> (){
+    fn check(&self, ont: &Ontology) -> (){
         for i in &self.operands{
             i.check(ont);
         }
@@ -90,7 +90,7 @@ pub struct Or{
 
 impl Checkable for Or
 {
-    fn check(&self, ont: &MutableOntology) -> (){
+    fn check(&self, ont: &Ontology) -> (){
         for i in &self.operands{
             i.check(ont);
         }
@@ -104,7 +104,7 @@ pub struct Not{
 
 impl Checkable for Not
 {
-    fn check(&self, ont:&MutableOntology) -> (){
+    fn check(&self, ont:&Ontology) -> (){
         self.operand.check(ont)
     }
 }
@@ -119,7 +119,7 @@ pub enum ClassExpression
 }
 
 impl Checkable for ClassExpression{
-    fn check(&self, ont:&MutableOntology) -> ()
+    fn check(&self, ont:&Ontology) -> ()
     {
         match self{
             &ClassExpression::Class(ref i) => i.check(ont),
@@ -130,7 +130,7 @@ impl Checkable for ClassExpression{
     }
 }
 
-pub struct MutableOntology
+pub struct Ontology
 {
     str_iri: HashMap<String,IRI>,
     id_str: HashMap<usize,String>,
@@ -141,9 +141,9 @@ pub struct MutableOntology
     and: HashSet<And>
 }
 
-impl MutableOntology {
-    pub fn new() -> MutableOntology{
-        MutableOntology{
+impl Ontology {
+    pub fn new() -> Ontology{
+        Ontology{
             str_iri: HashMap::new(),
             id_str: HashMap::new(),
             class: HashSet::new(),
@@ -298,18 +298,18 @@ mod bench{
 
     #[test]
     fn build_bench(){
-        let mut o = MutableOntology::new();
+        let mut o = Ontology::new();
         let mut i = 6_000_000;
         create_tree(&mut o, &mut i);
     }
 
-    fn create_tree(o:&mut MutableOntology, n:&mut i32){
+    fn create_tree(o:&mut Ontology, n:&mut i32){
         let i = o.iri(format!("http://example.com/a{}", n));
         let c = o.class(i);
         create_tree_0(o, vec![c], n );
     }
 
-    fn create_tree_0(o:&mut MutableOntology,
+    fn create_tree_0(o:&mut Ontology,
                      current:Vec<Class>, remaining:&mut i32){
         let mut next = vec![];
 
@@ -337,7 +337,7 @@ mod bench{
 
     #[test]
     fn is_subclass_with_many_direct_subclasses(){
-        let mut o = MutableOntology::new();
+        let mut o = Ontology::new();
         let i = o.iri("http://example.com/a".to_string());
         let c = o.class(i);
 

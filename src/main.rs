@@ -4,7 +4,7 @@ extern crate horned_owl;
 use horned_owl::*;
 
 pub fn main(){
-    let mut o = MutableOntology::new();
+    let mut o = Ontology::new();
 
     let i = o.iri("http://example.com/c".to_string());
     let c = o.class(i);

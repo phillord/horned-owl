@@ -7,7 +7,7 @@ use bencher::Bencher;
 
 fn a_thousand_classes(bench: &mut Bencher) {
     bench.iter(|| {
-        let mut o = MutableOntology::new();
+        let mut o = Ontology::new();
         for m in 1..1000 {
             let _i = o.iri(format!("http://example.com/b{}", m));
         }
