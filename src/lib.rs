@@ -90,6 +90,9 @@ impl Checkable for Or
 }
 
 #[derive(Eq,PartialEq,Hash,Clone,Debug)]
+pub struct Not{
+    operand: ClassExpression
+}
 
 impl Checkable for Not
 {
