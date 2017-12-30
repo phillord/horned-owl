@@ -3,6 +3,8 @@
 use std::collections::HashMap;
 use std::collections::HashSet;
 
+pub mod io;
+
 static mut COUNTER: usize = 0;
 
 pub trait Checkable{
@@ -130,10 +132,18 @@ impl Checkable for ClassExpression{
     }
 }
 
+#[derive(Debug)]
+pub struct OntologyID{
+    iri: Option<IRI>,
+    viri: Option<IRI>,
+}
+
+#[derive(Debug)]
 pub struct Ontology
 {
     str_iri: HashMap<String,IRI>,
     id_str: HashMap<usize,String>,
+    id: OntologyID,
     class: HashSet<Class>,
     subclass: HashSet<SubClass>,
     object_property: HashSet<ObjectProperty>,
@@ -146,6 +156,7 @@ impl Ontology {
         Ontology{
             str_iri: HashMap::new(),
             id_str: HashMap::new(),
+            id: OntologyID{iri:None,viri:None},
             class: HashSet::new(),
             subclass: HashSet::new(),
             object_property: HashSet::new(),
@@ -179,6 +190,10 @@ impl Ontology {
         self.str_iri.insert(s.clone(),iri);
         self.id_str.insert(id,s);
         iri
+    }
+
+    pub fn iri_to_str(&self, i: IRI ) -> Option<&String>{
+        self.id_str.get(&i.0)
     }
 
     pub fn class(&mut self, i: IRI) -> Class {
