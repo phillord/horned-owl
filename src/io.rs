@@ -58,6 +58,14 @@ fn handle_ontology(ont:&mut Ontology, attributes:Vec<OwnedAttribute>){
     }
 }
 
+#[test]
+fn test_simple_ontology(){
+    let ont_s = include_str!("ont/simple-ont.xml");
+    let ont = read(&mut ont_s.as_bytes());
+
+    println!("IRI is {:?}", &ont.id.iri.unwrap());
+}
+
 fn handle_class(ont:&mut Ontology, attributes: Vec<OwnedAttribute>){
     for attrib in attributes{
         match &attrib.name.local_name[..]{
