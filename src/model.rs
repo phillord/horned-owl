@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use std::collections::HashMap;
+use bimap::BiMap;
 use std::collections::HashSet;
 
 static mut COUNTER: usize = 0;
@@ -139,8 +139,7 @@ pub struct OntologyID{
 #[derive(Debug)]
 pub struct Ontology
 {
-    str_iri: HashMap<String,IRI>,
-    id_str: HashMap<usize,String>,
+    id_str: BiMap<usize,String>,
     pub id: OntologyID,
     pub class: HashSet<Class>,
     pub subclass: HashSet<SubClass>,
@@ -152,8 +151,7 @@ pub struct Ontology
 impl Ontology {
     pub fn new() -> Ontology{
         Ontology{
-            str_iri: HashMap::new(),
-            id_str: HashMap::new(),
+            id_str: BiMap::new(),
             id: OntologyID{iri:None,viri:None},
             class: HashSet::new(),
             subclass: HashSet::new(),
@@ -171,27 +169,29 @@ impl Ontology {
     }
 
     pub fn contains_id(&self, id:usize)-> bool {
-        self.id_str.contains_key(&id)
+        self.id_str.contains_left(&id)
     }
 
     pub fn contains_iri(&self, iri:String) -> bool {
-        self.str_iri.contains_key(&iri)
+        self.id_str.contains_right(&iri)
     }
 
     pub fn iri(&mut self, s: String) -> IRI {
         {
-            let iri = self.str_iri.get(&s);
-            if let Some(res) = iri {return res.clone();}
+            let someid = self.id_str.get_by_right(&s);
+            if let Some(id) = someid {
+                return IRI(*id);
+            }
         }
+
         let id = self.next_id();
         let iri = IRI(id);
-        self.str_iri.insert(s.clone(),iri);
         self.id_str.insert(id,s);
         iri
     }
 
-    pub fn iri_to_str(&self, i: IRI ) -> Option<&String>{
-        self.id_str.get(&i.0)
+    pub fn iri_to_str(&self, i: IRI) -> Option<&String>{
+        self.id_str.get_by_left(&i.0)
     }
 
     pub fn class(&mut self, i: IRI) -> Class {
