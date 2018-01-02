@@ -1,10 +1,10 @@
-extern crate xml;
+use curie::PrefixMapping;
 
 use std::io::BufRead;
 
-use self::xml::EventReader;
-use self::xml::reader::XmlEvent;
-use self::xml::attribute::OwnedAttribute;
+use xml::EventReader;
+use xml::reader::XmlEvent;
+use xml::attribute::OwnedAttribute;
 
 use model::*;
 
@@ -14,6 +14,7 @@ pub fn read <R: BufRead>(buf: &mut R) -> Ontology {
 
     let parser = EventReader::new(buf);
     let mut ont = Ontology::new();
+    let mut mapping = PrefixMapping::default();
 
     for e in parser {
          match e {
@@ -21,8 +22,14 @@ pub fn read <R: BufRead>(buf: &mut R) -> Ontology {
                  match &name.namespace{
                      &Some(ref f) if f == OWL_NS => {
                          match &name.local_name[..] {
-                             "Ontology" => handle_ontology(&mut ont, attributes),
-                             "Class" => handle_class(&mut ont, attributes),
+                             "Ontology" =>
+                                 handle_ontology(&mut ont,
+                                                 &mut mapping,
+                                                 attributes),
+                             "Class" =>
+                                 handle_class(&mut ont,
+                                              &mapping,
+                                              attributes),
                              _=> println!("Unknown Element in OWL NS:{}", name),
                          }
                      }
@@ -46,11 +53,15 @@ pub fn read <R: BufRead>(buf: &mut R) -> Ontology {
     ont
 }
 
-fn handle_ontology(ont:&mut Ontology, attributes:Vec<OwnedAttribute>){
+fn handle_ontology(ont:&mut Ontology, mapper:&mut PrefixMapping,
+                   attributes:Vec<OwnedAttribute>){
     for attrib in attributes{
         match &attrib.name.local_name[..]{
-            "ontologyIRI" =>
-                ont.id.iri = Some(ont.iri(attrib.value)),
+            "ontologyIRI" =>{
+                mapper.set_default(&attrib.value[..]);
+                ont.id.iri = Some(ont.iri(attrib.value));
+            }
+            ,
             "versionIRI" =>
                 ont.id.viri = Some(ont.iri(attrib.value)),
             _ => ()
@@ -63,17 +74,27 @@ fn test_simple_ontology(){
     let ont_s = include_str!("ont/one-ont.xml");
     let ont = read(&mut ont_s.as_bytes());
 
-    assert_eq!(ont.iri_to_str( ont.id.iri.unwrap()).unwrap(),
+    assert_eq!(ont.iri_to_str(ont.id.iri.unwrap()).unwrap(),
                "http://example.com/iri");
 }
 
-fn handle_class(ont:&mut Ontology, attributes: Vec<OwnedAttribute>){
+fn handle_class(ont:&mut Ontology, mapper: &PrefixMapping,
+                attributes: Vec<OwnedAttribute>){
     for attrib in attributes{
         match &attrib.name.local_name[..]{
             "IRI" =>{
-                let iri = ont.iri(attrib.value);
+                let expanded =
+                    match
+                    mapper.expand_curie_string(&attrib.value[..]){
+                        // If we expand use this
+                        Ok(n) => n,
+                        // Else assume it's a complete URI
+                        Err(_e) => attrib.value
+                    };
+
+                let iri = ont.iri(expanded);
                 ont.class(iri);
-            }
+            },
             _ => ()
         }
     }
@@ -87,5 +108,16 @@ fn test_one_class(){
     assert_eq!(ont.class.len(), 1);
     assert_eq!(
         ont.iri_to_str(ont.class.iter().next().unwrap().0).unwrap(),
-        "#C");
+        "http://example.com/iri#C");
+}
+
+#[test]
+fn test_one_class_fqn(){
+    let ont_s = include_str!("ont/one-class-fully-qualified.xml");
+    let ont = read(&mut ont_s.as_bytes());
+
+    assert_eq!(ont.class.len(), 1);
+    assert_eq!(
+        ont.iri_to_str(ont.class.iter().next().unwrap().0).unwrap(),
+        "http://www.russet.org.uk/#C");
 }
