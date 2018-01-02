@@ -3,8 +3,6 @@
 use std::collections::HashMap;
 use std::collections::HashSet;
 
-pub mod io;
-
 static mut COUNTER: usize = 0;
 
 pub trait Checkable{
@@ -23,7 +21,7 @@ impl Checkable for IRI{
 }
 
 #[derive(Eq,PartialEq,Hash,Copy,Clone,Debug)]
-pub struct Class(IRI);
+pub struct Class(pub IRI);
 
 impl Checkable for Class{
     fn check(&self, ont: &Ontology){
@@ -46,8 +44,8 @@ impl Checkable for ObjectProperty{
 
 #[derive(Eq,PartialEq,Hash,Clone,Debug)]
 pub struct SubClass{
-    superclass: ClassExpression,
-    subclass: ClassExpression,
+    pub superclass: ClassExpression,
+    pub subclass: ClassExpression,
 }
 
 impl Checkable for SubClass{
@@ -59,8 +57,8 @@ impl Checkable for SubClass{
 
 #[derive(Eq,PartialEq,Hash,Clone,Debug)]
 pub struct Some{
-    object_property: ObjectProperty,
-    filler: Box<ClassExpression>
+    pub object_property: ObjectProperty,
+    pub filler: Box<ClassExpression>
 }
 
 impl Checkable for Some{
@@ -73,7 +71,7 @@ impl Checkable for Some{
 
 #[derive(Eq,PartialEq,Hash,Clone,Debug)]
 pub struct And{
-    operands: Vec<ClassExpression>
+    pub operands: Vec<ClassExpression>
 }
 
 impl Checkable for And
@@ -87,7 +85,7 @@ impl Checkable for And
 
 #[derive(Eq,PartialEq,Hash,Clone,Debug)]
 pub struct Or{
-    operands: Vec<ClassExpression>
+    pub operands: Vec<ClassExpression>
 }
 
 impl Checkable for Or
@@ -101,7 +99,7 @@ impl Checkable for Or
 
 #[derive(Eq,PartialEq,Hash,Clone,Debug)]
 pub struct Not{
-    operand: ClassExpression
+    pub operand: ClassExpression
 }
 
 impl Checkable for Not
@@ -134,8 +132,8 @@ impl Checkable for ClassExpression{
 
 #[derive(Debug)]
 pub struct OntologyID{
-    iri: Option<IRI>,
-    viri: Option<IRI>,
+    pub iri: Option<IRI>,
+    pub viri: Option<IRI>,
 }
 
 #[derive(Debug)]
@@ -143,12 +141,12 @@ pub struct Ontology
 {
     str_iri: HashMap<String,IRI>,
     id_str: HashMap<usize,String>,
-    id: OntologyID,
-    class: HashSet<Class>,
-    subclass: HashSet<SubClass>,
-    object_property: HashSet<ObjectProperty>,
-    some: HashSet<ClassExpression>,
-    and: HashSet<And>
+    pub id: OntologyID,
+    pub class: HashSet<Class>,
+    pub subclass: HashSet<SubClass>,
+    pub object_property: HashSet<ObjectProperty>,
+    pub some: HashSet<ClassExpression>,
+    pub and: HashSet<And>
 }
 
 impl Ontology {

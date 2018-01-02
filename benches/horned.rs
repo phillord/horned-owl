@@ -2,7 +2,7 @@
 extern crate bencher;
 extern crate horned_owl;
 
-use horned_owl::*;
+use horned_owl::model::*;
 use bencher::Bencher;
 
 fn a_thousand_classes(bench: &mut Bencher) {
@@ -15,11 +15,12 @@ fn a_thousand_classes(bench: &mut Bencher) {
 }
 
 
-#[test]
-fn big_tree(){
-    let mut o = Ontology::new();
-    let mut i = 1_000_000;
-    create_tree(&mut o, &mut i);
+fn big_tree(bench: &mut Bencher){
+    bench.iter(|| {
+        let mut o = Ontology::new();
+        let mut i = 10_000;
+        create_tree(&mut o, &mut i);
+    })
 }
 
 fn create_tree(o:&mut Ontology, n:&mut i32){
@@ -54,30 +55,30 @@ fn create_tree_0(o:&mut Ontology,
     create_tree_0(o, next, remaining);
 }
 
-#[test]
-fn is_subclass_with_many_direct_subclasses(){
-    let mut o = Ontology::new();
-    let i = o.iri("http://example.com/a".to_string());
-    let c = o.class(i);
+fn is_subclass_with_many_direct_subclasses(bench: &mut Bencher){
+    bench.iter(|| {
+        let mut o = Ontology::new();
+        let i = o.iri("http://example.com/a".to_string());
+        let c = o.class(i);
 
-    let n = 1_000;
-    for m in 1..n {
-        let i =
-            o.iri(format!("http://example.com/b{}", m));
+        let n = 1_000;
+        for m in 1..n {
+            let i =
+                o.iri(format!("http://example.com/b{}", m));
+            let d = o.class(i);
+            o.subclass(c,d);
+        }
+
+        let i = o.iri(format!("http://example.com/b{}", n - 1));
         let d = o.class(i);
-        o.subclass(c,d);
-    }
 
-    let i = o.iri(format!("http://example.com/b{}", n - 1));
-    let d = o.class(i);
-
-    assert!(!o.is_subclass(d,c));
-    assert!(o.is_subclass(c,d));
+        assert!(!o.is_subclass(d,c));
+        assert!(o.is_subclass(c,d));
+    })
 }
 
 
 
-benchmark_group!(benches, a_thousand_classes, big_tree
-                 is_subclass_with_many_direct_subclasses
-);
+benchmark_group!(benches, a_thousand_classes, big_tree, is_subclass_with_many_direct_subclasses);
+
 benchmark_main!(benches);

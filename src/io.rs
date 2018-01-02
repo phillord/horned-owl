@@ -6,7 +6,7 @@ use self::xml::EventReader;
 use self::xml::reader::XmlEvent;
 use self::xml::attribute::OwnedAttribute;
 
-use super::*;
+use model::*;
 
 const OWL_NS:&'static str = "http://www.w3.org/2002/07/owl#";
 
