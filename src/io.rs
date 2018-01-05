@@ -12,14 +12,15 @@ use model::*;
 
 const OWL_NS:&'static str = "http://www.w3.org/2002/07/owl#";
 
-pub fn read <R: BufRead>(buf: &mut R) -> Ontology {
+pub fn read <R: BufRead>(buf: &mut R) ->
+    (Ontology,PrefixMapping) {
 
     let parser = EventReader::new(buf);
     let mut ont = Ontology::new();
     let mut mapping = PrefixMapping::default();
 
     top(&mut ont, &mut mapping, &mut parser.into_iter());
-    ont
+    (ont, mapping)
 }
 
 // Start parser closure needs to take everything as parameters since
@@ -97,10 +98,13 @@ fn ontology_attributes(ont:&mut Ontology, mapping:&mut PrefixMapping,
 fn ontology<R: Read>(ont:&mut Ontology, mapping:&mut PrefixMapping,
             iterator:&mut Events<R>){
     start_parser(iterator, "Ontology",
-                 |iterator, name, _attributes|{
+                 |iterator, name, attributes|{
                      match &name.local_name[..] {
                          "Declaration" => {
                              declaration(ont,mapping,iterator);
+                         }
+                         "Prefix" => {
+                             prefix_attributes(mapping,attributes);
                          }
                          _ => {
                              println!("Ontology: Unknown Element in OWL NS:{}",
@@ -108,6 +112,60 @@ fn ontology<R: Read>(ont:&mut Ontology, mapping:&mut PrefixMapping,
                          }
                      }
                  });
+}
+
+fn prefix_attributes(mapping:&mut PrefixMapping,
+                     attributes:&Vec<OwnedAttribute>){
+    let mut prefix=None;
+    let mut iri=None;
+
+
+    for attrib in attributes{
+        match &attrib.name.local_name[..]{
+            "IRI" => {
+                iri=Some(&attrib.value);
+            }
+            "name" => {
+                prefix=Some(&attrib.value);
+            }
+            _=>{}
+        }
+    }
+
+    match (iri, prefix) {
+        (Some(i), Some(p)) => {
+            mapping.add_prefix(&p[..], &i[..]).ok();
+        }
+        _=> {
+            println!("Incomplete prefix element");
+        }
+    }
+}
+
+#[cfg(test)]
+mod test{
+    use super::*;
+    use std::mem::transmute;
+    use std::collections::HashMap;
+
+    #[allow(dead_code)]
+    #[derive(Debug)]
+    struct PrefixMappingHx
+    {
+        default: Option<String>,
+        mapping: HashMap<String,String>
+    }
+
+    #[test]
+    fn test_simple_ontology_prefix(){
+        let ont_s = include_str!("ont/one-ont.xml");
+        let (_,mapping) = read(&mut ont_s.as_bytes());
+
+        let open_mapping:PrefixMappingHx = unsafe{transmute(mapping)};
+
+        assert_eq!(6, open_mapping.mapping.len());
+
+    }
 }
 
 fn declaration<R: Read>(ont:&mut Ontology, mapping:&mut PrefixMapping,
@@ -130,7 +188,7 @@ fn declaration<R: Read>(ont:&mut Ontology, mapping:&mut PrefixMapping,
 #[test]
 fn test_simple_ontology(){
     let ont_s = include_str!("ont/one-ont.xml");
-    let ont = read(&mut ont_s.as_bytes());
+    let (ont,_) = read(&mut ont_s.as_bytes());
 
     assert_eq!(ont.iri_to_str(ont.id.iri.unwrap()).unwrap(),
                "http://example.com/iri");
@@ -164,7 +222,7 @@ fn add_class(ont:&mut Ontology, mapping: &PrefixMapping,
 #[test]
 fn test_one_class(){
     let ont_s = include_str!("ont/one-class.xml");
-    let ont = read(&mut ont_s.as_bytes());
+    let (ont,_) = read(&mut ont_s.as_bytes());
 
     assert_eq!(ont.class.len(), 1);
     assert_eq!(
@@ -175,7 +233,7 @@ fn test_one_class(){
 #[test]
 fn test_one_class_fqn(){
     let ont_s = include_str!("ont/one-class-fully-qualified.xml");
-    let ont = read(&mut ont_s.as_bytes());
+    let (ont,_) = read(&mut ont_s.as_bytes());
 
     assert_eq!(ont.class.len(), 1);
     assert_eq!(
