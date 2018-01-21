@@ -8,6 +8,7 @@ use quick_xml::events::BytesStart;
 
 use model::*;
 
+#[derive(Copy,Clone)]
 enum State{
     Top, Ontology, Declaration
 }
@@ -24,6 +25,9 @@ pub fn read <R: BufRead>(bufread: &mut R) -> (Ontology,PrefixMapping)
     let mut buf = Vec::new();
     let mut ns_buf = Vec::new();
 
+    let mut closing_tag:&[u8] = b"";
+    let mut closing_state = State::Top;
+
     loop{
         match reader.read_namespaced_event(&mut buf, &mut ns_buf) {
             Ok((ref ns, Event::Start(ref mut e)))
@@ -38,7 +42,9 @@ pub fn read <R: BufRead>(bufread: &mut R) -> (Ontology,PrefixMapping)
                     }
                     (&State::Ontology, b"Declaration") => {
                         state = State::Declaration;
-                    }
+                        closing_tag=b"Declaration";
+                        closing_state = State::Ontology;
+                     }
                     (_,n) => {
                         println!("Ontology: Unknown element in OWL NS:{:?}",
                                  n);
@@ -63,15 +69,11 @@ pub fn read <R: BufRead>(bufread: &mut R) -> (Ontology,PrefixMapping)
                 }
             }
             Ok((ref ns,Event::End(ref mut e)))
-                if *ns == Some(b"http://www.w3.org/2002/07/owl#")
+                if *ns == Some(b"http://www.w3.org/2002/07/owl#") &&
+                e.local_name() == closing_tag
                 =>
             {
-                match(&state,e.local_name()){
-                    (&State::Declaration,b"Declaration")=>{
-                        state=State::Ontology
-                    }
-                    _=>{}
-                }
+                state=closing_state;
             }
 
             Err(e) => {
