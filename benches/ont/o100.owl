@@ -1,0 +1,320 @@
+<?xml version="1.0"?>
+<Ontology xmlns="http://www.w3.org/2002/07/owl#"
+     xml:base="urn:absolute:340e521d-d935-497a-86d8-50436a9d0dad#o"
+     xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+     xmlns:xml="http://www.w3.org/XML/1998/namespace"
+     xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+     xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"
+     ontologyIRI="urn:absolute:340e521d-d935-497a-86d8-50436a9d0dad#o">
+    <Prefix name="o" IRI="urn:absolute:340e521d-d935-497a-86d8-50436a9d0dad#o#"/>
+    <Prefix name="owl" IRI="http://www.w3.org/2002/07/owl#"/>
+    <Prefix name="rdf" IRI="http://www.w3.org/1999/02/22-rdf-syntax-ns#"/>
+    <Prefix name="xml" IRI="http://www.w3.org/XML/1998/namespace"/>
+    <Prefix name="xsd" IRI="http://www.w3.org/2001/XMLSchema#"/>
+    <Prefix name="rdfs" IRI="http://www.w3.org/2000/01/rdf-schema#"/>
+    <Declaration>
+        <Class IRI="#n39"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="#n27"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="#n15"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="#n79"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="#n67"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="#n55"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="#n43"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="#n2"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="#n42"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="#n30"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="#n94"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="#n82"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="#n70"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="#n28"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="#n16"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="#n68"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="#n56"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="#n9"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="#n44"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="#n32"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="#n1"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="#n31"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="#n95"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="#n83"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="#n71"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="#n4"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="#n49"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="#n37"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="#n25"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="#n13"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="#n89"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="#n77"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="#n65"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="#n64"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="#n52"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="#n40"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="#n92"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="#n80"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="#n3"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="#n38"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="#n26"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="#n14"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="#n78"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="#n66"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="#n54"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="#n53"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="#n41"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="#n93"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="#n81"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="#n59"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="#n6"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="#n47"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="#n100"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="#n35"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="#n23"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="#n11"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="#n99"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="#n87"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="#n19"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="#n86"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="#n74"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="#n62"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="#n50"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="#n90"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="#n5"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="#n48"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="#n36"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="#n24"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="#n12"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="#n88"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="#n76"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="#n75"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="#n63"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="#n51"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="#n91"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="#n17"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="#n69"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="#n57"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="#n8"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="#n45"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="#n33"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="#n21"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="#n29"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="#n20"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="#n96"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="#n84"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="#n72"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="#n60"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="#n58"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="#n7"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="#n46"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="#n34"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="#n22"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="#n10"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="#n98"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="#n18"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="#n97"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="#n85"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="#n73"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="#n61"/>
+    </Declaration>
+</Ontology>
+
+
+
+<!-- Generated by the OWL API (version 4.2.8.20170104-2310) https://github.com/owlcs/owlapi -->
+

@@ -3,6 +3,7 @@ extern crate bencher;
 extern crate horned_owl;
 
 use horned_owl::model::*;
+
 use bencher::Bencher;
 
 fn a_thousand_classes(bench: &mut Bencher) {
@@ -81,4 +82,32 @@ fn is_subclass_with_many_direct_subclasses(bench: &mut Bencher){
 
 benchmark_group!(benches, a_thousand_classes, big_tree, is_subclass_with_many_direct_subclasses);
 
-benchmark_main!(benches);
+
+use std::fs::File;
+use std::io::BufReader;
+
+
+fn quick_port_read(bench: &mut Bencher){
+
+    bench.iter(||{
+        let f = File::open("benches/ont/o100.owl").ok().unwrap();
+        let mut f = BufReader::new(f);
+
+        horned_owl::io_quick_port::read(&mut f);
+    })
+}
+
+fn io_read(bench: &mut Bencher){
+    bench.iter(||{
+        let f = File::open("benches/ont/o100.owl").ok().unwrap();
+        let mut f = BufReader::new(f);
+
+        horned_owl::io::read(&mut f);
+    })
+}
+
+benchmark_group!(iobenches, quick_port_read, io_read);
+
+
+
+benchmark_main!(benches,iobenches);

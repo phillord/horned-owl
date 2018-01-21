@@ -1,82 +1,77 @@
 use curie::PrefixMapping;
 
 use std::io::BufRead;
-use std::io::Read;
 
 use xml::EventReader;
-use xml::reader::{Events,XmlEvent};
-use xml::name::OwnedName;
 use xml::attribute::OwnedAttribute;
+use xml::reader::XmlEvent;
 
 use model::*;
 
 const OWL_NS:&'static str = "http://www.w3.org/2002/07/owl#";
 
-pub fn read <R: BufRead>(buf: &mut R) ->
-    (Ontology,PrefixMapping) {
+enum State{
+    Top, Ontology, Declaration
+}
+
+pub fn read <R: BufRead>(buf: &mut R) -> (Ontology,PrefixMapping) {
 
     let parser = EventReader::new(buf);
     let mut ont = Ontology::new();
     let mut mapping = PrefixMapping::default();
+    let mut state = State::Top;
 
-    top(&mut ont, &mut mapping, &mut parser.into_iter());
-    (ont, mapping)
-}
+    let owl_ns = Some(OWL_NS.to_string());
 
-// Start parser closure needs to take everything as parameters since
-// captures breaks borrowing
-fn start_parser<F,R>(iterator:&mut Events<R>, level: &str, mut callback: F)
-    where F: FnMut(&mut Events<R>, &OwnedName, &Vec<OwnedAttribute>), R: Read
-{
-    loop{
-        match iterator.next(){
-            Some(e) => {
-                match e {
-                    Ok(XmlEvent::StartElement {name, attributes, .. }) =>{
-                        match &name.namespace{
-                            &Some(ref f) if f == OWL_NS =>
-                            {
-                                callback(iterator, &name, &attributes);
-                            }
-                            &Some(_) =>{
-                                println!("{}: Unknown Element:{}", level, name)
-                            }
-                            &None => {
-                                println!("{}: Unknown Element without ns:{}", level, name);
-                            }
-                        }
+    for e in parser {
+        match e {
+            Ok(XmlEvent::StartElement {ref name, ref attributes, .. })
+                if &name.namespace == &owl_ns =>
+            {
+                match (&state, &name.local_name[..]) {
+                    (&State::Top, "Ontology") => {
+                        ontology_attributes(&mut ont,&mut mapping,attributes);
+                        state = State::Ontology;
                     }
-                    Err(e) => {
-                        println!("Error: {}", e);
+                    (&State::Ontology, "Declaration") => {
+                        state = State::Declaration;
                     }
+                    (&State::Ontology,"Prefix") => {
+                        prefix_attributes(&mut mapping,attributes);
+                    }
+                    (&State::Declaration,"Class") => {
+                        add_class(&mut ont, &mut mapping,attributes);
+                    }
+
                     _ => {
-                        // Ignore non starts
+                        println!("Ontology: Unknown element in OWL NS:{}",
+                                 name);
                     }
                 }
             },
-            None => {
-                break;
+            Ok(XmlEvent::EndElement {ref name, .. })
+                if &name.namespace == &owl_ns =>
+            {
+                match(&state,&name.local_name[..]){
+                    (&State::Declaration,"Declaration") => {
+                        state = State::Ontology
+                    }
+                    _ => {
+
+                    }
+                }
+
+            },
+
+            Err(err) => println!("Error:{}", err),
+            _ => {
+                //Ignore non starts
             }
         }
+
     }
-}
 
-
-fn top<R: Read>(ont:&mut Ontology, mapping:&mut PrefixMapping,
-                iterator:&mut Events<R>){
-    start_parser(iterator, "Top Level",
-                 |iterator, name, attributes|{
-                     match &name.local_name[..] {
-                         "Ontology" => {
-                             ontology_attributes(ont,mapping,attributes);
-                             ontology(ont,mapping,iterator);
-                         }
-                         _ => {
-                             println!("Top Level: Unknown Element in OWL NS:{}",
-                                      name);
-                         }
-                     }
-                 });
+    (ont, mapping)
 }
 
 fn ontology_attributes(ont:&mut Ontology, mapping:&mut PrefixMapping,
@@ -95,30 +90,10 @@ fn ontology_attributes(ont:&mut Ontology, mapping:&mut PrefixMapping,
     }
 }
 
-fn ontology<R: Read>(ont:&mut Ontology, mapping:&mut PrefixMapping,
-            iterator:&mut Events<R>){
-    start_parser(iterator, "Ontology",
-                 |iterator, name, attributes|{
-                     match &name.local_name[..] {
-                         "Declaration" => {
-                             declaration(ont,mapping,iterator);
-                         }
-                         "Prefix" => {
-                             prefix_attributes(mapping,attributes);
-                         }
-                         _ => {
-                             println!("Ontology: Unknown Element in OWL NS:{}",
-                                      name);
-                         }
-                     }
-                 });
-}
-
 fn prefix_attributes(mapping:&mut PrefixMapping,
                      attributes:&Vec<OwnedAttribute>){
     let mut prefix=None;
     let mut iri=None;
-
 
     for attrib in attributes{
         match &attrib.name.local_name[..]{
@@ -168,23 +143,6 @@ mod test{
     }
 }
 
-fn declaration<R: Read>(ont:&mut Ontology, mapping:&mut PrefixMapping,
-                  iterator:&mut Events<R>){
-    start_parser(iterator, "Declaration",
-                 |_iterator, name, attributes|{
-                     match &name.local_name[..] {
-                         "Class" => {
-                             add_class(ont,mapping,attributes);
-                         }
-                         _ => {
-                             println!("Declaration: Unknown Element in OWL NS:{}",
-                                      name);
-                         }
-                     }
-                 });
-}
-
-
 #[test]
 fn test_simple_ontology(){
     let ont_s = include_str!("ont/one-ont.xml");
@@ -195,7 +153,7 @@ fn test_simple_ontology(){
 }
 
 fn add_class(ont:&mut Ontology, mapping: &PrefixMapping,
-             attributes: &Vec<OwnedAttribute>)
+             attributes:&Vec<OwnedAttribute>)
              -> Option<Class>
 {
     for attrib in attributes{
@@ -239,4 +197,12 @@ fn test_one_class_fqn(){
     assert_eq!(
         ont.iri_to_str(ont.class.iter().next().unwrap().0).unwrap(),
         "http://www.russet.org.uk/#C");
+}
+
+#[test]
+fn test_ten_class(){
+    let ont_s = include_str!("ont/o10.owl");
+    let (ont,_) = read(&mut ont_s.as_bytes());
+
+    assert_eq!(ont.class.len(), 10);
 }

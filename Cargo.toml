@@ -6,9 +6,9 @@ authors = ["Phillip Lord <phillip.lord@russet.org.uk>"]
 [dependencies]
 bimap = "0.1.3"
 
+quick-xml="0.10.1"
 xml-rs = "0.7.0"
 curie = "0.0.4"
-
 
 [dev-dependencies]
 bencher = "0.1.4"
