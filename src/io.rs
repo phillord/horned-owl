@@ -2,114 +2,165 @@ use curie::PrefixMapping;
 
 use std::io::BufRead;
 
-use xml::EventReader;
-use xml::attribute::OwnedAttribute;
-use xml::reader::XmlEvent;
+use quick_xml::reader::Reader;
+use quick_xml::events::Event;
+use quick_xml::events::BytesStart;
 
 use model::*;
-
-const OWL_NS:&'static str = "http://www.w3.org/2002/07/owl#";
 
 enum State{
     Top, Ontology, Declaration
 }
 
-pub fn read <R: BufRead>(buf: &mut R) -> (Ontology,PrefixMapping) {
+pub fn read <R: BufRead>(bufread: &mut R) -> (Ontology,PrefixMapping)
+{
 
-    let parser = EventReader::new(buf);
+    let mut reader:Reader<&mut R> = Reader::from_reader(bufread);
+
     let mut ont = Ontology::new();
     let mut mapping = PrefixMapping::default();
+
     let mut state = State::Top;
+    let mut buf = Vec::new();
+    let mut ns_buf = Vec::new();
 
-    let owl_ns = Some(OWL_NS.to_string());
-
-    for e in parser {
-        match e {
-            Ok(XmlEvent::StartElement {ref name, ref attributes, .. })
-                if &name.namespace == &owl_ns =>
+    loop{
+        match reader.read_namespaced_event(&mut buf, &mut ns_buf) {
+            Ok((ref ns, Event::Start(ref mut e)))
+                if *ns == Some(b"http://www.w3.org/2002/07/owl#")
+                =>
             {
-                match (&state, &name.local_name[..]) {
-                    (&State::Top, "Ontology") => {
-                        ontology_attributes(&mut ont,&mut mapping,attributes);
+                match (&state, e.local_name()){
+                    (&State::Top, b"Ontology") => {
+                        ontology_attributes(&mut ont,&mut mapping,
+                                            &mut reader, e);
                         state = State::Ontology;
                     }
-                    (&State::Ontology, "Declaration") => {
+                    (&State::Ontology, b"Declaration") => {
                         state = State::Declaration;
                     }
-                    (&State::Ontology,"Prefix") => {
-                        prefix_attributes(&mut mapping,attributes);
-                    }
-                    (&State::Declaration,"Class") => {
-                        add_class(&mut ont, &mut mapping,attributes);
-                    }
-
-                    _ => {
-                        println!("Ontology: Unknown element in OWL NS:{}",
-                                 name);
+                    (_,n) => {
+                        println!("Ontology: Unknown element in OWL NS:{:?}",
+                                 n);
                     }
                 }
-            },
-            Ok(XmlEvent::EndElement {ref name, .. })
-                if &name.namespace == &owl_ns =>
+            }
+            Ok((ref ns,Event::Empty(ref mut e)))
+                if *ns == Some(b"http://www.w3.org/2002/07/owl#")
+                =>
             {
-                match(&state,&name.local_name[..]){
-                    (&State::Declaration,"Declaration") => {
-                        state = State::Ontology
+                match(&state, e.local_name()){
+                    (&State::Ontology, b"Prefix") => {
+                        prefix_attributes(&mut mapping, &mut reader, e);
                     }
-                    _ => {
-
+                    (&State::Declaration, b"Class") => {
+                        add_class(&mut ont, &mut mapping, &mut reader, e);
+                    }
+                    (_,n) =>{
+                        println!("Ontology: Unknown element in OWL NS:{:?}",
+                                 n);
                     }
                 }
+            }
+            Ok((ref ns,Event::End(ref mut e)))
+                if *ns == Some(b"http://www.w3.org/2002/07/owl#")
+                =>
+            {
+                match(&state,e.local_name()){
+                    (&State::Declaration,b"Declaration")=>{
+                        state=State::Ontology
+                    }
+                    _=>{}
+                }
+            }
 
+            Err(e) => {
+                println!("Error: {}", e);
             },
+            Ok((_, Event::Eof)) =>
+            {
+                break;
+            },
+            // Ok((_,Event::End(ref mut e)))=>{
+            //     println!("End Event:{:?}", reader.decode(e.local_name()));
+            // }
+            // Ok((_,Event::Empty(ref mut e)))=>{
+            //     println!("Empty Event:{:?}", e.unescape_and_decode(&reader));
+            // }
+            // Ok((_,Event::Text(ref mut e)))=>{
+            //     println!("Empty Event:{:?}", e.unescape_and_decode(&reader));
+            // }
 
-            Err(err) => println!("Error:{}", err),
-            _ => {
-                //Ignore non starts
+            _a => {
+                //println!("Other event:{:?} {:?}", reader.buffer_position(),
+                //a)
             }
         }
-
     }
 
-    (ont, mapping)
+    (ont,mapping)
 }
 
-fn ontology_attributes(ont:&mut Ontology, mapping:&mut PrefixMapping,
-                       attributes:&Vec<OwnedAttribute>){
-    for attrib in attributes{
-        match &attrib.name.local_name[..]{
-            "ontologyIRI" =>{
-                mapping.set_default(&attrib.value[..]);
-                ont.id.iri = Some(ont.iri(attrib.value.clone()));
+fn ontology_attributes<R: BufRead>(ont:&mut Ontology, mapping:&mut PrefixMapping,
+                                reader:&mut Reader<R>, e: &BytesStart){
+    for res in e.attributes(){
+        match res{
+            Ok(attrib) => {
+                match attrib.key{
+                    b"ontologyIRI" => {
+                        let s = reader.decode(&attrib.value);
+                        mapping.set_default(&s[..]);
+                        ont.id.iri = Some(ont.iri(s.into_owned()));
+                    },
+                    b"versionIRI" => {
+                        ont.id.viri = Some(ont.iri
+                                           (reader.decode(&attrib.value)
+                                            .into_owned()));
+                    },
+                    _ => ()
+                }
+            },
+            Err(e) => {
+                panic!( "Error at position{}: {:?}",
+                         reader.buffer_position(),
+                         e);
             }
-            ,
-            "versionIRI" =>
-                ont.id.viri = Some(ont.iri(attrib.value.clone())),
-            _ => ()
         }
     }
 }
 
-fn prefix_attributes(mapping:&mut PrefixMapping,
-                     attributes:&Vec<OwnedAttribute>){
+
+fn prefix_attributes<R: BufRead>(mapping:&mut PrefixMapping,
+                                 reader:&mut Reader<R>, e: &BytesStart)
+{
     let mut prefix=None;
     let mut iri=None;
 
-    for attrib in attributes{
-        match &attrib.name.local_name[..]{
-            "IRI" => {
-                iri=Some(&attrib.value);
+    for res in e.attributes() {
+        match res{
+            Ok(attrib) => {
+                match attrib.key {
+                    b"IRI" => {
+                        iri=Some(reader.decode(&attrib.value).into_owned());
+                    }
+                    b"name" => {
+                        prefix=Some(reader.decode(&attrib.value).into_owned());
+                    }
+                    _=>{}
+                }
+            },
+            Err(e) =>{
+                panic!("Error at position{}: {:?}",
+                       reader.buffer_position(),
+                       e);
             }
-            "name" => {
-                prefix=Some(&attrib.value);
-            }
-            _=>{}
         }
     }
 
+
     match (iri, prefix) {
         (Some(i), Some(p)) => {
-            mapping.add_prefix(&p[..], &i[..]).ok();
+            mapping.add_prefix(&p,&i).ok();
         }
         _=> {
             println!("Incomplete prefix element");
@@ -152,26 +203,33 @@ fn test_simple_ontology(){
                "http://example.com/iri");
 }
 
-fn add_class(ont:&mut Ontology, mapping: &PrefixMapping,
-             attributes:&Vec<OwnedAttribute>)
+fn add_class<R: BufRead>(ont:&mut Ontology, mapping: &PrefixMapping,
+                         reader:&mut Reader<R>,event:&BytesStart)
              -> Option<Class>
 {
-    for attrib in attributes{
-        match &attrib.name.local_name[..]{
-            "IRI" =>{
-                let expanded =
-                    match
-                    mapping.expand_curie_string(&attrib.value[..]){
-                        // If we expand use this
-                        Ok(n) => n,
-                        // Else assume it's a complete URI
-                        Err(_e) => attrib.value.clone()
-                    };
+    for res in event.attributes(){
+        match res {
+            Ok(attrib) => {
+                match attrib.key{
+                    b"IRI" =>{
+                        let val = reader.decode(&attrib.value);
+                        let expanded =
+                            match mapping.expand_curie_string(&val){
+                                // If we expand use this
+                                Ok(n) => n,
+                                // Else assume it's a complete URI
+                                Err(_e) => val.into_owned(),
+                            };
 
-                let iri = ont.iri(expanded);
-                return Some(ont.class(iri));
-            },
-            _ => ()
+                        let iri = ont.iri(expanded);
+                        return Some(ont.class(iri));
+                    },
+                    _ => {}
+                }
+            }
+            Err(_e) => {
+                panic!("We panic a lot");
+            }
         }
     }
     None
