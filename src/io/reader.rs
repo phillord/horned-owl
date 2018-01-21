@@ -186,7 +186,7 @@ mod test{
 
     #[test]
     fn test_simple_ontology_prefix(){
-        let ont_s = include_str!("ont/one-ont.xml");
+        let ont_s = include_str!("../ont/one-ont.xml");
         let (_,mapping) = read(&mut ont_s.as_bytes());
 
         let open_mapping:PrefixMappingHx = unsafe{transmute(mapping)};
@@ -198,7 +198,7 @@ mod test{
 
 #[test]
 fn test_simple_ontology(){
-    let ont_s = include_str!("ont/one-ont.xml");
+    let ont_s = include_str!("../ont/one-ont.xml");
     let (ont,_) = read(&mut ont_s.as_bytes());
 
     assert_eq!(ont.iri_to_str(ont.id.iri.unwrap()).unwrap(),
@@ -239,7 +239,7 @@ fn add_class<R: BufRead>(ont:&mut Ontology, mapping: &PrefixMapping,
 
 #[test]
 fn test_one_class(){
-    let ont_s = include_str!("ont/one-class.xml");
+    let ont_s = include_str!("../ont/one-class.xml");
     let (ont,_) = read(&mut ont_s.as_bytes());
 
     assert_eq!(ont.class.len(), 1);
@@ -250,7 +250,7 @@ fn test_one_class(){
 
 #[test]
 fn test_one_class_fqn(){
-    let ont_s = include_str!("ont/one-class-fully-qualified.xml");
+    let ont_s = include_str!("../ont/one-class-fully-qualified.xml");
     let (ont,_) = read(&mut ont_s.as_bytes());
 
     assert_eq!(ont.class.len(), 1);
@@ -261,7 +261,7 @@ fn test_one_class_fqn(){
 
 #[test]
 fn test_ten_class(){
-    let ont_s = include_str!("ont/o10.owl");
+    let ont_s = include_str!("../ont/o10.owl");
     let (ont,_) = read(&mut ont_s.as_bytes());
 
     assert_eq!(ont.class.len(), 10);
