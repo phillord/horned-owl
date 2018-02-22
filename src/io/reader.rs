@@ -173,7 +173,6 @@ fn prefix_attributes<R: BufRead>(mapping:&mut PrefixMapping,
 #[cfg(test)]
 mod test{
     use super::*;
-    use std::mem::transmute;
     use std::collections::HashMap;
 
     #[allow(dead_code)]
@@ -189,10 +188,8 @@ mod test{
         let ont_s = include_str!("../ont/one-ont.xml");
         let (_,mapping) = read(&mut ont_s.as_bytes());
 
-        let open_mapping:PrefixMappingHx = unsafe{transmute(mapping)};
-
-        assert_eq!(6, open_mapping.mapping.len());
-
+        let hash_map: HashMap<&String,&String> = mapping.mappings().collect();
+        assert_eq!(6, hash_map.len());
     }
 }
 
