@@ -175,14 +175,6 @@ mod test{
     use super::*;
     use std::collections::HashMap;
 
-    #[allow(dead_code)]
-    #[derive(Debug)]
-    struct PrefixMappingHx
-    {
-        default: Option<String>,
-        mapping: HashMap<String,String>
-    }
-
     #[test]
     fn test_simple_ontology_prefix(){
         let ont_s = include_str!("../ont/one-ont.xml");
