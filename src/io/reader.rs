@@ -1,6 +1,7 @@
 use curie::PrefixMapping;
 
 use std::io::BufRead;
+use std::str::from_utf8;
 
 use quick_xml::reader::Reader;
 use quick_xml::events::Event;
@@ -46,8 +47,7 @@ pub fn read <R: BufRead>(bufread: &mut R) -> (Ontology,PrefixMapping)
                         closing_state = State::Ontology;
                      }
                     (_,n) => {
-                        println!("Ontology: Unknown element in OWL NS:{:?}",
-                                 n);
+                        unimplemented_owl(n);
                     }
                 }
             }
@@ -63,8 +63,7 @@ pub fn read <R: BufRead>(bufread: &mut R) -> (Ontology,PrefixMapping)
                         add_class(&mut ont, &mut mapping, &mut reader, e);
                     }
                     (_,n) =>{
-                        println!("Ontology: Unknown element in OWL NS:{:?}",
-                                 n);
+                        unimplemented_owl(n);
                     }
                 }
             }
@@ -101,6 +100,11 @@ pub fn read <R: BufRead>(bufread: &mut R) -> (Ontology,PrefixMapping)
     }
 
     (ont,mapping)
+}
+
+fn unimplemented_owl(n:&[u8]){
+    println!("Ontology: Unknown element in OWL NS:{:?}",
+             from_utf8(n).ok().unwrap());
 }
 
 fn ontology_attributes<R: BufRead>(ont:&mut Ontology, mapping:&mut PrefixMapping,
