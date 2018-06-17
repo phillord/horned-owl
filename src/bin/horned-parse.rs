@@ -3,6 +3,7 @@ extern crate horned_owl;
 
 use clap::App;
 use clap::Arg;
+use clap::ArgMatches;
 
 use horned_owl::io::reader::read;
 
@@ -21,7 +22,10 @@ fn main() {
              .index(1))
         .get_matches();
 
+    matcher(matches);
+}
 
+fn matcher(matches:ArgMatches){
     let input = matches.value_of("INPUT").unwrap();
 
     let file = File::open(input).unwrap();
