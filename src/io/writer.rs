@@ -26,12 +26,12 @@ pub fn write<W: Write>(write: &mut W, ont: &Ontology,
 
     let elem = BytesEnd::owned(b"Ontology".to_vec());
 
+    push_classes(&mut writer, ont, _prefix);
     writer.write_event(Event::End(elem)).ok();
-
 }
 
 fn push_iri_attribute_maybe(elem:&mut BytesStart,ont:&Ontology,
-                  key:&str,iri:Option<IRI>)
+                            key:&str,iri:Option<IRI>)
 {
     match iri{
         Some(iri) => {
@@ -39,6 +39,34 @@ fn push_iri_attribute_maybe(elem:&mut BytesStart,ont:&Ontology,
             elem.push_attribute((key, &iri[..]));
         },
         None => {}
+    }
+}
+
+pub fn push_classes<W: Write>(writer: &mut Writer<W>, ont: &Ontology,
+                              _prefix: Option<&PrefixMapping>){
+
+    // Make rendering determinisitic in terms of order
+    let mut classes:Vec<&String> = ont.class.iter().
+        map(|c|
+            ont.iri_to_str(c.0).unwrap()
+        ).
+        collect::<Vec<&String>>();
+
+    classes.sort();
+
+    for iri in classes {
+        let mut declaration = BytesStart::owned(b"Declaration".to_vec(),
+                                                "Declaration".len());
+
+        writer.write_event(Event::Start(declaration)).ok();
+
+        let mut class = BytesStart::owned(b"Class".to_vec(),"Class".len());
+        class.push_attribute(("IRI",&iri[..]));
+        writer.write_event(Event::Start(class)).ok();
+
+        writer.write_event(Event::End(BytesEnd::owned(b"Class".to_vec()))).ok();
+        writer.write_event(Event::End(
+            BytesEnd::owned(b"Declaration".to_vec()))).ok();
     }
 }
 
