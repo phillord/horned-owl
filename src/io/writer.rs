@@ -9,7 +9,7 @@ use quick_xml::events::Event;
 use quick_xml::writer::Writer;
 
 pub fn write<W: Write>(write: &mut W, ont: &Ontology,
-                       _prefix: Option<&PrefixMapping>){
+                       prefix: Option<&PrefixMapping>){
     let mut writer = Writer::new_with_indent(write, ' ' as u8, 4);
 
     writer.write_event(Event::Decl(BytesDecl::new(&b"1.0"[..], None, None))).ok();
@@ -26,7 +26,8 @@ pub fn write<W: Write>(write: &mut W, ont: &Ontology,
 
     let elem = BytesEnd::owned(b"Ontology".to_vec());
 
-    push_classes(&mut writer, ont, _prefix);
+    push_prefixes(&mut writer, prefix);
+    push_classes(&mut writer, ont, prefix);
     writer.write_event(Event::End(elem)).ok();
 }
 
@@ -42,7 +43,23 @@ fn push_iri_attribute_maybe(elem:&mut BytesStart,ont:&Ontology,
     }
 }
 
-pub fn push_classes<W: Write>(writer: &mut Writer<W>, ont: &Ontology,
+fn push_prefixes<W: Write>(writer: &mut Writer<W>,
+                           prefix: Option<&PrefixMapping>){
+    println!("pushing prefixes");
+    if let Some(prefix) = prefix {
+        for pre in prefix.mappings(){
+            println!("pushing: {:?}", pre);
+            let mut prefix = BytesStart::owned(b"Prefix".to_vec(),
+                                               "Prefix".len());
+            prefix.push_attribute(("name", &pre.0[..]));
+            prefix.push_attribute(("IRI", &pre.1[..]));
+
+            writer.write_event(Event::Empty(prefix)).ok();
+        }
+    }
+}
+
+fn push_classes<W: Write>(writer: &mut Writer<W>, ont: &Ontology,
                               _prefix: Option<&PrefixMapping>){
 
     // Make rendering determinisitic in terms of order
@@ -79,6 +96,8 @@ mod test{
     use io::reader::*;
     use self::mktemp::Temp;
 
+    use std::collections::HashMap;
+
     use std::fs::File;
     use std::io::BufReader;
     use std::io::BufWriter;
@@ -99,6 +118,50 @@ mod test{
                    ont2.iri_to_str(ont2.id.iri.unwrap()).unwrap());
     }
 
+    fn roundtrip(ont:&str) -> (Ontology,PrefixMapping,
+                               Ontology,PrefixMapping){
+        let (ont_orig,prefix_orig) = read(&mut ont.as_bytes());
+        let mut temp_file = Temp::new_file().unwrap();
 
+        let file = File::create(&temp_file).ok().unwrap();
+        let mut buf_writer = BufWriter::new(&file);
 
+        write(&mut buf_writer, &ont_orig, Some(&prefix_orig));
+        buf_writer.flush().ok();
+
+        let file = File::open(&temp_file).ok().unwrap();
+
+        let(ont_round,prefix_round) = read(&mut BufReader::new(&file));
+
+        temp_file.release();
+
+        return(ont_orig,prefix_orig,
+               ont_round,prefix_round);
+    }
+
+    #[test]
+    fn round_one_ont(){
+        let (ont_orig,_prefix_orig,
+             ont_round,_prefix_round) =
+            roundtrip(include_str!("../ont/one-ont.xml"));
+
+        let iri_orig = ont_orig.iri_to_str(ont_orig.id.iri.unwrap());
+        let iri_round = ont_round.iri_to_str(ont_round.id.iri.unwrap());
+        assert_eq!(iri_orig,iri_round);
+    }
+
+    #[test]
+    fn round_one_ont_prefix(){
+        let (_ont_orig,prefix_orig,
+             _ont_round,prefix_round) =
+            roundtrip(include_str!("../ont/one-ont.xml"));
+
+        let prefix_orig_map: HashMap<&String, &String> =
+            prefix_orig.mappings().collect();
+
+        let prefix_round_map: HashMap<&String, &String> =
+            prefix_round.mappings().collect();
+
+        assert_eq!(prefix_orig_map,prefix_round_map);
+    }
 }

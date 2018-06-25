@@ -30,7 +30,10 @@ pub fn read <R: BufRead>(bufread: &mut R) -> (Ontology,PrefixMapping)
     let mut closing_state = State::Top;
 
     loop{
-        match reader.read_namespaced_event(&mut buf, &mut ns_buf) {
+        let mut r = reader.read_namespaced_event(&mut buf, &mut ns_buf);
+        //println!("r:{:?}", r);
+
+        match r {
             Ok((ref ns, Event::Start(ref mut e)))
                 if *ns == Some(b"http://www.w3.org/2002/07/owl#")
                 =>
@@ -197,6 +200,16 @@ fn test_simple_ontology(){
     assert_eq!(ont.iri_to_str(ont.id.iri.unwrap()).unwrap(),
                "http://example.com/iri");
 }
+
+#[test]
+fn test_simple_ontology_rendered_by_horned(){
+    let ont_s = include_str!("../ont/one-ont-from-horned.xml");
+    let (ont,_) = read(&mut ont_s.as_bytes());
+
+    assert_eq!(ont.iri_to_str(ont.id.iri.unwrap()).unwrap(),
+               "http://example.com/iri");
+}
+
 
 fn add_class<R: BufRead>(ont:&mut Ontology, mapping: &PrefixMapping,
                          reader:&mut Reader<R>,event:&BytesStart)
