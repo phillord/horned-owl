@@ -18,9 +18,9 @@ pub fn write<W: Write>(write: &mut W, ont: &Ontology,
                                      "Ontology".len());
     elem.push_attribute(("xmlns","http://www.w3.org/2002/07/owl#"));
     push_iri_attribute_maybe(&mut elem, ont,
-                             "ontologyIRI",ont.id.iri);
+                             "ontologyIRI",&ont.id.iri);
     push_iri_attribute_maybe(&mut elem, ont,
-                             "versionIRI",ont.id.viri);
+                             "versionIRI",&ont.id.viri);
 
     writer.write_event(Event::Start(elem)).ok();
 
@@ -31,13 +31,12 @@ pub fn write<W: Write>(write: &mut W, ont: &Ontology,
     writer.write_event(Event::End(elem)).ok();
 }
 
-fn push_iri_attribute_maybe(elem:&mut BytesStart,ont:&Ontology,
-                            key:&str,iri:Option<IRI>)
+fn push_iri_attribute_maybe(elem:&mut BytesStart,_ont:&Ontology,
+                            key:&str,iri:&Option<IRI>)
 {
     match iri{
         Some(iri) => {
-            let iri = ont.iri_to_str(iri).unwrap();
-            elem.push_attribute((key, &iri[..]));
+            elem.push_attribute((key, &(*iri)[..]));
         },
         None => {}
     }
@@ -65,7 +64,7 @@ fn push_classes<W: Write>(writer: &mut Writer<W>, ont: &Ontology,
     // Make rendering determinisitic in terms of order
     let mut classes:Vec<&String> = ont.class.iter().
         map(|c|
-            ont.iri_to_str(c.0).unwrap()
+            &(*c.0)
         ).
         collect::<Vec<&String>>();
 
@@ -105,7 +104,7 @@ mod test{
     #[test]
     fn test_ont_rt(){
         let mut ont = Ontology::new();
-        let iri = ont.iri("http://www.example.com/a".to_string());
+        let iri = ont.iri_build.iri("http://www.example.com/a".to_string());
         ont.id.iri = Some(iri);
         let temp_file = Temp::new_file().unwrap();
         let file = File::create(&temp_file).ok().unwrap();
@@ -114,8 +113,7 @@ mod test{
         let file = File::open(&temp_file).ok().unwrap();
         let (ont2,_) = read(&mut BufReader::new(file));
 
-        assert_eq!(ont.iri_to_str(ont.id.iri.unwrap()).unwrap(),
-                   ont2.iri_to_str(ont2.id.iri.unwrap()).unwrap());
+        assert_eq!(ont.id.iri, ont2.id.iri);
     }
 
     fn roundtrip(ont:&str) -> (Ontology,PrefixMapping,
@@ -145,9 +143,7 @@ mod test{
              ont_round,_prefix_round) =
             roundtrip(include_str!("../ont/one-ont.xml"));
 
-        let iri_orig = ont_orig.iri_to_str(ont_orig.id.iri.unwrap());
-        let iri_round = ont_round.iri_to_str(ont_round.id.iri.unwrap());
-        assert_eq!(iri_orig,iri_round);
+        assert_eq!(ont_orig.id.iri, ont_round.id.iri);
     }
 
     #[test]

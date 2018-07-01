@@ -1,58 +1,67 @@
 #![allow(dead_code)]
 
-use bimap::BiMap;
 use std::collections::HashSet;
-
-static mut COUNTER: usize = 0;
+use std::rc::Rc;
+use std::cell::RefCell;
+use std::ops::Deref;
 
 pub trait Checkable{
     fn check(&self, ont: &Ontology)-> ();
 }
 
-#[derive(Eq,PartialEq,Hash,Copy,Clone,Debug)]
-pub struct IRI(usize);
+#[derive(Eq,PartialEq,Hash,Clone,Debug)]
+pub struct IRI(Rc<String>);
 
-impl Checkable for IRI{
-    fn check(&self, ont: &Ontology){
-        if !ont.contains_id(self.0){
-            panic!("Attempt to add IRI to wrong ontology")
-        }
+impl Deref for IRI{
+    type Target = String;
+
+    fn deref(&self) -> &String{
+        &self.0
     }
 }
 
-#[derive(Eq,PartialEq,Hash,Copy,Clone,Debug)]
+#[derive(Debug)]
+pub struct IRIBuild(Rc<RefCell<HashSet<IRI>>>);
+
+impl IRIBuild{
+    pub fn new() -> IRIBuild{
+        IRIBuild(Rc::new(RefCell::new(HashSet::new())))
+    }
+
+    pub fn iri(&self, s: String) -> IRI{
+        let iri = IRI(Rc::new(s));
+
+        let mut cache = self.0.borrow_mut();
+        if cache.contains(&iri){
+            return cache.get(&iri).unwrap().clone()
+        }
+
+        cache.insert(iri.clone());
+        return iri;
+    }
+}
+
+#[test]
+fn test_iri_creation(){
+    let iri_build = IRIBuild::new();
+
+    let iri1 = iri_build.iri("http://example.com".to_string());
+
+    let iri2 = iri_build.iri("http://example.com".to_string());
+
+    assert_eq!(iri1, iri2);
+}
+
+#[derive(Eq,PartialEq,Hash,Clone,Debug)]
 pub struct Class(pub IRI);
 
-impl Checkable for Class{
-    fn check(&self, ont: &Ontology){
-        if !ont.contains_id((self.0).0){
-            panic!("Attempt to add class to wrong ontology");
-        }
-    }
-}
-
-#[derive(Eq,PartialEq,Hash,Copy,Clone,Debug)]
+#[derive(Eq,PartialEq,Hash,Clone,Debug)]
 pub struct ObjectProperty(IRI);
-
-impl Checkable for ObjectProperty{
-    fn check(&self, ont: &Ontology){
-        if !ont.contains_id((self.0).0){
-            panic!("Attempt to add object property to wrong ontology");
-        }
-    }
-}
 
 #[derive(Eq,PartialEq,Hash,Clone,Debug)]
 pub struct SubClass{
     pub superclass: ClassExpression,
     pub subclass: ClassExpression,
-}
-
-impl Checkable for SubClass{
-    fn check(&self, ont: &Ontology){
-        self.superclass.check(ont);
-        self.subclass.check(ont);
-    }
 }
 
 #[derive(Eq,PartialEq,Hash,Clone,Debug)]
@@ -61,26 +70,9 @@ pub struct Some{
     pub filler: Box<ClassExpression>
 }
 
-impl Checkable for Some{
-    fn check(&self, ont:&Ontology) -> ()
-    {
-        self.object_property.check(ont);
-        self.filler.check(ont);
-    }
-}
-
 #[derive(Eq,PartialEq,Hash,Clone,Debug)]
 pub struct And{
     pub operands: Vec<ClassExpression>
-}
-
-impl Checkable for And
-{
-    fn check(&self, ont: &Ontology) -> (){
-        for i in &self.operands{
-            i.check(ont);
-        }
-    }
 }
 
 #[derive(Eq,PartialEq,Hash,Clone,Debug)]
@@ -88,25 +80,9 @@ pub struct Or{
     pub operands: Vec<ClassExpression>
 }
 
-impl Checkable for Or
-{
-    fn check(&self, ont: &Ontology) -> (){
-        for i in &self.operands{
-            i.check(ont);
-        }
-    }
-}
-
 #[derive(Eq,PartialEq,Hash,Clone,Debug)]
 pub struct Not{
     pub operand: ClassExpression
-}
-
-impl Checkable for Not
-{
-    fn check(&self, ont:&Ontology) -> (){
-        self.operand.check(ont)
-    }
 }
 
 #[derive(Eq,PartialEq,Hash,Clone,Debug)]
@@ -118,18 +94,6 @@ pub enum ClassExpression
     Or(And),
 }
 
-impl Checkable for ClassExpression{
-    fn check(&self, ont:&Ontology) -> ()
-    {
-        match self{
-            &ClassExpression::Class(ref i) => i.check(ont),
-            &ClassExpression::Some(ref i)  => i.check(ont),
-            &ClassExpression::And(ref i) => i.check(ont),
-            &ClassExpression::Or(ref i) => i.check(ont)
-        }
-    }
-}
-
 #[derive(Debug)]
 pub struct OntologyID{
     pub iri: Option<IRI>,
@@ -139,7 +103,7 @@ pub struct OntologyID{
 #[derive(Debug)]
 pub struct Ontology
 {
-    id_str: BiMap<usize,String>,
+    pub iri_build:IRIBuild,
     pub id: OntologyID,
     pub class: HashSet<Class>,
     pub subclass: HashSet<SubClass>,
@@ -150,8 +114,12 @@ pub struct Ontology
 
 impl Ontology {
     pub fn new() -> Ontology{
+        Ontology::new_with_build(IRIBuild::new())
+    }
+
+    pub fn new_with_build(iri_build:IRIBuild) -> Ontology{
         Ontology{
-            id_str: BiMap::new(),
+            iri_build: iri_build,
             id: OntologyID{iri:None,viri:None},
             class: HashSet::new(),
             subclass: HashSet::new(),
@@ -161,58 +129,23 @@ impl Ontology {
         }
     }
 
-    fn next_id(&mut self) -> usize{
-        unsafe{
-            COUNTER = COUNTER + 1;
-            COUNTER
-        }
-    }
-
-    pub fn contains_id(&self, id:usize)-> bool {
-        self.id_str.contains_left(&id)
-    }
-
-    pub fn contains_iri(&self, iri:String) -> bool {
-        self.id_str.contains_right(&iri)
-    }
-
-    pub fn iri(&mut self, s: String) -> IRI {
-        {
-            let someid = self.id_str.get_by_right(&s);
-            if let Some(id) = someid {
-                return IRI(*id);
-            }
-        }
-
-        let id = self.next_id();
-        let iri = IRI(id);
-        self.id_str.insert(id,s);
-        iri
-    }
-
-    pub fn iri_to_str(&self, i: IRI) -> Option<&String>{
-        self.id_str.get_by_left(&i.0)
-    }
-
     pub fn class(&mut self, i: IRI) -> Class {
         let c = Class(i);
-        c.check(self);
 
         if let Some(_) = self.class.get(&c)
         {return c;}
 
-        self.class.insert(c);
+        self.class.insert(c.clone());
         c
     }
 
     pub fn object_property(&mut self, i: IRI) -> ObjectProperty{
         let o = ObjectProperty(i);
-        o.check(self);
 
         if let Some(_) = self.object_property.get(&o)
         {return o;};
 
-        self.object_property.insert(o);
+        self.object_property.insert(o.clone());
         o
     }
 
@@ -227,7 +160,6 @@ impl Ontology {
                         subclass: ClassExpression) -> SubClass
     {
         let sc = SubClass{superclass:superclass,subclass:subclass};
-        sc.check(self);
 
         if let Some(_) = self.subclass.get(&sc)
         {return sc;}
@@ -248,8 +180,6 @@ impl Ontology {
             ClassExpression::Some(
                 Some{object_property:object_property,
                      filler:Box::new(filler)});
-
-        some.check(self);
 
         if let Some(_) = self.some.get(&some)
         {return some;}
@@ -273,21 +203,21 @@ impl Ontology {
             .collect::<Vec<ClassExpression>>()
     }
 
-    pub fn is_subclass(&self, superclass:Class, subclass:Class)
+    pub fn is_subclass(&self, superclass:&Class, subclass:&Class)
         -> bool{
-        self.is_subclass_exp(ClassExpression::Class(superclass),
-                             ClassExpression::Class(subclass))
+        self.is_subclass_exp(&ClassExpression::Class(superclass.clone()),
+                             &ClassExpression::Class(subclass.clone()))
     }
 
-    pub fn is_subclass_exp(&self, superclass:ClassExpression,
-                           subclass:ClassExpression)
+    pub fn is_subclass_exp(&self, superclass:&ClassExpression,
+                           subclass:&ClassExpression)
                        ->bool{
 
         let first:Option<&SubClass> =
             self.subclass.iter()
-            .filter(|&sc|
-                    sc.superclass == superclass &&
-                    sc.subclass == subclass)
+            .filter(|sc|
+                    sc.superclass == *superclass &&
+                    sc.subclass == *subclass)
             .next();
 
         match first

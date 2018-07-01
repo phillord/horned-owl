@@ -14,12 +14,17 @@ enum State{
     Top, Ontology, Declaration
 }
 
-pub fn read <R: BufRead>(bufread: &mut R) -> (Ontology,PrefixMapping)
+pub fn read <R:BufRead>(bufread: &mut R) ->
+    (Ontology,PrefixMapping)
 {
+    read_with_build(bufread,IRIBuild::new())
+}
+
+pub fn read_with_build <R:BufRead>(bufread: &mut R, build:IRIBuild)
+                                   ->(Ontology,PrefixMapping){
 
     let mut reader:Reader<&mut R> = Reader::from_reader(bufread);
-
-    let mut ont = Ontology::new();
+    let mut ont = Ontology::new_with_build(build);
     let mut mapping = PrefixMapping::default();
 
     let mut state = State::Top;
@@ -40,7 +45,7 @@ pub fn read <R: BufRead>(bufread: &mut R) -> (Ontology,PrefixMapping)
             {
                 match (&state, e.local_name()){
                     (&State::Top, b"Ontology") => {
-                        ontology_attributes(&mut ont,&mut mapping,
+                        ontology_attributes(&mut ont, &mut mapping,
                                             &mut reader, e);
                         state = State::Ontology;
                     }
@@ -48,7 +53,7 @@ pub fn read <R: BufRead>(bufread: &mut R) -> (Ontology,PrefixMapping)
                         state = State::Declaration;
                         closing_tag=b"Declaration";
                         closing_state = State::Ontology;
-                     }
+                    }
                     (_,n) => {
                         unimplemented_owl(n);
                     }
@@ -110,8 +115,8 @@ fn unimplemented_owl(n:&[u8]){
              from_utf8(n).ok().unwrap());
 }
 
-fn ontology_attributes<R: BufRead>(ont:&mut Ontology, mapping:&mut PrefixMapping,
-                                reader:&mut Reader<R>, e: &BytesStart){
+fn ontology_attributes<R: BufRead>(ont:&mut Ontology, mapping: &mut PrefixMapping,
+                         reader:&mut Reader<R>,e: &BytesStart){
     for res in e.attributes(){
         match res{
             Ok(attrib) => {
@@ -119,21 +124,21 @@ fn ontology_attributes<R: BufRead>(ont:&mut Ontology, mapping:&mut PrefixMapping
                     b"ontologyIRI" => {
                         let s = reader.decode(&attrib.value);
                         mapping.set_default(&s[..]);
-                        ont.id.iri = Some(ont.iri(s.into_owned()));
+                        ont.id.iri = Some(ont.iri_build.iri(s.into_owned()));
                     },
                     b"versionIRI" => {
-                        ont.id.viri = Some(ont.iri
+                        ont.id.viri = Some(ont.iri_build.iri
                                            (reader.decode(&attrib.value)
                                             .into_owned()));
                     },
                     _ => ()
-                }
-            },
-            Err(e) => {
-                panic!( "Error at position{}: {:?}",
-                         reader.buffer_position(),
-                         e);
             }
+        },
+        Err(e) => {
+            panic!( "Error at position{}: {:?}",
+                     reader.buffer_position(),
+                     e);
+        }
         }
     }
 }
@@ -197,7 +202,7 @@ fn test_simple_ontology(){
     let ont_s = include_str!("../ont/one-ont.xml");
     let (ont,_) = read(&mut ont_s.as_bytes());
 
-    assert_eq!(ont.iri_to_str(ont.id.iri.unwrap()).unwrap(),
+    assert_eq!(*ont.id.iri.unwrap(),
                "http://example.com/iri");
 }
 
@@ -206,7 +211,7 @@ fn test_simple_ontology_rendered_by_horned(){
     let ont_s = include_str!("../ont/one-ont-from-horned.xml");
     let (ont,_) = read(&mut ont_s.as_bytes());
 
-    assert_eq!(ont.iri_to_str(ont.id.iri.unwrap()).unwrap(),
+    assert_eq!(*ont.id.iri.unwrap(),
                "http://example.com/iri");
 }
 
@@ -229,7 +234,7 @@ fn add_class<R: BufRead>(ont:&mut Ontology, mapping: &PrefixMapping,
                                 Err(_e) => val.into_owned(),
                             };
 
-                        let iri = ont.iri(expanded);
+                        let iri = ont.iri_build.iri(expanded);
                         return Some(ont.class(iri));
                     },
                     _ => {}
@@ -250,7 +255,7 @@ fn test_one_class(){
 
     assert_eq!(ont.class.len(), 1);
     assert_eq!(
-        ont.iri_to_str(ont.class.iter().next().unwrap().0).unwrap(),
+        *ont.class.iter().next().unwrap().0,
         "http://example.com/iri#C");
 }
 
@@ -261,7 +266,7 @@ fn test_one_class_fqn(){
 
     assert_eq!(ont.class.len(), 1);
     assert_eq!(
-        ont.iri_to_str(ont.class.iter().next().unwrap().0).unwrap(),
+        *ont.class.iter().next().unwrap().0,
         "http://www.russet.org.uk/#C");
 }
 
