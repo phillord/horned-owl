@@ -49,7 +49,14 @@ fn test_iri_creation(){
 
     let iri2 = iri_build.iri("http://example.com".to_string());
 
+    // these are equal to each other
     assert_eq!(iri1, iri2);
+
+    // these are the same object in memory
+    assert!(Rc::ptr_eq(&iri1.0, &iri2.0));
+
+    // iri1, iri2 and one in the cache == 3
+    assert_eq!(Rc::strong_count(&iri1.0), 3);
 }
 
 #[derive(Eq,PartialEq,Hash,Clone,Debug)]
@@ -229,13 +236,5 @@ impl Ontology {
             Some(_) => true,
             None => false
         }
-    }
-}
-
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn it_works() {
     }
 }
