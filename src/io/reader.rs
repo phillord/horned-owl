@@ -124,10 +124,10 @@ fn ontology_attributes<R: BufRead>(ont:&mut Ontology, mapping: &mut PrefixMappin
                     b"ontologyIRI" => {
                         let s = reader.decode(&attrib.value);
                         mapping.set_default(&s[..]);
-                        ont.id.iri = Some(ont.iri_build.iri(s.into_owned()));
+                        ont.id.iri = Some(ont.iri(s.into_owned()));
                     },
                     b"versionIRI" => {
-                        ont.id.viri = Some(ont.iri_build.iri
+                        ont.id.viri = Some(ont.iri
                                            (reader.decode(&attrib.value)
                                             .into_owned()));
                     },
@@ -234,7 +234,7 @@ fn add_class<R: BufRead>(ont:&mut Ontology, mapping: &PrefixMapping,
                                 Err(_e) => val.into_owned(),
                             };
 
-                        let iri = ont.iri_build.iri(expanded);
+                        let iri = ont.iri(expanded);
                         return Some(ont.class(iri));
                     },
                     _ => {}

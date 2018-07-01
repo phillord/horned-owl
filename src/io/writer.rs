@@ -104,7 +104,7 @@ mod test{
     #[test]
     fn test_ont_rt(){
         let mut ont = Ontology::new();
-        let iri = ont.iri_build.iri("http://www.example.com/a".to_string());
+        let iri = ont.iri("http://www.example.com/a".to_string());
         ont.id.iri = Some(iri);
         let temp_file = Temp::new_file().unwrap();
         let file = File::create(&temp_file).ok().unwrap();

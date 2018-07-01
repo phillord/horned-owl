@@ -129,6 +129,10 @@ impl Ontology {
         }
     }
 
+    pub fn iri(&self, s: String)-> IRI{
+        self.iri_build.iri(s)
+    }
+
     pub fn class(&mut self, i: IRI) -> Class {
         let c = Class(i);
 
