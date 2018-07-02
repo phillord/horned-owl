@@ -28,8 +28,10 @@ impl IRIBuild{
         IRIBuild(Rc::new(RefCell::new(HashSet::new())))
     }
 
-    pub fn iri(&self, s: String) -> IRI{
-        let iri = IRI(Rc::new(s));
+    pub fn iri<S>(&self, s: S) -> IRI
+        where S: Into<String>
+    {
+        let iri = IRI(Rc::new(s.into()));
 
         let mut cache = self.0.borrow_mut();
         if cache.contains(&iri){
@@ -57,6 +59,21 @@ fn test_iri_creation(){
 
     // iri1, iri2 and one in the cache == 3
     assert_eq!(Rc::strong_count(&iri1.0), 3);
+}
+
+#[test]
+fn test_iri_string_creation(){
+    let iri_build = IRIBuild::new();
+
+    let iri_string = iri_build.iri("http://www.example.com".to_string());
+    let iri_static = iri_build.iri("http://www.example.com");
+
+    let s = "http://www.example.com";
+    let iri_str = iri_build.iri(&s[..]);
+
+    assert_eq!(iri_string, iri_static);
+    assert_eq!(iri_string, iri_str);
+    assert_eq!(iri_static, iri_str);
 }
 
 #[derive(Eq,PartialEq,Hash,Clone,Debug)]
@@ -117,6 +134,7 @@ pub struct Ontology
     pub object_property: HashSet<ObjectProperty>,
     pub some: HashSet<ClassExpression>,
     pub and: HashSet<And>
+
 }
 
 impl Ontology {
@@ -237,4 +255,43 @@ impl Ontology {
             None => false
         }
     }
+}
+
+#[cfg(test)]
+mod test{
+    use super::*;
+
+    #[test]
+    fn test_ontology_cons(){
+        let _ = Ontology::new();
+        assert!(true);
+    }
+
+    #[test]
+    fn test_iri(){
+        let o = Ontology::new();
+        let iri = o.iri("http://www.example.com".to_string());
+        assert_eq!(*iri.0, "http://www.example.com".to_string());
+    }
+
+    #[test]
+    fn test_class(){
+        let mut o = Ontology::new();
+        let iri = o.iri("http://www.example.com".to_string());
+
+        let a = o.class(iri.clone());
+        let b = o.class(iri);
+        assert_eq!(a,b);
+    }
+
+    #[test]
+    fn test_object_property(){
+        let mut o = Ontology::new();
+        let iri = o.iri("http://www.example.com".to_string());
+
+        let a = o.object_property(iri.clone());
+        let b = o.object_property(iri);
+        assert_eq!(a,b);
+    }
+
 }
