@@ -20,6 +20,13 @@ impl Deref for IRI{
     }
 }
 
+impl From<IRI> for String{
+    fn from(i:IRI) -> String {
+        // Clone Rc'd value
+        (*i.0).clone()
+    }
+}
+
 #[derive(Debug)]
 pub struct IRIBuild(Rc<RefCell<HashSet<IRI>>>);
 
@@ -67,6 +74,7 @@ fn test_iri_string_creation(){
 
     let iri_string = iri_build.iri("http://www.example.com".to_string());
     let iri_static = iri_build.iri("http://www.example.com");
+    let iri_from_iri = iri_build.iri(iri_static.clone());
 
     let s = "http://www.example.com";
     let iri_str = iri_build.iri(&s[..]);
@@ -74,6 +82,7 @@ fn test_iri_string_creation(){
     assert_eq!(iri_string, iri_static);
     assert_eq!(iri_string, iri_str);
     assert_eq!(iri_static, iri_str);
+    assert_eq!(iri_from_iri, iri_str);
 }
 
 #[derive(Eq,PartialEq,Hash,Clone,Debug)]
@@ -154,11 +163,39 @@ impl Ontology {
         }
     }
 
-    pub fn iri(&self, s: String)-> IRI{
+    /// Constructs a new `IRI`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use horned_owl::model::*;
+    /// let o = Ontology::new();
+    /// let iri = o.iri("http://www.example.com".to_string());
+    /// let iri2 = o.iri("http://www.example.com");
+    ///
+    /// assert_eq!(iri, iri2);
+    /// ```
+    pub fn iri<S>(&self, s: S)-> IRI
+        where S: Into<String> {
         self.iri_build.iri(s)
     }
 
-    pub fn class(&mut self, i: IRI) -> Class {
+    /// Constructs a new `Class` from an existing IRI. This is
+    /// slightly more efficient that using `class`, when an IRI has
+    /// already been created.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use horned_owl::model::*;
+    /// let o = Ontology::new();
+    /// let iri = o.class("http://www.example.com".to_string());
+    /// let iri2 = o.class("http://www.example.com");
+    ///
+    /// assert_eq!(iri, iri2);
+    /// ```
+    ///
+    pub fn class_from_iri(&mut self, i: IRI) -> Class {
         let c = Class(i);
 
         if let Some(_) = self.class.get(&c)
@@ -168,7 +205,28 @@ impl Ontology {
         c
     }
 
-    pub fn object_property(&mut self, i: IRI) -> ObjectProperty{
+    /// Constructs a new `Class`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use horned_owl::model::*;
+    /// let o = Ontology::new();
+    /// let iri = o.class("http://www.example.com".to_string());
+    /// let iri2 = o.class("http://www.example.com");
+    ///
+    /// assert_eq!(iri, iri2);
+    /// ```
+    ///
+    pub fn class<S>(&mut self, s: S) -> Class
+        where S: Into<String>
+    {
+        let i = self.iri(s);
+        self.class_from_iri(i)
+    }
+
+    pub fn object_property_from_iri(&mut self, i: IRI) -> ObjectProperty
+    {
         let o = ObjectProperty(i);
 
         if let Some(_) = self.object_property.get(&o)
@@ -176,6 +234,25 @@ impl Ontology {
 
         self.object_property.insert(o.clone());
         o
+    }
+
+    /// Constructs a new `ObjectProperty`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use horned_owl::model::*;
+    /// let o = Ontology::new();
+    /// let iri = o.object_property("http://www.example.com".to_string());
+    /// let iri2 = o.object_property("http://www.example.com");
+    ///
+    /// assert_eq!(iri, iri2);
+    /// ```
+    pub fn object_property<S>(&mut self, s:S) -> ObjectProperty
+        where S: Into<String>
+    {
+        let i = self.iri(s);
+        self.object_property_from_iri(i)
     }
 
     pub fn subclass(&mut self, superclass:Class, subclass: Class)
@@ -279,8 +356,19 @@ mod test{
         let mut o = Ontology::new();
         let iri = o.iri("http://www.example.com".to_string());
 
-        let a = o.class(iri.clone());
+        let a = o.class("http://www.example.com");
         let b = o.class(iri);
+        assert_eq!(a,b);
+    }
+
+    #[test]
+    fn test_class_iri(){
+        let mut o = Ontology::new();
+
+        let iri = o.iri("http://www.example.com".to_string());
+        let a = o.class(iri.clone());
+        let b = o.class_from_iri(iri);
+
         assert_eq!(a,b);
     }
 
