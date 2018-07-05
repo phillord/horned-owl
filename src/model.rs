@@ -335,6 +335,24 @@ impl Ontology {
             .collect::<Vec<&ClassExpression>>()
     }
 
+    /// Returns true is `subclass` is a subclass of `superclass`
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use horned_owl::model::*;
+    /// let mut o = Ontology::new();
+    /// let sup = o.class("http://www.example.com/super");
+    /// let sub = o.class("http://www.example.com/sub");
+    /// let subsub = o.class("http://www.example.com/subsub");
+    ///
+    /// o.subclass(sup.clone(), sub.clone());
+    /// o.subclass(sub.clone(), subsub.clone());
+    ///
+    /// assert!(o.is_subclass(&sup, &sub));
+    /// assert!(!o.is_subclass(&sub, &sup));
+    /// assert!(!o.is_subclass(&sup, &subsub));
+    /// ```
     pub fn is_subclass(&self, superclass:&Class, subclass:&Class)
         -> bool{
         self.is_subclass_exp(&ClassExpression::Class(superclass.clone()),
