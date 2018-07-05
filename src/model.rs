@@ -302,18 +302,37 @@ impl Ontology {
         some
     }
 
-    pub fn direct_subclass(&self, c: Class)
-                           ->Vec<ClassExpression>{
-        self.direct_subclass_exp(ClassExpression::Class(c))
+    /// Returns all direct subclasses
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use horned_owl::model::*;
+    /// let mut o = Ontology::new();
+    /// let sup = o.class("http://www.example.com/super");
+    /// let sub = o.class("http://www.example.com/sub");
+    /// let subsub = o.class("http://www.example.com/subsub");
+    ///
+    /// o.subclass(sup.clone(), sub.clone());
+    /// o.subclass(sub.clone(), subsub);
+    ///
+    /// let subs = o.direct_subclass(&sup);
+    ///
+    /// assert_eq!(vec![&ClassExpression::Class(sub)],subs);
+    /// ```
+    pub fn direct_subclass(&self, c: &Class)
+                           ->Vec<&ClassExpression>{
+        let ce = ClassExpression::Class(c.clone());
+        self.direct_subclass_exp(&ce)
     }
 
-    pub fn direct_subclass_exp(&self, c: ClassExpression)
-                           -> Vec<ClassExpression>{
+    pub fn direct_subclass_exp(&self, c: &ClassExpression)
+                           -> Vec<&ClassExpression>{
         self.subclass
             .iter()
-            .filter(|sc| sc.superclass == c )
-            .map(|sc| sc.subclass.clone())
-            .collect::<Vec<ClassExpression>>()
+            .filter(|sc| &sc.superclass == c )
+            .map(|sc| &sc.subclass )
+            .collect::<Vec<&ClassExpression>>()
     }
 
     pub fn is_subclass(&self, superclass:&Class, subclass:&Class)
