@@ -5,10 +5,6 @@ use std::rc::Rc;
 use std::cell::RefCell;
 use std::ops::Deref;
 
-pub trait Checkable{
-    fn check(&self, ont: &Ontology)-> ();
-}
-
 #[derive(Eq,PartialEq,Hash,Clone,Debug)]
 pub struct IRI(Rc<String>);
 
