@@ -169,7 +169,7 @@ impl Ontology {
     ///
     /// ```
     /// # use horned_owl::model::*;
-    /// let o = Ontology::new();
+    /// let mut o = Ontology::new();
     /// let iri = o.iri("http://www.example.com".to_string());
     /// let iri2 = o.iri("http://www.example.com");
     ///
@@ -188,7 +188,7 @@ impl Ontology {
     ///
     /// ```
     /// # use horned_owl::model::*;
-    /// let o = Ontology::new();
+    /// let mut o = Ontology::new();
     /// let iri = o.class("http://www.example.com".to_string());
     /// let iri2 = o.class("http://www.example.com");
     ///
@@ -211,7 +211,7 @@ impl Ontology {
     ///
     /// ```
     /// # use horned_owl::model::*;
-    /// let o = Ontology::new();
+    /// let mut o = Ontology::new();
     /// let iri = o.class("http://www.example.com".to_string());
     /// let iri2 = o.class("http://www.example.com");
     ///
@@ -242,7 +242,7 @@ impl Ontology {
     ///
     /// ```
     /// # use horned_owl::model::*;
-    /// let o = Ontology::new();
+    /// let mut o = Ontology::new();
     /// let iri = o.object_property("http://www.example.com".to_string());
     /// let iri2 = o.object_property("http://www.example.com");
     ///
@@ -255,6 +255,18 @@ impl Ontology {
         self.object_property_from_iri(i)
     }
 
+    /// Adds a subclass axiom to the ontology
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use horned_owl::model::*;
+    /// let mut o = Ontology::new();
+    /// let sup = o.class("http://www.example.com/super");
+    /// let sub = o.class("http://www.example.com/sub");
+    ///
+    /// o.subclass(sup, sub);
+    /// ```
     pub fn subclass(&mut self, superclass:Class, subclass: Class)
                     -> SubClass
     {
@@ -294,7 +306,6 @@ impl Ontology {
         some
     }
 
-    // Query Methods
     pub fn direct_subclass(&self, c: Class)
                            ->Vec<ClassExpression>{
         self.direct_subclass_exp(ClassExpression::Class(c))
