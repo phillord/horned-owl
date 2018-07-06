@@ -16,6 +16,15 @@ impl Deref for IRI{
     }
 }
 
+#[test]
+fn test_iri_from_string() {
+    let iri_build = IRIBuild::new();
+    let iri = iri_build.iri("http://www.example.com");
+
+    assert_eq!(String::from(iri), "http://www.example.com");
+}
+
+
 impl From<IRI> for String{
     fn from(i:IRI) -> String {
         // Clone Rc'd value
@@ -84,6 +93,20 @@ fn test_iri_string_creation(){
 #[derive(Eq,PartialEq,Hash,Clone,Debug)]
 pub struct Class(pub IRI);
 
+impl From<Class> for String {
+    fn from(i:Class) -> String {
+        String::from((*i.0).clone())
+    }
+}
+
+#[test]
+fn test_class_from_string() {
+    let mut o = Ontology::new();
+    let c = o.class("http://www.example.com");
+
+    assert_eq!(String::from(c), "http://www.example.com");
+}
+
 #[derive(Eq,PartialEq,Hash,Clone,Debug)]
 pub struct ObjectProperty(IRI);
 
@@ -94,33 +117,12 @@ pub struct SubClass{
 }
 
 #[derive(Eq,PartialEq,Hash,Clone,Debug)]
-pub struct Some{
-    pub object_property: ObjectProperty,
-    pub filler: Box<ClassExpression>
-}
-
-#[derive(Eq,PartialEq,Hash,Clone,Debug)]
-pub struct And{
-    pub operands: Vec<ClassExpression>
-}
-
-#[derive(Eq,PartialEq,Hash,Clone,Debug)]
-pub struct Or{
-    pub operands: Vec<ClassExpression>
-}
-
-#[derive(Eq,PartialEq,Hash,Clone,Debug)]
-pub struct Not{
-    pub operand: ClassExpression
-}
-
-#[derive(Eq,PartialEq,Hash,Clone,Debug)]
 pub enum ClassExpression
 {
     Class(Class),
-    Some(Some),
-    And(And),
-    Or(And),
+    Some{o:ObjectProperty, c:Box<ClassExpression>},
+    And{o:Box<ClassExpression>},
+    Or{o:Box<ClassExpression>},
 }
 
 #[derive(Debug)]
@@ -137,8 +139,6 @@ pub struct Ontology
     pub class: HashSet<Class>,
     pub subclass: HashSet<SubClass>,
     pub object_property: HashSet<ObjectProperty>,
-    pub some: HashSet<ClassExpression>,
-    pub and: HashSet<And>
 
 }
 
@@ -154,8 +154,6 @@ impl Ontology {
             class: HashSet::new(),
             subclass: HashSet::new(),
             object_property: HashSet::new(),
-            some: HashSet::new(),
-            and: HashSet::new(),
         }
     }
 
@@ -194,7 +192,7 @@ impl Ontology {
     pub fn class_from_iri(&mut self, i: IRI) -> Class {
         let c = Class(i);
 
-        if let Some(_) = self.class.get(&c)
+        if let Option::Some(_) = self.class.get(&c)
         {return c;}
 
         self.class.insert(c.clone());
@@ -225,7 +223,7 @@ impl Ontology {
     {
         let o = ObjectProperty(i);
 
-        if let Some(_) = self.object_property.get(&o)
+        if let Option::Some(_) = self.object_property.get(&o)
         {return o;};
 
         self.object_property.insert(o.clone());
@@ -282,26 +280,6 @@ impl Ontology {
         sc
     }
 
-    pub fn some(&mut self, object_property:ObjectProperty,
-                class:Class)
-                -> ClassExpression{
-        self.some_exp(object_property,ClassExpression::Class(class))
-    }
-
-    pub fn some_exp(&mut self, object_property:ObjectProperty,
-                    filler:ClassExpression) -> ClassExpression{
-        let some =
-            ClassExpression::Some(
-                Some{object_property:object_property,
-                     filler:Box::new(filler)});
-
-        if let Some(_) = self.some.get(&some)
-        {return some;}
-
-        self.some.insert(some.clone());
-        some
-    }
-
     /// Returns all direct subclasses
     ///
     /// # Examples
@@ -353,15 +331,15 @@ impl Ontology {
     /// assert!(!o.is_subclass(&sub, &sup));
     /// assert!(!o.is_subclass(&sup, &subsub));
     /// ```
-    pub fn is_subclass(&self, superclass:&Class, subclass:&Class)
-        -> bool{
+    pub fn is_subclass(&self, superclass:&Class,
+                       subclass:&Class) -> bool {
         self.is_subclass_exp(&ClassExpression::Class(superclass.clone()),
                              &ClassExpression::Class(subclass.clone()))
     }
 
     pub fn is_subclass_exp(&self, superclass:&ClassExpression,
                            subclass:&ClassExpression)
-                       ->bool{
+        -> bool {
 
         let first:Option<&SubClass> =
             self.subclass.iter()
@@ -372,7 +350,7 @@ impl Ontology {
 
         match first
         {
-            Some(_) => true,
+            Option::Some(_) => true,
             None => false
         }
     }

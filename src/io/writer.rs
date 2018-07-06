@@ -62,11 +62,9 @@ fn push_classes<W: Write>(writer: &mut Writer<W>, ont: &Ontology,
                               _prefix: Option<&PrefixMapping>){
 
     // Make rendering determinisitic in terms of order
-    let mut classes:Vec<&String> = ont.class.iter().
-        map(|c|
-            &(*c.0)
-        ).
-        collect::<Vec<&String>>();
+    let mut classes:Vec<&String> = ont.class.iter()
+        .map(|c| &(*c.0))
+        .collect::<Vec<&String>>();
 
     classes.sort();
 
