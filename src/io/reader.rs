@@ -11,7 +11,7 @@ use model::*;
 
 #[derive(Copy,Clone)]
 enum State{
-    Top, Ontology, Declaration
+    Top, Ontology, Declaration, SubClassOf
 }
 
 pub fn read <R:BufRead>(bufread: &mut R) ->
@@ -34,11 +34,13 @@ pub fn read_with_build <R:BufRead>(bufread: &mut R, build:IRIBuild)
     let mut closing_tag:&[u8] = b"";
     let mut closing_state = State::Top;
 
+    let mut class_operands:Vec<ClassExpression> = Vec::new();
+
     loop{
-        let mut r = reader.read_namespaced_event(&mut buf, &mut ns_buf);
+        let mut e = reader.read_namespaced_event(&mut buf, &mut ns_buf);
         //println!("r:{:?}", r);
 
-        match r {
+        match e {
             Ok((ref ns, Event::Start(ref mut e)))
                 if *ns == Some(b"http://www.w3.org/2002/07/owl#")
                 =>
@@ -54,6 +56,9 @@ pub fn read_with_build <R:BufRead>(bufread: &mut R, build:IRIBuild)
                         closing_tag=b"Declaration";
                         closing_state = State::Ontology;
                     }
+                    (&State::Ontology, b"SubClassOf") => {
+                        state = State::SubClassOf;
+                    }
                     (_,n) => {
                         unimplemented_owl(n);
                     }
@@ -68,7 +73,41 @@ pub fn read_with_build <R:BufRead>(bufread: &mut R, build:IRIBuild)
                         prefix_attributes(&mut mapping, &mut reader, e);
                     }
                     (&State::Declaration, b"Class") => {
-                        add_class(&mut ont, &mut mapping, &mut reader, e);
+                        let iri = pull_iri(&mut ont, &mut mapping,
+                                           &mut reader, e);
+                        ont.class_from_iri(iri.unwrap());
+                    }
+                    (&State::SubClassOf, b"Class") => {
+                        match class_operands.len() {
+                            // Take off the last class and add it
+                            1 => {
+                                let iri = pull_iri(&mut ont, &mut mapping,
+                                                   &mut reader, e);
+                                let sub = ont.class_from_iri(iri.unwrap());
+
+                                ont.subclass_exp(class_operands.pop().unwrap(),
+                                                 ClassExpression::Class(sub));
+                                class_operands.clear();
+
+                            },
+                            // Add the new class as an operand
+                            0 => {
+                                let iri = pull_iri(&mut ont, &mut mapping,
+                                                   &mut reader, e);
+
+                                class_operands
+                                    .push(
+                                        ClassExpression::Class(
+                                            ont.class_from_iri(iri.unwrap())));
+                            }
+                            // Shouldn't happen
+                            _ => {panic!("We panic a lot!");}
+                        }
+                    }
+                    (&State::Declaration, b"ObjectProperty") => {
+                        let iri = pull_iri(&mut ont, &mut mapping, &mut reader,
+                                           e);
+                        ont.object_property_from_iri(iri.unwrap());
                     }
                     (_,n) =>{
                         unimplemented_owl(n);
@@ -134,11 +173,11 @@ fn ontology_attributes<R: BufRead>(ont:&mut Ontology, mapping: &mut PrefixMappin
                     _ => ()
             }
         },
-        Err(e) => {
-            panic!( "Error at position{}: {:?}",
-                     reader.buffer_position(),
-                     e);
-        }
+            Err(e) => {
+                panic!( "Error at position{}: {:?}",
+                         reader.buffer_position(),
+                         e);
+            }
         }
     }
 }
@@ -216,10 +255,10 @@ fn test_simple_ontology_rendered_by_horned(){
 }
 
 
-fn add_class<R: BufRead>(ont:&mut Ontology, mapping: &PrefixMapping,
-                         reader:&mut Reader<R>,event:&BytesStart)
-             -> Option<Class>
-{
+fn pull_iri<R:BufRead>(ont:&mut Ontology, mapping: &PrefixMapping,
+                       reader:&mut Reader<R>,
+                       event:&BytesStart)
+                       -> Option<IRI> {
     for res in event.attributes(){
         match res {
             Ok(attrib) => {
@@ -234,8 +273,7 @@ fn add_class<R: BufRead>(ont:&mut Ontology, mapping: &PrefixMapping,
                                 Err(_e) => val.into_owned(),
                             };
 
-                        let iri = ont.iri(expanded);
-                        return Some(ont.class(iri));
+                        return Some(ont.iri(expanded))
                     },
                     _ => {}
                 }
@@ -276,4 +314,22 @@ fn test_ten_class(){
     let (ont,_) = read(&mut ont_s.as_bytes());
 
     assert_eq!(ont.class.len(), 10);
+}
+
+
+
+#[test]
+fn test_one_property(){
+    let ont_s = include_str!("../ont/one-oproperty.xml");
+    let (ont,_) = read(&mut ont_s.as_bytes());
+
+    assert_eq!(ont.object_property.len(), 1);
+}
+
+#[test]
+fn test_one_subclass(){
+    let ont_s = include_str!("../ont/one-subclass.xml");
+    let (ont,_) = read(&mut ont_s.as_bytes());
+
+    assert_eq!(ont.subclass.len(), 1);
 }

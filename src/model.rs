@@ -93,9 +93,15 @@ fn test_iri_string_creation(){
 #[derive(Eq,PartialEq,Hash,Clone,Debug)]
 pub struct Class(pub IRI);
 
+impl <'a> From<&'a Class> for String {
+    fn from(i:&'a Class) -> String {
+        String::from((i.0).clone())
+    }
+}
+
 impl From<Class> for String {
     fn from(i:Class) -> String {
-        String::from((*i.0).clone())
+        String::from((i.0).clone())
     }
 }
 

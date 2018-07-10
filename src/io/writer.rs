@@ -17,9 +17,9 @@ pub fn write<W: Write>(write: &mut W, ont: &Ontology,
     let mut elem = BytesStart::owned(b"Ontology".to_vec(),
                                      "Ontology".len());
     elem.push_attribute(("xmlns","http://www.w3.org/2002/07/owl#"));
-    push_iri_attribute_maybe(&mut elem, ont,
+    push_iri_maybe(&mut elem, ont,
                              "ontologyIRI",&ont.id.iri);
-    push_iri_attribute_maybe(&mut elem, ont,
+    push_iri_maybe(&mut elem, ont,
                              "versionIRI",&ont.id.viri);
 
     writer.write_event(Event::Start(elem)).ok();
@@ -28,10 +28,11 @@ pub fn write<W: Write>(write: &mut W, ont: &Ontology,
 
     push_prefixes(&mut writer, prefix);
     push_classes(&mut writer, ont, prefix);
+    push_subclasses(&mut writer, ont, prefix);
     writer.write_event(Event::End(elem)).ok();
 }
 
-fn push_iri_attribute_maybe(elem:&mut BytesStart,_ont:&Ontology,
+fn push_iri_maybe(elem:&mut BytesStart,_ont:&Ontology,
                             key:&str,iri:&Option<IRI>)
 {
     match iri{
@@ -42,12 +43,36 @@ fn push_iri_attribute_maybe(elem:&mut BytesStart,_ont:&Ontology,
     }
 }
 
+fn push_iri_or_curie(elem:&mut BytesStart,_ont:&Ontology,
+                     prefix: Option<&PrefixMapping>, iri:&str)
+{
+    let key = "IRI";
+    match prefix {
+        Some(prefix) => {
+            match prefix.shrink_iri(&(*iri)[..]) {
+                Ok(curie) => {
+                    let curie_str = format!("{}", curie);
+                    elem.push_attribute
+                        ((key,&curie_str[..]));
+                    return;
+                }
+                Err(_) => {
+                    elem.push_attribute
+                        ((key,&iri[..]));
+                }
+            }
+        },
+        None => {
+            elem.push_attribute
+                ((key,&(*iri)[..]));
+        }
+    }
+}
+
 fn push_prefixes<W: Write>(writer: &mut Writer<W>,
                            prefix: Option<&PrefixMapping>){
-    println!("pushing prefixes");
     if let Some(prefix) = prefix {
         for pre in prefix.mappings(){
-            println!("pushing: {:?}", pre);
             let mut prefix = BytesStart::owned(b"Prefix".to_vec(),
                                                "Prefix".len());
             prefix.push_attribute(("name", &pre.0[..]));
@@ -58,8 +83,19 @@ fn push_prefixes<W: Write>(writer: &mut Writer<W>,
     }
 }
 
+fn push_class<W: Write >(writer: &mut Writer<W>, ont: &Ontology,
+                         prefix: Option<&PrefixMapping>,
+                         iri:&str) {
+    let mut class = BytesStart::owned(b"Class".to_vec(),"Class".len());
+    push_iri_or_curie(&mut class, ont, prefix, iri);
+    writer.write_event(Event::Start(class)).ok();
+
+    writer.write_event(Event::End(BytesEnd::owned(b"Class".to_vec()))).ok();
+
+}
+
 fn push_classes<W: Write>(writer: &mut Writer<W>, ont: &Ontology,
-                              _prefix: Option<&PrefixMapping>){
+                          prefix: Option<&PrefixMapping>){
 
     // Make rendering determinisitic in terms of order
     let mut classes:Vec<&String> = ont.class.iter()
@@ -69,18 +105,45 @@ fn push_classes<W: Write>(writer: &mut Writer<W>, ont: &Ontology,
     classes.sort();
 
     for iri in classes {
+
         let mut declaration = BytesStart::owned(b"Declaration".to_vec(),
                                                 "Declaration".len());
 
         writer.write_event(Event::Start(declaration)).ok();
-
-        let mut class = BytesStart::owned(b"Class".to_vec(),"Class".len());
-        class.push_attribute(("IRI",&iri[..]));
-        writer.write_event(Event::Start(class)).ok();
-
-        writer.write_event(Event::End(BytesEnd::owned(b"Class".to_vec()))).ok();
+        push_class(writer, ont, prefix, iri);
         writer.write_event(Event::End(
             BytesEnd::owned(b"Declaration".to_vec()))).ok();
+    }
+}
+
+fn push_class_expression<W: Write>(writer: &mut Writer<W>, ont: &Ontology,
+                                   prefix: Option<&PrefixMapping>,
+                                   ce: &ClassExpression) {
+    match ce {
+
+        &ClassExpression::Class(ref c) => {
+            push_class(writer, ont, prefix,
+                       &String::from(c));
+        },
+
+        _ => {
+            unimplemented!();
+        }
+    }
+}
+
+fn push_subclasses<W: Write>(writer: &mut Writer<W>, ont: &Ontology,
+                             prefix: Option<&PrefixMapping>) {
+
+    for subclass in &ont.subclass {
+        let mut declaration = BytesStart::owned(b"SubClass".to_vec(),
+                                                "SubClass".len());
+        writer.write_event(Event::Start(declaration)).ok();
+
+        push_class_expression(writer, ont, prefix, &subclass.superclass);
+        push_class_expression(writer, ont, prefix, &subclass.subclass);
+        writer.write_event(Event::End(
+            BytesEnd::owned(b"SubClass".to_vec()))).ok();
     }
 }
 
