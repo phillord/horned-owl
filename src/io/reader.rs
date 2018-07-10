@@ -14,6 +14,7 @@ enum State{
     Top, Ontology, Declaration, SubClassOf
 }
 
+
 pub fn read <R:BufRead>(bufread: &mut R) ->
     (Ontology,PrefixMapping)
 {
@@ -47,7 +48,7 @@ pub fn read_with_build <R:BufRead>(bufread: &mut R, build:IRIBuild)
             {
                 match (&state, e.local_name()){
                     (&State::Top, b"Ontology") => {
-                        ontology_attributes(&mut ont, &mut mapping,
+                        ontology(&mut ont, &mut mapping,
                                             &mut reader, e);
                         state = State::Ontology;
                     }
@@ -70,19 +71,19 @@ pub fn read_with_build <R:BufRead>(bufread: &mut R, build:IRIBuild)
             {
                 match(&state, e.local_name()){
                     (&State::Ontology, b"Prefix") => {
-                        prefix_attributes(&mut mapping, &mut reader, e);
+                        prefix(&mut mapping, &mut reader, e);
                     }
                     (&State::Declaration, b"Class") => {
-                        let iri = pull_iri(&mut ont, &mut mapping,
-                                           &mut reader, e);
+                        let iri = iri(&mut ont, &mut mapping,
+                                      &mut reader, e);
                         ont.class_from_iri(iri.unwrap());
                     }
                     (&State::SubClassOf, b"Class") => {
                         match class_operands.len() {
                             // Take off the last class and add it
                             1 => {
-                                let iri = pull_iri(&mut ont, &mut mapping,
-                                                   &mut reader, e);
+                                let iri = iri(&mut ont, &mut mapping,
+                                              &mut reader, e);
                                 let sub = ont.class_from_iri(iri.unwrap());
 
                                 ont.subclass_exp(class_operands.pop().unwrap(),
@@ -92,8 +93,8 @@ pub fn read_with_build <R:BufRead>(bufread: &mut R, build:IRIBuild)
                             },
                             // Add the new class as an operand
                             0 => {
-                                let iri = pull_iri(&mut ont, &mut mapping,
-                                                   &mut reader, e);
+                                let iri = iri(&mut ont, &mut mapping,
+                                              &mut reader, e);
 
                                 class_operands
                                     .push(
@@ -105,8 +106,8 @@ pub fn read_with_build <R:BufRead>(bufread: &mut R, build:IRIBuild)
                         }
                     }
                     (&State::Declaration, b"ObjectProperty") => {
-                        let iri = pull_iri(&mut ont, &mut mapping, &mut reader,
-                                           e);
+                        let iri = iri(&mut ont, &mut mapping, &mut reader,
+                                      e);
                         ont.object_property_from_iri(iri.unwrap());
                     }
                     (_,n) =>{
@@ -154,7 +155,7 @@ fn unimplemented_owl(n:&[u8]){
              from_utf8(n).ok().unwrap());
 }
 
-fn ontology_attributes<R: BufRead>(ont:&mut Ontology, mapping: &mut PrefixMapping,
+fn ontology<R: BufRead>(ont:&mut Ontology, mapping: &mut PrefixMapping,
                          reader:&mut Reader<R>,e: &BytesStart){
     for res in e.attributes(){
         match res{
@@ -183,7 +184,7 @@ fn ontology_attributes<R: BufRead>(ont:&mut Ontology, mapping: &mut PrefixMappin
 }
 
 
-fn prefix_attributes<R: BufRead>(mapping:&mut PrefixMapping,
+fn prefix<R: BufRead>(mapping:&mut PrefixMapping,
                                  reader:&mut Reader<R>, e: &BytesStart)
 {
     let mut prefix=None;
@@ -255,7 +256,7 @@ fn test_simple_ontology_rendered_by_horned(){
 }
 
 
-fn pull_iri<R:BufRead>(ont:&mut Ontology, mapping: &PrefixMapping,
+fn iri<R:BufRead>(ont:&mut Ontology, mapping: &PrefixMapping,
                        reader:&mut Reader<R>,
                        event:&BytesStart)
                        -> Option<IRI> {
