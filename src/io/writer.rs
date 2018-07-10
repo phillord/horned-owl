@@ -88,10 +88,7 @@ fn push_class<W: Write >(writer: &mut Writer<W>, ont: &Ontology,
                          iri:&str) {
     let mut class = BytesStart::owned(b"Class".to_vec(),"Class".len());
     push_iri_or_curie(&mut class, ont, prefix, iri);
-    writer.write_event(Event::Start(class)).ok();
-
-    writer.write_event(Event::End(BytesEnd::owned(b"Class".to_vec()))).ok();
-
+    writer.write_event(Event::Empty(class)).ok();
 }
 
 fn push_classes<W: Write>(writer: &mut Writer<W>, ont: &Ontology,
