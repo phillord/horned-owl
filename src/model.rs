@@ -131,7 +131,7 @@ pub enum ClassExpression
     Or{o:Box<ClassExpression>},
 }
 
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq)]
 pub struct OntologyID{
     pub iri: Option<IRI>,
     pub viri: Option<IRI>,
@@ -147,6 +147,17 @@ pub struct Ontology
     pub object_property: HashSet<ObjectProperty>,
 
 }
+
+impl PartialEq for Ontology {
+    fn eq(&self, other: &Ontology) -> bool {
+        self.id == other.id &&
+            self.class == other.class &&
+            self.subclass == other.subclass &&
+            self.object_property == self.object_property
+    }
+}
+
+impl Eq for Ontology {}
 
 impl Ontology {
     pub fn new() -> Ontology{
