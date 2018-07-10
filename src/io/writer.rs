@@ -133,14 +133,14 @@ fn push_subclasses<W: Write>(writer: &mut Writer<W>, ont: &Ontology,
                              prefix: Option<&PrefixMapping>) {
 
     for subclass in &ont.subclass {
-        let mut declaration = BytesStart::owned(b"SubClass".to_vec(),
-                                                "SubClass".len());
+        let mut declaration = BytesStart::owned(b"SubClassOf".to_vec(),
+                                                "SubClassOf".len());
         writer.write_event(Event::Start(declaration)).ok();
 
         push_class_expression(writer, ont, prefix, &subclass.superclass);
         push_class_expression(writer, ont, prefix, &subclass.subclass);
         writer.write_event(Event::End(
-            BytesEnd::owned(b"SubClass".to_vec()))).ok();
+            BytesEnd::owned(b"SubClassOf".to_vec()))).ok();
     }
 }
 
@@ -217,5 +217,14 @@ mod test{
             prefix_round.mappings().collect();
 
         assert_eq!(prefix_orig_map,prefix_round_map);
+    }
+
+    #[test]
+    fn round_one_subclass() {
+        let (ont_orig, _prefix_orig,
+             ont_round, _prefix_round) =
+            roundtrip(include_str!("../ont/one-subclass.xml"));
+
+        assert_eq!(ont_orig, ont_round);
     }
 }
