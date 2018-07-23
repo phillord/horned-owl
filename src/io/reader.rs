@@ -5,7 +5,7 @@ use std::str::from_utf8;
 
 use quick_xml::events::BytesStart;
 use quick_xml::events::Event;
-use quick_xml::reader::Reader;
+use quick_xml::Reader;
 
 use model::*;
 

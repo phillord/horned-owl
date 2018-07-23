@@ -6,7 +6,7 @@ use quick_xml::events::BytesDecl;
 use quick_xml::events::BytesEnd;
 use quick_xml::events::BytesStart;
 use quick_xml::events::Event;
-use quick_xml::writer::Writer;
+use quick_xml::Writer;
 
 use std::io::Write as StdWrite;
 
