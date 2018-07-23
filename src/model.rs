@@ -114,7 +114,13 @@ fn test_class_from_string() {
 }
 
 #[derive(Eq,PartialEq,Hash,Clone,Debug)]
-pub struct ObjectProperty(IRI);
+pub struct ObjectProperty(pub IRI);
+
+#[derive(Eq, PartialEq, Hash, Clone, Debug)]
+pub enum NamedEntity {
+    Class(Class),
+    ObjectProperty(ObjectProperty)
+}
 
 #[derive(Eq,PartialEq,Hash,Clone,Debug)]
 pub struct SubClass{
@@ -264,6 +270,18 @@ impl Ontology {
     {
         let i = self.iri(s);
         self.object_property_from_iri(i)
+    }
+
+    pub fn named_entity(&mut self, ne: NamedEntity)
+    {
+        match ne {
+            NamedEntity::Class(c) => {
+                self.class_from_iri(c.0);
+            }
+            NamedEntity::ObjectProperty(i) => {
+                self.object_property_from_iri(i.0);
+            }
+        }
     }
 
     /// Adds a subclass axiom to the ontology
