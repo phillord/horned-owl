@@ -13,8 +13,7 @@ use model::*;
 enum State {
     Top,
     Ontology,
-    Declaration,
-    SubClassOf,
+    SubClassOf
 }
 
 struct Read<R>
@@ -24,6 +23,8 @@ where
     ont: Ontology,
     mapping: PrefixMapping,
     reader: Reader<R>,
+    buf:Vec<u8>,
+    ns_buf:Vec<u8>
 }
 
 pub fn read<R: BufRead>(bufread: &mut R) -> (Ontology, PrefixMapping) {
@@ -47,13 +48,43 @@ impl<R: BufRead> Read<R> {
             reader: reader,
             ont: ont,
             mapping: mapping,
+            buf:Vec::new(),
+            ns_buf:Vec::new()
+        }
+    }
+
+    /// Read an event from the reader, which is unowned.
+    ///
+    /// This method is here because it allows me to nest self called,
+    /// inside a match on the event; the event otherwise keeps a
+    /// mutable borrow out which prevents these calls. This problem
+    /// happens because of the design of quick-xml. Nested calls
+    /// cannot work because we have to pass `buf` and `ns_buf`.
+    ///
+    /// So, we use this solution instead; the worry is that this will
+    /// be inefficient because it removes the zero-copy promise of
+    /// quick-xml. I will not worry about this, however, because when
+    /// non-lexical lifetimes appears, it should be possible to make
+    /// this a straight alias for `read_namespaced_event`, and still
+    /// have it all work.
+    fn read_event(&mut self)
+                  -> (Vec<u8>, Event<'static>)
+    {
+        let r = self.reader.read_namespaced_event(&mut self.buf,
+                                                  &mut self.ns_buf);
+        match r {
+            Ok((option_ns, event)) => {
+                (option_ns.unwrap_or(b"").to_owned(),
+                 event.into_owned())
+            }
+            Err(_) => {
+                panic!("We panic a lot");
+            }
         }
     }
 
     fn parse(&mut self) {
         let mut state = State::Top;
-        let mut buf = Vec::new();
-        let mut ns_buf = Vec::new();
 
         let mut closing_tag: &[u8] = b"";
         let mut closing_state = State::Top;
@@ -61,12 +92,16 @@ impl<R: BufRead> Read<R> {
         let mut class_operands: Vec<ClassExpression> = Vec::new();
 
         loop {
-            let mut e = self.reader.read_namespaced_event(&mut buf, &mut ns_buf);
-            //println!("r:{:?}", r);
 
-            match e {
-                Ok((ref ns, Event::Start(ref mut e)))
-                    if *ns == Some(b"http://www.w3.org/2002/07/owl#") =>
+            let event_tuple;
+            {
+                event_tuple = self.read_event();
+            }
+
+            //println!("r:{:?}", r);
+            match event_tuple {
+                (ref ns, Event::Start(ref e))
+                    if ns == b"http://www.w3.org/2002/07/owl#" =>
                 {
                     match (&state, e.local_name()) {
                         (&State::Top, b"Ontology") => {
@@ -74,9 +109,7 @@ impl<R: BufRead> Read<R> {
                             state = State::Ontology;
                         }
                         (&State::Ontology, b"Declaration") => {
-                            state = State::Declaration;
-                            closing_tag = b"Declaration";
-                            closing_state = State::Ontology;
+                            self.declaration();
                         }
                         (&State::Ontology, b"SubClassOf") => {
                             state = State::SubClassOf;
@@ -86,16 +119,12 @@ impl<R: BufRead> Read<R> {
                         }
                     }
                 }
-                Ok((ref ns, Event::Empty(ref mut e)))
-                    if *ns == Some(b"http://www.w3.org/2002/07/owl#") =>
+                (ref ns, Event::Empty(ref e))
+                    if *ns == b"http://www.w3.org/2002/07/owl#" =>
                 {
                     match (&state, e.local_name()) {
                         (&State::Ontology, b"Prefix") => {
                             self.prefix(e);
-                        }
-                        (&State::Declaration, b"Class") => {
-                            let iri = self.iri(e);
-                            self.ont.class_from_iri(iri.unwrap());
                         }
                         (&State::SubClassOf, b"Class") => {
                             match class_operands.len() {
@@ -124,26 +153,18 @@ impl<R: BufRead> Read<R> {
                                 }
                             }
                         }
-                        (&State::Declaration, b"ObjectProperty") => {
-                            let iri = self.iri(e);
-                            self.ont.object_property_from_iri(iri.unwrap());
-                        }
                         (_, n) => {
                             self.unimplemented_owl(n);
                         }
                     }
                 }
-                Ok((ref ns, Event::End(ref mut e)))
-                    if *ns == Some(b"http://www.w3.org/2002/07/owl#")
-                        && e.local_name() == closing_tag =>
+                (ref ns, Event::End(ref e))
+                    if *ns == b"http://www.w3.org/2002/07/owl#"
+                    && e.local_name() == closing_tag =>
                 {
                     state = closing_state;
                 }
-
-                Err(e) => {
-                    println!("Error: {}", e);
-                }
-                Ok((_, Event::Eof)) => {
+                (_, Event::Eof) => {
                     break;
                 }
                 // Ok((_,Event::End(ref mut e)))=>{
@@ -160,6 +181,7 @@ impl<R: BufRead> Read<R> {
                     //a)
                 }
             }
+
         }
     }
 
@@ -231,6 +253,47 @@ impl<R: BufRead> Read<R> {
         }
     }
 
+    fn declaration(&mut self) {
+        loop {
+            let mut e = self.read_event();
+
+            match e {
+                (ref ns, Event::Start(ref mut e))
+                    |
+                (ref ns, Event::Empty(ref mut e))
+                    if *ns == b"http://www.w3.org/2002/07/owl#" =>
+                {
+                    let ne = self.entity_r(e);
+                    self.ont.named_entity(ne);
+                }
+                (ref ns, Event::End(ref mut e))
+                    if *ns == b"http://www.w3.org/2002/07/owl#"
+                        && e.local_name() == b"Declaration" =>
+                {
+                    return;
+                }
+                _ => {}
+            }
+        }
+
+    }
+
+    fn entity_r(&mut self, e: &BytesStart) -> NamedEntity {
+        let iri = self.iri(e).unwrap();
+        // We already know that this is in the OWL namespace
+        match e.local_name() {
+            b"Class" => {
+                NamedEntity::Class(Class(iri))
+            },
+            b"ObjectProperty" => {
+                NamedEntity::ObjectProperty(ObjectProperty(iri))
+            }
+            _ => {
+                panic!("We panic a lot");
+            }
+        }
+    }
+
     fn iri(&mut self, event: &BytesStart) -> Option<IRI> {
         for res in event.attributes() {
             match res {
@@ -257,6 +320,7 @@ impl<R: BufRead> Read<R> {
         }
         None
     }
+
 }
 
 #[cfg(test)]
