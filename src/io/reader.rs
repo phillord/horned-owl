@@ -95,7 +95,9 @@ impl<R: BufRead> Read<R> {
             //println!("r:{:?}", r);
             match event_tuple {
                 (ref ns, Event::Start(ref e))
-                    if ns == b"http://www.w3.org/2002/07/owl#" =>
+                    |
+                (ref ns, Event::Empty(ref e))
+                    if *ns == b"http://www.w3.org/2002/07/owl#" =>
                 {
                     match (&state, e.local_name()) {
                         (&State::Top, b"Ontology") => {
@@ -108,15 +110,6 @@ impl<R: BufRead> Read<R> {
                         (&State::Ontology, b"SubClassOf") => {
                             self.subclassof();
                         }
-                        (_, n) => {
-                            self.unimplemented_owl(n);
-                        }
-                    }
-                }
-                (ref ns, Event::Empty(ref e))
-                    if *ns == b"http://www.w3.org/2002/07/owl#" =>
-                {
-                    match (&state, e.local_name()) {
                         (&State::Ontology, b"Prefix") => {
                             self.prefix(e);
                         }
