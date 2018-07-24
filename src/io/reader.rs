@@ -86,9 +86,6 @@ impl<R: BufRead> Read<R> {
     fn parse(&mut self) {
         let mut state = State::Top;
 
-        let mut closing_tag: &[u8] = b"";
-        let mut closing_state = State::Top;
-
         let mut class_operands: Vec<ClassExpression> = Vec::new();
 
         loop {
@@ -157,12 +154,6 @@ impl<R: BufRead> Read<R> {
                             self.unimplemented_owl(n);
                         }
                     }
-                }
-                (ref ns, Event::End(ref e))
-                    if *ns == b"http://www.w3.org/2002/07/owl#"
-                    && e.local_name() == closing_tag =>
-                {
-                    state = closing_state;
                 }
                 (_, Event::Eof) => {
                     break;
