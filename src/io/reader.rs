@@ -217,7 +217,7 @@ impl<R: BufRead> Read<R> {
                 (ref ns, Event::Empty(ref mut e))
                     if *ns == b"http://www.w3.org/2002/07/owl#" =>
                 {
-                    let ne = self.entity_r(e);
+                    let ne = self.named_entity_r(e);
                     self.ont.named_entity(ne);
                 }
                 (ref ns, Event::End(ref mut e))
@@ -279,7 +279,7 @@ impl<R: BufRead> Read<R> {
 
     }
 
-    fn entity_r(&mut self, e: &BytesStart) -> NamedEntity {
+    fn named_entity_r(&mut self, e: &BytesStart) -> NamedEntity {
         let iri = self.iri_r(e).unwrap();
         // We already know that this is in the OWL namespace
         match e.local_name() {
