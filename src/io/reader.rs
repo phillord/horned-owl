@@ -13,7 +13,6 @@ use model::*;
 enum State {
     Top,
     Ontology,
-    SubClassOf
 }
 
 struct Read<R>
@@ -86,8 +85,6 @@ impl<R: BufRead> Read<R> {
     fn parse(&mut self) {
         let mut state = State::Top;
 
-        let mut class_operands: Vec<ClassExpression> = Vec::new();
-
         loop {
 
             let event_tuple;
@@ -109,7 +106,7 @@ impl<R: BufRead> Read<R> {
                             self.declaration();
                         }
                         (&State::Ontology, b"SubClassOf") => {
-                            state = State::SubClassOf;
+                            self.subclassof();
                         }
                         (_, n) => {
                             self.unimplemented_owl(n);
@@ -122,33 +119,6 @@ impl<R: BufRead> Read<R> {
                     match (&state, e.local_name()) {
                         (&State::Ontology, b"Prefix") => {
                             self.prefix(e);
-                        }
-                        (&State::SubClassOf, b"Class") => {
-                            match class_operands.len() {
-                                // Take off the last class and add it
-                                1 => {
-                                    let iri = self.iri(e);
-                                    let sub = self.ont.class_from_iri(iri.unwrap());
-
-                                    self.ont.subclass_exp(
-                                        class_operands.pop().unwrap(),
-                                        ClassExpression::Class(sub),
-                                    );
-                                    class_operands.clear();
-                                }
-                                // Add the new class as an operand
-                                0 => {
-                                    let iri = self.iri(e);
-
-                                    class_operands.push(ClassExpression::Class(
-                                        self.ont.class_from_iri(iri.unwrap()),
-                                    ));
-                                }
-                                // Shouldn't happen
-                                _ => {
-                                    panic!("We panic a lot!");
-                                }
-                            }
                         }
                         (_, n) => {
                             self.unimplemented_owl(n);
@@ -260,6 +230,53 @@ impl<R: BufRead> Read<R> {
                 (ref ns, Event::End(ref mut e))
                     if *ns == b"http://www.w3.org/2002/07/owl#"
                         && e.local_name() == b"Declaration" =>
+                {
+                    return;
+                }
+                _ => {}
+            }
+        }
+
+    }
+
+    fn subclassof(&mut self) {
+        let mut class_operands: Vec<ClassExpression> = Vec::new();
+
+        loop {
+            let mut e = self.read_event();
+            match e {
+                (ref ns, Event::Start(ref mut e))
+                    |
+                (ref ns, Event::Empty(ref mut e))
+                    if *ns == b"http://www.w3.org/2002/07/owl#" =>
+                {
+                    match class_operands.len() {
+                        1 => {
+                            let iri = self.iri(e);
+                            let sub = self.ont.class_from_iri(iri.unwrap());
+                            self.ont.subclass_exp(
+                                class_operands.pop().unwrap(),
+                                ClassExpression::Class(sub),
+                            );
+                            class_operands.clear();
+                        }
+                        // Add the new class as an operand
+                        0 => {
+                            let iri = self.iri(e);
+
+                            class_operands.push(ClassExpression::Class(
+                                self.ont.class_from_iri(iri.unwrap()),
+                            ));
+                        }
+                        // Shouldn't happen
+                        _ => {
+                            panic!("We panic a lot!");
+                        }
+                    }
+                }
+                (ref ns, Event::End(ref mut e))
+                    if *ns == b"http://www.w3.org/2002/07/owl#"
+                        && e.local_name() == b"SubClassOf" =>
                 {
                     return;
                 }
