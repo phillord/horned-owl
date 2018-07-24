@@ -1,6 +1,3 @@
-// BiMap provides bi-directional mapping
-extern crate bimap;
-
 extern crate quick_xml;
 
 extern crate curie;
