@@ -252,7 +252,7 @@ impl<R: BufRead> Read<R> {
                 {
                     match class_operands.len() {
                         1 => {
-                            let iri = self.iri(e);
+                            let iri = self.iri_r(e);
                             let sub = self.ont.class_from_iri(iri.unwrap());
                             self.ont.subclass_exp(
                                 class_operands.pop().unwrap(),
@@ -262,7 +262,7 @@ impl<R: BufRead> Read<R> {
                         }
                         // Add the new class as an operand
                         0 => {
-                            let iri = self.iri(e);
+                            let iri = self.iri_r(e);
 
                             class_operands.push(ClassExpression::Class(
                                 self.ont.class_from_iri(iri.unwrap()),
@@ -287,7 +287,7 @@ impl<R: BufRead> Read<R> {
     }
 
     fn entity_r(&mut self, e: &BytesStart) -> NamedEntity {
-        let iri = self.iri(e).unwrap();
+        let iri = self.iri_r(e).unwrap();
         // We already know that this is in the OWL namespace
         match e.local_name() {
             b"Class" => {
@@ -302,7 +302,7 @@ impl<R: BufRead> Read<R> {
         }
     }
 
-    fn iri(&mut self, event: &BytesStart) -> Option<IRI> {
+    fn iri_r(&mut self, event: &BytesStart) -> Option<IRI> {
         for res in event.attributes() {
             match res {
                 Ok(attrib) => {
