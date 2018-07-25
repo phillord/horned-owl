@@ -243,23 +243,18 @@ impl<R: BufRead> Read<R> {
                 (ref ns, Event::Empty(ref mut e))
                     if *ns == b"http://www.w3.org/2002/07/owl#" =>
                 {
+                    let ce = self.class_expression_r(e);
+
                     match class_operands.len() {
                         1 => {
-                            let iri = self.iri_r(e);
-                            let sub = self.ont.class_from_iri(iri.unwrap());
                             self.ont.subclass_exp(
                                 class_operands.pop().unwrap(),
-                                ClassExpression::Class(sub),
+                                ce
                             );
-                            class_operands.clear();
                         }
                         // Add the new class as an operand
                         0 => {
-                            let iri = self.iri_r(e);
-
-                            class_operands.push(ClassExpression::Class(
-                                self.ont.class_from_iri(iri.unwrap()),
-                            ));
+                            class_operands.push(self.class_expression_r(e));
                         }
                         // Shouldn't happen
                         _ => {
@@ -277,6 +272,17 @@ impl<R: BufRead> Read<R> {
             }
         }
 
+    }
+
+    fn class_expression_r(&mut self, e: &BytesStart) -> ClassExpression {
+        match e.local_name() {
+            b"Class" => {
+                ClassExpression::Class(Class(self.iri_r(e).unwrap()))
+            }
+            _ => {
+                panic!("We panic a lot");
+            }
+        }
     }
 
     fn named_entity_r(&mut self, e: &BytesStart) -> NamedEntity {
