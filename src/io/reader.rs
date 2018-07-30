@@ -287,8 +287,44 @@ impl<R: BufRead> Read<R> {
             b"ObjectSomeValuesFrom" => {
                 self.object_some_values_from_p()
             }
+            b"ObjectAllValuesFrom" => {
+                self.object_all_values_from_p()
+            }
             _ => {
                 panic!("We panic a lot");
+            }
+        }
+    }
+
+    fn object_all_values_from_p(&mut self) -> ClassExpression {
+        let mut o = None;
+
+        loop {
+            let e = self.read_event();
+            match e {
+                (ref ns, Event::Start(ref e))
+                    |
+                (ref ns, Event::Empty(ref e))
+                    if *ns == b"http://www.w3.org/2002/07/owl#" =>
+                {
+                    match o {
+                        Some(o) => {
+                            let ce = self.class_expression_r(e);
+                            return ClassExpression::Only{o:o,
+                                                         ce:Box::new(ce)};
+                        }
+                        None => {
+                            if e.local_name() == b"ObjectProperty" {
+                                let iri = self.iri_r(e).unwrap();
+                                o = Some(ObjectProperty(iri))
+                            }
+                            else {
+                                panic!("We panic a lot");
+                            }
+                        }
+                    }
+                },
+                _=>{}
             }
         }
     }
@@ -454,8 +490,15 @@ fn test_one_subclass() {
 fn test_one_some() {
     let ont_s = include_str!("../ont/one-some.xml");
     let (ont, _) = read(&mut ont_s.as_bytes());
-    println!("{:?}", ont);
 
     assert_eq!(ont.subclass.len(), 1);
 
+}
+
+#[test]
+fn test_one_only() {
+    let ont_s = include_str!("../ont/one-only.xml");
+    let (ont, _) = read(&mut ont_s.as_bytes());
+
+    assert_eq!(ont.subclass.len(), 1);
 }

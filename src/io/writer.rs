@@ -140,10 +140,30 @@ impl <'a, W> Write<'a,W>
             &ClassExpression::Some{ref o, ref ce} => {
                 self.object_some_values_from(o, ce);
             }
+            &ClassExpression::Only{ref o, ref ce} => {
+                self.object_all_values_from(o, ce);
+            }
             _ => {
                 unimplemented!();
             }
         }
+    }
+
+    fn object_all_values_from(&mut self, o:&ObjectProperty,
+                               ce: &ClassExpression) {
+        let object_property = BytesStart::owned(b"ObjectAllValuesFrom".to_vec(),
+                                                "ObjectAllValuesFrom".len());
+        self.writer.write_event(Event::Start(object_property)).ok();
+
+        self.object_property(o);
+        self.class_expression(ce);
+
+        self.writer
+            .write_event(Event::End(BytesEnd::owned(b"ObjectAllValuesFrom".
+                                                    to_vec())))
+            .ok();
+
+
     }
 
     fn object_some_values_from(&mut self, o:&ObjectProperty,
@@ -283,5 +303,10 @@ mod test {
     #[test]
     fn round_one_some() {
         assert_round(include_str!("../ont/one-some.xml"));
+    }
+
+    #[test]
+    fn round_one_only() {
+        assert_round(include_str!("../ont/one-only.xml"));
     }
 }
