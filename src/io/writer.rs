@@ -34,7 +34,7 @@ pub fn write (write: &mut StdWrite,
     };
 
     let mut write = Write::new(writer, ont, mapping);
-    write.parse();
+    write.render();
 }
 
 impl <'a, W> Write<'a,W>
@@ -45,7 +45,7 @@ impl <'a, W> Write<'a,W>
         Write{writer, ont, mapping}
     }
 
-    fn parse(&mut self) {
+    fn render(&mut self) {
 
         self.writer
             .write_event(Event::Decl(BytesDecl::new(&b"1.0"[..], None, None)))
@@ -53,23 +53,23 @@ impl <'a, W> Write<'a,W>
 
         let mut elem = BytesStart::owned(b"Ontology".to_vec(), "Ontology".len());
         elem.push_attribute(("xmlns", "http://www.w3.org/2002/07/owl#"));
-        self.push_iri_maybe(&mut elem, "ontologyIRI",
-                            &self.ont.id.iri);
-        self.push_iri_maybe(&mut elem, "versionIRI",
-                            &self.ont.id.viri);
+        self.iri_maybe(&mut elem, "ontologyIRI",
+                       &self.ont.id.iri);
+        self.iri_maybe(&mut elem, "versionIRI",
+                       &self.ont.id.viri);
 
         self.writer.write_event(Event::Start(elem)).ok();
 
         let elem = BytesEnd::owned(b"Ontology".to_vec());
 
-        self.push_prefixes();
-        self.push_classes();
-        self.push_subclasses();
+        self.prefixes();
+        self.classes();
+        self.subclasses();
         self.writer.write_event(Event::End(elem)).ok();
     }
 
-    fn push_iri_maybe(&self, elem: &mut BytesStart,
-                      key: &str, iri: &Option<IRI>) {
+    fn iri_maybe(&self, elem: &mut BytesStart,
+                 key: &str, iri: &Option<IRI>) {
         match iri {
             Some(iri) => {
                 elem.push_attribute((key, &(*iri)[..]));
@@ -78,7 +78,7 @@ impl <'a, W> Write<'a,W>
         }
     }
 
-    fn push_iri_or_curie(
+    fn iri_or_curie(
         &self,
         elem: &mut BytesStart,
         iri: &str,
@@ -96,7 +96,7 @@ impl <'a, W> Write<'a,W>
         }
     }
 
-    fn push_prefixes(&mut self) {
+    fn prefixes(&mut self) {
         for pre in self.mapping.mappings() {
             let mut prefix = BytesStart::owned(b"Prefix".to_vec(),
                                                "Prefix".len());
@@ -106,13 +106,13 @@ impl <'a, W> Write<'a,W>
         }
     }
 
-    fn push_class(&mut self, iri: &str) {
+    fn class(&mut self, iri: &str) {
         let mut class = BytesStart::owned(b"Class".to_vec(), "Class".len());
-        self.push_iri_or_curie(&mut class, iri);
+        self.iri_or_curie(&mut class, iri);
         self.writer.write_event(Event::Empty(class)).ok();
     }
 
-    fn push_classes(&mut self) {
+    fn classes(&mut self) {
         // Make rendering determinisitic in terms of order
         let mut classes: Vec<&String> = self.ont.class
             .iter()
@@ -124,17 +124,17 @@ impl <'a, W> Write<'a,W>
             let mut declaration = BytesStart::owned(b"Declaration".to_vec(), "Declaration".len());
 
             self.writer.write_event(Event::Start(declaration)).ok();
-            self.push_class(iri);
+            self.class(iri);
             self.writer
                 .write_event(Event::End(BytesEnd::owned(b"Declaration".to_vec())))
                 .ok();
         }
     }
 
-    fn push_class_expression(&mut self, ce: &ClassExpression) {
+    fn class_expression(&mut self, ce: &ClassExpression) {
         match ce {
             &ClassExpression::Class(ref c) => {
-                self.push_class(&String::from(c));
+                self.class(&String::from(c));
             }
 
             &ClassExpression::Some{ref o, ref ce} => {
@@ -153,7 +153,7 @@ impl <'a, W> Write<'a,W>
         self.writer.write_event(Event::Start(object_property)).ok();
 
         self.object_property(o);
-        self.push_class_expression(ce);
+        self.class_expression(ce);
 
         self.writer
             .write_event(Event::End(BytesEnd::owned(b"ObjectSomeValuesFrom".
@@ -166,19 +166,19 @@ impl <'a, W> Write<'a,W>
     fn object_property(&mut self, o:&ObjectProperty) {
         let mut object_property = BytesStart::owned(b"ObjectProperty".to_vec(),
                                                     "ObjectProperty".len());
-        self.push_iri_or_curie(&mut object_property, &(*o.0).clone());
+        self.iri_or_curie(&mut object_property, &(*o.0).clone());
         self.writer.write_event(Event::Empty(object_property)).ok();
 
     }
 
-    fn push_subclasses(&mut self) {
+    fn subclasses(&mut self) {
         for subclass in &self.ont.subclass {
             let mut declaration = BytesStart::owned(b"SubClassOf".to_vec(),
                                                     "SubClassOf".len());
             self.writer.write_event(Event::Start(declaration)).ok();
 
-            self.push_class_expression(&subclass.superclass);
-            self.push_class_expression(&subclass.subclass);
+            self.class_expression(&subclass.superclass);
+            self.class_expression(&subclass.subclass);
             self.writer
                 .write_event(Event::End(BytesEnd::owned(b"SubClassOf".to_vec())))
                 .ok();
