@@ -132,7 +132,7 @@ pub struct SubClass{
 pub enum ClassExpression
 {
     Class(Class),
-    Some{o:ObjectProperty, c:Box<ClassExpression>},
+    Some{o:ObjectProperty, ce:Box<ClassExpression>},
     And{o:Box<ClassExpression>},
     Or{o:Box<ClassExpression>},
 }

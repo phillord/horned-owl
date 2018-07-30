@@ -137,10 +137,38 @@ impl <'a, W> Write<'a,W>
                 self.push_class(&String::from(c));
             }
 
+            &ClassExpression::Some{ref o, ref ce} => {
+                self.object_some_values_from(o, ce);
+            }
             _ => {
                 unimplemented!();
             }
         }
+    }
+
+    fn object_some_values_from(&mut self, o:&ObjectProperty,
+                               ce: &ClassExpression) {
+        let object_property = BytesStart::owned(b"ObjectSomeValuesFrom".to_vec(),
+                                                "ObjectSomeValuesFrom".len());
+        self.writer.write_event(Event::Start(object_property)).ok();
+
+        self.object_property(o);
+        self.push_class_expression(ce);
+
+        self.writer
+            .write_event(Event::End(BytesEnd::owned(b"ObjectSomeValuesFrom".
+                                                    to_vec())))
+            .ok();
+
+
+    }
+
+    fn object_property(&mut self, o:&ObjectProperty) {
+        let mut object_property = BytesStart::owned(b"ObjectProperty".to_vec(),
+                                                    "ObjectProperty".len());
+        self.push_iri_or_curie(&mut object_property, &(*o.0).clone());
+        self.writer.write_event(Event::Empty(object_property)).ok();
+
     }
 
     fn push_subclasses(&mut self) {
@@ -208,6 +236,22 @@ mod test {
         return (ont_orig, prefix_orig, ont_round, prefix_round);
     }
 
+    fn assert_round(ont: &str) -> (Ontology, PrefixMapping,
+                                   Ontology, PrefixMapping) {
+        let (ont_orig, prefix_orig, ont_round, prefix_round) =
+            roundtrip(ont);
+
+        assert_eq!(ont_orig.id.iri, ont_round.id.iri);
+
+        {
+            let prefix_orig_map: &HashMap<&String, &String> = &prefix_orig.mappings().collect();
+            let prefix_round_map: &HashMap<&String, &String> = &prefix_round.mappings().collect();
+
+            assert_eq!(prefix_orig_map,prefix_round_map);
+        }
+        return (ont_orig, prefix_orig, ont_round, prefix_round);
+    }
+
     #[test]
     fn round_one_ont() {
         let (ont_orig, _prefix_orig, ont_round, _prefix_round) =
@@ -234,5 +278,10 @@ mod test {
             roundtrip(include_str!("../ont/one-subclass.xml"));
 
         assert_eq!(ont_orig, ont_round);
+    }
+
+    #[test]
+    fn round_one_some() {
+        assert_round(include_str!("../ont/one-some.xml"));
     }
 }
