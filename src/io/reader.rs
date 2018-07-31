@@ -296,7 +296,10 @@ impl<R: BufRead> Read<R> {
         }
     }
 
-    fn object_all_values_from_p(&mut self) -> ClassExpression {
+    fn object_binary_p(&mut self,
+                       cons:fn (ObjectProperty, Box<ClassExpression>)
+                                -> ClassExpression)
+                       -> ClassExpression {
         let mut o = None;
 
         loop {
@@ -310,8 +313,7 @@ impl<R: BufRead> Read<R> {
                     match o {
                         Some(o) => {
                             let ce = self.class_expression_r(e);
-                            return ClassExpression::Only{o:o,
-                                                         ce:Box::new(ce)};
+                            return cons(o, Box::new(ce));
                         }
                         None => {
                             if e.local_name() == b"ObjectProperty" {
@@ -329,37 +331,14 @@ impl<R: BufRead> Read<R> {
         }
     }
 
-    fn object_some_values_from_p(&mut self) -> ClassExpression {
-        let mut o = None;
+    fn object_all_values_from_p(&mut self) -> ClassExpression {
+        self.object_binary_p(|o, ce|
+                             ClassExpression::Only{o, ce})
+    }
 
-        loop {
-            let e = self.read_event();
-            match e {
-                (ref ns, Event::Start(ref e))
-                    |
-                (ref ns, Event::Empty(ref e))
-                    if *ns == b"http://www.w3.org/2002/07/owl#" =>
-                {
-                    match o {
-                        Some(o) => {
-                            let ce = self.class_expression_r(e);
-                            return ClassExpression::Some{o:o,
-                                                         ce:Box::new(ce)};
-                        }
-                        None => {
-                            if e.local_name() == b"ObjectProperty" {
-                                let iri = self.iri_r(e).unwrap();
-                                o = Some(ObjectProperty(iri))
-                            }
-                            else {
-                                panic!("We panic a lot");
-                            }
-                        }
-                    }
-                },
-                _=>{}
-            }
-        }
+    fn object_some_values_from_p(&mut self) -> ClassExpression {
+        self.object_binary_p(|o, ce|
+                             ClassExpression::Some{o, ce})
     }
 
     fn named_entity_r(&mut self, e: &BytesStart) -> NamedEntity {

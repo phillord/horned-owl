@@ -149,38 +149,28 @@ impl <'a, W> Write<'a,W>
         }
     }
 
-    fn object_all_values_from(&mut self, o:&ObjectProperty,
-                               ce: &ClassExpression) {
-        let object_property = BytesStart::owned(b"ObjectAllValuesFrom".to_vec(),
-                                                "ObjectAllValuesFrom".len());
+    fn object_binary(&mut self, o:&ObjectProperty, ce: &ClassExpression,
+                     tag:&[u8]) {
+        let len = tag.len();
+        let object_property = BytesStart::borrowed(tag,len);
         self.writer.write_event(Event::Start(object_property)).ok();
 
         self.object_property(o);
         self.class_expression(ce);
 
         self.writer
-            .write_event(Event::End(BytesEnd::owned(b"ObjectAllValuesFrom".
-                                                    to_vec())))
+            .write_event(Event::End(BytesEnd::borrowed(tag)))
             .ok();
+    }
 
-
+    fn object_all_values_from(&mut self, o:&ObjectProperty,
+                               ce: &ClassExpression) {
+        self.object_binary(o, ce, b"ObjectAllValuesFrom")
     }
 
     fn object_some_values_from(&mut self, o:&ObjectProperty,
                                ce: &ClassExpression) {
-        let object_property = BytesStart::owned(b"ObjectSomeValuesFrom".to_vec(),
-                                                "ObjectSomeValuesFrom".len());
-        self.writer.write_event(Event::Start(object_property)).ok();
-
-        self.object_property(o);
-        self.class_expression(ce);
-
-        self.writer
-            .write_event(Event::End(BytesEnd::owned(b"ObjectSomeValuesFrom".
-                                                    to_vec())))
-            .ok();
-
-
+        self.object_binary(o, ce, b"ObjectSomeValuesFrom")
     }
 
     fn object_property(&mut self, o:&ObjectProperty) {
