@@ -121,13 +121,9 @@ impl <'a, W> Write<'a,W>
         classes.sort();
 
         for iri in classes {
-            let mut declaration = BytesStart::owned(b"Declaration".to_vec(), "Declaration".len());
-
-            self.writer.write_event(Event::Start(declaration)).ok();
-            self.class(iri);
-            self.writer
-                .write_event(Event::End(BytesEnd::owned(b"Declaration".to_vec())))
-                .ok();
+            self.write_start_end(b"Declaration",
+                                 |s: &mut Write<W>|
+                                 s.class(iri))
         }
     }
 
@@ -149,18 +145,30 @@ impl <'a, W> Write<'a,W>
         }
     }
 
-    fn object_binary(&mut self, o:&ObjectProperty, ce: &ClassExpression,
-                     tag:&[u8]) {
+    fn write_start_end<F>(&mut self, tag:&[u8], mut contents:F)
+        where F: FnMut(&mut Self)
+    {
         let len = tag.len();
-        let object_property = BytesStart::borrowed(tag,len);
-        self.writer.write_event(Event::Start(object_property)).ok();
+        let open = BytesStart::borrowed(tag,len);
+        self.writer.write_event(Event::Start(open)).ok();
 
-        self.object_property(o);
-        self.class_expression(ce);
+        // Pass self like this, because we cannot capture it in the
+        // closure, without failing the borrow checker.
+        contents(self);
 
         self.writer
             .write_event(Event::End(BytesEnd::borrowed(tag)))
             .ok();
+    }
+
+    fn object_binary(&mut self, o:&ObjectProperty, ce: &ClassExpression,
+                     tag:&[u8]) {
+        self.write_start_end(tag,
+                             |s: &mut Self| {
+                                 s.object_property(o);
+                                 s.class_expression(ce);
+                             }
+        );
     }
 
     fn object_all_values_from(&mut self, o:&ObjectProperty,
@@ -183,15 +191,13 @@ impl <'a, W> Write<'a,W>
 
     fn subclasses(&mut self) {
         for subclass in &self.ont.subclass {
-            let mut declaration = BytesStart::owned(b"SubClassOf".to_vec(),
-                                                    "SubClassOf".len());
-            self.writer.write_event(Event::Start(declaration)).ok();
-
-            self.class_expression(&subclass.superclass);
-            self.class_expression(&subclass.subclass);
-            self.writer
-                .write_event(Event::End(BytesEnd::owned(b"SubClassOf".to_vec())))
-                .ok();
+            self.write_start_end(
+                b"SubClassOf",
+                |s: &mut Write<W>|
+                {
+                    s.class_expression(&subclass.superclass);
+                    s.class_expression(&subclass.subclass);
+                });
         }
     }
 }
