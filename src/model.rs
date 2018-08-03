@@ -136,6 +136,7 @@ pub enum ClassExpression
     Only{o:ObjectProperty, ce:Box<ClassExpression>},
     And{o:Vec<Box<ClassExpression>>},
     Or{o:Vec<Box<ClassExpression>>},
+    Not{ce:Box<ClassExpression>}
 }
 
 #[derive(Debug, Eq, PartialEq)]

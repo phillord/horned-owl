@@ -296,8 +296,30 @@ impl<R: BufRead> Read<R> {
             b"ObjectUnionOf" => {
                 self.object_union_of_p()
             }
+            b"ObjectComplementOf" => {
+                self.object_complement_of_p()
+            }
             _ => {
                 panic!("We panic a lot");
+            }
+        }
+    }
+
+    fn object_complement_of_p(&mut self)
+                       -> ClassExpression {
+        loop {
+            let e = self.read_event();
+            match e {
+                (ref ns, Event::Start(ref e))
+                    |
+                (ref ns, Event::Empty(ref e))
+                    if *ns == b"http://www.w3.org/2002/07/owl#" =>
+                {
+                    return ClassExpression::Not{ce:
+                                                Box::new
+                                                (self.class_expression_r(e))};
+                }
+                _=>{}
             }
         }
     }
@@ -544,6 +566,14 @@ fn test_one_and() {
 fn test_one_or() {
     let ont_s = include_str!("../ont/one-or.xml");
     let (ont,_ ) = read(&mut ont_s.as_bytes());
+
+    assert_eq!(ont.subclass.len(), 1);
+}
+
+#[test]
+fn test_one_not() {
+    let ont_s = include_str!("../ont/one-not.xml");
+    let (ont, _) = read(&mut ont_s.as_bytes());
 
     assert_eq!(ont.subclass.len(), 1);
 }

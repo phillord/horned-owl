@@ -144,6 +144,9 @@ impl <'a, W> Write<'a,W>
             &ClassExpression::Or{ref o} => {
                 self.object_union_of(o);
             }
+            &ClassExpression::Not{ref ce} => {
+                self.object_complement_of(ce);
+            }
         }
     }
 
@@ -161,6 +164,14 @@ impl <'a, W> Write<'a,W>
         self.writer
             .write_event(Event::End(BytesEnd::borrowed(tag)))
             .ok();
+    }
+
+    fn object_complement_of(&mut self, ce: &ClassExpression) {
+        self.write_start_end(b"ObjectComplementOf",
+                             |s: &mut Self| {
+                                 s.class_expression(ce);
+                             }
+        )
     }
 
     fn object_binary(&mut self, o:&ObjectProperty, ce: &ClassExpression,
@@ -335,5 +346,10 @@ mod test {
     #[test]
     fn round_one_or() {
         assert_round(include_str!("../ont/one-or.xml"));
+    }
+
+    #[test]
+    fn round_one_not() {
+        assert_round(include_str!("../ont/one-not.xml"));
     }
 }
