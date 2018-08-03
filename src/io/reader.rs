@@ -290,8 +290,58 @@ impl<R: BufRead> Read<R> {
             b"ObjectAllValuesFrom" => {
                 self.object_all_values_from_p()
             }
+            b"ObjectIntersectionOf" => {
+                self.object_intersection_of_p()
+            }
+            b"ObjectUnionOf" => {
+                self.object_union_of_p()
+            }
             _ => {
                 panic!("We panic a lot");
+            }
+        }
+    }
+
+    fn object_union_of_p(&mut self) -> ClassExpression {
+        self.object_nary_p(
+            b"ObjectUnionOf",
+            |o|
+            ClassExpression::Or{o})
+    }
+
+    fn object_intersection_of_p(&mut self) -> ClassExpression {
+        self.object_nary_p(
+            b"ObjectIntersectionOf",
+            |o|
+            ClassExpression::And{o})
+    }
+
+    fn object_nary_p(&mut self,
+                     tag: &[u8],
+                     cons:fn (Vec<Box<ClassExpression>>)
+                              -> ClassExpression)
+                       -> ClassExpression {
+        let mut operands:Vec<Box<ClassExpression>> = Vec::new();
+
+        loop {
+            let e = self.read_event();
+            match e {
+                (ref ns, Event::Start(ref e))
+                    |
+                (ref ns, Event::Empty(ref e))
+                    if *ns == b"http://www.w3.org/2002/07/owl#" =>
+                {
+                    let ce = self.class_expression_r(e);
+                    operands.push(Box::new(ce));
+                }
+                (ref ns, Event::End(ref e))
+                    if *ns ==b"http://www.w3.org/2002/07/owl#"
+                    && e.local_name() == tag
+                    =>
+                {
+                    return cons(operands);
+                }
+                _=>{}
             }
         }
     }
@@ -478,6 +528,22 @@ fn test_one_some() {
 fn test_one_only() {
     let ont_s = include_str!("../ont/one-only.xml");
     let (ont, _) = read(&mut ont_s.as_bytes());
+
+    assert_eq!(ont.subclass.len(), 1);
+}
+
+#[test]
+fn test_one_and() {
+    let ont_s = include_str!("../ont/one-and.xml");
+    let (ont, _) = read(&mut ont_s.as_bytes());
+
+    assert_eq!(ont.subclass.len(), 1);
+}
+
+#[test]
+fn test_one_or() {
+    let ont_s = include_str!("../ont/one-or.xml");
+    let (ont,_ ) = read(&mut ont_s.as_bytes());
 
     assert_eq!(ont.subclass.len(), 1);
 }

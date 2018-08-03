@@ -132,15 +132,17 @@ impl <'a, W> Write<'a,W>
             &ClassExpression::Class(ref c) => {
                 self.class(&String::from(c));
             }
-
             &ClassExpression::Some{ref o, ref ce} => {
                 self.object_some_values_from(o, ce);
             }
             &ClassExpression::Only{ref o, ref ce} => {
                 self.object_all_values_from(o, ce);
             }
-            _ => {
-                unimplemented!();
+            &ClassExpression::And{ref o} => {
+                self.object_intersection_of(o);
+            }
+            &ClassExpression::Or{ref o} => {
+                self.object_union_of(o);
             }
         }
     }
@@ -169,6 +171,25 @@ impl <'a, W> Write<'a,W>
                                  s.class_expression(ce);
                              }
         );
+    }
+
+    fn object_nary(&mut self, o:&Vec<Box<ClassExpression>>,
+                   tag:&[u8]) {
+        self.write_start_end(tag,
+                             |s: &mut Self| {
+                                 for ce in o.iter() {
+                                     s.class_expression(&(*ce));
+                                 }
+                             }
+        );
+    }
+
+    fn object_union_of(&mut self, operands: &Vec<Box<ClassExpression>>) {
+        self.object_nary(operands, b"ObjectUnionOf")
+    }
+
+    fn object_intersection_of(&mut self, operands: &Vec<Box<ClassExpression>>) {
+        self.object_nary(operands, b"ObjectIntersectionOf")
     }
 
     fn object_all_values_from(&mut self, o:&ObjectProperty,
@@ -304,5 +325,15 @@ mod test {
     #[test]
     fn round_one_only() {
         assert_round(include_str!("../ont/one-only.xml"));
+    }
+
+    #[test]
+    fn round_one_and() {
+        assert_round(include_str!("../ont/one-and.xml"));
+    }
+
+    #[test]
+    fn round_one_or() {
+        assert_round(include_str!("../ont/one-or.xml"));
     }
 }

@@ -134,8 +134,8 @@ pub enum ClassExpression
     Class(Class),
     Some{o:ObjectProperty, ce:Box<ClassExpression>},
     Only{o:ObjectProperty, ce:Box<ClassExpression>},
-    And{o:Box<ClassExpression>},
-    Or{o:Box<ClassExpression>},
+    And{o:Vec<Box<ClassExpression>>},
+    Or{o:Vec<Box<ClassExpression>>},
 }
 
 #[derive(Debug, Eq, PartialEq)]
