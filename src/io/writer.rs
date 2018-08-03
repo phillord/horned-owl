@@ -184,7 +184,7 @@ impl <'a, W> Write<'a,W>
         );
     }
 
-    fn object_nary(&mut self, o:&Vec<Box<ClassExpression>>,
+    fn object_nary(&mut self, o:&Vec<ClassExpression>,
                    tag:&[u8]) {
         self.write_start_end(tag,
                              |s: &mut Self| {
@@ -195,11 +195,11 @@ impl <'a, W> Write<'a,W>
         );
     }
 
-    fn object_union_of(&mut self, operands: &Vec<Box<ClassExpression>>) {
+    fn object_union_of(&mut self, operands: &Vec<ClassExpression>) {
         self.object_nary(operands, b"ObjectUnionOf")
     }
 
-    fn object_intersection_of(&mut self, operands: &Vec<Box<ClassExpression>>) {
+    fn object_intersection_of(&mut self, operands: &Vec<ClassExpression>) {
         self.object_nary(operands, b"ObjectIntersectionOf")
     }
 

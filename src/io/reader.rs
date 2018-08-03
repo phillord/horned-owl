@@ -340,10 +340,10 @@ impl<R: BufRead> Read<R> {
 
     fn object_nary_p(&mut self,
                      tag: &[u8],
-                     cons:fn (Vec<Box<ClassExpression>>)
+                     cons:fn (Vec<ClassExpression>)
                               -> ClassExpression)
                        -> ClassExpression {
-        let mut operands:Vec<Box<ClassExpression>> = Vec::new();
+        let mut operands:Vec<ClassExpression> = Vec::new();
 
         loop {
             let e = self.read_event();
@@ -354,7 +354,7 @@ impl<R: BufRead> Read<R> {
                     if *ns == b"http://www.w3.org/2002/07/owl#" =>
                 {
                     let ce = self.class_expression_r(e);
-                    operands.push(Box::new(ce));
+                    operands.push(ce);
                 }
                 (ref ns, Event::End(ref e))
                     if *ns ==b"http://www.w3.org/2002/07/owl#"
