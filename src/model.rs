@@ -161,7 +161,7 @@ impl PartialEq for Ontology {
         self.id == other.id &&
             self.class == other.class &&
             self.subclass == other.subclass &&
-            self.object_property == self.object_property
+            self.object_property == other.object_property
     }
 }
 
