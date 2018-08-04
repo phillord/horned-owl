@@ -289,7 +289,7 @@ mod test {
         let (ont_orig, prefix_orig, ont_round, prefix_round) =
             roundtrip(ont);
 
-        assert_eq!(ont_orig.id.iri, ont_round.id.iri);
+        assert_eq!(ont_orig, ont_round);
 
         {
             let prefix_orig_map: &HashMap<&String, &String> = &prefix_orig.mappings().collect();
