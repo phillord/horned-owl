@@ -5,7 +5,7 @@ use std::rc::Rc;
 use std::cell::RefCell;
 use std::ops::Deref;
 
-#[derive(Eq,PartialEq,Hash,Clone,Debug)]
+#[derive(Clone, Debug, Eq, PartialEq, Hash, PartialOrd, Ord)]
 pub struct IRI(Rc<String>);
 
 impl Deref for IRI{
@@ -90,31 +90,36 @@ fn test_iri_string_creation(){
     assert_eq!(iri_from_iri, iri_str);
 }
 
-#[derive(Eq,PartialEq,Hash,Clone,Debug)]
+#[derive(Clone, Debug, Eq, PartialEq, Hash, PartialOrd, Ord)]
 pub struct Class(pub IRI);
 
-impl <'a> From<&'a Class> for String {
-    fn from(i:&'a Class) -> String {
-        String::from((i.0).clone())
+impl From<Class> for IRI {
+    fn from(c: Class) -> IRI {
+        Self::from(&c)
     }
 }
 
-impl From<Class> for String {
-    fn from(i:Class) -> String {
-        String::from((i.0).clone())
+impl <'a> From<&'a Class> for IRI {
+    fn from(c: &Class) -> IRI {
+        (c.0).clone()
     }
 }
 
-#[test]
-fn test_class_from_string() {
-    let mut o = Ontology::new();
-    let c = o.class("http://www.example.com");
-
-    assert_eq!(String::from(c), "http://www.example.com");
-}
-
-#[derive(Eq,PartialEq,Hash,Clone,Debug)]
+#[derive(Clone, Debug, Eq, PartialEq, Hash, PartialOrd, Ord)]
 pub struct ObjectProperty(pub IRI);
+
+impl From<ObjectProperty> for IRI {
+    fn from(c: ObjectProperty) -> IRI {
+        Self::from(&c)
+    }
+}
+
+impl <'a> From<&'a ObjectProperty> for IRI {
+    fn from(c: &ObjectProperty) -> IRI {
+        (c.0).clone()
+    }
+}
+
 
 #[derive(Eq, PartialEq, Hash, Clone, Debug)]
 pub enum NamedEntity {

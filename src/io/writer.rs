@@ -8,6 +8,8 @@ use quick_xml::events::BytesStart;
 use quick_xml::events::Event;
 use quick_xml::Writer;
 
+use std::collections::HashSet;
+use std::hash::Hash;
 use std::io::Write as StdWrite;
 
 struct Write<'a, W>
@@ -63,7 +65,7 @@ impl <'a, W> Write<'a,W>
         let elem = BytesEnd::owned(b"Ontology".to_vec());
 
         self.prefixes();
-        self.classes();
+        self.declarations();
         self.subclasses();
         self.writer.write_event(Event::End(elem)).ok();
     }
@@ -106,31 +108,54 @@ impl <'a, W> Write<'a,W>
         }
     }
 
-    fn class(&mut self, iri: &str) {
-        let mut class = BytesStart::owned(b"Class".to_vec(), "Class".len());
-        self.iri_or_curie(&mut class, iri);
+    fn object_property(&mut self, o:&ObjectProperty) {
+        let mut object_property = BytesStart::owned(b"ObjectProperty".to_vec(),
+                                                    "ObjectProperty".len());
+        self.iri_or_curie(&mut object_property, &(*o.0).clone());
+        self.writer.write_event(Event::Empty(object_property)).ok();
+    }
+
+
+    fn class(&mut self, c: &Class) {
+        let mut class = BytesStart::owned(b"Class".to_vec(),
+                                          "Class".len());
+        self.iri_or_curie(&mut class, &(*c.0).clone());
         self.writer.write_event(Event::Empty(class)).ok();
     }
 
-    fn classes(&mut self) {
+    fn declaration_1<'b, F, E>(&mut self, named_entity:&HashSet<E>,
+                     mut ne_writer: F)
+        where F: FnMut(&mut Self, &E),
+              E: 'b + Ord + Hash
+    {
         // Make rendering determinisitic in terms of order
-        let mut classes: Vec<&String> = self.ont.class
+        let mut named_entities: Vec<&E> = named_entity
             .iter()
-            .map(|c| &(*c.0)).collect::<Vec<&String>>();
+            .collect::<Vec<&E>>();
 
-        classes.sort();
+        named_entities.sort();
 
-        for iri in classes {
+        for ne in named_entities {
             self.write_start_end(b"Declaration",
-                                 |s: &mut Write<W>|
-                                 s.class(iri))
+                                 |s: &mut Self|
+                                 ne_writer(s, ne));
         }
+    }
+
+    fn declarations(&mut self) {
+        self.declaration_1(&self.ont.class,
+                           |s:& mut Self, c:&Class|
+                           s.class(c));
+        self.declaration_1(&self.ont.object_property,
+                           |s:& mut Self, o:&ObjectProperty|
+                           s.object_property(o));
+
     }
 
     fn class_expression(&mut self, ce: &ClassExpression) {
         match ce {
             &ClassExpression::Class(ref c) => {
-                self.class(&String::from(c));
+                self.class(c);
             }
             &ClassExpression::Some{ref o, ref ce} => {
                 self.object_some_values_from(o, ce);
@@ -211,14 +236,6 @@ impl <'a, W> Write<'a,W>
     fn object_some_values_from(&mut self, o:&ObjectProperty,
                                ce: &ClassExpression) {
         self.object_binary(o, ce, b"ObjectSomeValuesFrom")
-    }
-
-    fn object_property(&mut self, o:&ObjectProperty) {
-        let mut object_property = BytesStart::owned(b"ObjectProperty".to_vec(),
-                                                    "ObjectProperty".len());
-        self.iri_or_curie(&mut object_property, &(*o.0).clone());
-        self.writer.write_event(Event::Empty(object_property)).ok();
-
     }
 
     fn subclasses(&mut self) {
