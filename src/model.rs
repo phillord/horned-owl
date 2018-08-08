@@ -24,7 +24,6 @@ fn test_iri_from_string() {
     assert_eq!(String::from(iri), "http://www.example.com");
 }
 
-
 impl From<IRI> for String{
     fn from(i:IRI) -> String {
         // Clone Rc'd value
@@ -123,6 +122,17 @@ impl <'a> From<&'a ObjectProperty> for IRI {
 #[derive(Clone, Debug, Eq, PartialEq, Hash, PartialOrd, Ord)]
 pub struct AnnotationProperty(pub IRI);
 
+impl From<AnnotationProperty> for IRI {
+    fn from(c: AnnotationProperty) -> IRI {
+        Self::from(&c)
+    }
+}
+
+impl <'a> From<&'a AnnotationProperty> for IRI {
+    fn from(c: &AnnotationProperty) -> IRI {
+        (c.0).clone()
+    }
+}
 
 
 #[derive(Eq, PartialEq, Hash, Clone, Debug)]

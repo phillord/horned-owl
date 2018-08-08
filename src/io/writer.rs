@@ -109,25 +109,25 @@ impl <'a, W> Write<'a,W>
     }
 
     fn object_property(&mut self, o:&ObjectProperty) {
-        let mut object_property = BytesStart::owned(b"ObjectProperty".to_vec(),
-                                                    "ObjectProperty".len());
-        self.iri_or_curie(&mut object_property, &(*o.0).clone());
-        self.writer.write_event(Event::Empty(object_property)).ok();
+        self.with_iri(b"ObjectProperty",o);
     }
 
-
     fn class(&mut self, c: &Class) {
-        let mut class = BytesStart::owned(b"Class".to_vec(),
-                                          "Class".len());
-        self.iri_or_curie(&mut class, &(*c.0).clone());
-        self.writer.write_event(Event::Empty(class)).ok();
+        self.with_iri(b"Class", c);
     }
 
     fn annotation_property(&mut self, ap: &AnnotationProperty) {
-        let mut annotation_property = BytesStart::owned(b"AnnotationProperty".to_vec(),
-                                                        "AnnotationProperty".len());
-        self.iri_or_curie(&mut annotation_property, &(*ap.0).clone());
-        self.writer.write_event(Event::Empty(annotation_property)).ok();
+        self.with_iri(b"AnnotationProperty", ap);
+    }
+
+    fn with_iri<I>(&mut self, tag:&[u8], into_iri:I)
+        where I: Into<IRI> {
+        let iri:IRI = into_iri.into();
+        let mut bytes_start = BytesStart::borrowed(tag, tag.len());
+
+        let iri_string:String = iri.into();
+        self.iri_or_curie(&mut bytes_start, &iri_string[..]);
+        self.writer.write_event(Event::Empty(bytes_start)).ok();
     }
 
     fn declaration_1<'b, F, E>(&mut self, named_entity:&HashSet<E>,
