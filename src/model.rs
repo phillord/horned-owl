@@ -31,7 +31,7 @@ impl From<IRI> for String{
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct IRIBuild(Rc<RefCell<HashSet<IRI>>>);
 
 impl IRIBuild{
@@ -160,13 +160,13 @@ pub enum ClassExpression
     Not{ce:Box<ClassExpression>}
 }
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Default, Eq, PartialEq)]
 pub struct OntologyID{
     pub iri: Option<IRI>,
     pub viri: Option<IRI>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct Ontology
 {
     pub iri_build:IRIBuild,
@@ -197,11 +197,7 @@ impl Ontology {
     pub fn new_with_build(iri_build:IRIBuild) -> Ontology{
         Ontology{
             iri_build: iri_build,
-            id: OntologyID{iri:None,viri:None},
-            class: HashSet::new(),
-            subclass: HashSet::new(),
-            object_property: HashSet::new(),
-            annotation_property: HashSet::new()
+            .. Default::default()
         }
     }
 
