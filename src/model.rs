@@ -120,11 +120,17 @@ impl <'a> From<&'a ObjectProperty> for IRI {
     }
 }
 
+#[derive(Clone, Debug, Eq, PartialEq, Hash, PartialOrd, Ord)]
+pub struct AnnotationProperty(pub IRI);
+
+
 
 #[derive(Eq, PartialEq, Hash, Clone, Debug)]
 pub enum NamedEntity {
     Class(Class),
-    ObjectProperty(ObjectProperty)
+    ObjectProperty(ObjectProperty),
+    AnnotationProperty(AnnotationProperty)
+
 }
 
 #[derive(Eq,PartialEq,Hash,Clone,Debug)]
@@ -158,7 +164,7 @@ pub struct Ontology
     pub class: HashSet<Class>,
     pub subclass: HashSet<SubClass>,
     pub object_property: HashSet<ObjectProperty>,
-
+    pub annotation_property: HashSet<AnnotationProperty>
 }
 
 impl PartialEq for Ontology {
@@ -166,7 +172,8 @@ impl PartialEq for Ontology {
         self.id == other.id &&
             self.class == other.class &&
             self.subclass == other.subclass &&
-            self.object_property == other.object_property
+            self.object_property == other.object_property &&
+            self.annotation_property == other.annotation_property
     }
 }
 
@@ -184,6 +191,7 @@ impl Ontology {
             class: HashSet::new(),
             subclass: HashSet::new(),
             object_property: HashSet::new(),
+            annotation_property: HashSet::new()
         }
     }
 
@@ -279,6 +287,36 @@ impl Ontology {
         self.object_property_from_iri(i)
     }
 
+    pub fn annotation_property_from_iri(&mut self, i: IRI) -> AnnotationProperty
+    {
+        let o = AnnotationProperty(i);
+
+        if let Option::Some(_) = self.annotation_property.get(&o)
+        {return o;};
+
+        self.annotation_property.insert(o.clone());
+        o
+    }
+
+    /// Constructs a new `AnnotationProperty`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use horned_owl::model::*;
+    /// let mut o = Ontology::new();
+    /// let iri = o.annotation_property("http://www.example.com".to_string());
+    /// let iri2 = o.annotation_property("http://www.example.com");
+    ///
+    /// assert_eq!(iri, iri2);
+    /// ```
+    pub fn annotation_property<S>(&mut self, s:S) -> AnnotationProperty
+        where S: Into<String>
+    {
+        let i = self.iri(s);
+        self.annotation_property_from_iri(i)
+    }
+
     pub fn named_entity(&mut self, ne: NamedEntity)
     {
         match ne {
@@ -287,6 +325,9 @@ impl Ontology {
             }
             NamedEntity::ObjectProperty(i) => {
                 self.object_property_from_iri(i.0);
+            }
+            NamedEntity::AnnotationProperty(a) => {
+                self.annotation_property_from_iri(a.0);
             }
         }
     }

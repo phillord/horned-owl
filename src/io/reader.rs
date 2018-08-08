@@ -423,8 +423,11 @@ impl<R: BufRead> Read<R> {
             b"ObjectProperty" => {
                 NamedEntity::ObjectProperty(ObjectProperty(iri))
             }
-            _ => {
-                panic!("We panic a lot");
+            b"AnnotationProperty" => {
+                NamedEntity::AnnotationProperty(AnnotationProperty(iri))
+            }
+            _=> {
+                panic!("We panic a lot!");
             }
         }
     }
@@ -543,7 +546,7 @@ fn test_one_some() {
     let (ont, _) = read(&mut ont_s.as_bytes());
 
     assert_eq!(ont.subclass.len(), 1);
-
+    assert_eq!(ont.object_property.len(), 1);
 }
 
 #[test]
@@ -552,6 +555,7 @@ fn test_one_only() {
     let (ont, _) = read(&mut ont_s.as_bytes());
 
     assert_eq!(ont.subclass.len(), 1);
+    assert_eq!(ont.object_property.len(), 1);
 }
 
 #[test]
@@ -576,4 +580,11 @@ fn test_one_not() {
     let (ont, _) = read(&mut ont_s.as_bytes());
 
     assert_eq!(ont.subclass.len(), 1);
+}
+
+#[test]
+fn test_one_annotation_property() {
+    let ont_s = include_str!("../ont/one-annotation-property.xml");
+    let (ont, _) = read(&mut ont_s.as_bytes());
+    assert_eq!(ont.annotation_property.len(), 1);
 }

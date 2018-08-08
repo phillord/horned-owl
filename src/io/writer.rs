@@ -123,6 +123,13 @@ impl <'a, W> Write<'a,W>
         self.writer.write_event(Event::Empty(class)).ok();
     }
 
+    fn annotation_property(&mut self, ap: &AnnotationProperty) {
+        let mut annotation_property = BytesStart::owned(b"AnnotationProperty".to_vec(),
+                                                        "AnnotationProperty".len());
+        self.iri_or_curie(&mut annotation_property, &(*ap.0).clone());
+        self.writer.write_event(Event::Empty(annotation_property)).ok();
+    }
+
     fn declaration_1<'b, F, E>(&mut self, named_entity:&HashSet<E>,
                      mut ne_writer: F)
         where F: FnMut(&mut Self, &E),
@@ -147,9 +154,11 @@ impl <'a, W> Write<'a,W>
                            |s:& mut Self, c:&Class|
                            s.class(c));
         self.declaration_1(&self.ont.object_property,
-                           |s:& mut Self, o:&ObjectProperty|
+                           |s:&mut Self, o:&ObjectProperty|
                            s.object_property(o));
-
+        self.declaration_1(&self.ont.annotation_property,
+                           |s:&mut Self, a:&AnnotationProperty|
+                           s.annotation_property(a));
     }
 
     fn class_expression(&mut self, ce: &ClassExpression) {
@@ -368,5 +377,10 @@ mod test {
     #[test]
     fn round_one_not() {
         assert_round(include_str!("../ont/one-not.xml"));
+    }
+
+    #[test]
+    fn round_one_annotation_property() {
+        assert_round(include_str!("../ont/one-annotation-property.xml"));
     }
 }
