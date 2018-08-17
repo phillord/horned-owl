@@ -113,6 +113,9 @@ impl<R: BufRead> Read<R> {
                         (&State::Ontology, b"Prefix") => {
                             self.prefix(e);
                         }
+                        (&State::Ontology, b"AnnotationAssertion") => {
+                            self.annotation_assertion();
+                        }
                         (_, n) => {
                             self.unimplemented_owl(n);
                         }
@@ -168,6 +171,59 @@ impl<R: BufRead> Read<R> {
                         e
                     );
                 }
+            }
+        }
+    }
+
+    fn annotation_assertion(&mut self) {
+        let mut annotation_property = None;
+        let mut annotation_subject = None;
+
+        loop {
+            let e = self.read_event();
+            match e {
+                (ref ns, Event::Start(ref e))
+                    |
+                (ref ns, Event::Empty(ref e))
+                    if *ns == b"http://www.w3.org/2002/07/owl#" =>
+                {
+                    match (annotation_property.clone(),
+                           annotation_subject.clone()) {
+                        (Some(an_p), Some(an_s)) => {
+                            let annotation = self.annotation_r(e);
+                            let assertion =
+                                AnnotationAssertion {
+                                    annotation_property: an_p,
+                                    annotation_subject: an_s,
+                                    annotation: annotation
+                                };
+                            self.ont.annotation_assertion(assertion);
+                        },
+                        (Some(_),None) if e.local_name() == b"IRI" => {
+                            annotation_subject = Some(self.iri_r());
+                        },
+                        (None, None) => {
+                            match self.named_entity_r(e) {
+                                NamedEntity::AnnotationProperty(an_p) => {
+                                    annotation_property=Some(an_p);
+                                }
+                                _=> {
+                                    panic!("We panic a lot");
+                                }
+                            }
+                        },
+                        _ => {
+                            panic!("We panic a lot");
+                        }
+                    }
+                },
+                (ref ns, Event::End(ref e))
+                    if *ns == b"http://www.w3.org/2002/07/owl#"
+                    && e.local_name() == b"AnnotationAssertion" =>
+                {
+                    return;
+                }
+                _=>{}
             }
         }
     }
@@ -274,8 +330,44 @@ impl<R: BufRead> Read<R> {
 
     }
 
+    fn annotation_r(&mut self, e: &BytesStart) -> Annotation {
+        match e.local_name() {
+            b"Literal" => {
+                self.literal_r(e)
+            }
+            _ => unimplemented!()
+        }
+    }
+
+    fn literal_r(&mut self, e: &BytesStart) -> Annotation {
+        let datatype_iri = self.iri_from_attribute_r(e, b"datatypeIRI");
+        let lang = self.attrib_value(e, b"xml:lang");
+
+        let mut literal:Option<String> = None;
+
+        loop {
+            let mut e = self.read_event();
+            match e {
+                (_, Event::Text(ref e)) =>
+                {
+                    literal = Some(self.reader.decode(e).into_owned());
+                }
+                (ref ns, Event::End(ref mut e))
+                    if *ns == b"http://www.w3.org/2002/07/owl#"
+                    && e.local_name() == b"Literal" =>
+                {
+                    return Annotation::PlainLiteral
+                    {datatype_iri: datatype_iri,
+                     lang: lang,
+                     literal: literal};
+                }
+                _ => {}
+            }
+        }
+    }
+
     fn class_r(&mut self, e: &BytesStart) -> Class {
-        Class(self.iri_r(e).unwrap())
+        Class(self.iri_attribute_r(e).unwrap())
     }
 
     fn class_expression_r(&mut self, e: &BytesStart) -> ClassExpression {
@@ -389,7 +481,7 @@ impl<R: BufRead> Read<R> {
                         }
                         None => {
                             if e.local_name() == b"ObjectProperty" {
-                                let iri = self.iri_r(e).unwrap();
+                                let iri = self.iri_attribute_r(e).unwrap();
                                 o = Some(ObjectProperty(iri))
                             }
                             else {
@@ -414,7 +506,7 @@ impl<R: BufRead> Read<R> {
     }
 
     fn named_entity_r(&mut self, e: &BytesStart) -> NamedEntity {
-        let iri = self.iri_r(e).unwrap();
+        let iri = self.iri_attribute_r(e).unwrap();
         // We already know that this is in the OWL namespace
         match e.local_name() {
             b"Class" => {
@@ -432,23 +524,33 @@ impl<R: BufRead> Read<R> {
         }
     }
 
-    fn iri_r(&mut self, event: &BytesStart) -> Option<IRI> {
+    fn iri_r(&mut self) -> IRI {
+        loop {
+            let e = self.read_event();
+            match e {
+                (ref _ns,Event::Text(ref e)) => {
+                    let iri_s =
+                        self.expand_curie_maybe(e);
+                    return self.ont.iri(iri_s);
+                },
+                (ref ns, Event::End(ref e))
+                    if *ns ==b"http://www.w3.org/2002/07/owl#"
+                    && e.local_name() == b"IRI" =>
+                {
+                    panic!("We panic a lot");
+                },
+                _=>{}
+            }
+        }
+    }
+
+    fn attrib_value(&mut self, event: &BytesStart, tag:&[u8]) -> Option<String> {
         for res in event.attributes() {
             match res {
                 Ok(attrib) => {
-                    match attrib.key {
-                        b"IRI" => {
-                            let val = self.reader.decode(&attrib.value);
-                            let expanded = match self.mapping.expand_curie_string(&val) {
-                                // If we expand use this
-                                Ok(n) => n,
-                                // Else assume it's a complete URI
-                                Err(_e) => val.into_owned(),
-                            };
-
-                            return Some(self.ont.iri(expanded));
-                        }
-                        _ => {}
+                    if attrib.key == tag {
+                        return Some(self.reader.decode
+                                    (&attrib.value).into_owned());
                     }
                 }
                 Err(_e) => {
@@ -457,6 +559,37 @@ impl<R: BufRead> Read<R> {
             }
         }
         None
+    }
+
+    fn iri_attribute_r(&mut self, event: &BytesStart) -> Option<IRI> {
+        self.iri_from_attribute_r(event, b"IRI").or_else
+            (|| self.iri_from_attribute_r(event, b"abbreviatedIRI"))
+    }
+
+    fn iri_from_attribute_r(&mut self, event: &BytesStart, tag:&[u8]) -> Option<IRI> {
+        for res in event.attributes() {
+            match res {
+                Ok(attrib) => {
+                    if attrib.key == tag {
+                        let expanded = self.expand_curie_maybe(&attrib.value);
+                        return Some(self.ont.iri(expanded));
+                    }
+                }
+                Err(_e) => {
+                }
+            }
+        }
+        None
+    }
+
+    fn expand_curie_maybe(&self, val:&[u8]) -> String {
+        let val = self.reader.decode(val);
+        match self.mapping.expand_curie_string(&val) {
+            // If we expand use this
+            Ok(n) => n,
+            // Else assume it's a complete URI
+            Err(_e) => val.into_owned(),
+        }
     }
 
 }
@@ -587,4 +720,29 @@ fn test_one_annotation_property() {
     let ont_s = include_str!("../ont/one-annotation-property.xml");
     let (ont, _) = read(&mut ont_s.as_bytes());
     assert_eq!(ont.annotation_property.len(), 1);
+}
+
+#[test]
+fn test_one_annotation() {
+    let ont_s = include_str!("../ont/one-annotation.xml");
+    let (ont, _) = read(&mut ont_s.as_bytes());
+    assert_eq!(ont.annotation_property.len(), 1);
+    assert_eq!(ont.annotation_assertion.len(), 1);
+}
+
+#[test]
+fn test_one_label_non_abbreviated() {
+    let ont_s = include_str!("../ont/one-label-non-abbreviated-iri.xml");
+    let (ont, _) = read(&mut ont_s.as_bytes());
+
+    assert_eq!(ont.annotation_assertion.len(), 1);
+}
+
+
+#[test]
+fn test_one_label() {
+    let ont_s = include_str!("../ont/one-label.xml");
+    let (ont, _) = read(&mut ont_s.as_bytes());
+
+    assert_eq!(ont.annotation_assertion.len(), 1);
 }

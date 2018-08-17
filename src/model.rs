@@ -31,6 +31,11 @@ impl From<IRI> for String{
     }
 }
 
+impl <'a> From<&'a IRI> for String {
+    fn from(i:&'a IRI) -> String {
+        (*i.0).clone()
+    }
+}
 #[derive(Debug, Default)]
 pub struct IRIBuild(Rc<RefCell<HashSet<IRI>>>);
 
@@ -134,6 +139,21 @@ impl <'a> From<&'a AnnotationProperty> for IRI {
     }
 }
 
+#[derive(Eq, PartialEq, Hash, Clone, Debug)]
+pub struct AnnotationAssertion {
+    pub annotation_property: AnnotationProperty,
+    pub annotation_subject: IRI,
+    pub annotation: Annotation
+}
+
+#[derive(Eq, PartialEq, Hash, Clone, Debug)]
+pub enum Annotation {
+    PlainLiteral{
+        datatype_iri: Option<IRI>,
+        lang: Option<String>,
+        literal: Option<String>,
+    }
+}
 
 #[derive(Eq, PartialEq, Hash, Clone, Debug)]
 pub enum NamedEntity {
@@ -174,7 +194,9 @@ pub struct Ontology
     pub class: HashSet<Class>,
     pub subclass: HashSet<SubClass>,
     pub object_property: HashSet<ObjectProperty>,
-    pub annotation_property: HashSet<AnnotationProperty>
+
+    pub annotation_property: HashSet<AnnotationProperty>,
+    pub annotation_assertion: HashSet<AnnotationAssertion>
 }
 
 impl PartialEq for Ontology {
@@ -183,7 +205,8 @@ impl PartialEq for Ontology {
             self.class == other.class &&
             self.subclass == other.subclass &&
             self.object_property == other.object_property &&
-            self.annotation_property == other.annotation_property
+            self.annotation_property == other.annotation_property &&
+            self.annotation_assertion == other.annotation_assertion
     }
 }
 
@@ -442,6 +465,10 @@ impl Ontology {
             Option::Some(_) => true,
             None => false
         }
+    }
+
+    pub fn annotation_assertion(&mut self, assertion: AnnotationAssertion) {
+        self.annotation_assertion.insert(assertion);
     }
 }
 

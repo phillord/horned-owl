@@ -5,6 +5,7 @@ use model::*;
 use quick_xml::events::BytesDecl;
 use quick_xml::events::BytesEnd;
 use quick_xml::events::BytesStart;
+use quick_xml::events::BytesText;
 use quick_xml::events::Event;
 use quick_xml::Writer;
 
@@ -67,7 +68,18 @@ impl <'a, W> Write<'a,W>
         self.prefixes();
         self.declarations();
         self.subclasses();
+        self.annotation_assertions();
         self.writer.write_event(Event::End(elem)).ok();
+    }
+
+    fn attribute_maybe(&self, elem: &mut BytesStart,
+                       key: &str, val: &Option<String>) {
+        match val {
+            Some(val) => {
+                elem.push_attribute((key, &val[..]));
+            }
+            None => {}
+        }
     }
 
     fn iri_maybe(&self, elem: &mut BytesStart,
@@ -80,20 +92,32 @@ impl <'a, W> Write<'a,W>
         }
     }
 
+    fn shrink_iri_maybe(&self, iri: &str) -> String {
+        match self.mapping.shrink_iri(&(*iri)[..]) {
+            Ok(curie) => {
+                format!("{}", curie)
+            }
+            Err(_) => {
+                format!("{}", iri)
+            }
+        }
+    }
+
     fn iri_or_curie(
         &self,
         elem: &mut BytesStart,
         iri: &str,
     ) {
-        let key = "IRI";
         match self.mapping.shrink_iri(&(*iri)[..]) {
             Ok(curie) => {
-                let curie_str = format!("{}", curie);
-                elem.push_attribute((key, &curie_str[..]));
-                return;
+                let curie = format!("{}", curie);
+                elem.push_attribute(
+                    ("abbreviatedIRI",
+                     &curie[..]));
             }
             Err(_) => {
-                elem.push_attribute((key, &iri[..]));
+                elem.push_attribute(
+                    ("IRI", &iri[..]))
             }
         }
     }
@@ -128,6 +152,20 @@ impl <'a, W> Write<'a,W>
         let iri_string:String = iri.into();
         self.iri_or_curie(&mut bytes_start, &iri_string[..]);
         self.writer.write_event(Event::Empty(bytes_start)).ok();
+    }
+
+    fn iri(&mut self, i:&IRI){
+        let iri_st:String = i.into();
+        let iri_shrunk = self.shrink_iri_maybe(&iri_st[..]);
+        self.write_start_end(b"IRI",
+                             |s: &mut Self| {
+                                 s.writer.write_event(
+                                     Event::Text(
+                                         BytesText::from_escaped_str
+                                             (&iri_shrunk[..])))
+                                     .ok();
+                             }
+        );
     }
 
     fn declaration_1<'b, F, E>(&mut self, named_entity:&HashSet<E>,
@@ -184,15 +222,27 @@ impl <'a, W> Write<'a,W>
         }
     }
 
-    fn write_start_end<F>(&mut self, tag:&[u8], mut contents:F)
-        where F: FnMut(&mut Self)
-    {
+    fn write_start_end<F>(&mut self, tag:&[u8], contents:F)
+        where F: FnMut(&mut Self) {
+        self.write_start_end_with_tag(tag,
+                                      |_:&mut Self, _:&mut BytesStart| return,
+                                      contents);
+    }
+
+    fn write_start_end_with_tag<F, G>(&mut self, tag:&[u8], mut start:F,
+                                   mut contents:G)
+        where
+        F: FnMut(&mut Self, &mut BytesStart),
+        G: FnMut(&mut Self) {
         let len = tag.len();
-        let open = BytesStart::borrowed(tag,len);
-        self.writer.write_event(Event::Start(open)).ok();
+        let mut open = BytesStart::borrowed(tag,len);
 
         // Pass self like this, because we cannot capture it in the
         // closure, without failing the borrow checker.
+        start(self, &mut open);
+
+        self.writer.write_event(Event::Start(open)).ok();
+
         contents(self);
 
         self.writer
@@ -256,6 +306,46 @@ impl <'a, W> Write<'a,W>
                     s.class_expression(&subclass.superclass);
                     s.class_expression(&subclass.subclass);
                 });
+        }
+    }
+
+    fn annotation(&mut self, annotation:&Annotation) {
+        match annotation {
+            Annotation::PlainLiteral{datatype_iri, lang, literal}
+            => {
+                self.write_start_end_with_tag
+                    (b"Literal",
+                     |s: &mut Self, b: &mut BytesStart| {
+                         s.attribute_maybe(b, "xml:lang", lang);
+                         s.attribute_maybe(b, "datatypeIRI",
+                                           &datatype_iri
+                                           .as_ref()
+                                           .map(|s| s.into()));
+                     },
+                     |s: &mut Self| {
+                         if let Some(l) = literal {
+                             s.writer.write_event(
+                                 Event::Text(
+                                     BytesText::from_escaped_str(&l[..])
+                                 )
+                             ).ok();
+                         }
+                     } );
+            }
+        }
+    }
+
+    fn annotation_assertions(&mut self) {
+        for assertion in &self.ont.annotation_assertion {
+            self.write_start_end(
+                b"AnnotationAssertion",
+                |s: &mut Write<W>|
+                {
+                    s.annotation_property(&assertion.annotation_property);
+                    s.iri(&assertion.annotation_subject);
+                    s.annotation(&assertion.annotation);
+                }
+            )
         }
     }
 }
@@ -382,5 +472,15 @@ mod test {
     #[test]
     fn round_one_annotation_property() {
         assert_round(include_str!("../ont/one-annotation-property.xml"));
+    }
+
+    #[test]
+    fn round_one_annotation() {
+        assert_round(include_str!("../ont/one-annotation.xml"));
+    }
+
+    #[test]
+    fn round_one_label() {
+
     }
 }
