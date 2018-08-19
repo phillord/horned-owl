@@ -138,15 +138,18 @@ impl<R: BufRead> Read<R> {
                     //a)
                 }
             }
-
         }
     }
 
+    fn error(&self, message:String) -> ! {
+        panic!("Error: {} at {}", message, self.reader.buffer_position());
+    }
+
     fn unimplemented_owl(&self, n: &[u8]) {
-        println!(
+        self.error(format!(
             "Ontology: Unknown element in OWL NS:{:?}",
             from_utf8(n).ok().unwrap()
-        );
+        ));
     }
 
     fn ontology(&mut self, e: &BytesStart) {
@@ -519,7 +522,7 @@ impl<R: BufRead> Read<R> {
                 NamedEntity::AnnotationProperty(AnnotationProperty(iri))
             }
             _=> {
-                panic!("We panic a lot!");
+                self.error(format!("We panic a lot!"));
             }
         }
     }
