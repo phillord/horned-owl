@@ -116,6 +116,9 @@ impl<R: BufRead> Read<R> {
                         (&State::Ontology, b"AnnotationAssertion") => {
                             self.annotation_assertion();
                         }
+                        (&State::Ontology, b"Annotation") => {
+                            self.ontology_annotation();
+                        }
                         (_, n) => {
                             self.unimplemented_owl(n);
                         }
@@ -174,6 +177,51 @@ impl<R: BufRead> Read<R> {
                         e
                     );
                 }
+            }
+        }
+    }
+
+    fn ontology_annotation(&mut self) {
+        let mut annotation_property = None;
+
+        loop {
+            let e = self.read_event();
+            match e {
+                (ref ns, Event::Start(ref e))
+                    |
+                (ref ns, Event::Empty(ref e))
+                    if *ns == b"http://www.w3.org/2002/07/owl#" =>
+                {
+                    match annotation_property.clone() {
+                        Some(an_p) => {
+                            let annotation = self.annotation_r(e);
+                            let assertion =
+                                OntologyAnnotationAssertion {
+                                    annotation_property: an_p,
+                                    annotation: annotation
+                                };
+                            self.ont.ontology_annotation_assertion
+                                .insert(assertion);
+                        },
+                        None => {
+                            match self.named_entity_r(e) {
+                                NamedEntity::AnnotationProperty(an_p) => {
+                                    annotation_property=Some(an_p);
+                                }
+                                _=> {
+                                    panic!("We panic a lot");
+                                }
+                            }
+                        },
+                    }
+                },
+                (ref ns, Event::End(ref e))
+                    if *ns == b"http://www.w3.org/2002/07/owl#"
+                    && e.local_name() == b"Annotation" =>
+                {
+                    return;
+                }
+                _=>{}
             }
         }
     }
@@ -594,7 +642,6 @@ impl<R: BufRead> Read<R> {
             Err(_e) => val.into_owned(),
         }
     }
-
 }
 
 #[cfg(test)]
@@ -748,4 +795,12 @@ fn test_one_label() {
     let (ont, _) = read(&mut ont_s.as_bytes());
 
     assert_eq!(ont.annotation_assertion.len(), 1);
+}
+
+#[test]
+fn test_one_ontology_annotation() {
+    let ont_s = include_str!("../ont/one-ontology-annotation.xml");
+    let (ont, _) = read(&mut ont_s.as_bytes());
+
+    assert_eq!(ont.ontology_annotation_assertion.len(), 1);
 }

@@ -147,6 +147,12 @@ pub struct AnnotationAssertion {
 }
 
 #[derive(Eq, PartialEq, Hash, Clone, Debug)]
+pub struct OntologyAnnotationAssertion {
+    pub annotation_property: AnnotationProperty,
+    pub annotation: Annotation
+}
+
+#[derive(Eq, PartialEq, Hash, Clone, Debug)]
 pub enum Annotation {
     PlainLiteral{
         datatype_iri: Option<IRI>,
@@ -196,7 +202,11 @@ pub struct Ontology
     pub object_property: HashSet<ObjectProperty>,
 
     pub annotation_property: HashSet<AnnotationProperty>,
-    pub annotation_assertion: HashSet<AnnotationAssertion>
+    pub annotation_assertion: HashSet<AnnotationAssertion>,
+
+    pub ontology_annotation_assertion: HashSet<OntologyAnnotationAssertion>
+
+
 }
 
 impl PartialEq for Ontology {
@@ -206,7 +216,9 @@ impl PartialEq for Ontology {
             self.subclass == other.subclass &&
             self.object_property == other.object_property &&
             self.annotation_property == other.annotation_property &&
-            self.annotation_assertion == other.annotation_assertion
+            self.annotation_assertion == other.annotation_assertion &&
+            self.ontology_annotation_assertion ==
+            other.ontology_annotation_assertion
     }
 }
 

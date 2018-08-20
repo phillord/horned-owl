@@ -66,6 +66,7 @@ impl <'a, W> Write<'a,W>
         let elem = BytesEnd::owned(b"Ontology".to_vec());
 
         self.prefixes();
+        self.ontology_annotation_assertions();
         self.declarations();
         self.subclasses();
         self.annotation_assertions();
@@ -348,6 +349,19 @@ impl <'a, W> Write<'a,W>
             )
         }
     }
+
+    fn ontology_annotation_assertions(&mut self) {
+        for assertion in &self.ont.ontology_annotation_assertion {
+            self.write_start_end(
+                b"Annotation",
+                |s: &mut Write<W>|
+                {
+                    s.annotation_property(&assertion.annotation_property);
+                    s.annotation(&assertion.annotation);
+                }
+            )
+        }
+    }
 }
 
 
@@ -487,5 +501,10 @@ mod test {
     #[test]
     fn round_one_comment() {
         assert_round(include_str!("../ont/one-comment.xml"));
+    }
+
+    #[test]
+    fn round_one_ontology_annotation() {
+        assert_round(include_str!("../ont/one-ontology-annotation.xml"));
     }
 }
