@@ -69,6 +69,7 @@ impl <'a, W> Write<'a,W>
         self.ontology_annotation_assertions();
         self.declarations();
         self.subclasses();
+        self.equivalent_classes();
         self.annotation_assertions();
         self.writer.write_event(Event::End(elem)).ok();
     }
@@ -310,6 +311,18 @@ impl <'a, W> Write<'a,W>
         }
     }
 
+    fn equivalent_classes(&mut self) {
+        for equivalent_class in &self.ont.equivalent_class {
+            self.write_start_end(
+                b"EquivalentClasses",
+                |s: &mut Write<W>|
+                {
+                    s.class_expression(&equivalent_class.0);
+                    s.class_expression(&equivalent_class.1);
+                });
+        }
+    }
+
     fn annotation(&mut self, annotation:&Annotation) {
         match annotation {
             Annotation::PlainLiteral{datatype_iri, lang, literal}
@@ -506,5 +519,10 @@ mod test {
     #[test]
     fn round_one_ontology_annotation() {
         assert_round(include_str!("../ont/one-ontology-annotation.xml"));
+    }
+
+    #[test]
+    fn round_one_equivalent_class() {
+        assert_round(include_str!("../ont/one-equivalent.xml"));
     }
 }

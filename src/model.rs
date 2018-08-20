@@ -176,6 +176,11 @@ pub struct SubClass{
 }
 
 #[derive(Eq,PartialEq,Hash,Clone,Debug)]
+pub struct EquivalentClass(pub ClassExpression,
+                           pub ClassExpression);
+
+
+#[derive(Eq,PartialEq,Hash,Clone,Debug)]
 pub enum ClassExpression
 {
     Class(Class),
@@ -199,14 +204,13 @@ pub struct Ontology
     pub id: OntologyID,
     pub class: HashSet<Class>,
     pub subclass: HashSet<SubClass>,
+    pub equivalent_class: HashSet<EquivalentClass>,
     pub object_property: HashSet<ObjectProperty>,
 
     pub annotation_property: HashSet<AnnotationProperty>,
     pub annotation_assertion: HashSet<AnnotationAssertion>,
 
     pub ontology_annotation_assertion: HashSet<OntologyAnnotationAssertion>
-
-
 }
 
 impl PartialEq for Ontology {
@@ -214,6 +218,7 @@ impl PartialEq for Ontology {
         self.id == other.id &&
             self.class == other.class &&
             self.subclass == other.subclass &&
+            self.equivalent_class == other.equivalent_class &&
             self.object_property == other.object_property &&
             self.annotation_property == other.annotation_property &&
             self.annotation_assertion == other.annotation_assertion &&

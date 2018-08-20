@@ -119,6 +119,9 @@ impl<R: BufRead> Read<R> {
                         (&State::Ontology, b"Annotation") => {
                             self.ontology_annotation();
                         }
+                        (&State::Ontology, b"EquivalentClasses") => {
+                            self.equivalent_class();
+                        }
                         (_, n) => {
                             self.unimplemented_owl(n);
                         }
@@ -372,6 +375,50 @@ impl<R: BufRead> Read<R> {
                 (ref ns, Event::End(ref mut e))
                     if *ns == b"http://www.w3.org/2002/07/owl#"
                         && e.local_name() == b"SubClassOf" =>
+                {
+                    return;
+                }
+                _ => {}
+            }
+        }
+
+    }
+
+    fn equivalent_class(&mut self) {
+        let mut class_operands: Vec<ClassExpression> = Vec::new();
+
+        loop {
+            let mut e = self.read_event();
+            match e {
+                (ref ns, Event::Start(ref mut e))
+                    |
+                (ref ns, Event::Empty(ref mut e))
+                    if *ns == b"http://www.w3.org/2002/07/owl#" =>
+                {
+                    let ce = self.class_expression_r(e);
+
+                    match class_operands.len() {
+                        1 => {
+                            self.ont.equivalent_class.insert(
+                                EquivalentClass(
+                                    class_operands.pop().unwrap(),
+                                    ce
+                                )
+                            );
+                        }
+                        // Add the new class as an operand
+                        0 => {
+                            class_operands.push(self.class_expression_r(e));
+                        }
+                        // Shouldn't happen
+                        _ => {
+                            panic!("We panic a lot!");
+                        }
+                    }
+                }
+                (ref ns, Event::End(ref mut e))
+                    if *ns == b"http://www.w3.org/2002/07/owl#"
+                        && e.local_name() == b"EquivalentClasses" =>
                 {
                     return;
                 }
@@ -803,4 +850,12 @@ fn test_one_ontology_annotation() {
     let (ont, _) = read(&mut ont_s.as_bytes());
 
     assert_eq!(ont.ontology_annotation_assertion.len(), 1);
+}
+
+#[test]
+fn test_one_equivalent_class() {
+    let ont_s = include_str!("../ont/one-equivalent.xml");
+    let (ont, _) = read(&mut ont_s.as_bytes());
+
+    assert_eq!(ont.equivalent_class.len(), 1);
 }
