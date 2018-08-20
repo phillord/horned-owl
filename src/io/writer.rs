@@ -481,6 +481,11 @@ mod test {
 
     #[test]
     fn round_one_label() {
+        assert_round(include_str!("../ont/one-label.xml"));
+    }
 
+    #[test]
+    fn round_one_comment() {
+        assert_round(include_str!("../ont/one-comment.xml"));
     }
 }
