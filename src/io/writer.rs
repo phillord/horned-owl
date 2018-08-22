@@ -70,6 +70,7 @@ impl <'a, W> Write<'a,W>
         self.declarations();
         self.subclasses();
         self.equivalent_classes();
+        self.disjoint_classes();
         self.annotation_assertions();
         self.writer.write_event(Event::End(elem)).ok();
     }
@@ -323,6 +324,18 @@ impl <'a, W> Write<'a,W>
         }
     }
 
+    fn disjoint_classes(&mut self) {
+        for disjoint_class in &self.ont.disjoint_class {
+            self.write_start_end(
+                b"DisjointClasses",
+                |s: &mut Write<W>|
+                {
+                    s.class_expression(&disjoint_class.0);
+                    s.class_expression(&disjoint_class.1);
+                });
+        }
+    }
+
     fn annotation(&mut self, annotation:&Annotation) {
         match annotation {
             Annotation::PlainLiteral{datatype_iri, lang, literal}
@@ -524,5 +537,10 @@ mod test {
     #[test]
     fn round_one_equivalent_class() {
         assert_round(include_str!("../ont/one-equivalent.xml"));
+    }
+
+    #[test]
+    fn round_one_disjoint_class() {
+        assert_round(include_str!("../ont/one-disjoint.xml"));
     }
 }

@@ -179,6 +179,10 @@ pub struct SubClass{
 pub struct EquivalentClass(pub ClassExpression,
                            pub ClassExpression);
 
+#[derive(Eq,PartialEq,Hash,Clone,Debug)]
+pub struct DisjointClass(pub ClassExpression,
+                         pub ClassExpression);
+
 
 #[derive(Eq,PartialEq,Hash,Clone,Debug)]
 pub enum ClassExpression
@@ -189,6 +193,12 @@ pub enum ClassExpression
     And{o:Vec<ClassExpression>},
     Or{o:Vec<ClassExpression>},
     Not{ce:Box<ClassExpression>}
+}
+
+#[derive (Debug, Eq, Hash, PartialEq)]
+pub struct SubObjectProperty {
+    pub superproperty: ObjectProperty,
+    pub subproperty: ObjectProperty
 }
 
 #[derive(Debug, Default, Eq, PartialEq)]
@@ -202,11 +212,17 @@ pub struct Ontology
 {
     pub iri_build:IRIBuild,
     pub id: OntologyID,
+    // classes
     pub class: HashSet<Class>,
     pub subclass: HashSet<SubClass>,
     pub equivalent_class: HashSet<EquivalentClass>,
-    pub object_property: HashSet<ObjectProperty>,
+    pub disjoint_class: HashSet<DisjointClass>,
 
+    // object properties
+    pub object_property: HashSet<ObjectProperty>,
+    pub sub_object_property: HashSet<SubObjectProperty>,
+
+    // annotations
     pub annotation_property: HashSet<AnnotationProperty>,
     pub annotation_assertion: HashSet<AnnotationAssertion>,
 
@@ -219,6 +235,7 @@ impl PartialEq for Ontology {
             self.class == other.class &&
             self.subclass == other.subclass &&
             self.equivalent_class == other.equivalent_class &&
+            self.disjoint_class == other.disjoint_class &&
             self.object_property == other.object_property &&
             self.annotation_property == other.annotation_property &&
             self.annotation_assertion == other.annotation_assertion &&
