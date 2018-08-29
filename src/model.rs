@@ -166,7 +166,6 @@ pub enum NamedEntity {
     Class(Class),
     ObjectProperty(ObjectProperty),
     AnnotationProperty(AnnotationProperty)
-
 }
 
 #[derive(Eq,PartialEq,Hash,Clone,Debug)]
@@ -237,6 +236,7 @@ impl PartialEq for Ontology {
             self.equivalent_class == other.equivalent_class &&
             self.disjoint_class == other.disjoint_class &&
             self.object_property == other.object_property &&
+            self.sub_object_property == other.sub_object_property &&
             self.annotation_property == other.annotation_property &&
             self.annotation_assertion == other.annotation_assertion &&
             self.ontology_annotation_assertion ==

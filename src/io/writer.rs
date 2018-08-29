@@ -72,6 +72,7 @@ impl <'a, W> Write<'a,W>
         self.equivalent_classes();
         self.disjoint_classes();
         self.annotation_assertions();
+        self.suboproperties();
         self.writer.write_event(Event::End(elem)).ok();
     }
 
@@ -336,6 +337,18 @@ impl <'a, W> Write<'a,W>
         }
     }
 
+    fn suboproperties(&mut self) {
+        for sub in &self.ont.sub_object_property {
+            self.write_start_end(
+                b"SubObjectPropertyOf",
+                |s: &mut Write<W>|
+                {
+                    s.object_property(&sub.superproperty);
+                    s.object_property(&sub.subproperty);
+                });
+        }
+    }
+
     fn annotation(&mut self, annotation:&Annotation) {
         match annotation {
             Annotation::PlainLiteral{datatype_iri, lang, literal}
@@ -542,5 +555,10 @@ mod test {
     #[test]
     fn round_one_disjoint_class() {
         assert_round(include_str!("../ont/one-disjoint.xml"));
+    }
+
+    #[test]
+    fn round_one_sub_property() {
+        assert_round(include_str!("../ont/one-suboproperty.xml"));
     }
 }
