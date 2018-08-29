@@ -73,6 +73,7 @@ impl <'a, W> Write<'a,W>
         self.disjoint_classes();
         self.annotation_assertions();
         self.suboproperties();
+        self.inverse_object_properties();
         self.writer.write_event(Event::End(elem)).ok();
     }
 
@@ -349,6 +350,18 @@ impl <'a, W> Write<'a,W>
         }
     }
 
+    fn inverse_object_properties(&mut self) {
+        for sub in &self.ont.inverse_object_property {
+            self.write_start_end(
+                b"InverseObjectProperties",
+                |s: &mut Write<W>|
+                {
+                    s.object_property(&sub.0);
+                    s.object_property(&sub.1);
+                });
+        }
+    }
+
     fn annotation(&mut self, annotation:&Annotation) {
         match annotation {
             Annotation::PlainLiteral{datatype_iri, lang, literal}
@@ -560,5 +573,10 @@ mod test {
     #[test]
     fn round_one_sub_property() {
         assert_round(include_str!("../ont/one-suboproperty.xml"));
+    }
+
+    #[test]
+    fn round_one_inverse() {
+        assert_round(include_str!("../ont/inverse-properties.xml"));
     }
 }

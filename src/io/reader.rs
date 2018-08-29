@@ -128,6 +128,9 @@ impl<R: BufRead> Read<R> {
                         (&State::Ontology, b"SubObjectPropertyOf") => {
                             self.sub_object_property();
                         }
+                        (&State::Ontology, b"InverseObjectProperties") => {
+                            self.inverse_object_property();
+                        }
                         (_, n) => {
                             self.unimplemented_owl(n);
                         }
@@ -389,6 +392,54 @@ impl<R: BufRead> Read<R> {
                 (ref ns, Event::End(ref mut e))
                     if *ns == b"http://www.w3.org/2002/07/owl#"
                         && e.local_name() == b"SubObjectPropertyOf" =>
+                {
+                    return;
+                }
+                _ => {}
+            }
+        }
+
+    }
+
+    fn inverse_object_property(&mut self) {
+        let mut objectproperty_operands: Vec<ObjectProperty> = Vec::new();
+
+        loop {
+            let mut e = self.read_event();
+            match e {
+                (ref ns, Event::Start(ref mut e))
+                    |
+                (ref ns, Event::Empty(ref mut e))
+                    if *ns == b"http://www.w3.org/2002/07/owl#" =>
+                {
+                    let ne = self.named_entity_r(e);
+
+                    if let NamedEntity::ObjectProperty(op) = ne {
+                        match objectproperty_operands.len() {
+                            1 => {
+                                self.ont.inverse_object_property.insert(
+                                    InverseObjectProperty(
+                                        objectproperty_operands.pop().unwrap(),
+                                        op)
+                                );
+                            }
+                            // Add the new class as an operand
+                            0 => {
+                                objectproperty_operands.push(op);
+                            }
+                            // Shouldn't happen
+                            _ => {
+                                panic!("We panic a lot!");
+                            }
+                        }
+                    }
+                    else{
+                        self.error(format!("{}", "Expecting object property"));
+                    }
+                }
+                (ref ns, Event::End(ref mut e))
+                    if *ns == b"http://www.w3.org/2002/07/owl#"
+                        && e.local_name() == b"InverseObjectProperties" =>
                 {
                     return;
                 }
@@ -974,4 +1025,12 @@ fn test_one_sub_property() {
     let (ont, _) = read(&mut ont_s.as_bytes());
 
     assert_eq!(ont.sub_object_property.len(), 1);
+}
+
+#[test]
+fn test_one_inverse_property() {
+    let ont_s = include_str!("../ont/inverse-properties.xml");
+    let (ont, _) = read(&mut ont_s.as_bytes());
+
+    assert_eq!(ont.inverse_object_property.len(), 1);
 }

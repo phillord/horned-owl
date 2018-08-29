@@ -200,6 +200,11 @@ pub struct SubObjectProperty {
     pub subproperty: ObjectProperty
 }
 
+#[derive(Eq,PartialEq,Hash,Clone,Debug)]
+pub struct InverseObjectProperty(pub ObjectProperty,
+                                 pub ObjectProperty);
+
+
 #[derive(Debug, Default, Eq, PartialEq)]
 pub struct OntologyID{
     pub iri: Option<IRI>,
@@ -220,6 +225,7 @@ pub struct Ontology
     // object properties
     pub object_property: HashSet<ObjectProperty>,
     pub sub_object_property: HashSet<SubObjectProperty>,
+    pub inverse_object_property: HashSet<InverseObjectProperty>,
 
     // annotations
     pub annotation_property: HashSet<AnnotationProperty>,
@@ -237,6 +243,7 @@ impl PartialEq for Ontology {
             self.disjoint_class == other.disjoint_class &&
             self.object_property == other.object_property &&
             self.sub_object_property == other.sub_object_property &&
+            self.inverse_object_property == other.inverse_object_property &&
             self.annotation_property == other.annotation_property &&
             self.annotation_assertion == other.annotation_assertion &&
             self.ontology_annotation_assertion ==
