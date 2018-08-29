@@ -131,6 +131,9 @@ impl<R: BufRead> Read<R> {
                         (&State::Ontology, b"InverseObjectProperties") => {
                             self.inverse_object_property();
                         }
+                        (&State::Ontology, b"TransitiveObjectProperty") => {
+                            self.transitive_object_property();
+                        }
                         (_, n) => {
                             self.unimplemented_owl(n);
                         }
@@ -344,6 +347,30 @@ impl<R: BufRead> Read<R> {
                         && e.local_name() == b"Declaration" =>
                 {
                     return;
+                }
+                _ => {}
+            }
+        }
+
+    }
+
+    fn transitive_object_property(&mut self) {
+        loop {
+            let mut e = self.read_event();
+
+            match e {
+                (ref ns, Event::Start(ref mut e))
+                    |
+                (ref ns, Event::Empty(ref mut e))
+                    if *ns == b"http://www.w3.org/2002/07/owl#" =>
+                {
+                    let ne = self.named_entity_r(e);
+                    if let NamedEntity::ObjectProperty(op) = ne {
+                        self.ont.transitive_object_property.insert(
+                            TransitiveObjectProperty(op)
+                        );
+                        return;
+                    }
                 }
                 _ => {}
             }
@@ -1033,4 +1060,12 @@ fn test_one_inverse_property() {
     let (ont, _) = read(&mut ont_s.as_bytes());
 
     assert_eq!(ont.inverse_object_property.len(), 1);
+}
+
+#[test]
+fn test_one_transitive_property() {
+    let ont_s = include_str!("../ont/transitive-properties.xml");
+    let (ont, _) = read(&mut ont_s.as_bytes());
+
+    assert_eq!(ont.transitive_object_property.len(), 1);
 }

@@ -74,6 +74,7 @@ impl <'a, W> Write<'a,W>
         self.annotation_assertions();
         self.suboproperties();
         self.inverse_object_properties();
+        self.transitive_object_properties();
         self.writer.write_event(Event::End(elem)).ok();
     }
 
@@ -350,6 +351,17 @@ impl <'a, W> Write<'a,W>
         }
     }
 
+    fn transitive_object_properties(&mut self) {
+        for trans in &self.ont.transitive_object_property {
+            self.write_start_end(
+                b"TransitiveObjectProperty",
+                |s: &mut Write<W>|
+                {
+                    s.object_property(&trans.0);
+                });
+        }
+    }
+
     fn inverse_object_properties(&mut self) {
         for sub in &self.ont.inverse_object_property {
             self.write_start_end(
@@ -578,5 +590,10 @@ mod test {
     #[test]
     fn round_one_inverse() {
         assert_round(include_str!("../ont/inverse-properties.xml"));
+    }
+
+    #[test]
+    fn round_one_transitive() {
+        assert_round(include_str!("../ont/transitive-properties.xml"));
     }
 }
