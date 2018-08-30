@@ -265,7 +265,9 @@ impl<R: BufRead> Read<R> {
                                 };
                             self.ont.annotation_assertion(assertion);
                         },
-                        (Some(_),None) if e.local_name() == b"IRI" => {
+                        (Some(_),None)
+                            if e.local_name() == b"IRI" ||
+                            e.local_name() == b"AbbreviatedIRI" => {
                             annotation_subject = Some(self.iri_r());
                         },
                         (None, None) => {
@@ -279,7 +281,7 @@ impl<R: BufRead> Read<R> {
                             }
                         },
                         _ => {
-                            panic!("We panic a lot");
+                            self.error(format!("We panic a lot"));
                         }
                     }
                 },
@@ -858,7 +860,10 @@ impl<R: BufRead> Read<R> {
                 },
                 (ref ns, Event::End(ref e))
                     if *ns ==b"http://www.w3.org/2002/07/owl#"
-                    && e.local_name() == b"IRI" =>
+                    && (e.local_name() == b"IRI"
+                        ||
+                        e.local_name() == b"AbbreviatedIRI"
+                    ) =>
                 {
                     panic!("We panic a lot");
                 },
