@@ -378,37 +378,78 @@ impl<R: BufRead> Read<R> {
 
     }
 
+
+    fn object_property_r(&mut self) -> Vec<ObjectProperty>{
+        let mut ops: Vec<ObjectProperty> = Vec::new();
+
+        loop {
+            let mut e = self.read_event();
+
+            match e {
+                (ref ns, Event::Start(ref mut e))
+                    |
+                (ref ns, Event::Empty(ref mut e))
+                    if *ns == b"http://www.w3.org/2002/07/owl#"
+                    && e.local_name() == b"ObjectProperty" =>
+                {
+                    let ne = self.named_entity_r(e);
+                    if let NamedEntity::ObjectProperty(op) = ne {
+                        ops.push(op);
+                    }
+                },
+                (ref ns, Event::End(ref mut e))
+                    if *ns == b"http://www.w3.org/2002/07/owl#"
+                    && e.local_name() == b"ObjectPropertyChain" =>
+                {
+                    return ops;
+                }
+                _ => {}
+            }
+        }
+
+    }
+
+
     fn sub_object_property(&mut self) {
-        let mut objectproperty_operands: Vec<ObjectProperty> = Vec::new();
+        let mut objectproperty_operand: Option<ObjectPropertyExpression> = None;
 
         loop {
             let mut e = self.read_event();
             match e {
                 (ref ns, Event::Start(ref mut e))
+                    if *ns == b"http://www.w3.org/2002/07/owl#"
+                    && e.local_name() == b"ObjectPropertyChain" => {
+                        objectproperty_operand =
+                            Some(
+                                ObjectPropertyExpression::ObjectPropertyChain(
+                                    self.object_property_r()
+                                )
+                            )
+                    },
+                (ref ns, Event::Start(ref mut e))
                     |
                 (ref ns, Event::Empty(ref mut e))
-                    if *ns == b"http://www.w3.org/2002/07/owl#" =>
+                    if *ns == b"http://www.w3.org/2002/07/owl#"
+                    && e.local_name() == b"ObjectProperty" =>
                 {
                     let ne = self.named_entity_r(e);
 
                     if let NamedEntity::ObjectProperty(op) = ne {
-                        match objectproperty_operands.len() {
-                            1 => {
+                        match objectproperty_operand.clone() {
+                            Some(superprop) => {
                                 self.ont.sub_object_property.insert(
                                     SubObjectProperty{
                                         superproperty:
-                                        objectproperty_operands.pop().unwrap(),
+                                        superprop,
                                         subproperty:
                                         op}
                                 );
                             }
                             // Add the new class as an operand
-                            0 => {
-                                objectproperty_operands.push(op);
-                            }
-                            // Shouldn't happen
-                            _ => {
-                                panic!("We panic a lot!");
+                            None => {
+                                objectproperty_operand =
+                                    Some(ObjectPropertyExpression::
+                                         ObjectProperty(op));
                             }
                         }
                     }
@@ -782,19 +823,25 @@ impl<R: BufRead> Read<R> {
     }
 
     fn named_entity_r(&mut self, e: &BytesStart) -> NamedEntity {
-        let iri = self.iri_attribute_r(e).unwrap();
-        // We already know that this is in the OWL namespace
-        match e.local_name() {
-            b"Class" => {
-                NamedEntity::Class(Class(iri))
-            },
-            b"ObjectProperty" => {
-                NamedEntity::ObjectProperty(ObjectProperty(iri))
+        match self.iri_attribute_r(e) {
+            Some(iri) => {
+                // We already know that this is in the OWL namespace
+                match e.local_name() {
+                    b"Class" => {
+                        NamedEntity::Class(Class(iri))
+                    },
+                    b"ObjectProperty" => {
+                        NamedEntity::ObjectProperty(ObjectProperty(iri))
+                    }
+                    b"AnnotationProperty" => {
+                        NamedEntity::AnnotationProperty(AnnotationProperty(iri))
+                    }
+                    _=> {
+                        self.error(format!("We panic a lot!"));
+                    }
+                }
             }
-            b"AnnotationProperty" => {
-                NamedEntity::AnnotationProperty(AnnotationProperty(iri))
-            }
-            _=> {
+            None => {
                 self.error(format!("We panic a lot!"));
             }
         }
@@ -1068,4 +1115,12 @@ fn test_one_transitive_property() {
     let (ont, _) = read(&mut ont_s.as_bytes());
 
     assert_eq!(ont.transitive_object_property.len(), 1);
+}
+
+#[test]
+fn test_subproperty_chain() {
+    let ont_s = include_str!("../ont/subproperty-chain.xml");
+    let (ont, _) = read(&mut ont_s.as_bytes());
+
+    assert_eq!(ont.sub_object_property.len(), 1);
 }

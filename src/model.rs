@@ -194,9 +194,15 @@ pub enum ClassExpression
     Not{ce:Box<ClassExpression>}
 }
 
+#[derive(Eq,PartialEq,Hash,Clone,Debug)]
+pub enum ObjectPropertyExpression {
+    ObjectPropertyChain(Vec<ObjectProperty>),
+    ObjectProperty(ObjectProperty)
+}
+
 #[derive (Debug, Eq, Hash, PartialEq)]
 pub struct SubObjectProperty {
-    pub superproperty: ObjectProperty,
+    pub superproperty: ObjectPropertyExpression,
     pub subproperty: ObjectProperty
 }
 
