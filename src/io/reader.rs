@@ -667,6 +667,10 @@ impl<R: BufRead> Read<R> {
         match e.local_name() {
             b"Literal" => {
                 self.literal_r(e)
+            },
+            b"AbbreviatedIRI" | b"IRI" => {
+                let iri = self.iri_r();
+                AnnotationValue::IRI(iri)
             }
             _ => {
                 self.error(

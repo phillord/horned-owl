@@ -159,7 +159,8 @@ pub enum AnnotationValue {
         datatype_iri: Option<IRI>,
         lang: Option<String>,
         literal: Option<String>,
-    }
+    },
+    IRI(IRI)
 }
 
 #[derive(Eq, PartialEq, Hash, Clone, Debug)]

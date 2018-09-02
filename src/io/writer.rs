@@ -95,8 +95,12 @@ where
 
     fn shrink_iri_maybe(&self, iri: &str) -> String {
         match self.mapping.shrink_iri(&(*iri)[..]) {
-            Ok(curie) => format!("{}", curie),
-            Err(_) => format!("{}", iri),
+            Ok(curie) => {
+                format!("{}", curie)
+            },
+            Err(_) => {
+                format!("{}", iri)
+            },
         }
     }
 
@@ -338,6 +342,9 @@ where
 
     fn annotation_value(&mut self, annotation: &AnnotationValue) {
         match annotation {
+            AnnotationValue::IRI(iri) => {
+                self.iri(iri);
+            },
             AnnotationValue::PlainLiteral {
                 datatype_iri,
                 lang,
