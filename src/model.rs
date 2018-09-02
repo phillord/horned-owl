@@ -141,19 +141,20 @@ impl <'a> From<&'a AnnotationProperty> for IRI {
 
 #[derive(Eq, PartialEq, Hash, Clone, Debug)]
 pub struct AnnotationAssertion {
-    pub annotation_property: AnnotationProperty,
     pub annotation_subject: IRI,
-    pub annotation: Annotation
+    pub annotation: Annotation,
+    // annotation on the assertion!
+    pub annotated: Option<Vec<Annotation>>
 }
 
 #[derive(Eq, PartialEq, Hash, Clone, Debug)]
-pub struct OntologyAnnotationAssertion {
+pub struct Annotation {
     pub annotation_property: AnnotationProperty,
-    pub annotation: Annotation
+    pub annotation_value: AnnotationValue
 }
 
 #[derive(Eq, PartialEq, Hash, Clone, Debug)]
-pub enum Annotation {
+pub enum AnnotationValue {
     PlainLiteral{
         datatype_iri: Option<IRI>,
         lang: Option<String>,
@@ -241,7 +242,7 @@ pub struct Ontology
     pub annotation_property: HashSet<AnnotationProperty>,
     pub annotation_assertion: HashSet<AnnotationAssertion>,
 
-    pub ontology_annotation_assertion: HashSet<OntologyAnnotationAssertion>
+    pub annotation: HashSet<Annotation>
 }
 
 impl PartialEq for Ontology {
@@ -257,8 +258,7 @@ impl PartialEq for Ontology {
             self.transitive_object_property == other.transitive_object_property &&
             self.annotation_property == other.annotation_property &&
             self.annotation_assertion == other.annotation_assertion &&
-            self.ontology_annotation_assertion ==
-            other.ontology_annotation_assertion
+            self.annotation == other.annotation
     }
 }
 

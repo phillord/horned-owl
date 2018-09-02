@@ -336,9 +336,9 @@ where
         }
     }
 
-    fn annotation(&mut self, annotation: &Annotation) {
+    fn annotation_value(&mut self, annotation: &AnnotationValue) {
         match annotation {
-            Annotation::PlainLiteral {
+            AnnotationValue::PlainLiteral {
                 datatype_iri,
                 lang,
                 literal,
@@ -365,21 +365,37 @@ where
         }
     }
 
+    fn annotation(&mut self, annotation:&Annotation){
+        self.write_start_end(b"Annotation", |s: &mut Write<W>| {
+            s.annotation_property(&annotation.annotation_property);
+            s.annotation_value(&annotation.annotation_value);
+        });
+    }
+
+    fn annotations_maybe(&mut self, annotations_maybe: &Option<Vec<Annotation>>){
+        if let &Some(ref annotations) = annotations_maybe {
+            for annotation in annotations {
+                self.annotation(annotation);
+            }
+        }
+    }
+
     fn annotation_assertions(&mut self) {
         for assertion in &self.ont.annotation_assertion {
             self.write_start_end(b"AnnotationAssertion", |s: &mut Write<W>| {
-                s.annotation_property(&assertion.annotation_property);
+                s.annotations_maybe(&assertion.annotated);
+                s.annotation_property(&assertion.annotation.annotation_property);
                 s.iri(&assertion.annotation_subject);
-                s.annotation(&assertion.annotation);
+                s.annotation_value(&assertion.annotation.annotation_value);
             })
         }
     }
 
     fn ontology_annotation_assertions(&mut self) {
-        for assertion in &self.ont.ontology_annotation_assertion {
+        for annotation in &self.ont.annotation {
             self.write_start_end(b"Annotation", |s: &mut Write<W>| {
-                s.annotation_property(&assertion.annotation_property);
-                s.annotation(&assertion.annotation);
+                s.annotation_property(&annotation.annotation_property);
+                s.annotation_value(&annotation.annotation_value);
             })
         }
     }
@@ -554,5 +570,10 @@ mod test {
     #[test]
     fn round_one_subproperty_chain() {
         assert_round(include_str!("../ont/subproperty-chain.xml"));
+    }
+
+    #[test]
+    fn round_annotation_on_annotation() {
+        assert_round(include_str!("../ont/annotation-with-annotation.xml"));
     }
 }

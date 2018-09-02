@@ -197,7 +197,13 @@ impl<R: BufRead> Read<R> {
     }
 
     fn ontology_annotation(&mut self) {
+        let ann = self.annotation_r();
+        self.ont.annotation.insert(ann);
+    }
+
+    fn annotation_r(&mut self) -> Annotation {
         let mut annotation_property = None;
+        let annotation;
 
         loop {
             let e = self.read_event();
@@ -209,14 +215,12 @@ impl<R: BufRead> Read<R> {
                 {
                     match annotation_property.clone() {
                         Some(an_p) => {
-                            let annotation = self.annotation_r(e);
-                            let assertion =
-                                OntologyAnnotationAssertion {
-                                    annotation_property: an_p,
-                                    annotation: annotation
-                                };
-                            self.ont.ontology_annotation_assertion
-                                .insert(assertion);
+                            let val = self.annotation_value_r(e);
+                            annotation = Annotation {
+                                annotation_property: an_p,
+                                annotation_value: val
+                            };
+                            return annotation;
                         },
                         None => {
                             match self.named_entity_r(e) {
@@ -224,18 +228,12 @@ impl<R: BufRead> Read<R> {
                                     annotation_property=Some(an_p);
                                 }
                                 _=> {
-                                    panic!("We panic a lot");
+                                    self.error(format!("We panic a lot"));
                                 }
                             }
                         },
                     }
                 },
-                (ref ns, Event::End(ref e))
-                    if *ns == b"http://www.w3.org/2002/07/owl#"
-                    && e.local_name() == b"Annotation" =>
-                {
-                    return;
-                }
                 _=>{}
             }
         }
@@ -244,10 +242,23 @@ impl<R: BufRead> Read<R> {
     fn annotation_assertion(&mut self) {
         let mut annotation_property = None;
         let mut annotation_subject = None;
+        let mut annotated = None;
 
         loop {
             let e = self.read_event();
             match e {
+                (ref ns, Event::Start(ref e))
+                    if *ns == b"http://www.w3.org/2002/07/owl#" &&
+                    e.local_name() == b"Annotation" =>
+                {
+                    if let None = annotated {
+                        annotated = Some(vec![]);
+                    }
+                    if let Some(ref mut v) = annotated {
+                        let ann = self.annotation_r();
+                        v.push(ann);
+                    }
+                }
                 (ref ns, Event::Start(ref e))
                     |
                 (ref ns, Event::Empty(ref e))
@@ -256,12 +267,15 @@ impl<R: BufRead> Read<R> {
                     match (annotation_property.clone(),
                            annotation_subject.clone()) {
                         (Some(an_p), Some(an_s)) => {
-                            let annotation = self.annotation_r(e);
+                            let annotation_value = self.annotation_value_r(e);
                             let assertion =
                                 AnnotationAssertion {
-                                    annotation_property: an_p,
                                     annotation_subject: an_s,
-                                    annotation: annotation
+                                    annotation: Annotation {
+                                        annotation_property: an_p,
+                                        annotation_value: annotation_value,
+                                    },
+                                    annotated: annotated.clone()
                                 };
                             self.ont.annotation_assertion(assertion);
                         },
@@ -649,16 +663,20 @@ impl<R: BufRead> Read<R> {
 
     }
 
-    fn annotation_r(&mut self, e: &BytesStart) -> Annotation {
+    fn annotation_value_r(&mut self, e: &BytesStart) -> AnnotationValue {
         match e.local_name() {
             b"Literal" => {
                 self.literal_r(e)
             }
-            _ => unimplemented!()
+            _ => {
+                self.error(
+                    format!("Parsing of {} not implemented yet:",
+                            self.reader.decode(e)));
+            }
         }
     }
 
-    fn literal_r(&mut self, e: &BytesStart) -> Annotation {
+    fn literal_r(&mut self, e: &BytesStart) -> AnnotationValue {
         let datatype_iri = self.iri_from_attribute_r(e, b"datatypeIRI");
         let lang = self.attrib_value(e, b"xml:lang");
 
@@ -675,7 +693,7 @@ impl<R: BufRead> Read<R> {
                     if *ns == b"http://www.w3.org/2002/07/owl#"
                     && e.local_name() == b"Literal" =>
                 {
-                    return Annotation::PlainLiteral
+                    return AnnotationValue::PlainLiteral
                     {datatype_iri: datatype_iri,
                      lang: lang,
                      literal: literal};
@@ -1079,7 +1097,7 @@ fn test_one_ontology_annotation() {
     let ont_s = include_str!("../ont/one-ontology-annotation.xml");
     let (ont, _) = read(&mut ont_s.as_bytes());
 
-    assert_eq!(ont.ontology_annotation_assertion.len(), 1);
+    assert_eq!(ont.annotation.len(), 1);
 }
 
 #[test]
@@ -1128,4 +1146,15 @@ fn test_subproperty_chain() {
     let (ont, _) = read(&mut ont_s.as_bytes());
 
     assert_eq!(ont.sub_object_property.len(), 1);
+}
+
+#[test]
+fn test_annotation_on_annotation() {
+    let ont_s = include_str!("../ont/annotation-with-annotation.xml");
+    let (ont, _) = read(&mut ont_s.as_bytes());
+
+
+    let mut ann_i = ont.annotation_assertion.iter();
+    let ann:&AnnotationAssertion = ann_i.next().unwrap();
+    assert!(ann.annotated.is_some());
 }
