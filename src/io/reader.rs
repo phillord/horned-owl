@@ -134,6 +134,9 @@ impl<R: BufRead> Read<R> {
                         (&State::Ontology, b"TransitiveObjectProperty") => {
                             self.transitive_object_property();
                         }
+                        (&State::Ontology, b"SubAnnotationPropertyOf") => {
+                            self.sub_annotation_property();
+                        }
                         (_, n) => {
                             self.unimplemented_owl(n);
                         }
@@ -425,6 +428,53 @@ impl<R: BufRead> Read<R> {
 
     }
 
+    fn sub_annotation_property(&mut self) {
+        let mut objectproperty_operand: Option<AnnotationProperty> = None;
+
+        loop {
+            let mut e = self.read_event();
+            match e {
+                (ref ns, Event::Start(ref mut e))
+                    |
+                (ref ns, Event::Empty(ref mut e))
+                    if *ns == b"http://www.w3.org/2002/07/owl#"
+                    && e.local_name() == b"AnnotationProperty" =>
+                {
+                    let ne = self.named_entity_r(e);
+
+                    if let NamedEntity::AnnotationProperty(op) = ne {
+                        match objectproperty_operand.clone() {
+                            Some(superprop) => {
+                                self.ont.sub_annotation_property.insert(
+                                    SubAnnotationProperty{
+                                        superproperty:
+                                        superprop,
+                                        subproperty:
+                                        op}
+                                );
+                            }
+                            // Add the new class as an operand
+                            None => {
+                                objectproperty_operand =
+                                    Some(op);
+                            }
+                        }
+                    }
+                    else{
+                        self.error(format!("{}", "Expecting object property"));
+                    }
+                }
+                (ref ns, Event::End(ref mut e))
+                    if *ns == b"http://www.w3.org/2002/07/owl#"
+                        && e.local_name() == b"SubAnnotationPropertyOf" =>
+                {
+                    return;
+                }
+                _ => {}
+            }
+        }
+
+    }
 
     fn sub_object_property(&mut self) {
         let mut objectproperty_operand: Option<ObjectPropertyExpression> = None;
@@ -1161,4 +1211,12 @@ fn test_annotation_on_annotation() {
     let mut ann_i = ont.annotation_assertion.iter();
     let ann:&AnnotationAssertion = ann_i.next().unwrap();
     assert!(ann.annotated.is_some());
+}
+
+#[test]
+fn test_sub_annotation() {
+    let ont_s = include_str!("../ont/sub-annotation.xml");
+    let (ont, _) = read(&mut ont_s.as_bytes());
+
+    assert_eq!(ont.sub_annotation_property.len(), 1);
 }

@@ -164,6 +164,12 @@ pub enum AnnotationValue {
 }
 
 #[derive(Eq, PartialEq, Hash, Clone, Debug)]
+pub struct SubAnnotationProperty {
+    pub superproperty: AnnotationProperty,
+    pub subproperty: AnnotationProperty
+}
+
+#[derive(Eq, PartialEq, Hash, Clone, Debug)]
 pub enum NamedEntity {
     Class(Class),
     ObjectProperty(ObjectProperty),
@@ -242,7 +248,9 @@ pub struct Ontology
     // annotations
     pub annotation_property: HashSet<AnnotationProperty>,
     pub annotation_assertion: HashSet<AnnotationAssertion>,
+    pub sub_annotation_property: HashSet<SubAnnotationProperty>,
 
+        // ontology annotations
     pub annotation: HashSet<Annotation>
 }
 
@@ -259,6 +267,7 @@ impl PartialEq for Ontology {
             self.transitive_object_property == other.transitive_object_property &&
             self.annotation_property == other.annotation_property &&
             self.annotation_assertion == other.annotation_assertion &&
+            self.sub_annotation_property == other.sub_annotation_property &&
             self.annotation == other.annotation
     }
 }

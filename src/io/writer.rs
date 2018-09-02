@@ -69,6 +69,7 @@ where
         self.equivalent_classes();
         self.disjoint_classes();
         self.annotation_assertions();
+        self.subaproperties();
         self.suboproperties();
         self.inverse_object_properties();
         self.transitive_object_properties();
@@ -398,6 +399,16 @@ where
         }
     }
 
+    fn subaproperties(&mut self) {
+        for sub in &self.ont.sub_annotation_property {
+            self.write_start_end(b"SubAnnotationPropertyOf", |s: &mut Write<W>| {
+                s.annotation_property(&sub.superproperty);
+                s.annotation_property(&sub.subproperty);
+            });
+        }
+    }
+
+
     fn ontology_annotation_assertions(&mut self) {
         for annotation in &self.ont.annotation {
             self.write_start_end(b"Annotation", |s: &mut Write<W>| {
@@ -582,5 +593,10 @@ mod test {
     #[test]
     fn round_annotation_on_annotation() {
         assert_round(include_str!("../ont/annotation-with-annotation.xml"));
+    }
+
+    #[test]
+    fn round_sub_annotation() {
+        assert_round(include_str!("../ont/sub-annotation.xml"));
     }
 }
