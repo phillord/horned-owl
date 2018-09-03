@@ -1,3 +1,8 @@
 /target/
 **/*.rs.bk
 Cargo.lock
+/src/ont/go-presentation.owl
+/benches/ont/o1000*.owl
+/benches/ont/o5000*.owl
+/notes.org
+/src/main.rs
