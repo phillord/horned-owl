@@ -5,6 +5,8 @@ use std::rc::Rc;
 use std::cell::RefCell;
 use std::ops::Deref;
 
+
+// IRIs
 #[derive(Clone, Debug, Eq, PartialEq, Hash, PartialOrd, Ord)]
 pub struct IRI(Rc<String>);
 
@@ -36,6 +38,7 @@ impl <'a> From<&'a IRI> for String {
         (*i.0).clone()
     }
 }
+
 #[derive(Debug, Default)]
 pub struct IRIBuild(Rc<RefCell<HashSet<IRI>>>);
 
@@ -94,6 +97,8 @@ fn test_iri_string_creation(){
     assert_eq!(iri_from_iri, iri_str);
 }
 
+
+// NamedEntity
 #[derive(Clone, Debug, Eq, PartialEq, Hash, PartialOrd, Ord)]
 pub struct Class(pub IRI);
 
@@ -140,6 +145,15 @@ impl <'a> From<&'a AnnotationProperty> for IRI {
 }
 
 #[derive(Eq, PartialEq, Hash, Clone, Debug)]
+pub enum NamedEntity {
+    Class(Class),
+    ObjectProperty(ObjectProperty),
+    AnnotationProperty(AnnotationProperty)
+}
+
+// Axiom
+
+#[derive(Eq, PartialEq, Hash, Clone, Debug)]
 pub struct AnnotationAssertion {
     pub annotation_subject: IRI,
     pub annotation: Annotation,
@@ -169,12 +183,6 @@ pub struct SubAnnotationProperty {
     pub subproperty: AnnotationProperty
 }
 
-#[derive(Eq, PartialEq, Hash, Clone, Debug)]
-pub enum NamedEntity {
-    Class(Class),
-    ObjectProperty(ObjectProperty),
-    AnnotationProperty(AnnotationProperty)
-}
 
 #[derive(Eq,PartialEq,Hash,Clone,Debug)]
 pub struct SubClass{
@@ -221,6 +229,7 @@ pub struct InverseObjectProperty(pub ObjectProperty,
 #[derive(Eq,PartialEq,Hash,Clone,Debug)]
 pub struct TransitiveObjectProperty(pub ObjectProperty);
 
+// Ontology
 
 #[derive(Debug, Default, Eq, PartialEq)]
 pub struct OntologyID{
