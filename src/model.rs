@@ -1,10 +1,12 @@
 #![allow(dead_code)]
 
-use std::collections::HashSet;
-use std::rc::Rc;
 use std::cell::RefCell;
+use std::collections::HashMap;
+use std::collections::HashSet;
+use std::hash::Hash;
+use std::hash::Hasher;
 use std::ops::Deref;
-
+use std::rc::Rc;
 
 // IRIs
 #[derive(Clone, Debug, Eq, PartialEq, Hash, PartialOrd, Ord)]
@@ -152,7 +154,190 @@ pub enum NamedEntity {
 }
 
 // Axiom
+trait Annotated {
+    fn annotation(&self) -> &HashSet<Annotation>;
+}
 
+trait Kinded {
+    fn kind(&self) -> AxiomKind;
+}
+
+#[derive(Debug)]
+struct AnnotatedAxiom{
+    axiom: Axiom,
+    annotation: HashSet<Annotation>
+}
+
+impl From<Axiom> for AnnotatedAxiom {
+    fn from(axiom: Axiom) -> AnnotatedAxiom {
+        AnnotatedAxiom {
+            axiom: axiom,
+            annotation: HashSet::new()
+        }
+    }
+}
+
+impl Kinded for AnnotatedAxiom {
+    fn kind(&self) -> AxiomKind {
+        self.axiom.kind()
+    }
+}
+
+impl PartialEq for AnnotatedAxiom {
+    fn eq(&self, other:&AnnotatedAxiom) -> bool {
+        self.axiom.eq(&other.axiom)
+    }
+}
+
+impl Eq for AnnotatedAxiom {}
+
+impl Hash for AnnotatedAxiom {
+    fn hash<H: Hasher>(&self, state: &mut H) -> () {
+        self.axiom.hash(state)
+    }
+}
+
+macro_rules! on {
+    ($ont:ident, $kind:ident)
+        => {
+            $ont.axiom(AxiomKind::$kind)
+                .map(|ax|
+                     {
+                         match ax {
+                             Axiom::$kind(n) => n,
+                             _ => panic!()
+                         }
+                     })
+        }
+}
+
+macro_rules! onimpl {
+    ($kind:ident, $method:ident)
+        =>
+    {
+        impl Ontology {
+            fn $method(&mut self)
+                       -> impl Iterator<Item=&$kind> {
+                on!(self, $kind)
+            }
+        }
+    }
+}
+
+macro_rules! axioms {
+    ($(struct $name:ident {
+        $($field_name:ident: $field_type:ty),*
+    }) *)  => {
+        #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
+        enum AxiomKind {
+            $($name),*
+        }
+
+        #[derive(Debug, Eq, PartialEq, Hash)]
+        enum Axiom{
+            $($name($name)),*
+        }
+
+        impl Kinded for Axiom
+        {
+            fn kind(&self) -> AxiomKind
+            {
+                match self
+                {
+                    $(
+                        Axiom::$name(n) =>
+                            n.kind()
+                    ),*
+                }
+            }
+        }
+
+
+        $(
+            #[derive(Debug, Eq, Hash, PartialEq)]
+            struct $name
+            {
+                $(pub $field_name: $field_type),*,
+            }
+
+            impl $name
+            {
+                pub fn new( $($field_name: $field_type),* ) -> $name {
+                    $name {
+                        $($field_name),* ,
+                    }
+                }
+
+            }
+
+            impl From<$name> for Axiom {
+                fn from(ax: $name) -> Axiom {
+                    Axiom::$name(ax)
+                }
+            }
+
+            impl From<$name> for AnnotatedAxiom {
+                fn from(ax: $name) -> AnnotatedAxiom {
+                    AnnotatedAxiom::from(
+                        Axiom::from(ax))
+                }
+            }
+
+            impl Kinded for $name {
+                fn kind(&self) -> AxiomKind {
+                    AxiomKind::$name
+                }
+            }
+
+        ) *
+    }
+}
+
+// We must have one or AxiomKind is not defined
+axioms!{
+    struct A{
+        a:Class
+    }
+}
+
+
+impl Ontology {
+
+    fn set_for_kind(&mut self, axk: AxiomKind)
+        -> &mut HashSet<AnnotatedAxiom>
+    {
+        if let None = self.axiom.get(&axk) {
+            self.axiom.insert(axk, HashSet::new());
+        }
+
+        self.axiom.get_mut(&axk).unwrap()
+    }
+
+    fn insert<A>(&mut self, ax:A) -> bool
+        where A: Into<AnnotatedAxiom>
+    {
+        let ax:AnnotatedAxiom = ax.into();
+
+        self.set_for_kind(ax.kind()).insert(ax)
+    }
+
+    fn annotated_axiom(&mut self, axk: AxiomKind)
+        -> impl Iterator<Item=&AnnotatedAxiom>
+    {
+        self.set_for_kind(axk)
+            .iter()
+    }
+
+    fn axiom(&mut self, axk: AxiomKind)
+             -> impl Iterator<Item=&Axiom>
+    {
+        self.set_for_kind(axk)
+            .iter()
+            .map(|ann| &ann.axiom)
+    }
+}
+
+// Old Axioms
 #[derive(Eq, PartialEq, Hash, Clone, Debug)]
 pub struct AnnotationAssertion {
     pub annotation_subject: IRI,
@@ -229,8 +414,8 @@ pub struct InverseObjectProperty(pub ObjectProperty,
 #[derive(Eq,PartialEq,Hash,Clone,Debug)]
 pub struct TransitiveObjectProperty(pub ObjectProperty);
 
-// Ontology
 
+// Ontology
 #[derive(Debug, Default, Eq, PartialEq)]
 pub struct OntologyID{
     pub iri: Option<IRI>,
@@ -242,6 +427,9 @@ pub struct Ontology
 {
     pub iri_build:IRIBuild,
     pub id: OntologyID,
+
+    axiom: HashMap<AxiomKind,HashSet<AnnotatedAxiom>>,
+
     // classes
     pub class: HashSet<Class>,
     pub subclass: HashSet<SubClass>,
