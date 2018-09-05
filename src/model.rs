@@ -22,8 +22,8 @@ impl Deref for IRI{
 
 #[test]
 fn test_iri_from_string() {
-    let iri_build = IRIBuild::new();
-    let iri = iri_build.iri("http://www.example.com");
+    let build = Build::new();
+    let iri = build.iri("http://www.example.com");
 
     assert_eq!(String::from(iri), "http://www.example.com");
 }
@@ -41,12 +41,16 @@ impl <'a> From<&'a IRI> for String {
     }
 }
 
+// The builder class returns named entities and caches
+// IRIs. Currently, this uses Rc internally which means that we will
+// be limited to single threading, but this can be re-written as a
+// trait and made generic if we need.
 #[derive(Debug, Default)]
-pub struct IRIBuild(Rc<RefCell<HashSet<IRI>>>);
+pub struct Build(Rc<RefCell<HashSet<IRI>>>);
 
-impl IRIBuild{
-    pub fn new() -> IRIBuild{
-        IRIBuild(Rc::new(RefCell::new(HashSet::new())))
+impl Build{
+    pub fn new() -> Build{
+        Build(Rc::new(RefCell::new(HashSet::new())))
     }
 
     pub fn iri<S>(&self, s: S) -> IRI
@@ -62,15 +66,70 @@ impl IRIBuild{
         cache.insert(iri.clone());
         return iri;
     }
+
+    /// Constructs a new `Class`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use horned_owl::model::*;
+    /// let b = Build::new();
+    /// let c1 = b.class("http://www.example.com".to_string());
+    /// let c2 = b.class("http://www.example.com");
+    ///
+    /// assert_eq!(c1, c2);
+    /// ```
+    ///
+    pub fn class<S>(&self, s:S) -> Class
+        where S: Into<String>
+    {
+        Class(self.iri(s))
+    }
+
+    /// Constructs a new `ObjectProperty`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use horned_owl::model::*;
+    /// let b = Build::new();
+    /// let obp1 = b.object_property("http://www.example.com".to_string());
+    /// let obp2 = b.object_property("http://www.example.com");
+    ///
+    /// assert_eq!(obp1, obp2);
+    /// ```
+    pub fn object_property<S>(&self, s:S) -> ObjectProperty
+        where S: Into<String>
+    {
+        ObjectProperty(self.iri(s))
+    }
+
+    /// Constructs a new `AnnotationProperty`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use horned_owl::model::*;
+    /// let b = Build::new();
+    /// let anp1 = b.annotation_property("http://www.example.com".to_string());
+    /// let anp2 = b.annotation_property("http://www.example.com");
+    ///
+    /// assert_eq!(anp1, anp2);
+    /// ```
+    pub fn annotation_property<S>(&self, s:S)-> AnnotationProperty
+        where S: Into<String>
+    {
+        AnnotationProperty(self.iri(s))
+    }
 }
 
 #[test]
 fn test_iri_creation(){
-    let iri_build = IRIBuild::new();
+    let build = Build::new();
 
-    let iri1 = iri_build.iri("http://example.com".to_string());
+    let iri1 = build.iri("http://example.com".to_string());
 
-    let iri2 = iri_build.iri("http://example.com".to_string());
+    let iri2 = build.iri("http://example.com".to_string());
 
     // these are equal to each other
     assert_eq!(iri1, iri2);
@@ -84,20 +143,21 @@ fn test_iri_creation(){
 
 #[test]
 fn test_iri_string_creation(){
-    let iri_build = IRIBuild::new();
+    let build = Build::new();
 
-    let iri_string = iri_build.iri("http://www.example.com".to_string());
-    let iri_static = iri_build.iri("http://www.example.com");
-    let iri_from_iri = iri_build.iri(iri_static.clone());
+    let iri_string = build.iri("http://www.example.com".to_string());
+    let iri_static = build.iri("http://www.example.com");
+    let iri_from_iri = build.iri(iri_static.clone());
 
     let s = "http://www.example.com";
-    let iri_str = iri_build.iri(&s[..]);
+    let iri_str = build.iri(&s[..]);
 
     assert_eq!(iri_string, iri_static);
     assert_eq!(iri_string, iri_str);
     assert_eq!(iri_static, iri_str);
     assert_eq!(iri_from_iri, iri_str);
 }
+
 
 
 // NamedEntity
@@ -113,6 +173,12 @@ impl From<Class> for IRI {
 impl <'a> From<&'a Class> for IRI {
     fn from(c: &Class) -> IRI {
         (c.0).clone()
+    }
+}
+
+impl From<Class> for NamedEntity {
+    fn from(c:Class) -> NamedEntity {
+        NamedEntity::Class(c)
     }
 }
 
@@ -163,7 +229,7 @@ trait Kinded {
 }
 
 #[derive(Debug)]
-struct AnnotatedAxiom{
+pub struct AnnotatedAxiom{
     axiom: Axiom,
     annotation: HashSet<Annotation>
 }
@@ -197,6 +263,7 @@ impl Hash for AnnotatedAxiom {
     }
 }
 
+#[allow(unused_macros)]
 macro_rules! on {
     ($ont:ident, $kind:ident)
         => {
@@ -211,6 +278,7 @@ macro_rules! on {
         }
 }
 
+#[allow(unused_macros)]
 macro_rules! onimpl {
     ($kind:ident, $method:ident)
         =>
@@ -229,12 +297,12 @@ macro_rules! axioms {
         $($field_name:ident: $field_type:ty),*
     }) *)  => {
         #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
-        enum AxiomKind {
+        pub enum AxiomKind {
             $($name),*
         }
 
         #[derive(Debug, Eq, PartialEq, Hash)]
-        enum Axiom{
+        pub enum Axiom{
             $($name($name)),*
         }
 
@@ -255,7 +323,7 @@ macro_rules! axioms {
 
         $(
             #[derive(Debug, Eq, Hash, PartialEq)]
-            struct $name
+            pub struct $name
             {
                 $(pub $field_name: $field_type),*,
             }
@@ -293,13 +361,23 @@ macro_rules! axioms {
     }
 }
 
-// We must have one or AxiomKind is not defined
 axioms!{
-    struct A{
-        a:Class
+    struct DeclareClass{
+        o:Class
+    }
+
+    struct DeclareObjectProperty {
+        o:ObjectProperty
+    }
+
+    struct DeclareAnnotationProperty {
+        o:AnnotationProperty
     }
 }
 
+onimpl!{DeclareClass, declare_class}
+onimpl!{DeclareObjectProperty, declare_object_property}
+onimpl!{DeclareAnnotationProperty, declare_annotation_property}
 
 impl Ontology {
 
@@ -313,7 +391,7 @@ impl Ontology {
         self.axiom.get_mut(&axk).unwrap()
     }
 
-    fn insert<A>(&mut self, ax:A) -> bool
+    pub fn insert<A>(&mut self, ax:A) -> bool
         where A: Into<AnnotatedAxiom>
     {
         let ax:AnnotatedAxiom = ax.into();
@@ -321,14 +399,30 @@ impl Ontology {
         self.set_for_kind(ax.kind()).insert(ax)
     }
 
-    fn annotated_axiom(&mut self, axk: AxiomKind)
+    pub fn declare<N>(&mut self, ne: N) -> bool
+        where N: Into<NamedEntity>
+    {
+        self.insert(
+            match ne.into() {
+                NamedEntity::Class(c) =>
+                    Axiom::DeclareClass(DeclareClass{o:c}),
+                NamedEntity::ObjectProperty(obp) =>
+                Axiom::DeclareObjectProperty(DeclareObjectProperty{o:obp}),
+                NamedEntity::AnnotationProperty(anp) =>
+                    Axiom::DeclareAnnotationProperty
+                    (DeclareAnnotationProperty{o:anp})
+            }
+        )
+    }
+
+    pub fn annotated_axiom(&mut self, axk: AxiomKind)
         -> impl Iterator<Item=&AnnotatedAxiom>
     {
         self.set_for_kind(axk)
             .iter()
     }
 
-    fn axiom(&mut self, axk: AxiomKind)
+    pub fn axiom(&mut self, axk: AxiomKind)
              -> impl Iterator<Item=&Axiom>
     {
         self.set_for_kind(axk)
@@ -425,7 +519,6 @@ pub struct OntologyID{
 #[derive(Debug, Default)]
 pub struct Ontology
 {
-    pub iri_build:IRIBuild,
     pub id: OntologyID,
 
     axiom: HashMap<AxiomKind,HashSet<AnnotatedAxiom>>,
@@ -473,151 +566,7 @@ impl Eq for Ontology {}
 
 impl Ontology {
     pub fn new() -> Ontology{
-        Ontology::new_with_build(IRIBuild::new())
-    }
-
-    pub fn new_with_build(iri_build:IRIBuild) -> Ontology{
-        Ontology{
-            iri_build: iri_build,
-            .. Default::default()
-        }
-    }
-
-    /// Constructs a new `IRI`.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// # use horned_owl::model::*;
-    /// let mut o = Ontology::new();
-    /// let iri = o.iri("http://www.example.com".to_string());
-    /// let iri2 = o.iri("http://www.example.com");
-    ///
-    /// assert_eq!(iri, iri2);
-    /// ```
-    pub fn iri<S>(&self, s: S)-> IRI
-        where S: Into<String> {
-        self.iri_build.iri(s)
-    }
-
-    /// Constructs a new `Class` from an existing IRI. This is
-    /// slightly more efficient that using `class`, when an IRI has
-    /// already been created.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// # use horned_owl::model::*;
-    /// let mut o = Ontology::new();
-    /// let iri = o.class("http://www.example.com".to_string());
-    /// let iri2 = o.class("http://www.example.com");
-    ///
-    /// assert_eq!(iri, iri2);
-    /// ```
-    ///
-    pub fn class_from_iri(&mut self, i: IRI) -> Class {
-        let c = Class(i);
-
-        if let Option::Some(_) = self.class.get(&c)
-        {return c;}
-
-        self.class.insert(c.clone());
-        c
-    }
-
-    /// Constructs a new `Class`.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// # use horned_owl::model::*;
-    /// let mut o = Ontology::new();
-    /// let iri = o.class("http://www.example.com".to_string());
-    /// let iri2 = o.class("http://www.example.com");
-    ///
-    /// assert_eq!(iri, iri2);
-    /// ```
-    ///
-    pub fn class<S>(&mut self, s: S) -> Class
-        where S: Into<String>
-    {
-        let i = self.iri(s);
-        self.class_from_iri(i)
-    }
-
-    pub fn object_property_from_iri(&mut self, i: IRI) -> ObjectProperty
-    {
-        let o = ObjectProperty(i);
-
-        if let Option::Some(_) = self.object_property.get(&o)
-        {return o;};
-
-        self.object_property.insert(o.clone());
-        o
-    }
-
-    /// Constructs a new `ObjectProperty`.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// # use horned_owl::model::*;
-    /// let mut o = Ontology::new();
-    /// let iri = o.object_property("http://www.example.com".to_string());
-    /// let iri2 = o.object_property("http://www.example.com");
-    ///
-    /// assert_eq!(iri, iri2);
-    /// ```
-    pub fn object_property<S>(&mut self, s:S) -> ObjectProperty
-        where S: Into<String>
-    {
-        let i = self.iri(s);
-        self.object_property_from_iri(i)
-    }
-
-    pub fn annotation_property_from_iri(&mut self, i: IRI) -> AnnotationProperty
-    {
-        let o = AnnotationProperty(i);
-
-        if let Option::Some(_) = self.annotation_property.get(&o)
-        {return o;};
-
-        self.annotation_property.insert(o.clone());
-        o
-    }
-
-    /// Constructs a new `AnnotationProperty`.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// # use horned_owl::model::*;
-    /// let mut o = Ontology::new();
-    /// let iri = o.annotation_property("http://www.example.com".to_string());
-    /// let iri2 = o.annotation_property("http://www.example.com");
-    ///
-    /// assert_eq!(iri, iri2);
-    /// ```
-    pub fn annotation_property<S>(&mut self, s:S) -> AnnotationProperty
-        where S: Into<String>
-    {
-        let i = self.iri(s);
-        self.annotation_property_from_iri(i)
-    }
-
-    pub fn named_entity(&mut self, ne: NamedEntity)
-    {
-        match ne {
-            NamedEntity::Class(c) => {
-                self.class_from_iri(c.0);
-            }
-            NamedEntity::ObjectProperty(i) => {
-                self.object_property_from_iri(i.0);
-            }
-            NamedEntity::AnnotationProperty(a) => {
-                self.annotation_property_from_iri(a.0);
-            }
-        }
+        Ontology::default()
     }
 
     /// Adds a subclass axiom to the ontology
@@ -627,8 +576,10 @@ impl Ontology {
     /// ```
     /// # use horned_owl::model::*;
     /// let mut o = Ontology::new();
-    /// let sup = o.class("http://www.example.com/super");
-    /// let sub = o.class("http://www.example.com/sub");
+    /// let b = Build::new();
+
+    /// let sup = b.class("http://www.example.com/super");
+    /// let sub = b.class("http://www.example.com/sub");
     ///
     /// o.subclass(sup, sub);
     /// ```
@@ -658,9 +609,11 @@ impl Ontology {
     /// ```
     /// # use horned_owl::model::*;
     /// let mut o = Ontology::new();
-    /// let sup = o.class("http://www.example.com/super");
-    /// let sub = o.class("http://www.example.com/sub");
-    /// let subsub = o.class("http://www.example.com/subsub");
+    /// let b = Build::new();
+    ///
+    /// let sup = b.class("http://www.example.com/super");
+    /// let sub = b.class("http://www.example.com/sub");
+    /// let subsub = b.class("http://www.example.com/subsub");
     ///
     /// o.subclass(sup.clone(), sub.clone());
     /// o.subclass(sub.clone(), subsub);
@@ -691,9 +644,11 @@ impl Ontology {
     /// ```
     /// # use horned_owl::model::*;
     /// let mut o = Ontology::new();
-    /// let sup = o.class("http://www.example.com/super");
-    /// let sub = o.class("http://www.example.com/sub");
-    /// let subsub = o.class("http://www.example.com/subsub");
+    /// let b = Build::new();
+    ///
+    /// let sup = b.class("http://www.example.com/super");
+    /// let sub = b.class("http://www.example.com/sub");
+    /// let subsub = b.class("http://www.example.com/subsub");
     ///
     /// o.subclass(sup.clone(), sub.clone());
     /// o.subclass(sub.clone(), subsub.clone());
@@ -742,41 +697,21 @@ mod test{
     }
 
     #[test]
-    fn test_iri(){
-        let o = Ontology::new();
-        let iri = o.iri("http://www.example.com".to_string());
-        assert_eq!(*iri.0, "http://www.example.com".to_string());
-    }
-
-    #[test]
     fn test_class(){
         let mut o = Ontology::new();
-        let iri = o.iri("http://www.example.com".to_string());
+        let c = Build::new().class("http://www.example.com");
+        o.insert(DeclareClass{o:c});
 
-        let a = o.class("http://www.example.com");
-        let b = o.class(iri);
-        assert_eq!(a,b);
+        assert_eq!(o.declare_class().count(), 1);
     }
 
     #[test]
-    fn test_class_iri(){
+    fn test_class_declare() {
+        let c = Build::new().class("http://www.example.com");
+
         let mut o = Ontology::new();
+        o.declare(c);
 
-        let iri = o.iri("http://www.example.com".to_string());
-        let a = o.class(iri.clone());
-        let b = o.class_from_iri(iri);
-
-        assert_eq!(a,b);
+        assert_eq!(o.declare_class().count(), 1);
     }
-
-    #[test]
-    fn test_object_property(){
-        let mut o = Ontology::new();
-        let iri = o.iri("http://www.example.com".to_string());
-
-        let a = o.object_property(iri.clone());
-        let b = o.object_property(iri);
-        assert_eq!(a,b);
-    }
-
 }

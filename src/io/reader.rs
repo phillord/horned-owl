@@ -15,11 +15,12 @@ enum State {
     Ontology,
 }
 
-struct Read<R>
+struct Read<'a, R>
 where
     R: BufRead,
 {
     ont: Ontology,
+    build: &'a Build,
     mapping: PrefixMapping,
     reader: Reader<R>,
     buf:Vec<u8>,
@@ -27,26 +28,30 @@ where
 }
 
 pub fn read<R: BufRead>(bufread: &mut R) -> (Ontology, PrefixMapping) {
-    read_with_build(bufread, IRIBuild::new())
+    let b = Build::new();
+    read_with_build(bufread, &b)
 }
 
-pub fn read_with_build<R: BufRead>(bufread: &mut R, build: IRIBuild) -> (Ontology, PrefixMapping) {
+pub fn read_with_build<R: BufRead>(bufread: &mut R, build: &Build) -> (Ontology, PrefixMapping) {
     let reader: Reader<&mut R> = Reader::from_reader(bufread);
-    let ont = Ontology::new_with_build(build);
+    let ont = Ontology::new();
     let mapping = PrefixMapping::default();
 
-    let mut read = Read::new(reader, ont, mapping);
+    let mut read = Read::new(reader, ont, mapping, build);
     read.parse();
 
     (read.ont, read.mapping)
 }
 
-impl<R: BufRead> Read<R> {
-    fn new(reader: Reader<R>, ont: Ontology, mapping: PrefixMapping) -> Read<R> {
+impl<'a, R: BufRead> Read<'a, R> {
+    fn new(reader: Reader<R>, ont: Ontology, mapping: PrefixMapping,
+           build: &Build
+    ) -> Read<R> {
         Read {
             reader: reader,
             ont: ont,
             mapping: mapping,
+            build: build,
             buf:Vec::new(),
             ns_buf:Vec::new()
         }
@@ -180,11 +185,11 @@ impl<R: BufRead> Read<R> {
                     b"ontologyIRI" => {
                         let s = self.reader.decode(&attrib.value);
                         self.mapping.set_default(&s[..]);
-                        self.ont.id.iri = Some(self.ont.iri(s.into_owned()));
+                        self.ont.id.iri = Some(self.build.iri(s.into_owned()));
                     }
                     b"versionIRI" => {
                         self.ont.id.viri =
-                            Some(self.ont.iri(self.reader.decode(&attrib.value).into_owned()));
+                            Some(self.build.iri(self.reader.decode(&attrib.value).into_owned()));
                     }
                     _ => (),
                 },

@@ -3,6 +3,10 @@ name = "horned-owl"
 version = "0.2.0"
 authors = ["Phillip Lord <phillip.lord@russet.org.uk>"]
 
+[[bin]]
+name="temp"
+path="src/bin/temp.rs"
+
 [dependencies]
 quick-xml="0.12.1"
 curie = "0.0.8"
