@@ -115,63 +115,56 @@ impl Build{
     }
 }
 
-// NamedEntity
-#[derive(Clone, Debug, Eq, PartialEq, Hash, PartialOrd, Ord)]
-pub struct Class(pub IRI);
+macro_rules! named {
+    ($($name:ident),*)  => {
 
-impl From<Class> for IRI {
-    fn from(c: Class) -> IRI {
-        Self::from(&c)
+        #[derive(Debug, Eq, PartialEq, Hash)]
+        pub enum NamedEntity{
+            $($name($name)),*
+        }
+
+        $(
+            #[derive(Clone, Debug, Eq, Hash, PartialEq)]
+            pub struct $name(IRI);
+
+            impl From<IRI> for $name {
+                fn from(iri: IRI) -> $name {
+                    Self::from(&iri)
+                }
+            }
+
+            impl <'a> From<&'a IRI> for $name {
+                fn from(iri: &IRI) -> $name {
+                    $name(iri.clone())
+                }
+            }
+
+            impl From<$name> for IRI {
+                fn from(n: $name) -> IRI {
+                    Self::from(&n)
+                }
+            }
+
+            impl <'a> From<&'a $name> for IRI {
+                fn from(n: &$name) -> IRI {
+                    (n.0).clone()
+                }
+            }
+
+            impl From<$name> for NamedEntity {
+                fn from(n:$name) -> NamedEntity {
+                    NamedEntity::$name(n)
+                }
+            }
+
+        ) *
     }
 }
 
-impl <'a> From<&'a Class> for IRI {
-    fn from(c: &Class) -> IRI {
-        (c.0).clone()
-    }
-}
-
-impl From<Class> for NamedEntity {
-    fn from(c:Class) -> NamedEntity {
-        NamedEntity::Class(c)
-    }
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Hash, PartialOrd, Ord)]
-pub struct ObjectProperty(pub IRI);
-
-impl From<ObjectProperty> for IRI {
-    fn from(c: ObjectProperty) -> IRI {
-        Self::from(&c)
-    }
-}
-
-impl <'a> From<&'a ObjectProperty> for IRI {
-    fn from(c: &ObjectProperty) -> IRI {
-        (c.0).clone()
-    }
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Hash, PartialOrd, Ord)]
-pub struct AnnotationProperty(pub IRI);
-
-impl From<AnnotationProperty> for IRI {
-    fn from(c: AnnotationProperty) -> IRI {
-        Self::from(&c)
-    }
-}
-
-impl <'a> From<&'a AnnotationProperty> for IRI {
-    fn from(c: &AnnotationProperty) -> IRI {
-        (c.0).clone()
-    }
-}
-
-#[derive(Eq, PartialEq, Hash, Clone, Debug)]
-pub enum NamedEntity {
-    Class(Class),
-    ObjectProperty(ObjectProperty),
-    AnnotationProperty(AnnotationProperty)
+named!{
+    Class,
+    ObjectProperty,
+    AnnotationProperty
 }
 
 // Axiom
@@ -711,5 +704,20 @@ mod test{
         o.declare(c);
 
         assert_eq!(o.declare_class().count(), 1);
+    }
+
+    #[test]
+    fn test_class_convertors() {
+        let c = Build::new().class("http://www.example.com");
+        let i = Build::new().iri("http://www.example.com");
+
+        let i1:IRI = c.clone().into();
+        assert_eq!(i, i1);
+
+        let c1:Class = Class::from(i);
+        assert_eq!(c, c1);
+
+        let ne:NamedEntity = c.clone().into();
+        assert_eq!(ne, NamedEntity::Class(c));
     }
 }
