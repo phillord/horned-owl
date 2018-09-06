@@ -20,14 +20,6 @@ impl Deref for IRI{
     }
 }
 
-#[test]
-fn test_iri_from_string() {
-    let build = Build::new();
-    let iri = build.iri("http://www.example.com");
-
-    assert_eq!(String::from(iri), "http://www.example.com");
-}
-
 impl From<IRI> for String{
     fn from(i:IRI) -> String {
         // Clone Rc'd value
@@ -122,43 +114,6 @@ impl Build{
         AnnotationProperty(self.iri(s))
     }
 }
-
-#[test]
-fn test_iri_creation(){
-    let build = Build::new();
-
-    let iri1 = build.iri("http://example.com".to_string());
-
-    let iri2 = build.iri("http://example.com".to_string());
-
-    // these are equal to each other
-    assert_eq!(iri1, iri2);
-
-    // these are the same object in memory
-    assert!(Rc::ptr_eq(&iri1.0, &iri2.0));
-
-    // iri1, iri2 and one in the cache == 3
-    assert_eq!(Rc::strong_count(&iri1.0), 3);
-}
-
-#[test]
-fn test_iri_string_creation(){
-    let build = Build::new();
-
-    let iri_string = build.iri("http://www.example.com".to_string());
-    let iri_static = build.iri("http://www.example.com");
-    let iri_from_iri = build.iri(iri_static.clone());
-
-    let s = "http://www.example.com";
-    let iri_str = build.iri(&s[..]);
-
-    assert_eq!(iri_string, iri_static);
-    assert_eq!(iri_string, iri_str);
-    assert_eq!(iri_static, iri_str);
-    assert_eq!(iri_from_iri, iri_str);
-}
-
-
 
 // NamedEntity
 #[derive(Clone, Debug, Eq, PartialEq, Hash, PartialOrd, Ord)]
@@ -689,6 +644,49 @@ impl Ontology {
 #[cfg(test)]
 mod test{
     use super::*;
+
+    #[test]
+    fn test_iri_from_string() {
+        let build = Build::new();
+        let iri = build.iri("http://www.example.com");
+
+        assert_eq!(String::from(iri), "http://www.example.com");
+    }
+
+    #[test]
+    fn test_iri_creation(){
+        let build = Build::new();
+
+        let iri1 = build.iri("http://example.com".to_string());
+
+        let iri2 = build.iri("http://example.com".to_string());
+
+        // these are equal to each other
+        assert_eq!(iri1, iri2);
+
+        // these are the same object in memory
+        assert!(Rc::ptr_eq(&iri1.0, &iri2.0));
+
+        // iri1, iri2 and one in the cache == 3
+        assert_eq!(Rc::strong_count(&iri1.0), 3);
+    }
+
+    #[test]
+    fn test_iri_string_creation(){
+        let build = Build::new();
+
+        let iri_string = build.iri("http://www.example.com".to_string());
+        let iri_static = build.iri("http://www.example.com");
+        let iri_from_iri = build.iri(iri_static.clone());
+
+        let s = "http://www.example.com";
+        let iri_str = build.iri(&s[..]);
+
+        assert_eq!(iri_string, iri_static);
+        assert_eq!(iri_string, iri_str);
+        assert_eq!(iri_static, iri_str);
+        assert_eq!(iri_from_iri, iri_str);
+    }
 
     #[test]
     fn test_ontology_cons(){
