@@ -327,14 +327,30 @@ onimpl!{DeclareAnnotationProperty, declare_annotation_property}
 
 impl Ontology {
 
+    fn axioms_as_ptr(&self, axk: AxiomKind)
+        -> *mut HashMap<AxiomKind,HashSet<AnnotatedAxiom>>
+    {
+        self.axiom.borrow_mut().entry(axk)
+            .or_insert(HashSet::new());
+        self.axiom.as_ptr()
+    }
+
     fn set_for_kind(&mut self, axk: AxiomKind)
+        -> &HashSet<AnnotatedAxiom>
+    {
+        unsafe{
+            (*self.axioms_as_ptr(axk))
+                .get(&axk).unwrap()
+        }
+    }
+
+    fn mut_set_for_kind(&mut self, axk: AxiomKind)
         -> &mut HashSet<AnnotatedAxiom>
     {
-        if let None = self.axiom.get(&axk) {
-            self.axiom.insert(axk, HashSet::new());
+        unsafe {
+            (*self.axioms_as_ptr(axk))
+                .get_mut(&axk).unwrap()
         }
-
-        self.axiom.get_mut(&axk).unwrap()
     }
 
     pub fn insert<A>(&mut self, ax:A) -> bool
@@ -342,7 +358,7 @@ impl Ontology {
     {
         let ax:AnnotatedAxiom = ax.into();
 
-        self.set_for_kind(ax.kind()).insert(ax)
+        self.mut_set_for_kind(ax.kind()).insert(ax)
     }
 
     pub fn declare<N>(&mut self, ne: N) -> bool
@@ -467,7 +483,7 @@ pub struct Ontology
 {
     pub id: OntologyID,
 
-    axiom: HashMap<AxiomKind,HashSet<AnnotatedAxiom>>,
+    axiom: RefCell<HashMap<AxiomKind,HashSet<AnnotatedAxiom>>>,
 
     // classes
     pub class: HashSet<Class>,
