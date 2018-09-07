@@ -240,10 +240,51 @@ macro_rules! onimpl {
     }
 }
 
-macro_rules! axioms {
-    ($(struct $name:ident {
+macro_rules! axiomimpl {
+    ($name:ident) => {
+        impl From<$name> for Axiom {
+                fn from(ax: $name) -> Axiom {
+                    Axiom::$name(ax)
+                }
+        }
+
+        impl From<$name> for AnnotatedAxiom {
+            fn from(ax: $name) -> AnnotatedAxiom {
+                AnnotatedAxiom::from(
+                    Axiom::from(ax))
+            }
+        }
+
+        impl Kinded for $name {
+            fn kind(&self) -> AxiomKind {
+                AxiomKind::$name
+            }
+        }
+    }
+}
+
+
+macro_rules! axiom {
+    ($name:ident ($tt:tt)) => {
+        pub struct $name(pub $tt);
+        axiomimpl!($name);
+    };
+    ($name:ident {
         $($field_name:ident: $field_type:ty),*
-    }) *)  => {
+    }) => {
+        #[derive(Debug, Eq, Hash, PartialEq)]
+        pub struct $name
+        {
+            $(pub $field_name: $field_type),*,
+        }
+        axiomimpl!($name);
+    }
+}
+
+
+macro_rules! axioms {
+    ($($name:ident $tt:tt)*)
+        => {
         #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
         pub enum AxiomKind {
             $($name),*
@@ -261,64 +302,28 @@ macro_rules! axioms {
                 match self
                 {
                     $(
-                        Axiom::$name(n) =>
-                            n.kind()
+                        Axiom::$name(n) => n.kind()
                     ),*
                 }
             }
         }
 
-
-        $(
-            #[derive(Debug, Eq, Hash, PartialEq)]
-            pub struct $name
-            {
-                $(pub $field_name: $field_type),*,
-            }
-
-            impl $name
-            {
-                pub fn new( $($field_name: $field_type),* ) -> $name {
-                    $name {
-                        $($field_name),* ,
-                    }
-                }
-
-            }
-
-            impl From<$name> for Axiom {
-                fn from(ax: $name) -> Axiom {
-                    Axiom::$name(ax)
-                }
-            }
-
-            impl From<$name> for AnnotatedAxiom {
-                fn from(ax: $name) -> AnnotatedAxiom {
-                    AnnotatedAxiom::from(
-                        Axiom::from(ax))
-                }
-            }
-
-            impl Kinded for $name {
-                fn kind(&self) -> AxiomKind {
-                    AxiomKind::$name
-                }
-            }
-
-        ) *
-    }
+            $(
+                axiom!($name $tt);
+            ) *
+        }
 }
 
 axioms!{
-    struct DeclareClass{
+    DeclareClass {
         o:Class
     }
 
-    struct DeclareObjectProperty {
+    DeclareObjectProperty {
         o:ObjectProperty
     }
 
-    struct DeclareAnnotationProperty {
+    DeclareAnnotationProperty {
         o:AnnotationProperty
     }
 }
