@@ -266,6 +266,7 @@ macro_rules! axiomimpl {
 
 macro_rules! axiom {
     ($name:ident ($tt:tt)) => {
+        #[derive(Debug, Eq, Hash, PartialEq)]
         pub struct $name(pub $tt);
         axiomimpl!($name);
     };
@@ -283,7 +284,7 @@ macro_rules! axiom {
 
 
 macro_rules! axioms {
-    ($($name:ident $tt:tt)*)
+    ($($name:ident $tt:tt),*)
         => {
         #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
         pub enum AxiomKind {
@@ -315,17 +316,9 @@ macro_rules! axioms {
 }
 
 axioms!{
-    DeclareClass {
-        o:Class
-    }
-
-    DeclareObjectProperty {
-        o:ObjectProperty
-    }
-
-    DeclareAnnotationProperty {
-        o:AnnotationProperty
-    }
+    DeclareClass(Class),
+    DeclareObjectProperty(ObjectProperty),
+    DeclareAnnotationProperty (AnnotationProperty)
 }
 
 onimpl!{DeclareClass, declare_class}
@@ -358,12 +351,12 @@ impl Ontology {
         self.insert(
             match ne.into() {
                 NamedEntity::Class(c) =>
-                    Axiom::DeclareClass(DeclareClass{o:c}),
+                    Axiom::DeclareClass(DeclareClass(c)),
                 NamedEntity::ObjectProperty(obp) =>
-                Axiom::DeclareObjectProperty(DeclareObjectProperty{o:obp}),
+                    Axiom::DeclareObjectProperty(DeclareObjectProperty(obp)),
                 NamedEntity::AnnotationProperty(anp) =>
                     Axiom::DeclareAnnotationProperty
-                    (DeclareAnnotationProperty{o:anp})
+                    (DeclareAnnotationProperty(anp))
             }
         )
     }
@@ -696,7 +689,7 @@ mod test{
     fn test_class(){
         let mut o = Ontology::new();
         let c = Build::new().class("http://www.example.com");
-        o.insert(DeclareClass{o:c});
+        o.insert(DeclareClass(c));
 
         assert_eq!(o.declare_class().count(), 1);
     }
