@@ -2,6 +2,7 @@
 name = "horned-owl"
 version = "0.2.0"
 authors = ["Phillip Lord <phillip.lord@russet.org.uk>"]
+autobins=false
 
 [[bin]]
 name="temp"
