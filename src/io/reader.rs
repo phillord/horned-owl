@@ -364,7 +364,7 @@ impl<'a, R: BufRead> Read<'a, R> {
                     if *ns == b"http://www.w3.org/2002/07/owl#" =>
                 {
                     let ne = self.named_entity_r(e);
-                    self.ont.named_entity(ne);
+                    self.ont.declare(ne);
                 }
                 (ref ns, Event::End(ref mut e))
                     if *ns == b"http://www.w3.org/2002/07/owl#"
@@ -763,7 +763,7 @@ impl<'a, R: BufRead> Read<'a, R> {
     }
 
     fn class_r(&mut self, e: &BytesStart) -> Class {
-        Class(self.iri_attribute_r(e).unwrap())
+        self.build.class(self.iri_attribute_r(e).unwrap())
     }
 
     fn class_expression_r(&mut self, e: &BytesStart) -> ClassExpression {
@@ -878,7 +878,7 @@ impl<'a, R: BufRead> Read<'a, R> {
                         None => {
                             if e.local_name() == b"ObjectProperty" {
                                 let iri = self.iri_attribute_r(e).unwrap();
-                                o = Some(ObjectProperty(iri))
+                                o = Some(self.build.object_property(iri))
                             }
                             else {
                                 panic!("We panic a lot");
@@ -933,7 +933,7 @@ impl<'a, R: BufRead> Read<'a, R> {
                 (ref _ns,Event::Text(ref e)) => {
                     let iri_s =
                         self.expand_curie_maybe(e);
-                    return self.ont.iri(iri_s);
+                    return self.build.iri(iri_s);
                 },
                 (ref ns, Event::End(ref e))
                     if *ns ==b"http://www.w3.org/2002/07/owl#"
@@ -977,7 +977,7 @@ impl<'a, R: BufRead> Read<'a, R> {
                 Ok(attrib) => {
                     if attrib.key == tag {
                         let expanded = self.expand_curie_maybe(&attrib.value);
-                        return Some(self.ont.iri(expanded));
+                        return Some(self.build.iri(expanded));
                     }
                 }
                 Err(_e) => {
@@ -1034,9 +1034,9 @@ fn test_one_class() {
     let ont_s = include_str!("../ont/one-class.xml");
     let (ont, _) = read(&mut ont_s.as_bytes());
 
-    assert_eq!(ont.class.len(), 1);
+    assert_eq!(ont.declare_class().count(), 1);
     assert_eq!(
-        *ont.class.iter().next().unwrap().0,
+        String::from(&ont.declare_class().next().unwrap().0),
         "http://example.com/iri#C"
     );
 }
@@ -1046,9 +1046,9 @@ fn test_one_class_fqn() {
     let ont_s = include_str!("../ont/one-class-fully-qualified.xml");
     let (ont, _) = read(&mut ont_s.as_bytes());
 
-    assert_eq!(ont.class.len(), 1);
+    assert_eq!(ont.declare_class().count(), 1);
     assert_eq!(
-        *ont.class.iter().next().unwrap().0,
+        String::from(&ont.declare_class().next().unwrap().0),
         "http://www.russet.org.uk/#C"
     );
 }
@@ -1058,7 +1058,7 @@ fn test_ten_class() {
     let ont_s = include_str!("../ont/o10.owl");
     let (ont, _) = read(&mut ont_s.as_bytes());
 
-    assert_eq!(ont.class.len(), 10);
+    assert_eq!(ont.declare_class().count(), 10);
 }
 
 #[test]
@@ -1066,7 +1066,7 @@ fn test_one_property() {
     let ont_s = include_str!("../ont/one-oproperty.xml");
     let (ont, _) = read(&mut ont_s.as_bytes());
 
-    assert_eq!(ont.object_property.len(), 1);
+    assert_eq!(ont.declare_object_property().count(), 1);
 }
 
 #[test]
@@ -1083,7 +1083,7 @@ fn test_one_some() {
     let (ont, _) = read(&mut ont_s.as_bytes());
 
     assert_eq!(ont.subclass.len(), 1);
-    assert_eq!(ont.object_property.len(), 1);
+    assert_eq!(ont.declare_object_property().count(), 1);
 }
 
 #[test]
@@ -1092,7 +1092,8 @@ fn test_one_only() {
     let (ont, _) = read(&mut ont_s.as_bytes());
 
     assert_eq!(ont.subclass.len(), 1);
-    assert_eq!(ont.object_property.len(), 1);
+    assert_eq!(ont.declare_class().count(), 2);
+    assert_eq!(ont.declare_object_property().count(), 1);
 }
 
 #[test]
@@ -1123,14 +1124,14 @@ fn test_one_not() {
 fn test_one_annotation_property() {
     let ont_s = include_str!("../ont/one-annotation-property.xml");
     let (ont, _) = read(&mut ont_s.as_bytes());
-    assert_eq!(ont.annotation_property.len(), 1);
+    assert_eq!(ont.declare_annotation_property().count(), 1);
 }
 
 #[test]
 fn test_one_annotation() {
     let ont_s = include_str!("../ont/one-annotation.xml");
     let (ont, _) = read(&mut ont_s.as_bytes());
-    assert_eq!(ont.annotation_property.len(), 1);
+    assert_eq!(ont.declare_annotation_property().count(), 1);
     assert_eq!(ont.annotation_assertion.len(), 1);
 }
 

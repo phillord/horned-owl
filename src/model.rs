@@ -125,7 +125,7 @@ macro_rules! named {
 
         $(
             #[derive(Clone, Debug, Eq, Hash, PartialEq)]
-            pub struct $name(IRI);
+            pub struct $name(pub IRI);
 
             impl From<IRI> for $name {
                 fn from(iri: IRI) -> $name {
@@ -136,6 +136,18 @@ macro_rules! named {
             impl <'a> From<&'a IRI> for $name {
                 fn from(iri: &IRI) -> $name {
                     $name(iri.clone())
+                }
+            }
+
+            impl From<$name> for String {
+                fn from(n: $name) -> String {
+                    String::from(n.0)
+                }
+            }
+
+            impl <'a> From<&'a $name> for String {
+                fn from(n: &$name) -> String {
+                    String::from(&n.0)
                 }
             }
 
@@ -232,7 +244,7 @@ macro_rules! onimpl {
         =>
     {
         impl Ontology {
-            fn $method(&mut self)
+            pub fn $method(&self)
                        -> impl Iterator<Item=&$kind> {
                 on!(self, $kind)
             }
@@ -335,7 +347,7 @@ impl Ontology {
         self.axiom.as_ptr()
     }
 
-    fn set_for_kind(&mut self, axk: AxiomKind)
+    fn set_for_kind(&self, axk: AxiomKind)
         -> &HashSet<AnnotatedAxiom>
     {
         unsafe{
@@ -377,14 +389,14 @@ impl Ontology {
         )
     }
 
-    pub fn annotated_axiom(&mut self, axk: AxiomKind)
+    pub fn annotated_axiom(&self, axk: AxiomKind)
         -> impl Iterator<Item=&AnnotatedAxiom>
     {
         self.set_for_kind(axk)
             .iter()
     }
 
-    pub fn axiom(&mut self, axk: AxiomKind)
+    pub fn axiom(&self, axk: AxiomKind)
              -> impl Iterator<Item=&Axiom>
     {
         self.set_for_kind(axk)
