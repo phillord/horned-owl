@@ -3,6 +3,7 @@
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::collections::HashSet;
+use std::cmp::Ordering;
 use std::hash::Hash;
 use std::hash::Hasher;
 use std::ops::Deref;
@@ -60,6 +61,7 @@ impl Build{
     }
 
     /// Constructs a new `Class`.
+
     ///
     /// # Examples
     ///
@@ -124,7 +126,7 @@ macro_rules! named {
         }
 
         $(
-            #[derive(Clone, Debug, Eq, Hash, PartialEq)]
+            #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
             pub struct $name(pub IRI);
 
             impl From<IRI> for $name {
@@ -190,8 +192,34 @@ trait Kinded {
 
 #[derive(Debug)]
 pub struct AnnotatedAxiom{
-    axiom: Axiom,
-    annotation: HashSet<Annotation>
+    pub axiom: Axiom,
+    pub annotation: HashSet<Annotation>
+}
+
+impl Ord for AnnotatedAxiom {
+    fn cmp(&self, other: &AnnotatedAxiom) -> Ordering {
+        self.axiom.cmp(&other.axiom)
+    }
+}
+
+impl PartialOrd for AnnotatedAxiom {
+    fn partial_cmp(&self, other: &AnnotatedAxiom) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Eq for AnnotatedAxiom{}
+
+impl PartialEq for AnnotatedAxiom {
+    fn eq(&self, other: &AnnotatedAxiom) -> bool {
+        self.axiom == other.axiom
+    }
+}
+
+impl Hash for AnnotatedAxiom {
+    fn hash<H: Hasher>(&self, state: &mut H) -> () {
+        self.axiom.hash(state)
+    }
 }
 
 impl From<Axiom> for AnnotatedAxiom {
@@ -206,20 +234,6 @@ impl From<Axiom> for AnnotatedAxiom {
 impl Kinded for AnnotatedAxiom {
     fn kind(&self) -> AxiomKind {
         self.axiom.kind()
-    }
-}
-
-impl PartialEq for AnnotatedAxiom {
-    fn eq(&self, other:&AnnotatedAxiom) -> bool {
-        self.axiom.eq(&other.axiom)
-    }
-}
-
-impl Eq for AnnotatedAxiom {}
-
-impl Hash for AnnotatedAxiom {
-    fn hash<H: Hasher>(&self, state: &mut H) -> () {
-        self.axiom.hash(state)
     }
 }
 
@@ -278,14 +292,14 @@ macro_rules! axiomimpl {
 
 macro_rules! axiom {
     ($name:ident ($tt:tt)) => {
-        #[derive(Debug, Eq, Hash, PartialEq)]
+        #[derive(Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
         pub struct $name(pub $tt);
         axiomimpl!($name);
     };
     ($name:ident {
         $($field_name:ident: $field_type:ty),*
     }) => {
-        #[derive(Debug, Eq, Hash, PartialEq)]
+        #[derive(Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
         pub struct $name
         {
             $(pub $field_name: $field_type),*,
@@ -298,12 +312,12 @@ macro_rules! axiom {
 macro_rules! axioms {
     ($($name:ident $tt:tt),*)
         => {
-        #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
+        #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
         pub enum AxiomKind {
             $($name),*
         }
 
-        #[derive(Debug, Eq, PartialEq, Hash)]
+        #[derive(Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
         pub enum Axiom{
             $($name($name)),*
         }
@@ -348,16 +362,16 @@ impl Ontology {
     }
 
     fn set_for_kind(&self, axk: AxiomKind)
-        -> &HashSet<AnnotatedAxiom>
+                     -> Option<&HashSet<AnnotatedAxiom>>
     {
         unsafe{
-            (*self.axioms_as_ptr(axk))
-                .get(&axk).unwrap()
+            (*self.axiom.as_ptr())
+                .get(&axk)
         }
     }
 
     fn mut_set_for_kind(&mut self, axk: AxiomKind)
-        -> &mut HashSet<AnnotatedAxiom>
+                        -> &mut HashSet<AnnotatedAxiom>
     {
         unsafe {
             (*self.axioms_as_ptr(axk))
@@ -392,15 +406,14 @@ impl Ontology {
     pub fn annotated_axiom(&self, axk: AxiomKind)
         -> impl Iterator<Item=&AnnotatedAxiom>
     {
-        self.set_for_kind(axk)
-            .iter()
+        self.set_for_kind(axk).
+            into_iter().flat_map(|hs| hs.iter())
     }
 
     pub fn axiom(&self, axk: AxiomKind)
              -> impl Iterator<Item=&Axiom>
     {
-        self.set_for_kind(axk)
-            .iter()
+        self.annotated_axiom(axk)
             .map(|ann| &ann.axiom)
     }
 }
@@ -496,21 +509,18 @@ pub struct Ontology
     pub id: OntologyID,
 
     axiom: RefCell<HashMap<AxiomKind,HashSet<AnnotatedAxiom>>>,
-
+    empty: HashSet<AnnotatedAxiom>,
     // classes
-    pub class: HashSet<Class>,
     pub subclass: HashSet<SubClass>,
     pub equivalent_class: HashSet<EquivalentClass>,
     pub disjoint_class: HashSet<DisjointClass>,
 
     // object properties
-    pub object_property: HashSet<ObjectProperty>,
     pub sub_object_property: HashSet<SubObjectProperty>,
     pub inverse_object_property: HashSet<InverseObjectProperty>,
     pub transitive_object_property: HashSet<TransitiveObjectProperty>,
 
     // annotations
-    pub annotation_property: HashSet<AnnotationProperty>,
     pub annotation_assertion: HashSet<AnnotationAssertion>,
     pub sub_annotation_property: HashSet<SubAnnotationProperty>,
 
@@ -521,15 +531,13 @@ pub struct Ontology
 impl PartialEq for Ontology {
     fn eq(&self, other: &Ontology) -> bool {
         self.id == other.id &&
-            self.class == other.class &&
+            self.axiom == other.axiom &&
             self.subclass == other.subclass &&
             self.equivalent_class == other.equivalent_class &&
             self.disjoint_class == other.disjoint_class &&
-            self.object_property == other.object_property &&
             self.sub_object_property == other.sub_object_property &&
             self.inverse_object_property == other.inverse_object_property &&
             self.transitive_object_property == other.transitive_object_property &&
-            self.annotation_property == other.annotation_property &&
             self.annotation_assertion == other.annotation_assertion &&
             self.sub_annotation_property == other.sub_annotation_property &&
             self.annotation == other.annotation

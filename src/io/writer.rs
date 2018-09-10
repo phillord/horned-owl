@@ -8,8 +8,6 @@ use quick_xml::events::BytesText;
 use quick_xml::events::Event;
 use quick_xml::Writer;
 
-use std::collections::HashSet;
-use std::hash::Hash;
 use std::io::Write as StdWrite;
 
 struct Write<'a, W>
@@ -158,31 +156,44 @@ where
         });
     }
 
-    fn declaration_1<'b, F, E>(&mut self, named_entity: &HashSet<E>, mut ne_writer: F)
+    fn declaration_1<'b, F, I>(&mut self,
+                                  declare: I,
+                                  mut declare_writer: F)
     where
-        F: FnMut(&mut Self, &E),
-        E: 'b + Ord + Hash,
+        F: FnMut(&mut Self, &'b AnnotatedAxiom),
+        I: Iterator<Item=&'b AnnotatedAxiom>
     {
-        // Make rendering determinisitic in terms of order
-        let mut named_entities: Vec<&E> = named_entity.iter().collect::<Vec<&E>>();
 
-        named_entities.sort();
+        let mut declare:Vec<&AnnotatedAxiom> = declare.collect();
+        declare.sort_unstable();
 
-        for ne in named_entities {
-            self.write_start_end(b"Declaration", |s: &mut Self| ne_writer(s, ne));
+        for ne in declare {
+            self.write_start_end(b"Declaration",
+                                 |s: &mut Self| declare_writer(s, ne));
         }
     }
 
     fn declarations(&mut self) {
-        self.declaration_1(&self.ont.class, |s: &mut Self, c: &Class| s.class(c));
         self.declaration_1(
-            &self.ont.object_property,
-            |s: &mut Self, o: &ObjectProperty| s.object_property(o),
-        );
+            self.ont.annotated_axiom(AxiomKind::DeclareClass),
+            |s: &mut Self, c: &AnnotatedAxiom|
+            if let Axiom::DeclareClass(ref c) = c.axiom {
+                s.class(&c.0)
+            });
+
         self.declaration_1(
-            &self.ont.annotation_property,
-            |s: &mut Self, a: &AnnotationProperty| s.annotation_property(a),
-        );
+            self.ont.annotated_axiom(AxiomKind::DeclareObjectProperty),
+            |s: &mut Self, o: &AnnotatedAxiom|
+            if let Axiom::DeclareObjectProperty(ref o) = o.axiom {
+                s.object_property(&o.0)
+            });
+
+        self.declaration_1(
+            self.ont.annotated_axiom(AxiomKind::DeclareAnnotationProperty),
+            |s: &mut Self, a: &AnnotatedAxiom|
+            if let Axiom::DeclareAnnotationProperty(ref a) = a.axiom {
+                s.annotation_property(&a.0)
+            });
     }
 
     fn class_expression(&mut self, ce: &ClassExpression) {
@@ -419,6 +430,14 @@ where
     }
 }
 
+trait Render <'a, W>
+{
+    fn render(&self, w:Write<W>, mapping: &'a PrefixMapping)
+        where W: StdWrite;
+}
+
+
+
 #[cfg(test)]
 mod test {
 
@@ -437,7 +456,9 @@ mod test {
     #[test]
     fn test_ont_rt() {
         let mut ont = Ontology::new();
-        let iri = ont.iri("http://www.example.com/a".to_string());
+        let build = Build::new();
+
+        let iri = build.iri("http://www.example.com/a".to_string());
         ont.id.iri = Some(iri);
         let temp_file = Temp::new_file().unwrap();
         let file = File::create(&temp_file).ok().unwrap();
