@@ -510,9 +510,9 @@ impl<'a, R: BufRead> Read<'a, R> {
                             Some(superprop) => {
                                 self.ont.insert(
                                     SubObjectProperty{
-                                        superproperty:
+                                        super_property:
                                         superprop,
-                                        subproperty:
+                                        sub_property:
                                         op}
                                 );
                             }
@@ -605,8 +605,8 @@ impl<'a, R: BufRead> Read<'a, R> {
                         1 => {
                             self.ont.insert(
                                 SubClass{
-                                    superclass:class_operands.pop().unwrap(),
-                                    subclass: ce
+                                    super_class:class_operands.pop().unwrap(),
+                                    sub_class: ce
                                 }
                             );
                         }
@@ -1076,7 +1076,7 @@ fn test_one_subclass() {
     let ont_s = include_str!("../ont/one-subclass.xml");
     let (ont, _) = read(&mut ont_s.as_bytes());
 
-    assert_eq!(ont.subclass().count(), 1);
+    assert_eq!(ont.sub_class().count(), 1);
 }
 
 #[test]
@@ -1084,7 +1084,7 @@ fn test_one_some() {
     let ont_s = include_str!("../ont/one-some.xml");
     let (ont, _) = read(&mut ont_s.as_bytes());
 
-    assert_eq!(ont.subclass().count(), 1);
+    assert_eq!(ont.sub_class().count(), 1);
     assert_eq!(ont.declare_object_property().count(), 1);
 }
 
@@ -1093,7 +1093,7 @@ fn test_one_only() {
     let ont_s = include_str!("../ont/one-only.xml");
     let (ont, _) = read(&mut ont_s.as_bytes());
 
-    assert_eq!(ont.subclass().count(), 1);
+    assert_eq!(ont.sub_class().count(), 1);
     assert_eq!(ont.declare_class().count(), 2);
     assert_eq!(ont.declare_object_property().count(), 1);
 }
@@ -1103,7 +1103,7 @@ fn test_one_and() {
     let ont_s = include_str!("../ont/one-and.xml");
     let (ont, _) = read(&mut ont_s.as_bytes());
 
-    assert_eq!(ont.subclass().count(), 1);
+    assert_eq!(ont.sub_class().count(), 1);
 }
 
 #[test]
@@ -1111,7 +1111,7 @@ fn test_one_or() {
     let ont_s = include_str!("../ont/one-or.xml");
     let (ont,_ ) = read(&mut ont_s.as_bytes());
 
-    assert_eq!(ont.subclass().count(), 1);
+    assert_eq!(ont.sub_class().count(), 1);
 }
 
 #[test]
@@ -1119,7 +1119,7 @@ fn test_one_not() {
     let ont_s = include_str!("../ont/one-not.xml");
     let (ont, _) = read(&mut ont_s.as_bytes());
 
-    assert_eq!(ont.subclass().count(), 1);
+    assert_eq!(ont.sub_class().count(), 1);
 }
 
 #[test]
@@ -1183,7 +1183,7 @@ fn test_one_sub_property() {
     let ont_s = include_str!("../ont/one-suboproperty.xml");
     let (ont, _) = read(&mut ont_s.as_bytes());
 
-    assert_eq!(ont.sub_object_property.len(), 1);
+    assert_eq!(ont.sub_object_property().count(), 1);
 }
 
 #[test]
@@ -1191,7 +1191,7 @@ fn test_one_inverse_property() {
     let ont_s = include_str!("../ont/inverse-properties.xml");
     let (ont, _) = read(&mut ont_s.as_bytes());
 
-    assert_eq!(ont.inverse_object_property.len(), 1);
+    assert_eq!(ont.inverse_object_property().count(), 1);
 }
 
 #[test]
@@ -1199,7 +1199,7 @@ fn test_one_transitive_property() {
     let ont_s = include_str!("../ont/transitive-properties.xml");
     let (ont, _) = read(&mut ont_s.as_bytes());
 
-    assert_eq!(ont.transitive_object_property.len(), 1);
+    assert_eq!(ont.transitive_object_property().count(), 1);
 }
 
 #[test]
@@ -1207,7 +1207,7 @@ fn test_subproperty_chain() {
     let ont_s = include_str!("../ont/subproperty-chain.xml");
     let (ont, _) = read(&mut ont_s.as_bytes());
 
-    assert_eq!(ont.sub_object_property.len(), 1);
+    assert_eq!(ont.sub_object_property().count(), 1);
 }
 
 #[test]

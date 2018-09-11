@@ -285,10 +285,10 @@ where
     }
 
     fn subclasses(&mut self) {
-        for subclass in self.ont.subclass() {
+        for subclass in self.ont.sub_class() {
             self.write_start_end(b"SubClassOf", |s: &mut Write<W>| {
-                s.class_expression(&subclass.superclass);
-                s.class_expression(&subclass.subclass);
+                s.class_expression(&subclass.super_class);
+                s.class_expression(&subclass.sub_class);
             });
         }
     }
@@ -327,16 +327,16 @@ where
     }
 
     fn suboproperties(&mut self) {
-        for sub in &self.ont.sub_object_property() {
+        for sub in self.ont.sub_object_property() {
             self.write_start_end(b"SubObjectPropertyOf", |s: &mut Write<W>| {
-                s.object_property_expression(&sub.superproperty);
-                s.object_property(&sub.subproperty);
+                s.object_property_expression(&sub.super_property);
+                s.object_property(&sub.sub_property);
             });
         }
     }
 
     fn transitive_object_properties(&mut self) {
-        for trans in &self.ont.transitive_object_property() {
+        for trans in self.ont.transitive_object_property() {
             self.write_start_end(b"TransitiveObjectProperty", |s: &mut Write<W>| {
                 s.object_property(&trans.0);
             });
@@ -344,7 +344,7 @@ where
     }
 
     fn inverse_object_properties(&mut self) {
-        for sub in &self.ont.inverse_object_property {
+        for sub in self.ont.inverse_object_property() {
             self.write_start_end(b"InverseObjectProperties", |s: &mut Write<W>| {
                 s.object_property(&sub.0);
                 s.object_property(&sub.1);

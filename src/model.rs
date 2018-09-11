@@ -360,8 +360,8 @@ axioms!{
 
     // Class Axioms
     SubClass{
-        superclass: ClassExpression,
-        subclass: ClassExpression
+        super_class: ClassExpression,
+        sub_class: ClassExpression
     },
 
     EquivalentClass(ClassExpression,ClassExpression),
@@ -369,8 +369,8 @@ axioms!{
 
     // ObjectProperty axioms
     SubObjectProperty{
-        superproperty:ObjectPropertyExpression,
-        subproperty:ObjectProperty
+        super_property:ObjectPropertyExpression,
+        sub_property:ObjectProperty
     },
     InverseObjectProperty(ObjectProperty,ObjectProperty),
     TransitiveObjectProperty(ObjectProperty)
@@ -379,10 +379,10 @@ axioms!{
 onimpl!{DeclareClass, declare_class}
 onimpl!{DeclareObjectProperty, declare_object_property}
 onimpl!{DeclareAnnotationProperty, declare_annotation_property}
-onimpl!{SubClass, subclass}
+onimpl!{SubClass, sub_class}
 onimpl!{EquivalentClass, equivalent_class}
 onimpl!{DisjointClass, disjoint_class}
-onimpl!{SubObjectProperty, subobject_property}
+onimpl!{SubObjectProperty, sub_object_property}
 onimpl!{InverseObjectProperty, inverse_object_property}
 onimpl!{TransitiveObjectProperty, transitive_object_property}
 
@@ -578,9 +578,9 @@ impl Ontology {
         where C:Into<ClassExpression>
     {
         let c = c.into();
-        self.subclass()
-            .filter(move |sc| &sc.superclass == &c )
-            .map(|sc| &sc.subclass )
+        self.sub_class()
+            .filter(move |sc| &sc.super_class == &c )
+            .map(|sc| &sc.sub_class )
     }
 
     /// Returns true is `subclass` is a subclass of `superclass`
@@ -603,16 +603,16 @@ impl Ontology {
     /// assert!(!o.is_subclass(&sub, &sup));
     /// assert!(!o.is_subclass(&sup, &subsub));
     /// ```
-    pub fn is_subclass<C>(&self, superclass:C,
-                       subclass:C) -> bool
+    pub fn is_subclass<C>(&self, super_class:C,
+                       sub_class:C) -> bool
         where C: Into<ClassExpression>
     {
-        let superclass = superclass.into();
-        let subclass = subclass.into();
-        self.subclass()
+        let super_class = super_class.into();
+        let sub_class = sub_class.into();
+        self.sub_class()
             .any(|sc|
-                 sc.superclass == superclass &&
-                 sc.subclass == subclass)
+                 sc.super_class == super_class &&
+                 sc.sub_class == sub_class)
     }
 
     pub fn annotation_assertion(&mut self, assertion: AnnotationAssertion) {
