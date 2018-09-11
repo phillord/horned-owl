@@ -1,5 +1,6 @@
 use curie::PrefixMapping;
 
+use std::collections::HashSet;
 use std::io::BufRead;
 use std::str::from_utf8;
 
@@ -206,7 +207,9 @@ impl<'a, R: BufRead> Read<'a, R> {
 
     fn ontology_annotation(&mut self) {
         let ann = self.annotation_r();
-        self.ont.annotation.insert(ann);
+        self.ont.insert(
+            OntologyAnnotation(ann)
+        );
     }
 
     fn annotation_r(&mut self) -> Annotation {
@@ -250,7 +253,7 @@ impl<'a, R: BufRead> Read<'a, R> {
     fn annotation_assertion(&mut self) {
         let mut annotation_property = None;
         let mut annotation_subject = None;
-        let mut annotated = None;
+        let mut annotated = HashSet::new();
 
         loop {
             let e = self.read_event();
@@ -259,13 +262,7 @@ impl<'a, R: BufRead> Read<'a, R> {
                     if *ns == b"http://www.w3.org/2002/07/owl#" &&
                     e.local_name() == b"Annotation" =>
                 {
-                    if let None = annotated {
-                        annotated = Some(vec![]);
-                    }
-                    if let Some(ref mut v) = annotated {
-                        let ann = self.annotation_r();
-                        v.push(ann);
-                    }
+                    annotated.insert(self.annotation_r());
                 }
                 (ref ns, Event::Start(ref e))
                     |
@@ -277,15 +274,19 @@ impl<'a, R: BufRead> Read<'a, R> {
                         (Some(an_p), Some(an_s)) => {
                             let annotation_value = self.annotation_value_r(e);
                             let assertion =
-                                AnnotationAssertion {
-                                    annotation_subject: an_s,
-                                    annotation: Annotation {
-                                        annotation_property: an_p,
-                                        annotation_value: annotation_value,
-                                    },
-                                    annotated: annotated.clone()
-                                };
-                            self.ont.annotation_assertion(assertion);
+                                AnnotatedAxiom::new(
+                                    AssertAnnotation {
+                                        annotation_subject: an_s,
+                                        annotation: Annotation {
+                                            annotation_property: an_p,
+                                            annotation_value: annotation_value,
+                                        }
+                                    }
+                                    .into(),
+                                    annotated.clone()
+                                );
+
+                            self.ont.insert(assertion);
                         },
                         (Some(_),None)
                             if e.local_name() == b"IRI" ||
@@ -450,11 +451,11 @@ impl<'a, R: BufRead> Read<'a, R> {
                     if let NamedEntity::AnnotationProperty(op) = ne {
                         match objectproperty_operand.clone() {
                             Some(superprop) => {
-                                self.ont.sub_annotation_property.insert(
+                                self.ont.insert(
                                     SubAnnotationProperty{
-                                        superproperty:
+                                        super_property:
                                         superprop,
-                                        subproperty:
+                                        sub_property:
                                         op}
                                 );
                             }
@@ -1134,7 +1135,7 @@ fn test_one_annotation() {
     let ont_s = include_str!("../ont/one-annotation.xml");
     let (ont, _) = read(&mut ont_s.as_bytes());
     assert_eq!(ont.declare_annotation_property().count(), 1);
-    assert_eq!(ont.annotation_assertion.len(), 1);
+    assert_eq!(ont.assert_annotation().count(), 1);
 }
 
 #[test]
@@ -1142,7 +1143,7 @@ fn test_one_label_non_abbreviated() {
     let ont_s = include_str!("../ont/one-label-non-abbreviated-iri.xml");
     let (ont, _) = read(&mut ont_s.as_bytes());
 
-    assert_eq!(ont.annotation_assertion.len(), 1);
+    assert_eq!(ont.assert_annotation().count(), 1);
 }
 
 
@@ -1151,7 +1152,7 @@ fn test_one_label() {
     let ont_s = include_str!("../ont/one-label.xml");
     let (ont, _) = read(&mut ont_s.as_bytes());
 
-    assert_eq!(ont.annotation_assertion.len(), 1);
+    assert_eq!(ont.assert_annotation().count(), 1);
 }
 
 #[test]
@@ -1159,7 +1160,7 @@ fn test_one_ontology_annotation() {
     let ont_s = include_str!("../ont/one-ontology-annotation.xml");
     let (ont, _) = read(&mut ont_s.as_bytes());
 
-    assert_eq!(ont.annotation.len(), 1);
+    assert_eq!(ont.ontology_annotation().count(), 1);
 }
 
 #[test]
@@ -1216,9 +1217,9 @@ fn test_annotation_on_annotation() {
     let (ont, _) = read(&mut ont_s.as_bytes());
 
 
-    let mut ann_i = ont.annotation_assertion.iter();
-    let ann:&AnnotationAssertion = ann_i.next().unwrap();
-    assert!(ann.annotated.is_some());
+    let mut ann_i = ont.annotated_axiom(AxiomKind::AssertAnnotation);
+    let ann:&AnnotatedAxiom = ann_i.next().unwrap();
+    assert_eq!(ann.annotation.len(), 1);
 }
 
 #[test]
@@ -1226,5 +1227,5 @@ fn test_sub_annotation() {
     let ont_s = include_str!("../ont/sub-annotation.xml");
     let (ont, _) = read(&mut ont_s.as_bytes());
 
-    assert_eq!(ont.sub_annotation_property.len(), 1);
+    assert_eq!(ont.sub_annotation_property().count(), 1);
 }

@@ -196,6 +196,13 @@ pub struct AnnotatedAxiom{
     pub annotation: HashSet<Annotation>
 }
 
+impl AnnotatedAxiom {
+    pub fn new(axiom: Axiom, annotation: HashSet<Annotation>)
+        -> AnnotatedAxiom {
+        AnnotatedAxiom{axiom, annotation}
+    }
+}
+
 impl Ord for AnnotatedAxiom {
     fn cmp(&self, other: &AnnotatedAxiom) -> Ordering {
         self.axiom.cmp(&other.axiom)
@@ -373,7 +380,20 @@ axioms!{
         sub_property:ObjectProperty
     },
     InverseObjectProperty(ObjectProperty,ObjectProperty),
-    TransitiveObjectProperty(ObjectProperty)
+    TransitiveObjectProperty(ObjectProperty),
+
+    // Annotation Axioms
+    AssertAnnotation {
+        annotation_subject:IRI,
+        annotation: Annotation
+    },
+
+    SubAnnotationProperty {
+        super_property:AnnotationProperty,
+        sub_property: AnnotationProperty
+    },
+
+    OntologyAnnotation (Annotation)
 }
 
 onimpl!{DeclareClass, declare_class}
@@ -385,6 +405,10 @@ onimpl!{DisjointClass, disjoint_class}
 onimpl!{SubObjectProperty, sub_object_property}
 onimpl!{InverseObjectProperty, inverse_object_property}
 onimpl!{TransitiveObjectProperty, transitive_object_property}
+onimpl!{AssertAnnotation, assert_annotation}
+onimpl!{SubAnnotationProperty, sub_annotation_property}
+onimpl!{OntologyAnnotation, ontology_annotation}
+
 
 impl Ontology {
 
@@ -454,21 +478,13 @@ impl Ontology {
 }
 
 // Old Axioms
-#[derive(Eq, PartialEq, Hash, Clone, Debug)]
-pub struct AnnotationAssertion {
-    pub annotation_subject: IRI,
-    pub annotation: Annotation,
-    // annotation on the assertion!
-    pub annotated: Option<Vec<Annotation>>
-}
-
-#[derive(Eq, PartialEq, Hash, Clone, Debug)]
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct Annotation {
     pub annotation_property: AnnotationProperty,
     pub annotation_value: AnnotationValue
 }
 
-#[derive(Eq, PartialEq, Hash, Clone, Debug)]
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum AnnotationValue {
     PlainLiteral{
         datatype_iri: Option<IRI>,
@@ -484,11 +500,6 @@ pub enum ObjectPropertyExpression {
     ObjectProperty(ObjectProperty)
 }
 
-#[derive(Eq, PartialEq, Hash, Clone, Debug)]
-pub struct SubAnnotationProperty {
-    pub superproperty: AnnotationProperty,
-    pub subproperty: AnnotationProperty
-}
 
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum ClassExpression
@@ -521,32 +532,12 @@ pub struct OntologyID{
     pub viri: Option<IRI>,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Eq, PartialEq)]
 pub struct Ontology
 {
     pub id: OntologyID,
-
     axiom: RefCell<HashMap<AxiomKind,HashSet<AnnotatedAxiom>>>,
-
-    // annotations
-    pub annotation_assertion: HashSet<AnnotationAssertion>,
-    pub sub_annotation_property: HashSet<SubAnnotationProperty>,
-
-        // ontology annotations
-    pub annotation: HashSet<Annotation>
 }
-
-impl PartialEq for Ontology {
-    fn eq(&self, other: &Ontology) -> bool {
-        self.id == other.id &&
-            self.axiom == other.axiom &&
-            self.annotation_assertion == other.annotation_assertion &&
-            self.sub_annotation_property == other.sub_annotation_property &&
-            self.annotation == other.annotation
-    }
-}
-
-impl Eq for Ontology {}
 
 impl Ontology {
     pub fn new() -> Ontology{
@@ -613,10 +604,6 @@ impl Ontology {
             .any(|sc|
                  sc.super_class == super_class &&
                  sc.sub_class == sub_class)
-    }
-
-    pub fn annotation_assertion(&mut self, assertion: AnnotationAssertion) {
-        self.annotation_assertion.insert(assertion);
     }
 }
 

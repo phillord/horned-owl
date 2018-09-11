@@ -8,6 +8,7 @@ use quick_xml::events::BytesText;
 use quick_xml::events::Event;
 use quick_xml::Writer;
 
+use std::collections::HashSet;
 use std::io::Write as StdWrite;
 
 struct Write<'a, W>
@@ -391,40 +392,39 @@ where
         });
     }
 
-    fn annotations_maybe(&mut self, annotations_maybe: &Option<Vec<Annotation>>){
-        if let &Some(ref annotations) = annotations_maybe {
-            for annotation in annotations {
-                self.annotation(annotation);
-            }
+    fn annotations_maybe(&mut self, annotations: &HashSet<Annotation>){
+        for annotation in annotations {
+            self.annotation(annotation);
         }
     }
 
     fn annotation_assertions(&mut self) {
-        for assertion in &self.ont.annotation_assertion {
+        for annotated_assertion in self.ont.annotated_axiom(AxiomKind::AssertAnnotation) {
             self.write_start_end(b"AnnotationAssertion", |s: &mut Write<W>| {
-                s.annotations_maybe(&assertion.annotated);
-                s.annotation_property(&assertion.annotation.annotation_property);
-                s.iri(&assertion.annotation_subject);
-                s.annotation_value(&assertion.annotation.annotation_value);
+                s.annotations_maybe(&annotated_assertion.annotation);
+                if let Axiom::AssertAnnotation(ref ax) = annotated_assertion.axiom {
+                    s.annotation_property(&ax.annotation.annotation_property);
+                    s.iri(&ax.annotation_subject);
+                    s.annotation_value(&ax.annotation.annotation_value);
+                }
             })
         }
     }
 
     fn subaproperties(&mut self) {
-        for sub in &self.ont.sub_annotation_property {
+        for sub in self.ont.sub_annotation_property() {
             self.write_start_end(b"SubAnnotationPropertyOf", |s: &mut Write<W>| {
-                s.annotation_property(&sub.superproperty);
-                s.annotation_property(&sub.subproperty);
+                s.annotation_property(&sub.super_property);
+                s.annotation_property(&sub.sub_property);
             });
         }
     }
 
-
     fn ontology_annotation_assertions(&mut self) {
-        for annotation in &self.ont.annotation {
+        for annotation in self.ont.ontology_annotation() {
             self.write_start_end(b"Annotation", |s: &mut Write<W>| {
-                s.annotation_property(&annotation.annotation_property);
-                s.annotation_value(&annotation.annotation_value);
+                s.annotation_property(&annotation.0.annotation_property);
+                s.annotation_value(&annotation.0.annotation_value);
             })
         }
     }
