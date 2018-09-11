@@ -291,18 +291,29 @@ macro_rules! axiomimpl {
 
 
 macro_rules! axiom {
-    ($name:ident ($tt:tt)) => {
-        #[derive(Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-        pub struct $name(pub $tt);
+    ($name:ident ($($tt:tt),*)) => {
+        #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+        pub struct $name($(pub $tt),*);
         axiomimpl!($name);
     };
     ($name:ident {
         $($field_name:ident: $field_type:ty),*
     }) => {
-        #[derive(Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+        #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
         pub struct $name
         {
             $(pub $field_name: $field_type),*,
+        }
+
+        impl $name {
+            pub fn new($($field_name: $field_type),*)
+                -> $name
+            {
+                $name {
+                    $($field_name),*
+                }
+            }
+
         }
         axiomimpl!($name);
     }
@@ -317,7 +328,7 @@ macro_rules! axioms {
             $($name),*
         }
 
-        #[derive(Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+        #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
         pub enum Axiom{
             $($name($name)),*
         }
@@ -342,14 +353,25 @@ macro_rules! axioms {
 }
 
 axioms!{
+    // Declaration Axioms
     DeclareClass(Class),
     DeclareObjectProperty(ObjectProperty),
-    DeclareAnnotationProperty (AnnotationProperty)
+    DeclareAnnotationProperty (AnnotationProperty),
+
+    // Class Axioms
+    SubClass{superclass: ClassExpression,
+             subclass: ClassExpression},
+
+    EquivalentClass(ClassExpression,ClassExpression),
+    DisjointClass(ClassExpression,ClassExpression)
 }
 
 onimpl!{DeclareClass, declare_class}
 onimpl!{DeclareObjectProperty, declare_object_property}
 onimpl!{DeclareAnnotationProperty, declare_annotation_property}
+onimpl!{SubClass, subclass}
+onimpl!{EquivalentClass, equivalent_class}
+onimpl!{DisjointClass, disjoint_class}
 
 impl Ontology {
 
@@ -449,23 +471,7 @@ pub struct SubAnnotationProperty {
     pub subproperty: AnnotationProperty
 }
 
-
-#[derive(Eq,PartialEq,Hash,Clone,Debug)]
-pub struct SubClass{
-    pub superclass: ClassExpression,
-    pub subclass: ClassExpression,
-}
-
-#[derive(Eq,PartialEq,Hash,Clone,Debug)]
-pub struct EquivalentClass(pub ClassExpression,
-                           pub ClassExpression);
-
-#[derive(Eq,PartialEq,Hash,Clone,Debug)]
-pub struct DisjointClass(pub ClassExpression,
-                         pub ClassExpression);
-
-
-#[derive(Eq,PartialEq,Hash,Clone,Debug)]
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum ClassExpression
 {
     Class(Class),
@@ -474,6 +480,18 @@ pub enum ClassExpression
     And{o:Vec<ClassExpression>},
     Or{o:Vec<ClassExpression>},
     Not{ce:Box<ClassExpression>}
+}
+
+impl From<Class> for ClassExpression {
+    fn from(c:Class) -> ClassExpression {
+        ClassExpression::Class(c)
+    }
+}
+
+impl <'a> From<&'a Class> for ClassExpression {
+    fn from(c:&'a Class) -> ClassExpression {
+        ClassExpression::Class(c.clone())
+    }
 }
 
 #[derive(Eq,PartialEq,Hash,Clone,Debug)]
@@ -509,11 +527,6 @@ pub struct Ontology
     pub id: OntologyID,
 
     axiom: RefCell<HashMap<AxiomKind,HashSet<AnnotatedAxiom>>>,
-    empty: HashSet<AnnotatedAxiom>,
-    // classes
-    pub subclass: HashSet<SubClass>,
-    pub equivalent_class: HashSet<EquivalentClass>,
-    pub disjoint_class: HashSet<DisjointClass>,
 
     // object properties
     pub sub_object_property: HashSet<SubObjectProperty>,
@@ -532,9 +545,6 @@ impl PartialEq for Ontology {
     fn eq(&self, other: &Ontology) -> bool {
         self.id == other.id &&
             self.axiom == other.axiom &&
-            self.subclass == other.subclass &&
-            self.equivalent_class == other.equivalent_class &&
-            self.disjoint_class == other.disjoint_class &&
             self.sub_object_property == other.sub_object_property &&
             self.inverse_object_property == other.inverse_object_property &&
             self.transitive_object_property == other.transitive_object_property &&
@@ -551,39 +561,6 @@ impl Ontology {
         Ontology::default()
     }
 
-    /// Adds a subclass axiom to the ontology
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// # use horned_owl::model::*;
-    /// let mut o = Ontology::new();
-    /// let b = Build::new();
-
-    /// let sup = b.class("http://www.example.com/super");
-    /// let sub = b.class("http://www.example.com/sub");
-    ///
-    /// o.subclass(sup, sub);
-    /// ```
-    pub fn subclass(&mut self, superclass:Class, subclass: Class)
-                    -> SubClass
-    {
-        self.subclass_exp(ClassExpression::Class(superclass),
-                          ClassExpression::Class(subclass))
-    }
-
-    pub fn subclass_exp(&mut self, superclass:ClassExpression,
-                        subclass: ClassExpression) -> SubClass
-    {
-        let sc = SubClass{superclass:superclass,subclass:subclass};
-
-        if let Some(_) = self.subclass.get(&sc)
-        {return sc;}
-
-        self.subclass.insert(sc.clone());
-        sc
-    }
-
     /// Returns all direct subclasses
     ///
     /// # Examples
@@ -597,26 +574,21 @@ impl Ontology {
     /// let sub = b.class("http://www.example.com/sub");
     /// let subsub = b.class("http://www.example.com/subsub");
     ///
-    /// o.subclass(sup.clone(), sub.clone());
-    /// o.subclass(sub.clone(), subsub);
+    /// o.insert(SubClass::new((&sup).into(), (&sub).into()));
+    /// o.insert(SubClass::new((&sub).into(), (&subsub).into()));
     ///
-    /// let subs = o.direct_subclass(&sup);
+    /// let subs:Vec<&ClassExpression> = o.direct_subclass(&sup).collect();
     ///
     /// assert_eq!(vec![&ClassExpression::Class(sub)],subs);
     /// ```
-    pub fn direct_subclass(&self, c: &Class)
-                           ->Vec<&ClassExpression>{
-        let ce = ClassExpression::Class(c.clone());
-        self.direct_subclass_exp(&ce)
-    }
-
-    pub fn direct_subclass_exp(&self, c: &ClassExpression)
-                           -> Vec<&ClassExpression>{
-        self.subclass
-            .iter()
-            .filter(|sc| &sc.superclass == c )
+    pub fn direct_subclass<C>(&self, c: C)
+                              ->impl Iterator<Item=&ClassExpression>
+        where C:Into<ClassExpression>
+    {
+        let c = c.into();
+        self.subclass()
+            .filter(move |sc| &sc.superclass == &c )
             .map(|sc| &sc.subclass )
-            .collect::<Vec<&ClassExpression>>()
     }
 
     /// Returns true is `subclass` is a subclass of `superclass`
@@ -632,35 +604,23 @@ impl Ontology {
     /// let sub = b.class("http://www.example.com/sub");
     /// let subsub = b.class("http://www.example.com/subsub");
     ///
-    /// o.subclass(sup.clone(), sub.clone());
-    /// o.subclass(sub.clone(), subsub.clone());
+    /// o.insert(SubClass::new((&sup).into(), (&sub).into()));
+    /// o.insert(SubClass::new((&sub).into(), (&subsub).into()));
     ///
     /// assert!(o.is_subclass(&sup, &sub));
     /// assert!(!o.is_subclass(&sub, &sup));
     /// assert!(!o.is_subclass(&sup, &subsub));
     /// ```
-    pub fn is_subclass(&self, superclass:&Class,
-                       subclass:&Class) -> bool {
-        self.is_subclass_exp(&ClassExpression::Class(superclass.clone()),
-                             &ClassExpression::Class(subclass.clone()))
-    }
-
-    pub fn is_subclass_exp(&self, superclass:&ClassExpression,
-                           subclass:&ClassExpression)
-        -> bool {
-
-        let first:Option<&SubClass> =
-            self.subclass.iter()
-            .filter(|sc|
-                    sc.superclass == *superclass &&
-                    sc.subclass == *subclass)
-            .next();
-
-        match first
-        {
-            Option::Some(_) => true,
-            None => false
-        }
+    pub fn is_subclass<C>(&self, superclass:C,
+                       subclass:C) -> bool
+        where C: Into<ClassExpression>
+    {
+        let superclass = superclass.into();
+        let subclass = subclass.into();
+        self.subclass()
+            .any(|sc|
+                 sc.superclass == superclass &&
+                 sc.subclass == subclass)
     }
 
     pub fn annotation_assertion(&mut self, assertion: AnnotationAssertion) {

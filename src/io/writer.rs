@@ -285,7 +285,7 @@ where
     }
 
     fn subclasses(&mut self) {
-        for subclass in &self.ont.subclass {
+        for subclass in self.ont.subclass() {
             self.write_start_end(b"SubClassOf", |s: &mut Write<W>| {
                 s.class_expression(&subclass.superclass);
                 s.class_expression(&subclass.subclass);
@@ -294,7 +294,7 @@ where
     }
 
     fn equivalent_classes(&mut self) {
-        for equivalent_class in &self.ont.equivalent_class {
+        for equivalent_class in self.ont.equivalent_class() {
             self.write_start_end(b"EquivalentClasses", |s: &mut Write<W>| {
                 s.class_expression(&equivalent_class.0);
                 s.class_expression(&equivalent_class.1);
@@ -303,7 +303,7 @@ where
     }
 
     fn disjoint_classes(&mut self) {
-        for disjoint_class in &self.ont.disjoint_class {
+        for disjoint_class in self.ont.disjoint_class() {
             self.write_start_end(b"DisjointClasses", |s: &mut Write<W>| {
                 s.class_expression(&disjoint_class.0);
                 s.class_expression(&disjoint_class.1);

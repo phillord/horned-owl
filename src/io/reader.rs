@@ -603,9 +603,11 @@ impl<'a, R: BufRead> Read<'a, R> {
 
                     match class_operands.len() {
                         1 => {
-                            self.ont.subclass_exp(
-                                class_operands.pop().unwrap(),
-                                ce
+                            self.ont.insert(
+                                SubClass{
+                                    superclass:class_operands.pop().unwrap(),
+                                    subclass: ce
+                                }
                             );
                         }
                         // Add the new class as an operand
@@ -645,7 +647,7 @@ impl<'a, R: BufRead> Read<'a, R> {
 
                     match class_operands.len() {
                         1 => {
-                            self.ont.equivalent_class.insert(
+                            self.ont.insert(
                                 EquivalentClass(
                                     class_operands.pop().unwrap(),
                                     ce
@@ -689,7 +691,7 @@ impl<'a, R: BufRead> Read<'a, R> {
 
                     match class_operands.len() {
                         1 => {
-                            self.ont.disjoint_class.insert(
+                            self.ont.insert(
                                 DisjointClass(
                                     class_operands.pop().unwrap(),
                                     ce
@@ -1074,7 +1076,7 @@ fn test_one_subclass() {
     let ont_s = include_str!("../ont/one-subclass.xml");
     let (ont, _) = read(&mut ont_s.as_bytes());
 
-    assert_eq!(ont.subclass.len(), 1);
+    assert_eq!(ont.subclass().count(), 1);
 }
 
 #[test]
@@ -1082,7 +1084,7 @@ fn test_one_some() {
     let ont_s = include_str!("../ont/one-some.xml");
     let (ont, _) = read(&mut ont_s.as_bytes());
 
-    assert_eq!(ont.subclass.len(), 1);
+    assert_eq!(ont.subclass().count(), 1);
     assert_eq!(ont.declare_object_property().count(), 1);
 }
 
@@ -1091,7 +1093,7 @@ fn test_one_only() {
     let ont_s = include_str!("../ont/one-only.xml");
     let (ont, _) = read(&mut ont_s.as_bytes());
 
-    assert_eq!(ont.subclass.len(), 1);
+    assert_eq!(ont.subclass().count(), 1);
     assert_eq!(ont.declare_class().count(), 2);
     assert_eq!(ont.declare_object_property().count(), 1);
 }
@@ -1101,7 +1103,7 @@ fn test_one_and() {
     let ont_s = include_str!("../ont/one-and.xml");
     let (ont, _) = read(&mut ont_s.as_bytes());
 
-    assert_eq!(ont.subclass.len(), 1);
+    assert_eq!(ont.subclass().count(), 1);
 }
 
 #[test]
@@ -1109,7 +1111,7 @@ fn test_one_or() {
     let ont_s = include_str!("../ont/one-or.xml");
     let (ont,_ ) = read(&mut ont_s.as_bytes());
 
-    assert_eq!(ont.subclass.len(), 1);
+    assert_eq!(ont.subclass().count(), 1);
 }
 
 #[test]
@@ -1117,7 +1119,7 @@ fn test_one_not() {
     let ont_s = include_str!("../ont/one-not.xml");
     let (ont, _) = read(&mut ont_s.as_bytes());
 
-    assert_eq!(ont.subclass.len(), 1);
+    assert_eq!(ont.subclass().count(), 1);
 }
 
 #[test]
@@ -1165,7 +1167,7 @@ fn test_one_equivalent_class() {
     let ont_s = include_str!("../ont/one-equivalent.xml");
     let (ont, _) = read(&mut ont_s.as_bytes());
 
-    assert_eq!(ont.equivalent_class.len(), 1);
+    assert_eq!(ont.equivalent_class().count(), 1);
 }
 
 #[test]
@@ -1173,7 +1175,7 @@ fn test_one_disjoint_class() {
     let ont_s = include_str!("../ont/one-disjoint.xml");
     let (ont, _) = read(&mut ont_s.as_bytes());
 
-    assert_eq!(ont.disjoint_class.len(), 1);
+    assert_eq!(ont.disjoint_class().count(), 1);
 }
 
 #[test]
