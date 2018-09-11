@@ -359,11 +359,21 @@ axioms!{
     DeclareAnnotationProperty (AnnotationProperty),
 
     // Class Axioms
-    SubClass{superclass: ClassExpression,
-             subclass: ClassExpression},
+    SubClass{
+        superclass: ClassExpression,
+        subclass: ClassExpression
+    },
 
     EquivalentClass(ClassExpression,ClassExpression),
-    DisjointClass(ClassExpression,ClassExpression)
+    DisjointClass(ClassExpression,ClassExpression),
+
+    // ObjectProperty axioms
+    SubObjectProperty{
+        superproperty:ObjectPropertyExpression,
+        subproperty:ObjectProperty
+    },
+    InverseObjectProperty(ObjectProperty,ObjectProperty),
+    TransitiveObjectProperty(ObjectProperty)
 }
 
 onimpl!{DeclareClass, declare_class}
@@ -372,6 +382,9 @@ onimpl!{DeclareAnnotationProperty, declare_annotation_property}
 onimpl!{SubClass, subclass}
 onimpl!{EquivalentClass, equivalent_class}
 onimpl!{DisjointClass, disjoint_class}
+onimpl!{SubObjectProperty, subobject_property}
+onimpl!{InverseObjectProperty, inverse_object_property}
+onimpl!{TransitiveObjectProperty, transitive_object_property}
 
 impl Ontology {
 
@@ -465,6 +478,12 @@ pub enum AnnotationValue {
     IRI(IRI)
 }
 
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub enum ObjectPropertyExpression {
+    ObjectPropertyChain(Vec<ObjectProperty>),
+    ObjectProperty(ObjectProperty)
+}
+
 #[derive(Eq, PartialEq, Hash, Clone, Debug)]
 pub struct SubAnnotationProperty {
     pub superproperty: AnnotationProperty,
@@ -494,25 +513,6 @@ impl <'a> From<&'a Class> for ClassExpression {
     }
 }
 
-#[derive(Eq,PartialEq,Hash,Clone,Debug)]
-pub enum ObjectPropertyExpression {
-    ObjectPropertyChain(Vec<ObjectProperty>),
-    ObjectProperty(ObjectProperty)
-}
-
-#[derive (Debug, Eq, Hash, PartialEq)]
-pub struct SubObjectProperty {
-    pub superproperty: ObjectPropertyExpression,
-    pub subproperty: ObjectProperty
-}
-
-#[derive(Eq,PartialEq,Hash,Clone,Debug)]
-pub struct InverseObjectProperty(pub ObjectProperty,
-                                 pub ObjectProperty);
-
-#[derive(Eq,PartialEq,Hash,Clone,Debug)]
-pub struct TransitiveObjectProperty(pub ObjectProperty);
-
 
 // Ontology
 #[derive(Debug, Default, Eq, PartialEq)]
@@ -528,11 +528,6 @@ pub struct Ontology
 
     axiom: RefCell<HashMap<AxiomKind,HashSet<AnnotatedAxiom>>>,
 
-    // object properties
-    pub sub_object_property: HashSet<SubObjectProperty>,
-    pub inverse_object_property: HashSet<InverseObjectProperty>,
-    pub transitive_object_property: HashSet<TransitiveObjectProperty>,
-
     // annotations
     pub annotation_assertion: HashSet<AnnotationAssertion>,
     pub sub_annotation_property: HashSet<SubAnnotationProperty>,
@@ -545,9 +540,6 @@ impl PartialEq for Ontology {
     fn eq(&self, other: &Ontology) -> bool {
         self.id == other.id &&
             self.axiom == other.axiom &&
-            self.sub_object_property == other.sub_object_property &&
-            self.inverse_object_property == other.inverse_object_property &&
-            self.transitive_object_property == other.transitive_object_property &&
             self.annotation_assertion == other.annotation_assertion &&
             self.sub_annotation_property == other.sub_annotation_property &&
             self.annotation == other.annotation

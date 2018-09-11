@@ -390,7 +390,7 @@ impl<'a, R: BufRead> Read<'a, R> {
                 {
                     let ne = self.named_entity_r(e);
                     if let NamedEntity::ObjectProperty(op) = ne {
-                        self.ont.transitive_object_property.insert(
+                        self.ont.insert(
                             TransitiveObjectProperty(op)
                         );
                         return;
@@ -508,7 +508,7 @@ impl<'a, R: BufRead> Read<'a, R> {
                     if let NamedEntity::ObjectProperty(op) = ne {
                         match objectproperty_operand.clone() {
                             Some(superprop) => {
-                                self.ont.sub_object_property.insert(
+                                self.ont.insert(
                                     SubObjectProperty{
                                         superproperty:
                                         superprop,
@@ -556,7 +556,7 @@ impl<'a, R: BufRead> Read<'a, R> {
                     if let NamedEntity::ObjectProperty(op) = ne {
                         match objectproperty_operands.len() {
                             1 => {
-                                self.ont.inverse_object_property.insert(
+                                self.ont.insert(
                                     InverseObjectProperty(
                                         objectproperty_operands.pop().unwrap(),
                                         op)

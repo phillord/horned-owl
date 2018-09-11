@@ -327,7 +327,7 @@ where
     }
 
     fn suboproperties(&mut self) {
-        for sub in &self.ont.sub_object_property {
+        for sub in &self.ont.sub_object_property() {
             self.write_start_end(b"SubObjectPropertyOf", |s: &mut Write<W>| {
                 s.object_property_expression(&sub.superproperty);
                 s.object_property(&sub.subproperty);
@@ -336,7 +336,7 @@ where
     }
 
     fn transitive_object_properties(&mut self) {
-        for trans in &self.ont.transitive_object_property {
+        for trans in &self.ont.transitive_object_property() {
             self.write_start_end(b"TransitiveObjectProperty", |s: &mut Write<W>| {
                 s.object_property(&trans.0);
             });
