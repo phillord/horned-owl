@@ -682,6 +682,8 @@ pub enum AnnotationValue {
 /// A object property expression
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum ObjectPropertyExpression {
+    // We use Vec here rather than HashSet because, perhaps
+    // surprisingly, HashSet is not itself hashable.
     ObjectPropertyChain(Vec<ObjectProperty>),
     ObjectProperty(ObjectProperty)
 }
