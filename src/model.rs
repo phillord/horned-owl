@@ -28,7 +28,6 @@
 //! serialisation is to/from OWL Presentation format only, but RDF
 //! serialisation will be supported.
 //!
-//! - 0.2 Rework of internal data model
 //! - 0.3 Add vocab.rs
 //! - 0.4 Infrastructure for parsable command line tools
 //! - 0.5 More command line tools
