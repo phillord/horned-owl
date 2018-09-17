@@ -1,5 +1,6 @@
 use curie::PrefixMapping;
 use model::*;
+use model::Kinded;
 
 use quick_xml::events::BytesDecl;
 use quick_xml::events::BytesEnd;
@@ -70,9 +71,18 @@ where
         self.annotation_assertions();
         self.subaproperties();
         self.suboproperties();
-        self.inverse_object_properties();
-        self.transitive_object_properties();
+        self.iter_render(self.ont.annotated_axiom(AxiomKind::InverseObjectProperty));
+        self.iter_render(self.ont.annotated_axiom(AxiomKind::TransitiveObjectProperty));
         self.writer.write_event(Event::End(elem)).ok();
+    }
+
+    fn iter_render<I, R>(&mut self, i:I)
+        where I: Iterator<Item=&'a R>,
+              R: Render<'a, W> + 'a
+    {
+        for item in i {
+            item.render(&mut self.writer, self.mapping);
+        }
     }
 
     fn attribute_maybe(&self, elem: &mut BytesStart, key: &str, val: &Option<String>) {
@@ -336,23 +346,6 @@ where
         }
     }
 
-    fn transitive_object_properties(&mut self) {
-        for trans in self.ont.transitive_object_property() {
-            self.write_start_end(b"TransitiveObjectProperty", |s: &mut Write<W>| {
-                s.object_property(&trans.0);
-            });
-        }
-    }
-
-    fn inverse_object_properties(&mut self) {
-        for sub in self.ont.inverse_object_property() {
-            self.write_start_end(b"InverseObjectProperties", |s: &mut Write<W>| {
-                s.object_property(&sub.0);
-                s.object_property(&sub.1);
-            });
-        }
-    }
-
     fn annotation_value(&mut self, annotation: &AnnotationValue) {
         match annotation {
             AnnotationValue::IRI(iri) => {
@@ -430,10 +423,250 @@ where
     }
 }
 
+fn shrink_iri_maybe<'a>(iri: &str,
+                        mapping: &'a PrefixMapping) -> String {
+    match mapping.shrink_iri(&(*iri)[..]) {
+        Ok(curie) => {
+            format!("{}", curie)
+        },
+        Err(_) => {
+            format!("{}", iri)
+        },
+    }
+}
+
+fn attribute_maybe(elem: &mut BytesStart, key: &str, val: &Option<String>) {
+    match val {
+        Some(val) => {
+            elem.push_attribute((key, &val[..]));
+        }
+        None => {}
+    }
+}
+
+/// Add an IRI or abbreviatedIRI tag to elem
+fn iri_or_curie<'a>(mapping:&'a PrefixMapping, elem: &mut BytesStart, iri: &str) {
+    match mapping.shrink_iri(&(*iri)[..]) {
+        Ok(curie) => {
+            let curie = format!("{}", curie);
+            elem.push_attribute(("abbreviatedIRI", &curie[..]));
+        }
+        Err(_) => elem.push_attribute(("IRI", &iri[..])),
+    }
+}
+
+/// Write a start and end tag with some contents
+fn write_start_end<F,W>(w:&mut Writer<W>, tag: &[u8], contents: F)
+    where
+    F: FnMut(&mut Writer<W>),
+    W: StdWrite
+{
+    write_start_end_with_start_callback(w, tag,
+                                        |_: &mut Writer<W>, _: &mut BytesStart| return,
+                                        contents);
+}
+
+/// Write a start and end tag with contents but callback on start
+fn write_start_end_with_start_callback<F, G, W>(w:&mut Writer<W>, tag: &[u8],
+                                                mut start: F, mut contents: G)
+    where
+    F: FnMut(&mut Writer<W>, &mut BytesStart),
+    G: FnMut(&mut Writer<W>),
+    W: StdWrite
+{
+    let len = tag.len();
+    let mut open = BytesStart::borrowed(tag, len);
+
+    // Pass self like this, because we cannot capture it in the
+    // closure, without failing the borrow checker.
+    start(w, &mut open);
+
+    w.write_event(Event::Start(open)).ok();
+
+    contents(w);
+
+    w.write_event(Event::End(BytesEnd::borrowed(tag)))
+        .ok();
+}
+
+fn tag_with_iri<'a, I,W>(w:&mut Writer<W>, mapping:&'a PrefixMapping,
+                         tag: &[u8], into_iri: I)
+    where I: Into<IRI>,
+          W: StdWrite
+
+{
+    let iri: IRI = into_iri.into();
+    let mut bytes_start = BytesStart::borrowed(tag, tag.len());
+
+    let iri_string: String = iri.into();
+    iri_or_curie(mapping, &mut bytes_start, &iri_string[..]);
+    w.write_event(Event::Empty(bytes_start)).ok();
+}
+
+fn tag_for_kind (axk:AxiomKind) -> &'static [u8] {
+    match axk {
+        AxiomKind::InverseObjectProperty =>
+            b"InverseObjectProperties",
+        AxiomKind::TransitiveObjectProperty =>
+            b"TransitiveObjectProperty",
+        _ => {
+            panic!("Fetching tag for unknown kind");
+        }
+    }
+}
+
 trait Render <'a, W>
 {
-    fn render(&self, w:Write<W>, mapping: &'a PrefixMapping)
+    /// Render a entity to Write
+    ///
+    /// The intention here is to write out Write, so eventually Write
+    /// should be become a plain old Writer. However, for the moment,
+    /// I need access to the methods in Write so I re-write it
+    /// incrementally.
+    ///
+    /// The complexity of this is paragraph is one reason why I need
+    /// to redo things!
+    fn render(&self, w:&mut Writer<W>, mapping: &'a PrefixMapping)
         where W: StdWrite;
+}
+
+macro_rules! render {
+    ($type:ident, $self:ident, $write:ident, $map:ident,
+     $body:tt) => {
+
+        impl <'a, W> Render<'a, W> for $type {
+            fn render(& $self, $write:&mut Writer<W>, $map: &'a PrefixMapping)
+                where W: StdWrite
+                $body
+        }
+    }
+}
+
+/// TODO -- Throw this away and replace with iter_render, once we move
+/// it out
+fn annotations_maybe<'a, W>(annotations: &BTreeSet<Annotation>,
+                            w:&mut Writer<W>, m: &'a PrefixMapping)
+    where W: StdWrite
+{
+    for annotation in annotations {
+        annotation.render(w, m);
+    }
+}
+
+render!{
+    IRI, self, w, m,
+    {
+        let iri_st: String = self.into();
+        let iri_shrunk = shrink_iri_maybe(&iri_st[..], m);
+        write_start_end(w, b"IRI", |w| {
+            w.write_event(Event::Text(BytesText::from_escaped_str(&iri_shrunk[..])))
+                .ok();
+        });
+    }
+}
+
+
+
+render!{
+    AnnotatedAxiom, self, w, m,
+    {
+        let tag = tag_for_kind(self.kind());
+        write_start_end(w, tag, |w| {
+            annotations_maybe(&self.annotation, w, m);
+            self.axiom.render(w, m);
+        });
+    }
+}
+
+render! {
+    Axiom, self, w, m,
+    {
+        match self {
+            Axiom::TransitiveObjectProperty(ax) =>{
+                ax.render(w, m);
+            }
+            Axiom::InverseObjectProperty(ax) =>{
+                ax.render(w, m);
+            }
+            _ => {
+                unimplemented!("Axiom with no render implementation");
+            }
+        }
+    }
+}
+
+render!{
+    AnnotationValue, self, w, m,
+    {
+        match self {
+            AnnotationValue::IRI(iri) => {
+                iri.render(w, m);
+            },
+            AnnotationValue::PlainLiteral {
+                datatype_iri,
+                lang,
+                literal,
+            } => {
+                write_start_end_with_start_callback(
+                    w,
+                    b"Literal",
+                    |_s: &mut Writer<W>, b: &mut BytesStart| {
+                        attribute_maybe(b, "xml:lang", lang);
+                        attribute_maybe(
+                            b,
+                            "datatypeIRI",
+                            &datatype_iri.as_ref().map(|s| s.into()),
+                        );
+                    },
+                    |s: &mut Writer<W>| {
+                        if let Some(l) = literal {
+                            s.write_event(Event::Text(BytesText::from_escaped_str(&l[..])))
+                                .ok();
+                        }
+                    },
+                );
+            }
+        }
+    }
+}
+
+render!{
+    AnnotationProperty, self, w, m,
+    {
+        tag_with_iri(w, m, b"AnnotationProperty", self);
+    }
+}
+
+render!{
+    Annotation, self, w, m,
+    {
+        write_start_end(w, b"Annotation", |w: &mut Writer<W>| {
+            self.annotation_property.render(w,m);
+            self.annotation_value.render(w,m);
+        });
+    }
+}
+
+render!{
+    ObjectProperty, self, w, m,
+    {
+        tag_with_iri(w, m, b"ObjectProperty", self);
+    }
+}
+
+render!{
+    TransitiveObjectProperty, self, w, m,
+    {
+        (&self.0).render(w, m);
+    }
+}
+
+render!{
+    InverseObjectProperty, self, w, m,
+    {
+        (&self.0).render(w, m);
+        (&self.1).render(w, m);
+    }
 }
 
 
@@ -604,6 +837,11 @@ mod test {
     #[test]
     fn round_one_transitive() {
         assert_round(include_str!("../ont/transitive-properties.xml"));
+    }
+
+    #[test]
+    fn round_one_annotated_transitive() {
+        assert_round(include_str!("../ont/annotation-on-transitive.xml"));
     }
 
     #[test]

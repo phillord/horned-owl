@@ -281,8 +281,7 @@ impl<'a, R: BufRead> Read<'a, R> {
                                             annotation_property: an_p,
                                             annotation_value: annotation_value,
                                         }
-                                    }
-                                    .into(),
+                                    },
                                     annotated.clone()
                                 );
 
@@ -380,10 +379,17 @@ impl<'a, R: BufRead> Read<'a, R> {
     }
 
     fn transitive_object_property(&mut self) {
+        let mut annotated = BTreeSet::new();
         loop {
             let mut e = self.read_event();
 
             match e {
+                (ref ns, Event::Start(ref e))
+                    if *ns == b"http://www.w3.org/2002/07/owl#" &&
+                    e.local_name() == b"Annotation" =>
+                {
+                    annotated.insert(self.annotation_r());
+                }
                 (ref ns, Event::Start(ref mut e))
                     |
                 (ref ns, Event::Empty(ref mut e))
@@ -392,7 +398,10 @@ impl<'a, R: BufRead> Read<'a, R> {
                     let ne = self.named_entity_r(e);
                     if let NamedEntity::ObjectProperty(op) = ne {
                         self.ont.insert(
-                            TransitiveObjectProperty(op)
+                            AnnotatedAxiom::new(
+                                TransitiveObjectProperty(op),
+                                annotated.clone()
+                            )
                         );
                         return;
                     }
@@ -1220,6 +1229,16 @@ fn test_annotation_on_annotation() {
     let mut ann_i = ont.annotated_axiom(AxiomKind::AssertAnnotation);
     let ann:&AnnotatedAxiom = ann_i.next().unwrap();
     assert_eq!(ann.annotation.len(), 1);
+}
+
+#[test]
+fn annotated_transitive() {
+    let ont_s = include_str!("../ont/annotation-on-transitive.xml");
+    let (ont, _) = read(&mut ont_s.as_bytes());
+
+    let annotated_axiom = ont.annotated_axiom
+        (AxiomKind::TransitiveObjectProperty).next().unwrap();
+    assert_eq!(annotated_axiom.annotation.len(), 1);
 }
 
 #[test]
