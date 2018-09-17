@@ -1,4 +1,3 @@
-#![allow(dead_code)]
 //! # Horned-OWL
 //!
 //! Horned-OWL is a library for the reading, manipulation and
@@ -304,19 +303,19 @@ impl AnnotatedAxiom {
         AnnotatedAxiom{axiom:axiom.into(), annotation:annotation}
     }
 
-    fn logical_cmp(&self, other: &AnnotatedAxiom) -> Ordering {
+    pub fn logical_cmp(&self, other: &AnnotatedAxiom) -> Ordering {
         self.axiom.cmp(&other.axiom)
     }
 
-    fn logical_partial_cmp(&self, other: &AnnotatedAxiom) -> Option<Ordering> {
+    pub fn logical_partial_cmp(&self, other: &AnnotatedAxiom) -> Option<Ordering> {
         Some(self.cmp(other))
     }
 
-    fn logical_eq(&self, other: &AnnotatedAxiom) -> bool {
+    pub fn logical_eq(&self, other: &AnnotatedAxiom) -> bool {
         self.axiom == other.axiom
     }
 
-    fn logical_hash<H: Hasher>(&self, state: &mut H) -> () {
+    pub fn logical_hash<H: Hasher>(&self, state: &mut H) -> () {
         self.axiom.hash(state)
     }
 }
