@@ -291,10 +291,7 @@ trait Kinded {
 }
 
 /// An `AnnotatedAxiom` is an `Axiom` with one or more `Annotation`.
-///
-/// An `AnnotatedAxiom` takes it ordering, hash and equality semantics
-/// only from the underlying `Axiom` and not from the `Annotation`.
-#[derive(Debug)]
+#[derive(Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
 pub struct AnnotatedAxiom{
     pub axiom: Axiom,
     pub annotation: BTreeSet<Annotation>
@@ -305,30 +302,20 @@ impl AnnotatedAxiom {
         -> AnnotatedAxiom {
         AnnotatedAxiom{axiom, annotation}
     }
-}
 
-impl Ord for AnnotatedAxiom {
-    fn cmp(&self, other: &AnnotatedAxiom) -> Ordering {
+    fn logical_cmp(&self, other: &AnnotatedAxiom) -> Ordering {
         self.axiom.cmp(&other.axiom)
     }
-}
 
-impl PartialOrd for AnnotatedAxiom {
-    fn partial_cmp(&self, other: &AnnotatedAxiom) -> Option<Ordering> {
+    fn logical_partial_cmp(&self, other: &AnnotatedAxiom) -> Option<Ordering> {
         Some(self.cmp(other))
     }
-}
 
-impl Eq for AnnotatedAxiom{}
-
-impl PartialEq for AnnotatedAxiom {
-    fn eq(&self, other: &AnnotatedAxiom) -> bool {
+    fn logical_eq(&self, other: &AnnotatedAxiom) -> bool {
         self.axiom == other.axiom
     }
-}
 
-impl Hash for AnnotatedAxiom {
-    fn hash<H: Hasher>(&self, state: &mut H) -> () {
+    fn logical_hash<H: Hasher>(&self, state: &mut H) -> () {
         self.axiom.hash(state)
     }
 }
