@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 //! # Horned-OWL
 //!
 //! Horned-OWL is a library for the reading, manipulation and
@@ -286,7 +284,7 @@ trait Annotated {
 /// different kinds. These axioms all return an variant instance of
 /// the `AxiomKind` enum. This is used in the API mostly to retrieve
 /// instances of a certain kind.
-trait Kinded {
+pub trait Kinded {
     fn kind(&self) -> AxiomKind;
 }
 
