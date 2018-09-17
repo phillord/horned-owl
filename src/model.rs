@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 //! # Horned-OWL
 //!
 //! Horned-OWL is a library for the reading, manipulation and
@@ -296,7 +297,7 @@ pub struct AnnotatedAxiom{
 }
 
 impl AnnotatedAxiom {
-    pub fn new<I>(axiom: I, annotation: HashSet<Annotation>)
+    pub fn new<I>(axiom: I, annotation: BTreeSet<Annotation>)
                   -> AnnotatedAxiom
         where I: Into<Axiom>
     {
