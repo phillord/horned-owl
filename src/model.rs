@@ -296,9 +296,11 @@ pub struct AnnotatedAxiom{
 }
 
 impl AnnotatedAxiom {
-    pub fn new(axiom: Axiom, annotation: BTreeSet<Annotation>)
-        -> AnnotatedAxiom {
-        AnnotatedAxiom{axiom, annotation}
+    pub fn new<I>(axiom: I, annotation: HashSet<Annotation>)
+                  -> AnnotatedAxiom
+        where I: Into<Axiom>
+    {
+        AnnotatedAxiom{axiom:axiom.into(), annotation:annotation}
     }
 
     fn logical_cmp(&self, other: &AnnotatedAxiom) -> Ordering {
