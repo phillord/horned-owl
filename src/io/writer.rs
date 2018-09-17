@@ -8,7 +8,7 @@ use quick_xml::events::BytesText;
 use quick_xml::events::Event;
 use quick_xml::Writer;
 
-use std::collections::HashSet;
+use std::collections::BTreeSet;
 use std::io::Write as StdWrite;
 
 struct Write<'a, W>
@@ -392,7 +392,7 @@ where
         });
     }
 
-    fn annotations_maybe(&mut self, annotations: &HashSet<Annotation>){
+    fn annotations_maybe(&mut self, annotations: &BTreeSet<Annotation>){
         for annotation in annotations {
             self.annotation(annotation);
         }

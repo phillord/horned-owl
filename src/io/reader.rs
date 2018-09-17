@@ -1,6 +1,6 @@
 use curie::PrefixMapping;
 
-use std::collections::HashSet;
+use std::collections::BTreeSet;
 use std::io::BufRead;
 use std::str::from_utf8;
 
@@ -253,7 +253,7 @@ impl<'a, R: BufRead> Read<'a, R> {
     fn annotation_assertion(&mut self) {
         let mut annotation_property = None;
         let mut annotation_subject = None;
-        let mut annotated = HashSet::new();
+        let mut annotated = BTreeSet::new();
 
         loop {
             let e = self.read_event();

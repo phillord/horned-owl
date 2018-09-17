@@ -35,8 +35,8 @@
 //! - 0.7 RDF IO
 
 use std::cell::RefCell;
-use std::collections::HashMap;
-use std::collections::HashSet;
+use std::collections::BTreeMap;
+use std::collections::BTreeSet;
 use std::cmp::Ordering;
 use std::hash::Hash;
 use std::hash::Hasher;
@@ -90,11 +90,11 @@ impl <'a> From<&'a IRI> for String {
 // both could be replaced by traits or enums straight-forwardly
 // enough, to enable threading.
 #[derive(Debug, Default)]
-pub struct Build(Rc<RefCell<HashSet<IRI>>>);
+pub struct Build(Rc<RefCell<BTreeSet<IRI>>>);
 
 impl Build{
     pub fn new() -> Build{
-        Build(Rc::new(RefCell::new(HashSet::new())))
+        Build(Rc::new(RefCell::new(BTreeSet::new())))
     }
 
     /// Constructs a new `IRI`
@@ -276,8 +276,8 @@ named!{
 trait Annotated {
     /// Return the annotation
     ///
-    /// The returned `HashSet` may be empty.
-    fn annotation(&self) -> &HashSet<Annotation>;
+    /// The returned `BTreeSet` may be empty.
+    fn annotation(&self) -> &BTreeSet<Annotation>;
 }
 
 /// An interface providing access to the `AxiomKind`
@@ -297,11 +297,11 @@ trait Kinded {
 #[derive(Debug)]
 pub struct AnnotatedAxiom{
     pub axiom: Axiom,
-    pub annotation: HashSet<Annotation>
+    pub annotation: BTreeSet<Annotation>
 }
 
 impl AnnotatedAxiom {
-    pub fn new(axiom: Axiom, annotation: HashSet<Annotation>)
+    pub fn new(axiom: Axiom, annotation: BTreeSet<Annotation>)
         -> AnnotatedAxiom {
         AnnotatedAxiom{axiom, annotation}
     }
@@ -337,7 +337,7 @@ impl From<Axiom> for AnnotatedAxiom {
     fn from(axiom: Axiom) -> AnnotatedAxiom {
         AnnotatedAxiom {
             axiom: axiom,
-            annotation: HashSet::new()
+            annotation: BTreeSet::new()
         }
     }
 }
@@ -482,7 +482,7 @@ macro_rules! axioms {
         /// entities as part of the `Kinded` trait.
         /// See also `Axiom` which is a Enum whose variants take
         /// instances of the `Axiom`
-        #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
+        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
         pub enum AxiomKind {
             $($name),*
         }
@@ -681,8 +681,8 @@ pub enum AnnotationValue {
 /// A object property expression
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum ObjectPropertyExpression {
-    // We use Vec here rather than HashSet because, perhaps
-    // surprisingly, HashSet is not itself hashable.
+    // We use Vec here rather than BTreeSet because, perhaps
+    // surprisingly, BTreeSet is not itself hashable.
     ObjectPropertyChain(Vec<ObjectProperty>),
     ObjectProperty(ObjectProperty)
 }
@@ -762,31 +762,31 @@ pub struct OntologyID{
 pub struct Ontology
 {
     pub id: OntologyID,
-    // The use an HashMap keyed on AxiomKind allows efficient
+    // The use an BTreeMap keyed on AxiomKind allows efficient
     // retrieval of axioms. Otherwise, we'd have to iterate through
     // the lot every time.
-    axiom: RefCell<HashMap<AxiomKind,HashSet<AnnotatedAxiom>>>,
+    axiom: RefCell<BTreeMap<AxiomKind,BTreeSet<AnnotatedAxiom>>>,
 }
 
 impl Ontology {
 
     /// Fetch the axioms hashmap as a raw pointer.
     ///
-    /// This method also ensures that the HashSet for `axk` is
+    /// This method also ensures that the BTreeSet for `axk` is
     /// instantiated, which means that it effects equality of the
     /// ontology. It should only be used where the intention is to
     /// update the ontology.
     fn axioms_as_ptr(&self, axk: AxiomKind)
-        -> *mut HashMap<AxiomKind,HashSet<AnnotatedAxiom>>
+        -> *mut BTreeMap<AxiomKind,BTreeSet<AnnotatedAxiom>>
     {
         self.axiom.borrow_mut().entry(axk)
-            .or_insert(HashSet::new());
+            .or_insert(BTreeSet::new());
         self.axiom.as_ptr()
     }
 
     /// Fetch the axioms for the given kind.
     fn set_for_kind(&self, axk: AxiomKind)
-                     -> Option<&HashSet<AnnotatedAxiom>>
+                     -> Option<&BTreeSet<AnnotatedAxiom>>
     {
         unsafe{
             (*self.axiom.as_ptr())
@@ -796,7 +796,7 @@ impl Ontology {
 
     /// Fetch the axioms for given kind as a mutable ref.
     fn mut_set_for_kind(&mut self, axk: AxiomKind)
-                        -> &mut HashSet<AnnotatedAxiom>
+                        -> &mut BTreeSet<AnnotatedAxiom>
     {
         unsafe {
             (*self.axioms_as_ptr(axk))
