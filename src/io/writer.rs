@@ -12,17 +12,8 @@ use quick_xml::Writer;
 use std::collections::BTreeSet;
 use std::io::Write as StdWrite;
 
-struct Write<'a, W>
-where
-    W: StdWrite,
-{
-    writer: Writer<W>,
-    ont: &'a Ontology,
-    mapping: &'a PrefixMapping,
-}
-
 pub fn write(write: &mut StdWrite, ont: &Ontology, mapping: Option<&PrefixMapping>) {
-    let writer = Writer::new_with_indent(write, ' ' as u8, 4);
+    let mut writer = Writer::new_with_indent(write, ' ' as u8, 4);
 
     // Ensure we have a prefix mapping; the default is a no-op and
     // it's easier than checking every time.
@@ -32,396 +23,19 @@ pub fn write(write: &mut StdWrite, ont: &Ontology, mapping: Option<&PrefixMappin
         None => &default_mapper,
     };
 
-    let mut write = Write::new(writer, ont, mapping);
-    write.render();
+    ont.render(&mut writer, &mapping);
 }
 
-impl<'a, W> Write<'a, W>
-where
-    W: StdWrite,
-{
-    fn new(writer: Writer<W>, ont: &'a Ontology, mapping: &'a PrefixMapping) -> Write<'a, W> {
-        Write {
-            writer,
-            ont,
-            mapping,
+
+fn iri_maybe(elem: &mut BytesStart, key: &str, iri: &Option<IRI>) {
+    match iri {
+        Some(iri) => {
+            elem.push_attribute((key, &(*iri)[..]));
         }
-    }
-
-    fn render(&mut self) {
-        self.writer
-            .write_event(Event::Decl(BytesDecl::new(&b"1.0"[..], None, None)))
-            .ok();
-
-        let mut elem = BytesStart::owned(b"Ontology".to_vec(), "Ontology".len());
-        elem.push_attribute(("xmlns", "http://www.w3.org/2002/07/owl#"));
-        self.iri_maybe(&mut elem, "ontologyIRI", &self.ont.id.iri);
-        self.iri_maybe(&mut elem, "versionIRI", &self.ont.id.viri);
-
-        self.writer.write_event(Event::Start(elem)).ok();
-
-        let elem = BytesEnd::owned(b"Ontology".to_vec());
-
-        self.prefixes();
-        self.ontology_annotation_assertions();
-        self.declarations();
-        self.subclasses();
-        self.equivalent_classes();
-        self.disjoint_classes();
-        self.annotation_assertions();
-        self.subaproperties();
-        self.suboproperties();
-        self.iter_render(self.ont.annotated_axiom(AxiomKind::InverseObjectProperty));
-        self.iter_render(self.ont.annotated_axiom(AxiomKind::TransitiveObjectProperty));
-        self.writer.write_event(Event::End(elem)).ok();
-    }
-
-    fn iter_render<I, R>(&mut self, i:I)
-        where I: Iterator<Item=&'a R>,
-              R: Render<'a, W> + 'a
-    {
-        for item in i {
-            item.render(&mut self.writer, self.mapping);
-        }
-    }
-
-    fn attribute_maybe(&self, elem: &mut BytesStart, key: &str, val: &Option<String>) {
-        match val {
-            Some(val) => {
-                elem.push_attribute((key, &val[..]));
-            }
-            None => {}
-        }
-    }
-
-    fn iri_maybe(&self, elem: &mut BytesStart, key: &str, iri: &Option<IRI>) {
-        match iri {
-            Some(iri) => {
-                elem.push_attribute((key, &(*iri)[..]));
-            }
-            None => {}
-        }
-    }
-
-    fn shrink_iri_maybe(&self, iri: &str) -> String {
-        match self.mapping.shrink_iri(&(*iri)[..]) {
-            Ok(curie) => {
-                format!("{}", curie)
-            },
-            Err(_) => {
-                format!("{}", iri)
-            },
-        }
-    }
-
-    fn iri_or_curie(&self, elem: &mut BytesStart, iri: &str) {
-        match self.mapping.shrink_iri(&(*iri)[..]) {
-            Ok(curie) => {
-                let curie = format!("{}", curie);
-                elem.push_attribute(("abbreviatedIRI", &curie[..]));
-            }
-            Err(_) => elem.push_attribute(("IRI", &iri[..])),
-        }
-    }
-
-    fn prefixes(&mut self) {
-        for pre in self.mapping.mappings() {
-            let mut prefix = BytesStart::owned(b"Prefix".to_vec(), "Prefix".len());
-            prefix.push_attribute(("name", &pre.0[..]));
-            prefix.push_attribute(("IRI", &pre.1[..]));
-            self.writer.write_event(Event::Empty(prefix)).ok();
-        }
-    }
-
-    fn object_property(&mut self, o: &ObjectProperty) {
-        self.with_iri(b"ObjectProperty", o);
-    }
-
-    fn class(&mut self, c: &Class) {
-        self.with_iri(b"Class", c);
-    }
-
-    fn annotation_property(&mut self, ap: &AnnotationProperty) {
-        self.with_iri(b"AnnotationProperty", ap);
-    }
-
-    fn with_iri<I>(&mut self, tag: &[u8], into_iri: I)
-    where
-        I: Into<IRI>,
-    {
-        let iri: IRI = into_iri.into();
-        let mut bytes_start = BytesStart::borrowed(tag, tag.len());
-
-        let iri_string: String = iri.into();
-        self.iri_or_curie(&mut bytes_start, &iri_string[..]);
-        self.writer.write_event(Event::Empty(bytes_start)).ok();
-    }
-
-    fn iri(&mut self, i: &IRI) {
-        let iri_st: String = i.into();
-        let iri_shrunk = self.shrink_iri_maybe(&iri_st[..]);
-        self.write_start_end(b"IRI", |s: &mut Self| {
-            s.writer
-                .write_event(Event::Text(BytesText::from_escaped_str(&iri_shrunk[..])))
-                .ok();
-        });
-    }
-
-    fn declaration_1<'b, F, I>(&mut self,
-                                  declare: I,
-                                  mut declare_writer: F)
-    where
-        F: FnMut(&mut Self, &'b AnnotatedAxiom),
-        I: Iterator<Item=&'b AnnotatedAxiom>
-    {
-
-        let mut declare:Vec<&AnnotatedAxiom> = declare.collect();
-        declare.sort_unstable();
-
-        for ne in declare {
-            self.write_start_end(b"Declaration",
-                                 |s: &mut Self| declare_writer(s, ne));
-        }
-    }
-
-    fn declarations(&mut self) {
-        self.declaration_1(
-            self.ont.annotated_axiom(AxiomKind::DeclareClass),
-            |s: &mut Self, c: &AnnotatedAxiom|
-            if let Axiom::DeclareClass(ref c) = c.axiom {
-                s.class(&c.0)
-            });
-
-        self.declaration_1(
-            self.ont.annotated_axiom(AxiomKind::DeclareObjectProperty),
-            |s: &mut Self, o: &AnnotatedAxiom|
-            if let Axiom::DeclareObjectProperty(ref o) = o.axiom {
-                s.object_property(&o.0)
-            });
-
-        self.declaration_1(
-            self.ont.annotated_axiom(AxiomKind::DeclareAnnotationProperty),
-            |s: &mut Self, a: &AnnotatedAxiom|
-            if let Axiom::DeclareAnnotationProperty(ref a) = a.axiom {
-                s.annotation_property(&a.0)
-            });
-    }
-
-    fn class_expression(&mut self, ce: &ClassExpression) {
-        match ce {
-            &ClassExpression::Class(ref c) => {
-                self.class(c);
-            }
-            &ClassExpression::Some { ref o, ref ce } => {
-                self.object_some_values_from(o, ce);
-            }
-            &ClassExpression::Only { ref o, ref ce } => {
-                self.object_all_values_from(o, ce);
-            }
-            &ClassExpression::And { ref o } => {
-                self.object_intersection_of(o);
-            }
-            &ClassExpression::Or { ref o } => {
-                self.object_union_of(o);
-            }
-            &ClassExpression::Not { ref ce } => {
-                self.object_complement_of(ce);
-            }
-        }
-    }
-
-    fn write_start_end<F>(&mut self, tag: &[u8], contents: F)
-    where
-        F: FnMut(&mut Self),
-    {
-        self.write_start_end_with_tag(tag, |_: &mut Self, _: &mut BytesStart| return, contents);
-    }
-
-    fn write_start_end_with_tag<F, G>(&mut self, tag: &[u8], mut start: F, mut contents: G)
-    where
-        F: FnMut(&mut Self, &mut BytesStart),
-        G: FnMut(&mut Self),
-    {
-        let len = tag.len();
-        let mut open = BytesStart::borrowed(tag, len);
-
-        // Pass self like this, because we cannot capture it in the
-        // closure, without failing the borrow checker.
-        start(self, &mut open);
-
-        self.writer.write_event(Event::Start(open)).ok();
-
-        contents(self);
-
-        self.writer
-            .write_event(Event::End(BytesEnd::borrowed(tag)))
-            .ok();
-    }
-
-    fn object_complement_of(&mut self, ce: &ClassExpression) {
-        self.write_start_end(b"ObjectComplementOf", |s: &mut Self| {
-            s.class_expression(ce);
-        })
-    }
-
-    fn object_binary(&mut self, o: &ObjectProperty, ce: &ClassExpression, tag: &[u8]) {
-        self.write_start_end(tag, |s: &mut Self| {
-            s.object_property(o);
-            s.class_expression(ce);
-        });
-    }
-
-    fn object_nary(&mut self, o: &Vec<ClassExpression>, tag: &[u8]) {
-        self.write_start_end(tag, |s: &mut Self| {
-            for ce in o.iter() {
-                s.class_expression(&(*ce));
-            }
-        });
-    }
-
-    fn object_union_of(&mut self, operands: &Vec<ClassExpression>) {
-        self.object_nary(operands, b"ObjectUnionOf")
-    }
-
-    fn object_intersection_of(&mut self, operands: &Vec<ClassExpression>) {
-        self.object_nary(operands, b"ObjectIntersectionOf")
-    }
-
-    fn object_all_values_from(&mut self, o: &ObjectProperty, ce: &ClassExpression) {
-        self.object_binary(o, ce, b"ObjectAllValuesFrom")
-    }
-
-    fn object_some_values_from(&mut self, o: &ObjectProperty, ce: &ClassExpression) {
-        self.object_binary(o, ce, b"ObjectSomeValuesFrom")
-    }
-
-    fn subclasses(&mut self) {
-        for subclass in self.ont.sub_class() {
-            self.write_start_end(b"SubClassOf", |s: &mut Write<W>| {
-                s.class_expression(&subclass.super_class);
-                s.class_expression(&subclass.sub_class);
-            });
-        }
-    }
-
-    fn equivalent_classes(&mut self) {
-        for equivalent_class in self.ont.equivalent_class() {
-            self.write_start_end(b"EquivalentClasses", |s: &mut Write<W>| {
-                s.class_expression(&equivalent_class.0);
-                s.class_expression(&equivalent_class.1);
-            });
-        }
-    }
-
-    fn disjoint_classes(&mut self) {
-        for disjoint_class in self.ont.disjoint_class() {
-            self.write_start_end(b"DisjointClasses", |s: &mut Write<W>| {
-                s.class_expression(&disjoint_class.0);
-                s.class_expression(&disjoint_class.1);
-            });
-        }
-    }
-
-    fn object_property_expression(&mut self, ope: &ObjectPropertyExpression) {
-        match ope {
-            ObjectPropertyExpression::ObjectPropertyChain(v) => {
-                self.write_start_end(b"ObjectPropertyChain", |s: &mut Write<W>| {
-                    for op in v {
-                        s.object_property(op);
-                    }
-                })
-            }
-            ObjectPropertyExpression::ObjectProperty(op) => {
-                self.object_property(op);
-            }
-        }
-    }
-
-    fn suboproperties(&mut self) {
-        for sub in self.ont.sub_object_property() {
-            self.write_start_end(b"SubObjectPropertyOf", |s: &mut Write<W>| {
-                s.object_property_expression(&sub.super_property);
-                s.object_property(&sub.sub_property);
-            });
-        }
-    }
-
-    fn annotation_value(&mut self, annotation: &AnnotationValue) {
-        match annotation {
-            AnnotationValue::IRI(iri) => {
-                self.iri(iri);
-            },
-            AnnotationValue::PlainLiteral {
-                datatype_iri,
-                lang,
-                literal,
-            } => {
-                self.write_start_end_with_tag(
-                    b"Literal",
-                    |s: &mut Self, b: &mut BytesStart| {
-                        s.attribute_maybe(b, "xml:lang", lang);
-                        s.attribute_maybe(
-                            b,
-                            "datatypeIRI",
-                            &datatype_iri.as_ref().map(|s| s.into()),
-                        );
-                    },
-                    |s: &mut Self| {
-                        if let Some(l) = literal {
-                            s.writer
-                                .write_event(Event::Text(BytesText::from_escaped_str(&l[..])))
-                                .ok();
-                        }
-                    },
-                );
-            }
-        }
-    }
-
-    fn annotation(&mut self, annotation:&Annotation){
-        self.write_start_end(b"Annotation", |s: &mut Write<W>| {
-            s.annotation_property(&annotation.annotation_property);
-            s.annotation_value(&annotation.annotation_value);
-        });
-    }
-
-    fn annotations_maybe(&mut self, annotations: &BTreeSet<Annotation>){
-        for annotation in annotations {
-            self.annotation(annotation);
-        }
-    }
-
-    fn annotation_assertions(&mut self) {
-        for annotated_assertion in self.ont.annotated_axiom(AxiomKind::AssertAnnotation) {
-            self.write_start_end(b"AnnotationAssertion", |s: &mut Write<W>| {
-                s.annotations_maybe(&annotated_assertion.annotation);
-                if let Axiom::AssertAnnotation(ref ax) = annotated_assertion.axiom {
-                    s.annotation_property(&ax.annotation.annotation_property);
-                    s.iri(&ax.annotation_subject);
-                    s.annotation_value(&ax.annotation.annotation_value);
-                }
-            })
-        }
-    }
-
-    fn subaproperties(&mut self) {
-        for sub in self.ont.sub_annotation_property() {
-            self.write_start_end(b"SubAnnotationPropertyOf", |s: &mut Write<W>| {
-                s.annotation_property(&sub.super_property);
-                s.annotation_property(&sub.sub_property);
-            });
-        }
-    }
-
-    fn ontology_annotation_assertions(&mut self) {
-        for annotation in self.ont.ontology_annotation() {
-            self.write_start_end(b"Annotation", |s: &mut Write<W>| {
-                s.annotation_property(&annotation.0.annotation_property);
-                s.annotation_value(&annotation.0.annotation_value);
-            })
-        }
+        None => {}
     }
 }
+
 
 fn shrink_iri_maybe<'a>(iri: &str,
                         mapping: &'a PrefixMapping) -> String {
@@ -509,9 +123,26 @@ fn tag_for_kind (axk:AxiomKind) -> &'static [u8] {
             b"InverseObjectProperties",
         AxiomKind::TransitiveObjectProperty =>
             b"TransitiveObjectProperty",
-        _ => {
-            panic!("Fetching tag for unknown kind");
-        }
+        AxiomKind::SubObjectProperty =>
+            b"SubObjectPropertyOf",
+        AxiomKind::SubAnnotationProperty =>
+            b"SubAnnotationPropertyOf",
+        AxiomKind::AssertAnnotation =>
+            b"AnnotationAssertion",
+        AxiomKind::DisjointClass =>
+            b"DisjointClasses",
+        AxiomKind::EquivalentClass =>
+            b"EquivalentClasses",
+        AxiomKind::SubClass =>
+            b"SubClassOf",
+        AxiomKind::DeclareClass =>
+            b"Declaration",
+        AxiomKind::DeclareObjectProperty =>
+            b"Declaration",
+        AxiomKind::DeclareAnnotationProperty =>
+            b"Declaration",
+        AxiomKind::OntologyAnnotation =>
+            b"Annotation",
     }
 }
 
@@ -542,14 +173,52 @@ macro_rules! render {
     }
 }
 
-/// TODO -- Throw this away and replace with iter_render, once we move
-/// it out
-fn annotations_maybe<'a, W>(annotations: &BTreeSet<Annotation>,
-                            w:&mut Writer<W>, m: &'a PrefixMapping)
-    where W: StdWrite
-{
-    for annotation in annotations {
-        annotation.render(w, m);
+render! {
+    Ontology, self, w, m,
+    {
+        w.write_event(Event::Decl(BytesDecl::new(&b"1.0"[..], None, None)))
+            .ok();
+
+        let mut elem = BytesStart::owned(b"Ontology".to_vec(), "Ontology".len());
+        elem.push_attribute(("xmlns", "http://www.w3.org/2002/07/owl#"));
+        iri_maybe(&mut elem, "ontologyIRI", &self.id.iri);
+        iri_maybe(&mut elem, "versionIRI", &self.id.viri);
+
+        w.write_event(Event::Start(elem)).ok();
+
+        let elem = BytesEnd::owned(b"Ontology".to_vec());
+
+        m.render(w, m);
+
+        for axk in AxiomKind::all_kinds() {
+            for ax in self.annotated_axiom(axk) {
+                ax.render(w, m);
+            }
+        }
+
+
+        w.write_event(Event::End(elem)).ok();
+    }
+}
+
+impl <'a, W> Render<'a, W> for &'a BTreeSet<Annotation> {
+    fn render(&self, w:&mut Writer<W>, m: &'a PrefixMapping)
+        where W: StdWrite {
+        for a in self.iter() {
+            a.render(w, m);
+        }
+    }
+}
+
+render!{
+    PrefixMapping, self, w, _m,
+    {
+        for pre in self.mappings() {
+            let mut prefix = BytesStart::owned(b"Prefix".to_vec(), "Prefix".len());
+            prefix.push_attribute(("name", &pre.0[..]));
+            prefix.push_attribute(("IRI", &pre.1[..]));
+            w.write_event(Event::Empty(prefix)).ok();
+        }
     }
 }
 
@@ -565,16 +234,103 @@ render!{
     }
 }
 
+render! {
+    DeclareClass, self, w, m,
+    {
+        (&self.0).render(w, m);
+    }
+}
 
+render! {
+    DeclareObjectProperty, self, w, m,
+    {
+        (&self.0).render(w, m);
+    }
+}
+
+render! {
+    DeclareAnnotationProperty, self, w, m,
+    {
+        (&self.0).render(w, m);
+    }
+}
 
 render!{
     AnnotatedAxiom, self, w, m,
     {
         let tag = tag_for_kind(self.kind());
         write_start_end(w, tag, |w| {
-            annotations_maybe(&self.annotation, w, m);
+            (&self.annotation).render(w, m);
             self.axiom.render(w, m);
         });
+    }
+}
+
+impl <'a, W> Render<'a, W> for &'a Vec<ClassExpression>{
+    fn render(&self, w:&mut Writer<W>, m: &'a PrefixMapping)
+        where W: StdWrite {
+        for ce in self.iter() {
+            ce.render(w, m);
+        }
+    }
+}
+
+impl <'a, W> Render<'a, W> for (&'a ObjectProperty, &'a Box<ClassExpression>){
+    fn render(&self, w:&mut Writer<W>, m: &'a PrefixMapping)
+        where W: StdWrite {
+        (&self.0).render(w, m);
+        (&self.1).render(w, m);
+    }
+}
+
+render!{
+    Class, self, w, m,
+    {
+        tag_with_iri(w, m, b"Class", self);
+    }
+}
+
+render!{
+    ClassExpression, self, w, m,
+    {
+        match self {
+            &ClassExpression::Class(ref c) => {
+                c.render(w, m);
+            }
+            &ClassExpression::Some { ref o, ref ce } => {
+                write_start_end(w, b"ObjectSomeValuesFrom",
+                                |w| {
+                                    (o, ce).render(w, m);
+                                });
+            }
+            &ClassExpression::Only { ref o, ref ce } => {
+                write_start_end(w, b"ObjectAllValuesFrom",
+                                |w| {
+                                    (o, ce).render(w, m);
+                                });
+            }
+            &ClassExpression::And { ref o } => {
+                write_start_end(w, b"ObjectIntersectionOf",
+                                |w| {
+                                    o.render(w, m);
+                                }
+                );
+            }
+            &ClassExpression::Or { ref o } => {
+                write_start_end(w, b"ObjectUnionOf",
+                                |w| {
+                                    o.render(w, m);
+                                }
+                );
+            }
+            &ClassExpression::Not { ref ce } => {
+                write_start_end(w, b"ObjectComplementOf",
+                                |w| {
+                                    ce.render(w, m);
+                                }
+                );
+            }
+        }
     }
 }
 
@@ -588,10 +344,59 @@ render! {
             Axiom::InverseObjectProperty(ax) =>{
                 ax.render(w, m);
             }
-            _ => {
-                unimplemented!("Axiom with no render implementation");
+            Axiom::SubObjectProperty(ax) => {
+                ax.render(w, m);
+            }
+            Axiom::SubAnnotationProperty(ax) => {
+                ax.render(w, m);
+            }
+            Axiom::AssertAnnotation(ax) => {
+                ax.render(w, m);
+            }
+            Axiom::DisjointClass(ax) => {
+                ax.render(w, m);
+            }
+            Axiom::EquivalentClass(ax) => {
+                ax.render(w, m);
+            }
+            Axiom::SubClass(ax) => {
+                ax.render(w, m);
+            }
+            Axiom::DeclareClass(ax) => {
+                ax.render(w, m);
+            }
+            Axiom::DeclareObjectProperty(ax) => {
+                ax.render(w, m);
+            }
+            Axiom::DeclareAnnotationProperty(ax) => {
+                ax.render(w, m);
+            }
+            Axiom::OntologyAnnotation(ax) => {
+                ax.render(w, m);
             }
         }
+    }
+}
+
+render!{
+    OntologyAnnotation, self, w, m,
+    {
+        // There is something slightly wrong with my data model
+        // here. An `Annotation` object will normally render itself
+        // including the tags. But the OntologyAnnotation is an
+        // AnnotatedAxiom which means that we have already got
+        // `Annotation` tags, so we just need to render 
+        self.0.annotation_property.render(w, m);
+        self.0.annotation_value.render(w, m);
+    }
+}
+
+render!{
+    AssertAnnotation, self, w, m,
+    {
+        (&self.annotation.annotation_property).render(w, m);
+        (&self.annotation_subject).render(w, m);
+        (&self.annotation.annotation_value).render(w, m);
     }
 }
 
@@ -640,10 +445,42 @@ render!{
 render!{
     Annotation, self, w, m,
     {
-        write_start_end(w, b"Annotation", |w: &mut Writer<W>| {
+        write_start_end(w, b"Annotation", |w| {
             self.annotation_property.render(w,m);
             self.annotation_value.render(w,m);
         });
+    }
+}
+
+render!{
+    SubAnnotationProperty, self, w, m,
+    {
+        (&self.super_property).render(w, m);
+        (&self.sub_property).render(w, m);
+    }
+}
+
+render!{
+    SubClass, self, w, m,
+    {
+        (&self.super_class).render(w, m);
+        (&self.sub_class).render(w, m);
+    }
+}
+
+render!{
+    EquivalentClass, self, w, m,
+    {
+        (&self.0).render(w,m);
+        (&self.1).render(w,m);
+    }
+}
+
+render!{
+    DisjointClass, self, w, m,
+    {
+        (&self.0).render(w, m);
+        (&self.1).render(w, m);
     }
 }
 
@@ -653,6 +490,34 @@ render!{
         tag_with_iri(w, m, b"ObjectProperty", self);
     }
 }
+
+render!{
+    ObjectPropertyExpression, self, w, m,
+    {
+        match self {
+            ObjectPropertyExpression::ObjectPropertyChain(v) => {
+                write_start_end(w, b"ObjectPropertyChain", |w| {
+                    for op in v {
+                        op.render(w, m);
+                    }
+                })
+            }
+            ObjectPropertyExpression::ObjectProperty(op) => {
+                op.render(w, m);
+            }
+        }
+    }
+}
+
+
+render!{
+    SubObjectProperty, self, w, m,
+    {
+        (&self.super_property).render(w, m);
+        (&self.sub_property).render(w, m)
+    }
+}
+
 
 render!{
     TransitiveObjectProperty, self, w, m,

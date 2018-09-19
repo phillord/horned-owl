@@ -474,6 +474,12 @@ macro_rules! axioms {
             $($name),*
         }
 
+        impl AxiomKind {
+            pub fn all_kinds() -> Vec<AxiomKind> {
+                vec![$(AxiomKind::$name),*]
+            }
+        }
+
         /// An axiom
         ///
         /// This enum has variants representing the various kinds of
@@ -517,6 +523,9 @@ macro_rules! axioms {
 }
 
 axioms!{
+    /// An annotation associated with this Ontology
+    OntologyAnnotation (Annotation),
+
     // Declaration Axioms
 
     /// Declares that an IRI represents a Class in the Ontology
@@ -613,10 +622,7 @@ axioms!{
     SubAnnotationProperty {
         super_property:AnnotationProperty,
         sub_property: AnnotationProperty
-    },
-
-    /// An annotation associated with this Ontology
-    OntologyAnnotation (Annotation)
+    }
 }
 
 // In the ideal world, we would have generated these onimpl! calls as
