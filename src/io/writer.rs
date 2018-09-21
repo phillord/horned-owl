@@ -1,6 +1,8 @@
 use curie::PrefixMapping;
+
 use model::*;
 use model::Kinded;
+use vocab;
 
 use quick_xml::events::BytesDecl;
 use quick_xml::events::BytesEnd;
@@ -194,8 +196,8 @@ render! {
         w.write_event(Event::Decl(BytesDecl::new(&b"1.0"[..], None, None)))
             .ok();
 
-        let mut elem = BytesStart::owned(b"Ontology".to_vec(), "Ontology".len());
-        elem.push_attribute(("xmlns", "http://www.w3.org/2002/07/owl#"));
+        let mut elem = BytesStart::owned_name(io::vocab::ONTOLOGY);
+        elem.push_attribute((b"xmlns" as &[u8], vocab::OWL));
         iri_maybe(&mut elem, "ontologyIRI", &self.id.iri);
         iri_maybe(&mut elem, "versionIRI", &self.id.viri);
 
@@ -230,7 +232,7 @@ render!{
     PrefixMapping, self, w, _m,
     {
         for pre in self.mappings() {
-            let mut prefix = BytesStart::owned(b"Prefix".to_vec(), "Prefix".len());
+            let mut prefix = BytesStart::owned_name("Prefix");
             prefix.push_attribute(("name", &pre.0[..]));
             prefix.push_attribute(("IRI", &pre.1[..]));
             w.write_event(Event::Empty(prefix)).ok();
