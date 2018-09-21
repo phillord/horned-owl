@@ -12,7 +12,12 @@ use quick_xml::Writer;
 use std::collections::BTreeSet;
 use std::io::Write as StdWrite;
 
-pub fn write(write: &mut StdWrite, ont: &Ontology, mapping: Option<&PrefixMapping>) {
+/// Write an Ontology to `write`, using the given PrefixMapping
+///
+/// The ontology is written in OWL
+/// [XML](https://www.w3.org/TR/owl2-xml-serialization/) syntax.
+pub fn write(write: &mut StdWrite, ont: &Ontology,
+             mapping: Option<&PrefixMapping>) {
     let mut writer = Writer::new_with_indent(write, ' ' as u8, 4);
 
     // Ensure we have a prefix mapping; the default is a no-op and
@@ -26,7 +31,9 @@ pub fn write(write: &mut StdWrite, ont: &Ontology, mapping: Option<&PrefixMappin
     ont.render(&mut writer, &mapping);
 }
 
-
+/// Add an IRI to BytesStart as a element if necessary
+///
+/// `key` is the attribute name to use.
 fn iri_maybe(elem: &mut BytesStart, key: &str, iri: &Option<IRI>) {
     match iri {
         Some(iri) => {
@@ -36,7 +43,7 @@ fn iri_maybe(elem: &mut BytesStart, key: &str, iri: &Option<IRI>) {
     }
 }
 
-
+/// Shrink an IRI to a curie if there is an appropriate prefix
 fn shrink_iri_maybe<'a>(iri: &str,
                         mapping: &'a PrefixMapping) -> String {
     match mapping.shrink_iri(&(*iri)[..]) {
@@ -49,6 +56,7 @@ fn shrink_iri_maybe<'a>(iri: &str,
     }
 }
 
+/// Maybe An an attribute to `elem` if `val` is not None.
 fn attribute_maybe(elem: &mut BytesStart, key: &str, val: &Option<String>) {
     match val {
         Some(val) => {
@@ -58,7 +66,7 @@ fn attribute_maybe(elem: &mut BytesStart, key: &str, val: &Option<String>) {
     }
 }
 
-/// Add an IRI or abbreviatedIRI tag to elem
+/// Add an IRI or abbreviatedIRI attribute to elem
 fn iri_or_curie<'a>(mapping:&'a PrefixMapping, elem: &mut BytesStart, iri: &str) {
     match mapping.shrink_iri(&(*iri)[..]) {
         Ok(curie) => {
@@ -70,6 +78,9 @@ fn iri_or_curie<'a>(mapping:&'a PrefixMapping, elem: &mut BytesStart, iri: &str)
 }
 
 /// Write a start and end tag with some contents
+///
+/// `contents` are written with a callback to allow streaming
+/// of the output.
 fn write_start_end<F,W>(w:&mut Writer<W>, tag: &[u8], contents: F)
     where
     F: FnMut(&mut Writer<W>),
@@ -80,7 +91,10 @@ fn write_start_end<F,W>(w:&mut Writer<W>, tag: &[u8], contents: F)
                                         contents);
 }
 
-/// Write a start and end tag with contents but callback on start
+/// Write a start and end tag with contents and updated start tag
+///
+/// Like `write_start_end` but the start tag can be modified (by
+/// adding attributes for example), with a callback.
 fn write_start_end_with_start_callback<F, G, W>(w:&mut Writer<W>, tag: &[u8],
                                                 mut start: F, mut contents: G)
     where
@@ -103,6 +117,7 @@ fn write_start_end_with_start_callback<F, G, W>(w:&mut Writer<W>, tag: &[u8],
         .ok();
 }
 
+/// Write a tag with an IRI attribute.
 fn tag_with_iri<'a, I,W>(w:&mut Writer<W>, mapping:&'a PrefixMapping,
                          tag: &[u8], into_iri: I)
     where I: Into<IRI>,
@@ -117,6 +132,7 @@ fn tag_with_iri<'a, I,W>(w:&mut Writer<W>, mapping:&'a PrefixMapping,
     w.write_event(Event::Empty(bytes_start)).ok();
 }
 
+/// Fetch the name of the tag that is used to render `AxiomKind`
 fn tag_for_kind (axk:AxiomKind) -> &'static [u8] {
     match axk {
         AxiomKind::InverseObjectProperty =>
@@ -146,21 +162,20 @@ fn tag_for_kind (axk:AxiomKind) -> &'static [u8] {
     }
 }
 
+/// A trait for rendering an entity
+///
+/// The implementations of this trait are somewhat inconsistent as to
+/// whether they should render their own containing tag. So,
+/// `Ontology` renders it's own `Ontology` tag, while `DeclareClass`
+/// does not a `Declaration` tag, just the internal `Class` tag.
 trait Render <'a, W>
 {
     /// Render a entity to Write
-    ///
-    /// The intention here is to write out Write, so eventually Write
-    /// should be become a plain old Writer. However, for the moment,
-    /// I need access to the methods in Write so I re-write it
-    /// incrementally.
-    ///
-    /// The complexity of this is paragraph is one reason why I need
-    /// to redo things!
     fn render(&self, w:&mut Writer<W>, mapping: &'a PrefixMapping)
         where W: StdWrite;
 }
 
+/// The types in `Render` are too long to type.
 macro_rules! render {
     ($type:ident, $self:ident, $write:ident, $map:ident,
      $body:tt) => {
@@ -201,6 +216,7 @@ render! {
     }
 }
 
+// Didn't seem worth getting the macro working for generic types.
 impl <'a, W> Render<'a, W> for &'a BTreeSet<Annotation> {
     fn render(&self, w:&mut Writer<W>, m: &'a PrefixMapping)
         where W: StdWrite {
@@ -385,7 +401,8 @@ render!{
         // here. An `Annotation` object will normally render itself
         // including the tags. But the OntologyAnnotation is an
         // AnnotatedAxiom which means that we have already got
-        // `Annotation` tags, so we just need to render 
+        // `Annotation` tags, so we just need to render the inner
+        // contents.
         self.0.annotation_property.render(w, m);
         self.0.annotation_value.render(w, m);
     }
