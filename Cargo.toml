@@ -4,7 +4,7 @@ version = "0.3.0"
 authors = ["Phillip Lord <phillip.lord@russet.org.uk>"]
 
 [dependencies]
-quick-xml="0.12.1"
+quick-xml="0.12.4"
 curie = "0.0.8"
 clap = "2.31.2"
 

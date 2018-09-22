@@ -1,14 +1,17 @@
 use curie::PrefixMapping;
 
+use model::*;
+use vocab;
+
+
 use std::collections::BTreeSet;
 use std::io::BufRead;
 use std::str::from_utf8;
 
+use quick_xml::events::BytesEnd;
 use quick_xml::events::BytesStart;
 use quick_xml::events::Event;
 use quick_xml::Reader;
-
-use model::*;
 
 #[derive(Copy, Clone)]
 enum State {
@@ -20,6 +23,8 @@ struct Read<'a, R>
 where
     R: BufRead,
 {
+    // TODO Ontology needs to be removed from here once we have the
+    // trait based system up and running.
     ont: Ontology,
     build: &'a Build,
     mapping: PrefixMapping,
@@ -27,6 +32,7 @@ where
     buf:Vec<u8>,
     ns_buf:Vec<u8>
 }
+
 
 pub fn read<R: BufRead>(bufread: &mut R) -> (Ontology, PrefixMapping) {
     let b = Build::new();
@@ -290,7 +296,11 @@ impl<'a, R: BufRead> Read<'a, R> {
                         (Some(_),None)
                             if e.local_name() == b"IRI" ||
                             e.local_name() == b"AbbreviatedIRI" => {
-                            annotation_subject = Some(self.iri_r());
+                                annotation_subject = Some(
+                                    IRI::from_xml(self,
+                                                  e.local_name()))
+                                    // TODO Remove
+                                    .unwrap().ok();
                         },
                         (None, None) => {
                             match self.named_entity_r(e) {
@@ -736,7 +746,9 @@ impl<'a, R: BufRead> Read<'a, R> {
                 self.literal_r(e)
             },
             b"AbbreviatedIRI" | b"IRI" => {
-                let iri = self.iri_r();
+                let iri = IRI::from_xml(self, e.local_name())
+                    // TODO remove
+                    .unwrap();
                 AnnotationValue::IRI(iri)
             }
             _ => {
@@ -938,29 +950,6 @@ impl<'a, R: BufRead> Read<'a, R> {
         }
     }
 
-    fn iri_r(&mut self) -> IRI {
-        loop {
-            let e = self.read_event();
-            match e {
-                (ref _ns,Event::Text(ref e)) => {
-                    let iri_s =
-                        self.expand_curie_maybe(e);
-                    return self.build.iri(iri_s);
-                },
-                (ref ns, Event::End(ref e))
-                    if *ns ==b"http://www.w3.org/2002/07/owl#"
-                    && (e.local_name() == b"IRI"
-                        ||
-                        e.local_name() == b"AbbreviatedIRI"
-                    ) =>
-                {
-                    panic!("We panic a lot");
-                },
-                _=>{}
-            }
-        }
-    }
-
     fn attrib_value(&mut self, event: &BytesStart, tag:&[u8]) -> Option<String> {
         for res in event.attributes() {
             match res {
@@ -1009,6 +998,99 @@ impl<'a, R: BufRead> Read<'a, R> {
         }
     }
 }
+
+
+// Rework
+
+fn read_event<R:BufRead>(read:&mut Read<R>)
+              -> (Vec<u8>, Event<'static>)
+{
+    let r = read.reader.read_namespaced_event(&mut read.buf,
+                                              &mut read.ns_buf);
+    match r {
+        Ok((option_ns, event)) => {
+            (option_ns.unwrap_or(b"").to_owned(),
+             event.into_owned())
+        }
+        Err(_) => {
+            // TODO Remove this
+            panic!("We panic a lot");
+        }
+    }
+}
+
+/// Expand a curie if there is an appropriate prefix
+fn expand_curie_maybe<R:BufRead>(r: &mut Read<R>, val:&[u8]) -> String {
+    let val = r.reader.decode(val);
+    match r.mapping.expand_curie_string(&val) {
+        // If we expand use this
+        Ok(n) => n,
+        // Else assume it's a complete URI
+        Err(_e) => val.into_owned(),
+    }
+}
+
+/// Always returns an error
+fn error<R:BufRead, S:Into<String>>(message:S, r: &mut Read<R>)
+                                    -> String
+{
+    format!("Error: {} at {}", message.into(), r.reader.buffer_position())
+}
+
+fn is_owl_name(ns:&[u8], e:&BytesEnd, tag:&[u8]) -> bool {
+    ns == vocab::OWL && e.local_name() == tag
+}
+
+trait FromXML: Sized {
+    fn from_xml<R: BufRead>(newread: &mut Read<R>,
+                            end_tag: &[u8]) -> Result<Self,String> {
+
+        let s = Self::from_xml_nc(newread, end_tag);
+        newread.buf.clear();
+        s
+    }
+
+    fn from_xml_nc<R: BufRead>(newread: &mut Read<R>,
+                               end_tag: &[u8]) -> Result<Self,String>;
+
+}
+
+macro_rules! from_xml {
+    ($type:ident, $r:ident, $end:ident, $body:tt) => {
+        impl FromXML for IRI {
+            fn from_xml_nc<R: BufRead>($r: &mut Read<R>, $end:&[u8])
+                                       -> Result<IRI,String> {
+
+                $body
+            }
+        }
+    }
+}
+
+from_xml! {IRI, r, end,
+        {
+            let mut iri: Option<IRI> = None;
+            loop {
+                let e = read_event(r);
+                match e {
+                    (ref _ns,Event::Text(ref e)) => {
+                        iri = Some(r.build.iri
+                                   (expand_curie_maybe(r, e)));
+                    },
+                    (ref ns, Event::End(ref e))
+                        if is_owl_name(ns,e, end) =>
+                    {
+                        return iri.ok_or_else(
+                            || error("End tag reached early", r)
+                        )
+                    },
+                    _=>{}
+                }
+            }
+        }
+}
+
+
 
 #[cfg(test)]
 mod test {
