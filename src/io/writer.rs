@@ -196,7 +196,7 @@ render! {
         w.write_event(Event::Decl(BytesDecl::new(&b"1.0"[..], None, None)))
             .ok();
 
-        let mut elem = BytesStart::owned_name(io::vocab::ONTOLOGY);
+        let mut elem = BytesStart::owned_name("Ontology");
         elem.push_attribute((b"xmlns" as &[u8], vocab::OWL));
         iri_maybe(&mut elem, "ontologyIRI", &self.id.iri);
         iri_maybe(&mut elem, "versionIRI", &self.id.viri);
@@ -568,7 +568,13 @@ mod test {
 
     use std::fs::File;
     use std::io::BufReader;
+    use std::io::BufRead;
     use std::io::BufWriter;
+
+    fn read_ok<R:BufRead>(bufread: &mut R) -> (Ontology,PrefixMapping)
+    {
+        read(bufread).ok().unwrap()
+    }
 
     #[test]
     fn test_ont_rt() {
@@ -582,13 +588,13 @@ mod test {
         write(&mut BufWriter::new(file), &ont, None);
 
         let file = File::open(&temp_file).ok().unwrap();
-        let (ont2, _) = read(&mut BufReader::new(file));
+        let (ont2, _) = read_ok(&mut BufReader::new(file));
 
         assert_eq!(ont.id.iri, ont2.id.iri);
     }
 
     fn roundtrip(ont: &str) -> (Ontology, PrefixMapping, Ontology, PrefixMapping) {
-        let (ont_orig, prefix_orig) = read(&mut ont.as_bytes());
+        let (ont_orig, prefix_orig) = read_ok(&mut ont.as_bytes());
         let mut temp_file = Temp::new_file().unwrap();
 
         let file = File::create(&temp_file).ok().unwrap();
@@ -599,7 +605,7 @@ mod test {
 
         let file = File::open(&temp_file).ok().unwrap();
 
-        let (ont_round, prefix_round) = read(&mut BufReader::new(&file));
+        let (ont_round, prefix_round) = read_ok(&mut BufReader::new(&file));
 
         temp_file.release();
 

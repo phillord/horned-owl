@@ -1,9 +1,12 @@
 extern crate clap;
+extern crate failure;
 extern crate horned_owl;
 
 use clap::App;
 use clap::Arg;
 use clap::ArgMatches;
+
+use failure::Error;
 
 use horned_owl::io::reader::read;
 use horned_owl::io::writer::write;
@@ -12,7 +15,8 @@ use std::io::BufReader;
 use std::fs::File;
 use std::io::stdout;
 
-fn main() {
+
+fn main() -> Result<(),Error>{
     let matches =
         App::new("horned-round")
         .version("0.1")
@@ -24,15 +28,15 @@ fn main() {
              .index(1))
         .get_matches();
 
-    matcher(matches);
+    matcher(matches)
 }
 
-fn matcher(matches:ArgMatches){
+fn matcher(matches:ArgMatches) -> Result<(),Error>{
     let input = matches.value_of("INPUT").unwrap();
 
     let file = File::open(input).unwrap();
     let mut bufreader = BufReader::new(file);
-    let (o,p) = read(&mut bufreader);
+    let (o,p) = read(&mut bufreader)?;
 
-    write(&mut stdout(),&o,Some(&p))
+    Ok(write(&mut stdout(),&o,Some(&p)))
 }

@@ -269,6 +269,18 @@ named!{
     AnnotationProperty
 }
 
+pub fn declaration(ne: NamedEntity) -> Axiom {
+    match ne {
+        NamedEntity::Class(c) =>
+            Axiom::DeclareClass(DeclareClass(c)),
+        NamedEntity::ObjectProperty(obp) =>
+            Axiom::DeclareObjectProperty(DeclareObjectProperty(obp)),
+        NamedEntity::AnnotationProperty(anp) =>
+            Axiom::DeclareAnnotationProperty
+            (DeclareAnnotationProperty(anp))
+    }
+}
+
 /// An interface providing access to any `Annotation` attached to an
 /// entity.
 trait Annotated {
@@ -845,15 +857,7 @@ impl Ontology {
         where N: Into<NamedEntity>
     {
         self.insert(
-            match ne.into() {
-                NamedEntity::Class(c) =>
-                    Axiom::DeclareClass(DeclareClass(c)),
-                NamedEntity::ObjectProperty(obp) =>
-                    Axiom::DeclareObjectProperty(DeclareObjectProperty(obp)),
-                NamedEntity::AnnotationProperty(anp) =>
-                    Axiom::DeclareAnnotationProperty
-                    (DeclareAnnotationProperty(anp))
-            }
+            declaration(ne.into())
         )
     }
 
@@ -1053,5 +1057,14 @@ mod test{
 
         let ne:NamedEntity = c.clone().into();
         assert_eq!(ne, NamedEntity::Class(c));
+    }
+
+    #[test]
+    fn test_axiom_convertors() {
+        let c = Build::new().class("http://www.example.com");
+
+        let dc = DisjointClass(c.clone().into(), c.clone().into());
+        let _aa:Axiom = dc.into();
+
     }
 }
