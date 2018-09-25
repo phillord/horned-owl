@@ -23,6 +23,9 @@ enum ReadError {
     #[fail(display="Missing element: Expected {} at {}", tag, pos)]
     MissingElement{tag:String,pos:usize},
 
+    #[fail(display="Missing attribute: Expected {} at {}", attribute, pos)]
+    MissingAttribute{attribute:String,pos:usize},
+
     #[fail(display="Unknown Entity: Expected Kind of {}, found {} at {}",kind, found, pos)]
     UnknownEntity{kind:String, found:String, pos:usize}
 }
@@ -140,7 +143,7 @@ impl<'a, R: BufRead> Read<'a, R> {
                             self.subclassof();
                         }
                         (&State::Ontology, b"Prefix") => {
-                            self.prefix(e);
+                            self.prefix(e)?;
                         }
                         (&State::Ontology, b"AnnotationAssertion") => {
                             self.annotation_assertion();
@@ -346,37 +349,20 @@ impl<'a, R: BufRead> Read<'a, R> {
         }
     }
 
-    fn prefix(&mut self, e: &BytesStart) {
-        let mut prefix = None;
-        let mut iri = None;
-
-        for res in e.attributes() {
-            match res {
-                Ok(attrib) => match attrib.key {
-                    b"IRI" => {
-                        iri = Some(self.reader.decode(&attrib.value).into_owned());
-                    }
-                    b"name" => {
-                        prefix = Some(self.reader.decode(&attrib.value).into_owned());
-                    }
-                    _ => {}
-                },
-                Err(e) => {
-                    panic!(
-                        "Error at position{}: {:?}",
-                        self.reader.buffer_position(),
-                        e
-                    );
-                }
-            }
-        }
+    fn prefix(&mut self, e: &BytesStart) -> Result<(),Error> {
+        let iri = read_iri_attr(self, e)?;
+        let prefix = attrib_value(self, e, b"name")?;
 
         match (iri, prefix) {
             (Some(i), Some(p)) => {
                 self.mapping.add_prefix(&p, &i).ok();
+                return Ok(());
             }
-            _ => {
-                println!("Incomplete prefix element");
+            (None, _) => {
+                return Err(error_missing_attribute("IRI", self));
+            }
+            (Some(_), None) => {
+                return Err(error_missing_attribute("name", self));
             }
         }
     }
@@ -1011,8 +997,18 @@ fn error<R:BufRead>(r:&mut Read<R>, message:String) -> ! {
 }
 
 
+fn error_missing_attribute<A:Into<String>,R:BufRead>
+    (attribute:A, r:&mut Read<R>)
+                                      -> Error
+{
+    ReadError::MissingAttribute{
+        attribute:attribute.into(),
+        pos:r.reader.buffer_position()}
+    .into()
+}
+
 fn error_unexpected_end_tag<R:BufRead>(tag:&[u8], r: &mut Read<R>)
-    -> Error
+                                       -> Error
 {
     ReadError::UnexpectedEndTag{tag:r.reader.decode(tag).into_owned(),
                                 pos:r.reader.buffer_position()}.into()
