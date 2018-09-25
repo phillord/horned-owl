@@ -1,17 +1,21 @@
 extern crate clap;
+extern crate failure;
 extern crate horned_owl;
 
 use clap::App;
 use clap::Arg;
 use clap::ArgMatches;
 
+use failure::Error;
+
 use horned_owl::io::reader::read;
+use horned_owl::error::CommandError;
 
 use std::collections::HashMap;
 use std::io::BufReader;
 use std::fs::File;
 
-fn main() {
+fn main() -> Result<(),Error> {
     let matches =
         App::new("horned-parse")
         .version("0.1")
@@ -23,17 +27,18 @@ fn main() {
              .index(1))
         .get_matches();
 
-    matcher(matches);
+    matcher(matches)
 }
 
-fn matcher(matches:ArgMatches){
-    let input = matches.value_of("INPUT").unwrap();
+fn matcher(matches:ArgMatches) -> Result<(),Error> {
+    let input = matches.value_of("INPUT")
+        .ok_or(CommandError::MissingArgument)?;
 
-    let file = File::open(input).unwrap();
+    let file = File::open(input)?;
     let mut bufreader = BufReader::new(file);
-    let (ont, mapping) = read(&mut bufreader);
+    let (ont, mapping) = read(&mut bufreader)?;
 
     let hash_map: HashMap<&String, &String> = mapping.mappings().collect();
     println!("Ontology:\n{:?}\n\nMapping:\n{:?}", ont, hash_map);
-
+    Ok(())
 }

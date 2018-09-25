@@ -13,6 +13,20 @@ use quick_xml::events::BytesStart;
 use quick_xml::events::Event;
 use quick_xml::Reader;
 
+use failure::Error;
+
+#[derive(Debug, Fail)]
+enum ReadError {
+    #[fail(display="End Tag Arrived Unexpectedly: {} at {}", tag, pos)]
+    UnexpectedEndTag{tag:String,pos:usize},
+
+    #[fail(display="Missing element: Expected {} at {}", tag, pos)]
+    MissingElement{tag:String,pos:usize},
+
+    #[fail(display="Unknown Entity: Expected Kind of {}, found {} at {}",kind, found, pos)]
+    UnknownEntity{kind:String, found:String, pos:usize}
+}
+
 #[derive(Copy, Clone)]
 enum State {
     Top,
@@ -34,20 +48,23 @@ where
 }
 
 
-pub fn read<R: BufRead>(bufread: &mut R) -> (Ontology, PrefixMapping) {
+pub fn read<R: BufRead>(bufread: &mut R)
+                        -> Result<(Ontology,PrefixMapping),Error>
+{
     let b = Build::new();
     read_with_build(bufread, &b)
 }
 
-pub fn read_with_build<R: BufRead>(bufread: &mut R, build: &Build) -> (Ontology, PrefixMapping) {
+pub fn read_with_build<R: BufRead>(bufread: &mut R, build: &Build) ->
+    Result<(Ontology,PrefixMapping),Error>
+{
     let reader: Reader<&mut R> = Reader::from_reader(bufread);
     let ont = Ontology::new();
     let mapping = PrefixMapping::default();
 
     let mut read = Read::new(reader, ont, mapping, build);
-    read.parse();
-
-    (read.ont, read.mapping)
+    read.parse()?;
+    Ok((read.ont, read.mapping))
 }
 
 impl<'a, R: BufRead> Read<'a, R> {
@@ -94,7 +111,7 @@ impl<'a, R: BufRead> Read<'a, R> {
         }
     }
 
-    fn parse(&mut self) {
+    fn parse(&mut self) -> Result<(),Error>{
         let mut state = State::Top;
 
         loop {
@@ -117,7 +134,7 @@ impl<'a, R: BufRead> Read<'a, R> {
                             state = State::Ontology;
                         }
                         (&State::Ontology, b"Declaration") => {
-                            self.declaration();
+                            self.declaration()?;
                         }
                         (&State::Ontology, b"SubClassOf") => {
                             self.subclassof();
@@ -172,6 +189,7 @@ impl<'a, R: BufRead> Read<'a, R> {
                 }
             }
         }
+        Ok(())
     }
 
     fn error(&self, message:String) -> ! {
@@ -232,7 +250,11 @@ impl<'a, R: BufRead> Read<'a, R> {
                 {
                     match annotation_property.clone() {
                         Some(an_p) => {
-                            let val = self.annotation_value_r(e);
+                            let val =
+                                AnnotationValue::from_start(self, e)
+                                // TODO Remove
+                                .ok().unwrap();
+
                             annotation = Annotation {
                                 annotation_property: an_p,
                                 annotation_value: val
@@ -240,14 +262,10 @@ impl<'a, R: BufRead> Read<'a, R> {
                             return annotation;
                         },
                         None => {
-                            match self.named_entity_r(e) {
-                                NamedEntity::AnnotationProperty(an_p) => {
-                                    annotation_property=Some(an_p);
-                                }
-                                _=> {
-                                    self.error(format!("We panic a lot"));
-                                }
-                            }
+                            annotation_property =
+                                AnnotationProperty::from_start(self,e)
+                                // TODO: Remove this with ?
+                                .ok();
                         },
                     }
                 },
@@ -278,7 +296,11 @@ impl<'a, R: BufRead> Read<'a, R> {
                     match (annotation_property.clone(),
                            annotation_subject.clone()) {
                         (Some(an_p), Some(an_s)) => {
-                            let annotation_value = self.annotation_value_r(e);
+                            let annotation_value =
+                                AnnotationValue::from_start(self, e)
+                                // TODO Remove
+                                .ok().unwrap();
+
                             let assertion =
                                 AnnotatedAxiom::new(
                                     AssertAnnotation {
@@ -303,14 +325,10 @@ impl<'a, R: BufRead> Read<'a, R> {
                                     .unwrap().ok();
                         },
                         (None, None) => {
-                            match self.named_entity_r(e) {
-                                NamedEntity::AnnotationProperty(an_p) => {
-                                    annotation_property=Some(an_p);
-                                }
-                                _=> {
-                                    panic!("We panic a lot");
-                                }
-                            }
+                            annotation_property =
+                                AnnotationProperty::from_start(self, e)
+                            //TODO Remove
+                                .ok();
                         },
                         _ => {
                             self.error(format!("We panic a lot"));
@@ -363,29 +381,11 @@ impl<'a, R: BufRead> Read<'a, R> {
         }
     }
 
-    fn declaration(&mut self) {
-        loop {
-            let mut e = self.read_event();
-
-            match e {
-                (ref ns, Event::Start(ref mut e))
-                    |
-                (ref ns, Event::Empty(ref mut e))
-                    if *ns == b"http://www.w3.org/2002/07/owl#" =>
-                {
-                    let ne = self.named_entity_r(e);
-                    self.ont.declare(ne);
-                }
-                (ref ns, Event::End(ref mut e))
-                    if *ns == b"http://www.w3.org/2002/07/owl#"
-                        && e.local_name() == b"Declaration" =>
-                {
-                    return;
-                }
-                _ => {}
-            }
-        }
-
+    fn declaration(&mut self)
+        -> Result<bool,Error>
+    {
+        let ne = NamedEntity::from_xml(self, b"Declaration")?;
+        Ok(self.ont.declare(ne))
     }
 
     fn transitive_object_property(&mut self) {
@@ -405,16 +405,17 @@ impl<'a, R: BufRead> Read<'a, R> {
                 (ref ns, Event::Empty(ref mut e))
                     if *ns == b"http://www.w3.org/2002/07/owl#" =>
                 {
-                    let ne = self.named_entity_r(e);
-                    if let NamedEntity::ObjectProperty(op) = ne {
-                        self.ont.insert(
+                    let op = ObjectProperty::from_start(self, e);
+                    self.ont.insert(
                             AnnotatedAxiom::new(
-                                TransitiveObjectProperty(op),
+                                TransitiveObjectProperty(
+                                    // TODO Remove
+                                    op.ok().unwrap()
+                                ),
                                 annotated.clone()
                             )
-                        );
-                        return;
-                    }
+                    );
+                    return;
                 }
                 _ => {}
             }
@@ -436,10 +437,10 @@ impl<'a, R: BufRead> Read<'a, R> {
                     if *ns == b"http://www.w3.org/2002/07/owl#"
                     && e.local_name() == b"ObjectProperty" =>
                 {
-                    let ne = self.named_entity_r(e);
-                    if let NamedEntity::ObjectProperty(op) = ne {
-                        ops.push(op);
-                    }
+                    let op = ObjectProperty::from_start(self, e)
+                        // TODO Remove
+                        .ok().unwrap();
+                    ops.push(op);
                 },
                 (ref ns, Event::End(ref mut e))
                     if *ns == b"http://www.w3.org/2002/07/owl#"
@@ -465,28 +466,24 @@ impl<'a, R: BufRead> Read<'a, R> {
                     if *ns == b"http://www.w3.org/2002/07/owl#"
                     && e.local_name() == b"AnnotationProperty" =>
                 {
-                    let ne = self.named_entity_r(e);
-
-                    if let NamedEntity::AnnotationProperty(op) = ne {
-                        match objectproperty_operand.clone() {
-                            Some(superprop) => {
-                                self.ont.insert(
+                    let op = AnnotationProperty::from_start(self, e)
+                        // Remove
+                        .ok().unwrap();
+                    match objectproperty_operand.clone() {
+                        Some(superprop) => {
+                            self.ont.insert(
                                     SubAnnotationProperty{
                                         super_property:
                                         superprop,
                                         sub_property:
                                         op}
-                                );
-                            }
-                            // Add the new class as an operand
-                            None => {
-                                objectproperty_operand =
-                                    Some(op);
-                            }
+                            );
                         }
-                    }
-                    else{
-                        self.error(format!("{}", "Expecting object property"));
+                        // Add the new class as an operand
+                        None => {
+                            objectproperty_operand =
+                                Some(op);
+                        }
                     }
                 }
                 (ref ns, Event::End(ref mut e))
@@ -740,52 +737,6 @@ impl<'a, R: BufRead> Read<'a, R> {
 
     }
 
-    fn annotation_value_r(&mut self, e: &BytesStart) -> AnnotationValue {
-        match e.local_name() {
-            b"Literal" => {
-                self.literal_r(e)
-            },
-            b"AbbreviatedIRI" | b"IRI" => {
-                let iri = IRI::from_xml(self, e.local_name())
-                    // TODO remove
-                    .unwrap();
-                AnnotationValue::IRI(iri)
-            }
-            _ => {
-                self.error(
-                    format!("Parsing of {} not implemented yet:",
-                            self.reader.decode(e)));
-            }
-        }
-    }
-
-    fn literal_r(&mut self, e: &BytesStart) -> AnnotationValue {
-        let datatype_iri = self.iri_from_attribute_r(e, b"datatypeIRI");
-        let lang = self.attrib_value(e, b"xml:lang");
-
-        let mut literal:Option<String> = None;
-
-        loop {
-            let mut e = self.read_event();
-            match e {
-                (_, Event::Text(ref e)) =>
-                {
-                    literal = Some(self.reader.decode(e).into_owned());
-                }
-                (ref ns, Event::End(ref mut e))
-                    if *ns == b"http://www.w3.org/2002/07/owl#"
-                    && e.local_name() == b"Literal" =>
-                {
-                    return AnnotationValue::PlainLiteral
-                    {datatype_iri: datatype_iri,
-                     lang: lang,
-                     literal: literal};
-                }
-                _ => {}
-            }
-        }
-    }
-
     fn class_r(&mut self, e: &BytesStart) -> Class {
         self.build.class(self.iri_attribute_r(e).unwrap())
     }
@@ -950,23 +901,6 @@ impl<'a, R: BufRead> Read<'a, R> {
         }
     }
 
-    fn attrib_value(&mut self, event: &BytesStart, tag:&[u8]) -> Option<String> {
-        for res in event.attributes() {
-            match res {
-                Ok(attrib) => {
-                    if attrib.key == tag {
-                        return Some(self.reader.decode
-                                    (&attrib.value).into_owned());
-                    }
-                }
-                Err(_e) => {
-                    panic!("We panic a lot");
-                }
-            }
-        }
-        None
-    }
-
     fn iri_attribute_r(&mut self, event: &BytesStart) -> Option<IRI> {
         self.iri_from_attribute_r(event, b"IRI").or_else
             (|| self.iri_from_attribute_r(event, b"abbreviatedIRI"))
@@ -1013,37 +947,241 @@ fn read_event<R:BufRead>(read:&mut Read<R>)
              event.into_owned())
         }
         Err(_) => {
-            // TODO Remove this
+            // TODO Remove this, and return the error
             panic!("We panic a lot");
         }
     }
 }
 
+fn decode_expand_curie_maybe<R:BufRead>(r: &mut Read<R>, val:&[u8]) -> String{
+    let s = r.reader.decode(val).into_owned();
+    expand_curie_maybe(r, s)
+}
+
+
 /// Expand a curie if there is an appropriate prefix
-fn expand_curie_maybe<R:BufRead>(r: &mut Read<R>, val:&[u8]) -> String {
-    let val = r.reader.decode(val);
+fn expand_curie_maybe<R:BufRead>(r: &mut Read<R>, val:String) -> String {
     match r.mapping.expand_curie_string(&val) {
         // If we expand use this
         Ok(n) => n,
         // Else assume it's a complete URI
-        Err(_e) => val.into_owned(),
+        Err(_e) => val,
     }
 }
 
-/// Always returns an error
-fn error<R:BufRead, S:Into<String>>(message:S, r: &mut Read<R>)
-                                    -> String
+fn attrib_value<R:BufRead>(r: &mut Read<R>, event: &BytesStart,
+                           tag:&[u8]) -> Result<Option<String>,Error> {
+    for res in event.attributes() {
+        let attrib = res?;
+        if attrib.key == tag {
+            return Ok(Some(r.reader.decode
+                           (&attrib.value).into_owned()));
+        }
+    }
+
+    Ok(None)
+}
+
+fn read_iri_attr<R:BufRead>(r: &mut Read<R>, event: &BytesStart)
+                            -> Result<Option<IRI>,Error> {
+    let iri = read_a_iri_attr(r, event, b"IRI")?;
+    Ok(
+        if iri.is_some() {iri}
+        else {read_a_iri_attr(r, event, b"abbreviatedIRI")?}
+    )
+ }
+
+fn read_a_iri_attr<R:BufRead>(r: &mut Read<R>,
+                              event: &BytesStart, tag:&[u8])
+                              -> Result<Option<IRI>,Error> {
+    Ok(
+        // check for the attrib, if malformed return
+        attrib_value(r, event, tag)?.
+        // or transform the some String
+            map(|st|
+                // Into an iri
+                r.build.iri(
+                    // or a curie
+                    expand_curie_maybe(r, st))))
+}
+
+// TODO Temporary to be removed
+fn error<R:BufRead>(r:&mut Read<R>, message:String) -> ! {
+    panic!("Error: {} at {}", message, r.reader.buffer_position());
+}
+
+
+fn error_unexpected_end_tag<R:BufRead>(tag:&[u8], r: &mut Read<R>)
+    -> Error
 {
-    format!("Error: {} at {}", message.into(), r.reader.buffer_position())
+    ReadError::UnexpectedEndTag{tag:r.reader.decode(tag).into_owned(),
+                                pos:r.reader.buffer_position()}.into()
+}
+
+fn error_unknown_entity<A:Into<String>, R:BufRead>(kind:A,
+                                                   found: &[u8],
+                                                   r: &mut Read<R>)
+                                                   -> Error {
+    ReadError::UnknownEntity{
+        kind: kind.into(),
+        found: r.reader.decode(found).into_owned(),
+        pos:r.reader.buffer_position()
+    }.into()
+}
+
+fn error_missing_element<R:BufRead>(tag:&[u8], r: &mut Read<R>)
+    -> Error {
+    ReadError::MissingElement{
+        tag: r.reader.decode(tag).into_owned(),
+        pos: r.reader.buffer_position()
+    }.into()
+}
+
+fn is_owl(ns:&[u8]) -> bool {
+    ns == vocab::OWL
 }
 
 fn is_owl_name(ns:&[u8], e:&BytesEnd, tag:&[u8]) -> bool {
-    ns == vocab::OWL && e.local_name() == tag
+    is_owl(ns) && e.local_name() == tag
 }
+
+trait FromStart: Sized {
+    fn from_start<R:BufRead>(r:&mut Read<R>, e:&BytesStart) -> Result<Self,Error>;
+}
+
+macro_rules! from_start {
+    ($type:ident, $r:ident, $e:ident, $body:tt) => {
+        impl FromStart for $type{
+            fn from_start<R: BufRead>($r: &mut Read<R>, $e:&BytesStart)
+                                      -> Result<$type,Error> {
+
+                $body
+            }
+        }
+    }
+}
+
+fn named_entity_from_start<R,T>(r:&mut Read<R>, e:&BytesStart, tag:&[u8])
+                                -> Result<T,Error>
+    where R:BufRead,
+          T:From<IRI>
+{
+    if let Some(iri) = read_iri_attr(r, e)? {
+        if e.local_name() == tag {
+            return Ok(T::from(iri));
+        }
+        else {
+            return Err(error_unknown_entity(::std::str::from_utf8(tag).unwrap(),
+                                            e.local_name(),r ));
+        }
+    }
+    return Err(error_missing_element(b"IRI",r));
+}
+
+fn literal_from_start<R:BufRead>(r:&mut Read<R>, e: &BytesStart)
+                      -> Result<AnnotationValue,Error> {
+
+    let datatype_iri = read_a_iri_attr(r, e, b"datatypeIRI")?;
+    let lang = attrib_value(r, e, b"xml:lang")?;
+
+    let mut literal:Option<String> = None;
+
+    loop {
+        let mut e = r.read_event();
+        match e {
+            (_, Event::Text(ref e)) =>
+            {
+                literal = Some(r.reader.decode(e).into_owned());
+            }
+            (ref ns, Event::End(ref mut e))
+                if is_owl_name(ns, e, b"Literal") =>
+            {
+                return Ok(AnnotationValue::PlainLiteral
+                          {
+                              datatype_iri: datatype_iri,
+                              lang: lang,
+                              literal: literal
+                          });
+            }
+            _ => {
+            }
+        }
+    }
+}
+
+
+from_start! {
+    AnnotationValue, r, e, {
+        match e.local_name() {
+            b"Literal" => {
+                literal_from_start(r, e)
+            }
+            b"AbbreviatedIRI"|b"IRI" => {
+                Ok(AnnotationValue::IRI(IRI::from_xml(r, e.local_name())?))
+            }
+            _ => {
+                let msg = r.reader.decode(e);
+                error(r,format!("Parsing of {} not implemented yet:",
+                                msg))
+            }
+        }
+    }
+}
+
+from_start! {
+    AnnotationProperty, r, e,
+    {
+        named_entity_from_start(r, e, b"AnnotationProperty")
+    }
+}
+
+from_start!{
+    Class, r, e,
+    {
+        named_entity_from_start(r, e, b"Class")
+    }
+}
+
+from_start!{
+    ObjectProperty, r, e,
+    {
+        named_entity_from_start(r, e, b"ObjectProperty")
+    }
+}
+
+
+from_start! {
+    NamedEntity, r, e,
+    {
+        Ok(
+            match e.local_name() {
+                b"Class" => {
+                    NamedEntity::Class
+                        (Class::from_start(r, e)?)
+                },
+                b"ObjectProperty" => {
+                    NamedEntity::ObjectProperty
+                        (ObjectProperty::from_start(r,e)?)
+                }
+                b"AnnotationProperty" => {
+                    NamedEntity::AnnotationProperty
+                        (AnnotationProperty::from_start(r,e)?)
+                }
+                _=> {
+                    return Err(error_unknown_entity("NamedEntity",
+                                                    e.local_name(),r ));
+                }
+            }
+        )
+    }
+}
+
+
+
 
 trait FromXML: Sized {
     fn from_xml<R: BufRead>(newread: &mut Read<R>,
-                            end_tag: &[u8]) -> Result<Self,String> {
+                            end_tag: &[u8]) -> Result<Self,Error> {
 
         let s = Self::from_xml_nc(newread, end_tag);
         newread.buf.clear();
@@ -1051,17 +1189,45 @@ trait FromXML: Sized {
     }
 
     fn from_xml_nc<R: BufRead>(newread: &mut Read<R>,
-                               end_tag: &[u8]) -> Result<Self,String>;
+                               end_tag: &[u8]) -> Result<Self,Error>;
 
 }
 
 macro_rules! from_xml {
     ($type:ident, $r:ident, $end:ident, $body:tt) => {
-        impl FromXML for IRI {
+        impl FromXML for $type {
             fn from_xml_nc<R: BufRead>($r: &mut Read<R>, $end:&[u8])
-                                       -> Result<IRI,String> {
+                                       -> Result<$type,Error> {
 
                 $body
+            }
+        }
+    }
+}
+
+
+from_xml! {
+    NamedEntity,r, end,
+    {
+        let mut ne: Option<NamedEntity> = None;
+        loop {
+            let e = read_event(r);
+            match e {
+                (ref ns, Event::Start(ref e))
+                    |
+                (ref ns, Event::Empty(ref e))
+                    if *ns == b"http://www.w3.org/2002/07/owl#" =>
+                {
+                    ne = Some(NamedEntity::from_start(r,e)?);
+                }
+                (ref ns, Event::End(ref e))
+                    if is_owl_name(ns, e, end) =>
+                {
+                    return ne.ok_or_else(
+                        || error_unexpected_end_tag(end, r)
+                    );
+                },
+                _=>{}
             }
         }
     }
@@ -1075,14 +1241,14 @@ from_xml! {IRI, r, end,
                 match e {
                     (ref _ns,Event::Text(ref e)) => {
                         iri = Some(r.build.iri
-                                   (expand_curie_maybe(r, e)));
+                                   (decode_expand_curie_maybe(r, e)));
                     },
                     (ref ns, Event::End(ref e))
-                        if is_owl_name(ns,e, end) =>
+                        if is_owl_name(ns, e, end) =>
                     {
                         return iri.ok_or_else(
-                            || error("End tag reached early", r)
-                        )
+                            || error_unexpected_end_tag(end, r)
+                        );
                     },
                     _=>{}
                 }
@@ -1091,242 +1257,250 @@ from_xml! {IRI, r, end,
 }
 
 
-
 #[cfg(test)]
 mod test {
     use super::*;
     use std::collections::HashMap;
 
+    fn read_ok<R:BufRead>(bufread: &mut R) -> (Ontology,PrefixMapping)
+    {
+        let r = read(bufread);
+        assert!(r.is_ok(),
+                "Expected ontology, got failure:{:?}",
+                r.err());
+        r.ok().unwrap()
+    }
+
     #[test]
     fn test_simple_ontology_prefix() {
         let ont_s = include_str!("../ont/one-ont.xml");
-        let (_, mapping) = read(&mut ont_s.as_bytes());
+        let (_, mapping) = read_ok(&mut ont_s.as_bytes());
 
         let hash_map: HashMap<&String, &String> = mapping.mappings().collect();
         assert_eq!(6, hash_map.len());
     }
-}
 
-#[test]
-fn test_simple_ontology() {
-    let ont_s = include_str!("../ont/one-ont.xml");
-    let (ont, _) = read(&mut ont_s.as_bytes());
+    #[test]
+    fn test_simple_ontology() {
+        let ont_s = include_str!("../ont/one-ont.xml");
+        let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
-    assert_eq!(*ont.id.iri.unwrap(), "http://example.com/iri");
-}
+        assert_eq!(*ont.id.iri.unwrap(), "http://example.com/iri");
+    }
 
-#[test]
-fn test_simple_ontology_rendered_by_horned() {
-    let ont_s = include_str!("../ont/one-ont-from-horned.xml");
-    let (ont, _) = read(&mut ont_s.as_bytes());
+    #[test]
+    fn test_simple_ontology_rendered_by_horned() {
+        let ont_s = include_str!("../ont/one-ont-from-horned.xml");
+        let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
-    assert_eq!(*ont.id.iri.unwrap(), "http://example.com/iri");
-}
+        assert_eq!(*ont.id.iri.unwrap(), "http://example.com/iri");
+    }
 
-#[test]
-fn test_one_class() {
-    let ont_s = include_str!("../ont/one-class.xml");
-    let (ont, _) = read(&mut ont_s.as_bytes());
+    #[test]
+    fn test_one_class() {
+        let ont_s = include_str!("../ont/one-class.xml");
+        let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
-    assert_eq!(ont.declare_class().count(), 1);
-    assert_eq!(
-        String::from(&ont.declare_class().next().unwrap().0),
-        "http://example.com/iri#C"
-    );
-}
+        assert_eq!(ont.declare_class().count(), 1);
+        assert_eq!(
+            String::from(&ont.declare_class().next().unwrap().0),
+            "http://example.com/iri#C"
+        );
+    }
 
-#[test]
-fn test_one_class_fqn() {
-    let ont_s = include_str!("../ont/one-class-fully-qualified.xml");
-    let (ont, _) = read(&mut ont_s.as_bytes());
+    #[test]
+    fn test_one_class_fqn() {
+        let ont_s = include_str!("../ont/one-class-fully-qualified.xml");
+        let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
-    assert_eq!(ont.declare_class().count(), 1);
-    assert_eq!(
-        String::from(&ont.declare_class().next().unwrap().0),
-        "http://www.russet.org.uk/#C"
-    );
-}
+        assert_eq!(ont.declare_class().count(), 1);
+        assert_eq!(
+            String::from(&ont.declare_class().next().unwrap().0),
+            "http://www.russet.org.uk/#C"
+        );
+    }
 
-#[test]
-fn test_ten_class() {
-    let ont_s = include_str!("../ont/o10.owl");
-    let (ont, _) = read(&mut ont_s.as_bytes());
+    #[test]
+    fn test_ten_class() {
+        let ont_s = include_str!("../ont/o10.owl");
+        let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
-    assert_eq!(ont.declare_class().count(), 10);
-}
+        assert_eq!(ont.declare_class().count(), 10);
+    }
 
-#[test]
-fn test_one_property() {
-    let ont_s = include_str!("../ont/one-oproperty.xml");
-    let (ont, _) = read(&mut ont_s.as_bytes());
+    #[test]
+    fn test_one_property() {
+        let ont_s = include_str!("../ont/one-oproperty.xml");
+        let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
-    assert_eq!(ont.declare_object_property().count(), 1);
-}
+        assert_eq!(ont.declare_object_property().count(), 1);
+    }
 
-#[test]
-fn test_one_subclass() {
-    let ont_s = include_str!("../ont/one-subclass.xml");
-    let (ont, _) = read(&mut ont_s.as_bytes());
+    #[test]
+    fn test_one_subclass() {
+        let ont_s = include_str!("../ont/one-subclass.xml");
+        let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
-    assert_eq!(ont.sub_class().count(), 1);
-}
+        assert_eq!(ont.sub_class().count(), 1);
+    }
 
-#[test]
-fn test_one_some() {
-    let ont_s = include_str!("../ont/one-some.xml");
-    let (ont, _) = read(&mut ont_s.as_bytes());
+    #[test]
+    fn test_one_some() {
+        let ont_s = include_str!("../ont/one-some.xml");
+        let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
-    assert_eq!(ont.sub_class().count(), 1);
-    assert_eq!(ont.declare_object_property().count(), 1);
-}
+        assert_eq!(ont.sub_class().count(), 1);
+        assert_eq!(ont.declare_object_property().count(), 1);
+    }
 
-#[test]
-fn test_one_only() {
-    let ont_s = include_str!("../ont/one-only.xml");
-    let (ont, _) = read(&mut ont_s.as_bytes());
+    #[test]
+    fn test_one_only() {
+        let ont_s = include_str!("../ont/one-only.xml");
+        let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
-    assert_eq!(ont.sub_class().count(), 1);
-    assert_eq!(ont.declare_class().count(), 2);
-    assert_eq!(ont.declare_object_property().count(), 1);
-}
+        assert_eq!(ont.sub_class().count(), 1);
+        assert_eq!(ont.declare_class().count(), 2);
+        assert_eq!(ont.declare_object_property().count(), 1);
+    }
 
-#[test]
-fn test_one_and() {
-    let ont_s = include_str!("../ont/one-and.xml");
-    let (ont, _) = read(&mut ont_s.as_bytes());
+    #[test]
+    fn test_one_and() {
+        let ont_s = include_str!("../ont/one-and.xml");
+        let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
-    assert_eq!(ont.sub_class().count(), 1);
-}
+        assert_eq!(ont.sub_class().count(), 1);
+    }
 
-#[test]
-fn test_one_or() {
-    let ont_s = include_str!("../ont/one-or.xml");
-    let (ont,_ ) = read(&mut ont_s.as_bytes());
+    #[test]
+    fn test_one_or() {
+        let ont_s = include_str!("../ont/one-or.xml");
+        let (ont,_ ) = read_ok(&mut ont_s.as_bytes());
 
-    assert_eq!(ont.sub_class().count(), 1);
-}
+        assert_eq!(ont.sub_class().count(), 1);
+    }
 
-#[test]
-fn test_one_not() {
-    let ont_s = include_str!("../ont/one-not.xml");
-    let (ont, _) = read(&mut ont_s.as_bytes());
+    #[test]
+    fn test_one_not() {
+        let ont_s = include_str!("../ont/one-not.xml");
+        let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
-    assert_eq!(ont.sub_class().count(), 1);
-}
+        assert_eq!(ont.sub_class().count(), 1);
+    }
 
-#[test]
-fn test_one_annotation_property() {
-    let ont_s = include_str!("../ont/one-annotation-property.xml");
-    let (ont, _) = read(&mut ont_s.as_bytes());
-    assert_eq!(ont.declare_annotation_property().count(), 1);
-}
+    #[test]
+    fn test_one_annotation_property() {
+        let ont_s = include_str!("../ont/one-annotation-property.xml");
+        let (ont, _) = read_ok(&mut ont_s.as_bytes());
+        assert_eq!(ont.declare_annotation_property().count(), 1);
+    }
 
-#[test]
-fn test_one_annotation() {
-    let ont_s = include_str!("../ont/one-annotation.xml");
-    let (ont, _) = read(&mut ont_s.as_bytes());
-    assert_eq!(ont.declare_annotation_property().count(), 1);
-    assert_eq!(ont.assert_annotation().count(), 1);
-}
+    #[test]
+    fn test_one_annotation() {
+        let ont_s = include_str!("../ont/one-annotation.xml");
+        let (ont, _) = read_ok(&mut ont_s.as_bytes());
+        assert_eq!(ont.declare_annotation_property().count(), 1);
+        assert_eq!(ont.assert_annotation().count(), 1);
+    }
 
-#[test]
-fn test_one_label_non_abbreviated() {
-    let ont_s = include_str!("../ont/one-label-non-abbreviated-iri.xml");
-    let (ont, _) = read(&mut ont_s.as_bytes());
+    #[test]
+    fn test_one_label_non_abbreviated() {
+        let ont_s = include_str!("../ont/one-label-non-abbreviated-iri.xml");
+        let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
-    assert_eq!(ont.assert_annotation().count(), 1);
-}
-
-
-#[test]
-fn test_one_label() {
-    let ont_s = include_str!("../ont/one-label.xml");
-    let (ont, _) = read(&mut ont_s.as_bytes());
-
-    assert_eq!(ont.assert_annotation().count(), 1);
-}
-
-#[test]
-fn test_one_ontology_annotation() {
-    let ont_s = include_str!("../ont/one-ontology-annotation.xml");
-    let (ont, _) = read(&mut ont_s.as_bytes());
-
-    assert_eq!(ont.ontology_annotation().count(), 1);
-}
-
-#[test]
-fn test_one_equivalent_class() {
-    let ont_s = include_str!("../ont/one-equivalent.xml");
-    let (ont, _) = read(&mut ont_s.as_bytes());
-
-    assert_eq!(ont.equivalent_class().count(), 1);
-}
-
-#[test]
-fn test_one_disjoint_class() {
-    let ont_s = include_str!("../ont/one-disjoint.xml");
-    let (ont, _) = read(&mut ont_s.as_bytes());
-
-    assert_eq!(ont.disjoint_class().count(), 1);
-}
-
-#[test]
-fn test_one_sub_property() {
-    let ont_s = include_str!("../ont/one-suboproperty.xml");
-    let (ont, _) = read(&mut ont_s.as_bytes());
-
-    assert_eq!(ont.sub_object_property().count(), 1);
-}
-
-#[test]
-fn test_one_inverse_property() {
-    let ont_s = include_str!("../ont/inverse-properties.xml");
-    let (ont, _) = read(&mut ont_s.as_bytes());
-
-    assert_eq!(ont.inverse_object_property().count(), 1);
-}
-
-#[test]
-fn test_one_transitive_property() {
-    let ont_s = include_str!("../ont/transitive-properties.xml");
-    let (ont, _) = read(&mut ont_s.as_bytes());
-
-    assert_eq!(ont.transitive_object_property().count(), 1);
-}
-
-#[test]
-fn test_subproperty_chain() {
-    let ont_s = include_str!("../ont/subproperty-chain.xml");
-    let (ont, _) = read(&mut ont_s.as_bytes());
-
-    assert_eq!(ont.sub_object_property().count(), 1);
-}
-
-#[test]
-fn test_annotation_on_annotation() {
-    let ont_s = include_str!("../ont/annotation-with-annotation.xml");
-    let (ont, _) = read(&mut ont_s.as_bytes());
+        assert_eq!(ont.assert_annotation().count(), 1);
+    }
 
 
-    let mut ann_i = ont.annotated_axiom(AxiomKind::AssertAnnotation);
-    let ann:&AnnotatedAxiom = ann_i.next().unwrap();
-    assert_eq!(ann.annotation.len(), 1);
-}
+    #[test]
+    fn test_one_label() {
+        let ont_s = include_str!("../ont/one-label.xml");
+        let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
-#[test]
-fn annotated_transitive() {
-    let ont_s = include_str!("../ont/annotation-on-transitive.xml");
-    let (ont, _) = read(&mut ont_s.as_bytes());
+        assert_eq!(ont.assert_annotation().count(), 1);
+    }
 
-    let annotated_axiom = ont.annotated_axiom
-        (AxiomKind::TransitiveObjectProperty).next().unwrap();
-    assert_eq!(annotated_axiom.annotation.len(), 1);
-}
+    #[test]
+    fn test_one_ontology_annotation() {
+        let ont_s = include_str!("../ont/one-ontology-annotation.xml");
+        let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
-#[test]
-fn test_sub_annotation() {
-    let ont_s = include_str!("../ont/sub-annotation.xml");
-    let (ont, _) = read(&mut ont_s.as_bytes());
+        assert_eq!(ont.ontology_annotation().count(), 1);
+    }
 
-    assert_eq!(ont.sub_annotation_property().count(), 1);
+    #[test]
+    fn test_one_equivalent_class() {
+        let ont_s = include_str!("../ont/one-equivalent.xml");
+        let (ont, _) = read_ok(&mut ont_s.as_bytes());
+
+        assert_eq!(ont.equivalent_class().count(), 1);
+    }
+
+    #[test]
+    fn test_one_disjoint_class() {
+        let ont_s = include_str!("../ont/one-disjoint.xml");
+        let (ont, _) = read_ok(&mut ont_s.as_bytes());
+
+        assert_eq!(ont.disjoint_class().count(), 1);
+    }
+
+    #[test]
+    fn test_one_sub_property() {
+        let ont_s = include_str!("../ont/one-suboproperty.xml");
+        let (ont, _) = read_ok(&mut ont_s.as_bytes());
+
+        assert_eq!(ont.sub_object_property().count(), 1);
+    }
+
+    #[test]
+    fn test_one_inverse_property() {
+        let ont_s = include_str!("../ont/inverse-properties.xml");
+        let (ont, _) = read_ok(&mut ont_s.as_bytes());
+
+        assert_eq!(ont.inverse_object_property().count(), 1);
+    }
+
+    #[test]
+    fn test_one_transitive_property() {
+        let ont_s = include_str!("../ont/transitive-properties.xml");
+        let (ont, _) = read_ok(&mut ont_s.as_bytes());
+
+        assert_eq!(ont.transitive_object_property().count(), 1);
+    }
+
+    #[test]
+    fn test_subproperty_chain() {
+        let ont_s = include_str!("../ont/subproperty-chain.xml");
+        let (ont, _) = read_ok(&mut ont_s.as_bytes());
+
+        assert_eq!(ont.sub_object_property().count(), 1);
+    }
+
+    #[test]
+    fn test_annotation_on_annotation() {
+        let ont_s = include_str!("../ont/annotation-with-annotation.xml");
+        let (ont, _) = read_ok(&mut ont_s.as_bytes());
+
+
+        let mut ann_i = ont.annotated_axiom(AxiomKind::AssertAnnotation);
+        let ann:&AnnotatedAxiom = ann_i.next().unwrap();
+        assert_eq!(ann.annotation.len(), 1);
+    }
+
+    #[test]
+    fn annotated_transitive() {
+        let ont_s = include_str!("../ont/annotation-on-transitive.xml");
+        let (ont, _) = read_ok(&mut ont_s.as_bytes());
+
+        let annotated_axiom = ont.annotated_axiom
+            (AxiomKind::TransitiveObjectProperty).next().unwrap();
+        assert_eq!(annotated_axiom.annotation.len(), 1);
+    }
+
+    #[test]
+    fn test_sub_annotation() {
+        let ont_s = include_str!("../ont/sub-annotation.xml");
+        let (ont, _) = read_ok(&mut ont_s.as_bytes());
+
+        assert_eq!(ont.sub_annotation_property().count(), 1);
+    }
 }

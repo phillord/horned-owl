@@ -1,7 +1,8 @@
+extern crate curie;
+#[macro_use] extern crate failure;
 extern crate quick_xml;
 
-extern crate curie;
-
+pub mod error;
 pub mod model;
 pub mod vocab;
 pub mod io;
