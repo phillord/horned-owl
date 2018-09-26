@@ -27,7 +27,10 @@ enum ReadError {
     MissingAttribute{attribute:String,pos:usize},
 
     #[fail(display="Unknown Entity: Expected Kind of {}, found {} at {}",kind, found, pos)]
-    UnknownEntity{kind:String, found:String, pos:usize}
+    UnknownEntity{kind:String, found:String, pos:usize},
+
+    #[fail(display="Unexpected Tag: found {} at {}", tag, pos)]
+    UnexpectedTag{tag:String,pos:usize}
 }
 
 #[derive(Copy, Clone)]
@@ -164,7 +167,8 @@ impl<'a, R: BufRead> Read<'a, R> {
                             self.inverse_object_property();
                         }
                         (&State::Ontology, b"TransitiveObjectProperty") => {
-                            self.transitive_object_property();
+                            let aa = AnnotatedAxiom::from_start(self, e)?;
+                            self.ont.insert(aa);
                         }
                         (&State::Ontology, b"SubAnnotationPropertyOf") => {
                             self.sub_annotation_property();
@@ -373,42 +377,6 @@ impl<'a, R: BufRead> Read<'a, R> {
         let ne = NamedEntity::from_xml(self, b"Declaration")?;
         Ok(self.ont.declare(ne))
     }
-
-    fn transitive_object_property(&mut self) {
-        let mut annotated = BTreeSet::new();
-        loop {
-            let mut e = self.read_event();
-
-            match e {
-                (ref ns, Event::Start(ref e))
-                    if *ns == b"http://www.w3.org/2002/07/owl#" &&
-                    e.local_name() == b"Annotation" =>
-                {
-                    annotated.insert(self.annotation_r());
-                }
-                (ref ns, Event::Start(ref mut e))
-                    |
-                (ref ns, Event::Empty(ref mut e))
-                    if *ns == b"http://www.w3.org/2002/07/owl#" =>
-                {
-                    let op = ObjectProperty::from_start(self, e);
-                    self.ont.insert(
-                            AnnotatedAxiom::new(
-                                TransitiveObjectProperty(
-                                    // TODO Remove
-                                    op.ok().unwrap()
-                                ),
-                                annotated.clone()
-                            )
-                    );
-                    return;
-                }
-                _ => {}
-            }
-        }
-
-    }
-
 
     fn object_property_r(&mut self) -> Vec<ObjectProperty>{
         let mut ops: Vec<ObjectProperty> = Vec::new();
@@ -996,7 +964,6 @@ fn error<R:BufRead>(r:&mut Read<R>, message:String) -> ! {
     panic!("Error: {} at {}", message, r.reader.buffer_position());
 }
 
-
 fn error_missing_attribute<A:Into<String>,R:BufRead>
     (attribute:A, r:&mut Read<R>)
                                       -> Error
@@ -1006,6 +973,14 @@ fn error_missing_attribute<A:Into<String>,R:BufRead>
         pos:r.reader.buffer_position()}
     .into()
 }
+
+fn error_unexpected_tag<R:BufRead>(tag:&[u8], r: &mut Read<R>)
+                                       -> Error
+{
+    ReadError::UnexpectedTag{tag:r.reader.decode(tag).into_owned(),
+                             pos:r.reader.buffer_position()}.into()
+}
+
 
 fn error_unexpected_end_tag<R:BufRead>(tag:&[u8], r: &mut Read<R>)
                                        -> Error
@@ -1131,6 +1106,66 @@ from_start! {
     }
 }
 
+
+fn axiom_from_start<R:BufRead>(r:&mut Read<R>, e:&BytesStart, axiom_kind:&[u8])
+                               -> Result<Axiom, Error> {
+    Ok(
+        match axiom_kind
+        {
+            b"TransitiveObjectProperty" => {
+                Axiom::TransitiveObjectProperty
+                    (TransitiveObjectProperty
+                     (ObjectProperty::from_start(r, e)?))
+            }
+            _ => {
+                return Err(error_unexpected_tag(axiom_kind,r));
+            }
+        }
+    )
+}
+
+from_start! {
+    AnnotatedAxiom, r, e,
+    {
+        let mut annotation: BTreeSet<Annotation> = BTreeSet::new();
+        let mut axiom: Option<Axiom> = None;
+        let axiom_kind:&[u8] = e.local_name();
+        loop {
+            let e = read_event(r);
+            match e {
+                (ref ns, Event::Start(ref e))
+                    |
+                (ref ns, Event::Empty(ref e))
+                    if is_owl(ns) =>
+                {
+                    match e.local_name() {
+                        b"Annotation" => {
+                            annotation.insert
+                                (Annotation::from_xml(r, b"Annotation")?);
+                        }
+                        _ => {
+                            axiom =
+                                Some(axiom_from_start(r,e,axiom_kind)?);
+                        }
+                    }
+                }
+                (ref ns, Event::End(ref e))
+                    if is_owl_name(ns, e, axiom_kind) =>
+                {
+                    if axiom.is_none() {
+                        error_unexpected_end_tag(axiom_kind, r);
+                    }
+                    return Ok(AnnotatedAxiom{
+                        annotation:annotation, axiom:axiom.unwrap()
+                    })
+                },
+                _=>{}
+            }
+        }
+    }
+}
+
+
 from_start!{
     Class, r, e,
     {
@@ -1201,6 +1236,46 @@ macro_rules! from_xml {
     }
 }
 
+
+from_xml! {
+    Annotation, r, end,
+    {
+
+        let mut ap:Option<AnnotationProperty> = None;
+        let mut av:Option<AnnotationValue> = None;
+
+        loop {
+            let e = r.read_event();
+            match e {
+                (ref ns, Event::Start(ref e))
+                |
+                (ref ns, Event::Empty(ref e))
+                    if is_owl(ns) =>
+                {
+                    match e.local_name() {
+                        b"AnnotationProperty" =>
+                            ap = Some(AnnotationProperty::from_start(r, e)?),
+                        _ =>
+                            av = Some(AnnotationValue::from_start(r, e)?),
+                    }
+                }
+                (ref ns, Event::End(ref e))
+                    if is_owl_name(ns, e, end) =>
+                {
+                    if ap.is_none() || av.is_none() {
+                        return Err(error_unexpected_end_tag(end, r));
+                    }
+                    return Ok(Annotation{
+                        annotation_property:ap.unwrap(),
+                        annotation_value:av.unwrap()
+                    });
+                },
+                _ =>{}
+            }
+        }
+    }
+
+}
 
 from_xml! {
     NamedEntity,r, end,
@@ -1492,6 +1567,16 @@ mod test {
         assert_eq!(annotated_axiom.annotation.len(), 1);
     }
 
+    #[test]
+    fn two_annotated_transitive() {
+        let ont_s = include_str!("../ont/two-annotation-on-transitive.xml");
+        let (ont, _) = read_ok(&mut ont_s.as_bytes());
+
+        let annotated_axiom = ont.annotated_axiom
+            (AxiomKind::TransitiveObjectProperty).next().unwrap();
+
+        assert_eq!(annotated_axiom.annotation.len(), 2);
+    }
     #[test]
     fn test_sub_annotation() {
         let ont_s = include_str!("../ont/sub-annotation.xml");
