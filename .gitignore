@@ -8,3 +8,5 @@ Cargo.lock
 /src/main.rs
 /Makefile
 /src/ont/temp.owl
+/src/ont/owl-xml/family-other.owl
+/src/ont/owl-xml/family.owl
