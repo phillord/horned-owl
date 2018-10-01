@@ -629,7 +629,7 @@ mod test {
     #[test]
     fn round_one_ont() {
         let (ont_orig, _prefix_orig, ont_round, _prefix_round) =
-            roundtrip(include_str!("../ont/one-ont.xml"));
+            roundtrip(include_str!("../ont/owl-xml/one-ont.owl"));
 
         assert_eq!(ont_orig.id.iri, ont_round.id.iri);
     }
@@ -637,7 +637,7 @@ mod test {
     #[test]
     fn round_one_ont_prefix() {
         let (_ont_orig, prefix_orig, _ont_round, prefix_round) =
-            roundtrip(include_str!("../ont/one-ont.xml"));
+            roundtrip(include_str!("../ont/owl-xml/one-ont.owl"));
 
         let prefix_orig_map: HashMap<&String, &String> = prefix_orig.mappings().collect();
 
@@ -649,103 +649,103 @@ mod test {
     #[test]
     fn round_one_subclass() {
         let (ont_orig, _prefix_orig, ont_round, _prefix_round) =
-            roundtrip(include_str!("../ont/one-subclass.xml"));
+            roundtrip(include_str!("../ont/owl-xml/one-subclass.owl"));
 
         assert_eq!(ont_orig, ont_round);
     }
 
     #[test]
     fn round_one_some() {
-        assert_round(include_str!("../ont/one-some.xml"));
+        assert_round(include_str!("../ont/owl-xml/one-some.owl"));
     }
 
     #[test]
     fn round_one_only() {
-        assert_round(include_str!("../ont/one-only.xml"));
+        assert_round(include_str!("../ont/owl-xml/one-only.owl"));
     }
 
     #[test]
     fn round_one_and() {
-        assert_round(include_str!("../ont/one-and.xml"));
+        assert_round(include_str!("../ont/owl-xml/one-and.owl"));
     }
 
     #[test]
     fn round_one_or() {
-        assert_round(include_str!("../ont/one-or.xml"));
+        assert_round(include_str!("../ont/owl-xml/one-or.owl"));
     }
 
     #[test]
     fn round_one_not() {
-        assert_round(include_str!("../ont/one-not.xml"));
+        assert_round(include_str!("../ont/owl-xml/one-not.owl"));
     }
 
     #[test]
     fn round_one_annotation_property() {
-        assert_round(include_str!("../ont/one-annotation-property.xml"));
+        assert_round(include_str!("../ont/owl-xml/one-annotation-property.owl"));
     }
 
     #[test]
     fn round_one_annotation() {
-        assert_round(include_str!("../ont/one-annotation.xml"));
+        assert_round(include_str!("../ont/owl-xml/one-annotation.owl"));
     }
 
     #[test]
     fn round_one_label() {
-        assert_round(include_str!("../ont/one-label.xml"));
+        assert_round(include_str!("../ont/owl-xml/one-label.owl"));
     }
 
     #[test]
     fn round_one_comment() {
-        assert_round(include_str!("../ont/one-comment.xml"));
+        assert_round(include_str!("../ont/owl-xml/one-comment.owl"));
     }
 
     #[test]
     fn round_one_ontology_annotation() {
-        assert_round(include_str!("../ont/one-ontology-annotation.xml"));
+        assert_round(include_str!("../ont/owl-xml/one-ontology-annotation.owl"));
     }
 
     #[test]
     fn round_one_equivalent_class() {
-        assert_round(include_str!("../ont/one-equivalent.xml"));
+        assert_round(include_str!("../ont/owl-xml/one-equivalent.owl"));
     }
 
     #[test]
     fn round_one_disjoint_class() {
-        assert_round(include_str!("../ont/one-disjoint.xml"));
+        assert_round(include_str!("../ont/owl-xml/one-disjoint.owl"));
     }
 
     #[test]
     fn round_one_sub_property() {
-        assert_round(include_str!("../ont/one-suboproperty.xml"));
+        assert_round(include_str!("../ont/owl-xml/one-suboproperty.owl"));
     }
 
     #[test]
     fn round_one_inverse() {
-        assert_round(include_str!("../ont/inverse-properties.xml"));
+        assert_round(include_str!("../ont/owl-xml/inverse-properties.owl"));
     }
 
     #[test]
     fn round_one_transitive() {
-        assert_round(include_str!("../ont/transitive-properties.xml"));
+        assert_round(include_str!("../ont/owl-xml/transitive-properties.owl"));
     }
 
     #[test]
     fn round_one_annotated_transitive() {
-        assert_round(include_str!("../ont/annotation-on-transitive.xml"));
+        assert_round(include_str!("../ont/owl-xml/annotation-on-transitive.owl"));
     }
 
     #[test]
     fn round_one_subproperty_chain() {
-        assert_round(include_str!("../ont/subproperty-chain.xml"));
+        assert_round(include_str!("../ont/owl-xml/subproperty-chain.owl"));
     }
 
     #[test]
     fn round_annotation_on_annotation() {
-        assert_round(include_str!("../ont/annotation-with-annotation.xml"));
+        assert_round(include_str!("../ont/owl-xml/annotation-with-annotation.owl"));
     }
 
     #[test]
     fn round_sub_annotation() {
-        assert_round(include_str!("../ont/sub-annotation.xml"));
+        assert_round(include_str!("../ont/owl-xml/sub-annotation.owl"));
     }
 }
