@@ -6,8 +6,11 @@ description = "Library and Command Line tools for OWL Ontologies"
 
 repository = "https://github.com/phillord/horned-owl"
 
-keywords = ["xml", "ontology", "owl", "command line"]
-license = "LGPL3"
+keywords = ["xml", "ontology", "OWL", "command"]
+categories = ["command-line-utilities", "parsing",
+              "rendering", "science", "data-structures"]
+
+license = "LGPL-3.0"
 
 [dependencies]
 quick-xml="0.12.4"
