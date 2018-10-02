@@ -18,19 +18,6 @@
 //!
 //! At the moment, the library is in early stages and it is not a
 //! complete implementation of the OWL specification.
-//!
-//! # Roadmap
-//!
-//! I am working incrementally toward a full implementation. I plan to
-//! add semantics in a demand-led way (i.e. as I need it!). Currently,
-//! serialisation is to/from OWL Presentation format only, but RDF
-//! serialisation will be supported.
-//!
-//! - 0.3 Add vocab.rs
-//! - 0.4 Infrastructure for parsable command line tools
-//! - 0.5 More command line tools
-//! - 0.6 OWL Primer ontology read/write
-//! - 0.7 RDF IO
 
 use std::cell::RefCell;
 use std::collections::BTreeMap;
