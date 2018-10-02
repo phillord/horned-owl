@@ -159,6 +159,10 @@ fn tag_for_kind (axk:AxiomKind) -> &'static [u8] {
             b"Declaration",
         AxiomKind::DeclareAnnotationProperty =>
             b"Declaration",
+        AxiomKind::DeclareDataProperty =>
+            b"Declaration",
+        AxiomKind::DeclareNamedIndividual =>
+            b"Declaration",
         AxiomKind::OntologyAnnotation =>
             b"Annotation",
     }
@@ -273,6 +277,20 @@ render! {
     }
 }
 
+render! {
+    DeclareDataProperty, self, w, m,
+    {
+        (&self.0).render(w, m);
+    }
+}
+
+render! {
+    DeclareNamedIndividual, self, w, m,
+    {
+        (&self.0).render(w, m);
+    }
+}
+
 render!{
     AnnotatedAxiom, self, w, m,
     {
@@ -305,6 +323,20 @@ render!{
     Class, self, w, m,
     {
         tag_with_iri(w, m, b"Class", self);
+    }
+}
+
+render! {
+    DataProperty, self, w, m,
+    {
+        tag_with_iri(w, m, b"DataProperty", self);
+    }
+}
+
+render! {
+    NamedIndividual, self, w, m,
+    {
+        tag_with_iri(w, m, b"NamedIndividual", self);
     }
 }
 
@@ -387,6 +419,12 @@ render! {
                 ax.render(w, m);
             }
             Axiom::DeclareAnnotationProperty(ax) => {
+                ax.render(w, m);
+            }
+            Axiom::DeclareDataProperty(ax) => {
+                ax.render(w, m);
+            }
+            Axiom::DeclareNamedIndividual(ax) => {
                 ax.render(w, m);
             }
             Axiom::OntologyAnnotation(ax) => {
@@ -573,7 +611,11 @@ mod test {
 
     fn read_ok<R:BufRead>(bufread: &mut R) -> (Ontology,PrefixMapping)
     {
-        read(bufread).ok().unwrap()
+        let r = read(bufread);
+        assert!(r.is_ok(),
+                "Expected ontology, got failure:{:?}",
+                r.err());
+        r.ok().unwrap()
     }
 
     #[test]
@@ -748,4 +790,15 @@ mod test {
     fn round_sub_annotation() {
         assert_round(include_str!("../ont/owl-xml/sub-annotation.owl"));
     }
+
+    #[test]
+    fn round_data_property() {
+        assert_round(include_str!("../ont/owl-xml/data-property.owl"));
+    }
+
+    #[test]
+    fn round_named_individual() {
+        assert_round(include_str!("../ont/owl-xml/named-individual.owl"));
+    }
+
 }

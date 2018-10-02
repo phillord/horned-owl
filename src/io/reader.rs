@@ -576,6 +576,20 @@ from_start!{
 }
 
 from_start!{
+    DataProperty, r, e,
+    {
+        named_entity_from_start(r, e, b"DataProperty")
+    }
+}
+
+from_start!{
+    NamedIndividual, r, e,
+    {
+        named_entity_from_start(r, e, b"NamedIndividual")
+    }
+}
+
+from_start!{
     ObjectPropertyExpression, r, e,
     {
         Ok(
@@ -609,10 +623,16 @@ from_start! {
                     Class::from_start(r, e)?.into()
                 },
                 b"ObjectProperty" => {
-                    ObjectProperty::from_start(r,e)?.into()
+                    ObjectProperty::from_start(r, e)?.into()
                 }
                 b"AnnotationProperty" => {
-                    AnnotationProperty::from_start(r,e)?.into()
+                    AnnotationProperty::from_start(r, e)?.into()
+                }
+                b"DataProperty" => {
+                    DataProperty::from_start(r, e)?.into()
+                }
+                b"NamedIndividual" => {
+                    NamedIndividual::from_start(r, e)?.into()
                 }
                 _=> {
                     return Err(error_unknown_entity("NamedEntity",
@@ -1036,6 +1056,23 @@ mod test {
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
         assert_eq!(ont.sub_annotation_property().count(), 1);
+    }
+
+
+    #[test]
+    fn test_data_property() {
+        let ont_s = include_str!("../ont/owl-xml/data-property.owl");
+        let (ont, _) = read_ok(&mut ont_s.as_bytes());
+
+        assert_eq!(ont.declare_data_property().count(), 1);
+    }
+
+    #[test]
+    fn test_named_individual() {
+        let ont_s = include_str!("../ont/owl-xml/named-individual.owl");
+        let (ont, _) = read_ok(&mut ont_s.as_bytes());
+
+        assert_eq!(ont.declare_named_individual().count(), 1);
     }
 
 }

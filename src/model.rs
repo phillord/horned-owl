@@ -161,6 +161,43 @@ impl Build{
     {
         AnnotationProperty(self.iri(s))
     }
+
+    /// Constructs a new `DataProperty`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use horned_owl::model::*;
+    /// let b = Build::new();
+    /// let dp1 = b.data_property("http://www.example.com".to_string());
+    /// let dp2 = b.data_property("http://www.example.com");
+    ///
+    /// assert_eq!(dp1, dp2);
+    /// ```
+    pub fn data_property<S>(&self, s:S) -> DataProperty
+        where S: Into<String>
+    {
+        DataProperty(self.iri(s))
+    }
+
+    /// Constructs a new `NamedIndividual`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use horned_owl::model::*;
+    /// let b = Build::new();
+    /// let ni1 = b.named_individual("http://www.example.com".to_string());
+    /// let ni2 = b.named_individual("http://www.example.com");
+    ///
+    /// assert_eq!(ni1, ni2);
+    /// ```
+    pub fn named_individual<S>(&self, s:S) -> NamedIndividual
+        where S: Into<String>
+    {
+        NamedIndividual(self.iri(s))
+    }
+
 }
 
 macro_rules! named {
@@ -253,7 +290,19 @@ named!{
     /// The `Annotation` describes that part of the ontology. It is
     /// not part of the description of the world, but a description of
     /// the ontology itself.
-    AnnotationProperty
+    AnnotationProperty,
+
+    /// An OWL
+    /// [DataProperty](https://www.w3.org/TR/2012/REC-owl2-primer-20121211/#Datatypes)
+    /// is a relationship between part of an ontology and some
+    /// concrete information.
+    DataProperty,
+
+    /// An OWL
+    /// [NamedIndividual](https://www.w3.org/TR/2012/REC-owl2-primer-20121211/#Classes_and_Instances)
+    /// is an individual in the ontology which is specifically known
+    /// about and can be identified by name.
+    NamedIndividual
 }
 
 pub fn declaration(ne: NamedEntity) -> Axiom {
@@ -264,7 +313,12 @@ pub fn declaration(ne: NamedEntity) -> Axiom {
             Axiom::DeclareObjectProperty(DeclareObjectProperty(obp)),
         NamedEntity::AnnotationProperty(anp) =>
             Axiom::DeclareAnnotationProperty
-            (DeclareAnnotationProperty(anp))
+            (DeclareAnnotationProperty(anp)),
+        NamedEntity::DataProperty(dp) =>
+            Axiom::DeclareDataProperty
+            (DeclareDataProperty(dp)),
+        NamedEntity::NamedIndividual(ni) =>
+            Axiom::DeclareNamedIndividual(DeclareNamedIndividual(ni)),
     }
 }
 
@@ -548,6 +602,18 @@ axioms!{
     /// See also [`DeclareClass`](struct.DeclareClass.html)
     DeclareAnnotationProperty (AnnotationProperty),
 
+    /// Declares that an IRI represents a DataProperty in the
+    /// ontology.
+    ///
+    /// See also [`DeclareClass`](struct.DeclareClass.html)
+    DeclareDataProperty (DataProperty),
+
+    /// Declare that an IRI represents a NamedIndividual in the
+    /// ontology.
+    ///
+    /// See also [`DeclareClass`](struct.DeclareClass.html)
+    DeclareNamedIndividual (NamedIndividual),
+
     // Class Axioms
 
     /// A subclass relationship between two `ClassExpression`.
@@ -634,6 +700,8 @@ axioms!{
 onimpl!{DeclareClass, declare_class}
 onimpl!{DeclareObjectProperty, declare_object_property}
 onimpl!{DeclareAnnotationProperty, declare_annotation_property}
+onimpl!{DeclareDataProperty, declare_data_property}
+onimpl!{DeclareNamedIndividual, declare_named_individual}
 onimpl!{SubClass, sub_class}
 onimpl!{EquivalentClass, equivalent_class}
 onimpl!{DisjointClass, disjoint_class}
