@@ -163,6 +163,8 @@ fn tag_for_kind (axk:AxiomKind) -> &'static [u8] {
             b"Declaration",
         AxiomKind::DeclareNamedIndividual =>
             b"Declaration",
+        AxiomKind::Import =>
+            b"Import",
         AxiomKind::OntologyAnnotation =>
             b"Annotation",
     }
@@ -427,6 +429,9 @@ render! {
             Axiom::DeclareNamedIndividual(ax) => {
                 ax.render(w, m);
             }
+            Axiom::Import(ax) => {
+                ax.render(w, m);
+            }
             Axiom::OntologyAnnotation(ax) => {
                 ax.render(w, m);
             }
@@ -445,6 +450,15 @@ render!{
         // contents.
         self.0.annotation_property.render(w, m);
         self.0.annotation_value.render(w, m);
+    }
+}
+
+render!{
+    Import, self, w, _m,
+    {
+        w.write_event(Event::Text
+                      (BytesText::from_escaped_str
+                       (String::from(&self.0)))).ok();
     }
 }
 
@@ -801,4 +815,9 @@ mod test {
         assert_round(include_str!("../ont/owl-xml/named-individual.owl"));
     }
 
+
+    #[test]
+    fn round_import() {
+        assert_round(include_str!("../ont/owl-xml/import.owl"));
+    }
 }

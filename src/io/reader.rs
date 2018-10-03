@@ -104,6 +104,11 @@ pub fn read_with_build<R: BufRead>(bufread: &mut R, build: &Build) ->
                             }
                         }
                     }
+                    b"Import" => {
+                        ont.insert(
+                            Import(IRI::from_xml(&mut r, b"Import")?)
+                        );
+                    }
                     _ => {
                         let aa = AnnotatedAxiom::from_start(&mut r, e)?;
                         ont.insert(aa);
@@ -1075,4 +1080,11 @@ mod test {
         assert_eq!(ont.declare_named_individual().count(), 1);
     }
 
+    #[test]
+    fn test_import() {
+        let ont_s = include_str!("../ont/owl-xml/import.owl");
+        let (ont, _) = read_ok(&mut ont_s.as_bytes());
+
+        assert_eq!(ont.import().count(), 1);
+    }
 }

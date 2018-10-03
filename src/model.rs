@@ -579,6 +579,9 @@ axioms!{
     /// An annotation associated with this Ontology
     OntologyAnnotation (Annotation),
 
+    /// Declares that an IRI is an import of this ontology
+    Import(IRI),
+
     // Declaration Axioms
 
     /// Declares that an IRI represents a Class in the Ontology
@@ -710,6 +713,7 @@ onimpl!{InverseObjectProperty, inverse_object_property}
 onimpl!{TransitiveObjectProperty, transitive_object_property}
 onimpl!{AssertAnnotation, assert_annotation}
 onimpl!{SubAnnotationProperty, sub_annotation_property}
+onimpl!{Import, import}
 onimpl!{OntologyAnnotation, ontology_annotation}
 
 
