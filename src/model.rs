@@ -198,6 +198,23 @@ impl Build{
         NamedIndividual(self.iri(s))
     }
 
+    /// Constructs a new `Datatype`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use horned_owl::model::*;
+    /// let b = Build::new();
+    /// let ni1 = b.datatype("http://www.example.com".to_string());
+    /// let ni2 = b.datatype("http://www.example.com");
+    ///
+    /// assert_eq!(ni1, ni2);
+    /// ```
+    pub fn datatype<S>(&self, s:S) -> Datatype
+        where S: Into<String>
+    {
+        Datatype(self.iri(s))
+    }
 }
 
 macro_rules! named {
@@ -299,6 +316,11 @@ named!{
     DataProperty,
 
     /// An OWL
+    /// [Datatype](https://www.w3.org/TR/owl2-primer/#Datatypes) is a
+    /// specific kind of data, such as an integer, string or so forth.
+    Datatype,
+
+    /// An OWL
     /// [NamedIndividual](https://www.w3.org/TR/2012/REC-owl2-primer-20121211/#Classes_and_Instances)
     /// is an individual in the ontology which is specifically known
     /// about and can be identified by name.
@@ -319,6 +341,8 @@ pub fn declaration(ne: NamedEntity) -> Axiom {
             (DeclareDataProperty(dp)),
         NamedEntity::NamedIndividual(ni) =>
             Axiom::DeclareNamedIndividual(DeclareNamedIndividual(ni)),
+        NamedEntity::Datatype(dt) =>
+            Axiom::DeclareDatatype(DeclareDatatype(dt))
     }
 }
 
@@ -617,6 +641,10 @@ axioms!{
     /// See also [`DeclareClass`](struct.DeclareClass.html)
     DeclareNamedIndividual (NamedIndividual),
 
+    /// Declare that an IRI represents a Datatype in the ontology.
+    ///
+    DeclareDatatype(Datatype),
+
     // Class Axioms
 
     /// A subclass relationship between two `ClassExpression`.
@@ -705,6 +733,7 @@ onimpl!{DeclareObjectProperty, declare_object_property}
 onimpl!{DeclareAnnotationProperty, declare_annotation_property}
 onimpl!{DeclareDataProperty, declare_data_property}
 onimpl!{DeclareNamedIndividual, declare_named_individual}
+onimpl!{DeclareDatatype, declare_datatype}
 onimpl!{SubClass, sub_class}
 onimpl!{EquivalentClass, equivalent_class}
 onimpl!{DisjointClass, disjoint_class}

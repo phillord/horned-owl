@@ -163,6 +163,8 @@ fn tag_for_kind (axk:AxiomKind) -> &'static [u8] {
             b"Declaration",
         AxiomKind::DeclareNamedIndividual =>
             b"Declaration",
+        AxiomKind::DeclareDatatype =>
+            b"Declaration",
         AxiomKind::Import =>
             b"Import",
         AxiomKind::OntologyAnnotation =>
@@ -293,6 +295,14 @@ render! {
     }
 }
 
+render! {
+    DeclareDatatype, self, w, m,
+    {
+        (&self.0).render(w, m);
+    }
+
+}
+
 render!{
     AnnotatedAxiom, self, w, m,
     {
@@ -335,6 +345,12 @@ render! {
     }
 }
 
+render! {
+    Datatype, self, w, m,
+    {
+        tag_with_iri(w, m, b"Datatype", self);
+    }
+}
 render! {
     NamedIndividual, self, w, m,
     {
@@ -427,6 +443,9 @@ render! {
                 ax.render(w, m);
             }
             Axiom::DeclareNamedIndividual(ax) => {
+                ax.render(w, m);
+            }
+            Axiom::DeclareDatatype(ax) => {
                 ax.render(w, m);
             }
             Axiom::Import(ax) => {
@@ -819,5 +838,10 @@ mod test {
     #[test]
     fn round_import() {
         assert_round(include_str!("../ont/owl-xml/import.owl"));
+    }
+
+    #[test]
+    fn datatype(){
+        assert_round(include_str!("../ont/owl-xml/datatype.owl"));
     }
 }

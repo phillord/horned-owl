@@ -595,6 +595,13 @@ from_start!{
 }
 
 from_start!{
+    Datatype, r, e,
+    {
+        named_entity_from_start(r, e, b"Datatype")
+    }
+}
+
+from_start!{
     ObjectPropertyExpression, r, e,
     {
         Ok(
@@ -638,6 +645,9 @@ from_start! {
                 }
                 b"NamedIndividual" => {
                     NamedIndividual::from_start(r, e)?.into()
+                }
+                b"Datatype" => {
+                    Datatype::from_start(r, e)?.into()
                 }
                 _=> {
                     return Err(error_unknown_entity("NamedEntity",
@@ -1087,4 +1097,13 @@ mod test {
 
         assert_eq!(ont.import().count(), 1);
     }
+
+    #[test]
+    fn test_datatype() {
+        let ont_s = include_str!("../ont/owl-xml/datatype.owl");
+        let (ont, _) = read_ok(&mut ont_s.as_bytes());
+
+        assert_eq!(ont.declare_datatype().count(), 1);
+    }
+
 }
