@@ -398,7 +398,15 @@ render!{
                                 }
                 );
             }
-        }
+            &ClassExpression::ObjectHasValue {ref o, ref i} => {
+                write_start_end(w, b"ObjectHasValue",
+                                |w| {
+                                    o.render(w, m);
+                                    i.render(w, m);
+                                }
+                );
+            }
+      }
     }
 }
 
@@ -844,4 +852,10 @@ mod test {
     fn datatype(){
         assert_round(include_str!("../ont/owl-xml/datatype.owl"));
     }
+
+    #[test]
+    fn object_has_value(){
+        assert_round(include_str!("../ont/owl-xml/object-has-value.owl"));
+    }
+
 }

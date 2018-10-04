@@ -822,7 +822,14 @@ pub enum ClassExpression
     ///
     /// The class of individuals which are not individuals of any of
     /// these classes.
-    Not{ce:Box<ClassExpression>}
+    Not{ce:Box<ClassExpression>},
+
+    /// An existential relationship to an individual
+    ///
+    /// This is the class of individuals `c` which have the
+    /// relationship `o` to another individual `i`. Every individual
+    /// in `c` must have this relationship to the individual `i`
+    ObjectHasValue{o:ObjectProperty, i:NamedIndividual}
 }
 
 impl From<Class> for ClassExpression {

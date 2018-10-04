@@ -514,6 +514,13 @@ from_start! {
                     ClassExpression::Not
                     {ce: Box::new(from_next_tag(r)?)}
                 }
+                b"ObjectHasValue" => {
+                    ClassExpression::ObjectHasValue
+                    {
+                        o:from_next_tag(r)?,
+                        i:from_next_tag(r)?
+                    }
+                }
                 _ => {
                     return Err(error_unexpected_tag(e.local_name(), r))
                 }
@@ -1106,4 +1113,15 @@ mod test {
         assert_eq!(ont.declare_datatype().count(), 1);
     }
 
+    #[test]
+    fn test_has_value() {
+        let ont_s = include_str!("../ont/owl-xml/object-has-value.owl");
+        let (ont, _) = read_ok(&mut ont_s.as_bytes());
+
+        let ss = ont.sub_class().next().unwrap();
+        if let ClassExpression::ObjectHasValue{o:_, i:_} = ss.sub_class{
+            return;
+        }
+        assert!(false);
+    }
 }
