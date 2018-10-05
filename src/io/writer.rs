@@ -314,11 +314,12 @@ render!{
     }
 }
 
-impl <'a, W> Render<'a, W> for &'a Vec<ClassExpression>{
+impl <'a, O:Render<'a, W>, W> Render<'a, W> for &'a Vec<O>{
     fn render(&self, w:&mut Writer<W>, m: &'a PrefixMapping)
-        where W: StdWrite {
-        for ce in self.iter() {
-            ce.render(w, m);
+        where W: StdWrite,
+    {
+        for op in self.iter() {
+            op.render(w, m);
         }
     }
 }
@@ -403,6 +404,13 @@ render!{
                                 |w| {
                                     o.render(w, m);
                                     i.render(w, m);
+                                }
+                );
+            }
+            &ClassExpression::ObjectOneOf {ref o} => {
+                write_start_end(w, b"ObjectOneOf",
+                                |w| {
+                                    o.render(w, m);
                                 }
                 );
             }
@@ -858,4 +866,8 @@ mod test {
         assert_round(include_str!("../ont/owl-xml/object-has-value.owl"));
     }
 
+    #[test]
+    fn object_one_of(){
+        assert_round(include_str!("../ont/owl-xml/object-one-of.owl"));
+    }
 }

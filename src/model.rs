@@ -829,7 +829,13 @@ pub enum ClassExpression
     /// This is the class of individuals `c` which have the
     /// relationship `o` to another individual `i`. Every individual
     /// in `c` must have this relationship to the individual `i`
-    ObjectHasValue{o:ObjectProperty, i:NamedIndividual}
+    ObjectHasValue{o:ObjectProperty, i:NamedIndividual},
+
+    /// An enumeration of individuals
+    ///
+    /// This is the class containing exactly the given set of
+    /// individuals.
+    ObjectOneOf{o:Vec<NamedIndividual>}
 }
 
 impl From<Class> for ClassExpression {

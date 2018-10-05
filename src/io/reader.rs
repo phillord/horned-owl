@@ -521,6 +521,12 @@ from_start! {
                         i:from_next_tag(r)?
                     }
                 }
+                b"ObjectOneOf" => {
+                    ClassExpression::ObjectOneOf
+                    {
+                        o: till_end(r, b"ObjectOneOf")?
+                    }
+                }
                 _ => {
                     return Err(error_unexpected_tag(e.local_name(), r))
                 }
@@ -1123,5 +1129,17 @@ mod test {
             return;
         }
         assert!(false);
+    }
+
+
+    #[test]
+    fn test_one_of() {
+        let ont_s = include_str!("../ont/owl-xml/object-one-of.owl");
+        let (ont, _) = read_ok(&mut ont_s.as_bytes());
+
+        let ss = ont.sub_class().next().unwrap();
+        if let ClassExpression::ObjectOneOf{ref o} = ss.sub_class{
+            assert_eq!(o.len(), 2);
+        }
     }
 }
