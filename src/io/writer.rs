@@ -414,6 +414,13 @@ render!{
                                 }
                 );
             }
+            &ClassExpression::ObjectHasSelf (ref o) => {
+                write_start_end(w, b"ObjectHasSelf",
+                                |w| {
+                                    o.render(w, m);
+                                }
+                );
+            }
       }
     }
 }

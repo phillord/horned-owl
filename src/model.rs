@@ -835,7 +835,13 @@ pub enum ClassExpression
     ///
     /// This is the class containing exactly the given set of
     /// individuals.
-    ObjectOneOf{o:Vec<NamedIndividual>}
+    ObjectOneOf{o:Vec<NamedIndividual>},
+
+    /// The class of individuals which have a relation to themselves
+    ///
+    /// Given a object property `r`, this class defines all the
+    /// individuals where `i r i`.
+    ObjectHasSelf(ObjectProperty)
 }
 
 impl From<Class> for ClassExpression {

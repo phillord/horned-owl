@@ -527,6 +527,10 @@ from_start! {
                         o: till_end(r, b"ObjectOneOf")?
                     }
                 }
+                b"ObjectHasSelf" => {
+                    ClassExpression::ObjectHasSelf
+                        (from_next_tag(r)?)
+                }
                 _ => {
                     return Err(error_unexpected_tag(e.local_name(), r))
                 }
@@ -1131,7 +1135,6 @@ mod test {
         assert!(false);
     }
 
-
     #[test]
     fn test_one_of() {
         let ont_s = include_str!("../ont/owl-xml/object-one-of.owl");
@@ -1140,6 +1143,20 @@ mod test {
         let ss = ont.sub_class().next().unwrap();
         if let ClassExpression::ObjectOneOf{ref o} = ss.sub_class{
             assert_eq!(o.len(), 2);
+        }
+    }
+
+    #[test]
+    fn test_has_self() {
+        let ont_s = include_str!("../ont/owl-xml/object-has-self.owl");
+        let (ont, _) = read_ok(&mut ont_s.as_bytes());
+
+        let ss = ont.sub_class().next().unwrap();
+        if let ClassExpression::ObjectHasSelf(ref o) = ss.sub_class{
+            assert_eq!(
+                String::from(o),
+                "http://example.com/iri#o"
+            )
         }
     }
 }
