@@ -464,13 +464,13 @@ fn till_end<R:BufRead, T:FromStart>(r:&mut Read<R>,
             (ref ns, Event::Empty(ref e))
                 if is_owl(ns) =>
             {
-                let op = T::from_start(r, e)?;
+                let op = from_start(r, e)?;
                 operands.push(op);
             }
             (ref ns, Event::Start(ref e))
                 if is_owl(ns) =>
             {
-                let op = T::from_start(r, e)?;
+                let op = from_start(r, e)?;
                 operands.push(op);
                 discard_till(r, e.local_name())?;
             }
@@ -718,9 +718,9 @@ from_xml! {
                 {
                     match e.local_name() {
                         b"AnnotationProperty" =>
-                            ap = Some(AnnotationProperty::from_start(r, e)?),
+                            ap = Some(from_start(r, e)?),
                         _ =>
-                            av = Some(AnnotationValue::from_start(r, e)?),
+                            av = Some(from_start(r, e)?),
                     }
                 }
                 (ref ns, Event::End(ref e))
@@ -750,7 +750,7 @@ fn from_next_tag<R:BufRead, T:FromStart>(r: &mut Read<R>)-> Result<T,Error> {
             (ref ns, Event::Start(ref e))
                 if is_owl(ns) =>
             {
-                return T::from_start(r, e);
+                return from_start(r, e);
             }
             _ =>{}
         }
