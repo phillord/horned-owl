@@ -623,17 +623,40 @@ from_start!{
     {
         Ok(
             match e.local_name() {
+                b"ObjectProperty" => {
+                    ObjectPropertyExpression::ObjectProperty
+                        (from_start(r, e)?)
+                }
+                b"ObjectInverseOf" => {
+                    ObjectPropertyExpression::InverseObjectProperty
+                        (from_next_tag(r)?)
+                }
+                _ => {
+                    return Err(error_unknown_entity
+                                ("Object Property Expression",
+                                 e.local_name(), r));
+                }
+            }
+        )
+    }
+}
+
+from_start!{
+    SubObjectPropertyExpression, r, e,
+    {
+        Ok(
+            match e.local_name() {
                 b"ObjectPropertyChain" => {
                     let o = till_end(r, b"ObjectPropertyChain")?;
-                    ObjectPropertyExpression::ObjectPropertyChain(o)
+                    SubObjectPropertyExpression::ObjectPropertyChain(o)
 
                 }
                 b"ObjectProperty" => {
-                    ObjectPropertyExpression::
-                    ObjectProperty(from_start(r, e)?)
+                    SubObjectPropertyExpression::
+                    ObjectPropertyExpression(from_start(r, e)?)
                 }
                 _ => {
-                    return Err(error_unknown_entity("Object Property",
+                    return Err(error_unknown_entity("Sub Object Property",
                                                     e.local_name(),
                                                     r));
                 }
@@ -1158,5 +1181,33 @@ mod test {
                 "http://example.com/iri#o"
             )
         }
+    }
+
+    #[test]
+    fn test_inverse() {
+        let ont_s = include_str!("../ont/owl-xml/some-inverse.owl");
+        let (ont, _) = read_ok(&mut ont_s.as_bytes());
+
+        assert_eq!(ont.sub_class().count(), 1);
+        assert_eq!(ont.declare_object_property().count(), 1);
+
+        let sc = ont.sub_class().next().unwrap();
+        let some = &sc.sub_class;
+
+        assert_eq!(
+            match some {
+                ClassExpression::Some{
+                    o: ObjectPropertyExpression::InverseObjectProperty(o),
+                    ce:_
+                } =>
+                {
+                    String::from(o)
+                }
+                _ =>{
+                    "It didn't match".to_string()
+                }
+            },
+            "http://www.example.com#r"
+        );
     }
 }

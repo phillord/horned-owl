@@ -681,7 +681,7 @@ axioms!{
     /// See also: [Property Hierarchies](https://www.w3.org/TR/2012/REC-owl2-primer-20121211/#Property_Hierarchies)
     /// See also: [Property Chains](https://www.w3.org/TR/2012/REC-owl2-primer-20121211/#Property_Chains)
     SubObjectProperty{
-        super_property:ObjectPropertyExpression,
+        super_property:SubObjectPropertyExpression,
         sub_property:ObjectProperty
     },
 
@@ -774,12 +774,18 @@ pub enum AnnotationValue {
 /// A object property expression
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum ObjectPropertyExpression {
+    ObjectProperty(ObjectProperty),
+    InverseObjectProperty(ObjectProperty)
+}
+
+/// A sub-object property expression
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub enum SubObjectPropertyExpression {
     // We use Vec here rather than BTreeSet because, perhaps
     // surprisingly, BTreeSet is not itself hashable.
     ObjectPropertyChain(Vec<ObjectProperty>),
-    ObjectProperty(ObjectProperty)
+    ObjectPropertyExpression(ObjectPropertyExpression)
 }
-
 
 /// A class expression
 ///
@@ -796,7 +802,7 @@ pub enum ClassExpression
     /// This is the anonymous class of individuals `i`, which have the
     /// relationship `o` to a class expression `ce`. Every individual
     /// in `i` must have this relationship to one individual in `ce`.
-    Some{o:ObjectProperty, ce:Box<ClassExpression>},
+    Some{o:ObjectPropertyExpression, ce:Box<ClassExpression>},
 
     /// A universal relationship
     ///
@@ -804,7 +810,7 @@ pub enum ClassExpression
     /// individuals which are related by `o` are instances of
     /// `ce`. This does not imply that the `i` necessarily has any
     /// relation `r`.
-    Only{o:ObjectProperty, ce:Box<ClassExpression>},
+    Only{o:ObjectPropertyExpression, ce:Box<ClassExpression>},
 
     /// The boolean and
     ///
@@ -829,7 +835,7 @@ pub enum ClassExpression
     /// This is the class of individuals `c` which have the
     /// relationship `o` to another individual `i`. Every individual
     /// in `c` must have this relationship to the individual `i`
-    ObjectHasValue{o:ObjectProperty, i:NamedIndividual},
+    ObjectHasValue{o:ObjectPropertyExpression, i:NamedIndividual},
 
     /// An enumeration of individuals
     ///

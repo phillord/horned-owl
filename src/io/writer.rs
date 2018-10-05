@@ -324,7 +324,7 @@ impl <'a, O:Render<'a, W>, W> Render<'a, W> for &'a Vec<O>{
     }
 }
 
-impl <'a, W> Render<'a, W> for (&'a ObjectProperty, &'a Box<ClassExpression>){
+impl <'a, W> Render<'a, W> for (&'a ObjectPropertyExpression, &'a Box<ClassExpression>){
     fn render(&self, w:&mut Writer<W>, m: &'a PrefixMapping)
         where W: StdWrite {
         (&self.0).render(w, m);
@@ -604,18 +604,36 @@ render!{
     }
 }
 
-render!{
+render! {
     ObjectPropertyExpression, self, w, m,
     {
         match self {
-            ObjectPropertyExpression::ObjectPropertyChain(v) => {
+            ObjectPropertyExpression::ObjectProperty(p) => {
+                p.render(w, m);
+            }
+            ObjectPropertyExpression::InverseObjectProperty(p) => {
+                write_start_end(w, b"ObjectInverseOf",
+                                |w| {
+                                    p.render(w, m);
+                                }
+                )
+            }
+        }
+    }
+}
+
+render!{
+    SubObjectPropertyExpression, self, w, m,
+    {
+        match self {
+            SubObjectPropertyExpression::ObjectPropertyChain(v) => {
                 write_start_end(w, b"ObjectPropertyChain", |w| {
                     for op in v {
                         op.render(w, m);
                     }
                 })
             }
-            ObjectPropertyExpression::ObjectProperty(op) => {
+            SubObjectPropertyExpression::ObjectPropertyExpression(op) => {
                 op.render(w, m);
             }
         }
@@ -876,5 +894,10 @@ mod test {
     #[test]
     fn object_one_of(){
         assert_round(include_str!("../ont/owl-xml/object-one-of.owl"));
+    }
+
+    #[test]
+    fn inverse() {
+        assert_round(include_str!("../ont/owl-xml/some-inverse.owl"));
     }
 }
