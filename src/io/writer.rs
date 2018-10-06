@@ -119,6 +119,13 @@ fn write_start_end_with_start_callback<F, G, W>(w:&mut Writer<W>, tag: &[u8],
         .ok();
 }
 
+fn within<'a, C:Render<'a, W>, W>(w:&mut Writer<W>, m:&'a PrefixMapping,
+                                  tag: &[u8], contents:C)
+    where W:StdWrite
+{
+    write_start_end(w, tag, |w| contents.render(w, m));
+}
+
 /// Write a tag with an IRI attribute.
 fn tag_with_iri<'a, I,W>(w:&mut Writer<W>, mapping:&'a PrefixMapping,
                          tag: &[u8], into_iri: I)
@@ -187,7 +194,7 @@ trait Render <'a, W>
 
 /// The types in `Render` are too long to type.
 macro_rules! render {
-    ($type:ident, $self:ident, $write:ident, $map:ident,
+    ($type:ty, $self:ident, $write:ident, $map:ident,
      $body:tt) => {
 
         impl <'a, W> Render<'a, W> for $type {
@@ -324,7 +331,28 @@ impl <'a, O:Render<'a, W>, W> Render<'a, W> for &'a Vec<O>{
     }
 }
 
-impl <'a, W> Render<'a, W> for (&'a ObjectPropertyExpression, &'a Box<ClassExpression>){
+impl <'a, T:Render<'a,W>, W> Render<'a, W> for Box<T>{
+    fn render(&self, w:&mut Writer<W>, m: &'a PrefixMapping)
+        where W: StdWrite
+    {
+        (**self).render(w, m);
+    }
+}
+
+impl <'a, T:Render<'a,W>, W> Render<'a, W> for &'a Box<T>{
+    fn render(&self, w:&mut Writer<W>, m: &'a PrefixMapping)
+        where W: StdWrite
+    {
+        (**self).render(w, m);
+    }
+}
+
+impl <'a,
+      A: Render<'a, W>,
+      B: Render<'a, W>,
+      W>
+
+    Render<'a, W> for (&'a A, &'a B){
     fn render(&self, w:&mut Writer<W>, m: &'a PrefixMapping)
         where W: StdWrite {
         (&self.0).render(w, m);
@@ -336,6 +364,19 @@ render!{
     Class, self, w, m,
     {
         tag_with_iri(w, m, b"Class", self);
+    }
+}
+
+render! {
+    &'a ObjectProperty, self, w, m,
+    {
+        tag_with_iri(w, m, b"ObjectProperty", *self)
+    }
+}
+render! {
+    ObjectProperty, self, w, m,
+    {
+        tag_with_iri(w, m, b"ObjectProperty", self)
     }
 }
 
@@ -366,60 +407,29 @@ render!{
             &ClassExpression::Class(ref c) => {
                 c.render(w, m);
             }
-            &ClassExpression::Some { ref o, ref ce } => {
-                write_start_end(w, b"ObjectSomeValuesFrom",
-                                |w| {
-                                    (o, ce).render(w, m);
-                                });
+            &ClassExpression::Some {ref o, ref ce} => {
+                within(w, m, b"ObjectSomeValuesFrom", (o, ce));
             }
-            &ClassExpression::Only { ref o, ref ce } => {
-                write_start_end(w, b"ObjectAllValuesFrom",
-                                |w| {
-                                    (o, ce).render(w, m);
-                                });
+            &ClassExpression::Only {ref o, ref ce} => {
+                within(w, m, b"ObjectAllValuesFrom", (o, ce));
             }
-            &ClassExpression::And { ref o } => {
-                write_start_end(w, b"ObjectIntersectionOf",
-                                |w| {
-                                    o.render(w, m);
-                                }
-                );
+            &ClassExpression::And {ref o} => {
+                within(w, m, b"ObjectIntersectionOf", o);
             }
-            &ClassExpression::Or { ref o } => {
-                write_start_end(w, b"ObjectUnionOf",
-                                |w| {
-                                    o.render(w, m);
-                                }
-                );
+            &ClassExpression::Or {ref o} => {
+                within(w, m, b"ObjectUnionOf", o);
             }
-            &ClassExpression::Not { ref ce } => {
-                write_start_end(w, b"ObjectComplementOf",
-                                |w| {
-                                    ce.render(w, m);
-                                }
-                );
+            &ClassExpression::Not {ref ce} => {
+                within(w, m, b"ObjectComplementOf", ce);
             }
             &ClassExpression::ObjectHasValue {ref o, ref i} => {
-                write_start_end(w, b"ObjectHasValue",
-                                |w| {
-                                    o.render(w, m);
-                                    i.render(w, m);
-                                }
-                );
+                within(w, m, b"ObjectHasValue", (o, i));
             }
             &ClassExpression::ObjectOneOf {ref o} => {
-                write_start_end(w, b"ObjectOneOf",
-                                |w| {
-                                    o.render(w, m);
-                                }
-                );
+                within(w, m, b"ObjectOneOf", o);
             }
             &ClassExpression::ObjectHasSelf (ref o) => {
-                write_start_end(w, b"ObjectHasSelf",
-                                |w| {
-                                    o.render(w, m);
-                                }
-                );
+                within(w, m, b"ObjectHasSelf", o);
             }
       }
     }
@@ -594,13 +604,6 @@ render!{
     {
         (&self.0).render(w, m);
         (&self.1).render(w, m);
-    }
-}
-
-render!{
-    ObjectProperty, self, w, m,
-    {
-        tag_with_iri(w, m, b"ObjectProperty", self);
     }
 }
 
