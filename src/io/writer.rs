@@ -127,7 +127,7 @@ fn within<'a, C:Render<'a, W>, W>(w:&mut Writer<W>, m:&'a PrefixMapping,
 }
 
 /// Write a tag with an IRI attribute.
-fn tag_with_iri<'a, I,W>(w:&mut Writer<W>, mapping:&'a PrefixMapping,
+fn with_iri<'a, I,W>(w:&mut Writer<W>, mapping:&'a PrefixMapping,
                          tag: &[u8], into_iri: I)
     where I: Into<IRI>,
           W: StdWrite
@@ -350,9 +350,7 @@ impl <'a, T:Render<'a,W>, W> Render<'a, W> for &'a Box<T>{
 impl <'a,
       A: Render<'a, W>,
       B: Render<'a, W>,
-      W>
-
-    Render<'a, W> for (&'a A, &'a B){
+      W> Render<'a, W> for (&'a A, &'a B) {
     fn render(&self, w:&mut Writer<W>, m: &'a PrefixMapping)
         where W: StdWrite {
         (&self.0).render(w, m);
@@ -360,43 +358,56 @@ impl <'a,
     }
 }
 
+impl <'a,
+      A: Render<'a, W>,
+      B: Render<'a, W>,
+      C: Render<'a, W>,
+      W> Render<'a, W> for (&'a A, &'a B, &'a C) {
+    fn render(&self, w:&mut Writer<W>, m: &'a PrefixMapping)
+        where W: StdWrite {
+        (&self.0).render(w, m);
+        (&self.1).render(w, m);
+        (&self.2).render(w, m);
+    }
+}
+
 render!{
     Class, self, w, m,
     {
-        tag_with_iri(w, m, b"Class", self);
+        with_iri(w, m, b"Class", self);
     }
 }
 
 render! {
     &'a ObjectProperty, self, w, m,
     {
-        tag_with_iri(w, m, b"ObjectProperty", *self)
+        with_iri(w, m, b"ObjectProperty", *self)
     }
 }
 render! {
     ObjectProperty, self, w, m,
     {
-        tag_with_iri(w, m, b"ObjectProperty", self)
+        with_iri(w, m, b"ObjectProperty", self)
     }
 }
 
 render! {
     DataProperty, self, w, m,
     {
-        tag_with_iri(w, m, b"DataProperty", self);
+        with_iri(w, m, b"DataProperty", self);
     }
 }
 
 render! {
     Datatype, self, w, m,
     {
-        tag_with_iri(w, m, b"Datatype", self);
+        with_iri(w, m, b"Datatype", self);
     }
 }
 render! {
     NamedIndividual, self, w, m,
     {
-        tag_with_iri(w, m, b"NamedIndividual", self);
+        with_iri(w, m, b"NamedIndividual", self);
     }
 }
 
@@ -500,8 +511,8 @@ render!{
         // AnnotatedAxiom which means that we have already got
         // `Annotation` tags, so we just need to render the inner
         // contents.
-        self.0.annotation_property.render(w, m);
-        self.0.annotation_value.render(w, m);
+        (&self.0.annotation_property,
+         &self.0.annotation_value).render(w, m);
     }
 }
 
@@ -517,9 +528,9 @@ render!{
 render!{
     AssertAnnotation, self, w, m,
     {
-        (&self.annotation.annotation_property).render(w, m);
-        (&self.annotation_subject).render(w, m);
-        (&self.annotation.annotation_value).render(w, m);
+        (&self.annotation.annotation_property,
+         &self.annotation_subject,
+         &self.annotation.annotation_value).render(w, m);
     }
 }
 
@@ -561,49 +572,48 @@ render!{
 render!{
     AnnotationProperty, self, w, m,
     {
-        tag_with_iri(w, m, b"AnnotationProperty", self);
+        with_iri(w, m, b"AnnotationProperty", self);
     }
 }
 
 render!{
     Annotation, self, w, m,
     {
-        write_start_end(w, b"Annotation", |w| {
-            self.annotation_property.render(w,m);
-            self.annotation_value.render(w,m);
-        });
+        within(w, m, b"Annotation",
+               (&self.annotation_property,
+                &self.annotation_value));
     }
 }
 
 render!{
     SubAnnotationProperty, self, w, m,
     {
-        (&self.super_property).render(w, m);
-        (&self.sub_property).render(w, m);
+        (&self.super_property,
+         &self.sub_property).render(w, m);
     }
 }
 
 render!{
     SubClass, self, w, m,
     {
-        (&self.super_class).render(w, m);
-        (&self.sub_class).render(w, m);
+        (&self.super_class,
+         &self.sub_class).render(w, m);
     }
 }
 
 render!{
     EquivalentClass, self, w, m,
     {
-        (&self.0).render(w,m);
-        (&self.1).render(w,m);
+        (&self.0,
+         &self.1).render(w,m);
     }
 }
 
 render!{
     DisjointClass, self, w, m,
     {
-        (&self.0).render(w, m);
-        (&self.1).render(w, m);
+        (&self.0,
+         &self.1).render(w, m);
     }
 }
 
@@ -615,11 +625,7 @@ render! {
                 p.render(w, m);
             }
             ObjectPropertyExpression::InverseObjectProperty(p) => {
-                write_start_end(w, b"ObjectInverseOf",
-                                |w| {
-                                    p.render(w, m);
-                                }
-                )
+                within(w, m, b"ObjectInverseOf", p);
             }
         }
     }
@@ -630,11 +636,7 @@ render!{
     {
         match self {
             SubObjectPropertyExpression::ObjectPropertyChain(v) => {
-                write_start_end(w, b"ObjectPropertyChain", |w| {
-                    for op in v {
-                        op.render(w, m);
-                    }
-                })
+                within(w, m, b"ObjectPropertyChain", v);
             }
             SubObjectPropertyExpression::ObjectPropertyExpression(op) => {
                 op.render(w, m);
@@ -647,8 +649,8 @@ render!{
 render!{
     SubObjectProperty, self, w, m,
     {
-        (&self.super_property).render(w, m);
-        (&self.sub_property).render(w, m)
+        (&self.super_property,
+         &self.sub_property).render(w, m)
     }
 }
 
@@ -663,12 +665,10 @@ render!{
 render!{
     InverseObjectProperty, self, w, m,
     {
-        (&self.0).render(w, m);
-        (&self.1).render(w, m);
+        (&self.0,
+         &self.1).render(w, m);
     }
 }
-
-
 
 #[cfg(test)]
 mod test {
