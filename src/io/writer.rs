@@ -79,59 +79,11 @@ fn iri_or_curie<'a>(mapping:&'a PrefixMapping, elem: &mut BytesStart, iri: &str)
     }
 }
 
-/// Write a start and end tag with some contents
-///
-/// `contents` are written with a callback to allow streaming
-/// of the output.
-fn write_start_end<F,W>(w:&mut Writer<W>, tag: &[u8], contents: F)
-    where
-    F: FnMut(&mut Writer<W>),
-    W: StdWrite
-{
-    write_start_end_with_start_callback(w, tag,
-                                        |_: &mut Writer<W>, _: &mut BytesStart| return,
-                                        contents);
-}
-
-/// Write a start and end tag with contents and updated start tag
-///
-/// Like `write_start_end` but the start tag can be modified (by
-/// adding attributes for example), with a callback.
-fn write_start_end_with_start_callback<F, G, W>(w:&mut Writer<W>, tag: &[u8],
-                                                mut start: F, mut contents: G)
-    where
-    F: FnMut(&mut Writer<W>, &mut BytesStart),
-    G: FnMut(&mut Writer<W>),
-    W: StdWrite
-{
-    let len = tag.len();
-    let mut open = BytesStart::borrowed(tag, len);
-
-    // Pass self like this, because we cannot capture it in the
-    // closure, without failing the borrow checker.
-    start(w, &mut open);
-
-    w.write_event(Event::Start(open)).ok();
-
-    contents(w);
-
-    w.write_event(Event::End(BytesEnd::borrowed(tag)))
-        .ok();
-}
-
-fn within<'a, C:Render<'a, W>, W>(w:&mut Writer<W>, m:&'a PrefixMapping,
-                                  tag: &[u8], contents:C)
-    where W:StdWrite
-{
-    write_start_end(w, tag, |w| contents.render(w, m));
-}
-
 /// Write a tag with an IRI attribute.
 fn with_iri<'a, I,W>(w:&mut Writer<W>, mapping:&'a PrefixMapping,
-                         tag: &[u8], into_iri: I)
+                     tag: &[u8], into_iri: I)
     where I: Into<IRI>,
           W: StdWrite
-
 {
     let iri: IRI = into_iri.into();
     let mut bytes_start = BytesStart::borrowed(tag, tag.len());
@@ -185,11 +137,38 @@ fn tag_for_kind (axk:AxiomKind) -> &'static [u8] {
 /// whether they should render their own containing tag. So,
 /// `Ontology` renders it's own `Ontology` tag, while `DeclareClass`
 /// does not a `Declaration` tag, just the internal `Class` tag.
-trait Render <'a, W>
+trait Render <'a, W:StdWrite>
 {
     /// Render a entity to Write
-    fn render(&self, w:&mut Writer<W>, mapping: &'a PrefixMapping)
-        where W: StdWrite;
+    fn render(&self, w:&mut Writer<W>, mapping: &'a PrefixMapping);
+
+    fn within(&self,
+              w:&mut Writer<W>,
+              m:&'a PrefixMapping,
+              tag: &[u8])
+    {
+        let open = BytesStart::borrowed(tag, tag.len());
+        w.write_event(Event::Start(open)).ok();
+
+        self.render(w, m);
+
+        w.write_event(Event::End(BytesEnd::borrowed(tag)))
+            .ok();
+    }
+
+    fn within_tag(&self,
+                  w:&mut Writer<W>,
+                  m:&'a PrefixMapping,
+                  open: BytesStart)
+    {
+        let clone = open.clone();
+        w.write_event(Event::Start(clone)).ok();
+
+        self.render(w, m);
+
+        w.write_event(Event::End(BytesEnd::borrowed(open.local_name())))
+            .ok();
+    }
 }
 
 /// The types in `Render` are too long to type.
@@ -197,9 +176,8 @@ macro_rules! render {
     ($type:ty, $self:ident, $write:ident, $map:ident,
      $body:tt) => {
 
-        impl <'a, W> Render<'a, W> for $type {
+        impl <'a, W:StdWrite> Render<'a, W> for $type {
             fn render(& $self, $write:&mut Writer<W>, $map: &'a PrefixMapping)
-                where W: StdWrite
                 $body
         }
     }
@@ -233,13 +211,62 @@ render! {
     }
 }
 
-// Didn't seem worth getting the macro working for generic types.
-impl <'a, W> Render<'a, W> for &'a BTreeSet<Annotation> {
-    fn render(&self, w:&mut Writer<W>, m: &'a PrefixMapping)
-        where W: StdWrite {
-        for a in self.iter() {
-            a.render(w, m);
+// Render Impl for container and collection types
+impl <'a, T:Render<'a, W>, W:StdWrite> Render<'a, W> for BTreeSet<T> {
+    fn render(&self, w:&mut Writer<W>, m: &'a PrefixMapping){
+        for item in self.iter() {
+            item.render(w, m);
         }
+    }
+}
+
+impl <'a, O:Render<'a, W>, W:StdWrite> Render<'a, W> for Vec<O>{
+    fn render(&self, w:&mut Writer<W>, m: &'a PrefixMapping)
+    {
+        for op in self.iter() {
+            op.render(w, m);
+        }
+    }
+}
+
+impl <'a, T:Render<'a,W>, W:StdWrite> Render<'a, W> for Box<T>{
+    fn render(&self, w:&mut Writer<W>, m: &'a PrefixMapping)
+    {
+        (**self).render(w, m);
+    }
+}
+
+impl <'a,
+      A:Render<'a, W>,
+      W:StdWrite> Render<'a, W> for (&'a A,) {
+    fn render(&self, w:&mut Writer<W>, m: &'a PrefixMapping)
+    {
+        (&self.0).render(w, m);
+    }
+}
+
+
+impl <'a,
+      A:Render<'a, W>,
+      B:Render<'a, W>,
+      W:StdWrite> Render<'a, W> for (&'a A, &'a B) {
+    fn render(&self, w:&mut Writer<W>, m: &'a PrefixMapping)
+    {
+        (&self.0).render(w, m);
+        (&self.1).render(w, m);
+    }
+}
+
+impl <'a,
+      A: Render<'a, W>,
+      B: Render<'a, W>,
+      C: Render<'a, W>,
+      W:StdWrite> Render<'a, W> for (&'a A, &'a B, &'a C) {
+    fn render(&self, w:&mut Writer<W>, m: &'a PrefixMapping)
+    {
+        (&self.0).render(w, m);
+        (&self.1).render(w, m);
+        (&self.2).render(w, m);
     }
 }
 
@@ -256,14 +283,18 @@ render!{
 }
 
 render!{
+    String, self, w, _m,
+    {
+        w.write_event(Event::Text(BytesText::from_escaped_str(&self[..]))).ok();
+    }
+}
+
+render!{
     IRI, self, w, m,
     {
         let iri_st: String = self.into();
         let iri_shrunk = shrink_iri_maybe(&iri_st[..], m);
-        write_start_end(w, b"IRI", |w| {
-            w.write_event(Event::Text(BytesText::from_escaped_str(&iri_shrunk[..])))
-                .ok();
-        });
+        iri_shrunk.within(w, m, b"IRI");
     }
 }
 
@@ -313,61 +344,11 @@ render! {
 render!{
     AnnotatedAxiom, self, w, m,
     {
-        let tag = tag_for_kind(self.kind());
-        write_start_end(w, tag, |w| {
-            (&self.annotation).render(w, m);
-            self.axiom.render(w, m);
-        });
-    }
-}
-
-impl <'a, O:Render<'a, W>, W> Render<'a, W> for &'a Vec<O>{
-    fn render(&self, w:&mut Writer<W>, m: &'a PrefixMapping)
-        where W: StdWrite,
-    {
-        for op in self.iter() {
-            op.render(w, m);
-        }
-    }
-}
-
-impl <'a, T:Render<'a,W>, W> Render<'a, W> for Box<T>{
-    fn render(&self, w:&mut Writer<W>, m: &'a PrefixMapping)
-        where W: StdWrite
-    {
-        (**self).render(w, m);
-    }
-}
-
-impl <'a, T:Render<'a,W>, W> Render<'a, W> for &'a Box<T>{
-    fn render(&self, w:&mut Writer<W>, m: &'a PrefixMapping)
-        where W: StdWrite
-    {
-        (**self).render(w, m);
-    }
-}
-
-impl <'a,
-      A: Render<'a, W>,
-      B: Render<'a, W>,
-      W> Render<'a, W> for (&'a A, &'a B) {
-    fn render(&self, w:&mut Writer<W>, m: &'a PrefixMapping)
-        where W: StdWrite {
-        (&self.0).render(w, m);
-        (&self.1).render(w, m);
-    }
-}
-
-impl <'a,
-      A: Render<'a, W>,
-      B: Render<'a, W>,
-      C: Render<'a, W>,
-      W> Render<'a, W> for (&'a A, &'a B, &'a C) {
-    fn render(&self, w:&mut Writer<W>, m: &'a PrefixMapping)
-        where W: StdWrite {
-        (&self.0).render(w, m);
-        (&self.1).render(w, m);
-        (&self.2).render(w, m);
+        (
+            (&self.annotation),
+            (&self.axiom)
+        ).within(w, m,
+                 tag_for_kind(self.kind()));
     }
 }
 
@@ -419,28 +400,28 @@ render!{
                 c.render(w, m);
             }
             &ClassExpression::Some {ref o, ref ce} => {
-                within(w, m, b"ObjectSomeValuesFrom", (o, ce));
+                (o, ce).within(w, m, b"ObjectSomeValuesFrom");
             }
             &ClassExpression::Only {ref o, ref ce} => {
-                within(w, m, b"ObjectAllValuesFrom", (o, ce));
+                (o, ce).within(w, m, b"ObjectAllValuesFrom");
             }
             &ClassExpression::And {ref o} => {
-                within(w, m, b"ObjectIntersectionOf", o);
+                o.within(w, m, b"ObjectIntersectionOf");
             }
             &ClassExpression::Or {ref o} => {
-                within(w, m, b"ObjectUnionOf", o);
+                o.within(w, m, b"ObjectUnionOf");
             }
             &ClassExpression::Not {ref ce} => {
-                within(w, m, b"ObjectComplementOf", ce);
+                ce.within(w, m, b"ObjectComplementOf");
             }
             &ClassExpression::ObjectHasValue {ref o, ref i} => {
-                within(w, m, b"ObjectHasValue", (o, i));
+                (o, i).within(w, m, b"ObjectHasValue");
             }
             &ClassExpression::ObjectOneOf {ref o} => {
-                within(w, m, b"ObjectOneOf", o);
+                o.within(w, m, b"ObjectOneOf");
             }
             &ClassExpression::ObjectHasSelf (ref o) => {
-                within(w, m, b"ObjectHasSelf", o);
+                o.within(w, m, b"ObjectHasSelf");
             }
       }
     }
@@ -517,11 +498,9 @@ render!{
 }
 
 render!{
-    Import, self, w, _m,
+    Import, self, w, m,
     {
-        w.write_event(Event::Text
-                      (BytesText::from_escaped_str
-                       (String::from(&self.0)))).ok();
+        String::from(&self.0).render(w, m);
     }
 }
 
@@ -546,24 +525,16 @@ render!{
                 lang,
                 literal,
             } => {
-                write_start_end_with_start_callback(
-                    w,
-                    b"Literal",
-                    |_s: &mut Writer<W>, b: &mut BytesStart| {
-                        attribute_maybe(b, "xml:lang", lang);
-                        attribute_maybe(
-                            b,
-                            "datatypeIRI",
-                            &datatype_iri.as_ref().map(|s| s.into()),
-                        );
-                    },
-                    |s: &mut Writer<W>| {
-                        if let Some(l) = literal {
-                            s.write_event(Event::Text(BytesText::from_escaped_str(&l[..])))
-                                .ok();
-                        }
-                    },
+                let mut open = BytesStart::owned_name("Literal");
+                attribute_maybe(&mut open, "xml:lang", lang);
+                attribute_maybe(
+                    &mut open,
+                    "datatypeIRI",
+                    &datatype_iri.as_ref().map(|s| s.into()),
                 );
+                if let Some(l) = literal {
+                    l.within_tag(w, m, open)
+                }
             }
         }
     }
@@ -579,9 +550,9 @@ render!{
 render!{
     Annotation, self, w, m,
     {
-        within(w, m, b"Annotation",
-               (&self.annotation_property,
-                &self.annotation_value));
+        (&self.annotation_property,
+         &self.annotation_value).
+            within(w, m, b"Annotation")
     }
 }
 
@@ -625,7 +596,7 @@ render! {
                 p.render(w, m);
             }
             ObjectPropertyExpression::InverseObjectProperty(p) => {
-                within(w, m, b"ObjectInverseOf", p);
+                p.within(w, m, b"ObjectInverseOf");
             }
         }
     }
@@ -636,7 +607,7 @@ render!{
     {
         match self {
             SubObjectPropertyExpression::ObjectPropertyChain(v) => {
-                within(w, m, b"ObjectPropertyChain", v);
+                v.within(w, m, b"ObjectPropertyChain");
             }
             SubObjectPropertyExpression::ObjectPropertyExpression(op) => {
                 op.render(w, m);
