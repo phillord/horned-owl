@@ -14,12 +14,16 @@ use quick_xml::Writer;
 use std::collections::BTreeSet;
 use std::io::Write as StdWrite;
 
+use failure::Error;
+
 /// Write an Ontology to `write`, using the given PrefixMapping
 ///
 /// The ontology is written in OWL
 /// [XML](https://www.w3.org/TR/owl2-xml-serialization/) syntax.
 pub fn write(write: &mut StdWrite, ont: &Ontology,
-             mapping: Option<&PrefixMapping>) {
+             mapping: Option<&PrefixMapping>)
+    -> Result<(),Error>
+{
     let mut writer = Writer::new_with_indent(write, ' ' as u8, 4);
 
     // Ensure we have a prefix mapping; the default is a no-op and
@@ -30,7 +34,9 @@ pub fn write(write: &mut StdWrite, ont: &Ontology,
         None => &default_mapper,
     };
 
-    ont.render(&mut writer, &mapping);
+    ont.render(&mut writer, &mapping)?;
+
+    Ok(())
 }
 
 /// Add an IRI to BytesStart as a element if necessary
@@ -69,7 +75,8 @@ fn attribute_maybe(elem: &mut BytesStart, key: &str, val: &Option<String>) {
 }
 
 /// Add an IRI or abbreviatedIRI attribute to elem
-fn iri_or_curie<'a>(mapping:&'a PrefixMapping, elem: &mut BytesStart, iri: &str) {
+fn iri_or_curie<'a>(mapping:&'a PrefixMapping, elem: &mut BytesStart,
+                    iri: &str) {
     match mapping.shrink_iri(&(*iri)[..]) {
         Ok(curie) => {
             let curie = format!("{}", curie);
@@ -82,6 +89,7 @@ fn iri_or_curie<'a>(mapping:&'a PrefixMapping, elem: &mut BytesStart, iri: &str)
 /// Write a tag with an IRI attribute.
 fn with_iri<'a, I,W>(w:&mut Writer<W>, mapping:&'a PrefixMapping,
                      tag: &[u8], into_iri: I)
+    -> Result<(),Error>
     where I: Into<IRI>,
           W: StdWrite
 {
@@ -90,7 +98,9 @@ fn with_iri<'a, I,W>(w:&mut Writer<W>, mapping:&'a PrefixMapping,
 
     let iri_string: String = iri.into();
     iri_or_curie(mapping, &mut bytes_start, &iri_string[..]);
-    w.write_event(Event::Empty(bytes_start)).ok();
+    w.write_event(Event::Empty(bytes_start))?;
+
+    Ok(())
 }
 
 /// Fetch the name of the tag that is used to render `AxiomKind`
@@ -140,34 +150,39 @@ fn tag_for_kind (axk:AxiomKind) -> &'static [u8] {
 trait Render <'a, W:StdWrite>
 {
     /// Render a entity to Write
-    fn render(&self, w:&mut Writer<W>, mapping: &'a PrefixMapping);
+    fn render(&self, w:&mut Writer<W>, mapping: &'a PrefixMapping)
+        -> Result<(),Error>;
 
     fn within(&self,
               w:&mut Writer<W>,
               m:&'a PrefixMapping,
               tag: &[u8])
+        -> Result<(),Error>
     {
         let open = BytesStart::borrowed(tag, tag.len());
-        w.write_event(Event::Start(open)).ok();
+        w.write_event(Event::Start(open))?;
 
-        self.render(w, m);
+        self.render(w, m)?;
 
-        w.write_event(Event::End(BytesEnd::borrowed(tag)))
-            .ok();
+        w.write_event(Event::End(BytesEnd::borrowed(tag)))?;
+
+        Ok(())
     }
 
     fn within_tag(&self,
                   w:&mut Writer<W>,
                   m:&'a PrefixMapping,
                   open: BytesStart)
+        -> Result<(),Error>
     {
         let clone = open.clone();
-        w.write_event(Event::Start(clone)).ok();
+        w.write_event(Event::Start(clone))?;
 
-        self.render(w, m);
+        self.render(w, m)?;
 
-        w.write_event(Event::End(BytesEnd::borrowed(open.local_name())))
-            .ok();
+        w.write_event(Event::End(BytesEnd::borrowed(open.local_name())))?;
+
+        Ok(())
     }
 }
 
@@ -178,6 +193,8 @@ macro_rules! render {
 
         impl <'a, W:StdWrite> Render<'a, W> for $type {
             fn render(& $self, $write:&mut Writer<W>, $map: &'a PrefixMapping)
+                      -> Result<(),Error>
+                where W: StdWrite
                 $body
         }
     }
@@ -186,53 +203,65 @@ macro_rules! render {
 render! {
     Ontology, self, w, m,
     {
-        w.write_event(Event::Decl(BytesDecl::new(&b"1.0"[..], None, None)))
-            .ok();
+        w.write_event(Event::Decl(BytesDecl::new(&b"1.0"[..], None, None)))?;
 
         let mut elem = BytesStart::owned_name("Ontology");
         elem.push_attribute((b"xmlns" as &[u8], vocab::OWL));
         iri_maybe(&mut elem, "ontologyIRI", &self.id.iri);
         iri_maybe(&mut elem, "versionIRI", &self.id.viri);
 
-        w.write_event(Event::Start(elem)).ok();
+        w.write_event(Event::Start(elem))?;
 
         let elem = BytesEnd::owned(b"Ontology".to_vec());
 
-        m.render(w, m);
+        m.render(w, m)?;
 
         for axk in AxiomKind::all_kinds() {
             for ax in self.annotated_axiom(axk) {
-                ax.render(w, m);
+                ax.render(w, m)?;
             }
         }
 
 
-        w.write_event(Event::End(elem)).ok();
+        w.write_event(Event::End(elem))?;
+
+        Ok(())
     }
 }
 
 // Render Impl for container and collection types
 impl <'a, T:Render<'a, W>, W:StdWrite> Render<'a, W> for BTreeSet<T> {
-    fn render(&self, w:&mut Writer<W>, m: &'a PrefixMapping){
+    fn render(&self, w:&mut Writer<W>, m: &'a PrefixMapping)
+        -> Result<(),Error>
+    {
         for item in self.iter() {
-            item.render(w, m);
+            item.render(w, m)?;
         }
+
+        Ok(())
     }
 }
 
 impl <'a, O:Render<'a, W>, W:StdWrite> Render<'a, W> for Vec<O>{
     fn render(&self, w:&mut Writer<W>, m: &'a PrefixMapping)
+              -> Result<(),Error>
+        where W: StdWrite
     {
-        for op in self.iter() {
-            op.render(w, m);
+        for a in self.iter() {
+            a.render(w, m)?;
         }
+
+        Ok(())
     }
 }
 
 impl <'a, T:Render<'a,W>, W:StdWrite> Render<'a, W> for Box<T>{
     fn render(&self, w:&mut Writer<W>, m: &'a PrefixMapping)
+        -> Result<(),Error>
     {
-        (**self).render(w, m);
+        (**self).render(w, m)?;
+
+        Ok(())
     }
 }
 
@@ -240,8 +269,11 @@ impl <'a,
       A:Render<'a, W>,
       W:StdWrite> Render<'a, W> for (&'a A,) {
     fn render(&self, w:&mut Writer<W>, m: &'a PrefixMapping)
+        -> Result<(),Error>
     {
-        (&self.0).render(w, m);
+        (&self.0).render(w, m)?;
+
+        Ok(())
     }
 }
 
@@ -251,9 +283,12 @@ impl <'a,
       B:Render<'a, W>,
       W:StdWrite> Render<'a, W> for (&'a A, &'a B) {
     fn render(&self, w:&mut Writer<W>, m: &'a PrefixMapping)
+        -> Result<(),Error>
     {
-        (&self.0).render(w, m);
-        (&self.1).render(w, m);
+        (&self.0).render(w, m)?;
+        (&self.1).render(w, m)?;
+
+        Ok(())
     }
 }
 
@@ -263,10 +298,13 @@ impl <'a,
       C: Render<'a, W>,
       W:StdWrite> Render<'a, W> for (&'a A, &'a B, &'a C) {
     fn render(&self, w:&mut Writer<W>, m: &'a PrefixMapping)
+        -> Result<(),Error>
     {
-        (&self.0).render(w, m);
-        (&self.1).render(w, m);
-        (&self.2).render(w, m);
+        (&self.0).render(w, m)?;
+        (&self.1).render(w, m)?;
+        (&self.2).render(w, m)?;
+
+        Ok(())
     }
 }
 
@@ -277,15 +315,18 @@ render!{
             let mut prefix = BytesStart::owned_name("Prefix");
             prefix.push_attribute(("name", &pre.0[..]));
             prefix.push_attribute(("IRI", &pre.1[..]));
-            w.write_event(Event::Empty(prefix)).ok();
+            w.write_event(Event::Empty(prefix))?;
         }
+
+        Ok(())
     }
 }
 
 render!{
     String, self, w, _m,
     {
-        w.write_event(Event::Text(BytesText::from_escaped_str(&self[..]))).ok();
+        w.write_event(Event::Text(BytesText::from_escaped_str(&self[..])))?;
+        Ok(())
     }
 }
 
@@ -294,49 +335,62 @@ render!{
     {
         let iri_st: String = self.into();
         let iri_shrunk = shrink_iri_maybe(&iri_st[..], m);
-        iri_shrunk.within(w, m, b"IRI");
+        iri_shrunk.within(w, m, b"IRI")?;
+        Ok(())
     }
 }
 
 render! {
     DeclareClass, self, w, m,
     {
-        (&self.0).render(w, m);
+        (&self.0).render(w, m)?;
+
+        Ok(())
     }
 }
 
 render! {
     DeclareObjectProperty, self, w, m,
     {
-        (&self.0).render(w, m);
+        (&self.0).render(w, m)?;
+
+        Ok(())
     }
 }
 
 render! {
     DeclareAnnotationProperty, self, w, m,
     {
-        (&self.0).render(w, m);
+        (&self.0).render(w, m)?;
+
+        Ok(())
     }
 }
 
 render! {
     DeclareDataProperty, self, w, m,
     {
-        (&self.0).render(w, m);
+        (&self.0).render(w, m)?;
+
+        Ok(())
     }
 }
 
 render! {
     DeclareNamedIndividual, self, w, m,
     {
-        (&self.0).render(w, m);
+        (&self.0).render(w, m)?;
+
+        Ok(())
     }
 }
 
 render! {
     DeclareDatatype, self, w, m,
     {
-        (&self.0).render(w, m);
+        (&self.0).render(w, m)?;
+
+        Ok(())
     }
 
 }
@@ -348,47 +402,61 @@ render!{
             (&self.annotation),
             (&self.axiom)
         ).within(w, m,
-                 tag_for_kind(self.kind()));
+                 tag_for_kind(self.kind()))?;
+
+        Ok(())
     }
 }
 
 render!{
     Class, self, w, m,
     {
-        with_iri(w, m, b"Class", self);
+        with_iri(w, m, b"Class", self)?;
+
+        Ok(())
     }
 }
 
 render! {
     &'a ObjectProperty, self, w, m,
     {
-        with_iri(w, m, b"ObjectProperty", *self)
+        with_iri(w, m, b"ObjectProperty", *self)?;
+
+        Ok(())
     }
 }
 render! {
     ObjectProperty, self, w, m,
     {
-        with_iri(w, m, b"ObjectProperty", self)
+        with_iri(w, m, b"ObjectProperty", self)?;
+
+        Ok(())
     }
 }
 
 render! {
     DataProperty, self, w, m,
     {
-        with_iri(w, m, b"DataProperty", self);
+        with_iri(w, m, b"DataProperty", self)?;
+
+        Ok(())
     }
 }
 
 render! {
     Datatype, self, w, m,
     {
-        with_iri(w, m, b"Datatype", self);
+        with_iri(w, m, b"Datatype", self)?;
+
+        Ok(())
     }
 }
 render! {
     NamedIndividual, self, w, m,
     {
-        with_iri(w, m, b"NamedIndividual", self);
+        with_iri(w, m, b"NamedIndividual", self)?;
+
+        Ok(())
     }
 }
 
@@ -397,33 +465,34 @@ render!{
     {
         match self {
             &ClassExpression::Class(ref c) => {
-                c.render(w, m);
+                c.render(w, m)?;
             }
             &ClassExpression::Some {ref o, ref ce} => {
-                (o, ce).within(w, m, b"ObjectSomeValuesFrom");
+                (o, ce).within(w, m, b"ObjectSomeValuesFrom")?;
             }
             &ClassExpression::Only {ref o, ref ce} => {
-                (o, ce).within(w, m, b"ObjectAllValuesFrom");
+                (o, ce).within(w, m, b"ObjectAllValuesFrom")?;
             }
             &ClassExpression::And {ref o} => {
-                o.within(w, m, b"ObjectIntersectionOf");
+                o.within(w, m, b"ObjectIntersectionOf")?;
             }
             &ClassExpression::Or {ref o} => {
-                o.within(w, m, b"ObjectUnionOf");
+                o.within(w, m, b"ObjectUnionOf")?;
             }
             &ClassExpression::Not {ref ce} => {
-                ce.within(w, m, b"ObjectComplementOf");
+                ce.within(w, m, b"ObjectComplementOf")?;
             }
             &ClassExpression::ObjectHasValue {ref o, ref i} => {
-                (o, i).within(w, m, b"ObjectHasValue");
+                (o, i).within(w, m, b"ObjectHasValue")?;
             }
             &ClassExpression::ObjectOneOf {ref o} => {
-                o.within(w, m, b"ObjectOneOf");
+                o.within(w, m, b"ObjectOneOf")?;
             }
             &ClassExpression::ObjectHasSelf (ref o) => {
-                o.within(w, m, b"ObjectHasSelf");
+                o.within(w, m, b"ObjectHasSelf")?;
             }
-      }
+        }
+        Ok(())
     }
 }
 
@@ -432,54 +501,55 @@ render! {
     {
         match self {
             Axiom::TransitiveObjectProperty(ax) =>{
-                ax.render(w, m);
+                ax.render(w, m)?;
             }
             Axiom::InverseObjectProperty(ax) =>{
-                ax.render(w, m);
+                ax.render(w, m)?;
             }
             Axiom::SubObjectProperty(ax) => {
-                ax.render(w, m);
+                ax.render(w, m)?;
             }
             Axiom::SubAnnotationProperty(ax) => {
-                ax.render(w, m);
+                ax.render(w, m)?;
             }
             Axiom::AssertAnnotation(ax) => {
-                ax.render(w, m);
+                ax.render(w, m)?;
             }
             Axiom::DisjointClass(ax) => {
-                ax.render(w, m);
+                ax.render(w, m)?;
             }
             Axiom::EquivalentClass(ax) => {
-                ax.render(w, m);
+                ax.render(w, m)?;
             }
             Axiom::SubClass(ax) => {
-                ax.render(w, m);
+                ax.render(w, m)?;
             }
             Axiom::DeclareClass(ax) => {
-                ax.render(w, m);
+                ax.render(w, m)?;
             }
             Axiom::DeclareObjectProperty(ax) => {
-                ax.render(w, m);
+                ax.render(w, m)?;
             }
             Axiom::DeclareAnnotationProperty(ax) => {
-                ax.render(w, m);
+                ax.render(w, m)?;
             }
             Axiom::DeclareDataProperty(ax) => {
-                ax.render(w, m);
+                ax.render(w, m)?;
             }
             Axiom::DeclareNamedIndividual(ax) => {
-                ax.render(w, m);
+                ax.render(w, m)?;
             }
             Axiom::DeclareDatatype(ax) => {
-                ax.render(w, m);
+                ax.render(w, m)?;
             }
             Axiom::Import(ax) => {
-                ax.render(w, m);
+                ax.render(w, m)?;
             }
             Axiom::OntologyAnnotation(ax) => {
-                ax.render(w, m);
+                ax.render(w, m)?;
             }
         }
+        Ok(())
     }
 }
 
@@ -493,14 +563,18 @@ render!{
         // `Annotation` tags, so we just need to render the inner
         // contents.
         (&self.0.annotation_property,
-         &self.0.annotation_value).render(w, m);
+         &self.0.annotation_value).render(w, m)?;
+
+        Ok(())
     }
 }
 
 render!{
     Import, self, w, m,
     {
-        String::from(&self.0).render(w, m);
+        String::from(&self.0).render(w, m)?;
+
+        Ok(())
     }
 }
 
@@ -509,7 +583,9 @@ render!{
     {
         (&self.annotation.annotation_property,
          &self.annotation_subject,
-         &self.annotation.annotation_value).render(w, m);
+         &self.annotation.annotation_value).render(w, m)?;
+
+        Ok(())
     }
 }
 
@@ -518,7 +594,7 @@ render!{
     {
         match self {
             AnnotationValue::IRI(iri) => {
-                iri.render(w, m);
+                iri.render(w, m)?;
             },
             AnnotationValue::PlainLiteral {
                 datatype_iri,
@@ -533,17 +609,21 @@ render!{
                     &datatype_iri.as_ref().map(|s| s.into()),
                 );
                 if let Some(l) = literal {
-                    l.within_tag(w, m, open)
+                    l.within_tag(w, m, open)?;
                 }
             }
         }
+
+        Ok(())
     }
 }
 
 render!{
     AnnotationProperty, self, w, m,
     {
-        with_iri(w, m, b"AnnotationProperty", self);
+        with_iri(w, m, b"AnnotationProperty", self)?;
+
+        Ok(())
     }
 }
 
@@ -552,7 +632,9 @@ render!{
     {
         (&self.annotation_property,
          &self.annotation_value).
-            within(w, m, b"Annotation")
+            within(w, m, b"Annotation")?;
+
+        Ok(())
     }
 }
 
@@ -560,7 +642,9 @@ render!{
     SubAnnotationProperty, self, w, m,
     {
         (&self.super_property,
-         &self.sub_property).render(w, m);
+         &self.sub_property).render(w, m)?;
+
+        Ok(())
     }
 }
 
@@ -568,7 +652,9 @@ render!{
     SubClass, self, w, m,
     {
         (&self.super_class,
-         &self.sub_class).render(w, m);
+         &self.sub_class).render(w, m)?;
+
+        Ok(())
     }
 }
 
@@ -576,7 +662,9 @@ render!{
     EquivalentClass, self, w, m,
     {
         (&self.0,
-         &self.1).render(w,m);
+         &self.1).render(w,m)?;
+
+        Ok(())
     }
 }
 
@@ -584,7 +672,9 @@ render!{
     DisjointClass, self, w, m,
     {
         (&self.0,
-         &self.1).render(w, m);
+         &self.1).render(w, m)?;
+
+        Ok(())
     }
 }
 
@@ -593,12 +683,14 @@ render! {
     {
         match self {
             ObjectPropertyExpression::ObjectProperty(p) => {
-                p.render(w, m);
+                p.render(w, m)?;
             }
             ObjectPropertyExpression::InverseObjectProperty(p) => {
-                p.within(w, m, b"ObjectInverseOf");
+                p.within(w, m, b"ObjectInverseOf")?;
             }
         }
+
+        Ok(())
     }
 }
 
@@ -607,12 +699,14 @@ render!{
     {
         match self {
             SubObjectPropertyExpression::ObjectPropertyChain(v) => {
-                v.within(w, m, b"ObjectPropertyChain");
+                v.within(w, m, b"ObjectPropertyChain")?;
             }
             SubObjectPropertyExpression::ObjectPropertyExpression(op) => {
-                op.render(w, m);
+                op.render(w, m)?;
             }
         }
+
+        Ok(())
     }
 }
 
@@ -621,7 +715,9 @@ render!{
     SubObjectProperty, self, w, m,
     {
         (&self.super_property,
-         &self.sub_property).render(w, m)
+         &self.sub_property).render(w, m)?;
+
+        Ok(())
     }
 }
 
@@ -629,7 +725,9 @@ render!{
 render!{
     TransitiveObjectProperty, self, w, m,
     {
-        (&self.0).render(w, m);
+        (&self.0).render(w, m)?;
+
+        Ok(())
     }
 }
 
@@ -637,7 +735,9 @@ render!{
     InverseObjectProperty, self, w, m,
     {
         (&self.0,
-         &self.1).render(w, m);
+         &self.1).render(w, m)?;
+
+        Ok(())
     }
 }
 
@@ -675,7 +775,7 @@ mod test {
         ont.id.iri = Some(iri);
         let temp_file = Temp::new_file().unwrap();
         let file = File::create(&temp_file).ok().unwrap();
-        write(&mut BufWriter::new(file), &ont, None);
+        write(&mut BufWriter::new(file), &ont, None).ok().unwrap();
 
         let file = File::open(&temp_file).ok().unwrap();
         let (ont2, _) = read_ok(&mut BufReader::new(file));
@@ -690,7 +790,7 @@ mod test {
         let file = File::create(&temp_file).ok().unwrap();
         let mut buf_writer = BufWriter::new(&file);
 
-        write(&mut buf_writer, &ont_orig, Some(&prefix_orig));
+        write(&mut buf_writer, &ont_orig, Some(&prefix_orig)).ok().unwrap();
         buf_writer.flush().ok();
 
         let file = File::open(&temp_file).ok().unwrap();
