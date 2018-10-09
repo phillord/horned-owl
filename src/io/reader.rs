@@ -495,23 +495,23 @@ from_start! {
                 b"ObjectSomeValuesFrom" => {
                     let o = from_next_tag(r)?;
                     let ce = Box::new(from_next_tag(r)?);
-                    ClassExpression::Some{o,ce}
+                    ClassExpression::ObjectSomeValuesFrom{o,ce}
                 }
                 b"ObjectAllValuesFrom" => {
                     let o = from_next_tag(r)?;
                     let ce = Box::new(from_next_tag(r)?);
-                    ClassExpression::Only{o,ce}
+                    ClassExpression::ObjectAllValuesFrom{o,ce}
                 }
                 b"ObjectIntersectionOf" => {
                     let o = till_end(r, b"ObjectIntersectionOf")?;
-                    ClassExpression::And{o}
+                    ClassExpression::ObjectIntersectionOf{o}
                 }
                 b"ObjectUnionOf" => {
                     let o = till_end(r, b"ObjectUnionOf")?;
-                    ClassExpression::Or{o}
+                    ClassExpression::ObjectUnionOf{o}
                 }
                 b"ObjectComplementOf" => {
-                    ClassExpression::Not
+                    ClassExpression::ObjectComplementOf
                     {ce: Box::new(from_next_tag(r)?)}
                 }
                 b"ObjectHasValue" => {
@@ -1196,7 +1196,7 @@ mod test {
 
         assert_eq!(
             match some {
-                ClassExpression::Some{
+                ClassExpression::ObjectSomeValuesFrom{
                     o: ObjectPropertyExpression::InverseObjectProperty(o),
                     ce:_
                 } =>

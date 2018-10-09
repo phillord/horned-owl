@@ -797,12 +797,36 @@ pub enum ClassExpression
     /// A named class
     Class(Class),
 
+    /// The boolean and
+    ///
+    /// The class of individuals which are individuals of all these
+    /// classes.
+    ObjectIntersectionOf{o:Vec<ClassExpression>},
+
+    /// The boolean or
+    ///
+    /// The class of individuals which are individuals of any of these
+    /// classes.
+    ObjectUnionOf{o:Vec<ClassExpression>},
+
+    /// The boolean not
+    ///
+    /// The class of individuals which are not individuals of any of
+    /// these classes.
+    ObjectComplementOf{ce:Box<ClassExpression>},
+
+    /// An enumeration of individuals
+    ///
+    /// This is the class containing exactly the given set of
+    /// individuals.
+    ObjectOneOf{o:Vec<NamedIndividual>},
+
     /// An existential relationship
     ///
     /// This is the anonymous class of individuals `i`, which have the
     /// relationship `o` to a class expression `ce`. Every individual
     /// in `i` must have this relationship to one individual in `ce`.
-    Some{o:ObjectPropertyExpression, ce:Box<ClassExpression>},
+    ObjectSomeValuesFrom{o:ObjectPropertyExpression, ce:Box<ClassExpression>},
 
     /// A universal relationship
     ///
@@ -810,25 +834,7 @@ pub enum ClassExpression
     /// individuals which are related by `o` are instances of
     /// `ce`. This does not imply that the `i` necessarily has any
     /// relation `r`.
-    Only{o:ObjectPropertyExpression, ce:Box<ClassExpression>},
-
-    /// The boolean and
-    ///
-    /// The class of individuals which are individuals of all these
-    /// classes.
-    And{o:Vec<ClassExpression>},
-
-    /// The boolean or
-    ///
-    /// The class of individuals which are individuals of any of these
-    /// classes.
-    Or{o:Vec<ClassExpression>},
-
-    /// The boolean not
-    ///
-    /// The class of individuals which are not individuals of any of
-    /// these classes.
-    Not{ce:Box<ClassExpression>},
+    ObjectAllValuesFrom{o:ObjectPropertyExpression, ce:Box<ClassExpression>},
 
     /// An existential relationship to an individual
     ///
@@ -836,12 +842,6 @@ pub enum ClassExpression
     /// relationship `o` to another individual `i`. Every individual
     /// in `c` must have this relationship to the individual `i`
     ObjectHasValue{o:ObjectPropertyExpression, i:NamedIndividual},
-
-    /// An enumeration of individuals
-    ///
-    /// This is the class containing exactly the given set of
-    /// individuals.
-    ObjectOneOf{o:Vec<NamedIndividual>},
 
     /// The class of individuals which have a relation to themselves
     ///

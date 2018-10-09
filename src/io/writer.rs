@@ -467,19 +467,19 @@ render!{
             &ClassExpression::Class(ref c) => {
                 c.render(w, m)?;
             }
-            &ClassExpression::Some {ref o, ref ce} => {
+            &ClassExpression::ObjectSomeValuesFrom {ref o, ref ce} => {
                 (o, ce).within(w, m, b"ObjectSomeValuesFrom")?;
             }
-            &ClassExpression::Only {ref o, ref ce} => {
+            &ClassExpression::ObjectAllValuesFrom {ref o, ref ce} => {
                 (o, ce).within(w, m, b"ObjectAllValuesFrom")?;
             }
-            &ClassExpression::And {ref o} => {
+            &ClassExpression::ObjectIntersectionOf {ref o} => {
                 o.within(w, m, b"ObjectIntersectionOf")?;
             }
-            &ClassExpression::Or {ref o} => {
+            &ClassExpression::ObjectUnionOf {ref o} => {
                 o.within(w, m, b"ObjectUnionOf")?;
             }
-            &ClassExpression::Not {ref ce} => {
+            &ClassExpression::ObjectComplementOf {ref ce} => {
                 ce.within(w, m, b"ObjectComplementOf")?;
             }
             &ClassExpression::ObjectHasValue {ref o, ref i} => {
