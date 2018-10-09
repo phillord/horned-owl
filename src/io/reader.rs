@@ -272,7 +272,7 @@ fn error_missing_element<R:BufRead>(tag:&[u8], r: &mut Read<R>)
 }
 
 fn is_owl(ns:&[u8]) -> bool {
-    ns == vocab::OWL
+    ns == vocab::ns::OWL
 }
 
 fn is_owl_name(ns:&[u8], e:&BytesEnd, tag:&[u8]) -> bool {

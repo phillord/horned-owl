@@ -206,7 +206,7 @@ render! {
         w.write_event(Event::Decl(BytesDecl::new(&b"1.0"[..], None, None)))?;
 
         let mut elem = BytesStart::owned_name("Ontology");
-        elem.push_attribute((b"xmlns" as &[u8], vocab::OWL));
+        elem.push_attribute((b"xmlns" as &[u8], vocab::ns::OWL));
         iri_maybe(&mut elem, "ontologyIRI", &self.id.iri);
         iri_maybe(&mut elem, "versionIRI", &self.id.viri);
 
