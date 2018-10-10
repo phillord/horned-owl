@@ -848,6 +848,30 @@ pub enum ClassExpression
     /// Given a object property `r`, this class defines all the
     /// individuals where `i r i`.
     ObjectHasSelf(ObjectProperty),
+
+    /// A min cardinality relationship between individuals
+    ///
+    /// Given an object property `o` and a class `ce`, this describes
+    /// the class of individuals which have the `o` relationship to at
+    /// least `n` other individuals.
+    ObjectMinCardinality{n:i32, o:ObjectPropertyExpression,
+                         ce:Box<ClassExpression>},
+
+    /// A max cardinality relationship between individuals
+    ///
+    /// Given an object property `o` and a class `ce`, this describes
+    /// the class of individuals which have the `o` relationship to at
+    /// most `n` other individuals.
+    ObjectMaxCardinality{n:i32, o:ObjectPropertyExpression,
+                         ce:Box<ClassExpression>},
+
+    /// An exact cardinality relationship between individuals
+    ///
+    /// Given an object property `o` and a class `ce`, this describes
+    /// the class of individuals which have the `o` relationship to exactly
+    /// `n` other individuals.
+    ObjectExactCardinality{n:i32, o:ObjectPropertyExpression,
+                           ce:Box<ClassExpression>},
 }
 
 impl From<Class> for ClassExpression {

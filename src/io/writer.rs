@@ -491,6 +491,21 @@ render!{
             &ClassExpression::ObjectHasSelf (ref o) => {
                 o.within(w, m, b"ObjectHasSelf")?;
             }
+            &ClassExpression::ObjectMinCardinality{n, ref o, ref ce} => {
+                let mut open = BytesStart::owned_name("ObjectMinCardinality");
+                open.push_attribute(("cardinality", &n.to_string()[..]));
+                (o, ce).within_tag(w, m, open)?;
+            }
+            &ClassExpression::ObjectMaxCardinality{n, ref o, ref ce} => {
+                let mut open = BytesStart::owned_name("ObjectMaxCardinality");
+                open.push_attribute(("cardinality", &n.to_string()[..]));
+                (o, ce).within_tag(w, m, open)?;
+            }
+            &ClassExpression::ObjectExactCardinality{n, ref o, ref ce} => {
+                let mut open = BytesStart::owned_name("ObjectExactCardinality");
+                open.push_attribute(("cardinality", &n.to_string()[..]));
+                (o, ce).within_tag(w, m, open)?;
+            }
         }
         Ok(())
     }
@@ -973,5 +988,20 @@ mod test {
     #[test]
     fn inverse() {
         assert_round(include_str!("../ont/owl-xml/some-inverse.owl"));
+    }
+
+    #[test]
+    fn object_min_cardinality() {
+        assert_round(include_str!("../ont/owl-xml/object-min-cardinality.owl"));
+    }
+
+    #[test]
+    fn object_max_cardinality() {
+        assert_round(include_str!("../ont/owl-xml/object-max-cardinality.owl"));
+    }
+
+    #[test]
+    fn object_exact_cardinality() {
+        assert_round(include_str!("../ont/owl-xml/object-exact-cardinality.owl"));
     }
 }

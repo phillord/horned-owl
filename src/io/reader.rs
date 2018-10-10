@@ -485,6 +485,27 @@ fn till_end<R:BufRead, T:FromStart>(r:&mut Read<R>,
     }
 }
 
+fn cardinality_restriction<R:BufRead>(r:&mut Read<R>,
+                                      e: &BytesStart)
+                                      -> Result<(i32, ObjectPropertyExpression,
+                                                 Box<ClassExpression>),Error>
+{
+
+    let n = attrib_value(r, e, b"cardinality")?;
+    if let Some(n) = n {
+        Ok((
+            n.parse::<i32>()?,
+            from_next_tag(r)?,
+            Box::new(from_next_tag(r)?)
+        ))
+    }
+    else {
+        return Err(error_missing_attribute
+                   ("cardinality",r));
+    }
+}
+
+
 from_start! {
     ClassExpression, r, e, {
         Ok(
@@ -531,8 +552,20 @@ from_start! {
                     ClassExpression::ObjectHasSelf
                         (from_next_tag(r)?)
                 }
+                b"ObjectMinCardinality" => {
+                    let (n, o, ce) = cardinality_restriction(r, e)?;
+                    ClassExpression::ObjectMinCardinality{n, o, ce}
+                }
+                b"ObjectMaxCardinality" => {
+                    let (n, o, ce) = cardinality_restriction(r, e)?;
+                    ClassExpression::ObjectMaxCardinality{n, o, ce}
+                }
+                b"ObjectExactCardinality" => {
+                    let (n, o, ce) = cardinality_restriction(r, e)?;
+                    ClassExpression::ObjectExactCardinality{n, o, ce}
+                }
                 _ => {
-                    return Err(error_unexpected_tag(e.local_name(), r))
+                    return Err(error_unexpected_tag(e.local_name(), r));
                 }
             }
         )
@@ -1210,4 +1243,159 @@ mod test {
             "http://www.example.com#r"
         );
     }
+
+
+    #[test]
+    fn test_min_cardinality() {
+        let ont_s = include_str!("../ont/owl-xml/object-min-cardinality.owl");
+        let (ont, _) = read_ok(&mut ont_s.as_bytes());
+
+        assert_eq!(ont.sub_class().count(), 1);
+        assert_eq!(ont.declare_object_property().count(), 1);
+
+        let sc = ont.sub_class().next().unwrap();
+        let some = &sc.sub_class;
+
+        let (n, o, c) =
+            match some {
+                ClassExpression::ObjectMinCardinality{
+                    n,
+                    o: ObjectPropertyExpression::ObjectProperty(o),
+                    ce
+                } =>
+                {
+                    match **ce {
+                        ClassExpression::Class(ref c)
+                            => {
+                                (
+                                    n,
+                                    String::from(o),
+                                    String::from(c)
+                                )
+                            }
+                        _ => {
+                            panic!("1:Unexpected Class");
+                        }
+                    }
+                }
+                _ =>{
+                    panic!("2:Unexpected Class");
+                }
+            };
+
+        assert!(
+            n == &1
+        );
+        assert_eq!(
+            o,
+            "http://www.example.com/r"
+        );
+        assert_eq!(
+            c,
+            "http://www.example.com/D"
+        )
+    }
+
+        #[test]
+    fn test_max_cardinality() {
+        let ont_s = include_str!("../ont/owl-xml/object-max-cardinality.owl");
+        let (ont, _) = read_ok(&mut ont_s.as_bytes());
+
+        assert_eq!(ont.sub_class().count(), 1);
+        assert_eq!(ont.declare_object_property().count(), 1);
+
+        let sc = ont.sub_class().next().unwrap();
+        let some = &sc.sub_class;
+
+        let (n, o, c) =
+            match some {
+                ClassExpression::ObjectMaxCardinality{
+                    n,
+                    o: ObjectPropertyExpression::ObjectProperty(o),
+                    ce
+                } =>
+                {
+                    match **ce {
+                        ClassExpression::Class(ref c)
+                            => {
+                                (
+                                    n,
+                                    String::from(o),
+                                    String::from(c)
+                                )
+                            }
+                        _ => {
+                            panic!("1:Unexpected Class");
+                        }
+                    }
+                }
+                _ =>{
+                    panic!("2:Unexpected Class");
+                }
+            };
+
+        assert!(
+            n == &1
+        );
+        assert_eq!(
+            o,
+            "http://www.example.com/r"
+        );
+        assert_eq!(
+            c,
+            "http://www.example.com/D"
+        )
+    }
+
+        #[test]
+    fn test_exact_cardinality() {
+        let ont_s = include_str!("../ont/owl-xml/object-exact-cardinality.owl");
+        let (ont, _) = read_ok(&mut ont_s.as_bytes());
+
+        assert_eq!(ont.sub_class().count(), 1);
+        assert_eq!(ont.declare_object_property().count(), 1);
+
+        let sc = ont.sub_class().next().unwrap();
+        let some = &sc.sub_class;
+
+        let (n, o, c) =
+            match some {
+                ClassExpression::ObjectExactCardinality{
+                    n,
+                    o: ObjectPropertyExpression::ObjectProperty(o),
+                    ce
+                } =>
+                {
+                    match **ce {
+                        ClassExpression::Class(ref c)
+                            => {
+                                (
+                                    n,
+                                    String::from(o),
+                                    String::from(c)
+                                )
+                            }
+                        _ => {
+                            panic!("1:Unexpected Class");
+                        }
+                    }
+                }
+                _ =>{
+                    panic!("2:Unexpected Class");
+                }
+            };
+
+        assert!(
+            n == &1
+        );
+        assert_eq!(
+            o,
+            "http://www.example.com/r"
+        );
+        assert_eq!(
+            c,
+            "http://www.example.com/D"
+        )
+    }
+
 }
