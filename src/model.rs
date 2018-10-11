@@ -290,6 +290,11 @@ named!{
     /// each other.
     Class,
 
+        /// An OWL
+    /// [Datatype](https://www.w3.org/TR/owl2-primer/#Datatypes) is a
+    /// specific kind of data, such as an integer, string or so forth.
+    Datatype,
+
     /// An OWL
     /// [ObjectProperty](https://www.w3.org/TR/2012/REC-owl2-primer-20121211/#Object_Properties)
     /// is a relationship between two individuals.
@@ -300,6 +305,12 @@ named!{
     ObjectProperty,
 
     /// An OWL
+    /// [DataProperty](https://www.w3.org/TR/2012/REC-owl2-primer-20121211/#Datatypes)
+    /// is a relationship between part of an ontology and some
+    /// concrete information.
+    DataProperty,
+
+    /// An OWL
     /// [AnnotationProperty](https://www.w3.org/TR/2012/REC-owl2-primer-20121211/#Document_Information_and_Annotations)
     /// is a relationship between a part of an ontology and an
     /// `Annotation`.
@@ -308,17 +319,6 @@ named!{
     /// not part of the description of the world, but a description of
     /// the ontology itself.
     AnnotationProperty,
-
-    /// An OWL
-    /// [DataProperty](https://www.w3.org/TR/2012/REC-owl2-primer-20121211/#Datatypes)
-    /// is a relationship between part of an ontology and some
-    /// concrete information.
-    DataProperty,
-
-    /// An OWL
-    /// [Datatype](https://www.w3.org/TR/owl2-primer/#Datatypes) is a
-    /// specific kind of data, such as an integer, string or so forth.
-    Datatype,
 
     /// An OWL
     /// [NamedIndividual](https://www.w3.org/TR/2012/REC-owl2-primer-20121211/#Classes_and_Instances)
@@ -562,14 +562,14 @@ macro_rules! axioms {
         /// This enum has variants representing the various kinds of
         /// Axiom that can be found in an OWL Ontology. An OWL axiom
         /// maps to three different entities in Horned-OWL. First is a
-        /// struct (for example, `SubClass`) which contains the data
+        /// struct (for example, `SubClassOf`) which contains the data
         /// which defines the axiom (i.e. super and sub class for
-        /// `SubClass`). Second, is a variant of the `AxiomKind`,
+        /// `SubClassOf`). Second, is a variant of the `AxiomKind`,
         /// which is used to identify all instances of a particular
-        /// kind of axiom (i.e. any `SubClass` axiom will return an
-        /// instance of AxiomKind::SubClass). Finally, we have a
+        /// kind of axiom (i.e. any `SubClassOf` axiom will return an
+        /// instance of AxiomKind::SubClassOf). Finally, we have a
         /// variant of this enum, which contains one of the structs
-        /// (i.e. Axiom::SubClass(SubClass)), which is used as a union
+        /// (i.e. Axiom::SubClassOf(SubClassOf)), which is used as a union
         /// type for all structs. The struct and enum variants all
         /// share identical names.
         #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
@@ -651,7 +651,7 @@ axioms!{
     ///
     /// All instances of `sub_class` are also instances of
     /// `super_class`.
-    SubClass{
+    SubClassOf{
         super_class: ClassExpression,
         sub_class: ClassExpression
     },
@@ -660,13 +660,13 @@ axioms!{
     ///
     /// All instances of the two `ClassExpression` are also instances
     /// of other other.
-    EquivalentClass(ClassExpression,ClassExpression),
+    EquivalentClasses(ClassExpression,ClassExpression),
 
     /// A disjoint relationship between two `ClassExpression`
     ///
     /// No instance of one `ClassExpression` can also be an instance
     /// of the other.
-    DisjointClass(ClassExpression,ClassExpression),
+    DisjointClasses(ClassExpression,ClassExpression),
 
     // ObjectProperty axioms
 
@@ -680,7 +680,7 @@ axioms!{
     ///
     /// See also: [Property Hierarchies](https://www.w3.org/TR/2012/REC-owl2-primer-20121211/#Property_Hierarchies)
     /// See also: [Property Chains](https://www.w3.org/TR/2012/REC-owl2-primer-20121211/#Property_Chains)
-    SubObjectProperty{
+    SubObjectPropertyOf{
         super_property:SubObjectPropertyExpression,
         sub_property:ObjectProperty
     },
@@ -734,10 +734,10 @@ onimpl!{DeclareAnnotationProperty, declare_annotation_property}
 onimpl!{DeclareDataProperty, declare_data_property}
 onimpl!{DeclareNamedIndividual, declare_named_individual}
 onimpl!{DeclareDatatype, declare_datatype}
-onimpl!{SubClass, sub_class}
-onimpl!{EquivalentClass, equivalent_class}
-onimpl!{DisjointClass, disjoint_class}
-onimpl!{SubObjectProperty, sub_object_property}
+onimpl!{SubClassOf, sub_class}
+onimpl!{EquivalentClasses, equivalent_class}
+onimpl!{DisjointClasses, disjoint_class}
+onimpl!{SubObjectPropertyOf, sub_object_property}
 onimpl!{InverseObjectProperty, inverse_object_property}
 onimpl!{TransitiveObjectProperty, transitive_object_property}
 onimpl!{AssertAnnotation, assert_annotation}
@@ -1059,8 +1059,8 @@ impl Ontology {
     /// let sub = b.class("http://www.example.com/sub");
     /// let subsub = b.class("http://www.example.com/subsub");
     ///
-    /// o.insert(SubClass::new((&sup).into(), (&sub).into()));
-    /// o.insert(SubClass::new((&sub).into(), (&subsub).into()));
+    /// o.insert(SubClassOf::new((&sup).into(), (&sub).into()));
+    /// o.insert(SubClassOf::new((&sub).into(), (&subsub).into()));
     ///
     /// let subs:Vec<&ClassExpression> = o.direct_subclass(&sup).collect();
     ///
@@ -1089,8 +1089,8 @@ impl Ontology {
     /// let sub = b.class("http://www.example.com/sub");
     /// let subsub = b.class("http://www.example.com/subsub");
     ///
-    /// o.insert(SubClass::new((&sup).into(), (&sub).into()));
-    /// o.insert(SubClass::new((&sub).into(), (&subsub).into()));
+    /// o.insert(SubClassOf::new((&sup).into(), (&sub).into()));
+    /// o.insert(SubClassOf::new((&sub).into(), (&subsub).into()));
     ///
     /// assert!(o.is_subclass(&sup, &sub));
     /// assert!(!o.is_subclass(&sub, &sup));
@@ -1200,7 +1200,7 @@ mod test{
     fn test_axiom_convertors() {
         let c = Build::new().class("http://www.example.com");
 
-        let dc = DisjointClass(c.clone().into(), c.clone().into());
+        let dc = DisjointClasses(c.clone().into(), c.clone().into());
         let _aa:Axiom = dc.into();
 
     }

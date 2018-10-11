@@ -384,13 +384,13 @@ fn axiom_from_start<R:BufRead>(r:&mut Read<R>, e:&BytesStart, axiom_kind:&[u8])
                     (from_start(r, e)?).into()
             }
             b"DisjointClasses" => {
-                DisjointClass(
+                DisjointClasses(
                     from_start(r, e)?,
                     from_next_tag(r)?
                 ).into()
             }
             b"EquivalentClasses" => {
-                EquivalentClass(
+                EquivalentClasses(
                     from_start(r, e)?,
                     from_next_tag(r)?
                 ).into()
@@ -410,12 +410,12 @@ fn axiom_from_start<R:BufRead>(r:&mut Read<R>, e:&BytesStart, axiom_kind:&[u8])
             b"SubClassOf" => {
                 let super_class = from_start(r, e)?;
                 let sub_class = from_next_tag(r)?;
-                SubClass{
+                SubClassOf{
                     super_class, sub_class
                 }.into()
             }
             b"SubObjectPropertyOf" => {
-                SubObjectProperty{
+                SubObjectPropertyOf{
                     super_property:from_start(r, e)?,
                     sub_property:from_next_tag(r)?
                 }.into()

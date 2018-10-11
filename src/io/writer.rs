@@ -110,17 +110,17 @@ fn tag_for_kind (axk:AxiomKind) -> &'static [u8] {
             b"InverseObjectProperties",
         AxiomKind::TransitiveObjectProperty =>
             b"TransitiveObjectProperty",
-        AxiomKind::SubObjectProperty =>
+        AxiomKind::SubObjectPropertyOf =>
             b"SubObjectPropertyOf",
         AxiomKind::SubAnnotationProperty =>
             b"SubAnnotationPropertyOf",
         AxiomKind::AssertAnnotation =>
             b"AnnotationAssertion",
-        AxiomKind::DisjointClass =>
+        AxiomKind::DisjointClasses =>
             b"DisjointClasses",
-        AxiomKind::EquivalentClass =>
+        AxiomKind::EquivalentClasses =>
             b"EquivalentClasses",
-        AxiomKind::SubClass =>
+        AxiomKind::SubClassOf =>
             b"SubClassOf",
         AxiomKind::DeclareClass =>
             b"Declaration",
@@ -521,7 +521,7 @@ render! {
             Axiom::InverseObjectProperty(ax) =>{
                 ax.render(w, m)?;
             }
-            Axiom::SubObjectProperty(ax) => {
+            Axiom::SubObjectPropertyOf(ax) => {
                 ax.render(w, m)?;
             }
             Axiom::SubAnnotationProperty(ax) => {
@@ -530,13 +530,13 @@ render! {
             Axiom::AssertAnnotation(ax) => {
                 ax.render(w, m)?;
             }
-            Axiom::DisjointClass(ax) => {
+            Axiom::DisjointClasses(ax) => {
                 ax.render(w, m)?;
             }
-            Axiom::EquivalentClass(ax) => {
+            Axiom::EquivalentClasses(ax) => {
                 ax.render(w, m)?;
             }
-            Axiom::SubClass(ax) => {
+            Axiom::SubClassOf(ax) => {
                 ax.render(w, m)?;
             }
             Axiom::DeclareClass(ax) => {
@@ -664,7 +664,7 @@ render!{
 }
 
 render!{
-    SubClass, self, w, m,
+    SubClassOf, self, w, m,
     {
         (&self.super_class,
          &self.sub_class).render(w, m)?;
@@ -674,7 +674,7 @@ render!{
 }
 
 render!{
-    EquivalentClass, self, w, m,
+    EquivalentClasses, self, w, m,
     {
         (&self.0,
          &self.1).render(w,m)?;
@@ -684,7 +684,7 @@ render!{
 }
 
 render!{
-    DisjointClass, self, w, m,
+    DisjointClasses, self, w, m,
     {
         (&self.0,
          &self.1).render(w, m)?;
@@ -727,7 +727,7 @@ render!{
 
 
 render!{
-    SubObjectProperty, self, w, m,
+    SubObjectPropertyOf, self, w, m,
     {
         (&self.super_property,
          &self.sub_property).render(w, m)?;
