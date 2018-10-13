@@ -1,9 +1,11 @@
 use curie::PrefixMapping;
 
 use model::*;
-use vocab;
+use vocab::Namespace::*;
+use vocab::WithIRI;
+use vocab::var;
 
-
+use std::borrow::Cow;
 use std::collections::BTreeSet;
 use std::io::BufRead;
 
@@ -181,17 +183,26 @@ fn expand_curie_maybe<R:BufRead>(r: &mut Read<R>, val:String) -> String {
     }
 }
 
-fn attrib_value<R:BufRead>(r: &mut Read<R>, event: &BytesStart,
-                           tag:&[u8]) -> Result<Option<String>,Error> {
+fn attrib_value_b<'a>(event: &'a BytesStart,
+                      tag:&[u8]) -> Result<Option<Cow<'a,[u8]>>,Error> {
     for res in event.attributes() {
         let attrib = res?;
         if attrib.key == tag {
-            return Ok(Some(r.reader.decode
-                           (&attrib.value).into_owned()));
+            return Ok(Some(attrib.value));
         }
     }
 
     Ok(None)
+
+}
+
+fn attrib_value<R:BufRead>(r: &mut Read<R>, event: &BytesStart,
+                           tag:&[u8]) -> Result<Option<String>,Error> {
+    attrib_value_b(event, tag)
+        .map(|res|
+             res.map(
+                 |val|
+                 r.reader.decode(&val).into_owned()))
 }
 
 fn read_iri_attr<R:BufRead>(r: &mut Read<R>, event: &BytesStart)
@@ -272,7 +283,7 @@ fn error_missing_element<R:BufRead>(tag:&[u8], r: &mut Read<R>)
 }
 
 fn is_owl(ns:&[u8]) -> bool {
-    ns == vocab::ns::OWL
+    ns == OWL.iri_b()
 }
 
 fn is_owl_name(ns:&[u8], e:&BytesEnd, tag:&[u8]) -> bool {
@@ -313,56 +324,61 @@ fn named_entity_from_start<R,T>(r:&mut Read<R>, e:&BytesStart, tag:&[u8])
     return Err(error_missing_element(b"IRI",r));
 }
 
-fn literal_from_start<R:BufRead>(r:&mut Read<R>, e: &BytesStart)
-                      -> Result<AnnotationValue,Error> {
-
-    let datatype_iri = read_a_iri_attr(r, e, b"datatypeIRI")?;
-    let lang = attrib_value(r, e, b"xml:lang")?;
-
-    let mut literal:Option<String> = None;
-
-    loop {
-        let mut e = read_event(r)?;
-        match e {
-            (_, Event::Text(ref e)) =>
-            {
-                literal = Some(r.reader.decode(e).into_owned());
-            }
-            (ref ns, Event::End(ref mut e))
-                if is_owl_name(ns, e, b"Literal") =>
-            {
-                return Ok(AnnotationValue::PlainLiteral
-                          {
-                              datatype_iri: datatype_iri,
-                              lang: lang,
-                              literal: literal
-                          });
-            }
-            _ => {
-            }
-        }
-    }
-}
-
 fn from_start<R:BufRead, T:FromStart>(r:&mut Read<R>, e: &BytesStart)
                                       -> Result<T, Error>{
     T::from_start(r, e)
 }
 
 from_start! {
-    AnnotationValue, r, e, {
-        match e.local_name() {
-            b"Literal" => {
-                literal_from_start(r, e)
-            }
-            b"AbbreviatedIRI"|b"IRI" => {
-                Ok(AnnotationValue::IRI(IRI::from_xml(r, e.local_name())?))
-            }
-            _ => {
-                return Err
-                    (error_unexpected_tag(e.local_name(), r));
+    Literal, r, e,
+    {
+        let datatype_iri = read_a_iri_attr(r, e, b"datatypeIRI")?;
+        let lang = attrib_value(r, e, b"xml:lang")?;
+
+        let mut literal:Option<String> = None;
+
+        loop {
+            let mut e = read_event(r)?;
+            match e {
+                (_, Event::Text(ref e)) =>
+                {
+                    literal = Some(r.reader.decode(e).into_owned());
+                }
+                (ref ns, Event::End(ref mut e))
+                    if is_owl_name(ns, e, b"Literal") =>
+                {
+                    return Ok(
+                        Literal{
+                            datatype_iri: datatype_iri,
+                            lang: lang,
+                            literal: literal
+                        });
+                }
+                _ => {
+                }
             }
         }
+    }
+}
+
+from_start! {
+    AnnotationValue, r, e, {
+        Ok(
+            match e.local_name() {
+                b"Literal" => {
+                    Literal::from_start(r, e)?
+                    .into()
+                }
+                b"AbbreviatedIRI"|b"IRI" => {
+                    IRI::from_xml(r, e.local_name())?
+                    .into()
+                }
+                _ => {
+                    return Err
+                        (error_unexpected_tag(e.local_name(), r));
+                }
+            }
+        )
     }
 }
 
@@ -445,6 +461,12 @@ fn axiom_from_start<R:BufRead>(r:&mut Read<R>, e:&BytesStart, axiom_kind:&[u8])
                     }
                 }.into()
             }
+            b"DatatypeDefinition" => {
+                DatatypeDefinition{
+                    kind: from_start(r, e)?,
+                    range: from_next_tag(r)?
+                }.into()
+            }
             _ => {
                 return Err(error_unexpected_tag(axiom_kind,r));
             }
@@ -472,7 +494,6 @@ fn till_end<R:BufRead, T:FromStart>(r:&mut Read<R>,
             {
                 let op = from_start(r, e)?;
                 operands.push(op);
-                discard_till(r, e.local_name())?;
             }
             (ref ns, Event::End(ref e))
                 if is_owl_name(ns, e, end_tag)
@@ -563,6 +584,12 @@ from_start! {
                 b"ObjectExactCardinality" => {
                     let (n, o, ce) = cardinality_restriction(r, e)?;
                     ClassExpression::ObjectExactCardinality{n, o, ce}
+                }
+                b"DataSomeValuesFrom" => {
+                    ClassExpression::DataSomeValuesFrom{
+                        dp:from_next_tag(r)?,
+                        dr:from_next_tag(r)?
+                    }
                 }
                 _ => {
                     return Err(error_unexpected_tag(e.local_name(), r));
@@ -698,6 +725,65 @@ from_start!{
     }
 }
 
+from_start! {
+    FacetRestriction, r, e,
+    {
+        let f = attrib_value_b(e, b"facet")?;
+        let f = f.ok_or_else(
+            || error_missing_attribute("facet", r)
+        )?;
+
+        Ok(
+            FacetRestriction {
+                f: var(Facet::all(), &f)
+                    .ok_or_else(
+                    || error_unknown_entity("facet", &f, r)
+                )?,
+                l: from_next_tag(r)?
+            }
+        )
+    }
+}
+
+from_start! {
+    DataRange, r, e,
+    {
+        Ok(
+            match e.local_name() {
+                b"Datatype" => {
+                    DataRange::Datatype(
+                        from_start(r, e)?
+                    )
+                }
+                b"DataIntersectionOf" => {
+                    DataRange::DataIntersectionOf(
+                        till_end(r, b"DataIntersectionOf")?
+                    )
+                }
+                b"DataComplementOf" => {
+                    DataRange::DataComplementOf(
+                        Box::new(from_next_tag(r)?)
+                    )
+                }
+                b"DataOneOf" => {
+                    DataRange::DataOneOf(
+                        till_end(r, b"DataOneOf")?
+                    )
+                }
+                b"DatatypeRestriction" => {
+                    DataRange::DatatypeRestriction (
+                        from_next_tag(r)?,
+                        till_end(r, b"DatatypeRestriction")?
+                    )
+                }
+                _=> {
+                    return Err(error_unknown_entity("DataRange",
+                                                    e.local_name(),r ));
+                }
+            }
+        )
+    }
+}
 
 from_start! {
     NamedEntity, r, e,
@@ -1347,7 +1433,7 @@ mod test {
         )
     }
 
-        #[test]
+    #[test]
     fn test_exact_cardinality() {
         let ont_s = include_str!("../ont/owl-xml/object-exact-cardinality.owl");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
@@ -1398,4 +1484,78 @@ mod test {
         )
     }
 
+    #[test]
+    fn datatype_alias() {
+        let ont_s = include_str!("../ont/owl-xml/datatype-alias.owl");
+        let (ont, _) = read_ok(&mut ont_s.as_bytes());
+
+        assert_eq!(ont.datatype_definition().count(), 1);
+        let dd = ont.datatype_definition().next().unwrap();
+
+        match dd {
+            DatatypeDefinition{kind, range} => {
+                assert_eq!(String::from(kind),
+                           "http://www.example.com/D");
+
+                match range {
+                    DataRange::Datatype(real) => {
+                        assert_eq!(String::from(real),
+                                   "http://www.w3.org/2002/07/owl#real"
+                        );
+                    }
+                    _=> {
+                        panic!("Unexpected type from test");
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn datatype_intersection() {
+        let ont_s = include_str!("../ont/owl-xml/datatype-intersection.owl");
+        let (ont, _) = read_ok(&mut ont_s.as_bytes());
+
+        assert_eq!(ont.datatype_definition().count(), 1);
+    }
+
+    #[test]
+    fn datatype_union() {
+        let ont_s = include_str!("../ont/owl-xml/datatype-union.owl");
+        let (ont, _) = read_ok(&mut ont_s.as_bytes());
+
+        assert_eq!(ont.datatype_definition().count(), 1);
+    }
+
+    #[test]
+    fn datatype_complement() {
+        let ont_s = include_str!("../ont/owl-xml/datatype-complement.owl");
+        let (ont, _) = read_ok(&mut ont_s.as_bytes());
+
+        assert_eq!(ont.datatype_definition().count(), 1);
+    }
+
+    #[test]
+    fn datatype_oneof() {
+        let ont_s = include_str!("../ont/owl-xml/datatype-oneof.owl");
+        let (ont, _) = read_ok(&mut ont_s.as_bytes());
+
+        assert_eq!(ont.datatype_definition().count(), 1);
+    }
+
+    #[test]
+    fn data_some() {
+        let ont_s = include_str!("../ont/owl-xml/data-some.owl");
+        let (ont, _) = read_ok(&mut ont_s.as_bytes());
+
+        assert_eq!(ont.sub_class().count(), 1);
+    }
+
+    #[test]
+    fn facet_restriction() {
+        let ont_s = include_str!("../ont/owl-xml/facet-restriction.owl");
+        let (ont, _) = read_ok(&mut ont_s.as_bytes());
+
+        assert_eq!(ont.sub_class().count(), 1);
+    }
 }

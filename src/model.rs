@@ -718,6 +718,11 @@ axioms!{
     SubAnnotationProperty {
         super_property:AnnotationProperty,
         sub_property: AnnotationProperty
+    },
+
+    DatatypeDefinition {
+        kind: Datatype,
+        range: DataRange
     }
 }
 
@@ -742,11 +747,21 @@ onimpl!{InverseObjectProperty, inverse_object_property}
 onimpl!{TransitiveObjectProperty, transitive_object_property}
 onimpl!{AssertAnnotation, assert_annotation}
 onimpl!{SubAnnotationProperty, sub_annotation_property}
+onimpl!{DatatypeDefinition, datatype_definition}
+
+
 onimpl!{Import, import}
 onimpl!{OntologyAnnotation, ontology_annotation}
 
 
 // Non-axiom data structures associated with OWL
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct Literal
+{
+    pub datatype_iri:Option<IRI>,
+    pub lang: Option<String>,
+    pub literal: Option<String>
+}
 
 /// Data associated with a part of the ontology.
 ///
@@ -763,12 +778,20 @@ pub struct Annotation {
 /// This Enum is currently not complete.
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum AnnotationValue {
-    PlainLiteral{
-        datatype_iri: Option<IRI>,
-        lang: Option<String>,
-        literal: Option<String>,
-    },
+    Literal(Literal),
     IRI(IRI)
+}
+
+impl From<Literal> for AnnotationValue {
+    fn from(literal: Literal) -> AnnotationValue {
+        AnnotationValue::Literal(literal)
+    }
+}
+
+impl From<IRI> for AnnotationValue {
+    fn from(iri:IRI) -> AnnotationValue {
+        AnnotationValue::IRI(iri)
+    }
 }
 
 /// A object property expression
@@ -785,6 +808,39 @@ pub enum SubObjectPropertyExpression {
     // surprisingly, BTreeSet is not itself hashable.
     ObjectPropertyChain(Vec<ObjectProperty>),
     ObjectPropertyExpression(ObjectPropertyExpression)
+}
+
+
+// Data!!!
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct FacetRestriction{
+    pub f: Facet,
+    pub l: Literal,
+}
+
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub enum Facet{
+    Length,
+    MinLength,
+    MaxLength,
+    Pattern,
+    MinInclusive,
+    MinExclusive,
+    MaxInclusive,
+    MaxExclusive,
+    TotalDigits,
+    FractionDigits,
+    LangRange
+}
+
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub enum DataRange {
+    Datatype(Datatype),
+    DataIntersectionOf(Vec<DataRange>),
+    DataUnionOf(Vec<DataRange>),
+    DataComplementOf(Box<DataRange>),
+    DataOneOf(Vec<Literal>),
+    DatatypeRestriction(Datatype, Vec<FacetRestriction>),
 }
 
 /// A class expression
@@ -872,6 +928,9 @@ pub enum ClassExpression
     /// `n` other individuals.
     ObjectExactCardinality{n:i32, o:ObjectPropertyExpression,
                            ce:Box<ClassExpression>},
+
+    DataSomeValuesFrom{dp:DataProperty, dr:DataRange}
+
 }
 
 impl From<Class> for ClassExpression {

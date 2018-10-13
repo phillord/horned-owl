@@ -2,7 +2,8 @@ use curie::PrefixMapping;
 
 use model::*;
 use model::Kinded;
-use vocab;
+use vocab::Namespace::*;
+use vocab::WithIRI;
 
 use quick_xml::events::BytesDecl;
 use quick_xml::events::BytesEnd;
@@ -138,6 +139,8 @@ fn tag_for_kind (axk:AxiomKind) -> &'static [u8] {
             b"Import",
         AxiomKind::OntologyAnnotation =>
             b"Annotation",
+        AxiomKind::DatatypeDefinition =>
+            b"DatatypeDefinition",
     }
 }
 
@@ -206,7 +209,7 @@ render! {
         w.write_event(Event::Decl(BytesDecl::new(&b"1.0"[..], None, None)))?;
 
         let mut elem = BytesStart::owned_name("Ontology");
-        elem.push_attribute((b"xmlns" as &[u8], vocab::ns::OWL));
+        elem.push_attribute((b"xmlns" as &[u8], OWL.iri_b()));
         iri_maybe(&mut elem, "ontologyIRI", &self.id.iri);
         iri_maybe(&mut elem, "versionIRI", &self.id.viri);
 
@@ -506,6 +509,9 @@ render!{
                 open.push_attribute(("cardinality", &n.to_string()[..]));
                 (o, ce).within_tag(w, m, open)?;
             }
+            &ClassExpression::DataSomeValuesFrom{ref dp, ref dr} => {
+                (dp, dr).within(w, m, b"DataSomeValuesFrom")?;
+            }
         }
         Ok(())
     }
@@ -563,6 +569,9 @@ render! {
             Axiom::OntologyAnnotation(ax) => {
                 ax.render(w, m)?;
             }
+            Axiom::DatatypeDefinition(ax) => {
+                ax.render(w, m)?;
+            }
         }
         Ok(())
     }
@@ -605,27 +614,32 @@ render!{
 }
 
 render!{
+    Literal, self, w, m,
+    {
+        let mut open = BytesStart::owned_name("Literal");
+        attribute_maybe(&mut open, "xml:lang", &self.lang);
+        attribute_maybe(
+            &mut open,
+            "datatypeIRI",
+            &self.datatype_iri.as_ref().map(|s| s.into()),
+        );
+        if let Some(l) = &self.literal {
+            l.within_tag(w, m, open)?;
+        }
+
+        Ok(())
+    }
+}
+
+render!{
     AnnotationValue, self, w, m,
     {
         match self {
             AnnotationValue::IRI(iri) => {
                 iri.render(w, m)?;
             },
-            AnnotationValue::PlainLiteral {
-                datatype_iri,
-                lang,
-                literal,
-            } => {
-                let mut open = BytesStart::owned_name("Literal");
-                attribute_maybe(&mut open, "xml:lang", lang);
-                attribute_maybe(
-                    &mut open,
-                    "datatypeIRI",
-                    &datatype_iri.as_ref().map(|s| s.into()),
-                );
-                if let Some(l) = literal {
-                    l.within_tag(w, m, open)?;
-                }
+            AnnotationValue::Literal(l) => {
+                l.render(w, m)?;
             }
         }
 
@@ -751,6 +765,58 @@ render!{
     {
         (&self.0,
          &self.1).render(w, m)?;
+
+        Ok(())
+    }
+}
+
+
+render!{
+    DatatypeDefinition, self, w, m,
+    {
+        (&self.kind).render(w, m)?;
+        (&self.range).render(w, m)?;
+
+        Ok(())
+    }
+}
+
+render!{
+    FacetRestriction, self, w, m,
+    {
+        let mut open = BytesStart::owned_name("FacetRestriction");
+        // Got the facet IRI from vocab
+        open.push_attribute(("facet",
+                             &self.f.iri_s()[..]));
+        self.l.within_tag(w, m, open)?;
+
+        Ok(())
+    }
+}
+
+render!{
+    DataRange, self, w, m,
+    {
+        match self {
+            DataRange::Datatype(d) => {
+                d.render(w, m)?;
+            }
+            DataRange::DataIntersectionOf(d) => {
+                d.within(w, m, b"DataIntersectionOf")?;
+            }
+            DataRange::DataUnionOf(d) => {
+                d.within(w, m, b"DataUnionOf")?;
+            }
+            DataRange::DataComplementOf(d) => {
+                d.within(w, m, b"DataComplementOf")?;
+            }
+            DataRange::DataOneOf(d) => {
+                d.within(w, m, b"DataOneOf")?;
+            }
+            DataRange::DatatypeRestriction(dt, fr) => {
+                (dt, fr).within(w,m, b"DatatypeRestriction")?;
+            }
+        }
 
         Ok(())
     }
@@ -1004,4 +1070,40 @@ mod test {
     fn object_exact_cardinality() {
         assert_round(include_str!("../ont/owl-xml/object-exact-cardinality.owl"));
     }
+
+    #[test]
+    fn datatype_alias() {
+        assert_round(include_str!("../ont/owl-xml/datatype-alias.owl"));
+    }
+
+    #[test]
+    fn datatype_intersection() {
+        assert_round(include_str!("../ont/owl-xml/datatype-intersection.owl"));
+    }
+
+    #[test]
+    fn datatype_union() {
+        assert_round(include_str!("../ont/owl-xml/datatype-union.owl"));
+    }
+
+    #[test]
+    fn datatype_complement() {
+        assert_round(include_str!("../ont/owl-xml/datatype-complement.owl"));
+    }
+
+    #[test]
+    fn datatype_oneof() {
+        assert_round(include_str!("../ont/owl-xml/datatype-oneof.owl"));
+    }
+
+    #[test]
+    fn datatype_some() {
+        assert_round(include_str!("../ont/owl-xml/data-some.owl"));
+    }
+
+    #[test]
+    fn facet_restriction() {
+        assert_round(include_str!("../ont/owl-xml/facet-restriction.owl"));
+    }
+
 }
