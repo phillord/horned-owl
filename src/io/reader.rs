@@ -3,7 +3,6 @@ use curie::PrefixMapping;
 use model::*;
 use vocab::Namespace::*;
 use vocab::WithIRI;
-use vocab::var;
 
 use std::borrow::Cow;
 use std::collections::BTreeSet;
@@ -735,10 +734,9 @@ from_start! {
 
         Ok(
             FacetRestriction {
-                f: var(Facet::all(), &f)
+                f: Facet::var_b(&f)
                     .ok_or_else(
-                    || error_unknown_entity("facet", &f, r)
-                )?,
+                        || error_unknown_entity("facet", &f, r))?,
                 l: from_next_tag(r)?
             }
         )

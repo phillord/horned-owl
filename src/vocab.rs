@@ -11,6 +11,20 @@ pub trait WithIRI<'a>: Meta<&'a IRIString> {
     fn iri_b(&self) ->&'a [u8] {
         &self.meta().0.as_bytes()
     }
+
+    fn var_s(tag: &'a str) -> Option<Self>
+    {
+        Self::var_b(tag.as_bytes())
+    }
+
+    fn var_b(tag: &'a [u8]) -> Option<Self>{
+        for v in Self::all() {
+            if tag == v.iri_b() {
+                return Some(v);
+            }
+        }
+        None
+    }
 }
 
 pub struct IRIString (String);
@@ -30,22 +44,6 @@ fn extend<'a, I>(i:I, s:&'a str) -> IRIString
     to_meta(&format!("{}{}", i.iri_s(), s))
 }
 
-pub fn var<'a, T>(all:Vec<T>, tag: &[u8]) -> Option<T>
-    where T:WithIRI<'a>{
-    for v in all {
-        if tag == v.iri_b() {
-            return Some(v);
-        }
-    }
-    None
-}
-
-pub fn var_s<'a, T>(all:Vec<T>, tag: &'a str) -> Option<T>
-    where T:WithIRI<'a>
-{
-    var(all, tag.as_bytes())
-}
-
 #[derive(Debug, Eq, PartialEq)]
 pub enum Namespace {
     OWL, RDF, XSD
@@ -63,13 +61,11 @@ fn meta_testing() {
     assert_eq!("http://www.w3.org/2002/07/owl#", OWL.iri_s());
     assert_eq!(b"http://www.w3.org/2002/07/owl#", OWL.iri_b());
 
-    assert_eq!(var_s(Namespace::all(),
-                     "http://www.w3.org/2002/07/owl#")
+    assert_eq!(Namespace::var_s("http://www.w3.org/2002/07/owl#")
                .unwrap(),
                OWL);
 
-    assert_eq!(var(Namespace::all(),
-                   b"http://www.w3.org/2002/07/owl#")
+    assert_eq!(Namespace::var_b(b"http://www.w3.org/2002/07/owl#")
                .unwrap(),
                OWL);
 }
@@ -104,16 +100,14 @@ pub mod facet {
                    "http://www.w3.org/2001/XMLSchema#pattern");
 
         assert_eq!(
-            var_s(Facet::all(),
-                  &"http://www.w3.org/2001/XMLSchema#pattern".to_string())
+            Facet::var_s(&"http://www.w3.org/2001/XMLSchema#pattern"
+                         .to_string())
                 .unwrap(),
             Facet::Pattern);
 
         assert_eq!(
-            var(Facet::all(),
-                b"http://www.w3.org/2001/XMLSchema#minExclusive"
-            ).unwrap(),
-            Facet::MinExclusive
-        );
+            Facet::var_b(b"http://www.w3.org/2001/XMLSchema#minExclusive")
+                .unwrap(),
+            Facet::MinExclusive);
     }
 }
