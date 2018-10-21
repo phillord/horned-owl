@@ -929,8 +929,55 @@ pub enum ClassExpression
     ObjectExactCardinality{n:i32, o:ObjectPropertyExpression,
                            ce:Box<ClassExpression>},
 
-    DataSomeValuesFrom{dp:DataProperty, dr:DataRange}
+    /// An exististential relationship.
+    ///
+    /// This is the anonymous class of individuals `i` which have the
+    /// relationship `dp` to the data range, `dr`. Every individual
+    /// `i` must have this relationship to data constrainted by `dr`.
+    ///
+    /// See also: [Existential Quantification](https://www.w3.org/TR/owl2-syntax/#Existential_Quantification_2)
+    DataSomeValuesFrom{dp:DataProperty, dr:DataRange},
 
+    /// A universal relationship.
+    ///
+    /// This is the anonymous class of individuals `i` which if they
+    /// have a relationship `dp` to some data, then that must be of
+    /// type `dr`.
+    ///
+    /// See also [Universal Quantification](https://www.w3.org/TR/owl2-syntax/#Universal_Quantification_2)
+    DataAllValuesFrom{dp:DataProperty, dr:DataRange},
+
+    /// A has-value relationship.
+
+    /// This is the class of individuals, `i`, which have the
+    /// relationship `dp` to exactly the literal `l`.
+
+    /// See also [Value Restriction](https://www.w3.org/TR/owl2-syntax/#Literal_Value_Restriction)
+    DataHasValue{dp:DataProperty, l:Literal},
+
+    /// A minimum cardinality restriction
+
+    /// The class of individuals have at least `n` relationships of
+    /// the kind `dp` to a given data range `dr`.
+
+    /// See also [Min Cardinality](https://www.w3.org/TR/owl2-syntax/#Minimum_Cardinality_2)
+    DataMinCardinality{n:i32, dp:DataProperty, dr:DataRange},
+
+    /// A max cardinality restriction
+
+    /// The class of individuals have at most `n` relationships of
+    /// the kind `dp` to a given data range `dr`.
+
+    /// See also [Max Cardinality](https://www.w3.org/TR/owl2-syntax/#Maximum_Cardinality_2)
+    DataMaxCardinality{n:i32, dp:DataProperty, dr:DataRange},
+
+    /// An exact cardinality restriction
+
+    /// The class of individuals have exactly `n` relationships of
+    /// the kind `dp` to a given data range `dr`.
+
+    /// See also [Exactly Cardinality](https://www.w3.org/TR/owl2-syntax/#Exact_Cardinality_2)
+    DataExactCardinality{n:i32, dp:DataProperty, dr:DataRange}
 }
 
 impl From<Class> for ClassExpression {

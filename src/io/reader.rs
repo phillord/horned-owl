@@ -505,10 +505,10 @@ fn till_end<R:BufRead, T:FromStart>(r:&mut Read<R>,
     }
 }
 
-fn cardinality_restriction<R:BufRead>(r:&mut Read<R>,
-                                      e: &BytesStart)
-                                      -> Result<(i32, ObjectPropertyExpression,
-                                                 Box<ClassExpression>),Error>
+fn object_cardinality_restriction<R:BufRead>(r:&mut Read<R>,
+                                             e: &BytesStart)
+                                             -> Result<(i32, ObjectPropertyExpression,
+                                                        Box<ClassExpression>),Error>
 {
 
     let n = attrib_value(r, e, b"cardinality")?;
@@ -517,6 +517,28 @@ fn cardinality_restriction<R:BufRead>(r:&mut Read<R>,
             n.parse::<i32>()?,
             from_next_tag(r)?,
             Box::new(from_next_tag(r)?)
+        ))
+    }
+    else {
+        return Err(error_missing_attribute
+                   ("cardinality",r));
+    }
+}
+
+fn data_cardinality_restriction<R:BufRead>(r:&mut Read<R>,
+                                             e: &BytesStart)
+                                           -> Result<(i32, DataProperty,
+                                                      DataRange
+                                             ),Error>
+{
+
+    let n = attrib_value(r, e, b"cardinality")?;
+
+    if let Some(n) = n {
+        Ok((
+            n.parse::<i32>()?,
+            from_next_tag(r)?,
+            from_next_tag(r)?
         ))
     }
     else {
@@ -573,15 +595,15 @@ from_start! {
                         (from_next_tag(r)?)
                 }
                 b"ObjectMinCardinality" => {
-                    let (n, o, ce) = cardinality_restriction(r, e)?;
+                    let (n, o, ce) = object_cardinality_restriction(r, e)?;
                     ClassExpression::ObjectMinCardinality{n, o, ce}
                 }
                 b"ObjectMaxCardinality" => {
-                    let (n, o, ce) = cardinality_restriction(r, e)?;
+                    let (n, o, ce) = object_cardinality_restriction(r, e)?;
                     ClassExpression::ObjectMaxCardinality{n, o, ce}
                 }
                 b"ObjectExactCardinality" => {
-                    let (n, o, ce) = cardinality_restriction(r, e)?;
+                    let (n, o, ce) = object_cardinality_restriction(r, e)?;
                     ClassExpression::ObjectExactCardinality{n, o, ce}
                 }
                 b"DataSomeValuesFrom" => {
@@ -589,6 +611,30 @@ from_start! {
                         dp:from_next_tag(r)?,
                         dr:from_next_tag(r)?
                     }
+                }
+                b"DataAllValuesFrom" => {
+                    ClassExpression::DataAllValuesFrom{
+                        dp:from_next_tag(r)?,
+                        dr:from_next_tag(r)?
+                    }
+                }
+                b"DataHasValue" => {
+                    ClassExpression::DataHasValue {
+                        dp:from_next_tag(r)?,
+                        l:from_next_tag(r)?
+                    }
+                }
+                b"DataMinCardinality" => {
+                    let (n, dp, dr) = data_cardinality_restriction(r, e)?;
+                    ClassExpression::DataMinCardinality{n, dp, dr}
+                }
+                b"DataMaxCardinality" => {
+                    let (n, dp, dr) = data_cardinality_restriction(r, e)?;
+                    ClassExpression::DataMaxCardinality{n, dp, dr}
+                }
+                b"DataExactCardinality" => {
+                    let (n, dp, dr) = data_cardinality_restriction(r, e)?;
+                    ClassExpression::DataExactCardinality{n, dp, dr}
                 }
                 _ => {
                     return Err(error_unexpected_tag(e.local_name(), r));
@@ -1555,5 +1601,78 @@ mod test {
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
         assert_eq!(ont.sub_class().count(), 1);
+    }
+
+
+    #[test]
+    fn data_only() {
+        let ont_s = include_str!("../ont/owl-xml/data-only.owl");
+        let (ont, _) = read_ok(&mut ont_s.as_bytes());
+
+        let cl = &ont.sub_class().next().unwrap().sub_class;
+        assert_eq!(ont.sub_class().count(), 1);
+        if let ClassExpression::DataAllValuesFrom{dp:ref _dp, dr:ref _dr} = cl {
+            assert!(true);
+        }
+        else{
+            panic!("Expecting DataAllValuesFrom");
+        }
+    }
+
+    #[test]
+    fn data_exact_cardinality() {
+        let ont_s = include_str!("../ont/owl-xml/data-exact-cardinality.owl");
+        let (ont, _) = read_ok(&mut ont_s.as_bytes());
+
+        let cl = &ont.sub_class().next().unwrap().sub_class;
+        assert_eq!(ont.sub_class().count(), 1);
+        if let ClassExpression::DataExactCardinality{n: ref _n, dp:ref _dp,
+                                                     dr:ref _dr} = cl {
+            assert!(true);
+        }
+        else{
+            panic!("Expecting DataExactCardinality");
+        }
+    }
+
+    #[test]
+    fn data_min_cardinality() {
+        let ont_s = include_str!("../ont/owl-xml/data-min-cardinality.owl");
+        let (ont, _) = read_ok(&mut ont_s.as_bytes());
+
+        let cl = &ont.sub_class().next().unwrap().sub_class;
+        assert_eq!(ont.sub_class().count(), 1);
+        if let ClassExpression::DataMinCardinality{n: ref _n, dp:ref _dp,
+                                                     dr:ref _dr} = cl {
+            assert!(true);
+        }
+        else{
+            panic!("Expecting DataMinCardinality");
+        }
+    }
+
+
+    #[test]
+    fn data_max_cardinality() {
+        let ont_s = include_str!("../ont/owl-xml/data-max-cardinality.owl");
+        let (ont, _) = read_ok(&mut ont_s.as_bytes());
+
+        let cl = &ont.sub_class().next().unwrap().sub_class;
+        assert_eq!(ont.sub_class().count(), 1);
+        if let ClassExpression::DataMaxCardinality{n: ref _n, dp:ref _dp,
+                                                   dr:ref _dr} = cl {
+            assert!(true);
+        }
+        else{
+            panic!("Expecting DataMaxCardinality");
+        }
+    }
+
+    #[test]
+    fn data_has_value() {
+        let ont_s = include_str!("../ont/owl-xml/data-has-value.owl");
+        let (ont, _) = read_ok(&mut ont_s.as_bytes());
+
+        assert_eq!(1, ont.sub_class().count());
     }
 }

@@ -512,6 +512,27 @@ render!{
             &ClassExpression::DataSomeValuesFrom{ref dp, ref dr} => {
                 (dp, dr).within(w, m, b"DataSomeValuesFrom")?;
             }
+            &ClassExpression::DataAllValuesFrom{ref dp, ref dr} => {
+                (dp, dr).within(w, m, b"DataAllValuesFrom")?;
+            }
+            &ClassExpression::DataHasValue{ref dp, ref l} => {
+                (dp, l).within(w, m, b"DataHasValue")?;
+            }
+            &ClassExpression::DataMinCardinality{n, ref dp, ref dr} => {
+                let mut open = BytesStart::owned_name("DataMinCardinality");
+                open.push_attribute(("cardinality", &n.to_string()[..]));
+                (dp, dr).within_tag(w, m, open)?;
+            }
+            &ClassExpression::DataMaxCardinality{n, ref dp, ref dr} => {
+                let mut open = BytesStart::owned_name("DataMaxCardinality");
+                open.push_attribute(("cardinality", &n.to_string()[..]));
+                (dp, dr).within_tag(w, m, open)?;
+            }
+            &ClassExpression::DataExactCardinality{n, ref dp, ref dr} => {
+                let mut open = BytesStart::owned_name("DataExactCardinality");
+                open.push_attribute(("cardinality", &n.to_string()[..]));
+                (dp, dr).within_tag(w, m, open)?;
+            }
         }
         Ok(())
     }
@@ -1104,6 +1125,30 @@ mod test {
     #[test]
     fn facet_restriction() {
         assert_round(include_str!("../ont/owl-xml/facet-restriction.owl"));
+    }
+
+    #[test]
+    fn data_only(){
+        assert_round(include_str!("../ont/owl-xml/data-only.owl"));
+    }
+    #[test]
+    fn data_exact_cardinality() {
+        assert_round(include_str!("../ont/owl-xml/data-exact-cardinality.owl"));
+    }
+
+    #[test]
+    fn data_has_value(){
+        assert_round(include_str!("../ont/owl-xml/data-has-value.owl"));
+    }
+
+    #[test]
+    fn data_max_cardinality() {
+        assert_round(include_str!("../ont/owl-xml/data-max-cardinality.owl"));
+    }
+
+    #[test]
+    fn data_min_cardinality() {
+        assert_round(include_str!("../ont/owl-xml/data-min-cardinality.owl"));
     }
 
 }
