@@ -277,6 +277,19 @@ macro_rules! named {
                 }
             }
 
+            impl $name {
+                pub fn is<I>(&self, iri: I) -> bool
+                    where I:Into<IRI>
+                {
+                    self.0 == iri.into()
+                }
+
+                pub fn is_s<S>(&self, iri:S) -> bool
+                    where S:Into<String>
+                {
+                    *(self.0).0 == iri.into()
+                }
+            }
         ) *
     }
 }
@@ -1300,6 +1313,25 @@ mod test{
 
         let ne:NamedEntity = c.clone().into();
         assert_eq!(ne, NamedEntity::Class(c));
+    }
+
+    #[test]
+    fn test_class_string_ref() {
+        let s = String::from("http://www.example.com");
+        let c = Build::new().class(s.clone());
+
+        assert!(c.is_s(s))
+    }
+
+    #[test]
+    fn test_is() {
+        let c = Build::new().class("http://www.example.com");
+        let i = Build::new().named_individual("http://www.example.com");
+        let iri = Build::new().iri("http://www.example.com");
+
+        assert!(c.is(iri));
+        assert!(c.is(i.clone()));
+        assert!(i.is(c));
     }
 
     #[test]

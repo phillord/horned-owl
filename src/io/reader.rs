@@ -2,6 +2,7 @@ use curie::PrefixMapping;
 
 use model::*;
 use vocab::Namespace::*;
+use vocab::OWL;
 use vocab::WithIRI;
 
 use std::borrow::Cow;
@@ -506,23 +507,31 @@ fn till_end<R:BufRead, T:FromStart>(r:&mut Read<R>,
 }
 
 fn object_cardinality_restriction<R:BufRead>(r:&mut Read<R>,
-                                             e: &BytesStart)
+                                             e: &BytesStart,
+                                             end_tag: &[u8])
                                              -> Result<(i32, ObjectPropertyExpression,
                                                         Box<ClassExpression>),Error>
 {
 
     let n = attrib_value(r, e, b"cardinality")?;
-    if let Some(n) = n {
-        Ok((
-            n.parse::<i32>()?,
-            from_next_tag(r)?,
-            Box::new(from_next_tag(r)?)
-        ))
-    }
-    else {
-        return Err(error_missing_attribute
-                   ("cardinality",r));
-    }
+    let n = n.ok_or_else(
+        || error_missing_attribute("cardinality",r)
+    )?;
+
+    let ope = from_next_tag(r)?;
+    let mut vce:Vec<ClassExpression> = till_end(r, end_tag)?;
+
+    Ok((
+        n.parse::<i32>()?,
+        ope,
+        Box::new(
+            match vce.len() {
+                0 => r.build.class(OWL::Thing.iri_s()
+                                   .to_string()).into(),
+                1 => vce.remove(0).into(),
+                _ => Err(error_unexpected_tag(end_tag, r))?
+            })
+    ))
 }
 
 fn data_cardinality_restriction<R:BufRead>(r:&mut Read<R>,
@@ -595,15 +604,18 @@ from_start! {
                         (from_next_tag(r)?)
                 }
                 b"ObjectMinCardinality" => {
-                    let (n, o, ce) = object_cardinality_restriction(r, e)?;
+                    let (n, o, ce) = object_cardinality_restriction
+                        (r, e, b"ObjectMinCardinality")?;
                     ClassExpression::ObjectMinCardinality{n, o, ce}
                 }
                 b"ObjectMaxCardinality" => {
-                    let (n, o, ce) = object_cardinality_restriction(r, e)?;
+                    let (n, o, ce) = object_cardinality_restriction
+                        (r, e, b"ObjectMaxCardinality")?;
                     ClassExpression::ObjectMaxCardinality{n, o, ce}
                 }
                 b"ObjectExactCardinality" => {
-                    let (n, o, ce) = object_cardinality_restriction(r, e)?;
+                    let (n, o, ce) = object_cardinality_restriction
+                        (r, e, b"ObjectExactCardinality")?;
                     ClassExpression::ObjectExactCardinality{n, o, ce}
                 }
                 b"DataSomeValuesFrom" => {
@@ -1426,7 +1438,15 @@ mod test {
         )
     }
 
-        #[test]
+    #[test]
+    fn test_unqualified_cardinality() {
+        let ont_s = include_str!("../ont/owl-xml/object-unqualified-max-cardinality.owl");
+        let (ont, _) = read_ok(&mut ont_s.as_bytes());
+
+        assert_eq!(ont.sub_class().count(), 1);
+    }
+
+    #[test]
     fn test_max_cardinality() {
         let ont_s = include_str!("../ont/owl-xml/object-max-cardinality.owl");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());

@@ -1,5 +1,6 @@
-use self::Namespace::*;
 use enum_meta::*;
+use model::Facet;
+use self::Namespace::*;
 
 pub trait WithIRI<'a>: Meta<&'a IRIString> {
     /// Return a string representation of the IRI associated with this
@@ -56,6 +57,19 @@ lazy_meta! {
     XSD, to_meta("http://www.w3.org/2001/XMLSchema#");
 }
 
+
+pub enum OWL {
+    // TODO add the others
+    Thing,
+    Nothing,
+}
+
+lazy_meta! {
+    OWL, IRIString, META_OWL;
+    Thing, extend(OWL, "Thing");
+    Nothing, extend(OWL, "Nothing")
+}
+
 #[test]
 fn meta_testing() {
     assert_eq!("http://www.w3.org/2002/07/owl#", OWL.iri_s());
@@ -70,44 +84,39 @@ fn meta_testing() {
                OWL);
 }
 
-pub mod facet {
-    use ::model::Facet;
-    use super::*;
-
-    lazy_meta!{
-        Facet, IRIString, META_FACET;
-        Length, extend(XSD, "length");
-        MinLength, extend(XSD, "minLength");
-        MaxLength, extend(XSD, "maxLength");
-        Pattern, extend(XSD, "pattern");
-        MinInclusive, extend(XSD, "minInclusive");
-        MinExclusive, extend(XSD, "minExclusive");
-        MaxInclusive, extend(XSD, "maxInclusive");
-        MaxExclusive, extend(XSD, "maxExclusive");
-        TotalDigits, extend(XSD, "totalDigits");
-        FractionDigits, extend(XSD, "fractionDigits");
-        LangRange, extend(RDF, "langRange");
-    }
+lazy_meta!{
+    Facet, IRIString, META_FACET;
+    Length, extend(XSD, "length");
+    MinLength, extend(XSD, "minLength");
+    MaxLength, extend(XSD, "maxLength");
+    Pattern, extend(XSD, "pattern");
+    MinInclusive, extend(XSD, "minInclusive");
+    MinExclusive, extend(XSD, "minExclusive");
+    MaxInclusive, extend(XSD, "maxInclusive");
+    MaxExclusive, extend(XSD, "maxExclusive");
+    TotalDigits, extend(XSD, "totalDigits");
+    FractionDigits, extend(XSD, "fractionDigits");
+    LangRange, extend(RDF, "langRange");
+}
 
 
-    #[test]
-    fn facet_meta() {
+#[test]
+fn facet_meta() {
 
-        assert_eq!(Facet::MinLength.iri_s(),
-                   "http://www.w3.org/2001/XMLSchema#minLength");
+    assert_eq!(Facet::MinLength.iri_s(),
+               "http://www.w3.org/2001/XMLSchema#minLength");
 
-        assert_eq!(Facet::Pattern.iri_s(),
-                   "http://www.w3.org/2001/XMLSchema#pattern");
+    assert_eq!(Facet::Pattern.iri_s(),
+               "http://www.w3.org/2001/XMLSchema#pattern");
 
-        assert_eq!(
-            Facet::var_s(&"http://www.w3.org/2001/XMLSchema#pattern"
-                         .to_string())
-                .unwrap(),
-            Facet::Pattern);
+    assert_eq!(
+        Facet::var_s(&"http://www.w3.org/2001/XMLSchema#pattern"
+                     .to_string())
+            .unwrap(),
+        Facet::Pattern);
 
-        assert_eq!(
-            Facet::var_b(b"http://www.w3.org/2001/XMLSchema#minExclusive")
-                .unwrap(),
-            Facet::MinExclusive);
-    }
+    assert_eq!(
+        Facet::var_b(b"http://www.w3.org/2001/XMLSchema#minExclusive")
+            .unwrap(),
+        Facet::MinExclusive);
 }
