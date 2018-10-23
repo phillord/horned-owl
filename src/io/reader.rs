@@ -1,6 +1,7 @@
 use curie::PrefixMapping;
 
 use model::*;
+use vocab::OWL2Datatype;
 use vocab::Namespace::*;
 use vocab::OWL;
 use vocab::WithIRI;
@@ -535,25 +536,30 @@ fn object_cardinality_restriction<R:BufRead>(r:&mut Read<R>,
 }
 
 fn data_cardinality_restriction<R:BufRead>(r:&mut Read<R>,
-                                             e: &BytesStart)
+                                           e: &BytesStart,
+                                           end_tag: &[u8])
                                            -> Result<(i32, DataProperty,
                                                       DataRange
                                              ),Error>
 {
-
     let n = attrib_value(r, e, b"cardinality")?;
+    let n = n.ok_or_else(
+        || (error_missing_attribute("cardinality",r))
+    )?;
 
-    if let Some(n) = n {
-        Ok((
-            n.parse::<i32>()?,
-            from_next_tag(r)?,
-            from_next_tag(r)?
-        ))
-    }
-    else {
-        return Err(error_missing_attribute
-                   ("cardinality",r));
-    }
+    let dp = from_next_tag(r)?;
+    let mut vdr:Vec<DataRange> = till_end(r, end_tag)?;
+
+    Ok((
+        n.parse::<i32>()?,
+        dp,
+        match vdr.len() {
+            0 => r.build.datatype(OWL2Datatype::RDFSLiteral.iri_s()
+                                  .to_string()).into(),
+            1 => vdr.remove(0).into(),
+            _ => Err(error_unexpected_tag(end_tag, r))?
+        }
+    ))
 }
 
 
@@ -637,15 +643,18 @@ from_start! {
                     }
                 }
                 b"DataMinCardinality" => {
-                    let (n, dp, dr) = data_cardinality_restriction(r, e)?;
+                    let (n, dp, dr) = data_cardinality_restriction
+                        (r, e, b"DataMinCardinality")?;
                     ClassExpression::DataMinCardinality{n, dp, dr}
                 }
                 b"DataMaxCardinality" => {
-                    let (n, dp, dr) = data_cardinality_restriction(r, e)?;
+                    let (n, dp, dr) = data_cardinality_restriction
+                        (r, e, b"DataMaxCardinality")?;
                     ClassExpression::DataMaxCardinality{n, dp, dr}
                 }
                 b"DataExactCardinality" => {
-                    let (n, dp, dr) = data_cardinality_restriction(r, e)?;
+                    let (n, dp, dr) = data_cardinality_restriction
+                        (r, e, b"DataExactCardinality")?;
                     ClassExpression::DataExactCardinality{n, dp, dr}
                 }
                 _ => {
@@ -1656,6 +1665,27 @@ mod test {
     }
 
     #[test]
+    fn data_unqualified_cardinality() {
+        let ont_s = include_str!("../ont/owl-xml/data-unqualified-exact.owl");
+        let (ont, _) = read_ok(&mut ont_s.as_bytes());
+        let cl = &ont.sub_class().next().unwrap().sub_class;
+        assert_eq!(ont.sub_class().count(), 1);
+        if let ClassExpression::DataExactCardinality{n: ref _n, dp:ref _dp,
+                                                     ref dr} = cl {
+            assert!(
+                match dr {
+                    DataRange::Datatype(dt) =>
+                        dt.is_s(&OWL2Datatype::RDFSLiteral.iri_s()[..]),
+                    _ => false
+                }
+            );
+        }
+        else{
+            panic!("Expecting DataExactCardinality");
+        }
+    }
+
+    #[test]
     fn data_min_cardinality() {
         let ont_s = include_str!("../ont/owl-xml/data-min-cardinality.owl");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
@@ -1670,7 +1700,6 @@ mod test {
             panic!("Expecting DataMinCardinality");
         }
     }
-
 
     #[test]
     fn data_max_cardinality() {

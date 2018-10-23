@@ -47,13 +47,14 @@ fn extend<'a, I>(i:I, s:&'a str) -> IRIString
 
 #[derive(Debug, Eq, PartialEq)]
 pub enum Namespace {
-    OWL, RDF, XSD
+    OWL, RDF, RDFS, XSD
 }
 
 lazy_meta! {
     Namespace, IRIString, META_NS;
     OWL, to_meta("http://www.w3.org/2002/07/owl#");
     RDF, to_meta("http://www.w3.org/1999/02/22-rdf-syntax-ns#");
+    RDFS, to_meta("http://www.w3.org/2000/01/rdf-schema#");
     XSD, to_meta("http://www.w3.org/2001/XMLSchema#");
 }
 
@@ -67,7 +68,16 @@ pub enum OWL {
 lazy_meta! {
     OWL, IRIString, META_OWL;
     Thing, extend(OWL, "Thing");
-    Nothing, extend(OWL, "Nothing")
+    Nothing, extend(OWL, "Nothing");
+}
+
+pub enum OWL2Datatype{
+    RDFSLiteral
+}
+
+lazy_meta! {
+    OWL2Datatype, IRIString, META_OWL2Datatype;
+    RDFSLiteral, extend(RDFS, "Literal")
 }
 
 #[test]

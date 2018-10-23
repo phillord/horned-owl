@@ -289,6 +289,7 @@ macro_rules! named {
                 {
                     *(self.0).0 == iri.into()
                 }
+
             }
         ) *
     }
@@ -856,6 +857,13 @@ pub enum DataRange {
     DatatypeRestriction(Datatype, Vec<FacetRestriction>),
 }
 
+impl From<Datatype> for DataRange {
+    fn from(dr: Datatype) -> DataRange {
+        DataRange::Datatype(dr)
+    }
+}
+
+
 /// A class expression
 ///
 /// As well as a named class, it is possible to define classes of
@@ -1320,7 +1328,7 @@ mod test{
         let s = String::from("http://www.example.com");
         let c = Build::new().class(s.clone());
 
-        assert!(c.is_s(s))
+        assert!(c.is_s(s));
     }
 
     #[test]
