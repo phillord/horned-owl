@@ -1078,6 +1078,11 @@ mod test {
     }
 
     #[test]
+    fn object_unqualified_cardinality() {
+        assert_round(include_str!("../ont/owl-xml/object-unqualified-max-cardinality.owl"));
+    }
+
+    #[test]
     fn object_min_cardinality() {
         assert_round(include_str!("../ont/owl-xml/object-min-cardinality.owl"));
     }
