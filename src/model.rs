@@ -508,7 +508,7 @@ macro_rules! axiomimpl {
 // noticed that the quick_error crate passes afterwards and it's easy
 // to get to work this way. As it's an internal macro, I think this is fine.
 macro_rules! axiom {
-    ($name:ident ($($tt:tt),*) $(#[$attr:meta])*) =>
+    ($name:ident ($($tt:ty),*) $(#[$attr:meta])*) =>
     {
         $(#[$attr]) *
         #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
@@ -672,15 +672,15 @@ axioms!{
 
     /// An equivalance relationship between two `ClassExpression`.
     ///
-    /// All instances of the two `ClassExpression` are also instances
+    /// All instances of `ClassExpression` are also instances
     /// of other other.
-    EquivalentClasses(ClassExpression,ClassExpression),
+    EquivalentClasses(Vec<ClassExpression>),
 
     /// A disjoint relationship between two `ClassExpression`
     ///
     /// No instance of one `ClassExpression` can also be an instance
-    /// of the other.
-    DisjointClasses(ClassExpression,ClassExpression),
+    /// of any of the others.
+    DisjointClasses(Vec<ClassExpression>),
 
     // ObjectProperty axioms
 
@@ -1346,7 +1346,7 @@ mod test{
     fn test_axiom_convertors() {
         let c = Build::new().class("http://www.example.com");
 
-        let dc = DisjointClasses(c.clone().into(), c.clone().into());
+        let dc = DisjointClasses(vec![c.clone().into(), c.clone().into()]);
         let _aa:Axiom = dc.into();
 
     }

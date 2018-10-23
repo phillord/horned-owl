@@ -711,8 +711,7 @@ render!{
 render!{
     EquivalentClasses, self, w, m,
     {
-        (&self.0,
-         &self.1).render(w,m)?;
+        (&self.0).render(w,m)?;
 
         Ok(())
     }
@@ -721,8 +720,7 @@ render!{
 render!{
     DisjointClasses, self, w, m,
     {
-        (&self.0,
-         &self.1).render(w, m)?;
+        (&self.0).render(w, m)?;
 
         Ok(())
     }

@@ -402,14 +402,12 @@ fn axiom_from_start<R:BufRead>(r:&mut Read<R>, e:&BytesStart, axiom_kind:&[u8])
             }
             b"DisjointClasses" => {
                 DisjointClasses(
-                    from_start(r, e)?,
-                    from_next_tag(r)?
+                    from_start_to_end(r, e, b"DisjointClasses")?
                 ).into()
             }
             b"EquivalentClasses" => {
                 EquivalentClasses(
-                    from_start(r, e)?,
-                    from_next_tag(r)?
+                    from_start_to_end(r, e, b"EquivalentClasses")?
                 ).into()
             }
             b"SubAnnotationPropertyOf" => {
@@ -475,12 +473,28 @@ fn axiom_from_start<R:BufRead>(r:&mut Read<R>, e:&BytesStart, axiom_kind:&[u8])
     )
 }
 
+fn from_start_to_end<R:BufRead, T:FromStart>(r:&mut Read<R>,
+                     e:&BytesStart,
+                     end_tag: &[u8])
+                     -> Result<Vec<T>,Error> {
+    let mut v = Vec::new();
+    v.push(from_start(r, e)?);
+    till_end_with(r, end_tag, v)
+}
+
 // Keep reading entities, till end_tag is reached
 fn till_end<R:BufRead, T:FromStart>(r:&mut Read<R>,
-                            end_tag: &[u8])
-                            -> Result<Vec<T>,Error> {
-    let mut operands:Vec<T> = Vec::new();
+                                    end_tag: &[u8])
+                                    -> Result<Vec<T>,Error> {
+    let operands:Vec<T> = Vec::new();
+    till_end_with(r, end_tag, operands)
+}
 
+// Keep reading entities, till end_tag is reached
+fn till_end_with<R:BufRead, T:FromStart>(r:&mut Read<R>,
+                                         end_tag: &[u8],
+                                         mut operands:Vec<T>)
+                                    -> Result<Vec<T>,Error> {
     loop {
         let e = read_event(r)?;
         match e {
@@ -669,7 +683,6 @@ from_start! {
     AnnotatedAxiom, r, e,
     {
         let mut annotation: BTreeSet<Annotation> = BTreeSet::new();
-        let mut axiom: Option<Axiom> = None;
         let axiom_kind:&[u8] = e.local_name();
 
         loop {
@@ -686,20 +699,17 @@ from_start! {
                                 (Annotation::from_xml(r, b"Annotation")?);
                         }
                         _ => {
-                            axiom =
-                                Some(axiom_from_start(r,e,axiom_kind)?);
+                            return Ok(AnnotatedAxiom{
+                                annotation:annotation,
+                                axiom:axiom_from_start(r,e,axiom_kind)?
+                            });
                         }
                     }
                 }
                 (ref ns, Event::End(ref e))
                     if is_owl_name(ns, e, axiom_kind) =>
                 {
-                    if axiom.is_none() {
-                        return Err(error_unexpected_end_tag(axiom_kind, r));
-                    }
-                    return Ok(AnnotatedAxiom{
-                        annotation:annotation, axiom:axiom.unwrap()
-                    })
+                    return Err(error_unexpected_end_tag(axiom_kind, r));
                 },
                 _=>{
                 }
