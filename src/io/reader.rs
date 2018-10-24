@@ -466,6 +466,50 @@ fn axiom_from_start<R:BufRead>(r:&mut Read<R>, e:&BytesStart, axiom_kind:&[u8])
                     range: from_next_tag(r)?
                 }.into()
             }
+            b"ClassAssertion" => {
+                ClassAssertion{
+                    ce: from_start(r, e)?,
+                    i: from_next_tag(r)?
+                }.into()
+            }
+            b"SameIndividual" =>{
+                SameIndividual (
+                    from_start_to_end(r, e, b"SameIndividual")?
+                ).into()
+            }
+            b"DifferentIndividuals" => {
+                DifferentIndividuals (
+                    from_start_to_end(r, e, b"DifferentIndividuals")?
+                ).into()
+            }
+            b"ObjectPropertyAssertion" => {
+                ObjectPropertyAssertion {
+                    ope:from_start(r, e)?,
+                    from:from_next_tag(r)?,
+                    to:from_next_tag(r)?
+                }.into()
+            }
+            b"NegativeObjectPropertyAssertion" => {
+                NegativeObjectPropertyAssertion {
+                    ope:from_start(r, e)?,
+                    from:from_next_tag(r)?,
+                    to:from_next_tag(r)?
+                }.into()
+            }
+            b"DataPropertyAssertion" => {
+                DataPropertyAssertion {
+                    dp:from_start(r, e)?,
+                    from:from_next_tag(r)?,
+                    to:from_next_tag(r)?
+                }.into()
+            }
+            b"NegativeDataPropertyAssertion" => {
+                NegativeDataPropertyAssertion {
+                    dp:from_start(r, e)?,
+                    from:from_next_tag(r)?,
+                    to:from_next_tag(r)?
+                }.into()
+            }
             _ => {
                 return Err(error_unexpected_tag(axiom_kind,r));
             }
@@ -1733,5 +1777,24 @@ mod test {
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
         assert_eq!(1, ont.sub_class().count());
+    }
+
+    #[test]
+    fn class_assertion(){
+        let ont_s = include_str!("../ont/owl-xml/class-assertion.owl");
+        let (ont, _) = read_ok(&mut ont_s.as_bytes());
+
+        assert_eq!(1, ont.class_assertion().count());
+    }
+
+    #[test]
+    fn different_individuals(){
+        let ont_s = include_str!("../ont/owl-xml/different-individual.owl");
+        let (ont, _) = read_ok(&mut ont_s.as_bytes());
+
+        assert_eq!(1, ont.different_individuals().count());
+
+        let di = ont.different_individuals().next().unwrap();
+        assert_eq!(2, di.0.len());
     }
 }

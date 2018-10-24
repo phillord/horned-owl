@@ -714,6 +714,44 @@ axioms!{
     /// c` also.
     TransitiveObjectProperty(ObjectProperty),
 
+    // Assertions
+    SameIndividual (
+        Vec<NamedIndividual>
+    ),
+
+    DifferentIndividuals (
+        Vec<NamedIndividual>
+    ),
+
+    ClassAssertion {
+        ce: ClassExpression,
+        i: NamedIndividual
+    },
+
+    ObjectPropertyAssertion {
+        ope: ObjectPropertyExpression,
+        from: NamedIndividual,
+        to: NamedIndividual
+    },
+
+    NegativeObjectPropertyAssertion {
+        ope: ObjectPropertyExpression,
+        from: NamedIndividual,
+        to: NamedIndividual
+    },
+
+    DataPropertyAssertion {
+        dp: DataProperty,
+        from: NamedIndividual,
+        to: Literal
+    },
+
+    NegativeDataPropertyAssertion {
+        dp: DataProperty,
+        from: NamedIndividual,
+        to: Literal
+    },
+
     // Annotation Axioms
     /// An annotation assertion axiom
     ///
@@ -762,7 +800,13 @@ onimpl!{TransitiveObjectProperty, transitive_object_property}
 onimpl!{AssertAnnotation, assert_annotation}
 onimpl!{SubAnnotationProperty, sub_annotation_property}
 onimpl!{DatatypeDefinition, datatype_definition}
-
+onimpl!{SameIndividual, same_individual}
+onimpl!{DifferentIndividuals, different_individuals}
+onimpl!{ClassAssertion, class_assertion}
+onimpl!{ObjectPropertyAssertion, object_property_assertion}
+onimpl!{NegativeObjectPropertyAssertion, negative_object_property_assertion}
+onimpl!{DataPropertyAssertion, data_property_assertion}
+onimpl!{NegativeDataPropertyAssertion, negative_data_property_assertion}
 
 onimpl!{Import, import}
 onimpl!{OntologyAnnotation, ontology_annotation}

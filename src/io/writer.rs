@@ -107,6 +107,20 @@ fn with_iri<'a, I,W>(w:&mut Writer<W>, mapping:&'a PrefixMapping,
 /// Fetch the name of the tag that is used to render `AxiomKind`
 fn tag_for_kind (axk:AxiomKind) -> &'static [u8] {
     match axk {
+        AxiomKind::SameIndividual =>
+            b"SameIndividual",
+        AxiomKind::DifferentIndividuals =>
+            b"DifferentIndividuals",
+        AxiomKind::ObjectPropertyAssertion =>
+            b"ObjectPropertyAssertion",
+        AxiomKind::NegativeObjectPropertyAssertion =>
+            b"NegativeObjectpropertyassertion",
+        AxiomKind::DataPropertyAssertion =>
+            b"DataPropertyAssertion",
+        AxiomKind::NegativeDataPropertyAssertion =>
+            b"NegativeDataPropertyAssertion",
+        AxiomKind::ClassAssertion =>
+            b"ClassAssertion",
         AxiomKind::InverseObjectProperty =>
             b"InverseObjectProperties",
         AxiomKind::TransitiveObjectProperty =>
@@ -202,6 +216,18 @@ macro_rules! render {
         }
     }
 }
+
+macro_rules! contents {
+    ($type:ty, $self:ident, $body:expr) =>
+    {
+        render! {$type, $self, w, m,{
+                $body.render(w, m)?;
+                Ok(())
+            }
+        }
+    }
+}
+
 
 render! {
     Ontology, self, w, m,
@@ -542,6 +568,24 @@ render! {
     Axiom, self, w, m,
     {
         match self {
+            Axiom::SameIndividual(ax) => {
+                ax.render(w, m)?;
+            }
+            Axiom::DifferentIndividuals(ax) => {
+                ax.render(w,m)?;
+            }
+            Axiom::ObjectPropertyAssertion(ax) => {
+                ax.render(w, m)?;
+            }
+            Axiom::NegativeObjectPropertyAssertion(ax) => {
+                ax.render(w, m)?;
+            }
+            Axiom::DataPropertyAssertion(ax) => {
+                ax.render(w, m)?;
+            }
+            Axiom::NegativeDataPropertyAssertion(ax) => {
+                ax.render(w, m)?;
+            }
             Axiom::TransitiveObjectProperty(ax) =>{
                 ax.render(w, m)?;
             }
@@ -593,6 +637,9 @@ render! {
             Axiom::DatatypeDefinition(ax) => {
                 ax.render(w, m)?;
             }
+            Axiom::ClassAssertion(ax) => {
+                ax.render(w, m)?;
+            }
         }
         Ok(())
     }
@@ -618,6 +665,62 @@ render!{
     Import, self, w, m,
     {
         String::from(&self.0).render(w, m)?;
+
+        Ok(())
+    }
+}
+
+render!{
+    SameIndividual, self, w, m,
+    {
+        (&self.0).render(w, m)?;
+
+        Ok(())
+    }
+}
+
+render!{
+    DifferentIndividuals, self, w, m,
+    {
+        (&self.0).render(w, m)?;
+
+        Ok(())
+    }
+}
+
+render!{
+    ObjectPropertyAssertion, self, w, m,
+    {
+        (
+            &self.ope,
+            &self.from,
+            &self.to
+        )
+            .render(w, m)?;
+
+        Ok(())
+    }
+}
+
+contents!{
+    NegativeObjectPropertyAssertion, self,
+    (&self.ope, &self.from, &self.to)
+}
+
+contents!{
+    DataPropertyAssertion, self,
+    (&self.dp, &self.from, &self.to)
+}
+
+contents!{
+    NegativeDataPropertyAssertion, self,
+    (&self.dp, &self.from, &self.to)
+}
+
+render!{
+    ClassAssertion, self, w, m,
+    {
+        (&self.ce, &self.i).render(w, m)?;
 
         Ok(())
     }
@@ -1154,4 +1257,50 @@ mod test {
         assert_round(include_str!("../ont/owl-xml/data-min-cardinality.owl"));
     }
 
+    #[test]
+    fn class_assertion() {
+        assert_round(include_str!("../ont/owl-xml/class-assertion.owl"));
+    }
+
+    #[test]
+    fn data_property_assertion() {
+        assert_round(
+            include_str!("../ont/owl-xml/data-property-assertion.owl")
+        );
+    }
+
+    #[test]
+    fn same_individual() {
+        assert_round(
+            include_str!("../ont/owl-xml/same-individual.owl")
+        );
+    }
+
+    #[test]
+    fn different_individuals() {
+        assert_round(
+            include_str!("../ont/owl-xml/different-individual.owl")
+        );
+    }
+
+    #[test]
+    fn negative_data_property_assertion() {
+        assert_round(
+            include_str!("../ont/owl-xml/negative-data-property-assertion.owl")
+        );
+    }
+
+    #[test]
+    fn negative_object_property_assertion() {
+        assert_round(
+            include_str!("../ont/owl-xml/negative-object-property-assertion.owl")
+        );
+    }
+
+    #[test]
+    fn object_property_assertion() {
+        assert_round(
+            include_str!("../ont/owl-xml/object-property-assertion.owl")
+        );
+    }
 }
