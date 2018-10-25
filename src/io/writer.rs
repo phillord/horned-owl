@@ -369,59 +369,28 @@ render!{
     }
 }
 
-render! {
-    DeclareClass, self, w, m,
-    {
-        (&self.0).render(w, m)?;
-
-        Ok(())
-    }
+contents! {
+    DeclareClass, self,(&self.0)
 }
 
-render! {
-    DeclareObjectProperty, self, w, m,
-    {
-        (&self.0).render(w, m)?;
-
-        Ok(())
-    }
+contents! {
+    DeclareObjectProperty, self,(&self.0)
 }
 
-render! {
-    DeclareAnnotationProperty, self, w, m,
-    {
-        (&self.0).render(w, m)?;
-
-        Ok(())
-    }
+contents! {
+    DeclareAnnotationProperty, self,(&self.0)
 }
 
-render! {
-    DeclareDataProperty, self, w, m,
-    {
-        (&self.0).render(w, m)?;
-
-        Ok(())
-    }
+contents! {
+    DeclareDataProperty, self, (&self.0)
 }
 
-render! {
-    DeclareNamedIndividual, self, w, m,
-    {
-        (&self.0).render(w, m)?;
-
-        Ok(())
-    }
+contents! {
+    DeclareNamedIndividual, self, (&self.0)
 }
 
-render! {
-    DeclareDatatype, self, w, m,
-    {
-        (&self.0).render(w, m)?;
-
-        Ok(())
-    }
-
+contents! {
+    DeclareDatatype, self, (&self.0)
 }
 
 render!{
@@ -645,61 +614,27 @@ render! {
     }
 }
 
-render!{
-    OntologyAnnotation, self, w, m,
-    {
-        // There is something slightly wrong with my data model
-        // here. An `Annotation` object will normally render itself
-        // including the tags. But the OntologyAnnotation is an
-        // AnnotatedAxiom which means that we have already got
-        // `Annotation` tags, so we just need to render the inner
-        // contents.
-        (&self.0.annotation_property,
-         &self.0.annotation_value).render(w, m)?;
-
-        Ok(())
-    }
+contents!{OntologyAnnotation, self,
+         (&self.0.annotation_property,
+          &self.0.annotation_value)
 }
 
-render!{
-    Import, self, w, m,
-    {
-        String::from(&self.0).render(w, m)?;
+contents!{Import, self,
+        String::from(&self.0)}
 
-        Ok(())
-    }
+contents!{SameIndividual, self,(&self.0)}
+
+contents!{
+    DifferentIndividuals, self,(&self.0)
 }
 
-render!{
-    SameIndividual, self, w, m,
-    {
-        (&self.0).render(w, m)?;
-
-        Ok(())
-    }
-}
-
-render!{
-    DifferentIndividuals, self, w, m,
-    {
-        (&self.0).render(w, m)?;
-
-        Ok(())
-    }
-}
-
-render!{
-    ObjectPropertyAssertion, self, w, m,
-    {
-        (
-            &self.ope,
-            &self.from,
-            &self.to
-        )
-            .render(w, m)?;
-
-        Ok(())
-    }
+contents!{
+    ObjectPropertyAssertion, self,
+    (
+        &self.ope,
+        &self.from,
+        &self.to
+    )
 }
 
 contents!{
@@ -717,24 +652,15 @@ contents!{
     (&self.dp, &self.from, &self.to)
 }
 
-render!{
-    ClassAssertion, self, w, m,
-    {
-        (&self.ce, &self.i).render(w, m)?;
-
-        Ok(())
-    }
+contents!{
+    ClassAssertion, self,(&self.ce, &self.i)
 }
 
-render!{
-    AssertAnnotation, self, w, m,
-    {
+contents!{
+    AssertAnnotation, self,
         (&self.annotation.annotation_property,
          &self.annotation_subject,
-         &self.annotation.annotation_value).render(w, m)?;
-
-        Ok(())
-    }
+         &self.annotation.annotation_value)
 }
 
 render!{
@@ -791,42 +717,24 @@ render!{
     }
 }
 
-render!{
-    SubAnnotationProperty, self, w, m,
-    {
-        (&self.super_property,
-         &self.sub_property).render(w, m)?;
-
-        Ok(())
-    }
+contents!{
+    SubAnnotationProperty, self,
+    (&self.super_property,
+     &self.sub_property)
 }
 
-render!{
-    SubClassOf, self, w, m,
-    {
-        (&self.super_class,
-         &self.sub_class).render(w, m)?;
-
-        Ok(())
-    }
+contents!{
+    SubClassOf, self,
+    (&self.super_class,
+     &self.sub_class)
 }
 
-render!{
-    EquivalentClasses, self, w, m,
-    {
-        (&self.0).render(w,m)?;
-
-        Ok(())
-    }
+contents!{
+    EquivalentClasses, self,(&self.0)
 }
 
-render!{
-    DisjointClasses, self, w, m,
-    {
-        (&self.0).render(w, m)?;
-
-        Ok(())
-    }
+contents!{
+    DisjointClasses, self,(&self.0)
 }
 
 render! {
@@ -862,45 +770,27 @@ render!{
 }
 
 
-render!{
-    SubObjectPropertyOf, self, w, m,
-    {
-        (&self.super_property,
-         &self.sub_property).render(w, m)?;
-
-        Ok(())
-    }
+contents!{
+    SubObjectPropertyOf, self,
+    (&self.super_property,
+     &self.sub_property)
 }
 
 
-render!{
-    TransitiveObjectProperty, self, w, m,
-    {
-        (&self.0).render(w, m)?;
-
-        Ok(())
-    }
+contents!{
+    TransitiveObjectProperty, self,(&self.0)
 }
 
-render!{
-    InverseObjectProperty, self, w, m,
-    {
-        (&self.0,
-         &self.1).render(w, m)?;
-
-        Ok(())
-    }
+contents!{
+    InverseObjectProperty, self,
+    (&self.0,
+     &self.1)
 }
 
-
-render!{
-    DatatypeDefinition, self, w, m,
-    {
-        (&self.kind).render(w, m)?;
-        (&self.range).render(w, m)?;
-
-        Ok(())
-    }
+contents!{
+    DatatypeDefinition, self,
+    (&self.kind,
+     &self.range)
 }
 
 render!{
