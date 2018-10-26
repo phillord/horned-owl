@@ -400,7 +400,7 @@ fn axiom_from_start<R:BufRead>(r:&mut Read<R>, e:&BytesStart, axiom_kind:&[u8])
                 OntologyAnnotation (
                     Annotation {
                         annotation_property:from_start(r, e)?,
-                        annotation_value:from_next_tag(r)?
+                        annotation_value:from_next(r)?
                     }
                 ).into()
             }
@@ -411,7 +411,7 @@ fn axiom_from_start<R:BufRead>(r:&mut Read<R>, e:&BytesStart, axiom_kind:&[u8])
             }
             b"SubClassOf" => {
                 let super_class = from_start(r, e)?;
-                let sub_class = from_next_tag(r)?;
+                let sub_class = from_next(r)?;
                 SubClassOf{
                     super_class, sub_class
                 }.into()
@@ -429,7 +429,7 @@ fn axiom_from_start<R:BufRead>(r:&mut Read<R>, e:&BytesStart, axiom_kind:&[u8])
             b"SubObjectPropertyOf" => {
                 SubObjectPropertyOf{
                     super_property:from_start(r, e)?,
-                    sub_property:from_next_tag(r)?
+                    sub_property:from_next(r)?
                 }.into()
             }
             b"EquivalentObjectProperties" =>{
@@ -445,19 +445,19 @@ fn axiom_from_start<R:BufRead>(r:&mut Read<R>, e:&BytesStart, axiom_kind:&[u8])
             b"InverseObjectProperties" => {
                 InverseObjectProperties(
                     from_start(r, e)?,
-                    from_next_tag(r)?
+                    from_next(r)?
                 ).into()
             }
             b"ObjectPropertyDomain" => {
                 ObjectPropertyDomain {
                     ope:from_start(r, e)?,
-                    ce:from_next_tag(r)?
+                    ce:from_next(r)?
                 }.into()
             }
             b"ObjectPropertyRange" => {
                 ObjectPropertyRange{
                     ope:from_start(r, e)?,
-                    ce:from_next_tag(r)?
+                    ce:from_next(r)?
                 }.into()
             }
             b"FunctionalObjectProperty" => {
@@ -498,7 +498,7 @@ fn axiom_from_start<R:BufRead>(r:&mut Read<R>, e:&BytesStart, axiom_kind:&[u8])
             b"SubDataPropertyOf" => {
                 SubDataPropertyOf{
                     super_property:from_start(r, e)?,
-                    sub_property:from_next_tag(r)?
+                    sub_property:from_next(r)?
                 }.into()
             }
             b"EquivalentDataProperties" => {
@@ -514,13 +514,13 @@ fn axiom_from_start<R:BufRead>(r:&mut Read<R>, e:&BytesStart, axiom_kind:&[u8])
             b"DataPropertyDomain" => {
                 DataPropertyDomain{
                     dp:from_start(r, e)?,
-                    ce:from_next_tag(r)?
+                    ce:from_next(r)?
                 }.into()
             }
             b"DataPropertyRange" => {
                 DataPropertyRange{
                     dp:from_start(r, e)?,
-                    dr:from_next_tag(r)?
+                    dr:from_next(r)?
                 }.into()
             }
             b"FunctionalDataProperty" => {
@@ -531,13 +531,13 @@ fn axiom_from_start<R:BufRead>(r:&mut Read<R>, e:&BytesStart, axiom_kind:&[u8])
             b"DatatypeDefinition" => {
                 DatatypeDefinition{
                     kind: from_start(r, e)?,
-                    range: from_next_tag(r)?
+                    range: from_next(r)?
                 }.into()
             }
             b"HasKey" => {
                 HasKey{
                     ce:from_start(r, e)?,
-                    pe:from_next_tag(r)?
+                    pe:from_next(r)?
                 }.into()
             }
             b"SameIndividual" =>{
@@ -553,41 +553,41 @@ fn axiom_from_start<R:BufRead>(r:&mut Read<R>, e:&BytesStart, axiom_kind:&[u8])
             b"ClassAssertion" => {
                 ClassAssertion{
                     ce: from_start(r, e)?,
-                    i: from_next_tag(r)?
+                    i: from_next(r)?
                 }.into()
             }
                         b"ObjectPropertyAssertion" => {
                 ObjectPropertyAssertion {
                     ope:from_start(r, e)?,
-                    from:from_next_tag(r)?,
-                    to:from_next_tag(r)?
+                    from:from_next(r)?,
+                    to:from_next(r)?
                 }.into()
             }
             b"NegativeObjectPropertyAssertion" => {
                 NegativeObjectPropertyAssertion {
                     ope:from_start(r, e)?,
-                    from:from_next_tag(r)?,
-                    to:from_next_tag(r)?
+                    from:from_next(r)?,
+                    to:from_next(r)?
                 }.into()
             }
             b"DataPropertyAssertion" => {
                 DataPropertyAssertion {
                     dp:from_start(r, e)?,
-                    from:from_next_tag(r)?,
-                    to:from_next_tag(r)?
+                    from:from_next(r)?,
+                    to:from_next(r)?
                 }.into()
             }
             b"NegativeDataPropertyAssertion" => {
                 NegativeDataPropertyAssertion {
                     dp:from_start(r, e)?,
-                    from:from_next_tag(r)?,
-                    to:from_next_tag(r)?
+                    from:from_next(r)?,
+                    to:from_next(r)?
                 }.into()
             }
             b"AnnotationAssertion" => {
                 let annotation_property = from_start(r, e)?;
-                let annotation_subject = from_next_tag(r)?;
-                let annotation_value = from_next_tag(r)?;
+                let annotation_subject = from_next(r)?;
+                let annotation_value = from_next(r)?;
 
                 AnnotationAssertion {
                     annotation_subject: annotation_subject,
@@ -599,7 +599,7 @@ fn axiom_from_start<R:BufRead>(r:&mut Read<R>, e:&BytesStart, axiom_kind:&[u8])
             b"SubAnnotationPropertyOf" => {
                 SubAnnotationPropertyOf{
                     super_property:from_start(r, e)?,
-                    sub_property:from_next_tag(r)?
+                    sub_property:from_next(r)?
                 }.into()
             }
             _ => {
@@ -669,7 +669,7 @@ fn object_cardinality_restriction<R:BufRead>(r:&mut Read<R>,
         || error_missing_attribute("cardinality",r)
     )?;
 
-    let ope = from_next_tag(r)?;
+    let ope = from_next(r)?;
     let mut vce:Vec<ClassExpression> = till_end(r, end_tag)?;
 
     Ok((
@@ -697,7 +697,7 @@ fn data_cardinality_restriction<R:BufRead>(r:&mut Read<R>,
         || (error_missing_attribute("cardinality",r))
     )?;
 
-    let dp = from_next_tag(r)?;
+    let dp = from_next(r)?;
     let mut vdr:Vec<DataRange> = till_end(r, end_tag)?;
 
     Ok((
@@ -744,13 +744,13 @@ from_start! {
                     Class::from_start(r, e)?.into()
                 }
                 b"ObjectSomeValuesFrom" => {
-                    let o = from_next_tag(r)?;
-                    let ce = Box::new(from_next_tag(r)?);
+                    let o = from_next(r)?;
+                    let ce = Box::new(from_next(r)?);
                     ClassExpression::ObjectSomeValuesFrom{o,ce}
                 }
                 b"ObjectAllValuesFrom" => {
-                    let o = from_next_tag(r)?;
-                    let ce = Box::new(from_next_tag(r)?);
+                    let o = from_next(r)?;
+                    let ce = Box::new(from_next(r)?);
                     ClassExpression::ObjectAllValuesFrom{o,ce}
                 }
                 b"ObjectIntersectionOf" => {
@@ -763,13 +763,13 @@ from_start! {
                 }
                 b"ObjectComplementOf" => {
                     ClassExpression::ObjectComplementOf
-                    {ce: Box::new(from_next_tag(r)?)}
+                    {ce: Box::new(from_next(r)?)}
                 }
                 b"ObjectHasValue" => {
                     ClassExpression::ObjectHasValue
                     {
-                        o:from_next_tag(r)?,
-                        i:from_next_tag(r)?
+                        o:from_next(r)?,
+                        i:from_next(r)?
                     }
                 }
                 b"ObjectOneOf" => {
@@ -780,7 +780,7 @@ from_start! {
                 }
                 b"ObjectHasSelf" => {
                     ClassExpression::ObjectHasSelf
-                        (from_next_tag(r)?)
+                        (from_next(r)?)
                 }
                 b"ObjectMinCardinality" => {
                     let (n, o, ce) = object_cardinality_restriction
@@ -799,20 +799,20 @@ from_start! {
                 }
                 b"DataSomeValuesFrom" => {
                     ClassExpression::DataSomeValuesFrom{
-                        dp:from_next_tag(r)?,
-                        dr:from_next_tag(r)?
+                        dp:from_next(r)?,
+                        dr:from_next(r)?
                     }
                 }
                 b"DataAllValuesFrom" => {
                     ClassExpression::DataAllValuesFrom{
-                        dp:from_next_tag(r)?,
-                        dr:from_next_tag(r)?
+                        dp:from_next(r)?,
+                        dr:from_next(r)?
                     }
                 }
                 b"DataHasValue" => {
                     ClassExpression::DataHasValue {
-                        dp:from_next_tag(r)?,
-                        l:from_next_tag(r)?
+                        dp:from_next(r)?,
+                        l:from_next(r)?
                     }
                 }
                 b"DataMinCardinality" => {
@@ -924,7 +924,7 @@ from_start!{
                 }
                 b"ObjectInverseOf" => {
                     ObjectPropertyExpression::InverseObjectProperty
-                        (from_next_tag(r)?)
+                        (from_next(r)?)
                 }
                 _ => {
                     return Err(error_unknown_entity
@@ -973,7 +973,7 @@ from_start! {
                 f: Facet::var_b(&f)
                     .ok_or_else(
                         || error_unknown_entity("facet", &f, r))?,
-                l: from_next_tag(r)?
+                l: from_next(r)?
             }
         )
     }
@@ -996,7 +996,7 @@ from_start! {
                 }
                 b"DataComplementOf" => {
                     DataRange::DataComplementOf(
-                        Box::new(from_next_tag(r)?)
+                        Box::new(from_next(r)?)
                     )
                 }
                 b"DataOneOf" => {
@@ -1006,7 +1006,7 @@ from_start! {
                 }
                 b"DatatypeRestriction" => {
                     DataRange::DatatypeRestriction (
-                        from_next_tag(r)?,
+                        from_next(r)?,
                         till_end(r, b"DatatypeRestriction")?
                     )
                 }
@@ -1121,7 +1121,7 @@ from_xml! {
 
 }
 
-fn from_next_tag<R:BufRead, T:FromStart>(r: &mut Read<R>)-> Result<T,Error> {
+fn from_next<R:BufRead, T:FromStart>(r: &mut Read<R>)-> Result<T,Error> {
     loop {
         let e = read_event(r)?;
         match e {
@@ -1159,7 +1159,7 @@ fn discard_till<R:BufRead>(r:&mut Read<R>, end:&[u8]) -> Result<(),Error> {
 from_xml! {
     NamedEntity,r, end,
     {
-        let ne = from_next_tag(r);
+        let ne = from_next(r);
         discard_till(r, end)?;
         return ne;
     }
