@@ -5,7 +5,6 @@ add semantics in a demand-led way (i.e. as I need it!). Currently,
 serialisation is to/from OWL Presentation format only, but RDF
 serialisation will be supported.
 
-- 0.5 OWL Primer ontology read/write
 - 0.6 Infrastructure for parsable command line tools
 - 0.7 More command line tools
 - 0.8 RDF IO
