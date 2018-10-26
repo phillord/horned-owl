@@ -103,7 +103,7 @@ impl Build{
         }
 
         cache.insert(iri.clone());
-        return iri;
+        iri
     }
 
     /// Constructs a new `Class`.
@@ -391,7 +391,7 @@ impl AnnotatedAxiom {
                   -> AnnotatedAxiom
         where I: Into<Axiom>
     {
-        AnnotatedAxiom{axiom:axiom.into(), annotation:annotation}
+        AnnotatedAxiom{axiom:axiom.into(), annotation}
     }
 
     pub fn logical_cmp(&self, other: &AnnotatedAxiom) -> Ordering {
@@ -414,7 +414,7 @@ impl AnnotatedAxiom {
 impl From<Axiom> for AnnotatedAxiom {
     fn from(axiom: Axiom) -> AnnotatedAxiom {
         AnnotatedAxiom {
-            axiom: axiom,
+            axiom,
             annotation: BTreeSet::new()
         }
     }
@@ -1288,7 +1288,7 @@ impl Ontology {
         -> *mut BTreeMap<AxiomKind,BTreeSet<AnnotatedAxiom>>
     {
         self.axiom.borrow_mut().entry(axk)
-            .or_insert(BTreeSet::new());
+            .or_insert_with(BTreeSet::new);
         self.axiom.as_ptr()
     }
 
@@ -1438,7 +1438,7 @@ impl Ontology {
     {
         let c = c.into();
         self.sub_class()
-            .filter(move |sc| &sc.super_class == &c )
+            .filter(move |sc| sc.super_class == c )
             .map(|sc| &sc.sub_class )
     }
 

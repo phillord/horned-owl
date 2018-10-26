@@ -25,7 +25,7 @@ pub fn write(write: &mut StdWrite, ont: &Ontology,
              mapping: Option<&PrefixMapping>)
     -> Result<(),Error>
 {
-    let mut writer = Writer::new_with_indent(write, ' ' as u8, 4);
+    let mut writer = Writer::new_with_indent(write, b' ', 4);
 
     // Ensure we have a prefix mapping; the default is a no-op and
     // it's easier than checking every time.
@@ -60,7 +60,7 @@ fn shrink_iri_maybe<'a>(iri: &str,
             format!("{}", curie)
         },
         Err(_) => {
-            format!("{}", iri)
+            iri.to_string()
         },
     }
 }
@@ -448,69 +448,69 @@ render! {
 render!{
     ClassExpression, self, w, m,
     {
-        match self {
-            &ClassExpression::Class(ref c) => {
+        match *self {
+            ClassExpression::Class(ref c) => {
                 c.render(w, m)?;
             }
-            &ClassExpression::ObjectSomeValuesFrom {ref o, ref ce} => {
+            ClassExpression::ObjectSomeValuesFrom {ref o, ref ce} => {
                 (o, ce).within(w, m, b"ObjectSomeValuesFrom")?;
             }
-            &ClassExpression::ObjectAllValuesFrom {ref o, ref ce} => {
+            ClassExpression::ObjectAllValuesFrom {ref o, ref ce} => {
                 (o, ce).within(w, m, b"ObjectAllValuesFrom")?;
             }
-            &ClassExpression::ObjectIntersectionOf {ref o} => {
+            ClassExpression::ObjectIntersectionOf {ref o} => {
                 o.within(w, m, b"ObjectIntersectionOf")?;
             }
-            &ClassExpression::ObjectUnionOf {ref o} => {
+            ClassExpression::ObjectUnionOf {ref o} => {
                 o.within(w, m, b"ObjectUnionOf")?;
             }
-            &ClassExpression::ObjectComplementOf {ref ce} => {
+            ClassExpression::ObjectComplementOf {ref ce} => {
                 ce.within(w, m, b"ObjectComplementOf")?;
             }
-            &ClassExpression::ObjectHasValue {ref o, ref i} => {
+            ClassExpression::ObjectHasValue {ref o, ref i} => {
                 (o, i).within(w, m, b"ObjectHasValue")?;
             }
-            &ClassExpression::ObjectOneOf {ref o} => {
+            ClassExpression::ObjectOneOf {ref o} => {
                 o.within(w, m, b"ObjectOneOf")?;
             }
-            &ClassExpression::ObjectHasSelf (ref o) => {
+            ClassExpression::ObjectHasSelf (ref o) => {
                 o.within(w, m, b"ObjectHasSelf")?;
             }
-            &ClassExpression::ObjectMinCardinality{n, ref o, ref ce} => {
+            ClassExpression::ObjectMinCardinality{n, ref o, ref ce} => {
                 let mut open = BytesStart::owned_name("ObjectMinCardinality");
                 open.push_attribute(("cardinality", &n.to_string()[..]));
                 (o, ce).within_tag(w, m, open)?;
             }
-            &ClassExpression::ObjectMaxCardinality{n, ref o, ref ce} => {
+            ClassExpression::ObjectMaxCardinality{n, ref o, ref ce} => {
                 let mut open = BytesStart::owned_name("ObjectMaxCardinality");
                 open.push_attribute(("cardinality", &n.to_string()[..]));
                 (o, ce).within_tag(w, m, open)?;
             }
-            &ClassExpression::ObjectExactCardinality{n, ref o, ref ce} => {
+            ClassExpression::ObjectExactCardinality{n, ref o, ref ce} => {
                 let mut open = BytesStart::owned_name("ObjectExactCardinality");
                 open.push_attribute(("cardinality", &n.to_string()[..]));
                 (o, ce).within_tag(w, m, open)?;
             }
-            &ClassExpression::DataSomeValuesFrom{ref dp, ref dr} => {
+            ClassExpression::DataSomeValuesFrom{ref dp, ref dr} => {
                 (dp, dr).within(w, m, b"DataSomeValuesFrom")?;
             }
-            &ClassExpression::DataAllValuesFrom{ref dp, ref dr} => {
+            ClassExpression::DataAllValuesFrom{ref dp, ref dr} => {
                 (dp, dr).within(w, m, b"DataAllValuesFrom")?;
             }
-            &ClassExpression::DataHasValue{ref dp, ref l} => {
+            ClassExpression::DataHasValue{ref dp, ref l} => {
                 (dp, l).within(w, m, b"DataHasValue")?;
             }
-            &ClassExpression::DataMinCardinality{n, ref dp, ref dr} => {
+            ClassExpression::DataMinCardinality{n, ref dp, ref dr} => {
                 let mut open = BytesStart::owned_name("DataMinCardinality");
                 open.push_attribute(("cardinality", &n.to_string()[..]));
                 (dp, dr).within_tag(w, m, open)?;
             }
-            &ClassExpression::DataMaxCardinality{n, ref dp, ref dr} => {
+            ClassExpression::DataMaxCardinality{n, ref dp, ref dr} => {
                 let mut open = BytesStart::owned_name("DataMaxCardinality");
                 open.push_attribute(("cardinality", &n.to_string()[..]));
                 (dp, dr).within_tag(w, m, open)?;
             }
-            &ClassExpression::DataExactCardinality{n, ref dp, ref dr} => {
+            ClassExpression::DataExactCardinality{n, ref dp, ref dr} => {
                 let mut open = BytesStart::owned_name("DataExactCardinality");
                 open.push_attribute(("cardinality", &n.to_string()[..]));
                 (dp, dr).within_tag(w, m, open)?;

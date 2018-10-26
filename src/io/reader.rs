@@ -66,8 +66,7 @@ pub fn read_with_build<R: BufRead>(bufread: &mut R, build: &Build) ->
     let mut ont = Ontology::new();
     let mapping = PrefixMapping::default();
 
-    let mut r = Read{reader:reader, build:build,
-                     mapping: mapping,
+    let mut r = Read{reader, build, mapping,
                      buf:Vec::new(), ns_buf:Vec::new()};
 
     loop {
@@ -234,7 +233,7 @@ fn error_missing_end_tag<R:BufRead>(tag:&[u8], r:&mut Read<R>, pos: usize)
 {
     ReadError::MissingEndTag{
         tag: r.reader.decode(tag).into_owned(),
-        pos: pos
+        pos
     }
     .into()
 }
@@ -322,7 +321,8 @@ fn named_entity_from_start<R,T>(r:&mut Read<R>, e:&BytesStart, tag:&[u8])
                                             e.local_name(),r ));
         }
     }
-    return Err(error_missing_element(b"IRI",r));
+
+    Err(error_missing_element(b"IRI",r))
 }
 
 fn from_start<R:BufRead, T:FromStart>(r:&mut Read<R>, e: &BytesStart)
@@ -590,7 +590,7 @@ fn axiom_from_start<R:BufRead>(r:&mut Read<R>, e:&BytesStart, axiom_kind:&[u8])
                 let annotation_value = from_next(r)?;
 
                 AnnotationAssertion {
-                    annotation_subject: annotation_subject,
+                    annotation_subject,
                     annotation: Annotation {
                         annotation_property, annotation_value
                     }
@@ -679,7 +679,7 @@ fn object_cardinality_restriction<R:BufRead>(r:&mut Read<R>,
             match vce.len() {
                 0 => r.build.class(OWL::Thing.iri_s()
                                    .to_string()).into(),
-                1 => vce.remove(0).into(),
+                1 => vce.remove(0),
                 _ => Err(error_unexpected_tag(end_tag, r))?
             })
     ))
@@ -706,7 +706,7 @@ fn data_cardinality_restriction<R:BufRead>(r:&mut Read<R>,
         match vdr.len() {
             0 => r.build.datatype(OWL2Datatype::RDFSLiteral.iri_s()
                                   .to_string()).into(),
-            1 => vdr.remove(0).into(),
+            1 => vdr.remove(0),
             _ => Err(error_unexpected_tag(end_tag, r))?
         }
     ))
@@ -1161,7 +1161,7 @@ from_xml! {
     {
         let ne = from_next(r);
         discard_till(r, end)?;
-        return ne;
+        ne
     }
 }
 

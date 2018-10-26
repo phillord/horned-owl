@@ -26,10 +26,10 @@ fn main() -> Result<(),Error> {
              .index(1))
         .get_matches();
 
-    matcher(matches)
+    matcher(&matches)
 }
 
-fn matcher(matches:ArgMatches) -> Result<(),Error>{
+fn matcher(matches:&ArgMatches) -> Result<(),Error>{
     let input = matches.value_of("INPUT")
         .ok_or(CommandError::MissingArgument)?;
 
