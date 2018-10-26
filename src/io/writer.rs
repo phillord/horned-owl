@@ -107,54 +107,47 @@ fn with_iri<'a, I,W>(w:&mut Writer<W>, mapping:&'a PrefixMapping,
 /// Fetch the name of the tag that is used to render `AxiomKind`
 fn tag_for_kind (axk:AxiomKind) -> &'static [u8] {
     match axk {
-        AxiomKind::SameIndividual =>
-            b"SameIndividual",
-        AxiomKind::DifferentIndividuals =>
-            b"DifferentIndividuals",
-        AxiomKind::ObjectPropertyAssertion =>
-            b"ObjectPropertyAssertion",
-        AxiomKind::NegativeObjectPropertyAssertion =>
-            b"NegativeObjectpropertyassertion",
-        AxiomKind::DataPropertyAssertion =>
-            b"DataPropertyAssertion",
-        AxiomKind::NegativeDataPropertyAssertion =>
-            b"NegativeDataPropertyAssertion",
-        AxiomKind::ClassAssertion =>
-            b"ClassAssertion",
-        AxiomKind::InverseObjectProperty =>
-            b"InverseObjectProperties",
-        AxiomKind::TransitiveObjectProperty =>
-            b"TransitiveObjectProperty",
-        AxiomKind::SubObjectPropertyOf =>
-            b"SubObjectPropertyOf",
-        AxiomKind::SubAnnotationProperty =>
-            b"SubAnnotationPropertyOf",
-        AxiomKind::AssertAnnotation =>
-            b"AnnotationAssertion",
-        AxiomKind::DisjointClasses =>
-            b"DisjointClasses",
-        AxiomKind::EquivalentClasses =>
-            b"EquivalentClasses",
-        AxiomKind::SubClassOf =>
-            b"SubClassOf",
-        AxiomKind::DeclareClass =>
-            b"Declaration",
-        AxiomKind::DeclareObjectProperty =>
-            b"Declaration",
-        AxiomKind::DeclareAnnotationProperty =>
-            b"Declaration",
-        AxiomKind::DeclareDataProperty =>
-            b"Declaration",
-        AxiomKind::DeclareNamedIndividual =>
-            b"Declaration",
-        AxiomKind::DeclareDatatype =>
-            b"Declaration",
-        AxiomKind::Import =>
-            b"Import",
-        AxiomKind::OntologyAnnotation =>
-            b"Annotation",
-        AxiomKind::DatatypeDefinition =>
-            b"DatatypeDefinition",
+        AxiomKind::Import => b"Import",
+        AxiomKind::OntologyAnnotation => b"Annotation",
+        AxiomKind::DeclareClass => b"Declaration",
+        AxiomKind::DeclareObjectProperty => b"Declaration",
+        AxiomKind::DeclareAnnotationProperty => b"Declaration",
+        AxiomKind::DeclareDataProperty => b"Declaration",
+        AxiomKind::DeclareNamedIndividual => b"Declaration",
+        AxiomKind::DeclareDatatype => b"Declaration",
+        AxiomKind::SubClassOf => b"SubClassOf",
+        AxiomKind::EquivalentClasses => b"EquivalentClasses",
+        AxiomKind::DisjointClasses => b"DisjointClasses",
+        AxiomKind::SubObjectPropertyOf => b"SubObjectPropertyOf",
+        AxiomKind::EquivalentObjectProperties => b"EquivalentObjectProperties",
+        AxiomKind::DisjointObjectProperties => b"DisjointObjectProperties",
+        AxiomKind::InverseObjectProperties => b"InverseObjectProperties",
+        AxiomKind::ObjectPropertyDomain => b"ObjectPropertyDomain",
+        AxiomKind::ObjectPropertyRange => b"ObjectPropertyRange",
+        AxiomKind::FunctionalObjectProperty => b"FunctionalObjectProperty",
+        AxiomKind::InverseFunctionalObjectProperty => b"InverseFunctionalObjectProperty",
+        AxiomKind::ReflexiveObjectProperty => b"ReflexiveObjectProperty",
+        AxiomKind::IrreflexiveObjectProperty => b"IrreflexiveObjectProperty",
+        AxiomKind::SymmetricObjectProperty => b"SymmetricObjectProperty",
+        AxiomKind::AsymmetricObjectProperty => b"AsymmetricObjectProperty",
+        AxiomKind::TransitiveObjectProperty => b"TransitiveObjectProperty",
+        AxiomKind::SubDataPropertyOf => b"SubDataPropertyOf",
+        AxiomKind::EquivalentDataProperties => b"EquivalentDataProperties",
+        AxiomKind::DisjointDataProperties => b"DisjointDataProperties",
+        AxiomKind::DataPropertyDomain => b"DataPropertyDomain",
+        AxiomKind::DataPropertyRange => b"DataPropertyRange",
+        AxiomKind::FunctionalDataProperty => b"FunctionalDataProperty",
+        AxiomKind::DatatypeDefinition => b"DatatypeDefinition",
+        AxiomKind::HasKey => b"HasKey",
+        AxiomKind::SameIndividual => b"SameIndividual",
+        AxiomKind::DifferentIndividuals => b"DifferentIndividuals",
+        AxiomKind::ClassAssertion => b"ClassAssertion",
+        AxiomKind::ObjectPropertyAssertion => b"ObjectPropertyAssertion",
+        AxiomKind::NegativeObjectPropertyAssertion => b"NegativeObjectPropertyAssertion",
+        AxiomKind::DataPropertyAssertion => b"DataPropertyAssertion",
+        AxiomKind::NegativeDataPropertyAssertion => b"NegativeDataPropertyAssertion",
+        AxiomKind::AnnotationAssertion => b"AnnotationAssertion",
+        AxiomKind::SubAnnotationPropertyOf => b"SubAnnotationPropertyOf",
     }
 }
 
@@ -228,6 +221,12 @@ macro_rules! contents {
     }
 }
 
+
+macro_rules! content0 {
+    ($type:ty) => {
+        contents!{$type, self, &self.0}
+    }
+}
 
 render! {
     Ontology, self, w, m,
@@ -369,29 +368,17 @@ render!{
     }
 }
 
-contents! {
-    DeclareClass, self,(&self.0)
-}
+content0!{DeclareClass}
 
-contents! {
-    DeclareObjectProperty, self,(&self.0)
-}
+content0!{DeclareObjectProperty}
 
-contents! {
-    DeclareAnnotationProperty, self,(&self.0)
-}
+content0!{DeclareAnnotationProperty}
 
-contents! {
-    DeclareDataProperty, self, (&self.0)
-}
+content0!{DeclareDataProperty}
 
-contents! {
-    DeclareNamedIndividual, self, (&self.0)
-}
+content0!{DeclareNamedIndividual}
 
-contents! {
-    DeclareDatatype, self, (&self.0)
-}
+content0!{DeclareDatatype}
 
 render!{
     AnnotatedAxiom, self, w, m,
@@ -537,78 +524,47 @@ render! {
     Axiom, self, w, m,
     {
         match self {
-            Axiom::SameIndividual(ax) => {
-                ax.render(w, m)?;
-            }
-            Axiom::DifferentIndividuals(ax) => {
-                ax.render(w,m)?;
-            }
-            Axiom::ObjectPropertyAssertion(ax) => {
-                ax.render(w, m)?;
-            }
-            Axiom::NegativeObjectPropertyAssertion(ax) => {
-                ax.render(w, m)?;
-            }
-            Axiom::DataPropertyAssertion(ax) => {
-                ax.render(w, m)?;
-            }
-            Axiom::NegativeDataPropertyAssertion(ax) => {
-                ax.render(w, m)?;
-            }
-            Axiom::TransitiveObjectProperty(ax) =>{
-                ax.render(w, m)?;
-            }
-            Axiom::InverseObjectProperty(ax) =>{
-                ax.render(w, m)?;
-            }
-            Axiom::SubObjectPropertyOf(ax) => {
-                ax.render(w, m)?;
-            }
-            Axiom::SubAnnotationProperty(ax) => {
-                ax.render(w, m)?;
-            }
-            Axiom::AssertAnnotation(ax) => {
-                ax.render(w, m)?;
-            }
-            Axiom::DisjointClasses(ax) => {
-                ax.render(w, m)?;
-            }
-            Axiom::EquivalentClasses(ax) => {
-                ax.render(w, m)?;
-            }
-            Axiom::SubClassOf(ax) => {
-                ax.render(w, m)?;
-            }
-            Axiom::DeclareClass(ax) => {
-                ax.render(w, m)?;
-            }
-            Axiom::DeclareObjectProperty(ax) => {
-                ax.render(w, m)?;
-            }
-            Axiom::DeclareAnnotationProperty(ax) => {
-                ax.render(w, m)?;
-            }
-            Axiom::DeclareDataProperty(ax) => {
-                ax.render(w, m)?;
-            }
-            Axiom::DeclareNamedIndividual(ax) => {
-                ax.render(w, m)?;
-            }
-            Axiom::DeclareDatatype(ax) => {
-                ax.render(w, m)?;
-            }
-            Axiom::Import(ax) => {
-                ax.render(w, m)?;
-            }
-            Axiom::OntologyAnnotation(ax) => {
-                ax.render(w, m)?;
-            }
-            Axiom::DatatypeDefinition(ax) => {
-                ax.render(w, m)?;
-            }
-            Axiom::ClassAssertion(ax) => {
-                ax.render(w, m)?;
-            }
+            Axiom::Import(ax) => ax.render(w, m)?,
+            Axiom::OntologyAnnotation(ax) => ax.render(w, m)?,
+            Axiom::DeclareClass(ax) => ax.render(w, m)?,
+            Axiom::DeclareObjectProperty(ax) => ax.render(w, m)?,
+            Axiom::DeclareAnnotationProperty(ax) => ax.render(w, m)?,
+            Axiom::DeclareDataProperty(ax) => ax.render(w, m)?,
+            Axiom::DeclareNamedIndividual(ax) => ax.render(w, m)?,
+            Axiom::DeclareDatatype(ax) => ax.render(w, m)?,
+            Axiom::SubClassOf(ax) => ax.render(w, m)?,
+            Axiom::EquivalentClasses(ax) => ax.render(w, m)?,
+            Axiom::DisjointClasses(ax) => ax.render(w, m)?,
+            Axiom::SubObjectPropertyOf(ax) => ax.render(w, m)?,
+            Axiom::EquivalentObjectProperties(ax) => ax.render(w, m)?,
+            Axiom::DisjointObjectProperties(ax) => ax.render(w, m)?,
+            Axiom::InverseObjectProperties(ax) => ax.render(w, m)?,
+            Axiom::ObjectPropertyDomain(ax) => ax.render(w, m)?,
+            Axiom::ObjectPropertyRange(ax) => ax.render(w, m)?,
+            Axiom::FunctionalObjectProperty(ax) => ax.render(w, m)?,
+            Axiom::InverseFunctionalObjectProperty(ax) => ax.render(w, m)?,
+            Axiom::ReflexiveObjectProperty(ax) => ax.render(w, m)?,
+            Axiom::IrreflexiveObjectProperty(ax) => ax.render(w, m)?,
+            Axiom::SymmetricObjectProperty(ax) => ax.render(w, m)?,
+            Axiom::AsymmetricObjectProperty(ax) => ax.render(w, m)?,
+            Axiom::TransitiveObjectProperty(ax) => ax.render(w, m)?,
+            Axiom::SubDataPropertyOf(ax) => ax.render(w, m)?,
+            Axiom::EquivalentDataProperties(ax) => ax.render(w, m)?,
+            Axiom::DisjointDataProperties(ax) => ax.render(w, m)?,
+            Axiom::DataPropertyDomain(ax) => ax.render(w, m)?,
+            Axiom::DataPropertyRange(ax) => ax.render(w, m)?,
+            Axiom::FunctionalDataProperty(ax) => ax.render(w, m)?,
+            Axiom::DatatypeDefinition(ax) => ax.render(w, m)?,
+            Axiom::HasKey(ax) => ax.render(w, m)?,
+            Axiom::SameIndividual(ax) => ax.render(w, m)?,
+            Axiom::DifferentIndividuals(ax) => ax.render(w, m)?,
+            Axiom::ClassAssertion(ax) => ax.render(w, m)?,
+            Axiom::ObjectPropertyAssertion(ax) => ax.render(w, m)?,
+            Axiom::NegativeObjectPropertyAssertion(ax) => ax.render(w, m)?,
+            Axiom::DataPropertyAssertion(ax) => ax.render(w, m)?,
+            Axiom::NegativeDataPropertyAssertion(ax) => ax.render(w, m)?,
+            Axiom::AnnotationAssertion(ax) => ax.render(w, m)?,
+            Axiom::SubAnnotationPropertyOf(ax) => ax.render(w, m)?,
         }
         Ok(())
     }
@@ -619,14 +575,59 @@ contents!{OntologyAnnotation, self,
           &self.0.annotation_value)
 }
 
-contents!{Import, self,
-        String::from(&self.0)}
-
-contents!{SameIndividual, self,(&self.0)}
-
 contents!{
-    DifferentIndividuals, self,(&self.0)
+    Import, self,
+    String::from(&self.0)
 }
+
+
+render!{
+    PropertyExpression, self, w, m,
+    {
+        match self {
+            PropertyExpression::DataProperty(dp) => dp.render(w, m),
+            PropertyExpression::ObjectPropertyExpression(ope) => ope.render(w, m)
+        }
+    }
+}
+
+contents!{HasKey, self, (&self.ce, &self.pe)}
+
+content0!{FunctionalDataProperty}
+
+contents!{DataPropertyRange, self, (&self.dp, &self.dr)}
+
+contents!{DataPropertyDomain, self, (&self.dp, &self.ce)}
+
+content0!{DisjointDataProperties}
+
+content0!{EquivalentObjectProperties}
+
+contents!{SubDataPropertyOf, self, (&self.super_property, &self.sub_property)}
+
+content0!{AsymmetricObjectProperty}
+
+content0!{SymmetricObjectProperty}
+
+content0!{IrreflexiveObjectProperty}
+
+content0!{ReflexiveObjectProperty}
+
+content0!{InverseFunctionalObjectProperty}
+
+content0!{FunctionalObjectProperty}
+
+contents!{ObjectPropertyRange, self, (&self.ope, &self.ce)}
+
+contents!{ObjectPropertyDomain, self, (&self.ope, &self.ce)}
+
+content0!{DisjointObjectProperties}
+
+content0!{EquivalentDataProperties}
+
+content0!{SameIndividual}
+
+content0!{DifferentIndividuals}
 
 contents!{
     ObjectPropertyAssertion, self,
@@ -657,7 +658,7 @@ contents!{
 }
 
 contents!{
-    AssertAnnotation, self,
+    AnnotationAssertion, self,
         (&self.annotation.annotation_property,
          &self.annotation_subject,
          &self.annotation.annotation_value)
@@ -718,7 +719,7 @@ render!{
 }
 
 contents!{
-    SubAnnotationProperty, self,
+    SubAnnotationPropertyOf, self,
     (&self.super_property,
      &self.sub_property)
 }
@@ -729,13 +730,9 @@ contents!{
      &self.sub_class)
 }
 
-contents!{
-    EquivalentClasses, self,(&self.0)
-}
+content0!{EquivalentClasses}
 
-contents!{
-    DisjointClasses, self,(&self.0)
-}
+content0!{DisjointClasses}
 
 render! {
     ObjectPropertyExpression, self, w, m,
@@ -777,12 +774,10 @@ contents!{
 }
 
 
-contents!{
-    TransitiveObjectProperty, self,(&self.0)
-}
+content0!{TransitiveObjectProperty}
 
 contents!{
-    InverseObjectProperty, self,
+    InverseObjectProperties, self,
     (&self.0,
      &self.1)
 }
@@ -1191,6 +1186,139 @@ mod test {
     fn object_property_assertion() {
         assert_round(
             include_str!("../ont/owl-xml/object-property-assertion.owl")
+        );
+    }
+
+    #[test]
+    fn data_has_key () {
+        assert_round(
+            include_str!("../ont/owl-xml/data-has-key.owl")
+        );
+      }
+
+    #[test]
+    fn data_property_disjoint () {
+        assert_round(
+           include_str!("../ont/owl-xml/data-property-disjoint.owl")
+        );
+     }
+
+    #[test]
+    fn data_property_domain () {
+        assert_round(
+            include_str!("../ont/owl-xml/data-property-domain.owl")
+        );
+    }
+
+    #[test]
+    fn data_property_equivalent () {
+        assert_round(
+            include_str!("../ont/owl-xml/data-property-equivalent.owl")
+        );
+    }
+
+    #[test]
+    fn data_property_functional () {
+        assert_round(
+            include_str!("../ont/owl-xml/data-property-functional.owl")
+        );
+    }
+
+    #[test]
+    fn data_property_range () {
+        assert_round(
+            include_str!("../ont/owl-xml/data-property-range.owl")
+        );
+    }
+
+    #[test]
+    fn data_property_sub () {
+        assert_round(
+            include_str!("../ont/owl-xml/data-property-sub.owl")
+        );
+    }
+
+    #[test]
+    fn disjoint_object_properties () {
+        assert_round(
+            include_str!("../ont/owl-xml/disjoint-object-properties.owl")
+        );
+    }
+
+    #[test]
+    fn equivalent_object_properties () {
+        assert_round(
+            include_str!("../ont/owl-xml/equivalent_object_properties.owl")
+        );
+    }
+
+    #[test]
+    fn object_has_key () {
+        assert_round(
+            include_str!("../ont/owl-xml/object-has-key.owl")
+        );
+    }
+
+    #[test]
+    fn object_property_asymmetric () {
+        assert_round(
+            include_str!("../ont/owl-xml/object-property-asymmetric.owl")
+        );
+    }
+
+    #[test]
+    fn object_property_domain () {
+        assert_round(
+            include_str!("../ont/owl-xml/object-property-domain.owl")
+        );
+    }
+
+    #[test]
+    fn object_property_functional () {
+        assert_round(
+            include_str!("../ont/owl-xml/object-property-functional.owl")
+        );
+    }
+
+    #[test]
+    fn object_property_inverse_functional () {
+        assert_round(
+            include_str!("../ont/owl-xml/object-property-inverse-functional.owl")
+        );
+    }
+
+    #[test]
+    fn object_property_irreflexive () {
+        assert_round(
+            include_str!("../ont/owl-xml/object-property-irreflexive.owl")
+        );
+    }
+
+    #[test]
+    fn object_property_range () {
+        assert_round(
+            include_str!("../ont/owl-xml/object-property-range.owl")
+        );
+    }
+
+    #[test]
+    fn object_property_reflexive () {
+        assert_round(
+            include_str!("../ont/owl-xml/object-property-reflexive.owl")
+        );
+    }
+
+    #[test]
+    fn object_property_symmetric () {
+        assert_round(
+            include_str!("../ont/owl-xml/object-property-symmetric.owl")
+        );
+    }
+
+    #[test]
+    fn family() {
+        assert_round(
+            include_str!("../ont/owl-xml/family.owl")
         );
     }
 }

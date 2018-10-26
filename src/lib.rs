@@ -1,5 +1,5 @@
 extern crate curie;
-#[macro_use] extern crate enum_meta;
+extern crate enum_meta;
 #[macro_use] extern crate failure;
 extern crate quick_xml;
 

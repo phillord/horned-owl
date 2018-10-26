@@ -699,6 +699,18 @@ axioms!{
         sub_property:ObjectProperty
     },
 
+    /// An equivalent object properties relationship.
+    ///
+    /// States that two object properties are semantically identical
+    /// to each other.
+    EquivalentObjectProperties(Vec<ObjectPropertyExpression>),
+
+    /// A disjoint object property relationship.
+    ///
+    /// This states that is an individual is connected by one of these
+    /// object properties, it cannot be connected by any of the others.
+    DisjointObjectProperties(Vec<ObjectPropertyExpression>),
+
     /// An inverse relationship between two object properties.
     ///
     /// If two individuals are related by one relationship, they are
@@ -706,46 +718,213 @@ axioms!{
     /// `s` are transitive, then `a r b` implies `b r a`.
     ///
     /// See also: [Property Characteristics](https://www.w3.org/TR/2012/REC-owl2-primer-20121211/#Property_Characteristics)
-    InverseObjectProperty(ObjectProperty,ObjectProperty),
+    InverseObjectProperties(ObjectProperty,ObjectProperty),
+
+    /// The domain of the object property.
+    ///
+    /// This states that if an individual `i` has an relationship,
+    /// `ope` to any other individual, then the individual `i` is an
+    /// instances of `ce`
+    ///
+    /// See also: [Domain](https://www.w3.org/TR/owl2-syntax/#Object_Property_Domain)
+    ObjectPropertyDomain{ope:ObjectPropertyExpression, ce:ClassExpression},
+
+    /// The range of the object property.
+    ///
+    /// This states that if an individual `i` is connected to be the
+    /// relationship `ope`, then it is an individual of `ce`.1
+    ///
+    /// See also: [Domain](https://www.w3.org/TR/owl2-syntax/#Object_Property_Range)
+    ObjectPropertyRange{ope:ObjectPropertyExpression, ce:ClassExpression},
+
+    /// The functional characteristic.
+    ///
+    /// This states that if for a given individual `i`, there can be
+    /// only one individual `j` connected to `i` by this object
+    /// property expression.
+    ///
+    /// See also: [Functional](https://www.w3.org/TR/owl2-syntax/#Functional_Object_Properties)
+    FunctionalObjectProperty(ObjectPropertyExpression),
+
+    /// The inverse functional characteristic
+    ///
+    /// This states that for each individual `i`, there can be at most
+    /// one individual `j` connected to `i` via this object property
+    /// expression.
+    ///
+    /// See also: [Inverse Functional](https://www.w3.org/TR/owl2-syntax/#Inverse-Functional_Object_Properties)
+    InverseFunctionalObjectProperty(ObjectPropertyExpression),
+
+    /// The reflexive characteristic
+    ///
+    /// Every individual that is connected via the
+    /// ObjectPropertyExpression is connected to itself.
+    ///
+    /// See also: [Reflexive](https://www.w3.org/TR/owl2-syntax/#Reflexive_Object_Properties)
+    ReflexiveObjectProperty(ObjectPropertyExpression),
+
+    /// The irreflexive characteristic
+    ///
+    /// No individual can be connected to itself by this property.
+    ///
+    /// See also: [Irreflexive](https://www.w3.org/TR/owl2-syntax/#Irreflexive_Object_Properties)
+    IrreflexiveObjectProperty(ObjectPropertyExpression),
+
+    /// The symmetric characteristic
+    ///
+    /// If an individual `i` is connected to `j` by this
+    /// ObjectPropertyExpression, then `j` is also connected by `i`
+    /// See also: [Symmetric](https://www.w3.org/TR/owl2-syntax/#Symmetric_Object_Properties)
+    SymmetricObjectProperty(ObjectPropertyExpression),
+
+    /// The asymmetric characteristic.
+    ///
+    /// if an individual `i` is connected to `j` by this
+    /// ObjectPropertyExpression, then `j` cannot be connected to `i`
+    /// by the ObjectPropertyExpression.
+    ///
+    /// See also: [Asymmetric](https://www.w3.org/TR/owl2-syntax/#Asymmetric_Object_Properties)
+    AsymmetricObjectProperty(ObjectPropertyExpression),
 
     /// A transitive relationship between two object properties.
     ///
     /// When `r` is transitive, then `a r b`, and `b r c` implies `a r
     /// c` also.
+    ///
+    /// See also: [TransitiveObjectProperty](https://www.w3.org/TR/owl2-syntax/#Transitive_Object_Properties)
     TransitiveObjectProperty(ObjectProperty),
 
+    /// A sub data property relationship.
+    ///
+    /// The existence of the `sub_property` relationship also implies
+    /// the existence of the `super_property`.
+    ///
+    /// See also: [Data Subproperties](https://www.w3.org/TR/owl2-syntax/#Data_Subproperties)
+    SubDataPropertyOf {
+        super_property:DataProperty,
+        sub_property:DataProperty
+    },
+
+    /// An equivalent data property relationship.
+    ///
+    /// All these DataProperties are semantically identical.
+    ///
+    /// See also: [EquivalentDataproperties](https://www.w3.org/TR/owl2-syntax/#Equivalent_Data_Properties)
+    EquivalentDataProperties(Vec<DataProperty>),
+
+    /// A disjoint data property relationship.
+    ///
+    /// No individual can be connected to a data property expression
+    /// by more than one of these DataProperty relations.
+    ///
+    /// See also: [DisjointDataProperties](https://www.w3.org/TR/owl2-syntax/#Disjoint_Data_Properties)
+    DisjointDataProperties(Vec<DataProperty>),
+
+    /// The domain of a DataProperty.
+    ///
+    /// If an individual `i` has a relationship `dp` then `i` must be
+    /// of type `ce`.
+    ///
+    /// See also: [Data Property Domain](https://www.w3.org/TR/owl2-syntax/#Disjoint_Data_Properties)
+    DataPropertyDomain{dp:DataProperty,ce:ClassExpression},
+
+    /// The range of a DataProperty.
+    ///
+    /// If in individual `i` has a relationship `dp` with some literal
+    /// `l`, then `l` must by in `dr`.
+    ///
+    /// See also: [Data Property Range](https://www.w3.org/TR/owl2-syntax/#Data_Property_Range)
+    DataPropertyRange{dp:DataProperty,dr:DataRange},
+
+    /// The functional DataProperty characteristic.
+    ///
+    /// Any individual `i` can only be connected to a single literal
+    /// by this DataProperty.
+    ///
+    /// See also: [Functional Data Property]:(https://www.w3.org/TR/owl2-syntax/#Functional_Data_Properties)
+    FunctionalDataProperty(DataProperty),
+
+    /// Defintion of a datatype.
+    ///
+    /// See also: [Datatype Definitions](https://www.w3.org/TR/owl2-syntax/#Datatype_Definitions)
+    DatatypeDefinition {
+        kind: Datatype,
+        range: DataRange
+    },
+
+    /// A key
+    ///
+    /// An individual `i` which is of type `ce` can be uniquely
+    /// identified by `pe`. Keys can only be applied to individuals
+    /// which are explicitly named in the ontology, not those that are
+    /// inferred.
+    ///
+    /// See also: [Keys](https://www.w3.org/TR/owl2-syntax/#Keys)
+    HasKey{ce:ClassExpression, pe:PropertyExpression},
+
     // Assertions
+    /// A same individual expression.
+    ///
+    /// See also: [Individual Equality](https://www.w3.org/TR/owl2-syntax/#Individual_Equality)
     SameIndividual (
         Vec<NamedIndividual>
     ),
 
+    /// A different individuals expression.
+    ///
+    /// See also: [Individual Inequality](https://www.w3.org/TR/owl2-syntax/#Individual_Inequality)
     DifferentIndividuals (
         Vec<NamedIndividual>
     ),
 
+    /// A class assertion expression.
+    ///
+    /// States that `i` is in class `ce`.
+    ///
+    /// See also: [Class Assertions](https://www.w3.org/TR/owl2-syntax/#Class_Assertions)   
     ClassAssertion {
         ce: ClassExpression,
         i: NamedIndividual
     },
 
+    /// An object property assertion.
+    ///
+    /// Individual `from` is connected `to` by `ope`.
+    ///
+    /// See also: [Positive Object Property Assertions](https://www.w3.org/TR/owl2-syntax/#Positive_Object_Property_Assertions)
     ObjectPropertyAssertion {
         ope: ObjectPropertyExpression,
         from: NamedIndividual,
         to: NamedIndividual
     },
 
+    /// A negative object property assertion.
+    ///
+    /// Individual `from` is not connected `to` by `ope`
+    ///
+    /// See also: [Negative Object Property Assertions](https://www.w3.org/TR/owl2-syntax/#Negative_Object_Property_Assertions)
     NegativeObjectPropertyAssertion {
         ope: ObjectPropertyExpression,
         from: NamedIndividual,
         to: NamedIndividual
     },
 
+    /// A data property assertion.
+    ///
+    /// Individual `from` is connected `to`` literal by `dp`.
+    ///
+    /// See also: [Data Property Assertion](https://www.w3.org/TR/owl2-syntax/#Positive_Data_Property_Assertions)
     DataPropertyAssertion {
         dp: DataProperty,
         from: NamedIndividual,
         to: Literal
     },
 
+    /// A negative data property assertion.
+    ///
+    /// Individual `from` is not connected `to` literal by `dp`.
+    ///
+    /// See also [Negative Data Property Assertions](https://www.w3.org/TR/owl2-syntax/#Negative_Data_Property_Assertions)
     NegativeDataPropertyAssertion {
         dp: DataProperty,
         from: NamedIndividual,
@@ -758,7 +937,7 @@ axioms!{
     /// States that `annotation` applies to the
     /// `annotation_subject`. Annotations refer to an `IRI` rather
     /// than the `NamedEntity` identified by that `IRI`.
-    AssertAnnotation {
+    AnnotationAssertion {
         annotation_subject:IRI,
         annotation: Annotation
     },
@@ -767,14 +946,9 @@ axioms!{
     ///
     /// Implies that any annotation of the type `sub_property` is also
     /// an annotation of the type `super_property`.
-    SubAnnotationProperty {
+    SubAnnotationPropertyOf {
         super_property:AnnotationProperty,
         sub_property: AnnotationProperty
-    },
-
-    DatatypeDefinition {
-        kind: Datatype,
-        range: DataRange
     }
 }
 
@@ -785,6 +959,9 @@ axioms!{
 // manipulations on the them. So we can't.
 //
 // "Whoever does not understand LISP is doomed to reinvent it" (badly)
+onimpl!{Import, import}
+onimpl!{OntologyAnnotation, ontology_annotation}
+
 onimpl!{DeclareClass, declare_class}
 onimpl!{DeclareObjectProperty, declare_object_property}
 onimpl!{DeclareAnnotationProperty, declare_annotation_property}
@@ -795,11 +972,26 @@ onimpl!{SubClassOf, sub_class}
 onimpl!{EquivalentClasses, equivalent_class}
 onimpl!{DisjointClasses, disjoint_class}
 onimpl!{SubObjectPropertyOf, sub_object_property}
-onimpl!{InverseObjectProperty, inverse_object_property}
+onimpl!{EquivalentObjectProperties, equivalent_object_properties}
+onimpl!{DisjointObjectProperties, disjoint_object_properties}
+onimpl!{InverseObjectProperties, inverse_object_properties}
+onimpl!{ObjectPropertyDomain, object_property_domain}
+onimpl!{ObjectPropertyRange, object_property_range}
+onimpl!{FunctionalObjectProperty, functional_object_property}
+onimpl!{InverseFunctionalObjectProperty, inverse_functional_object_property}
+onimpl!{ReflexiveObjectProperty, reflexive_object_property}
+onimpl!{IrreflexiveObjectProperty, irreflexive_object_property}
+onimpl!{SymmetricObjectProperty, symmetric_object_property}
+onimpl!{AsymmetricObjectProperty, assymmetric_object_property}
 onimpl!{TransitiveObjectProperty, transitive_object_property}
-onimpl!{AssertAnnotation, assert_annotation}
-onimpl!{SubAnnotationProperty, sub_annotation_property}
+onimpl!{SubDataPropertyOf, sub_data_property_of}
+onimpl!{EquivalentDataProperties, equivalent_data_properties}
+onimpl!{DisjointDataProperties, disjoint_data_properties}
+onimpl!{DataPropertyDomain, data_property_domain}
+onimpl!{DataPropertyRange, data_property_range}
+onimpl!{FunctionalDataProperty, functional_data_property}
 onimpl!{DatatypeDefinition, datatype_definition}
+onimpl!{HasKey, has_key}
 onimpl!{SameIndividual, same_individual}
 onimpl!{DifferentIndividuals, different_individuals}
 onimpl!{ClassAssertion, class_assertion}
@@ -807,10 +999,8 @@ onimpl!{ObjectPropertyAssertion, object_property_assertion}
 onimpl!{NegativeObjectPropertyAssertion, negative_object_property_assertion}
 onimpl!{DataPropertyAssertion, data_property_assertion}
 onimpl!{NegativeDataPropertyAssertion, negative_data_property_assertion}
-
-onimpl!{Import, import}
-onimpl!{OntologyAnnotation, ontology_annotation}
-
+onimpl!{AnnotationAssertion, annotation_assertion}
+onimpl!{SubAnnotationPropertyOf, sub_annotation_property_of}
 
 // Non-axiom data structures associated with OWL
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
@@ -868,6 +1058,11 @@ pub enum SubObjectPropertyExpression {
     ObjectPropertyExpression(ObjectPropertyExpression)
 }
 
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub enum PropertyExpression {
+    ObjectPropertyExpression(ObjectPropertyExpression),
+    DataProperty(DataProperty)
+}
 
 // Data!!!
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]

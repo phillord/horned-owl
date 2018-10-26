@@ -396,50 +396,6 @@ fn axiom_from_start<R:BufRead>(r:&mut Read<R>, e:&BytesStart, axiom_kind:&[u8])
     Ok(
         match axiom_kind
         {
-            b"TransitiveObjectProperty" => {
-                TransitiveObjectProperty
-                    (from_start(r, e)?).into()
-            }
-            b"DisjointClasses" => {
-                DisjointClasses(
-                    from_start_to_end(r, e, b"DisjointClasses")?
-                ).into()
-            }
-            b"EquivalentClasses" => {
-                EquivalentClasses(
-                    from_start_to_end(r, e, b"EquivalentClasses")?
-                ).into()
-            }
-            b"SubAnnotationPropertyOf" => {
-                SubAnnotationProperty{
-                    super_property:from_start(r, e)?,
-                    sub_property:from_next_tag(r)?
-                }.into()
-            }
-            b"InverseObjectProperties" => {
-                InverseObjectProperty(
-                    from_start(r, e)?,
-                    from_next_tag(r)?
-                ).into()
-            }
-            b"SubClassOf" => {
-                let super_class = from_start(r, e)?;
-                let sub_class = from_next_tag(r)?;
-                SubClassOf{
-                    super_class, sub_class
-                }.into()
-            }
-            b"SubObjectPropertyOf" => {
-                SubObjectPropertyOf{
-                    super_property:from_start(r, e)?,
-                    sub_property:from_next_tag(r)?
-                }.into()
-            }
-            b"Declaration" => {
-                declaration(
-                    from_start(r, e)?
-                )
-            }
             b"Annotation" => {
                 OntologyAnnotation (
                     Annotation {
@@ -448,17 +404,129 @@ fn axiom_from_start<R:BufRead>(r:&mut Read<R>, e:&BytesStart, axiom_kind:&[u8])
                     }
                 ).into()
             }
-            b"AnnotationAssertion" => {
-                let annotation_property = from_start(r, e)?;
-                let annotation_subject = from_next_tag(r)?;
-                let annotation_value = from_next_tag(r)?;
-
-                AssertAnnotation {
-                    annotation_subject: annotation_subject,
-                    annotation: Annotation {
-                        annotation_property, annotation_value
-                    }
+            b"Declaration" => {
+                declaration(
+                    from_start(r, e)?
+                )
+            }
+            b"SubClassOf" => {
+                let super_class = from_start(r, e)?;
+                let sub_class = from_next_tag(r)?;
+                SubClassOf{
+                    super_class, sub_class
                 }.into()
+            }
+            b"EquivalentClasses" => {
+                EquivalentClasses(
+                    from_start_to_end(r, e, b"EquivalentClasses")?
+                ).into()
+            }
+            b"DisjointClasses" => {
+                DisjointClasses(
+                    from_start_to_end(r, e, b"DisjointClasses")?
+                ).into()
+            }
+            b"SubObjectPropertyOf" => {
+                SubObjectPropertyOf{
+                    super_property:from_start(r, e)?,
+                    sub_property:from_next_tag(r)?
+                }.into()
+            }
+            b"EquivalentObjectProperties" =>{
+                EquivalentObjectProperties(
+                    from_start_to_end(r, e, b"EquivalentObjectProperties")?
+                ).into()
+            }
+            b"DisjointObjectProperties" =>{
+                DisjointObjectProperties(
+                    from_start_to_end(r, e, b"DisjointObjectProperties")?
+                ).into()
+            }
+            b"InverseObjectProperties" => {
+                InverseObjectProperties(
+                    from_start(r, e)?,
+                    from_next_tag(r)?
+                ).into()
+            }
+            b"ObjectPropertyDomain" => {
+                ObjectPropertyDomain {
+                    ope:from_start(r, e)?,
+                    ce:from_next_tag(r)?
+                }.into()
+            }
+            b"ObjectPropertyRange" => {
+                ObjectPropertyRange{
+                    ope:from_start(r, e)?,
+                    ce:from_next_tag(r)?
+                }.into()
+            }
+            b"FunctionalObjectProperty" => {
+                FunctionalObjectProperty(
+                    from_start(r, e)?
+                ).into()
+            }
+            b"InverseFunctionalObjectProperty" => {
+                InverseFunctionalObjectProperty(
+                    from_start(r, e)?
+                ).into()
+            }
+            b"ReflexiveObjectProperty" => {
+                ReflexiveObjectProperty(
+                    from_start(r, e)?
+                ).into()
+            }
+            b"IrreflexiveObjectProperty" => {
+                IrreflexiveObjectProperty(
+                    from_start(r, e)?
+                ).into()
+            }
+            b"SymmetricObjectProperty" => {
+                SymmetricObjectProperty(
+                    from_start(r, e)?
+                ).into()
+            }
+            b"AsymmetricObjectProperty" => {
+                AsymmetricObjectProperty(
+                    from_start(r, e)?
+                ).into()
+            }
+            b"TransitiveObjectProperty" => {
+                TransitiveObjectProperty(
+                    from_start(r, e)?
+                ).into()
+            }
+            b"SubDataPropertyOf" => {
+                SubDataPropertyOf{
+                    super_property:from_start(r, e)?,
+                    sub_property:from_next_tag(r)?
+                }.into()
+            }
+            b"EquivalentDataProperties" => {
+                EquivalentDataProperties(
+                    from_start_to_end(r, e, b"EquivalentDataProperties")?
+                ).into()
+            }
+            b"DisjointDataProperties" => {
+                DisjointDataProperties(
+                    from_start_to_end(r, e, b"DisjointDataProperties")?
+                ).into()
+            }
+            b"DataPropertyDomain" => {
+                DataPropertyDomain{
+                    dp:from_start(r, e)?,
+                    ce:from_next_tag(r)?
+                }.into()
+            }
+            b"DataPropertyRange" => {
+                DataPropertyRange{
+                    dp:from_start(r, e)?,
+                    dr:from_next_tag(r)?
+                }.into()
+            }
+            b"FunctionalDataProperty" => {
+                FunctionalDataProperty(
+                    from_start(r, e)?
+                ).into()
             }
             b"DatatypeDefinition" => {
                 DatatypeDefinition{
@@ -466,10 +534,10 @@ fn axiom_from_start<R:BufRead>(r:&mut Read<R>, e:&BytesStart, axiom_kind:&[u8])
                     range: from_next_tag(r)?
                 }.into()
             }
-            b"ClassAssertion" => {
-                ClassAssertion{
-                    ce: from_start(r, e)?,
-                    i: from_next_tag(r)?
+            b"HasKey" => {
+                HasKey{
+                    ce:from_start(r, e)?,
+                    pe:from_next_tag(r)?
                 }.into()
             }
             b"SameIndividual" =>{
@@ -482,7 +550,13 @@ fn axiom_from_start<R:BufRead>(r:&mut Read<R>, e:&BytesStart, axiom_kind:&[u8])
                     from_start_to_end(r, e, b"DifferentIndividuals")?
                 ).into()
             }
-            b"ObjectPropertyAssertion" => {
+            b"ClassAssertion" => {
+                ClassAssertion{
+                    ce: from_start(r, e)?,
+                    i: from_next_tag(r)?
+                }.into()
+            }
+                        b"ObjectPropertyAssertion" => {
                 ObjectPropertyAssertion {
                     ope:from_start(r, e)?,
                     from:from_next_tag(r)?,
@@ -508,6 +582,24 @@ fn axiom_from_start<R:BufRead>(r:&mut Read<R>, e:&BytesStart, axiom_kind:&[u8])
                     dp:from_start(r, e)?,
                     from:from_next_tag(r)?,
                     to:from_next_tag(r)?
+                }.into()
+            }
+            b"AnnotationAssertion" => {
+                let annotation_property = from_start(r, e)?;
+                let annotation_subject = from_next_tag(r)?;
+                let annotation_value = from_next_tag(r)?;
+
+                AnnotationAssertion {
+                    annotation_subject: annotation_subject,
+                    annotation: Annotation {
+                        annotation_property, annotation_value
+                    }
+                }.into()
+            }
+            b"SubAnnotationPropertyOf" => {
+                SubAnnotationPropertyOf{
+                    super_property:from_start(r, e)?,
+                    sub_property:from_next_tag(r)?
                 }.into()
             }
             _ => {
@@ -620,6 +712,29 @@ fn data_cardinality_restriction<R:BufRead>(r:&mut Read<R>,
     ))
 }
 
+
+from_start!{
+    PropertyExpression, r, e,
+    {
+        Ok(
+            match e.local_name() {
+                b"ObjectProperty" |
+                b"ObjectInverseOf" => {
+                    PropertyExpression::ObjectPropertyExpression
+                        (from_start(r, e)?)
+                }
+                b"DataProperty" => {
+                    PropertyExpression::DataProperty(
+                        from_start(r, e)?
+                    )
+                }
+                _ => {
+                    return Err(error_unknown_entity("PropertyExpression",
+                                                    e.local_name(), r))
+                }
+            })
+    }
+}
 
 from_start! {
     ClassExpression, r, e, {
@@ -1236,7 +1351,7 @@ mod test {
         let ont_s = include_str!("../ont/owl-xml/one-annotation.owl");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
         assert_eq!(ont.declare_annotation_property().count(), 1);
-        assert_eq!(ont.assert_annotation().count(), 1);
+        assert_eq!(ont.annotation_assertion().count(), 1);
     }
 
     #[test]
@@ -1244,7 +1359,7 @@ mod test {
         let ont_s = include_str!("../ont/owl-xml/one-label-non-abbreviated-iri.owl");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
-        assert_eq!(ont.assert_annotation().count(), 1);
+        assert_eq!(ont.annotation_assertion().count(), 1);
     }
 
 
@@ -1253,7 +1368,7 @@ mod test {
         let ont_s = include_str!("../ont/owl-xml/one-label.owl");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
-        assert_eq!(ont.assert_annotation().count(), 1);
+        assert_eq!(ont.annotation_assertion().count(), 1);
     }
 
     #[test]
@@ -1293,7 +1408,7 @@ mod test {
         let ont_s = include_str!("../ont/owl-xml/inverse-properties.owl");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
-        assert_eq!(ont.inverse_object_property().count(), 1);
+        assert_eq!(ont.inverse_object_properties().count(), 1);
     }
 
     #[test]
@@ -1318,7 +1433,7 @@ mod test {
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
 
-        let mut ann_i = ont.annotated_axiom(AxiomKind::AssertAnnotation);
+        let mut ann_i = ont.annotated_axiom(AxiomKind::AnnotationAssertion);
         let ann:&AnnotatedAxiom = ann_i.next().unwrap();
         assert_eq!(ann.annotation.len(), 1);
     }
@@ -1348,7 +1463,7 @@ mod test {
         let ont_s = include_str!("../ont/owl-xml/sub-annotation.owl");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
-        assert_eq!(ont.sub_annotation_property().count(), 1);
+        assert_eq!(ont.sub_annotation_property_of().count(), 1);
     }
 
 
@@ -1796,5 +1911,11 @@ mod test {
 
         let di = ont.different_individuals().next().unwrap();
         assert_eq!(2, di.0.len());
+    }
+
+    #[test]
+    fn family() {
+        let ont_s = include_str!("../ont/owl-xml/family.owl");
+        let (_, _) = read_ok(&mut ont_s.as_bytes());
     }
 }
