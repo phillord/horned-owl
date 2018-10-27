@@ -40,23 +40,23 @@ use std::rc::Rc;
 #[derive(Clone, Debug, Eq, PartialEq, Hash, PartialOrd, Ord)]
 pub struct IRI(Rc<String>);
 
-impl Deref for IRI{
+impl Deref for IRI {
     type Target = String;
 
-    fn deref(&self) -> &String{
+    fn deref(&self) -> &String {
         &self.0
     }
 }
 
-impl From<IRI> for String{
-    fn from(i:IRI) -> String {
+impl From<IRI> for String {
+    fn from(i: IRI) -> String {
         // Clone Rc'd value
         (*i.0).clone()
     }
 }
 
-impl <'a> From<&'a IRI> for String {
-    fn from(i:&'a IRI) -> String {
+impl<'a> From<&'a IRI> for String {
+    fn from(i: &'a IRI) -> String {
         (*i.0).clone()
     }
 }
@@ -77,8 +77,8 @@ impl <'a> From<&'a IRI> for String {
 #[derive(Debug, Default)]
 pub struct Build(Rc<RefCell<BTreeSet<IRI>>>);
 
-impl Build{
-    pub fn new() -> Build{
+impl Build {
+    pub fn new() -> Build {
         Build(Rc::new(RefCell::new(BTreeSet::new())))
     }
 
@@ -93,13 +93,14 @@ impl Build{
     /// assert_eq!("http://www.example.com", String::from(iri));
     /// ```
     pub fn iri<S>(&self, s: S) -> IRI
-        where S: Into<String>
+    where
+        S: Into<String>,
     {
         let iri = IRI(Rc::new(s.into()));
 
         let mut cache = self.0.borrow_mut();
-        if cache.contains(&iri){
-            return cache.get(&iri).unwrap().clone()
+        if cache.contains(&iri) {
+            return cache.get(&iri).unwrap().clone();
         }
 
         cache.insert(iri.clone());
@@ -120,8 +121,9 @@ impl Build{
     /// assert_eq!(c1, c2);
     /// ```
     ///
-    pub fn class<S>(&self, s:S) -> Class
-        where S: Into<String>
+    pub fn class<S>(&self, s: S) -> Class
+    where
+        S: Into<String>,
     {
         Class(self.iri(s))
     }
@@ -138,8 +140,9 @@ impl Build{
     ///
     /// assert_eq!(obp1, obp2);
     /// ```
-    pub fn object_property<S>(&self, s:S) -> ObjectProperty
-        where S: Into<String>
+    pub fn object_property<S>(&self, s: S) -> ObjectProperty
+    where
+        S: Into<String>,
     {
         ObjectProperty(self.iri(s))
     }
@@ -156,8 +159,9 @@ impl Build{
     ///
     /// assert_eq!(anp1, anp2);
     /// ```
-    pub fn annotation_property<S>(&self, s:S)-> AnnotationProperty
-        where S: Into<String>
+    pub fn annotation_property<S>(&self, s: S) -> AnnotationProperty
+    where
+        S: Into<String>,
     {
         AnnotationProperty(self.iri(s))
     }
@@ -174,8 +178,9 @@ impl Build{
     ///
     /// assert_eq!(dp1, dp2);
     /// ```
-    pub fn data_property<S>(&self, s:S) -> DataProperty
-        where S: Into<String>
+    pub fn data_property<S>(&self, s: S) -> DataProperty
+    where
+        S: Into<String>,
     {
         DataProperty(self.iri(s))
     }
@@ -192,8 +197,9 @@ impl Build{
     ///
     /// assert_eq!(ni1, ni2);
     /// ```
-    pub fn named_individual<S>(&self, s:S) -> NamedIndividual
-        where S: Into<String>
+    pub fn named_individual<S>(&self, s: S) -> NamedIndividual
+    where
+        S: Into<String>,
     {
         NamedIndividual(self.iri(s))
     }
@@ -210,8 +216,9 @@ impl Build{
     ///
     /// assert_eq!(ni1, ni2);
     /// ```
-    pub fn datatype<S>(&self, s:S) -> Datatype
-        where S: Into<String>
+    pub fn datatype<S>(&self, s: S) -> Datatype
+    where
+        S: Into<String>,
     {
         Datatype(self.iri(s))
     }
@@ -343,20 +350,18 @@ named!{
 
 pub fn declaration(ne: NamedEntity) -> Axiom {
     match ne {
-        NamedEntity::Class(c) =>
-            Axiom::DeclareClass(DeclareClass(c)),
-        NamedEntity::ObjectProperty(obp) =>
-            Axiom::DeclareObjectProperty(DeclareObjectProperty(obp)),
-        NamedEntity::AnnotationProperty(anp) =>
-            Axiom::DeclareAnnotationProperty
-            (DeclareAnnotationProperty(anp)),
-        NamedEntity::DataProperty(dp) =>
-            Axiom::DeclareDataProperty
-            (DeclareDataProperty(dp)),
-        NamedEntity::NamedIndividual(ni) =>
-            Axiom::DeclareNamedIndividual(DeclareNamedIndividual(ni)),
-        NamedEntity::Datatype(dt) =>
-            Axiom::DeclareDatatype(DeclareDatatype(dt))
+        NamedEntity::Class(c) => Axiom::DeclareClass(DeclareClass(c)),
+        NamedEntity::ObjectProperty(obp) => {
+            Axiom::DeclareObjectProperty(DeclareObjectProperty(obp))
+        }
+        NamedEntity::AnnotationProperty(anp) => {
+            Axiom::DeclareAnnotationProperty(DeclareAnnotationProperty(anp))
+        }
+        NamedEntity::DataProperty(dp) => Axiom::DeclareDataProperty(DeclareDataProperty(dp)),
+        NamedEntity::NamedIndividual(ni) => {
+            Axiom::DeclareNamedIndividual(DeclareNamedIndividual(ni))
+        }
+        NamedEntity::Datatype(dt) => Axiom::DeclareDatatype(DeclareDatatype(dt)),
     }
 }
 
@@ -381,17 +386,20 @@ pub trait Kinded {
 
 /// An `AnnotatedAxiom` is an `Axiom` with one or more `Annotation`.
 #[derive(Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
-pub struct AnnotatedAxiom{
+pub struct AnnotatedAxiom {
     pub axiom: Axiom,
-    pub annotation: BTreeSet<Annotation>
+    pub annotation: BTreeSet<Annotation>,
 }
 
 impl AnnotatedAxiom {
-    pub fn new<I>(axiom: I, annotation: BTreeSet<Annotation>)
-                  -> AnnotatedAxiom
-        where I: Into<Axiom>
+    pub fn new<I>(axiom: I, annotation: BTreeSet<Annotation>) -> AnnotatedAxiom
+    where
+        I: Into<Axiom>,
     {
-        AnnotatedAxiom{axiom:axiom.into(), annotation}
+        AnnotatedAxiom {
+            axiom: axiom.into(),
+            annotation,
+        }
     }
 
     pub fn logical_cmp(&self, other: &AnnotatedAxiom) -> Ordering {
@@ -415,7 +423,7 @@ impl From<Axiom> for AnnotatedAxiom {
     fn from(axiom: Axiom) -> AnnotatedAxiom {
         AnnotatedAxiom {
             axiom,
-            annotation: BTreeSet::new()
+            annotation: BTreeSet::new(),
         }
     }
 }
@@ -436,57 +444,45 @@ impl Kinded for AnnotatedAxiom {
 /// Return all axioms of a specific `AxiomKind`
 #[allow(unused_macros)]
 macro_rules! on {
-    ($ont:ident, $kind:ident)
-        => {
-            $ont.axiom(AxiomKind::$kind)
-                .map(|ax|
-                     {
-                         match ax {
-                             Axiom::$kind(n) => n,
-                             _ => panic!()
-                         }
-                     })
-        }
+    ($ont:ident, $kind:ident) => {
+        $ont.axiom(AxiomKind::$kind).map(|ax| match ax {
+            Axiom::$kind(n) => n,
+            _ => panic!(),
+        })
+    };
 }
 
 /// Add a method to `Ontology` which returns axioms of a specific
 /// `AxiomKind`.
 #[allow(unused_macros)]
 macro_rules! onimpl {
-    ($kind:ident, $method:ident)
-        =>
-    {
+    ($kind:ident, $method:ident) => {
         onimpl!($kind, $method, stringify!($kind));
     };
-    ($kind:ident, $method:ident, $skind:expr)
-        =>
-    {
+    ($kind:ident, $method:ident, $skind:expr) => {
         impl Ontology {
-
             #[doc = "Return all instances of"]
             #[doc = $skind]
             #[doc = "in the ontology."]
-            pub fn $method(&self)
-                       -> impl Iterator<Item=&$kind> {
+            pub fn $method(&self) -> impl Iterator<Item = &$kind> {
                 on!(self, $kind)
             }
         }
-    }
+    };
 }
 
 /// Add `Kinded` and `From` for each axiom.
 macro_rules! axiomimpl {
     ($name:ident) => {
         impl From<$name> for Axiom {
-                fn from(ax: $name) -> Axiom {
-                    Axiom::$name(ax)
-                }
+            fn from(ax: $name) -> Axiom {
+                Axiom::$name(ax)
+            }
         }
 
         impl From<$name> for AnnotatedAxiom {
             fn from(ax: $name) -> AnnotatedAxiom {
-                AnnotatedAxiom::from(
-                    Axiom::from(ax))
+                AnnotatedAxiom::from(Axiom::from(ax))
             }
         }
 
@@ -495,7 +491,7 @@ macro_rules! axiomimpl {
                 AxiomKind::$name
             }
         }
-    }
+    };
 }
 
 /// Define a new axiom
@@ -881,7 +877,7 @@ axioms!{
     ///
     /// States that `i` is in class `ce`.
     ///
-    /// See also: [Class Assertions](https://www.w3.org/TR/owl2-syntax/#Class_Assertions)   
+    /// See also: [Class Assertions](https://www.w3.org/TR/owl2-syntax/#Class_Assertions)
     ClassAssertion {
         ce: ClassExpression,
         i: NamedIndividual
@@ -1004,11 +1000,10 @@ onimpl!{SubAnnotationPropertyOf, sub_annotation_property_of}
 
 // Non-axiom data structures associated with OWL
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub struct Literal
-{
-    pub datatype_iri:Option<IRI>,
+pub struct Literal {
+    pub datatype_iri: Option<IRI>,
     pub lang: Option<String>,
-    pub literal: Option<String>
+    pub literal: Option<String>,
 }
 
 /// Data associated with a part of the ontology.
@@ -1018,7 +1013,7 @@ pub struct Literal
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct Annotation {
     pub annotation_property: AnnotationProperty,
-    pub annotation_value: AnnotationValue
+    pub annotation_value: AnnotationValue,
 }
 
 /// The value of an annotation
@@ -1027,7 +1022,7 @@ pub struct Annotation {
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum AnnotationValue {
     Literal(Literal),
-    IRI(IRI)
+    IRI(IRI),
 }
 
 impl From<Literal> for AnnotationValue {
@@ -1037,7 +1032,7 @@ impl From<Literal> for AnnotationValue {
 }
 
 impl From<IRI> for AnnotationValue {
-    fn from(iri:IRI) -> AnnotationValue {
+    fn from(iri: IRI) -> AnnotationValue {
         AnnotationValue::IRI(iri)
     }
 }
@@ -1046,7 +1041,7 @@ impl From<IRI> for AnnotationValue {
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum ObjectPropertyExpression {
     ObjectProperty(ObjectProperty),
-    InverseObjectProperty(ObjectProperty)
+    InverseObjectProperty(ObjectProperty),
 }
 
 /// A sub-object property expression
@@ -1055,24 +1050,24 @@ pub enum SubObjectPropertyExpression {
     // We use Vec here rather than BTreeSet because, perhaps
     // surprisingly, BTreeSet is not itself hashable.
     ObjectPropertyChain(Vec<ObjectProperty>),
-    ObjectPropertyExpression(ObjectPropertyExpression)
+    ObjectPropertyExpression(ObjectPropertyExpression),
 }
 
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum PropertyExpression {
     ObjectPropertyExpression(ObjectPropertyExpression),
-    DataProperty(DataProperty)
+    DataProperty(DataProperty),
 }
 
 // Data!!!
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub struct FacetRestriction{
+pub struct FacetRestriction {
     pub f: Facet,
     pub l: Literal,
 }
 
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub enum Facet{
+pub enum Facet {
     Length,
     MinLength,
     MaxLength,
@@ -1083,7 +1078,7 @@ pub enum Facet{
     MaxExclusive,
     TotalDigits,
     FractionDigits,
-    LangRange
+    LangRange,
 }
 
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
@@ -1102,14 +1097,12 @@ impl From<Datatype> for DataRange {
     }
 }
 
-
 /// A class expression
 ///
 /// As well as a named class, it is possible to define classes of
 /// individuals based on these class constructors.
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub enum ClassExpression
-{
+pub enum ClassExpression {
     /// A named class
     Class(Class),
 
@@ -1117,32 +1110,35 @@ pub enum ClassExpression
     ///
     /// The class of individuals which are individuals of all these
     /// classes.
-    ObjectIntersectionOf{o:Vec<ClassExpression>},
+    ObjectIntersectionOf { o: Vec<ClassExpression> },
 
     /// The boolean or
     ///
     /// The class of individuals which are individuals of any of these
     /// classes.
-    ObjectUnionOf{o:Vec<ClassExpression>},
+    ObjectUnionOf { o: Vec<ClassExpression> },
 
     /// The boolean not
     ///
     /// The class of individuals which are not individuals of any of
     /// these classes.
-    ObjectComplementOf{ce:Box<ClassExpression>},
+    ObjectComplementOf { ce: Box<ClassExpression> },
 
     /// An enumeration of individuals
     ///
     /// This is the class containing exactly the given set of
     /// individuals.
-    ObjectOneOf{o:Vec<NamedIndividual>},
+    ObjectOneOf { o: Vec<NamedIndividual> },
 
     /// An existential relationship
     ///
     /// This is the anonymous class of individuals `i`, which have the
     /// relationship `o` to a class expression `ce`. Every individual
     /// in `i` must have this relationship to one individual in `ce`.
-    ObjectSomeValuesFrom{o:ObjectPropertyExpression, ce:Box<ClassExpression>},
+    ObjectSomeValuesFrom {
+        o: ObjectPropertyExpression,
+        ce: Box<ClassExpression>,
+    },
 
     /// A universal relationship
     ///
@@ -1150,14 +1146,20 @@ pub enum ClassExpression
     /// individuals which are related by `o` are instances of
     /// `ce`. This does not imply that the `i` necessarily has any
     /// relation `r`.
-    ObjectAllValuesFrom{o:ObjectPropertyExpression, ce:Box<ClassExpression>},
+    ObjectAllValuesFrom {
+        o: ObjectPropertyExpression,
+        ce: Box<ClassExpression>,
+    },
 
     /// An existential relationship to an individual
     ///
     /// This is the class of individuals `c` which have the
     /// relationship `o` to another individual `i`. Every individual
     /// in `c` must have this relationship to the individual `i`
-    ObjectHasValue{o:ObjectPropertyExpression, i:NamedIndividual},
+    ObjectHasValue {
+        o: ObjectPropertyExpression,
+        i: NamedIndividual,
+    },
 
     /// The class of individuals which have a relation to themselves
     ///
@@ -1170,24 +1172,33 @@ pub enum ClassExpression
     /// Given an object property `o` and a class `ce`, this describes
     /// the class of individuals which have the `o` relationship to at
     /// least `n` other individuals.
-    ObjectMinCardinality{n:i32, o:ObjectPropertyExpression,
-                         ce:Box<ClassExpression>},
+    ObjectMinCardinality {
+        n: i32,
+        o: ObjectPropertyExpression,
+        ce: Box<ClassExpression>,
+    },
 
     /// A max cardinality relationship between individuals
     ///
     /// Given an object property `o` and a class `ce`, this describes
     /// the class of individuals which have the `o` relationship to at
     /// most `n` other individuals.
-    ObjectMaxCardinality{n:i32, o:ObjectPropertyExpression,
-                         ce:Box<ClassExpression>},
+    ObjectMaxCardinality {
+        n: i32,
+        o: ObjectPropertyExpression,
+        ce: Box<ClassExpression>,
+    },
 
     /// An exact cardinality relationship between individuals
     ///
     /// Given an object property `o` and a class `ce`, this describes
     /// the class of individuals which have the `o` relationship to exactly
     /// `n` other individuals.
-    ObjectExactCardinality{n:i32, o:ObjectPropertyExpression,
-                           ce:Box<ClassExpression>},
+    ObjectExactCardinality {
+        n: i32,
+        o: ObjectPropertyExpression,
+        ce: Box<ClassExpression>,
+    },
 
     /// An exististential relationship.
     ///
@@ -1196,7 +1207,7 @@ pub enum ClassExpression
     /// `i` must have this relationship to data constrainted by `dr`.
     ///
     /// See also: [Existential Quantification](https://www.w3.org/TR/owl2-syntax/#Existential_Quantification_2)
-    DataSomeValuesFrom{dp:DataProperty, dr:DataRange},
+    DataSomeValuesFrom { dp: DataProperty, dr: DataRange },
 
     /// A universal relationship.
     ///
@@ -1205,7 +1216,7 @@ pub enum ClassExpression
     /// type `dr`.
     ///
     /// See also [Universal Quantification](https://www.w3.org/TR/owl2-syntax/#Universal_Quantification_2)
-    DataAllValuesFrom{dp:DataProperty, dr:DataRange},
+    DataAllValuesFrom { dp: DataProperty, dr: DataRange },
 
     /// A has-value relationship.
 
@@ -1213,7 +1224,7 @@ pub enum ClassExpression
     /// relationship `dp` to exactly the literal `l`.
 
     /// See also [Value Restriction](https://www.w3.org/TR/owl2-syntax/#Literal_Value_Restriction)
-    DataHasValue{dp:DataProperty, l:Literal},
+    DataHasValue { dp: DataProperty, l: Literal },
 
     /// A minimum cardinality restriction
 
@@ -1221,7 +1232,11 @@ pub enum ClassExpression
     /// the kind `dp` to a given data range `dr`.
 
     /// See also [Min Cardinality](https://www.w3.org/TR/owl2-syntax/#Minimum_Cardinality_2)
-    DataMinCardinality{n:i32, dp:DataProperty, dr:DataRange},
+    DataMinCardinality {
+        n: i32,
+        dp: DataProperty,
+        dr: DataRange,
+    },
 
     /// A max cardinality restriction
 
@@ -1229,7 +1244,11 @@ pub enum ClassExpression
     /// the kind `dp` to a given data range `dr`.
 
     /// See also [Max Cardinality](https://www.w3.org/TR/owl2-syntax/#Maximum_Cardinality_2)
-    DataMaxCardinality{n:i32, dp:DataProperty, dr:DataRange},
+    DataMaxCardinality {
+        n: i32,
+        dp: DataProperty,
+        dr: DataRange,
+    },
 
     /// An exact cardinality restriction
 
@@ -1237,17 +1256,21 @@ pub enum ClassExpression
     /// the kind `dp` to a given data range `dr`.
 
     /// See also [Exactly Cardinality](https://www.w3.org/TR/owl2-syntax/#Exact_Cardinality_2)
-    DataExactCardinality{n:i32, dp:DataProperty, dr:DataRange}
+    DataExactCardinality {
+        n: i32,
+        dp: DataProperty,
+        dr: DataRange,
+    },
 }
 
 impl From<Class> for ClassExpression {
-    fn from(c:Class) -> ClassExpression {
+    fn from(c: Class) -> ClassExpression {
         ClassExpression::Class(c)
     }
 }
 
-impl <'a> From<&'a Class> for ClassExpression {
-    fn from(c:&'a Class) -> ClassExpression {
+impl<'a> From<&'a Class> for ClassExpression {
+    fn from(c: &'a Class) -> ClassExpression {
         ClassExpression::Class(c.clone())
     }
 }
@@ -1258,7 +1281,7 @@ impl <'a> From<&'a Class> for ClassExpression {
 /// stable over the lifetime of the ontology, and a version IRI which
 /// is expected to change between versions.
 #[derive(Debug, Default, Eq, PartialEq)]
-pub struct OntologyID{
+pub struct OntologyID {
     pub iri: Option<IRI>,
     pub viri: Option<IRI>,
 }
@@ -1267,49 +1290,37 @@ pub struct OntologyID{
 ///
 /// An ontology consists of a identifier and set of axiom
 #[derive(Debug, Default, Eq, PartialEq)]
-pub struct Ontology
-{
+pub struct Ontology {
     pub id: OntologyID,
     // The use an BTreeMap keyed on AxiomKind allows efficient
     // retrieval of axioms. Otherwise, we'd have to iterate through
     // the lot every time.
-    axiom: RefCell<BTreeMap<AxiomKind,BTreeSet<AnnotatedAxiom>>>,
+    axiom: RefCell<BTreeMap<AxiomKind, BTreeSet<AnnotatedAxiom>>>,
 }
 
 impl Ontology {
-
     /// Fetch the axioms hashmap as a raw pointer.
     ///
     /// This method also ensures that the BTreeSet for `axk` is
     /// instantiated, which means that it effects equality of the
     /// ontology. It should only be used where the intention is to
     /// update the ontology.
-    fn axioms_as_ptr(&self, axk: AxiomKind)
-        -> *mut BTreeMap<AxiomKind,BTreeSet<AnnotatedAxiom>>
-    {
-        self.axiom.borrow_mut().entry(axk)
+    fn axioms_as_ptr(&self, axk: AxiomKind) -> *mut BTreeMap<AxiomKind, BTreeSet<AnnotatedAxiom>> {
+        self.axiom
+            .borrow_mut()
+            .entry(axk)
             .or_insert_with(BTreeSet::new);
         self.axiom.as_ptr()
     }
 
     /// Fetch the axioms for the given kind.
-    fn set_for_kind(&self, axk: AxiomKind)
-                     -> Option<&BTreeSet<AnnotatedAxiom>>
-    {
-        unsafe{
-            (*self.axiom.as_ptr())
-                .get(&axk)
-        }
+    fn set_for_kind(&self, axk: AxiomKind) -> Option<&BTreeSet<AnnotatedAxiom>> {
+        unsafe { (*self.axiom.as_ptr()).get(&axk) }
     }
 
     /// Fetch the axioms for given kind as a mutable ref.
-    fn mut_set_for_kind(&mut self, axk: AxiomKind)
-                        -> &mut BTreeSet<AnnotatedAxiom>
-    {
-        unsafe {
-            (*self.axioms_as_ptr(axk))
-                .get_mut(&axk).unwrap()
-        }
+    fn mut_set_for_kind(&mut self, axk: AxiomKind) -> &mut BTreeSet<AnnotatedAxiom> {
+        unsafe { (*self.axioms_as_ptr(axk)).get_mut(&axk).unwrap() }
     }
 
     /// Create a new ontology.
@@ -1322,7 +1333,7 @@ impl Ontology {
     ///
     /// assert_eq!(o, o2);
     /// ```
-    pub fn new() -> Ontology{
+    pub fn new() -> Ontology {
         Ontology::default()
     }
 
@@ -1338,10 +1349,11 @@ impl Ontology {
     /// ```
     ///
     /// See `declare` for an easier way to declare named entities.
-    pub fn insert<A>(&mut self, ax:A) -> bool
-        where A: Into<AnnotatedAxiom>
+    pub fn insert<A>(&mut self, ax: A) -> bool
+    where
+        A: Into<AnnotatedAxiom>,
     {
-        let ax:AnnotatedAxiom = ax.into();
+        let ax: AnnotatedAxiom = ax.into();
 
         self.mut_set_for_kind(ax.kind()).insert(ax)
     }
@@ -1357,11 +1369,10 @@ impl Ontology {
     /// o.declare(b.object_property("http://www.example.com/r"));
     /// ```
     pub fn declare<N>(&mut self, ne: N) -> bool
-        where N: Into<NamedEntity>
+    where
+        N: Into<NamedEntity>,
     {
-        self.insert(
-            declaration(ne.into())
-        )
+        self.insert(declaration(ne.into()))
     }
 
     /// Fetch the AnnotatedAxiom for a given kind
@@ -1378,11 +1389,8 @@ impl Ontology {
     /// ```
     ///
     /// See also `axiom` for access to the `Axiom` without annotations.
-    pub fn annotated_axiom(&self, axk: AxiomKind)
-        -> impl Iterator<Item=&AnnotatedAxiom>
-    {
-        self.set_for_kind(axk).
-            into_iter().flat_map(|hs| hs.iter())
+    pub fn annotated_axiom(&self, axk: AxiomKind) -> impl Iterator<Item = &AnnotatedAxiom> {
+        self.set_for_kind(axk).into_iter().flat_map(|hs| hs.iter())
     }
 
     /// Fetch the Axiom for a given kind
@@ -1400,18 +1408,12 @@ impl Ontology {
     ///
     /// See methods such as `declare_class` for access to the Axiom
     /// struct directly.
-    pub fn axiom(&self, axk: AxiomKind)
-             -> impl Iterator<Item=&Axiom>
-    {
-        self.annotated_axiom(axk)
-            .map(|ann| &ann.axiom)
+    pub fn axiom(&self, axk: AxiomKind) -> impl Iterator<Item = &Axiom> {
+        self.annotated_axiom(axk).map(|ann| &ann.axiom)
     }
 }
 
-
-
 impl Ontology {
-
     /// Returns all direct subclasses
     ///
     /// # Examples
@@ -1432,14 +1434,14 @@ impl Ontology {
     ///
     /// assert_eq!(vec![&ClassExpression::Class(sub)],subs);
     /// ```
-    pub fn direct_subclass<C>(&self, c: C)
-                              ->impl Iterator<Item=&ClassExpression>
-        where C:Into<ClassExpression>
+    pub fn direct_subclass<C>(&self, c: C) -> impl Iterator<Item = &ClassExpression>
+    where
+        C: Into<ClassExpression>,
     {
         let c = c.into();
         self.sub_class()
-            .filter(move |sc| sc.super_class == c )
-            .map(|sc| &sc.sub_class )
+            .filter(move |sc| sc.super_class == c)
+            .map(|sc| &sc.sub_class)
     }
 
     /// Returns true is `subclass` is a subclass of `superclass`
@@ -1462,21 +1464,19 @@ impl Ontology {
     /// assert!(!o.is_subclass(&sub, &sup));
     /// assert!(!o.is_subclass(&sup, &subsub));
     /// ```
-    pub fn is_subclass<C>(&self, super_class:C,
-                       sub_class:C) -> bool
-        where C: Into<ClassExpression>
+    pub fn is_subclass<C>(&self, super_class: C, sub_class: C) -> bool
+    where
+        C: Into<ClassExpression>,
     {
         let super_class = super_class.into();
         let sub_class = sub_class.into();
         self.sub_class()
-            .any(|sc|
-                 sc.super_class == super_class &&
-                 sc.sub_class == sub_class)
+            .any(|sc| sc.super_class == super_class && sc.sub_class == sub_class)
     }
 }
 
 #[cfg(test)]
-mod test{
+mod test {
     use super::*;
 
     #[test]
@@ -1488,7 +1488,7 @@ mod test{
     }
 
     #[test]
-    fn test_iri_creation(){
+    fn test_iri_creation() {
         let build = Build::new();
 
         let iri1 = build.iri("http://example.com".to_string());
@@ -1506,7 +1506,7 @@ mod test{
     }
 
     #[test]
-    fn test_iri_string_creation(){
+    fn test_iri_string_creation() {
         let build = Build::new();
 
         let iri_string = build.iri("http://www.example.com".to_string());
@@ -1523,13 +1523,13 @@ mod test{
     }
 
     #[test]
-    fn test_ontology_cons(){
+    fn test_ontology_cons() {
         let _ = Ontology::new();
         assert!(true);
     }
 
     #[test]
-    fn test_class(){
+    fn test_class() {
         let mut o = Ontology::new();
         let c = Build::new().class("http://www.example.com");
         o.insert(DeclareClass(c));
@@ -1552,13 +1552,13 @@ mod test{
         let c = Build::new().class("http://www.example.com");
         let i = Build::new().iri("http://www.example.com");
 
-        let i1:IRI = c.clone().into();
+        let i1: IRI = c.clone().into();
         assert_eq!(i, i1);
 
-        let c1:Class = Class::from(i);
+        let c1: Class = Class::from(i);
         assert_eq!(c, c1);
 
-        let ne:NamedEntity = c.clone().into();
+        let ne: NamedEntity = c.clone().into();
         assert_eq!(ne, NamedEntity::Class(c));
     }
 
@@ -1586,7 +1586,6 @@ mod test{
         let c = Build::new().class("http://www.example.com");
 
         let dc = DisjointClasses(vec![c.clone().into(), c.clone().into()]);
-        let _aa:Axiom = dc.into();
-
+        let _aa: Axiom = dc.into();
     }
 }

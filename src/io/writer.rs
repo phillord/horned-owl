@@ -1,7 +1,7 @@
 use curie::PrefixMapping;
 
-use model::*;
 use model::Kinded;
+use model::*;
 use vocab::Namespace::*;
 use vocab::WithIRI;
 
@@ -21,10 +21,11 @@ use failure::Error;
 ///
 /// The ontology is written in OWL
 /// [XML](https://www.w3.org/TR/owl2-xml-serialization/) syntax.
-pub fn write(write: &mut StdWrite, ont: &Ontology,
-             mapping: Option<&PrefixMapping>)
-    -> Result<(),Error>
-{
+pub fn write(
+    write: &mut StdWrite,
+    ont: &Ontology,
+    mapping: Option<&PrefixMapping>,
+) -> Result<(), Error> {
     let mut writer = Writer::new_with_indent(write, b' ', 4);
 
     // Ensure we have a prefix mapping; the default is a no-op and
@@ -53,15 +54,10 @@ fn iri_maybe(elem: &mut BytesStart, key: &str, iri: &Option<IRI>) {
 }
 
 /// Shrink an IRI to a curie if there is an appropriate prefix
-fn shrink_iri_maybe<'a>(iri: &str,
-                        mapping: &'a PrefixMapping) -> String {
+fn shrink_iri_maybe<'a>(iri: &str, mapping: &'a PrefixMapping) -> String {
     match mapping.shrink_iri(&(*iri)[..]) {
-        Ok(curie) => {
-            format!("{}", curie)
-        },
-        Err(_) => {
-            iri.to_string()
-        },
+        Ok(curie) => format!("{}", curie),
+        Err(_) => iri.to_string(),
     }
 }
 
@@ -76,8 +72,7 @@ fn attribute_maybe(elem: &mut BytesStart, key: &str, val: &Option<String>) {
 }
 
 /// Add an IRI or abbreviatedIRI attribute to elem
-fn iri_or_curie<'a>(mapping:&'a PrefixMapping, elem: &mut BytesStart,
-                    iri: &str) {
+fn iri_or_curie<'a>(mapping: &'a PrefixMapping, elem: &mut BytesStart, iri: &str) {
     match mapping.shrink_iri(&(*iri)[..]) {
         Ok(curie) => {
             let curie = format!("{}", curie);
@@ -88,11 +83,15 @@ fn iri_or_curie<'a>(mapping:&'a PrefixMapping, elem: &mut BytesStart,
 }
 
 /// Write a tag with an IRI attribute.
-fn with_iri<'a, I,W>(w:&mut Writer<W>, mapping:&'a PrefixMapping,
-                     tag: &[u8], into_iri: I)
-    -> Result<(),Error>
-    where I: Into<IRI>,
-          W: StdWrite
+fn with_iri<'a, I, W>(
+    w: &mut Writer<W>,
+    mapping: &'a PrefixMapping,
+    tag: &[u8],
+    into_iri: I,
+) -> Result<(), Error>
+where
+    I: Into<IRI>,
+    W: StdWrite,
 {
     let iri: IRI = into_iri.into();
     let mut bytes_start = BytesStart::borrowed(tag, tag.len());
@@ -105,7 +104,7 @@ fn with_iri<'a, I,W>(w:&mut Writer<W>, mapping:&'a PrefixMapping,
 }
 
 /// Fetch the name of the tag that is used to render `AxiomKind`
-fn tag_for_kind (axk:AxiomKind) -> &'static [u8] {
+fn tag_for_kind(axk: AxiomKind) -> &'static [u8] {
     match axk {
         AxiomKind::Import => b"Import",
         AxiomKind::OntologyAnnotation => b"Annotation",
@@ -157,18 +156,11 @@ fn tag_for_kind (axk:AxiomKind) -> &'static [u8] {
 /// whether they should render their own containing tag. So,
 /// `Ontology` renders it's own `Ontology` tag, while `DeclareClass`
 /// does not a `Declaration` tag, just the internal `Class` tag.
-trait Render <'a, W:StdWrite>
-{
+trait Render<'a, W: StdWrite> {
     /// Render a entity to Write
-    fn render(&self, w:&mut Writer<W>, mapping: &'a PrefixMapping)
-        -> Result<(),Error>;
+    fn render(&self, w: &mut Writer<W>, mapping: &'a PrefixMapping) -> Result<(), Error>;
 
-    fn within(&self,
-              w:&mut Writer<W>,
-              m:&'a PrefixMapping,
-              tag: &[u8])
-        -> Result<(),Error>
-    {
+    fn within(&self, w: &mut Writer<W>, m: &'a PrefixMapping, tag: &[u8]) -> Result<(), Error> {
         let open = BytesStart::borrowed(tag, tag.len());
         w.write_event(Event::Start(open))?;
 
@@ -179,12 +171,12 @@ trait Render <'a, W:StdWrite>
         Ok(())
     }
 
-    fn within_tag(&self,
-                  w:&mut Writer<W>,
-                  m:&'a PrefixMapping,
-                  open: BytesStart)
-        -> Result<(),Error>
-    {
+    fn within_tag(
+        &self,
+        w: &mut Writer<W>,
+        m: &'a PrefixMapping,
+        open: BytesStart,
+    ) -> Result<(), Error> {
         let clone = open.clone();
         w.write_event(Event::Start(clone))?;
 
@@ -211,16 +203,14 @@ macro_rules! render {
 }
 
 macro_rules! contents {
-    ($type:ty, $self:ident, $body:expr) =>
-    {
+    ($type:ty, $self:ident, $body:expr) => {
         render! {$type, $self, w, m,{
                 $body.render(w, m)?;
                 Ok(())
             }
         }
-    }
+    };
 }
-
 
 macro_rules! content0 {
     ($type:ty) => {
@@ -258,10 +248,8 @@ render! {
 }
 
 // Render Impl for container and collection types
-impl <'a, T:Render<'a, W>, W:StdWrite> Render<'a, W> for BTreeSet<T> {
-    fn render(&self, w:&mut Writer<W>, m: &'a PrefixMapping)
-        -> Result<(),Error>
-    {
+impl<'a, T: Render<'a, W>, W: StdWrite> Render<'a, W> for BTreeSet<T> {
+    fn render(&self, w: &mut Writer<W>, m: &'a PrefixMapping) -> Result<(), Error> {
         for item in self.iter() {
             item.render(w, m)?;
         }
@@ -270,10 +258,10 @@ impl <'a, T:Render<'a, W>, W:StdWrite> Render<'a, W> for BTreeSet<T> {
     }
 }
 
-impl <'a, O:Render<'a, W>, W:StdWrite> Render<'a, W> for Vec<O>{
-    fn render(&self, w:&mut Writer<W>, m: &'a PrefixMapping)
-              -> Result<(),Error>
-        where W: StdWrite
+impl<'a, O: Render<'a, W>, W: StdWrite> Render<'a, W> for Vec<O> {
+    fn render(&self, w: &mut Writer<W>, m: &'a PrefixMapping) -> Result<(), Error>
+    where
+        W: StdWrite,
     {
         for a in self.iter() {
             a.render(w, m)?;
@@ -283,36 +271,24 @@ impl <'a, O:Render<'a, W>, W:StdWrite> Render<'a, W> for Vec<O>{
     }
 }
 
-impl <'a, T:Render<'a,W>, W:StdWrite> Render<'a, W> for Box<T>{
-    fn render(&self, w:&mut Writer<W>, m: &'a PrefixMapping)
-        -> Result<(),Error>
-    {
+impl<'a, T: Render<'a, W>, W: StdWrite> Render<'a, W> for Box<T> {
+    fn render(&self, w: &mut Writer<W>, m: &'a PrefixMapping) -> Result<(), Error> {
         (**self).render(w, m)?;
 
         Ok(())
     }
 }
 
-impl <'a,
-      A:Render<'a, W>,
-      W:StdWrite> Render<'a, W> for (&'a A,) {
-    fn render(&self, w:&mut Writer<W>, m: &'a PrefixMapping)
-        -> Result<(),Error>
-    {
+impl<'a, A: Render<'a, W>, W: StdWrite> Render<'a, W> for (&'a A,) {
+    fn render(&self, w: &mut Writer<W>, m: &'a PrefixMapping) -> Result<(), Error> {
         (&self.0).render(w, m)?;
 
         Ok(())
     }
 }
 
-
-impl <'a,
-      A:Render<'a, W>,
-      B:Render<'a, W>,
-      W:StdWrite> Render<'a, W> for (&'a A, &'a B) {
-    fn render(&self, w:&mut Writer<W>, m: &'a PrefixMapping)
-        -> Result<(),Error>
-    {
+impl<'a, A: Render<'a, W>, B: Render<'a, W>, W: StdWrite> Render<'a, W> for (&'a A, &'a B) {
+    fn render(&self, w: &mut Writer<W>, m: &'a PrefixMapping) -> Result<(), Error> {
         (&self.0).render(w, m)?;
         (&self.1).render(w, m)?;
 
@@ -320,14 +296,10 @@ impl <'a,
     }
 }
 
-impl <'a,
-      A: Render<'a, W>,
-      B: Render<'a, W>,
-      C: Render<'a, W>,
-      W:StdWrite> Render<'a, W> for (&'a A, &'a B, &'a C) {
-    fn render(&self, w:&mut Writer<W>, m: &'a PrefixMapping)
-        -> Result<(),Error>
-    {
+impl<'a, A: Render<'a, W>, B: Render<'a, W>, C: Render<'a, W>, W: StdWrite> Render<'a, W>
+    for (&'a A, &'a B, &'a C)
+{
+    fn render(&self, w: &mut Writer<W>, m: &'a PrefixMapping) -> Result<(), Error> {
         (&self.0).render(w, m)?;
         (&self.1).render(w, m)?;
         (&self.2).render(w, m)?;
@@ -580,7 +552,6 @@ contents!{
     String::from(&self.0)
 }
 
-
 render!{
     PropertyExpression, self, w, m,
     {
@@ -654,7 +625,7 @@ contents!{
 }
 
 contents!{
-    ClassAssertion, self,(&self.ce, &self.i)
+    ClassAssertion, self, (&self.ce, &self.i)
 }
 
 contents!{
@@ -766,13 +737,11 @@ render!{
     }
 }
 
-
 contents!{
     SubObjectPropertyOf, self,
     (&self.super_property,
      &self.sub_property)
 }
-
 
 content0!{TransitiveObjectProperty}
 
@@ -841,16 +810,13 @@ mod test {
     use std::collections::HashMap;
 
     use std::fs::File;
-    use std::io::BufReader;
     use std::io::BufRead;
+    use std::io::BufReader;
     use std::io::BufWriter;
 
-    fn read_ok<R:BufRead>(bufread: &mut R) -> (Ontology,PrefixMapping)
-    {
+    fn read_ok<R: BufRead>(bufread: &mut R) -> (Ontology, PrefixMapping) {
         let r = read(bufread);
-        assert!(r.is_ok(),
-                "Expected ontology, got failure:{:?}",
-                r.err());
+        assert!(r.is_ok(), "Expected ontology, got failure:{:?}", r.err());
         r.ok().unwrap()
     }
 
@@ -878,7 +844,9 @@ mod test {
         let file = File::create(&temp_file).ok().unwrap();
         let mut buf_writer = BufWriter::new(&file);
 
-        write(&mut buf_writer, &ont_orig, Some(&prefix_orig)).ok().unwrap();
+        write(&mut buf_writer, &ont_orig, Some(&prefix_orig))
+            .ok()
+            .unwrap();
         buf_writer.flush().ok();
 
         let file = File::open(&temp_file).ok().unwrap();
@@ -1019,7 +987,9 @@ mod test {
 
     #[test]
     fn round_annotation_on_annotation() {
-        assert_round(include_str!("../ont/owl-xml/annotation-with-annotation.owl"));
+        assert_round(include_str!(
+            "../ont/owl-xml/annotation-with-annotation.owl"
+        ));
     }
 
     #[test]
@@ -1037,24 +1007,23 @@ mod test {
         assert_round(include_str!("../ont/owl-xml/named-individual.owl"));
     }
 
-
     #[test]
     fn round_import() {
         assert_round(include_str!("../ont/owl-xml/import.owl"));
     }
 
     #[test]
-    fn datatype(){
+    fn datatype() {
         assert_round(include_str!("../ont/owl-xml/datatype.owl"));
     }
 
     #[test]
-    fn object_has_value(){
+    fn object_has_value() {
         assert_round(include_str!("../ont/owl-xml/object-has-value.owl"));
     }
 
     #[test]
-    fn object_one_of(){
+    fn object_one_of() {
         assert_round(include_str!("../ont/owl-xml/object-one-of.owl"));
     }
 
@@ -1065,7 +1034,9 @@ mod test {
 
     #[test]
     fn object_unqualified_cardinality() {
-        assert_round(include_str!("../ont/owl-xml/object-unqualified-max-cardinality.owl"));
+        assert_round(include_str!(
+            "../ont/owl-xml/object-unqualified-max-cardinality.owl"
+        ));
     }
 
     #[test]
@@ -1119,7 +1090,7 @@ mod test {
     }
 
     #[test]
-    fn data_only(){
+    fn data_only() {
         assert_round(include_str!("../ont/owl-xml/data-only.owl"));
     }
     #[test]
@@ -1128,7 +1099,7 @@ mod test {
     }
 
     #[test]
-    fn data_has_value(){
+    fn data_has_value() {
         assert_round(include_str!("../ont/owl-xml/data-has-value.owl"));
     }
 
@@ -1149,176 +1120,142 @@ mod test {
 
     #[test]
     fn data_property_assertion() {
-        assert_round(
-            include_str!("../ont/owl-xml/data-property-assertion.owl")
-        );
+        assert_round(include_str!("../ont/owl-xml/data-property-assertion.owl"));
     }
 
     #[test]
     fn same_individual() {
-        assert_round(
-            include_str!("../ont/owl-xml/same-individual.owl")
-        );
+        assert_round(include_str!("../ont/owl-xml/same-individual.owl"));
     }
 
     #[test]
     fn different_individuals() {
-        assert_round(
-            include_str!("../ont/owl-xml/different-individual.owl")
-        );
+        assert_round(include_str!("../ont/owl-xml/different-individual.owl"));
     }
 
     #[test]
     fn negative_data_property_assertion() {
-        assert_round(
-            include_str!("../ont/owl-xml/negative-data-property-assertion.owl")
-        );
+        assert_round(include_str!(
+            "../ont/owl-xml/negative-data-property-assertion.owl"
+        ));
     }
 
     #[test]
     fn negative_object_property_assertion() {
-        assert_round(
-            include_str!("../ont/owl-xml/negative-object-property-assertion.owl")
-        );
+        assert_round(include_str!(
+            "../ont/owl-xml/negative-object-property-assertion.owl"
+        ));
     }
 
     #[test]
     fn object_property_assertion() {
-        assert_round(
-            include_str!("../ont/owl-xml/object-property-assertion.owl")
-        );
+        assert_round(include_str!("../ont/owl-xml/object-property-assertion.owl"));
     }
 
     #[test]
-    fn data_has_key () {
-        assert_round(
-            include_str!("../ont/owl-xml/data-has-key.owl")
-        );
-      }
-
-    #[test]
-    fn data_property_disjoint () {
-        assert_round(
-           include_str!("../ont/owl-xml/data-property-disjoint.owl")
-        );
-     }
-
-    #[test]
-    fn data_property_domain () {
-        assert_round(
-            include_str!("../ont/owl-xml/data-property-domain.owl")
-        );
+    fn data_has_key() {
+        assert_round(include_str!("../ont/owl-xml/data-has-key.owl"));
     }
 
     #[test]
-    fn data_property_equivalent () {
-        assert_round(
-            include_str!("../ont/owl-xml/data-property-equivalent.owl")
-        );
+    fn data_property_disjoint() {
+        assert_round(include_str!("../ont/owl-xml/data-property-disjoint.owl"));
     }
 
     #[test]
-    fn data_property_functional () {
-        assert_round(
-            include_str!("../ont/owl-xml/data-property-functional.owl")
-        );
+    fn data_property_domain() {
+        assert_round(include_str!("../ont/owl-xml/data-property-domain.owl"));
     }
 
     #[test]
-    fn data_property_range () {
-        assert_round(
-            include_str!("../ont/owl-xml/data-property-range.owl")
-        );
+    fn data_property_equivalent() {
+        assert_round(include_str!("../ont/owl-xml/data-property-equivalent.owl"));
     }
 
     #[test]
-    fn data_property_sub () {
-        assert_round(
-            include_str!("../ont/owl-xml/data-property-sub.owl")
-        );
+    fn data_property_functional() {
+        assert_round(include_str!("../ont/owl-xml/data-property-functional.owl"));
     }
 
     #[test]
-    fn disjoint_object_properties () {
-        assert_round(
-            include_str!("../ont/owl-xml/disjoint-object-properties.owl")
-        );
+    fn data_property_range() {
+        assert_round(include_str!("../ont/owl-xml/data-property-range.owl"));
     }
 
     #[test]
-    fn equivalent_object_properties () {
-        assert_round(
-            include_str!("../ont/owl-xml/equivalent_object_properties.owl")
-        );
+    fn data_property_sub() {
+        assert_round(include_str!("../ont/owl-xml/data-property-sub.owl"));
     }
 
     #[test]
-    fn object_has_key () {
-        assert_round(
-            include_str!("../ont/owl-xml/object-has-key.owl")
-        );
+    fn disjoint_object_properties() {
+        assert_round(include_str!(
+            "../ont/owl-xml/disjoint-object-properties.owl"
+        ));
     }
 
     #[test]
-    fn object_property_asymmetric () {
-        assert_round(
-            include_str!("../ont/owl-xml/object-property-asymmetric.owl")
-        );
+    fn equivalent_object_properties() {
+        assert_round(include_str!(
+            "../ont/owl-xml/equivalent_object_properties.owl"
+        ));
     }
 
     #[test]
-    fn object_property_domain () {
-        assert_round(
-            include_str!("../ont/owl-xml/object-property-domain.owl")
-        );
+    fn object_has_key() {
+        assert_round(include_str!("../ont/owl-xml/object-has-key.owl"));
     }
 
     #[test]
-    fn object_property_functional () {
-        assert_round(
-            include_str!("../ont/owl-xml/object-property-functional.owl")
-        );
+    fn object_property_asymmetric() {
+        assert_round(include_str!(
+            "../ont/owl-xml/object-property-asymmetric.owl"
+        ));
     }
 
     #[test]
-    fn object_property_inverse_functional () {
-        assert_round(
-            include_str!("../ont/owl-xml/object-property-inverse-functional.owl")
-        );
+    fn object_property_domain() {
+        assert_round(include_str!("../ont/owl-xml/object-property-domain.owl"));
     }
 
     #[test]
-    fn object_property_irreflexive () {
-        assert_round(
-            include_str!("../ont/owl-xml/object-property-irreflexive.owl")
-        );
+    fn object_property_functional() {
+        assert_round(include_str!(
+            "../ont/owl-xml/object-property-functional.owl"
+        ));
     }
 
     #[test]
-    fn object_property_range () {
-        assert_round(
-            include_str!("../ont/owl-xml/object-property-range.owl")
-        );
+    fn object_property_inverse_functional() {
+        assert_round(include_str!(
+            "../ont/owl-xml/object-property-inverse-functional.owl"
+        ));
     }
 
     #[test]
-    fn object_property_reflexive () {
-        assert_round(
-            include_str!("../ont/owl-xml/object-property-reflexive.owl")
-        );
+    fn object_property_irreflexive() {
+        assert_round(include_str!(
+            "../ont/owl-xml/object-property-irreflexive.owl"
+        ));
     }
 
     #[test]
-    fn object_property_symmetric () {
-        assert_round(
-            include_str!("../ont/owl-xml/object-property-symmetric.owl")
-        );
+    fn object_property_range() {
+        assert_round(include_str!("../ont/owl-xml/object-property-range.owl"));
+    }
+
+    #[test]
+    fn object_property_reflexive() {
+        assert_round(include_str!("../ont/owl-xml/object-property-reflexive.owl"));
+    }
+
+    #[test]
+    fn object_property_symmetric() {
+        assert_round(include_str!("../ont/owl-xml/object-property-symmetric.owl"));
     }
 
     #[test]
     fn family() {
-        assert_round(
-            include_str!("../ont/owl-xml/family.owl")
-        );
+        assert_round(include_str!("../ont/owl-xml/family.owl"));
     }
 }

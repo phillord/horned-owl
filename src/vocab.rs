@@ -1,6 +1,6 @@
+use self::Namespace::*;
 use enum_meta::*;
 use model::Facet;
-use self::Namespace::*;
 
 pub trait WithIRI<'a>: Meta<&'a IRIString> {
     /// Return a string representation of the IRI associated with this
@@ -9,16 +9,15 @@ pub trait WithIRI<'a>: Meta<&'a IRIString> {
         &self.meta().0
     }
 
-    fn iri_b(&self) ->&'a [u8] {
+    fn iri_b(&self) -> &'a [u8] {
         &self.meta().0.as_bytes()
     }
 
-    fn var_s(tag: &'a str) -> Option<Self>
-    {
+    fn var_s(tag: &'a str) -> Option<Self> {
         Self::var_b(tag.as_bytes())
     }
 
-    fn var_b(tag: &'a [u8]) -> Option<Self>{
+    fn var_b(tag: &'a [u8]) -> Option<Self> {
         for v in Self::all() {
             if tag == v.iri_b() {
                 return Some(v);
@@ -28,26 +27,27 @@ pub trait WithIRI<'a>: Meta<&'a IRIString> {
     }
 }
 
-pub struct IRIString (String);
+pub struct IRIString(String);
 
-impl <'a, T> WithIRI<'a> for T
-    where T:Meta<&'a IRIString>{
-}
+impl<'a, T> WithIRI<'a> for T where T: Meta<&'a IRIString> {}
 
-fn to_meta(s:&str) -> IRIString
-{
+fn to_meta(s: &str) -> IRIString {
     IRIString(s.to_string())
 }
 
-fn extend<'a, I>(i:I, s:&'a str) -> IRIString
-    where I: WithIRI<'a>
+fn extend<'a, I>(i: I, s: &'a str) -> IRIString
+where
+    I: WithIRI<'a>,
 {
     to_meta(&format!("{}{}", i.iri_s(), s))
 }
 
 #[derive(Debug, Eq, PartialEq)]
 pub enum Namespace {
-    OWL, RDF, RDFS, XSD
+    OWL,
+    RDF,
+    RDFS,
+    XSD,
 }
 
 lazy_meta! {
@@ -57,7 +57,6 @@ lazy_meta! {
     RDFS, to_meta("http://www.w3.org/2000/01/rdf-schema#");
     XSD, to_meta("http://www.w3.org/2001/XMLSchema#");
 }
-
 
 pub enum OWL {
     // TODO add the others
@@ -71,8 +70,8 @@ lazy_meta! {
     Nothing, extend(OWL, "Nothing");
 }
 
-pub enum OWL2Datatype{
-    RDFSLiteral
+pub enum OWL2Datatype {
+    RDFSLiteral,
 }
 
 lazy_meta! {
@@ -85,13 +84,15 @@ fn meta_testing() {
     assert_eq!("http://www.w3.org/2002/07/owl#", OWL.iri_s());
     assert_eq!(b"http://www.w3.org/2002/07/owl#", OWL.iri_b());
 
-    assert_eq!(Namespace::var_s("http://www.w3.org/2002/07/owl#")
-               .unwrap(),
-               OWL);
+    assert_eq!(
+        Namespace::var_s("http://www.w3.org/2002/07/owl#").unwrap(),
+        OWL
+    );
 
-    assert_eq!(Namespace::var_b(b"http://www.w3.org/2002/07/owl#")
-               .unwrap(),
-               OWL);
+    assert_eq!(
+        Namespace::var_b(b"http://www.w3.org/2002/07/owl#").unwrap(),
+        OWL
+    );
 }
 
 lazy_meta!{
@@ -109,24 +110,25 @@ lazy_meta!{
     LangRange, extend(RDF, "langRange");
 }
 
-
 #[test]
 fn facet_meta() {
-
-    assert_eq!(Facet::MinLength.iri_s(),
-               "http://www.w3.org/2001/XMLSchema#minLength");
-
-    assert_eq!(Facet::Pattern.iri_s(),
-               "http://www.w3.org/2001/XMLSchema#pattern");
+    assert_eq!(
+        Facet::MinLength.iri_s(),
+        "http://www.w3.org/2001/XMLSchema#minLength"
+    );
 
     assert_eq!(
-        Facet::var_s(&"http://www.w3.org/2001/XMLSchema#pattern"
-                     .to_string())
-            .unwrap(),
-        Facet::Pattern);
+        Facet::Pattern.iri_s(),
+        "http://www.w3.org/2001/XMLSchema#pattern"
+    );
 
     assert_eq!(
-        Facet::var_b(b"http://www.w3.org/2001/XMLSchema#minExclusive")
-            .unwrap(),
-        Facet::MinExclusive);
+        Facet::var_s(&"http://www.w3.org/2001/XMLSchema#pattern".to_string()).unwrap(),
+        Facet::Pattern
+    );
+
+    assert_eq!(
+        Facet::var_b(b"http://www.w3.org/2001/XMLSchema#minExclusive").unwrap(),
+        Facet::MinExclusive
+    );
 }
