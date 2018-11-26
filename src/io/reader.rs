@@ -1,10 +1,10 @@
 use curie::PrefixMapping;
 
-use model::*;
-use vocab::Namespace::*;
-use vocab::OWL2Datatype;
-use vocab::WithIRI;
-use vocab::OWL;
+use crate::model::*;
+use crate::vocab::Namespace::*;
+use crate::vocab::OWL2Datatype;
+use crate::vocab::WithIRI;
+use crate::vocab::OWL;
 
 use std::borrow::Cow;
 use std::collections::BTreeSet;

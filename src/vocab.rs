@@ -1,6 +1,6 @@
 use self::Namespace::*;
 use enum_meta::*;
-use model::Facet;
+use crate::model::Facet;
 
 pub trait WithIRI<'a>: Meta<&'a IRIString> {
     /// Return a string representation of the IRI associated with this

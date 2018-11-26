@@ -1,9 +1,9 @@
 use curie::PrefixMapping;
 
-use model::Kinded;
-use model::*;
-use vocab::Namespace::*;
-use vocab::WithIRI;
+use crate::model::Kinded;
+use crate::model::*;
+use crate::vocab::Namespace::*;
+use crate::vocab::WithIRI;
 
 use quick_xml::events::BytesDecl;
 use quick_xml::events::BytesEnd;
@@ -805,7 +805,7 @@ mod test {
 
     use self::mktemp::Temp;
     use super::*;
-    use io::reader::*;
+    use crate::io::reader::*;
 
     use std::collections::HashMap;
 
