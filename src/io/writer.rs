@@ -986,9 +986,9 @@ mod test {
     }
 
     #[test]
-    fn round_annotation_on_annotation() {
+    fn round_annotation_on_annotation_assertion() {
         assert_round(include_str!(
-            "../ont/owl-xml/annotation-with-annotation.owl"
+            "../ont/owl-xml/annotation-assertion-with-annotation.owl"
         ));
     }
 

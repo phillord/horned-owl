@@ -385,6 +385,7 @@ fn axiom_from_start<R: BufRead>(
         b"Annotation" => OntologyAnnotation(Annotation {
             annotation_property: from_start(r, e)?,
             annotation_value: from_next(r)?,
+            annotation: Default::default(), // FIXME ?
         }).into(),
         b"Declaration" => declaration(from_start(r, e)?),
         b"SubClassOf" => {
@@ -493,6 +494,7 @@ fn axiom_from_start<R: BufRead>(
                 annotation: Annotation {
                     annotation_property,
                     annotation_value,
+                    annotation: Default::default(), // FIXME
                 },
             }.into()
         }
@@ -955,6 +957,7 @@ from_xml! {
     Annotation, r, end,
     {
 
+        let mut aa:BTreeSet<Annotation> = BTreeSet::new();
         let mut ap:Option<AnnotationProperty> = None;
         let mut av:Option<AnnotationValue> = None;
 
@@ -969,8 +972,14 @@ from_xml! {
                     match e.local_name() {
                         b"AnnotationProperty" =>
                             ap = Some(from_start(r, e)?),
-                        _ =>
+                        b"IRI" | b"AbbreviatedIRI" | b"Literal" | b"AnonymousIndividual" =>
                             av = Some(from_start(r, e)?),
+                        b"Annotation" => {
+                            aa.insert(Self::from_xml_nc(r, e)?);
+                        }
+                        other =>
+                            return Err(error_unexpected_tag(other, r))
+
                     }
                 }
                 (ref ns, Event::End(ref e))
@@ -981,7 +990,8 @@ from_xml! {
                     }
                     return Ok(Annotation{
                         annotation_property:ap.unwrap(),
-                        annotation_value:av.unwrap()
+                        annotation_value:av.unwrap(),
+                        annotation: aa,
                     });
                 },
                 _ =>{}
@@ -1288,6 +1298,18 @@ mod test {
     #[test]
     fn test_annotation_on_annotation() {
         let ont_s = include_str!("../ont/owl-xml/annotation-with-annotation.owl");
+        let (ont, _) = read_ok(&mut ont_s.as_bytes());
+
+        let mut cls_i = ont.annotated_axiom(AxiomKind::DeclareClass);
+        let cls: &AnnotatedAxiom = cls_i.next().unwrap();
+
+        let def = cls.annotation.iter().next().unwrap();
+        assert_eq!(def.annotation.len(), 1);
+    }
+
+    #[test]
+    fn test_annotation_on_annotation_assertion() {
+        let ont_s = include_str!("../ont/owl-xml/annotation-assertion-with-annotation.owl");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
         let mut ann_i = ont.annotated_axiom(AxiomKind::AnnotationAssertion);

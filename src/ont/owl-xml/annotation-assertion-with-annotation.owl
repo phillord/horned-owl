@@ -14,14 +14,19 @@
     <Prefix name="rdfs" IRI="http://www.w3.org/2000/01/rdf-schema#"/>
     <Prefix name="pattern" IRI="http://www.w3id.org/ontolink/pattern.owl#"/>
     <Declaration>
-        <Annotation>
-            <Annotation>
-              <AnnotationProperty IRI="oboInOwl:hasDbXref"/>
-              <IRI>https://www.ncbi.nlm.nih.gov/pubmed/31014809</IRI>
-            </Annotation>
-            <AnnotationProperty IRI="oboInOwl:Definition"/>
-            <Literal datatypeIRI="xsd:string">Something something</Literal>
-        </Annotation>
-        <Class IRI="http://purl.obolibrary.org/obo/TST_001"/>
+      <Class IRI="#A"/>
     </Declaration>
+    <AnnotationAssertion>
+        <Annotation>
+            <AnnotationProperty abbreviatedIRI="rdfs:comment"/>
+            <Literal
+                datatypeIRI="http://www.w3.org/2001/XMLSchema#string">Comment
+            on Comment</Literal>
+        </Annotation>
+        <AnnotationProperty abbreviatedIRI="rdfs:comment"/>
+        <AbbreviatedIRI>#C</AbbreviatedIRI>
+        <Literal
+            datatypeIRI="http://www.w3.org/2001/XMLSchema#string">Comment
+        on Class</Literal>
+    </AnnotationAssertion>
 </Ontology>

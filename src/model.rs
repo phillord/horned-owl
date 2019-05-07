@@ -991,6 +991,7 @@ pub struct Literal {
 /// particular way, defined by the property.
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct Annotation {
+    pub annotation: BTreeSet<Annotation>,
     pub annotation_property: AnnotationProperty,
     pub annotation_value: AnnotationValue,
 }
