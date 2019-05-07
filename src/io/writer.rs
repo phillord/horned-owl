@@ -308,6 +308,19 @@ impl<'a, A: Render<'a, W>, B: Render<'a, W>, C: Render<'a, W>, W: StdWrite> Rend
     }
 }
 
+impl<'a, A: Render<'a, W>, B: Render<'a, W>, C: Render<'a, W>, D: Render<'a, W>, W: StdWrite> Render<'a, W>
+    for (&'a A, &'a B, &'a C, &'a D)
+{
+    fn render(&self, w: &mut Writer<W>, m: &'a PrefixMapping) -> Result<(), Error> {
+        (&self.0).render(w, m)?;
+        (&self.1).render(w, m)?;
+        (&self.2).render(w, m)?;
+        (&self.3).render(w, m)?;
+
+        Ok(())
+    }
+}
+
 render!{
     PrefixMapping, self, w, _m,
     {
@@ -543,7 +556,8 @@ render! {
 }
 
 contents!{OntologyAnnotation, self,
-         (&self.0.annotation_property,
+         (&self.0.annotation,
+          &self.0.annotation_property,
           &self.0.annotation_value)
 }
 
@@ -630,7 +644,8 @@ contents!{
 
 contents!{
     AnnotationAssertion, self,
-        (&self.annotation.annotation_property,
+        (&self.annotation.annotation,
+         &self.annotation.annotation_property,
          &self.annotation_subject,
          &self.annotation.annotation_value)
 }
@@ -681,7 +696,8 @@ render!{
 render!{
     Annotation, self, w, m,
     {
-        (&self.annotation_property,
+        (&self.annotation,
+         &self.annotation_property,
          &self.annotation_value).
             within(w, m, b"Annotation")?;
 
@@ -989,6 +1005,13 @@ mod test {
     fn round_annotation_on_annotation_assertion() {
         assert_round(include_str!(
             "../ont/owl-xml/annotation-assertion-with-annotation.owl"
+        ));
+    }
+
+    #[test]
+    fn round_annotation_on_annotation() {
+        assert_round(include_str!(
+            "../ont/owl-xml/annotation-with-annotation.owl"
         ));
     }
 
