@@ -8,10 +8,11 @@ use bencher::Bencher;
 
 fn a_thousand_classes(bench: &mut Bencher) {
     bench.iter(|| {
+        let mut b = Build::default();
         let mut o = Ontology::new();
         for m in 1..1000 {
-            let i = o.iri(format!("http://example.com/b{}", m));
-            let _c = o.class(i);
+            let i = b.iri(format!("http://example.com/b{}", m));
+            let _c = o.declare(b.class(i));
         }
     })
 }
@@ -26,29 +27,36 @@ fn big_tree(bench: &mut Bencher){
 }
 
 fn create_tree(o:&mut Ontology, n:&mut i32){
-    let i = o.iri(format!("http://example.com/a{}", n));
-    let c = o.class(i);
+    let mut b = Build::default();
+    let i = b.iri(format!("http://example.com/a{}", n));
+    let c = b.class(i);
     create_tree_0(o, vec![c], n );
 }
 
 fn create_tree_0(o:&mut Ontology,
                  current:Vec<Class>, remaining:&mut i32){
+    let mut b = Build::default();
     let mut next = vec![];
 
     for curr in current.into_iter() {
-        let i = o.iri(format!("http://example.com/a{}", remaining));
-        let c = o.class(i);
+        let i = b.iri(format!("http://example.com/a{}", remaining));
+        let c = b.class(i);
         *remaining = *remaining - 1;
-        let i = o.iri(format!("http://example.com/a{}",
-                                        remaining));
-        let d = o.class(i);
+        let i = b.iri(format!("http://example.com/a{}", remaining));
+        let d = b.class(i);
         *remaining = *remaining - 1;
 
         next.push(c.clone());
         next.push(d.clone());
 
-        o.subclass(curr.clone(), c);
-        o.subclass(curr, d);
+        o.insert(SubClassOf::new(
+            ClassExpression::Class(curr.clone()),
+            ClassExpression::Class(c)
+        ));
+        o.insert(SubClassOf::new(
+            ClassExpression::Class(curr),
+            ClassExpression::Class(d)
+        ));
 
         if *remaining < 0 {
             return
@@ -59,20 +67,24 @@ fn create_tree_0(o:&mut Ontology,
 
 fn is_subclass_with_many_direct_subclasses(bench: &mut Bencher){
     bench.iter(|| {
+        let mut b = Build::default();
         let mut o = Ontology::new();
-        let i = o.iri("http://example.com/a".to_string());
-        let c = o.class(i);
+        let i = b.iri("http://example.com/a".to_string());
+        let c = b.class(i);
 
         let n = 1_000;
         for m in 1..n {
-            let i =
-                o.iri(format!("http://example.com/b{}", m));
-            let d = o.class(i);
-            o.subclass(c.clone(),d.clone());
+            let i =b.iri(format!("http://example.com/b{}", m));
+            let d = b.class(i);
+            o.insert(SubClassOf::new(
+                ClassExpression::Class(c.clone()),
+                ClassExpression::Class(d.clone()),
+            ));
         }
 
-        let i = o.iri(format!("http://example.com/b{}", n - 1));
-        let d = o.class(i);
+        let i = b.iri(format!("http://example.com/b{}", n - 1));
+        let d = b.class(i);
+        o.declare(d.clone());
 
         assert!(!o.is_subclass(&d,&c));
         assert!(o.is_subclass(&c,&d));
