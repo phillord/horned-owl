@@ -19,6 +19,12 @@ use std::rc::Rc;
 #[derive(Clone, Debug, Eq, PartialEq, Hash, PartialOrd, Ord)]
 pub struct IRI(Rc<String>);
 
+impl AsRef<str> for IRI {
+    fn as_ref(&self) -> &str {
+        &self.0.as_str()
+    }
+}
+
 impl Deref for IRI {
     type Target = String;
 
