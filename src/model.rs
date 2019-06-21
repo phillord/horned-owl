@@ -1,6 +1,7 @@
 use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
+use std::collections::VecDeque;
 use std::cmp::Ordering;
 use std::hash::Hash;
 use std::hash::Hasher;
@@ -1458,6 +1459,90 @@ impl Ontology {
         self.sub_class()
             .any(|sc| sc.super_class == super_class && sc.sub_class == sub_class)
     }
+
+    /// Gets an iterator that visits the annotated axioms of the ontology.
+    pub fn iter(&self) -> Iter {
+        Iter {
+            ont: self,
+            inner: None,
+            kinds: unsafe { (*self.axiom.as_ptr()).keys().collect() },
+        }
+    }
+}
+
+/// An iterator over the annotated axioms of an `Ontology`.
+pub struct Iter<'a> {
+    ont: &'a Ontology,
+    kinds: VecDeque<&'a AxiomKind>,
+    inner: Option<<&'a BTreeSet<AnnotatedAxiom> as IntoIterator>::IntoIter>,
+}
+
+impl<'a> Iterator for Iter<'a> {
+    type Item = &'a AnnotatedAxiom;
+    fn next(&mut self) -> Option<Self::Item> {
+        // Consume the current iterator if there are items left.
+        if let Some(ref mut it) = self.inner {
+            if let Some(axiom) = it.next() {
+                return Some(axiom);
+            }
+        }
+        // Attempt to consume the iterator for the next axiom kind
+        if !self.kinds.is_empty() {
+            let kind = self.kinds.pop_front().unwrap();
+            self.inner = self.ont.set_for_kind(*kind).map(BTreeSet::iter);
+            self.next()
+        } else {
+            None
+        }
+    }
+}
+
+impl<'a> IntoIterator for &'a Ontology {
+    type Item = &'a AnnotatedAxiom;
+    type IntoIter = Iter<'a>;
+    fn into_iter(self) -> Self::IntoIter {
+        Iter {
+            ont: self,
+            inner: None,
+            kinds: unsafe { (*self.axiom.as_ptr()).keys().collect() },
+        }
+    }
+}
+
+/// An owning iterator over the annotated axioms of an `Ontology`.
+pub struct IntoIter {
+    inner: <BTreeMap<AxiomKind, BTreeSet<AnnotatedAxiom>> as IntoIterator>::IntoIter,
+    current: Option<<BTreeSet<AnnotatedAxiom> as IntoIterator>::IntoIter>,
+}
+
+impl Iterator for IntoIter {
+    type Item = AnnotatedAxiom;
+    fn next(&mut self) -> Option<Self::Item> {
+        // Consume the current iterator if there are items left.
+        if let Some(ref mut it) = self.current {
+            if let Some(axiom) = it.next() {
+                return Some(axiom);
+            }
+        }
+        // Attempt to consume the iterator for the next axiom kind
+        if let Some((_, axioms)) = self.inner.next() {
+            self.current = Some(axioms.into_iter());
+            self.next()
+        } else {
+            None
+        }
+    }
+}
+
+impl IntoIterator for Ontology {
+    type Item = AnnotatedAxiom;
+    type IntoIter = IntoIter;
+    fn into_iter(self) -> Self::IntoIter {
+        IntoIter {
+            inner: self.axiom.into_inner().into_iter(),
+            current: None,
+        }
+    }
 }
 
 #[cfg(test)]
@@ -1572,5 +1657,88 @@ mod test {
 
         let dc = DisjointClasses(vec![c.clone().into(), c.clone().into()]);
         let _aa: Axiom = dc.into();
+    }
+
+    #[test]
+    fn test_ontology_into_iter() {
+        // Setup
+        let build = Build::new();
+        let mut o = Ontology::new();
+        let decl1 = DeclareClass(build.class("http://www.example.com#a"));
+        let decl2 = DeclareClass(build.class("http://www.example.com#b"));
+        let decl3 = DeclareClass(build.class("http://www.example.com#c"));
+        let disj1 = DisjointClasses(vec![
+            ClassExpression::Class(build.class("http://www.example.com#a")),
+            ClassExpression::Class(build.class("http://www.example.com#b")),
+        ]);
+        let disj2 = DisjointClasses(vec![
+            ClassExpression::Class(build.class("http://www.example.com#b")),
+            ClassExpression::Class(build.class("http://www.example.com#c")),
+        ]);
+        o.insert(disj1.clone());
+        o.insert(disj2.clone());
+        o.insert(decl1.clone());
+        o.insert(decl2.clone());
+        o.insert(decl3.clone());
+
+        // Iteration is based on ascending order of axiom kinds.
+        let mut it = o.into_iter();
+        assert_eq!(it.next(), Some(AnnotatedAxiom::from(Axiom::DeclareClass(decl1))));
+        assert_eq!(it.next(), Some(AnnotatedAxiom::from(Axiom::DeclareClass(decl2))));
+        assert_eq!(it.next(), Some(AnnotatedAxiom::from(Axiom::DeclareClass(decl3))));
+        assert_eq!(it.next(), Some(AnnotatedAxiom::from(Axiom::DisjointClasses(disj1))));
+        assert_eq!(it.next(), Some(AnnotatedAxiom::from(Axiom::DisjointClasses(disj2))));
+        assert_eq!(it.next(), None);
+        assert_eq!(it.next(), None);
+    }
+
+    #[test]
+    fn test_ontology_into_iter_empty() {
+        // Empty ontologies should stop iteration right away
+        let o = Ontology::new();
+        let mut it = (&o).into_iter();
+        assert_eq!(it.next(), None);
+        assert_eq!(it.next(), None);
+    }
+
+    #[test]
+    fn test_ontology_iter() {
+        // Setup
+        let build = Build::new();
+        let mut o = Ontology::new();
+        let decl1 = DeclareClass(build.class("http://www.example.com#a"));
+        let decl2 = DeclareClass(build.class("http://www.example.com#b"));
+        let decl3 = DeclareClass(build.class("http://www.example.com#c"));
+        let disj1 = DisjointClasses(vec![
+            ClassExpression::Class(build.class("http://www.example.com#a")),
+            ClassExpression::Class(build.class("http://www.example.com#b")),
+        ]);
+        let disj2 = DisjointClasses(vec![
+            ClassExpression::Class(build.class("http://www.example.com#b")),
+            ClassExpression::Class(build.class("http://www.example.com#c")),
+        ]);
+        o.insert(disj1.clone());
+        o.insert(disj2.clone());
+        o.insert(decl1.clone());
+        o.insert(decl2.clone());
+        o.insert(decl3.clone());
+
+        // Iteration is based on ascending order of axiom kinds.
+        let mut it = (&o).into_iter();
+        assert_eq!(it.next(), Some(&AnnotatedAxiom::from(Axiom::DeclareClass(decl1))));
+        assert_eq!(it.next(), Some(&AnnotatedAxiom::from(Axiom::DeclareClass(decl2))));
+        assert_eq!(it.next(), Some(&AnnotatedAxiom::from(Axiom::DeclareClass(decl3))));
+        assert_eq!(it.next(), Some(&AnnotatedAxiom::from(Axiom::DisjointClasses(disj1))));
+        assert_eq!(it.next(), Some(&AnnotatedAxiom::from(Axiom::DisjointClasses(disj2))));
+        assert_eq!(it.next(), None);
+        assert_eq!(it.next(), None);
+    }
+
+    #[test]
+    fn test_ontology_iter_empty() {
+        // Empty ontologies should stop iteration right away
+        let mut it = Ontology::new().into_iter();
+        assert_eq!(it.next(), None);
+        assert_eq!(it.next(), None);
     }
 }
