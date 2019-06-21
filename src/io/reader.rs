@@ -322,28 +322,17 @@ from_start! {
         let datatype_iri = read_a_iri_attr(r, e, b"datatypeIRI")?;
         let lang = attrib_value(r, e, b"xml:lang")?;
 
-        let mut literal:Option<String> = None;
-
-        loop {
-            let mut e = read_event(r)?;
-            match e {
-                (_, Event::Text(ref e)) =>
-                {
-                    literal = Some(r.reader.decode(e).into_owned());
+        match r.reader.read_text(b"Literal", &mut Vec::new()) {
+            Ok(literal) => Ok(Literal{
+                datatype_iri: datatype_iri,
+                lang: lang,
+                literal: if literal.is_empty() {
+                    None
+                } else {
+                    Some(literal)
                 }
-                (ref ns, Event::End(ref mut e))
-                    if is_owl_name(ns, e, b"Literal") =>
-                {
-                    return Ok(
-                        Literal{
-                            datatype_iri: datatype_iri,
-                            lang: lang,
-                            literal: literal
-                        });
-                }
-                _ => {
-                }
-            }
+            }),
+            Err(e) => Err(e.into()),
         }
     }
 }
@@ -1333,6 +1322,18 @@ mod test {
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
         assert_eq!(ont.declare_data_property().count(), 1);
+    }
+
+    #[test]
+    fn test_literal_escaped() {
+        let ont_s = include_str!("../ont/owl-xml/literal-escaped.owl");
+        let (ont, _) = read_ok(&mut ont_s.as_bytes());
+
+        let ann = ont.annotation_assertion().next().unwrap();
+        match &ann.annotation.annotation_value {
+            AnnotationValue::Literal(l) => assert_eq!(l.literal, Some(String::from("A --> B"))),
+            _ => panic!("expected literal annotation value"),
+        }
     }
 
     #[test]

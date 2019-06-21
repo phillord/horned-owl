@@ -325,7 +325,7 @@ render!{
 render!{
     String, self, w, _m,
     {
-        w.write_event(Event::Text(BytesText::from_escaped_str(&self[..])))?;
+        w.write_event(Event::Text(BytesText::from_plain_str(&self[..])))?;
         Ok(())
     }
 }
@@ -1002,6 +1002,11 @@ mod test {
     #[test]
     fn round_data_property() {
         assert_round(include_str!("../ont/owl-xml/data-property.owl"));
+    }
+
+    #[test]
+    fn round_literal_escaped() {
+        assert_round(include_str!("../ont/owl-xml/literal-escaped.owl"));
     }
 
     #[test]
