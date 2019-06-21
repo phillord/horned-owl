@@ -71,7 +71,7 @@ fn attribute_maybe(elem: &mut BytesStart, key: &str, val: &Option<String>) {
     }
 }
 
-/// Add an IRI or abbreviatedIRI attribute to elem
+/// Add an IRI or AbbreviatedIRI attribute to elem
 fn iri_or_curie<'a>(mapping: &'a PrefixMapping, elem: &mut BytesStart, iri: &str) {
     match mapping.shrink_iri(&(*iri)[..]) {
         Ok(curie) => {
@@ -334,9 +334,11 @@ render!{
     IRI, self, w, m,
     {
         let iri_st: String = self.into();
-        let iri_shrunk = shrink_iri_maybe(&iri_st[..], m);
-        iri_shrunk.within(w, m, b"IRI")?;
-        Ok(())
+
+        match m.shrink_iri(&iri_st[..]) {
+            Ok(curie) => curie.to_string().within(w, m, b"AbbreviatedIRI"),
+            Err(_) => iri_st.within(w, m, b"IRI"),
+        }
     }
 }
 
