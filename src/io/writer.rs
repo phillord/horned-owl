@@ -576,7 +576,7 @@ content0!{DisjointDataProperties}
 
 content0!{EquivalentObjectProperties}
 
-contents!{SubDataPropertyOf, self, (&self.super_property, &self.sub_property)}
+contents!{SubDataPropertyOf, self, (&self.sub_property, &self.super_property)}
 
 content0!{AsymmetricObjectProperty}
 
@@ -693,14 +693,14 @@ render!{
 
 contents!{
     SubAnnotationPropertyOf, self,
-    (&self.super_property,
-     &self.sub_property)
+    (&self.sub_property,
+     &self.super_property)
 }
 
 contents!{
     SubClassOf, self,
-    (&self.super_class,
-     &self.sub_class)
+    (&self.sub_class,
+     &self.super_class)
 }
 
 content0!{EquivalentClasses}
@@ -741,8 +741,8 @@ render!{
 
 contents!{
     SubObjectPropertyOf, self,
-    (&self.super_property,
-     &self.sub_property)
+    (&self.sub_property,
+     &self.super_property)
 }
 
 content0!{TransitiveObjectProperty}

@@ -22,10 +22,10 @@
       <ObjectProperty IRI="#t"/>
     </Declaration>
     <SubObjectPropertyOf>
+      <ObjectProperty abbreviatedIRI="#t"/>
       <ObjectPropertyChain>
         <ObjectProperty abbreviatedIRI="#r"/>
         <ObjectProperty abbreviatedIRI="#s"/>
       </ObjectPropertyChain>
-      <ObjectProperty abbreviatedIRI="#t"/>
     </SubObjectPropertyOf>
 </Ontology>
