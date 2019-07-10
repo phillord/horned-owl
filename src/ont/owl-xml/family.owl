@@ -522,18 +522,18 @@
         <ObjectProperty IRI="hasSpouse"/>
     </DisjointObjectProperties>
     <SubObjectPropertyOf>
-        <ObjectProperty IRI="hasUncle"/>
         <ObjectPropertyChain>
             <ObjectProperty IRI="hasFather"/>
             <ObjectProperty IRI="hasBrother"/>
         </ObjectPropertyChain>
+        <ObjectProperty IRI="hasUncle"/>
     </SubObjectPropertyOf>
     <SubObjectPropertyOf>
-        <ObjectProperty IRI="hasGrandparent"/>
         <ObjectPropertyChain>
             <ObjectProperty IRI="hasParent"/>
             <ObjectProperty IRI="hasParent"/>
         </ObjectPropertyChain>
+        <ObjectProperty IRI="hasGrandparent"/>
     </SubObjectPropertyOf>
     <EquivalentDataProperties>
         <DataProperty IRI="hasAge"/>
