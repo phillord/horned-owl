@@ -677,8 +677,8 @@ axioms!{
     /// See also: [Property Hierarchies](https://www.w3.org/TR/2012/REC-owl2-primer-20121211/#Property_Hierarchies)
     /// See also: [Property Chains](https://www.w3.org/TR/2012/REC-owl2-primer-20121211/#Property_Chains)
     SubObjectPropertyOf{
-        super_property:SubObjectPropertyExpression,
-        sub_property:ObjectProperty
+        super_property: ObjectPropertyExpression,
+        sub_property: SubObjectPropertyExpression
     },
 
     /// An equivalent object properties relationship.
