@@ -1030,6 +1030,15 @@ pub enum ObjectPropertyExpression {
     InverseObjectProperty(ObjectProperty),
 }
 
+impl ObjectPropertyExpression {
+    pub fn as_property(self) -> Option<ObjectProperty> {
+        match self {
+            ObjectPropertyExpression::ObjectProperty(op) => Some(op),
+            ObjectPropertyExpression::InverseObjectProperty(_) => None,
+        }
+    }
+}
+
 /// A sub-object property expression
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum SubObjectPropertyExpression {
@@ -1740,5 +1749,15 @@ mod test {
         let mut it = Ontology::new().into_iter();
         assert_eq!(it.next(), None);
         assert_eq!(it.next(), None);
+    }
+
+    #[test]
+    fn test_object_property_expression() {
+        let b = Build::new();
+        let obp = b.object_property("http://www.example.com");
+
+        let obpe = ObjectPropertyExpression::ObjectProperty(obp.clone());
+
+        assert_eq!(obpe.as_property().unwrap(), obp);
     }
 }
