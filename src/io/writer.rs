@@ -988,6 +988,11 @@ mod test {
     }
 
     #[test]
+    fn round_one_subproperty_chain_with_inverse() {
+        assert_round(include_str!("../ont/owl-xml/subproperty-chain-with-inverse.owl"));
+    }
+
+    #[test]
     fn round_annotation_on_annotation() {
         assert_round(include_str!(
             "../ont/owl-xml/annotation-with-annotation.owl"

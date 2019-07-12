@@ -1035,7 +1035,7 @@ pub enum ObjectPropertyExpression {
 pub enum SubObjectPropertyExpression {
     // We use Vec here rather than BTreeSet because, perhaps
     // surprisingly, BTreeSet is not itself hashable.
-    ObjectPropertyChain(Vec<ObjectProperty>),
+    ObjectPropertyChain(Vec<ObjectPropertyExpression>),
     ObjectPropertyExpression(ObjectPropertyExpression),
 }
 

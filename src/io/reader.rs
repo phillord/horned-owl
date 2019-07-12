@@ -1275,6 +1275,14 @@ mod test {
     }
 
     #[test]
+    fn test_subproperty_chain_with_inverse() {
+    let ont_s = include_str!("../ont/owl-xml/subproperty-chain-with-inverse.owl");
+        let (ont, _) = read_ok(&mut ont_s.as_bytes());
+
+        assert_eq!(ont.sub_object_property().count(), 1);
+    }
+
+    #[test]
     fn test_annotation_on_annotation() {
         let ont_s = include_str!("../ont/owl-xml/annotation-with-annotation.owl");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
