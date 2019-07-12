@@ -147,6 +147,8 @@ fn tag_for_kind(axk: AxiomKind) -> &'static [u8] {
         AxiomKind::NegativeDataPropertyAssertion => b"NegativeDataPropertyAssertion",
         AxiomKind::AnnotationAssertion => b"AnnotationAssertion",
         AxiomKind::SubAnnotationPropertyOf => b"SubAnnotationPropertyOf",
+        AxiomKind::AnnotationPropertyDomain => b"AnnotationPropertyDomain",
+        AxiomKind::AnnotationPropertyRange => b"AnnotationPropertyRange",
     }
 }
 
@@ -539,6 +541,8 @@ render! {
             Axiom::NegativeDataPropertyAssertion(ax) => ax.render(w, m)?,
             Axiom::AnnotationAssertion(ax) => ax.render(w, m)?,
             Axiom::SubAnnotationPropertyOf(ax) => ax.render(w, m)?,
+            Axiom::AnnotationPropertyDomain(ax) => ax.render(w, m)?,
+            Axiom::AnnotationPropertyRange(ax) => ax.render(w, m)?
         }
         Ok(())
     }
@@ -695,6 +699,14 @@ contents!{
     SubAnnotationPropertyOf, self,
     (&self.sub_property,
      &self.super_property)
+}
+
+contents! {
+    AnnotationPropertyDomain, self, (&self.property, &self.iri)
+}
+
+contents! {
+    AnnotationPropertyRange, self, (&self.property, &self.iri)
 }
 
 contents!{
@@ -935,6 +947,16 @@ mod test {
     #[test]
     fn round_one_annotation() {
         assert_round(include_str!("../ont/owl-xml/one-annotation.owl"));
+    }
+
+    #[test]
+    fn round_annotation_domain() {
+        assert_round(include_str!("../ont/owl-xml/annotation-domain.owl"));
+    }
+
+    #[test]
+    fn round_annotation_range() {
+        assert_round(include_str!("../ont/owl-xml/annotation-range.owl"));
     }
 
     #[test]

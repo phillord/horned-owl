@@ -489,9 +489,17 @@ fn axiom_from_start<R: BufRead>(
             sub_property: from_start(r, e)?,
             super_property: from_next(r)?,
         }.into(),
+        b"AnnotationPropertyDomain" => AnnotationPropertyDomain {
+            property: from_start(r, e)?,
+            iri: from_next(r)?,
+        }.into(),
+        b"AnnotationPropertyRange" => AnnotationPropertyRange {
+            property:from_start(r, e)?,
+            iri: from_next(r)?
+        }.into(),
         _ => {
             return Err(error_unexpected_tag(axiom_kind, r));
-        }
+        },
     })
 }
 
@@ -1314,6 +1322,22 @@ mod test {
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
         assert_eq!(ont.sub_annotation_property_of().count(), 1);
+    }
+
+    #[test]
+    fn test_annotation_domain() {
+        let ont_s = include_str!("../ont/owl-xml/annotation-domain.owl");
+        let (ont,_) = read_ok(&mut ont_s.as_bytes());
+
+        assert_eq!(ont.annotation_property_domain().count(), 1);
+    }
+
+    #[test]
+    fn test_annotation_range() {
+        let ont_s = include_str!("../ont/owl-xml/annotation-range.owl");
+        let (ont,_) = read_ok(&mut ont_s.as_bytes());
+
+        assert_eq!(ont.annotation_property_range().count(), 1);
     }
 
     #[test]
