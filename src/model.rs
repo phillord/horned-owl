@@ -931,6 +931,18 @@ axioms!{
     SubAnnotationPropertyOf {
         super_property:AnnotationProperty,
         sub_property: AnnotationProperty
+    },
+
+    /// Assert the domain of an `AnnotationProperty`
+    AnnotationPropertyDomain {
+        property: AnnotationProperty,
+        iri: IRI
+    },
+
+    /// Assert the range of an `AnnotationProperty`
+    AnnotationPropertyRange {
+        property: AnnotationProperty,
+        iri: IRI
     }
 }
 
@@ -941,48 +953,50 @@ axioms!{
 // manipulations on the them. So we can't.
 //
 // "Whoever does not understand LISP is doomed to reinvent it" (badly)
-onimpl!{Import, import}
-onimpl!{OntologyAnnotation, ontology_annotation}
+onimpl! {Import, import}
+onimpl! {OntologyAnnotation, ontology_annotation}
 
-onimpl!{DeclareClass, declare_class}
-onimpl!{DeclareObjectProperty, declare_object_property}
-onimpl!{DeclareAnnotationProperty, declare_annotation_property}
-onimpl!{DeclareDataProperty, declare_data_property}
-onimpl!{DeclareNamedIndividual, declare_named_individual}
-onimpl!{DeclareDatatype, declare_datatype}
-onimpl!{SubClassOf, sub_class}
-onimpl!{EquivalentClasses, equivalent_class}
-onimpl!{DisjointClasses, disjoint_class}
-onimpl!{SubObjectPropertyOf, sub_object_property}
-onimpl!{EquivalentObjectProperties, equivalent_object_properties}
-onimpl!{DisjointObjectProperties, disjoint_object_properties}
-onimpl!{InverseObjectProperties, inverse_object_properties}
-onimpl!{ObjectPropertyDomain, object_property_domain}
-onimpl!{ObjectPropertyRange, object_property_range}
-onimpl!{FunctionalObjectProperty, functional_object_property}
-onimpl!{InverseFunctionalObjectProperty, inverse_functional_object_property}
-onimpl!{ReflexiveObjectProperty, reflexive_object_property}
-onimpl!{IrreflexiveObjectProperty, irreflexive_object_property}
-onimpl!{SymmetricObjectProperty, symmetric_object_property}
-onimpl!{AsymmetricObjectProperty, assymmetric_object_property}
-onimpl!{TransitiveObjectProperty, transitive_object_property}
-onimpl!{SubDataPropertyOf, sub_data_property_of}
-onimpl!{EquivalentDataProperties, equivalent_data_properties}
-onimpl!{DisjointDataProperties, disjoint_data_properties}
-onimpl!{DataPropertyDomain, data_property_domain}
-onimpl!{DataPropertyRange, data_property_range}
-onimpl!{FunctionalDataProperty, functional_data_property}
-onimpl!{DatatypeDefinition, datatype_definition}
-onimpl!{HasKey, has_key}
-onimpl!{SameIndividual, same_individual}
-onimpl!{DifferentIndividuals, different_individuals}
-onimpl!{ClassAssertion, class_assertion}
-onimpl!{ObjectPropertyAssertion, object_property_assertion}
-onimpl!{NegativeObjectPropertyAssertion, negative_object_property_assertion}
-onimpl!{DataPropertyAssertion, data_property_assertion}
-onimpl!{NegativeDataPropertyAssertion, negative_data_property_assertion}
-onimpl!{AnnotationAssertion, annotation_assertion}
-onimpl!{SubAnnotationPropertyOf, sub_annotation_property_of}
+onimpl! {DeclareClass, declare_class}
+onimpl! {DeclareObjectProperty, declare_object_property}
+onimpl! {DeclareAnnotationProperty, declare_annotation_property}
+onimpl! {DeclareDataProperty, declare_data_property}
+onimpl! {DeclareNamedIndividual, declare_named_individual}
+onimpl! {DeclareDatatype, declare_datatype}
+onimpl! {SubClassOf, sub_class}
+onimpl! {EquivalentClasses, equivalent_class}
+onimpl! {DisjointClasses, disjoint_class}
+onimpl! {SubObjectPropertyOf, sub_object_property}
+onimpl! {EquivalentObjectProperties, equivalent_object_properties}
+onimpl! {DisjointObjectProperties, disjoint_object_properties}
+onimpl! {InverseObjectProperties, inverse_object_properties}
+onimpl! {ObjectPropertyDomain, object_property_domain}
+onimpl! {ObjectPropertyRange, object_property_range}
+onimpl! {FunctionalObjectProperty, functional_object_property}
+onimpl! {InverseFunctionalObjectProperty, inverse_functional_object_property}
+onimpl! {ReflexiveObjectProperty, reflexive_object_property}
+onimpl! {IrreflexiveObjectProperty, irreflexive_object_property}
+onimpl! {SymmetricObjectProperty, symmetric_object_property}
+onimpl! {AsymmetricObjectProperty, assymmetric_object_property}
+onimpl! {TransitiveObjectProperty, transitive_object_property}
+onimpl! {SubDataPropertyOf, sub_data_property_of}
+onimpl! {EquivalentDataProperties, equivalent_data_properties}
+onimpl! {DisjointDataProperties, disjoint_data_properties}
+onimpl! {DataPropertyDomain, data_property_domain}
+onimpl! {DataPropertyRange, data_property_range}
+onimpl! {FunctionalDataProperty, functional_data_property}
+onimpl! {DatatypeDefinition, datatype_definition}
+onimpl! {HasKey, has_key}
+onimpl! {SameIndividual, same_individual}
+onimpl! {DifferentIndividuals, different_individuals}
+onimpl! {ClassAssertion, class_assertion}
+onimpl! {ObjectPropertyAssertion, object_property_assertion}
+onimpl! {NegativeObjectPropertyAssertion, negative_object_property_assertion}
+onimpl! {DataPropertyAssertion, data_property_assertion}
+onimpl! {NegativeDataPropertyAssertion, negative_data_property_assertion}
+onimpl! {AnnotationAssertion, annotation_assertion}
+onimpl! {SubAnnotationPropertyOf, sub_annotation_property_of}
+onimpl! {AnnotationPropertyDomain, annotation_property_domain}
+onimpl! {AnnotationPropertyRange, annotation_property_range}
 
 // Non-axiom data structures associated with OWL
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
