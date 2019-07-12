@@ -117,6 +117,7 @@ fn tag_for_kind(axk: AxiomKind) -> &'static [u8] {
         AxiomKind::SubClassOf => b"SubClassOf",
         AxiomKind::EquivalentClasses => b"EquivalentClasses",
         AxiomKind::DisjointClasses => b"DisjointClasses",
+        AxiomKind::DisjointUnion => b"DisjointUnion",
         AxiomKind::SubObjectPropertyOf => b"SubObjectPropertyOf",
         AxiomKind::EquivalentObjectProperties => b"EquivalentObjectProperties",
         AxiomKind::DisjointObjectProperties => b"DisjointObjectProperties",
@@ -509,6 +510,7 @@ render! {
             Axiom::SubClassOf(ax) => ax.render(w, m)?,
             Axiom::EquivalentClasses(ax) => ax.render(w, m)?,
             Axiom::DisjointClasses(ax) => ax.render(w, m)?,
+            Axiom::DisjointUnion(ax) => ax.render(w, m)?,
             Axiom::SubObjectPropertyOf(ax) => ax.render(w, m)?,
             Axiom::EquivalentObjectProperties(ax) => ax.render(w, m)?,
             Axiom::DisjointObjectProperties(ax) => ax.render(w, m)?,
@@ -706,6 +708,16 @@ contents!{
 content0!{EquivalentClasses}
 
 content0!{DisjointClasses}
+
+render! {
+    DisjointUnion, self, w, m,
+    {
+        self.0.render(w, m)?;
+        self.1.render(w, m)?;
+
+        Ok(())
+    }
+}
 
 render! {
     ObjectPropertyExpression, self, w, m,
@@ -960,6 +972,11 @@ mod test {
     #[test]
     fn round_one_disjoint_class() {
         assert_round(include_str!("../ont/owl-xml/one-disjoint.owl"));
+    }
+
+    #[test]
+    fn round_disjoint_union() {
+        assert_round(include_str!("../ont/owl-xml/disjoint-union.owl"));
     }
 
     #[test]

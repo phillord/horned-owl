@@ -386,6 +386,7 @@ fn axiom_from_start<R: BufRead>(
             EquivalentClasses(from_start_to_end(r, e, b"EquivalentClasses")?).into()
         }
         b"DisjointClasses" => DisjointClasses(from_start_to_end(r, e, b"DisjointClasses")?).into(),
+        b"DisjointUnion" => DisjointUnion(from_start(r, e)?, till_end(r, b"DisjointUnion")?).into(),
         b"SubObjectPropertyOf" => SubObjectPropertyOf {
             sub_property: from_start(r, e)?,
             super_property: from_next(r)?,
@@ -1240,6 +1241,14 @@ mod test {
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
         assert_eq!(ont.disjoint_class().count(), 1);
+    }
+
+    #[test]
+    fn test_disjoint_union() {
+        let ont_s = include_str!("../ont/owl-xml/disjoint-union.owl");
+        let (ont, _) = read_ok(&mut ont_s.as_bytes());
+
+        assert_eq!(ont.disjoint_union().count(), 1);
     }
 
     #[test]
