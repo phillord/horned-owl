@@ -549,7 +549,7 @@ fn object_cardinality_restriction<R: BufRead>(
     r: &mut Read<R>,
     e: &BytesStart,
     end_tag: &[u8],
-) -> Result<(i32, ObjectPropertyExpression, Box<ClassExpression>), Error> {
+) -> Result<(u32, ObjectPropertyExpression, Box<ClassExpression>), Error> {
     let n = attrib_value(r, e, b"cardinality")?;
     let n = n.ok_or_else(|| error_missing_attribute("cardinality", r))?;
 
@@ -557,7 +557,7 @@ fn object_cardinality_restriction<R: BufRead>(
     let mut vce: Vec<ClassExpression> = till_end(r, end_tag)?;
 
     Ok((
-        n.parse::<i32>()?,
+        n.parse::<u32>()?,
         ope,
         Box::new(match vce.len() {
             0 => r.build.class(OWL::Thing.iri_s().to_string()).into(),
@@ -571,7 +571,7 @@ fn data_cardinality_restriction<R: BufRead>(
     r: &mut Read<R>,
     e: &BytesStart,
     end_tag: &[u8],
-) -> Result<(i32, DataProperty, DataRange), Error> {
+) -> Result<(u32, DataProperty, DataRange), Error> {
     let n = attrib_value(r, e, b"cardinality")?;
     let n = n.ok_or_else(|| (error_missing_attribute("cardinality", r)))?;
 
@@ -579,7 +579,7 @@ fn data_cardinality_restriction<R: BufRead>(
     let mut vdr: Vec<DataRange> = till_end(r, end_tag)?;
 
     Ok((
-        n.parse::<i32>()?,
+        n.parse::<u32>()?,
         dp,
         match vdr.len() {
             0 => r

@@ -1188,7 +1188,7 @@ pub enum ClassExpression {
     /// the class of individuals which have the `o` relationship to at
     /// least `n` other individuals.
     ObjectMinCardinality {
-        n: i32,
+        n: u32,
         o: ObjectPropertyExpression,
         ce: Box<ClassExpression>,
     },
@@ -1199,7 +1199,7 @@ pub enum ClassExpression {
     /// the class of individuals which have the `o` relationship to at
     /// most `n` other individuals.
     ObjectMaxCardinality {
-        n: i32,
+        n: u32,
         o: ObjectPropertyExpression,
         ce: Box<ClassExpression>,
     },
@@ -1210,7 +1210,7 @@ pub enum ClassExpression {
     /// the class of individuals which have the `o` relationship to exactly
     /// `n` other individuals.
     ObjectExactCardinality {
-        n: i32,
+        n: u32,
         o: ObjectPropertyExpression,
         ce: Box<ClassExpression>,
     },
@@ -1248,7 +1248,7 @@ pub enum ClassExpression {
 
     /// See also [Min Cardinality](https://www.w3.org/TR/owl2-syntax/#Minimum_Cardinality_2)
     DataMinCardinality {
-        n: i32,
+        n: u32,
         dp: DataProperty,
         dr: DataRange,
     },
@@ -1260,7 +1260,7 @@ pub enum ClassExpression {
 
     /// See also [Max Cardinality](https://www.w3.org/TR/owl2-syntax/#Maximum_Cardinality_2)
     DataMaxCardinality {
-        n: i32,
+        n: u32,
         dp: DataProperty,
         dr: DataRange,
     },
@@ -1272,7 +1272,7 @@ pub enum ClassExpression {
 
     /// See also [Exactly Cardinality](https://www.w3.org/TR/owl2-syntax/#Exact_Cardinality_2)
     DataExactCardinality {
-        n: i32,
+        n: u32,
         dp: DataProperty,
         dr: DataRange,
     },
