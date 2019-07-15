@@ -664,6 +664,12 @@ axioms!{
     /// of any of the others.
     DisjointClasses(Vec<ClassExpression>),
 
+    /// A disjoint union expression between one `ClassExpression` and
+    /// a set of others.
+    ///
+    /// See also: https://www.w3.org/TR/owl2-syntax/#Disjoint_Union_of_Class_Expressions
+    DisjointUnion(Class, Vec<ClassExpression>),
+
     // ObjectProperty axioms
 
     /// A sub property relationship between two object properties.
@@ -955,7 +961,6 @@ axioms!{
 // "Whoever does not understand LISP is doomed to reinvent it" (badly)
 onimpl! {Import, import}
 onimpl! {OntologyAnnotation, ontology_annotation}
-
 onimpl! {DeclareClass, declare_class}
 onimpl! {DeclareObjectProperty, declare_object_property}
 onimpl! {DeclareAnnotationProperty, declare_annotation_property}
@@ -965,6 +970,7 @@ onimpl! {DeclareDatatype, declare_datatype}
 onimpl! {SubClassOf, sub_class}
 onimpl! {EquivalentClasses, equivalent_class}
 onimpl! {DisjointClasses, disjoint_class}
+onimpl! {DisjointUnion, disjoint_union}
 onimpl! {SubObjectPropertyOf, sub_object_property}
 onimpl! {EquivalentObjectProperties, equivalent_object_properties}
 onimpl! {DisjointObjectProperties, disjoint_object_properties}
