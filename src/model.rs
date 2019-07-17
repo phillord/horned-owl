@@ -1,3 +1,41 @@
+//! This module implements the basic data data structre for OWL2.
+
+//! # Naming
+//!
+//! Names have been chosen to reflect the OWL structural
+//! specification, (see https://www.w3.org/TR/owl2-syntax/).
+//!
+//! The core data structures use both C-style structs and tuples
+//! structs. The aim is for this to maximize usability.
+
+//! The rules are as follows:
+//! 1. Use tuples where all the entities are of the same type and
+//! semantically equivalent
+//! 2. Use structs where entities are not equivalent.
+//! 3. Where values are equivalent and bounded in number to two, use a
+//! tuple with two values.
+//! 4. Where values are equivalent, but unbounded, use a Vec, either as
+//! part of a tuple or struct.
+//! 5. Where structs are used, variables names should be short,
+//! identify the type is unique, or be descriptive if not.
+
+//! Examples of these:
+//! - Rule 1:
+//! `TransitiveObjectProperty(ObjectProperty)`
+//! - Rule 2:
+//! `HasKey{ce:ClassExpression, pe:PropertyExpression}`
+//! - Rule 3:
+//! `InverseObjectProperty(ObjectProperty, ObjectProperty)`
+//! - Rule 4:
+//! `EquivalentClasses(Vec<ClassExpression>)`
+//! - Rule 5:
+//! `ObjectPropertyAssertion {
+//!    ope: ObjectPropertyAssertion,
+//!    from: NamedIndividual,
+//!    to: NamedIndividual,
+//! }`
+
+
 use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
@@ -7,7 +45,6 @@ use std::hash::Hash;
 use std::hash::Hasher;
 use std::ops::Deref;
 use std::rc::Rc;
-
 
 
 /// An
@@ -297,7 +334,7 @@ named!{
     /// each other.
     Class,
 
-        /// An OWL
+    /// An OWL
     /// [Datatype](https://www.w3.org/TR/owl2-primer/#Datatypes) is a
     /// specific kind of data, such as an integer, string or so forth.
     Datatype,
