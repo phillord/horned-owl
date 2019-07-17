@@ -372,14 +372,14 @@ fn axiom_from_start<R: BufRead>(
 ) -> Result<Axiom, Error> {
     Ok(match axiom_kind {
         b"Annotation" => OntologyAnnotation(Annotation {
-            annotation_property: from_start(r, e)?,
-            annotation_value: from_next(r)?,
+            ap: from_start(r, e)?,
+            av: from_next(r)?,
         }).into(),
         b"Declaration" => declaration(from_start(r, e)?),
         b"SubClassOf" => {
             SubClassOf {
-                sub_class:from_start(r, e)?,
-                super_class:from_next(r)?,
+                sub:from_start(r, e)?,
+                sup:from_next(r)?,
             }.into()
         }
         b"EquivalentClasses" => {
@@ -388,8 +388,8 @@ fn axiom_from_start<R: BufRead>(
         b"DisjointClasses" => DisjointClasses(from_start_to_end(r, e, b"DisjointClasses")?).into(),
         b"DisjointUnion" => DisjointUnion(from_start(r, e)?, till_end(r, b"DisjointUnion")?).into(),
         b"SubObjectPropertyOf" => SubObjectPropertyOf {
-            sub_property: from_start(r, e)?,
-            super_property: from_next(r)?,
+            sub: from_start(r, e)?,
+            sup: from_next(r)?,
         }.into(),
         b"EquivalentObjectProperties" => {
             EquivalentObjectProperties(from_start_to_end(r, e, b"EquivalentObjectProperties")?)
@@ -419,8 +419,8 @@ fn axiom_from_start<R: BufRead>(
         b"AsymmetricObjectProperty" => AsymmetricObjectProperty(from_start(r, e)?).into(),
         b"TransitiveObjectProperty" => TransitiveObjectProperty(from_start(r, e)?).into(),
         b"SubDataPropertyOf" => SubDataPropertyOf {
-            sub_property: from_start(r, e)?,
-            super_property: from_next(r)?,
+            sub: from_start(r, e)?,
+            sup: from_next(r)?,
         }.into(),
         b"EquivalentDataProperties" => {
             EquivalentDataProperties(from_start_to_end(r, e, b"EquivalentDataProperties")?).into()
@@ -474,28 +474,25 @@ fn axiom_from_start<R: BufRead>(
             to: from_next(r)?,
         }.into(),
         b"AnnotationAssertion" => {
-            let annotation_property = from_start(r, e)?;
-            let annotation_subject = from_next(r)?;
-            let annotation_value = from_next(r)?;
+            let ap = from_start(r, e)?;
+            let subject = from_next(r)?;
+            let av = from_next(r)?;
 
             AnnotationAssertion {
-                annotation_subject,
-                annotation: Annotation {
-                    annotation_property,
-                    annotation_value,
-                },
+                subject,
+                ann: Annotation {ap, av},
             }.into()
         }
         b"SubAnnotationPropertyOf" => SubAnnotationPropertyOf {
-            sub_property: from_start(r, e)?,
-            super_property: from_next(r)?,
+            sub: from_start(r, e)?,
+            sup: from_next(r)?,
         }.into(),
         b"AnnotationPropertyDomain" => AnnotationPropertyDomain {
-            property: from_start(r, e)?,
+            ap: from_start(r, e)?,
             iri: from_next(r)?,
         }.into(),
         b"AnnotationPropertyRange" => AnnotationPropertyRange {
-            property:from_start(r, e)?,
+            ap:from_start(r, e)?,
             iri: from_next(r)?
         }.into(),
         _ => {
@@ -623,58 +620,55 @@ from_start! {
                     Class::from_start(r, e)?.into()
                 }
                 b"ObjectSomeValuesFrom" => {
-                    let o = from_next(r)?;
-                    let ce = Box::new(from_next(r)?);
-                    ClassExpression::ObjectSomeValuesFrom{o,ce}
+                    let ope = from_next(r)?;
+                    let bce = Box::new(from_next(r)?);
+                    ClassExpression::ObjectSomeValuesFrom{ope,bce}
                 }
                 b"ObjectAllValuesFrom" => {
-                    let o = from_next(r)?;
-                    let ce = Box::new(from_next(r)?);
-                    ClassExpression::ObjectAllValuesFrom{o,ce}
+                    let ope = from_next(r)?;
+                    let bce = Box::new(from_next(r)?);
+                    ClassExpression::ObjectAllValuesFrom{ope,bce}
                 }
                 b"ObjectIntersectionOf" => {
                     let o = till_end(r, b"ObjectIntersectionOf")?;
-                    ClassExpression::ObjectIntersectionOf{o}
+                    ClassExpression::ObjectIntersectionOf(o)
                 }
                 b"ObjectUnionOf" => {
                     let o = till_end(r, b"ObjectUnionOf")?;
-                    ClassExpression::ObjectUnionOf{o}
+                    ClassExpression::ObjectUnionOf(o)
                 }
                 b"ObjectComplementOf" => {
                     ClassExpression::ObjectComplementOf
-                    {ce: Box::new(from_next(r)?)}
+                        (Box::new(from_next(r)?))
                 }
                 b"ObjectHasValue" => {
                     ClassExpression::ObjectHasValue
                     {
-                        o:from_next(r)?,
+                        ope:from_next(r)?,
                         i:from_next(r)?
                     }
                 }
                 b"ObjectOneOf" => {
-                    ClassExpression::ObjectOneOf
-                    {
-                        o: till_end(r, b"ObjectOneOf")?
-                    }
+                    ClassExpression::ObjectOneOf(till_end(r, b"ObjectOneOf")?)
                 }
                 b"ObjectHasSelf" => {
                     ClassExpression::ObjectHasSelf
                         (from_next(r)?)
                 }
                 b"ObjectMinCardinality" => {
-                    let (n, o, ce) = object_cardinality_restriction
+                    let (n, ope, bce) = object_cardinality_restriction
                         (r, e, b"ObjectMinCardinality")?;
-                    ClassExpression::ObjectMinCardinality{n, o, ce}
+                    ClassExpression::ObjectMinCardinality{n, ope, bce}
                 }
                 b"ObjectMaxCardinality" => {
-                    let (n, o, ce) = object_cardinality_restriction
+                    let (n, ope, bce) = object_cardinality_restriction
                         (r, e, b"ObjectMaxCardinality")?;
-                    ClassExpression::ObjectMaxCardinality{n, o, ce}
+                    ClassExpression::ObjectMaxCardinality{n, ope, bce}
                 }
                 b"ObjectExactCardinality" => {
-                    let (n, o, ce) = object_cardinality_restriction
+                    let (n, ope, bce) = object_cardinality_restriction
                         (r, e, b"ObjectExactCardinality")?;
-                    ClassExpression::ObjectExactCardinality{n, o, ce}
+                    ClassExpression::ObjectExactCardinality{n, ope, bce}
                 }
                 b"DataSomeValuesFrom" => {
                     ClassExpression::DataSomeValuesFrom{
@@ -738,7 +732,7 @@ from_start! {
                         }
                         _ => {
                             return Ok(AnnotatedAxiom{
-                                annotation:annotation,
+                                ann:annotation,
                                 axiom:axiom_from_start(r,e,axiom_kind)?
                             });
                         }
@@ -978,8 +972,8 @@ from_xml! {
                         return Err(error_unexpected_end_tag(end, r));
                     }
                     return Ok(Annotation{
-                        annotation_property:ap.unwrap(),
-                        annotation_value:av.unwrap()
+                        ap:ap.unwrap(),
+                        av:av.unwrap()
                     });
                 },
                 _ =>{}
@@ -1114,7 +1108,7 @@ mod test {
 
         let aa = ont.annotated_axiom(AxiomKind::DeclareClass).next().unwrap();
 
-        assert_eq!(aa.annotation.len(), 1);
+        assert_eq!(aa.ann.len(), 1);
     }
 
     #[test]
@@ -1306,7 +1300,7 @@ mod test {
 
         let mut ann_i = ont.annotated_axiom(AxiomKind::AnnotationAssertion);
         let ann: &AnnotatedAxiom = ann_i.next().unwrap();
-        assert_eq!(ann.annotation.len(), 1);
+        assert_eq!(ann.ann.len(), 1);
     }
 
     #[test]
@@ -1318,7 +1312,7 @@ mod test {
             .annotated_axiom(AxiomKind::TransitiveObjectProperty)
             .next()
             .unwrap();
-        assert_eq!(annotated_axiom.annotation.len(), 1);
+        assert_eq!(annotated_axiom.ann.len(), 1);
     }
 
     #[test]
@@ -1331,7 +1325,7 @@ mod test {
             .next()
             .unwrap();
 
-        assert_eq!(annotated_axiom.annotation.len(), 2);
+        assert_eq!(annotated_axiom.ann.len(), 2);
     }
     #[test]
     fn test_sub_annotation() {
@@ -1370,8 +1364,8 @@ mod test {
         let ont_s = include_str!("../ont/owl-xml/literal-escaped.owl");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
-        let ann = ont.annotation_assertion().next().unwrap();
-        match &ann.annotation.annotation_value {
+        let aa = ont.annotation_assertion().next().unwrap();
+        match &aa.ann.av {
             AnnotationValue::Literal(l) => assert_eq!(l.literal, Some(String::from("A --> B"))),
             _ => panic!("expected literal annotation value"),
         }
@@ -1407,7 +1401,7 @@ mod test {
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
         let ss = ont.sub_class().next().unwrap();
-        if let ClassExpression::ObjectHasValue { o: _, i: _ } = ss.super_class {
+        if let ClassExpression::ObjectHasValue { ope: _, i: _ } = ss.sup {
             return;
         }
         assert!(false);
@@ -1419,7 +1413,7 @@ mod test {
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
         let ss = ont.sub_class().next().unwrap();
-        if let ClassExpression::ObjectOneOf { ref o } = ss.sub_class {
+        if let ClassExpression::ObjectOneOf (ref o) = ss.sub {
             assert_eq!(o.len(), 2);
         }
     }
@@ -1430,7 +1424,7 @@ mod test {
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
         let ss = ont.sub_class().next().unwrap();
-        match dbg!(ss).super_class {
+        match ss.sup {
             ClassExpression::ObjectHasSelf(
                 ObjectPropertyExpression::ObjectProperty(ref op)
             )
@@ -1452,14 +1446,14 @@ mod test {
         assert_eq!(ont.declare_object_property().count(), 1);
 
         let sc = ont.sub_class().next().unwrap();
-        let some = &sc.super_class;
+        let some = &sc.sup;
 
         assert_eq!(
             match some {
                 ClassExpression::ObjectSomeValuesFrom {
-                    o: ObjectPropertyExpression::InverseObjectProperty(o),
-                    ce: _,
-                } => String::from(o),
+                    ope: ObjectPropertyExpression::InverseObjectProperty(op),
+                    bce: _,
+                } => String::from(op),
                 _ => "It didn't match".to_string(),
             },
             "http://www.example.com#r"
@@ -1475,14 +1469,14 @@ mod test {
         assert_eq!(ont.declare_object_property().count(), 1);
 
         let sc = ont.sub_class().next().unwrap();
-        let some = &sc.super_class;
+        let some = &sc.sup;
 
         let (n, o, c) = match some {
             ClassExpression::ObjectMinCardinality {
                 n,
-                o: ObjectPropertyExpression::ObjectProperty(o),
-                ce,
-            } => match **ce {
+                ope: ObjectPropertyExpression::ObjectProperty(o),
+                bce,
+            } => match **bce {
                 ClassExpression::Class(ref c) => (n, String::from(o), String::from(c)),
                 _ => {
                     panic!("1:Unexpected Class");
@@ -1515,14 +1509,14 @@ mod test {
         assert_eq!(ont.declare_object_property().count(), 1);
 
         let sc = ont.sub_class().next().unwrap();
-        let some = &sc.super_class;
+        let some = &sc.sup;
 
         let (n, o, c) = match some {
             ClassExpression::ObjectMaxCardinality {
                 n,
-                o: ObjectPropertyExpression::ObjectProperty(o),
-                ce,
-            } => match **ce {
+                ope: ObjectPropertyExpression::ObjectProperty(o),
+                bce,
+            } => match **bce {
                 ClassExpression::Class(ref c) => (n, String::from(o), String::from(c)),
                 _ => {
                     panic!("1:Unexpected Class");
@@ -1547,14 +1541,14 @@ mod test {
         assert_eq!(ont.declare_object_property().count(), 1);
 
         let sc = ont.sub_class().next().unwrap();
-        let some = &sc.super_class;
+        let some = &sc.sup;
 
         let (n, o, c) = match some {
             ClassExpression::ObjectExactCardinality {
                 n,
-                o: ObjectPropertyExpression::ObjectProperty(o),
-                ce,
-            } => match **ce {
+                ope: ObjectPropertyExpression::ObjectProperty(o),
+                bce,
+            } => match **bce {
                 ClassExpression::Class(ref c) => (n, String::from(o), String::from(c)),
                 _ => {
                     panic!("1:Unexpected Class");
@@ -1647,7 +1641,7 @@ mod test {
         let ont_s = include_str!("../ont/owl-xml/data-only.owl");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
-        let cl = &ont.sub_class().next().unwrap().super_class;
+        let cl = &ont.sub_class().next().unwrap().sup;
         assert_eq!(ont.sub_class().count(), 1);
         if let ClassExpression::DataAllValuesFrom {
             dp: ref _dp,
@@ -1665,7 +1659,7 @@ mod test {
         let ont_s = include_str!("../ont/owl-xml/data-exact-cardinality.owl");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
-        let cl = &ont.sub_class().next().unwrap().super_class;
+        let cl = &ont.sub_class().next().unwrap().sup;
         assert_eq!(ont.sub_class().count(), 1);
         if let ClassExpression::DataExactCardinality {
             n: ref _n,
@@ -1683,7 +1677,7 @@ mod test {
     fn data_unqualified_cardinality() {
         let ont_s = include_str!("../ont/owl-xml/data-unqualified-exact.owl");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
-        let cl = &ont.sub_class().next().unwrap().super_class;
+        let cl = &ont.sub_class().next().unwrap().sup;
         assert_eq!(ont.sub_class().count(), 1);
         if let ClassExpression::DataExactCardinality {
             n: ref _n,
@@ -1705,7 +1699,7 @@ mod test {
         let ont_s = include_str!("../ont/owl-xml/data-min-cardinality.owl");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
-        let cl = &ont.sub_class().next().unwrap().super_class;
+        let cl = &ont.sub_class().next().unwrap().sup;
         assert_eq!(ont.sub_class().count(), 1);
         if let ClassExpression::DataMinCardinality {
             n: ref _n,
@@ -1724,7 +1718,7 @@ mod test {
         let ont_s = include_str!("../ont/owl-xml/data-max-cardinality.owl");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
-        let cl = &ont.sub_class().next().unwrap().super_class;
+        let cl = &ont.sub_class().next().unwrap().sup;
         assert_eq!(ont.sub_class().count(), 1);
         if let ClassExpression::DataMaxCardinality {
             n: ref _n,
