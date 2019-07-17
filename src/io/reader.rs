@@ -1430,8 +1430,16 @@ mod test {
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
         let ss = ont.sub_class().next().unwrap();
-        if let ClassExpression::ObjectHasSelf(ref o) = ss.sub_class {
-            assert_eq!(String::from(o), "http://example.com/iri#o")
+        match dbg!(ss).super_class {
+            ClassExpression::ObjectHasSelf(
+                ObjectPropertyExpression::ObjectProperty(ref op)
+            )
+                =>
+                assert_eq!(String::from(op),
+                           "http://example.com/iri#o"),
+            _ => {
+                panic!("Expecting ObjectProperty");
+            }
         }
     }
 

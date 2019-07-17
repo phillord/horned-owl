@@ -1051,7 +1051,7 @@ pub enum ObjectPropertyExpression {
 }
 
 impl ObjectPropertyExpression {
-    pub fn as_property(self) -> Option<ObjectProperty> {
+    pub fn as_property(&self) -> Option<&ObjectProperty> {
         match self {
             ObjectPropertyExpression::ObjectProperty(op) => Some(op),
             ObjectPropertyExpression::InverseObjectProperty(_) => None,
@@ -1180,7 +1180,7 @@ pub enum ClassExpression {
     ///
     /// Given a object property `r`, this class defines all the
     /// individuals where `i r i`.
-    ObjectHasSelf(ObjectProperty),
+    ObjectHasSelf(ObjectPropertyExpression),
 
     /// A min cardinality relationship between individuals
     ///
@@ -1778,6 +1778,6 @@ mod test {
 
         let obpe = ObjectPropertyExpression::ObjectProperty(obp.clone());
 
-        assert_eq!(obpe.as_property().unwrap(), obp);
+        assert_eq!(obpe.as_property().unwrap(), &obp);
     }
 }
