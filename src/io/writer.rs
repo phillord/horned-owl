@@ -429,44 +429,44 @@ render!{
             ClassExpression::Class(ref c) => {
                 c.render(w, m)?;
             }
-            ClassExpression::ObjectSomeValuesFrom {ref o, ref ce} => {
-                (o, ce).within(w, m, b"ObjectSomeValuesFrom")?;
+            ClassExpression::ObjectSomeValuesFrom {ref ope, ref bce} => {
+                (ope, bce).within(w, m, b"ObjectSomeValuesFrom")?;
             }
-            ClassExpression::ObjectAllValuesFrom {ref o, ref ce} => {
-                (o, ce).within(w, m, b"ObjectAllValuesFrom")?;
+            ClassExpression::ObjectAllValuesFrom {ref ope, ref bce} => {
+                (ope, bce).within(w, m, b"ObjectAllValuesFrom")?;
             }
-            ClassExpression::ObjectIntersectionOf {ref o} => {
-                o.within(w, m, b"ObjectIntersectionOf")?;
+            ClassExpression::ObjectIntersectionOf(ref ope) => {
+                ope.within(w, m, b"ObjectIntersectionOf")?;
             }
-            ClassExpression::ObjectUnionOf {ref o} => {
-                o.within(w, m, b"ObjectUnionOf")?;
+            ClassExpression::ObjectUnionOf (ref ope) => {
+                ope.within(w, m, b"ObjectUnionOf")?;
             }
-            ClassExpression::ObjectComplementOf {ref ce} => {
-                ce.within(w, m, b"ObjectComplementOf")?;
+            ClassExpression::ObjectComplementOf (ref bce) => {
+                bce.within(w, m, b"ObjectComplementOf")?;
             }
-            ClassExpression::ObjectHasValue {ref o, ref i} => {
-                (o, i).within(w, m, b"ObjectHasValue")?;
+            ClassExpression::ObjectHasValue {ref ope, ref i} => {
+                (ope, i).within(w, m, b"ObjectHasValue")?;
             }
-            ClassExpression::ObjectOneOf {ref o} => {
-                o.within(w, m, b"ObjectOneOf")?;
+            ClassExpression::ObjectOneOf (ref ope) => {
+                ope.within(w, m, b"ObjectOneOf")?;
             }
-            ClassExpression::ObjectHasSelf (ref o) => {
-                o.within(w, m, b"ObjectHasSelf")?;
+            ClassExpression::ObjectHasSelf (ref ope) => {
+                ope.within(w, m, b"ObjectHasSelf")?;
             }
-            ClassExpression::ObjectMinCardinality{n, ref o, ref ce} => {
+            ClassExpression::ObjectMinCardinality{n, ref ope, ref bce} => {
                 let mut open = BytesStart::owned_name("ObjectMinCardinality");
                 open.push_attribute(("cardinality", &n.to_string()[..]));
-                (o, ce).within_tag(w, m, open)?;
+                (ope, bce).within_tag(w, m, open)?;
             }
-            ClassExpression::ObjectMaxCardinality{n, ref o, ref ce} => {
+            ClassExpression::ObjectMaxCardinality{n, ref ope, ref bce} => {
                 let mut open = BytesStart::owned_name("ObjectMaxCardinality");
                 open.push_attribute(("cardinality", &n.to_string()[..]));
-                (o, ce).within_tag(w, m, open)?;
+                (ope, bce).within_tag(w, m, open)?;
             }
-            ClassExpression::ObjectExactCardinality{n, ref o, ref ce} => {
+            ClassExpression::ObjectExactCardinality{n, ref ope, ref bce} => {
                 let mut open = BytesStart::owned_name("ObjectExactCardinality");
                 open.push_attribute(("cardinality", &n.to_string()[..]));
-                (o, ce).within_tag(w, m, open)?;
+                (ope, bce).within_tag(w, m, open)?;
             }
             ClassExpression::DataSomeValuesFrom{ref dp, ref dr} => {
                 (dp, dr).within(w, m, b"DataSomeValuesFrom")?;
@@ -550,15 +550,9 @@ render! {
     }
 }
 
-contents!{OntologyAnnotation, self,
-         (&self.0.annotation_property,
-          &self.0.annotation_value)
-}
+contents! {OntologyAnnotation, self, (&self.0.ap, &self.0.av)}
 
-contents!{
-    Import, self,
-    String::from(&self.0)
-}
+contents!{Import, self, String::from(&self.0)}
 
 render!{
     PropertyExpression, self, w, m,
@@ -582,7 +576,7 @@ content0!{DisjointDataProperties}
 
 content0!{EquivalentObjectProperties}
 
-contents!{SubDataPropertyOf, self, (&self.sub_property, &self.super_property)}
+contents!{SubDataPropertyOf, self, (&self.sub, &self.sup)}
 
 content0!{AsymmetricObjectProperty}
 
@@ -638,9 +632,9 @@ contents!{
 
 contents!{
     AnnotationAssertion, self,
-        (&self.annotation.annotation_property,
-         &self.annotation_subject,
-         &self.annotation.annotation_value)
+    (&self.annotation.ap,
+     &self.subject,
+     &self.annotation.av)
 }
 
 render!{
@@ -689,9 +683,7 @@ render!{
 render!{
     Annotation, self, w, m,
     {
-        (&self.annotation_property,
-         &self.annotation_value).
-            within(w, m, b"Annotation")?;
+        (&self.ap, &self.av).within(w, m, b"Annotation")?;
 
         Ok(())
     }
@@ -699,22 +691,21 @@ render!{
 
 contents!{
     SubAnnotationPropertyOf, self,
-    (&self.sub_property,
-     &self.super_property)
+    (&self.sub,
+     &self.sup)
 }
 
 contents! {
-    AnnotationPropertyDomain, self, (&self.property, &self.iri)
+    AnnotationPropertyDomain, self, (&self.ap, &self.iri)
 }
 
 contents! {
-    AnnotationPropertyRange, self, (&self.property, &self.iri)
+    AnnotationPropertyRange, self, (&self.ap, &self.iri)
 }
 
 contents!{
     SubClassOf, self,
-    (&self.sub_class,
-     &self.super_class)
+    (&self.sub, &self.sup)
 }
 
 content0!{EquivalentClasses}
@@ -765,8 +756,7 @@ render!{
 
 contents!{
     SubObjectPropertyOf, self,
-    (&self.sub_property,
-     &self.super_property)
+    (&self.sub, &self.sup)
 }
 
 content0!{TransitiveObjectProperty}

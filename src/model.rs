@@ -2,8 +2,10 @@
 
 //! # Naming
 //!
-//! Names have been chosen to reflect the OWL structural
-//! specification, (see https://www.w3.org/TR/owl2-syntax/).
+//! The OWL specification is large and complicated. This library,
+//! therefore, takes efforts to be as regular and predictable as
+//! possible. Names have been chosen to reflect the OWL structural
+//! specification, (see <https://www.w3.org/TR/owl2-syntax/>).
 //!
 //! The core data structures use both C-style structs and tuples
 //! structs. The aim is for this to maximize usability.
@@ -19,28 +21,64 @@
 //! 5. Where structs are used, variables names should be short,
 //! identify the type is unique, or be descriptive if not.
 
-//! Examples of these:
+//! # Example
 //! - Rule 1:
-//! `TransitiveObjectProperty(ObjectProperty)`
+//! ```
+//! # use horned_owl::model::*;
+//! // TransitiveObjectProperty(ObjectProperty)
+//! let b = Build::new();
+//! let top = TransitiveObjectProperty(b.object_property("http://www.example.com/op"));
+//! ```
 //! - Rule 2:
-//! `HasKey{ce:ClassExpression, pe:PropertyExpression}`
+//! ```
+//! # use horned_owl::model::*;
+//! // ObjectSomeValuesFrom{ope:PropertyExpression, ce:ClassExpression}
+//! let b = Build::new();
+//! let some = ClassExpression::ObjectSomeValuesFrom{
+//!                 ope: b.object_property("http://www.example.com/p").into(),
+//!                 bce: b.class("http://www.example.com/c").into()
+//! };
+//! ```
 //! - Rule 3:
-//! `InverseObjectProperty(ObjectProperty, ObjectProperty)`
+//! ```
+//! # use horned_owl::model::*;
+//! // InverseObjectProperty(ObjectProperty, ObjectProperty)
+//! let b = Build::new();
+//! let iop = InverseObjectProperties
+//!             (b.object_property("http://www.example.com/op1"),
+//!              b.object_property("http://www.example.com/op2"));
+//! ```
 //! - Rule 4:
-//! `EquivalentClasses(Vec<ClassExpression>)`
+//! ```
+//! # use horned_owl::model::*;
+//! // EquivalentClasses(Vec<ClassExpression>)
+//! let b = Build::new();
+//! let ec = EquivalentClasses
+//!           (vec!(b.class("http://www.example.com/op1").into(),
+//!                 b.class("http://www.example.com/op2").into()));
+//! ```
 //! - Rule 5:
-//! `ObjectPropertyAssertion {
-//!    ope: ObjectPropertyAssertion,
-//!    from: NamedIndividual,
-//!    to: NamedIndividual,
-//! }`
+//! ```
+//! //ObjectPropertyAssertion {
+//! //ope: ObjectPropertyExpression,
+//! //from: NamedIndividual,
+//! //to: NamedIndividual,
+//! //}
+//! # use horned_owl::model::*;
+//! let b = Build::new();
+//! let opa = ObjectPropertyAssertion {
+//!     ope: b.object_property("http://www.example.com/op").into(),
+//!     from: b.named_individual("http://www.example.com/i1"),
+//!     to: b.named_individual("http://www.example.com/i2"),
+//! };
+//! ```
 
 
 use std::cell::RefCell;
+use std::cmp::Ordering;
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 use std::collections::VecDeque;
-use std::cmp::Ordering;
 use std::hash::Hash;
 use std::hash::Hasher;
 use std::ops::Deref;
@@ -685,8 +723,8 @@ axioms!{
     /// All instances of `sub_class` are also instances of
     /// `super_class`.
     SubClassOf{
-        super_class: ClassExpression,
-        sub_class: ClassExpression
+        sup: ClassExpression,
+        sub: ClassExpression
     },
 
     /// An equivalance relationship between two `ClassExpression`.
@@ -720,8 +758,8 @@ axioms!{
     /// See also: [Property Hierarchies](https://www.w3.org/TR/2012/REC-owl2-primer-20121211/#Property_Hierarchies)
     /// See also: [Property Chains](https://www.w3.org/TR/2012/REC-owl2-primer-20121211/#Property_Chains)
     SubObjectPropertyOf{
-        super_property: ObjectPropertyExpression,
-        sub_property: SubObjectPropertyExpression
+        sup: ObjectPropertyExpression,
+        sub: SubObjectPropertyExpression
     },
 
     /// An equivalent object properties relationship.
@@ -826,8 +864,8 @@ axioms!{
     ///
     /// See also: [Data Subproperties](https://www.w3.org/TR/owl2-syntax/#Data_Subproperties)
     SubDataPropertyOf {
-        super_property:DataProperty,
-        sub_property:DataProperty
+        sup:DataProperty,
+        sub:DataProperty
     },
 
     /// An equivalent data property relationship.
@@ -963,7 +1001,7 @@ axioms!{
     /// `annotation_subject`. Annotations refer to an `IRI` rather
     /// than the `NamedEntity` identified by that `IRI`.
     AnnotationAssertion {
-        annotation_subject:IRI,
+        subject:IRI,
         annotation: Annotation
     },
 
@@ -972,19 +1010,19 @@ axioms!{
     /// Implies that any annotation of the type `sub_property` is also
     /// an annotation of the type `super_property`.
     SubAnnotationPropertyOf {
-        super_property:AnnotationProperty,
-        sub_property: AnnotationProperty
+        sup:AnnotationProperty,
+        sub: AnnotationProperty
     },
 
     /// Assert the domain of an `AnnotationProperty`
     AnnotationPropertyDomain {
-        property: AnnotationProperty,
+        ap: AnnotationProperty,
         iri: IRI
     },
 
     /// Assert the range of an `AnnotationProperty`
     AnnotationPropertyRange {
-        property: AnnotationProperty,
+        ap: AnnotationProperty,
         iri: IRI
     }
 }
@@ -1055,8 +1093,8 @@ pub struct Literal {
 /// particular way, defined by the property.
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct Annotation {
-    pub annotation_property: AnnotationProperty,
-    pub annotation_value: AnnotationValue,
+    pub ap: AnnotationProperty,
+    pub av: AnnotationValue,
 }
 
 /// The value of an annotation
@@ -1087,6 +1125,12 @@ pub enum ObjectPropertyExpression {
     InverseObjectProperty(ObjectProperty),
 }
 
+impl From<ObjectProperty> for ObjectPropertyExpression {
+    fn from(op: ObjectProperty) -> ObjectPropertyExpression {
+        ObjectPropertyExpression::ObjectProperty(op)
+    }
+}
+
 impl ObjectPropertyExpression {
     pub fn as_property(&self) -> Option<&ObjectProperty> {
         match self {
@@ -1109,6 +1153,17 @@ pub enum SubObjectPropertyExpression {
 pub enum PropertyExpression {
     ObjectPropertyExpression(ObjectPropertyExpression),
     DataProperty(DataProperty),
+}
+
+impl From<ObjectPropertyExpression> for PropertyExpression {
+    fn from(ope: ObjectPropertyExpression) -> PropertyExpression {
+        PropertyExpression::ObjectPropertyExpression(ope)
+    }
+}
+impl From<DataProperty> for PropertyExpression {
+    fn from(dp: DataProperty) -> PropertyExpression {
+        PropertyExpression::DataProperty(dp)
+    }
 }
 
 // Data!!!
@@ -1162,25 +1217,25 @@ pub enum ClassExpression {
     ///
     /// The class of individuals which are individuals of all these
     /// classes.
-    ObjectIntersectionOf { o: Vec<ClassExpression> },
+    ObjectIntersectionOf(Vec<ClassExpression>),
 
     /// The boolean or
     ///
     /// The class of individuals which are individuals of any of these
     /// classes.
-    ObjectUnionOf { o: Vec<ClassExpression> },
+    ObjectUnionOf(Vec<ClassExpression>),
 
     /// The boolean not
     ///
     /// The class of individuals which are not individuals of any of
     /// these classes.
-    ObjectComplementOf { ce: Box<ClassExpression> },
+    ObjectComplementOf(Box<ClassExpression>),
 
     /// An enumeration of individuals
     ///
     /// This is the class containing exactly the given set of
     /// individuals.
-    ObjectOneOf { o: Vec<NamedIndividual> },
+    ObjectOneOf(Vec<NamedIndividual>),
 
     /// An existential relationship
     ///
@@ -1188,8 +1243,8 @@ pub enum ClassExpression {
     /// relationship `o` to a class expression `ce`. Every individual
     /// in `i` must have this relationship to one individual in `ce`.
     ObjectSomeValuesFrom {
-        o: ObjectPropertyExpression,
-        ce: Box<ClassExpression>,
+        ope: ObjectPropertyExpression,
+        bce: Box<ClassExpression>,
     },
 
     /// A universal relationship
@@ -1199,8 +1254,8 @@ pub enum ClassExpression {
     /// `ce`. This does not imply that the `i` necessarily has any
     /// relation `r`.
     ObjectAllValuesFrom {
-        o: ObjectPropertyExpression,
-        ce: Box<ClassExpression>,
+        ope: ObjectPropertyExpression,
+        bce: Box<ClassExpression>,
     },
 
     /// An existential relationship to an individual
@@ -1209,7 +1264,7 @@ pub enum ClassExpression {
     /// relationship `o` to another individual `i`. Every individual
     /// in `c` must have this relationship to the individual `i`
     ObjectHasValue {
-        o: ObjectPropertyExpression,
+        ope: ObjectPropertyExpression,
         i: NamedIndividual,
     },
 
@@ -1226,8 +1281,8 @@ pub enum ClassExpression {
     /// least `n` other individuals.
     ObjectMinCardinality {
         n: u32,
-        o: ObjectPropertyExpression,
-        ce: Box<ClassExpression>,
+        ope: ObjectPropertyExpression,
+        bce: Box<ClassExpression>,
     },
 
     /// A max cardinality relationship between individuals
@@ -1237,8 +1292,8 @@ pub enum ClassExpression {
     /// most `n` other individuals.
     ObjectMaxCardinality {
         n: u32,
-        o: ObjectPropertyExpression,
-        ce: Box<ClassExpression>,
+        ope: ObjectPropertyExpression,
+        bce: Box<ClassExpression>,
     },
 
     /// An exact cardinality relationship between individuals
@@ -1248,8 +1303,8 @@ pub enum ClassExpression {
     /// `n` other individuals.
     ObjectExactCardinality {
         n: u32,
-        o: ObjectPropertyExpression,
-        ce: Box<ClassExpression>,
+        ope: ObjectPropertyExpression,
+        bce: Box<ClassExpression>,
     },
 
     /// An exististential relationship.
@@ -1324,6 +1379,12 @@ impl From<Class> for ClassExpression {
 impl<'a> From<&'a Class> for ClassExpression {
     fn from(c: &'a Class) -> ClassExpression {
         ClassExpression::Class(c.clone())
+    }
+}
+
+impl From<Class> for Box<ClassExpression> {
+    fn from(c: Class) -> Box<ClassExpression> {
+        Box::new(c.into())
     }
 }
 
@@ -1492,8 +1553,8 @@ impl Ontology {
     {
         let c = c.into();
         self.sub_class()
-            .filter(move |sc| sc.super_class == c)
-            .map(|sc| &sc.sub_class)
+            .filter(move |sc| sc.sup == c)
+            .map(|sc| &sc.sub)
     }
 
     /// Returns true is `subclass` is a subclass of `superclass`
@@ -1516,14 +1577,14 @@ impl Ontology {
     /// assert!(!o.is_subclass(&sub, &sup));
     /// assert!(!o.is_subclass(&sup, &subsub));
     /// ```
-    pub fn is_subclass<C>(&self, super_class: C, sub_class: C) -> bool
+    pub fn is_subclass<C>(&self, sup: C, sub: C) -> bool
     where
         C: Into<ClassExpression>,
     {
-        let super_class = super_class.into();
-        let sub_class = sub_class.into();
+        let sup = sup.into();
+        let sub = sub.into();
         self.sub_class()
-            .any(|sc| sc.super_class == super_class && sc.sub_class == sub_class)
+            .any(|sc| sc.sup == sup && sc.sub == sub)
     }
 
     /// Gets an iterator that visits the annotated axioms of the ontology.
