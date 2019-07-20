@@ -361,7 +361,7 @@ render!{
     AnnotatedAxiom, self, w, m,
     {
         (
-            (&self.annotation),
+            (&self.ann),
             (&self.axiom)
         ).within(w, m,
                  tag_for_kind(self.kind()))?;
@@ -632,9 +632,9 @@ contents!{
 
 contents!{
     AnnotationAssertion, self,
-    (&self.annotation.ap,
+    (&self.ann.ap,
      &self.subject,
-     &self.annotation.av)
+     &self.ann.av)
 }
 
 render!{

@@ -480,7 +480,7 @@ fn axiom_from_start<R: BufRead>(
 
             AnnotationAssertion {
                 subject,
-                annotation: Annotation {ap, av},
+                ann: Annotation {ap, av},
             }.into()
         }
         b"SubAnnotationPropertyOf" => SubAnnotationPropertyOf {
@@ -732,7 +732,7 @@ from_start! {
                         }
                         _ => {
                             return Ok(AnnotatedAxiom{
-                                annotation:annotation,
+                                ann:annotation,
                                 axiom:axiom_from_start(r,e,axiom_kind)?
                             });
                         }
@@ -1108,7 +1108,7 @@ mod test {
 
         let aa = ont.annotated_axiom(AxiomKind::DeclareClass).next().unwrap();
 
-        assert_eq!(aa.annotation.len(), 1);
+        assert_eq!(aa.ann.len(), 1);
     }
 
     #[test]
@@ -1300,7 +1300,7 @@ mod test {
 
         let mut ann_i = ont.annotated_axiom(AxiomKind::AnnotationAssertion);
         let ann: &AnnotatedAxiom = ann_i.next().unwrap();
-        assert_eq!(ann.annotation.len(), 1);
+        assert_eq!(ann.ann.len(), 1);
     }
 
     #[test]
@@ -1312,7 +1312,7 @@ mod test {
             .annotated_axiom(AxiomKind::TransitiveObjectProperty)
             .next()
             .unwrap();
-        assert_eq!(annotated_axiom.annotation.len(), 1);
+        assert_eq!(annotated_axiom.ann.len(), 1);
     }
 
     #[test]
@@ -1325,7 +1325,7 @@ mod test {
             .next()
             .unwrap();
 
-        assert_eq!(annotated_axiom.annotation.len(), 2);
+        assert_eq!(annotated_axiom.ann.len(), 2);
     }
     #[test]
     fn test_sub_annotation() {
@@ -1364,8 +1364,8 @@ mod test {
         let ont_s = include_str!("../ont/owl-xml/literal-escaped.owl");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
-        let ann = ont.annotation_assertion().next().unwrap();
-        match &ann.annotation.av {
+        let aa = ont.annotation_assertion().next().unwrap();
+        match &aa.ann.av {
             AnnotationValue::Literal(l) => assert_eq!(l.literal, Some(String::from("A --> B"))),
             _ => panic!("expected literal annotation value"),
         }

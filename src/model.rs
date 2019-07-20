@@ -449,17 +449,17 @@ pub trait Kinded {
 #[derive(Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
 pub struct AnnotatedAxiom {
     pub axiom: Axiom,
-    pub annotation: BTreeSet<Annotation>,
+    pub ann: BTreeSet<Annotation>,
 }
 
 impl AnnotatedAxiom {
-    pub fn new<I>(axiom: I, annotation: BTreeSet<Annotation>) -> AnnotatedAxiom
+    pub fn new<I>(axiom: I, ann: BTreeSet<Annotation>) -> AnnotatedAxiom
     where
         I: Into<Axiom>,
     {
         AnnotatedAxiom {
             axiom: axiom.into(),
-            annotation,
+            ann,
         }
     }
 
@@ -484,7 +484,7 @@ impl From<Axiom> for AnnotatedAxiom {
     fn from(axiom: Axiom) -> AnnotatedAxiom {
         AnnotatedAxiom {
             axiom,
-            annotation: BTreeSet::new(),
+            ann: BTreeSet::new(),
         }
     }
 }
@@ -1002,7 +1002,7 @@ axioms!{
     /// than the `NamedEntity` identified by that `IRI`.
     AnnotationAssertion {
         subject:IRI,
-        annotation: Annotation
+        ann: Annotation
     },
 
     /// An sub-property assertion for annotation properties.
