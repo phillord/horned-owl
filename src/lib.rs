@@ -22,8 +22,10 @@ extern crate curie;
 extern crate enum_meta;
 #[macro_use] extern crate failure;
 extern crate quick_xml;
+extern crate indexmap;
 
 pub mod error;
 pub mod model;
 pub mod vocab;
 pub mod io;
+pub mod command;
