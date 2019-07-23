@@ -51,7 +51,7 @@ pub enum Namespace {
 }
 
 lazy_meta! {
-    Namespace, IRIString, META_NS;
+    Namespace, IRIString, METANS;
     OWL, to_meta("http://www.w3.org/2002/07/owl#");
     RDF, to_meta("http://www.w3.org/1999/02/22-rdf-syntax-ns#");
     RDFS, to_meta("http://www.w3.org/2000/01/rdf-schema#");
@@ -65,7 +65,7 @@ pub enum OWL {
 }
 
 lazy_meta! {
-    OWL, IRIString, META_OWL;
+    OWL, IRIString, METAOWL;
     Thing, extend(OWL, "Thing");
     Nothing, extend(OWL, "Nothing");
 }
@@ -75,7 +75,7 @@ pub enum OWL2Datatype {
 }
 
 lazy_meta! {
-    OWL2Datatype, IRIString, META_OWL2Datatype;
+    OWL2Datatype, IRIString, METAOWL2DATATYPE;
     RDFSLiteral, extend(RDFS, "Literal")
 }
 
@@ -96,7 +96,7 @@ fn meta_testing() {
 }
 
 lazy_meta!{
-    Facet, IRIString, META_FACET;
+    Facet, IRIString, METAFACET;
     Length, extend(XSD, "length");
     MinLength, extend(XSD, "minLength");
     MaxLength, extend(XSD, "maxLength");

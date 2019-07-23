@@ -53,14 +53,6 @@ fn iri_maybe(elem: &mut BytesStart, key: &str, iri: &Option<IRI>) {
     }
 }
 
-/// Shrink an IRI to a curie if there is an appropriate prefix
-fn shrink_iri_maybe<'a>(iri: &str, mapping: &'a PrefixMapping) -> String {
-    match mapping.shrink_iri(&(*iri)[..]) {
-        Ok(curie) => format!("{}", curie),
-        Err(_) => iri.to_string(),
-    }
-}
-
 /// Maybe An an attribute to `elem` if `val` is not None.
 fn attribute_maybe(elem: &mut BytesStart, key: &str, val: &Option<String>) {
     match val {
