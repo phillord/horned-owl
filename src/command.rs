@@ -1,6 +1,6 @@
 pub mod naming {
-    use model::AxiomKind;
-    use model::AxiomKind::*;
+    use crate::model::AxiomKind;
+    use crate::model::AxiomKind::*;
 
     pub fn name(axk: &AxiomKind) -> &'static str {
         match axk {
@@ -55,8 +55,8 @@ pub mod naming {
 pub mod summary {
 
     use indexmap::map::IndexMap;
-    use model::AxiomKind;
-    use model::Ontology;
+    use crate::model::AxiomKind;
+    use crate::model::Ontology;
 
     #[derive(Debug)]
     pub struct SummaryStatistics {
