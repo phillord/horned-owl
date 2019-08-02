@@ -73,6 +73,7 @@
 //! };
 //! ```
 
+use at_collection::AtLeastTwo;
 
 use std::cell::RefCell;
 use std::cmp::Ordering;
@@ -737,7 +738,7 @@ axioms!{
     ///
     /// No instance of one `ClassExpression` can also be an instance
     /// of any of the others.
-    DisjointClasses(Vec<ClassExpression>),
+    DisjointClasses(AtLeastTwo<ClassExpression>),
 
     /// A disjoint union expression between one `ClassExpression` and
     /// a set of others.
@@ -1782,7 +1783,7 @@ mod test {
     fn test_axiom_convertors() {
         let c = Build::new().class("http://www.example.com");
 
-        let dc = DisjointClasses(vec![c.clone().into(), c.clone().into()]);
+        let dc = DisjointClasses(AtLeastTwo::new(c.clone().into(), c.clone().into()));
         let _aa: Axiom = dc.into();
     }
 
@@ -1794,14 +1795,14 @@ mod test {
         let decl1 = DeclareClass(build.class("http://www.example.com#a"));
         let decl2 = DeclareClass(build.class("http://www.example.com#b"));
         let decl3 = DeclareClass(build.class("http://www.example.com#c"));
-        let disj1 = DisjointClasses(vec![
+        let disj1 = DisjointClasses(AtLeastTwo::new(
             ClassExpression::Class(build.class("http://www.example.com#a")),
             ClassExpression::Class(build.class("http://www.example.com#b")),
-        ]);
-        let disj2 = DisjointClasses(vec![
+        ));
+        let disj2 = DisjointClasses(AtLeastTwo::new(
             ClassExpression::Class(build.class("http://www.example.com#b")),
             ClassExpression::Class(build.class("http://www.example.com#c")),
-        ]);
+        ));
         o.insert(disj1.clone());
         o.insert(disj2.clone());
         o.insert(decl1.clone());
@@ -1836,14 +1837,14 @@ mod test {
         let decl1 = DeclareClass(build.class("http://www.example.com#a"));
         let decl2 = DeclareClass(build.class("http://www.example.com#b"));
         let decl3 = DeclareClass(build.class("http://www.example.com#c"));
-        let disj1 = DisjointClasses(vec![
+        let disj1 = DisjointClasses(AtLeastTwo::new(
             ClassExpression::Class(build.class("http://www.example.com#a")),
             ClassExpression::Class(build.class("http://www.example.com#b")),
-        ]);
-        let disj2 = DisjointClasses(vec![
+        ));
+        let disj2 = DisjointClasses(AtLeastTwo::new(
             ClassExpression::Class(build.class("http://www.example.com#b")),
             ClassExpression::Class(build.class("http://www.example.com#c")),
-        ]);
+        ));
         o.insert(disj1.clone());
         o.insert(disj2.clone());
         o.insert(decl1.clone());

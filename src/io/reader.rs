@@ -1,3 +1,5 @@
+use at_collection::AtLeastTwo;
+
 use curie::PrefixMapping;
 
 use crate::model::*;
@@ -385,7 +387,12 @@ fn axiom_from_start<R: BufRead>(
         b"EquivalentClasses" => {
             EquivalentClasses(from_start_to_end(r, e, b"EquivalentClasses")?).into()
         }
-        b"DisjointClasses" => DisjointClasses(from_start_to_end(r, e, b"DisjointClasses")?).into(),
+        b"DisjointClasses" => DisjointClasses(
+            AtLeastTwo::new_and(
+                from_start(r, e)?,
+                from_next(r)?,
+                till_end(r, b"DisjointClasses")?))
+            .into(),
         b"DisjointUnion" => DisjointUnion(from_start(r, e)?, till_end(r, b"DisjointUnion")?).into(),
         b"SubObjectPropertyOf" => SubObjectPropertyOf {
             sub: from_start(r, e)?,

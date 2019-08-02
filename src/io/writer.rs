@@ -1,3 +1,6 @@
+use at_collection::AtCollection;
+use at_collection::AtLeastTwo;
+
 use curie::PrefixMapping;
 
 use crate::model::Kinded;
@@ -254,6 +257,19 @@ impl<'a, T: Render<'a, W>, W: StdWrite> Render<'a, W> for BTreeSet<T> {
 }
 
 impl<'a, O: Render<'a, W>, W: StdWrite> Render<'a, W> for Vec<O> {
+    fn render(&self, w: &mut Writer<W>, m: &'a PrefixMapping) -> Result<(), Error>
+    where
+        W: StdWrite,
+    {
+        for a in self.iter() {
+            a.render(w, m)?;
+        }
+
+        Ok(())
+    }
+}
+
+impl<'a, O: Render<'a, W>, W: StdWrite> Render<'a, W> for AtLeastTwo<O> {
     fn render(&self, w: &mut Writer<W>, m: &'a PrefixMapping) -> Result<(), Error>
     where
         W: StdWrite,

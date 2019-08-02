@@ -14,6 +14,7 @@ license = "LGPL-3.0"
 edition = "2018"
 
 [dependencies]
+at-collection = {path = "../at-collection"}
 curie = "0.0.8"
 clap = "2.31.2"
 failure = "0.1.2"
