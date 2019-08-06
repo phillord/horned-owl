@@ -51,11 +51,13 @@
 //! - Rule 4:
 //! ```
 //! # use horned_owl::model::*;
+//! use at_collection::atl2;
+//! use std::convert::TryFrom;
 //! // EquivalentClasses(Vec<ClassExpression>)
 //! let b = Build::new();
 //! let ec = EquivalentClasses
-//!           (vec!(b.class("http://www.example.com/op1").into(),
-//!                 b.class("http://www.example.com/op2").into()));
+//!           (atl2![b.class("http://www.example.com/op1").into(),
+//!                  b.class("http://www.example.com/op2").into()].unwrap());
 //! ```
 //! - Rule 5:
 //! ```
@@ -73,6 +75,7 @@
 //! };
 //! ```
 
+use at_collection::AtLeastOne;
 use at_collection::AtLeastTwo;
 
 use std::cell::RefCell;
@@ -732,7 +735,7 @@ axioms!{
     ///
     /// All instances of `ClassExpression` are also instances
     /// of other other.
-    EquivalentClasses(Vec<ClassExpression>),
+    EquivalentClasses(AtLeastTwo<ClassExpression>),
 
     /// A disjoint relationship between two `ClassExpression`
     ///
@@ -744,7 +747,7 @@ axioms!{
     /// a set of others.
     ///
     /// See also: https://www.w3.org/TR/owl2-syntax/#Disjoint_Union_of_Class_Expressions
-    DisjointUnion(Class, Vec<ClassExpression>),
+    DisjointUnion(Class, AtLeastTwo<ClassExpression>),
 
     // ObjectProperty axioms
 
@@ -767,13 +770,13 @@ axioms!{
     ///
     /// States that two object properties are semantically identical
     /// to each other.
-    EquivalentObjectProperties(Vec<ObjectPropertyExpression>),
+    EquivalentObjectProperties(AtLeastTwo<ObjectPropertyExpression>),
 
     /// A disjoint object property relationship.
     ///
     /// This states that is an individual is connected by one of these
     /// object properties, it cannot be connected by any of the others.
-    DisjointObjectProperties(Vec<ObjectPropertyExpression>),
+    DisjointObjectProperties(AtLeastTwo<ObjectPropertyExpression>),
 
     /// An inverse relationship between two object properties.
     ///
@@ -783,7 +786,6 @@ axioms!{
     ///
     /// See also: [Property Characteristics](https://www.w3.org/TR/2012/REC-owl2-primer-20121211/#Property_Characteristics)
     InverseObjectProperties(ObjectProperty,ObjectProperty),
-
     /// The domain of the object property.
     ///
     /// This states that if an individual `i` has an relationship,
@@ -874,7 +876,7 @@ axioms!{
     /// All these DataProperties are semantically identical.
     ///
     /// See also: [EquivalentDataproperties](https://www.w3.org/TR/owl2-syntax/#Equivalent_Data_Properties)
-    EquivalentDataProperties(Vec<DataProperty>),
+    EquivalentDataProperties(AtLeastTwo<DataProperty>),
 
     /// A disjoint data property relationship.
     ///
@@ -882,7 +884,7 @@ axioms!{
     /// by more than one of these DataProperty relations.
     ///
     /// See also: [DisjointDataProperties](https://www.w3.org/TR/owl2-syntax/#Disjoint_Data_Properties)
-    DisjointDataProperties(Vec<DataProperty>),
+    DisjointDataProperties(AtLeastTwo<DataProperty>),
 
     /// The domain of a DataProperty.
     ///
@@ -931,14 +933,14 @@ axioms!{
     ///
     /// See also: [Individual Equality](https://www.w3.org/TR/owl2-syntax/#Individual_Equality)
     SameIndividual (
-        Vec<NamedIndividual>
+        AtLeastTwo<NamedIndividual>
     ),
 
     /// A different individuals expression.
     ///
     /// See also: [Individual Inequality](https://www.w3.org/TR/owl2-syntax/#Individual_Inequality)
     DifferentIndividuals (
-        Vec<NamedIndividual>
+        AtLeastTwo<NamedIndividual>
     ),
 
     /// A class assertion expression.
@@ -1146,7 +1148,7 @@ impl ObjectPropertyExpression {
 pub enum SubObjectPropertyExpression {
     // We use Vec here rather than BTreeSet because, perhaps
     // surprisingly, BTreeSet is not itself hashable.
-    ObjectPropertyChain(Vec<ObjectPropertyExpression>),
+    ObjectPropertyChain(AtLeastTwo<ObjectPropertyExpression>),
     ObjectPropertyExpression(ObjectPropertyExpression),
 }
 
@@ -1192,11 +1194,11 @@ pub enum Facet {
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum DataRange {
     Datatype(Datatype),
-    DataIntersectionOf(Vec<DataRange>),
-    DataUnionOf(Vec<DataRange>),
+    DataIntersectionOf(AtLeastTwo<DataRange>),
+    DataUnionOf(AtLeastTwo<DataRange>),
     DataComplementOf(Box<DataRange>),
-    DataOneOf(Vec<Literal>),
-    DatatypeRestriction(Datatype, Vec<FacetRestriction>),
+    DataOneOf(AtLeastOne<Literal>),
+    DatatypeRestriction(Datatype, AtLeastOne<FacetRestriction>),
 }
 
 impl From<Datatype> for DataRange {
@@ -1218,13 +1220,13 @@ pub enum ClassExpression {
     ///
     /// The class of individuals which are individuals of all these
     /// classes.
-    ObjectIntersectionOf(Vec<ClassExpression>),
+    ObjectIntersectionOf(AtLeastTwo<ClassExpression>),
 
     /// The boolean or
     ///
     /// The class of individuals which are individuals of any of these
     /// classes.
-    ObjectUnionOf(Vec<ClassExpression>),
+    ObjectUnionOf(AtLeastTwo<ClassExpression>),
 
     /// The boolean not
     ///
@@ -1236,7 +1238,7 @@ pub enum ClassExpression {
     ///
     /// This is the class containing exactly the given set of
     /// individuals.
-    ObjectOneOf(Vec<NamedIndividual>),
+    ObjectOneOf(AtLeastOne<NamedIndividual>),
 
     /// An existential relationship
     ///
