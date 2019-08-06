@@ -1779,9 +1779,9 @@ mod test {
         assert_eq!(2, di.0.len());
     }
 
-    // #[test]
-    // fn family() {
-    //     let ont_s = include_str!("../ont/owl-xml/family.owl");
-    //     let (_, _) = read_ok(&mut ont_s.as_bytes());
-    // }
+    #[test]
+    fn family() {
+        let ont_s = include_str!("../ont/owl-xml/family.owl");
+        let (_, _) = read_ok(&mut ont_s.as_bytes());
+    }
 }

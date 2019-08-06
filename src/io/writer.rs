@@ -1318,8 +1318,8 @@ mod test {
         assert_round(include_str!("../ont/owl-xml/object-property-symmetric.owl"));
     }
 
-    // #[test]
-    // fn family() {
-    //     assert_round(include_str!("../ont/owl-xml/family.owl"));
-    // }
+    #[test]
+    fn family() {
+        assert_round(include_str!("../ont/owl-xml/family.owl"));
+    }
 }
