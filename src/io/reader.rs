@@ -1055,11 +1055,11 @@ from_xml! {IRI, r, end,
 }
 
 #[cfg(test)]
-mod test {
+pub mod test {
     use super::*;
     use std::collections::HashMap;
 
-    fn read_ok<R: BufRead>(bufread: &mut R) -> (Ontology, PrefixMapping) {
+    pub fn read_ok<R: BufRead>(bufread: &mut R) -> (Ontology, PrefixMapping) {
         let r = read(bufread);
         assert!(r.is_ok(), "Expected ontology, got failure:{:?}", r.err());
         r.ok().unwrap()
@@ -1067,7 +1067,7 @@ mod test {
 
     #[test]
     fn test_simple_ontology_prefix() {
-        let ont_s = include_str!("../ont/owl-xml/one-ont.owl");
+        let ont_s = include_str!("../ont/owl-xml/one-ont.owx");
         let (_, mapping) = read_ok(&mut ont_s.as_bytes());
 
         let hash_map: HashMap<&String, &String> = mapping.mappings().collect();
@@ -1076,7 +1076,7 @@ mod test {
 
     #[test]
     fn test_simple_ontology() {
-        let ont_s = include_str!("../ont/owl-xml/one-ont.owl");
+        let ont_s = include_str!("../ont/owl-xml/one-ont.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
         assert_eq!(*ont.id.iri.unwrap(), "http://example.com/iri");
@@ -1084,7 +1084,7 @@ mod test {
 
     #[test]
     fn test_simple_ontology_rendered_by_horned() {
-        let ont_s = include_str!("../ont/owl-xml/one-ont-from-horned.owl");
+        let ont_s = include_str!("../ont/owl-xml/one-ont-from-horned.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
         assert_eq!(*ont.id.iri.unwrap(), "http://example.com/iri");
@@ -1092,7 +1092,7 @@ mod test {
 
     #[test]
     fn test_one_class() {
-        let ont_s = include_str!("../ont/owl-xml/one-class.owl");
+        let ont_s = include_str!("../ont/owl-xml/one-class.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
         assert_eq!(ont.declare_class().count(), 1);
@@ -1104,7 +1104,7 @@ mod test {
 
     #[test]
     fn test_class_with_annotation() {
-        let ont_s = include_str!("../ont/owl-xml/declaration-with-annotation.owl");
+        let ont_s = include_str!("../ont/owl-xml/declaration-with-annotation.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
         assert_eq!(ont.declare_class().count(), 1);
@@ -1116,7 +1116,7 @@ mod test {
 
     #[test]
     fn test_one_class_fqn() {
-        let ont_s = include_str!("../ont/owl-xml/one-class-fully-qualified.owl");
+        let ont_s = include_str!("../ont/owl-xml/one-class-fully-qualified.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
         assert_eq!(ont.declare_class().count(), 1);
@@ -1128,7 +1128,7 @@ mod test {
 
     #[test]
     fn test_ten_class() {
-        let ont_s = include_str!("../ont/owl-xml/o10.owl");
+        let ont_s = include_str!("../ont/owl-xml/o10.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
         assert_eq!(ont.declare_class().count(), 10);
@@ -1136,7 +1136,7 @@ mod test {
 
     #[test]
     fn test_one_property() {
-        let ont_s = include_str!("../ont/owl-xml/one-oproperty.owl");
+        let ont_s = include_str!("../ont/owl-xml/one-oproperty.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
         assert_eq!(ont.declare_object_property().count(), 1);
@@ -1144,7 +1144,7 @@ mod test {
 
     #[test]
     fn test_one_subclass() {
-        let ont_s = include_str!("../ont/owl-xml/one-subclass.owl");
+        let ont_s = include_str!("../ont/owl-xml/one-subclass.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
         assert_eq!(ont.sub_class().count(), 1);
@@ -1152,7 +1152,7 @@ mod test {
 
     #[test]
     fn test_one_some() {
-        let ont_s = include_str!("../ont/owl-xml/one-some.owl");
+        let ont_s = include_str!("../ont/owl-xml/one-some.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
         assert_eq!(ont.sub_class().count(), 1);
@@ -1161,7 +1161,7 @@ mod test {
 
     #[test]
     fn test_one_only() {
-        let ont_s = include_str!("../ont/owl-xml/one-only.owl");
+        let ont_s = include_str!("../ont/owl-xml/one-only.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
         assert_eq!(ont.sub_class().count(), 1);
@@ -1171,7 +1171,7 @@ mod test {
 
     #[test]
     fn test_one_and() {
-        let ont_s = include_str!("../ont/owl-xml/one-and.owl");
+        let ont_s = include_str!("../ont/owl-xml/one-and.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
         assert_eq!(ont.sub_class().count(), 1);
@@ -1179,7 +1179,7 @@ mod test {
 
     #[test]
     fn test_one_or() {
-        let ont_s = include_str!("../ont/owl-xml/one-or.owl");
+        let ont_s = include_str!("../ont/owl-xml/one-or.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
         assert_eq!(ont.sub_class().count(), 1);
@@ -1187,7 +1187,7 @@ mod test {
 
     #[test]
     fn test_one_not() {
-        let ont_s = include_str!("../ont/owl-xml/one-not.owl");
+        let ont_s = include_str!("../ont/owl-xml/one-not.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
         assert_eq!(ont.sub_class().count(), 1);
@@ -1195,14 +1195,14 @@ mod test {
 
     #[test]
     fn test_one_annotation_property() {
-        let ont_s = include_str!("../ont/owl-xml/one-annotation-property.owl");
+        let ont_s = include_str!("../ont/owl-xml/one-annotation-property.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
         assert_eq!(ont.declare_annotation_property().count(), 1);
     }
 
     #[test]
     fn test_one_annotation() {
-        let ont_s = include_str!("../ont/owl-xml/one-annotation.owl");
+        let ont_s = include_str!("../ont/owl-xml/one-annotation.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
         assert_eq!(ont.declare_annotation_property().count(), 1);
         assert_eq!(ont.annotation_assertion().count(), 1);
@@ -1210,7 +1210,7 @@ mod test {
 
     #[test]
     fn test_one_label_non_abbreviated() {
-        let ont_s = include_str!("../ont/owl-xml/one-label-non-abbreviated-iri.owl");
+        let ont_s = include_str!("../ont/owl-xml/one-label-non-abbreviated-iri.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
         assert_eq!(ont.annotation_assertion().count(), 1);
@@ -1218,7 +1218,7 @@ mod test {
 
     #[test]
     fn test_one_label() {
-        let ont_s = include_str!("../ont/owl-xml/one-label.owl");
+        let ont_s = include_str!("../ont/owl-xml/one-label.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
         assert_eq!(ont.annotation_assertion().count(), 1);
@@ -1226,7 +1226,7 @@ mod test {
 
     #[test]
     fn test_one_ontology_annotation() {
-        let ont_s = include_str!("../ont/owl-xml/one-ontology-annotation.owl");
+        let ont_s = include_str!("../ont/owl-xml/one-ontology-annotation.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
         assert_eq!(ont.ontology_annotation().count(), 1);
@@ -1234,7 +1234,7 @@ mod test {
 
     #[test]
     fn test_one_equivalent_class() {
-        let ont_s = include_str!("../ont/owl-xml/one-equivalent.owl");
+        let ont_s = include_str!("../ont/owl-xml/one-equivalent.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
         assert_eq!(ont.equivalent_class().count(), 1);
@@ -1242,7 +1242,7 @@ mod test {
 
     #[test]
     fn test_one_disjoint_class() {
-        let ont_s = include_str!("../ont/owl-xml/one-disjoint.owl");
+        let ont_s = include_str!("../ont/owl-xml/one-disjoint.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
         assert_eq!(ont.disjoint_class().count(), 1);
@@ -1250,7 +1250,7 @@ mod test {
 
     #[test]
     fn test_disjoint_union() {
-        let ont_s = include_str!("../ont/owl-xml/disjoint-union.owl");
+        let ont_s = include_str!("../ont/owl-xml/disjoint-union.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
         assert_eq!(ont.disjoint_union().count(), 1);
@@ -1258,7 +1258,7 @@ mod test {
 
     #[test]
     fn test_one_sub_property() {
-        let ont_s = include_str!("../ont/owl-xml/one-suboproperty.owl");
+        let ont_s = include_str!("../ont/owl-xml/one-suboproperty.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
         assert_eq!(ont.sub_object_property().count(), 1);
@@ -1266,7 +1266,7 @@ mod test {
 
     #[test]
     fn test_one_inverse_property() {
-        let ont_s = include_str!("../ont/owl-xml/inverse-properties.owl");
+        let ont_s = include_str!("../ont/owl-xml/inverse-properties.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
         assert_eq!(ont.inverse_object_properties().count(), 1);
@@ -1274,7 +1274,7 @@ mod test {
 
     #[test]
     fn test_one_transitive_property() {
-        let ont_s = include_str!("../ont/owl-xml/transitive-properties.owl");
+        let ont_s = include_str!("../ont/owl-xml/transitive-properties.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
         assert_eq!(ont.transitive_object_property().count(), 1);
@@ -1282,7 +1282,7 @@ mod test {
 
     #[test]
     fn test_subproperty_chain() {
-        let ont_s = include_str!("../ont/owl-xml/subproperty-chain.owl");
+        let ont_s = include_str!("../ont/owl-xml/subproperty-chain.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
         assert_eq!(ont.sub_object_property().count(), 1);
@@ -1290,7 +1290,7 @@ mod test {
 
     #[test]
     fn test_subproperty_chain_with_inverse() {
-    let ont_s = include_str!("../ont/owl-xml/subproperty-chain-with-inverse.owl");
+    let ont_s = include_str!("../ont/owl-xml/subproperty-chain-with-inverse.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
         assert_eq!(ont.sub_object_property().count(), 1);
@@ -1298,7 +1298,7 @@ mod test {
 
     #[test]
     fn test_annotation_on_annotation() {
-        let ont_s = include_str!("../ont/owl-xml/annotation-with-annotation.owl");
+        let ont_s = include_str!("../ont/owl-xml/annotation-with-annotation.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
         let mut ann_i = ont.annotated_axiom(AxiomKind::AnnotationAssertion);
@@ -1308,7 +1308,7 @@ mod test {
 
     #[test]
     fn annotated_transitive() {
-        let ont_s = include_str!("../ont/owl-xml/annotation-on-transitive.owl");
+        let ont_s = include_str!("../ont/owl-xml/annotation-on-transitive.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
         let annotated_axiom = ont
@@ -1320,7 +1320,7 @@ mod test {
 
     #[test]
     fn two_annotated_transitive() {
-        let ont_s = include_str!("../ont/owl-xml/two-annotation-on-transitive.owl");
+        let ont_s = include_str!("../ont/owl-xml/two-annotation-on-transitive.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
         let annotated_axiom = ont
@@ -1332,7 +1332,7 @@ mod test {
     }
     #[test]
     fn test_sub_annotation() {
-        let ont_s = include_str!("../ont/owl-xml/sub-annotation.owl");
+        let ont_s = include_str!("../ont/owl-xml/sub-annotation.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
         assert_eq!(ont.sub_annotation_property_of().count(), 1);
@@ -1340,7 +1340,7 @@ mod test {
 
     #[test]
     fn test_annotation_domain() {
-        let ont_s = include_str!("../ont/owl-xml/annotation-domain.owl");
+        let ont_s = include_str!("../ont/owl-xml/annotation-domain.owx");
         let (ont,_) = read_ok(&mut ont_s.as_bytes());
 
         assert_eq!(ont.annotation_property_domain().count(), 1);
@@ -1348,7 +1348,7 @@ mod test {
 
     #[test]
     fn test_annotation_range() {
-        let ont_s = include_str!("../ont/owl-xml/annotation-range.owl");
+        let ont_s = include_str!("../ont/owl-xml/annotation-range.owx");
         let (ont,_) = read_ok(&mut ont_s.as_bytes());
 
         assert_eq!(ont.annotation_property_range().count(), 1);
@@ -1356,7 +1356,7 @@ mod test {
 
     #[test]
     fn test_data_property() {
-        let ont_s = include_str!("../ont/owl-xml/data-property.owl");
+        let ont_s = include_str!("../ont/owl-xml/data-property.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
         assert_eq!(ont.declare_data_property().count(), 1);
@@ -1364,7 +1364,7 @@ mod test {
 
     #[test]
     fn test_literal_escaped() {
-        let ont_s = include_str!("../ont/owl-xml/literal-escaped.owl");
+        let ont_s = include_str!("../ont/owl-xml/literal-escaped.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
         let aa = ont.annotation_assertion().next().unwrap();
@@ -1376,7 +1376,7 @@ mod test {
 
     #[test]
     fn test_named_individual() {
-        let ont_s = include_str!("../ont/owl-xml/named-individual.owl");
+        let ont_s = include_str!("../ont/owl-xml/named-individual.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
         assert_eq!(ont.declare_named_individual().count(), 1);
@@ -1384,7 +1384,7 @@ mod test {
 
     #[test]
     fn test_import() {
-        let ont_s = include_str!("../ont/owl-xml/import.owl");
+        let ont_s = include_str!("../ont/owl-xml/import.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
         assert_eq!(ont.import().count(), 1);
@@ -1392,7 +1392,7 @@ mod test {
 
     #[test]
     fn test_datatype() {
-        let ont_s = include_str!("../ont/owl-xml/datatype.owl");
+        let ont_s = include_str!("../ont/owl-xml/datatype.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
         assert_eq!(ont.declare_datatype().count(), 1);
@@ -1400,7 +1400,7 @@ mod test {
 
     #[test]
     fn test_has_value() {
-        let ont_s = include_str!("../ont/owl-xml/object-has-value.owl");
+        let ont_s = include_str!("../ont/owl-xml/object-has-value.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
         let ss = ont.sub_class().next().unwrap();
@@ -1412,7 +1412,7 @@ mod test {
 
     #[test]
     fn test_one_of() {
-        let ont_s = include_str!("../ont/owl-xml/object-one-of.owl");
+        let ont_s = include_str!("../ont/owl-xml/object-one-of.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
         let ss = ont.sub_class().next().unwrap();
@@ -1423,7 +1423,7 @@ mod test {
 
     #[test]
     fn test_has_self() {
-        let ont_s = include_str!("../ont/owl-xml/object-has-self.owl");
+        let ont_s = include_str!("../ont/owl-xml/object-has-self.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
         let ss = ont.sub_class().next().unwrap();
@@ -1442,7 +1442,7 @@ mod test {
 
     #[test]
     fn test_inverse() {
-        let ont_s = include_str!("../ont/owl-xml/some-inverse.owl");
+        let ont_s = include_str!("../ont/owl-xml/some-inverse.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
         assert_eq!(ont.sub_class().count(), 1);
@@ -1465,7 +1465,7 @@ mod test {
 
     #[test]
     fn test_min_cardinality() {
-        let ont_s = include_str!("../ont/owl-xml/object-min-cardinality.owl");
+        let ont_s = include_str!("../ont/owl-xml/object-min-cardinality.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
         assert_eq!(ont.sub_class().count(), 1);
@@ -1497,7 +1497,7 @@ mod test {
 
     #[test]
     fn test_unqualified_cardinality() {
-        let ont_s = include_str!("../ont/owl-xml/object-unqualified-max-cardinality.owl");
+        let ont_s = include_str!("../ont/owl-xml/object-unqualified-max-cardinality.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
         assert_eq!(ont.sub_class().count(), 1);
@@ -1505,7 +1505,7 @@ mod test {
 
     #[test]
     fn test_max_cardinality() {
-        let ont_s = include_str!("../ont/owl-xml/object-max-cardinality.owl");
+        let ont_s = include_str!("../ont/owl-xml/object-max-cardinality.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
         assert_eq!(ont.sub_class().count(), 1);
@@ -1537,7 +1537,7 @@ mod test {
 
     #[test]
     fn test_exact_cardinality() {
-        let ont_s = include_str!("../ont/owl-xml/object-exact-cardinality.owl");
+        let ont_s = include_str!("../ont/owl-xml/object-exact-cardinality.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
         assert_eq!(ont.sub_class().count(), 1);
@@ -1569,7 +1569,7 @@ mod test {
 
     #[test]
     fn datatype_alias() {
-        let ont_s = include_str!("../ont/owl-xml/datatype-alias.owl");
+        let ont_s = include_str!("../ont/owl-xml/datatype-alias.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
         assert_eq!(ont.datatype_definition().count(), 1);
@@ -1593,7 +1593,7 @@ mod test {
 
     #[test]
     fn datatype_intersection() {
-        let ont_s = include_str!("../ont/owl-xml/datatype-intersection.owl");
+        let ont_s = include_str!("../ont/owl-xml/datatype-intersection.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
         assert_eq!(ont.datatype_definition().count(), 1);
@@ -1601,7 +1601,7 @@ mod test {
 
     #[test]
     fn datatype_union() {
-        let ont_s = include_str!("../ont/owl-xml/datatype-union.owl");
+        let ont_s = include_str!("../ont/owl-xml/datatype-union.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
         assert_eq!(ont.datatype_definition().count(), 1);
@@ -1609,7 +1609,7 @@ mod test {
 
     #[test]
     fn datatype_complement() {
-        let ont_s = include_str!("../ont/owl-xml/datatype-complement.owl");
+        let ont_s = include_str!("../ont/owl-xml/datatype-complement.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
         assert_eq!(ont.datatype_definition().count(), 1);
@@ -1617,7 +1617,7 @@ mod test {
 
     #[test]
     fn datatype_oneof() {
-        let ont_s = include_str!("../ont/owl-xml/datatype-oneof.owl");
+        let ont_s = include_str!("../ont/owl-xml/datatype-oneof.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
         assert_eq!(ont.datatype_definition().count(), 1);
@@ -1625,7 +1625,7 @@ mod test {
 
     #[test]
     fn data_some() {
-        let ont_s = include_str!("../ont/owl-xml/data-some.owl");
+        let ont_s = include_str!("../ont/owl-xml/data-some.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
         assert_eq!(ont.sub_class().count(), 1);
@@ -1633,7 +1633,7 @@ mod test {
 
     #[test]
     fn facet_restriction() {
-        let ont_s = include_str!("../ont/owl-xml/facet-restriction.owl");
+        let ont_s = include_str!("../ont/owl-xml/facet-restriction.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
         assert_eq!(ont.sub_class().count(), 1);
@@ -1641,7 +1641,7 @@ mod test {
 
     #[test]
     fn data_only() {
-        let ont_s = include_str!("../ont/owl-xml/data-only.owl");
+        let ont_s = include_str!("../ont/owl-xml/data-only.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
         let cl = &ont.sub_class().next().unwrap().sup;
@@ -1659,7 +1659,7 @@ mod test {
 
     #[test]
     fn data_exact_cardinality() {
-        let ont_s = include_str!("../ont/owl-xml/data-exact-cardinality.owl");
+        let ont_s = include_str!("../ont/owl-xml/data-exact-cardinality.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
         let cl = &ont.sub_class().next().unwrap().sup;
@@ -1678,7 +1678,7 @@ mod test {
 
     #[test]
     fn data_unqualified_cardinality() {
-        let ont_s = include_str!("../ont/owl-xml/data-unqualified-exact.owl");
+        let ont_s = include_str!("../ont/owl-xml/data-unqualified-exact.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
         let cl = &ont.sub_class().next().unwrap().sup;
         assert_eq!(ont.sub_class().count(), 1);
@@ -1699,7 +1699,7 @@ mod test {
 
     #[test]
     fn data_min_cardinality() {
-        let ont_s = include_str!("../ont/owl-xml/data-min-cardinality.owl");
+        let ont_s = include_str!("../ont/owl-xml/data-min-cardinality.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
         let cl = &ont.sub_class().next().unwrap().sup;
@@ -1718,7 +1718,7 @@ mod test {
 
     #[test]
     fn data_max_cardinality() {
-        let ont_s = include_str!("../ont/owl-xml/data-max-cardinality.owl");
+        let ont_s = include_str!("../ont/owl-xml/data-max-cardinality.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
         let cl = &ont.sub_class().next().unwrap().sup;
@@ -1737,7 +1737,7 @@ mod test {
 
     #[test]
     fn data_has_value() {
-        let ont_s = include_str!("../ont/owl-xml/data-has-value.owl");
+        let ont_s = include_str!("../ont/owl-xml/data-has-value.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
         assert_eq!(1, ont.sub_class().count());
@@ -1745,7 +1745,7 @@ mod test {
 
     #[test]
     fn class_assertion() {
-        let ont_s = include_str!("../ont/owl-xml/class-assertion.owl");
+        let ont_s = include_str!("../ont/owl-xml/class-assertion.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
         assert_eq!(1, ont.class_assertion().count());
@@ -1753,7 +1753,7 @@ mod test {
 
     #[test]
     fn different_individuals() {
-        let ont_s = include_str!("../ont/owl-xml/different-individual.owl");
+        let ont_s = include_str!("../ont/owl-xml/different-individual.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
         assert_eq!(1, ont.different_individuals().count());
@@ -1764,7 +1764,7 @@ mod test {
 
     #[test]
     fn family() {
-        let ont_s = include_str!("../ont/owl-xml/family.owl");
+        let ont_s = include_str!("../ont/owl-xml/family.owx");
         let (_, _) = read_ok(&mut ont_s.as_bytes());
     }
 }

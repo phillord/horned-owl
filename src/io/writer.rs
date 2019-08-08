@@ -887,7 +887,7 @@ mod test {
     #[test]
     fn round_one_ont() {
         let (ont_orig, _prefix_orig, ont_round, _prefix_round) =
-            roundtrip(include_str!("../ont/owl-xml/one-ont.owl"));
+            roundtrip(include_str!("../ont/owl-xml/one-ont.owx"));
 
         assert_eq!(ont_orig.id.iri, ont_round.id.iri);
     }
@@ -895,7 +895,7 @@ mod test {
     #[test]
     fn round_one_ont_prefix() {
         let (_ont_orig, prefix_orig, _ont_round, prefix_round) =
-            roundtrip(include_str!("../ont/owl-xml/one-ont.owl"));
+            roundtrip(include_str!("../ont/owl-xml/one-ont.owx"));
 
         let prefix_orig_map: HashMap<&String, &String> = prefix_orig.mappings().collect();
 
@@ -907,392 +907,392 @@ mod test {
     #[test]
     fn round_one_subclass() {
         let (ont_orig, _prefix_orig, ont_round, _prefix_round) =
-            roundtrip(include_str!("../ont/owl-xml/one-subclass.owl"));
+            roundtrip(include_str!("../ont/owl-xml/one-subclass.owx"));
 
         assert_eq!(ont_orig, ont_round);
     }
 
     #[test]
     fn round_one_some() {
-        assert_round(include_str!("../ont/owl-xml/one-some.owl"));
+        assert_round(include_str!("../ont/owl-xml/one-some.owx"));
     }
 
     #[test]
     fn round_one_only() {
-        assert_round(include_str!("../ont/owl-xml/one-only.owl"));
+        assert_round(include_str!("../ont/owl-xml/one-only.owx"));
     }
 
     #[test]
     fn round_one_and() {
-        assert_round(include_str!("../ont/owl-xml/one-and.owl"));
+        assert_round(include_str!("../ont/owl-xml/one-and.owx"));
     }
 
     #[test]
     fn round_one_or() {
-        assert_round(include_str!("../ont/owl-xml/one-or.owl"));
+        assert_round(include_str!("../ont/owl-xml/one-or.owx"));
     }
 
     #[test]
     fn round_one_not() {
-        assert_round(include_str!("../ont/owl-xml/one-not.owl"));
+        assert_round(include_str!("../ont/owl-xml/one-not.owx"));
     }
 
     #[test]
     fn round_one_annotation_property() {
-        assert_round(include_str!("../ont/owl-xml/one-annotation-property.owl"));
+        assert_round(include_str!("../ont/owl-xml/one-annotation-property.owx"));
     }
 
     #[test]
     fn round_one_annotation() {
-        assert_round(include_str!("../ont/owl-xml/one-annotation.owl"));
+        assert_round(include_str!("../ont/owl-xml/one-annotation.owx"));
     }
 
     #[test]
     fn round_annotation_domain() {
-        assert_round(include_str!("../ont/owl-xml/annotation-domain.owl"));
+        assert_round(include_str!("../ont/owl-xml/annotation-domain.owx"));
     }
 
     #[test]
     fn round_annotation_range() {
-        assert_round(include_str!("../ont/owl-xml/annotation-range.owl"));
+        assert_round(include_str!("../ont/owl-xml/annotation-range.owx"));
     }
 
     #[test]
     fn round_one_label() {
-        assert_round(include_str!("../ont/owl-xml/one-label.owl"));
+        assert_round(include_str!("../ont/owl-xml/one-label.owx"));
     }
 
     #[test]
     fn round_one_comment() {
-        assert_round(include_str!("../ont/owl-xml/one-comment.owl"));
+        assert_round(include_str!("../ont/owl-xml/one-comment.owx"));
     }
 
     #[test]
     fn round_one_ontology_annotation() {
-        assert_round(include_str!("../ont/owl-xml/one-ontology-annotation.owl"));
+        assert_round(include_str!("../ont/owl-xml/one-ontology-annotation.owx"));
     }
 
     #[test]
     fn round_one_equivalent_class() {
-        assert_round(include_str!("../ont/owl-xml/one-equivalent.owl"));
+        assert_round(include_str!("../ont/owl-xml/one-equivalent.owx"));
     }
 
     #[test]
     fn round_one_disjoint_class() {
-        assert_round(include_str!("../ont/owl-xml/one-disjoint.owl"));
+        assert_round(include_str!("../ont/owl-xml/one-disjoint.owx"));
     }
 
     #[test]
     fn round_disjoint_union() {
-        assert_round(include_str!("../ont/owl-xml/disjoint-union.owl"));
+        assert_round(include_str!("../ont/owl-xml/disjoint-union.owx"));
     }
 
     #[test]
     fn round_one_sub_property() {
-        assert_round(include_str!("../ont/owl-xml/one-suboproperty.owl"));
+        assert_round(include_str!("../ont/owl-xml/one-suboproperty.owx"));
     }
 
     #[test]
     fn round_one_inverse() {
-        assert_round(include_str!("../ont/owl-xml/inverse-properties.owl"));
+        assert_round(include_str!("../ont/owl-xml/inverse-properties.owx"));
     }
 
     #[test]
     fn round_one_transitive() {
-        assert_round(include_str!("../ont/owl-xml/transitive-properties.owl"));
+        assert_round(include_str!("../ont/owl-xml/transitive-properties.owx"));
     }
 
     #[test]
     fn round_one_annotated_transitive() {
-        assert_round(include_str!("../ont/owl-xml/annotation-on-transitive.owl"));
+        assert_round(include_str!("../ont/owl-xml/annotation-on-transitive.owx"));
     }
 
     #[test]
     fn round_one_subproperty_chain() {
-        assert_round(include_str!("../ont/owl-xml/subproperty-chain.owl"));
+        assert_round(include_str!("../ont/owl-xml/subproperty-chain.owx"));
     }
 
     #[test]
     fn round_one_subproperty_chain_with_inverse() {
-        assert_round(include_str!("../ont/owl-xml/subproperty-chain-with-inverse.owl"));
+        assert_round(include_str!("../ont/owl-xml/subproperty-chain-with-inverse.owx"));
     }
 
     #[test]
     fn round_annotation_on_annotation() {
         assert_round(include_str!(
-            "../ont/owl-xml/annotation-with-annotation.owl"
+            "../ont/owl-xml/annotation-with-annotation.owx"
         ));
     }
 
     #[test]
     fn round_sub_annotation() {
-        assert_round(include_str!("../ont/owl-xml/sub-annotation.owl"));
+        assert_round(include_str!("../ont/owl-xml/sub-annotation.owx"));
     }
 
     #[test]
     fn round_data_property() {
-        assert_round(include_str!("../ont/owl-xml/data-property.owl"));
+        assert_round(include_str!("../ont/owl-xml/data-property.owx"));
     }
 
     #[test]
     fn round_literal_escaped() {
-        assert_round(include_str!("../ont/owl-xml/literal-escaped.owl"));
+        assert_round(include_str!("../ont/owl-xml/literal-escaped.owx"));
     }
 
     #[test]
     fn round_named_individual() {
-        assert_round(include_str!("../ont/owl-xml/named-individual.owl"));
+        assert_round(include_str!("../ont/owl-xml/named-individual.owx"));
     }
 
     #[test]
     fn round_import() {
-        assert_round(include_str!("../ont/owl-xml/import.owl"));
+        assert_round(include_str!("../ont/owl-xml/import.owx"));
     }
 
     #[test]
     fn datatype() {
-        assert_round(include_str!("../ont/owl-xml/datatype.owl"));
+        assert_round(include_str!("../ont/owl-xml/datatype.owx"));
     }
 
     #[test]
     fn object_has_value() {
-        assert_round(include_str!("../ont/owl-xml/object-has-value.owl"));
+        assert_round(include_str!("../ont/owl-xml/object-has-value.owx"));
     }
 
     #[test]
     fn object_one_of() {
-        assert_round(include_str!("../ont/owl-xml/object-one-of.owl"));
+        assert_round(include_str!("../ont/owl-xml/object-one-of.owx"));
     }
 
     #[test]
     fn inverse() {
-        assert_round(include_str!("../ont/owl-xml/some-inverse.owl"));
+        assert_round(include_str!("../ont/owl-xml/some-inverse.owx"));
     }
 
     #[test]
     fn object_unqualified_cardinality() {
         assert_round(include_str!(
-            "../ont/owl-xml/object-unqualified-max-cardinality.owl"
+            "../ont/owl-xml/object-unqualified-max-cardinality.owx"
         ));
     }
 
     #[test]
     fn object_min_cardinality() {
-        assert_round(include_str!("../ont/owl-xml/object-min-cardinality.owl"));
+        assert_round(include_str!("../ont/owl-xml/object-min-cardinality.owx"));
     }
 
     #[test]
     fn object_max_cardinality() {
-        assert_round(include_str!("../ont/owl-xml/object-max-cardinality.owl"));
+        assert_round(include_str!("../ont/owl-xml/object-max-cardinality.owx"));
     }
 
     #[test]
     fn object_exact_cardinality() {
-        assert_round(include_str!("../ont/owl-xml/object-exact-cardinality.owl"));
+        assert_round(include_str!("../ont/owl-xml/object-exact-cardinality.owx"));
     }
 
     #[test]
     fn datatype_alias() {
-        assert_round(include_str!("../ont/owl-xml/datatype-alias.owl"));
+        assert_round(include_str!("../ont/owl-xml/datatype-alias.owx"));
     }
 
     #[test]
     fn datatype_intersection() {
-        assert_round(include_str!("../ont/owl-xml/datatype-intersection.owl"));
+        assert_round(include_str!("../ont/owl-xml/datatype-intersection.owx"));
     }
 
     #[test]
     fn datatype_union() {
-        assert_round(include_str!("../ont/owl-xml/datatype-union.owl"));
+        assert_round(include_str!("../ont/owl-xml/datatype-union.owx"));
     }
 
     #[test]
     fn datatype_complement() {
-        assert_round(include_str!("../ont/owl-xml/datatype-complement.owl"));
+        assert_round(include_str!("../ont/owl-xml/datatype-complement.owx"));
     }
 
     #[test]
     fn datatype_oneof() {
-        assert_round(include_str!("../ont/owl-xml/datatype-oneof.owl"));
+        assert_round(include_str!("../ont/owl-xml/datatype-oneof.owx"));
     }
 
     #[test]
     fn datatype_some() {
-        assert_round(include_str!("../ont/owl-xml/data-some.owl"));
+        assert_round(include_str!("../ont/owl-xml/data-some.owx"));
     }
 
     #[test]
     fn facet_restriction() {
-        assert_round(include_str!("../ont/owl-xml/facet-restriction.owl"));
+        assert_round(include_str!("../ont/owl-xml/facet-restriction.owx"));
     }
 
     #[test]
     fn data_only() {
-        assert_round(include_str!("../ont/owl-xml/data-only.owl"));
+        assert_round(include_str!("../ont/owl-xml/data-only.owx"));
     }
     #[test]
     fn data_exact_cardinality() {
-        assert_round(include_str!("../ont/owl-xml/data-exact-cardinality.owl"));
+        assert_round(include_str!("../ont/owl-xml/data-exact-cardinality.owx"));
     }
 
     #[test]
     fn data_has_value() {
-        assert_round(include_str!("../ont/owl-xml/data-has-value.owl"));
+        assert_round(include_str!("../ont/owl-xml/data-has-value.owx"));
     }
 
     #[test]
     fn data_max_cardinality() {
-        assert_round(include_str!("../ont/owl-xml/data-max-cardinality.owl"));
+        assert_round(include_str!("../ont/owl-xml/data-max-cardinality.owx"));
     }
 
     #[test]
     fn data_min_cardinality() {
-        assert_round(include_str!("../ont/owl-xml/data-min-cardinality.owl"));
+        assert_round(include_str!("../ont/owl-xml/data-min-cardinality.owx"));
     }
 
     #[test]
     fn class_assertion() {
-        assert_round(include_str!("../ont/owl-xml/class-assertion.owl"));
+        assert_round(include_str!("../ont/owl-xml/class-assertion.owx"));
     }
 
     #[test]
     fn data_property_assertion() {
-        assert_round(include_str!("../ont/owl-xml/data-property-assertion.owl"));
+        assert_round(include_str!("../ont/owl-xml/data-property-assertion.owx"));
     }
 
     #[test]
     fn same_individual() {
-        assert_round(include_str!("../ont/owl-xml/same-individual.owl"));
+        assert_round(include_str!("../ont/owl-xml/same-individual.owx"));
     }
 
     #[test]
     fn different_individuals() {
-        assert_round(include_str!("../ont/owl-xml/different-individual.owl"));
+        assert_round(include_str!("../ont/owl-xml/different-individual.owx"));
     }
 
     #[test]
     fn negative_data_property_assertion() {
         assert_round(include_str!(
-            "../ont/owl-xml/negative-data-property-assertion.owl"
+            "../ont/owl-xml/negative-data-property-assertion.owx"
         ));
     }
 
     #[test]
     fn negative_object_property_assertion() {
         assert_round(include_str!(
-            "../ont/owl-xml/negative-object-property-assertion.owl"
+            "../ont/owl-xml/negative-object-property-assertion.owx"
         ));
     }
 
     #[test]
     fn object_property_assertion() {
-        assert_round(include_str!("../ont/owl-xml/object-property-assertion.owl"));
+        assert_round(include_str!("../ont/owl-xml/object-property-assertion.owx"));
     }
 
     #[test]
     fn data_has_key() {
-        assert_round(include_str!("../ont/owl-xml/data-has-key.owl"));
+        assert_round(include_str!("../ont/owl-xml/data-has-key.owx"));
     }
 
     #[test]
     fn data_property_disjoint() {
-        assert_round(include_str!("../ont/owl-xml/data-property-disjoint.owl"));
+        assert_round(include_str!("../ont/owl-xml/data-property-disjoint.owx"));
     }
 
     #[test]
     fn data_property_domain() {
-        assert_round(include_str!("../ont/owl-xml/data-property-domain.owl"));
+        assert_round(include_str!("../ont/owl-xml/data-property-domain.owx"));
     }
 
     #[test]
     fn data_property_equivalent() {
-        assert_round(include_str!("../ont/owl-xml/data-property-equivalent.owl"));
+        assert_round(include_str!("../ont/owl-xml/data-property-equivalent.owx"));
     }
 
     #[test]
     fn data_property_functional() {
-        assert_round(include_str!("../ont/owl-xml/data-property-functional.owl"));
+        assert_round(include_str!("../ont/owl-xml/data-property-functional.owx"));
     }
 
     #[test]
     fn data_property_range() {
-        assert_round(include_str!("../ont/owl-xml/data-property-range.owl"));
+        assert_round(include_str!("../ont/owl-xml/data-property-range.owx"));
     }
 
     #[test]
     fn data_property_sub() {
-        assert_round(include_str!("../ont/owl-xml/data-property-sub.owl"));
+        assert_round(include_str!("../ont/owl-xml/data-property-sub.owx"));
     }
 
     #[test]
     fn disjoint_object_properties() {
         assert_round(include_str!(
-            "../ont/owl-xml/disjoint-object-properties.owl"
+            "../ont/owl-xml/disjoint-object-properties.owx"
         ));
     }
 
     #[test]
     fn equivalent_object_properties() {
         assert_round(include_str!(
-            "../ont/owl-xml/equivalent_object_properties.owl"
+            "../ont/owl-xml/equivalent_object_properties.owx"
         ));
     }
 
     #[test]
     fn object_has_key() {
-        assert_round(include_str!("../ont/owl-xml/object-has-key.owl"));
+        assert_round(include_str!("../ont/owl-xml/object-has-key.owx"));
     }
 
     #[test]
     fn object_property_asymmetric() {
         assert_round(include_str!(
-            "../ont/owl-xml/object-property-asymmetric.owl"
+            "../ont/owl-xml/object-property-asymmetric.owx"
         ));
     }
 
     #[test]
     fn object_property_domain() {
-        assert_round(include_str!("../ont/owl-xml/object-property-domain.owl"));
+        assert_round(include_str!("../ont/owl-xml/object-property-domain.owx"));
     }
 
     #[test]
     fn object_property_functional() {
         assert_round(include_str!(
-            "../ont/owl-xml/object-property-functional.owl"
+            "../ont/owl-xml/object-property-functional.owx"
         ));
     }
 
     #[test]
     fn object_property_inverse_functional() {
         assert_round(include_str!(
-            "../ont/owl-xml/object-property-inverse-functional.owl"
+            "../ont/owl-xml/object-property-inverse-functional.owx"
         ));
     }
 
     #[test]
     fn object_property_irreflexive() {
         assert_round(include_str!(
-            "../ont/owl-xml/object-property-irreflexive.owl"
+            "../ont/owl-xml/object-property-irreflexive.owx"
         ));
     }
 
     #[test]
     fn object_property_range() {
-        assert_round(include_str!("../ont/owl-xml/object-property-range.owl"));
+        assert_round(include_str!("../ont/owl-xml/object-property-range.owx"));
     }
 
     #[test]
     fn object_property_reflexive() {
-        assert_round(include_str!("../ont/owl-xml/object-property-reflexive.owl"));
+        assert_round(include_str!("../ont/owl-xml/object-property-reflexive.owx"));
     }
 
     #[test]
     fn object_property_symmetric() {
-        assert_round(include_str!("../ont/owl-xml/object-property-symmetric.owl"));
+        assert_round(include_str!("../ont/owl-xml/object-property-symmetric.owx"));
     }
 
     #[test]
     fn family() {
-        assert_round(include_str!("../ont/owl-xml/family.owl"));
+        assert_round(include_str!("../ont/owl-xml/family.owx"));
     }
 }
