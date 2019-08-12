@@ -28,18 +28,12 @@ enum ReadError {
     #[fail(display = "Missing element: Expected {} at {}", tag, pos)]
     MissingElement { tag: String, pos: usize },
 
-    #[fail(
-        display = "Missing attribute: Expected {} at {}",
-        attribute,
-        pos
-    )]
+    #[fail(display = "Missing attribute: Expected {} at {}", attribute, pos)]
     MissingAttribute { attribute: String, pos: usize },
 
     #[fail(
         display = "Unknown Entity: Expected Kind of {}, found {} at {}",
-        kind,
-        found,
-        pos
+        kind, found, pos
     )]
     UnknownEntity {
         kind: String,
@@ -156,7 +150,8 @@ fn read_event<R: BufRead>(read: &mut Read<R>) -> Result<(Vec<u8>, Event<'static>
     match r {
         Ok((_, Event::Eof)) => Err(ReadError::UnexpectedEof {
             pos: read.reader.buffer_position(),
-        }.into()),
+        }
+        .into()),
         Ok((option_ns, event)) => Ok((option_ns.unwrap_or(b"").to_owned(), event.into_owned())),
         Err(r) => Err(r.into()),
     }
@@ -226,28 +221,32 @@ fn error_missing_end_tag<R: BufRead>(tag: &[u8], r: &mut Read<R>, pos: usize) ->
     ReadError::MissingEndTag {
         tag: r.reader.decode(tag).into_owned(),
         pos,
-    }.into()
+    }
+    .into()
 }
 
 fn error_missing_attribute<A: Into<String>, R: BufRead>(attribute: A, r: &mut Read<R>) -> Error {
     ReadError::MissingAttribute {
         attribute: attribute.into(),
         pos: r.reader.buffer_position(),
-    }.into()
+    }
+    .into()
 }
 
 fn error_unexpected_tag<R: BufRead>(tag: &[u8], r: &mut Read<R>) -> Error {
     ReadError::UnexpectedTag {
         tag: r.reader.decode(tag).into_owned(),
         pos: r.reader.buffer_position(),
-    }.into()
+    }
+    .into()
 }
 
 fn error_unexpected_end_tag<R: BufRead>(tag: &[u8], r: &mut Read<R>) -> Error {
     ReadError::UnexpectedEndTag {
         tag: r.reader.decode(tag).into_owned(),
         pos: r.reader.buffer_position(),
-    }.into()
+    }
+    .into()
 }
 
 fn error_unknown_entity<A: Into<String>, R: BufRead>(
@@ -259,14 +258,16 @@ fn error_unknown_entity<A: Into<String>, R: BufRead>(
         kind: kind.into(),
         found: r.reader.decode(found).into_owned(),
         pos: r.reader.buffer_position(),
-    }.into()
+    }
+    .into()
 }
 
 fn error_missing_element<R: BufRead>(tag: &[u8], r: &mut Read<R>) -> Error {
     ReadError::MissingElement {
         tag: r.reader.decode(tag).into_owned(),
         pos: r.reader.buffer_position(),
-    }.into()
+    }
+    .into()
 }
 
 fn is_owl(ns: &[u8]) -> bool {
@@ -377,14 +378,14 @@ fn axiom_from_start<R: BufRead>(
         b"Annotation" => OntologyAnnotation(Annotation {
             ap: from_start(r, e)?,
             av: from_next(r)?,
-        }).into(),
+        })
+        .into(),
         b"Declaration" => declaration(from_start(r, e)?),
-        b"SubClassOf" => {
-            SubClassOf {
-                sub:from_start(r, e)?,
-                sup:from_next(r)?,
-            }.into()
+        b"SubClassOf" => SubClassOf {
+            sub: from_start(r, e)?,
+            sup: from_next(r)?,
         }
+        .into(),
         b"EquivalentClasses" => {
             EquivalentClasses(from_start_to_end(r, e, b"EquivalentClasses")?).into()
         }
@@ -393,7 +394,8 @@ fn axiom_from_start<R: BufRead>(
         b"SubObjectPropertyOf" => SubObjectPropertyOf {
             sub: from_start(r, e)?,
             sup: from_next(r)?,
-        }.into(),
+        }
+        .into(),
         b"EquivalentObjectProperties" => {
             EquivalentObjectProperties(from_start_to_end(r, e, b"EquivalentObjectProperties")?)
                 .into()
@@ -407,11 +409,13 @@ fn axiom_from_start<R: BufRead>(
         b"ObjectPropertyDomain" => ObjectPropertyDomain {
             ope: from_start(r, e)?,
             ce: from_next(r)?,
-        }.into(),
+        }
+        .into(),
         b"ObjectPropertyRange" => ObjectPropertyRange {
             ope: from_start(r, e)?,
             ce: from_next(r)?,
-        }.into(),
+        }
+        .into(),
         b"FunctionalObjectProperty" => FunctionalObjectProperty(from_start(r, e)?).into(),
         b"InverseFunctionalObjectProperty" => {
             InverseFunctionalObjectProperty(from_start(r, e)?).into()
@@ -424,7 +428,8 @@ fn axiom_from_start<R: BufRead>(
         b"SubDataPropertyOf" => SubDataPropertyOf {
             sub: from_start(r, e)?,
             sup: from_next(r)?,
-        }.into(),
+        }
+        .into(),
         b"EquivalentDataProperties" => {
             EquivalentDataProperties(from_start_to_end(r, e, b"EquivalentDataProperties")?).into()
         }
@@ -434,20 +439,24 @@ fn axiom_from_start<R: BufRead>(
         b"DataPropertyDomain" => DataPropertyDomain {
             dp: from_start(r, e)?,
             ce: from_next(r)?,
-        }.into(),
+        }
+        .into(),
         b"DataPropertyRange" => DataPropertyRange {
             dp: from_start(r, e)?,
             dr: from_next(r)?,
-        }.into(),
+        }
+        .into(),
         b"FunctionalDataProperty" => FunctionalDataProperty(from_start(r, e)?).into(),
         b"DatatypeDefinition" => DatatypeDefinition {
             kind: from_start(r, e)?,
             range: from_next(r)?,
-        }.into(),
+        }
+        .into(),
         b"HasKey" => HasKey {
             ce: from_start(r, e)?,
             pe: from_next(r)?,
-        }.into(),
+        }
+        .into(),
         b"SameIndividual" => SameIndividual(from_start_to_end(r, e, b"SameIndividual")?).into(),
         b"DifferentIndividuals" => {
             DifferentIndividuals(from_start_to_end(r, e, b"DifferentIndividuals")?).into()
@@ -455,27 +464,32 @@ fn axiom_from_start<R: BufRead>(
         b"ClassAssertion" => ClassAssertion {
             ce: from_start(r, e)?,
             i: from_next(r)?,
-        }.into(),
+        }
+        .into(),
         b"ObjectPropertyAssertion" => ObjectPropertyAssertion {
             ope: from_start(r, e)?,
             from: from_next(r)?,
             to: from_next(r)?,
-        }.into(),
+        }
+        .into(),
         b"NegativeObjectPropertyAssertion" => NegativeObjectPropertyAssertion {
             ope: from_start(r, e)?,
             from: from_next(r)?,
             to: from_next(r)?,
-        }.into(),
+        }
+        .into(),
         b"DataPropertyAssertion" => DataPropertyAssertion {
             dp: from_start(r, e)?,
             from: from_next(r)?,
             to: from_next(r)?,
-        }.into(),
+        }
+        .into(),
         b"NegativeDataPropertyAssertion" => NegativeDataPropertyAssertion {
             dp: from_start(r, e)?,
             from: from_next(r)?,
             to: from_next(r)?,
-        }.into(),
+        }
+        .into(),
         b"AnnotationAssertion" => {
             let ap = from_start(r, e)?;
             let subject = from_next(r)?;
@@ -483,24 +497,28 @@ fn axiom_from_start<R: BufRead>(
 
             AnnotationAssertion {
                 subject,
-                ann: Annotation {ap, av},
-            }.into()
+                ann: Annotation { ap, av },
+            }
+            .into()
         }
         b"SubAnnotationPropertyOf" => SubAnnotationPropertyOf {
             sub: from_start(r, e)?,
             sup: from_next(r)?,
-        }.into(),
+        }
+        .into(),
         b"AnnotationPropertyDomain" => AnnotationPropertyDomain {
             ap: from_start(r, e)?,
             iri: from_next(r)?,
-        }.into(),
+        }
+        .into(),
         b"AnnotationPropertyRange" => AnnotationPropertyRange {
-            ap:from_start(r, e)?,
-            iri: from_next(r)?
-        }.into(),
+            ap: from_start(r, e)?,
+            iri: from_next(r)?,
+        }
+        .into(),
         _ => {
             return Err(error_unexpected_tag(axiom_kind, r));
-        },
+        }
     })
 }
 
@@ -592,7 +610,7 @@ fn data_cardinality_restriction<R: BufRead>(
     ))
 }
 
-from_start!{
+from_start! {
     PropertyExpression, r, e,
     {
         Ok(
@@ -753,42 +771,42 @@ from_start! {
     }
 }
 
-from_start!{
+from_start! {
     Class, r, e,
     {
         named_entity_from_start(r, e, b"Class")
     }
 }
 
-from_start!{
+from_start! {
     ObjectProperty, r, e,
     {
         named_entity_from_start(r, e, b"ObjectProperty")
     }
 }
 
-from_start!{
+from_start! {
     DataProperty, r, e,
     {
         named_entity_from_start(r, e, b"DataProperty")
     }
 }
 
-from_start!{
+from_start! {
     NamedIndividual, r, e,
     {
         named_entity_from_start(r, e, b"NamedIndividual")
     }
 }
 
-from_start!{
+from_start! {
     Datatype, r, e,
     {
         named_entity_from_start(r, e, b"Datatype")
     }
 }
 
-from_start!{
+from_start! {
     ObjectPropertyExpression, r, e,
     {
         Ok(
@@ -811,7 +829,7 @@ from_start!{
     }
 }
 
-from_start!{
+from_start! {
     SubObjectPropertyExpression, r, e,
     {
         Ok(
@@ -1112,6 +1130,32 @@ pub mod test {
         let aa = ont.annotated_axiom(AxiomKind::DeclareClass).next().unwrap();
 
         assert_eq!(aa.ann.len(), 1);
+
+        let ann = aa.ann.iter().next().unwrap();
+        assert_eq!(
+            String::from(&ann.ap),
+            "http://www.w3.org/2000/01/rdf-schema#comment"
+        );
+    }
+
+    #[test]
+    fn class_with_two_annotation() {
+        let ont_s = include_str!("../ont/owl-xml/class_with_two_annotations.owx");
+        let (ont, _) = read_ok(&mut ont_s.as_bytes());
+
+        assert_eq!(ont.declare_class().count(), 1);
+
+        dbg!(&ont);
+
+        let aa = ont.annotated_axiom(AxiomKind::DeclareClass).next().unwrap();
+
+        assert_eq!(aa.ann.len(), 2);
+
+        let ann = aa.ann.iter().next().unwrap();
+        assert_eq!(
+            String::from(&ann.ap),
+            "http://www.w3.org/2000/01/rdf-schema#comment"
+        );
     }
 
     #[test]
@@ -1290,7 +1334,7 @@ pub mod test {
 
     #[test]
     fn test_subproperty_chain_with_inverse() {
-    let ont_s = include_str!("../ont/owl-xml/subproperty-chain-with-inverse.owx");
+        let ont_s = include_str!("../ont/owl-xml/subproperty-chain-with-inverse.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
         assert_eq!(ont.sub_object_property().count(), 1);
@@ -1341,7 +1385,7 @@ pub mod test {
     #[test]
     fn test_annotation_domain() {
         let ont_s = include_str!("../ont/owl-xml/annotation-domain.owx");
-        let (ont,_) = read_ok(&mut ont_s.as_bytes());
+        let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
         assert_eq!(ont.annotation_property_domain().count(), 1);
     }
@@ -1349,7 +1393,7 @@ pub mod test {
     #[test]
     fn test_annotation_range() {
         let ont_s = include_str!("../ont/owl-xml/annotation-range.owx");
-        let (ont,_) = read_ok(&mut ont_s.as_bytes());
+        let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
         assert_eq!(ont.annotation_property_range().count(), 1);
     }
@@ -1416,7 +1460,7 @@ pub mod test {
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
         let ss = ont.sub_class().next().unwrap();
-        if let ClassExpression::ObjectOneOf (ref o) = ss.sub {
+        if let ClassExpression::ObjectOneOf(ref o) = ss.sub {
             assert_eq!(o.len(), 2);
         }
     }
@@ -1428,12 +1472,9 @@ pub mod test {
 
         let ss = ont.sub_class().next().unwrap();
         match ss.sup {
-            ClassExpression::ObjectHasSelf(
-                ObjectPropertyExpression::ObjectProperty(ref op)
-            )
-                =>
-                assert_eq!(String::from(op),
-                           "http://example.com/iri#o"),
+            ClassExpression::ObjectHasSelf(ObjectPropertyExpression::ObjectProperty(ref op)) => {
+                assert_eq!(String::from(op), "http://example.com/iri#o")
+            }
             _ => {
                 panic!("Expecting ObjectProperty");
             }

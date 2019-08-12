@@ -25,6 +25,8 @@ sophia = {version="0.3.0", features=["xml"]}
 [dev-dependencies]
 bencher = "0.1.4"
 mktemp = "0.3.1"
+pretty_assertions = "0.6.1"
+slurp = "1.0.1"
 
 [[bench]]
 name = "horned"

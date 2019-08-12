@@ -205,8 +205,8 @@ macro_rules! contents {
 
 macro_rules! content0 {
     ($type:ty) => {
-        contents!{$type, self, &self.0}
-    }
+        contents! {$type, self, &self.0}
+    };
 }
 
 render! {
@@ -299,7 +299,7 @@ impl<'a, A: Render<'a, W>, B: Render<'a, W>, C: Render<'a, W>, W: StdWrite> Rend
     }
 }
 
-render!{
+render! {
     PrefixMapping, self, w, _m,
     {
         for pre in self.mappings() {
@@ -313,7 +313,7 @@ render!{
     }
 }
 
-render!{
+render! {
     String, self, w, _m,
     {
         w.write_event(Event::Text(BytesText::from_plain_str(&self[..])))?;
@@ -321,7 +321,7 @@ render!{
     }
 }
 
-render!{
+render! {
     IRI, self, w, m,
     {
         let iri_st: String = self.into();
@@ -333,19 +333,19 @@ render!{
     }
 }
 
-content0!{DeclareClass}
+content0! {DeclareClass}
 
-content0!{DeclareObjectProperty}
+content0! {DeclareObjectProperty}
 
-content0!{DeclareAnnotationProperty}
+content0! {DeclareAnnotationProperty}
 
-content0!{DeclareDataProperty}
+content0! {DeclareDataProperty}
 
-content0!{DeclareNamedIndividual}
+content0! {DeclareNamedIndividual}
 
-content0!{DeclareDatatype}
+content0! {DeclareDatatype}
 
-render!{
+render! {
     AnnotatedAxiom, self, w, m,
     {
         (
@@ -358,7 +358,7 @@ render!{
     }
 }
 
-render!{
+render! {
     Class, self, w, m,
     {
         with_iri(w, m, b"Class", self)?;
@@ -410,7 +410,7 @@ render! {
     }
 }
 
-render!{
+render! {
     ClassExpression, self, w, m,
     {
         match *self {
@@ -540,9 +540,9 @@ render! {
 
 contents! {OntologyAnnotation, self, (&self.0.ap, &self.0.av)}
 
-contents!{Import, self, String::from(&self.0)}
+contents! {Import, self, String::from(&self.0)}
 
-render!{
+render! {
     PropertyExpression, self, w, m,
     {
         match self {
@@ -552,45 +552,45 @@ render!{
     }
 }
 
-contents!{HasKey, self, (&self.ce, &self.pe)}
+contents! {HasKey, self, (&self.ce, &self.pe)}
 
-content0!{FunctionalDataProperty}
+content0! {FunctionalDataProperty}
 
-contents!{DataPropertyRange, self, (&self.dp, &self.dr)}
+contents! {DataPropertyRange, self, (&self.dp, &self.dr)}
 
-contents!{DataPropertyDomain, self, (&self.dp, &self.ce)}
+contents! {DataPropertyDomain, self, (&self.dp, &self.ce)}
 
-content0!{DisjointDataProperties}
+content0! {DisjointDataProperties}
 
-content0!{EquivalentObjectProperties}
+content0! {EquivalentObjectProperties}
 
-contents!{SubDataPropertyOf, self, (&self.sub, &self.sup)}
+contents! {SubDataPropertyOf, self, (&self.sub, &self.sup)}
 
-content0!{AsymmetricObjectProperty}
+content0! {AsymmetricObjectProperty}
 
-content0!{SymmetricObjectProperty}
+content0! {SymmetricObjectProperty}
 
-content0!{IrreflexiveObjectProperty}
+content0! {IrreflexiveObjectProperty}
 
-content0!{ReflexiveObjectProperty}
+content0! {ReflexiveObjectProperty}
 
-content0!{InverseFunctionalObjectProperty}
+content0! {InverseFunctionalObjectProperty}
 
-content0!{FunctionalObjectProperty}
+content0! {FunctionalObjectProperty}
 
-contents!{ObjectPropertyRange, self, (&self.ope, &self.ce)}
+contents! {ObjectPropertyRange, self, (&self.ope, &self.ce)}
 
-contents!{ObjectPropertyDomain, self, (&self.ope, &self.ce)}
+contents! {ObjectPropertyDomain, self, (&self.ope, &self.ce)}
 
-content0!{DisjointObjectProperties}
+content0! {DisjointObjectProperties}
 
-content0!{EquivalentDataProperties}
+content0! {EquivalentDataProperties}
 
-content0!{SameIndividual}
+content0! {SameIndividual}
 
-content0!{DifferentIndividuals}
+content0! {DifferentIndividuals}
 
-contents!{
+contents! {
     ObjectPropertyAssertion, self,
     (
         &self.ope,
@@ -599,33 +599,33 @@ contents!{
     )
 }
 
-contents!{
+contents! {
     NegativeObjectPropertyAssertion, self,
     (&self.ope, &self.from, &self.to)
 }
 
-contents!{
+contents! {
     DataPropertyAssertion, self,
     (&self.dp, &self.from, &self.to)
 }
 
-contents!{
+contents! {
     NegativeDataPropertyAssertion, self,
     (&self.dp, &self.from, &self.to)
 }
 
-contents!{
+contents! {
     ClassAssertion, self, (&self.ce, &self.i)
 }
 
-contents!{
+contents! {
     AnnotationAssertion, self,
     (&self.ann.ap,
      &self.subject,
      &self.ann.av)
 }
 
-render!{
+render! {
     Literal, self, w, m,
     {
         let mut open = BytesStart::owned_name("Literal");
@@ -651,7 +651,7 @@ render!{
     }
 }
 
-render!{
+render! {
     AnnotationValue, self, w, m,
     {
         match self {
@@ -667,7 +667,7 @@ render!{
     }
 }
 
-render!{
+render! {
     AnnotationProperty, self, w, m,
     {
         with_iri(w, m, b"AnnotationProperty", self)?;
@@ -676,7 +676,7 @@ render!{
     }
 }
 
-render!{
+render! {
     Annotation, self, w, m,
     {
         (&self.ap, &self.av).within(w, m, b"Annotation")?;
@@ -685,7 +685,7 @@ render!{
     }
 }
 
-contents!{
+contents! {
     SubAnnotationPropertyOf, self,
     (&self.sub,
      &self.sup)
@@ -699,14 +699,14 @@ contents! {
     AnnotationPropertyRange, self, (&self.ap, &self.iri)
 }
 
-contents!{
+contents! {
     SubClassOf, self,
     (&self.sub, &self.sup)
 }
 
-content0!{EquivalentClasses}
+content0! {EquivalentClasses}
 
-content0!{DisjointClasses}
+content0! {DisjointClasses}
 
 render! {
     DisjointUnion, self, w, m,
@@ -734,7 +734,7 @@ render! {
     }
 }
 
-render!{
+render! {
     SubObjectPropertyExpression, self, w, m,
     {
         match self {
@@ -750,26 +750,26 @@ render!{
     }
 }
 
-contents!{
+contents! {
     SubObjectPropertyOf, self,
     (&self.sub, &self.sup)
 }
 
-content0!{TransitiveObjectProperty}
+content0! {TransitiveObjectProperty}
 
-contents!{
+contents! {
     InverseObjectProperties, self,
     (&self.0,
      &self.1)
 }
 
-contents!{
+contents! {
     DatatypeDefinition, self,
     (&self.kind,
      &self.range)
 }
 
-render!{
+render! {
     FacetRestriction, self, w, m,
     {
         let mut open = BytesStart::owned_name("FacetRestriction");
@@ -782,7 +782,7 @@ render!{
     }
 }
 
-render!{
+render! {
     DataRange, self, w, m,
     {
         match self {
@@ -905,6 +905,23 @@ mod test {
     }
 
     #[test]
+    fn round_class() {
+        let (ont_orig, _prefix_orig, ont_round, _prefix_round) =
+            roundtrip(include_str!("../ont/owl-xml/one-class.owx"));
+
+        assert_eq!(ont_orig, ont_round);
+    }
+
+    #[test]
+    fn round_class_with_annotation() {
+        let (ont_orig, _prefix_orig, ont_round, _prefix_round) = roundtrip(include_str!(
+            "../ont/owl-xml/declaration-with-annotation.owx"
+        ));
+
+        assert_eq!(ont_orig, ont_round);
+    }
+
+    #[test]
     fn round_one_subclass() {
         let (ont_orig, _prefix_orig, ont_round, _prefix_round) =
             roundtrip(include_str!("../ont/owl-xml/one-subclass.owx"));
@@ -1014,7 +1031,9 @@ mod test {
 
     #[test]
     fn round_one_subproperty_chain_with_inverse() {
-        assert_round(include_str!("../ont/owl-xml/subproperty-chain-with-inverse.owx"));
+        assert_round(include_str!(
+            "../ont/owl-xml/subproperty-chain-with-inverse.owx"
+        ));
     }
 
     #[test]
