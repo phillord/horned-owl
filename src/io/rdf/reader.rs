@@ -96,16 +96,14 @@ fn iri_from_iri_data(iri_data: &IriData<Rc<str>>, b: &Build) -> IRI {
 fn annotation_value_from_term(term: &Term<Rc<str>>, b: &Build) -> Result<AnnotationValue, Error> {
     match term {
         Term::Iri(iri_data) => Ok(iri_from_iri_data(iri_data, b).into()),
-        Term::Literal(v, LiteralKind::Lang(lang)) => Ok(Literal {
-            datatype_iri: None,
-            lang: Some(lang.to_string()),
-            literal: Some(v.to_string()),
+        Term::Literal(v, LiteralKind::Lang(lang)) => Ok(Literal::Language {
+            lang: lang.to_string(),
+            literal: v.to_string(),
         }
         .into()),
-        Term::Literal(v, LiteralKind::Datatype(iri_data)) => Ok(Literal {
-            datatype_iri: Some(iri_from_iri_data(iri_data, b)),
-            lang: None,
-            literal: Some(v.to_string()),
+        Term::Literal(v, LiteralKind::Datatype(iri_data)) => Ok(Literal::Datatype {
+            datatype_iri: iri_from_iri_data(iri_data, b),
+            literal: v.to_string(),
         }
         .into()),
         _ => bail!("Expected annotation value"),
