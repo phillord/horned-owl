@@ -10,6 +10,7 @@ use failure::Error;
 
 use sophia::term::BNodeId;
 use sophia::term::IriData;
+use sophia::term::LiteralKind;
 use sophia::term::Term;
 
 /// https://www.w3.org/TR/owl2-mapping-to-rdf/
@@ -92,6 +93,25 @@ fn iri_from_iri_data(iri_data: &IriData<Rc<str>>, b: &Build) -> IRI {
     b.iri(iri_data.to_string())
 }
 
+fn annotation_value_from_term(term: &Term<Rc<str>>, b: &Build) -> Result<AnnotationValue, Error> {
+    match term {
+        Term::Iri(iri_data) => Ok(iri_from_iri_data(iri_data, b).into()),
+        Term::Literal(v, LiteralKind::Lang(lang)) => Ok(Literal {
+            datatype_iri: None,
+            lang: Some(lang.to_string()),
+            literal: Some(v.to_string()),
+        }
+        .into()),
+        Term::Literal(v, LiteralKind::Datatype(iri_data)) => Ok(Literal {
+            datatype_iri: Some(iri_from_iri_data(iri_data, b)),
+            lang: None,
+            literal: Some(v.to_string()),
+        }
+        .into()),
+        _ => bail!("Expected annotation value"),
+    }
+}
+
 // Acceptor trait and implementations
 enum AcceptorState {
     Accepted,
@@ -128,6 +148,16 @@ impl Acceptor for SingleAcceptor {
                     o.insert(SubClassOf {
                         sup: ClassExpression::Class(b.class(iri_from_term(&triple[2], b)?)),
                         sub: ClassExpression::Class(b.class(iri_from_term(&triple[0], b)?)),
+                    });
+                    return Ok(AcceptorState::AcceptedComplete);
+                }
+                if *d == "http://www.w3.org/2000/01/rdf-schema#comment" {
+                    o.insert(AnnotationAssertion {
+                        subject: iri_from_term(&triple[0], b)?,
+                        ann: Annotation {
+                            ap: b.annotation_property(iri_from_term(&triple[1], b)?),
+                            av: annotation_value_from_term(&triple[2], b)?,
+                        },
                     });
                     return Ok(AcceptorState::AcceptedComplete);
                 }
@@ -368,6 +398,10 @@ mod test {
 
     #[test]
     fn one_comment() {
+        // This is currently failing because the XML parser gives the
+        // comment a language and a datatype ("PlainLiteral") while
+        // the RDF one gives it just the language, as literals can't
+        // be both. Which is correct?
         compare("one-comment");
     }
 
