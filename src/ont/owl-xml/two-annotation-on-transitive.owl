@@ -19,11 +19,11 @@
     <TransitiveObjectProperty>
         <Annotation>
             <AnnotationProperty abbreviatedIRI="rdfs:comment"/>
-            <Literal xml:lang="en" datatypeIRI="http://www.w3.org/1999/02/22-rdf-syntax-ns#PlainLiteral">comment one</Literal>
+            <Literal xml:lang="en">comment one</Literal>
         </Annotation>
         <Annotation>
             <AnnotationProperty abbreviatedIRI="rdfs:comment"/>
-            <Literal xml:lang="en" datatypeIRI="http://www.w3.org/1999/02/22-rdf-syntax-ns#PlainLiteral">comment two</Literal>
+            <Literal xml:lang="en">comment two</Literal>
         </Annotation>
         <ObjectProperty IRI="#r"/>
     </TransitiveObjectProperty>

@@ -275,7 +275,7 @@
     <SubClassOf>
         <Annotation>
             <AnnotationProperty abbreviatedIRI="rdfs:comment"/>
-            <Literal xml:lang="en" datatypeIRI="http://www.w3.org/1999/02/22-rdf-syntax-ns#PlainLiteral">States that every man is a person</Literal>
+            <Literal xml:lang="en">States that every man is a person</Literal>
         </Annotation>
         <Class IRI="Man"/>
         <Class IRI="Person"/>
@@ -557,7 +557,7 @@
     <AnnotationAssertion>
         <AnnotationProperty abbreviatedIRI="rdfs:comment"/>
         <IRI>Person</IRI>
-        <Literal xml:lang="en" datatypeIRI="http://www.w3.org/1999/02/22-rdf-syntax-ns#PlainLiteral">Represents the set of all people.</Literal>
+        <Literal xml:lang="en">Represents the set of all people.</Literal>
     </AnnotationAssertion>
     <DatatypeDefinition>
         <Datatype IRI="majorAge"/>

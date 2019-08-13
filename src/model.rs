@@ -1081,11 +1081,33 @@ onimpl! {AnnotationPropertyRange, annotation_property_range}
 
 // Non-axiom data structures associated with OWL
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub struct Literal {
-    pub datatype_iri: Option<IRI>,
-    pub lang: Option<String>,
-    pub literal: Option<String>,
+pub enum Literal {
+    // Simple Literals are syntactic sugar for a Datatype with type:
+    // http://www.w3.org/2001/XMLSchema#string
+    Simple { literal: String },
+    // Language-tagged literals have a lang tag and must be (or have
+    // an implicit) of datatype
+    // http://www.w3.org/1999/02/22-rdf-syntax-ns#langString
+    Language { literal: String, lang: String },
+    Datatype { literal: String, datatype_iri: IRI },
 }
+
+impl Literal {
+    pub fn literal(&self) -> &String {
+        match self {
+            Literal::Simple { literal } => literal,
+            Literal::Language { literal, .. } => literal,
+            Literal::Datatype { literal, .. } => literal,
+        }
+    }
+}
+
+// #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+// pub struct Literal {
+//     pub datatype_iri: Option<IRI>,
+//     pub lang: Option<String>,
+//     pub literal: Option<String>,
+// }
 
 /// Data associated with a part of the ontology.
 ///

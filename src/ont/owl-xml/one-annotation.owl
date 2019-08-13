@@ -22,7 +22,7 @@
     <AnnotationAssertion>
         <AnnotationProperty IRI="#a"/>
         <IRI>#A</IRI>
-        <Literal xml:lang="en" datatypeIRI="http://www.w3.org/1999/02/22-rdf-syntax-ns#PlainLiteral">annotation</Literal>
+        <Literal xml:lang="en">annotation</Literal>
     </AnnotationAssertion>
 </Ontology>
 

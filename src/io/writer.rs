@@ -53,14 +53,10 @@ fn iri_maybe(elem: &mut BytesStart, key: &str, iri: &Option<IRI>) {
     }
 }
 
-/// Maybe An an attribute to `elem` if `val` is not None.
-fn attribute_maybe(elem: &mut BytesStart, key: &str, val: &Option<String>) {
-    match val {
-        Some(val) => {
-            elem.push_attribute((key, &val[..]));
-        }
-        None => {}
-    }
+fn attribute<I>(elem: &mut BytesStart, key: &str, val: I)
+    where I: Into<String>
+{
+    elem.push_attribute((key, &(val.into())[..]));
 }
 
 /// Add an IRI or AbbreviatedIRI attribute to elem
@@ -633,15 +629,23 @@ render!{
     Literal, self, w, m,
     {
         let mut open = BytesStart::owned_name("Literal");
-        attribute_maybe(&mut open, "xml:lang", &self.lang);
-        attribute_maybe(
-            &mut open,
-            "datatypeIRI",
-            &self.datatype_iri.as_ref().map(|s| s.into()),
-        );
-        if let Some(l) = &self.literal {
-            l.within_tag(w, m, open)?;
-        }
+
+        match self {
+            Literal::Datatype{literal, datatype_iri} => {
+                attribute(
+                    &mut open,
+                    "datatypeIRI",
+                    datatype_iri,
+                );
+                literal
+            }
+            Literal::Language{literal, lang} => {
+                attribute(&mut open, "xml:lang", lang);
+                literal
+            }
+            Literal::Simple{literal} => literal
+
+        }.within_tag(w, m, open)?;
 
         Ok(())
     }

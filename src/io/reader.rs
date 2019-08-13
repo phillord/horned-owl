@@ -322,18 +322,21 @@ from_start! {
         let datatype_iri = read_a_iri_attr(r, e, b"datatypeIRI")?;
         let lang = attrib_value(r, e, b"xml:lang")?;
 
-        match r.reader.read_text(b"Literal", &mut Vec::new()) {
-            Ok(literal) => Ok(Literal{
-                datatype_iri: datatype_iri,
-                lang: lang,
-                literal: if literal.is_empty() {
-                    None
-                } else {
-                    Some(literal)
-                }
-            }),
-            Err(e) => Err(e.into()),
-        }
+        let literal = r.reader.read_text(b"Literal", &mut Vec::new())?;
+        Ok(
+            match (datatype_iri, lang, literal) {
+                (None, None, literal) =>
+                    Literal::Simple{literal},
+                (None, Some(lang), literal) =>
+                    Literal::Language{literal, lang},
+                (Some(ref datatype_iri), Some(ref lang), ref literal)
+                    if **datatype_iri == "http://www.w3.org/1999/02/22-rdf-syntax-ns#langString"
+                    => Literal::Language{literal:literal.to_string(), lang:lang.to_string()},
+                (Some(_), Some(_), _)
+                    => bail!("Literal with language tag and incorrect datatype"),
+                (Some(datatype_iri), None, literal)
+                    => Literal::Datatype{literal, datatype_iri},
+            })
     }
 }
 
@@ -1366,7 +1369,7 @@ mod test {
 
         let aa = ont.annotation_assertion().next().unwrap();
         match &aa.ann.av {
-            AnnotationValue::Literal(l) => assert_eq!(l.literal, Some(String::from("A --> B"))),
+            AnnotationValue::Literal(l) => assert_eq!(l.literal(), &String::from("A --> B")),
             _ => panic!("expected literal annotation value"),
         }
     }
