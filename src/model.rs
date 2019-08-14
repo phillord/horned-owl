@@ -617,7 +617,7 @@ macro_rules! axioms {
         /// entities as part of the `Kinded` trait.
         /// See also `Axiom` which is a Enum whose variants take
         /// instances of the `Axiom`
-        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
+        #[derive(Clone, Copy, Eq, Hash, PartialEq, PartialOrd, Ord)]
         pub enum AxiomKind {
             $($name),*
         }
@@ -625,6 +625,18 @@ macro_rules! axioms {
         impl AxiomKind {
             pub fn all_kinds() -> Vec<AxiomKind> {
                 vec![$(AxiomKind::$name),*]
+            }
+        }
+
+        impl std::fmt::Debug for AxiomKind {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                write!(f, "AxiomKind::{}",
+                       match self {
+                           $(
+                               AxiomKind::$name => stringify!($name)
+                           ),*
+
+                       })
             }
         }
 
@@ -643,9 +655,28 @@ macro_rules! axioms {
         /// (i.e. Axiom::SubClassOf(SubClassOf)), which is used as a union
         /// type for all structs. The struct and enum variants all
         /// share identical names.
-        #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+        #[derive(Clone, Eq, Hash, Ord, PartialEq, PartialOrd)]
         pub enum Axiom{
             $($name($name)),*
+        }
+
+        impl std::fmt::Debug for Axiom {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                write!(f, "Axiom::{}({})",
+                       match self {
+                           $(
+                               Axiom::$name(_) =>
+                                   stringify!($name)
+                           ),*
+                       },
+                       match self {
+                           $(
+                               Axiom::$name(ax) =>
+                                   format!("{:?}", ax)
+                           ),*
+                       },
+                )
+            }
         }
 
         impl Kinded for Axiom
