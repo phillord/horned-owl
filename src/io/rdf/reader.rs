@@ -390,10 +390,10 @@ mod test {
     //     compare("annotation-range");
     // }
 
-    // #[test]
-    // fn one_label() {
-    //     compare("one-label");
-    // }
+    #[test]
+    fn one_label() {
+        compare("one-label");
+    }
 
     #[test]
     fn one_comment() {
