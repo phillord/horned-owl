@@ -22,7 +22,7 @@ use failure::Error;
 /// The ontology is written in OWL
 /// [XML](https://www.w3.org/TR/owl2-xml-serialization/) syntax.
 pub fn write(
-    write: &mut StdWrite,
+    write: &mut dyn StdWrite,
     ont: &Ontology,
     mapping: Option<&PrefixMapping>,
 ) -> Result<(), Error> {

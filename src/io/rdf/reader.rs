@@ -28,7 +28,7 @@ pub fn read_with_build<R: BufRead>(
     let triple_iter = parser.parse_bufread(bufread);
     let mut o = Ontology::new();
 
-    let mut incomplete_acceptors: VecDeque<Box<Acceptor>> = VecDeque::new();
+    let mut incomplete_acceptors: VecDeque<Box<dyn Acceptor>> = VecDeque::new();
 
     'outer: for triple in triple_iter {
         dbg!(&triple);
