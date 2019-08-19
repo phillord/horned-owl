@@ -149,7 +149,11 @@ impl Acceptor for SingleAcceptor {
                     });
                     return Ok(AcceptorState::AcceptedComplete);
                 }
-                if *d == "http://www.w3.org/2000/01/rdf-schema#comment" {
+                if *d == "http://www.w3.org/2002/07/owl#versionIRI" {
+                    o.id.viri = Some(iri_from_term(&triple[2], b)?);
+                    return Ok(AcceptorState::AcceptedComplete);
+                }
+                if crate::vocab::is_annotation_builtin(&d.to_string()) {
                     o.insert(AnnotationAssertion {
                         subject: iri_from_term(&triple[0], b)?,
                         ann: Annotation {
@@ -159,10 +163,7 @@ impl Acceptor for SingleAcceptor {
                     });
                     return Ok(AcceptorState::AcceptedComplete);
                 }
-                if *d == "http://www.w3.org/2002/07/owl#versionIRI" {
-                    o.id.viri = Some(iri_from_term(&triple[2], b)?);
-                    return Ok(AcceptorState::AcceptedComplete);
-                }
+
             }
             _ => {}
         }
@@ -312,15 +313,15 @@ mod test {
         compare("one-class");
     }
 
-    #[test]
-    fn declaration_with_annotation() {
-        compare("declaration-with-annotation");
-    }
+    // #[test]
+    // fn declaration_with_annotation() {
+    //     compare("declaration-with-annotation");
+    // }
 
-    //#[test]
-    //fn class_with_two_annotations() {
-    //compare("class_with_two_annotations");
-    //}
+    #[test]
+    fn class_with_two_annotations() {
+        compare("class_with_two_annotations");
+    }
 
     #[test]
     fn one_ont() {

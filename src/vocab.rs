@@ -70,15 +70,6 @@ lazy_meta! {
     Nothing, extend(OWL, "Nothing");
 }
 
-pub enum OWL2Datatype {
-    RDFSLiteral,
-}
-
-lazy_meta! {
-    OWL2Datatype, IRIString, METAOWL2DATATYPE;
-    RDFSLiteral, extend(RDFS, "Literal")
-}
-
 #[test]
 fn meta_testing() {
     assert_eq!("http://www.w3.org/2002/07/owl#", OWL.iri_s());
@@ -93,6 +84,56 @@ fn meta_testing() {
         Namespace::var_b(b"http://www.w3.org/2002/07/owl#").unwrap(),
         OWL
     );
+}
+
+pub enum OWL2Datatype {
+    RDFSLiteral,
+}
+
+lazy_meta! {
+    OWL2Datatype, IRIString, METAOWL2DATATYPE;
+    RDFSLiteral, extend(RDFS, "Literal")
+}
+
+pub enum AnnotationBuiltIn {
+    LABEL,
+    COMMENT,
+    SEEALSO,
+    ISDEFINEDBY,
+    DEPRECATED,
+    VERSIOINFO,
+    PRIORVERSION,
+    BACKWARDCOMPATIBLEWITH,
+    INCOMPATIBLEWITH,
+}
+
+lazy_meta! {
+    AnnotationBuiltIn, IRIString, METAANNOTATIONBUILTIN;
+    LABEL, extend(RDFS, "label");
+    COMMENT, extend(RDFS, "comment");
+    SEEALSO, extend(RDFS, "seeAlso");
+    ISDEFINEDBY, extend(RDFS, "isDefinedBy");
+    DEPRECATED, extend(OWL, "deprecated");
+    VERSIOINFO, extend(OWL, "versionInfo");
+    PRIORVERSION, extend(OWL, "priorVersion");
+    BACKWARDCOMPATIBLEWITH, extend(OWL, "backwardCompatibleWith");
+    INCOMPATIBLEWITH, extend(OWL, "incompatibleWith");
+}
+
+pub fn is_annotation_builtin(iri: &String) -> bool {
+    for meta in AnnotationBuiltIn::all() {
+        if meta.iri_s() == iri {
+            return true;
+        }
+    }
+    return false;
+}
+
+#[test]
+fn annotation_builtin(){
+    assert!(is_annotation_builtin(&"http://www.w3.org/2002/07/owl#deprecated".to_string()));
+    assert!(is_annotation_builtin(&"http://www.w3.org/2000/01/rdf-schema#comment".to_string()));
+    assert!(!is_annotation_builtin(&"http://www.w3.org/2002/07/owl#fred".to_string()));
 }
 
 lazy_meta!{

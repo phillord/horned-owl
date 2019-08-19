@@ -1145,15 +1145,16 @@ pub mod test {
 
         assert_eq!(ont.declare_class().count(), 1);
 
-        dbg!(&ont);
+        assert_eq!(ont.annotation_assertion().count(), 2);
 
-        let aa = ont.annotated_axiom(AxiomKind::DeclareClass).next().unwrap();
-
-        assert_eq!(aa.ann.len(), 2);
-
-        let ann = aa.ann.iter().next().unwrap();
+        let aa = ont.annotation_assertion().next().unwrap();
         assert_eq!(
-            String::from(&ann.ap),
+            *(aa.subject),
+            "http://www.example.com#C"
+        );
+
+        assert_eq!(
+            String::from(&aa.ann.ap),
             "http://www.w3.org/2000/01/rdf-schema#comment"
         );
     }
