@@ -163,7 +163,6 @@ impl Acceptor for SingleAcceptor {
                     });
                     return Ok(AcceptorState::AcceptedComplete);
                 }
-
             }
             _ => {}
         }
@@ -184,14 +183,15 @@ impl SingleAcceptor {
         // };
         let subject = &triple[0].value();
 
-        match &triple[2] {
-            Term::Iri(s) if s == &"http://www.w3.org/2002/07/owl#Ontology" => {
+        if let Term::Iri(s) = &triple[2] {
+            if s == &"http://www.w3.org/2002/07/owl#Ontology" {
                 o.id.iri = Some(b.iri(subject));
             }
-            Term::Iri(s) if s == &"http://www.w3.org/2002/07/owl#Class" => {
-                o.declare(b.class(subject));
+            else if let Ok(named_entity) = crate::vocab::entity_for_iri(&s.to_string(),
+                                                                        subject, b) {
+                o.declare(named_entity);
             }
-            _ => {
+            else {
                 return Ok(AcceptorState::NotAccepted);
             }
         }
@@ -345,6 +345,11 @@ mod test {
         compare("one-subclass");
     }
 
+    #[test]
+    fn one_oproperty() {
+        compare("one-oproperty");
+    }
+
     //#[test]
     //fn one_some() {
     //    compare("one-some");
@@ -370,10 +375,10 @@ mod test {
     //     compare("one-not");
     // }
 
-    // #[test]
-    // fn one_annotation_property() {
-    //     compare("one-annotation-property");
-    // }
+    #[test]
+    fn one_annotation_property() {
+         compare("one-annotation-property");
+    }
 
     // #[test]
     // fn one_annotation() {
@@ -464,30 +469,30 @@ mod test {
     //     compare("sub-annotation");
     // }
 
-    // #[test]
-    // fn data_property() {
-    //     compare("data-property");
-    // }
+    #[test]
+    fn data_property() {
+        compare("data-property");
+    }
 
     // #[test]
     // fn literal_escaped() {
     //     compare("literal-escaped");
     // }
 
-    // #[test]
-    // fn named_individual() {
-    //     compare("named-individual");
-    // }
+    #[test]
+    fn named_individual() {
+        compare("named-individual");
+    }
 
     // #[test]
     // fn import() {
     //     compare("import");
     // }
 
-    // #[test]
-    // fn datatype() {
-    //     compare("datatype");
-    // }
+    #[test]
+    fn datatype() {
+         compare("datatype");
+    }
 
     // #[test]
     // fn object_has_value() {
@@ -563,6 +568,7 @@ mod test {
     // fn data_only() {
     //     compare("data-only");
     // }
+
     // #[test]
     // fn data_exact_cardinality() {
     //     compare("data-exact-cardinality");

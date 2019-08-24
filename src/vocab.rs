@@ -1,6 +1,11 @@
 use self::Namespace::*;
 use enum_meta::*;
+
+use crate::model::Build;
 use crate::model::Facet;
+use crate::model::NamedEntity;
+
+use failure::Error;
 
 pub trait WithIRI<'a>: Meta<&'a IRIString> {
     /// Return a string representation of the IRI associated with this
@@ -84,6 +89,38 @@ fn meta_testing() {
         Namespace::var_b(b"http://www.w3.org/2002/07/owl#").unwrap(),
         OWL
     );
+}
+
+pub fn entity_for_iri(type_iri: &str, entity_iri: &str, b: &Build) -> Result<NamedEntity,Error> {
+    // Datatypes are handled here because they are not a
+    // "type" but an "RDF schema" element.
+    if type_iri == "http://www.w3.org/2000/01/rdf-schema#Datatype" {
+        return Ok(b.datatype(entity_iri).into());
+    }
+
+    if type_iri.len() < 30  {
+        bail!("IRI is not for a type of entity:{}", type_iri);
+    }
+
+    Ok(
+        match &type_iri[30..] {
+            "Class" => b.class(entity_iri).into(),
+            "ObjectProperty" => b.object_property(entity_iri).into(),
+            "DatatypeProperty" => b.data_property(entity_iri).into(),
+            "AnnotationProperty" => b.annotation_property(entity_iri).into(),
+            "NamedIndividual" => b.named_individual(entity_iri).into(),
+            _ => bail!("IRI is not a type of entity:{}", type_iri),
+        })
+}
+
+#[test]
+pub fn test_entity_for_iri() {
+    let b = Build::new();
+
+    assert!(entity_for_iri("http://www.w3.org/2002/07/owl#Class",
+                           "http://www.example.com", &b).is_ok());
+    assert!(entity_for_iri("http://www.w3.org/2002/07/owl#Fred",
+                                 "http://www.example.com", &b).is_err());
 }
 
 pub enum OWL2Datatype {

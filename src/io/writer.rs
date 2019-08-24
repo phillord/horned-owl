@@ -930,6 +930,11 @@ mod test {
     }
 
     #[test]
+    fn round_one_oproperty() {
+        assert_round(include_str!("../ont/owl-xml/one-oproperty.owx"));
+    }
+
+    #[test]
     fn round_one_some() {
         assert_round(include_str!("../ont/owl-xml/one-some.owx"));
     }
