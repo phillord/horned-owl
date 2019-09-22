@@ -73,7 +73,6 @@
 //! };
 //! ```
 
-
 use std::cell::RefCell;
 use std::cmp::Ordering;
 use std::collections::BTreeMap;
@@ -83,7 +82,6 @@ use std::hash::Hash;
 use std::hash::Hasher;
 use std::ops::Deref;
 use std::rc::Rc;
-
 
 /// An
 /// [IRI](https://en.wikipedia.org/wiki/Internationalized_Resource_Identifier)
@@ -363,7 +361,7 @@ macro_rules! named {
     }
 }
 
-named!{
+named! {
     /// An OWL
     /// [Class](https://www.w3.org/TR/2012/REC-owl2-primer-20121211/#Classes_and_Instances)
     /// is a group of individuals.
@@ -445,8 +443,8 @@ pub trait Kinded {
     fn kind(&self) -> AxiomKind;
 }
 
-/// An `AnnotatedAxiom` is an `Axiom` with one or more `Annotation`.
-#[derive(Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
+/// An `AnnotatedAxiom` is an `Axiom` with one orpmore `Annotation`.
+#[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
 pub struct AnnotatedAxiom {
     pub axiom: Axiom,
     pub ann: BTreeSet<Annotation>,
@@ -701,7 +699,7 @@ macro_rules! axioms {
     }
 }
 
-axioms!{
+axioms! {
     /// An annotation associated with this Ontology
     OntologyAnnotation (Annotation),
 
@@ -1524,6 +1522,14 @@ impl Ontology {
         self.mut_set_for_kind(ax.kind()).insert(ax)
     }
 
+    pub fn remove(&mut self, ax: &AnnotatedAxiom) -> bool {
+        self.mut_set_for_kind(ax.kind()).remove(&ax)
+    }
+
+    pub fn take(&mut self, ax: &AnnotatedAxiom) -> Option<AnnotatedAxiom> {
+        self.mut_set_for_kind(ax.kind()).take(&ax)
+    }
+
     /// Declare an NamedEntity for the ontology.
     ///
     /// # Examples
@@ -1636,8 +1642,7 @@ impl Ontology {
     {
         let sup = sup.into();
         let sub = sub.into();
-        self.sub_class()
-            .any(|sc| sc.sup == sup && sc.sub == sub)
+        self.sub_class().any(|sc| sc.sup == sup && sc.sub == sub)
     }
 
     /// Gets an iterator that visits the annotated axioms of the ontology.
@@ -1863,11 +1868,26 @@ mod test {
 
         // Iteration is based on ascending order of axiom kinds.
         let mut it = o.into_iter();
-        assert_eq!(it.next(), Some(AnnotatedAxiom::from(Axiom::DeclareClass(decl1))));
-        assert_eq!(it.next(), Some(AnnotatedAxiom::from(Axiom::DeclareClass(decl2))));
-        assert_eq!(it.next(), Some(AnnotatedAxiom::from(Axiom::DeclareClass(decl3))));
-        assert_eq!(it.next(), Some(AnnotatedAxiom::from(Axiom::DisjointClasses(disj1))));
-        assert_eq!(it.next(), Some(AnnotatedAxiom::from(Axiom::DisjointClasses(disj2))));
+        assert_eq!(
+            it.next(),
+            Some(AnnotatedAxiom::from(Axiom::DeclareClass(decl1)))
+        );
+        assert_eq!(
+            it.next(),
+            Some(AnnotatedAxiom::from(Axiom::DeclareClass(decl2)))
+        );
+        assert_eq!(
+            it.next(),
+            Some(AnnotatedAxiom::from(Axiom::DeclareClass(decl3)))
+        );
+        assert_eq!(
+            it.next(),
+            Some(AnnotatedAxiom::from(Axiom::DisjointClasses(disj1)))
+        );
+        assert_eq!(
+            it.next(),
+            Some(AnnotatedAxiom::from(Axiom::DisjointClasses(disj2)))
+        );
         assert_eq!(it.next(), None);
         assert_eq!(it.next(), None);
     }
@@ -1905,11 +1925,26 @@ mod test {
 
         // Iteration is based on ascending order of axiom kinds.
         let mut it = (&o).into_iter();
-        assert_eq!(it.next(), Some(&AnnotatedAxiom::from(Axiom::DeclareClass(decl1))));
-        assert_eq!(it.next(), Some(&AnnotatedAxiom::from(Axiom::DeclareClass(decl2))));
-        assert_eq!(it.next(), Some(&AnnotatedAxiom::from(Axiom::DeclareClass(decl3))));
-        assert_eq!(it.next(), Some(&AnnotatedAxiom::from(Axiom::DisjointClasses(disj1))));
-        assert_eq!(it.next(), Some(&AnnotatedAxiom::from(Axiom::DisjointClasses(disj2))));
+        assert_eq!(
+            it.next(),
+            Some(&AnnotatedAxiom::from(Axiom::DeclareClass(decl1)))
+        );
+        assert_eq!(
+            it.next(),
+            Some(&AnnotatedAxiom::from(Axiom::DeclareClass(decl2)))
+        );
+        assert_eq!(
+            it.next(),
+            Some(&AnnotatedAxiom::from(Axiom::DeclareClass(decl3)))
+        );
+        assert_eq!(
+            it.next(),
+            Some(&AnnotatedAxiom::from(Axiom::DisjointClasses(disj1)))
+        );
+        assert_eq!(
+            it.next(),
+            Some(&AnnotatedAxiom::from(Axiom::DisjointClasses(disj2)))
+        );
         assert_eq!(it.next(), None);
         assert_eq!(it.next(), None);
     }

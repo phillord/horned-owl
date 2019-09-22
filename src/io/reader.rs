@@ -1196,6 +1196,18 @@ pub mod test {
     }
 
     #[test]
+    fn annotated_subclass() {
+        let ont_s = include_str!("../ont/owl-xml/annotation-on-subclass.owx");
+        let (ont, _) = read_ok(&mut ont_s.as_bytes());
+
+        let annotated_axiom = ont
+            .annotated_axiom(AxiomKind::SubClassOf)
+            .next()
+            .unwrap();
+        assert_eq!(annotated_axiom.ann.len(), 1);
+    }
+
+    #[test]
     fn test_one_some() {
         let ont_s = include_str!("../ont/owl-xml/one-some.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());

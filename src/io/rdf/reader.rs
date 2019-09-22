@@ -1,7 +1,9 @@
+use crate::index::update_logically_equal_axiom;
 use crate::model::*;
 
 use curie::PrefixMapping;
 
+use std::collections::BTreeSet;
 use std::collections::VecDeque;
 use std::io::BufRead;
 use std::rc::Rc;
@@ -57,6 +59,10 @@ pub fn read_with_build<R: BufRead>(
             || accept_maybe(AnnotationMainTriple::default(), &mut args)?;
     }
 
+    for mut i in incomplete_acceptors {
+        i.completing(&mut o, build)?;
+    }
+
     Ok((o, PrefixMapping::default()))
 }
 
@@ -82,13 +88,6 @@ fn accept_maybe<A: Acceptor + 'static>(
 }
 
 // Helper Functions
-fn iri_from_term(triple: &Term<Rc<str>>, b: &Build) -> Result<IRI, Error> {
-    match triple {
-        Term::Iri(iri_data) => Ok(b.iri(iri_data.to_string())),
-        _ => bail!("Expected IRI term found: {:?}", triple),
-    }
-}
-
 fn iri_from_iri_data(iri_data: &IriData<Rc<str>>, b: &Build) -> IRI {
     b.iri(iri_data.to_string())
 }
@@ -110,6 +109,27 @@ fn annotation_value_from_term(term: &Term<Rc<str>>, b: &Build) -> Result<Annotat
     }
 }
 
+// Convert to Horned Model
+fn three_iris<T: AsRef<str>>(
+    b: &Build,
+    s: &IriData<T>,
+    o: &IriData<T>,
+    p: &IriData<T>,
+) -> Result<Axiom, Error> {
+    match (s.to_string(), o.to_string(), p.to_string()) {
+        (_, ref o, _) if o == &"http://www.w3.org/2000/01/rdf-schema#subClassOf" => {
+            Ok(SubClassOf {
+                sup: ClassExpression::Class(b.class(p.to_string())),
+                sub: ClassExpression::Class(b.class(s.to_string())),
+            }
+            .into())
+        }
+        _ => {
+            bail!("Cannot match type");
+        }
+    }
+}
+
 // Acceptor trait and implementations
 enum AcceptorState {
     Accepted,
@@ -118,16 +138,20 @@ enum AcceptorState {
     NotAccepted,
 }
 
-trait Acceptor {
+trait Acceptor: std::fmt::Debug {
     fn accept(
         &mut self,
         o: &mut Ontology,
         b: &Build,
         triple: &[Term<Rc<str>>; 3],
     ) -> Result<AcceptorState, Error>;
+
+    fn completing(&mut self, _o: &mut Ontology, _b: &Build) -> Result<(), Error> {
+        Ok(())
+    }
 }
 
-#[derive(Default)]
+#[derive(Debug, Default)]
 struct SingleAcceptor;
 
 impl Acceptor for SingleAcceptor {
@@ -137,32 +161,30 @@ impl Acceptor for SingleAcceptor {
         b: &Build,
         triple: &[Term<Rc<str>>; 3],
     ) -> Result<AcceptorState, Error> {
-        match &triple[1] {
-            Term::Iri(d) => {
-                if *d == "http://www.w3.org/1999/02/22-rdf-syntax-ns#type" {
+        match triple {
+            [Term::Iri(s), Term::Iri(p), Term::Iri(ob)] => {
+                if *p == "http://www.w3.org/1999/02/22-rdf-syntax-ns#type" {
                     return self.accept_type(o, b, triple);
                 }
-                if *d == "http://www.w3.org/2000/01/rdf-schema#subClassOf" {
-                    o.insert(SubClassOf {
-                        sup: ClassExpression::Class(b.class(iri_from_term(&triple[2], b)?)),
-                        sub: ClassExpression::Class(b.class(iri_from_term(&triple[0], b)?)),
-                    });
+                if *p == "http://www.w3.org/2002/07/owl#versionIRI" {
+                    o.id.viri = Some(b.iri(ob.to_string()));
                     return Ok(AcceptorState::AcceptedComplete);
                 }
-                if *d == "http://www.w3.org/2002/07/owl#versionIRI" {
-                    o.id.viri = Some(iri_from_term(&triple[2], b)?);
-                    return Ok(AcceptorState::AcceptedComplete);
-                }
-                if crate::vocab::is_annotation_builtin(&d.to_string()) {
-                    o.insert(AnnotationAssertion {
-                        subject: iri_from_term(&triple[0], b)?,
-                        ann: Annotation {
-                            ap: b.annotation_property(iri_from_term(&triple[1], b)?),
-                            av: annotation_value_from_term(&triple[2], b)?,
-                        },
-                    });
-                    return Ok(AcceptorState::AcceptedComplete);
-                }
+
+                o.insert(three_iris(b, s, p, ob)?);
+                return Ok(AcceptorState::AcceptedComplete);
+            }
+            [Term::Iri(s), Term::Iri(p), _]
+                if crate::vocab::is_annotation_builtin(&(p.to_string())) =>
+            {
+                o.insert(AnnotationAssertion {
+                    subject: b.iri(s.to_string()),
+                    ann: Annotation {
+                        ap: b.annotation_property(b.iri(p.to_string())),
+                        av: annotation_value_from_term(&triple[2], b)?,
+                    },
+                });
+                return Ok(AcceptorState::AcceptedComplete);
             }
             _ => {}
         }
@@ -186,12 +208,11 @@ impl SingleAcceptor {
         if let Term::Iri(s) = &triple[2] {
             if s == &"http://www.w3.org/2002/07/owl#Ontology" {
                 o.id.iri = Some(b.iri(subject));
-            }
-            else if let Ok(named_entity) = crate::vocab::entity_for_iri(&s.to_string(),
-                                                                        subject, b) {
+            } else if let Ok(named_entity) =
+                crate::vocab::entity_for_iri(&s.to_string(), subject, b)
+            {
                 o.declare(named_entity);
-            }
-            else {
+            } else {
                 return Ok(AcceptorState::NotAccepted);
             }
         }
@@ -208,67 +229,107 @@ impl SingleAcceptor {
 #[derive(Debug, Default)]
 struct AnnotationMainTriple {
     bnode: Option<BNodeId<Rc<str>>>,
-    source: Option<IRI>,
-    property: Option<IRI>,
-    target: Option<IRI>,
+    source: Option<IriData<Rc<str>>>,
+    property: Option<IriData<Rc<str>>>,
+    target: Option<IriData<Rc<str>>>,
+    axiom: Option<Axiom>,
+    ann: Option<BTreeSet<Annotation>>,
 }
 
 impl Acceptor for AnnotationMainTriple {
     fn accept(
         &mut self,
-        _o: &mut Ontology,
+        o: &mut Ontology,
         b: &Build,
         triple: &[Term<Rc<str>>; 3],
     ) -> Result<AcceptorState, Error> {
-        match (&self, &triple) {
-            (&Self { bnode: None, .. }, [Term::BNode(s), Term::Iri(p), Term::Iri(o)])
+        let on_bnode = match triple {
+            [Term::BNode(s), _, _] => self.bnode.is_some() && self.bnode.as_ref() == Some(s),
+            _ => false,
+        };
+
+        match triple {
+            [Term::BNode(s), Term::Iri(p), Term::Iri(ob)]
                 if p == &"http://www.w3.org/1999/02/22-rdf-syntax-ns#type"
-                    && o == &"http://www.w3.org/2002/07/owl#Axiom" =>
+                    && ob == &"http://www.w3.org/2002/07/owl#Axiom" =>
             {
                 self.bnode = Some(s.to_owned());
                 return Ok(AcceptorState::Accepted);
             }
-            (
-                &Self {
-                    bnode: Some(ref bnode),
-                    ..
-                },
-                [Term::BNode(s), Term::Iri(p), Term::Iri(o)],
-            ) if bnode == s => match p {
-                _ if p == &"http://www.w3.org/2002/07/owl#annotatedSource" => {
-                    self.source = Some(iri_from_iri_data(o, b));
-                    return Ok(AcceptorState::Accepted);
-                }
-                _ if p == &"http://www.w3.org/2002/07/owl#annotatedProperty" => {
-                    self.property = Some(iri_from_iri_data(o, b));
-                    return Ok(AcceptorState::Accepted);
-                }
-                _ if p == &"http://www.w3.org/2002/07/owl#annotatedTarget" => {
-                    self.target = Some(iri_from_iri_data(o, b));
-                    return Ok(AcceptorState::Accepted);
-                }
-                _ => {
-                    return Ok(AcceptorState::NotAccepted);
-                }
-            },
-            (
-                &Self {
-                    bnode: Some(_),
-                    source: Some(_),
-                    property: Some(_),
-                    target: Some(_),
-                },
-                [_, _, _],
-            ) => {
-                // We now have all the data that we need to identify
-                // the axiom, so all the triples that follow are annotations
 
+            [Term::BNode(_), Term::Iri(p), Term::Iri(ob)] if on_bnode => {
+                // Reified triple
+                if p == &"http://www.w3.org/2002/07/owl#annotatedSource" {
+                    self.source = Some(ob.to_owned());
+                    return Ok(AcceptorState::Accepted);
+                }
+
+                if p == &"http://www.w3.org/2002/07/owl#annotatedProperty" {
+                    self.property = Some(ob.to_owned());
+                    return Ok(AcceptorState::Accepted);
+                }
+
+                if p == &"http://www.w3.org/2002/07/owl#annotatedTarget" {
+                    self.target = Some(ob.to_owned());
+                    // This is a bit dodgy, because we are assuming an
+                    // order of the triples.
+                    self.axiom = Some(three_iris(
+                        b,
+                        &self.source.take().unwrap(),
+                        &self.property.take().unwrap(),
+                        &self.target.take().unwrap(),
+                    )?);
+
+                    return Ok(AcceptorState::Accepted);
+                }
+                return Ok(AcceptorState::NotAccepted);
+            }
+
+            [Term::BNode(_), Term::Iri(p), ob] if on_bnode => {
+                // Annotation
+                self.ann
+                    .get_or_insert_with(|| BTreeSet::default())
+                    .insert(Annotation {
+                        ap: b.annotation_property(p.to_string()),
+                        av: annotation_value_from_term(ob, b)?,
+                    });
+
+                return Ok(AcceptorState::Accepted);
+            }
+
+            _ if self.bnode.is_some() => {
+                // First we will need to find axiom that it should be
+                // fitting under, or potentially creating it (the
+                // specification is a little bit unclear here, but
+                // suggests that the statement here is enough to
+                // define the axiom, during parsing but the reading
+                // section suggests that we also have to write axiom
+                // out explicitly.
+                if let Self { axiom: Some(_), .. } = self {
+                    self.completing(o, b)?;
+                }
                 return Ok(AcceptorState::NotAcceptedComplete);
             }
+
             _ => {
                 return Ok(AcceptorState::NotAccepted);
             }
         }
+    }
+
+    fn completing(&mut self, o: &mut Ontology, _b: &Build) -> Result<(), Error> {
+        update_logically_equal_axiom(
+            o,
+            AnnotatedAxiom {
+                axiom: self.axiom.take().unwrap(),
+                ann: self
+                    .ann
+                    .take()
+                    .or_else(|| Some(BTreeSet::default()))
+                    .unwrap(),
+            },
+        );
+        Ok(())
     }
 }
 
@@ -313,10 +374,10 @@ mod test {
         compare("one-class");
     }
 
-    // #[test]
-    // fn declaration_with_annotation() {
-    //     compare("declaration-with-annotation");
-    // }
+    //#[test]
+    //fn declaration_with_annotation() {
+    //compare("declaration-with-annotation");
+    //}
 
     #[test]
     fn class_with_two_annotations() {
@@ -343,6 +404,11 @@ mod test {
     #[test]
     fn one_subclass() {
         compare("one-subclass");
+    }
+
+    #[test]
+    fn subclass_with_annotation() {
+        compare("annotation-on-subclass");
     }
 
     #[test]
@@ -377,7 +443,7 @@ mod test {
 
     #[test]
     fn one_annotation_property() {
-         compare("one-annotation-property");
+        compare("one-annotation-property");
     }
 
     // #[test]
@@ -491,7 +557,7 @@ mod test {
 
     #[test]
     fn datatype() {
-         compare("datatype");
+        compare("datatype");
     }
 
     // #[test]
