@@ -33,7 +33,6 @@ pub fn read_with_build<R: BufRead>(
     let mut incomplete_acceptors: VecDeque<Box<dyn Acceptor>> = VecDeque::new();
 
     'outer: for triple in triple_iter {
-        dbg!(&triple);
         let triple = triple.unwrap();
 
         let mut offset = 0;
@@ -56,7 +55,12 @@ pub fn read_with_build<R: BufRead>(
 
         let mut args = (&mut o, build, &mut incomplete_acceptors, &triple);
         let _rtn = accept_maybe(SingleAcceptor::default(), &mut args)?
-            || accept_maybe(AnnotationMainTriple::default(), &mut args)?;
+        || accept_maybe(AnnotationMainTriple::default(), &mut args)?
+        || accept_maybe(RestrictionAcceptor::default(), &mut args)?;
+
+        if !_rtn {
+            dbg!("Triple not accepted:", &triple);
+        }
     }
 
     for mut i in incomplete_acceptors {
@@ -151,6 +155,8 @@ trait Acceptor: std::fmt::Debug {
     }
 }
 
+
+// Match all of the things encoded as a single triple
 #[derive(Debug, Default)]
 struct SingleAcceptor;
 
@@ -220,12 +226,14 @@ impl SingleAcceptor {
     }
 }
 
+
+// These are the reified versions of the annotations defined by a
+// signle triple
 // s p xlt .
 // _:x rdf:type owl:Axiom .
 // _:x owl:annotatedSource s .
 // _:x owl:annotatedProperty p .
 // _:x owl:annotatedTarget xlt .
-
 #[derive(Debug, Default)]
 struct AnnotationMainTriple {
     bnode: Option<BNodeId<Rc<str>>>,
@@ -333,6 +341,85 @@ impl Acceptor for AnnotationMainTriple {
     }
 }
 
+// :x rdf:type owl:Restriction .
+// :x owl:onProperty y .
+// Then other stuff
+#[derive(Debug, Default)]
+struct RestrictionAcceptor {
+    bnode: Option<BNodeId<Rc<str>>>,
+    property: Option<IriData<Rc<str>>>,
+    kind: Option<IriData<Rc<str>>>
+}
+
+
+impl Acceptor for RestrictionAcceptor {
+    fn accept(
+        &mut self,
+        _o: &mut Ontology,
+        _b: &Build,
+        triple: &[Term<Rc<str>>; 3],
+    ) -> Result<AcceptorState, Error> {
+        let on_bnode = match triple {
+            [Term::BNode(s), _, _] => self.bnode.is_some() && self.bnode.as_ref() == Some(s),
+            _ => false,
+        };
+
+
+        match triple {
+            [Term::BNode(s), Term::Iri(p), Term::Iri(ob)]
+                 if p == &"http://www.w3.org/1999/02/22-rdf-syntax-ns#type"
+                    && ob == &"http://www.w3.org/2002/07/owl#Restriction" =>
+            {
+                self.bnode = Some(s.to_owned());
+                return Ok(AcceptorState::Accepted);
+            }
+            [Term::BNode(_), Term::Iri(p), Term::Iri(ob)]
+                if on_bnode && p == &"http://www.w3.org/2002/07/owl#onProperty" =>
+            {
+                self.property = Some(ob.to_owned());
+                return Ok(AcceptorState::Accepted);
+            }
+
+            [Term::BNode(_), Term::Iri(p), Term::Iri(ob)]
+                if on_bnode =>
+            {
+                match p {
+                    _ if p == &"http://www.w3.org/2002/07/owl#someValuesFrom" => {
+                        return Ok(AcceptorState::NotAccepted)
+                        //return Ok(AcceptorState::Accepted);
+                    }
+
+                    _ => {
+                        return Ok(AcceptorState::NotAccepted);
+                    }
+                }
+            }
+
+            //
+            //[Term::BNode(_s), Term::Iri(_p), Term::Iri(_ob)] if on_bnode =>{
+                //unimplemented!()
+            //}
+
+            _ if self.bnode.is_some() => {
+                dbg!("All done, but not clue what to do");
+                return Ok(AcceptorState::NotAcceptedComplete);
+            }
+             _ => {
+                return Ok(AcceptorState::NotAccepted)
+            }
+
+
+        }
+    }
+
+    fn completing(&mut self, _o: &mut Ontology, _b: &Build) -> Result<(), Error> {
+        Ok(())
+    }
+}
+
+
+
+
 #[cfg(test)]
 mod test {
     use super::*;
@@ -416,10 +503,10 @@ mod test {
         compare("one-oproperty");
     }
 
-    //#[test]
-    //fn one_some() {
-    //    compare("one-some");
-    //}
+    #[test]
+    fn one_some() {
+        compare("one-some");
+    }
 
     // #[test]
     // fn one_only() {
@@ -620,10 +707,10 @@ mod test {
     //     compare("datatype-oneof");
     // }
 
-    // #[test]
-    // fn datatype_some() {
-    //     compare("data-some");
-    // }
+    #[test]
+    fn datatype_some() {
+        compare("data-some");
+    }
 
     // #[test]
     // fn facet_restriction() {
