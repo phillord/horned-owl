@@ -1,0 +1,29 @@
+@prefix : <urn:absolute:340e521d-d935-497a-86d8-50436a9d0dad#o#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xml: <http://www.w3.org/XML/1998/namespace> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+<urn:absolute:340e521d-d935-497a-86d8-50436a9d0dad#o> a owl:Ontology .
+
+:n1 a owl:Class .
+
+:n10 a owl:Class .
+
+:n2 a owl:Class .
+
+:n3 a owl:Class .
+
+:n4 a owl:Class .
+
+:n5 a owl:Class .
+
+:n6 a owl:Class .
+
+:n7 a owl:Class .
+
+:n8 a owl:Class .
+
+:n9 a owl:Class .
+

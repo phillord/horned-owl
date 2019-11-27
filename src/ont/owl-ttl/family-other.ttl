@@ -1,0 +1,28 @@
+@prefix : <http://homepages.cs.ncl.ac.uk/phillip.lord/scratch/family-other.owl#> .
+@prefix family: <http://example.com/owl/families/#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix tawny: <http://www.purl.org/ontolink/tawny#> .
+@prefix xml: <http://www.w3.org/XML/1998/namespace> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+: a owl:Ontology ;
+    tawny:name "family-other"@en ;
+    owl:imports <http://www.purl.org/ontolink/tawny> .
+
+:Grownup a owl:Class ;
+    tawny:name "Grownup"@en .
+
+:JohnBrown a owl:NamedIndividual ;
+    tawny:name "JohnBrown"@en .
+
+:MaryBrown a owl:NamedIndividual ;
+    tawny:name "MaryBrown"@en .
+
+:age a owl:DatatypeProperty ;
+    tawny:name "age"@en .
+
+:child a owl:ObjectProperty ;
+    tawny:name "child"@en .
+

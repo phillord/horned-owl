@@ -18,6 +18,10 @@ pub trait WithIRI<'a>: Meta<&'a IRIString> {
         &self.meta().0.as_bytes()
     }
 
+    fn iri_str(&self) -> &'a str {
+        &self.meta().0[..]
+    }
+
     fn var_s(tag: &'a str) -> Option<Self> {
         Self::var_b(tag.as_bytes())
     }
@@ -63,16 +67,31 @@ lazy_meta! {
     XSD, to_meta("http://www.w3.org/2001/XMLSchema#");
 }
 
+
+pub enum RDF {
+    Type
+}
+
+lazy_meta! {
+    RDF, IRIString, METARDF;
+    Type, extend(RDF, "type");
+}
+
+
 pub enum OWL {
     // TODO add the others
     Thing,
     Nothing,
+    Ontology,
+    VersionIRI,
 }
 
 lazy_meta! {
     OWL, IRIString, METAOWL;
     Thing, extend(OWL, "Thing");
     Nothing, extend(OWL, "Nothing");
+    Ontology, extend(OWL, "Ontology");
+    VersionIRI, extend(OWL, "versionIRI");
 }
 
 #[test]
