@@ -71,7 +71,7 @@ pub fn read_with_build<R: BufRead>(
 }
 
 fn accept_maybe<A: Acceptor + 'static>(
-    mut acceptor: A,
+    mut acceptor: A,b
     args: &mut (
         &mut Ontology,
         &Build,

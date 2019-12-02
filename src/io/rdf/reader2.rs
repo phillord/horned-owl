@@ -23,35 +23,64 @@ enum AcceptState {
 }
 
 enum CompleteState {
+    // The acceptor does not have all of the information that it needs
+    // because it has not recieved enough triples.
+    NotComplete,
+
     // The acceptor has all the information that it needs to complete,
-    // but can still accept more.
+    // but can still accept more. The acceptor may require further
+    // information from the ontology, for instance the type of IRIs in
+    // accepted triples, to actually complete.
     CanComplete,
 
     // The acceptor has all the information that it needs to complete,
-    // and will not accept further triples.
+    // and will not accept further triples. The acceptor may require
+    // further information from the ontology, for instance the type of
+    // IRIs in accepted triples, to actually complete.
     Complete,
 }
 
 trait Acceptor<O>: std::fmt::Debug {
-    fn accept(&mut self, triple: [Term<Rc<str>>; 3]) -> AcceptState;
+    // Accept a triple.
+    fn accept(&mut self, b: &Build, triple: [Term<Rc<str>>; 3]) -> AcceptState;
 
+    // Indicate the completion state of the acceptor.
     fn can_complete(&mut self) -> CompleteState;
 
-    fn complete(self, b: &Build) -> Result<O, Error>;
+    // Return an ontology entity based on the triples that have been
+    // consumed and the data in the ontology. Return an Error if the
+    // acceptor cannot return yet because there is information missing
+    // from the ontology (such as a declaration).
+
+    // This method should not be called till can_complete would return
+    // either Complete or CanComplete if called.
+
+    // TODO: Do I need more than one Error here? I know for sure that
+    // I will need to return "not got enough information from the
+    // ontology"; I guess I should be able to return a "not in the
+    // right state" error also. Anything else?
+    fn complete(self, b: &Build, o: &Ontology) -> Result<O, Error>;
 }
 
 #[derive(Debug, Default)]
 struct OntologyAcceptor {
-    complete: Vec<AnnotatedAxiomAcceptor>,
     incomplete: Vec<AnnotatedAxiomAcceptor>,
+    complete_acceptors: Vec<AnnotatedAxiomAcceptor>,
+
+    // Does this make any sense -- we are replicating the Ontology
+    // data structure here? And our data structures are
+    // complicated. Why do we not build these up as we go?
+
+    // Because now we have to convert backwards and forwards between
+    // the sophia data structures -- think it was better before. It
+    // will probably help anyway when we come to structures were we
+    // cannot work it out early
     iri: Option<IriData<Rc<str>>>,
-    viri: Option<IriData<Rc<str>>>,
+    viri: Option<IriData<Rc<str>>>
 }
 
 impl Acceptor<Ontology> for OntologyAcceptor {
-    fn accept(&mut self, triple: [Term<Rc<str>>; 3]) -> AcceptState {
-
-
+    fn accept(&mut self, b:&Build, triple: [Term<Rc<str>>; 3]) -> AcceptState {
         match &triple {
             [Term::Iri(s), Term::Iri(p), Term::Iri(ob)]
                 if p == &"http://www.w3.org/1999/02/22-rdf-syntax-ns#type" &&
@@ -68,7 +97,25 @@ impl Acceptor<Ontology> for OntologyAcceptor {
                 AcceptState::Accept
             }
             _ => {
-                AcceptState::Return(triple)
+                // Pass on to incomplete acceptors, till one of them
+                // accepts, then pass onto new acceptors and see if
+                // one of them accepts. Collect and collate any "backtracks",
+                // return one of these.
+                let mut d = AnnotatedAxiomAcceptor::default();
+                match d.accept(b, triple) {
+                    AcceptState::Accept => {
+                        // this only works because declaration
+                        // accepts are one long
+                        self.complete_acceptors.push(d);
+                        AcceptState::Accept
+                    },
+                    AcceptState::Return(t) => {
+                        AcceptState::Return(t)
+                    },
+                    AcceptState::BackTrack(v) => {
+                        AcceptState::BackTrack(v)
+                    },
+                }
             }
         }
     }
@@ -77,34 +124,51 @@ impl Acceptor<Ontology> for OntologyAcceptor {
         unimplemented!()
     }
 
-    fn complete(self, b: &Build) -> Result<Ontology, Error> {
+    fn complete(self, b: &Build, o:&Ontology) -> Result<Ontology, Error> {
         // Iterate over all the complete Acceptor, run complete on
         // them, and insert this
-        dbg!(&self.iri);
-        let mut o = Ontology::new();
+        let mut o = Ontology::default();
         o.id.iri = self.iri.map(|i| b.iri(i.to_string()));
         o.id.viri = self.viri.map(|i| b.iri(i.to_string()));
 
+        // TODO: deal with incomplete acceptors
+        for ac in self.complete_acceptors{
+           o.insert(ac.complete(b, &o)?);
+        }
         return Ok(o);
     }
 }
 
-#[derive(Debug)]
-struct AnnotatedAxiomAcceptor {}
+#[derive(Debug, Default)]
+struct AnnotatedAxiomAcceptor {
+    iri: Option<IriData<Rc<str>>>,
+}
 
 impl Acceptor<AnnotatedAxiom> for AnnotatedAxiomAcceptor {
-    fn accept(&mut self, triple: [Term<Rc<str>>; 3]) -> AcceptState {
-        unimplemented!()
+    fn accept(&mut self, b:&Build, triple: [Term<Rc<str>>; 3]) -> AcceptState {
+        match &triple {
+            [Term::Iri(s), Term::Iri(p), Term::Iri(ob)]
+                if p == &"http://www.w3.org/1999/02/22-rdf-syntax-ns#type" =>
+            {
+                self.iri = Some(s.clone());
+                AcceptState::Accept
+            }
+            _=> {
+                dbg!(triple);
+                unimplemented!()
+            }
+        }
     }
 
     fn can_complete(&mut self) -> CompleteState {
         unimplemented!()
     }
 
-    fn complete(self, b: &Build) -> Result<AnnotatedAxiom, Error> {
+    fn complete(self, b: &Build, o:&Ontology) -> Result<AnnotatedAxiom, Error> {
         // Iterate over all the complete Acceptor, run complete on
         // them, and insert this
-        unimplemented!()
+        let n:NamedEntity = b.class(self.iri.unwrap().to_string()).into();
+        Ok(declaration(n).into())
     }
 }
 
@@ -115,10 +179,10 @@ fn read_then_complete(
 ) -> Result<Ontology, Error> {
     for t in triple_iter {
         let t = t.unwrap();
-        acceptor.accept(t);
+        acceptor.accept(b, t);
     }
 
-    acceptor.complete(b)
+    acceptor.complete(b, &Ontology::default())
 }
 
 pub fn read_with_build<R: BufRead>(
@@ -173,14 +237,14 @@ mod test {
         //assert_eq!(rdfmapping, xmlmapping);
     }
 
-    // #[test]
-    // fn one_class() {
-    //     compare("one-class");
-    // }
+    #[test]
+    fn one_class() {
+        compare("one-class");
+    }
 
     //#[test]
     //fn declaration_with_annotation() {
-    //compare("declaration-with-annotation");
+    //    compare("declaration-with-annotation");
     //}
 
     // #[test]
