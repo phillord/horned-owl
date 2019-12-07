@@ -3,6 +3,8 @@
 use crate::model::*;
 use crate::vocab::*;
 
+use crate::index::update_logically_equal_axiom;
+
 use curie::PrefixMapping;
 
 use failure::Error;
@@ -88,10 +90,10 @@ trait Acceptor<O>: std::fmt::Debug {
 #[derive(Debug, Default)]
 struct OntologyAcceptor {
     // Acceptors which are NotComplete or CanComplete
-    incomplete_acceptors: Vec<Box<dyn Acceptor<AnnotatedAxiom>>>,
+    incomplete_acceptors: Vec<Box<dyn Acceptor<(AnnotatedAxiom, Merge)>>>,
 
     // Acceptors which are Complete
-    complete_acceptors: Vec<Box<dyn Acceptor<AnnotatedAxiom>>>,
+    complete_acceptors: Vec<Box<dyn Acceptor<(AnnotatedAxiom, Merge)>>>,
 
     // Does this make any sense -- we are replicating the Ontology
     // data structure here? And our data structures are
@@ -149,7 +151,7 @@ impl Acceptor<Ontology> for OntologyAcceptor {
                 }
 
                 // Iterate through new acceptor
-                let acceptors: Vec<Box<dyn Acceptor<AnnotatedAxiom>>> = vec![
+                let acceptors: Vec<Box<dyn Acceptor<(AnnotatedAxiom, Merge)>>> = vec![
                     Box::new(SimpleAnnotatedAxiomAcceptor::default()),
                     Box::new(AnnotatedAxiomAcceptor::default()),
                 ];
@@ -188,17 +190,26 @@ impl Acceptor<Ontology> for OntologyAcceptor {
         o.id.iri = self.iri.as_ref().map(|i| b.iri(i.to_string()));
         o.id.viri = self.viri.as_ref().map(|i| b.iri(i.to_string()));
 
-        for ac in &mut self.complete_acceptors {
-            o.insert(ac.complete(b, &o)?);
+        //let mut ch = self.complete_acceptors.iter().chain(self.incomplete_acceptors.iter());
+        for ac in self.complete_acceptors.iter_mut()
+            .chain(self.incomplete_acceptors.iter_mut()) {
+            let c = ac.complete(b, &o)?;
+            if let Merge::NeedsMerge = c.1 {
+                update_logically_equal_axiom(&mut o, c.0)
+            }
+            else {
+                o.insert(c.0);
+            }
         }
 
-        for ac in &mut self.incomplete_acceptors {
-            o.insert(ac.complete(b, &o)?);
-        }
-
-        dbg!(&o);
         return Ok(o);
     }
+}
+
+#[derive(Debug)]
+enum Merge {
+    NeedsMerge,
+    DoesNotNeedMerge,
 }
 
 // Accept axioms with no annotations then as an AnnotatedAxiom (with
@@ -209,7 +220,7 @@ struct SimpleAnnotatedAxiomAcceptor {
     ac: Option<Box<dyn Acceptor<AnnotatedAxiom>>>,
 }
 
-impl Acceptor<AnnotatedAxiom> for SimpleAnnotatedAxiomAcceptor {
+impl Acceptor<(AnnotatedAxiom, Merge)> for SimpleAnnotatedAxiomAcceptor {
     fn accept(&mut self, b: &Build, triple: [Term<Rc<str>>; 3]) -> AcceptState {
         match &mut self.ac {
             None => {
@@ -229,9 +240,9 @@ impl Acceptor<AnnotatedAxiom> for SimpleAnnotatedAxiomAcceptor {
         }
     }
 
-    fn complete(&mut self, b: &Build, o: &Ontology) -> Result<AnnotatedAxiom, Error> {
+    fn complete(&mut self, b: &Build, o: &Ontology) -> Result<(AnnotatedAxiom, Merge), Error> {
         match &mut self.ac {
-            Some(boxacceptor) => boxacceptor.complete(b, o),
+            Some(boxacceptor) => Ok((boxacceptor.complete(b, o)?, Merge::DoesNotNeedMerge)),
             None => unimplemented!(),
         }
     }
@@ -249,7 +260,7 @@ struct AnnotatedAxiomAcceptor {
     complete: bool
 }
 
-impl Acceptor<AnnotatedAxiom> for AnnotatedAxiomAcceptor {
+impl Acceptor<(AnnotatedAxiom, Merge)> for AnnotatedAxiomAcceptor {
     fn accept(&mut self, b: &Build, triple: [Term<Rc<str>>; 3]) -> AcceptState {
         match &triple {
             // This should only happen when bnodeid is None
@@ -322,7 +333,7 @@ impl Acceptor<AnnotatedAxiom> for AnnotatedAxiomAcceptor {
         }
     }
 
-    fn complete(&mut self, b: &Build, o: &Ontology) -> Result<AnnotatedAxiom, Error> {
+    fn complete(&mut self, b: &Build, o: &Ontology) -> Result<(AnnotatedAxiom, Merge), Error> {
         // Convert the reified triple into a normal one, and then pass
         // it to SimpleAnnotatedAxiomAcceptor to get the normal
         // axiom.
@@ -333,13 +344,12 @@ impl Acceptor<AnnotatedAxiom> for AnnotatedAxiomAcceptor {
                                           self.annotated_property.take().unwrap(),
                                           self.annotated_target.take().unwrap()]);
 
-        let mut ann_axiom = simple_acceptor.complete(b, o)?;
+        let mut ann_axiom = simple_acceptor.complete(b, o)?.0;
         for i in &mut self.annotations {
             ann_axiom.ann.insert(i.complete(b, o)?);
         }
 
-        dbg!(&ann_axiom);
-        Ok(ann_axiom)
+        Ok((ann_axiom, Merge::NeedsMerge))
     }
 }
 
