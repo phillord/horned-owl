@@ -1,3 +1,5 @@
+#![allow(dead_code, unused_variables)]
+
 use crate::model::*;
 use crate::vocab::*;
 
@@ -5,12 +7,20 @@ use curie::PrefixMapping;
 
 use failure::Error;
 
+use sophia::term::BNodeId;
 use sophia::term::IriData;
+use sophia::term::LiteralKind;
 use sophia::term::Term;
+
 
 use std::io::BufRead;
 use std::rc::Rc;
 
+// Two type aliases for "SoPhia" entities.
+type SpTerm = Term<Rc<str>>;
+type SpIri = IriData<Rc<str>>;
+
+#[derive(Debug)]
 enum AcceptState {
     // Accept and consume the triple
     Accept,
@@ -45,7 +55,20 @@ trait Acceptor<O>: std::fmt::Debug {
     fn accept(&mut self, b: &Build, triple: [Term<Rc<str>>; 3]) -> AcceptState;
 
     // Indicate the completion state of the acceptor.
-    fn can_complete(&mut self) -> CompleteState;
+    fn complete_state(&self) -> CompleteState;
+
+    fn is_complete(&self) -> bool {
+        match self.complete_state() {
+            CompleteState::Complete => true,
+            _ => false,
+        }
+    }
+    fn can_complete(&self) -> bool {
+        match self.complete_state() {
+            CompleteState::CanComplete | CompleteState::Complete => true,
+            _ => false,
+        }
+    }
 
     // Return an ontology entity based on the triples that have been
     // consumed and the data in the ontology. Return an Error if the
@@ -59,13 +82,16 @@ trait Acceptor<O>: std::fmt::Debug {
     // I will need to return "not got enough information from the
     // ontology"; I guess I should be able to return a "not in the
     // right state" error also. Anything else?
-    fn complete(self, b: &Build, o: &Ontology) -> Result<O, Error>;
+    fn complete(&mut self, b: &Build, o: &Ontology) -> Result<O, Error>;
 }
 
 #[derive(Debug, Default)]
 struct OntologyAcceptor {
-    incomplete: Vec<AnnotatedAxiomAcceptor>,
-    complete_acceptors: Vec<AnnotatedAxiomAcceptor>,
+    // Acceptors which are NotComplete or CanComplete
+    incomplete_acceptors: Vec<Box<dyn Acceptor<AnnotatedAxiom>>>,
+
+    // Acceptors which are Complete
+    complete_acceptors: Vec<Box<dyn Acceptor<AnnotatedAxiom>>>,
 
     // Does this make any sense -- we are replicating the Ontology
     // data structure here? And our data structures are
@@ -75,23 +101,22 @@ struct OntologyAcceptor {
     // the sophia data structures -- think it was better before. It
     // will probably help anyway when we come to structures were we
     // cannot work it out early
-    iri: Option<IriData<Rc<str>>>,
-    viri: Option<IriData<Rc<str>>>
+    iri: Option<SpIri>,
+    viri: Option<SpIri>,
 }
 
 impl Acceptor<Ontology> for OntologyAcceptor {
-    fn accept(&mut self, b:&Build, triple: [Term<Rc<str>>; 3]) -> AcceptState {
+    fn accept(&mut self, b: &Build, mut triple: [Term<Rc<str>>; 3]) -> AcceptState {
         match &triple {
             [Term::Iri(s), Term::Iri(p), Term::Iri(ob)]
-                if p == &"http://www.w3.org/1999/02/22-rdf-syntax-ns#type" &&
-                ob == &OWL::Ontology.iri_str() =>
+                if p == &"http://www.w3.org/1999/02/22-rdf-syntax-ns#type"
+                    && ob == &OWL::Ontology.iri_str() =>
             {
                 self.iri = Some(s.clone());
                 AcceptState::Accept
             }
             [Term::Iri(s), Term::Iri(p), Term::Iri(ob)]
-                if self.iri.as_ref() == Some(s) &&
-                p == &OWL::VersionIRI.iri_str() =>
+                if self.iri.as_ref() == Some(s) && p == &OWL::VersionIRI.iri_str() =>
             {
                 self.viri = Some(ob.clone());
                 AcceptState::Accept
@@ -101,51 +126,231 @@ impl Acceptor<Ontology> for OntologyAcceptor {
                 // accepts, then pass onto new acceptors and see if
                 // one of them accepts. Collect and collate any "backtracks",
                 // return one of these.
-                let mut d = AnnotatedAxiomAcceptor::default();
-                match d.accept(b, triple) {
-                    AcceptState::Accept => {
-                        // this only works because declaration
-                        // accepts are one long
-                        self.complete_acceptors.push(d);
-                        AcceptState::Accept
-                    },
-                    AcceptState::Return(t) => {
-                        AcceptState::Return(t)
-                    },
-                    AcceptState::BackTrack(v) => {
-                        AcceptState::BackTrack(v)
-                    },
+
+                // iterate through the incomplete acceptors and try
+                // them first
+                for i in 0..self.incomplete_acceptors.len() {
+                    let ac = &mut self.incomplete_acceptors[i];
+                    let acr = ac.accept(b, triple);
+                    match acr {
+                        AcceptState::Accept => {
+                            if ac.is_complete() {
+                                self.complete_acceptors.push(
+                                    self.incomplete_acceptors.remove(i)
+                                );
+                            }
+                            return acr;
+                        }
+                        AcceptState::Return(t) => {
+                            triple = t;
+                        }
+                        AcceptState::BackTrack(ts) => unimplemented!(),
+                    }
                 }
+
+                // Iterate through new acceptor
+                let acceptors: Vec<Box<dyn Acceptor<AnnotatedAxiom>>> = vec![
+                    Box::new(SimpleAnnotatedAxiomAcceptor::default()),
+                    Box::new(AnnotatedAxiomAcceptor::default()),
+                ];
+
+                for mut ac in acceptors {
+                    let acr = ac.accept(b, triple);
+                    match acr {
+                        AcceptState::Accept => {
+                            if ac.is_complete() {
+                                self.complete_acceptors.push(ac)
+                            } else {
+                                self.incomplete_acceptors.push(ac)
+                            };
+                            return acr;
+                        }
+                        AcceptState::Return(t) => {
+                            triple = t;
+                        }
+                        AcceptState::BackTrack(ts) => unimplemented!(),
+                    }
+                }
+
+                AcceptState::Return(triple)
             }
         }
     }
 
-    fn can_complete(&mut self) -> CompleteState {
+    fn complete_state(&self) -> CompleteState {
         unimplemented!()
     }
 
-    fn complete(self, b: &Build, o:&Ontology) -> Result<Ontology, Error> {
+    fn complete(&mut self, b: &Build, o: &Ontology) -> Result<Ontology, Error> {
         // Iterate over all the complete Acceptor, run complete on
         // them, and insert this
         let mut o = Ontology::default();
-        o.id.iri = self.iri.map(|i| b.iri(i.to_string()));
-        o.id.viri = self.viri.map(|i| b.iri(i.to_string()));
+        o.id.iri = self.iri.as_ref().map(|i| b.iri(i.to_string()));
+        o.id.viri = self.viri.as_ref().map(|i| b.iri(i.to_string()));
 
-        // TODO: deal with incomplete acceptors
-        for ac in self.complete_acceptors{
-           o.insert(ac.complete(b, &o)?);
+        for ac in &mut self.complete_acceptors {
+            o.insert(ac.complete(b, &o)?);
         }
+
+        for ac in &mut self.incomplete_acceptors {
+            o.insert(ac.complete(b, &o)?);
+        }
+
+        dbg!(&o);
         return Ok(o);
     }
 }
 
+// Accept axioms with no annotations then as an AnnotatedAxiom (with
+// no annotations)
+#[derive(Debug, Default)]
+struct SimpleAnnotatedAxiomAcceptor {
+    // Currently we just support a single axiom type
+    ac: Option<Box<dyn Acceptor<AnnotatedAxiom>>>,
+}
+
+impl Acceptor<AnnotatedAxiom> for SimpleAnnotatedAxiomAcceptor {
+    fn accept(&mut self, b: &Build, triple: [Term<Rc<str>>; 3]) -> AcceptState {
+        match &mut self.ac {
+            None => {
+                // Try all the possibilities till we find the first which
+                // accepts. Or currently, just fake it
+                self.ac = Some(Box::new(DeclarationAcceptor::default()));
+                self.accept(b, triple)
+            }
+            Some(acceptor) => acceptor.accept(b, triple),
+        }
+    }
+
+    fn complete_state(&self) -> CompleteState {
+        match &self.ac {
+            Some(a) => a.complete_state(),
+            None => CompleteState::NotComplete,
+        }
+    }
+
+    fn complete(&mut self, b: &Build, o: &Ontology) -> Result<AnnotatedAxiom, Error> {
+        match &mut self.ac {
+            Some(boxacceptor) => boxacceptor.complete(b, o),
+            None => unimplemented!(),
+        }
+    }
+}
+
+// Accept reified annotations of an axiom
 #[derive(Debug, Default)]
 struct AnnotatedAxiomAcceptor {
-    iri: Option<IriData<Rc<str>>>,
+    bnodeid: Option<BNodeId<Rc<str>>>,
+    // Currently we just support a single axiom type
+    annotated_source: Option<SpTerm>,
+    annotated_property: Option<SpTerm>,
+    annotated_target: Option<SpTerm>,
+    annotations: Vec<AnnotationAcceptor>,
+    complete: bool
 }
 
 impl Acceptor<AnnotatedAxiom> for AnnotatedAxiomAcceptor {
-    fn accept(&mut self, b:&Build, triple: [Term<Rc<str>>; 3]) -> AcceptState {
+    fn accept(&mut self, b: &Build, triple: [Term<Rc<str>>; 3]) -> AcceptState {
+        match &triple {
+            // This should only happen when bnodeid is None
+            [Term::BNode(s), Term::Iri(p), Term::Iri(ob)]
+                if p == &RDF::Type.iri_str() && ob == &OWL::Axiom.iri_str() =>
+            {
+                self.bnodeid = Some(s.clone());
+                AcceptState::Accept
+            }
+            [Term::BNode(s), Term::Iri(p), Term::Iri(ob)]
+                if Some(s) == self.bnodeid.as_ref() =>
+            {
+                match p {
+                    _ if p == &OWL::AnnotatedSource.iri_str() => {
+                        self.annotated_source = Some(triple[2].clone());
+                        AcceptState::Accept
+                    },
+                    _ if p == &OWL::AnnotatedProperty.iri_str() => {
+                        self.annotated_property = Some(triple[2].clone());
+                        AcceptState::Accept
+                    }
+                    _ if p == &OWL::AnnotatedTarget.iri_str() => {
+                        self.annotated_target = Some(triple[2].clone());
+                        AcceptState::Accept
+                    }
+                    _ => {
+                        dbg!("On bnode, but unrecognised", &triple);
+                        // This needs to be passed on to an annotation
+                        // acceptor
+                        AcceptState::Return(triple)
+                    }
+                }
+            }
+            [Term::BNode(s), _, _]
+                if Some(s) == self.bnodeid.as_ref() =>
+            {
+                let mut annac = AnnotationAcceptor::default();
+                let rtn = annac.accept(b, triple);
+
+                if annac.is_complete() {
+                    self.annotations.push(annac);
+                }
+                rtn
+            }
+            _ if self.bnodeid.is_some() && !self.complete => {
+                self.complete = true;
+                AcceptState::Return(triple)
+            }
+            _ => {
+                dbg!("default triple", self);
+                AcceptState::Return(triple)
+            }
+        }
+    }
+
+    fn complete_state(&self) -> CompleteState {
+        if self.complete {
+            CompleteState::Complete
+        }
+        else {
+            if self.bnodeid.is_some()
+                && self.annotated_source.is_some()
+                && self.annotated_property.is_some()
+                && self.annotated_target.is_some()
+            {
+                CompleteState::CanComplete
+            } else {
+                CompleteState::NotComplete
+            }
+        }
+    }
+
+    fn complete(&mut self, b: &Build, o: &Ontology) -> Result<AnnotatedAxiom, Error> {
+        // Convert the reified triple into a normal one, and then pass
+        // it to SimpleAnnotatedAxiomAcceptor to get the normal
+        // axiom.
+        let mut simple_acceptor = SimpleAnnotatedAxiomAcceptor::default();
+
+        let acs = simple_acceptor.accept(b,
+                                         [self.annotated_source.take().unwrap(),
+                                          self.annotated_property.take().unwrap(),
+                                          self.annotated_target.take().unwrap()]);
+
+        let mut ann_axiom = simple_acceptor.complete(b, o)?;
+        for i in &mut self.annotations {
+            ann_axiom.ann.insert(i.complete(b, o)?);
+        }
+
+        dbg!(&ann_axiom);
+        Ok(ann_axiom)
+    }
+}
+
+// Accept declarations of type
+#[derive(Debug, Default)]
+struct DeclarationAcceptor {
+    iri: Option<IriData<Rc<str>>>,
+}
+
+impl Acceptor<AnnotatedAxiom> for DeclarationAcceptor {
+    fn accept(&mut self, b: &Build, triple: [Term<Rc<str>>; 3]) -> AcceptState {
         match &triple {
             [Term::Iri(s), Term::Iri(p), Term::Iri(ob)]
                 if p == &"http://www.w3.org/1999/02/22-rdf-syntax-ns#type" =>
@@ -153,22 +358,88 @@ impl Acceptor<AnnotatedAxiom> for AnnotatedAxiomAcceptor {
                 self.iri = Some(s.clone());
                 AcceptState::Accept
             }
-            _=> {
-                dbg!(triple);
+            _ => AcceptState::Return(triple),
+        }
+    }
+
+    fn complete_state(&self) -> CompleteState {
+        if self.iri.is_some() {
+            CompleteState::Complete
+        } else {
+            CompleteState::NotComplete
+        }
+    }
+
+    fn complete(&mut self, b: &Build, o: &Ontology) -> Result<AnnotatedAxiom, Error> {
+        // Iterate over all the complete Acceptor, run complete on
+        // them, and insert this
+        let n: NamedEntity = b.class(self.iri.as_ref().unwrap().to_string()).into();
+        Ok(declaration(n).into())
+    }
+}
+
+
+
+// Accept declarations of type
+#[derive(Debug, Default)]
+struct AnnotationAcceptor {
+    p: Option<SpIri>,
+    iri_val: Option<SpIri>,
+    literal_val: Option<Rc<str>>,
+    literal_lang: Option<Rc<str>>,
+}
+
+impl Acceptor<Annotation> for AnnotationAcceptor {
+    fn accept(&mut self, b: &Build, triple: [Term<Rc<str>>; 3]) -> AcceptState {
+        match &triple {
+            [Term::BNode(s), Term::Iri(p), Term::Literal(ob, kind)] =>
+            {
+                // Literal value
+                self.p = Some(p.clone());
+                self.literal_val = Some(ob.clone());
+                if let LiteralKind::Lang(lang) = kind {
+                    self.literal_lang = Some(lang.clone());
+                }
+                AcceptState::Return(triple)
+            }
+            [Term::BNode(s), Term::Iri(p), Term::Iri(ob)] => {
+                // IRI annotation value
+                self.p = Some(p.clone());
+                self.iri_val = Some(ob.clone());
+                AcceptState::Return(triple)
+            }
+            _ => {
                 unimplemented!()
             }
         }
     }
 
-    fn can_complete(&mut self) -> CompleteState {
-        unimplemented!()
+    fn complete_state(&self) -> CompleteState {
+        if self.p.is_some() &&
+            self.iri_val.is_some() ||
+            self.literal_val.is_some() {
+                CompleteState::Complete
+            }
+        else {
+            CompleteState::NotComplete
+        }
     }
 
-    fn complete(self, b: &Build, o:&Ontology) -> Result<AnnotatedAxiom, Error> {
-        // Iterate over all the complete Acceptor, run complete on
-        // them, and insert this
-        let n:NamedEntity = b.class(self.iri.unwrap().to_string()).into();
-        Ok(declaration(n).into())
+    fn complete(&mut self, b: &Build, o: &Ontology) -> Result<Annotation, Error> {
+        Ok(
+            Annotation {
+                ap: b.annotation_property(self.p.as_ref().unwrap().to_string()),
+                av: if self.iri_val.is_some() {
+                    b.iri(self.iri_val.as_ref().unwrap().to_string()).into()
+                }
+                else {
+                    Literal::Language {
+                        literal:self.literal_val.as_ref().unwrap().to_string(),
+                        lang: self.literal_lang.as_ref().unwrap().to_string(),
+                    }.into()
+                }
+            }
+        )
     }
 }
 
@@ -192,8 +463,8 @@ pub fn read_with_build<R: BufRead>(
     let parser = sophia::parser::xml::Config::default();
     let triple_iter = parser.parse_bufread(bufread);
 
-    return read_then_complete(triple_iter, build, OntologyAcceptor::default()).
-        map (|o| return (o, PrefixMapping::default()));
+    return read_then_complete(triple_iter, build, OntologyAcceptor::default())
+        .map(|o| return (o, PrefixMapping::default()));
 }
 
 pub fn read<R: BufRead>(bufread: &mut R) -> Result<(Ontology, PrefixMapping), Error> {
@@ -242,10 +513,10 @@ mod test {
         compare("one-class");
     }
 
-    //#[test]
-    //fn declaration_with_annotation() {
-    //    compare("declaration-with-annotation");
-    //}
+    #[test]
+    fn declaration_with_annotation() {
+        compare("declaration-with-annotation");
+    }
 
     // #[test]
     // fn class_with_two_annotations() {

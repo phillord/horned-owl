@@ -79,18 +79,32 @@ lazy_meta! {
 
 
 pub enum OWL {
-    // TODO add the others
-    Thing,
+    // Lower case
+    AnnotatedSource,
+    AnnotatedProperty,
+    AnnotatedTarget,
+
+    // Upper Case
+    Axiom,
     Nothing,
     Ontology,
+    Thing,
     VersionIRI,
 }
 
 lazy_meta! {
     OWL, IRIString, METAOWL;
-    Thing, extend(OWL, "Thing");
+
+    // Lower Case
+    AnnotatedSource, extend(OWL, "annotatedSource");
+    AnnotatedProperty, extend(OWL, "annotatedProperty");
+    AnnotatedTarget, extend(OWL, "annotatedTarget");
+
+    // Upper Case
+    Axiom, extend(OWL, "Axiom");
     Nothing, extend(OWL, "Nothing");
     Ontology, extend(OWL, "Ontology");
+    Thing, extend(OWL, "Thing");
     VersionIRI, extend(OWL, "versionIRI");
 }
 
