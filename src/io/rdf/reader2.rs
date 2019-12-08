@@ -221,13 +221,32 @@ struct SimpleAnnotatedAxiomAcceptor {
 }
 
 impl Acceptor<(AnnotatedAxiom, Merge)> for SimpleAnnotatedAxiomAcceptor {
-    fn accept(&mut self, b: &Build, triple: [Term<Rc<str>>; 3]) -> AcceptState {
+    fn accept(&mut self, b: &Build, mut triple: [Term<Rc<str>>; 3]) -> AcceptState {
         match &mut self.ac {
             None => {
                 // Try all the possibilities till we find the first which
                 // accepts. Or currently, just fake it
-                self.ac = Some(Box::new(DeclarationAcceptor::default()));
-                self.accept(b, triple)
+                let acceptors: Vec<Box<dyn Acceptor<AnnotatedAxiom>>> = vec![
+                    Box::new(DeclarationAcceptor::default()),
+                    Box::new(SubClassOfAcceptor::default())
+                ];
+
+                for mut ac in acceptors {
+                    let acr = ac.accept(b, triple);
+                    match acr {
+                        AcceptState::Accept => {
+                            self.ac = Some(ac);
+                            return AcceptState::Accept;
+                        }
+                        AcceptState::Return(t) => {
+                            triple = t
+                        }
+                        _ => {
+                            panic!("Acceptor in unexpected state");
+                        }
+                    }
+                }
+                AcceptState::Return(triple)
             }
             Some(acceptor) => acceptor.accept(b, triple),
         }
@@ -310,7 +329,6 @@ impl Acceptor<(AnnotatedAxiom, Merge)> for AnnotatedAxiomAcceptor {
                 AcceptState::Return(triple)
             }
             _ => {
-                dbg!("default triple", self);
                 AcceptState::Return(triple)
             }
         }
@@ -388,9 +406,47 @@ impl Acceptor<AnnotatedAxiom> for DeclarationAcceptor {
     }
 }
 
+#[derive(Debug, Default)]
+struct SubClassOfAcceptor {
+    superclass: Option<SpIri>,
+    subclass: Option<SpIri>,
+}
 
+impl Acceptor<AnnotatedAxiom> for SubClassOfAcceptor {
+    fn accept(&mut self, b: &Build, triple: [Term<Rc<str>>; 3]) -> AcceptState {
+        match &triple {
+            [Term::Iri(s), Term::Iri(p), Term::Iri(ob)]
+                if p == &RDFS::SubClassOf.iri_str() =>
+            {
+                self.superclass=Some(ob.clone());
+                self.subclass=Some(s.clone());
+                AcceptState::Accept
+            }
+            _ => AcceptState::Return(triple),
+        }
+    }
 
-// Accept declarations of type
+    fn complete_state(&self) -> CompleteState {
+        if self.superclass.is_some() {
+            CompleteState::Complete
+        } else {
+            CompleteState::NotComplete
+        }
+    }
+
+    fn complete(&mut self, b: &Build, o: &Ontology) -> Result<AnnotatedAxiom, Error> {
+        // Iterate over all the complete Acceptor, run complete on
+        // them, and insert this
+        Ok(
+            SubClassOf {
+                sub: b.class(self.subclass.as_ref().unwrap().to_string()).into(),
+                sup: b.class(self.superclass.as_ref().unwrap().to_string()).into(),
+            }.into()
+        )
+    }
+}
+
+// Accept annotations
 #[derive(Debug, Default)]
 struct AnnotationAcceptor {
     p: Option<SpIri>,
@@ -538,27 +594,15 @@ mod test {
         compare("one-ont");
     }
 
-    // #[test]
-    // fn round_one_ont_prefix() {
-    //     let (_ont_orig, prefix_orig, _ont_round, prefix_round) =
-    //         roundtrip(include_str!("../ont/owl-xml/one-ont.owx"));
+    #[test]
+    fn one_subclass() {
+        compare("one-subclass");
+    }
 
-    //     let prefix_orig_map: HashMap<&String, &String> = prefix_orig.mappings().collect();
-
-    //     let prefix_round_map: HashMap<&String, &String> = prefix_round.mappings().collect();
-
-    //     assert_eq!(prefix_orig_map, prefix_round_map);
-    //}
-
-    // #[test]
-    // fn one_subclass() {
-    //     compare("one-subclass");
-    // }
-
-    // #[test]
-    // fn subclass_with_annotation() {
-    //     compare("annotation-on-subclass");
-    // }
+    #[test]
+    fn subclass_with_annotation() {
+        compare("annotation-on-subclass");
+    }
 
     // #[test]
     // fn one_oproperty() {

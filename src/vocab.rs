@@ -78,6 +78,15 @@ lazy_meta! {
 }
 
 
+pub enum RDFS {
+    SubClassOf,
+}
+
+lazy_meta! {
+    RDFS, IRIString, METARDFS;
+    SubClassOf, extend(RDFS, "subClassOf");
+}
+
 pub enum OWL {
     // Lower case
     AnnotatedSource,
