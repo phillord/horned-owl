@@ -202,6 +202,7 @@ impl Acceptor<Ontology> for OntologyAcceptor {
             }
         }
 
+        dbg!(&o);
         return Ok(o);
     }
 }
@@ -228,7 +229,10 @@ impl Acceptor<(AnnotatedAxiom, Merge)> for SimpleAnnotatedAxiomAcceptor {
                 // accepts. Or currently, just fake it
                 let acceptors: Vec<Box<dyn Acceptor<AnnotatedAxiom>>> = vec![
                     Box::new(DeclarationAcceptor::default()),
-                    Box::new(SubClassOfAcceptor::default())
+                    Box::new(SubClassOfAcceptor::default()),
+
+                    //Needs to go last!
+                    Box::new(AnnotationAssertionAcceptor::default()),
                 ];
 
                 for mut ac in acceptors {
@@ -446,6 +450,45 @@ impl Acceptor<AnnotatedAxiom> for SubClassOfAcceptor {
     }
 }
 
+#[derive(Debug, Default)]
+struct AnnotationAssertionAcceptor {
+    ac: Option<AnnotationAcceptor>,
+    subject: Option<SpIri>,
+}
+
+impl Acceptor<AnnotatedAxiom> for AnnotationAssertionAcceptor{
+    fn accept(&mut self, b: &Build, triple: [Term<Rc<str>>; 3]) -> AcceptState {
+        match &triple {
+            [Term::Iri(s), _, _] => {
+                self.subject = Some(s.clone());
+                self.ac = Some(AnnotationAcceptor::default());
+                self.ac.as_mut().unwrap().accept(b, triple)
+            }
+            _ => {
+                AcceptState::Return(triple)
+            }
+        }
+    }
+
+    fn complete_state(&self) -> CompleteState {
+        if self.subject.is_some() {
+            CompleteState::Complete
+        }
+        else{
+            CompleteState::NotComplete
+        }
+    }
+
+    fn complete(&mut self, b: &Build, o: &Ontology) -> Result<AnnotatedAxiom, Error> {
+        Ok(
+            AnnotationAssertion {
+                subject: b.iri(self.subject.as_ref().unwrap().to_string()),
+                ann: self.ac.as_mut().unwrap().complete(b, o)?,
+            }.into()
+        )
+    }
+}
+
 // Accept annotations
 #[derive(Debug, Default)]
 struct AnnotationAcceptor {
@@ -458,7 +501,7 @@ struct AnnotationAcceptor {
 impl Acceptor<Annotation> for AnnotationAcceptor {
     fn accept(&mut self, b: &Build, triple: [Term<Rc<str>>; 3]) -> AcceptState {
         match &triple {
-            [Term::BNode(s), Term::Iri(p), Term::Literal(ob, kind)] =>
+            [_, Term::Iri(p), Term::Literal(ob, kind)] =>
             {
                 // Literal value
                 self.p = Some(p.clone());
@@ -466,13 +509,13 @@ impl Acceptor<Annotation> for AnnotationAcceptor {
                 if let LiteralKind::Lang(lang) = kind {
                     self.literal_lang = Some(lang.clone());
                 }
-                AcceptState::Return(triple)
+                AcceptState::Accept
             }
-            [Term::BNode(s), Term::Iri(p), Term::Iri(ob)] => {
+            [_, Term::Iri(p), Term::Iri(ob)] => {
                 // IRI annotation value
                 self.p = Some(p.clone());
                 self.iri_val = Some(ob.clone());
-                AcceptState::Return(triple)
+                AcceptState::Accept
             }
             _ => {
                 unimplemented!()
@@ -584,10 +627,10 @@ mod test {
         compare("declaration-with-annotation");
     }
 
-    // #[test]
-    // fn class_with_two_annotations() {
-    //     compare("class_with_two_annotations");
-    // }
+    //#[test]
+    //fn class_with_two_annotations() {
+    //    compare("class_with_two_annotations");
+    //}
 
     #[test]
     fn one_ont() {
@@ -659,14 +702,14 @@ mod test {
     //     compare("one-label");
     // }
 
-    // #[test]
-    // fn one_comment() {
-    //     // This is currently failing because the XML parser gives the
-    //     // comment a language and a datatype ("PlainLiteral") while
-    //     // the RDF one gives it just the language, as literals can't
-    //     // be both. Which is correct?
-    //     compare("one-comment");
-    // }
+    #[test]
+    fn one_comment() {
+        // This is currently failing because the XML parser gives the
+        // comment a language and a datatype ("PlainLiteral") while
+        // the RDF one gives it just the language, as literals can't
+        // be both. Which is correct?
+        compare("one-comment");
+    }
 
     // #[test]
     // fn one_ontology_annotation() {
