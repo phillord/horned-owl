@@ -28,10 +28,10 @@ enum AcceptState {
     Accept,
 
     // Do not accept the triple and return it
-    Return([Term<Rc<str>>; 3]),
+    Return([SpTerm; 3]),
 
     // Return triples that were previously accepted
-    BackTrack(Vec<[Term<Rc<str>>; 3]>),
+    BackTrack(Vec<[SpTerm; 3]>),
 }
 
 enum CompleteState {
@@ -54,7 +54,7 @@ enum CompleteState {
 
 trait Acceptor<O>: std::fmt::Debug {
     // Accept a triple.
-    fn accept(&mut self, b: &Build, triple: [Term<Rc<str>>; 3]) -> AcceptState;
+    fn accept(&mut self, b: &Build, triple: [SpTerm; 3]) -> AcceptState;
 
     // Indicate the completion state of the acceptor.
     fn complete_state(&self) -> CompleteState;
@@ -122,6 +122,14 @@ impl MaybeConvert for Option<SpIri> {
     }
 }
 
+macro_rules! all_some {
+    ($name:expr) => {
+        $name.is_some()
+    };
+    ($name:expr, $($names:expr),*) => {
+        all_some!($name) && all_some!($($names),*)
+    };
+}
 
 #[derive(Debug, Default)]
 struct OntologyAcceptor {
@@ -144,7 +152,7 @@ struct OntologyAcceptor {
 }
 
 impl Acceptor<Ontology> for OntologyAcceptor {
-    fn accept(&mut self, b: &Build, mut triple: [Term<Rc<str>>; 3]) -> AcceptState {
+    fn accept(&mut self, b: &Build, mut triple: [SpTerm; 3]) -> AcceptState {
         match &triple {
             [Term::Iri(s), Term::Iri(p), Term::Iri(ob)]
                 if p == &"http://www.w3.org/1999/02/22-rdf-syntax-ns#type"
@@ -258,7 +266,7 @@ struct SimpleAnnotatedAxiomAcceptor {
 }
 
 impl Acceptor<(AnnotatedAxiom, Merge)> for SimpleAnnotatedAxiomAcceptor {
-    fn accept(&mut self, b: &Build, mut triple: [Term<Rc<str>>; 3]) -> AcceptState {
+    fn accept(&mut self, b: &Build, mut triple: [SpTerm; 3]) -> AcceptState {
         match &mut self.ac {
             None => {
                 // Try all the possibilities till we find the first which
@@ -320,7 +328,7 @@ struct AnnotatedAxiomAcceptor {
 }
 
 impl Acceptor<(AnnotatedAxiom, Merge)> for AnnotatedAxiomAcceptor {
-    fn accept(&mut self, b: &Build, triple: [Term<Rc<str>>; 3]) -> AcceptState {
+    fn accept(&mut self, b: &Build, triple: [SpTerm; 3]) -> AcceptState {
         match &triple {
             // This should only happen when bnodeid is None
             [Term::BNode(s), Term::Iri(p), Term::Iri(ob)]
@@ -379,10 +387,8 @@ impl Acceptor<(AnnotatedAxiom, Merge)> for AnnotatedAxiomAcceptor {
             CompleteState::Complete
         }
         else {
-            if self.bnodeid.is_some()
-                && self.annotated_source.is_some()
-                && self.annotated_property.is_some()
-                && self.annotated_target.is_some()
+            if all_some!(self.bnodeid, self.annotated_source,
+                         self.annotated_property, self.annotated_target)
             {
                 CompleteState::CanComplete
             } else {
