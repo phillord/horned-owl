@@ -87,6 +87,42 @@ trait Acceptor<O>: std::fmt::Debug {
     fn complete(&mut self, b: &Build, o: &Ontology) -> Result<O, Error>;
 }
 
+trait Convert {
+    fn to_iri(&self, b: &Build) -> IRI;
+}
+
+trait MaybeConvert {
+    fn to_some_iri(&self, b:&Build) -> Option<IRI>;
+
+    fn to_iri_maybe(&self, b:&Build) -> Result<IRI, Error> {
+        match self.to_some_iri(b) {
+            Some(iri) => Ok(iri),
+            None => panic!("Fix this"),
+        }
+    }
+
+    fn to_class_maybe(&self, b:&Build) -> Result<Class, Error> {
+        self.to_iri_maybe(b).map(|i| i.into())
+    }
+
+    fn to_annotation_property_maybe(&self, b: &Build) -> Result<AnnotationProperty, Error> {
+        self.to_iri_maybe(b).map(|i| i.into())
+    }
+}
+
+impl Convert for SpIri {
+    fn to_iri(&self, b:&Build) -> IRI {
+        b.iri(self.to_string())
+    }
+}
+
+impl MaybeConvert for Option<SpIri> {
+    fn to_some_iri(&self, b: &Build) -> Option<IRI> {
+        self.as_ref().map(|i| i.to_iri(b))
+    }
+}
+
+
 #[derive(Debug, Default)]
 struct OntologyAcceptor {
     // Acceptors which are NotComplete or CanComplete
@@ -187,8 +223,8 @@ impl Acceptor<Ontology> for OntologyAcceptor {
         // Iterate over all the complete Acceptor, run complete on
         // them, and insert this
         let mut o = Ontology::default();
-        o.id.iri = self.iri.as_ref().map(|i| b.iri(i.to_string()));
-        o.id.viri = self.viri.as_ref().map(|i| b.iri(i.to_string()));
+        o.id.iri = self.iri.to_some_iri(b);
+        o.id.viri = self.viri.to_some_iri(b);
 
         //let mut ch = self.complete_acceptors.iter().chain(self.incomplete_acceptors.iter());
         for ac in self.complete_acceptors.iter_mut()
@@ -405,7 +441,7 @@ impl Acceptor<AnnotatedAxiom> for DeclarationAcceptor {
     fn complete(&mut self, b: &Build, o: &Ontology) -> Result<AnnotatedAxiom, Error> {
         // Iterate over all the complete Acceptor, run complete on
         // them, and insert this
-        let n: NamedEntity = b.class(self.iri.as_ref().unwrap().to_string()).into();
+        let n: NamedEntity = self.iri.to_class_maybe(b)?.into();
         Ok(declaration(n).into())
     }
 }
@@ -443,8 +479,8 @@ impl Acceptor<AnnotatedAxiom> for SubClassOfAcceptor {
         // them, and insert this
         Ok(
             SubClassOf {
-                sub: b.class(self.subclass.as_ref().unwrap().to_string()).into(),
-                sup: b.class(self.superclass.as_ref().unwrap().to_string()).into(),
+                sub: self.subclass.to_class_maybe(b)?.into(),
+                sup: self.superclass.to_class_maybe(b)?.into(),
             }.into()
         )
     }
@@ -482,7 +518,8 @@ impl Acceptor<AnnotatedAxiom> for AnnotationAssertionAcceptor{
     fn complete(&mut self, b: &Build, o: &Ontology) -> Result<AnnotatedAxiom, Error> {
         Ok(
             AnnotationAssertion {
-                subject: b.iri(self.subject.as_ref().unwrap().to_string()),
+                subject: self.subject.to_iri_maybe(b)?,
+                //b.iri(self.subject.as_ref().unwrap().to_string()),
                 ann: self.ac.as_mut().unwrap().complete(b, o)?,
             }.into()
         )
@@ -537,9 +574,10 @@ impl Acceptor<Annotation> for AnnotationAcceptor {
     fn complete(&mut self, b: &Build, o: &Ontology) -> Result<Annotation, Error> {
         Ok(
             Annotation {
-                ap: b.annotation_property(self.p.as_ref().unwrap().to_string()),
-                av: if self.iri_val.is_some() {
-                    b.iri(self.iri_val.as_ref().unwrap().to_string()).into()
+                ap: self.p.to_annotation_property_maybe(b)?,
+                av:
+                if self.iri_val.is_some() {
+                    self.iri_val.to_iri_maybe(b)?.into()
                 }
                 else {
                     Literal::Language {
