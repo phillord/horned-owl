@@ -34,6 +34,7 @@ enum AcceptState {
     BackTrack(Vec<[SpTerm; 3]>),
 }
 
+#[derive(Debug, Eq, PartialEq)]
 enum CompleteState {
     // The acceptor does not have all of the information that it needs
     // because it has not recieved enough triples.
@@ -91,6 +92,12 @@ trait Convert {
     fn to_iri(&self, b: &Build) -> IRI;
 }
 
+impl Convert for SpIri {
+    fn to_iri(&self, b:&Build) -> IRI {
+        b.iri(self.to_string())
+    }
+}
+
 trait MaybeConvert {
     fn to_some_iri(&self, b:&Build) -> Option<IRI>;
 
@@ -102,18 +109,17 @@ trait MaybeConvert {
     }
 
     fn to_class_maybe(&self, b:&Build) -> Result<Class, Error> {
-        self.to_iri_maybe(b).map(|i| i.into())
+        Ok(self.to_iri_maybe(b)?.into())
+    }
+
+    fn to_object_property_maybe(&self, b: &Build) -> Result<ObjectProperty, Error> {
+        Ok(self.to_iri_maybe(b)?.into())
     }
 
     fn to_annotation_property_maybe(&self, b: &Build) -> Result<AnnotationProperty, Error> {
-        self.to_iri_maybe(b).map(|i| i.into())
+        Ok(self.to_iri_maybe(b)?.into())
     }
-}
 
-impl Convert for SpIri {
-    fn to_iri(&self, b:&Build) -> IRI {
-        b.iri(self.to_string())
-    }
 }
 
 impl MaybeConvert for Option<SpIri> {
@@ -128,6 +134,15 @@ macro_rules! all_some {
     };
     ($name:expr, $($names:expr),*) => {
         all_some!($name) && all_some!($($names),*)
+    };
+}
+
+macro_rules! all_complete {
+    ($name:expr) => {
+        $name.is_some() && $name.as_ref().unwrap().complete_state() == CompleteState::Complete
+    };
+    ($name:expr, $($names:expr),*) => {
+        all_complete!($name) && all_complete!($($names),*)
     };
 }
 
@@ -247,6 +262,7 @@ impl Acceptor<Ontology> for OntologyAcceptor {
         }
 
         dbg!(&o);
+        // dbg!(&o); if true {panic!()}
         return Ok(o);
     }
 }
@@ -420,16 +436,18 @@ impl Acceptor<(AnnotatedAxiom, Merge)> for AnnotatedAxiomAcceptor {
 // Accept declarations of type
 #[derive(Debug, Default)]
 struct DeclarationAcceptor {
-    iri: Option<IriData<Rc<str>>>,
+    iri: Option<SpIri>,
+    kind: Option<SpIri>
 }
 
 impl Acceptor<AnnotatedAxiom> for DeclarationAcceptor {
-    fn accept(&mut self, b: &Build, triple: [Term<Rc<str>>; 3]) -> AcceptState {
+    fn accept(&mut self, b: &Build, triple: [SpTerm; 3]) -> AcceptState {
         match &triple {
             [Term::Iri(s), Term::Iri(p), Term::Iri(ob)]
                 if p == &"http://www.w3.org/1999/02/22-rdf-syntax-ns#type" =>
             {
                 self.iri = Some(s.clone());
+                self.kind = Some(ob.clone());
                 AcceptState::Accept
             }
             _ => AcceptState::Return(triple),
@@ -447,15 +465,70 @@ impl Acceptor<AnnotatedAxiom> for DeclarationAcceptor {
     fn complete(&mut self, b: &Build, o: &Ontology) -> Result<AnnotatedAxiom, Error> {
         // Iterate over all the complete Acceptor, run complete on
         // them, and insert this
-        let n: NamedEntity = self.iri.to_class_maybe(b)?.into();
+        let n: NamedEntity =
+            match &self.kind {
+                Some(i) if i == &OWL::Class.iri_str() => {
+                    self.iri.to_class_maybe(b)?.into()
+                }
+                Some(i) if i == &OWL::ObjectProperty.iri_str() => {
+                    self.iri.to_object_property_maybe(b)?.into()
+                }
+                Some(_) => unimplemented!(),
+                None => {
+                    unimplemented!();
+                }
+            };
+
         Ok(declaration(n).into())
+    }
+}
+
+#[derive(Debug)]
+struct ClassExpressionAcceptor {
+    class: Option<SpIri>,
+    bnode: Option<BNodeId<Rc<str>>>,
+    complete: bool,
+}
+
+impl ClassExpressionAcceptor {
+    fn for_iri(class: SpIri) -> ClassExpressionAcceptor {
+        ClassExpressionAcceptor {class:Some(class), bnode: None, complete: true}
+    }
+
+    fn for_bnode(bnode:BNodeId<Rc<str>>) -> ClassExpressionAcceptor {
+        ClassExpressionAcceptor {class: None, bnode: Some(bnode), complete: false}
+    }
+}
+
+impl Acceptor<ClassExpression> for ClassExpressionAcceptor {
+    // Accept a triple.
+    fn accept(&mut self, b: &Build, triple: [SpTerm; 3]) -> AcceptState {
+        unimplemented!()
+    }
+
+    // Indicate the completion state of the acceptor.
+    fn complete_state(&self) -> CompleteState {
+        if self.complete || self.class.is_some() {
+            CompleteState::Complete
+        }
+        else {
+            CompleteState::NotComplete
+        }
+    }
+
+    fn complete(&mut self, b: &Build, o: &Ontology) -> Result<ClassExpression, Error> {
+        if self.class.is_some() {
+            return Ok(self.class.to_class_maybe(b)?.into())
+        }
+
+        unimplemented!()
     }
 }
 
 #[derive(Debug, Default)]
 struct SubClassOfAcceptor {
-    superclass: Option<SpIri>,
-    subclass: Option<SpIri>,
+    superclass: Option<ClassExpressionAcceptor>,
+    subclass: Option<ClassExpressionAcceptor>,
 }
 
 impl Acceptor<AnnotatedAxiom> for SubClassOfAcceptor {
@@ -464,8 +537,8 @@ impl Acceptor<AnnotatedAxiom> for SubClassOfAcceptor {
             [Term::Iri(s), Term::Iri(p), Term::Iri(ob)]
                 if p == &RDFS::SubClassOf.iri_str() =>
             {
-                self.superclass=Some(ob.clone());
-                self.subclass=Some(s.clone());
+                self.subclass = Some(ClassExpressionAcceptor::for_iri(s.clone()));
+                self.superclass = Some(ClassExpressionAcceptor::for_iri(ob.clone()));
                 AcceptState::Accept
             }
             _ => AcceptState::Return(triple),
@@ -473,7 +546,8 @@ impl Acceptor<AnnotatedAxiom> for SubClassOfAcceptor {
     }
 
     fn complete_state(&self) -> CompleteState {
-        if self.superclass.is_some() {
+        if all_complete!(&self.superclass, &self.subclass)
+        {
             CompleteState::Complete
         } else {
             CompleteState::NotComplete
@@ -485,8 +559,8 @@ impl Acceptor<AnnotatedAxiom> for SubClassOfAcceptor {
         // them, and insert this
         Ok(
             SubClassOf {
-                sub: self.subclass.to_class_maybe(b)?.into(),
-                sup: self.superclass.to_class_maybe(b)?.into(),
+                sub: self.subclass.as_mut().unwrap().complete(b, o)?,
+                sup: self.superclass.as_mut().unwrap().complete(b, o)?,
             }.into()
         )
     }
@@ -561,6 +635,7 @@ impl Acceptor<Annotation> for AnnotationAcceptor {
                 AcceptState::Accept
             }
             _ => {
+                dbg!(&triple);
                 unimplemented!()
             }
         }
@@ -671,10 +746,10 @@ mod test {
         compare("declaration-with-annotation");
     }
 
-    //#[test]
-    //fn class_with_two_annotations() {
-    //    compare("class_with_two_annotations");
-    //}
+    #[test]
+    fn class_with_two_annotations() {
+        compare("class_with_two_annotations");
+    }
 
     #[test]
     fn one_ont() {
@@ -691,15 +766,15 @@ mod test {
         compare("annotation-on-subclass");
     }
 
-    // #[test]
-    // fn one_oproperty() {
-    //     compare("one-oproperty");
-    // }
+    #[test]
+    fn one_oproperty() {
+        compare("one-oproperty");
+    }
 
-    // #[test]
-    // fn one_some() {
-    //     compare("one-some");
-    // }
+    //#[test]
+    //fn one_some() {
+    //    compare("one-some");
+    //}
 
     // #[test]
     // fn one_only() {
@@ -741,10 +816,10 @@ mod test {
     //     compare("annotation-range");
     // }
 
-    // #[test]
-    // fn one_label() {
-    //     compare("one-label");
-    // }
+    #[test]
+    fn one_label() {
+        compare("one-label");
+    }
 
     #[test]
     fn one_comment() {

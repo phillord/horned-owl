@@ -95,7 +95,9 @@ pub enum OWL {
 
     // Upper Case
     Axiom,
+    Class,
     Nothing,
+    ObjectProperty,
     Ontology,
     Thing,
     VersionIRI,
@@ -111,7 +113,9 @@ lazy_meta! {
 
     // Upper Case
     Axiom, extend(OWL, "Axiom");
+    Class, extend(OWL, "Class");
     Nothing, extend(OWL, "Nothing");
+    ObjectProperty, extend(OWL, "ObjectProperty");
     Ontology, extend(OWL, "Ontology");
     Thing, extend(OWL, "Thing");
     VersionIRI, extend(OWL, "versionIRI");
