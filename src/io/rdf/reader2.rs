@@ -1,5 +1,8 @@
 #![allow(dead_code, unused_variables)]
 
+use AcceptState::*;
+use CompleteState::*;
+
 use crate::model::*;
 use crate::vocab::*;
 
@@ -13,7 +16,6 @@ use sophia::term::BNodeId;
 use sophia::term::IriData;
 use sophia::term::LiteralKind;
 use sophia::term::Term;
-
 
 use std::io::BufRead;
 use std::rc::Rc;
@@ -63,13 +65,13 @@ trait Acceptor<O>: std::fmt::Debug {
 
     fn is_complete(&self) -> bool {
         match self.complete_state() {
-            CompleteState::Complete => true,
+            Complete => true,
             _ => false,
         }
     }
     fn can_complete(&self) -> bool {
         match self.complete_state() {
-            CompleteState::CanComplete | CompleteState::Complete => true,
+            CanComplete | Complete => true,
             _ => false,
         }
     }
@@ -149,7 +151,7 @@ macro_rules! all_some {
 
 macro_rules! all_complete {
     ($name:expr) => {
-        $name.is_some() && $name.as_ref().unwrap().complete_state() == CompleteState::Complete
+        $name.is_some() && $name.as_ref().unwrap().complete_state() == Complete
     };
     ($name:expr, $($names:expr),*) => {
         all_complete!($name) && all_complete!($($names),*)
@@ -184,13 +186,13 @@ impl Acceptor<Ontology> for OntologyAcceptor {
                     && ob == &OWL::Ontology.iri_str() =>
             {
                 self.iri = Some(s.clone());
-                AcceptState::Accept
+                Accept
             }
             [Term::Iri(s), Term::Iri(p), Term::Iri(ob)]
                 if self.iri.as_ref() == Some(s) && p == &OWL::VersionIRI.iri_str() =>
             {
                 self.viri = Some(ob.clone());
-                AcceptState::Accept
+                Accept
             }
             _ => {
                 // Pass on to incomplete acceptors, till one of them
@@ -204,7 +206,7 @@ impl Acceptor<Ontology> for OntologyAcceptor {
                     let ac = &mut self.incomplete_acceptors[i];
                     let acr = ac.accept(b, triple);
                     match acr {
-                        AcceptState::Accept => {
+                        Accept => {
                             if ac.is_complete() {
                                 self.complete_acceptors.push(
                                     self.incomplete_acceptors.remove(i)
@@ -212,10 +214,10 @@ impl Acceptor<Ontology> for OntologyAcceptor {
                             }
                             return acr;
                         }
-                        AcceptState::Return(t) => {
+                        Return(t) => {
                             triple = t;
                         }
-                        AcceptState::BackTrack(ts) => unimplemented!(),
+                        BackTrack(ts) => unimplemented!(),
                     }
                 }
 
@@ -228,7 +230,7 @@ impl Acceptor<Ontology> for OntologyAcceptor {
                 for mut ac in acceptors {
                     let acr = ac.accept(b, triple);
                     match acr {
-                        AcceptState::Accept => {
+                        Accept => {
                             if ac.is_complete() {
                                 self.complete_acceptors.push(ac)
                             } else {
@@ -236,15 +238,15 @@ impl Acceptor<Ontology> for OntologyAcceptor {
                             };
                             return acr;
                         }
-                        AcceptState::Return(t) => {
+                        Return(t) => {
                             triple = t;
                         }
-                        AcceptState::BackTrack(ts) => unimplemented!(),
+                        BackTrack(ts) => unimplemented!(),
                     }
                 }
 
                 //dbg!("Return unaccepted triple");
-                AcceptState::Return(triple)
+                Return(triple)
             }
         }
     }
@@ -309,11 +311,11 @@ impl Acceptor<(AnnotatedAxiom, Merge)> for SimpleAnnotatedAxiomAcceptor {
                 for mut ac in acceptors {
                     let acr = ac.accept(b, triple);
                     match acr {
-                        AcceptState::Accept => {
+                        Accept => {
                             self.ac = Some(ac);
-                            return AcceptState::Accept;
+                            return Accept;
                         }
-                        AcceptState::Return(t) => {
+                        Return(t) => {
                             triple = t
                         }
                         _ => {
@@ -321,7 +323,7 @@ impl Acceptor<(AnnotatedAxiom, Merge)> for SimpleAnnotatedAxiomAcceptor {
                         }
                     }
                 }
-                AcceptState::Return(triple)
+                Return(triple)
             }
             Some(acceptor) => acceptor.accept(b, triple),
         }
@@ -330,7 +332,7 @@ impl Acceptor<(AnnotatedAxiom, Merge)> for SimpleAnnotatedAxiomAcceptor {
     fn complete_state(&self) -> CompleteState {
         match &self.ac {
             Some(a) => a.complete_state(),
-            None => CompleteState::NotComplete,
+            None => NotComplete,
         }
     }
 
@@ -362,7 +364,7 @@ impl Acceptor<(AnnotatedAxiom, Merge)> for AnnotatedAxiomAcceptor {
                 if p == &RDF::Type.iri_str() && ob == &OWL::Axiom.iri_str() =>
             {
                 self.bnodeid = Some(s.clone());
-                AcceptState::Accept
+                Accept
             }
             [Term::BNode(s), Term::Iri(p), Term::Iri(ob)]
                 if Some(s) == self.bnodeid.as_ref() =>
@@ -370,20 +372,20 @@ impl Acceptor<(AnnotatedAxiom, Merge)> for AnnotatedAxiomAcceptor {
                 match p {
                     _ if p == &OWL::AnnotatedSource.iri_str() => {
                         self.annotated_source = Some(triple[2].clone());
-                        AcceptState::Accept
+                        Accept
                     },
                     _ if p == &OWL::AnnotatedProperty.iri_str() => {
                         self.annotated_property = Some(triple[2].clone());
-                        AcceptState::Accept
+                        Accept
                     }
                     _ if p == &OWL::AnnotatedTarget.iri_str() => {
                         self.annotated_target = Some(triple[2].clone());
-                        AcceptState::Accept
+                        Accept
                     }
                     _ => {
                         // This needs to be passed on to an annotation
                         // acceptor
-                        AcceptState::Return(triple)
+                        Return(triple)
                     }
                 }
             }
@@ -400,25 +402,25 @@ impl Acceptor<(AnnotatedAxiom, Merge)> for AnnotatedAxiomAcceptor {
             }
             _ if self.bnodeid.is_some() && !self.complete => {
                 self.complete = true;
-                AcceptState::Return(triple)
+                Return(triple)
             }
             _ => {
-                AcceptState::Return(triple)
+                Return(triple)
             }
         }
     }
 
     fn complete_state(&self) -> CompleteState {
         if self.complete {
-            CompleteState::Complete
+            Complete
         }
         else {
             if all_some!(self.bnodeid, self.annotated_source,
                          self.annotated_property, self.annotated_target)
             {
-                CompleteState::CanComplete
+                CanComplete
             } else {
-                CompleteState::NotComplete
+                NotComplete
             }
         }
     }
@@ -458,17 +460,17 @@ impl Acceptor<AnnotatedAxiom> for DeclarationAcceptor {
             {
                 self.iri = Some(s.clone());
                 self.kind = Some(ob.clone());
-                AcceptState::Accept
+                Accept
             }
-            _ => AcceptState::Return(triple),
+            _ => Return(triple),
         }
     }
 
     fn complete_state(&self) -> CompleteState {
         if self.iri.is_some() {
-            CompleteState::Complete
+            Complete
         } else {
-            CompleteState::NotComplete
+            NotComplete
         }
     }
 
@@ -521,20 +523,20 @@ impl Acceptor<ClassExpression> for ClassExpressionAcceptor {
             {
                 // WHat should we do with a statement that we have a restriction?
                 //self.bnode = Some(id.clone());
-                AcceptState::Accept
+                Accept
             }
             [Term::BNode(id), Term::Iri(p), ob]
                 if Some(id) == self.bnode.as_ref() =>
             {
                 self.tuples.push((p.clone(), ob.clone()));
-                AcceptState::Accept
+                Accept
             }
             // Fallen off bnode
             _ if self.bnode.is_some() => {
                 // Currently, stop, but really should pass along to
                 // sub acceptors
                 self.complete = true;
-                AcceptState::Return(triple)
+                Return(triple)
             }
             _ => {
                 unimplemented!("ClassExpressionAcceptor accept")
@@ -545,10 +547,10 @@ impl Acceptor<ClassExpression> for ClassExpressionAcceptor {
     // Indicate the completion state of the acceptor.
     fn complete_state(&self) -> CompleteState {
         if self.complete || self.class.is_some() {
-            CompleteState::Complete
+            Complete
         }
         else {
-            CompleteState::NotComplete
+            NotComplete
         }
     }
 
@@ -581,14 +583,14 @@ impl Acceptor<AnnotatedAxiom> for SubClassOfAcceptor {
             {
                 self.subclass = Some(ClassExpressionAcceptor::for_iri(s.clone()));
                 self.superclass = Some(ClassExpressionAcceptor::for_iri(ob.clone()));
-                AcceptState::Accept
+                Accept
             }
             [Term::Iri(s), Term::Iri(p), Term::BNode(id)]
                 if p == &RDFS::SubClassOf.iri_str() =>
             {
                 self.subclass = Some(ClassExpressionAcceptor::for_iri(s.clone()));
                 self.superclass = Some(ClassExpressionAcceptor::for_bnode(id.clone()));
-                AcceptState::Accept
+                Accept
             }
             _ => {
                 match &mut self.superclass {
@@ -597,7 +599,7 @@ impl Acceptor<AnnotatedAxiom> for SubClassOfAcceptor {
                         // fix this later
                         ac.accept(b, triple)
                     }
-                    None => AcceptState::Return(triple)
+                    None => Return(triple)
                 }
             }
         }
@@ -606,9 +608,9 @@ impl Acceptor<AnnotatedAxiom> for SubClassOfAcceptor {
     fn complete_state(&self) -> CompleteState {
         if all_complete!(&self.superclass, &self.subclass)
         {
-            CompleteState::Complete
+            Complete
         } else {
-            CompleteState::NotComplete
+            NotComplete
         }
     }
 
@@ -639,17 +641,17 @@ impl Acceptor<AnnotatedAxiom> for AnnotationAssertionAcceptor{
                 self.ac.as_mut().unwrap().accept(b, triple)
             }
             _ => {
-                AcceptState::Return(triple)
+                Return(triple)
             }
         }
     }
 
     fn complete_state(&self) -> CompleteState {
         if self.subject.is_some() {
-            CompleteState::Complete
+            Complete
         }
         else{
-            CompleteState::NotComplete
+            NotComplete
         }
     }
 
@@ -684,13 +686,13 @@ impl Acceptor<Annotation> for AnnotationAcceptor {
                 if let LiteralKind::Lang(lang) = kind {
                     self.literal_lang = Some(lang.clone());
                 }
-                AcceptState::Accept
+                Accept
             }
             [_, Term::Iri(p), Term::Iri(ob)] => {
                 // IRI annotation value
                 self.p = Some(p.clone());
                 self.iri_val = Some(ob.clone());
-                AcceptState::Accept
+                Accept
             }
             _ => {
                 unimplemented!()
@@ -702,10 +704,10 @@ impl Acceptor<Annotation> for AnnotationAcceptor {
         if self.p.is_some() &&
             self.iri_val.is_some() ||
             self.literal_val.is_some() {
-                CompleteState::Complete
+                Complete
             }
         else {
-            CompleteState::NotComplete
+            NotComplete
         }
     }
 
@@ -741,8 +743,8 @@ fn read_then_complete_1(
 
         // Check return type of this and do something sensible
         match acceptor.accept(b, t) {
-            AcceptState::Accept => {}
-            AcceptState::Return(triple) => {
+            Accept => {}
+            Return(triple) => {
                 let x = triple;
                 not_accepted_triples.push(Ok(x));
             }
