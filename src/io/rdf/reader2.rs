@@ -55,6 +55,7 @@ enum CompleteState {
 
 trait Acceptor<O>: std::fmt::Debug {
     // Accept a triple.
+    #[must_use]
     fn accept(&mut self, b: &Build, triple: [SpTerm; 3]) -> AcceptState;
 
     // Indicate the completion state of the acceptor.
@@ -125,6 +126,15 @@ trait MaybeConvert {
 impl MaybeConvert for Option<SpIri> {
     fn to_some_iri(&self, b: &Build) -> Option<IRI> {
         self.as_ref().map(|i| i.to_iri(b))
+    }
+}
+
+impl MaybeConvert for SpTerm {
+    fn to_some_iri(&self, b: &Build) -> Option<IRI> {
+        match self {
+            Term::Iri(iri) => Some(iri.to_iri(b)),
+            _ => None,
+        }
     }
 }
 
@@ -233,6 +243,7 @@ impl Acceptor<Ontology> for OntologyAcceptor {
                     }
                 }
 
+                //dbg!("Return unaccepted triple");
                 AcceptState::Return(triple)
             }
         }
@@ -370,7 +381,6 @@ impl Acceptor<(AnnotatedAxiom, Merge)> for AnnotatedAxiomAcceptor {
                         AcceptState::Accept
                     }
                     _ => {
-                        dbg!("On bnode, but unrecognised", &triple);
                         // This needs to be passed on to an annotation
                         // acceptor
                         AcceptState::Return(triple)
@@ -488,22 +498,48 @@ struct ClassExpressionAcceptor {
     class: Option<SpIri>,
     bnode: Option<BNodeId<Rc<str>>>,
     complete: bool,
+
+    tuples: Vec<(SpIri, SpTerm)>,
 }
 
 impl ClassExpressionAcceptor {
     fn for_iri(class: SpIri) -> ClassExpressionAcceptor {
-        ClassExpressionAcceptor {class:Some(class), bnode: None, complete: true}
+        ClassExpressionAcceptor {class:Some(class), bnode: None, complete: true, tuples: vec![]}
     }
 
     fn for_bnode(bnode:BNodeId<Rc<str>>) -> ClassExpressionAcceptor {
-        ClassExpressionAcceptor {class: None, bnode: Some(bnode), complete: false}
+        ClassExpressionAcceptor {class: None, bnode: Some(bnode), complete: false, tuples: vec![]}
     }
 }
 
 impl Acceptor<ClassExpression> for ClassExpressionAcceptor {
     // Accept a triple.
     fn accept(&mut self, b: &Build, triple: [SpTerm; 3]) -> AcceptState {
-        unimplemented!()
+        match &triple {
+            [Term::BNode(id), Term::Iri(p), Term::Iri(ob)]
+                if ob == &OWL::Restriction.iri_str() =>
+            {
+                // WHat should we do with a statement that we have a restriction?
+                //self.bnode = Some(id.clone());
+                AcceptState::Accept
+            }
+            [Term::BNode(id), Term::Iri(p), ob]
+                if Some(id) == self.bnode.as_ref() =>
+            {
+                self.tuples.push((p.clone(), ob.clone()));
+                AcceptState::Accept
+            }
+            // Fallen off bnode
+            _ if self.bnode.is_some() => {
+                // Currently, stop, but really should pass along to
+                // sub acceptors
+                self.complete = true;
+                AcceptState::Return(triple)
+            }
+            _ => {
+                unimplemented!("ClassExpressionAcceptor accept")
+            }
+        }
     }
 
     // Indicate the completion state of the acceptor.
@@ -521,7 +557,13 @@ impl Acceptor<ClassExpression> for ClassExpressionAcceptor {
             return Ok(self.class.to_class_maybe(b)?.into())
         }
 
-        unimplemented!()
+        Ok(
+            // Clearly this needs to be made more generic
+            ClassExpression::ObjectSomeValuesFrom {
+                ope: self.tuples[0].1.to_object_property_maybe(b)?.into(),
+                bce: Box::new(self.tuples[1].1.to_class_maybe(b)?.into()),
+            }
+        )
     }
 }
 
@@ -541,7 +583,23 @@ impl Acceptor<AnnotatedAxiom> for SubClassOfAcceptor {
                 self.superclass = Some(ClassExpressionAcceptor::for_iri(ob.clone()));
                 AcceptState::Accept
             }
-            _ => AcceptState::Return(triple),
+            [Term::Iri(s), Term::Iri(p), Term::BNode(id)]
+                if p == &RDFS::SubClassOf.iri_str() =>
+            {
+                self.subclass = Some(ClassExpressionAcceptor::for_iri(s.clone()));
+                self.superclass = Some(ClassExpressionAcceptor::for_bnode(id.clone()));
+                AcceptState::Accept
+            }
+            _ => {
+                match &mut self.superclass {
+                    Some(ac) => {
+                        // For now just ignore the subclass, but we need to
+                        // fix this later
+                        ac.accept(b, triple)
+                    }
+                    None => AcceptState::Return(triple)
+                }
+            }
         }
     }
 
@@ -635,7 +693,6 @@ impl Acceptor<Annotation> for AnnotationAcceptor {
                 AcceptState::Accept
             }
             _ => {
-                dbg!(&triple);
                 unimplemented!()
             }
         }
@@ -671,14 +728,52 @@ impl Acceptor<Annotation> for AnnotationAcceptor {
     }
 }
 
+fn read_then_complete_1(
+    triple_iter: impl Iterator<Item = Result<[SpTerm; 3], sophia::error::Error>>,
+    b: &Build,
+    acceptor: &mut OntologyAcceptor,
+) -> Vec<Result<[SpTerm;3], sophia::error::Error>> {
+    let mut not_accepted_triples = vec![];
+    let iter = triple_iter;
+
+    for t in iter {
+        let t = t.unwrap();
+
+        // Check return type of this and do something sensible
+        match acceptor.accept(b, t) {
+            AcceptState::Accept => {}
+            AcceptState::Return(triple) => {
+                let x = triple;
+                not_accepted_triples.push(Ok(x));
+            }
+            _=> {
+                unimplemented!()
+            }
+        }
+    }
+
+    not_accepted_triples
+}
+
 fn read_then_complete(
     triple_iter: impl Iterator<Item = Result<[Term<Rc<str>>; 3], sophia::error::Error>>,
     b: &Build,
     mut acceptor: OntologyAcceptor,
 ) -> Result<Ontology, Error> {
-    for t in triple_iter {
-        let t = t.unwrap();
-        acceptor.accept(b, t);
+
+    eprintln!("First read_then_complet");
+    let mut not_accepted = read_then_complete_1(triple_iter, b, &mut acceptor);
+    let mut last_len = std::usize::MAX;
+    dbg!("not accepted", &not_accepted);
+
+    while not_accepted.len() < last_len && not_accepted.len() > 0 {
+        // I thought this would have the same type as triple_iter, but
+        // it doesn't. Perhaps do a collect on triple_iter to vec,
+        // then it should be easier.
+        eprintln!("second read_then_complete");
+        not_accepted = read_then_complete_1(not_accepted.into_iter(),
+                                            b, &mut acceptor);
+        last_len = not_accepted.len();
     }
 
     acceptor.complete(b, &Ontology::default())
@@ -771,10 +866,10 @@ mod test {
         compare("one-oproperty");
     }
 
-    //#[test]
-    //fn one_some() {
-    //    compare("one-some");
-    //}
+    #[test]
+    fn one_some() {
+        compare("one-some");
+    }
 
     // #[test]
     // fn one_only() {

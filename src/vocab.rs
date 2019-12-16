@@ -99,6 +99,7 @@ pub enum OWL {
     Nothing,
     ObjectProperty,
     Ontology,
+    Restriction,
     Thing,
     VersionIRI,
 }
@@ -117,6 +118,7 @@ lazy_meta! {
     Nothing, extend(OWL, "Nothing");
     ObjectProperty, extend(OWL, "ObjectProperty");
     Ontology, extend(OWL, "Ontology");
+    Restriction, extend(OWL, "Restriction");
     Thing, extend(OWL, "Thing");
     VersionIRI, extend(OWL, "versionIRI");
 }
