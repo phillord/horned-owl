@@ -521,7 +521,7 @@ impl Acceptor<ClassExpression> for ClassExpressionAcceptor {
             [Term::BNode(id), Term::Iri(p), Term::Iri(ob)]
                 if ob == &OWL::Restriction.iri_str() =>
             {
-                // WHat should we do with a statement that we have a restriction?
+                // What should we do with a statement that we have a restriction?
                 //self.bnode = Some(id.clone());
                 Accept
             }
@@ -763,7 +763,7 @@ fn read_then_complete(
     mut acceptor: OntologyAcceptor,
 ) -> Result<Ontology, Error> {
 
-    eprintln!("First read_then_complet");
+    eprintln!("First read_then_complete");
     let mut not_accepted = read_then_complete_1(triple_iter, b, &mut acceptor);
     let mut last_len = std::usize::MAX;
     dbg!("not accepted", &not_accepted);
