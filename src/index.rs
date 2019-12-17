@@ -23,6 +23,38 @@ pub fn update_logically_equal_axiom<'a>(o: &'a mut Ontology, mut axiom: Annotate
     o.insert(axiom);
 }
 
+pub fn find_declaration_kind(o: &Ontology, iri: IRI) -> Option<AxiomKind> {
+    match 10 {
+        _ if find_logically_equal_axiom
+            (o, &DeclareClass(Class(iri.clone())).into()).is_some() => {
+                Some(AxiomKind::DeclareClass)
+        }
+        _ if find_logically_equal_axiom
+            (o, &DeclareObjectProperty(ObjectProperty(iri.clone())).into()).is_some() => {
+                Some(AxiomKind::DeclareObjectProperty)
+            }
+        _ if find_logically_equal_axiom
+            (o, &DeclareAnnotationProperty(AnnotationProperty
+                                           (iri.clone())).into()).is_some() => {
+                Some(AxiomKind::DeclareAnnotationProperty)
+            }
+        _ if find_logically_equal_axiom
+            (o, &DeclareDataProperty(DataProperty(iri.clone())).into()).is_some() => {
+                Some(AxiomKind::DeclareDataProperty)
+            }
+        _ if find_logically_equal_axiom
+            (o, &DeclareNamedIndividual(NamedIndividual(iri.clone())).into()).is_some() => {
+                Some(AxiomKind::DeclareNamedIndividual)
+            }
+        _ if find_logically_equal_axiom
+            (o, &DeclareDatatype(Datatype(iri.clone())).into()).is_some() => {
+                Some(AxiomKind::DeclareDatatype)
+            }
+        _ => None,
+    }
+
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
@@ -98,6 +130,30 @@ mod test {
             assert_eq!(aa.ann.iter().count(), 2);
 
         }
+    }
+
+    #[test]
+    fn test_find_declaration_single() {
+        let b = Build::new();
+        let mut o = Ontology::new();
+
+        o.declare(b.class("http://www.example.com/c"));
+        o.declare(b.object_property("http://www.example.com/ob"));
+
+        assert_eq!(
+            find_declaration_kind(&o, b.iri("http://www.example.com/c")),
+            Some(AxiomKind::DeclareClass)
+        );
+
+        assert_eq!(
+            find_declaration_kind(&o, b.iri("http://www.example.com/ob")),
+            Some(AxiomKind::DeclareObjectProperty)
+        );
+
+        assert_eq!(
+            find_declaration_kind(&o, b.iri("http://www.example.com/fred")),
+            None
+        );
     }
 
 }
