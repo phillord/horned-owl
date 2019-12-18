@@ -96,6 +96,7 @@ pub enum OWL {
     // Upper Case
     Axiom,
     Class,
+    DatatypeProperty,
     Nothing,
     ObjectProperty,
     Ontology,
@@ -115,6 +116,7 @@ lazy_meta! {
     // Upper Case
     Axiom, extend(OWL, "Axiom");
     Class, extend(OWL, "Class");
+    DatatypeProperty, extend(OWL, "DatatypeProperty");
     Nothing, extend(OWL, "Nothing");
     ObjectProperty, extend(OWL, "ObjectProperty");
     Ontology, extend(OWL, "Ontology");

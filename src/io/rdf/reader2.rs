@@ -6,6 +6,7 @@ use CompleteState::*;
 use crate::model::*;
 use crate::vocab::*;
 
+use crate::index::find_declaration_kind;
 use crate::index::update_logically_equal_axiom;
 
 use curie::PrefixMapping;
@@ -123,6 +124,13 @@ trait MaybeConvert {
         Ok(self.to_iri_maybe(b)?.into())
     }
 
+    fn to_data_property_maybe(&self, b: &Build) -> Result<DataProperty, Error> {
+        Ok(self.to_iri_maybe(b)?.into())
+    }
+
+    fn to_datatype_maybe(&self, b: &Build) -> Result<Datatype, Error> {
+        Ok(self.to_iri_maybe(b)?.into())
+    }
 }
 
 impl MaybeConvert for Option<SpIri> {
@@ -180,6 +188,7 @@ struct OntologyAcceptor {
 
 impl Acceptor<Ontology> for OntologyAcceptor {
     fn accept(&mut self, b: &Build, mut triple: [SpTerm; 3]) -> AcceptState {
+        //dbg!(&triple);
         match &triple {
             [Term::Iri(s), Term::Iri(p), Term::Iri(ob)]
                 if p == &"http://www.w3.org/1999/02/22-rdf-syntax-ns#type"
@@ -485,9 +494,14 @@ impl Acceptor<AnnotatedAxiom> for DeclarationAcceptor {
                 Some(i) if i == &OWL::ObjectProperty.iri_str() => {
                     self.iri.to_object_property_maybe(b)?.into()
                 }
-                Some(_) => unimplemented!(),
+                Some(i) if i == &OWL::DatatypeProperty.iri_str() => {
+                    self.iri.to_data_property_maybe(b)?.into()
+                }
+                Some(_) => {
+                    unimplemented!()
+                }
                 None => {
-                    unimplemented!();
+                    unimplemented!()
                 }
             };
 
@@ -560,10 +574,21 @@ impl Acceptor<ClassExpression> for ClassExpressionAcceptor {
         }
 
         Ok(
-            // Clearly this needs to be made more generic
-            ClassExpression::ObjectSomeValuesFrom {
-                ope: self.tuples[0].1.to_object_property_maybe(b)?.into(),
-                bce: Box::new(self.tuples[1].1.to_class_maybe(b)?.into()),
+            match find_declaration_kind(o, b.iri(self.tuples[0].1.value())) {
+                // Clearly this needs to be made more generic and more robust
+                Some(NamedEntityKind::ObjectProperty) => {
+                    ClassExpression::ObjectSomeValuesFrom {
+                        ope: self.tuples[0].1.to_object_property_maybe(b)?.into(),
+                        bce: Box::new(self.tuples[1].1.to_class_maybe(b)?.into()),
+                    }
+                },
+                Some(NamedEntityKind::DataProperty) => {
+                    ClassExpression::DataSomeValuesFrom {
+                        dp: self.tuples[0].1.to_data_property_maybe(b)?.into(),
+                        dr: self.tuples[1].1.to_datatype_maybe(b)?.into(),
+                    }
+                },
+                _ => unimplemented!()
             }
         )
     }
@@ -987,10 +1012,10 @@ mod test {
     //     compare("sub-annotation");
     // }
 
-    // #[test]
-    // fn data_property() {
-    //     compare("data-property");
-    // }
+    #[test]
+    fn data_property() {
+         compare("data-property");
+    }
 
     // #[test]
     // fn literal_escaped() {
@@ -1072,10 +1097,10 @@ mod test {
     //     compare("datatype-oneof");
     // }
 
-    // #[test]
-    // fn datatype_some() {
-    //    compare("data-some");
-    // }
+    #[test]
+    fn datatype_some() {
+        compare("data-some");
+    }
 
     // #[test]
     // fn facet_restriction() {

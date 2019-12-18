@@ -23,32 +23,32 @@ pub fn update_logically_equal_axiom<'a>(o: &'a mut Ontology, mut axiom: Annotate
     o.insert(axiom);
 }
 
-pub fn find_declaration_kind(o: &Ontology, iri: IRI) -> Option<AxiomKind> {
+pub fn find_declaration_kind(o: &Ontology, iri: IRI) -> Option<NamedEntityKind> {
     match 10 {
         _ if find_logically_equal_axiom
             (o, &DeclareClass(Class(iri.clone())).into()).is_some() => {
-                Some(AxiomKind::DeclareClass)
+                Some(NamedEntityKind::Class)
         }
         _ if find_logically_equal_axiom
             (o, &DeclareObjectProperty(ObjectProperty(iri.clone())).into()).is_some() => {
-                Some(AxiomKind::DeclareObjectProperty)
+                Some(NamedEntityKind::ObjectProperty)
             }
         _ if find_logically_equal_axiom
             (o, &DeclareAnnotationProperty(AnnotationProperty
                                            (iri.clone())).into()).is_some() => {
-                Some(AxiomKind::DeclareAnnotationProperty)
+                Some(NamedEntityKind::AnnotationProperty)
             }
         _ if find_logically_equal_axiom
             (o, &DeclareDataProperty(DataProperty(iri.clone())).into()).is_some() => {
-                Some(AxiomKind::DeclareDataProperty)
+                Some(NamedEntityKind::DataProperty)
             }
         _ if find_logically_equal_axiom
             (o, &DeclareNamedIndividual(NamedIndividual(iri.clone())).into()).is_some() => {
-                Some(AxiomKind::DeclareNamedIndividual)
+                Some(NamedEntityKind::NamedIndividual)
             }
         _ if find_logically_equal_axiom
             (o, &DeclareDatatype(Datatype(iri.clone())).into()).is_some() => {
-                Some(AxiomKind::DeclareDatatype)
+                Some(NamedEntityKind::Datatype)
             }
         _ => None,
     }
@@ -142,12 +142,12 @@ mod test {
 
         assert_eq!(
             find_declaration_kind(&o, b.iri("http://www.example.com/c")),
-            Some(AxiomKind::DeclareClass)
+            Some(NamedEntityKind::Class)
         );
 
         assert_eq!(
             find_declaration_kind(&o, b.iri("http://www.example.com/ob")),
-            Some(AxiomKind::DeclareObjectProperty)
+            Some(NamedEntityKind::ObjectProperty)
         );
 
         assert_eq!(

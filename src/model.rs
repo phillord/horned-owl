@@ -286,6 +286,11 @@ impl Build {
 macro_rules! named {
     ($($(#[$attr:meta])* $name:ident),*)  => {
 
+        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
+        pub enum NamedEntityKind {
+            $($name),*
+        }
+
         /// An OWL entity that is directly resolvable to an IRI
         ///
         /// All variants in this enum are named after the struct
