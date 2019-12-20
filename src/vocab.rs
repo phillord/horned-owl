@@ -92,10 +92,12 @@ pub enum OWL {
     AnnotatedSource,
     AnnotatedProperty,
     AnnotatedTarget,
+    OnProperty,
 
     // Upper Case
     Axiom,
     Class,
+    Datatype,
     DatatypeProperty,
     Nothing,
     ObjectProperty,
@@ -112,10 +114,12 @@ lazy_meta! {
     AnnotatedSource, extend(OWL, "annotatedSource");
     AnnotatedProperty, extend(OWL, "annotatedProperty");
     AnnotatedTarget, extend(OWL, "annotatedTarget");
+    OnProperty, extend(OWL, "onProperty");
 
     // Upper Case
     Axiom, extend(OWL, "Axiom");
     Class, extend(OWL, "Class");
+    Datatype, extend(OWL, "Datatype");
     DatatypeProperty, extend(OWL, "DatatypeProperty");
     Nothing, extend(OWL, "Nothing");
     ObjectProperty, extend(OWL, "ObjectProperty");

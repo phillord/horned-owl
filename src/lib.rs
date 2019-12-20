@@ -18,12 +18,14 @@
 //!
 //! At the moment, the library is in early stages. It is, however, a
 //! complete implementation of the OWL2 specification.
-extern crate curie;
-extern crate enum_meta;
+//extern crate curie;
+//extern crate enum_meta;
 #[macro_use]
 extern crate failure;
-extern crate indexmap;
-extern crate quick_xml;
+//#[macro_use]
+//extern crate log;
+//extern crate indexmap;
+//extern crate quick_xml;
 
 pub mod command;
 pub mod error;
