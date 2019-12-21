@@ -89,10 +89,12 @@ lazy_meta! {
 
 pub enum OWL {
     // Lower case
+    AllValuesFrom,
     AnnotatedSource,
     AnnotatedProperty,
     AnnotatedTarget,
     OnProperty,
+    SomeValuesFrom,
 
     // Upper Case
     Axiom,
@@ -111,10 +113,12 @@ lazy_meta! {
     OWL, IRIString, METAOWL;
 
     // Lower Case
+    AllValuesFrom, extend(OWL, "allValuesFrom");
     AnnotatedSource, extend(OWL, "annotatedSource");
     AnnotatedProperty, extend(OWL, "annotatedProperty");
     AnnotatedTarget, extend(OWL, "annotatedTarget");
     OnProperty, extend(OWL, "onProperty");
+    SomeValuesFrom, extend(OWL, "someValuesFrom");
 
     // Upper Case
     Axiom, extend(OWL, "Axiom");

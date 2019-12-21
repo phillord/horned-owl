@@ -597,14 +597,23 @@ impl Acceptor<ClassExpression> for ClassExpressionAcceptor {
         }
 
         let on_prop = self.take_on_property().unwrap().1;
+        let prop_kind = find_declaration_kind(o, b.iri(on_prop.value()));
+
 
         Ok(
-            match find_declaration_kind(o, b.iri(on_prop.value())) {
+            match prop_kind {
                 Some(NamedEntityKind::ObjectProperty) => {
-                    // Clearly this needs to be made more generic
-                    ClassExpression::ObjectSomeValuesFrom {
-                        ope: on_prop.to_object_property_maybe(b)?.into(),
-                        bce: Box::new(self.tuples[0].1.to_class_maybe(b)?.into()),
+
+                    let ope = on_prop.to_object_property_maybe(b)?.into();
+                    let bce = Box::new(self.tuples[0].1.to_class_maybe(b)?.into());
+                    match &self.tuples[0].0 {
+                        t if t == &OWL::SomeValuesFrom.iri_str() => {
+                            ClassExpression::ObjectSomeValuesFrom { ope, bce }
+                        }
+                        t if t == &OWL::AllValuesFrom.iri_str() => {
+                            ClassExpression::ObjectAllValuesFrom { ope, bce }
+                        }
+                        _ => todo!()
                     }
                 }
                 Some(NamedEntityKind::DataProperty) => {
@@ -962,14 +971,14 @@ mod test {
         compare_two("one-some-property-filler-reversed", "one-some");
     }
 
-    // #[test]
-    // fn one_only() {
-    //     compare("one-only");
-    //}
+    #[test]
+    fn one_only() {
+        compare("one-only");
+    }
 
     // #[test]
     // fn one_and() {
-    //     compare("one-and");
+    //    compare("one-and");
     // }
 
     // #[test]
