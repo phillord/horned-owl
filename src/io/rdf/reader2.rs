@@ -527,18 +527,16 @@ impl Acceptor<AnnotatedAxiom> for DeclarationAcceptor {
 }
 
 #[derive(Debug)]
-struct ClassExpressionAcceptor {
+struct RestrictionAcceptor {
     bnode: Option<BNodeId<Rc<str>>>,
     tuples: Vec<(SpIri, SpTerm)>,
 }
 
-impl ClassExpressionAcceptor {
-    fn for_bnode(bnode:BNodeId<Rc<str>>) -> ClassExpressionAcceptor {
-        ClassExpressionAcceptor {bnode: Some(bnode), tuples: vec![]}
+impl RestrictionAcceptor {
+    fn from_bnode(bnode:BNodeId<Rc<str>>) -> RestrictionAcceptor {
+        RestrictionAcceptor {bnode: Some(bnode), tuples: vec![]}
     }
-}
 
-impl ClassExpressionAcceptor {
     fn take<P>(&mut self, predicate:P) -> Option<(SpIri, SpTerm)>
     where P: FnMut(&(SpIri, SpTerm)) -> bool
     {
@@ -552,29 +550,12 @@ impl ClassExpressionAcceptor {
     }
 }
 
-
-impl Acceptor<ClassExpression> for ClassExpressionAcceptor {
-    // Accept a triple.
+impl Acceptor<ClassExpression> for RestrictionAcceptor {
     fn accept(&mut self, b: &Build, triple: [SpTerm; 3]) -> AcceptState {
         match &triple {
             [Term::BNode(id), _, _]
                 if Some(id) == self.bnode.as_ref() => {
                     match &triple {
-                        [_, Term::Iri(p), Term::Iri(ob)]
-                            if p == &RDF::Type.iri_str() =>
-                        {
-                            if ob == &OWL::Restriction.iri_str() {
-                                return accept("ClassExpression");
-                            }
-                            if ob == &OWL::Class.iri_str() {
-                                return accept("ClassExpression");
-                            }
-                            retn(triple, "ClassExpression")
-                        }
-                        [_, Term::Iri(p), Term::BNode(ob_id)] =>
-                        {
-                            retn(triple, "ClassExpression")
-                        }
                         [_, Term::Iri(p), ob] =>
                         {
                             self.tuples.push((p.clone(), ob.clone()));
@@ -602,7 +583,6 @@ impl Acceptor<ClassExpression> for ClassExpressionAcceptor {
     }
 
     fn complete(&mut self, b: &Build, o: &Ontology) -> Result<ClassExpression, Error> {
-
         let on_prop = self.take_on_property().unwrap().1;
         let prop_kind = find_declaration_kind(o, b.iri(on_prop.value()));
 
@@ -631,6 +611,74 @@ impl Acceptor<ClassExpression> for ClassExpressionAcceptor {
                 _ => todo!(),
             }
         )
+    }
+}
+
+#[derive(Debug)]
+enum ClassExpressionSubAcceptor {
+    Restriction(RestrictionAcceptor)
+}
+
+#[derive(Debug)]
+struct ClassExpressionAcceptor {
+    bnode: Option<BNodeId<Rc<str>>>,
+    sub: Option<ClassExpressionSubAcceptor>,
+}
+
+impl ClassExpressionAcceptor {
+    fn for_bnode(bnode:BNodeId<Rc<str>>) -> ClassExpressionAcceptor {
+        ClassExpressionAcceptor {bnode: Some(bnode), sub: None}
+    }
+}
+
+impl Acceptor<ClassExpression> for ClassExpressionAcceptor {
+    // Accept a triple.
+    fn accept(&mut self, b: &Build, triple: [SpTerm; 3]) -> AcceptState {
+        match &triple {
+            [Term::BNode(id), Term::Iri(p), Term::Iri(ob)]
+                if Some(id) == self.bnode.as_ref() &&
+                p == &RDF::Type.iri_str() =>
+            {
+                if ob == &OWL::Restriction.iri_str() {
+                    self.sub = Some(
+                        ClassExpressionSubAcceptor::Restriction(
+                            RestrictionAcceptor::from_bnode(id.clone())
+                        )
+                    );
+                    accept("ClassExpression")
+                }
+                else {
+                    todo!()
+                }
+            }
+            _ if self.sub.is_some() => {
+                match self.sub.as_mut().unwrap() {
+                    ClassExpressionSubAcceptor::Restriction(ac) =>
+                        ac.accept(b, triple),
+                }
+            }
+            _ => {
+                retn(triple, "ClassExpression")
+            }
+        }
+    }
+
+    // Indicate the completion state of the acceptor.
+    fn complete_state(&self) -> CompleteState {
+        if self.bnode.is_some() {
+            CanComplete
+        }
+        else {
+            NotComplete
+        }
+    }
+
+    fn complete(&mut self, b: &Build, o: &Ontology) -> Result<ClassExpression, Error> {
+        match self.sub.as_mut() {
+            Some(ClassExpressionSubAcceptor::Restriction(ac)) =>
+                ac.complete(b, o),
+            None => todo!()
+        }
     }
 }
 
