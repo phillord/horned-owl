@@ -103,7 +103,7 @@ impl Convert for SpIri {
     }
 }
 
-trait MaybeConvert {
+trait TryBuild<N: From<IRI>> {
     fn to_some_iri(&self, b:&Build) -> Option<IRI>;
 
     fn to_iri_maybe(&self, b:&Build) -> Result<IRI, Error> {
@@ -113,38 +113,22 @@ trait MaybeConvert {
         }
     }
 
-    fn to_class_maybe(&self, b:&Build) -> Result<Class, Error> {
-        Ok(self.to_iri_maybe(b)?.into())
-    }
-
-    fn to_object_property_maybe(&self, b: &Build) -> Result<ObjectProperty, Error> {
-        Ok(self.to_iri_maybe(b)?.into())
-    }
-
-    fn to_annotation_property_maybe(&self, b: &Build) -> Result<AnnotationProperty, Error> {
-        Ok(self.to_iri_maybe(b)?.into())
-    }
-
-    fn to_data_property_maybe(&self, b: &Build) -> Result<DataProperty,Error> {
-        Ok(self.to_iri_maybe(b)?.into())
-    }
-
-    fn to_datatype_maybe(&self, b: &Build) -> Result<Datatype,Error> {
+    fn try_build(&self, b:&Build) -> Result<N, Error> {
         Ok(self.to_iri_maybe(b)?.into())
     }
 }
 
-impl MaybeConvert for Option<SpIri> {
+impl <N: From<IRI>> TryBuild<N> for Option<SpIri> {
     fn to_some_iri(&self, b: &Build) -> Option<IRI> {
         self.as_ref().map(|i| i.to_iri(b))
     }
 }
 
-impl MaybeConvert for SpTerm {
+impl <N: From<IRI>> TryBuild<N> for SpTerm {
     fn to_some_iri(&self, b: &Build) -> Option<IRI> {
         match self {
-            Term::Iri(iri) => Some(iri.to_iri(b)),
-            _ => None,
+            Term::Iri(spiri) => Some(spiri.to_iri(b)),
+            _ => None
         }
     }
 }
@@ -282,8 +266,8 @@ impl Acceptor<Ontology> for OntologyAcceptor {
         // Iterate over all the complete Acceptor, run complete on
         // them, and insert this
         let mut o = Ontology::default();
-        o.id.iri = self.iri.to_some_iri(b);
-        o.id.viri = self.viri.to_some_iri(b);
+        o.id.iri = TryBuild::<IRI>::to_some_iri(&self.iri, b);
+        o.id.viri = TryBuild::<IRI>::to_some_iri(&self.viri, b);
 
         //let mut ch = self.complete_acceptors.iter().chain(self.incomplete_acceptors.iter());
         for ac in self.complete_acceptors.iter_mut()
@@ -505,16 +489,16 @@ impl Acceptor<AnnotatedAxiom> for DeclarationAcceptor {
         let n: NamedEntity =
             match &self.kind {
                 Some(i) if i == &OWL::Class.iri_str() => {
-                    self.iri.to_class_maybe(b)?.into()
+                    TryBuild::<Class>::try_build(&self.iri, b)?.into()
                 }
                 Some(i) if i == &OWL::ObjectProperty.iri_str() => {
-                    self.iri.to_object_property_maybe(b)?.into()
+                    TryBuild::<ObjectProperty>::try_build(&self.iri, b)?.into()
                 }
                 Some(i) if i == &OWL::DatatypeProperty.iri_str() => {
-                    self.iri.to_data_property_maybe(b)?.into()
+                    TryBuild::<DataProperty>::try_build(&self.iri, b)?.into()
                 }
                 Some(i) if i == &OWL::Datatype.iri_str() => {
-                    self.iri.to_datatype_maybe(b)?.into()
+                    TryBuild::<Datatype>::try_build(&self.iri, b)?.into()
                 }
                 Some(_) => todo!(),
                 None => {
@@ -590,8 +574,10 @@ impl Acceptor<ClassExpression> for RestrictionAcceptor {
             match prop_kind {
                 Some(NamedEntityKind::ObjectProperty) => {
 
-                    let ope = on_prop.to_object_property_maybe(b)?.into();
-                    let bce = Box::new(self.tuples[0].1.to_class_maybe(b)?.into());
+                    let ope = TryBuild::<ObjectProperty>::try_build(&on_prop, b)?.into();
+                    let bce = Box::new(
+                        TryBuild::<Class>::try_build(&self.tuples[0].1, b)?.into()
+                    );
                     match &self.tuples[0].0 {
                         t if t == &OWL::SomeValuesFrom.iri_str() => {
                             ClassExpression::ObjectSomeValuesFrom { ope, bce }
@@ -604,8 +590,8 @@ impl Acceptor<ClassExpression> for RestrictionAcceptor {
                 }
                 Some(NamedEntityKind::DataProperty) => {
                     ClassExpression::DataSomeValuesFrom {
-                        dp: on_prop.to_data_property_maybe(b)?.into(),
-                        dr: DataRange::Datatype(self.tuples[0].1.to_datatype_maybe(b)?),
+                        dp: TryBuild::<DataProperty>::try_build(&on_prop, b)?.into(),
+                        dr: TryBuild::<Datatype>::try_build(&self.tuples[0].1, b)?.into(),
                     }
                 }
                 _ => todo!(),
@@ -821,7 +807,7 @@ impl Acceptor<AnnotatedAxiom> for AnnotationAssertionAcceptor{
     fn complete(&mut self, b: &Build, o: &Ontology) -> Result<AnnotatedAxiom, Error> {
         Ok(
             AnnotationAssertion {
-                subject: self.subject.to_iri_maybe(b)?,
+                subject: TryBuild::<IRI>::to_iri_maybe(&self.subject, b)?,
                 //b.iri(self.subject.as_ref().unwrap().to_string()),
                 ann: self.ac.as_mut().unwrap().complete(b, o)?,
             }.into()
@@ -877,10 +863,10 @@ impl Acceptor<Annotation> for AnnotationAcceptor {
     fn complete(&mut self, b: &Build, o: &Ontology) -> Result<Annotation, Error> {
         Ok(
             Annotation {
-                ap: self.p.to_annotation_property_maybe(b)?,
+                ap: TryBuild::<AnnotationProperty>::try_build(&self.p, b)?,
                 av:
                 if self.iri_val.is_some() {
-                    self.iri_val.to_iri_maybe(b)?.into()
+                    TryBuild::<IRI>::try_build(&self.iri_val, b)?.into()
                 }
                 else {
                     Literal::Language {
