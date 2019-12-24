@@ -511,6 +511,122 @@ impl Acceptor<AnnotatedAxiom> for DeclarationAcceptor {
 }
 
 #[derive(Debug)]
+enum OperandList {
+    Class(Vec<ClassAcceptor>)
+}
+
+#[derive(Debug)]
+struct PropositionAcceptor {
+    bnode: BNodeId<Rc<str>>,
+    kind: Option<SpIri>,
+    end_of_list: Option<BNodeId<Rc<str>>>,
+    complete: bool,
+    operands: Option<OperandList>
+}
+
+impl PropositionAcceptor {
+    fn from_bnode(bnode:BNodeId<Rc<str>>) -> PropositionAcceptor {
+        PropositionAcceptor {bnode, operands:None, end_of_list: None,
+                             kind:None, complete: false}
+    }
+}
+
+impl Acceptor<ClassExpression> for PropositionAcceptor {
+    fn accept(&mut self, b: &Build, triple: [SpTerm; 3]) -> AcceptState {
+        if self.complete {
+            return retn(triple, "Proposition")
+        }
+
+        match &triple {
+            [Term::BNode(id), Term::Iri(p), Term::BNode(ob)]
+                if id == &self.bnode =>
+            {
+                if p == &OWL::IntersectionOf.iri_str() {
+                    self.operands = Some(OperandList::Class(vec![]));
+                    self.kind = Some(p.clone());
+                }
+                self.end_of_list = Some(ob.clone());
+                accept("Proposition")
+            }
+            [Term::BNode(s), Term::Iri(p), ob]
+                if Some(s) == self.end_of_list.as_ref() &&
+                p == &RDF::First.iri_str() =>
+            {
+                match &mut self.operands {
+                    Some(OperandList::Class(v)) => {
+                        v.push(
+                            match ob {
+                                Term::Iri(iri) =>
+                                    ClassAcceptor::from_iri(iri.clone()),
+                                Term::BNode(id) =>
+                                    ClassAcceptor::from_bnode(id.clone()),
+                                _ => {
+                                    return retn(triple, "Proposition");
+                                }
+                            }
+                        );
+                        accept("Proposition")
+                    }
+                    _ => {
+                        retn(triple, "Proposition")
+                    }
+                }
+            }
+            [Term::BNode(s), Term::Iri(p), Term::Iri(ob)]
+                if Some(s) == self.end_of_list.as_ref() &&
+                p == &RDF::Rest.iri_str() &&
+                ob == &RDF::Nil.iri_str() =>
+            {
+                self.complete = true;
+                accept("Proposition")
+            }
+            [Term::BNode(s), Term::Iri(p), Term::BNode(ob)]
+                if Some(s) == self.end_of_list.as_ref() &&
+                p == &RDF::Rest.iri_str() =>
+            {
+                // We make the assumption here that we get first, then
+                // rest, then first, then rest. Otherwize, we have
+                // over-written the value of this bnode and we may not
+                // have got it's equivalent rest. If we cannot rely
+                // on that, we need a list of "rest" bnodes, and
+                // collect the "firsts" as we go.
+                self.end_of_list = Some(ob.clone());
+                accept("Proposition")
+            }
+            _ => {
+                todo!()
+            }
+        }
+    }
+
+    fn complete_state(&self) -> CompleteState {
+        if self.complete {
+            Complete
+        }
+        else {
+            NotComplete
+        }
+    }
+
+    fn complete(&mut self, b: &Build, o: &Ontology) -> Result<ClassExpression, Error> {
+
+        match &mut self.operands {
+            Some(OperandList::Class(v)) => {
+                let op: Result<Vec<_>, _> = v
+                    .into_iter()
+                    .map(|op| op.complete(b, o))
+                    .collect();
+
+                Ok(
+                    ClassExpression::ObjectIntersectionOf(op?)
+                )
+            }
+            _ => todo!()
+        }
+    }
+}
+
+#[derive(Debug)]
 struct RestrictionAcceptor {
     bnode: Option<BNodeId<Rc<str>>>,
     tuples: Vec<(SpIri, SpTerm)>,
@@ -602,7 +718,8 @@ impl Acceptor<ClassExpression> for RestrictionAcceptor {
 
 #[derive(Debug)]
 enum ClassExpressionSubAcceptor {
-    Restriction(RestrictionAcceptor)
+    Restriction(RestrictionAcceptor),
+    Proposition(PropositionAcceptor),
 }
 
 #[derive(Debug)]
@@ -612,7 +729,7 @@ struct ClassExpressionAcceptor {
 }
 
 impl ClassExpressionAcceptor {
-    fn for_bnode(bnode:BNodeId<Rc<str>>) -> ClassExpressionAcceptor {
+    fn from_bnode(bnode:BNodeId<Rc<str>>) -> ClassExpressionAcceptor {
         ClassExpressionAcceptor {bnode: Some(bnode), sub: None}
     }
 }
@@ -631,15 +748,26 @@ impl Acceptor<ClassExpression> for ClassExpressionAcceptor {
                             RestrictionAcceptor::from_bnode(id.clone())
                         )
                     );
-                    accept("ClassExpression")
+                    return accept("ClassExpression");
                 }
-                else {
-                    todo!()
+
+                if ob == &OWL::Class.iri_str() {
+                    self.sub = Some(
+                        ClassExpressionSubAcceptor::Proposition(
+                            PropositionAcceptor::from_bnode(id.clone())
+                        )
+                    );
+                    return accept("ClassExpression");
                 }
+
+                todo!()
+
             }
             _ if self.sub.is_some() => {
                 match self.sub.as_mut().unwrap() {
                     ClassExpressionSubAcceptor::Restriction(ac) =>
+                        ac.accept(b, triple),
+                    ClassExpressionSubAcceptor::Proposition(ac) =>
                         ac.accept(b, triple),
                 }
             }
@@ -651,11 +779,12 @@ impl Acceptor<ClassExpression> for ClassExpressionAcceptor {
 
     // Indicate the completion state of the acceptor.
     fn complete_state(&self) -> CompleteState {
-        if self.bnode.is_some() {
-            CanComplete
-        }
-        else {
-            NotComplete
+        match self.sub.as_ref() {
+            Some(ClassExpressionSubAcceptor::Restriction(ac)) =>
+                ac.complete_state(),
+            Some(ClassExpressionSubAcceptor::Proposition(ac)) =>
+                ac.complete_state(),
+            None => NotComplete,
         }
     }
 
@@ -663,7 +792,9 @@ impl Acceptor<ClassExpression> for ClassExpressionAcceptor {
         match self.sub.as_mut() {
             Some(ClassExpressionSubAcceptor::Restriction(ac)) =>
                 ac.complete(b, o),
-            None => todo!()
+            Some(ClassExpressionSubAcceptor::Proposition(ac)) =>
+                ac.complete(b, o),
+            None => todo!(),
         }
     }
 }
@@ -677,12 +808,12 @@ enum ClassAcceptor {
 }
 
 impl ClassAcceptor {
-    fn for_iri(class: SpIri) -> ClassAcceptor {
+    fn from_iri(class: SpIri) -> ClassAcceptor {
         ClassAcceptor::Named(class)
     }
 
-    fn for_bnode(bnode:BNodeId<Rc<str>>) -> ClassAcceptor {
-        ClassAcceptor::Expression(ClassExpressionAcceptor::for_bnode(bnode))
+    fn from_bnode(bnode:BNodeId<Rc<str>>) -> ClassAcceptor {
+        ClassAcceptor::Expression(ClassExpressionAcceptor::from_bnode(bnode))
     }
 }
 
@@ -728,15 +859,15 @@ impl Acceptor<AnnotatedAxiom> for SubClassOfAcceptor {
             [Term::Iri(s), Term::Iri(p), Term::Iri(ob)]
                 if p == &RDFS::SubClassOf.iri_str() =>
             {
-                self.subclass = Some(ClassAcceptor::for_iri(s.clone()));
-                self.superclass = Some(ClassAcceptor::for_iri(ob.clone()));
+                self.subclass = Some(ClassAcceptor::from_iri(s.clone()));
+                self.superclass = Some(ClassAcceptor::from_iri(ob.clone()));
                 accept("SubClassOfAcceptor")
             }
             [Term::Iri(s), Term::Iri(p), Term::BNode(id)]
                 if p == &RDFS::SubClassOf.iri_str() =>
             {
-                self.subclass = Some(ClassAcceptor::for_iri(s.clone()));
-                self.superclass = Some(ClassAcceptor::for_bnode(id.clone()));
+                self.subclass = Some(ClassAcceptor::from_iri(s.clone()));
+                self.superclass = Some(ClassAcceptor::from_bnode(id.clone()));
                 accept("SubClassOfAcceptor")
             }
             _ => {
@@ -1064,10 +1195,10 @@ mod test {
         compare("one-only");
     }
 
-    // #[test]
-    // fn one_and() {
-    //     compare("one-and");
-    // }
+    #[test]
+    fn one_and() {
+        compare("one-and");
+    }
 
     // #[test]
     // fn one_or() {

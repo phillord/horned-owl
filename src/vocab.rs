@@ -67,16 +67,20 @@ lazy_meta! {
     XSD, to_meta("http://www.w3.org/2001/XMLSchema#");
 }
 
-
 pub enum RDF {
-    Type
+    First,
+    Nil,
+    Rest,
+    Type,
 }
 
 lazy_meta! {
     RDF, IRIString, METARDF;
+    First, extend(RDF, "first");
+    Nil, extend(RDF, "nil");
+    Rest, extend(RDF, "rest");
     Type, extend(RDF, "type");
 }
-
 
 pub enum RDFS {
     SubClassOf,
@@ -93,6 +97,7 @@ pub enum OWL {
     AnnotatedSource,
     AnnotatedProperty,
     AnnotatedTarget,
+    IntersectionOf,
     OnProperty,
     SomeValuesFrom,
 
@@ -117,6 +122,7 @@ lazy_meta! {
     AnnotatedSource, extend(OWL, "annotatedSource");
     AnnotatedProperty, extend(OWL, "annotatedProperty");
     AnnotatedTarget, extend(OWL, "annotatedTarget");
+    IntersectionOf, extend(OWL, "intersectionOf");
     OnProperty, extend(OWL, "onProperty");
     SomeValuesFrom, extend(OWL, "someValuesFrom");
 
