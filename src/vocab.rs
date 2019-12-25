@@ -99,6 +99,7 @@ pub enum OWL {
     AnnotatedTarget,
     IntersectionOf,
     OnProperty,
+    UnionOf,
     SomeValuesFrom,
 
     // Upper Case
@@ -125,6 +126,7 @@ lazy_meta! {
     IntersectionOf, extend(OWL, "intersectionOf");
     OnProperty, extend(OWL, "onProperty");
     SomeValuesFrom, extend(OWL, "someValuesFrom");
+    UnionOf, extend(OWL, "unionOf");
 
     // Upper Case
     Axiom, extend(OWL, "Axiom");

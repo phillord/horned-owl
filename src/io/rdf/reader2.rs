@@ -14,6 +14,7 @@ use curie::PrefixMapping;
 use failure::Error;
 
 use log::{debug, trace};
+
 use sophia::term::BNodeId;
 use sophia::term::IriData;
 use sophia::term::LiteralKind;
@@ -541,7 +542,8 @@ impl Acceptor<ClassExpression> for PropositionAcceptor {
             [Term::BNode(id), Term::Iri(p), Term::BNode(ob)]
                 if id == &self.bnode =>
             {
-                if p == &OWL::IntersectionOf.iri_str() {
+                if p == &OWL::IntersectionOf.iri_str() ||
+                    p == &OWL::UnionOf.iri_str() {
                     self.operands = Some(OperandList::Class(vec![]));
                     self.kind = Some(p.clone());
                 }
@@ -616,10 +618,21 @@ impl Acceptor<ClassExpression> for PropositionAcceptor {
                     .into_iter()
                     .map(|op| op.complete(b, o))
                     .collect();
-
-                Ok(
-                    ClassExpression::ObjectIntersectionOf(op?)
-                )
+                match &self.kind {
+                    Some(k) if k == &OWL::IntersectionOf.iri_str() =>
+                    {
+                        Ok(
+                            ClassExpression::ObjectIntersectionOf(op?)
+                        )
+                    }
+                    Some(k) if k == &OWL::UnionOf.iri_str() =>
+                    {
+                        Ok(
+                            ClassExpression::ObjectUnionOf(op?)
+                        )
+                    }
+                    _ => todo!()
+                }
             }
             _ => todo!()
         }
@@ -1200,10 +1213,10 @@ mod test {
         compare("one-and");
     }
 
-    // #[test]
-    // fn one_or() {
-    //     compare("one-or");
-    // }
+    #[test]
+    fn one_or() {
+        compare("one-or");
+    }
 
     // #[test]
     // fn one_not() {
