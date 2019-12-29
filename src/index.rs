@@ -27,32 +27,33 @@ pub fn find_declaration_kind(o: &Ontology, iri: IRI) -> Option<NamedEntityKind> 
     match 10 {
         _ if find_logically_equal_axiom
             (o, &DeclareClass(Class(iri.clone())).into()).is_some() => {
-                Some(NamedEntityKind::Class)
-        }
+                return Some(NamedEntityKind::Class)
+            }
         _ if find_logically_equal_axiom
             (o, &DeclareObjectProperty(ObjectProperty(iri.clone())).into()).is_some() => {
-                Some(NamedEntityKind::ObjectProperty)
+                return Some(NamedEntityKind::ObjectProperty)
             }
         _ if find_logically_equal_axiom
             (o, &DeclareAnnotationProperty(AnnotationProperty
                                            (iri.clone())).into()).is_some() => {
-                Some(NamedEntityKind::AnnotationProperty)
+                return Some(NamedEntityKind::AnnotationProperty)
             }
         _ if find_logically_equal_axiom
             (o, &DeclareDataProperty(DataProperty(iri.clone())).into()).is_some() => {
-                Some(NamedEntityKind::DataProperty)
+                return Some(NamedEntityKind::DataProperty)
             }
         _ if find_logically_equal_axiom
             (o, &DeclareNamedIndividual(NamedIndividual(iri.clone())).into()).is_some() => {
-                Some(NamedEntityKind::NamedIndividual)
+                return Some(NamedEntityKind::NamedIndividual)
             }
         _ if find_logically_equal_axiom
             (o, &DeclareDatatype(Datatype(iri.clone())).into()).is_some() => {
-                Some(NamedEntityKind::Datatype)
+                return Some(NamedEntityKind::Datatype)
             }
-        _ => None,
+        _ => {}
     }
 
+    return None;
 }
 
 #[cfg(test)]

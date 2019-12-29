@@ -42,7 +42,9 @@ enum AcceptState {
 #[derive(Debug, Eq, PartialEq)]
 enum CompleteState {
     // The acceptor does not have all of the information that it needs
-    // because it has not recieved enough triples.
+    // because it has not recieved enough triples. An acceptor that
+    // has returned this state as it's last state would be expected to
+    // fail when completing.
     NotComplete,
 
     // The acceptor has all the information that it needs to complete,
@@ -52,16 +54,20 @@ enum CompleteState {
     CanComplete,
 
     // The acceptor has all the information that it needs to complete,
-    // and will not accept further triples. The acceptor may require
-    // further information from the ontology, for instance the type of
-    // IRIs in accepted triples, to actually complete.
+    // and will not accept further triples. At this point, the
+    // acceptor should be able to complete without error.
     Complete,
 }
 
 trait Acceptor<O>: std::fmt::Debug {
     // Accept a triple.
+    //
+    // The ontology which is accepting the triple and its import
+    // closure is also passed. This is in the currently known state;
+    // both the ontologies and the number of ontologies may change
+    // over time.
     #[must_use]
-    fn accept(&mut self, b: &Build, triple: [SpTerm; 3]) -> AcceptState;
+    fn accept(&mut self, b: &Build, triple: [SpTerm; 3], o: &Ontology) -> AcceptState;
 
     // Indicate the completion state of the acceptor.
     fn complete_state(&self) -> CompleteState;
@@ -72,6 +78,7 @@ trait Acceptor<O>: std::fmt::Debug {
             _ => false,
         }
     }
+
     fn can_complete(&self) -> bool {
         match self.complete_state() {
             CanComplete | Complete => true,
@@ -99,37 +106,37 @@ trait Convert {
 }
 
 impl Convert for SpIri {
-    fn to_iri(&self, b:&Build) -> IRI {
+    fn to_iri(&self, b: &Build) -> IRI {
         b.iri(self.to_string())
     }
 }
 
 trait TryBuild<N: From<IRI>> {
-    fn to_some_iri(&self, b:&Build) -> Option<IRI>;
+    fn to_some_iri(&self, b: &Build) -> Option<IRI>;
 
-    fn to_iri_maybe(&self, b:&Build) -> Result<IRI, Error> {
+    fn to_iri_maybe(&self, b: &Build) -> Result<IRI, Error> {
         match self.to_some_iri(b) {
             Some(iri) => Ok(iri),
             None => panic!("Fix this"),
         }
     }
 
-    fn try_build(&self, b:&Build) -> Result<N, Error> {
+    fn try_build(&self, b: &Build) -> Result<N, Error> {
         Ok(self.to_iri_maybe(b)?.into())
     }
 }
 
-impl <N: From<IRI>> TryBuild<N> for Option<SpIri> {
+impl<N: From<IRI>> TryBuild<N> for Option<SpIri> {
     fn to_some_iri(&self, b: &Build) -> Option<IRI> {
         self.as_ref().map(|i| i.to_iri(b))
     }
 }
 
-impl <N: From<IRI>> TryBuild<N> for SpTerm {
+impl<N: From<IRI>> TryBuild<N> for SpTerm {
     fn to_some_iri(&self, b: &Build) -> Option<IRI> {
         match self {
             Term::Iri(spiri) => Some(spiri.to_iri(b)),
-            _ => None
+            _ => None,
         }
     }
 }
@@ -162,129 +169,203 @@ fn retn(triple: [SpTerm; 3], log: &str) -> AcceptState {
     Return(triple)
 }
 
-
-fn p_tup(triple: &[SpTerm;3]) {
-    debug!("{}\n\t{}\n\t{}", &triple[0].n3(), &triple[1].n3(), &triple[2].n3());
+fn p_tup(triple: &[SpTerm; 3]) {
+    debug!(
+        "{}\n\t{}\n\t{}",
+        &triple[0].n3(),
+        &triple[1].n3(),
+        &triple[2].n3()
+    );
 }
 
 #[derive(Debug, Default)]
-struct OntologyAcceptor {
+struct OntologyParser {
     // Acceptors which are NotComplete or CanComplete
     incomplete_acceptors: Vec<Box<dyn Acceptor<(AnnotatedAxiom, Merge)>>>,
 
     // Acceptors which are Complete
     complete_acceptors: Vec<Box<dyn Acceptor<(AnnotatedAxiom, Merge)>>>,
 
-    // Does this make any sense -- we are replicating the Ontology
-    // data structure here? And our data structures are
-    // complicated. Why do we not build these up as we go?
-
-    // Because now we have to convert backwards and forwards between
-    // the sophia data structures -- think it was better before. It
-    // will probably help anyway when we come to structures were we
-    // cannot work it out early
     iri: Option<SpIri>,
     viri: Option<SpIri>,
+
+    // The ontology we are currently parsing
+    so: Option<Ontology>,
 }
 
-impl Acceptor<Ontology> for OntologyAcceptor {
+impl OntologyParser {
+
+    fn default() -> OntologyParser {
+        OntologyParser {
+            so: Some(Ontology::default()),
+            .. Default::default()
+        }
+    }
+
     fn accept(&mut self, b: &Build, mut triple: [SpTerm; 3]) -> AcceptState {
-        match &triple {
-            [Term::Iri(s), Term::Iri(p), Term::Iri(ob)]
-                if p == &"http://www.w3.org/1999/02/22-rdf-syntax-ns#type"
-                    && ob == &OWL::Ontology.iri_str() =>
-            {
-                self.iri = Some(s.clone());
-                accept("Ontology Acceptor")
-            }
-            [Term::Iri(s), Term::Iri(p), Term::Iri(ob)]
-                if self.iri.as_ref() == Some(s) && p == &OWL::VersionIRI.iri_str() =>
-            {
-                self.viri = Some(ob.clone());
-                accept("Ontology Acceptor")
-            }
-            _ => {
-                // Pass on to incomplete acceptors, till one of them
-                // accepts, then pass onto new acceptors and see if
-                // one of them accepts. Collect and collate any "backtracks",
-                // return one of these.
+        match &self.so {
+            None => retn(triple, "Ontology Acceptor"),
+            Some(o) => {
+                match &triple {
+                    [Term::Iri(s), Term::Iri(p), Term::Iri(ob)]
+                        if p == &"http://www.w3.org/1999/02/22-rdf-syntax-ns#type"
+                            && ob == &OWL::Ontology.iri_str() =>
+                    {
+                        self.iri = Some(s.clone());
+                        accept("Ontology Acceptor")
+                    }
+                    [Term::Iri(s), Term::Iri(p), Term::Iri(ob)]
+                        if self.iri.as_ref() == Some(s) && p == &OWL::VersionIRI.iri_str() =>
+                    {
+                        self.viri = Some(ob.clone());
+                        accept("Ontology Acceptor")
+                    }
+                    _ => {
+                        // Pass on to incomplete acceptors, till one of them
+                        // accepts, then pass onto new acceptors and see if
+                        // one of them accepts. Collect and collate any "backtracks",
+                        // return one of these.
 
-                // iterate through the incomplete acceptors and try
-                // them first
-                for i in 0..self.incomplete_acceptors.len() {
-                    let ac = &mut self.incomplete_acceptors[i];
-                    let acr = ac.accept(b, triple);
-                    match acr {
-                        Accept => {
-                            if ac.is_complete() {
-                                self.complete_acceptors.push(
-                                    self.incomplete_acceptors.remove(i)
-                                );
+                        // iterate through the incomplete acceptors and try
+                        // them first
+                        for i in 0..self.incomplete_acceptors.len() {
+                            let ac = &mut self.incomplete_acceptors[i];
+                            let acr = ac.accept(b, triple, &o);
+                            match acr {
+                                Accept => {
+                                    if ac.is_complete() {
+                                        self.complete_acceptors
+                                            .push(self.incomplete_acceptors.remove(i));
+                                    }
+                                    return acr;
+                                }
+                                Return(t) => {
+                                    triple = t;
+                                }
+                                BackTrack(ts) => todo!(),
                             }
-                            return acr;
                         }
-                        Return(t) => {
-                            triple = t;
+
+                        // Iterate through new acceptor
+                        let acceptors: Vec<Box<dyn Acceptor<(AnnotatedAxiom, Merge)>>> = vec![
+                            Box::new(SimpleAnnotatedAxiomAcceptor::default()),
+                            Box::new(AnnotatedAxiomAcceptor::default()),
+                        ];
+
+                        for mut ac in acceptors {
+                            let acr = ac.accept(b, triple, &o);
+                            match acr {
+                                Accept => {
+                                    if ac.is_complete() {
+                                        self.complete_acceptors.push(ac)
+                                    } else {
+                                        self.incomplete_acceptors.push(ac)
+                                    };
+                                    return acr;
+                                }
+                                Return(t) => {
+                                    triple = t;
+                                }
+                                BackTrack(ts) => todo!(),
+                            }
                         }
-                        BackTrack(ts) => todo!(),
+
+                        retn(triple, "Ontology Acceptor")
                     }
                 }
-
-                // Iterate through new acceptor
-                let acceptors: Vec<Box<dyn Acceptor<(AnnotatedAxiom, Merge)>>> = vec![
-                    Box::new(SimpleAnnotatedAxiomAcceptor::default()),
-                    Box::new(AnnotatedAxiomAcceptor::default()),
-                ];
-
-                for mut ac in acceptors {
-                    let acr = ac.accept(b, triple);
-                    match acr {
-                        Accept => {
-                            if ac.is_complete() {
-                                self.complete_acceptors.push(ac)
-                            } else {
-                                self.incomplete_acceptors.push(ac)
-                            };
-                            return acr;
-                        }
-                        Return(t) => {
-                            triple = t;
-                        }
-                        BackTrack(ts) => todo!(),
-                    }
-                }
-
-                retn(triple, "Ontology Acceptor")
             }
         }
     }
 
-    fn complete_state(&self) -> CompleteState {
-        todo!()
+    fn complete(&mut self, b: &Build) -> Result<Ontology, Error> {
+        match self.so.as_mut() {
+            None => todo!(),
+            Some(mut o) => {
+                // Iterate over all the complete Acceptor, run complete on
+                // them, and insert this
+                o.id.iri = TryBuild::<IRI>::to_some_iri(&self.iri, b);
+                o.id.viri = TryBuild::<IRI>::to_some_iri(&self.viri, b);
+
+                for ac in self
+                    .complete_acceptors
+                    .iter_mut()
+                    .chain(self.incomplete_acceptors.iter_mut())
+                {
+                    let c = ac.complete(b, &o)?;
+                    if let Merge::NeedsMerge = c.1 {
+                        update_logically_equal_axiom(&mut o, c.0)
+                    } else {
+                        o.insert(c.0);
+                    }
+                }
+
+                dbg!(&o);
+                // dbg!(&o); if true {panic!()}
+                return Ok(self.so.take().unwrap());
+            }
+        }
     }
 
-    fn complete(&mut self, b: &Build, o: &Ontology) -> Result<Ontology, Error> {
-        // Iterate over all the complete Acceptor, run complete on
-        // them, and insert this
-        let mut o = Ontology::default();
-        o.id.iri = TryBuild::<IRI>::to_some_iri(&self.iri, b);
-        o.id.viri = TryBuild::<IRI>::to_some_iri(&self.viri, b);
+    fn read_then_complete_1(
+        &mut self,
+        triple_iter: impl Iterator<Item = Result<[SpTerm; 3], sophia::error::Error>>,
+        b: &Build,
+    ) -> Vec<Result<[SpTerm; 3], sophia::error::Error>> {
+        let mut not_accepted_triples = vec![];
+        let iter = triple_iter;
 
-        //let mut ch = self.complete_acceptors.iter().chain(self.incomplete_acceptors.iter());
-        for ac in self.complete_acceptors.iter_mut()
-            .chain(self.incomplete_acceptors.iter_mut()) {
-                let c = ac.complete(b, &o)?;
-                if let Merge::NeedsMerge = c.1 {
-                    update_logically_equal_axiom(&mut o, c.0)
+        for t in iter {
+            let t = t.unwrap();
+            debug!(
+                "Checking: {}\n\t\t{}\n\t\t{}",
+                &t[0].n3(),
+                &t[1].n3(),
+                &t[2].n3()
+            );
+
+            // Check return type of this and do something sensible
+            match self.accept(b, t) {
+                Accept => {}
+                Return(triple) => {
+                    let x = triple;
+                    not_accepted_triples.push(Ok(x));
                 }
-                else {
-                    o.insert(c.0);
-                }
+                _ => todo!(),
             }
+        }
 
-        dbg!(&o);
-        // dbg!(&o); if true {panic!()}
-        return Ok(o);
+        not_accepted_triples
+    }
+
+    fn read_then_complete(
+        &mut self,
+        triple_iter: impl Iterator<Item = Result<[Term<Rc<str>>; 3], sophia::error::Error>>,
+        b: &Build,
+    ) -> Result<Ontology, Error> {
+        debug!("First read_then_complete");
+        let mut not_accepted = self.read_then_complete_1(triple_iter, b);
+        let mut last_len = std::usize::MAX;
+        //dbg!("not accepted", &not_accepted);
+
+        let mut i = 0;
+        while not_accepted.len() < last_len && not_accepted.len() > 0 {
+            // I thought this would have the same type as triple_iter, but
+            // it doesn't. Perhaps do a collect on triple_iter to vec,
+            // then it should be easier.
+            debug!("read_then_complete: {}", i);
+            i = i + 1;
+            last_len = not_accepted.len();
+            not_accepted = self.read_then_complete_1(not_accepted.into_iter(), b);
+            debug!("not accepted:{}: last_len:{}", not_accepted.len(), last_len);
+        }
+
+        if not_accepted.len() > 0 {
+            debug!("Read Complete with unaccepted triples");
+        } else {
+            debug!("Read Complete");
+        }
+
+        self.complete(b)
     }
 }
 
@@ -303,7 +384,7 @@ struct SimpleAnnotatedAxiomAcceptor {
 }
 
 impl Acceptor<(AnnotatedAxiom, Merge)> for SimpleAnnotatedAxiomAcceptor {
-    fn accept(&mut self, b: &Build, mut triple: [SpTerm; 3]) -> AcceptState {
+    fn accept(&mut self, b: &Build, mut triple: [SpTerm; 3], o: &Ontology) -> AcceptState {
         match &mut self.ac {
             None => {
                 // Try all the possibilities till we find the first which
@@ -311,29 +392,26 @@ impl Acceptor<(AnnotatedAxiom, Merge)> for SimpleAnnotatedAxiomAcceptor {
                 let acceptors: Vec<Box<dyn Acceptor<AnnotatedAxiom>>> = vec![
                     Box::new(DeclarationAcceptor::default()),
                     Box::new(SubClassOfAcceptor::default()),
-
                     //Needs to go last!
                     Box::new(AnnotationAssertionAcceptor::default()),
                 ];
 
                 for mut ac in acceptors {
-                    let acr = ac.accept(b, triple);
+                    let acr = ac.accept(b, triple, o);
                     match acr {
                         Accept => {
                             self.ac = Some(ac);
                             return Accept;
                         }
-                        Return(t) => {
-                            triple = t
-                        }
+                        Return(t) => triple = t,
                         _ => {
                             panic!("Acceptor in unexpected state");
                         }
                     }
                 }
-                retn(triple,"SimpleAnnotatedAxiomAcceptor")
+                retn(triple, "SimpleAnnotatedAxiomAcceptor")
             }
-            Some(acceptor) => acceptor.accept(b, triple),
+            Some(acceptor) => acceptor.accept(b, triple, o),
         }
     }
 
@@ -361,11 +439,11 @@ struct AnnotatedAxiomAcceptor {
     annotated_property: Option<SpTerm>,
     annotated_target: Option<SpTerm>,
     annotations: Vec<AnnotationAcceptor>,
-    complete: bool
+    complete: bool,
 }
 
 impl Acceptor<(AnnotatedAxiom, Merge)> for AnnotatedAxiomAcceptor {
-    fn accept(&mut self, b: &Build, triple: [SpTerm; 3]) -> AcceptState {
+    fn accept(&mut self, b: &Build, triple: [SpTerm; 3], o: &Ontology) -> AcceptState {
         match &triple {
             // This should only happen when bnodeid is None
             [Term::BNode(s), Term::Iri(p), Term::Iri(ob)]
@@ -374,14 +452,12 @@ impl Acceptor<(AnnotatedAxiom, Merge)> for AnnotatedAxiomAcceptor {
                 self.bnodeid = Some(s.clone());
                 accept("AnnotatedAxiom")
             }
-            [Term::BNode(s), Term::Iri(p), Term::Iri(ob)]
-                if Some(s) == self.bnodeid.as_ref() =>
-            {
+            [Term::BNode(s), Term::Iri(p), Term::Iri(ob)] if Some(s) == self.bnodeid.as_ref() => {
                 match p {
                     _ if p == &OWL::AnnotatedSource.iri_str() => {
                         self.annotated_source = Some(triple[2].clone());
                         accept("AnnotatedAxiom")
-                    },
+                    }
                     _ if p == &OWL::AnnotatedProperty.iri_str() => {
                         self.annotated_property = Some(triple[2].clone());
                         accept("AnnotatedAxiom")
@@ -397,11 +473,9 @@ impl Acceptor<(AnnotatedAxiom, Merge)> for AnnotatedAxiomAcceptor {
                     }
                 }
             }
-            [Term::BNode(s), _, _]
-                if Some(s) == self.bnodeid.as_ref() =>
-            {
+            [Term::BNode(s), _, _] if Some(s) == self.bnodeid.as_ref() => {
                 let mut annac = AnnotationAcceptor::default();
-                let rtn = annac.accept(b, triple);
+                let rtn = annac.accept(b, triple, o);
 
                 if annac.is_complete() {
                     self.annotations.push(annac);
@@ -412,20 +486,20 @@ impl Acceptor<(AnnotatedAxiom, Merge)> for AnnotatedAxiomAcceptor {
                 self.complete = true;
                 retn(triple, "AnnotatedAxiomAcceptor")
             }
-            _ => {
-                retn(triple, "AnnotatedAxiomAcceptor")
-            }
+            _ => retn(triple, "AnnotatedAxiomAcceptor"),
         }
     }
 
     fn complete_state(&self) -> CompleteState {
         if self.complete {
             Complete
-        }
-        else {
-            if all_some!(self.bnodeid, self.annotated_source,
-                         self.annotated_property, self.annotated_target)
-            {
+        } else {
+            if all_some!(
+                self.bnodeid,
+                self.annotated_source,
+                self.annotated_property,
+                self.annotated_target
+            ) {
                 CanComplete
             } else {
                 NotComplete
@@ -439,10 +513,15 @@ impl Acceptor<(AnnotatedAxiom, Merge)> for AnnotatedAxiomAcceptor {
         // axiom.
         let mut simple_acceptor = SimpleAnnotatedAxiomAcceptor::default();
 
-        let acs = simple_acceptor.accept(b,
-                                         [self.annotated_source.take().unwrap(),
-                                          self.annotated_property.take().unwrap(),
-                                          self.annotated_target.take().unwrap()]);
+        let acs = simple_acceptor.accept(
+            b,
+            [
+                self.annotated_source.take().unwrap(),
+                self.annotated_property.take().unwrap(),
+                self.annotated_target.take().unwrap(),
+            ],
+            o,
+        );
 
         let mut ann_axiom = simple_acceptor.complete(b, o)?.0;
         for i in &mut self.annotations {
@@ -457,11 +536,11 @@ impl Acceptor<(AnnotatedAxiom, Merge)> for AnnotatedAxiomAcceptor {
 #[derive(Debug, Default)]
 struct DeclarationAcceptor {
     iri: Option<SpIri>,
-    kind: Option<SpIri>
+    kind: Option<SpIri>,
 }
 
 impl Acceptor<AnnotatedAxiom> for DeclarationAcceptor {
-    fn accept(&mut self, b: &Build, triple: [SpTerm; 3]) -> AcceptState {
+    fn accept(&mut self, b: &Build, triple: [SpTerm; 3], o: &Ontology) -> AcceptState {
         match &triple {
             [Term::Iri(s), Term::Iri(p), Term::Iri(ob)]
                 if p == &"http://www.w3.org/1999/02/22-rdf-syntax-ns#type" =>
@@ -470,9 +549,7 @@ impl Acceptor<AnnotatedAxiom> for DeclarationAcceptor {
                 self.kind = Some(ob.clone());
                 accept("DeclarationAcceptor")
             }
-            _ => {
-                retn(triple, "DeclarationAcceptor")
-            }
+            _ => retn(triple, "DeclarationAcceptor"),
         }
     }
 
@@ -487,25 +564,24 @@ impl Acceptor<AnnotatedAxiom> for DeclarationAcceptor {
     fn complete(&mut self, b: &Build, o: &Ontology) -> Result<AnnotatedAxiom, Error> {
         // Iterate over all the complete Acceptor, run complete on
         // them, and insert this
-        let n: NamedEntity =
-            match &self.kind {
-                Some(i) if i == &OWL::Class.iri_str() => {
-                    TryBuild::<Class>::try_build(&self.iri, b)?.into()
-                }
-                Some(i) if i == &OWL::ObjectProperty.iri_str() => {
-                    TryBuild::<ObjectProperty>::try_build(&self.iri, b)?.into()
-                }
-                Some(i) if i == &OWL::DatatypeProperty.iri_str() => {
-                    TryBuild::<DataProperty>::try_build(&self.iri, b)?.into()
-                }
-                Some(i) if i == &OWL::Datatype.iri_str() => {
-                    TryBuild::<Datatype>::try_build(&self.iri, b)?.into()
-                }
-                Some(_) => todo!(),
-                None => {
-                    todo!();
-                }
-            };
+        let n: NamedEntity = match &self.kind {
+            Some(i) if i == &OWL::Class.iri_str() => {
+                TryBuild::<Class>::try_build(&self.iri, b)?.into()
+            }
+            Some(i) if i == &OWL::ObjectProperty.iri_str() => {
+                TryBuild::<ObjectProperty>::try_build(&self.iri, b)?.into()
+            }
+            Some(i) if i == &OWL::DatatypeProperty.iri_str() => {
+                TryBuild::<DataProperty>::try_build(&self.iri, b)?.into()
+            }
+            Some(i) if i == &OWL::Datatype.iri_str() => {
+                TryBuild::<Datatype>::try_build(&self.iri, b)?.into()
+            }
+            Some(_) => todo!(),
+            None => {
+                todo!();
+            }
+        };
 
         Ok(declaration(n).into())
     }
@@ -513,7 +589,7 @@ impl Acceptor<AnnotatedAxiom> for DeclarationAcceptor {
 
 #[derive(Debug)]
 enum OperandList {
-    Class(Vec<ClassAcceptor>)
+    Class(Vec<ClassAcceptor>),
 }
 
 #[derive(Debug)]
@@ -522,28 +598,30 @@ struct PropositionAcceptor {
     kind: Option<SpIri>,
     end_of_list: Option<BNodeId<Rc<str>>>,
     complete: bool,
-    operands: Option<OperandList>
+    operands: Option<OperandList>,
 }
 
 impl PropositionAcceptor {
-    fn from_bnode(bnode:BNodeId<Rc<str>>) -> PropositionAcceptor {
-        PropositionAcceptor {bnode, operands:None, end_of_list: None,
-                             kind:None, complete: false}
+    fn from_bnode(bnode: BNodeId<Rc<str>>) -> PropositionAcceptor {
+        PropositionAcceptor {
+            bnode,
+            operands: None,
+            end_of_list: None,
+            kind: None,
+            complete: false,
+        }
     }
 }
 
 impl Acceptor<ClassExpression> for PropositionAcceptor {
-    fn accept(&mut self, b: &Build, triple: [SpTerm; 3]) -> AcceptState {
+    fn accept(&mut self, b: &Build, triple: [SpTerm; 3], o: &Ontology) -> AcceptState {
         if self.complete {
-            return retn(triple, "Proposition")
+            return retn(triple, "Proposition");
         }
 
         match &triple {
-            [Term::BNode(id), Term::Iri(p), Term::BNode(ob)]
-                if id == &self.bnode =>
-            {
-                if p == &OWL::IntersectionOf.iri_str() ||
-                    p == &OWL::UnionOf.iri_str() {
+            [Term::BNode(id), Term::Iri(p), Term::BNode(ob)] if id == &self.bnode => {
+                if p == &OWL::IntersectionOf.iri_str() || p == &OWL::UnionOf.iri_str() {
                     self.operands = Some(OperandList::Class(vec![]));
                     self.kind = Some(p.clone());
                 }
@@ -551,40 +629,32 @@ impl Acceptor<ClassExpression> for PropositionAcceptor {
                 accept("Proposition")
             }
             [Term::BNode(s), Term::Iri(p), ob]
-                if Some(s) == self.end_of_list.as_ref() &&
-                p == &RDF::First.iri_str() =>
+                if Some(s) == self.end_of_list.as_ref() && p == &RDF::First.iri_str() =>
             {
                 match &mut self.operands {
                     Some(OperandList::Class(v)) => {
-                        v.push(
-                            match ob {
-                                Term::Iri(iri) =>
-                                    ClassAcceptor::from_iri(iri.clone()),
-                                Term::BNode(id) =>
-                                    ClassAcceptor::from_bnode(id.clone()),
-                                _ => {
-                                    return retn(triple, "Proposition");
-                                }
+                        v.push(match ob {
+                            Term::Iri(iri) => ClassAcceptor::from_iri(iri.clone()),
+                            Term::BNode(id) => ClassAcceptor::from_bnode(id.clone()),
+                            _ => {
+                                return retn(triple, "Proposition");
                             }
-                        );
+                        });
                         accept("Proposition")
                     }
-                    _ => {
-                        retn(triple, "Proposition")
-                    }
+                    _ => retn(triple, "Proposition"),
                 }
             }
             [Term::BNode(s), Term::Iri(p), Term::Iri(ob)]
-                if Some(s) == self.end_of_list.as_ref() &&
-                p == &RDF::Rest.iri_str() &&
-                ob == &RDF::Nil.iri_str() =>
+                if Some(s) == self.end_of_list.as_ref()
+                    && p == &RDF::Rest.iri_str()
+                    && ob == &RDF::Nil.iri_str() =>
             {
                 self.complete = true;
                 accept("Proposition")
             }
             [Term::BNode(s), Term::Iri(p), Term::BNode(ob)]
-                if Some(s) == self.end_of_list.as_ref() &&
-                p == &RDF::Rest.iri_str() =>
+                if Some(s) == self.end_of_list.as_ref() && p == &RDF::Rest.iri_str() =>
             {
                 // We make the assumption here that we get first, then
                 // rest, then first, then rest. Otherwize, we have
@@ -595,46 +665,33 @@ impl Acceptor<ClassExpression> for PropositionAcceptor {
                 self.end_of_list = Some(ob.clone());
                 accept("Proposition")
             }
-            _ => {
-                todo!()
-            }
+            _ => todo!(),
         }
     }
 
     fn complete_state(&self) -> CompleteState {
         if self.complete {
             Complete
-        }
-        else {
+        } else {
             NotComplete
         }
     }
 
     fn complete(&mut self, b: &Build, o: &Ontology) -> Result<ClassExpression, Error> {
-
         match &mut self.operands {
             Some(OperandList::Class(v)) => {
-                let op: Result<Vec<_>, _> = v
-                    .into_iter()
-                    .map(|op| op.complete(b, o))
-                    .collect();
+                let op: Result<Vec<_>, _> = v.into_iter().map(|op| op.complete(b, o)).collect();
                 match &self.kind {
-                    Some(k) if k == &OWL::IntersectionOf.iri_str() =>
-                    {
-                        Ok(
-                            ClassExpression::ObjectIntersectionOf(op?)
-                        )
+                    Some(k) if k == &OWL::IntersectionOf.iri_str() => {
+                        Ok(ClassExpression::ObjectIntersectionOf(op?))
                     }
-                    Some(k) if k == &OWL::UnionOf.iri_str() =>
-                    {
-                        Ok(
-                            ClassExpression::ObjectUnionOf(op?)
-                        )
+                    Some(k) if k == &OWL::UnionOf.iri_str() => {
+                        Ok(ClassExpression::ObjectUnionOf(op?))
                     }
-                    _ => todo!()
+                    _ => todo!(),
                 }
             }
-            _ => todo!()
+            _ => todo!(),
         }
     }
 }
@@ -646,42 +703,38 @@ struct RestrictionAcceptor {
 }
 
 impl RestrictionAcceptor {
-    fn from_bnode(bnode:BNodeId<Rc<str>>) -> RestrictionAcceptor {
-        RestrictionAcceptor {bnode: Some(bnode), tuples: vec![]}
+    fn from_bnode(bnode: BNodeId<Rc<str>>) -> RestrictionAcceptor {
+        RestrictionAcceptor {
+            bnode: Some(bnode),
+            tuples: vec![],
+        }
     }
 
-    fn take<P>(&mut self, predicate:P) -> Option<(SpIri, SpTerm)>
-    where P: FnMut(&(SpIri, SpTerm)) -> bool
+    fn take<P>(&mut self, predicate: P) -> Option<(SpIri, SpTerm)>
+    where
+        P: FnMut(&(SpIri, SpTerm)) -> bool,
     {
         let index = self.tuples.iter().position(predicate)?;
         Some(self.tuples.remove(index))
     }
 
     // Return the object of the onProperty predicate
-    fn take_on_property(&mut self) -> Option<(SpIri,SpTerm)> {
+    fn take_on_property(&mut self) -> Option<(SpIri, SpTerm)> {
         Some(self.take(|t| t.0 == OWL::OnProperty.iri_str())?)
     }
 }
 
 impl Acceptor<ClassExpression> for RestrictionAcceptor {
-    fn accept(&mut self, b: &Build, triple: [SpTerm; 3]) -> AcceptState {
+    fn accept(&mut self, b: &Build, triple: [SpTerm; 3], o: &Ontology) -> AcceptState {
         match &triple {
-            [Term::BNode(id), _, _]
-                if Some(id) == self.bnode.as_ref() => {
-                    match &triple {
-                        [_, Term::Iri(p), ob] =>
-                        {
-                            self.tuples.push((p.clone(), ob.clone()));
-                            accept("ClassExpression")
-                        }
-                        _ => {
-                            retn(triple, "ClassExpression")
-                        }
-                    }
+            [Term::BNode(id), _, _] if Some(id) == self.bnode.as_ref() => match &triple {
+                [_, Term::Iri(p), ob] => {
+                    self.tuples.push((p.clone(), ob.clone()));
+                    accept("ClassExpression")
                 }
-            _ => {
-                retn(triple, "ClassExpression")
-            }
+                _ => retn(triple, "ClassExpression"),
+            },
+            _ => retn(triple, "ClassExpression"),
         }
     }
 
@@ -689,8 +742,7 @@ impl Acceptor<ClassExpression> for RestrictionAcceptor {
     fn complete_state(&self) -> CompleteState {
         if self.bnode.is_some() {
             CanComplete
-        }
-        else {
+        } else {
             NotComplete
         }
     }
@@ -699,33 +751,26 @@ impl Acceptor<ClassExpression> for RestrictionAcceptor {
         let on_prop = self.take_on_property().unwrap().1;
         let prop_kind = find_declaration_kind(o, b.iri(on_prop.value()));
 
-        Ok(
-            match prop_kind {
-                Some(NamedEntityKind::ObjectProperty) => {
-
-                    let ope = TryBuild::<ObjectProperty>::try_build(&on_prop, b)?.into();
-                    let bce = Box::new(
-                        TryBuild::<Class>::try_build(&self.tuples[0].1, b)?.into()
-                    );
-                    match &self.tuples[0].0 {
-                        t if t == &OWL::SomeValuesFrom.iri_str() => {
-                            ClassExpression::ObjectSomeValuesFrom { ope, bce }
-                        }
-                        t if t == &OWL::AllValuesFrom.iri_str() => {
-                            ClassExpression::ObjectAllValuesFrom { ope, bce }
-                        }
-                        _ => todo!()
+        Ok(match prop_kind {
+            Some(NamedEntityKind::ObjectProperty) => {
+                let ope = TryBuild::<ObjectProperty>::try_build(&on_prop, b)?.into();
+                let bce = Box::new(TryBuild::<Class>::try_build(&self.tuples[0].1, b)?.into());
+                match &self.tuples[0].0 {
+                    t if t == &OWL::SomeValuesFrom.iri_str() => {
+                        ClassExpression::ObjectSomeValuesFrom { ope, bce }
                     }
-                }
-                Some(NamedEntityKind::DataProperty) => {
-                    ClassExpression::DataSomeValuesFrom {
-                        dp: TryBuild::<DataProperty>::try_build(&on_prop, b)?.into(),
-                        dr: TryBuild::<Datatype>::try_build(&self.tuples[0].1, b)?.into(),
+                    t if t == &OWL::AllValuesFrom.iri_str() => {
+                        ClassExpression::ObjectAllValuesFrom { ope, bce }
                     }
+                    _ => todo!(),
                 }
-                _ => todo!(),
             }
-        )
+            Some(NamedEntityKind::DataProperty) => ClassExpression::DataSomeValuesFrom {
+                dp: TryBuild::<DataProperty>::try_build(&on_prop, b)?.into(),
+                dr: TryBuild::<Datatype>::try_build(&self.tuples[0].1, b)?.into(),
+            },
+            _ => todo!(),
+        })
     }
 }
 
@@ -742,82 +787,67 @@ struct ClassExpressionAcceptor {
 }
 
 impl ClassExpressionAcceptor {
-    fn from_bnode(bnode:BNodeId<Rc<str>>) -> ClassExpressionAcceptor {
-        ClassExpressionAcceptor {bnode: Some(bnode), sub: None}
+    fn from_bnode(bnode: BNodeId<Rc<str>>) -> ClassExpressionAcceptor {
+        ClassExpressionAcceptor {
+            bnode: Some(bnode),
+            sub: None,
+        }
     }
 }
 
 impl Acceptor<ClassExpression> for ClassExpressionAcceptor {
     // Accept a triple.
-    fn accept(&mut self, b: &Build, triple: [SpTerm; 3]) -> AcceptState {
+    fn accept(&mut self, b: &Build, triple: [SpTerm; 3], o: &Ontology) -> AcceptState {
         match &triple {
             [Term::BNode(id), Term::Iri(p), Term::Iri(ob)]
-                if Some(id) == self.bnode.as_ref() &&
-                p == &RDF::Type.iri_str() =>
+                if Some(id) == self.bnode.as_ref() && p == &RDF::Type.iri_str() =>
             {
                 if ob == &OWL::Restriction.iri_str() {
-                    self.sub = Some(
-                        ClassExpressionSubAcceptor::Restriction(
-                            RestrictionAcceptor::from_bnode(id.clone())
-                        )
-                    );
+                    self.sub = Some(ClassExpressionSubAcceptor::Restriction(
+                        RestrictionAcceptor::from_bnode(id.clone()),
+                    ));
                     return accept("ClassExpression");
                 }
 
                 if ob == &OWL::Class.iri_str() {
-                    self.sub = Some(
-                        ClassExpressionSubAcceptor::Proposition(
-                            PropositionAcceptor::from_bnode(id.clone())
-                        )
-                    );
+                    self.sub = Some(ClassExpressionSubAcceptor::Proposition(
+                        PropositionAcceptor::from_bnode(id.clone()),
+                    ));
                     return accept("ClassExpression");
                 }
 
                 todo!()
-
             }
-            _ if self.sub.is_some() => {
-                match self.sub.as_mut().unwrap() {
-                    ClassExpressionSubAcceptor::Restriction(ac) =>
-                        ac.accept(b, triple),
-                    ClassExpressionSubAcceptor::Proposition(ac) =>
-                        ac.accept(b, triple),
-                }
-            }
-            _ => {
-                retn(triple, "ClassExpression")
-            }
+            _ if self.sub.is_some() => match self.sub.as_mut().unwrap() {
+                ClassExpressionSubAcceptor::Restriction(ac) => ac.accept(b, triple, o),
+                ClassExpressionSubAcceptor::Proposition(ac) => ac.accept(b, triple, o),
+            },
+            _ => retn(triple, "ClassExpression"),
         }
     }
 
     // Indicate the completion state of the acceptor.
     fn complete_state(&self) -> CompleteState {
         match self.sub.as_ref() {
-            Some(ClassExpressionSubAcceptor::Restriction(ac)) =>
-                ac.complete_state(),
-            Some(ClassExpressionSubAcceptor::Proposition(ac)) =>
-                ac.complete_state(),
+            Some(ClassExpressionSubAcceptor::Restriction(ac)) => ac.complete_state(),
+            Some(ClassExpressionSubAcceptor::Proposition(ac)) => ac.complete_state(),
             None => NotComplete,
         }
     }
 
     fn complete(&mut self, b: &Build, o: &Ontology) -> Result<ClassExpression, Error> {
         match self.sub.as_mut() {
-            Some(ClassExpressionSubAcceptor::Restriction(ac)) =>
-                ac.complete(b, o),
-            Some(ClassExpressionSubAcceptor::Proposition(ac)) =>
-                ac.complete(b, o),
+            Some(ClassExpressionSubAcceptor::Restriction(ac)) => ac.complete(b, o),
+            Some(ClassExpressionSubAcceptor::Proposition(ac)) => ac.complete(b, o),
             None => todo!(),
         }
     }
 }
 
-
-
 #[derive(Debug)]
 enum ClassAcceptor {
-    Named (SpIri),
-    Expression (ClassExpressionAcceptor),
+    Named(SpIri),
+    Expression(ClassExpressionAcceptor),
 }
 
 impl ClassAcceptor {
@@ -825,17 +855,17 @@ impl ClassAcceptor {
         ClassAcceptor::Named(class)
     }
 
-    fn from_bnode(bnode:BNodeId<Rc<str>>) -> ClassAcceptor {
+    fn from_bnode(bnode: BNodeId<Rc<str>>) -> ClassAcceptor {
         ClassAcceptor::Expression(ClassExpressionAcceptor::from_bnode(bnode))
     }
 }
 
 impl Acceptor<ClassExpression> for ClassAcceptor {
     // Accept a triple.
-    fn accept(&mut self, b: &Build, triple: [SpTerm; 3]) -> AcceptState {
+    fn accept(&mut self, b: &Build, triple: [SpTerm; 3], o: &Ontology) -> AcceptState {
         match self {
             ClassAcceptor::Named(_) => retn(triple, "Class"),
-            ClassAcceptor::Expression(ce) => ce.accept(b, triple),
+            ClassAcceptor::Expression(ce) => ce.accept(b, triple, o),
         }
     }
 
@@ -850,12 +880,10 @@ impl Acceptor<ClassExpression> for ClassAcceptor {
     fn complete(&mut self, b: &Build, o: &Ontology) -> Result<ClassExpression, Error> {
         match self {
             ClassAcceptor::Named(nc) => {
-                let c:Class = nc.to_iri(b).into();
+                let c: Class = nc.to_iri(b).into();
                 Ok(c.into())
             }
-            ClassAcceptor::Expression(ce) => {
-                ce.complete(b, o)
-            }
+            ClassAcceptor::Expression(ce) => ce.complete(b, o),
         }
     }
 }
@@ -867,18 +895,14 @@ struct SubClassOfAcceptor {
 }
 
 impl Acceptor<AnnotatedAxiom> for SubClassOfAcceptor {
-    fn accept(&mut self, b: &Build, triple: [Term<Rc<str>>; 3]) -> AcceptState {
+    fn accept(&mut self, b: &Build, triple: [Term<Rc<str>>; 3], o: &Ontology) -> AcceptState {
         match &triple {
-            [Term::Iri(s), Term::Iri(p), Term::Iri(ob)]
-                if p == &RDFS::SubClassOf.iri_str() =>
-            {
+            [Term::Iri(s), Term::Iri(p), Term::Iri(ob)] if p == &RDFS::SubClassOf.iri_str() => {
                 self.subclass = Some(ClassAcceptor::from_iri(s.clone()));
                 self.superclass = Some(ClassAcceptor::from_iri(ob.clone()));
                 accept("SubClassOfAcceptor")
             }
-            [Term::Iri(s), Term::Iri(p), Term::BNode(id)]
-                if p == &RDFS::SubClassOf.iri_str() =>
-            {
+            [Term::Iri(s), Term::Iri(p), Term::BNode(id)] if p == &RDFS::SubClassOf.iri_str() => {
                 self.subclass = Some(ClassAcceptor::from_iri(s.clone()));
                 self.superclass = Some(ClassAcceptor::from_bnode(id.clone()));
                 accept("SubClassOfAcceptor")
@@ -888,19 +912,16 @@ impl Acceptor<AnnotatedAxiom> for SubClassOfAcceptor {
                     Some(ac) => {
                         // For now just ignore the subclass, but we need to
                         // fix this later
-                        ac.accept(b, triple)
+                        ac.accept(b, triple, o)
                     }
-                    None => {
-                        retn(triple, "SubClassOfAcceptor")
-                    }
+                    None => retn(triple, "SubClassOfAcceptor"),
                 }
             }
         }
     }
 
     fn complete_state(&self) -> CompleteState {
-        if all_complete!(&self.superclass, &self.subclass)
-        {
+        if all_complete!(&self.superclass, &self.subclass) {
             Complete
         } else {
             NotComplete
@@ -910,12 +931,11 @@ impl Acceptor<AnnotatedAxiom> for SubClassOfAcceptor {
     fn complete(&mut self, b: &Build, o: &Ontology) -> Result<AnnotatedAxiom, Error> {
         // Iterate over all the complete Acceptor, run complete on
         // them, and insert this
-        Ok(
-            SubClassOf {
-                sub: self.subclass.as_mut().unwrap().complete(b, o)?,
-                sup: self.superclass.as_mut().unwrap().complete(b, o)?,
-            }.into()
-        )
+        Ok(SubClassOf {
+            sub: self.subclass.as_mut().unwrap().complete(b, o)?,
+            sup: self.superclass.as_mut().unwrap().complete(b, o)?,
+        }
+        .into())
     }
 }
 
@@ -925,37 +945,33 @@ struct AnnotationAssertionAcceptor {
     subject: Option<SpIri>,
 }
 
-impl Acceptor<AnnotatedAxiom> for AnnotationAssertionAcceptor{
-    fn accept(&mut self, b: &Build, triple: [Term<Rc<str>>; 3]) -> AcceptState {
+impl Acceptor<AnnotatedAxiom> for AnnotationAssertionAcceptor {
+    fn accept(&mut self, b: &Build, triple: [Term<Rc<str>>; 3], o: &Ontology) -> AcceptState {
         match &triple {
             [Term::Iri(s), _, _] => {
                 self.subject = Some(s.clone());
                 self.ac = Some(AnnotationAcceptor::default());
-                self.ac.as_mut().unwrap().accept(b, triple)
+                self.ac.as_mut().unwrap().accept(b, triple, o)
             }
-            _ => {
-                Return(triple)
-            }
+            _ => Return(triple),
         }
     }
 
     fn complete_state(&self) -> CompleteState {
         if self.subject.is_some() {
             Complete
-        }
-        else{
+        } else {
             NotComplete
         }
     }
 
     fn complete(&mut self, b: &Build, o: &Ontology) -> Result<AnnotatedAxiom, Error> {
-        Ok(
-            AnnotationAssertion {
-                subject: TryBuild::<IRI>::to_iri_maybe(&self.subject, b)?,
-                //b.iri(self.subject.as_ref().unwrap().to_string()),
-                ann: self.ac.as_mut().unwrap().complete(b, o)?,
-            }.into()
-        )
+        Ok(AnnotationAssertion {
+            subject: TryBuild::<IRI>::to_iri_maybe(&self.subject, b)?,
+            //b.iri(self.subject.as_ref().unwrap().to_string()),
+            ann: self.ac.as_mut().unwrap().complete(b, o)?,
+        }
+        .into())
     }
 }
 
@@ -969,10 +985,9 @@ struct AnnotationAcceptor {
 }
 
 impl Acceptor<Annotation> for AnnotationAcceptor {
-    fn accept(&mut self, b: &Build, triple: [Term<Rc<str>>; 3]) -> AcceptState {
+    fn accept(&mut self, b: &Build, triple: [Term<Rc<str>>; 3], o: &Ontology) -> AcceptState {
         match &triple {
-            [_, Term::Iri(p), Term::Literal(ob, kind)] =>
-            {
+            [_, Term::Iri(p), Term::Literal(ob, kind)] => {
                 // Literal value
                 self.p = Some(p.clone());
                 self.literal_val = Some(ob.clone());
@@ -987,103 +1002,32 @@ impl Acceptor<Annotation> for AnnotationAcceptor {
                 self.iri_val = Some(ob.clone());
                 accept("AnnotationAcceptor")
             }
-            _ => {
-                todo!()
-            }
+            _ => todo!(),
         }
     }
 
     fn complete_state(&self) -> CompleteState {
-        if self.p.is_some() &&
-            self.iri_val.is_some() ||
-            self.literal_val.is_some() {
-                Complete
-            }
-        else {
+        if self.p.is_some() && self.iri_val.is_some() || self.literal_val.is_some() {
+            Complete
+        } else {
             NotComplete
         }
     }
 
     fn complete(&mut self, b: &Build, o: &Ontology) -> Result<Annotation, Error> {
-        Ok(
-            Annotation {
-                ap: TryBuild::<AnnotationProperty>::try_build(&self.p, b)?,
-                av:
-                if self.iri_val.is_some() {
-                    TryBuild::<IRI>::try_build(&self.iri_val, b)?.into()
+        Ok(Annotation {
+            ap: TryBuild::<AnnotationProperty>::try_build(&self.p, b)?,
+            av: if self.iri_val.is_some() {
+                TryBuild::<IRI>::try_build(&self.iri_val, b)?.into()
+            } else {
+                Literal::Language {
+                    literal: self.literal_val.as_ref().unwrap().to_string(),
+                    lang: self.literal_lang.as_ref().unwrap().to_string(),
                 }
-                else {
-                    Literal::Language {
-                        literal:self.literal_val.as_ref().unwrap().to_string(),
-                        lang: self.literal_lang.as_ref().unwrap().to_string(),
-                    }.into()
-                }
-            }
-        )
+                .into()
+            },
+        })
     }
-}
-
-fn read_then_complete_1(
-    triple_iter: impl Iterator<Item = Result<[SpTerm; 3], sophia::error::Error>>,
-    b: &Build,
-    acceptor: &mut OntologyAcceptor,
-) -> Vec<Result<[SpTerm;3], sophia::error::Error>> {
-    let mut not_accepted_triples = vec![];
-    let iter = triple_iter;
-
-    for t in iter {
-        let t = t.unwrap();
-        debug!("Checking: {}\n\t\t{}\n\t\t{}", &t[0].n3(), &t[1].n3(), &t[2].n3());
-
-        // Check return type of this and do something sensible
-        match acceptor.accept(b, t) {
-            Accept => {
-            }
-            Return(triple) => {
-                let x = triple;
-                not_accepted_triples.push(Ok(x));
-            }
-            _=> {
-                todo!()
-            }
-        }
-    }
-
-    not_accepted_triples
-}
-
-fn read_then_complete(
-    triple_iter: impl Iterator<Item = Result<[Term<Rc<str>>; 3], sophia::error::Error>>,
-    b: &Build,
-    mut acceptor: OntologyAcceptor,
-) -> Result<Ontology, Error> {
-
-    debug!("First read_then_complete");
-    let mut not_accepted = read_then_complete_1(triple_iter, b, &mut acceptor);
-    let mut last_len = std::usize::MAX;
-    //dbg!("not accepted", &not_accepted);
-
-    let mut i = 0;
-    while not_accepted.len() < last_len && not_accepted.len() > 0 {
-        // I thought this would have the same type as triple_iter, but
-        // it doesn't. Perhaps do a collect on triple_iter to vec,
-        // then it should be easier.
-        debug!("read_then_complete: {}", i);
-        i = i + 1;
-        last_len = not_accepted.len();
-        not_accepted = read_then_complete_1(not_accepted.into_iter(),
-                                            b, &mut acceptor);
-        debug!("not accepted:{}: last_len:{}", not_accepted.len(), last_len);
-    }
-
-    if not_accepted.len() > 0 {
-        debug!("Read Complete with unaccepted triples");
-    }
-    else {
-        debug!("Read Complete");
-    }
-
-    acceptor.complete(b, &Ontology::default())
 }
 
 pub fn read_with_build<R: BufRead>(
@@ -1093,7 +1037,8 @@ pub fn read_with_build<R: BufRead>(
     let parser = sophia::parser::xml::Config::default();
     let triple_iter = parser.parse_bufread(bufread);
 
-    return read_then_complete(triple_iter, build, OntologyAcceptor::default())
+    return OntologyParser::default()
+        .read_then_complete(triple_iter, build)
         .map(|o| return (o, PrefixMapping::default()));
 }
 
@@ -1106,8 +1051,8 @@ pub fn read<R: BufRead>(bufread: &mut R) -> Result<(Ontology, PrefixMapping), Er
 mod test {
     use super::*;
 
-    use std::path::PathBuf;
     use std::io::Write;
+    use std::path::PathBuf;
 
     use pretty_assertions::assert_eq;
 
@@ -1136,8 +1081,10 @@ mod test {
         let dir = dir_path_buf.parent().unwrap().to_string_lossy();
 
         compare_str(
-            &slurp::read_all_to_string(format!("{}/../../ont/owl-rdf/{}.owl", dir, testrdf)).unwrap(),
-            &slurp::read_all_to_string(format!("{}/../../ont/owl-xml/{}.owx", dir, testowl)).unwrap(),
+            &slurp::read_all_to_string(format!("{}/../../ont/owl-rdf/{}.owl", dir, testrdf))
+                .unwrap(),
+            &slurp::read_all_to_string(format!("{}/../../ont/owl-xml/{}.owx", dir, testowl))
+                .unwrap(),
         );
     }
 
