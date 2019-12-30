@@ -34,9 +34,6 @@ enum AcceptState {
 
     // Do not accept the triple and return it
     Return([SpTerm; 3]),
-
-    // Return triples that were previously accepted
-    BackTrack(Vec<[SpTerm; 3]>),
 }
 
 #[derive(Debug, Eq, PartialEq)]
@@ -67,7 +64,7 @@ trait Acceptor<O>: std::fmt::Debug {
     // both the ontologies and the number of ontologies may change
     // over time.
     #[must_use]
-    fn accept(&mut self, b: &Build, triple: [SpTerm; 3], o: &Ontology) -> AcceptState;
+    fn accept(&mut self, b: &Build, triple: [SpTerm; 3], o: &Ontology) -> Result<AcceptState, Error>;
 
     // Indicate the completion state of the acceptor.
     fn complete_state(&self) -> CompleteState;
@@ -159,14 +156,14 @@ macro_rules! all_complete {
     };
 }
 
-fn accept(log: &str) -> AcceptState {
+fn accept(log: &str) -> Result<AcceptState,Error> {
     debug!("Accept: {}", log);
-    Accept
+    Ok(Accept)
 }
 
-fn retn(triple: [SpTerm; 3], log: &str) -> AcceptState {
+fn retn(triple: [SpTerm; 3], log: &str) -> Result<AcceptState, Error> {
     trace!("Return: {}", log);
-    Return(triple)
+    Ok(Return(triple))
 }
 
 fn p_tup(triple: &[SpTerm; 3]) {
@@ -202,7 +199,7 @@ impl OntologyParser {
         }
     }
 
-    fn accept(&mut self, b: &Build, mut triple: [SpTerm; 3]) -> AcceptState {
+    fn accept(&mut self, b: &Build, mut triple: [SpTerm; 3]) -> Result<AcceptState,Error> {
         match &self.so {
             None => retn(triple, "Ontology Acceptor"),
             Some(o) => {
@@ -230,19 +227,18 @@ impl OntologyParser {
                         // them first
                         for i in 0..self.incomplete_acceptors.len() {
                             let ac = &mut self.incomplete_acceptors[i];
-                            let acr = ac.accept(b, triple, &o);
+                            let acr = ac.accept(b, triple, &o)?;
                             match acr {
                                 Accept => {
                                     if ac.is_complete() {
-                                        self.complete_acceptors
-                                            .push(self.incomplete_acceptors.remove(i));
+                                        let act = &mut self.incomplete_acceptors.remove(i);
+                                        self.complete_acceptor (b, act)?;
                                     }
-                                    return acr;
+                                    return Ok(acr);
                                 }
                                 Return(t) => {
                                     triple = t;
                                 }
-                                BackTrack(ts) => todo!(),
                             }
                         }
 
@@ -253,26 +249,42 @@ impl OntologyParser {
                         ];
 
                         for mut ac in acceptors {
-                            let acr = ac.accept(b, triple, &o);
+                            let acr = ac.accept(b, triple, &o)?;
                             match acr {
                                 Accept => {
                                     if ac.is_complete() {
-                                        self.complete_acceptors.push(ac)
+                                        self.complete_acceptor(b, &mut ac)?;
                                     } else {
-                                        self.incomplete_acceptors.push(ac)
-                                    };
-                                    return acr;
+                                        self.incomplete_acceptors.push(ac);
+                                    }
+
+                                    return Ok(acr);
                                 }
                                 Return(t) => {
                                     triple = t;
                                 }
-                                BackTrack(ts) => todo!(),
                             }
                         }
 
                         retn(triple, "Ontology Acceptor")
                     }
                 }
+            }
+        }
+    }
+
+    fn complete_acceptor(&mut self, b: &Build, ac: &mut Box<dyn Acceptor<(AnnotatedAxiom, Merge)>>)
+                         -> Result<(), Error> {
+        match self.so.as_mut() {
+            None => todo!(),
+            Some(mut o) => {
+                let c = ac.complete(b, &o)?;
+                if let Merge::NeedsMerge = c.1 {
+                    update_logically_equal_axiom(&mut o, c.0);
+                } else {
+                    o.insert(c.0);
+                }
+                Ok(())
             }
         }
     }
@@ -286,20 +298,13 @@ impl OntologyParser {
                 o.id.iri = TryBuild::<IRI>::to_some_iri(&self.iri, b);
                 o.id.viri = TryBuild::<IRI>::to_some_iri(&self.viri, b);
 
-                for ac in self
-                    .complete_acceptors
-                    .iter_mut()
-                    .chain(self.incomplete_acceptors.iter_mut())
+                let mut v = vec![];
+                std::mem::swap(&mut v, &mut self.incomplete_acceptors);
+                for mut ac in v.iter_mut()
                 {
-                    let c = ac.complete(b, &o)?;
-                    if let Merge::NeedsMerge = c.1 {
-                        update_logically_equal_axiom(&mut o, c.0)
-                    } else {
-                        o.insert(c.0);
-                    }
+                    self.complete_acceptor(b, &mut ac)?;
                 }
 
-                dbg!(&o);
                 // dbg!(&o); if true {panic!()}
                 return Ok(self.so.take().unwrap());
             }
@@ -325,8 +330,8 @@ impl OntologyParser {
 
             // Check return type of this and do something sensible
             match self.accept(b, t) {
-                Accept => {}
-                Return(triple) => {
+                Ok(Accept) => {}
+                Ok(Return(triple)) => {
                     let x = triple;
                     not_accepted_triples.push(Ok(x));
                 }
@@ -384,7 +389,7 @@ struct SimpleAnnotatedAxiomAcceptor {
 }
 
 impl Acceptor<(AnnotatedAxiom, Merge)> for SimpleAnnotatedAxiomAcceptor {
-    fn accept(&mut self, b: &Build, mut triple: [SpTerm; 3], o: &Ontology) -> AcceptState {
+    fn accept(&mut self, b: &Build, mut triple: [SpTerm; 3], o: &Ontology) -> Result<AcceptState, Error> {
         match &mut self.ac {
             None => {
                 // Try all the possibilities till we find the first which
@@ -397,16 +402,13 @@ impl Acceptor<(AnnotatedAxiom, Merge)> for SimpleAnnotatedAxiomAcceptor {
                 ];
 
                 for mut ac in acceptors {
-                    let acr = ac.accept(b, triple, o);
+                    let acr = ac.accept(b, triple, o)?;
                     match acr {
                         Accept => {
                             self.ac = Some(ac);
-                            return Accept;
+                            return accept("SimpleAnnotatedAxiom");
                         }
                         Return(t) => triple = t,
-                        _ => {
-                            panic!("Acceptor in unexpected state");
-                        }
                     }
                 }
                 retn(triple, "SimpleAnnotatedAxiomAcceptor")
@@ -443,7 +445,7 @@ struct AnnotatedAxiomAcceptor {
 }
 
 impl Acceptor<(AnnotatedAxiom, Merge)> for AnnotatedAxiomAcceptor {
-    fn accept(&mut self, b: &Build, triple: [SpTerm; 3], o: &Ontology) -> AcceptState {
+    fn accept(&mut self, b: &Build, triple: [SpTerm; 3], o: &Ontology) -> Result<AcceptState, Error> {
         match &triple {
             // This should only happen when bnodeid is None
             [Term::BNode(s), Term::Iri(p), Term::Iri(ob)]
@@ -540,7 +542,7 @@ struct DeclarationAcceptor {
 }
 
 impl Acceptor<AnnotatedAxiom> for DeclarationAcceptor {
-    fn accept(&mut self, b: &Build, triple: [SpTerm; 3], o: &Ontology) -> AcceptState {
+    fn accept(&mut self, b: &Build, triple: [SpTerm; 3], o: &Ontology) -> Result<AcceptState,Error> {
         match &triple {
             [Term::Iri(s), Term::Iri(p), Term::Iri(ob)]
                 if p == &"http://www.w3.org/1999/02/22-rdf-syntax-ns#type" =>
@@ -614,7 +616,7 @@ impl PropositionAcceptor {
 }
 
 impl Acceptor<ClassExpression> for PropositionAcceptor {
-    fn accept(&mut self, b: &Build, triple: [SpTerm; 3], o: &Ontology) -> AcceptState {
+    fn accept(&mut self, b: &Build, triple: [SpTerm; 3], o: &Ontology) -> Result<AcceptState, Error> {
         if self.complete {
             return retn(triple, "Proposition");
         }
@@ -725,7 +727,7 @@ impl RestrictionAcceptor {
 }
 
 impl Acceptor<ClassExpression> for RestrictionAcceptor {
-    fn accept(&mut self, b: &Build, triple: [SpTerm; 3], o: &Ontology) -> AcceptState {
+    fn accept(&mut self, b: &Build, triple: [SpTerm; 3], o: &Ontology) -> Result<AcceptState, Error> {
         match &triple {
             [Term::BNode(id), _, _] if Some(id) == self.bnode.as_ref() => match &triple {
                 [_, Term::Iri(p), ob] => {
@@ -797,7 +799,7 @@ impl ClassExpressionAcceptor {
 
 impl Acceptor<ClassExpression> for ClassExpressionAcceptor {
     // Accept a triple.
-    fn accept(&mut self, b: &Build, triple: [SpTerm; 3], o: &Ontology) -> AcceptState {
+    fn accept(&mut self, b: &Build, triple: [SpTerm; 3], o: &Ontology) -> Result<AcceptState, Error> {
         match &triple {
             [Term::BNode(id), Term::Iri(p), Term::Iri(ob)]
                 if Some(id) == self.bnode.as_ref() && p == &RDF::Type.iri_str() =>
@@ -862,7 +864,7 @@ impl ClassAcceptor {
 
 impl Acceptor<ClassExpression> for ClassAcceptor {
     // Accept a triple.
-    fn accept(&mut self, b: &Build, triple: [SpTerm; 3], o: &Ontology) -> AcceptState {
+    fn accept(&mut self, b: &Build, triple: [SpTerm; 3], o: &Ontology) -> Result<AcceptState, Error> {
         match self {
             ClassAcceptor::Named(_) => retn(triple, "Class"),
             ClassAcceptor::Expression(ce) => ce.accept(b, triple, o),
@@ -895,7 +897,7 @@ struct SubClassOfAcceptor {
 }
 
 impl Acceptor<AnnotatedAxiom> for SubClassOfAcceptor {
-    fn accept(&mut self, b: &Build, triple: [Term<Rc<str>>; 3], o: &Ontology) -> AcceptState {
+    fn accept(&mut self, b: &Build, triple: [Term<Rc<str>>; 3], o: &Ontology) -> Result<AcceptState, Error> {
         match &triple {
             [Term::Iri(s), Term::Iri(p), Term::Iri(ob)] if p == &RDFS::SubClassOf.iri_str() => {
                 self.subclass = Some(ClassAcceptor::from_iri(s.clone()));
@@ -946,14 +948,14 @@ struct AnnotationAssertionAcceptor {
 }
 
 impl Acceptor<AnnotatedAxiom> for AnnotationAssertionAcceptor {
-    fn accept(&mut self, b: &Build, triple: [Term<Rc<str>>; 3], o: &Ontology) -> AcceptState {
+    fn accept(&mut self, b: &Build, triple: [Term<Rc<str>>; 3], o: &Ontology) -> Result<AcceptState, Error> {
         match &triple {
             [Term::Iri(s), _, _] => {
                 self.subject = Some(s.clone());
                 self.ac = Some(AnnotationAcceptor::default());
                 self.ac.as_mut().unwrap().accept(b, triple, o)
             }
-            _ => Return(triple),
+            _ => Ok(Return(triple)),
         }
     }
 
@@ -985,7 +987,7 @@ struct AnnotationAcceptor {
 }
 
 impl Acceptor<Annotation> for AnnotationAcceptor {
-    fn accept(&mut self, b: &Build, triple: [Term<Rc<str>>; 3], o: &Ontology) -> AcceptState {
+    fn accept(&mut self, b: &Build, triple: [Term<Rc<str>>; 3], o: &Ontology) -> Result<AcceptState, Error> {
         match &triple {
             [_, Term::Iri(p), Term::Literal(ob, kind)] => {
                 // Literal value
