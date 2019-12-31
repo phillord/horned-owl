@@ -298,8 +298,7 @@ impl OntologyParser {
                 o.id.iri = TryBuild::<IRI>::to_some_iri(&self.iri, b);
                 o.id.viri = TryBuild::<IRI>::to_some_iri(&self.viri, b);
 
-                let mut v = vec![];
-                std::mem::swap(&mut v, &mut self.incomplete_acceptors);
+                let mut v = std::mem::take(&mut self.incomplete_acceptors);
                 for mut ac in v.iter_mut()
                 {
                     self.complete_acceptor(b, &mut ac)?;
@@ -699,8 +698,110 @@ impl Acceptor<ClassExpression> for PropositionAcceptor {
 }
 
 #[derive(Debug)]
+struct ObjectRestriction {
+    // The kind of restriction, typed as an SpIri
+    kind: Option<SpIri>,
+    // The object property which we must know at construction
+    // time. This is actually an OPE, so this will get more complex
+    ope: IRI,
+    // Some, all, and the cardinalities have a class associated
+    // with them
+    ce: Option<Box<ClassAcceptor>>,
+    // Cardinality has a number
+    n: Option<u32>,
+    // HasValue has an individual
+    i: Option<SpIri>
+}
+
+impl Acceptor<ClassExpression> for ObjectRestriction {
+    fn accept(&mut self, b: &Build, triple: [SpTerm; 3], o: &Ontology) -> Result<AcceptState, Error>{
+        match triple {
+            [Term::BNode(_), Term::Iri(p), ob]
+                if p == OWL::SomeValuesFrom.iri_str() ||
+                p == OWL::AllValuesFrom.iri_str()
+                =>
+            {
+                self.kind = Some(p);
+                self.ce = Some(Box::new(ClassAcceptor::from_term(ob)));
+                accept("TypedRestrictionAcceptor")
+            }
+            _ => retn(triple, "TypedRestrictionAcceptor")
+        }
+    }
+
+    fn complete_state(&self) -> CompleteState {
+        todo!()
+    }
+
+    fn complete(&mut self, b: &Build, o: &Ontology) -> Result<ClassExpression, Error>{
+        let ope = ObjectProperty(self.ope.clone());
+
+        match &self.kind {
+            Some(t) if t == &OWL::SomeValuesFrom.iri_str() => {
+                Ok(
+                    ClassExpression::ObjectSomeValuesFrom
+                    {
+                        ope: ope.into(),
+                        bce: self.ce.take().unwrap().complete(b, o)?.into()
+                    }
+                )
+            }
+            Some(t) if t == &OWL::AllValuesFrom.iri_str() => {
+                Ok(
+                    ClassExpression::ObjectAllValuesFrom
+                    {
+                        ope: ope.into(),
+                        bce: self.ce.take().unwrap().complete(b, o)?.into()
+                    }
+                )
+            }
+            _ => {
+                dbg!(&self);
+                todo!()
+            },
+        }
+    }
+}
+
+#[derive(Debug)]
+struct DataRestriction {
+    kind: Option<SpIri>,
+    dp: IRI,
+    dr: Option<SpIri>
+}
+#[derive(Debug)]
+enum TypedRestrictionAcceptor {
+    Object(ObjectRestriction)
+}
+
+impl Acceptor<ClassExpression> for TypedRestrictionAcceptor {
+    fn accept(&mut self, b: &Build, triple: [SpTerm; 3], o: &Ontology) -> Result<AcceptState, Error>{
+        match self {
+            // This makes no sense -- move the variants into their own type
+            Self::Object(ref mut obj) => {
+                obj.accept(b, triple, o)
+            }
+        }
+    }
+
+    fn complete_state(&self) -> CompleteState {
+        todo!()
+    }
+
+    fn complete(&mut self, b: &Build, o: &Ontology) -> Result<ClassExpression, Error>{
+        match self {
+            Self::Object(ref mut obj) => {
+                obj.complete(b, o)
+            }
+        }
+    }
+}
+
+#[derive(Debug)]
 struct RestrictionAcceptor {
     bnode: Option<BNodeId<Rc<str>>>,
+    on_property: Option<IRI>,
+    typed_acceptor: Option<TypedRestrictionAcceptor>,
     tuples: Vec<(SpIri, SpTerm)>,
 }
 
@@ -709,6 +810,8 @@ impl RestrictionAcceptor {
         RestrictionAcceptor {
             bnode: Some(bnode),
             tuples: vec![],
+            on_property: None,
+            typed_acceptor: None,
         }
     }
 
@@ -724,16 +827,37 @@ impl RestrictionAcceptor {
     fn take_on_property(&mut self) -> Option<(SpIri, SpTerm)> {
         Some(self.take(|t| t.0 == OWL::OnProperty.iri_str())?)
     }
+
 }
 
 impl Acceptor<ClassExpression> for RestrictionAcceptor {
     fn accept(&mut self, b: &Build, triple: [SpTerm; 3], o: &Ontology) -> Result<AcceptState, Error> {
         match &triple {
             [Term::BNode(id), _, _] if Some(id) == self.bnode.as_ref() => match &triple {
-                [_, Term::Iri(p), ob] => {
-                    self.tuples.push((p.clone(), ob.clone()));
-                    accept("ClassExpression")
+                [_, Term::Iri(p), ob] if p == &OWL::OnProperty.iri_str() => {
+                    dbg!("Here");
+                    let on_prop_iri = b.iri(ob.value());
+                    match dbg!(find_declaration_kind(o, on_prop_iri.clone())) {
+                        Some(NamedEntityKind::ObjectProperty) => {
+                            self.typed_acceptor = Some(TypedRestrictionAcceptor::Object (
+                                ObjectRestriction
+                                {
+                                    ope: on_prop_iri.clone(),
+                                    ce: None, n: None, i: None, kind: None,
+                                }));
+                            accept("ClassExpression")
+                        }
+                        _ => retn(triple, "ClassExpression")
+                    }
                 }
+                [_, _, _ ] if self.typed_acceptor.is_some() => {
+                    dbg!("passing on");
+                    self.typed_acceptor.as_mut().unwrap().accept(b, triple, o)
+                }
+                // [_, Term::Iri(p), ob] => {
+                //     self.tuples.push((p.clone(), ob.clone()));
+                //     accept("ClassExpression")
+                // }
                 _ => retn(triple, "ClassExpression"),
             },
             _ => retn(triple, "ClassExpression"),
@@ -750,6 +874,11 @@ impl Acceptor<ClassExpression> for RestrictionAcceptor {
     }
 
     fn complete(&mut self, b: &Build, o: &Ontology) -> Result<ClassExpression, Error> {
+        if let Some(ta) = self.typed_acceptor.as_mut() {
+            return ta.complete(b, o);
+        }
+
+
         let on_prop = self.take_on_property().unwrap().1;
         let prop_kind = find_declaration_kind(o, b.iri(on_prop.value()));
 
@@ -859,6 +988,14 @@ impl ClassAcceptor {
 
     fn from_bnode(bnode: BNodeId<Rc<str>>) -> ClassAcceptor {
         ClassAcceptor::Expression(ClassExpressionAcceptor::from_bnode(bnode))
+    }
+
+    fn from_term(term: SpTerm) -> ClassAcceptor {
+        match term {
+            Term::Iri(i) => ClassAcceptor::from_iri(i),
+            Term::BNode(id) => ClassAcceptor::from_bnode(id),
+            _ => todo!(),
+        }
     }
 }
 
