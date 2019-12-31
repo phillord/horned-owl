@@ -767,20 +767,57 @@ impl Acceptor<ClassExpression> for ObjectRestriction {
 struct DataRestriction {
     kind: Option<SpIri>,
     dp: IRI,
-    dr: Option<SpIri>
+    dr: Option<SpTerm>
 }
+
+impl Acceptor<ClassExpression> for DataRestriction {
+    fn accept(&mut self, b: &Build, triple: [SpTerm; 3], o: &Ontology) -> Result<AcceptState, Error>{
+        match triple {
+            [Term::BNode(_), Term::Iri(p), ob]
+                if p == OWL::SomeValuesFrom.iri_str() ||
+                p == OWL::AllValuesFrom.iri_str()
+                =>
+            {
+                self.kind = Some(p);
+                self.dr = Some(ob);
+                accept("DataRestriction")
+            }
+            _ => retn(triple, "DataRestriction")
+        }
+    }
+
+    fn complete_state(&self) -> CompleteState {
+        todo!()
+    }
+
+    fn complete(&mut self, b: &Build, o: &Ontology) -> Result<ClassExpression, Error>{
+        let dp = DataProperty(self.dp.clone());
+        //
+        match &self.kind {
+            _ => {
+                Ok(
+                    ClassExpression::DataSomeValuesFrom {
+                        dp: dp,
+                        dr: TryBuild::<Datatype>::try_build(&self.dr.take().unwrap(), b)?.into(),
+                    }
+                )
+            },
+        }
+    }
+}
+
+
 #[derive(Debug)]
 enum TypedRestrictionAcceptor {
-    Object(ObjectRestriction)
+    Object(ObjectRestriction),
+    Data(DataRestriction),
 }
 
 impl Acceptor<ClassExpression> for TypedRestrictionAcceptor {
     fn accept(&mut self, b: &Build, triple: [SpTerm; 3], o: &Ontology) -> Result<AcceptState, Error>{
         match self {
-            // This makes no sense -- move the variants into their own type
-            Self::Object(ref mut obj) => {
-                obj.accept(b, triple, o)
-            }
+            Self::Object(ref mut obj) => obj.accept(b, triple, o),
+            Self::Data(ref mut data) => data.accept(b, triple, o),
         }
     }
 
@@ -790,9 +827,8 @@ impl Acceptor<ClassExpression> for TypedRestrictionAcceptor {
 
     fn complete(&mut self, b: &Build, o: &Ontology) -> Result<ClassExpression, Error>{
         match self {
-            Self::Object(ref mut obj) => {
-                obj.complete(b, o)
-            }
+            Self::Object(ref mut obj) => obj.complete(b, o),
+            Self::Data(ref mut data) => data.complete(b, o),
         }
     }
 }
@@ -800,34 +836,16 @@ impl Acceptor<ClassExpression> for TypedRestrictionAcceptor {
 #[derive(Debug)]
 struct RestrictionAcceptor {
     bnode: Option<BNodeId<Rc<str>>>,
-    on_property: Option<IRI>,
     typed_acceptor: Option<TypedRestrictionAcceptor>,
-    tuples: Vec<(SpIri, SpTerm)>,
 }
 
 impl RestrictionAcceptor {
     fn from_bnode(bnode: BNodeId<Rc<str>>) -> RestrictionAcceptor {
         RestrictionAcceptor {
             bnode: Some(bnode),
-            tuples: vec![],
-            on_property: None,
             typed_acceptor: None,
         }
     }
-
-    fn take<P>(&mut self, predicate: P) -> Option<(SpIri, SpTerm)>
-    where
-        P: FnMut(&(SpIri, SpTerm)) -> bool,
-    {
-        let index = self.tuples.iter().position(predicate)?;
-        Some(self.tuples.remove(index))
-    }
-
-    // Return the object of the onProperty predicate
-    fn take_on_property(&mut self) -> Option<(SpIri, SpTerm)> {
-        Some(self.take(|t| t.0 == OWL::OnProperty.iri_str())?)
-    }
-
 }
 
 impl Acceptor<ClassExpression> for RestrictionAcceptor {
@@ -835,7 +853,6 @@ impl Acceptor<ClassExpression> for RestrictionAcceptor {
         match &triple {
             [Term::BNode(id), _, _] if Some(id) == self.bnode.as_ref() => match &triple {
                 [_, Term::Iri(p), ob] if p == &OWL::OnProperty.iri_str() => {
-                    dbg!("Here");
                     let on_prop_iri = b.iri(ob.value());
                     match dbg!(find_declaration_kind(o, on_prop_iri.clone())) {
                         Some(NamedEntityKind::ObjectProperty) => {
@@ -845,22 +862,25 @@ impl Acceptor<ClassExpression> for RestrictionAcceptor {
                                     ope: on_prop_iri.clone(),
                                     ce: None, n: None, i: None, kind: None,
                                 }));
-                            accept("ClassExpression")
+                            accept("Restriction")
                         }
-                        _ => retn(triple, "ClassExpression")
+                        Some(NamedEntityKind::DataProperty) => {
+                            self.typed_acceptor = Some(TypedRestrictionAcceptor::Data (
+                                DataRestriction {
+                                    dp: on_prop_iri.clone(),
+                                    dr: None, kind: None,
+                                }));
+                            accept("Restriction")
+                        }
+                        _ => retn(triple, "Restriction")
                     }
                 }
                 [_, _, _ ] if self.typed_acceptor.is_some() => {
-                    dbg!("passing on");
                     self.typed_acceptor.as_mut().unwrap().accept(b, triple, o)
                 }
-                // [_, Term::Iri(p), ob] => {
-                //     self.tuples.push((p.clone(), ob.clone()));
-                //     accept("ClassExpression")
-                // }
-                _ => retn(triple, "ClassExpression"),
+                _ => retn(triple, "Restriction"),
             },
-            _ => retn(triple, "ClassExpression"),
+            _ => retn(triple, "Restriction"),
         }
     }
 
@@ -878,30 +898,7 @@ impl Acceptor<ClassExpression> for RestrictionAcceptor {
             return ta.complete(b, o);
         }
 
-
-        let on_prop = self.take_on_property().unwrap().1;
-        let prop_kind = find_declaration_kind(o, b.iri(on_prop.value()));
-
-        Ok(match prop_kind {
-            Some(NamedEntityKind::ObjectProperty) => {
-                let ope = TryBuild::<ObjectProperty>::try_build(&on_prop, b)?.into();
-                let bce = Box::new(TryBuild::<Class>::try_build(&self.tuples[0].1, b)?.into());
-                match &self.tuples[0].0 {
-                    t if t == &OWL::SomeValuesFrom.iri_str() => {
-                        ClassExpression::ObjectSomeValuesFrom { ope, bce }
-                    }
-                    t if t == &OWL::AllValuesFrom.iri_str() => {
-                        ClassExpression::ObjectAllValuesFrom { ope, bce }
-                    }
-                    _ => todo!(),
-                }
-            }
-            Some(NamedEntityKind::DataProperty) => ClassExpression::DataSomeValuesFrom {
-                dp: TryBuild::<DataProperty>::try_build(&on_prop, b)?.into(),
-                dr: TryBuild::<Datatype>::try_build(&self.tuples[0].1, b)?.into(),
-            },
-            _ => todo!(),
-        })
+        todo!()
     }
 }
 
