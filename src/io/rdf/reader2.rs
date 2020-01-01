@@ -383,7 +383,6 @@ enum Merge {
 // no annotations)
 #[derive(Debug, Default)]
 struct SimpleAnnotatedAxiomAcceptor {
-    // Currently we just support a single axiom type
     ac: Option<Box<dyn Acceptor<AnnotatedAxiom>>>,
 }
 
@@ -730,7 +729,14 @@ impl Acceptor<ClassExpression> for ObjectRestriction {
     }
 
     fn complete_state(&self) -> CompleteState {
-        todo!()
+        // Working out whether we are complete requires us to do
+        // different things for all the restriction types. So fudge
+        // it.
+        if self.kind.is_some() {
+            CanComplete
+        } else {
+            NotComplete
+        }
     }
 
     fn complete(&mut self, b: &Build, o: &Ontology) -> Result<ClassExpression, Error>{
@@ -787,7 +793,11 @@ impl Acceptor<ClassExpression> for DataRestriction {
     }
 
     fn complete_state(&self) -> CompleteState {
-        todo!()
+        if all_some!(self.kind, self.dr) {
+            CanComplete
+        } else {
+            NotComplete
+        }
     }
 
     fn complete(&mut self, b: &Build, o: &Ontology) -> Result<ClassExpression, Error>{
@@ -822,7 +832,10 @@ impl Acceptor<ClassExpression> for TypedRestrictionAcceptor {
     }
 
     fn complete_state(&self) -> CompleteState {
-        todo!()
+        match self {
+            Self::Object(ref obj) => obj.complete_state(),
+            Self::Data(ref data) => data.complete_state(),
+        }
     }
 
     fn complete(&mut self, b: &Build, o: &Ontology) -> Result<ClassExpression, Error>{
