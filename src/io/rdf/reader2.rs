@@ -577,6 +577,9 @@ impl Acceptor<AnnotatedAxiom> for DeclarationAcceptor {
             Some(i) if i == &OWL::Datatype.iri_str() => {
                 TryBuild::<Datatype>::try_build(&self.iri, b)?.into()
             }
+            Some(i) if i == &OWL::AnnotationProperty.iri_str() => {
+                TryBuild::<AnnotationProperty>::try_build(&self.iri, b)?.into()
+            }
             Some(_) => todo!(),
             None => {
                 todo!();
@@ -620,6 +623,21 @@ impl Acceptor<ClassExpression> for PropositionAcceptor {
         }
 
         match &triple {
+            [Term::BNode(id), Term::Iri(p), ob]
+                if id == &self.bnode && p == &OWL::ComplementOf.iri_str() =>
+            {
+                self.kind = Some(p.clone());
+                let mut v = vec![];
+                v.push(
+                    match ob {
+                        Term::Iri(iri) => ClassAcceptor::from_iri(iri.clone()),
+                        Term::BNode(id) => ClassAcceptor::from_bnode(id.clone()),
+                        _ => todo!()
+                    }
+                );
+                self.operands = Some(OperandList::Class(v));
+                accept("Proposition")
+            }
             [Term::BNode(id), Term::Iri(p), Term::BNode(ob)] if id == &self.bnode => {
                 if p == &OWL::IntersectionOf.iri_str() || p == &OWL::UnionOf.iri_str() {
                     self.operands = Some(OperandList::Class(vec![]));
@@ -688,7 +706,13 @@ impl Acceptor<ClassExpression> for PropositionAcceptor {
                     Some(k) if k == &OWL::UnionOf.iri_str() => {
                         Ok(ClassExpression::ObjectUnionOf(op?))
                     }
-                    _ => todo!(),
+                    Some(k) if k == &OWL::ComplementOf.iri_str() => {
+                        Ok(ClassExpression::ObjectComplementOf(Box::new(op?.remove(0))))
+                    }
+                    _ => {
+                        dbg!(&self);
+                        todo!()
+                    }
                 }
             }
             _ => todo!(),
@@ -1314,15 +1338,15 @@ mod test {
         compare("one-or");
     }
 
-    // #[test]
-    // fn one_not() {
-    //     compare("one-not");
-    // }
+    #[test]
+    fn one_not() {
+        compare("one-not");
+    }
 
-    // #[test]
-    // fn one_annotation_property() {
-    //     compare("one-annotation-property");
-    // }
+    #[test]
+    fn one_annotation_property() {
+        compare("one-annotation-property");
+    }
 
     // #[test]
     // fn one_annotation() {

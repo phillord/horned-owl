@@ -97,12 +97,14 @@ pub enum OWL {
     AnnotatedSource,
     AnnotatedProperty,
     AnnotatedTarget,
+    ComplementOf,
     IntersectionOf,
     OnProperty,
     UnionOf,
     SomeValuesFrom,
 
     // Upper Case
+    AnnotationProperty,
     Axiom,
     Class,
     Datatype,
@@ -123,12 +125,14 @@ lazy_meta! {
     AnnotatedSource, extend(OWL, "annotatedSource");
     AnnotatedProperty, extend(OWL, "annotatedProperty");
     AnnotatedTarget, extend(OWL, "annotatedTarget");
+    ComplementOf, extend(OWL, "complementOf");
     IntersectionOf, extend(OWL, "intersectionOf");
     OnProperty, extend(OWL, "onProperty");
     SomeValuesFrom, extend(OWL, "someValuesFrom");
     UnionOf, extend(OWL, "unionOf");
 
     // Upper Case
+    AnnotationProperty, extend(OWL, "AnnotationProperty");
     Axiom, extend(OWL, "Axiom");
     Class, extend(OWL, "Class");
     Datatype, extend(OWL, "Datatype");
