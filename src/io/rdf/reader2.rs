@@ -175,7 +175,7 @@ fn p_tup(triple: &[SpTerm; 3]) {
     );
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 struct OntologyParser {
     // Acceptors which are NotComplete or CanComplete
     incomplete_acceptors: Vec<Box<dyn Acceptor<(AnnotatedAxiom, Merge)>>>,
@@ -186,21 +186,24 @@ struct OntologyParser {
     iri: Option<SpIri>,
     viri: Option<SpIri>,
 
-    // The ontology we are currently parsing
+    // The ontology we are currently parsing. We need an Option here
+    // because we are going to take the Ontology later.
     so: Option<Ontology>,
 }
 
-impl OntologyParser {
-
+impl Default for OntologyParser {
     fn default() -> OntologyParser {
         OntologyParser {
             so: Some(Ontology::default()),
-            .. Default::default()
+            incomplete_acceptors: vec![], complete_acceptors: vec![],
+            iri: None, viri: None
         }
     }
+}
 
+impl OntologyParser {
     fn accept(&mut self, b: &Build, mut triple: [SpTerm; 3]) -> Result<AcceptState,Error> {
-        match &self.so {
+        match self.so.as_mut() {
             None => retn(triple, "Ontology Acceptor"),
             Some(o) => {
                 match &triple {
@@ -209,6 +212,7 @@ impl OntologyParser {
                             && ob == &OWL::Ontology.iri_str() =>
                     {
                         self.iri = Some(s.clone());
+                        o.id.iri = TryBuild::<IRI>::to_some_iri(&self.iri, b);
                         accept("Ontology Acceptor")
                     }
                     [Term::Iri(s), Term::Iri(p), Term::Iri(ob)]
@@ -278,7 +282,16 @@ impl OntologyParser {
         match self.so.as_mut() {
             None => todo!(),
             Some(mut o) => {
-                let c = ac.complete(b, &o)?;
+                let mut c = ac.complete(b, &o)?;
+
+                // Ontology Annotations are a pain to find, so we just
+                // check them at the end.
+                if let Axiom::AnnotationAssertion(AnnotationAssertion{subject, ann}) = &c.0.axiom {
+                    if o.id.iri == Some(subject.clone()) {
+                        c = (OntologyAnnotation(ann.clone()).into(), c.1)
+                    }
+                }
+
                 if let Merge::NeedsMerge = c.1 {
                     update_logically_equal_axiom(&mut o, c.0);
                 } else {
@@ -295,7 +308,6 @@ impl OntologyParser {
             Some(mut o) => {
                 // Iterate over all the complete Acceptor, run complete on
                 // them, and insert this
-                o.id.iri = TryBuild::<IRI>::to_some_iri(&self.iri, b);
                 o.id.viri = TryBuild::<IRI>::to_some_iri(&self.viri, b);
 
                 let mut v = std::mem::take(&mut self.incomplete_acceptors);
@@ -395,6 +407,7 @@ impl Acceptor<(AnnotatedAxiom, Merge)> for SimpleAnnotatedAxiomAcceptor {
                 let acceptors: Vec<Box<dyn Acceptor<AnnotatedAxiom>>> = vec![
                     Box::new(DeclarationAcceptor::default()),
                     Box::new(SubClassOfAcceptor::default()),
+
                     //Needs to go last!
                     Box::new(AnnotationAssertionAcceptor::default()),
                 ];
@@ -786,7 +799,6 @@ impl Acceptor<ClassExpression> for ObjectRestriction {
                 )
             }
             _ => {
-                dbg!(&self);
                 todo!()
             },
         }
@@ -891,7 +903,7 @@ impl Acceptor<ClassExpression> for RestrictionAcceptor {
             [Term::BNode(id), _, _] if Some(id) == self.bnode.as_ref() => match &triple {
                 [_, Term::Iri(p), ob] if p == &OWL::OnProperty.iri_str() => {
                     let on_prop_iri = b.iri(ob.value());
-                    match dbg!(find_declaration_kind(o, on_prop_iri.clone())) {
+                    match find_declaration_kind(o, on_prop_iri.clone()) {
                         Some(NamedEntityKind::ObjectProperty) => {
                             self.typed_acceptor = Some(TypedRestrictionAcceptor::Object (
                                 ObjectRestriction
@@ -1114,7 +1126,7 @@ impl Acceptor<AnnotatedAxiom> for SubClassOfAcceptor {
 
 #[derive(Debug, Default)]
 struct AnnotationAssertionAcceptor {
-    ac: Option<AnnotationAcceptor>,
+    ac: AnnotationAcceptor,
     subject: Option<SpIri>,
 }
 
@@ -1123,8 +1135,7 @@ impl Acceptor<AnnotatedAxiom> for AnnotationAssertionAcceptor {
         match &triple {
             [Term::Iri(s), _, _] => {
                 self.subject = Some(s.clone());
-                self.ac = Some(AnnotationAcceptor::default());
-                self.ac.as_mut().unwrap().accept(b, triple, o)
+                self.ac.accept(b, triple, o)
             }
             _ => Ok(Return(triple)),
         }
@@ -1142,7 +1153,7 @@ impl Acceptor<AnnotatedAxiom> for AnnotationAssertionAcceptor {
         Ok(AnnotationAssertion {
             subject: TryBuild::<IRI>::to_iri_maybe(&self.subject, b)?,
             //b.iri(self.subject.as_ref().unwrap().to_string()),
-            ann: self.ac.as_mut().unwrap().complete(b, o)?,
+            ann: self.ac.complete(b, o)?,
         }
         .into())
     }
@@ -1155,6 +1166,7 @@ struct AnnotationAcceptor {
     iri_val: Option<SpIri>,
     literal_val: Option<Rc<str>>,
     literal_lang: Option<Rc<str>>,
+    literal_datatype: Option<SpIri>,
 }
 
 impl Acceptor<Annotation> for AnnotationAcceptor {
@@ -1164,8 +1176,13 @@ impl Acceptor<Annotation> for AnnotationAcceptor {
                 // Literal value
                 self.p = Some(p.clone());
                 self.literal_val = Some(ob.clone());
-                if let LiteralKind::Lang(lang) = kind {
-                    self.literal_lang = Some(lang.clone());
+                match kind {
+                    LiteralKind::Lang(lang) => {
+                        self.literal_lang = Some(lang.clone());
+                    }
+                    LiteralKind::Datatype(iri) => {
+                        self.literal_datatype = Some(iri.clone())
+                    }
                 }
                 accept("AnnotationAcceptor")
             }
@@ -1193,11 +1210,19 @@ impl Acceptor<Annotation> for AnnotationAcceptor {
             av: if self.iri_val.is_some() {
                 TryBuild::<IRI>::try_build(&self.iri_val, b)?.into()
             } else {
-                Literal::Language {
-                    literal: self.literal_val.as_ref().unwrap().to_string(),
-                    lang: self.literal_lang.as_ref().unwrap().to_string(),
+                match (&self.literal_lang, &self.literal_datatype) {
+                    (Some(lang), None) =>
+                        Literal::Language {
+                            literal: self.literal_val.as_ref().unwrap().to_string(),
+                            lang: lang.to_string(),
+                        }.into(),
+                    (None, Some(data)) =>
+                        Literal::Datatype {
+                            literal: self.literal_val.as_ref().unwrap().to_string(),
+                            datatype_iri: data.to_iri(b),
+                        }.into(),
+                    _ => todo!("This shouldn't happen")
                 }
-                .into()
             },
         })
     }
@@ -1377,10 +1402,10 @@ mod test {
         compare("one-comment");
     }
 
-    // #[test]
-    // fn one_ontology_annotation() {
-    //     compare("one-ontology-annotation");
-    // }
+    #[test]
+    fn one_ontology_annotation() {
+        compare("one-ontology-annotation");
+    }
 
     // #[test]
     // fn one_equivalent_class() {
