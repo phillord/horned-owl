@@ -407,8 +407,10 @@ impl Acceptor<(AnnotatedAxiom, Merge)> for SimpleAnnotatedAxiomAcceptor {
                 let acceptors: Vec<Box<dyn Acceptor<AnnotatedAxiom>>> = vec![
                     Box::new(DeclarationAcceptor::default()),
                     Box::new(SubClassOfAcceptor::default()),
+                    Box::new(PropertyAxiomAcceptor::default()),
 
-                    //Needs to go last!
+                    // Needs to go last, because it slurps up
+                    // triples at top-level
                     Box::new(AnnotationAssertionAcceptor::default()),
                 ];
 
@@ -602,6 +604,114 @@ impl Acceptor<AnnotatedAxiom> for DeclarationAcceptor {
         Ok(declaration(n).into())
     }
 }
+
+#[derive(Debug)]
+enum TypedPropertyAcceptor {
+    Immediate(Axiom)
+}
+
+impl Acceptor<AnnotatedAxiom> for TypedPropertyAcceptor {
+    fn accept(&mut self, b: &Build, triple: [SpTerm; 3], o: &Ontology) -> Result<AcceptState, Error> {
+        match &self {
+            Self::Immediate(_) => retn(triple, "TypedProperty: Immediate"),
+        }
+    }
+    fn complete_state(&self) -> CompleteState {
+        match &self {
+            Self::Immediate(_) => Complete,
+        }
+
+    }
+    fn complete(&mut self, b: &Build, o: &Ontology) -> Result<AnnotatedAxiom, Error> {
+        match &self {
+            Self::Immediate(ax) => Ok(ax.clone().into())
+        }
+    }
+}
+
+
+#[derive(Debug, Default)]
+struct PropertyAxiomAcceptor {
+    tpa: Option<TypedPropertyAcceptor>
+}
+
+impl Acceptor<AnnotatedAxiom> for PropertyAxiomAcceptor {
+    fn accept(&mut self, b: &Build, triple: [SpTerm; 3], o: &Ontology) -> Result<AcceptState, Error> {
+        if let Some(ref mut tpa) = &mut self.tpa {
+            return tpa.accept(b, triple, o)
+        }
+
+
+        match &triple {
+            [Term::Iri(s), Term::Iri(p), Term::Iri(ob)] => {
+                let fdk = |p: &SpIri| -> Result<Option<NamedEntityKind>, Error>{
+                    let iri = p.to_iri(b);
+                    Ok(find_declaration_kind(o, iri))
+                };
+
+                match p {
+                    i if i == &RDFS::Domain.iri_str() => {
+                        match fdk(s)? {
+                            Some(NamedEntityKind::AnnotationProperty) => {
+                                self.tpa = Some(
+                                    TypedPropertyAcceptor::Immediate(AnnotationPropertyDomain {
+                                        ap: s.to_iri(b).into(),
+                                        iri: ob.to_iri(b),
+                                    }.into()));
+
+                                accept("PropertyAxiom")
+                            }
+                            _ => {
+                                retn(triple, "PropertyAxiom: 3.1")
+                            }
+                        }
+                    }
+
+                    i if i == &RDFS::Range.iri_str() => {
+                        match fdk(s)? {
+                            Some(NamedEntityKind::AnnotationProperty) => {
+                                self.tpa =
+                                    Some(
+                                        TypedPropertyAcceptor::Immediate(
+                                            AnnotationPropertyRange {
+                                                ap: s.to_iri(b).into(),
+                                                iri: ob.to_iri(b),
+                                            }.into()
+                                        )
+                                    );
+
+                                accept("PropertyAxiom")
+                            }
+                            _ => {
+                                retn(triple, "PropertyAxiom: 3.2")
+                            }
+                        }
+                    }
+                    _ => retn(triple, "PropertyAxiom: 2")
+                }
+            }
+            _ => retn(triple, "PropertyAxiom: 1")
+        }
+    }
+
+    fn complete_state(&self) -> CompleteState {
+        if let Some(ac) = &self.tpa {
+            ac.complete_state()
+        } else {
+            NotComplete
+        }
+    }
+
+    fn complete(&mut self, b: &Build, o: &Ontology) -> Result<AnnotatedAxiom, Error> {
+        if let Some(ref mut ac) = &mut self.tpa {
+            ac.complete(b, o)
+        } else {
+            todo!()
+        }
+    }
+}
+
+
 
 #[derive(Debug)]
 enum OperandList {
@@ -1290,6 +1400,8 @@ mod test {
         let (rdfont, _rdfmapping) = read_ok(&mut rdfread.as_bytes());
         let (xmlont, _xmlmapping) = crate::io::reader::test::read_ok(&mut xmlread.as_bytes());
 
+        //dbg!(&rdfont); if true {panic!()};
+
         assert_eq!(rdfont, xmlont);
 
         //let rdfmapping: &HashMap<&String, &String> = &rdfmapping.mappings().collect();
@@ -1373,20 +1485,20 @@ mod test {
         compare("one-annotation-property");
     }
 
-    // #[test]
-    // fn one_annotation() {
-    //     compare("one-annotation");
-    // }
+    #[test]
+    fn one_annotation() {
+        compare("one-annotation");
+    }
 
-    // #[test]
-    // fn annotation_domain() {
-    //     compare("annotation-domain");
-    // }
+    #[test]
+    fn annotation_domain() {
+        compare("annotation-domain");
+    }
 
-    // #[test]
-    // fn annotation_range() {
-    //     compare("annotation-range");
-    // }
+    #[test]
+    fn annotation_range() {
+        compare("annotation-range");
+    }
 
     #[test]
     fn one_label() {
@@ -1407,6 +1519,7 @@ mod test {
         compare("one-ontology-annotation");
     }
 
+    // Before doing this test, move "complete" to take own self
     // #[test]
     // fn one_equivalent_class() {
     //     compare("one-equivalent");

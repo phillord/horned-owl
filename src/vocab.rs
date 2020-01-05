@@ -83,11 +83,15 @@ lazy_meta! {
 }
 
 pub enum RDFS {
+    Domain,
+    Range,
     SubClassOf,
 }
 
 lazy_meta! {
     RDFS, IRIString, METARDFS;
+    Domain, extend(RDFS, "domain");
+    Range, extend(RDFS, "range");
     SubClassOf, extend(RDFS, "subClassOf");
 }
 
