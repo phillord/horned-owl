@@ -421,7 +421,7 @@ impl Acceptor<(AnnotatedAxiom, Merge)> for SimpleAnnotatedAxiomAcceptor {
                 // accepts. Or currently, just fake it
                 let acceptors: Vec<Box<dyn Acceptor<AnnotatedAxiom>>> = vec![
                     Box::new(DeclarationAcceptor::default()),
-                    Box::new(SubClassOfAcceptor::default()),
+                    Box::new(TwoClassAcceptor::default()),
                     Box::new(PropertyAxiomAcceptor::default()),
                     // Needs to go last, because it slurps up
                     // triples at top-level
@@ -1224,12 +1224,13 @@ impl Acceptor<ClassExpression> for ClassAcceptor {
 }
 
 #[derive(Debug, Default)]
-struct SubClassOfAcceptor {
-    superclass: Option<ClassAcceptor>,
-    subclass: Option<ClassAcceptor>,
+struct TwoClassAcceptor {
+    kind: Option<AxiomKind>,
+    firstclass: Option<ClassAcceptor>,
+    secondclass: Option<ClassAcceptor>,
 }
 
-impl Acceptor<AnnotatedAxiom> for SubClassOfAcceptor {
+impl Acceptor<AnnotatedAxiom> for TwoClassAcceptor {
     fn accept(
         &mut self,
         b: &Build,
@@ -1237,31 +1238,57 @@ impl Acceptor<AnnotatedAxiom> for SubClassOfAcceptor {
         o: &Ontology,
     ) -> Result<AcceptState, Error> {
         match &triple {
-            [Term::Iri(s), Term::Iri(p), Term::Iri(ob)] if p == &RDFS::SubClassOf.iri_str() => {
-                self.subclass = Some(ClassAcceptor::from_iri(s.clone()));
-                self.superclass = Some(ClassAcceptor::from_iri(ob.clone()));
-                accept("SubClassOfAcceptor")
-            }
-            [Term::Iri(s), Term::Iri(p), Term::BNode(id)] if p == &RDFS::SubClassOf.iri_str() => {
-                self.subclass = Some(ClassAcceptor::from_iri(s.clone()));
-                self.superclass = Some(ClassAcceptor::from_bnode(id.clone()));
-                accept("SubClassOfAcceptor")
+            [_, Term::Iri(p), _]
+                if p == &RDFS::SubClassOf.iri_str() || p == &OWL::EquivalentClass.iri_str() =>
+            {
+                if p == &RDFS::SubClassOf.iri_str() {
+                    self.kind = Some(AxiomKind::SubClassOf);
+                } else {
+                    if p == &OWL::EquivalentClass.iri_str() {
+                        self.kind = Some(AxiomKind::EquivalentClasses);
+                    }
+                }
+
+                let mut accpt = false;
+                if let [Term::Iri(s), _, _] = &triple {
+                    self.secondclass = Some(ClassAcceptor::from_iri(s.clone()));
+                    accpt = true;
+                }
+                if let [Term::BNode(s), _, _] = &triple {
+                    self.secondclass = Some(ClassAcceptor::from_bnode(s.clone()));
+                    accpt = true;
+                }
+
+                if let [_, _, Term::Iri(ob)] = &triple {
+                    self.firstclass = Some(ClassAcceptor::from_iri(ob.clone()));
+                    accpt = true;
+                }
+
+                if let [_, _, Term::BNode(ob)] = &triple {
+                    self.firstclass = Some(ClassAcceptor::from_bnode(ob.clone()));
+                    accpt = true;
+                }
+
+                if accpt {
+                    accept("TwoClass")
+                } else {
+                    retn(triple, "TwoClass")
+                }
             }
             _ => {
-                match &mut self.superclass {
-                    Some(ac) => {
-                        // For now just ignore the subclass, but we need to
-                        // fix this later
-                        ac.accept(b, triple, o)
-                    }
-                    None => retn(triple, "SubClassOfAcceptor"),
+                if let Some(ac) = &mut self.firstclass {
+                    // For now just ignore the subclass, but we need to
+                    // fix this later
+                    ac.accept(b, triple, o)
+                } else {
+                    retn(triple, "TwoClass")
                 }
             }
         }
     }
 
     fn complete_state(&self) -> CompleteState {
-        if all_complete!(&self.superclass, &self.subclass) {
+        if all_complete!(&self.firstclass, &self.secondclass) {
             Complete
         } else {
             NotComplete
@@ -1269,13 +1296,19 @@ impl Acceptor<AnnotatedAxiom> for SubClassOfAcceptor {
     }
 
     fn complete(&mut self, b: &Build, o: &Ontology) -> Result<AnnotatedAxiom, Error> {
-        // Iterate over all the complete Acceptor, run complete on
-        // them, and insert this
-        Ok(SubClassOf {
-            sub: self.subclass.as_mut().unwrap().complete(b, o)?,
-            sup: self.superclass.as_mut().unwrap().complete(b, o)?,
+        match self.kind {
+            Some(AxiomKind::SubClassOf) => Ok(SubClassOf {
+                sub: self.secondclass.as_mut().unwrap().complete(b, o)?,
+                sup: self.firstclass.as_mut().unwrap().complete(b, o)?,
+            }
+            .into()),
+            Some(AxiomKind::EquivalentClasses) => Ok(EquivalentClasses(vec![
+                self.firstclass.as_mut().unwrap().complete(b, o)?,
+                self.secondclass.as_mut().unwrap().complete(b, o)?,
+            ])
+            .into()),
+            _ => panic!(),
         }
-        .into())
     }
 }
 
@@ -1572,11 +1605,10 @@ mod test {
         compare("one-ontology-annotation");
     }
 
-    // Before doing this test, move "complete" to take own self
-    // #[test]
-    // fn one_equivalent_class() {
-    //     compare("one-equivalent");
-    // }
+    #[test]
+    fn one_equivalent_class() {
+        compare("one-equivalent");
+    }
 
     // #[test]
     // fn one_disjoint_class() {

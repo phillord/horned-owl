@@ -102,6 +102,7 @@ pub enum OWL {
     AnnotatedProperty,
     AnnotatedTarget,
     ComplementOf,
+    EquivalentClass,
     IntersectionOf,
     OnProperty,
     UnionOf,
@@ -130,6 +131,7 @@ lazy_meta! {
     AnnotatedProperty, extend(OWL, "annotatedProperty");
     AnnotatedTarget, extend(OWL, "annotatedTarget");
     ComplementOf, extend(OWL, "complementOf");
+    EquivalentClass, extend(OWL, "equivalentClass");
     IntersectionOf, extend(OWL, "intersectionOf");
     OnProperty, extend(OWL, "onProperty");
     SomeValuesFrom, extend(OWL, "someValuesFrom");
