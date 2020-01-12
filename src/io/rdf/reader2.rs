@@ -1239,15 +1239,16 @@ impl Acceptor<AnnotatedAxiom> for TwoClassAcceptor {
     ) -> Result<AcceptState, Error> {
         match &triple {
             [_, Term::Iri(p), _]
-                if p == &RDFS::SubClassOf.iri_str() || p == &OWL::EquivalentClass.iri_str() =>
+                if p == &RDFS::SubClassOf.iri_str()
+                    || p == &OWL::EquivalentClass.iri_str()
+                    || p == &OWL::DisjointWith.iri_str() =>
             {
-                if p == &RDFS::SubClassOf.iri_str() {
-                    self.kind = Some(AxiomKind::SubClassOf);
-                } else {
-                    if p == &OWL::EquivalentClass.iri_str() {
-                        self.kind = Some(AxiomKind::EquivalentClasses);
-                    }
-                }
+                self.kind = Some(match 10 {
+                    _ if p == &RDFS::SubClassOf.iri_str() => AxiomKind::SubClassOf,
+                    _ if p == &OWL::EquivalentClass.iri_str() => AxiomKind::EquivalentClasses,
+                    _ if p == &OWL::DisjointWith.iri_str() => AxiomKind::DisjointClasses,
+                    _ => panic!(),
+                });
 
                 let mut accpt = false;
                 if let [Term::Iri(s), _, _] = &triple {
@@ -1303,6 +1304,11 @@ impl Acceptor<AnnotatedAxiom> for TwoClassAcceptor {
             }
             .into()),
             Some(AxiomKind::EquivalentClasses) => Ok(EquivalentClasses(vec![
+                self.firstclass.as_mut().unwrap().complete(b, o)?,
+                self.secondclass.as_mut().unwrap().complete(b, o)?,
+            ])
+            .into()),
+            Some(AxiomKind::DisjointClasses) => Ok(DisjointClasses(vec![
                 self.firstclass.as_mut().unwrap().complete(b, o)?,
                 self.secondclass.as_mut().unwrap().complete(b, o)?,
             ])
@@ -1610,10 +1616,10 @@ mod test {
         compare("one-equivalent");
     }
 
-    // #[test]
-    // fn one_disjoint_class() {
-    //     compare("one-disjoint");
-    // }
+    #[test]
+    fn one_disjoint_class() {
+        compare("one-disjoint");
+    }
 
     // #[test]
     // fn disjoint_union() {
