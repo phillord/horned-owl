@@ -20,6 +20,7 @@ use sophia::term::IriData;
 use sophia::term::LiteralKind;
 use sophia::term::Term;
 
+use std::fmt::Debug;
 use std::io::BufRead;
 use std::rc::Rc;
 
@@ -735,14 +736,14 @@ impl Acceptor<AnnotatedAxiom> for PropertyAxiomAcceptor {
 }
 
 #[derive(Debug)]
-struct SeqAcceptor {
+struct SeqAcceptor<A> {
     end_of_seq: BNodeId<Rc<str>>,
-    seq: Vec<ClassAcceptor>,
+    seq: Vec<A>,
     complete: bool,
 }
 
-impl SeqAcceptor {
-    fn from_bnode(bnode: BNodeId<Rc<str>>) -> SeqAcceptor {
+impl<A> SeqAcceptor<A> {
+    fn from_bnode(bnode: BNodeId<Rc<str>>) -> SeqAcceptor<A> {
         SeqAcceptor {
             end_of_seq: bnode,
             seq: vec![],
@@ -751,7 +752,11 @@ impl SeqAcceptor {
     }
 }
 
-impl Acceptor<Vec<ClassExpression>> for SeqAcceptor {
+impl<A, E> Acceptor<Vec<E>> for SeqAcceptor<A>
+where
+    A: Debug + From<SpIri> + From<BNodeId<Rc<str>>> + Acceptor<E>,
+    E: Debug,
+{
     fn accept(
         &mut self,
         b: &Build,
@@ -809,7 +814,7 @@ impl Acceptor<Vec<ClassExpression>> for SeqAcceptor {
         }
     }
 
-    fn complete(&mut self, b: &Build, o: &Ontology) -> Result<Vec<ClassExpression>, Error> {
+    fn complete(&mut self, b: &Build, o: &Ontology) -> Result<Vec<E>, Error> {
         let op: Result<Vec<_>, _> = std::mem::take(&mut self.seq)
             .into_iter()
             .map(|mut op| op.complete(b, o))
@@ -959,7 +964,7 @@ impl Acceptor<ClassExpression> for UnaryPropositionAcceptor {
 #[derive(Debug)]
 struct NaryPropositionAcceptor {
     kind: SpIri,
-    operands: SeqAcceptor,
+    operands: SeqAcceptor<ClassAcceptor>,
 }
 
 impl NaryPropositionAcceptor {
