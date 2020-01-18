@@ -144,6 +144,37 @@ impl<N: From<IRI>> TryBuild<N> for SpTerm {
     }
 }
 
+impl<A, B> Acceptor<B> for Option<A>
+where
+    A: Acceptor<B>,
+{
+    fn accept(
+        &mut self,
+        b: &Build,
+        triple: [SpTerm; 3],
+        o: &Ontology,
+    ) -> Result<AcceptState, Error> {
+        match self.as_mut() {
+            Some(ac) => ac.accept(b, triple, o),
+            None => retn(triple, "Option"),
+        }
+    }
+
+    fn complete_state(&self) -> CompleteState {
+        match &self {
+            Some(ac) => ac.complete_state(),
+            None => NotComplete,
+        }
+    }
+
+    fn complete(&mut self, b: &Build, o: &Ontology) -> Result<B, Error> {
+        match self.as_mut() {
+            Some(ac) => ac.complete(b, o),
+            None => todo!(),
+        }
+    }
+}
+
 macro_rules! all_some {
     ($name:expr) => {
         $name.is_some()
@@ -670,8 +701,8 @@ impl Acceptor<AnnotatedAxiom> for PropertyAxiomAcceptor {
         triple: [SpTerm; 3],
         o: &Ontology,
     ) -> Result<AcceptState, Error> {
-        if let Some(ref mut tpa) = &mut self.tpa {
-            return tpa.accept(b, triple, o);
+        if self.tpa.is_some() {
+            return self.tpa.accept(b, triple, o);
         }
 
         match &triple {
@@ -719,19 +750,11 @@ impl Acceptor<AnnotatedAxiom> for PropertyAxiomAcceptor {
     }
 
     fn complete_state(&self) -> CompleteState {
-        if let Some(ac) = &self.tpa {
-            ac.complete_state()
-        } else {
-            NotComplete
-        }
+        self.tpa.complete_state()
     }
 
     fn complete(&mut self, b: &Build, o: &Ontology) -> Result<AnnotatedAxiom, Error> {
-        if let Some(ref mut ac) = &mut self.tpa {
-            ac.complete(b, o)
-        } else {
-            todo!()
-        }
+        self.tpa.complete(b, o)
     }
 }
 
@@ -1207,10 +1230,7 @@ impl Acceptor<ClassExpression> for RestrictionAcceptor {
                         _ => retn(triple, "Restriction"),
                     }
                 }
-                [_, _, _] if self.typed_acceptor.is_some() => {
-                    self.typed_acceptor.as_mut().unwrap().accept(b, triple, o)
-                }
-                _ => retn(triple, "Restriction"),
+                _ => self.typed_acceptor.accept(b, triple, o),
             },
             _ => retn(triple, "Restriction"),
         }
@@ -1218,19 +1238,11 @@ impl Acceptor<ClassExpression> for RestrictionAcceptor {
 
     // Indicate the completion state of the acceptor.
     fn complete_state(&self) -> CompleteState {
-        if self.bnode.is_some() {
-            CanComplete
-        } else {
-            NotComplete
-        }
+        self.typed_acceptor.complete_state()
     }
 
     fn complete(&mut self, b: &Build, o: &Ontology) -> Result<ClassExpression, Error> {
-        if let Some(ta) = self.typed_acceptor.as_mut() {
-            return ta.complete(b, o);
-        }
-
-        todo!()
+        self.typed_acceptor.complete(b, o)
     }
 }
 
@@ -1432,13 +1444,9 @@ impl Acceptor<AnnotatedAxiom> for TwoClassAcceptor {
                 }
             }
             _ => {
-                if let Some(ac) = &mut self.firstclass {
-                    // For now just ignore the subclass, but we need to
-                    // fix this later
-                    ac.accept(b, triple, o)
-                } else {
-                    retn(triple, "TwoClass")
-                }
+                // For now just ignore the subclass, but we need to
+                // fix this later
+                self.firstclass.accept(b, triple, o)
             }
         }
     }
@@ -1473,28 +1481,28 @@ impl Acceptor<AnnotatedAxiom> for TwoClassAcceptor {
     }
 }
 
-#[derive(Debug, Default)]
-struct OneToManyAcceptor {}
+// #[derive(Debug, Default)]
+// struct OneToManyAcceptor {}
 
-impl Acceptor<AnnotatedAxiom> for OneToManyAcceptor {
-    fn accept(
-        &mut self,
-        b: &Build,
-        triple: [Term<Rc<str>>; 3],
-        o: &Ontology,
-    ) -> Result<AcceptState, Error> {
-        todo!()
-        //match &triple {}
-    }
+// impl Acceptor<AnnotatedAxiom> for OneToManyAcceptor {
+//     fn accept(
+//         &mut self,
+//         b: &Build,
+//         triple: [Term<Rc<str>>; 3],
+//         o: &Ontology,
+//     ) -> Result<AcceptState, Error> {
+//         todo!()
+//         //match &triple {}
+//     }
 
-    fn complete_state(&self) -> CompleteState {
-        todo!()
-    }
+//     fn complete_state(&self) -> CompleteState {
+//         todo!()
+//     }
 
-    fn complete(&mut self, b: &Build, o: &Ontology) -> Result<AnnotatedAxiom, Error> {
-        todo!()
-    }
-}
+//     fn complete(&mut self, b: &Build, o: &Ontology) -> Result<AnnotatedAxiom, Error> {
+//         todo!()
+//     }
+// }
 
 #[derive(Debug, Default)]
 struct AnnotationAssertionAcceptor {
