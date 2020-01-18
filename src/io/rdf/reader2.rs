@@ -735,32 +735,23 @@ impl Acceptor<AnnotatedAxiom> for PropertyAxiomAcceptor {
 }
 
 #[derive(Debug)]
-enum OperandList {
-    Class(Vec<ClassAcceptor>),
-}
-
-#[derive(Debug)]
-struct PropositionAcceptor {
-    bnode: BNodeId<Rc<str>>,
-    kind: Option<SpIri>,
-    end_of_list: Option<BNodeId<Rc<str>>>,
+struct SeqAcceptor {
+    end_of_seq: BNodeId<Rc<str>>,
+    seq: Vec<ClassAcceptor>,
     complete: bool,
-    operands: Option<OperandList>,
 }
 
-impl PropositionAcceptor {
-    fn from_bnode(bnode: BNodeId<Rc<str>>) -> PropositionAcceptor {
-        PropositionAcceptor {
-            bnode,
-            operands: None,
-            end_of_list: None,
-            kind: None,
+impl SeqAcceptor {
+    fn from_bnode(bnode: BNodeId<Rc<str>>) -> SeqAcceptor {
+        SeqAcceptor {
+            end_of_seq: bnode,
+            seq: vec![],
             complete: false,
         }
     }
 }
 
-impl Acceptor<ClassExpression> for PropositionAcceptor {
+impl Acceptor<Vec<ClassExpression>> for SeqAcceptor {
     fn accept(
         &mut self,
         b: &Build,
@@ -768,58 +759,25 @@ impl Acceptor<ClassExpression> for PropositionAcceptor {
         o: &Ontology,
     ) -> Result<AcceptState, Error> {
         if self.complete {
-            return retn(triple, "Proposition");
+            return retn(triple, "Seq");
         }
 
         match &triple {
-            [Term::BNode(id), Term::Iri(p), ob]
-                if id == &self.bnode && p == &OWL::ComplementOf.iri_str() =>
+            // Next Item
+            [Term::BNode(s), Term::Iri(p), ob]
+                if s == &self.end_of_seq && p == &RDF::First.iri_str() =>
             {
-                self.kind = Some(p.clone());
-                let mut v = vec![];
-                v.push(match ob {
-                    Term::Iri(iri) => ClassAcceptor::from_iri(iri.clone()),
-                    Term::BNode(id) => ClassAcceptor::from_bnode(id.clone()),
+                self.seq.push(match ob {
+                    Term::Iri(iri) => iri.clone().into(),
+                    Term::BNode(id) => id.clone().into(),
                     _ => todo!(),
                 });
-                self.operands = Some(OperandList::Class(v));
-                accept("Proposition")
+
+                accept("Seq")
             }
-            [Term::BNode(id), Term::Iri(p), Term::BNode(ob)] if id == &self.bnode => {
-                if p == &OWL::IntersectionOf.iri_str() || p == &OWL::UnionOf.iri_str() {
-                    self.operands = Some(OperandList::Class(vec![]));
-                    self.kind = Some(p.clone());
-                }
-                self.end_of_list = Some(ob.clone());
-                accept("Proposition")
-            }
-            [Term::BNode(s), Term::Iri(p), ob]
-                if Some(s) == self.end_of_list.as_ref() && p == &RDF::First.iri_str() =>
-            {
-                match &mut self.operands {
-                    Some(OperandList::Class(v)) => {
-                        v.push(match ob {
-                            Term::Iri(iri) => ClassAcceptor::from_iri(iri.clone()),
-                            Term::BNode(id) => ClassAcceptor::from_bnode(id.clone()),
-                            _ => {
-                                return retn(triple, "Proposition");
-                            }
-                        });
-                        accept("Proposition")
-                    }
-                    _ => retn(triple, "Proposition"),
-                }
-            }
-            [Term::BNode(s), Term::Iri(p), Term::Iri(ob)]
-                if Some(s) == self.end_of_list.as_ref()
-                    && p == &RDF::Rest.iri_str()
-                    && ob == &RDF::Nil.iri_str() =>
-            {
-                self.complete = true;
-                accept("Proposition")
-            }
+            // Pointer to Rest
             [Term::BNode(s), Term::Iri(p), Term::BNode(ob)]
-                if Some(s) == self.end_of_list.as_ref() && p == &RDF::Rest.iri_str() =>
+                if s == &self.end_of_seq && p == &RDF::Rest.iri_str() =>
             {
                 // We make the assumption here that we get first, then
                 // rest, then first, then rest. Otherwize, we have
@@ -827,8 +785,17 @@ impl Acceptor<ClassExpression> for PropositionAcceptor {
                 // have got it's equivalent rest. If we cannot rely
                 // on that, we need a list of "rest" bnodes, and
                 // collect the "firsts" as we go.
-                self.end_of_list = Some(ob.clone());
-                accept("Proposition")
+                self.end_of_seq = ob.clone();
+                accept("Seq")
+            }
+            // End of Seq
+            [Term::BNode(s), Term::Iri(p), Term::Iri(ob)]
+                if s == &self.end_of_seq
+                    && p == &RDF::Rest.iri_str()
+                    && ob == &RDF::Nil.iri_str() =>
+            {
+                self.complete = true;
+                accept("Seq")
             }
             _ => todo!(),
         }
@@ -842,27 +809,198 @@ impl Acceptor<ClassExpression> for PropositionAcceptor {
         }
     }
 
-    fn complete(&mut self, b: &Build, o: &Ontology) -> Result<ClassExpression, Error> {
-        match &mut self.operands {
-            Some(OperandList::Class(v)) => {
-                let op: Result<Vec<_>, _> = v.into_iter().map(|op| op.complete(b, o)).collect();
-                match &self.kind {
-                    Some(k) if k == &OWL::IntersectionOf.iri_str() => {
-                        Ok(ClassExpression::ObjectIntersectionOf(op?))
-                    }
-                    Some(k) if k == &OWL::UnionOf.iri_str() => {
-                        Ok(ClassExpression::ObjectUnionOf(op?))
-                    }
-                    Some(k) if k == &OWL::ComplementOf.iri_str() => {
-                        Ok(ClassExpression::ObjectComplementOf(Box::new(op?.remove(0))))
-                    }
-                    _ => {
-                        dbg!(&self);
-                        todo!()
-                    }
-                }
+    fn complete(&mut self, b: &Build, o: &Ontology) -> Result<Vec<ClassExpression>, Error> {
+        let op: Result<Vec<_>, _> = std::mem::take(&mut self.seq)
+            .into_iter()
+            .map(|mut op| op.complete(b, o))
+            .collect();
+
+        op
+    }
+}
+
+#[derive(Debug)]
+struct PropositionAcceptor {
+    bnode: BNodeId<Rc<str>>,
+    typed_acceptor: Option<Box<TypedPropositionAcceptor>>,
+}
+
+impl PropositionAcceptor {
+    fn from_bnode(bnode: BNodeId<Rc<str>>) -> PropositionAcceptor {
+        PropositionAcceptor {
+            bnode,
+            typed_acceptor: None,
+        }
+    }
+}
+
+impl Acceptor<ClassExpression> for PropositionAcceptor {
+    fn accept(
+        &mut self,
+        b: &Build,
+        triple: [SpTerm; 3],
+        o: &Ontology,
+    ) -> Result<AcceptState, Error> {
+        match &triple {
+            [Term::BNode(id), Term::Iri(p), Term::BNode(ob)]
+                if id == &self.bnode && p == &OWL::IntersectionOf.iri_str()
+                    || p == &OWL::UnionOf.iri_str() =>
+            {
+                self.typed_acceptor = Some(Box::new(TypedPropositionAcceptor::Nary(
+                    NaryPropositionAcceptor::new(ob.clone(), p.clone()),
+                )));
+                accept("Proposition")
+            }
+            [Term::BNode(id), Term::Iri(p), ob]
+                if id == &self.bnode && p == &OWL::ComplementOf.iri_str() =>
+            {
+                self.typed_acceptor = Some(Box::new(TypedPropositionAcceptor::Unary(
+                    UnaryPropositionAcceptor::new(ob.clone()),
+                )));
+                accept("Proposition")
+            }
+            _ if self.typed_acceptor.is_some() => {
+                self.typed_acceptor.as_mut().unwrap().accept(b, triple, o)
             }
             _ => todo!(),
+        }
+    }
+
+    fn complete_state(&self) -> CompleteState {
+        if let Some(ac) = &self.typed_acceptor {
+            ac.complete_state()
+        } else {
+            NotComplete
+        }
+    }
+
+    fn complete(&mut self, b: &Build, o: &Ontology) -> Result<ClassExpression, Error> {
+        if let Some(ac) = &mut self.typed_acceptor {
+            ac.complete(b, o)
+        } else {
+            todo!()
+        }
+    }
+}
+
+#[derive(Debug)]
+enum TypedPropositionAcceptor {
+    Nary(NaryPropositionAcceptor),
+    Unary(UnaryPropositionAcceptor),
+}
+
+impl Acceptor<ClassExpression> for TypedPropositionAcceptor {
+    fn accept(
+        &mut self,
+        b: &Build,
+        triple: [SpTerm; 3],
+        o: &Ontology,
+    ) -> Result<AcceptState, Error> {
+        match self {
+            Self::Nary(ac) => ac.accept(b, triple, o),
+            Self::Unary(ac) => ac.accept(b, triple, o),
+        }
+    }
+
+    // Indicate the completion state of the acceptor.
+    fn complete_state(&self) -> CompleteState {
+        match self {
+            Self::Nary(ac) => ac.complete_state(),
+            Self::Unary(ac) => ac.complete_state(),
+        }
+    }
+
+    fn complete(&mut self, b: &Build, o: &Ontology) -> Result<ClassExpression, Error> {
+        match self {
+            Self::Nary(ac) => ac.complete(b, o),
+            Self::Unary(ac) => ac.complete(b, o),
+        }
+    }
+}
+
+#[derive(Debug)]
+struct UnaryPropositionAcceptor {
+    ac: ClassAcceptor,
+}
+
+impl UnaryPropositionAcceptor {
+    fn new(term: SpTerm) -> UnaryPropositionAcceptor {
+        UnaryPropositionAcceptor {
+            ac: match term {
+                Term::Iri(iri) => ClassAcceptor::from_iri(iri),
+                Term::BNode(id) => ClassAcceptor::from_bnode(id),
+                _ => todo!(),
+            },
+        }
+    }
+}
+
+impl Acceptor<ClassExpression> for UnaryPropositionAcceptor {
+    fn accept(
+        &mut self,
+        b: &Build,
+        triple: [SpTerm; 3],
+        o: &Ontology,
+    ) -> Result<AcceptState, Error> {
+        self.ac.accept(b, triple, o)
+    }
+
+    fn complete_state(&self) -> CompleteState {
+        self.ac.complete_state()
+    }
+
+    fn complete(&mut self, b: &Build, o: &Ontology) -> Result<ClassExpression, Error> {
+        Ok(ClassExpression::ObjectComplementOf(Box::new(
+            self.ac.complete(b, o)?,
+        )))
+    }
+}
+
+#[derive(Debug)]
+struct NaryPropositionAcceptor {
+    kind: SpIri,
+    operands: SeqAcceptor,
+}
+
+impl NaryPropositionAcceptor {
+    fn new(bnode: BNodeId<Rc<str>>, kind: SpIri) -> NaryPropositionAcceptor {
+        NaryPropositionAcceptor {
+            operands: SeqAcceptor::from_bnode(bnode),
+            kind,
+        }
+    }
+}
+
+impl Acceptor<ClassExpression> for NaryPropositionAcceptor {
+    fn accept(
+        &mut self,
+        b: &Build,
+        triple: [SpTerm; 3],
+        o: &Ontology,
+    ) -> Result<AcceptState, Error> {
+        if self.operands.complete_state() == Complete {
+            return retn(triple, "NaryProposition");
+        }
+
+        self.operands.accept(b, triple, o)
+    }
+
+    fn complete_state(&self) -> CompleteState {
+        self.operands.complete_state()
+    }
+
+    fn complete(&mut self, b: &Build, o: &Ontology) -> Result<ClassExpression, Error> {
+        match &self.kind {
+            k if k == &OWL::IntersectionOf.iri_str() => Ok(ClassExpression::ObjectIntersectionOf(
+                self.operands.complete(b, o)?,
+            )),
+            k if k == &OWL::UnionOf.iri_str() => Ok(ClassExpression::ObjectUnionOf(
+                self.operands.complete(b, o)?,
+            )),
+            _ => {
+                dbg!(&self);
+                todo!()
+            }
         }
     }
 }
@@ -1190,6 +1328,18 @@ impl ClassAcceptor {
     }
 }
 
+impl From<BNodeId<Rc<str>>> for ClassAcceptor {
+    fn from(id: BNodeId<Rc<str>>) -> ClassAcceptor {
+        ClassAcceptor::from_bnode(id)
+    }
+}
+
+impl From<SpIri> for ClassAcceptor {
+    fn from(class: SpIri) -> ClassAcceptor {
+        ClassAcceptor::from_iri(class)
+    }
+}
+
 impl Acceptor<ClassExpression> for ClassAcceptor {
     // Accept a triple.
     fn accept(
@@ -1315,6 +1465,29 @@ impl Acceptor<AnnotatedAxiom> for TwoClassAcceptor {
             .into()),
             _ => panic!(),
         }
+    }
+}
+
+#[derive(Debug, Default)]
+struct OneToManyAcceptor {}
+
+impl Acceptor<AnnotatedAxiom> for OneToManyAcceptor {
+    fn accept(
+        &mut self,
+        b: &Build,
+        triple: [Term<Rc<str>>; 3],
+        o: &Ontology,
+    ) -> Result<AcceptState, Error> {
+        todo!()
+        //match &triple {}
+    }
+
+    fn complete_state(&self) -> CompleteState {
+        todo!()
+    }
+
+    fn complete(&mut self, b: &Build, o: &Ontology) -> Result<AnnotatedAxiom, Error> {
+        todo!()
     }
 }
 
@@ -1623,7 +1796,7 @@ mod test {
 
     // #[test]
     // fn disjoint_union() {
-    //     compare("disjoint-union");
+    //    compare("disjoint-union");
     // }
 
     // #[test]
