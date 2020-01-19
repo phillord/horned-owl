@@ -175,6 +175,28 @@ where
     }
 }
 
+impl<A, B> Acceptor<B> for Box<A>
+where
+    A: Acceptor<B>,
+{
+    fn accept(
+        &mut self,
+        b: &Build,
+        triple: [SpTerm; 3],
+        o: &Ontology,
+    ) -> Result<AcceptState, Error> {
+        (**self).accept(b, triple, o)
+    }
+
+    fn complete_state(&self) -> CompleteState {
+        (**self).complete_state()
+    }
+
+    fn complete(&mut self, b: &Build, o: &Ontology) -> Result<B, Error> {
+        (**self).complete(b, o)
+    }
+}
+
 macro_rules! all_some {
     ($name:expr) => {
         $name.is_some()
@@ -887,27 +909,16 @@ impl Acceptor<ClassExpression> for PropositionAcceptor {
                 )));
                 accept("Proposition")
             }
-            _ if self.typed_acceptor.is_some() => {
-                self.typed_acceptor.as_mut().unwrap().accept(b, triple, o)
-            }
-            _ => todo!(),
+            _ => self.typed_acceptor.as_mut().unwrap().accept(b, triple, o),
         }
     }
 
     fn complete_state(&self) -> CompleteState {
-        if let Some(ac) = &self.typed_acceptor {
-            ac.complete_state()
-        } else {
-            NotComplete
-        }
+        self.typed_acceptor.complete_state()
     }
 
     fn complete(&mut self, b: &Build, o: &Ontology) -> Result<ClassExpression, Error> {
-        if let Some(ac) = &mut self.typed_acceptor {
-            ac.complete(b, o)
-        } else {
-            todo!()
-        }
+        self.typed_acceptor.complete(b, o)
     }
 }
 
@@ -1086,13 +1097,13 @@ impl Acceptor<ClassExpression> for ObjectRestriction {
             Some(t) if t == &OWL::SomeValuesFrom.iri_str() => {
                 Ok(ClassExpression::ObjectSomeValuesFrom {
                     ope: ope.into(),
-                    bce: self.ce.take().unwrap().complete(b, o)?.into(),
+                    bce: self.ce.complete(b, o)?.into(),
                 })
             }
             Some(t) if t == &OWL::AllValuesFrom.iri_str() => {
                 Ok(ClassExpression::ObjectAllValuesFrom {
                     ope: ope.into(),
-                    bce: self.ce.take().unwrap().complete(b, o)?.into(),
+                    bce: self.ce.complete(b, o)?.into(),
                 })
             }
             _ => todo!(),
