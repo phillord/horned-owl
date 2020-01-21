@@ -1,4 +1,4 @@
-#![allow(dead_code, unused_variables)]
+//#![allow(dead_code, unused_variables)]
 
 use AcceptState::*;
 use CompleteState::*;
@@ -225,6 +225,7 @@ fn retn(triple: [SpTerm; 3], log: &str) -> Result<AcceptState, Error> {
     Ok(Return(triple))
 }
 
+#[allow(dead_code)]
 fn p_tup(triple: &[SpTerm; 3]) {
     debug!(
         "{}\n\t{}\n\t{}",
@@ -540,7 +541,7 @@ impl Acceptor<(AnnotatedAxiom, Merge)> for AnnotatedAxiomAcceptor {
                 self.bnodeid = Some(s.clone());
                 accept("AnnotatedAxiom")
             }
-            [Term::BNode(s), Term::Iri(p), Term::Iri(ob)] if Some(s) == self.bnodeid.as_ref() => {
+            [Term::BNode(s), Term::Iri(p), Term::Iri(_ob)] if Some(s) == self.bnodeid.as_ref() => {
                 match p {
                     _ if p == &OWL::AnnotatedSource.iri_str() => {
                         self.annotated_source = Some(triple[2].clone());
@@ -601,7 +602,7 @@ impl Acceptor<(AnnotatedAxiom, Merge)> for AnnotatedAxiomAcceptor {
         // axiom.
         let mut simple_acceptor = SimpleAnnotatedAxiomAcceptor::default();
 
-        let acs = simple_acceptor.accept(
+        let _ = simple_acceptor.accept(
             b,
             [
                 self.annotated_source.take().unwrap(),
@@ -630,9 +631,9 @@ struct DeclarationAcceptor {
 impl Acceptor<AnnotatedAxiom> for DeclarationAcceptor {
     fn accept(
         &mut self,
-        b: &Build,
+        _b: &Build,
         triple: [SpTerm; 3],
-        o: &Ontology,
+        _o: &Ontology,
     ) -> Result<AcceptState, Error> {
         match &triple {
             [Term::Iri(s), Term::Iri(p), Term::Iri(ob)]
@@ -654,7 +655,7 @@ impl Acceptor<AnnotatedAxiom> for DeclarationAcceptor {
         }
     }
 
-    fn complete(&mut self, b: &Build, o: &Ontology) -> Result<AnnotatedAxiom, Error> {
+    fn complete(&mut self, b: &Build, _o: &Ontology) -> Result<AnnotatedAxiom, Error> {
         // Iterate over all the complete Acceptor, run complete on
         // them, and insert this
         let n: NamedEntity = match &self.kind {
@@ -691,9 +692,9 @@ enum TypedPropertyAcceptor {
 impl Acceptor<AnnotatedAxiom> for TypedPropertyAcceptor {
     fn accept(
         &mut self,
-        b: &Build,
+        _b: &Build,
         triple: [SpTerm; 3],
-        o: &Ontology,
+        _o: &Ontology,
     ) -> Result<AcceptState, Error> {
         match &self {
             Self::Immediate(_) => retn(triple, "TypedProperty: Immediate"),
@@ -704,7 +705,7 @@ impl Acceptor<AnnotatedAxiom> for TypedPropertyAcceptor {
             Self::Immediate(_) => Complete,
         }
     }
-    fn complete(&mut self, b: &Build, o: &Ontology) -> Result<AnnotatedAxiom, Error> {
+    fn complete(&mut self, _b: &Build, _o: &Ontology) -> Result<AnnotatedAxiom, Error> {
         match self {
             Self::Immediate(ax) => Ok(ax.clone().into()),
         }
@@ -804,9 +805,9 @@ where
 {
     fn accept(
         &mut self,
-        b: &Build,
+        _b: &Build,
         triple: [SpTerm; 3],
-        o: &Ontology,
+        _o: &Ontology,
     ) -> Result<AcceptState, Error> {
         if self.complete {
             return retn(triple, "Seq");
@@ -1063,9 +1064,9 @@ struct ObjectRestriction {
 impl Acceptor<ClassExpression> for ObjectRestriction {
     fn accept(
         &mut self,
-        b: &Build,
+        _b: &Build,
         triple: [SpTerm; 3],
-        o: &Ontology,
+        _o: &Ontology,
     ) -> Result<AcceptState, Error> {
         match triple {
             [Term::BNode(_), Term::Iri(p), ob]
@@ -1121,9 +1122,9 @@ struct DataRestriction {
 impl Acceptor<ClassExpression> for DataRestriction {
     fn accept(
         &mut self,
-        b: &Build,
+        _b: &Build,
         triple: [SpTerm; 3],
-        o: &Ontology,
+        _o: &Ontology,
     ) -> Result<AcceptState, Error> {
         match triple {
             [Term::BNode(_), Term::Iri(p), ob]
@@ -1145,7 +1146,7 @@ impl Acceptor<ClassExpression> for DataRestriction {
         }
     }
 
-    fn complete(&mut self, b: &Build, o: &Ontology) -> Result<ClassExpression, Error> {
+    fn complete(&mut self, b: &Build, _o: &Ontology) -> Result<ClassExpression, Error> {
         let dp = DataProperty(self.dp.clone());
         //
         match &self.kind {
@@ -1568,9 +1569,9 @@ struct AnnotationAcceptor {
 impl Acceptor<Annotation> for AnnotationAcceptor {
     fn accept(
         &mut self,
-        b: &Build,
+        _b: &Build,
         triple: [Term<Rc<str>>; 3],
-        o: &Ontology,
+        _o: &Ontology,
     ) -> Result<AcceptState, Error> {
         match &triple {
             [_, Term::Iri(p), Term::Literal(ob, kind)] => {
@@ -1603,7 +1604,7 @@ impl Acceptor<Annotation> for AnnotationAcceptor {
         }
     }
 
-    fn complete(&mut self, b: &Build, o: &Ontology) -> Result<Annotation, Error> {
+    fn complete(&mut self, b: &Build, _o: &Ontology) -> Result<Annotation, Error> {
         Ok(Annotation {
             ap: TryBuild::<AnnotationProperty>::try_build(&self.p, b)?,
             av: if self.iri_val.is_some() {

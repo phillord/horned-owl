@@ -16,8 +16,8 @@ edition = "2018"
 [dependencies]
 curie = "0.0.8"
 clap = "2.31.2"
-failure = "0.1.2"
 enum_meta = "0.6.0"
+failure = "0.1.2"
 log = {version="0.4.8"}
 quick-xml="0.12.4"
 indexmap="1.0.2"
