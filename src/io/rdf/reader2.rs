@@ -1,7 +1,6 @@
 //#![allow(dead_code, unused_variables)]
 
 use AcceptState::*;
-use CompleteState::*;
 
 use crate::model::*;
 use crate::vocab::*;
@@ -37,26 +36,6 @@ enum AcceptState {
     Return([SpTerm; 3]),
 }
 
-#[derive(Debug, Eq, PartialEq)]
-enum CompleteState {
-    // The acceptor does not have all of the information that it needs
-    // because it has not recieved enough triples. An acceptor that
-    // has returned this state as it's last state would be expected to
-    // fail when completing.
-    NotComplete,
-
-    // The acceptor has all the information that it needs to complete,
-    // but can still accept more. The acceptor may require further
-    // information from the ontology, for instance the type of IRIs in
-    // accepted triples, to actually complete.
-    CanComplete,
-
-    // The acceptor has all the information that it needs to complete,
-    // and will not accept further triples. At this point, the
-    // acceptor should be able to complete without error.
-    Complete,
-}
-
 trait Acceptor<O>: std::fmt::Debug {
     // Accept a triple.
     //
@@ -73,21 +52,11 @@ trait Acceptor<O>: std::fmt::Debug {
     ) -> Result<AcceptState, Error>;
 
     // Indicate the completion state of the acceptor.
-    fn complete_state(&self) -> CompleteState;
 
-    fn is_complete(&self) -> bool {
-        match self.complete_state() {
-            Complete => true,
-            _ => false,
-        }
-    }
-
-    fn can_complete(&self) -> bool {
-        match self.complete_state() {
-            CanComplete | Complete => true,
-            _ => false,
-        }
-    }
+    // If true, the acceptor has all the information that it needs to
+    // complete, and will not accept further triples. If false, the
+    // acceptor may still accept triples.
+    fn is_complete(&self) -> bool;
 
     // Return an ontology entity based on the triples that have been
     // consumed and the data in the ontology. Return an Error if the
@@ -160,11 +129,8 @@ where
         }
     }
 
-    fn complete_state(&self) -> CompleteState {
-        match &self {
-            Some(ac) => ac.complete_state(),
-            None => NotComplete,
-        }
+    fn is_complete(&self) -> bool {
+        self.as_ref().map_or(false, |ac| ac.is_complete())
     }
 
     fn complete(&mut self, b: &Build, o: &Ontology) -> Result<B, Error> {
@@ -188,8 +154,8 @@ where
         (**self).accept(b, triple, o)
     }
 
-    fn complete_state(&self) -> CompleteState {
-        (**self).complete_state()
+    fn is_complete(&self) -> bool {
+        (**self).is_complete()
     }
 
     fn complete(&mut self, b: &Build, o: &Ontology) -> Result<B, Error> {
@@ -203,15 +169,6 @@ macro_rules! all_some {
     };
     ($name:expr, $($names:expr),*) => {
         all_some!($name) && all_some!($($names),*)
-    };
-}
-
-macro_rules! all_complete {
-    ($name:expr) => {
-        $name.is_some() && $name.as_ref().unwrap().complete_state() == Complete
-    };
-    ($name:expr, $($names:expr),*) => {
-        all_complete!($name) && all_complete!($($names),*)
     };
 }
 
@@ -499,10 +456,10 @@ impl Acceptor<(AnnotatedAxiom, Merge)> for SimpleAnnotatedAxiomAcceptor {
         }
     }
 
-    fn complete_state(&self) -> CompleteState {
+    fn is_complete(&self) -> bool {
         match &self.ac {
-            Some(a) => a.complete_state(),
-            None => NotComplete,
+            Some(a) => a.is_complete(),
+            None => false,
         }
     }
 
@@ -579,21 +536,8 @@ impl Acceptor<(AnnotatedAxiom, Merge)> for AnnotatedAxiomAcceptor {
         }
     }
 
-    fn complete_state(&self) -> CompleteState {
-        if self.complete {
-            Complete
-        } else {
-            if all_some!(
-                self.bnodeid,
-                self.annotated_source,
-                self.annotated_property,
-                self.annotated_target
-            ) {
-                CanComplete
-            } else {
-                NotComplete
-            }
-        }
+    fn is_complete(&self) -> bool {
+        self.complete
     }
 
     fn complete(&mut self, b: &Build, o: &Ontology) -> Result<(AnnotatedAxiom, Merge), Error> {
@@ -647,12 +591,8 @@ impl Acceptor<AnnotatedAxiom> for DeclarationAcceptor {
         }
     }
 
-    fn complete_state(&self) -> CompleteState {
-        if self.iri.is_some() {
-            Complete
-        } else {
-            NotComplete
-        }
+    fn is_complete(&self) -> bool {
+        self.iri.is_some()
     }
 
     fn complete(&mut self, b: &Build, _o: &Ontology) -> Result<AnnotatedAxiom, Error> {
@@ -700,9 +640,9 @@ impl Acceptor<AnnotatedAxiom> for TypedPropertyAcceptor {
             Self::Immediate(_) => retn(triple, "TypedProperty: Immediate"),
         }
     }
-    fn complete_state(&self) -> CompleteState {
+    fn is_complete(&self) -> bool {
         match &self {
-            Self::Immediate(_) => Complete,
+            Self::Immediate(_) => true,
         }
     }
     fn complete(&mut self, _b: &Build, _o: &Ontology) -> Result<AnnotatedAxiom, Error> {
@@ -772,8 +712,8 @@ impl Acceptor<AnnotatedAxiom> for PropertyAxiomAcceptor {
         }
     }
 
-    fn complete_state(&self) -> CompleteState {
-        self.tpa.complete_state()
+    fn is_complete(&self) -> bool {
+        self.tpa.is_complete()
     }
 
     fn complete(&mut self, b: &Build, o: &Ontology) -> Result<AnnotatedAxiom, Error> {
@@ -852,12 +792,8 @@ where
         }
     }
 
-    fn complete_state(&self) -> CompleteState {
-        if self.complete {
-            Complete
-        } else {
-            NotComplete
-        }
+    fn is_complete(&self) -> bool {
+        self.complete
     }
 
     fn complete(&mut self, b: &Build, o: &Ontology) -> Result<Vec<E>, Error> {
@@ -914,8 +850,8 @@ impl Acceptor<ClassExpression> for PropositionAcceptor {
         }
     }
 
-    fn complete_state(&self) -> CompleteState {
-        self.typed_acceptor.complete_state()
+    fn is_complete(&self) -> bool {
+        self.typed_acceptor.is_complete()
     }
 
     fn complete(&mut self, b: &Build, o: &Ontology) -> Result<ClassExpression, Error> {
@@ -943,10 +879,10 @@ impl Acceptor<ClassExpression> for TypedPropositionAcceptor {
     }
 
     // Indicate the completion state of the acceptor.
-    fn complete_state(&self) -> CompleteState {
+    fn is_complete(&self) -> bool {
         match self {
-            Self::Nary(ac) => ac.complete_state(),
-            Self::Unary(ac) => ac.complete_state(),
+            Self::Nary(ac) => ac.is_complete(),
+            Self::Unary(ac) => ac.is_complete(),
         }
     }
 
@@ -985,8 +921,8 @@ impl Acceptor<ClassExpression> for UnaryPropositionAcceptor {
         self.ac.accept(b, triple, o)
     }
 
-    fn complete_state(&self) -> CompleteState {
-        self.ac.complete_state()
+    fn is_complete(&self) -> bool {
+        self.ac.is_complete()
     }
 
     fn complete(&mut self, b: &Build, o: &Ontology) -> Result<ClassExpression, Error> {
@@ -1018,15 +954,15 @@ impl Acceptor<ClassExpression> for NaryPropositionAcceptor {
         triple: [SpTerm; 3],
         o: &Ontology,
     ) -> Result<AcceptState, Error> {
-        if self.operands.complete_state() == Complete {
+        if self.operands.is_complete() {
             return retn(triple, "NaryProposition");
         }
 
         self.operands.accept(b, triple, o)
     }
 
-    fn complete_state(&self) -> CompleteState {
-        self.operands.complete_state()
+    fn is_complete(&self) -> bool {
+        self.operands.is_complete()
     }
 
     fn complete(&mut self, b: &Build, o: &Ontology) -> Result<ClassExpression, Error> {
@@ -1080,15 +1016,11 @@ impl Acceptor<ClassExpression> for ObjectRestriction {
         }
     }
 
-    fn complete_state(&self) -> CompleteState {
+    fn is_complete(&self) -> bool {
         // Working out whether we are complete requires us to do
         // different things for all the restriction types. So fudge
         // it.
-        if self.kind.is_some() {
-            CanComplete
-        } else {
-            NotComplete
-        }
+        self.ce.is_complete()
     }
 
     fn complete(&mut self, b: &Build, o: &Ontology) -> Result<ClassExpression, Error> {
@@ -1138,12 +1070,8 @@ impl Acceptor<ClassExpression> for DataRestriction {
         }
     }
 
-    fn complete_state(&self) -> CompleteState {
-        if all_some!(self.kind, self.dr) {
-            CanComplete
-        } else {
-            NotComplete
-        }
+    fn is_complete(&self) -> bool {
+        all_some!(self.kind, self.dr)
     }
 
     fn complete(&mut self, b: &Build, _o: &Ontology) -> Result<ClassExpression, Error> {
@@ -1177,10 +1105,10 @@ impl Acceptor<ClassExpression> for TypedRestrictionAcceptor {
         }
     }
 
-    fn complete_state(&self) -> CompleteState {
+    fn is_complete(&self) -> bool {
         match self {
-            Self::Object(ref obj) => obj.complete_state(),
-            Self::Data(ref data) => data.complete_state(),
+            Self::Object(ref obj) => obj.is_complete(),
+            Self::Data(ref data) => data.is_complete(),
         }
     }
 
@@ -1249,8 +1177,8 @@ impl Acceptor<ClassExpression> for RestrictionAcceptor {
     }
 
     // Indicate the completion state of the acceptor.
-    fn complete_state(&self) -> CompleteState {
-        self.typed_acceptor.complete_state()
+    fn is_complete(&self) -> bool {
+        self.typed_acceptor.is_complete()
     }
 
     fn complete(&mut self, b: &Build, o: &Ontology) -> Result<ClassExpression, Error> {
@@ -1316,11 +1244,11 @@ impl Acceptor<ClassExpression> for ClassExpressionAcceptor {
     }
 
     // Indicate the completion state of the acceptor.
-    fn complete_state(&self) -> CompleteState {
+    fn is_complete(&self) -> bool {
         match self.sub.as_ref() {
-            Some(ClassExpressionSubAcceptor::Restriction(ac)) => ac.complete_state(),
-            Some(ClassExpressionSubAcceptor::Proposition(ac)) => ac.complete_state(),
-            None => NotComplete,
+            Some(ClassExpressionSubAcceptor::Restriction(ac)) => ac.is_complete(),
+            Some(ClassExpressionSubAcceptor::Proposition(ac)) => ac.is_complete(),
+            None => false,
         }
     }
 
@@ -1384,10 +1312,10 @@ impl Acceptor<ClassExpression> for ClassAcceptor {
     }
 
     // Indicate the completion state of the acceptor.
-    fn complete_state(&self) -> CompleteState {
+    fn is_complete(&self) -> bool {
         match self {
-            ClassAcceptor::Named(_) => CanComplete,
-            ClassAcceptor::Expression(ce) => ce.complete_state(),
+            ClassAcceptor::Named(_) => false,
+            ClassAcceptor::Expression(ce) => ce.is_complete(),
         }
     }
 
@@ -1463,11 +1391,11 @@ impl Acceptor<AnnotatedAxiom> for TwoClassAcceptor {
         }
     }
 
-    fn complete_state(&self) -> CompleteState {
-        if all_complete!(&self.firstclass, &self.secondclass) {
-            Complete
+    fn is_complete(&self) -> bool {
+        if self.firstclass.is_complete() && self.secondclass.is_complete() {
+            true
         } else {
-            NotComplete
+            false
         }
     }
 
@@ -1507,7 +1435,7 @@ impl Acceptor<AnnotatedAxiom> for TwoClassAcceptor {
 //         //match &triple {}
 //     }
 
-//     fn complete_state(&self) -> CompleteState {
+//     fn is_complete(&self) -> CompleteState {
 //         todo!()
 //     }
 
@@ -1538,11 +1466,11 @@ impl Acceptor<AnnotatedAxiom> for AnnotationAssertionAcceptor {
         }
     }
 
-    fn complete_state(&self) -> CompleteState {
+    fn is_complete(&self) -> bool {
         if self.subject.is_some() {
-            Complete
+            true
         } else {
-            NotComplete
+            false
         }
     }
 
@@ -1596,11 +1524,11 @@ impl Acceptor<Annotation> for AnnotationAcceptor {
         }
     }
 
-    fn complete_state(&self) -> CompleteState {
+    fn is_complete(&self) -> bool {
         if self.p.is_some() && self.iri_val.is_some() || self.literal_val.is_some() {
-            Complete
+            true
         } else {
-            NotComplete
+            false
         }
     }
 
