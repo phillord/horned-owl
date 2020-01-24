@@ -1358,21 +1358,21 @@ impl Acceptor<AnnotatedAxiom> for TwoClassAcceptor {
 
                 let mut accpt = false;
                 if let [Term::Iri(s), _, _] = &triple {
-                    self.secondclass = Some(ClassAcceptor::from_iri(s.clone()));
+                    self.secondclass = Some(s.clone().into());
                     accpt = true;
                 }
                 if let [Term::BNode(s), _, _] = &triple {
-                    self.secondclass = Some(ClassAcceptor::from_bnode(s.clone()));
+                    self.secondclass = Some(s.clone().into());
                     accpt = true;
                 }
 
                 if let [_, _, Term::Iri(ob)] = &triple {
-                    self.firstclass = Some(ClassAcceptor::from_iri(ob.clone()));
+                    self.firstclass = Some(ob.clone().into());
                     accpt = true;
                 }
 
                 if let [_, _, Term::BNode(ob)] = &triple {
-                    self.firstclass = Some(ClassAcceptor::from_bnode(ob.clone()));
+                    self.firstclass = Some(ob.clone().into());
                     accpt = true;
                 }
 
@@ -1401,18 +1401,18 @@ impl Acceptor<AnnotatedAxiom> for TwoClassAcceptor {
     fn complete(&mut self, b: &Build, o: &Ontology) -> Result<AnnotatedAxiom, Error> {
         match self.kind {
             Some(AxiomKind::SubClassOf) => Ok(SubClassOf {
-                sub: self.secondclass.as_mut().unwrap().complete(b, o)?,
-                sup: self.firstclass.as_mut().unwrap().complete(b, o)?,
+                sub: self.secondclass.complete(b, o)?,
+                sup: self.firstclass.complete(b, o)?,
             }
             .into()),
             Some(AxiomKind::EquivalentClasses) => Ok(EquivalentClasses(vec![
-                self.firstclass.as_mut().unwrap().complete(b, o)?,
-                self.secondclass.as_mut().unwrap().complete(b, o)?,
+                self.firstclass.complete(b, o)?,
+                self.secondclass.complete(b, o)?,
             ])
             .into()),
             Some(AxiomKind::DisjointClasses) => Ok(DisjointClasses(vec![
-                self.firstclass.as_mut().unwrap().complete(b, o)?,
-                self.secondclass.as_mut().unwrap().complete(b, o)?,
+                self.firstclass.complete(b, o)?,
+                self.secondclass.complete(b, o)?,
             ])
             .into()),
             _ => panic!(),
