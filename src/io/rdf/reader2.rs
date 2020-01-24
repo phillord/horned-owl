@@ -1,5 +1,3 @@
-//#![allow(dead_code, unused_variables)]
-
 use AcceptState::*;
 
 use crate::model::*;
@@ -26,6 +24,7 @@ use std::rc::Rc;
 // Two type aliases for "SoPhia" entities.
 type SpTerm = Term<Rc<str>>;
 type SpIri = IriData<Rc<str>>;
+type SpBNode = BNodeId<Rc<str>>;
 
 #[derive(Debug)]
 enum AcceptState {
@@ -89,7 +88,7 @@ trait TryBuild<N: From<IRI>> {
     fn to_iri_maybe(&self, b: &Build) -> Result<IRI, Error> {
         match self.to_some_iri(b) {
             Some(iri) => Ok(iri),
-            None => panic!("Fix this"),
+            None => todo!("Fix this"),
         }
     }
 
@@ -474,7 +473,7 @@ impl Acceptor<(AnnotatedAxiom, Merge)> for SimpleAnnotatedAxiomAcceptor {
 // Accept reified annotations of an axiom
 #[derive(Debug, Default)]
 struct AnnotatedAxiomAcceptor {
-    bnodeid: Option<BNodeId<Rc<str>>>,
+    bnodeid: Option<SpBNode>,
     // Currently we just support a single axiom type
     annotated_source: Option<SpTerm>,
     annotated_property: Option<SpTerm>,
@@ -565,7 +564,7 @@ impl Acceptor<(AnnotatedAxiom, Merge)> for AnnotatedAxiomAcceptor {
     }
 }
 
-// Accept declarations of type
+// Accept axioms that declare the type of an entity
 #[derive(Debug, Default)]
 struct DeclarationAcceptor {
     iri: Option<SpIri>,
@@ -723,13 +722,13 @@ impl Acceptor<AnnotatedAxiom> for PropertyAxiomAcceptor {
 
 #[derive(Debug)]
 struct SeqAcceptor<A> {
-    end_of_seq: BNodeId<Rc<str>>,
+    end_of_seq: SpBNode,
     seq: Vec<A>,
     complete: bool,
 }
 
 impl<A> SeqAcceptor<A> {
-    fn from_bnode(bnode: BNodeId<Rc<str>>) -> SeqAcceptor<A> {
+    fn from_bnode(bnode: SpBNode) -> SeqAcceptor<A> {
         SeqAcceptor {
             end_of_seq: bnode,
             seq: vec![],
@@ -740,7 +739,7 @@ impl<A> SeqAcceptor<A> {
 
 impl<A, E> Acceptor<Vec<E>> for SeqAcceptor<A>
 where
-    A: Debug + From<SpIri> + From<BNodeId<Rc<str>>> + Acceptor<E>,
+    A: Debug + From<SpIri> + From<SpBNode> + Acceptor<E>,
     E: Debug,
 {
     fn accept(
@@ -808,12 +807,12 @@ where
 
 #[derive(Debug)]
 struct PropositionAcceptor {
-    bnode: BNodeId<Rc<str>>,
+    bnode: SpBNode,
     typed_acceptor: Option<Box<TypedPropositionAcceptor>>,
 }
 
 impl PropositionAcceptor {
-    fn from_bnode(bnode: BNodeId<Rc<str>>) -> PropositionAcceptor {
+    fn from_bnode(bnode: SpBNode) -> PropositionAcceptor {
         PropositionAcceptor {
             bnode,
             typed_acceptor: None,
@@ -939,7 +938,7 @@ struct NaryPropositionAcceptor {
 }
 
 impl NaryPropositionAcceptor {
-    fn new(bnode: BNodeId<Rc<str>>, kind: SpIri) -> NaryPropositionAcceptor {
+    fn new(bnode: SpBNode, kind: SpIri) -> NaryPropositionAcceptor {
         NaryPropositionAcceptor {
             operands: SeqAcceptor::from_bnode(bnode),
             kind,
@@ -1122,12 +1121,12 @@ impl Acceptor<ClassExpression> for TypedRestrictionAcceptor {
 
 #[derive(Debug)]
 struct RestrictionAcceptor {
-    bnode: Option<BNodeId<Rc<str>>>,
+    bnode: Option<SpBNode>,
     typed_acceptor: Option<TypedRestrictionAcceptor>,
 }
 
 impl RestrictionAcceptor {
-    fn from_bnode(bnode: BNodeId<Rc<str>>) -> RestrictionAcceptor {
+    fn from_bnode(bnode: SpBNode) -> RestrictionAcceptor {
         RestrictionAcceptor {
             bnode: Some(bnode),
             typed_acceptor: None,
@@ -1194,12 +1193,12 @@ enum ClassExpressionSubAcceptor {
 
 #[derive(Debug)]
 struct ClassExpressionAcceptor {
-    bnode: Option<BNodeId<Rc<str>>>,
+    bnode: Option<SpBNode>,
     sub: Option<ClassExpressionSubAcceptor>,
 }
 
 impl ClassExpressionAcceptor {
-    fn from_bnode(bnode: BNodeId<Rc<str>>) -> ClassExpressionAcceptor {
+    fn from_bnode(bnode: SpBNode) -> ClassExpressionAcceptor {
         ClassExpressionAcceptor {
             bnode: Some(bnode),
             sub: None,
@@ -1272,7 +1271,7 @@ impl ClassAcceptor {
         ClassAcceptor::Named(class)
     }
 
-    fn from_bnode(bnode: BNodeId<Rc<str>>) -> ClassAcceptor {
+    fn from_bnode(bnode: SpBNode) -> ClassAcceptor {
         ClassAcceptor::Expression(ClassExpressionAcceptor::from_bnode(bnode))
     }
 
@@ -1285,8 +1284,8 @@ impl ClassAcceptor {
     }
 }
 
-impl From<BNodeId<Rc<str>>> for ClassAcceptor {
-    fn from(id: BNodeId<Rc<str>>) -> ClassAcceptor {
+impl From<SpBNode> for ClassAcceptor {
+    fn from(id: SpBNode) -> ClassAcceptor {
         ClassAcceptor::from_bnode(id)
     }
 }
