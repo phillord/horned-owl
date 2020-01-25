@@ -1332,8 +1332,8 @@ impl Acceptor<ClassExpression> for ClassAcceptor {
 #[derive(Debug, Default)]
 struct TwoClassAcceptor {
     kind: Option<AxiomKind>,
-    firstclass: Option<ClassAcceptor>,
-    secondclass: Option<ClassAcceptor>,
+    from: Option<ClassAcceptor>,
+    to: Option<ClassAcceptor>,
 }
 
 impl Acceptor<AnnotatedAxiom> for TwoClassAcceptor {
@@ -1344,10 +1344,10 @@ impl Acceptor<AnnotatedAxiom> for TwoClassAcceptor {
         o: &Ontology,
     ) -> Result<AcceptState, Error> {
         // If we already have found the main triple, then check sub acceptors
-        if self.firstclass.is_some() && self.secondclass.is_some() {
-            match self.firstclass.accept(b, triple, o)? {
+        if self.from.is_some() && self.to.is_some() {
+            match self.from.accept(b, triple, o)? {
                 Accept => return Ok(Accept),
-                Return(triple) => match self.secondclass.accept(b, triple, o)? {
+                Return(triple) => match self.to.accept(b, triple, o)? {
                     Accept => return Ok(Accept),
                     Return(triple) => return retn(triple, "TwoClass"),
                 },
@@ -1365,19 +1365,19 @@ impl Acceptor<AnnotatedAxiom> for TwoClassAcceptor {
             });
 
             if let [Term::Iri(s), _, _] = &triple {
-                self.secondclass = Some(s.clone().into());
+                self.to = Some(s.clone().into());
             }
 
             if let [Term::BNode(s), _, _] = &triple {
-                self.secondclass = Some(s.clone().into());
+                self.to = Some(s.clone().into());
             }
 
             if let [_, _, Term::Iri(ob)] = &triple {
-                self.firstclass = Some(ob.clone().into());
+                self.from = Some(ob.clone().into());
             }
 
             if let [_, _, Term::BNode(ob)] = &triple {
-                self.firstclass = Some(ob.clone().into());
+                self.from = Some(ob.clone().into());
             }
 
             // We must have discovered the kind earlier, so return now
@@ -1389,7 +1389,7 @@ impl Acceptor<AnnotatedAxiom> for TwoClassAcceptor {
     }
 
     fn is_complete(&self) -> bool {
-        if self.firstclass.is_complete() && self.secondclass.is_complete() {
+        if self.from.is_complete() && self.to.is_complete() {
             true
         } else {
             false
@@ -1399,20 +1399,22 @@ impl Acceptor<AnnotatedAxiom> for TwoClassAcceptor {
     fn complete(&mut self, b: &Build, o: &Ontology) -> Result<AnnotatedAxiom, Error> {
         match self.kind {
             Some(AxiomKind::SubClassOf) => Ok(SubClassOf {
-                sub: self.secondclass.complete(b, o)?,
-                sup: self.firstclass.complete(b, o)?,
+                sub: self.to.complete(b, o)?,
+                sup: self.from.complete(b, o)?,
             }
             .into()),
-            Some(AxiomKind::EquivalentClasses) => Ok(EquivalentClasses(vec![
-                self.firstclass.complete(b, o)?,
-                self.secondclass.complete(b, o)?,
-            ])
-            .into()),
-            Some(AxiomKind::DisjointClasses) => Ok(DisjointClasses(vec![
-                self.firstclass.complete(b, o)?,
-                self.secondclass.complete(b, o)?,
-            ])
-            .into()),
+            Some(AxiomKind::EquivalentClasses) => {
+                Ok(
+                    EquivalentClasses(vec![self.from.complete(b, o)?, self.to.complete(b, o)?])
+                        .into(),
+                )
+            }
+            Some(AxiomKind::DisjointClasses) => {
+                Ok(
+                    DisjointClasses(vec![self.from.complete(b, o)?, self.to.complete(b, o)?])
+                        .into(),
+                )
+            }
             _ => panic!(),
         }
     }
