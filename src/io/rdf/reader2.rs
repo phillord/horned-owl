@@ -354,7 +354,7 @@ impl OntologyParser {
         for t in iter {
             let t = t.unwrap();
             debug!(
-                "Checking: {}\n\t\t{}\n\t\t{}",
+                "\nChecking: {}\n\t\t{}\n\t\t{}",
                 &t[0].n3(),
                 &t[1].n3(),
                 &t[2].n3()
@@ -1343,51 +1343,49 @@ impl Acceptor<AnnotatedAxiom> for TwoClassAcceptor {
         triple: [Term<Rc<str>>; 3],
         o: &Ontology,
     ) -> Result<AcceptState, Error> {
-        match &triple {
-            [_, Term::Iri(p), _]
-                if p == &RDFS::SubClassOf.iri_str()
-                    || p == &OWL::EquivalentClass.iri_str()
-                    || p == &OWL::DisjointWith.iri_str() =>
-            {
-                self.kind = Some(match 10 {
-                    _ if p == &RDFS::SubClassOf.iri_str() => AxiomKind::SubClassOf,
-                    _ if p == &OWL::EquivalentClass.iri_str() => AxiomKind::EquivalentClasses,
-                    _ if p == &OWL::DisjointWith.iri_str() => AxiomKind::DisjointClasses,
-                    _ => panic!(),
-                });
-
-                let mut accpt = false;
-                if let [Term::Iri(s), _, _] = &triple {
-                    self.secondclass = Some(s.clone().into());
-                    accpt = true;
-                }
-                if let [Term::BNode(s), _, _] = &triple {
-                    self.secondclass = Some(s.clone().into());
-                    accpt = true;
-                }
-
-                if let [_, _, Term::Iri(ob)] = &triple {
-                    self.firstclass = Some(ob.clone().into());
-                    accpt = true;
-                }
-
-                if let [_, _, Term::BNode(ob)] = &triple {
-                    self.firstclass = Some(ob.clone().into());
-                    accpt = true;
-                }
-
-                if accpt {
-                    accept("TwoClass")
-                } else {
-                    retn(triple, "TwoClass")
-                }
-            }
-            _ => {
-                // For now just ignore the subclass, but we need to
-                // fix this later
-                self.firstclass.accept(b, triple, o)
-            }
+        // If we already have found the main triple, then check sub acceptors
+        if self.firstclass.is_some() && self.secondclass.is_some() {
+            match self.firstclass.accept(b, triple, o)? {
+                Accept => return Ok(Accept),
+                Return(triple) => match self.secondclass.accept(b, triple, o)? {
+                    Accept => return Ok(Accept),
+                    Return(triple) => return retn(triple, "TwoClass"),
+                },
+            };
         }
+
+        if let [_, Term::Iri(p), _] = &triple {
+            // Check the kind of the triple and return if we cannot
+            // handle it
+            self.kind = Some(match 10 {
+                _ if p == &RDFS::SubClassOf.iri_str() => AxiomKind::SubClassOf,
+                _ if p == &OWL::EquivalentClass.iri_str() => AxiomKind::EquivalentClasses,
+                _ if p == &OWL::DisjointWith.iri_str() => AxiomKind::DisjointClasses,
+                _ => return retn(triple, "TwoClass"),
+            });
+
+            if let [Term::Iri(s), _, _] = &triple {
+                self.secondclass = Some(s.clone().into());
+            }
+
+            if let [Term::BNode(s), _, _] = &triple {
+                self.secondclass = Some(s.clone().into());
+            }
+
+            if let [_, _, Term::Iri(ob)] = &triple {
+                self.firstclass = Some(ob.clone().into());
+            }
+
+            if let [_, _, Term::BNode(ob)] = &triple {
+                self.firstclass = Some(ob.clone().into());
+            }
+
+            // We must have discovered the kind earlier, so return now
+            return accept("TwoClass");
+        }
+
+        // We have some random triple that is nothing to do with us
+        retn(triple, "TwoClass")
     }
 
     fn is_complete(&self) -> bool {
