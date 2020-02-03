@@ -1,5 +1,7 @@
 use AcceptState::*;
 
+// Required because of name clash with sophia::term::Term
+use crate::model::Literal;
 use crate::model::*;
 use crate::vocab::*;
 
@@ -16,6 +18,7 @@ use sophia::term::BNodeId;
 use sophia::term::IriData;
 use sophia::term::LiteralKind;
 use sophia::term::Term;
+use sophia::term::Term::*;
 
 use std::fmt::Debug;
 use std::io::BufRead;
@@ -491,13 +494,13 @@ impl Acceptor<(AnnotatedAxiom, Merge)> for AnnotatedAxiomAcceptor {
     ) -> Result<AcceptState, Error> {
         match &triple {
             // This should only happen when bnodeid is None
-            [Term::BNode(s), Term::Iri(p), Term::Iri(ob)]
+            [BNode(s), Iri(p), Iri(ob)]
                 if p == &RDF::Type.iri_str() && ob == &OWL::Axiom.iri_str() =>
             {
                 self.bnodeid = Some(s.clone());
                 accept("AnnotatedAxiom")
             }
-            [Term::BNode(s), Term::Iri(p), Term::Iri(_ob)] if Some(s) == self.bnodeid.as_ref() => {
+            [BNode(s), Iri(p), Iri(_ob)] if Some(s) == self.bnodeid.as_ref() => {
                 match p {
                     _ if p == &OWL::AnnotatedSource.iri_str() => {
                         self.annotated_source = Some(triple[2].clone());
@@ -518,7 +521,7 @@ impl Acceptor<(AnnotatedAxiom, Merge)> for AnnotatedAxiomAcceptor {
                     }
                 }
             }
-            [Term::BNode(s), _, _] if Some(s) == self.bnodeid.as_ref() => {
+            [BNode(s), _, _] if Some(s) == self.bnodeid.as_ref() => {
                 let mut annac = AnnotationAcceptor::default();
                 let rtn = annac.accept(b, triple, o);
 
@@ -579,7 +582,7 @@ impl Acceptor<AnnotatedAxiom> for DeclarationAcceptor {
         _o: &Ontology,
     ) -> Result<AcceptState, Error> {
         match &triple {
-            [Term::Iri(s), Term::Iri(p), Term::Iri(ob)]
+            [Iri(s), Iri(p), Iri(ob)]
                 if p == &"http://www.w3.org/1999/02/22-rdf-syntax-ns#type" =>
             {
                 self.iri = Some(s.clone());
@@ -668,7 +671,7 @@ impl Acceptor<AnnotatedAxiom> for PropertyAxiomAcceptor {
         }
 
         match &triple {
-            [Term::Iri(s), Term::Iri(p), Term::Iri(ob)] => {
+            [Iri(s), Iri(p), Iri(ob)] => {
                 let fdk = |p: &SpIri| -> Result<Option<NamedEntityKind>, Error> {
                     let iri = p.to_iri(b);
                     Ok(find_declaration_kind(o, iri))
@@ -754,21 +757,17 @@ where
 
         match &triple {
             // Next Item
-            [Term::BNode(s), Term::Iri(p), ob]
-                if s == &self.end_of_seq && p == &RDF::First.iri_str() =>
-            {
+            [BNode(s), Iri(p), ob] if s == &self.end_of_seq && p == &RDF::First.iri_str() => {
                 self.seq.push(match ob {
-                    Term::Iri(iri) => iri.clone().into(),
-                    Term::BNode(id) => id.clone().into(),
+                    Iri(iri) => iri.clone().into(),
+                    BNode(id) => id.clone().into(),
                     _ => todo!(),
                 });
 
                 accept("Seq")
             }
             // Pointer to Rest
-            [Term::BNode(s), Term::Iri(p), Term::BNode(ob)]
-                if s == &self.end_of_seq && p == &RDF::Rest.iri_str() =>
-            {
+            [BNode(s), Iri(p), BNode(ob)] if s == &self.end_of_seq && p == &RDF::Rest.iri_str() => {
                 // We make the assumption here that we get first, then
                 // rest, then first, then rest. Otherwize, we have
                 // over-written the value of this bnode and we may not
@@ -779,7 +778,7 @@ where
                 accept("Seq")
             }
             // End of Seq
-            [Term::BNode(s), Term::Iri(p), Term::Iri(ob)]
+            [BNode(s), Iri(p), Iri(ob)]
                 if s == &self.end_of_seq
                     && p == &RDF::Rest.iri_str()
                     && ob == &RDF::Nil.iri_str() =>
@@ -828,7 +827,7 @@ impl Acceptor<ClassExpression> for PropositionAcceptor {
         o: &Ontology,
     ) -> Result<AcceptState, Error> {
         match &triple {
-            [Term::BNode(id), Term::Iri(p), Term::BNode(ob)]
+            [BNode(id), Iri(p), BNode(ob)]
                 if id == &self.bnode && p == &OWL::IntersectionOf.iri_str()
                     || p == &OWL::UnionOf.iri_str() =>
             {
@@ -837,9 +836,7 @@ impl Acceptor<ClassExpression> for PropositionAcceptor {
                 )));
                 accept("Proposition")
             }
-            [Term::BNode(id), Term::Iri(p), ob]
-                if id == &self.bnode && p == &OWL::ComplementOf.iri_str() =>
-            {
+            [BNode(id), Iri(p), ob] if id == &self.bnode && p == &OWL::ComplementOf.iri_str() => {
                 self.typed_acceptor = Some(Box::new(TypedPropositionAcceptor::Unary(
                     UnaryPropositionAcceptor::new(ob.clone()),
                 )));
@@ -902,8 +899,8 @@ impl UnaryPropositionAcceptor {
     fn new(term: SpTerm) -> UnaryPropositionAcceptor {
         UnaryPropositionAcceptor {
             ac: match term {
-                Term::Iri(iri) => ClassAcceptor::from_iri(iri),
-                Term::BNode(id) => ClassAcceptor::from_bnode(id),
+                Iri(iri) => ClassAcceptor::from_iri(iri),
+                BNode(id) => ClassAcceptor::from_bnode(id),
                 _ => todo!(),
             },
         }
@@ -1004,7 +1001,7 @@ impl Acceptor<ClassExpression> for ObjectRestriction {
         _o: &Ontology,
     ) -> Result<AcceptState, Error> {
         match triple {
-            [Term::BNode(_), Term::Iri(p), ob]
+            [BNode(_), Iri(p), ob]
                 if p == OWL::SomeValuesFrom.iri_str() || p == OWL::AllValuesFrom.iri_str() =>
             {
                 self.kind = Some(p);
@@ -1058,7 +1055,7 @@ impl Acceptor<ClassExpression> for DataRestriction {
         _o: &Ontology,
     ) -> Result<AcceptState, Error> {
         match triple {
-            [Term::BNode(_), Term::Iri(p), ob]
+            [BNode(_), Iri(p), ob]
                 if p == OWL::SomeValuesFrom.iri_str() || p == OWL::AllValuesFrom.iri_str() =>
             {
                 self.kind = Some(p);
@@ -1142,8 +1139,8 @@ impl Acceptor<ClassExpression> for RestrictionAcceptor {
         o: &Ontology,
     ) -> Result<AcceptState, Error> {
         match &triple {
-            [Term::BNode(id), _, _] if Some(id) == self.bnode.as_ref() => match &triple {
-                [_, Term::Iri(p), ob] if p == &OWL::OnProperty.iri_str() => {
+            [BNode(id), _, _] if Some(id) == self.bnode.as_ref() => match &triple {
+                [_, Iri(p), ob] if p == &OWL::OnProperty.iri_str() => {
                     let on_prop_iri = b.iri(ob.value());
                     match find_declaration_kind(o, on_prop_iri.clone()) {
                         Some(NamedEntityKind::ObjectProperty) => {
@@ -1215,7 +1212,7 @@ impl Acceptor<ClassExpression> for ClassExpressionAcceptor {
         o: &Ontology,
     ) -> Result<AcceptState, Error> {
         match &triple {
-            [Term::BNode(id), Term::Iri(p), Term::Iri(ob)]
+            [BNode(id), Iri(p), Iri(ob)]
                 if Some(id) == self.bnode.as_ref() && p == &RDF::Type.iri_str() =>
             {
                 if ob == &OWL::Restriction.iri_str() {
@@ -1277,8 +1274,8 @@ impl ClassAcceptor {
 
     fn from_term(term: SpTerm) -> ClassAcceptor {
         match term {
-            Term::Iri(i) => ClassAcceptor::from_iri(i),
-            Term::BNode(id) => ClassAcceptor::from_bnode(id),
+            Iri(i) => ClassAcceptor::from_iri(i),
+            BNode(id) => ClassAcceptor::from_bnode(id),
             _ => todo!(),
         }
     }
@@ -1354,7 +1351,7 @@ impl Acceptor<AnnotatedAxiom> for TwoClassAcceptor {
             };
         }
 
-        if let [_, Term::Iri(p), _] = &triple {
+        if let [_, Iri(p), _] = &triple {
             // Check the kind of the triple and return if we cannot
             // handle it
             self.kind = Some(match 10 {
@@ -1364,19 +1361,19 @@ impl Acceptor<AnnotatedAxiom> for TwoClassAcceptor {
                 _ => return retn(triple, "TwoClass"),
             });
 
-            if let [Term::Iri(s), _, _] = &triple {
+            if let [Iri(s), _, _] = &triple {
                 self.to = Some(s.clone().into());
             }
 
-            if let [Term::BNode(s), _, _] = &triple {
+            if let [BNode(s), _, _] = &triple {
                 self.to = Some(s.clone().into());
             }
 
-            if let [_, _, Term::Iri(ob)] = &triple {
+            if let [_, _, Iri(ob)] = &triple {
                 self.from = Some(ob.clone().into());
             }
 
-            if let [_, _, Term::BNode(ob)] = &triple {
+            if let [_, _, BNode(ob)] = &triple {
                 self.from = Some(ob.clone().into());
             }
 
@@ -1457,7 +1454,7 @@ impl Acceptor<AnnotatedAxiom> for AnnotationAssertionAcceptor {
         o: &Ontology,
     ) -> Result<AcceptState, Error> {
         match &triple {
-            [Term::Iri(s), _, _] => {
+            [Iri(s), _, _] => {
                 self.subject = Some(s.clone());
                 self.ac.accept(b, triple, o)
             }
@@ -1501,7 +1498,7 @@ impl Acceptor<Annotation> for AnnotationAcceptor {
         _o: &Ontology,
     ) -> Result<AcceptState, Error> {
         match &triple {
-            [_, Term::Iri(p), Term::Literal(ob, kind)] => {
+            [_, Iri(p), Term::Literal(ob, kind)] => {
                 // Literal value
                 self.p = Some(p.clone());
                 self.literal_val = Some(ob.clone());
@@ -1513,7 +1510,7 @@ impl Acceptor<Annotation> for AnnotationAcceptor {
                 }
                 accept("AnnotationAcceptor")
             }
-            [_, Term::Iri(p), Term::Iri(ob)] => {
+            [_, Iri(p), Iri(ob)] => {
                 // IRI annotation value
                 self.p = Some(p.clone());
                 self.iri_val = Some(ob.clone());
