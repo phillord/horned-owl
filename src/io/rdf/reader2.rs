@@ -165,6 +165,18 @@ where
     }
 }
 
+impl PartialEq<OWL> for &IriData<Rc<str>> {
+    fn eq(&self, other: &OWL) -> bool {
+        **self == other.iri_str()
+    }
+}
+
+impl PartialEq<OWL> for IriData<Rc<str>> {
+    fn eq(&self, other: &OWL) -> bool {
+        *self == other.iri_str()
+    }
+}
+
 macro_rules! all_some {
     ($name:expr) => {
         $name.is_some()
@@ -230,14 +242,14 @@ impl OntologyParser {
                 match &triple {
                     [Term::Iri(s), Term::Iri(p), Term::Iri(ob)]
                         if p == &"http://www.w3.org/1999/02/22-rdf-syntax-ns#type"
-                            && ob == &OWL::Ontology.iri_str() =>
+                            && ob == OWL::Ontology =>
                     {
                         self.iri = Some(s.clone());
                         o.id.iri = TryBuild::<IRI>::to_some_iri(&self.iri, b);
                         accept("Ontology Acceptor")
                     }
                     [Term::Iri(s), Term::Iri(p), Term::Iri(ob)]
-                        if self.iri.as_ref() == Some(s) && p == &OWL::VersionIRI.iri_str() =>
+                        if self.iri.as_ref() == Some(s) && p == OWL::VersionIRI =>
                     {
                         self.viri = Some(ob.clone());
                         accept("Ontology Acceptor")
@@ -494,23 +506,21 @@ impl Acceptor<(AnnotatedAxiom, Merge)> for AnnotatedAxiomAcceptor {
     ) -> Result<AcceptState, Error> {
         match &triple {
             // This should only happen when bnodeid is None
-            [BNode(s), Iri(p), Iri(ob)]
-                if p == &RDF::Type.iri_str() && ob == &OWL::Axiom.iri_str() =>
-            {
+            [BNode(s), Iri(p), Iri(ob)] if p == &RDF::Type.iri_str() && ob == OWL::Axiom => {
                 self.bnodeid = Some(s.clone());
                 accept("AnnotatedAxiom")
             }
             [BNode(s), Iri(p), Iri(_ob)] if Some(s) == self.bnodeid.as_ref() => {
                 match p {
-                    _ if p == &OWL::AnnotatedSource.iri_str() => {
+                    _ if p == OWL::AnnotatedSource => {
                         self.annotated_source = Some(triple[2].clone());
                         accept("AnnotatedAxiom")
                     }
-                    _ if p == &OWL::AnnotatedProperty.iri_str() => {
+                    _ if p == OWL::AnnotatedProperty => {
                         self.annotated_property = Some(triple[2].clone());
                         accept("AnnotatedAxiom")
                     }
-                    _ if p == &OWL::AnnotatedTarget.iri_str() => {
+                    _ if p == OWL::AnnotatedTarget => {
                         self.annotated_target = Some(triple[2].clone());
                         accept("AnnotatedAxiom")
                     }
@@ -601,19 +611,15 @@ impl Acceptor<AnnotatedAxiom> for DeclarationAcceptor {
         // Iterate over all the complete Acceptor, run complete on
         // them, and insert this
         let n: NamedEntity = match &self.kind {
-            Some(i) if i == &OWL::Class.iri_str() => {
-                TryBuild::<Class>::try_build(&self.iri, b)?.into()
-            }
-            Some(i) if i == &OWL::ObjectProperty.iri_str() => {
+            Some(i) if i == OWL::Class => TryBuild::<Class>::try_build(&self.iri, b)?.into(),
+            Some(i) if i == OWL::ObjectProperty => {
                 TryBuild::<ObjectProperty>::try_build(&self.iri, b)?.into()
             }
-            Some(i) if i == &OWL::DatatypeProperty.iri_str() => {
+            Some(i) if i == OWL::DatatypeProperty => {
                 TryBuild::<DataProperty>::try_build(&self.iri, b)?.into()
             }
-            Some(i) if i == &OWL::Datatype.iri_str() => {
-                TryBuild::<Datatype>::try_build(&self.iri, b)?.into()
-            }
-            Some(i) if i == &OWL::AnnotationProperty.iri_str() => {
+            Some(i) if i == OWL::Datatype => TryBuild::<Datatype>::try_build(&self.iri, b)?.into(),
+            Some(i) if i == OWL::AnnotationProperty => {
                 TryBuild::<AnnotationProperty>::try_build(&self.iri, b)?.into()
             }
             Some(_) => todo!(),
@@ -828,15 +834,14 @@ impl Acceptor<ClassExpression> for PropositionAcceptor {
     ) -> Result<AcceptState, Error> {
         match &triple {
             [BNode(id), Iri(p), BNode(ob)]
-                if id == &self.bnode && p == &OWL::IntersectionOf.iri_str()
-                    || p == &OWL::UnionOf.iri_str() =>
+                if id == &self.bnode && p == OWL::IntersectionOf || p == OWL::UnionOf =>
             {
                 self.typed_acceptor = Some(Box::new(TypedPropositionAcceptor::Nary(
                     NaryPropositionAcceptor::new(ob.clone(), p.clone()),
                 )));
                 accept("Proposition")
             }
-            [BNode(id), Iri(p), ob] if id == &self.bnode && p == &OWL::ComplementOf.iri_str() => {
+            [BNode(id), Iri(p), ob] if id == &self.bnode && p == OWL::ComplementOf => {
                 self.typed_acceptor = Some(Box::new(TypedPropositionAcceptor::Unary(
                     UnaryPropositionAcceptor::new(ob.clone()),
                 )));
@@ -963,10 +968,10 @@ impl Acceptor<ClassExpression> for NaryPropositionAcceptor {
 
     fn complete(&mut self, b: &Build, o: &Ontology) -> Result<ClassExpression, Error> {
         match &self.kind {
-            k if k == &OWL::IntersectionOf.iri_str() => Ok(ClassExpression::ObjectIntersectionOf(
+            k if k == OWL::IntersectionOf => Ok(ClassExpression::ObjectIntersectionOf(
                 self.operands.complete(b, o)?,
             )),
-            k if k == &OWL::UnionOf.iri_str() => Ok(ClassExpression::ObjectUnionOf(
+            k if k == OWL::UnionOf => Ok(ClassExpression::ObjectUnionOf(
                 self.operands.complete(b, o)?,
             )),
             _ => {
@@ -1001,9 +1006,7 @@ impl Acceptor<ClassExpression> for ObjectRestriction {
         _o: &Ontology,
     ) -> Result<AcceptState, Error> {
         match triple {
-            [BNode(_), Iri(p), ob]
-                if p == OWL::SomeValuesFrom.iri_str() || p == OWL::AllValuesFrom.iri_str() =>
-            {
+            [BNode(_), Iri(p), ob] if p == OWL::SomeValuesFrom || p == OWL::AllValuesFrom => {
                 self.kind = Some(p);
                 self.ce = Some(Box::new(ClassAcceptor::from_term(ob)));
                 accept("TypedRestrictionAcceptor")
@@ -1023,18 +1026,14 @@ impl Acceptor<ClassExpression> for ObjectRestriction {
         let ope = ObjectProperty(self.ope.clone());
 
         match &self.kind {
-            Some(t) if t == &OWL::SomeValuesFrom.iri_str() => {
-                Ok(ClassExpression::ObjectSomeValuesFrom {
-                    ope: ope.into(),
-                    bce: self.ce.complete(b, o)?.into(),
-                })
-            }
-            Some(t) if t == &OWL::AllValuesFrom.iri_str() => {
-                Ok(ClassExpression::ObjectAllValuesFrom {
-                    ope: ope.into(),
-                    bce: self.ce.complete(b, o)?.into(),
-                })
-            }
+            Some(t) if t == OWL::SomeValuesFrom => Ok(ClassExpression::ObjectSomeValuesFrom {
+                ope: ope.into(),
+                bce: self.ce.complete(b, o)?.into(),
+            }),
+            Some(t) if t == OWL::AllValuesFrom => Ok(ClassExpression::ObjectAllValuesFrom {
+                ope: ope.into(),
+                bce: self.ce.complete(b, o)?.into(),
+            }),
             _ => todo!(),
         }
     }
@@ -1055,9 +1054,7 @@ impl Acceptor<ClassExpression> for DataRestriction {
         _o: &Ontology,
     ) -> Result<AcceptState, Error> {
         match triple {
-            [BNode(_), Iri(p), ob]
-                if p == OWL::SomeValuesFrom.iri_str() || p == OWL::AllValuesFrom.iri_str() =>
-            {
+            [BNode(_), Iri(p), ob] if p == OWL::SomeValuesFrom || p == OWL::AllValuesFrom => {
                 self.kind = Some(p);
                 self.dr = Some(ob);
                 accept("DataRestriction")
@@ -1140,7 +1137,7 @@ impl Acceptor<ClassExpression> for RestrictionAcceptor {
     ) -> Result<AcceptState, Error> {
         match &triple {
             [BNode(id), _, _] if Some(id) == self.bnode.as_ref() => match &triple {
-                [_, Iri(p), ob] if p == &OWL::OnProperty.iri_str() => {
+                [_, Iri(p), ob] if p == OWL::OnProperty => {
                     let on_prop_iri = b.iri(ob.value());
                     match find_declaration_kind(o, on_prop_iri.clone()) {
                         Some(NamedEntityKind::ObjectProperty) => {
@@ -1215,14 +1212,14 @@ impl Acceptor<ClassExpression> for ClassExpressionAcceptor {
             [BNode(id), Iri(p), Iri(ob)]
                 if Some(id) == self.bnode.as_ref() && p == &RDF::Type.iri_str() =>
             {
-                if ob == &OWL::Restriction.iri_str() {
+                if ob == OWL::Restriction {
                     self.sub = Some(ClassExpressionSubAcceptor::Restriction(
                         RestrictionAcceptor::from_bnode(id.clone()),
                     ));
                     return accept("ClassExpression");
                 }
 
-                if ob == &OWL::Class.iri_str() {
+                if ob == OWL::Class {
                     self.sub = Some(ClassExpressionSubAcceptor::Proposition(
                         PropositionAcceptor::from_bnode(id.clone()),
                     ));
@@ -1356,8 +1353,8 @@ impl Acceptor<AnnotatedAxiom> for TwoClassAcceptor {
             // handle it
             self.kind = Some(match 10 {
                 _ if p == &RDFS::SubClassOf.iri_str() => AxiomKind::SubClassOf,
-                _ if p == &OWL::EquivalentClass.iri_str() => AxiomKind::EquivalentClasses,
-                _ if p == &OWL::DisjointWith.iri_str() => AxiomKind::DisjointClasses,
+                _ if p == OWL::EquivalentClass => AxiomKind::EquivalentClasses,
+                _ if p == OWL::DisjointWith => AxiomKind::DisjointClasses,
                 _ => return retn(triple, "TwoClass"),
             });
 
