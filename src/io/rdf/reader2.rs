@@ -165,14 +165,40 @@ where
     }
 }
 
+// I have so far failed to make these three otherwise identical impls
+// generic
 impl PartialEq<OWL> for &IriData<Rc<str>> {
     fn eq(&self, other: &OWL) -> bool {
-        **self == other.iri_str()
+        *self == other
     }
 }
 
 impl PartialEq<OWL> for IriData<Rc<str>> {
     fn eq(&self, other: &OWL) -> bool {
+        *self == other.iri_str()
+    }
+}
+
+impl PartialEq<RDFS> for &IriData<Rc<str>> {
+    fn eq(&self, other: &RDFS) -> bool {
+        *self == other
+    }
+}
+
+impl PartialEq<RDFS> for IriData<Rc<str>> {
+    fn eq(&self, other: &RDFS) -> bool {
+        *self == other.iri_str()
+    }
+}
+
+impl PartialEq<RDF> for &IriData<Rc<str>> {
+    fn eq(&self, other: &RDF) -> bool {
+        *self == other
+    }
+}
+
+impl PartialEq<RDF> for IriData<Rc<str>> {
+    fn eq(&self, other: &RDF) -> bool {
         *self == other.iri_str()
     }
 }
@@ -506,7 +532,7 @@ impl Acceptor<(AnnotatedAxiom, Merge)> for AnnotatedAxiomAcceptor {
     ) -> Result<AcceptState, Error> {
         match &triple {
             // This should only happen when bnodeid is None
-            [BNode(s), Iri(p), Iri(ob)] if p == &RDF::Type.iri_str() && ob == OWL::Axiom => {
+            [BNode(s), Iri(p), Iri(ob)] if p == RDF::Type && ob == OWL::Axiom => {
                 self.bnodeid = Some(s.clone());
                 accept("AnnotatedAxiom")
             }
@@ -684,7 +710,7 @@ impl Acceptor<AnnotatedAxiom> for PropertyAxiomAcceptor {
                 };
 
                 match p {
-                    i if i == &RDFS::Domain.iri_str() => match fdk(s)? {
+                    i if i == RDFS::Domain => match fdk(s)? {
                         Some(NamedEntityKind::AnnotationProperty) => {
                             self.tpa = Some(TypedPropertyAcceptor::Immediate(
                                 AnnotationPropertyDomain {
@@ -699,7 +725,7 @@ impl Acceptor<AnnotatedAxiom> for PropertyAxiomAcceptor {
                         _ => retn(triple, "PropertyAxiom: 3.1"),
                     },
 
-                    i if i == &RDFS::Range.iri_str() => match fdk(s)? {
+                    i if i == RDFS::Range => match fdk(s)? {
                         Some(NamedEntityKind::AnnotationProperty) => {
                             self.tpa = Some(TypedPropertyAcceptor::Immediate(
                                 AnnotationPropertyRange {
@@ -763,7 +789,7 @@ where
 
         match &triple {
             // Next Item
-            [BNode(s), Iri(p), ob] if s == &self.end_of_seq && p == &RDF::First.iri_str() => {
+            [BNode(s), Iri(p), ob] if s == &self.end_of_seq && p == RDF::First => {
                 self.seq.push(match ob {
                     Iri(iri) => iri.clone().into(),
                     BNode(id) => id.clone().into(),
@@ -773,7 +799,7 @@ where
                 accept("Seq")
             }
             // Pointer to Rest
-            [BNode(s), Iri(p), BNode(ob)] if s == &self.end_of_seq && p == &RDF::Rest.iri_str() => {
+            [BNode(s), Iri(p), BNode(ob)] if s == &self.end_of_seq && p == RDF::Rest => {
                 // We make the assumption here that we get first, then
                 // rest, then first, then rest. Otherwize, we have
                 // over-written the value of this bnode and we may not
@@ -785,9 +811,7 @@ where
             }
             // End of Seq
             [BNode(s), Iri(p), Iri(ob)]
-                if s == &self.end_of_seq
-                    && p == &RDF::Rest.iri_str()
-                    && ob == &RDF::Nil.iri_str() =>
+                if s == &self.end_of_seq && p == RDF::Rest && ob == RDF::Nil =>
             {
                 self.complete = true;
                 accept("Seq")
@@ -1209,9 +1233,7 @@ impl Acceptor<ClassExpression> for ClassExpressionAcceptor {
         o: &Ontology,
     ) -> Result<AcceptState, Error> {
         match &triple {
-            [BNode(id), Iri(p), Iri(ob)]
-                if Some(id) == self.bnode.as_ref() && p == &RDF::Type.iri_str() =>
-            {
+            [BNode(id), Iri(p), Iri(ob)] if Some(id) == self.bnode.as_ref() && p == RDF::Type => {
                 if ob == OWL::Restriction {
                     self.sub = Some(ClassExpressionSubAcceptor::Restriction(
                         RestrictionAcceptor::from_bnode(id.clone()),
@@ -1352,7 +1374,7 @@ impl Acceptor<AnnotatedAxiom> for TwoClassAcceptor {
             // Check the kind of the triple and return if we cannot
             // handle it
             self.kind = Some(match 10 {
-                _ if p == &RDFS::SubClassOf.iri_str() => AxiomKind::SubClassOf,
+                _ if p == RDFS::SubClassOf => AxiomKind::SubClassOf,
                 _ if p == OWL::EquivalentClass => AxiomKind::EquivalentClasses,
                 _ if p == OWL::DisjointWith => AxiomKind::DisjointClasses,
                 _ => return retn(triple, "TwoClass"),
