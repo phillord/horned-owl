@@ -9,7 +9,6 @@ use crate::index::find_declaration_kind;
 use crate::index::update_logically_equal_axiom;
 
 use curie::PrefixMapping;
-
 use failure::Error;
 
 use log::{debug, trace};
@@ -606,89 +605,52 @@ impl Acceptor<(AnnotatedAxiom, Merge)> for AnnotatedAxiomAcceptor {
 // Accept axioms that declare the type of an entity
 #[derive(Debug, Default)]
 struct DeclarationAcceptor {
-    iri: Option<SpIri>,
-    kind: Option<SpIri>,
+    ax: Option<Axiom>,
 }
 
 impl Acceptor<AnnotatedAxiom> for DeclarationAcceptor {
     fn accept(
         &mut self,
-        _b: &Build,
+        b: &Build,
         triple: [SpTerm; 3],
         _o: &Ontology,
     ) -> Result<AcceptState, Error> {
+        if self.ax.is_some() {
+            return retn(triple, "DeclarationAcceptor:1");
+        }
+
         match &triple {
-            [Iri(s), Iri(p), Iri(ob)]
-                if p == &"http://www.w3.org/1999/02/22-rdf-syntax-ns#type" =>
-            {
-                self.iri = Some(s.clone());
-                self.kind = Some(ob.clone());
-                accept("DeclarationAcceptor")
+            [Iri(s), Iri(p), Iri(ob)] if p == RDF::Type => {
+                self.ax = Some(declaration(match ob {
+                    i if i == OWL::Class => Class(s.to_iri(b)).into(),
+                    i if i == OWL::ObjectProperty => ObjectProperty(s.to_iri(b)).into(),
+                    i if i == OWL::DatatypeProperty => DataProperty(s.to_iri(b)).into(),
+                    i if i == OWL::Datatype => Datatype(s.to_iri(b)).into(),
+                    i if i == OWL::AnnotationProperty => AnnotationProperty(s.to_iri(b)).into(),
+                    _ => {
+                        return retn(triple, "DeclarationAcceptor");
+                    }
+                }));
+                return accept("DeclarationAcceptor");
             }
-            _ => retn(triple, "DeclarationAcceptor"),
+            _ => {
+                return retn(triple, "DeclarationAcceptor");
+            }
         }
     }
 
     fn is_complete(&self) -> bool {
-        self.iri.is_some()
+        self.ax.is_some()
     }
 
-    fn complete(&mut self, b: &Build, _o: &Ontology) -> Result<AnnotatedAxiom, Error> {
-        // Iterate over all the complete Acceptor, run complete on
-        // them, and insert this
-        let n: NamedEntity = match &self.kind {
-            Some(i) if i == OWL::Class => TryBuild::<Class>::try_build(&self.iri, b)?.into(),
-            Some(i) if i == OWL::ObjectProperty => {
-                TryBuild::<ObjectProperty>::try_build(&self.iri, b)?.into()
-            }
-            Some(i) if i == OWL::DatatypeProperty => {
-                TryBuild::<DataProperty>::try_build(&self.iri, b)?.into()
-            }
-            Some(i) if i == OWL::Datatype => TryBuild::<Datatype>::try_build(&self.iri, b)?.into(),
-            Some(i) if i == OWL::AnnotationProperty => {
-                TryBuild::<AnnotationProperty>::try_build(&self.iri, b)?.into()
-            }
-            Some(_) => todo!(),
-            None => {
-                todo!();
-            }
-        };
-
-        Ok(declaration(n).into())
-    }
-}
-
-#[derive(Debug)]
-enum TypedPropertyAcceptor {
-    Immediate(Axiom),
-}
-
-impl Acceptor<AnnotatedAxiom> for TypedPropertyAcceptor {
-    fn accept(
-        &mut self,
-        _b: &Build,
-        triple: [SpTerm; 3],
-        _o: &Ontology,
-    ) -> Result<AcceptState, Error> {
-        match &self {
-            Self::Immediate(_) => retn(triple, "TypedProperty: Immediate"),
-        }
-    }
-    fn is_complete(&self) -> bool {
-        match &self {
-            Self::Immediate(_) => true,
-        }
-    }
     fn complete(&mut self, _b: &Build, _o: &Ontology) -> Result<AnnotatedAxiom, Error> {
-        match self {
-            Self::Immediate(ax) => Ok(ax.clone().into()),
-        }
+        Ok(self.ax.take().unwrap().into())
     }
 }
 
 #[derive(Debug, Default)]
 struct PropertyAxiomAcceptor {
-    tpa: Option<TypedPropertyAcceptor>,
+    ax: Option<Axiom>,
 }
 
 impl Acceptor<AnnotatedAxiom> for PropertyAxiomAcceptor {
@@ -698,60 +660,50 @@ impl Acceptor<AnnotatedAxiom> for PropertyAxiomAcceptor {
         triple: [SpTerm; 3],
         o: &Ontology,
     ) -> Result<AcceptState, Error> {
-        if self.tpa.is_some() {
-            return self.tpa.accept(b, triple, o);
+        if self.ax.is_some() {
+            return retn(triple, "PropertyAxiom:1");
         }
 
-        match &triple {
-            [Iri(s), Iri(p), Iri(ob)] => {
-                let fdk = |p: &SpIri| -> Result<Option<NamedEntityKind>, Error> {
-                    let iri = p.to_iri(b);
-                    Ok(find_declaration_kind(o, iri))
-                };
-
-                match p {
-                    i if i == RDFS::Domain => match fdk(s)? {
-                        Some(NamedEntityKind::AnnotationProperty) => {
-                            self.tpa = Some(TypedPropertyAcceptor::Immediate(
-                                AnnotationPropertyDomain {
-                                    ap: s.to_iri(b).into(),
-                                    iri: ob.to_iri(b),
-                                }
-                                .into(),
-                            ));
-
-                            accept("PropertyAxiom")
-                        }
-                        _ => retn(triple, "PropertyAxiom: 3.1"),
-                    },
-
-                    i if i == RDFS::Range => match fdk(s)? {
-                        Some(NamedEntityKind::AnnotationProperty) => {
-                            self.tpa = Some(TypedPropertyAcceptor::Immediate(
-                                AnnotationPropertyRange {
-                                    ap: s.to_iri(b).into(),
-                                    iri: ob.to_iri(b),
-                                }
-                                .into(),
-                            ));
-
-                            accept("PropertyAxiom")
-                        }
-                        _ => retn(triple, "PropertyAxiom: 3.2"),
-                    },
-                    _ => retn(triple, "PropertyAxiom: 2"),
+        if let [Iri(s), Iri(p), Iri(ob)] = &triple {
+            if let Some(dec_kind) = find_declaration_kind(o, s.to_iri(b)) {
+                match (dec_kind, p, ob) {
+                    (NamedEntityKind::AnnotationProperty, p, _) if p == RDFS::Domain => {
+                        self.ax = Some(
+                            AnnotationPropertyDomain {
+                                ap: s.to_iri(b).into(),
+                                iri: ob.to_iri(b),
+                            }
+                            .into(),
+                        );
+                    }
+                    (NamedEntityKind::AnnotationProperty, p, _) if p == RDFS::Range => {
+                        self.ax = Some(
+                            AnnotationPropertyRange {
+                                ap: s.to_iri(b).into(),
+                                iri: ob.to_iri(b),
+                            }
+                            .into(),
+                        );
+                    }
+                    (NamedEntityKind::ObjectProperty, p, ob)
+                        if p == RDF::Type && ob == OWL::TransitiveProperty =>
+                    {
+                        self.ax = Some(TransitiveObjectProperty(s.to_iri(b).into()).into())
+                    }
+                    _ => return retn(triple, "PropertyAxiom"),
                 }
+                return accept("PropertyAxiom");
             }
-            _ => retn(triple, "PropertyAxiom: 1"),
         }
+        return retn(triple, "PropertyAxiom");
     }
 
     fn is_complete(&self) -> bool {
-        self.tpa.is_complete()
+        self.ax.is_some()
     }
 
-    fn complete(&mut self, b: &Build, o: &Ontology) -> Result<AnnotatedAxiom, Error> {
-        self.tpa.complete(b, o)
+    fn complete(&mut self, _b: &Build, _o: &Ontology) -> Result<AnnotatedAxiom, Error> {
+        Ok(self.ax.take().unwrap().into())
     }
 }
 
@@ -1777,10 +1729,10 @@ mod test {
     //     compare("inverse-properties");
     // }
 
-    // #[test]
-    // fn one_transitive() {
-    //     compare("transitive-properties");
-    // }
+    #[test]
+    fn one_transitive() {
+        compare("transitive-properties");
+    }
 
     // #[test]
     // fn one_annotated_transitive() {

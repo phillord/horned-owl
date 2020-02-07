@@ -119,6 +119,7 @@ pub enum OWL {
     ObjectProperty,
     Ontology,
     Restriction,
+    TransitiveProperty,
     Thing,
     VersionIRI,
 }
@@ -150,6 +151,7 @@ lazy_meta! {
     Ontology, extend(OWL, "Ontology");
     Restriction, extend(OWL, "Restriction");
     Thing, extend(OWL, "Thing");
+    TransitiveProperty, extend(OWL, "TransitiveProperty");
     VersionIRI, extend(OWL, "versionIRI");
 }
 
