@@ -331,7 +331,7 @@ from_start! {
                 (None, Some(lang), literal) =>
                     Literal::Language{literal, lang},
                 (Some(ref datatype_iri), Some(ref lang), ref literal)
-                    if **datatype_iri == "http://www.w3.org/1999/02/22-rdf-syntax-ns#langString"
+                    if **datatype_iri == "http://www.w3.org/1999/02/22-rdf-syntax-ns#PlainLiteral"
                     => Literal::Language{literal:literal.to_string(), lang:lang.to_string()},
                 (Some(_), Some(_), _)
                     => bail!("Literal with language tag and incorrect datatype"),
@@ -1085,7 +1085,7 @@ pub mod test {
 
     #[test]
     fn test_simple_ontology_prefix() {
-        let ont_s = include_str!("../ont/owl-xml/one-ont.owx");
+        let ont_s = include_str!("../ont/owl-xml/ont.owx");
         let (_, mapping) = read_ok(&mut ont_s.as_bytes());
 
         let hash_map: HashMap<&String, &String> = mapping.mappings().collect();
@@ -1094,10 +1094,10 @@ pub mod test {
 
     #[test]
     fn test_simple_ontology() {
-        let ont_s = include_str!("../ont/owl-xml/one-ont.owx");
+        let ont_s = include_str!("../ont/owl-xml/ont.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
-        assert_eq!(*ont.id.iri.unwrap(), "http://example.com/iri");
+        assert_eq!(*ont.id.iri.unwrap(), "http://www.example.com/iri");
     }
 
     #[test]
@@ -1109,14 +1109,14 @@ pub mod test {
     }
 
     #[test]
-    fn test_one_class() {
-        let ont_s = include_str!("../ont/owl-xml/one-class.owx");
+    fn test_class() {
+        let ont_s = include_str!("../ont/owl-xml/class.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
         assert_eq!(ont.declare_class().count(), 1);
         assert_eq!(
             String::from(&ont.declare_class().next().unwrap().0),
-            "http://example.com/iri#C"
+            "http://www.example.com/iri#C"
         );
     }
 
@@ -1143,6 +1143,7 @@ pub mod test {
         let ont_s = include_str!("../ont/owl-xml/class_with_two_annotations.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
+        dbg!(&ont);
         assert_eq!(ont.declare_class().count(), 1);
 
         assert_eq!(ont.annotation_assertion().count(), 2);
@@ -1150,7 +1151,7 @@ pub mod test {
         let aa = ont.annotation_assertion().next().unwrap();
         assert_eq!(
             *(aa.subject),
-            "http://www.example.com#C"
+            "http://www.example.com/iri#C"
         );
 
         assert_eq!(
@@ -1180,16 +1181,16 @@ pub mod test {
     }
 
     #[test]
-    fn test_one_property() {
-        let ont_s = include_str!("../ont/owl-xml/one-oproperty.owx");
+    fn test_oproperty() {
+        let ont_s = include_str!("../ont/owl-xml/oproperty.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
         assert_eq!(ont.declare_object_property().count(), 1);
     }
 
     #[test]
-    fn test_one_subclass() {
-        let ont_s = include_str!("../ont/owl-xml/one-subclass.owx");
+    fn test_subclass() {
+        let ont_s = include_str!("../ont/owl-xml/subclass.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
         assert_eq!(ont.sub_class().count(), 1);
@@ -1208,8 +1209,8 @@ pub mod test {
     }
 
     #[test]
-    fn test_one_some() {
-        let ont_s = include_str!("../ont/owl-xml/one-some.owx");
+    fn test_some() {
+        let ont_s = include_str!("../ont/owl-xml/some.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
         assert_eq!(ont.sub_class().count(), 1);

@@ -887,7 +887,7 @@ mod test {
     #[test]
     fn round_one_ont() {
         let (ont_orig, _prefix_orig, ont_round, _prefix_round) =
-            roundtrip(include_str!("../ont/owl-xml/one-ont.owx"));
+            roundtrip(include_str!("../ont/owl-xml/ont.owx"));
 
         assert_eq!(ont_orig.id.iri, ont_round.id.iri);
     }
@@ -895,7 +895,7 @@ mod test {
     #[test]
     fn round_one_ont_prefix() {
         let (_ont_orig, prefix_orig, _ont_round, prefix_round) =
-            roundtrip(include_str!("../ont/owl-xml/one-ont.owx"));
+            roundtrip(include_str!("../ont/owl-xml/ont.owx"));
 
         let prefix_orig_map: HashMap<&String, &String> = prefix_orig.mappings().collect();
 
@@ -907,7 +907,7 @@ mod test {
     #[test]
     fn round_class() {
         let (ont_orig, _prefix_orig, ont_round, _prefix_round) =
-            roundtrip(include_str!("../ont/owl-xml/one-class.owx"));
+            roundtrip(include_str!("../ont/owl-xml/class.owx"));
 
         assert_eq!(ont_orig, ont_round);
     }
@@ -922,21 +922,21 @@ mod test {
     }
 
     #[test]
-    fn round_one_subclass() {
+    fn round_subclass() {
         let (ont_orig, _prefix_orig, ont_round, _prefix_round) =
-            roundtrip(include_str!("../ont/owl-xml/one-subclass.owx"));
+            roundtrip(include_str!("../ont/owl-xml/subclass.owx"));
 
         assert_eq!(ont_orig, ont_round);
     }
 
     #[test]
-    fn round_one_oproperty() {
-        assert_round(include_str!("../ont/owl-xml/one-oproperty.owx"));
+    fn round_oproperty() {
+        assert_round(include_str!("../ont/owl-xml/oproperty.owx"));
     }
 
     #[test]
-    fn round_one_some() {
-        assert_round(include_str!("../ont/owl-xml/one-some.owx"));
+    fn round_some() {
+        assert_round(include_str!("../ont/owl-xml/some.owx"));
     }
 
     #[test]

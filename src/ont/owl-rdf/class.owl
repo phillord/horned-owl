@@ -27,12 +27,6 @@
     <!-- http://www.example.com/iri#C -->
 
     <owl:Class rdf:about="http://www.example.com/iri#C"/>
-    <owl:Axiom>
-        <owl:annotatedSource rdf:resource="http://www.example.com/iri#C"/>
-        <owl:annotatedProperty rdf:resource="http://www.w3.org/1999/02/22-rdf-syntax-ns#type"/>
-        <owl:annotatedTarget rdf:resource="http://www.w3.org/2002/07/owl#Class"/>
-        <rdfs:comment xml:lang="en">Comment on Declaration</rdfs:comment>
-    </owl:Axiom>
 </rdf:RDF>
 
 

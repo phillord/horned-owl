@@ -10,25 +10,6 @@
     <owl:Ontology rdf:about="http://www.example.com/iri">
         <owl:versionIRI rdf:resource="http://www.example.com/viri"/>
     </owl:Ontology>
-    
-
-
-    <!-- 
-    ///////////////////////////////////////////////////////////////////////////////////////
-    //
-    // Object Properties
-    //
-    ///////////////////////////////////////////////////////////////////////////////////////
-     -->
-
-    
-
-
-    <!-- http://www.example.com/iri#r -->
-
-    <owl:ObjectProperty rdf:about="http://www.example.com/iri#r">
-        <rdf:type rdf:resource="http://www.w3.org/2002/07/owl#TransitiveProperty"/>
-    </owl:ObjectProperty>
 </rdf:RDF>
 
 

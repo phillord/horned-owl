@@ -1596,8 +1596,8 @@ mod test {
     }
 
     #[test]
-    fn one_class() {
-        compare("one-class");
+    fn class() {
+        compare("class");
     }
 
     #[test]
@@ -1612,7 +1612,7 @@ mod test {
 
     #[test]
     fn one_ont() {
-        compare("one-ont");
+        compare("ont");
     }
 
     #[test]
@@ -1626,23 +1626,23 @@ mod test {
     }
 
     #[test]
-    fn one_oproperty() {
-        compare("one-oproperty");
+    fn oproperty() {
+        compare("oproperty");
     }
 
     #[test]
-    fn one_some() {
-        compare("one-some");
+    fn some() {
+        compare("some");
     }
 
     #[test]
     fn one_some_reversed() {
-        compare_two("one-some-reversed-triples", "one-some");
+        compare_two("manual/one-some-reversed-triples", "some");
     }
 
     #[test]
     fn one_some_property_filler_reversed() {
-        compare_two("one-some-property-filler-reversed", "one-some");
+        compare_two("manual/one-some-property-filler-reversed", "some");
     }
 
     #[test]

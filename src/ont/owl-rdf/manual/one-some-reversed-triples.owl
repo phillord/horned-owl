@@ -6,14 +6,18 @@
      xmlns:xml="http://www.w3.org/XML/1998/namespace"
      xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
      xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#">
-    <owl:Ontology rdf:about="http://www.example.com"/>
+    <owl:Ontology rdf:about="http://www.example.com/iri">
+        <owl:versionIRI rdf:resource="http://www.example.com/viri"/>
+    </owl:Ontology>
+
+    
     
 
-    <owl:Class rdf:about="http://www.example.com#B">
+    <owl:Class rdf:about="http://www.example.com/iri#B">
         <rdfs:subClassOf>
             <owl:Restriction>
-                <owl:onProperty rdf:resource="http://www.example.com#r"/>
-                <owl:someValuesFrom rdf:resource="http://www.example.com#A"/>
+                <owl:onProperty rdf:resource="http://www.example.com/iri#r"/>
+                <owl:someValuesFrom rdf:resource="http://www.example.com/iri#A"/>
             </owl:Restriction>
         </rdfs:subClassOf>
     </owl:Class>
@@ -22,13 +26,13 @@
 
     <!-- http://www.example.com#r -->
 
-    <owl:ObjectProperty rdf:about="http://www.example.com#r"/>
+    <owl:ObjectProperty rdf:about="http://www.example.com/iri#r"/>
     
 
 
     <!-- http://www.example.com#A -->
 
-    <owl:Class rdf:about="http://www.example.com#A"/>
+    <owl:Class rdf:about="http://www.example.com/iri#A"/>
     
 
 

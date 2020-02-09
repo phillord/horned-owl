@@ -14,11 +14,15 @@
     <Prefix name="xsd" IRI="http://www.w3.org/2001/XMLSchema#"/>
     <Prefix name="rdfs" IRI="http://www.w3.org/2000/01/rdf-schema#"/>
     <Declaration>
-        <ObjectProperty IRI="#r"/>
+        <Class IRI="#A"/>
     </Declaration>
-    <TransitiveObjectProperty>
-        <ObjectProperty IRI="#r"/>
-    </TransitiveObjectProperty>
+    <Declaration>
+        <Class IRI="#B"/>
+    </Declaration>
+    <SubClassOf>
+        <Class IRI="#B"/>
+        <Class IRI="#A"/>
+    </SubClassOf>
 </Ontology>
 
 
