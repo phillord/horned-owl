@@ -26,6 +26,7 @@ sophia = {version="0.3.0", features=["xml"]}
 [dev-dependencies]
 bencher = "0.1.4"
 env_logger = "0.7.1"
+matches = "0.1.8"
 mktemp = "0.3.1"
 pretty_assertions = "0.6.1"
 slurp = "1.0.1"

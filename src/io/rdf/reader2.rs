@@ -1646,33 +1646,33 @@ mod test {
     }
 
     #[test]
-    fn one_only() {
-        compare("one-only");
+    fn only() {
+        compare("only");
     }
 
     #[test]
-    fn one_and() {
-        compare("one-and");
+    fn and() {
+        compare("and");
     }
 
     #[test]
-    fn one_or() {
-        compare("one-or");
+    fn or() {
+        compare("or");
     }
 
     #[test]
-    fn one_not() {
-        compare("one-not");
+    fn not() {
+        compare("not");
     }
 
     #[test]
-    fn one_annotation_property() {
-        compare("one-annotation-property");
+    fn annotation_property() {
+        compare("annotation-property");
     }
 
     #[test]
-    fn one_annotation() {
-        compare("one-annotation");
+    fn annotation() {
+        compare("annotation");
     }
 
     #[test]
@@ -1686,8 +1686,8 @@ mod test {
     }
 
     #[test]
-    fn one_label() {
-        compare("one-label");
+    fn label() {
+        compare("label");
     }
 
     #[test]

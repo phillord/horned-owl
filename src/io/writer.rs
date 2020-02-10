@@ -940,33 +940,33 @@ mod test {
     }
 
     #[test]
-    fn round_one_only() {
-        assert_round(include_str!("../ont/owl-xml/one-only.owx"));
+    fn round_only() {
+        assert_round(include_str!("../ont/owl-xml/only.owx"));
     }
 
     #[test]
-    fn round_one_and() {
-        assert_round(include_str!("../ont/owl-xml/one-and.owx"));
+    fn round_and() {
+        assert_round(include_str!("../ont/owl-xml/and.owx"));
     }
 
     #[test]
-    fn round_one_or() {
-        assert_round(include_str!("../ont/owl-xml/one-or.owx"));
+    fn round_or() {
+        assert_round(include_str!("../ont/owl-xml/or.owx"));
     }
 
     #[test]
-    fn round_one_not() {
-        assert_round(include_str!("../ont/owl-xml/one-not.owx"));
+    fn round_not() {
+        assert_round(include_str!("../ont/owl-xml/not.owx"));
     }
 
     #[test]
-    fn round_one_annotation_property() {
-        assert_round(include_str!("../ont/owl-xml/one-annotation-property.owx"));
+    fn round_annotation_property() {
+        assert_round(include_str!("../ont/owl-xml/annotation-property.owx"));
     }
 
     #[test]
-    fn round_one_annotation() {
-        assert_round(include_str!("../ont/owl-xml/one-annotation.owx"));
+    fn round_annotation() {
+        assert_round(include_str!("../ont/owl-xml/annotation.owx"));
     }
 
     #[test]
@@ -980,8 +980,8 @@ mod test {
     }
 
     #[test]
-    fn round_one_label() {
-        assert_round(include_str!("../ont/owl-xml/one-label.owx"));
+    fn round_label() {
+        assert_round(include_str!("../ont/owl-xml/label.owx"));
     }
 
     #[test]

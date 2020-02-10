@@ -1076,6 +1076,7 @@ from_xml! {IRI, r, end,
 pub mod test {
     use super::*;
     use std::collections::HashMap;
+    use matches::*;
 
     pub fn read_ok<R: BufRead>(bufread: &mut R) -> (Ontology, PrefixMapping) {
         let r = read(bufread);
@@ -1218,8 +1219,8 @@ pub mod test {
     }
 
     #[test]
-    fn test_one_only() {
-        let ont_s = include_str!("../ont/owl-xml/one-only.owx");
+    fn test_only() {
+        let ont_s = include_str!("../ont/owl-xml/only.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
         assert_eq!(ont.sub_class().count(), 1);
@@ -1228,39 +1229,45 @@ pub mod test {
     }
 
     #[test]
-    fn test_one_and() {
-        let ont_s = include_str!("../ont/owl-xml/one-and.owx");
+    fn test_and() {
+        let ont_s = include_str!("../ont/owl-xml/and.owx");
+        let (ont, _) = read_ok(&mut ont_s.as_bytes());
+
+        assert_eq!(ont.sub_class().count(), 1);
+
+        let sc = ont.sub_class().next().unwrap();
+        assert_matches!(&sc.sup, ClassExpression::ObjectIntersectionOf(_));
+    }
+
+    #[test]
+    fn test_or() {
+        let ont_s = include_str!("../ont/owl-xml/or.owx");
+        let (ont, _) = read_ok(&mut ont_s.as_bytes());
+
+        assert_eq!(ont.sub_class().count(), 1);
+
+        let sc = ont.sub_class().next().unwrap();
+        assert_matches!(&sc.sup, ClassExpression::ObjectUnionOf(_));
+    }
+
+    #[test]
+    fn test_not() {
+        let ont_s = include_str!("../ont/owl-xml/not.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
         assert_eq!(ont.sub_class().count(), 1);
     }
 
     #[test]
-    fn test_one_or() {
-        let ont_s = include_str!("../ont/owl-xml/one-or.owx");
-        let (ont, _) = read_ok(&mut ont_s.as_bytes());
-
-        assert_eq!(ont.sub_class().count(), 1);
-    }
-
-    #[test]
-    fn test_one_not() {
-        let ont_s = include_str!("../ont/owl-xml/one-not.owx");
-        let (ont, _) = read_ok(&mut ont_s.as_bytes());
-
-        assert_eq!(ont.sub_class().count(), 1);
-    }
-
-    #[test]
-    fn test_one_annotation_property() {
-        let ont_s = include_str!("../ont/owl-xml/one-annotation-property.owx");
+    fn test_annotation_property() {
+        let ont_s = include_str!("../ont/owl-xml/annotation-property.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
         assert_eq!(ont.declare_annotation_property().count(), 1);
     }
 
     #[test]
-    fn test_one_annotation() {
-        let ont_s = include_str!("../ont/owl-xml/one-annotation.owx");
+    fn test_annotation() {
+        let ont_s = include_str!("../ont/owl-xml/annotation.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
         assert_eq!(ont.declare_annotation_property().count(), 1);
         assert_eq!(ont.annotation_assertion().count(), 1);
@@ -1268,15 +1275,15 @@ pub mod test {
 
     #[test]
     fn test_one_label_non_abbreviated() {
-        let ont_s = include_str!("../ont/owl-xml/one-label-non-abbreviated-iri.owx");
+        let ont_s = include_str!("../ont/owl-xml/manual/one-label-non-abbreviated-iri.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
         assert_eq!(ont.annotation_assertion().count(), 1);
     }
 
     #[test]
-    fn test_one_label() {
-        let ont_s = include_str!("../ont/owl-xml/one-label.owx");
+    fn test_label() {
+        let ont_s = include_str!("../ont/owl-xml/label.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
         assert_eq!(ont.annotation_assertion().count(), 1);
