@@ -696,6 +696,7 @@ impl Acceptor<AnnotatedAxiom> for DeclarationAcceptor {
                     VOWL::DatatypeProperty => DataProperty(s.to_iri(b)).into(),
                     VOWL::Datatype => Datatype(s.to_iri(b)).into(),
                     VOWL::AnnotationProperty => AnnotationProperty(s.to_iri(b)).into(),
+                    VOWL::NamedIndividual => NamedIndividual(s.to_iri(b)).into(),
                     _ => {
                         return retn(triple, "DeclarationAcceptor");
                     }
@@ -1781,10 +1782,10 @@ mod test {
         compare("transitive-properties");
     }
 
-    // #[test]
-    // fn one_annotated_transitive() {
-    //    compare("annotation-on-transitive");
-    // }
+    #[test]
+    fn one_annotated_transitive() {
+        compare("annotation-on-transitive");
+    }
 
     // #[test]
     // fn one_subproperty_chain() {
@@ -1796,30 +1797,30 @@ mod test {
     //     compare("subproperty-chain-with-inverse");
     // }
 
-    // #[test]
-    // fn annotation_on_annotation() {
-    //     compare("annotation-with-annotation");
-    // }
+    //#[test]
+    //fn annotation_on_annotation() {
+    //    compare("annotation-with-annotation");
+    //}
 
     // #[test]
     // fn sub_annotation() {
     //     compare("sub-annotation");
     // }
 
-    // #[test]
-    // fn data_property() {
-    //     compare("data-property");
-    // }
+    #[test]
+    fn data_property() {
+        compare("data-property");
+    }
 
     // #[test]
     // fn literal_escaped() {
     //     compare("literal-escaped");
     // }
 
-    // #[test]
-    // fn named_individual() {
-    //     compare("named-individual");
-    // }
+    #[test]
+    fn named_individual() {
+        compare("named-individual");
+    }
 
     // #[test]
     // fn import() {
