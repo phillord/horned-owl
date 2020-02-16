@@ -1124,12 +1124,13 @@ impl Acceptor<ClassExpression> for DataRestriction {
 
     fn complete(&mut self, b: &Build, _o: &Ontology) -> Result<ClassExpression, Error> {
         let dp = DataProperty(self.dp.clone());
+        let dr = TryBuild::<Datatype>::try_build(&self.dr.take().unwrap(), b)?.into();
         //
         match &self.kind {
-            Some(VOWL::SomeValuesFrom) => Ok(ClassExpression::DataSomeValuesFrom {
-                dp: dp,
-                dr: TryBuild::<Datatype>::try_build(&self.dr.take().unwrap(), b)?.into(),
-            }),
+            Some(VOWL::SomeValuesFrom) => {
+                Ok(ClassExpression::DataSomeValuesFrom { dp: dp, dr: dr })
+            }
+            Some(VOWL::AllValuesFrom) => Ok(ClassExpression::DataAllValuesFrom { dp: dp, dr: dr }),
             _ => todo!(),
         }
     }
@@ -1782,7 +1783,7 @@ mod test {
 
     // #[test]
     // fn one_annotated_transitive() {
-    //     compare("annotation-on-transitive");
+    //    compare("annotation-on-transitive");
     // }
 
     // #[test]
@@ -1900,10 +1901,10 @@ mod test {
     //     compare("facet-restriction");
     // }
 
-    // #[test]
-    // fn data_only() {
-    //     compare("data-only");
-    // }
+    #[test]
+    fn data_only() {
+        compare("data-only");
+    }
 
     // #[test]
     // fn data_exact_cardinality() {
