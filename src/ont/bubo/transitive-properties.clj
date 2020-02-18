@@ -3,4 +3,4 @@
 (defoproperty r :characteristic :transitive)
 
 
-(save :rdf)
+(save-all)

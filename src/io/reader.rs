@@ -1346,6 +1346,14 @@ pub mod test {
     }
 
     #[test]
+    fn test_inverse_transitive() {
+        let ont_s = include_str!("../ont/owl-xml/inverse-transitive.owx");
+        let (ont, _) = read_ok(&mut ont_s.as_bytes());
+
+        assert_eq!(ont.transitive_object_property().count(), 1);
+    }
+
+    #[test]
     fn test_subproperty_chain() {
         let ont_s = include_str!("../ont/owl-xml/subproperty-chain.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());

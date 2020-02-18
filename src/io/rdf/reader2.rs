@@ -720,56 +720,107 @@ impl Acceptor<AnnotatedAxiom> for DeclarationAcceptor {
 
 #[derive(Debug, Default)]
 struct PropertyAxiomAcceptor {
+    dec_kind: Option<NamedEntityKind>,
+    bnode: Option<SpBNode>,
+    tuple: Option<[Term; 2]>,
+    some_property: Option<PropertyExpression>,
+
     ax: Option<Axiom>,
+}
+
+impl PropertyAxiomAcceptor {
+    fn axiomatize(&mut self, b: &Build, tuple: [Term; 2]) {
+        if let Some(property) = &self.some_property {
+            match (property, &tuple[0], &tuple[1]) {
+                (PropertyExpression::AnnotationProperty(ap), RDFS(VRDFS::Domain), Iri(ob)) => {
+                    self.ax = Some(
+                        AnnotationPropertyDomain {
+                            ap: ap.clone(),
+                            iri: ob.to_iri(b),
+                        }
+                        .into(),
+                    );
+                }
+                (PropertyExpression::AnnotationProperty(ap), RDFS(VRDFS::Range), Iri(ob)) => {
+                    self.ax = Some(
+                        AnnotationPropertyRange {
+                            ap: ap.clone(),
+                            iri: ob.to_iri(b),
+                        }
+                        .into(),
+                    );
+                }
+                (
+                    PropertyExpression::ObjectPropertyExpression(ope),
+                    RDF(VRDF::Type),
+                    OWL(VOWL::TransitiveProperty),
+                ) => {
+                    self.ax = Some(TransitiveObjectProperty(ope.clone()).into());
+                }
+                _ => todo!("Should not be able to get here"),
+            }
+        }
+    }
 }
 
 impl Acceptor<AnnotatedAxiom> for PropertyAxiomAcceptor {
     fn accept(&mut self, b: &Build, triple: [Term; 3], o: &Ontology) -> Result<AcceptState, Error> {
-        // if BNode(id), inverseOf we have object so store the
-        // property, as inverse property accept, return
+        if self.ax.is_some() {
+            return retn(triple, "PropertyAxiom");
+        }
 
-        // if BNode(id) == last_bode_id or if Iri(), find
-        // declaration_kind, push Iri(s) or InverseProperty into
-        // custom enum
+        // Figure out the propertytriple,
+        match &triple {
+            [BNode(id), OWL(VOWL::InverseOf), Iri(iri)] if Some(id) == self.bnode.as_ref() => {
+                dbg!("Capture some property");
+                self.some_property = Some(PropertyExpression::ObjectPropertyExpression(
+                    ObjectPropertyExpression::InverseObjectProperty(iri.to_iri(b).into()),
+                ));
 
-        // now check p, ob
-
-        // finally, use .into() on enum to either convert the Iri(s)
-        // into a Property of the appropriate type, or just return the
-        // InverseProperty that we already have
-
-        if let [Iri(s), p, ob] = &triple {
-            if let Some(dec_kind) = find_declaration_kind(o, s.to_iri(b)) {
-                match (dec_kind, p, ob) {
-                    (NamedEntityKind::AnnotationProperty, RDFS(VRDFS::Domain), Iri(ob)) => {
-                        self.ax = Some(
-                            AnnotationPropertyDomain {
-                                ap: s.to_iri(b).into(),
-                                iri: ob.to_iri(b),
-                            }
-                            .into(),
-                        );
-                    }
-                    (NamedEntityKind::AnnotationProperty, RDFS(VRDFS::Range), Iri(ob)) => {
-                        self.ax = Some(
-                            AnnotationPropertyRange {
-                                ap: s.to_iri(b).into(),
-                                iri: ob.to_iri(b),
-                            }
-                            .into(),
-                        );
-                    }
-                    (
-                        NamedEntityKind::ObjectProperty,
-                        RDF(VRDF::Type),
-                        OWL(VOWL::TransitiveProperty),
-                    ) => self.ax = Some(TransitiveObjectProperty(s.to_iri(b).into()).into()),
-                    _ => return retn(triple, "PropertyAxiom"),
+                if self.tuple.is_some() {
+                    let tuple = self.tuple.take().unwrap();
+                    self.axiomatize(b, tuple);
                 }
+
                 return accept("PropertyAxiom");
             }
+
+            [s, RDFS(VRDFS::Domain), _]
+            | [s, RDFS(VRDFS::Range), _]
+            | [s, RDF(VRDF::Type), OWL(VOWL::TransitiveProperty)] => {
+                match s {
+                    Iri(iri) => {
+                        let iri = iri.to_iri(b);
+                        match find_declaration_kind(o, iri.clone()) {
+                            Some(NamedEntityKind::AnnotationProperty) => {
+                                self.some_property =
+                                    Some(PropertyExpression::AnnotationProperty(iri.into()));
+                            }
+                            Some(NamedEntityKind::DataProperty) => {
+                                self.some_property =
+                                    Some(PropertyExpression::DataProperty(iri.into()));
+                            }
+                            Some(NamedEntityKind::ObjectProperty) => {
+                                self.some_property =
+                                    Some(PropertyExpression::ObjectPropertyExpression(iri.into()));
+                            }
+                            _ => return retn(triple, "PropertyAxiom"),
+                        };
+                    }
+                    BNode(id) => {
+                        self.bnode = Some(id.clone());
+                        self.tuple = Some([triple[1].clone(), triple[2].clone()]);
+                        return accept("PropertyAxiom");
+                    }
+                    _ => todo!(),
+                };
+            }
+
+            _ => return retn(triple, "PropertyAxiom"),
         }
-        return retn(triple, "PropertyAxiom");
+
+        self.axiomatize(b, [triple[1].clone(), triple[2].clone()]);
+        return accept("PropertyAxiom");
     }
 
     fn is_complete(&self) -> bool {
@@ -1783,6 +1834,11 @@ mod test {
     }
 
     #[test]
+    fn inverse_transitive() {
+        compare("inverse-transitive")
+    }
+
+    #[test]
     fn one_annotated_transitive() {
         compare("annotation-on-transitive");
     }
@@ -2042,13 +2098,13 @@ mod test {
     //     compare("object-property-range");
     // }
 
-    // #[test]
-    // fn object_property_reflexive() {
-    //     compare("object-property-reflexive");
-    // }
+    //#[test]
+    //fn object_property_reflexive() {
+    //    compare("object-property-reflexive");
+    //}
 
-    // #[test]
-    // fn object_property_symmetric() {
+    //#[test]
+    //fn object_property_symmetric() {
     //     compare("object-property-symmetric");
     // }
 

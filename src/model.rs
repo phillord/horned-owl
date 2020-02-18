@@ -27,7 +27,8 @@
 //! # use horned_owl::model::*;
 //! // TransitiveObjectProperty(ObjectProperty)
 //! let b = Build::new();
-//! let top = TransitiveObjectProperty(b.object_property("http://www.example.com/op"));
+//! let top = TransitiveObjectProperty(ObjectPropertyExpression::ObjectProperty
+//!                          (b.object_property("http://www.example.com/op")));
 //! ```
 //! - Rule 2:
 //! ```
@@ -889,7 +890,7 @@ axioms! {
     /// c` also.
     ///
     /// See also: [TransitiveObjectProperty](https://www.w3.org/TR/owl2-syntax/#Transitive_Object_Properties)
-    TransitiveObjectProperty(ObjectProperty),
+    TransitiveObjectProperty(ObjectPropertyExpression),
 
     /// A sub data property relationship.
     ///
@@ -1187,6 +1188,13 @@ impl From<ObjectProperty> for ObjectPropertyExpression {
     }
 }
 
+impl From<IRI> for ObjectPropertyExpression {
+    fn from(iri: IRI) -> ObjectPropertyExpression {
+        let op: ObjectProperty = iri.into();
+        op.into()
+    }
+}
+
 impl ObjectPropertyExpression {
     pub fn as_property(&self) -> Option<&ObjectProperty> {
         match self {
@@ -1209,6 +1217,7 @@ pub enum SubObjectPropertyExpression {
 pub enum PropertyExpression {
     ObjectPropertyExpression(ObjectPropertyExpression),
     DataProperty(DataProperty),
+    AnnotationProperty(AnnotationProperty),
 }
 
 impl From<ObjectPropertyExpression> for PropertyExpression {

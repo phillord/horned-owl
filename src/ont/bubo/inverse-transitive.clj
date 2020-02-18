@@ -4,4 +4,4 @@
 (add-axiom
  o (.getOWLTransitiveObjectPropertyAxiom (owl-data-factory) (inverse r)))
 
-(save :ttl)
+(save-all)

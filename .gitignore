@@ -10,3 +10,6 @@ Cargo.lock
 /src/ont/temp.owl
 /src/ont/owl-xml/family-other.owl
 
+/src/ont/owl-rdf/inverse-transitive.owl
+/src/ont/owl-ttl/inverse-transitive.ttl
+/src/ont/owl-xml/inverse-transitive.owx

@@ -108,6 +108,7 @@ pub enum OWL {
     DisjointWith,
     EquivalentClass,
     IntersectionOf,
+    InverseOf,
     OnProperty,
     UnionOf,
     SomeValuesFrom,
@@ -140,6 +141,7 @@ lazy_meta! {
     DisjointWith, extend(OWL, "disjointWith");
     EquivalentClass, extend(OWL, "equivalentClass");
     IntersectionOf, extend(OWL, "intersectionOf");
+    InverseOf, extend(OWL, "inverseOf");
     OnProperty, extend(OWL, "onProperty");
     SomeValuesFrom, extend(OWL, "someValuesFrom");
     UnionOf, extend(OWL, "unionOf");

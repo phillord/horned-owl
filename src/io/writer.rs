@@ -546,6 +546,7 @@ render! {
     PropertyExpression, self, w, m,
     {
         match self {
+            PropertyExpression::AnnotationProperty(ap) => ap.render(w, m),
             PropertyExpression::DataProperty(dp) => dp.render(w, m),
             PropertyExpression::ObjectPropertyExpression(ope) => ope.render(w, m)
         }
