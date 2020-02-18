@@ -757,6 +757,14 @@ impl PropertyAxiomAcceptor {
                 ) => {
                     self.ax = Some(TransitiveObjectProperty(ope.clone()).into());
                 }
+                (
+                    PropertyExpression::ObjectPropertyExpression(ope),
+                    RDF(VRDF::Type),
+                    OWL(VOWL::FunctionalProperty),
+                ) => {
+                    self.ax = Some(FunctionalObjectProperty(ope.clone()).into());
+                }
+
                 _ => todo!("Should not be able to get here"),
             }
         }
@@ -787,7 +795,8 @@ impl Acceptor<AnnotatedAxiom> for PropertyAxiomAcceptor {
 
             [s, RDFS(VRDFS::Domain), _]
             | [s, RDFS(VRDFS::Range), _]
-            | [s, RDF(VRDF::Type), OWL(VOWL::TransitiveProperty)] => {
+            | [s, RDF(VRDF::Type), OWL(VOWL::TransitiveProperty)]
+            | [s, RDF(VRDF::Type), OWL(VOWL::FunctionalProperty)] => {
                 match s {
                     Iri(iri) => {
                         let iri = iri.to_iri(b);
@@ -2078,10 +2087,10 @@ mod test {
     //     compare("object-property-domain");
     // }
 
-    // #[test]
-    // fn object_property_functional() {
-    //     compare("object-property-functional");
-    // }
+    #[test]
+    fn object_property_functional() {
+        compare("object-property-functional");
+    }
 
     // #[test]
     // fn object_property_inverse_functional() {

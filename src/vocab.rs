@@ -119,6 +119,7 @@ pub enum OWL {
     Class,
     Datatype,
     DatatypeProperty,
+    FunctionalProperty,
     NamedIndividual,
     Nothing,
     ObjectProperty,
@@ -152,6 +153,7 @@ lazy_meta! {
     Class, extend(OWL, "Class");
     Datatype, extend(OWL, "Datatype");
     DatatypeProperty, extend(OWL, "DatatypeProperty");
+    FunctionalProperty, extend(OWL, "FunctionalProperty");
     NamedIndividual, extend(OWL, "NamedIndividual");
     Nothing, extend(OWL, "Nothing");
     ObjectProperty, extend(OWL, "ObjectProperty");
