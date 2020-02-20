@@ -115,16 +115,21 @@ pub enum OWL {
 
     // Upper Case
     AnnotationProperty,
+    AsymmetricProperty,
     Axiom,
     Class,
     Datatype,
     DatatypeProperty,
     FunctionalProperty,
+    InverseFunctionalProperty,
+    IrreflexiveProperty,
     NamedIndividual,
     Nothing,
     ObjectProperty,
     Ontology,
+    ReflexiveProperty,
     Restriction,
+    SymmetricProperty,
     TransitiveProperty,
     Thing,
     VersionIRI,
@@ -149,16 +154,21 @@ lazy_meta! {
 
     // Upper Case
     AnnotationProperty, extend(OWL, "AnnotationProperty");
+    AsymmetricProperty, extend(OWL, "AsymmetricProperty");
     Axiom, extend(OWL, "Axiom");
     Class, extend(OWL, "Class");
     Datatype, extend(OWL, "Datatype");
     DatatypeProperty, extend(OWL, "DatatypeProperty");
     FunctionalProperty, extend(OWL, "FunctionalProperty");
+    InverseFunctionalProperty, extend(OWL, "InverseFunctionalProperty");
+    IrreflexiveProperty, extend(OWL, "IrreflexiveProperty");
     NamedIndividual, extend(OWL, "NamedIndividual");
     Nothing, extend(OWL, "Nothing");
     ObjectProperty, extend(OWL, "ObjectProperty");
     Ontology, extend(OWL, "Ontology");
+    ReflexiveProperty, extend(OWL, "ReflexiveProperty");
     Restriction, extend(OWL, "Restriction");
+    SymmetricProperty, extend(OWL, "SymmetricProperty");
     Thing, extend(OWL, "Thing");
     TransitiveProperty, extend(OWL, "TransitiveProperty");
     VersionIRI, extend(OWL, "versionIRI");

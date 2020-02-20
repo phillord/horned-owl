@@ -731,42 +731,45 @@ struct PropertyAxiomAcceptor {
 impl PropertyAxiomAcceptor {
     fn axiomatize(&mut self, b: &Build, tuple: [Term; 2]) {
         if let Some(property) = &self.some_property {
-            match (property, &tuple[0], &tuple[1]) {
+            self.ax = Some(match (property, &tuple[0], &tuple[1]) {
                 (PropertyExpression::AnnotationProperty(ap), RDFS(VRDFS::Domain), Iri(ob)) => {
-                    self.ax = Some(
-                        AnnotationPropertyDomain {
-                            ap: ap.clone(),
-                            iri: ob.to_iri(b),
-                        }
-                        .into(),
-                    );
+                    AnnotationPropertyDomain {
+                        ap: ap.clone(),
+                        iri: ob.to_iri(b),
+                    }
+                    .into()
                 }
                 (PropertyExpression::AnnotationProperty(ap), RDFS(VRDFS::Range), Iri(ob)) => {
-                    self.ax = Some(
-                        AnnotationPropertyRange {
-                            ap: ap.clone(),
-                            iri: ob.to_iri(b),
+                    AnnotationPropertyRange {
+                        ap: ap.clone(),
+                        iri: ob.to_iri(b),
+                    }
+                    .into()
+                }
+                (PropertyExpression::ObjectPropertyExpression(ope), RDF(VRDF::Type), _) => {
+                    match &tuple[1] {
+                        OWL(VOWL::AsymmetricProperty) => {
+                            AsymmetricObjectProperty(ope.clone()).into()
                         }
-                        .into(),
-                    );
+                        OWL(VOWL::FunctionalProperty) => {
+                            FunctionalObjectProperty(ope.clone()).into()
+                        }
+                        OWL(VOWL::InverseFunctionalProperty) => {
+                            InverseFunctionalObjectProperty(ope.clone()).into()
+                        }
+                        OWL(VOWL::IrreflexiveProperty) => {
+                            IrreflexiveObjectProperty(ope.clone()).into()
+                        }
+                        OWL(VOWL::ReflexiveProperty) => ReflexiveObjectProperty(ope.clone()).into(),
+                        OWL(VOWL::SymmetricProperty) => SymmetricObjectProperty(ope.clone()).into(),
+                        OWL(VOWL::TransitiveProperty) => {
+                            TransitiveObjectProperty(ope.clone()).into()
+                        }
+                        _ => panic!(),
+                    }
                 }
-                (
-                    PropertyExpression::ObjectPropertyExpression(ope),
-                    RDF(VRDF::Type),
-                    OWL(VOWL::TransitiveProperty),
-                ) => {
-                    self.ax = Some(TransitiveObjectProperty(ope.clone()).into());
-                }
-                (
-                    PropertyExpression::ObjectPropertyExpression(ope),
-                    RDF(VRDF::Type),
-                    OWL(VOWL::FunctionalProperty),
-                ) => {
-                    self.ax = Some(FunctionalObjectProperty(ope.clone()).into());
-                }
-
                 _ => todo!("Should not be able to get here"),
-            }
+            });
         }
     }
 }
@@ -795,8 +798,13 @@ impl Acceptor<AnnotatedAxiom> for PropertyAxiomAcceptor {
 
             [s, RDFS(VRDFS::Domain), _]
             | [s, RDFS(VRDFS::Range), _]
-            | [s, RDF(VRDF::Type), OWL(VOWL::TransitiveProperty)]
-            | [s, RDF(VRDF::Type), OWL(VOWL::FunctionalProperty)] => {
+            | [s, RDF(VRDF::Type), OWL(VOWL::AsymmetricProperty)]
+            | [s, RDF(VRDF::Type), OWL(VOWL::FunctionalProperty)]
+            | [s, RDF(VRDF::Type), OWL(VOWL::InverseFunctionalProperty)]
+            | [s, RDF(VRDF::Type), OWL(VOWL::IrreflexiveProperty)]
+            | [s, RDF(VRDF::Type), OWL(VOWL::ReflexiveProperty)]
+            | [s, RDF(VRDF::Type), OWL(VOWL::SymmetricProperty)]
+            | [s, RDF(VRDF::Type), OWL(VOWL::TransitiveProperty)] => {
                 match s {
                     Iri(iri) => {
                         let iri = iri.to_iri(b);
@@ -2077,14 +2085,14 @@ mod test {
     //     compare("object-has-key");
     // }
 
-    // #[test]
-    // fn object_property_asymmetric() {
-    //     compare("object-property-asymmetric");
-    // }
+    #[test]
+    fn object_property_asymmetric() {
+        compare("object-property-asymmetric");
+    }
 
-    // #[test]
+    ///#[test]
     // fn object_property_domain() {
-    //     compare("object-property-domain");
+    //    compare("object-property-domain");
     // }
 
     #[test]
@@ -2092,30 +2100,30 @@ mod test {
         compare("object-property-functional");
     }
 
-    // #[test]
-    // fn object_property_inverse_functional() {
-    //     compare("object-property-inverse-functional");
-    // }
+    #[test]
+    fn object_property_inverse_functional() {
+        compare("object-property-inverse-functional");
+    }
 
-    // #[test]
-    // fn object_property_irreflexive() {
-    //     compare("object-property-irreflexive");
-    // }
+    #[test]
+    fn object_property_irreflexive() {
+        compare("object-property-irreflexive");
+    }
 
     // #[test]
     // fn object_property_range() {
-    //     compare("object-property-range");
+    //    compare("object-property-range");
     // }
 
-    //#[test]
-    //fn object_property_reflexive() {
-    //    compare("object-property-reflexive");
-    //}
+    #[test]
+    fn object_property_reflexive() {
+        compare("object-property-reflexive");
+    }
 
-    //#[test]
-    //fn object_property_symmetric() {
-    //     compare("object-property-symmetric");
-    // }
+    #[test]
+    fn object_property_symmetric() {
+        compare("object-property-symmetric");
+    }
 
     // #[test]
     // fn family() {
