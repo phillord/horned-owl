@@ -4,6 +4,7 @@ use Term::*;
 
 use curie::PrefixMapping;
 
+use crate::index::update_logically_equal_axiom;
 use crate::model::Literal;
 use crate::model::*;
 use crate::vocab::WithIRI;
@@ -15,9 +16,6 @@ use enum_meta::Meta;
 use failure::Error;
 use failure::SyncFailure;
 
-use itertools::Either;
-use itertools::Itertools;
-
 use log::{debug, trace};
 
 use sophia::term::BNodeId;
@@ -25,6 +23,7 @@ use sophia::term::IriData;
 use sophia::term::LiteralKind;
 
 use std::cmp::Ordering;
+use std::collections::BTreeSet;
 use std::collections::HashMap;
 use std::io::BufRead;
 use std::rc::Rc;
@@ -338,19 +337,111 @@ impl<'a> OntologyParser<'a> {
         // Table 5, Table 6
     }
 
+    fn annotations(&self, triples: &[[Term; 3]]) -> BTreeSet<Annotation> {
+        let mut ann = BTreeSet::default();
+        for a in triples {
+            ann.insert(self.annotation(a));
+        }
+        ann
+    }
+
+    fn annotation(&self, t: &[Term; 3]) -> Annotation {
+        match t {
+            [_, Iri(p), Term::Literal(ob, kind)] => Annotation {
+                ap: AnnotationProperty(p.to_iri(self.b)),
+                av: match kind {
+                    LiteralKind::Lang(lang) => Literal::Language {
+                        lang: lang.clone().to_string(),
+                        literal: ob.clone().to_string(),
+                    }
+                    .into(),
+                    LiteralKind::Datatype(iri) => Literal::Datatype {
+                        datatype_iri: iri.to_iri(self.b),
+                        literal: ob.clone().to_string(),
+                    }
+                    .into(),
+                },
+            },
+            [_, Iri(p), Iri(ob)] => {
+                // IRI annotation value
+                Annotation {
+                    ap: AnnotationProperty(p.to_iri(self.b)),
+                    av: ob.to_iri(self.b).into(),
+                }
+            }
+            _ => todo!(),
+        }
+    }
+
     fn declarations(&mut self) {
         // Table 7
-        let simple_triples = ::std::mem::take(&mut self.simple_triples);
-        let (iris, remain): (Vec<SpIri>, Vec<[Term; 3]>) =
-            simple_triples.into_iter().partition_map(|n| match n {
-                [Term::Iri(s), Term::RDF(VRDF::Type), Term::OWL(VOWL::Class)] => Either::Left(s),
-                _ => Either::Right(n),
-            });
+        let mut annotated_triples: Vec<([Term; 3], BTreeSet<Annotation>)> =
+            ::std::mem::take(&mut self.simple_triples)
+                .into_iter()
+                .map(|t| (t, BTreeSet::new()))
+                .collect();
+
+        let bnode_triples = ::std::mem::take(&mut self.bnode_triples);
+        let _: HashMap<SpBNode, Vec<[Term; 3]>> = bnode_triples
+            .into_iter()
+            .filter(|(_, v)| match v.as_slice() {
+                [
+                    [_, Term::OWL(VOWL::AnnotatedSource), sb @ Term::Iri(_)],
+                    [_, Term::OWL(VOWL::AnnotatedProperty), p @ Term::RDF(VRDF::Type)],
+                    [_, Term::OWL(VOWL::AnnotatedTarget), ob @ Term::OWL(_)],
+                    [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Axiom)],
+                    ann @ ..
+                ] => {
+                    annotated_triples.push(([sb.clone(), p.clone(), ob.clone()],
+                                            self.annotations(ann)));
+                    false
+                }
+                _ =>
+                {
+                    true
+                }
+            })
+            .collect();
+
+        let remain: Vec<[Term; 3]> = annotated_triples
+            .into_iter()
+            .filter(|n| match n {
+                // TODO Change this into a single outer match
+                ([Term::Iri(s), Term::RDF(VRDF::Type), entity], ann) => {
+                    // TODO Move match into function
+                    let entity = match entity {
+                        Term::OWL(VOWL::Class) => Class(s.to_iri(self.b)).into(),
+                        Term::OWL(VOWL::ObjectProperty) => ObjectProperty(s.to_iri(self.b)).into(),
+                        Term::OWL(VOWL::AnnotationProperty) => {
+                            AnnotationProperty(s.to_iri(self.b)).into()
+                        }
+                        Term::OWL(VOWL::DatatypeProperty) => DataProperty(s.to_iri(self.b)).into(),
+                        Term::RDFS(VRDFS::Datatype) => Datatype(s.to_iri(self.b)).into(),
+                        _ => {
+                            return true;
+                        }
+                    };
+
+                    let is_empty = ann.is_empty();
+                    let ax = AnnotatedAxiom {
+                        axiom: declaration(entity),
+                        ann: ann.clone(),
+                    };
+
+                    if is_empty {
+                        self.o.insert(ax);
+                    } else {
+                        update_logically_equal_axiom(&mut self.o, ax);
+                    }
+
+                    false
+                }
+                _ => true,
+            })
+            .map(|(t, _a)| t)
+            .collect();
 
         self.simple_triples = remain;
-        for i in iris {
-            self.o.declare(Class(i.to_iri(self.b)));
-        }
     }
 
     fn read(mut self, triple: Vec<[SpTerm; 3]>) -> Result<Ontology, Error> {
@@ -387,9 +478,6 @@ impl<'a> OntologyParser<'a> {
         //     }
         // }
 
-        dbg!(self.bnode_triples);
-        dbg!(self.simple_triples);
-
         // Then handle SEQ this should give HashMap<BNodeID,
         // Vec<[SpTerm]> where the BNodeID is the first node of the
         // seq, and the SpTerms are the next in order. This will
@@ -425,6 +513,13 @@ impl<'a> OntologyParser<'a> {
         // We need two traits, one for dealing with iri, iri, *
         // triples, and another for dealing with IRIs.
 
+        if self.simple_triples.len() > 0 {
+            dbg!("simple remaining", self.simple_triples);
+        }
+
+        if self.bnode_triples.len() > 0 {
+            dbg!("bnodes remaining", self.bnode_triples);
+        }
         Ok(self.o)
     }
 }
@@ -509,10 +604,10 @@ mod test {
         compare("class");
     }
 
-    // #[test]
-    // fn declaration_with_annotation() {
-    //     compare("declaration-with-annotation");
-    // }
+    #[test]
+    fn declaration_with_annotation() {
+        compare("declaration-with-annotation");
+    }
 
     // #[test]
     // fn class_with_two_annotations() {
@@ -534,10 +629,10 @@ mod test {
     //     compare("annotation-on-subclass");
     // }
 
-    // #[test]
-    // fn oproperty() {
-    //     compare("oproperty");
-    // }
+    #[test]
+    fn oproperty() {
+        compare("oproperty");
+    }
 
     // #[test]
     // fn some() {
@@ -574,10 +669,10 @@ mod test {
     //     compare("not");
     // }
 
-    // #[test]
-    // fn annotation_property() {
-    //     compare("annotation-property");
-    // }
+    #[test]
+    fn annotation_property() {
+        compare("annotation-property");
+    }
 
     // #[test]
     // fn annotation() {
@@ -673,10 +768,10 @@ mod test {
     //     compare("sub-annotation");
     // }
 
-    // #[test]
-    // fn data_property() {
-    //    compare("data-property");
-    // }
+    #[test]
+    fn data_property() {
+        compare("data-property");
+    }
 
     // #[test]
     // fn literal_escaped() {
@@ -693,10 +788,10 @@ mod test {
     //     compare("import");
     // }
 
-    // #[test]
-    // fn datatype() {
-    //    compare("datatype");
-    //}
+    #[test]
+    fn datatype() {
+        compare("datatype");
+    }
 
     // #[test]
     // fn object_has_value() {

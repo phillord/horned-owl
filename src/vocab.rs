@@ -85,6 +85,7 @@ lazy_meta! {
 
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub enum RDFS {
+    Datatype,
     Domain,
     Range,
     SubClassOf,
@@ -92,6 +93,7 @@ pub enum RDFS {
 
 lazy_meta! {
     RDFS, IRIString, METARDFS;
+    Datatype, extend(RDFS, "Datatype");
     Domain, extend(RDFS, "domain");
     Range, extend(RDFS, "range");
     SubClassOf, extend(RDFS, "subClassOf");
@@ -118,7 +120,6 @@ pub enum OWL {
     AsymmetricProperty,
     Axiom,
     Class,
-    Datatype,
     DatatypeProperty,
     FunctionalProperty,
     InverseFunctionalProperty,
@@ -157,7 +158,6 @@ lazy_meta! {
     AsymmetricProperty, extend(OWL, "AsymmetricProperty");
     Axiom, extend(OWL, "Axiom");
     Class, extend(OWL, "Class");
-    Datatype, extend(OWL, "Datatype");
     DatatypeProperty, extend(OWL, "DatatypeProperty");
     FunctionalProperty, extend(OWL, "FunctionalProperty");
     InverseFunctionalProperty, extend(OWL, "InverseFunctionalProperty");
