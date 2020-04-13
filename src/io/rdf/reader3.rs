@@ -444,6 +444,33 @@ impl<'a> OntologyParser<'a> {
         self.simple_triples = remain;
     }
 
+    fn axioms(&mut self) {
+        // TODO match subclass axiom for the moment on a BNode.
+        // We will need to have altered the BNode tiples at this
+        // point, so taht they have ClassExpression at the ned
+
+        let simple_triples = ::std::mem::take(&mut self.simple_triples);
+
+        let remain = simple_triples
+            .into_iter()
+            .filter(|n| match n {
+                [Term::Iri(sub), Term::RDFS(VRDFS::SubClassOf), Term::Iri(sup)] => {
+                    self.o.insert(AnnotatedAxiom {
+                        axiom: SubClassOf {
+                            sub: Class(sub.to_iri(self.b)).into(),
+                            sup: Class(sup.to_iri(self.b)).into(),
+                        }
+                        .into(),
+                        ann: BTreeSet::new(),
+                    })
+                }
+                _ => todo!(),
+            })
+            .collect();
+
+        self.simple_triples = remain
+    }
+
     fn read(mut self, triple: Vec<[SpTerm; 3]>) -> Result<Ontology, Error> {
         // move to our own Terms, with IRIs swapped
         let m = vocab_lookup();
@@ -512,6 +539,9 @@ impl<'a> OntologyParser<'a> {
         // Table 8:
         // We need two traits, one for dealing with iri, iri, *
         // triples, and another for dealing with IRIs.
+
+        // Table 16: Axioms without annotations
+        self.axioms();
 
         if self.simple_triples.len() > 0 {
             dbg!("simple remaining", self.simple_triples);
@@ -619,10 +649,10 @@ mod test {
         compare("ont");
     }
 
-    // #[test]
-    // fn one_subclass() {
-    //     compare("one-subclass");
-    // }
+    #[test]
+    fn one_subclass() {
+        compare("one-subclass");
+    }
 
     // #[test]
     // fn subclass_with_annotation() {
