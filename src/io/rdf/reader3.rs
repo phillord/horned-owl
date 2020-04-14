@@ -35,7 +35,7 @@ type SpBNode = BNodeId<Rc<str>>;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 enum Term {
-    Iri(SpIri),
+    Iri(IRI),
     BNode(SpBNode),
     Literal(Rc<str>, LiteralKind<Rc<str>>),
     Variable(Rc<str>),
@@ -85,40 +85,40 @@ impl PartialOrd for Term {
     }
 }
 
-impl Term {
-    pub fn n3_maybe(&self) -> String {
-        match self {
-            Iri(_) | BNode(_) | Literal(_, _) | Variable(_) => self.n3(),
-            OWL(v) => format!("{:?}", v),
-            RDFS(v) => format!("{:?}", v),
-            RDF(v) => format!("{:?}", v),
-        }
-    }
+// impl Term {
+//     pub fn n3_maybe(&self) -> String {
+//         match self {
+//             Iri(_) | BNode(_) | Literal(_, _) | Variable(_) => self.n3(),
+//             OWL(v) => format!("{:?}", v),
+//             RDFS(v) => format!("{:?}", v),
+//             RDF(v) => format!("{:?}", v),
+//         }
+//     }
 
-    pub fn n3(&self) -> String {
-        match self {
-            Iri(i) => sophia::term::Term::Iri(i.clone()).n3(),
-            BNode(id) => sophia::term::Term::BNode(id.clone()).n3(),
-            Literal(l, k) => sophia::term::Term::Literal(l.clone(), k.clone()).n3(),
-            Variable(v) => sophia::term::Term::Variable(v.clone()).n3(),
-            OWL(v) => vocab_to_term(v).n3(),
-            RDFS(v) => vocab_to_term(v).n3(),
-            RDF(v) => vocab_to_term(v).n3(),
-        }
-    }
+//     pub fn n3(&self) -> String {
+//         match self {
+//             Iri(i) => sophia::term::Term::Iri(i.clone()).n3(),
+//             BNode(id) => sophia::term::Term::BNode(id.clone()).n3(),
+//             Literal(l, k) => sophia::term::Term::Literal(l.clone(), k.clone()).n3(),
+//             Variable(v) => sophia::term::Term::Variable(v.clone()).n3(),
+//             OWL(v) => vocab_to_term(v).n3(),
+//             RDFS(v) => vocab_to_term(v).n3(),
+//             RDF(v) => vocab_to_term(v).n3(),
+//         }
+//     }
 
-    pub fn value(&self) -> String {
-        match self {
-            Iri(i) => sophia::term::Term::Iri(i.clone()).value(),
-            BNode(id) => sophia::term::Term::BNode(id.clone()).value(),
-            Literal(l, k) => sophia::term::Term::Literal(l.clone(), k.clone()).value(),
-            Variable(v) => sophia::term::Term::Variable(v.clone()).value(),
-            OWL(v) => vocab_to_term(v).value(),
-            RDFS(v) => vocab_to_term(v).value(),
-            RDF(v) => vocab_to_term(v).value(),
-        }
-    }
-}
+//     pub fn value(&self) -> String {
+//         match self {
+//             Iri(i) => sophia::term::Term::Iri(i.clone()).value(),
+//             BNode(id) => sophia::term::Term::BNode(id.clone()).value(),
+//             Literal(l, k) => sophia::term::Term::Literal(l.clone(), k.clone()).value(),
+//             Variable(v) => sophia::term::Term::Variable(v.clone()).value(),
+//             OWL(v) => vocab_to_term(v).value(),
+//             RDFS(v) => vocab_to_term(v).value(),
+//             RDF(v) => vocab_to_term(v).value(),
+//         }
+//     }
+// }
 
 trait Convert {
     fn to_iri(&self, b: &Build) -> IRI;
@@ -148,15 +148,6 @@ trait TryBuild<N: From<IRI>> {
 impl<N: From<IRI>> TryBuild<N> for Option<SpIri> {
     fn to_some_iri(&self, b: &Build) -> Option<IRI> {
         self.as_ref().map(|i| i.to_iri(b))
-    }
-}
-
-impl<N: From<IRI>> TryBuild<N> for Term {
-    fn to_some_iri(&self, b: &Build) -> Option<IRI> {
-        match self {
-            Term::Iri(spiri) => Some(spiri.to_iri(b)),
-            _ => None,
-        }
     }
 }
 
@@ -201,12 +192,12 @@ fn vocab_lookup() -> HashMap<SpTerm, Term> {
     m
 }
 
-fn to_term(t: &SpTerm, m: &HashMap<SpTerm, Term>) -> Term {
+fn to_term(t: &SpTerm, m: &HashMap<SpTerm, Term>, b: &Build) -> Term {
     if let Some(t) = m.get(t) {
         t.clone()
     } else {
         match t {
-            sophia::term::Term::Iri(i) => Iri(i.clone()),
+            sophia::term::Term::Iri(i) => Iri(i.to_iri(b)),
             sophia::term::Term::BNode(id) => BNode(id.clone()),
             sophia::term::Term::Literal(l, k) => Literal(l.clone(), k.clone()),
             sophia::term::Term::Variable(v) => Variable(v.clone()),
@@ -320,8 +311,8 @@ impl<'a> OntologyParser<'a> {
         //Section 3.1.2/table 4
         //   *:x rdf:type owl:Ontology .
         //[ *:x owl:versionIRI *:y .]
-        let mut iri: Option<SpIri> = None;
-        let mut viri: Option<SpIri> = None;
+        let mut iri: Option<IRI> = None;
+        let mut viri: Option<IRI> = None;
 
         let (_, remain): (Vec<[Term; 3]>, Vec<[Term; 3]>) =
             simple.into_iter().partition(|n| match n {
@@ -342,8 +333,8 @@ impl<'a> OntologyParser<'a> {
             _ => false,
         });
 
-        self.o.id.iri = TryBuild::<IRI>::to_some_iri(&iri, &self.b);
-        self.o.id.viri = TryBuild::<IRI>::to_some_iri(&viri, &self.b);
+        self.o.id.iri = iri;
+        self.o.id.viri = viri;
 
         Ok(remain)
     }
@@ -363,7 +354,7 @@ impl<'a> OntologyParser<'a> {
     fn annotation(&self, t: &[Term; 3]) -> Annotation {
         match t {
             [_, Iri(p), Term::Literal(ob, kind)] => Annotation {
-                ap: AnnotationProperty(p.to_iri(self.b)),
+                ap: AnnotationProperty(p.clone()),
                 av: match kind {
                     LiteralKind::Lang(lang) => Literal::Language {
                         lang: lang.clone().to_string(),
@@ -380,8 +371,8 @@ impl<'a> OntologyParser<'a> {
             [_, Iri(p), Iri(ob)] => {
                 // IRI annotation value
                 Annotation {
-                    ap: AnnotationProperty(p.to_iri(self.b)),
-                    av: ob.to_iri(self.b).into(),
+                    ap: AnnotationProperty(p.clone()),
+                    av: ob.clone().into(),
                 }
             }
             _ => todo!(),
@@ -425,13 +416,11 @@ impl<'a> OntologyParser<'a> {
                 ([Term::Iri(s), Term::RDF(VRDF::Type), entity], ann) => {
                     // TODO Move match into function
                     let entity = match entity {
-                        Term::OWL(VOWL::Class) => Class(s.to_iri(self.b)).into(),
-                        Term::OWL(VOWL::ObjectProperty) => ObjectProperty(s.to_iri(self.b)).into(),
-                        Term::OWL(VOWL::AnnotationProperty) => {
-                            AnnotationProperty(s.to_iri(self.b)).into()
-                        }
-                        Term::OWL(VOWL::DatatypeProperty) => DataProperty(s.to_iri(self.b)).into(),
-                        Term::RDFS(VRDFS::Datatype) => Datatype(s.to_iri(self.b)).into(),
+                        Term::OWL(VOWL::Class) => Class(s.clone()).into(),
+                        Term::OWL(VOWL::ObjectProperty) => ObjectProperty(s.clone()).into(),
+                        Term::OWL(VOWL::AnnotationProperty) => AnnotationProperty(s.clone()).into(),
+                        Term::OWL(VOWL::DatatypeProperty) => DataProperty(s.clone()).into(),
+                        Term::RDFS(VRDFS::Datatype) => Datatype(s.clone()).into(),
                         _ => {
                             return true;
                         }
@@ -493,8 +482,8 @@ impl<'a> OntologyParser<'a> {
                 [Term::Iri(sub), Term::RDFS(VRDFS::SubClassOf), Term::Iri(sup)] => {
                     self.o.insert(AnnotatedAxiom {
                         axiom: SubClassOf {
-                            sub: Class(sub.to_iri(self.b)).into(),
-                            sup: Class(sup.to_iri(self.b)).into(),
+                            sub: Class(sub.clone()).into(),
+                            sup: Class(sup.clone()).into(),
                         }
                         .into(),
                         ann: BTreeSet::new(),
@@ -517,7 +506,13 @@ impl<'a> OntologyParser<'a> {
         let m = vocab_lookup();
         let triple: Vec<[Term; 3]> = triple
             .into_iter()
-            .map(|t| [to_term(&t[0], &m), to_term(&t[1], &m), to_term(&t[2], &m)])
+            .map(|t| {
+                [
+                    to_term(&t[0], &m, self.b),
+                    to_term(&t[1], &m, self.b),
+                    to_term(&t[2], &m, self.b),
+                ]
+            })
             .collect();
 
         let simple: Vec<[Term; 3]> = vec![];
