@@ -160,6 +160,24 @@ impl<N: From<IRI>> TryBuild<N> for Term {
     }
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+enum OrTerm {
+    Term(Term),
+    ClassExpression(ClassExpression),
+}
+
+impl From<ClassExpression> for OrTerm {
+    fn from(c: ClassExpression) -> OrTerm {
+        OrTerm::ClassExpression(c)
+    }
+}
+
+impl From<Term> for OrTerm {
+    fn from(t: Term) -> OrTerm {
+        OrTerm::Term(t)
+    }
+}
+
 fn vocab_to_term<'a, V: WithIRI<'a>>(v: &V) -> SpTerm {
     // unwrap should be safe for all known WithIRIs
     sophia::term::Term::new_iri(Rc::from(v.iri_str())).unwrap()
@@ -220,8 +238,6 @@ trait Acceptor<A>: std::fmt::Debug {
 struct OntologyParser<'a> {
     o: Ontology,
     b: &'a Build,
-    bnode_triples: HashMap<SpBNode, Vec<[Term; 3]>>,
-    simple_triples: Vec<[Term; 3]>,
 }
 
 impl<'a> OntologyParser<'a> {
@@ -229,12 +245,15 @@ impl<'a> OntologyParser<'a> {
         OntologyParser {
             o: Ontology::default(),
             b,
-            bnode_triples: HashMap::new(),
-            simple_triples: vec![],
         }
     }
 
-    fn group_triples(&mut self, triple: Vec<[Term; 3]>) {
+    fn group_triples(
+        &mut self,
+        triple: Vec<[Term; 3]>,
+        mut simple: Vec<[Term; 3]>,
+        mut bnode: HashMap<SpBNode, Vec<[Term; 3]>>,
+    ) -> (Vec<[Term; 3]>, HashMap<SpBNode, Vec<[Term; 3]>>) {
         // Next group together triples on a BNode, so we have
         // HashMap<BNodeID, Vec<[SpTerm; 3]> All of which should be
         // triples should begin with the BNodeId. We should be able to
@@ -242,17 +261,16 @@ impl<'a> OntologyParser<'a> {
         for t in &triple {
             match t {
                 [BNode(id), _, _] => {
-                    let v = self
-                        .bnode_triples
-                        .entry(id.clone())
-                        .or_insert_with(Vec::new);
+                    let v = bnode.entry(id.clone()).or_insert_with(Vec::new);
                     v.push(t.clone())
                 }
                 _ => {
-                    self.simple_triples.push(t.clone());
+                    simple.push(t.clone());
                 }
             }
         }
+
+        (simple, bnode)
     }
 
     fn stitch_seqs(&self) {
@@ -298,16 +316,15 @@ impl<'a> OntologyParser<'a> {
         // Section 3.1.2/table 4 of RDF Graphs
     }
 
-    fn headers(&mut self) -> Result<(), Error> {
-        // Section 3.1.2/table 4
-        // *:x rdf:type owl:Ontology .
-        // [ *:x owl:versionIRI *:y .]
+    fn headers(&mut self, simple: Vec<[Term; 3]>) -> Result<Vec<[Term; 3]>, Error> {
+        //Section 3.1.2/table 4
+        //   *:x rdf:type owl:Ontology .
+        //[ *:x owl:versionIRI *:y .]
         let mut iri: Option<SpIri> = None;
         let mut viri: Option<SpIri> = None;
 
-        let simple_triples = ::std::mem::take(&mut self.simple_triples);
         let (_, remain): (Vec<[Term; 3]>, Vec<[Term; 3]>) =
-            simple_triples.into_iter().partition(|n| match n {
+            simple.into_iter().partition(|n| match n {
                 [Term::Iri(s), Term::RDF(VRDF::Type), Term::OWL(VOWL::Ontology)] => {
                     iri = Some(s.clone());
                     true
@@ -328,9 +345,7 @@ impl<'a> OntologyParser<'a> {
         self.o.id.iri = TryBuild::<IRI>::to_some_iri(&iri, &self.b);
         self.o.id.viri = TryBuild::<IRI>::to_some_iri(&viri, &self.b);
 
-        self.simple_triples = remain;
-
-        Ok(())
+        Ok(remain)
     }
 
     fn backward_compat(&mut self) {
@@ -373,16 +388,16 @@ impl<'a> OntologyParser<'a> {
         }
     }
 
-    fn declarations(&mut self) {
+    fn declarations(
+        &mut self,
+        simple: Vec<[Term; 3]>,
+        bnode: HashMap<SpBNode, Vec<[Term; 3]>>,
+    ) -> (Vec<[Term; 3]>, HashMap<SpBNode, Vec<[Term; 3]>>) {
         // Table 7
         let mut annotated_triples: Vec<([Term; 3], BTreeSet<Annotation>)> =
-            ::std::mem::take(&mut self.simple_triples)
-                .into_iter()
-                .map(|t| (t, BTreeSet::new()))
-                .collect();
+            simple.into_iter().map(|t| (t, BTreeSet::new())).collect();
 
-        let bnode_triples = ::std::mem::take(&mut self.bnode_triples);
-        let _: HashMap<SpBNode, Vec<[Term; 3]>> = bnode_triples
+        let bnode: HashMap<SpBNode, Vec<[Term; 3]>> = bnode
             .into_iter()
             .filter(|(_, v)| match v.as_slice() {
                 [
@@ -441,17 +456,38 @@ impl<'a> OntologyParser<'a> {
             .map(|(t, _a)| t)
             .collect();
 
-        self.simple_triples = remain;
+        (remain, bnode)
     }
 
-    fn axioms(&mut self) {
+    fn class_expressions(
+        &mut self,
+        bnode: HashMap<SpBNode, Vec<[Term; 3]>>,
+    ) -> HashMap<SpBNode, Vec<[Term; 3]>> {
+        let remain = bnode
+            .into_iter()
+            .filter(|(_, v)| match v.as_slice() {
+                [
+                    [_, Term::OWL(VOWL::OnProperty), Term::Iri(pr)],
+                    [_, Term::OWL(VOWL::SomeValuesFrom), Term::Iri(cl)],
+                    [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Restriction)],
+                ] => {
+                    dbg!("found", v);
+                    false
+                }
+                a => {
+                    dbg!(a);
+                    true
+                }
+            })
+            .collect();
+        remain
+    }
+
+    fn axioms(&mut self, simple: Vec<[Term; 3]>) -> Vec<[Term; 3]> {
         // TODO match subclass axiom for the moment on a BNode.
         // We will need to have altered the BNode tiples at this
         // point, so taht they have ClassExpression at the ned
-
-        let simple_triples = ::std::mem::take(&mut self.simple_triples);
-
-        let remain = simple_triples
+        let remain = simple
             .into_iter()
             .filter(|n| match n {
                 [Term::Iri(sub), Term::RDFS(VRDFS::SubClassOf), Term::Iri(sup)] => {
@@ -462,44 +498,49 @@ impl<'a> OntologyParser<'a> {
                         }
                         .into(),
                         ann: BTreeSet::new(),
-                    })
+                    });
+                    false
                 }
-                _ => todo!(),
+                _ => {
+                    dbg!("unrecognised triple");
+                    true
+                }
             })
             .collect();
 
-        self.simple_triples = remain
+        remain
     }
 
     fn read(mut self, triple: Vec<[SpTerm; 3]>) -> Result<Ontology, Error> {
         // move to our own Terms, with IRIs swapped
+
         let m = vocab_lookup();
         let triple: Vec<[Term; 3]> = triple
             .into_iter()
             .map(|t| [to_term(&t[0], &m), to_term(&t[1], &m), to_term(&t[2], &m)])
             .collect();
 
-        self.group_triples(triple);
+        let simple: Vec<[Term; 3]> = vec![];
+        let bnode: HashMap<SpBNode, Vec<[Term; 3]>> = Default::default();
+
+        let (simple, mut bnode) = self.group_triples(triple, simple, bnode);
 
         // sort the triples, so that I can get a dependable order
-        for (_, vec) in self.bnode_triples.iter_mut() {
+        for (_, vec) in bnode.iter_mut() {
             vec.sort();
         }
 
         self.stitch_seqs();
         self.resolve_imports();
-        self.headers();
         self.backward_compat();
 
-        self.declarations();
-
-        // for t in bnode_triples.values() {
+        // for t in bnode.values() {
         //     match t.as_slice()[0] {
         //         [BNode(s), RDF(VRDF::First), ob] => {
         //             //let v = vec![];
         //             // So, we have captured first (value of which is ob)
         //             // Rest of the sequence could be either in
-        //             // bnode_seq or in bnode_triples -- confusing
+        //             // bnode_seq or in bnode -- confusing
         //             //bnode_seq.insert(s.clone(), self.seq())
         //         }
         //     }
@@ -522,6 +563,7 @@ impl<'a> OntologyParser<'a> {
         // to read an ontology just for declarations. At the moment, I
         // don't know how to get to another set of triples for these
         // -- we will need some kind of factory.
+        let simple = self.headers(simple)?;
 
         // Can we pull out annotations at this point and handle them
         // as we do in reader2? Tranform them into a triple which we
@@ -535,20 +577,21 @@ impl<'a> OntologyParser<'a> {
         // Table 7: Declarations (this should be simple, if we have a
         // generic solution for handling annotations, there is no
         // handling of bnodes).
+        let (simple, bnode) = self.declarations(simple, bnode);
 
         // Table 8:
-        // We need two traits, one for dealing with iri, iri, *
-        // triples, and another for dealing with IRIs.
 
+        // Table 13: Parsing of Class Expressions
+        let bnode = self.class_expressions(bnode);
         // Table 16: Axioms without annotations
-        self.axioms();
+        let simple = self.axioms(simple);
 
-        if self.simple_triples.len() > 0 {
-            dbg!("simple remaining", self.simple_triples);
+        if simple.len() > 0 {
+            dbg!("simple remaining", simple);
         }
 
-        if self.bnode_triples.len() > 0 {
-            dbg!("bnodes remaining", self.bnode_triples);
+        if bnode.len() > 0 {
+            dbg!("bnodes remaining", bnode);
         }
         Ok(self.o)
     }
@@ -664,10 +707,10 @@ mod test {
         compare("oproperty");
     }
 
-    // #[test]
-    // fn some() {
-    //     compare("some");
-    // }
+    //#[test]
+    //fn some() {
+    //    compare("some");
+    //}
 
     // #[test]
     // fn one_some_reversed() {
