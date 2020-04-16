@@ -1076,7 +1076,6 @@ from_xml! {IRI, r, end,
 pub mod test {
     use super::*;
     use std::collections::HashMap;
-    use matches::*;
 
     pub fn read_ok<R: BufRead>(bufread: &mut R) -> (Ontology, PrefixMapping) {
         let r = read(bufread);
@@ -1219,6 +1218,23 @@ pub mod test {
     }
 
     #[test]
+    fn test_some_not() {
+        let ont_s = include_str!("../ont/owl-xml/some-not.owx");
+        let (ont, _) = read_ok(&mut ont_s.as_bytes());
+
+        assert_eq!(ont.sub_class().count(), 1);
+        let sc: &SubClassOf = ont.sub_class().next().unwrap();
+        match &sc.sup {
+            ClassExpression::ObjectSomeValuesFrom{ope:_, bce} => {
+                matches!(**bce, ClassExpression::ObjectComplementOf(_));
+            }
+            _=> panic!()
+        }
+
+        assert_eq!(ont.declare_object_property().count(), 1);
+    }
+
+    #[test]
     fn test_only() {
         let ont_s = include_str!("../ont/owl-xml/only.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
@@ -1236,7 +1252,7 @@ pub mod test {
         assert_eq!(ont.sub_class().count(), 1);
 
         let sc = ont.sub_class().next().unwrap();
-        assert_matches!(&sc.sup, ClassExpression::ObjectIntersectionOf(_));
+        assert!(matches!(&sc.sup, ClassExpression::ObjectIntersectionOf(_)));
     }
 
     #[test]
@@ -1247,7 +1263,7 @@ pub mod test {
         assert_eq!(ont.sub_class().count(), 1);
 
         let sc = ont.sub_class().next().unwrap();
-        assert_matches!(&sc.sup, ClassExpression::ObjectUnionOf(_));
+        assert!(matches!(&sc.sup, ClassExpression::ObjectUnionOf(_)));
     }
 
     #[test]

@@ -1,5 +1,4 @@
 #![allow(unused_imports)]
-use AcceptState::*;
 use Term::*;
 
 use curie::PrefixMapping;
@@ -203,27 +202,6 @@ fn to_term(t: &SpTerm, m: &HashMap<SpTerm, Term>, b: &Build) -> Term {
             sophia::term::Term::Variable(v) => Variable(v.clone()),
         }
     }
-}
-
-#[derive(Debug)]
-enum AcceptState<A> {
-    // Accept and consume the triple
-    Accept,
-
-    // Accept and consume the triple and return the SpBNode
-    AcceptOn(SpBNode),
-    // Do not accept the triple and return it
-    Return([Term; 3]),
-
-    // Complete acceptance and return a result
-    Complete(A),
-}
-
-trait Acceptor<A>: std::fmt::Debug {
-    fn new(b: &Build, o: &Ontology) -> Self;
-
-    #[must_use]
-    fn accept(&mut self, triple: [Term; 3]) -> Result<AcceptState<A>, Error>;
 }
 
 struct OntologyParser<'a> {
@@ -451,31 +429,82 @@ impl<'a> OntologyParser<'a> {
     fn class_expressions(
         &mut self,
         bnode: HashMap<SpBNode, Vec<[Term; 3]>>,
-    ) -> HashMap<SpBNode, Vec<[Term; 3]>> {
+    ) -> (
+        HashMap<SpBNode, Vec<[Term; 3]>>,
+        HashMap<SpBNode, ClassExpression>,
+    ) {
+        self.class_expressions_1(bnode, HashMap::new())
+    }
+
+    fn class_expressions_1(
+        &mut self,
+        bnode: HashMap<SpBNode, Vec<[Term; 3]>>,
+        mut class_expression: HashMap<SpBNode, ClassExpression>,
+    ) -> (
+        HashMap<SpBNode, Vec<[Term; 3]>>,
+        HashMap<SpBNode, ClassExpression>,
+    ) {
+        let class_expression_len = class_expression.len();
         let remain = bnode
             .into_iter()
             .filter(|(_, v)| match v.as_slice() {
                 [
-                    [_, Term::OWL(VOWL::OnProperty), Term::Iri(pr)],
-                    [_, Term::OWL(VOWL::SomeValuesFrom), Term::Iri(cl)],
+                    [Term::BNode(bnode), Term::OWL(VOWL::OnProperty), Term::Iri(pr)],
+                    [_, Term::OWL(VOWL::SomeValuesFrom), tce],
                     [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Restriction)],
                 ] => {
-                    dbg!("found", v);
+                    if let Some(ce) = match tce {
+                        Term::Iri(cl) => Some(Class(cl.clone()).into()),
+                        Term::BNode(id) => class_expression.get(id).cloned(),
+                        _ => panic!()
+                    }{
+                        class_expression.insert(
+                            bnode.clone(),
+                            ClassExpression::ObjectSomeValuesFrom {
+                                ope: ObjectProperty(pr.clone()).into(),
+                                bce: ce.into(),
+                            }
+                        );
+                        false
+                    } else {
+                        true
+                    }
+                }
+                [
+                    [Term::BNode(bnode), Term::OWL(VOWL::ComplementOf), Term::Iri(cl)],
+                    [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Class)]
+                ] => {
+                    class_expression.insert(
+                        bnode.clone(),
+                        ClassExpression::ObjectComplementOf (
+                            Class(cl.clone()).into()
+                        )
+                    );
                     false
                 }
-                a => {
-                    dbg!(a);
+                _a => {
                     true
                 }
             })
             .collect();
-        remain
+
+        if class_expression.len() > class_expression_len {
+            dbg!("Recursing");
+            self.class_expressions_1(remain, class_expression)
+        } else {
+            (remain, class_expression)
+        }
     }
 
-    fn axioms(&mut self, simple: Vec<[Term; 3]>) -> Vec<[Term; 3]> {
+    fn axioms(
+        &mut self,
+        simple: Vec<[Term; 3]>,
+        mut class_expression: HashMap<SpBNode, ClassExpression>,
+    ) -> (Vec<[Term; 3]>, HashMap<SpBNode, ClassExpression>) {
         // TODO match subclass axiom for the moment on a BNode.
         // We will need to have altered the BNode tiples at this
         // point, so taht they have ClassExpression at the ned
+
         let remain = simple
             .into_iter()
             .filter(|n| match n {
@@ -490,6 +519,24 @@ impl<'a> OntologyParser<'a> {
                     });
                     false
                 }
+                [Term::Iri(sub), Term::RDFS(VRDFS::SubClassOf), Term::BNode(bnode)] => {
+                    let oce = class_expression.remove(bnode);
+                    if let Some(ce) = oce {
+                        self.o.insert(AnnotatedAxiom {
+                            axiom: SubClassOf {
+                                sub: Class(sub.clone()).into(),
+                                sup: ce,
+                            }
+                            .into(),
+                            ann: BTreeSet::new(),
+                        });
+                        false
+                    } else {
+                        dbg!("Failed to find bnode", bnode);
+                        true
+                    }
+                }
+
                 _ => {
                     dbg!("unrecognised triple");
                     true
@@ -497,7 +544,7 @@ impl<'a> OntologyParser<'a> {
             })
             .collect();
 
-        remain
+        (remain, class_expression)
     }
 
     fn read(mut self, triple: Vec<[SpTerm; 3]>) -> Result<Ontology, Error> {
@@ -577,9 +624,9 @@ impl<'a> OntologyParser<'a> {
         // Table 8:
 
         // Table 13: Parsing of Class Expressions
-        let bnode = self.class_expressions(bnode);
+        let (bnode, class_expression) = self.class_expressions(bnode);
         // Table 16: Axioms without annotations
-        let simple = self.axioms(simple);
+        let (simple, class_expression) = self.axioms(simple, class_expression);
 
         if simple.len() > 0 {
             dbg!("simple remaining", simple);
@@ -587,6 +634,10 @@ impl<'a> OntologyParser<'a> {
 
         if bnode.len() > 0 {
             dbg!("bnodes remaining", bnode);
+        }
+
+        if class_expression.len() > 0 {
+            dbg!("class_expression remaining", class_expression);
         }
         Ok(self.o)
     }
@@ -702,10 +753,15 @@ mod test {
         compare("oproperty");
     }
 
-    //#[test]
-    //fn some() {
-    //    compare("some");
-    //}
+    #[test]
+    fn some() {
+        compare("some");
+    }
+
+    #[test]
+    fn some_not() {
+        compare("some-not");
+    }
 
     // #[test]
     // fn one_some_reversed() {
@@ -732,10 +788,10 @@ mod test {
     //     compare("or");
     // }
 
-    // #[test]
-    // fn not() {
-    //     compare("not");
-    // }
+    #[test]
+    fn not() {
+        compare("not");
+    }
 
     #[test]
     fn annotation_property() {
