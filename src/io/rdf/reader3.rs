@@ -32,7 +32,7 @@ type SpTerm = sophia::term::Term<Rc<str>>;
 type SpIri = IriData<Rc<str>>;
 type SpBNode = BNodeId<Rc<str>>;
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 enum Term {
     Iri(IRI),
     BNode(SpBNode),
@@ -321,7 +321,7 @@ impl<'a> OntologyParser<'a> {
         // Table 5, Table 6
     }
 
-    fn annotations(&self, triples: &[[Term; 3]]) -> BTreeSet<Annotation> {
+    fn parse_annotations(&self, triples: &[[Term; 3]]) -> BTreeSet<Annotation> {
         let mut ann = BTreeSet::default();
         for a in triples {
             ann.insert(self.annotation(a));
@@ -357,41 +357,68 @@ impl<'a> OntologyParser<'a> {
         }
     }
 
+    fn merge<A: Into<AnnotatedAxiom>>(&mut self, ax: A) {
+        let ax = ax.into();
+        update_logically_equal_axiom(&mut self.o, ax);
+    }
+
+    fn in_or_merge<A: Into<AnnotatedAxiom>>(&mut self, ax: A) {
+        let ax = ax.into();
+        let is_empty = ax.ann.is_empty();
+
+        if is_empty {
+            self.o.insert(ax);
+        } else {
+            update_logically_equal_axiom(&mut self.o, ax);
+        }
+    }
+
+    fn annotations(
+        &mut self,
+        mut simple: Vec<[Term; 3]>,
+        bnode: HashMap<SpBNode, Vec<[Term; 3]>>,
+    ) -> (
+        Vec<[Term; 3]>,
+        HashMap<SpBNode, Vec<[Term; 3]>>,
+        HashMap<[Term; 3], BTreeSet<Annotation>>,
+    ) {
+        let mut annotated_triples = HashMap::new();
+        let mut remain_bnode = HashMap::new();
+        for (k, v) in bnode {
+            match v.as_slice() {
+                #[rustfmt::skip]
+                [[_, Term::OWL(VOWL::AnnotatedSource), sb],
+                 [_, Term::OWL(VOWL::AnnotatedProperty), p],
+                 [_, Term::OWL(VOWL::AnnotatedTarget), ob],
+                 [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Axiom)],
+                 ann @ ..] =>
+                {
+                    annotated_triples.insert(
+                        [sb.clone(), p.clone(), ob.clone()],
+                        self.parse_annotations(ann),
+                    );
+                    simple.push([sb.clone(), p.clone(), ob.clone()])
+                }
+
+                _ => {
+                    remain_bnode.insert(k, v);
+                }
+            }
+        }
+        (simple, remain_bnode, annotated_triples)
+    }
+
     fn declarations(
         &mut self,
         simple: Vec<[Term; 3]>,
-        bnode: HashMap<SpBNode, Vec<[Term; 3]>>,
-    ) -> (Vec<[Term; 3]>, HashMap<SpBNode, Vec<[Term; 3]>>) {
+        mut ann_map: HashMap<[Term; 3], BTreeSet<Annotation>>,
+    ) -> (Vec<[Term; 3]>, HashMap<[Term; 3], BTreeSet<Annotation>>) {
         // Table 7
-        let mut annotated_triples: Vec<([Term; 3], BTreeSet<Annotation>)> =
-            simple.into_iter().map(|t| (t, BTreeSet::new())).collect();
-
-        let bnode: HashMap<SpBNode, Vec<[Term; 3]>> = bnode
-            .into_iter()
-            .filter(|(_, v)| match v.as_slice() {
-                [
-                    [_, Term::OWL(VOWL::AnnotatedSource), sb @ Term::Iri(_)],
-                    [_, Term::OWL(VOWL::AnnotatedProperty), p @ Term::RDF(VRDF::Type)],
-                    [_, Term::OWL(VOWL::AnnotatedTarget), ob @ Term::OWL(_)],
-                    [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Axiom)],
-                    ann @ ..
-                ] => {
-                    annotated_triples.push(([sb.clone(), p.clone(), ob.clone()],
-                                            self.annotations(ann)));
-                    false
-                }
-                _ =>
-                {
-                    true
-                }
-            })
-            .collect();
-
-        let remain: Vec<[Term; 3]> = annotated_triples
+        let remain: Vec<[Term; 3]> = simple
             .into_iter()
             .filter(|n| match n {
                 // TODO Change this into a single outer match
-                ([Term::Iri(s), Term::RDF(VRDF::Type), entity], ann) => {
+                [Term::Iri(s), Term::RDF(VRDF::Type), entity] => {
                     // TODO Move match into function
                     let entity = match entity {
                         Term::OWL(VOWL::Class) => Class(s.clone()).into(),
@@ -404,26 +431,18 @@ impl<'a> OntologyParser<'a> {
                         }
                     };
 
-                    let is_empty = ann.is_empty();
-                    let ax = AnnotatedAxiom {
+                    self.merge(AnnotatedAxiom {
                         axiom: declaration(entity),
-                        ann: ann.clone(),
-                    };
-
-                    if is_empty {
-                        self.o.insert(ax);
-                    } else {
-                        update_logically_equal_axiom(&mut self.o, ax);
-                    }
+                        ann: ann_map.remove(n).unwrap_or_else(|| BTreeSet::new()),
+                    });
 
                     false
                 }
                 _ => true,
             })
-            .map(|(t, _a)| t)
             .collect();
 
-        (remain, bnode)
+        (remain, ann_map)
     }
 
     fn class_expressions(
@@ -436,6 +455,18 @@ impl<'a> OntologyParser<'a> {
         self.class_expressions_1(bnode, HashMap::new())
     }
 
+    fn to_ce(
+        &mut self,
+        tce: &Term,
+        class_expression: &HashMap<SpBNode, ClassExpression>,
+    ) -> Option<ClassExpression> {
+        match tce {
+            Term::Iri(cl) => Some(Class(cl.clone()).into()),
+            Term::BNode(id) => class_expression.get(id).cloned(),
+            _ => None,
+        }
+    }
+
     fn class_expressions_1(
         &mut self,
         bnode: HashMap<SpBNode, Vec<[Term; 3]>>,
@@ -445,48 +476,44 @@ impl<'a> OntologyParser<'a> {
         HashMap<SpBNode, ClassExpression>,
     ) {
         let class_expression_len = class_expression.len();
-        let remain = bnode
-            .into_iter()
-            .filter(|(_, v)| match v.as_slice() {
-                [
-                    [Term::BNode(bnode), Term::OWL(VOWL::OnProperty), Term::Iri(pr)],
-                    [_, Term::OWL(VOWL::SomeValuesFrom), tce],
-                    [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Restriction)],
-                ] => {
-                    if let Some(ce) = match tce {
-                        Term::Iri(cl) => Some(Class(cl.clone()).into()),
-                        Term::BNode(id) => class_expression.get(id).cloned(),
-                        _ => panic!()
-                    }{
-                        class_expression.insert(
+        let mut remain = HashMap::new();
+
+        for (k, v) in bnode {
+            // rustfmt breaks this (putting the triples all on one
+            // line) so skip
+            #[rustfmt::skip]
+            let tup = match v.as_slice() {
+                [[Term::BNode(bnode), Term::OWL(VOWL::OnProperty), Term::Iri(pr)],
+                 [_, Term::OWL(VOWL::SomeValuesFrom), tce],
+                 [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Restriction)]] => {
+                    self.to_ce(&tce, &class_expression).map(|ce| {
+                        (
                             bnode.clone(),
                             ClassExpression::ObjectSomeValuesFrom {
                                 ope: ObjectProperty(pr.clone()).into(),
                                 bce: ce.into(),
-                            }
-                        );
-                        false
-                    } else {
-                        true
-                    }
-                }
-                [
-                    [Term::BNode(bnode), Term::OWL(VOWL::ComplementOf), Term::Iri(cl)],
-                    [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Class)]
-                ] => {
-                    class_expression.insert(
-                        bnode.clone(),
-                        ClassExpression::ObjectComplementOf (
-                            Class(cl.clone()).into()
+                            },
                         )
-                    );
-                    false
+                    })
                 }
-                _a => {
-                    true
+                [[Term::BNode(bnode), Term::OWL(VOWL::ComplementOf), tce],
+                 [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Class)]] => {
+                    self.to_ce(&tce, &class_expression).map(|ce| {
+                        (
+                            bnode.clone(),
+                            ClassExpression::ObjectComplementOf(ce.into()),
+                        )
+                    })
                 }
-            })
-            .collect();
+                _a => None,
+            };
+
+            if let Some((bnode, ce)) = tup {
+                class_expression.insert(bnode, ce);
+            } else {
+                remain.insert(k, v);
+            }
+        }
 
         if class_expression.len() > class_expression_len {
             dbg!("Recursing");
@@ -499,36 +526,40 @@ impl<'a> OntologyParser<'a> {
     fn axioms(
         &mut self,
         simple: Vec<[Term; 3]>,
+        mut ann_map: HashMap<[Term; 3], BTreeSet<Annotation>>,
         mut class_expression: HashMap<SpBNode, ClassExpression>,
-    ) -> (Vec<[Term; 3]>, HashMap<SpBNode, ClassExpression>) {
+    ) -> (
+        Vec<[Term; 3]>,
+        HashMap<[Term; 3], BTreeSet<Annotation>>,
+        HashMap<SpBNode, ClassExpression>,
+    ) {
         // TODO match subclass axiom for the moment on a BNode.
         // We will need to have altered the BNode tiples at this
         // point, so taht they have ClassExpression at the ned
-
         let remain = simple
             .into_iter()
             .filter(|n| match n {
                 [Term::Iri(sub), Term::RDFS(VRDFS::SubClassOf), Term::Iri(sup)] => {
-                    self.o.insert(AnnotatedAxiom {
+                    self.merge(AnnotatedAxiom {
                         axiom: SubClassOf {
                             sub: Class(sub.clone()).into(),
                             sup: Class(sup.clone()).into(),
                         }
                         .into(),
-                        ann: BTreeSet::new(),
+                        ann: ann_map.remove(n).unwrap_or_else(|| BTreeSet::new()),
                     });
                     false
                 }
                 [Term::Iri(sub), Term::RDFS(VRDFS::SubClassOf), Term::BNode(bnode)] => {
                     let oce = class_expression.remove(bnode);
                     if let Some(ce) = oce {
-                        self.o.insert(AnnotatedAxiom {
+                        self.merge(AnnotatedAxiom {
                             axiom: SubClassOf {
                                 sub: Class(sub.clone()).into(),
                                 sup: ce,
                             }
                             .into(),
-                            ann: BTreeSet::new(),
+                            ann: ann_map.remove(n).unwrap_or_else(|| BTreeSet::new()),
                         });
                         false
                     } else {
@@ -544,7 +575,7 @@ impl<'a> OntologyParser<'a> {
             })
             .collect();
 
-        (remain, class_expression)
+        (remain, ann_map, class_expression)
     }
 
     fn read(mut self, triple: Vec<[SpTerm; 3]>) -> Result<Ontology, Error> {
@@ -573,6 +604,9 @@ impl<'a> OntologyParser<'a> {
         }
 
         self.stitch_seqs();
+
+        let (simple, bnode, ann_map) = self.annotations(simple, bnode);
+
         self.resolve_imports();
         self.backward_compat();
 
@@ -619,14 +653,14 @@ impl<'a> OntologyParser<'a> {
         // Table 7: Declarations (this should be simple, if we have a
         // generic solution for handling annotations, there is no
         // handling of bnodes).
-        let (simple, bnode) = self.declarations(simple, bnode);
+        let (simple, ann_map) = self.declarations(simple, ann_map);
 
         // Table 8:
 
         // Table 13: Parsing of Class Expressions
         let (bnode, class_expression) = self.class_expressions(bnode);
         // Table 16: Axioms without annotations
-        let (simple, class_expression) = self.axioms(simple, class_expression);
+        let (simple, ann_map, class_expression) = self.axioms(simple, ann_map, class_expression);
 
         if simple.len() > 0 {
             dbg!("simple remaining", simple);
@@ -634,6 +668,10 @@ impl<'a> OntologyParser<'a> {
 
         if bnode.len() > 0 {
             dbg!("bnodes remaining", bnode);
+        }
+
+        if ann_map.len() > 0 {
+            dbg!("annotations remaining", ann_map);
         }
 
         if class_expression.len() > 0 {
@@ -743,10 +781,10 @@ mod test {
         compare("one-subclass");
     }
 
-    // #[test]
-    // fn subclass_with_annotation() {
-    //     compare("annotation-on-subclass");
-    // }
+    #[test]
+    fn subclass_with_annotation() {
+        compare("annotation-on-subclass");
+    }
 
     #[test]
     fn oproperty() {

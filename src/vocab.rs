@@ -67,7 +67,7 @@ lazy_meta! {
     XSD, to_meta("http://www.w3.org/2001/XMLSchema#");
 }
 
-#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum RDF {
     First,
     Nil,
@@ -83,7 +83,7 @@ lazy_meta! {
     Type, extend(RDF, "type");
 }
 
-#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum RDFS {
     Datatype,
     Domain,
@@ -99,7 +99,7 @@ lazy_meta! {
     SubClassOf, extend(RDFS, "subClassOf");
 }
 
-#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum OWL {
     // Lower case
     AllValuesFrom,
