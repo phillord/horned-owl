@@ -766,6 +766,11 @@ mod test {
         compare("declaration-with-annotation");
     }
 
+    #[test]
+    fn declaration_with_two_annotation() {
+        compare("declaration-with-two-annotation");
+    }
+
     // #[test]
     // fn class_with_two_annotations() {
     //     compare("class_with_two_annotations");
@@ -801,15 +806,15 @@ mod test {
         compare("some-not");
     }
 
-    // #[test]
-    // fn one_some_reversed() {
-    //     compare_two("manual/one-some-reversed-triples", "some");
-    // }
+    #[test]
+    fn one_some_reversed() {
+        compare_two("manual/one-some-reversed-triples", "some");
+    }
 
-    // #[test]
-    // fn one_some_property_filler_reversed() {
-    //     compare_two("manual/one-some-property-filler-reversed", "some");
-    // }
+    #[test]
+    fn one_some_property_filler_reversed() {
+        compare_two("manual/one-some-property-filler-reversed", "some");
+    }
 
     // #[test]
     // fn only() {
