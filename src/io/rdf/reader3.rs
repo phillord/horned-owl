@@ -3,6 +3,7 @@ use Term::*;
 
 use curie::PrefixMapping;
 
+use crate::index::find_declaration_kind;
 use crate::index::update_logically_equal_axiom;
 use crate::model::Literal;
 use crate::model::*;
@@ -467,6 +468,29 @@ impl<'a> OntologyParser<'a> {
         }
     }
 
+    fn to_dr(&self, t: &Term) -> Option<DataRange> {
+        match t {
+            Term::Iri(iri) => {
+                let dt: Datatype = iri.into();
+                Some(dt.into())
+            }
+            _ => todo!(),
+        }
+    }
+
+    fn find_property_kind(&self, iri: &IRI) -> PropertyExpression {
+        match find_declaration_kind(&self.o, iri.clone()) {
+            Some(NamedEntityKind::AnnotationProperty) => {
+                PropertyExpression::AnnotationProperty(iri.into())
+            }
+            Some(NamedEntityKind::DataProperty) => PropertyExpression::DataProperty(iri.into()),
+            Some(NamedEntityKind::ObjectProperty) => {
+                PropertyExpression::ObjectPropertyExpression(iri.into())
+            }
+            _ => todo!(),
+        }
+    }
+
     fn class_expressions_1(
         &mut self,
         bnode: HashMap<SpBNode, Vec<[Term; 3]>>,
@@ -478,40 +502,47 @@ impl<'a> OntologyParser<'a> {
         let class_expression_len = class_expression.len();
         let mut remain = HashMap::new();
 
-        for (k, v) in bnode {
+        for (this_bnode, v) in bnode {
             // rustfmt breaks this (putting the triples all on one
             // line) so skip
             #[rustfmt::skip]
-            let tup = match v.as_slice() {
-                [[Term::BNode(bnode), Term::OWL(VOWL::OnProperty), Term::Iri(pr)],
-                 [_, Term::OWL(VOWL::SomeValuesFrom), tce],
+            let ce = match v.as_slice() {
+                [[_, Term::OWL(VOWL::OnProperty), Term::Iri(pr)],
+                 [_, Term::OWL(VOWL::SomeValuesFrom), ce_or_dr],
                  [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Restriction)]] => {
-                    self.to_ce(&tce, &class_expression).map(|ce| {
-                        (
-                            bnode.clone(),
-                            ClassExpression::ObjectSomeValuesFrom {
-                                ope: ObjectProperty(pr.clone()).into(),
-                                bce: ce.into(),
-                            },
-                        )
-                    })
+                    match self.find_property_kind(pr) {
+                         PropertyExpression::ObjectPropertyExpression(ope) =>
+                            self.to_ce(ce_or_dr, &class_expression).map(|ce| {
+                                ClassExpression::ObjectSomeValuesFrom {
+                                    ope,
+                                    bce: ce.into(),
+                                }
+                            }),
+                         PropertyExpression::DataProperty(dp) => {
+                             // TODO this should be a Result
+                             self.to_dr(ce_or_dr).map(|dr| {
+                                 ClassExpression::DataSomeValuesFrom {
+                                     dp,
+                                     dr: dr.into(),
+                                 }
+                             })
+                         },
+                         _ => todo!()
+                    }
                 }
-                [[Term::BNode(bnode), Term::OWL(VOWL::ComplementOf), tce],
+                [[_, Term::OWL(VOWL::ComplementOf), tce],
                  [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Class)]] => {
                     self.to_ce(&tce, &class_expression).map(|ce| {
-                        (
-                            bnode.clone(),
-                            ClassExpression::ObjectComplementOf(ce.into()),
-                        )
+                        ClassExpression::ObjectComplementOf(ce.into())
                     })
                 }
                 _a => None,
             };
 
-            if let Some((bnode, ce)) = tup {
-                class_expression.insert(bnode, ce);
+            if let Some(ce) = ce {
+                class_expression.insert(this_bnode, ce);
             } else {
-                remain.insert(k, v);
+                remain.insert(this_bnode, v);
             }
         }
 
@@ -1020,10 +1051,10 @@ mod test {
     //     compare("datatype-oneof");
     // }
 
-    // #[test]
-    // fn datatype_some() {
-    //   compare("data-some");
-    // }
+    #[test]
+    fn datatype_some() {
+        compare("data-some");
+    }
 
     // #[test]
     // fn facet_restriction() {

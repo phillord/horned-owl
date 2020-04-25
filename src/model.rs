@@ -1195,6 +1195,12 @@ impl From<IRI> for ObjectPropertyExpression {
     }
 }
 
+impl From<&IRI> for ObjectPropertyExpression {
+    fn from(iri: &IRI) -> ObjectPropertyExpression {
+        iri.clone().into()
+    }
+}
+
 impl ObjectPropertyExpression {
     pub fn as_property(&self) -> Option<&ObjectProperty> {
         match self {
