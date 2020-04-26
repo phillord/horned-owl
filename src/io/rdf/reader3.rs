@@ -503,6 +503,23 @@ impl<'a> OntologyParser<'a> {
         }
     }
 
+    fn to_ce_seq(
+        &mut self,
+        term_seq: &Option<Vec<Term>>,
+        class_expression: &HashMap<SpBNode, ClassExpression>,
+    ) -> Option<Vec<ClassExpression>> {
+        let option_ce_seq: Option<Vec<Option<ClassExpression>>> = term_seq.as_ref().map(|vce| {
+            vce.into_iter()
+                .map(|tce| self.to_ce(&tce, &class_expression))
+                .collect()
+        });
+
+        let option_ce_seq: Option<Option<Vec<ClassExpression>>> =
+            option_ce_seq.map(|vce| vce.into_iter().collect());
+
+        option_ce_seq.flatten()
+    }
+
     fn to_dr(&self, t: &Term) -> Option<DataRange> {
         match t {
             Term::Iri(iri) => {
@@ -590,17 +607,7 @@ impl<'a> OntologyParser<'a> {
                 },
                 [[_, Term::OWL(VOWL::IntersectionOf), Term::BNode(bnodeid)],
                  [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Class)]] => {
-                    let option_seq: Option<Vec<Term>> = bnode_seq.remove(bnodeid);
-                    let option_ce_seq: Option<Vec<Option<ClassExpression>>> = option_seq.map(
-                        |vce|
-                        vce.into_iter().map(|tce| self.to_ce(&tce, &class_expression)).collect()
-                    );
-
-                    let option_ce_seq: Option<Option<Vec<ClassExpression>>> = option_ce_seq.map(
-                        |vce| vce.into_iter().collect()
-                    );
-
-                    let option_ce_seq: Option<Vec<ClassExpression>> = option_ce_seq.flatten();
+                    let option_ce_seq = self.to_ce_seq(&bnode_seq.remove(bnodeid), &class_expression);
                     option_ce_seq.map(|vce|
                                       ClassExpression::ObjectIntersectionOf (vce))
                 },
