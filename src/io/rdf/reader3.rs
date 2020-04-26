@@ -243,43 +243,76 @@ impl<'a> OntologyParser<'a> {
         (simple, bnode)
     }
 
-    fn stitch_seqs(&self) {
-        // As described in Table 3 of RDF Graphs
-        // Work backward BNode with RDF::rest RDF::Nil
+    fn stitch_seqs_1(
+        &self,
+        bnode: HashMap<SpBNode, Vec<[Term; 3]>>,
+        mut bnode_seq: HashMap<SpBNode, Vec<Term>>,
+    ) -> (
+        HashMap<SpBNode, Vec<[Term; 3]>>,
+        HashMap<SpBNode, Vec<Term>>,
+    ) {
+        let mut remain_bnode: HashMap<SpBNode, Vec<[Term; 3]>> = Default::default();
+        let mut extended = false;
 
-        // There should be only one of these per list, although RDF
-        // does not guarantee it strictly. It's easier to work
-        // backward than forward. This way we should be able to pull
-        // out the whole thing.
-        //
-        // Find all BNode with RDF::rest
-        // Put those with RDF::Nil into vec
-        // Put those with BNode into HashMap keyed on object "restmap"
-        //
-        // Find all BNode with RDF::first
-        // Put those into HashMap keyed on subject: "firstmap"
-        //
-        // Create Used BNode vec
+        for (k, v) in bnode {
+            #[rustfmt::skip]
+            let _ = match v.as_slice() {
+                [[_, Term::RDF(VRDF::First), val],
+                 [_, Term::RDF(VRDF::Rest), Term::BNode(bnode_id)]] => {
+                    let some_seq = bnode_seq.remove(bnode_id);
+                    if let Some(mut seq) = some_seq {
+                        seq.push(val.clone());
+                        bnode_seq.insert(k.clone(), seq);
+                        extended = true;
+                    } else {
+                        remain_bnode.insert(k, v);
+                    }
+                }
+                _ => {
+                    remain_bnode.insert(k, v);
+                }
+            };
+        }
 
-        // Now iterate through RDF::Nil, gives BNode subject
-        // Create value vec
-        // Lookup Subject of rest in firstmap find RDF::First node, this is our
-        // list element add to value vec, add BNode to used BNode vec
-        // Lookup Subject of rest in restmap, gives us BNode::Subject
-        // and recurse if we find it
+        if extended && remain_bnode.len() > 0 {
+            self.stitch_seqs_1(remain_bnode, bnode_seq)
+        } else {
+            (remain_bnode, bnode_seq)
+        }
+    }
 
-        // reverse vec, add to HashMap keyed on last value of BNode
+    fn stitch_seqs(
+        &self,
+        bnode: HashMap<SpBNode, Vec<[Term; 3]>>,
+    ) -> (
+        HashMap<SpBNode, Vec<[Term; 3]>>,
+        HashMap<SpBNode, Vec<Term>>,
+    ) {
+        let mut bnode_seq_reversed: HashMap<SpBNode, Vec<Term>> = Default::default();
+        let mut remain_bnode: HashMap<SpBNode, Vec<[Term; 3]>> = Default::default();
 
-        // First find all BNode with RDF::First as a term
-        // Create vec and find Rest node.
-        // Add to data structure like so
-        //
-        // SpBNode (first) -> SPNode (rest), Vec[Term] (or nil)
-        //
-        // Vec will be length one long
-        //
-        // Take first entry, lookup SPNode(rest), add it's vec to our
-        // vec, and add back to the Map,
+        for (k, v) in bnode {
+            #[rustfmt::skip]
+            let _ = match v.as_slice() {
+                [[_, Term::RDF(VRDF::First), val],
+                 [_, Term::RDF(VRDF::Rest), Term::RDF(VRDF::Nil)]] =>
+                {
+                    bnode_seq_reversed.insert(k.clone(), vec![val.clone()]);
+                }
+                _ => {
+                    remain_bnode.insert(k, v);
+                }
+            };
+        }
+
+        let (remain_bnode, mut bnode_seq_reversed) =
+            self.stitch_seqs_1(remain_bnode, bnode_seq_reversed);
+
+        for (_, v) in bnode_seq_reversed.iter_mut() {
+            v.reverse();
+        }
+
+        (remain_bnode, bnode_seq_reversed)
     }
 
     fn resolve_imports(&mut self) {
@@ -449,11 +482,13 @@ impl<'a> OntologyParser<'a> {
     fn class_expressions(
         &mut self,
         bnode: HashMap<SpBNode, Vec<[Term; 3]>>,
+        bnode_seq: HashMap<SpBNode, Vec<Term>>,
     ) -> (
         HashMap<SpBNode, Vec<[Term; 3]>>,
+        HashMap<SpBNode, Vec<Term>>,
         HashMap<SpBNode, ClassExpression>,
     ) {
-        self.class_expressions_1(bnode, HashMap::new())
+        self.class_expressions_1(bnode, bnode_seq, HashMap::new())
     }
 
     fn to_ce(
@@ -494,9 +529,11 @@ impl<'a> OntologyParser<'a> {
     fn class_expressions_1(
         &mut self,
         bnode: HashMap<SpBNode, Vec<[Term; 3]>>,
+        mut bnode_seq: HashMap<SpBNode, Vec<Term>>,
         mut class_expression: HashMap<SpBNode, ClassExpression>,
     ) -> (
         HashMap<SpBNode, Vec<[Term; 3]>>,
+        HashMap<SpBNode, Vec<Term>>,
         HashMap<SpBNode, ClassExpression>,
     ) {
         let class_expression_len = class_expression.len();
@@ -519,7 +556,6 @@ impl<'a> OntologyParser<'a> {
                                 }
                             }),
                          PropertyExpression::DataProperty(dp) => {
-                             // TODO this should be a Result
                              self.to_dr(ce_or_dr).map(|dr| {
                                  ClassExpression::DataSomeValuesFrom {
                                      dp,
@@ -527,9 +563,47 @@ impl<'a> OntologyParser<'a> {
                                  }
                              })
                          },
-                         _ => todo!()
+                         _ => panic!("Unexpected Property Kind")
                     }
                 }
+                [[_, Term::OWL(VOWL::AllValuesFrom), ce_or_dr],
+                 [_, Term::OWL(VOWL::OnProperty), Term::Iri(pr)],
+                 [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Restriction)]] => {
+                    match self.find_property_kind(pr) {
+                         PropertyExpression::ObjectPropertyExpression(ope) =>
+                            self.to_ce(ce_or_dr, &class_expression).map(|ce| {
+                                ClassExpression::ObjectAllValuesFrom {
+                                    ope,
+                                    bce: ce.into(),
+                                }
+                            }),
+                         PropertyExpression::DataProperty(dp) => {
+                             self.to_dr(ce_or_dr).map(|dr| {
+                                 ClassExpression::DataAllValuesFrom {
+                                     dp,
+                                     dr: dr.into(),
+                                 }
+                             })
+                         },
+                         _ => panic!("Unexpected Property Kind")
+                    }
+                },
+                [[_, Term::OWL(VOWL::IntersectionOf), Term::BNode(bnodeid)],
+                 [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Class)]] => {
+                    let option_seq: Option<Vec<Term>> = bnode_seq.remove(bnodeid);
+                    let option_ce_seq: Option<Vec<Option<ClassExpression>>> = option_seq.map(
+                        |vce|
+                        vce.into_iter().map(|tce| self.to_ce(&tce, &class_expression)).collect()
+                    );
+
+                    let option_ce_seq: Option<Option<Vec<ClassExpression>>> = option_ce_seq.map(
+                        |vce| vce.into_iter().collect()
+                    );
+
+                    let option_ce_seq: Option<Vec<ClassExpression>> = option_ce_seq.flatten();
+                    option_ce_seq.map(|vce|
+                                      ClassExpression::ObjectIntersectionOf (vce))
+                },
                 [[_, Term::OWL(VOWL::ComplementOf), tce],
                  [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Class)]] => {
                     self.to_ce(&tce, &class_expression).map(|ce| {
@@ -548,9 +622,9 @@ impl<'a> OntologyParser<'a> {
 
         if class_expression.len() > class_expression_len {
             dbg!("Recursing");
-            self.class_expressions_1(remain, class_expression)
+            self.class_expressions_1(remain, bnode_seq, class_expression)
         } else {
-            (remain, class_expression)
+            (remain, bnode_seq, class_expression)
         }
     }
 
@@ -634,7 +708,7 @@ impl<'a> OntologyParser<'a> {
             vec.sort();
         }
 
-        self.stitch_seqs();
+        let (bnode, bnode_seq) = self.stitch_seqs(bnode);
 
         let (simple, bnode, ann_map) = self.annotations(simple, bnode);
 
@@ -689,7 +763,7 @@ impl<'a> OntologyParser<'a> {
         // Table 8:
 
         // Table 13: Parsing of Class Expressions
-        let (bnode, class_expression) = self.class_expressions(bnode);
+        let (bnode, bnode_seq, class_expression) = self.class_expressions(bnode, bnode_seq);
         // Table 16: Axioms without annotations
         let (simple, ann_map, class_expression) = self.axioms(simple, ann_map, class_expression);
 
@@ -699,6 +773,10 @@ impl<'a> OntologyParser<'a> {
 
         if bnode.len() > 0 {
             dbg!("bnodes remaining", bnode);
+        }
+
+        if bnode_seq.len() > 0 {
+            dbg!("sequences remaining", bnode_seq);
         }
 
         if ann_map.len() > 0 {
@@ -847,15 +925,15 @@ mod test {
         compare_two("manual/one-some-property-filler-reversed", "some");
     }
 
-    // #[test]
-    // fn only() {
-    //     compare("only");
-    //}
+    #[test]
+    fn only() {
+        compare("only");
+    }
 
-    // #[test]
-    // fn and() {
-    //     compare("and");
-    // }
+    #[test]
+    fn and() {
+        compare("and");
+    }
 
     // #[test]
     // fn or() {
@@ -1061,10 +1139,10 @@ mod test {
     //     compare("facet-restriction");
     // }
 
-    // #[test]
-    // fn data_only() {
-    //    compare("data-only");
-    // }
+    #[test]
+    fn data_only() {
+        compare("data-only");
+    }
 
     // #[test]
     // fn data_exact_cardinality() {
