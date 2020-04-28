@@ -111,6 +111,7 @@ pub enum OWL {
     EquivalentClass,
     IntersectionOf,
     InverseOf,
+    MinQualifiedCardinality,
     OnProperty,
     UnionOf,
     SomeValuesFrom,
@@ -127,6 +128,7 @@ pub enum OWL {
     NamedIndividual,
     Nothing,
     ObjectProperty,
+    OnClass,
     Ontology,
     ReflexiveProperty,
     Restriction,
@@ -149,6 +151,8 @@ lazy_meta! {
     EquivalentClass, extend(OWL, "equivalentClass");
     IntersectionOf, extend(OWL, "intersectionOf");
     InverseOf, extend(OWL, "inverseOf");
+    MinQualifiedCardinality, extend(OWL, "minQualifiedCardinality");
+    OnClass, extend(OWL, "onClass");
     OnProperty, extend(OWL, "onProperty");
     SomeValuesFrom, extend(OWL, "someValuesFrom");
     UnionOf, extend(OWL, "unionOf");

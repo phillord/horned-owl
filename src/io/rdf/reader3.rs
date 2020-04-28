@@ -33,6 +33,12 @@ type SpTerm = sophia::term::Term<Rc<str>>;
 type SpIri = IriData<Rc<str>>;
 type SpBNode = BNodeId<Rc<str>>;
 
+macro_rules! some {
+    ($body:expr) => {
+        (|| Some($body))()
+    };
+}
+
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 enum Term {
     Iri(IRI),
@@ -530,6 +536,13 @@ impl<'a> OntologyParser<'a> {
         }
     }
 
+    fn to_u32(&self, t: &Term) -> Option<u32> {
+        match t {
+            Term::Literal(val, LiteralKind::Datatype(_)) => val.parse::<u32>().ok(),
+            _ => None,
+        }
+    }
+
     fn find_property_kind(&self, iri: &IRI) -> PropertyExpression {
         match find_declaration_kind(&self.o, iri.clone()) {
             Some(NamedEntityKind::AnnotationProperty) => {
@@ -611,11 +624,31 @@ impl<'a> OntologyParser<'a> {
                     option_ce_seq.map(|vce|
                                       ClassExpression::ObjectIntersectionOf (vce))
                 },
+                  [[_, Term::OWL(VOWL::UnionOf), Term::BNode(bnodeid)],
+                   [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Class)]] => {
+                    let option_ce_seq = self.to_ce_seq(&bnode_seq.remove(bnodeid), &class_expression);
+                    option_ce_seq.map(|vce|
+                                      ClassExpression::ObjectUnionOf (vce))
+                },
                 [[_, Term::OWL(VOWL::ComplementOf), tce],
                  [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Class)]] => {
                     self.to_ce(&tce, &class_expression).map(|ce| {
                         ClassExpression::ObjectComplementOf(ce.into())
                     })
+                },
+                [[_, Term::OWL(VOWL::MinQualifiedCardinality), literal],
+                 [_, Term::OWL(VOWL::OnProperty), Term::Iri(pr)],
+                 [_, Term::OWL(VOWL::OnClass), tce],
+                 [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Restriction)]
+                ] => {
+                    some!{
+                        ClassExpression::ObjectMinCardinality
+                        {
+                            n:self.to_u32(literal)?,
+                            ope: pr.into(),
+                            bce: self.to_ce(tce, &class_expression)?.into()
+                        }
+                    }
                 }
                 _a => None,
             };
@@ -942,10 +975,10 @@ mod test {
         compare("and");
     }
 
-    // #[test]
-    // fn or() {
-    //     compare("or");
-    // }
+    #[test]
+    fn or() {
+        compare("or");
+    }
 
     #[test]
     fn not() {
@@ -1096,10 +1129,10 @@ mod test {
     //     compare("object-unqualified-max-cardinality");
     // }
 
-    // #[test]
-    // fn object_min_cardinality() {
-    //     compare("object-min-cardinality");
-    // }
+    #[test]
+    fn object_min_cardinality() {
+        compare("object-min-cardinality");
+    }
 
     // #[test]
     // fn object_max_cardinality() {
