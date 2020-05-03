@@ -514,16 +514,14 @@ impl<'a> OntologyParser<'a> {
         term_seq: &Option<Vec<Term>>,
         class_expression: &HashMap<SpBNode, ClassExpression>,
     ) -> Option<Vec<ClassExpression>> {
-        let option_ce_seq: Option<Vec<Option<ClassExpression>>> = term_seq.as_ref().map(|vce| {
-            vce.into_iter()
-                .map(|tce| self.to_ce(&tce, &class_expression))
-                .collect()
-        });
+        let v: Vec<Option<ClassExpression>> = term_seq
+            .as_ref()?
+            .into_iter()
+            .map(|tce| self.to_ce(&tce, &class_expression))
+            .collect();
 
-        let option_ce_seq: Option<Option<Vec<ClassExpression>>> =
-            option_ce_seq.map(|vce| vce.into_iter().collect());
-
-        option_ce_seq.flatten()
+        // All or nothing
+        v.into_iter().collect()
     }
 
     fn to_dr(&self, t: &Term) -> Option<DataRange> {
@@ -579,19 +577,20 @@ impl<'a> OntologyParser<'a> {
                  [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Restriction)]] => {
                     match self.find_property_kind(pr) {
                          PropertyExpression::ObjectPropertyExpression(ope) =>
-                            self.to_ce(ce_or_dr, &class_expression).map(|ce| {
+                            some!{
                                 ClassExpression::ObjectSomeValuesFrom {
                                     ope,
-                                    bce: ce.into(),
+                                    bce: self.to_ce(ce_or_dr, &class_expression)?.into()
                                 }
-                            }),
+                            },
                          PropertyExpression::DataProperty(dp) => {
-                             self.to_dr(ce_or_dr).map(|dr| {
+                             some!{
                                  ClassExpression::DataSomeValuesFrom {
                                      dp,
-                                     dr: dr.into(),
+                                     dr: self.to_dr(ce_or_dr)?
                                  }
-                             })
+
+                             }
                          },
                          _ => panic!("Unexpected Property Kind")
                     }
@@ -600,41 +599,51 @@ impl<'a> OntologyParser<'a> {
                  [_, Term::OWL(VOWL::OnProperty), Term::Iri(pr)],
                  [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Restriction)]] => {
                     match self.find_property_kind(pr) {
-                         PropertyExpression::ObjectPropertyExpression(ope) =>
-                            self.to_ce(ce_or_dr, &class_expression).map(|ce| {
+                        PropertyExpression::ObjectPropertyExpression(ope) => {
+                            some!{
                                 ClassExpression::ObjectAllValuesFrom {
                                     ope,
-                                    bce: ce.into(),
+                                    bce: self.to_ce(ce_or_dr, &class_expression)?.into()
                                 }
-                            }),
-                         PropertyExpression::DataProperty(dp) => {
-                             self.to_dr(ce_or_dr).map(|dr| {
-                                 ClassExpression::DataAllValuesFrom {
-                                     dp,
-                                     dr: dr.into(),
-                                 }
-                             })
-                         },
-                         _ => panic!("Unexpected Property Kind")
+                            }
+                        },
+                        PropertyExpression::DataProperty(dp) => {
+                            some! {
+                                ClassExpression::DataAllValuesFrom {
+                                    dp,
+                                    dr: self.to_dr(ce_or_dr)?
+                                }
+                            }
+                        },
+                        _ => panic!("Unexpected Property Kind")
                     }
                 },
                 [[_, Term::OWL(VOWL::IntersectionOf), Term::BNode(bnodeid)],
                  [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Class)]] => {
-                    let option_ce_seq = self.to_ce_seq(&bnode_seq.remove(bnodeid), &class_expression);
-                    option_ce_seq.map(|vce|
-                                      ClassExpression::ObjectIntersectionOf (vce))
+                    some!{
+                        ClassExpression::ObjectIntersectionOf(
+                            self.to_ce_seq(&bnode_seq.remove(bnodeid), &class_expression)?
+                        )
+                    }
                 },
-                  [[_, Term::OWL(VOWL::UnionOf), Term::BNode(bnodeid)],
-                   [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Class)]] => {
-                    let option_ce_seq = self.to_ce_seq(&bnode_seq.remove(bnodeid), &class_expression);
-                    option_ce_seq.map(|vce|
-                                      ClassExpression::ObjectUnionOf (vce))
+                [[_, Term::OWL(VOWL::UnionOf), Term::BNode(bnodeid)],
+                 [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Class)]] => {
+                    some!{
+                        ClassExpression::ObjectUnionOf(
+                            self.to_ce_seq(
+                                &bnode_seq.remove(bnodeid),
+                                &class_expression
+                            )?
+                        )
+                    }
                 },
                 [[_, Term::OWL(VOWL::ComplementOf), tce],
                  [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Class)]] => {
-                    self.to_ce(&tce, &class_expression).map(|ce| {
-                        ClassExpression::ObjectComplementOf(ce.into())
-                    })
+                    some!{
+                        ClassExpression::ObjectComplementOf(
+                            self.to_ce(&tce, &class_expression)?.into()
+                        )
+                    }
                 },
                 [[_, Term::OWL(VOWL::MinQualifiedCardinality), literal],
                  [_, Term::OWL(VOWL::OnProperty), Term::Iri(pr)],
