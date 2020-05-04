@@ -1577,8 +1577,8 @@ pub mod test {
         };
 
         assert!(n == &1);
-        assert_eq!(o, "http://www.example.com/r");
-        assert_eq!(c, "http://www.example.com/D")
+        assert_eq!(o, "http://www.example.com/iri#r");
+        assert_eq!(c, "http://www.example.com/iri#D")
     }
 
     #[test]
@@ -1617,8 +1617,8 @@ pub mod test {
         };
 
         assert!(n == &1);
-        assert_eq!(o, "http://www.example.com/r");
-        assert_eq!(c, "http://www.example.com/D")
+        assert_eq!(o, "http://www.example.com/iri#r");
+        assert_eq!(c, "http://www.example.com/iri#D")
     }
 
     #[test]
@@ -1649,8 +1649,8 @@ pub mod test {
         };
 
         assert!(n == &1);
-        assert_eq!(o, "http://www.example.com/r");
-        assert_eq!(c, "http://www.example.com/D")
+        assert_eq!(o, "http://www.example.com/iri#r");
+        assert_eq!(c, "http://www.example.com/iri#D")
     }
 
     #[test]

@@ -645,6 +645,20 @@ impl<'a> OntologyParser<'a> {
                         )
                     }
                 },
+                [[_, Term::OWL(VOWL::OnProperty), Term::Iri(pr)],
+                 [_, Term::OWL(VOWL::QualifiedCardinality), literal],
+                 [_, Term::OWL(VOWL::OnClass), tce],
+                 [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Restriction)]
+                ] => {
+                    some!{
+                        ClassExpression::ObjectExactCardinality
+                        {
+                            n:self.to_u32(literal)?,
+                            ope: pr.into(),
+                            bce: self.to_ce(tce, &class_expression)?.into()
+                        }
+                    }
+                }
                 [[_, Term::OWL(VOWL::MinQualifiedCardinality), literal],
                  [_, Term::OWL(VOWL::OnProperty), Term::Iri(pr)],
                  [_, Term::OWL(VOWL::OnClass), tce],
@@ -659,6 +673,21 @@ impl<'a> OntologyParser<'a> {
                         }
                     }
                 }
+                [[_, Term::OWL(VOWL::MaxQualifiedCardinality), literal],
+                 [_, Term::OWL(VOWL::OnProperty), Term::Iri(pr)],
+                 [_, Term::OWL(VOWL::OnClass), tce],
+                 [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Restriction)]
+                ] => {
+                    some!{
+                        ClassExpression::ObjectMaxCardinality
+                        {
+                            n:self.to_u32(literal)?,
+                            ope: pr.into(),
+                            bce: self.to_ce(tce, &class_expression)?.into()
+                        }
+                    }
+                }
+
                 _a => None,
             };
 
@@ -1143,15 +1172,15 @@ mod test {
         compare("object-min-cardinality");
     }
 
-    // #[test]
-    // fn object_max_cardinality() {
-    //     compare("object-max-cardinality");
-    // }
+    #[test]
+    fn object_max_cardinality() {
+        compare("object-max-cardinality");
+    }
 
-    // #[test]
-    // fn object_exact_cardinality() {
-    //     compare("object-exact-cardinality");
-    // }
+    #[test]
+    fn object_exact_cardinality() {
+        compare("object-exact-cardinality");
+    }
 
     // #[test]
     // fn datatype_alias() {

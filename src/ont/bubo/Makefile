@@ -8,7 +8,7 @@ PREQ_STEM=$(subst .clj,,$(PREQ_EXC))
 ## Use "&" to indicate a grouping target which is only available in
 ## make 4.3. It causes warnings in lower versions.
 define build_template
-  ../owl-rdf/$(1).owl ../owl-xml/$(1).owx ../owl-ttl/$1.ttl: $1.clj
+  ../owl-rdf/$(1).owl ../owl-xml/$(1).owx ../owl-ttl/$1.ttl &: $1.clj
 	bubo $1.clj
 
   TARGETS+=../owl-rdf/$(1).owl ../owl-xml/$(1).owx ../owl-ttl/$(1).ttl

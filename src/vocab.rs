@@ -111,8 +111,10 @@ pub enum OWL {
     EquivalentClass,
     IntersectionOf,
     InverseOf,
+    MaxQualifiedCardinality,
     MinQualifiedCardinality,
     OnProperty,
+    QualifiedCardinality,
     UnionOf,
     SomeValuesFrom,
 
@@ -151,9 +153,11 @@ lazy_meta! {
     EquivalentClass, extend(OWL, "equivalentClass");
     IntersectionOf, extend(OWL, "intersectionOf");
     InverseOf, extend(OWL, "inverseOf");
+    MaxQualifiedCardinality, extend(OWL, "maxQualifiedCardinality");
     MinQualifiedCardinality, extend(OWL, "minQualifiedCardinality");
     OnClass, extend(OWL, "onClass");
     OnProperty, extend(OWL, "onProperty");
+    QualifiedCardinality, extend(OWL, "qualifiedCardinality");
     SomeValuesFrom, extend(OWL, "someValuesFrom");
     UnionOf, extend(OWL, "unionOf");
 
