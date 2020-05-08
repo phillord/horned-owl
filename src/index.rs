@@ -6,7 +6,6 @@ pub fn find_logically_equal_axiom<'a>(
 ) -> Option<&'a AnnotatedAxiom> {
     // Find any axiom in Ontology which is the same as AnnotatedAxiom,
     // ignoring the Annotations
-
     o.annotated_axiom(axiom.kind())
         .find(|ax| ax.logical_eq(axiom))
 }
@@ -23,7 +22,7 @@ pub fn update_logically_equal_axiom<'a>(o: &'a mut Ontology, mut axiom: Annotate
     o.insert(axiom);
 }
 
-pub fn find_declaration_kind(o: &Ontology, iri: IRI) -> Option<NamedEntityKind> {
+pub fn find_declaration_kind(o: &Ontology, iri: &IRI) -> Option<NamedEntityKind> {
     match 10 {
         _ if find_logically_equal_axiom
             (o, &DeclareClass(Class(iri.clone())).into()).is_some() => {
@@ -54,6 +53,13 @@ pub fn find_declaration_kind(o: &Ontology, iri: IRI) -> Option<NamedEntityKind> 
     }
 
     return None;
+}
+
+pub fn is_annotation_property(o: &Ontology, iri: &IRI) -> bool {
+    match find_declaration_kind(o, iri) {
+        Some(NamedEntityKind::AnnotationProperty) => true,
+        _ => false
+    }
 }
 
 #[cfg(test)]
@@ -142,17 +148,17 @@ mod test {
         o.declare(b.object_property("http://www.example.com/ob"));
 
         assert_eq!(
-            find_declaration_kind(&o, b.iri("http://www.example.com/c")),
+            find_declaration_kind(&o, &b.iri("http://www.example.com/c")),
             Some(NamedEntityKind::Class)
         );
 
         assert_eq!(
-            find_declaration_kind(&o, b.iri("http://www.example.com/ob")),
+            find_declaration_kind(&o, &b.iri("http://www.example.com/ob")),
             Some(NamedEntityKind::ObjectProperty)
         );
 
         assert_eq!(
-            find_declaration_kind(&o, b.iri("http://www.example.com/fred")),
+            find_declaration_kind(&o, &b.iri("http://www.example.com/fred")),
             None
         );
     }

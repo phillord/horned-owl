@@ -4,6 +4,7 @@ use Term::*;
 use curie::PrefixMapping;
 
 use crate::index::find_declaration_kind;
+use crate::index::is_annotation_property;
 use crate::index::update_logically_equal_axiom;
 use crate::model::Literal;
 use crate::model::*;
@@ -371,6 +372,12 @@ impl<'a> OntologyParser<'a> {
 
     fn annotation(&self, t: &[Term; 3]) -> Annotation {
         match t {
+            // We assume that anything passed to here is an
+            // annotation built in type
+            [s, RDFS(rdfs), b] => {
+                let iri = self.b.iri(rdfs.iri_s());
+                self.annotation(&[s.clone(), Term::Iri(iri), b.clone()])
+            }
             [_, Iri(p), Term::Literal(ob, kind)] => Annotation {
                 ap: AnnotationProperty(p.clone()),
                 av: match kind {
@@ -379,6 +386,14 @@ impl<'a> OntologyParser<'a> {
                         literal: ob.clone().to_string(),
                     }
                     .into(),
+                    LiteralKind::Datatype(iri)
+                        if iri.to_string() == "http://www.w3.org/2001/XMLSchema#string" =>
+                    {
+                        Literal::Simple {
+                            literal: ob.clone().to_string(),
+                        }
+                        .into()
+                    }
                     LiteralKind::Datatype(iri) => Literal::Datatype {
                         datatype_iri: iri.to_iri(self.b),
                         literal: ob.clone().to_string(),
@@ -413,7 +428,7 @@ impl<'a> OntologyParser<'a> {
         }
     }
 
-    fn annotations(
+    fn axiom_annotations(
         &mut self,
         mut simple: Vec<[Term; 3]>,
         bnode: HashMap<SpBNode, Vec<[Term; 3]>>,
@@ -542,7 +557,7 @@ impl<'a> OntologyParser<'a> {
     }
 
     fn find_property_kind(&self, iri: &IRI) -> PropertyExpression {
-        match find_declaration_kind(&self.o, iri.clone()) {
+        match find_declaration_kind(&self.o, iri) {
             Some(NamedEntityKind::AnnotationProperty) => {
                 PropertyExpression::AnnotationProperty(iri.into())
             }
@@ -761,6 +776,32 @@ impl<'a> OntologyParser<'a> {
         (remain, ann_map, class_expression)
     }
 
+    fn simple_annotations(&mut self, simple: Vec<[Term; 3]>) -> Vec<[Term; 3]> {
+        let mut remain = vec![];
+
+        for triple in simple {
+            dbg!(&triple);
+            if let Some(iri) = match &triple {
+                [Term::Iri(iri), Term::RDFS(rdfs), _] if rdfs.is_builtin() => Some(iri),
+                [Term::Iri(iri), Term::OWL(VOWL::VersionInfo), _] => Some(iri),
+                [Term::Iri(iri), Term::Iri(ap), _] if is_annotation_property(&self.o, &ap) => {
+                    eprintln!("is annotation");
+                    Some(iri)
+                }
+                _ => None,
+            } {
+                self.o.insert(AnnotationAssertion {
+                    subject: iri.clone(),
+                    ann: self.annotation(&triple),
+                });
+            } else {
+                remain.push(triple);
+            }
+        }
+
+        remain
+    }
+
     fn read(mut self, triple: Vec<[SpTerm; 3]>) -> Result<Ontology, Error> {
         // move to our own Terms, with IRIs swapped
 
@@ -788,7 +829,8 @@ impl<'a> OntologyParser<'a> {
 
         let (bnode, bnode_seq) = self.stitch_seqs(bnode);
 
-        let (simple, bnode, ann_map) = self.annotations(simple, bnode);
+        // Table 10
+        let (simple, bnode, ann_map) = self.axiom_annotations(simple, bnode);
 
         self.resolve_imports();
         self.backward_compat();
@@ -837,6 +879,9 @@ impl<'a> OntologyParser<'a> {
         // generic solution for handling annotations, there is no
         // handling of bnodes).
         let (simple, ann_map) = self.declarations(simple, ann_map);
+
+        // Table 10
+        let simple = self.simple_annotations(simple);
 
         // Table 8:
 
@@ -958,10 +1003,10 @@ mod test {
         compare("declaration-with-two-annotation");
     }
 
-    // #[test]
-    // fn class_with_two_annotations() {
-    //     compare("class_with_two_annotations");
-    // }
+    #[test]
+    fn class_with_two_annotations() {
+        compare("class_with_two_annotations");
+    }
 
     #[test]
     fn ont() {
@@ -1028,10 +1073,10 @@ mod test {
         compare("annotation-property");
     }
 
-    // #[test]
-    // fn annotation() {
-    //     compare("annotation");
-    // }
+    #[test]
+    fn annotation() {
+        compare("annotation");
+    }
 
     // #[test]
     // fn annotation_domain() {
@@ -1043,19 +1088,19 @@ mod test {
     //     compare("annotation-range");
     // }
 
-    // #[test]
-    // fn label() {
-    //     compare("label");
-    // }
+    #[test]
+    fn label() {
+        compare("label");
+    }
 
-    // #[test]
-    // fn one_comment() {
-    //     // This is currently failing because the XML parser gives the
-    //     // comment a language and a datatype ("PlainLiteral") while
-    //     // the RDF one gives it just the language, as literals can't
-    //     // be both. Which is correct?
-    //     compare("one-comment");
-    // }
+    #[test]
+    fn one_comment() {
+        // This is currently failing because the XML parser gives the
+        // comment a language and a datatype ("PlainLiteral") while
+        // the RDF one gives it just the language, as literals can't
+        // be both. Which is correct?
+        compare("one-comment");
+    }
 
     // #[test]
     // fn one_ontology_annotation() {

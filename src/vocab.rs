@@ -85,22 +85,44 @@ lazy_meta! {
 
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum RDFS {
+    Comment,
     Datatype,
     Domain,
+    IsDefinedBy,
+    Label,
     Range,
+    SeeAlso,
     SubClassOf,
+}
+
+impl RDFS {
+    pub fn is_builtin(&self) -> bool {
+        match self {
+            RDFS::Label | RDFS::Comment
+                | RDFS::SeeAlso | RDFS::IsDefinedBy => true,
+            _ => false,
+        }
+    }
+
 }
 
 lazy_meta! {
     RDFS, IRIString, METARDFS;
+    Comment, extend(RDFS, "comment");
     Datatype, extend(RDFS, "Datatype");
     Domain, extend(RDFS, "domain");
+    IsDefinedBy, extend(RDFS, "isDefinedBy");
+    Label, extend(RDFS, "label");
     Range, extend(RDFS, "range");
+    SeeAlso, extend(RDFS, "seeAlso");
     SubClassOf, extend(RDFS, "subClassOf");
 }
 
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum OWL {
+    // TODO Remove this lower case/upper case split. It affects the
+    // Ord of these things, is hard to remember and is not reflected
+    // in the Rust naming
     // Lower case
     AllValuesFrom,
     AnnotatedSource,
@@ -117,6 +139,7 @@ pub enum OWL {
     QualifiedCardinality,
     UnionOf,
     SomeValuesFrom,
+    VersionInfo,
 
     // Upper Case
     AnnotationProperty,
@@ -160,6 +183,7 @@ lazy_meta! {
     QualifiedCardinality, extend(OWL, "qualifiedCardinality");
     SomeValuesFrom, extend(OWL, "someValuesFrom");
     UnionOf, extend(OWL, "unionOf");
+    VersionInfo, extend(OWL, "versionInfo");
 
     // Upper Case
     AnnotationProperty, extend(OWL, "AnnotationProperty");
