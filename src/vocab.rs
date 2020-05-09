@@ -120,90 +120,81 @@ lazy_meta! {
 
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum OWL {
-    // TODO Remove this lower case/upper case split. It affects the
-    // Ord of these things, is hard to remember and is not reflected
-    // in the Rust naming
-    // Lower case
     AllValuesFrom,
-    AnnotatedSource,
     AnnotatedProperty,
+    AnnotatedSource,
     AnnotatedTarget,
-    ComplementOf,
-    DisjointWith,
-    EquivalentClass,
-    IntersectionOf,
-    InverseOf,
-    MaxQualifiedCardinality,
-    MinQualifiedCardinality,
-    OnProperty,
-    QualifiedCardinality,
-    UnionOf,
-    SomeValuesFrom,
-    VersionInfo,
-
-    // Upper Case
     AnnotationProperty,
     AsymmetricProperty,
     Axiom,
     Class,
+    ComplementOf,
     DatatypeProperty,
+    DisjointWith,
+    EquivalentClass,
     FunctionalProperty,
+    IntersectionOf,
     InverseFunctionalProperty,
+    InverseOf,
     IrreflexiveProperty,
+    MaxQualifiedCardinality,
+    MinQualifiedCardinality,
     NamedIndividual,
     Nothing,
     ObjectProperty,
     OnClass,
+    OnProperty,
     Ontology,
+    QualifiedCardinality,
     ReflexiveProperty,
     Restriction,
+    SomeValuesFrom,
     SymmetricProperty,
-    TransitiveProperty,
     Thing,
+    TransitiveProperty,
+    UnionOf,
     VersionIRI,
+    VersionInfo,
 }
 
 lazy_meta! {
     OWL, IRIString, METAOWL;
 
-    // Lower Case
     AllValuesFrom, extend(OWL, "allValuesFrom");
-    AnnotatedSource, extend(OWL, "annotatedSource");
     AnnotatedProperty, extend(OWL, "annotatedProperty");
+    AnnotatedSource, extend(OWL, "annotatedSource");
     AnnotatedTarget, extend(OWL, "annotatedTarget");
-    ComplementOf, extend(OWL, "complementOf");
-    DisjointWith, extend(OWL, "disjointWith");
-    EquivalentClass, extend(OWL, "equivalentClass");
-    IntersectionOf, extend(OWL, "intersectionOf");
-    InverseOf, extend(OWL, "inverseOf");
-    MaxQualifiedCardinality, extend(OWL, "maxQualifiedCardinality");
-    MinQualifiedCardinality, extend(OWL, "minQualifiedCardinality");
-    OnClass, extend(OWL, "onClass");
-    OnProperty, extend(OWL, "onProperty");
-    QualifiedCardinality, extend(OWL, "qualifiedCardinality");
-    SomeValuesFrom, extend(OWL, "someValuesFrom");
-    UnionOf, extend(OWL, "unionOf");
-    VersionInfo, extend(OWL, "versionInfo");
-
-    // Upper Case
     AnnotationProperty, extend(OWL, "AnnotationProperty");
     AsymmetricProperty, extend(OWL, "AsymmetricProperty");
     Axiom, extend(OWL, "Axiom");
     Class, extend(OWL, "Class");
+    ComplementOf, extend(OWL, "complementOf");
     DatatypeProperty, extend(OWL, "DatatypeProperty");
+    DisjointWith, extend(OWL, "disjointWith");
+    EquivalentClass, extend(OWL, "equivalentClass");
     FunctionalProperty, extend(OWL, "FunctionalProperty");
+    IntersectionOf, extend(OWL, "intersectionOf");
     InverseFunctionalProperty, extend(OWL, "InverseFunctionalProperty");
+    InverseOf, extend(OWL, "inverseOf");
     IrreflexiveProperty, extend(OWL, "IrreflexiveProperty");
+    MaxQualifiedCardinality, extend(OWL, "maxQualifiedCardinality");
+    MinQualifiedCardinality, extend(OWL, "minQualifiedCardinality");
     NamedIndividual, extend(OWL, "NamedIndividual");
     Nothing, extend(OWL, "Nothing");
     ObjectProperty, extend(OWL, "ObjectProperty");
+    OnClass, extend(OWL, "onClass");
+    OnProperty, extend(OWL, "onProperty");
     Ontology, extend(OWL, "Ontology");
+    QualifiedCardinality, extend(OWL, "qualifiedCardinality");
     ReflexiveProperty, extend(OWL, "ReflexiveProperty");
     Restriction, extend(OWL, "Restriction");
+    SomeValuesFrom, extend(OWL, "someValuesFrom");
     SymmetricProperty, extend(OWL, "SymmetricProperty");
     Thing, extend(OWL, "Thing");
     TransitiveProperty, extend(OWL, "TransitiveProperty");
+    UnionOf, extend(OWL, "unionOf");
     VersionIRI, extend(OWL, "versionIRI");
+    VersionInfo, extend(OWL, "versionInfo");
 }
 
 #[test]

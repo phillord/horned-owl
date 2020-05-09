@@ -442,8 +442,8 @@ impl<'a> OntologyParser<'a> {
         for (k, v) in bnode {
             match v.as_slice() {
                 #[rustfmt::skip]
-                [[_, Term::OWL(VOWL::AnnotatedSource), sb],
-                 [_, Term::OWL(VOWL::AnnotatedProperty), p],
+                [[_, Term::OWL(VOWL::AnnotatedProperty), p],
+                 [_, Term::OWL(VOWL::AnnotatedSource), sb],
                  [_, Term::OWL(VOWL::AnnotatedTarget), ob],
                  [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Axiom)],
                  ann @ ..] =>
@@ -660,9 +660,9 @@ impl<'a> OntologyParser<'a> {
                         )
                     }
                 },
-                [[_, Term::OWL(VOWL::OnProperty), Term::Iri(pr)],
+                [[_, Term::OWL(VOWL::OnClass), tce],
+                 [_, Term::OWL(VOWL::OnProperty), Term::Iri(pr)],
                  [_, Term::OWL(VOWL::QualifiedCardinality), literal],
-                 [_, Term::OWL(VOWL::OnClass), tce],
                  [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Restriction)]
                 ] => {
                     some!{
@@ -675,8 +675,8 @@ impl<'a> OntologyParser<'a> {
                     }
                 }
                 [[_, Term::OWL(VOWL::MinQualifiedCardinality), literal],
-                 [_, Term::OWL(VOWL::OnProperty), Term::Iri(pr)],
                  [_, Term::OWL(VOWL::OnClass), tce],
+                 [_, Term::OWL(VOWL::OnProperty), Term::Iri(pr)],
                  [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Restriction)]
                 ] => {
                     some!{
@@ -689,8 +689,8 @@ impl<'a> OntologyParser<'a> {
                     }
                 }
                 [[_, Term::OWL(VOWL::MaxQualifiedCardinality), literal],
-                 [_, Term::OWL(VOWL::OnProperty), Term::Iri(pr)],
                  [_, Term::OWL(VOWL::OnClass), tce],
+                 [_, Term::OWL(VOWL::OnProperty), Term::Iri(pr)],
                  [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Restriction)]
                 ] => {
                     some!{
