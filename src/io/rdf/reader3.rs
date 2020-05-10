@@ -731,12 +731,10 @@ impl<'a> OntologyParser<'a> {
         HashMap<[Term; 3], BTreeSet<Annotation>>,
         HashMap<SpBNode, ClassExpression>,
     ) {
-        // TODO match subclass axiom for the moment on a BNode.
-        // We will need to have altered the BNode tiples at this
-        // point, so taht they have ClassExpression at the ned
-        let remain = simple
-            .into_iter()
-            .filter(|n| match n {
+        let mut remain = vec![];
+
+        for triple in simple {
+            match &triple {
                 [Term::Iri(sub), Term::RDFS(VRDFS::SubClassOf), Term::Iri(sup)] => {
                     self.merge(AnnotatedAxiom {
                         axiom: SubClassOf {
@@ -744,12 +742,11 @@ impl<'a> OntologyParser<'a> {
                             sup: Class(sup.clone()).into(),
                         }
                         .into(),
-                        ann: ann_map.remove(n).unwrap_or_else(|| BTreeSet::new()),
+                        ann: ann_map.remove(&triple).unwrap_or_else(|| BTreeSet::new()),
                     });
-                    false
                 }
                 [Term::Iri(sub), Term::RDFS(VRDFS::SubClassOf), Term::BNode(bnode)] => {
-                    let oce = class_expression.remove(bnode);
+                    let oce = class_expression.remove(&bnode);
                     if let Some(ce) = oce {
                         self.merge(AnnotatedAxiom {
                             axiom: SubClassOf {
@@ -757,21 +754,44 @@ impl<'a> OntologyParser<'a> {
                                 sup: ce,
                             }
                             .into(),
-                            ann: ann_map.remove(n).unwrap_or_else(|| BTreeSet::new()),
+                            ann: ann_map.remove(&triple).unwrap_or_else(|| BTreeSet::new()),
                         });
-                        false
                     } else {
                         dbg!("Failed to find bnode", bnode);
-                        true
                     }
                 }
-
-                _ => {
-                    dbg!("unrecognised triple");
-                    true
+                // TODO: We need to check whether these
+                // EquivalentClasses have any other EquivalentClasses
+                // and add to that axiom
+                [Term::Iri(a), Term::OWL(VOWL::EquivalentClass), Term::Iri(b)] => {
+                    self.merge(AnnotatedAxiom {
+                        axiom: EquivalentClasses(vec![
+                            // The order is not important here, but
+                            // this way around matches with the XML reader
+                            Class(b.clone()).into(),
+                            Class(a.clone()).into(),
+                        ])
+                        .into(),
+                        ann: ann_map.remove(&triple).unwrap_or_else(|| BTreeSet::new()),
+                    });
                 }
-            })
-            .collect();
+                [Term::Iri(a), Term::OWL(VOWL::DisjointWith), Term::Iri(b)] => {
+                    self.merge(AnnotatedAxiom {
+                        axiom: DisjointClasses(vec![
+                            // The order is not important here, but
+                            // this way around matches with the XML reader
+                            Class(b.clone()).into(),
+                            Class(a.clone()).into(),
+                        ])
+                        .into(),
+                        ann: ann_map.remove(&triple).unwrap_or_else(|| BTreeSet::new()),
+                    });
+                }
+                _ => {
+                    remain.push(triple);
+                }
+            }
+        }
 
         (remain, ann_map, class_expression)
     }
@@ -1107,15 +1127,15 @@ mod test {
     //     compare("one-ontology-annotation");
     // }
 
-    // #[test]
-    // fn one_equivalent_class() {
-    //     compare("one-equivalent");
-    // }
+    #[test]
+    fn one_equivalent_class() {
+        compare("one-equivalent");
+    }
 
-    // #[test]
-    // fn one_disjoint_class() {
-    //     compare("one-disjoint");
-    // }
+    #[test]
+    fn one_disjoint_class() {
+        compare("one-disjoint");
+    }
 
     // #[test]
     // fn disjoint_union() {
