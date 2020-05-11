@@ -515,11 +515,11 @@ impl<'a> OntologyParser<'a> {
     fn to_ce(
         &mut self,
         tce: &Term,
-        class_expression: &HashMap<SpBNode, ClassExpression>,
+        class_expression: &mut HashMap<SpBNode, ClassExpression>,
     ) -> Option<ClassExpression> {
         match tce {
             Term::Iri(cl) => Some(Class(cl.clone()).into()),
-            Term::BNode(id) => class_expression.get(id).cloned(),
+            Term::BNode(id) => class_expression.remove(id),
             _ => None,
         }
     }
@@ -527,12 +527,12 @@ impl<'a> OntologyParser<'a> {
     fn to_ce_seq(
         &mut self,
         term_seq: &Option<Vec<Term>>,
-        class_expression: &HashMap<SpBNode, ClassExpression>,
+        class_expression: &mut HashMap<SpBNode, ClassExpression>,
     ) -> Option<Vec<ClassExpression>> {
         let v: Vec<Option<ClassExpression>> = term_seq
             .as_ref()?
             .into_iter()
-            .map(|tce| self.to_ce(&tce, &class_expression))
+            .map(|tce| self.to_ce(&tce, class_expression))
             .collect();
 
         // All or nothing
@@ -595,7 +595,7 @@ impl<'a> OntologyParser<'a> {
                             some!{
                                 ClassExpression::ObjectSomeValuesFrom {
                                     ope,
-                                    bce: self.to_ce(ce_or_dr, &class_expression)?.into()
+                                    bce: self.to_ce(ce_or_dr, &mut class_expression)?.into()
                                 }
                             },
                          PropertyExpression::DataProperty(dp) => {
@@ -618,7 +618,7 @@ impl<'a> OntologyParser<'a> {
                             some!{
                                 ClassExpression::ObjectAllValuesFrom {
                                     ope,
-                                    bce: self.to_ce(ce_or_dr, &class_expression)?.into()
+                                    bce: self.to_ce(ce_or_dr, &mut class_expression)?.into()
                                 }
                             }
                         },
@@ -637,7 +637,7 @@ impl<'a> OntologyParser<'a> {
                  [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Class)]] => {
                     some!{
                         ClassExpression::ObjectIntersectionOf(
-                            self.to_ce_seq(&bnode_seq.remove(bnodeid), &class_expression)?
+                            self.to_ce_seq(&bnode_seq.remove(bnodeid), &mut class_expression)?
                         )
                     }
                 },
@@ -647,7 +647,7 @@ impl<'a> OntologyParser<'a> {
                         ClassExpression::ObjectUnionOf(
                             self.to_ce_seq(
                                 &bnode_seq.remove(bnodeid),
-                                &class_expression
+                                &mut class_expression
                             )?
                         )
                     }
@@ -656,7 +656,7 @@ impl<'a> OntologyParser<'a> {
                  [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Class)]] => {
                     some!{
                         ClassExpression::ObjectComplementOf(
-                            self.to_ce(&tce, &class_expression)?.into()
+                            self.to_ce(&tce, &mut class_expression)?.into()
                         )
                     }
                 },
@@ -670,7 +670,7 @@ impl<'a> OntologyParser<'a> {
                         {
                             n:self.to_u32(literal)?,
                             ope: pr.into(),
-                            bce: self.to_ce(tce, &class_expression)?.into()
+                            bce: self.to_ce(tce, &mut class_expression)?.into()
                         }
                     }
                 }
@@ -684,7 +684,7 @@ impl<'a> OntologyParser<'a> {
                         {
                             n:self.to_u32(literal)?,
                             ope: pr.into(),
-                            bce: self.to_ce(tce, &class_expression)?.into()
+                            bce: self.to_ce(tce, &mut class_expression)?.into()
                         }
                     }
                 }
@@ -698,7 +698,7 @@ impl<'a> OntologyParser<'a> {
                         {
                             n:self.to_u32(literal)?,
                             ope: pr.into(),
-                            bce: self.to_ce(tce, &class_expression)?.into()
+                            bce: self.to_ce(tce, &mut class_expression)?.into()
                         }
                     }
                 }
@@ -734,62 +734,63 @@ impl<'a> OntologyParser<'a> {
         let mut remain = vec![];
 
         for triple in simple {
-            match &triple {
-                [Term::Iri(sub), Term::RDFS(VRDFS::SubClassOf), Term::Iri(sup)] => {
-                    self.merge(AnnotatedAxiom {
-                        axiom: SubClassOf {
-                            sub: Class(sub.clone()).into(),
-                            sup: Class(sup.clone()).into(),
-                        }
-                        .into(),
-                        ann: ann_map.remove(&triple).unwrap_or_else(|| BTreeSet::new()),
-                    });
-                }
-                [Term::Iri(sub), Term::RDFS(VRDFS::SubClassOf), Term::BNode(bnode)] => {
-                    let oce = class_expression.remove(&bnode);
-                    if let Some(ce) = oce {
-                        self.merge(AnnotatedAxiom {
-                            axiom: SubClassOf {
-                                sub: Class(sub.clone()).into(),
-                                sup: ce,
-                            }
-                            .into(),
-                            ann: ann_map.remove(&triple).unwrap_or_else(|| BTreeSet::new()),
-                        });
-                    } else {
-                        dbg!("Failed to find bnode", bnode);
+            let axiom: Option<Axiom> = match &triple {
+                [Term::Iri(sub), Term::RDFS(VRDFS::SubClassOf), tce] => some! {
+                    SubClassOf {
+                        sub: Class(sub.clone()).into(),
+                        sup: self.to_ce(tce, &mut class_expression)?,
                     }
-                }
+                    .into()
+                },
                 // TODO: We need to check whether these
                 // EquivalentClasses have any other EquivalentClasses
                 // and add to that axiom
                 [Term::Iri(a), Term::OWL(VOWL::EquivalentClass), Term::Iri(b)] => {
-                    self.merge(AnnotatedAxiom {
-                        axiom: EquivalentClasses(vec![
+                    Some(
+                        EquivalentClasses(vec![
                             // The order is not important here, but
                             // this way around matches with the XML reader
                             Class(b.clone()).into(),
                             Class(a.clone()).into(),
                         ])
                         .into(),
-                        ann: ann_map.remove(&triple).unwrap_or_else(|| BTreeSet::new()),
-                    });
+                    )
                 }
                 [Term::Iri(a), Term::OWL(VOWL::DisjointWith), Term::Iri(b)] => {
-                    self.merge(AnnotatedAxiom {
-                        axiom: DisjointClasses(vec![
+                    Some(
+                        DisjointClasses(vec![
                             // The order is not important here, but
                             // this way around matches with the XML reader
                             Class(b.clone()).into(),
                             Class(a.clone()).into(),
                         ])
                         .into(),
-                        ann: ann_map.remove(&triple).unwrap_or_else(|| BTreeSet::new()),
-                    });
+                    )
                 }
-                _ => {
-                    remain.push(triple);
-                }
+                [Term::Iri(p), Term::RDFS(VRDFS::Domain), Term::Iri(d)] => Some(
+                    AnnotationPropertyDomain {
+                        ap: AnnotationProperty(p.clone()).into(),
+                        iri: d.clone(),
+                    }
+                    .into(),
+                ),
+                [Term::Iri(p), Term::RDFS(VRDFS::Range), Term::Iri(d)] => Some(
+                    AnnotationPropertyRange {
+                        ap: AnnotationProperty(p.clone()).into(),
+                        iri: d.clone(),
+                    }
+                    .into(),
+                ),
+                _ => None,
+            };
+
+            if let Some(axiom) = axiom {
+                self.merge(AnnotatedAxiom {
+                    axiom,
+                    ann: ann_map.remove(&triple).unwrap_or_else(|| BTreeSet::new()),
+                })
+            } else {
+                remain.push(triple)
             }
         }
 
@@ -800,7 +801,6 @@ impl<'a> OntologyParser<'a> {
         let mut remain = vec![];
 
         for triple in simple {
-            dbg!(&triple);
             if let Some(iri) = match &triple {
                 [Term::Iri(iri), Term::RDFS(rdfs), _] if rdfs.is_builtin() => Some(iri),
                 [Term::Iri(iri), Term::OWL(VOWL::VersionInfo), _] => Some(iri),
@@ -1098,15 +1098,15 @@ mod test {
         compare("annotation");
     }
 
-    // #[test]
-    // fn annotation_domain() {
-    //     compare("annotation-domain");
-    // }
+    #[test]
+    fn annotation_domain() {
+        compare("annotation-domain");
+    }
 
-    // #[test]
-    // fn annotation_range() {
-    //     compare("annotation-range");
-    // }
+    #[test]
+    fn annotation_range() {
+        compare("annotation-range");
+    }
 
     #[test]
     fn label() {
