@@ -512,6 +512,12 @@ impl<'a> OntologyParser<'a> {
         self.class_expressions_1(bnode, bnode_seq, HashMap::new())
     }
 
+    fn to_iri(&self, t: &Term) -> Option<IRI> {
+        match t {
+            Term::Iri(iri) => Some(iri.clone()),
+            _ => None,
+        }
+    }
     fn to_ce(
         &mut self,
         tce: &Term,
@@ -767,20 +773,46 @@ impl<'a> OntologyParser<'a> {
                         .into(),
                     )
                 }
-                [Term::Iri(p), Term::RDFS(VRDFS::Domain), Term::Iri(d)] => Some(
-                    AnnotationPropertyDomain {
-                        ap: AnnotationProperty(p.clone()).into(),
-                        iri: d.clone(),
+                [Term::Iri(pr), Term::RDFS(VRDFS::Domain), t] => {
+                    some! {
+                        match self.find_property_kind(pr) {
+                            PropertyExpression::ObjectPropertyExpression(ope) => ObjectPropertyDomain {
+                                ope,
+                                ce: self.to_ce(t, &mut class_expression)?,
+                            }
+                            .into(),
+                            PropertyExpression::DataProperty(dp) => DataPropertyDomain {
+                                dp,
+                                ce: self.to_ce(t, &mut class_expression)?,
+                            }
+                            .into(),
+                            PropertyExpression::AnnotationProperty(ap) => AnnotationPropertyDomain {
+                                ap: ap,
+                                iri: self.to_iri(t)?,
+                            }
+                            .into(),
+                        }
                     }
-                    .into(),
-                ),
-                [Term::Iri(p), Term::RDFS(VRDFS::Range), Term::Iri(d)] => Some(
-                    AnnotationPropertyRange {
-                        ap: AnnotationProperty(p.clone()).into(),
-                        iri: d.clone(),
+                }
+                [Term::Iri(pr), Term::RDFS(VRDFS::Range), t] => some! {
+                    match self.find_property_kind(pr) {
+                        PropertyExpression::ObjectPropertyExpression(ope) => ObjectPropertyRange {
+                            ope,
+                            ce: self.to_ce(t, &mut class_expression)?,
+                        }
+                        .into(),
+                        PropertyExpression::DataProperty(dp) => DataPropertyRange {
+                            dp,
+                            dr: self.to_dr(t)?,
+                        }
+                        .into(),
+                        PropertyExpression::AnnotationProperty(ap) => AnnotationPropertyRange {
+                            ap: ap,
+                            iri: self.to_iri(t)?,
+                        }
+                        .into(),
                     }
-                    .into(),
-                ),
+                },
                 _ => None,
             };
 
@@ -1352,10 +1384,10 @@ mod test {
     //     compare("data-property-disjoint");
     // }
 
-    // #[test]
-    // fn data_property_domain() {
-    //     compare("data-property-domain");
-    // }
+    #[test]
+    fn data_property_domain() {
+        compare("data-property-domain");
+    }
 
     // #[test]
     // fn data_property_equivalent() {
@@ -1367,10 +1399,10 @@ mod test {
     //     compare("data-property-functional");
     // }
 
-    // #[test]
-    // fn data_property_range() {
-    //     compare("data-property-range");
-    // }
+    #[test]
+    fn data_property_range() {
+        compare("data-property-range");
+    }
 
     // #[test]
     // fn data_property_sub() {
@@ -1397,10 +1429,10 @@ mod test {
     //    compare("object-property-asymmetric");
     // }
 
-    // #[test]
-    // fn object_property_domain() {
-    //    compare("object-property-domain");
-    // }
+    #[test]
+    fn object_property_domain() {
+        compare("object-property-domain");
+    }
 
     // #[test]
     // fn object_property_functional() {
@@ -1417,10 +1449,10 @@ mod test {
     //     compare("object-property-irreflexive");
     // }
 
-    // #[test]
-    // fn object_property_range() {
-    //    compare("object-property-range");
-    // }
+    #[test]
+    fn object_property_range() {
+        compare("object-property-range");
+    }
 
     // #[test]
     // fn object_property_reflexive() {
