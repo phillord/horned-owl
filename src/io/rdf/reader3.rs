@@ -500,6 +500,34 @@ impl<'a> OntologyParser<'a> {
         (remain, ann_map)
     }
 
+    fn object_property_expressions(
+        &mut self,
+        bnode: HashMap<SpBNode, Vec<[Term; 3]>>,
+    ) -> (
+        HashMap<SpBNode, Vec<[Term; 3]>>,
+        HashMap<SpBNode, ObjectPropertyExpression>,
+    ) {
+        let mut remain = HashMap::new();
+        let mut object_property_expression = HashMap::new();
+
+        for (this_bnode, v) in bnode {
+            let ope = match v.as_slice() {
+                [[Term::BNode(_), Term::OWL(VOWL::InverseOf), Term::Iri(iri)]] => {
+                    Some(ObjectPropertyExpression::InverseObjectProperty(iri.into()))
+                }
+                _ => None,
+            };
+
+            if let Some(ope) = ope {
+                object_property_expression.insert(this_bnode, ope);
+            } else {
+                remain.insert(this_bnode, v);
+            }
+        }
+
+        (remain, object_property_expression)
+    }
+
     fn class_expressions(
         &mut self,
         bnode: HashMap<SpBNode, Vec<[Term; 3]>>,
@@ -518,6 +546,27 @@ impl<'a> OntologyParser<'a> {
             _ => None,
         }
     }
+
+    fn to_sope(
+        &mut self,
+        t: &Term,
+        object_property_expression: &mut HashMap<SpBNode, ObjectPropertyExpression>,
+    ) -> Option<SubObjectPropertyExpression> {
+        Some(self.to_ope(t, object_property_expression)?.into())
+    }
+
+    fn to_ope(
+        &mut self,
+        t: &Term,
+        object_property_expression: &mut HashMap<SpBNode, ObjectPropertyExpression>,
+    ) -> Option<ObjectPropertyExpression> {
+        match t {
+            Term::Iri(iri) => Some(ObjectProperty(iri.clone()).into()),
+            Term::BNode(id) => object_property_expression.remove(id),
+            _ => None,
+        }
+    }
+
     fn to_ce(
         &mut self,
         tce: &Term,
@@ -732,10 +781,13 @@ impl<'a> OntologyParser<'a> {
         simple: Vec<[Term; 3]>,
         mut ann_map: HashMap<[Term; 3], BTreeSet<Annotation>>,
         mut class_expression: HashMap<SpBNode, ClassExpression>,
+        bnode_seq: &mut HashMap<SpBNode, Vec<Term>>,
+        mut object_property_expression: HashMap<SpBNode, ObjectPropertyExpression>,
     ) -> (
         Vec<[Term; 3]>,
         HashMap<[Term; 3], BTreeSet<Annotation>>,
         HashMap<SpBNode, ClassExpression>,
+        HashMap<SpBNode, ObjectPropertyExpression>,
     ) {
         let mut remain = vec![];
 
@@ -772,6 +824,26 @@ impl<'a> OntologyParser<'a> {
                         ])
                         .into(),
                     )
+                }
+                [pr, Term::RDFS(VRDFS::SubPropertyOf), t] => some! {
+                    SubObjectPropertyOf {
+                        sub: self.to_sope(pr, &mut object_property_expression)?,
+                        sup: self.to_ope(t, &mut object_property_expression)?,
+                    }.into()
+                },
+                [Term::Iri(pr), Term::OWL(VOWL::PropertyChainAxiom), Term::BNode(id)] => {
+                    some! {
+                        SubObjectPropertyOf {
+                            sub: SubObjectPropertyExpression::ObjectPropertyChain(
+                                bnode_seq
+                                    .remove(id)?
+                                    .iter()
+                                    .map(|t| self.to_ope(t, &mut object_property_expression).unwrap())
+                                    .collect()
+                            ),
+                            sup: ObjectProperty(pr.clone()).into(),
+                        }.into()
+                    }
                 }
                 [Term::Iri(pr), Term::RDFS(VRDFS::Domain), t] => {
                     some! {
@@ -826,7 +898,12 @@ impl<'a> OntologyParser<'a> {
             }
         }
 
-        (remain, ann_map, class_expression)
+        (
+            remain,
+            ann_map,
+            class_expression,
+            object_property_expression,
+        )
     }
 
     fn simple_annotations(&mut self, simple: Vec<[Term; 3]>) -> Vec<[Term; 3]> {
@@ -879,7 +956,7 @@ impl<'a> OntologyParser<'a> {
             vec.sort();
         }
 
-        let (bnode, bnode_seq) = self.stitch_seqs(bnode);
+        let (bnode, mut bnode_seq) = self.stitch_seqs(bnode);
 
         // Table 10
         let (simple, bnode, ann_map) = self.axiom_annotations(simple, bnode);
@@ -936,11 +1013,17 @@ impl<'a> OntologyParser<'a> {
         let simple = self.simple_annotations(simple);
 
         // Table 8:
-
+        let (bnode, object_property_expression) = self.object_property_expressions(bnode);
         // Table 13: Parsing of Class Expressions
-        let (bnode, bnode_seq, class_expression) = self.class_expressions(bnode, bnode_seq);
+        let (bnode, mut bnode_seq, class_expression) = self.class_expressions(bnode, bnode_seq);
         // Table 16: Axioms without annotations
-        let (simple, ann_map, class_expression) = self.axioms(simple, ann_map, class_expression);
+        let (simple, ann_map, class_expression, object_property_expression) = self.axioms(
+            simple,
+            ann_map,
+            class_expression,
+            &mut bnode_seq,
+            object_property_expression,
+        );
 
         if simple.len() > 0 {
             dbg!("simple remaining", simple);
@@ -960,6 +1043,13 @@ impl<'a> OntologyParser<'a> {
 
         if class_expression.len() > 0 {
             dbg!("class_expression remaining", class_expression);
+        }
+
+        if object_property_expression.len() > 0 {
+            dbg!(
+                "object property expression remaining",
+                object_property_expression
+            );
         }
         Ok(self.o)
     }
@@ -1174,10 +1264,15 @@ mod test {
     //    compare("disjoint-union");
     // }
 
-    // #[test]
-    // fn one_sub_property() {
-    //     compare("one-suboproperty");
-    // }
+    #[test]
+    fn sub_oproperty() {
+        compare("suboproperty");
+    }
+
+    #[test]
+    fn sub_oproperty_inverse() {
+        compare("suboproperty-inverse");
+    }
 
     // #[test]
     // fn one_inverse() {
@@ -1199,10 +1294,10 @@ mod test {
     //     compare("annotation-on-transitive");
     // }
 
-    // #[test]
-    // fn one_subproperty_chain() {
-    //     compare("subproperty-chain");
-    // }
+    #[test]
+    fn subproperty_chain() {
+        compare("subproperty-chain");
+    }
 
     // #[test]
     // fn one_subproperty_chain_with_inverse() {

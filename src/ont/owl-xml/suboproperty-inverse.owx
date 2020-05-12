@@ -19,15 +19,11 @@
     <Declaration>
         <ObjectProperty IRI="#s"/>
     </Declaration>
-    <Declaration>
-        <ObjectProperty IRI="#t"/>
-    </Declaration>
     <SubObjectPropertyOf>
-        <ObjectPropertyChain>
+        <ObjectProperty IRI="#s"/>
+        <ObjectInverseOf>
             <ObjectProperty IRI="#r"/>
-            <ObjectProperty IRI="#s"/>
-        </ObjectPropertyChain>
-        <ObjectProperty IRI="#t"/>
+        </ObjectInverseOf>
     </SubObjectPropertyOf>
 </Ontology>
 

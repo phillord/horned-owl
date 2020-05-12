@@ -1338,8 +1338,16 @@ pub mod test {
     }
 
     #[test]
-    fn test_one_sub_property() {
-        let ont_s = include_str!("../ont/owl-xml/one-suboproperty.owx");
+    fn test_sub_oproperty() {
+        let ont_s = include_str!("../ont/owl-xml/suboproperty.owx");
+        let (ont, _) = read_ok(&mut ont_s.as_bytes());
+
+        assert_eq!(ont.sub_object_property().count(), 1);
+    }
+
+        #[test]
+    fn test_sub_oproperty_inverse() {
+        let ont_s = include_str!("../ont/owl-xml/suboproperty-inverse.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
         assert_eq!(ont.sub_object_property().count(), 1);

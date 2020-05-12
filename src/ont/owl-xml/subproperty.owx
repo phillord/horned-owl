@@ -19,15 +19,9 @@
     <Declaration>
         <ObjectProperty IRI="#s"/>
     </Declaration>
-    <Declaration>
-        <ObjectProperty IRI="#t"/>
-    </Declaration>
     <SubObjectPropertyOf>
-        <ObjectPropertyChain>
-            <ObjectProperty IRI="#r"/>
-            <ObjectProperty IRI="#s"/>
-        </ObjectPropertyChain>
-        <ObjectProperty IRI="#t"/>
+        <ObjectProperty IRI="#s"/>
+        <ObjectProperty IRI="#r"/>
     </SubObjectPropertyOf>
 </Ontology>
 

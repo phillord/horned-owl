@@ -1219,6 +1219,12 @@ pub enum SubObjectPropertyExpression {
     ObjectPropertyExpression(ObjectPropertyExpression),
 }
 
+impl From<ObjectPropertyExpression> for SubObjectPropertyExpression {
+    fn from(ope: ObjectPropertyExpression) -> SubObjectPropertyExpression {
+        SubObjectPropertyExpression::ObjectPropertyExpression(ope)
+    }
+}
+
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum PropertyExpression {
     ObjectPropertyExpression(ObjectPropertyExpression),

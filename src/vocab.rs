@@ -93,6 +93,7 @@ pub enum RDFS {
     Range,
     SeeAlso,
     SubClassOf,
+    SubPropertyOf,
 }
 
 impl RDFS {
@@ -116,6 +117,7 @@ lazy_meta! {
     Range, extend(RDFS, "range");
     SeeAlso, extend(RDFS, "seeAlso");
     SubClassOf, extend(RDFS, "subClassOf");
+    SubPropertyOf, extend(RDFS, "subPropertyOf");
 }
 
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
@@ -146,6 +148,7 @@ pub enum OWL {
     OnProperty,
     Ontology,
     QualifiedCardinality,
+    PropertyChainAxiom,
     ReflexiveProperty,
     Restriction,
     SomeValuesFrom,
@@ -185,6 +188,7 @@ lazy_meta! {
     OnClass, extend(OWL, "onClass");
     OnProperty, extend(OWL, "onProperty");
     Ontology, extend(OWL, "Ontology");
+    PropertyChainAxiom, extend(OWL, "propertyChainAxiom");
     QualifiedCardinality, extend(OWL, "qualifiedCardinality");
     ReflexiveProperty, extend(OWL, "ReflexiveProperty");
     Restriction, extend(OWL, "Restriction");

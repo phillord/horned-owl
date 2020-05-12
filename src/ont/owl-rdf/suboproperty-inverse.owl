@@ -32,17 +32,12 @@
 
     <!-- http://www.example.com/iri#s -->
 
-    <owl:ObjectProperty rdf:about="http://www.example.com/iri#s"/>
-    
-
-
-    <!-- http://www.example.com/iri#t -->
-
-    <owl:ObjectProperty rdf:about="http://www.example.com/iri#t">
-        <owl:propertyChainAxiom rdf:parseType="Collection">
-            <rdf:Description rdf:about="http://www.example.com/iri#r"/>
-            <rdf:Description rdf:about="http://www.example.com/iri#s"/>
-        </owl:propertyChainAxiom>
+    <owl:ObjectProperty rdf:about="http://www.example.com/iri#s">
+        <rdfs:subPropertyOf>
+            <rdf:Description>
+                <owl:inverseOf rdf:resource="http://www.example.com/iri#r"/>
+            </rdf:Description>
+        </rdfs:subPropertyOf>
     </owl:ObjectProperty>
 </rdf:RDF>
 
