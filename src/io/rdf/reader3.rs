@@ -776,6 +776,38 @@ impl<'a> OntologyParser<'a> {
                         .into(),
                     )
                 }
+                [Term::Iri(iri), Term::OWL(VOWL::DisjointUnionOf), Term::BNode(bnodeid)] => {
+                    some! {
+                        DisjointUnion(
+                            Class(iri.clone()),
+                            self.to_ce_seq(&bnode_seq.remove(bnodeid), class_expression)?
+                        ).into()
+                    }
+                }
+                [Term::Iri(p), Term::OWL(VOWL::InverseOf), Term::Iri(r)] => {
+                    some! {
+                        InverseObjectProperties (ObjectProperty(p.clone()),
+                                                 ObjectProperty(r.clone())).into()
+                    }
+                }
+                [pr, Term::RDF(VRDF::Type), Term::OWL(VOWL::TransitiveProperty)] => {
+                    some! {
+                        TransitiveObjectProperty(self.to_ope(pr, object_property_expression)?).into()
+                    }
+                }
+                [Term::Iri(pr), Term::RDF(VRDF::Type), Term::OWL(VOWL::FunctionalProperty)] => {
+                    some! {
+                        match self.find_property_kind(pr) {
+                            PropertyExpression::ObjectPropertyExpression(ope) => {
+                                FunctionalObjectProperty(ope).into()
+                            },
+                            PropertyExpression::DataProperty(dp) => {
+                                FunctionalDataProperty(dp).into()
+                            },
+                            _ => todo!()
+                        }
+                    }
+                }
                 [Term::Iri(a), Term::OWL(VOWL::DisjointWith), Term::Iri(b)] => {
                     Some(
                         DisjointClasses(vec![
@@ -1210,10 +1242,10 @@ mod test {
         compare("one-disjoint");
     }
 
-    // #[test]
-    // fn disjoint_union() {
-    //    compare("disjoint-union");
-    // }
+    #[test]
+    fn disjoint_union() {
+        compare("disjoint-union");
+    }
 
     #[test]
     fn sub_oproperty() {
@@ -1225,15 +1257,15 @@ mod test {
         compare("suboproperty-inverse");
     }
 
-    // #[test]
-    // fn one_inverse() {
-    //     compare("inverse-properties");
-    // }
+    #[test]
+    fn one_inverse() {
+        compare("inverse-properties");
+    }
 
-    // #[test]
-    // fn one_transitive() {
-    //     compare("transitive-properties");
-    // }
+    #[test]
+    fn one_transitive() {
+        compare("transitive-properties");
+    }
 
     // #[test]
     // fn inverse_transitive() {
@@ -1440,10 +1472,10 @@ mod test {
     //     compare("data-property-equivalent");
     // }
 
-    // #[test]
-    // fn data_property_functional() {
-    //     compare("data-property-functional");
-    // }
+    #[test]
+    fn data_property_functional() {
+        compare("data-property-functional");
+    }
 
     #[test]
     fn data_property_range() {
@@ -1480,10 +1512,10 @@ mod test {
         compare("object-property-domain");
     }
 
-    // #[test]
-    // fn object_property_functional() {
-    //     compare("object-property-functional");
-    // }
+    #[test]
+    fn object_property_functional() {
+        compare("object-property-functional");
+    }
 
     // #[test]
     // fn object_property_inverse_functional() {

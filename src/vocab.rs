@@ -132,6 +132,7 @@ pub enum OWL {
     Class,
     ComplementOf,
     DatatypeProperty,
+    DisjointUnionOf,
     DisjointWith,
     EquivalentClass,
     FunctionalProperty,
@@ -173,6 +174,7 @@ lazy_meta! {
     Class, extend(OWL, "Class");
     ComplementOf, extend(OWL, "complementOf");
     DatatypeProperty, extend(OWL, "DatatypeProperty");
+    DisjointUnionOf, extend(OWL, "disjointUnionOf");
     DisjointWith, extend(OWL, "disjointWith");
     EquivalentClass, extend(OWL, "equivalentClass");
     FunctionalProperty, extend(OWL, "FunctionalProperty");
