@@ -1280,10 +1280,10 @@ mod test {
         compare("inverse-transitive")
     }
 
-    // #[test]
-    // fn one_annotated_transitive() {
-    //     compare("annotation-on-transitive");
-    // }
+    #[test]
+    fn one_annotated_transitive() {
+        compare("annotation-on-transitive");
+    }
 
     #[test]
     fn subproperty_chain() {
