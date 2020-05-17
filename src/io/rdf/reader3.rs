@@ -364,28 +364,9 @@ impl<'a> OntologyParser<'a> {
                 let iri = self.b.iri(rdfs.iri_s());
                 self.annotation(&[s.clone(), Term::Iri(iri), b.clone()])
             }
-            [_, Iri(p), Term::Literal(ob, kind)] => Annotation {
+            [_, Iri(p), ob @ Term::Literal(_, _)] => Annotation {
                 ap: AnnotationProperty(p.clone()),
-                av: match kind {
-                    LiteralKind::Lang(lang) => Literal::Language {
-                        lang: lang.clone().to_string(),
-                        literal: ob.clone().to_string(),
-                    }
-                    .into(),
-                    LiteralKind::Datatype(iri)
-                        if iri.to_string() == "http://www.w3.org/2001/XMLSchema#string" =>
-                    {
-                        Literal::Simple {
-                            literal: ob.clone().to_string(),
-                        }
-                        .into()
-                    }
-                    LiteralKind::Datatype(iri) => Literal::Datatype {
-                        datatype_iri: iri.to_iri(self.b),
-                        literal: ob.clone().to_string(),
-                    }
-                    .into(),
-                },
+                av: self.to_literal(ob).unwrap().into(),
             },
             [_, Iri(p), Iri(ob)] => {
                 // IRI annotation value
@@ -465,6 +446,7 @@ impl<'a> OntologyParser<'a> {
                             Some(AnnotationProperty(s.clone()).into())
                         }
                         Term::OWL(VOWL::DatatypeProperty) => Some(DataProperty(s.clone()).into()),
+                        Term::OWL(VOWL::NamedIndividual) => Some(NamedIndividual(s.clone()).into()),
                         Term::RDFS(VRDFS::Datatype) => Some(Datatype(s.clone()).into()),
                         _ => None,
                     }
@@ -603,6 +585,27 @@ impl<'a> OntologyParser<'a> {
         }
     }
 
+    fn to_literal(&self, t: &Term) -> Option<Literal> {
+        Some(match t {
+            Term::Literal(ob, LiteralKind::Lang(lang)) => Literal::Language {
+                lang: lang.clone().to_string(),
+                literal: ob.clone().to_string(),
+            },
+            Term::Literal(ob, LiteralKind::Datatype(iri))
+                if iri.to_string() == "http://www.w3.org/2001/XMLSchema#string" =>
+            {
+                Literal::Simple {
+                    literal: ob.clone().to_string(),
+                }
+            }
+            Term::Literal(ob, LiteralKind::Datatype(iri)) => Literal::Datatype {
+                datatype_iri: iri.to_iri(self.b),
+                literal: ob.clone().to_string(),
+            },
+            _ => return None,
+        })
+    }
+
     fn find_property_kind(
         &self,
         term: &Term,
@@ -657,6 +660,27 @@ impl<'a> OntologyParser<'a> {
                                 }
                             },
                             _ => panic!("Unexpected Property Kind")
+                        }
+                    }
+                },
+                [[_, Term::OWL(VOWL::HasValue), val],
+                 [_, Term::OWL(VOWL::OnProperty), pr],
+                 [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Restriction)]] => {
+                    some! {
+                        match self.find_property_kind(pr, object_property_expression)? {
+                            PropertyExpression::ObjectPropertyExpression(ope) => {
+                                ClassExpression::ObjectHasValue {
+                                    ope,
+                                    i: NamedIndividual(self.to_iri(val)?).into()
+                                }
+                            },
+                            PropertyExpression::DataProperty(dp) => {
+                                ClassExpression::DataHasValue {
+                                    dp,
+                                    l: self.to_literal(val)?
+                                }
+                            }
+                            _ => panic!("Unexpected Property kind"),
                         }
                     }
                 },
@@ -1359,10 +1383,10 @@ mod test {
     //     compare("literal-escaped");
     // }
 
-    // #[test]
-    // fn named_individual() {
-    //     compare("named-individual");
-    // }
+    #[test]
+    fn named_individual() {
+        compare("named-individual");
+    }
 
     // #[test]
     // fn import() {
@@ -1374,20 +1398,20 @@ mod test {
         compare("datatype");
     }
 
-    // #[test]
-    // fn object_has_value() {
-    //     compare("object-has-value");
-    // }
+    #[test]
+    fn object_has_value() {
+        compare("object-has-value");
+    }
 
     // #[test]
     // fn object_one_of() {
     //     compare("object-one-of");
     // }
 
-    // #[test]
-    // fn inverse() {
-    //     compare("some-inverse");
-    // }
+    #[test]
+    fn inverse() {
+        compare("some-inverse");
+    }
 
     // #[test]
     // fn object_unqualified_cardinality() {

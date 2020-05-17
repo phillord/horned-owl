@@ -136,6 +136,7 @@ pub enum OWL {
     DisjointWith,
     EquivalentClass,
     FunctionalProperty,
+    HasValue,
     IntersectionOf,
     InverseFunctionalProperty,
     InverseOf,
@@ -182,6 +183,7 @@ lazy_meta! {
     InverseFunctionalProperty, extend(OWL, "InverseFunctionalProperty");
     InverseOf, extend(OWL, "inverseOf");
     IrreflexiveProperty, extend(OWL, "IrreflexiveProperty");
+    HasValue, extend(OWL, "hasValue");
     MaxQualifiedCardinality, extend(OWL, "maxQualifiedCardinality");
     MinQualifiedCardinality, extend(OWL, "minQualifiedCardinality");
     NamedIndividual, extend(OWL, "NamedIndividual");
