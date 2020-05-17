@@ -792,6 +792,19 @@ impl<'a> OntologyParser<'a> {
                         }
                     }
                 }
+                [[_, Term::OWL(VOWL::MaxCardinality), literal],
+                 [_, Term::OWL(VOWL::OnProperty), Term::Iri(pr)],
+                 [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Restriction)]
+                ] => {
+                    some!{
+                        ClassExpression::ObjectMaxCardinality
+                        {
+                            n:self.to_u32(literal)?,
+                            ope: pr.into(),
+                            bce: self.b.class(VOWL::Thing.iri_s().to_string()).into()
+                        }
+                    }
+                }
 
                 _a => None,
             };
@@ -1433,10 +1446,10 @@ mod test {
         compare("some-inverse");
     }
 
-    // #[test]
-    // fn object_unqualified_cardinality() {
-    //     compare("object-unqualified-max-cardinality");
-    // }
+    #[test]
+    fn object_unqualified_cardinality() {
+        compare("object-unqualified-max-cardinality");
+    }
 
     #[test]
     fn object_min_cardinality() {
