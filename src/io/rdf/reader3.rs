@@ -519,9 +519,10 @@ impl<'a> OntologyParser<'a> {
         &mut self,
         bnode: &mut HashMap<SpBNode, Vec<[Term; 3]>>,
         bnode_seq: &mut HashMap<SpBNode, Vec<Term>>,
+        object_property_expression: &mut HashMap<SpBNode, ObjectPropertyExpression>,
     ) -> HashMap<SpBNode, ClassExpression> {
         let mut hm = HashMap::new();
-        self.class_expressions_1(bnode, bnode_seq, &mut hm);
+        self.class_expressions_1(bnode, bnode_seq, &mut hm, object_property_expression);
         hm
     }
 
@@ -545,9 +546,15 @@ impl<'a> OntologyParser<'a> {
         t: &Term,
         object_property_expression: &mut HashMap<SpBNode, ObjectPropertyExpression>,
     ) -> Option<ObjectPropertyExpression> {
-        match t {
-            Term::Iri(iri) => Some(ObjectProperty(iri.clone()).into()),
-            Term::BNode(id) => object_property_expression.remove(id),
+        match self.find_property_kind(t, object_property_expression)? {
+            PropertyExpression::ObjectPropertyExpression(ope) => Some(ope),
+            _ => None,
+        }
+    }
+
+    fn to_ap(&mut self, t: &Term) -> Option<AnnotationProperty> {
+        match self.find_property_kind(t, &mut HashMap::default())? {
+            PropertyExpression::AnnotationProperty(ap) => Some(ap),
             _ => None,
         }
     }
@@ -596,16 +603,26 @@ impl<'a> OntologyParser<'a> {
         }
     }
 
-    fn find_property_kind(&self, iri: &IRI) -> PropertyExpression {
-        match find_declaration_kind(&self.o, iri) {
-            Some(NamedEntityKind::AnnotationProperty) => {
-                PropertyExpression::AnnotationProperty(iri.into())
-            }
-            Some(NamedEntityKind::DataProperty) => PropertyExpression::DataProperty(iri.into()),
-            Some(NamedEntityKind::ObjectProperty) => {
-                PropertyExpression::ObjectPropertyExpression(iri.into())
-            }
-            _ => todo!(),
+    fn find_property_kind(
+        &self,
+        term: &Term,
+        object_property_expression: &mut HashMap<SpBNode, ObjectPropertyExpression>,
+    ) -> Option<PropertyExpression> {
+        match term {
+            Term::Iri(iri) => match find_declaration_kind(&self.o, iri) {
+                Some(NamedEntityKind::AnnotationProperty) => {
+                    Some(PropertyExpression::AnnotationProperty(iri.into()))
+                }
+                Some(NamedEntityKind::DataProperty) => {
+                    Some(PropertyExpression::DataProperty(iri.into()))
+                }
+                Some(NamedEntityKind::ObjectProperty) => {
+                    Some(PropertyExpression::ObjectPropertyExpression(iri.into()))
+                }
+                _ => None,
+            },
+            Term::BNode(id) => Some(object_property_expression.remove(id)?.into()),
+            _ => None,
         }
     }
 
@@ -614,6 +631,7 @@ impl<'a> OntologyParser<'a> {
         bnode: &mut HashMap<SpBNode, Vec<[Term; 3]>>,
         bnode_seq: &mut HashMap<SpBNode, Vec<Term>>,
         class_expression: &mut HashMap<SpBNode, ClassExpression>,
+        object_property_expression: &mut HashMap<SpBNode, ObjectPropertyExpression>,
     ) {
         let class_expression_len = class_expression.len();
         for (this_bnode, v) in std::mem::take(bnode) {
@@ -621,50 +639,46 @@ impl<'a> OntologyParser<'a> {
             // line) so skip
             #[rustfmt::skip]
             let ce = match v.as_slice() {
-                [[_, Term::OWL(VOWL::OnProperty), Term::Iri(pr)],
+                [[_, Term::OWL(VOWL::OnProperty), pr],
                  [_, Term::OWL(VOWL::SomeValuesFrom), ce_or_dr],
                  [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Restriction)]] => {
-                    match self.find_property_kind(pr) {
-                         PropertyExpression::ObjectPropertyExpression(ope) =>
-                            some!{
+                    some! {
+                        match self.find_property_kind(pr, object_property_expression)? {
+                            PropertyExpression::ObjectPropertyExpression(ope) => {
                                 ClassExpression::ObjectSomeValuesFrom {
                                     ope,
                                     bce: self.to_ce(ce_or_dr, class_expression)?.into()
                                 }
                             },
-                         PropertyExpression::DataProperty(dp) => {
-                             some!{
-                                 ClassExpression::DataSomeValuesFrom {
-                                     dp,
-                                     dr: self.to_dr(ce_or_dr)?
-                                 }
-
-                             }
-                         },
-                         _ => panic!("Unexpected Property Kind")
+                            PropertyExpression::DataProperty(dp) => {
+                                ClassExpression::DataSomeValuesFrom {
+                                    dp,
+                                    dr: self.to_dr(ce_or_dr)?
+                                }
+                            },
+                            _ => panic!("Unexpected Property Kind")
+                        }
                     }
-                }
+                },
                 [[_, Term::OWL(VOWL::AllValuesFrom), ce_or_dr],
-                 [_, Term::OWL(VOWL::OnProperty), Term::Iri(pr)],
+                 [_, Term::OWL(VOWL::OnProperty), pr],
                  [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Restriction)]] => {
-                    match self.find_property_kind(pr) {
-                        PropertyExpression::ObjectPropertyExpression(ope) => {
-                            some!{
+                    some! {
+                        match self.find_property_kind(pr, object_property_expression)? {
+                            PropertyExpression::ObjectPropertyExpression(ope) => {
                                 ClassExpression::ObjectAllValuesFrom {
                                     ope,
                                     bce: self.to_ce(ce_or_dr, class_expression)?.into()
                                 }
-                            }
-                        },
-                        PropertyExpression::DataProperty(dp) => {
-                            some! {
+                            },
+                            PropertyExpression::DataProperty(dp) => {
                                 ClassExpression::DataAllValuesFrom {
                                     dp,
                                     dr: self.to_dr(ce_or_dr)?
                                 }
-                            }
-                        },
-                        _ => panic!("Unexpected Property Kind")
+                            },
+                            _ => panic!("Unexpected Property Kind")
+                        }
                     }
                 },
                 [[_, Term::OWL(VOWL::IntersectionOf), Term::BNode(bnodeid)],
@@ -748,7 +762,12 @@ impl<'a> OntologyParser<'a> {
         }
 
         if class_expression.len() > class_expression_len {
-            self.class_expressions_1(bnode, bnode_seq, class_expression)
+            self.class_expressions_1(
+                bnode,
+                bnode_seq,
+                class_expression,
+                object_property_expression,
+            )
         }
     }
 
@@ -806,9 +825,9 @@ impl<'a> OntologyParser<'a> {
                         TransitiveObjectProperty(self.to_ope(pr, object_property_expression)?).into()
                     }
                 }
-                [Term::Iri(pr), Term::RDF(VRDF::Type), Term::OWL(VOWL::FunctionalProperty)] => {
+                [pr, Term::RDF(VRDF::Type), Term::OWL(VOWL::FunctionalProperty)] => {
                     some! {
-                        match self.find_property_kind(pr) {
+                        match self.find_property_kind(pr, object_property_expression)? {
                             PropertyExpression::ObjectPropertyExpression(ope) => {
                                 FunctionalObjectProperty(ope).into()
                             },
@@ -830,12 +849,23 @@ impl<'a> OntologyParser<'a> {
                         .into(),
                     )
                 }
-                [pr, Term::RDFS(VRDFS::SubPropertyOf), t] => some! {
-                    SubObjectPropertyOf {
-                        sub: self.to_sope(pr, object_property_expression)?,
-                        sup: self.to_ope(t, object_property_expression)?,
-                    }.into()
-                },
+                [pr, Term::RDFS(VRDFS::SubPropertyOf), t] => {
+                    some! {
+                        match self.find_property_kind(t, object_property_expression)? {
+                            PropertyExpression::ObjectPropertyExpression(ope) =>
+                                SubObjectPropertyOf {
+                                    sub: self.to_sope(pr, object_property_expression)?,
+                                    sup: ope,
+                                }.into(),
+                            PropertyExpression::AnnotationProperty(ap) =>
+                                SubAnnotationPropertyOf {
+                                    sup: ap,
+                                    sub: self.to_ap(pr)?
+                                }.into(),
+                            _ => todo!()
+                        }
+                    }
+                }
                 [Term::Iri(pr), Term::OWL(VOWL::PropertyChainAxiom), Term::BNode(id)] => {
                     some! {
                         SubObjectPropertyOf {
@@ -850,9 +880,9 @@ impl<'a> OntologyParser<'a> {
                         }.into()
                     }
                 }
-                [Term::Iri(pr), Term::RDFS(VRDFS::Domain), t] => {
+                [pr, Term::RDFS(VRDFS::Domain), t] => {
                     some! {
-                        match self.find_property_kind(pr) {
+                        match self.find_property_kind(pr, object_property_expression)? {
                             PropertyExpression::ObjectPropertyExpression(ope) => ObjectPropertyDomain {
                                 ope,
                                 ce: self.to_ce(t, class_expression)?,
@@ -871,8 +901,8 @@ impl<'a> OntologyParser<'a> {
                         }
                     }
                 }
-                [Term::Iri(pr), Term::RDFS(VRDFS::Range), t] => some! {
-                    match self.find_property_kind(pr) {
+                [pr, Term::RDFS(VRDFS::Range), t] => some! {
+                    match self.find_property_kind(pr, object_property_expression)? {
                         PropertyExpression::ObjectPropertyExpression(ope) => ObjectPropertyRange {
                             ope,
                             ce: self.to_ce(t, class_expression)?,
@@ -1017,7 +1047,8 @@ impl<'a> OntologyParser<'a> {
         // Table 8:
         let mut object_property_expression = self.object_property_expressions(&mut bnode);
         // Table 13: Parsing of Class Expressions
-        let mut class_expression = self.class_expressions(&mut bnode, &mut bnode_seq);
+        let mut class_expression =
+            self.class_expressions(&mut bnode, &mut bnode_seq, &mut object_property_expression);
         // Table 16: Axioms without annotations
         self.axioms(
             &mut simple,
@@ -1313,10 +1344,10 @@ mod test {
         compare("annotation-with-non-builtin-annotation");
     }
 
-    // #[test]
-    // fn sub_annotation() {
-    //     compare("sub-annotation");
-    // }
+    #[test]
+    fn sub_annotation() {
+        compare("sub-annotation");
+    }
 
     #[test]
     fn data_property() {
