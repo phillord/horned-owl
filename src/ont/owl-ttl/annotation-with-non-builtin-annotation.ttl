@@ -11,6 +11,14 @@
                               owl:versionIRI <http://www.example.com/viri> .
 
 #################################################################
+#    Annotation properties
+#################################################################
+
+###  http://www.example.com/iri#ann
+o:ann rdf:type owl:AnnotationProperty .
+
+
+#################################################################
 #    Classes
 #################################################################
 
@@ -22,7 +30,7 @@ o:A rdf:type owl:Class ;
    owl:annotatedSource o:A ;
    owl:annotatedProperty rdfs:comment ;
    owl:annotatedTarget "Comment on Class"@en ;
-   rdfs:comment "Comment on Comment"@en
+   o:ann "Comment on Comment"@en
  ] .
 
 

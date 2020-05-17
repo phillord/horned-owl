@@ -16,6 +16,23 @@
     <!-- 
     ///////////////////////////////////////////////////////////////////////////////////////
     //
+    // Annotation properties
+    //
+    ///////////////////////////////////////////////////////////////////////////////////////
+     -->
+
+    
+
+
+    <!-- http://www.example.com/iri#ann -->
+
+    <owl:AnnotationProperty rdf:about="http://www.example.com/iri#ann"/>
+    
+
+
+    <!-- 
+    ///////////////////////////////////////////////////////////////////////////////////////
+    //
     // Classes
     //
     ///////////////////////////////////////////////////////////////////////////////////////
@@ -33,7 +50,7 @@
         <owl:annotatedSource rdf:resource="http://www.example.com/iri#A"/>
         <owl:annotatedProperty rdf:resource="http://www.w3.org/2000/01/rdf-schema#comment"/>
         <owl:annotatedTarget xml:lang="en">Comment on Class</owl:annotatedTarget>
-        <rdfs:comment xml:lang="en">Comment on Comment</rdfs:comment>
+        <ann xml:lang="en">Comment on Comment</ann>
     </owl:Axiom>
 </rdf:RDF>
 

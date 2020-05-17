@@ -16,9 +16,12 @@
     <Declaration>
         <Class IRI="#A"/>
     </Declaration>
+    <Declaration>
+        <AnnotationProperty IRI="#ann"/>
+    </Declaration>
     <AnnotationAssertion>
         <Annotation>
-            <AnnotationProperty abbreviatedIRI="rdfs:comment"/>
+            <AnnotationProperty IRI="#ann"/>
             <Literal xml:lang="en">Comment on Comment</Literal>
         </Annotation>
         <AnnotationProperty abbreviatedIRI="rdfs:comment"/>

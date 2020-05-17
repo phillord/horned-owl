@@ -904,7 +904,11 @@ impl<'a> OntologyParser<'a> {
         }
     }
 
-    fn simple_annotations(&mut self, simple: &mut Vec<[Term; 3]>) {
+    fn simple_annotations(
+        &mut self,
+        simple: &mut Vec<[Term; 3]>,
+        ann_map: &mut HashMap<[Term; 3], BTreeSet<Annotation>>,
+    ) {
         for triple in std::mem::take(simple) {
             if let Some(iri) = match &triple {
                 [Term::Iri(iri), Term::RDFS(rdfs), _] if rdfs.is_builtin() => Some(iri),
@@ -915,9 +919,13 @@ impl<'a> OntologyParser<'a> {
                 }
                 _ => None,
             } {
-                self.o.insert(AnnotationAssertion {
-                    subject: iri.clone(),
-                    ann: self.annotation(&triple),
+                self.merge(AnnotatedAxiom {
+                    axiom: AnnotationAssertion {
+                        subject: iri.clone(),
+                        ann: self.annotation(&triple),
+                    }
+                    .into(),
+                    ann: ann_map.remove(&triple).unwrap_or_else(|| BTreeSet::new()),
                 });
             } else {
                 simple.push(triple);
@@ -1004,7 +1012,7 @@ impl<'a> OntologyParser<'a> {
         self.declarations(&mut simple, &mut ann_map);
 
         // Table 10
-        self.simple_annotations(&mut simple);
+        self.simple_annotations(&mut simple, &mut ann_map);
 
         // Table 8:
         let mut object_property_expression = self.object_property_expressions(&mut bnode);
@@ -1295,10 +1303,15 @@ mod test {
     //     compare("subproperty-chain-with-inverse");
     // }
 
-    //#[test]
-    //fn annotation_on_annotation() {
-    //    compare("annotation-with-annotation");
-    //}
+    #[test]
+    fn annotation_on_annotation() {
+        compare("annotation-with-annotation");
+    }
+
+    #[test]
+    fn non_built_in_annotation_on_annotation() {
+        compare("annotation-with-non-builtin-annotation");
+    }
 
     // #[test]
     // fn sub_annotation() {
