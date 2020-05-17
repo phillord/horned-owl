@@ -568,6 +568,16 @@ impl<'a> OntologyParser<'a> {
         v.into_iter().collect()
     }
 
+    fn to_ni_seq(&mut self, term_seq: &Option<Vec<Term>>) -> Option<Vec<NamedIndividual>> {
+        let v: Vec<Option<NamedIndividual>> = term_seq
+            .as_ref()?
+            .into_iter()
+            .map(|t| self.to_iri(t).map(|iri| NamedIndividual(iri.clone())))
+            .collect();
+
+        v.into_iter().collect()
+    }
+
     fn to_dr(&self, t: &Term) -> Option<DataRange> {
         match t {
             Term::Iri(iri) => {
@@ -703,6 +713,14 @@ impl<'a> OntologyParser<'a> {
                             },
                             _ => panic!("Unexpected Property Kind")
                         }
+                    }
+                },
+                [[_, Term::OWL(VOWL::OneOf), Term::BNode(bnodeid)],
+                 [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Class)]] => {
+                    some!{
+                        ClassExpression::ObjectOneOf(
+                            self.to_ni_seq(&bnode_seq.remove(bnodeid))?
+                        )
                     }
                 },
                 [[_, Term::OWL(VOWL::IntersectionOf), Term::BNode(bnodeid)],
@@ -1073,6 +1091,8 @@ impl<'a> OntologyParser<'a> {
         // Table 13: Parsing of Class Expressions
         let mut class_expression =
             self.class_expressions(&mut bnode, &mut bnode_seq, &mut object_property_expression);
+
+        dbg!(&bnode);
         // Table 16: Axioms without annotations
         self.axioms(
             &mut simple,
@@ -1403,10 +1423,10 @@ mod test {
         compare("object-has-value");
     }
 
-    // #[test]
-    // fn object_one_of() {
-    //     compare("object-one-of");
-    // }
+    #[test]
+    fn object_one_of() {
+        compare("object-one-of");
+    }
 
     #[test]
     fn inverse() {

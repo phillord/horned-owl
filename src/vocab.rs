@@ -147,6 +147,7 @@ pub enum OWL {
     Nothing,
     ObjectProperty,
     OnClass,
+    OneOf,
     OnProperty,
     Ontology,
     QualifiedCardinality,
@@ -190,6 +191,7 @@ lazy_meta! {
     Nothing, extend(OWL, "Nothing");
     ObjectProperty, extend(OWL, "ObjectProperty");
     OnClass, extend(OWL, "onClass");
+    OneOf, extend(OWL, "oneOf");
     OnProperty, extend(OWL, "onProperty");
     Ontology, extend(OWL, "Ontology");
     PropertyChainAxiom, extend(OWL, "propertyChainAxiom");
