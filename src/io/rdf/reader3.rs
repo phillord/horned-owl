@@ -490,17 +490,25 @@ impl<'a> OntologyParser<'a> {
         let mut object_property_expression = HashMap::new();
 
         for (this_bnode, v) in std::mem::take(bnode) {
-            let ope = match v.as_slice() {
-                [[Term::BNode(_), Term::OWL(VOWL::InverseOf), Term::Iri(iri)]] => {
-                    Some(ObjectPropertyExpression::InverseObjectProperty(iri.into()))
-                }
-                _ => None,
-            };
+            let mut ope = None;
+            let mut new_triple = vec![];
+            for t in v {
+                match t {
+                    [Term::BNode(_), Term::OWL(VOWL::InverseOf), Term::Iri(iri)] => {
+                        ope = Some(ObjectPropertyExpression::InverseObjectProperty(iri.into()))
+                    }
+                    _ => {
+                        new_triple.push(t);
+                    }
+                };
+            }
 
             if let Some(ope) = ope {
-                object_property_expression.insert(this_bnode, ope);
-            } else {
-                bnode.insert(this_bnode, v);
+                object_property_expression.insert(this_bnode.clone(), ope);
+            }
+
+            if new_triple.len() > 0 {
+                bnode.insert(this_bnode, new_triple);
             }
         }
 
@@ -740,7 +748,6 @@ impl<'a> OntologyParser<'a> {
         }
 
         if class_expression.len() > class_expression_len {
-            dbg!("Recursing");
             self.class_expressions_1(bnode, bnode_seq, class_expression)
         }
     }
@@ -748,12 +755,16 @@ impl<'a> OntologyParser<'a> {
     fn axioms(
         &mut self,
         simple: &mut Vec<[Term; 3]>,
+        bnode: &mut HashMap<SpBNode, Vec<[Term; 3]>>,
         ann_map: &mut HashMap<[Term; 3], BTreeSet<Annotation>>,
         class_expression: &mut HashMap<SpBNode, ClassExpression>,
         bnode_seq: &mut HashMap<SpBNode, Vec<Term>>,
         object_property_expression: &mut HashMap<SpBNode, ObjectPropertyExpression>,
     ) {
-        for triple in std::mem::take(simple) {
+        for triple in std::mem::take(simple)
+            .into_iter()
+            .chain(std::mem::take(bnode).into_iter().map(|(_k, v)| v).flatten())
+        {
             let axiom: Option<Axiom> = match &triple {
                 [Term::Iri(sub), Term::RDFS(VRDFS::SubClassOf), tce] => some! {
                     SubClassOf {
@@ -1002,6 +1013,7 @@ impl<'a> OntologyParser<'a> {
         // Table 16: Axioms without annotations
         self.axioms(
             &mut simple,
+            &mut bnode,
             &mut ann_map,
             &mut class_expression,
             &mut bnode_seq,
@@ -1010,10 +1022,6 @@ impl<'a> OntologyParser<'a> {
 
         if simple.len() > 0 {
             dbg!("simple remaining", simple);
-        }
-
-        if bnode.len() > 0 {
-            dbg!("bnodes remaining", bnode);
         }
 
         if bnode_seq.len() > 0 {
@@ -1267,10 +1275,10 @@ mod test {
         compare("transitive-properties");
     }
 
-    // #[test]
-    // fn inverse_transitive() {
-    //     compare("inverse-transitive")
-    // }
+    #[test]
+    fn inverse_transitive() {
+        compare("inverse-transitive")
+    }
 
     // #[test]
     // fn one_annotated_transitive() {
