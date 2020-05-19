@@ -914,6 +914,51 @@ impl<'a> OntologyParser<'a> {
                         }
                     }
                 }
+                [pr, Term::RDF(VRDF::Type), Term::OWL(VOWL::SymmetricProperty)] => {
+                    some! {
+                        match self.find_property_kind(pr, object_property_expression)? {
+                            PropertyExpression::ObjectPropertyExpression(ope) => {
+                                SymmetricObjectProperty(ope).into()
+                            },
+
+                            _ => todo!()
+                        }
+                    }
+                }
+                [pr, Term::RDF(VRDF::Type), Term::OWL(VOWL::ReflexiveProperty)] => {
+                    some! {
+                        match self.find_property_kind(pr, object_property_expression)? {
+                            PropertyExpression::ObjectPropertyExpression(ope) => {
+                                ReflexiveObjectProperty(ope).into()
+                            },
+
+                            _ => todo!()
+                        }
+                    }
+                }
+                [pr, Term::RDF(VRDF::Type), Term::OWL(VOWL::IrreflexiveProperty)] => {
+                    some! {
+                        match self.find_property_kind(pr, object_property_expression)? {
+                            PropertyExpression::ObjectPropertyExpression(ope) => {
+                                IrreflexiveObjectProperty(ope).into()
+                            },
+
+                            _ => todo!()
+                        }
+                    }
+                }
+                [pr, Term::RDF(VRDF::Type), Term::OWL(VOWL::InverseFunctionalProperty)] => {
+                    some! {
+                        match self.find_property_kind(pr, object_property_expression)? {
+                            PropertyExpression::ObjectPropertyExpression(ope) => {
+                                InverseFunctionalObjectProperty(ope).into()
+                            },
+
+                            _ => todo!()
+                        }
+                    }
+                }
+
                 [Term::Iri(a), Term::OWL(VOWL::DisjointWith), Term::Iri(b)] => {
                     Some(
                         DisjointClasses(vec![
@@ -1647,30 +1692,30 @@ mod test {
         compare("object-property-functional");
     }
 
-    // #[test]
-    // fn object_property_inverse_functional() {
-    //     compare("object-property-inverse-functional");
-    // }
+    #[test]
+    fn object_property_inverse_functional() {
+        compare("object-property-inverse-functional");
+    }
 
-    // #[test]
-    // fn object_property_irreflexive() {
-    //     compare("object-property-irreflexive");
-    // }
+    #[test]
+    fn object_property_irreflexive() {
+        compare("object-property-irreflexive");
+    }
 
     #[test]
     fn object_property_range() {
         compare("object-property-range");
     }
 
-    // #[test]
-    // fn object_property_reflexive() {
-    //     compare("object-property-reflexive");
-    // }
+    #[test]
+    fn object_property_reflexive() {
+        compare("object-property-reflexive");
+    }
 
-    // #[test]
-    // fn object_property_symmetric() {
-    //     compare("object-property-symmetric");
-    // }
+    #[test]
+    fn object_property_symmetric() {
+        compare("object-property-symmetric");
+    }
 
     // #[test]
     // fn family() {
