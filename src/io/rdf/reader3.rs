@@ -893,6 +893,17 @@ impl<'a> OntologyParser<'a> {
                         }
                     }
                 }
+                [pr, Term::RDF(VRDF::Type), Term::OWL(VOWL::AsymmetricProperty)] => {
+                    some! {
+                        match self.find_property_kind(pr, object_property_expression)? {
+                            PropertyExpression::ObjectPropertyExpression(ope) => {
+                                AsymmetricObjectProperty(ope).into()
+                            },
+
+                            _ => todo!()
+                        }
+                    }
+                }
                 [Term::Iri(a), Term::OWL(VOWL::DisjointWith), Term::Iri(b)] => {
                     Some(
                         DisjointClasses(vec![
@@ -1611,10 +1622,10 @@ mod test {
     //     compare("object-has-key");
     // }
 
-    // #[test]
-    // fn object_property_asymmetric() {
-    //    compare("object-property-asymmetric");
-    // }
+    #[test]
+    fn object_property_asymmetric() {
+        compare("object-property-asymmetric");
+    }
 
     #[test]
     fn object_property_domain() {
