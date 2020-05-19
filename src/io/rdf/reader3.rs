@@ -851,15 +851,25 @@ impl<'a> OntologyParser<'a> {
                 // EquivalentClasses have any other EquivalentClasses
                 // and add to that axiom
                 [Term::Iri(a), Term::OWL(VOWL::EquivalentClass), Term::Iri(b)] => {
-                    Some(
-                        EquivalentClasses(vec![
-                            // The order is not important here, but
-                            // this way around matches with the XML reader
-                            Class(b.clone()).into(),
-                            Class(a.clone()).into(),
-                        ])
-                        .into(),
-                    )
+                    some!{
+                        match find_declaration_kind(&self.o, a)? {
+                            NamedEntityKind::Class => {
+                                EquivalentClasses(vec![
+                                    // The order is not important here, but
+                                    // this way around matches with the XML reader
+                                    Class(b.clone()).into(),
+                                    Class(a.clone()).into(),
+                                ]).into()
+                            }
+                            NamedEntityKind::Datatype => {
+                                DatatypeDefinition{
+                                    kind: Datatype(a.clone()).into(),
+                                    range: Datatype(b.clone()).into(),
+                                }.into()
+                            }
+                            _=> todo!()
+                        }
+                    }
                 }
                 [Term::Iri(iri), Term::OWL(VOWL::DisjointUnionOf), Term::BNode(bnodeid)] => {
                     some! {
@@ -1477,10 +1487,10 @@ mod test {
         compare("object-exact-cardinality");
     }
 
-    // #[test]
-    // fn datatype_alias() {
-    //     compare("datatype-alias");
-    // }
+    #[test]
+    fn datatype_alias() {
+        compare("datatype-alias");
+    }
 
     // #[test]
     // fn datatype_intersection() {
