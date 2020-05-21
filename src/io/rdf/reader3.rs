@@ -476,6 +476,14 @@ impl<'a> OntologyParser<'a> {
                         )
                     }
                 },
+                [[_, Term::OWL(VOWL::DatatypeComplementOf), term],
+                  [_, Term::RDF(VRDF::Type), Term::RDFS(VRDFS::Datatype)]] => {
+                     some!{
+                       DataRange::DataComplementOf(
+                             Box::new(self.to_dr(term)?)
+                         )
+                     }
+                 },
                 _ => None
             };
 
@@ -768,6 +776,21 @@ impl<'a> OntologyParser<'a> {
                         )
                     }
                 },
+                [[_, Term::OWL(VOWL::OnDataRange), dr],
+                 [_, Term::OWL(VOWL::OnProperty), Term::Iri(pr)],
+                 [_, Term::OWL(VOWL::QualifiedCardinality), literal],
+                 [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Restriction)]
+                ] => {
+                    some!{
+                        ClassExpression::DataExactCardinality
+                        {
+                            n:self.to_u32(literal)?,
+                            dp: pr.into(),
+                            dr: self.to_dr(dr)?
+                        }
+                    }
+                }
+
                 [[_, Term::OWL(VOWL::OnClass), tce],
                  [_, Term::OWL(VOWL::OnProperty), Term::Iri(pr)],
                  [_, Term::OWL(VOWL::QualifiedCardinality), literal],
@@ -1559,10 +1582,10 @@ mod test {
         compare("datatype-union");
     }
 
-    // #[test]
-    // fn datatype_complement() {
-    //     compare("datatype-complement");
-    // }
+    #[test]
+    fn datatype_complement() {
+        compare("datatype-complement");
+    }
 
     // #[test]
     // fn datatype_oneof() {
@@ -1584,10 +1607,10 @@ mod test {
         compare("data-only");
     }
 
-    // #[test]
-    // fn data_exact_cardinality() {
-    //     compare("data-exact-cardinality");
-    // }
+    #[test]
+    fn data_exact_cardinality() {
+        compare("data-exact-cardinality");
+    }
 
     // #[test]
     // fn data_has_value() {

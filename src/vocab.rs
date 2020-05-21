@@ -131,6 +131,7 @@ pub enum OWL {
     Axiom,
     Class,
     ComplementOf,
+    DatatypeComplementOf,
     DatatypeProperty,
     DisjointUnionOf,
     DisjointWith,
@@ -148,6 +149,7 @@ pub enum OWL {
     Nothing,
     ObjectProperty,
     OnClass,
+    OnDataRange,
     OneOf,
     OnProperty,
     Ontology,
@@ -176,6 +178,7 @@ lazy_meta! {
     Axiom, extend(OWL, "Axiom");
     Class, extend(OWL, "Class");
     ComplementOf, extend(OWL, "complementOf");
+    DatatypeComplementOf, extend(OWL, "datatypeComplementOf");
     DatatypeProperty, extend(OWL, "DatatypeProperty");
     DisjointUnionOf, extend(OWL, "disjointUnionOf");
     DisjointWith, extend(OWL, "disjointWith");
@@ -193,6 +196,7 @@ lazy_meta! {
     Nothing, extend(OWL, "Nothing");
     ObjectProperty, extend(OWL, "ObjectProperty");
     OnClass, extend(OWL, "onClass");
+    OnDataRange, extend(OWL, "onDataRange");
     OneOf, extend(OWL, "oneOf");
     OnProperty, extend(OWL, "onProperty");
     Ontology, extend(OWL, "Ontology");
