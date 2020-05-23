@@ -1735,10 +1735,10 @@ mod test {
         compare("data-max-cardinality");
     }
 
-    // #[test]
-    // fn data_min_cardinality() {
-    //     compare("data-min-cardinality");
-    // }
+    #[test]
+    fn data_min_cardinality() {
+        compare("data-min-cardinality");
+    }
 
     // #[test]
     // fn class_assertion() {
