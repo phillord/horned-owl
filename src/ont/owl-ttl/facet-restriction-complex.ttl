@@ -30,6 +30,8 @@ o:C rdf:type owl:Class ;
                                            owl:onDatatype xsd:integer ;
                                            owl:withRestrictions ( [ xsd:minExclusive 10
                                                                   ]
+                                                                  [ xsd:maxExclusive 20
+                                                                  ]
                                                                 )
                                          ]
                     ] .

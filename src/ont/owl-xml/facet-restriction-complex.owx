@@ -28,6 +28,9 @@
                 <FacetRestriction facet="http://www.w3.org/2001/XMLSchema#minExclusive">
                     <Literal datatypeIRI="http://www.w3.org/2001/XMLSchema#integer">10</Literal>
                 </FacetRestriction>
+                <FacetRestriction facet="http://www.w3.org/2001/XMLSchema#maxExclusive">
+                    <Literal datatypeIRI="http://www.w3.org/2001/XMLSchema#integer">20</Literal>
+                </FacetRestriction>
             </DatatypeRestriction>
         </DataSomeValuesFrom>
     </SubClassOf>

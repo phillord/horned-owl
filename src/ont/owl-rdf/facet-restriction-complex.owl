@@ -54,6 +54,9 @@
                             <rdf:Description>
                                 <xsd:minExclusive rdf:datatype="http://www.w3.org/2001/XMLSchema#integer">10</xsd:minExclusive>
                             </rdf:Description>
+                            <rdf:Description>
+                                <xsd:maxExclusive rdf:datatype="http://www.w3.org/2001/XMLSchema#integer">20</xsd:maxExclusive>
+                            </rdf:Description>
                         </owl:withRestrictions>
                     </rdfs:Datatype>
                 </owl:someValuesFrom>

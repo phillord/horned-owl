@@ -150,6 +150,7 @@ pub enum OWL {
     ObjectProperty,
     OnClass,
     OnDataRange,
+    OnDatatype,
     OneOf,
     OnProperty,
     Ontology,
@@ -164,6 +165,7 @@ pub enum OWL {
     UnionOf,
     VersionIRI,
     VersionInfo,
+    WithRestrictions,
 }
 
 lazy_meta! {
@@ -197,6 +199,7 @@ lazy_meta! {
     ObjectProperty, extend(OWL, "ObjectProperty");
     OnClass, extend(OWL, "onClass");
     OnDataRange, extend(OWL, "onDataRange");
+    OnDatatype, extend(OWL, "onDatatype");
     OneOf, extend(OWL, "oneOf");
     OnProperty, extend(OWL, "onProperty");
     Ontology, extend(OWL, "Ontology");
@@ -211,7 +214,9 @@ lazy_meta! {
     UnionOf, extend(OWL, "unionOf");
     VersionIRI, extend(OWL, "versionIRI");
     VersionInfo, extend(OWL, "versionInfo");
+    WithRestrictions, extend(OWL, "withRestrictions");
 }
+
 
 #[test]
 fn meta_testing() {

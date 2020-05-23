@@ -8,6 +8,7 @@ use crate::index::is_annotation_property;
 use crate::index::update_logically_equal_axiom;
 use crate::model::Literal;
 use crate::model::*;
+
 use crate::vocab::WithIRI;
 use crate::vocab::OWL as VOWL;
 use crate::vocab::RDF as VRDF;
@@ -49,6 +50,7 @@ enum Term {
     OWL(VOWL),
     RDF(VRDF),
     RDFS(VRDFS),
+    FacetTerm(Facet),
 }
 
 impl Term {
@@ -57,10 +59,11 @@ impl Term {
             OWL(_) => 1,
             RDF(_) => 2,
             RDFS(_) => 3,
-            Iri(_) => 4,
-            BNode(_) => 5,
-            Literal(_, _) => 6,
-            Variable(_) => 7,
+            FacetTerm(_) => 4,
+            Iri(_) => 5,
+            BNode(_) => 6,
+            Literal(_, _) => 7,
+            Variable(_) => 8,
         }
     }
 }
@@ -77,6 +80,7 @@ impl Ord for Term {
             (OWL(s), OWL(o)) => s.cmp(o),
             (RDF(s), RDF(o)) => s.cmp(o),
             (RDFS(s), RDFS(o)) => s.cmp(o),
+            (FacetTerm(s), FacetTerm(o)) => s.cmp(o),
             (Iri(s), Iri(o)) => s.to_string().cmp(&o.to_string()),
             (BNode(s), BNode(o)) => (*s).cmp(&(*o)),
             (Literal(s, _), Literal(o, _)) => s.cmp(o),
@@ -196,6 +200,9 @@ fn vocab_lookup() -> HashMap<SpTerm, Term> {
         m.insert(vocab_to_term(&v), Term::RDF(v));
     }
 
+    for v in Facet::all() {
+        m.insert(vocab_to_term(&v), Term::FacetTerm(v));
+    }
     m
 }
 
@@ -393,17 +400,6 @@ impl<'a> OntologyParser<'a> {
         update_logically_equal_axiom(&mut self.o, ax);
     }
 
-    fn in_or_merge<A: Into<AnnotatedAxiom>>(&mut self, ax: A) {
-        let ax = ax.into();
-        let is_empty = ax.ann.is_empty();
-
-        if is_empty {
-            self.o.insert(ax);
-        } else {
-            update_logically_equal_axiom(&mut self.o, ax);
-        }
-    }
-
     fn axiom_annotations(
         &mut self,
     ) {
@@ -466,6 +462,20 @@ impl<'a> OntologyParser<'a> {
 
     fn data_ranges(&mut self) {
         let data_range_len = self.data_range.len();
+
+        let mut facet_map: HashMap<SpBNode, Vec<[Term;3]>>  = HashMap::new();
+
+        for (k, v) in std::mem::take(&mut self.bnode) {
+             match v.as_slice() {
+                 [[_, Term::FacetTerm(_), _]] => {
+                     facet_map.insert(k, v);
+                 }
+                 _ => {
+                     self.bnode.insert(k, v);
+                 }
+             }
+        }
+
         for (this_bnode, v) in std::mem::take(&mut self.bnode) {
             let dr = match v.as_slice()  {
                 [[_, Term::OWL(VOWL::IntersectionOf), Term::BNode(bnodeid)],
@@ -483,7 +493,48 @@ impl<'a> OntologyParser<'a> {
                              Box::new(self.to_dr(term)?)
                          )
                      }
-                 },
+                },
+                [[_, Term::OWL(VOWL::OnDatatype), Term::Iri(iri)],
+                 ..,
+                 [_, Term::RDF(VRDF::Type), Term::RDFS(VRDFS::Datatype)]] => {
+                    let facet_nodes = v.to_vec();
+                    let facets:Vec<FacetRestriction> = facet_nodes
+                        .into_iter()
+                        .filter_map(|t|
+                                    if let [_, Term::OWL(VOWL::WithRestrictions), Term::BNode(bnode)] = t {
+                                        let facet_triples = facet_map.remove(&bnode)?;
+                                        let mut facet_restrictions:Vec<FacetRestriction> = vec![];
+                                        for facet_triple in facet_triples {
+                                            facet_restrictions.push(
+                                                match facet_triple {
+                                                    [_, Term::FacetTerm(facet), literal] => {
+                                                        FacetRestriction {
+                                                            f: facet,
+                                                            l: self.to_literal(&literal)?
+                                                        }
+                                                    }
+                                                    _ => {
+                                                        return None;
+                                                    }
+                                                }
+                                            )
+                                        }
+                                        Some(facet_restrictions)
+                                    }
+                                    else {
+                                        None
+                                    }
+                        )
+                        .flatten()
+                        .collect();
+
+                    some!{
+                        DataRange::DatatypeRestriction(
+                            iri.into(),
+                            facets
+                        )
+                    }
+                }
                 _ => None
             };
 
@@ -498,6 +549,10 @@ impl<'a> OntologyParser<'a> {
         if self.data_range.len() > data_range_len {
             self.data_ranges();
         }
+
+        // Shove any remaining facets back onto bnode so that they get
+        // reported at the end
+        self.bnode.extend(facet_map);
     }
 
     fn object_property_expressions(
@@ -1597,10 +1652,15 @@ mod test {
         compare("data-some");
     }
 
-    // #[test]
-    // fn facet_restriction() {
-    //     compare("facet-restriction");
-    // }
+    #[test]
+    fn facet_restriction() {
+        compare("facet-restriction");
+    }
+
+    #[test]
+    fn facet_restriction_complex() {
+        compare("facet-restriction-complex");
+    }
 
     #[test]
     fn data_only() {
