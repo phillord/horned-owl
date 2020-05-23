@@ -871,7 +871,34 @@ impl<'a> OntologyParser<'a> {
                         }
                     }
                 }
-
+                [[_, Term::OWL(VOWL::MaxQualifiedCardinality), literal],
+                 [_, Term::OWL(VOWL::OnDataRange), dr],
+                 [_, Term::OWL(VOWL::OnProperty), Term::Iri(pr)],
+                 [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Restriction)]
+                ] => {
+                    some!{
+                        ClassExpression::DataMaxCardinality
+                        {
+                            n:self.to_u32(literal)?,
+                            dp: pr.into(),
+                            dr: self.to_dr(dr)?
+                        }
+                    }
+                }
+                [[_, Term::OWL(VOWL::MinQualifiedCardinality), literal],
+                 [_, Term::OWL(VOWL::OnDataRange), dr],
+                 [_, Term::OWL(VOWL::OnProperty), Term::Iri(pr)],
+                 [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Restriction)]
+                ] => {
+                    some!{
+                        ClassExpression::DataMinCardinality
+                        {
+                            n:self.to_u32(literal)?,
+                            dp: pr.into(),
+                            dr: self.to_dr(dr)?
+                        }
+                    }
+                }
                 [[_, Term::OWL(VOWL::OnClass), tce],
                  [_, Term::OWL(VOWL::OnProperty), Term::Iri(pr)],
                  [_, Term::OWL(VOWL::QualifiedCardinality), literal],
@@ -1703,10 +1730,10 @@ mod test {
     //     compare("data-has-value");
     // }
 
-    // #[test]
-    // fn data_max_cardinality() {
-    //     compare("data-max-cardinality");
-    // }
+    #[test]
+    fn data_max_cardinality() {
+        compare("data-max-cardinality");
+    }
 
     // #[test]
     // fn data_min_cardinality() {
