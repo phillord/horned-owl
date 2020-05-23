@@ -70,6 +70,7 @@ lazy_meta! {
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum RDF {
     First,
+    List,
     Nil,
     Rest,
     Type,
@@ -78,6 +79,7 @@ pub enum RDF {
 lazy_meta! {
     RDF, IRIString, METARDF;
     First, extend(RDF, "first");
+    List, extend(RDF, "List");
     Nil, extend(RDF, "nil");
     Rest, extend(RDF, "rest");
     Type, extend(RDF, "type");

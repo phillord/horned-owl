@@ -286,7 +286,10 @@ impl<'a> OntologyParser<'a> {
             #[rustfmt::skip]
             let _ = match v.as_slice() {
                 [[_, Term::RDF(VRDF::First), val],
-                 [_, Term::RDF(VRDF::Rest), Term::BNode(bnode_id)]] => {
+                 [_, Term::RDF(VRDF::Rest), Term::BNode(bnode_id)],
+                 // Some sequences have a Type List, some do not
+                 ..
+                ] => {
                     let some_seq = self.bnode_seq.remove(bnode_id);
                     if let Some(mut seq) = some_seq {
                         seq.push(val.clone());
@@ -314,7 +317,10 @@ impl<'a> OntologyParser<'a> {
             #[rustfmt::skip]
             let _ = match v.as_slice() {
                 [[_, Term::RDF(VRDF::First), val],
-                 [_, Term::RDF(VRDF::Rest), Term::RDF(VRDF::Nil)]] =>
+                 [_, Term::RDF(VRDF::Rest), Term::RDF(VRDF::Nil)],
+                 // Lists may or may not have a "list" RDF type
+                 ..
+                ] =>
                 {
                     self.bnode_seq.insert(k.clone(), vec![val.clone()]);
                 }
@@ -494,6 +500,14 @@ impl<'a> OntologyParser<'a> {
                          )
                      }
                 },
+                [[_, Term::OWL(VOWL::OneOf), Term::BNode(bnode)],
+                 [_, Term::RDF(VRDF::Type), Term::RDFS(VRDFS::Datatype)]] => {
+                    some!{
+                        DataRange::DataOneOf(
+                            self.to_literal_seq(bnode)?
+                        )
+                    }
+                }
                 [[_, Term::OWL(VOWL::OnDatatype), Term::Iri(iri)],
                  ..,
                  [_, Term::RDF(VRDF::Type), Term::RDFS(VRDFS::Datatype)]] => {
@@ -656,6 +670,18 @@ impl<'a> OntologyParser<'a> {
             .as_ref()?
             .into_iter()
             .map(|t| self.to_dr(t))
+            .collect();
+
+        v.into_iter().collect()
+    }
+
+    // TODO Fix code duplication
+    fn to_literal_seq(&mut self, bnodeid: &SpBNode) -> Option<Vec<Literal>>{
+        let v: Vec<Option<Literal>> = self.bnode_seq
+            .remove(bnodeid)
+            .as_ref()?
+            .into_iter()
+            .map(|t| self.to_literal(t))
             .collect();
 
         v.into_iter().collect()
@@ -1642,10 +1668,10 @@ mod test {
         compare("datatype-complement");
     }
 
-    // #[test]
-    // fn datatype_oneof() {
-    //     compare("datatype-oneof");
-    // }
+    #[test]
+    fn datatype_oneof() {
+        compare("datatype-oneof");
+    }
 
     #[test]
     fn datatype_some() {
