@@ -955,6 +955,7 @@ impl<'a> OntologyParser<'a> {
                     }
                 }
 
+
                 _a => None,
             };
 
@@ -1006,6 +1007,23 @@ impl<'a> OntologyParser<'a> {
                                 }.into()
                             }
                             _=> todo!()
+                        }
+                    }
+                }
+                [class, Term::OWL(VOWL::HasKey), Term::BNode(bnodeid)] => {
+                    some! {
+                        {
+                            let v:Vec<Option<PropertyExpression>> = self.bnode_seq
+                                .remove(&bnodeid)?
+                                .into_iter()
+                                .map(|pr| self.find_property_kind(&pr))
+                                .collect();
+                            let vpe: Option<Vec<PropertyExpression>> = v.into_iter().collect();
+
+                            HasKey{
+                                ce:self.to_ce(class)?,
+                                vpe: vpe?
+                            }.into()
                         }
                     }
                 }
@@ -1237,6 +1255,7 @@ impl<'a> OntologyParser<'a> {
             })
             .collect();
 
+        dbg!(&triple);
         Self::group_triples(triple, &mut self.simple, &mut self.bnode);
 
         // sort the triples, so that I can get a dependable order
@@ -1725,10 +1744,10 @@ mod test {
         compare("data-exact-cardinality");
     }
 
-    // #[test]
-    // fn data_has_value() {
-    //     compare("data-has-value");
-    // }
+    #[test]
+    fn data_has_value() {
+        compare("data-has-value");
+    }
 
     #[test]
     fn data_max_cardinality() {
@@ -1775,10 +1794,10 @@ mod test {
     //     compare("object-property-assertion");
     // }
 
-    // #[test]
-    // fn data_has_key() {
-    //     compare("data-has-key");
-    // }
+    #[test]
+    fn data_has_key() {
+        compare("data-has-key");
+    }
 
     // #[test]
     // fn data_property_disjoint() {
@@ -1820,10 +1839,10 @@ mod test {
     //     compare("equivalent_object_properties");
     // }
 
-    // #[test]
-    // fn object_has_key() {
-    //     compare("object-has-key");
-    // }
+    #[test]
+    fn object_has_key() {
+        compare("object-has-key");
+    }
 
     #[test]
     fn object_property_asymmetric() {

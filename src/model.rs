@@ -958,7 +958,7 @@ axioms! {
     /// inferred.
     ///
     /// See also: [Keys](https://www.w3.org/TR/owl2-syntax/#Keys)
-    HasKey{ce:ClassExpression, pe:PropertyExpression},
+    HasKey{ce:ClassExpression, vpe:Vec<PropertyExpression>},
 
     // Assertions
     /// A same individual expression.

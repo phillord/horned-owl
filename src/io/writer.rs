@@ -553,7 +553,7 @@ render! {
     }
 }
 
-contents! {HasKey, self, (&self.ce, &self.pe)}
+contents! {HasKey, self, (&self.ce, &self.vpe)}
 
 content0! {FunctionalDataProperty}
 

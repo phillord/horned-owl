@@ -454,7 +454,7 @@ fn axiom_from_start<R: BufRead>(
         .into(),
         b"HasKey" => HasKey {
             ce: from_start(r, e)?,
-            pe: from_next(r)?,
+            vpe: till_end(r, b"HasKey")?,
         }
         .into(),
         b"SameIndividual" => SameIndividual(from_start_to_end(r, e, b"SameIndividual")?).into(),
@@ -609,6 +609,9 @@ fn data_cardinality_restriction<R: BufRead>(
         },
     ))
 }
+
+
+
 
 from_start! {
     PropertyExpression, r, e,
