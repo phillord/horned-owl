@@ -627,6 +627,13 @@ impl<'a> OntologyParser<'a> {
         }
     }
 
+    fn to_dp(&mut self, t: &Term) -> Option<DataProperty> {
+        match self.find_property_kind(t)? {
+            PropertyExpression::DataProperty(dp) => Some(dp),
+            _ => None,
+        }
+    }
+
     fn to_ce(
         &mut self,
         tce: &Term,
@@ -1197,6 +1204,33 @@ impl<'a> OntologyParser<'a> {
                         .into(),
                     }
                 },
+                [r, Term::OWL(VOWL::PropertyDisjointWith), s] => some! {
+                    match self.find_property_kind(r)? {
+                        PropertyExpression::ObjectPropertyExpression(ope) => DisjointObjectProperties (
+                            vec![ope, self.to_ope(s)?]
+                        )
+                        .into(),
+                        PropertyExpression::DataProperty(dp) => DisjointDataProperties (
+                            vec![dp, self.to_dp(s)?]
+                        )
+                            .into(),
+                        _ => todo!()
+                    }
+                },
+                [r, Term::OWL(VOWL::EquivalentProperty), s] => some! {
+                    match self.find_property_kind(r)? {
+                        PropertyExpression::ObjectPropertyExpression(ope) => EquivalentObjectProperties (
+                            vec![ope, self.to_ope(s)?]
+                        )
+                        .into(),
+                        PropertyExpression::DataProperty(dp) => EquivalentDataProperties (
+                            vec![dp, self.to_dp(s)?]
+                        )
+                            .into(),
+                        _ => todo!()
+                    }
+                },
+
                 _ => None,
             };
 
@@ -1799,20 +1833,20 @@ mod test {
         compare("data-has-key");
     }
 
-    // #[test]
-    // fn data_property_disjoint() {
-    //     compare("data-property-disjoint");
-    // }
+    #[test]
+    fn data_property_disjoint() {
+        compare("data-property-disjoint");
+    }
 
     #[test]
     fn data_property_domain() {
         compare("data-property-domain");
     }
 
-    // #[test]
-    // fn data_property_equivalent() {
-    //     compare("data-property-equivalent");
-    // }
+    #[test]
+    fn data_property_equivalent() {
+        compare("data-property-equivalent");
+    }
 
     #[test]
     fn data_property_functional() {

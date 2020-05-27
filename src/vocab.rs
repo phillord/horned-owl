@@ -138,6 +138,7 @@ pub enum OWL {
     DisjointUnionOf,
     DisjointWith,
     EquivalentClass,
+    EquivalentProperty,
     FunctionalProperty,
     HasKey,
     HasValue,
@@ -159,6 +160,7 @@ pub enum OWL {
     Ontology,
     QualifiedCardinality,
     PropertyChainAxiom,
+    PropertyDisjointWith,
     ReflexiveProperty,
     Restriction,
     SomeValuesFrom,
@@ -188,6 +190,7 @@ lazy_meta! {
     DisjointUnionOf, extend(OWL, "disjointUnionOf");
     DisjointWith, extend(OWL, "disjointWith");
     EquivalentClass, extend(OWL, "equivalentClass");
+    EquivalentProperty, extend(OWL, "equivalentProperty");
     FunctionalProperty, extend(OWL, "FunctionalProperty");
     IntersectionOf, extend(OWL, "intersectionOf");
     InverseFunctionalProperty, extend(OWL, "InverseFunctionalProperty");
@@ -208,6 +211,7 @@ lazy_meta! {
     OnProperty, extend(OWL, "onProperty");
     Ontology, extend(OWL, "Ontology");
     PropertyChainAxiom, extend(OWL, "propertyChainAxiom");
+    PropertyDisjointWith, extend(OWL, "propertyDisjointWith");
     QualifiedCardinality, extend(OWL, "qualifiedCardinality");
     ReflexiveProperty, extend(OWL, "ReflexiveProperty");
     Restriction, extend(OWL, "Restriction");
