@@ -1863,15 +1863,15 @@ mod test {
     //     compare("data-property-sub");
     // }
 
-    // #[test]
-    // fn disjoint_object_properties() {
-    //     compare("disjoint-object-properties");
-    // }
+    #[test]
+    fn disjoint_object_properties() {
+        compare("disjoint-object-properties");
+    }
 
-    // #[test]
-    // fn equivalent_object_properties() {
-    //     compare("equivalent_object_properties");
-    // }
+    #[test]
+    fn equivalent_object_properties() {
+        compare("equivalent-object-properties");
+    }
 
     #[test]
     fn object_has_key() {

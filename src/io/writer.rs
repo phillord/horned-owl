@@ -1259,7 +1259,7 @@ mod test {
     #[test]
     fn equivalent_object_properties() {
         assert_round(include_str!(
-            "../ont/owl-xml/equivalent_object_properties.owx"
+            "../ont/owl-xml/equivalent-object-properties.owx"
         ));
     }
 

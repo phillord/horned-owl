@@ -16,7 +16,7 @@
 
 ###  http://www.example.com/iri#r
 o:r rdf:type owl:ObjectProperty ;
-    owl:propertyDisjointWith o:s .
+    owl:equivalentProperty o:s .
 
 
 ###  http://www.example.com/iri#s
