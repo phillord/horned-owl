@@ -189,7 +189,11 @@ fn vocab_lookup() -> HashMap<SpTerm, Term> {
     let mut m = HashMap::default();
 
     for v in VOWL::all() {
-        m.insert(vocab_to_term(&v), Term::OWL(v));
+        match v {
+            // Skip the builtin properties or we have to treat them separately
+            VOWL::TopDataProperty => None,
+            _ => m.insert(vocab_to_term(&v), Term::OWL(v)),
+        };
     }
 
     for v in VRDFS::all() {
@@ -1138,15 +1142,19 @@ impl<'a> OntologyParser<'a> {
                         match self.find_property_kind(t)? {
                             PropertyExpression::ObjectPropertyExpression(ope) =>
                                 SubObjectPropertyOf {
-                                    sub: self.to_sope(pr)?,
                                     sup: ope,
+                                    sub: self.to_sope(pr)?,
+                                }.into(),
+                            PropertyExpression::DataProperty(dp) =>
+                                SubDataPropertyOf {
+                                    sup: dp,
+                                    sub: self.to_dp(pr)?
                                 }.into(),
                             PropertyExpression::AnnotationProperty(ap) =>
                                 SubAnnotationPropertyOf {
                                     sup: ap,
                                     sub: self.to_ap(pr)?
                                 }.into(),
-                            _ => todo!()
                         }
                     }
                 }
@@ -1289,7 +1297,6 @@ impl<'a> OntologyParser<'a> {
             })
             .collect();
 
-        dbg!(&triple);
         Self::group_triples(triple, &mut self.simple, &mut self.bnode);
 
         // sort the triples, so that I can get a dependable order
@@ -1858,10 +1865,10 @@ mod test {
         compare("data-property-range");
     }
 
-    // #[test]
-    // fn data_property_sub() {
-    //     compare("data-property-sub");
-    // }
+    #[test]
+    fn data_property_sub() {
+        compare("data-property-sub");
+    }
 
     #[test]
     fn disjoint_object_properties() {

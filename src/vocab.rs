@@ -4,6 +4,8 @@ use enum_meta::*;
 use crate::model::Build;
 use crate::model::Facet;
 use crate::model::NamedEntity;
+use crate::model::NamedEntityKind;
+use crate::model::IRI;
 
 use failure::Error;
 
@@ -165,6 +167,7 @@ pub enum OWL {
     Restriction,
     SomeValuesFrom,
     SymmetricProperty,
+    TopDataProperty,
     Thing,
     TransitiveProperty,
     UnionOf,
@@ -218,6 +221,7 @@ lazy_meta! {
     SomeValuesFrom, extend(OWL, "someValuesFrom");
     SymmetricProperty, extend(OWL, "SymmetricProperty");
     Thing, extend(OWL, "Thing");
+    TopDataProperty, extend(OWL, "topDataProperty");
     TransitiveProperty, extend(OWL, "TransitiveProperty");
     UnionOf, extend(OWL, "unionOf");
     VersionIRI, extend(OWL, "versionIRI");
@@ -225,6 +229,15 @@ lazy_meta! {
     WithRestrictions, extend(OWL, "withRestrictions");
 }
 
+pub fn to_built_in_entity(iri: &IRI) -> Option<NamedEntityKind>
+{
+    let ir = iri.as_ref();
+    match ir {
+        _ if ir == OWL::TopDataProperty.iri_s() =>
+            Some(NamedEntityKind::DataProperty),
+        _ => None
+    }
+}
 
 #[test]
 fn meta_testing() {

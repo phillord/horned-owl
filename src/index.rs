@@ -49,10 +49,10 @@ pub fn find_declaration_kind(o: &Ontology, iri: &IRI) -> Option<NamedEntityKind>
             (o, &DeclareDatatype(Datatype(iri.clone())).into()).is_some() => {
                 return Some(NamedEntityKind::Datatype)
             }
-        _ => {}
+        _ => {
+            return crate::vocab::to_built_in_entity(iri);
+        }
     }
-
-    return None;
 }
 
 pub fn is_annotation_property(o: &Ontology, iri: &IRI) -> bool {
