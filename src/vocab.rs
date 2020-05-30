@@ -126,11 +126,13 @@ lazy_meta! {
 
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum OWL {
+    AllDifferent,
     AllValuesFrom,
     AnnotatedProperty,
     AnnotatedSource,
     AnnotatedTarget,
     AnnotationProperty,
+    AssertionProperty,
     AsymmetricProperty,
     Axiom,
     Class,
@@ -139,6 +141,7 @@ pub enum OWL {
     DatatypeProperty,
     DisjointUnionOf,
     DisjointWith,
+    DistinctMembers,
     EquivalentClass,
     EquivalentProperty,
     FunctionalProperty,
@@ -152,6 +155,7 @@ pub enum OWL {
     MaxQualifiedCardinality,
     MinQualifiedCardinality,
     NamedIndividual,
+    NegativePropertyAssertion,
     Nothing,
     ObjectProperty,
     OnClass,
@@ -165,8 +169,12 @@ pub enum OWL {
     PropertyDisjointWith,
     ReflexiveProperty,
     Restriction,
+    SameAs,
+    SourceIndividual,
     SomeValuesFrom,
     SymmetricProperty,
+    TargetIndividual,
+    TargetValue,
     TopDataProperty,
     Thing,
     TransitiveProperty,
@@ -179,11 +187,13 @@ pub enum OWL {
 lazy_meta! {
     OWL, IRIString, METAOWL;
 
+    AllDifferent, extend(OWL, "AllDifferent");
     AllValuesFrom, extend(OWL, "allValuesFrom");
     AnnotatedProperty, extend(OWL, "annotatedProperty");
     AnnotatedSource, extend(OWL, "annotatedSource");
     AnnotatedTarget, extend(OWL, "annotatedTarget");
     AnnotationProperty, extend(OWL, "AnnotationProperty");
+    AssertionProperty, extend(OWL, "assertionProperty");
     AsymmetricProperty, extend(OWL, "AsymmetricProperty");
     Axiom, extend(OWL, "Axiom");
     Class, extend(OWL, "Class");
@@ -192,6 +202,7 @@ lazy_meta! {
     DatatypeProperty, extend(OWL, "DatatypeProperty");
     DisjointUnionOf, extend(OWL, "disjointUnionOf");
     DisjointWith, extend(OWL, "disjointWith");
+    DistinctMembers, extend(OWL, "distinctMembers");
     EquivalentClass, extend(OWL, "equivalentClass");
     EquivalentProperty, extend(OWL, "equivalentProperty");
     FunctionalProperty, extend(OWL, "FunctionalProperty");
@@ -205,6 +216,7 @@ lazy_meta! {
     MaxQualifiedCardinality, extend(OWL, "maxQualifiedCardinality");
     MinQualifiedCardinality, extend(OWL, "minQualifiedCardinality");
     NamedIndividual, extend(OWL, "NamedIndividual");
+    NegativePropertyAssertion, extend(OWL, "NegativePropertyAssertion");
     Nothing, extend(OWL, "Nothing");
     ObjectProperty, extend(OWL, "ObjectProperty");
     OnClass, extend(OWL, "onClass");
@@ -218,8 +230,12 @@ lazy_meta! {
     QualifiedCardinality, extend(OWL, "qualifiedCardinality");
     ReflexiveProperty, extend(OWL, "ReflexiveProperty");
     Restriction, extend(OWL, "Restriction");
+    SameAs, extend(OWL, "sameAs");
+    SourceIndividual, extend(OWL, "sourceIndividual");
     SomeValuesFrom, extend(OWL, "someValuesFrom");
     SymmetricProperty, extend(OWL, "SymmetricProperty");
+    TargetIndividual, extend(OWL, "targetIndividual");
+    TargetValue, extend(OWL, "targetValue");
     Thing, extend(OWL, "Thing");
     TopDataProperty, extend(OWL, "topDataProperty");
     TransitiveProperty, extend(OWL, "TransitiveProperty");

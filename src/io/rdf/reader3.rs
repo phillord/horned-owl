@@ -233,7 +233,7 @@ struct OntologyParser<'a> {
     o: Ontology,
     b: &'a Build,
 
-    simple: Vec<[Term;3]>,
+    simple: Vec<[Term; 3]>,
     bnode: HashMap<SpBNode, Vec<[Term; 3]>>,
     bnode_seq: HashMap<SpBNode, Vec<Term>>,
 
@@ -281,9 +281,7 @@ impl<'a> OntologyParser<'a> {
         }
     }
 
-    fn stitch_seqs_1(
-        &mut self,
-    ) {
+    fn stitch_seqs_1(&mut self) {
         let mut extended = false;
 
         for (k, v) in std::mem::take(&mut self.bnode) {
@@ -314,9 +312,7 @@ impl<'a> OntologyParser<'a> {
         }
     }
 
-    fn stitch_seqs(
-        &mut self,
-    ) {
+    fn stitch_seqs(&mut self) {
         for (k, v) in std::mem::take(&mut self.bnode) {
             #[rustfmt::skip]
             let _ = match v.as_slice() {
@@ -410,9 +406,7 @@ impl<'a> OntologyParser<'a> {
         update_logically_equal_axiom(&mut self.o, ax);
     }
 
-    fn axiom_annotations(
-        &mut self,
-    ) {
+    fn axiom_annotations(&mut self) {
         for (k, v) in std::mem::take(&mut self.bnode) {
             match v.as_slice() {
                 #[rustfmt::skip]
@@ -459,10 +453,13 @@ impl<'a> OntologyParser<'a> {
             };
 
             if let Some(entity) = entity {
-                let ann = self.ann_map.remove(&triple).unwrap_or_else(|| BTreeSet::new());
+                let ann = self
+                    .ann_map
+                    .remove(&triple)
+                    .unwrap_or_else(|| BTreeSet::new());
                 self.merge(AnnotatedAxiom {
                     axiom: declaration(entity),
-                    ann
+                    ann,
                 });
             } else {
                 self.simple.push(triple);
@@ -473,93 +470,86 @@ impl<'a> OntologyParser<'a> {
     fn data_ranges(&mut self) {
         let data_range_len = self.data_range.len();
 
-        let mut facet_map: HashMap<SpBNode, Vec<[Term;3]>>  = HashMap::new();
+        let mut facet_map: HashMap<SpBNode, Vec<[Term; 3]>> = HashMap::new();
 
         for (k, v) in std::mem::take(&mut self.bnode) {
-             match v.as_slice() {
-                 [[_, Term::FacetTerm(_), _]] => {
-                     facet_map.insert(k, v);
-                 }
-                 _ => {
-                     self.bnode.insert(k, v);
-                 }
-             }
+            match v.as_slice() {
+                [[_, Term::FacetTerm(_), _]] => {
+                    facet_map.insert(k, v);
+                }
+                _ => {
+                    self.bnode.insert(k, v);
+                }
+            }
         }
 
         for (this_bnode, v) in std::mem::take(&mut self.bnode) {
-            let dr = match v.as_slice()  {
-                [[_, Term::OWL(VOWL::IntersectionOf), Term::BNode(bnodeid)],
-                 [_, Term::RDF(VRDF::Type), Term::RDFS(VRDFS::Datatype)]] => {
-                    some!{
+            let dr = match v.as_slice() {
+                [[_, Term::OWL(VOWL::IntersectionOf), Term::BNode(bnodeid)], [_, Term::RDF(VRDF::Type), Term::RDFS(VRDFS::Datatype)]] =>
+                {
+                    some! {
                         DataRange::DataIntersectionOf(
                             self.to_dr_seq(bnodeid)?
                         )
                     }
-                },
-                [[_, Term::OWL(VOWL::DatatypeComplementOf), term],
-                  [_, Term::RDF(VRDF::Type), Term::RDFS(VRDFS::Datatype)]] => {
-                     some!{
-                       DataRange::DataComplementOf(
-                             Box::new(self.to_dr(term)?)
-                         )
-                     }
-                },
-                [[_, Term::OWL(VOWL::OneOf), Term::BNode(bnode)],
-                 [_, Term::RDF(VRDF::Type), Term::RDFS(VRDFS::Datatype)]] => {
-                    some!{
+                }
+                [[_, Term::OWL(VOWL::DatatypeComplementOf), term], [_, Term::RDF(VRDF::Type), Term::RDFS(VRDFS::Datatype)]] =>
+                {
+                    some! {
+                      DataRange::DataComplementOf(
+                            Box::new(self.to_dr(term)?)
+                        )
+                    }
+                }
+                [[_, Term::OWL(VOWL::OneOf), Term::BNode(bnode)], [_, Term::RDF(VRDF::Type), Term::RDFS(VRDFS::Datatype)]] =>
+                {
+                    some! {
                         DataRange::DataOneOf(
                             self.to_literal_seq(bnode)?
                         )
                     }
                 }
-                [[_, Term::OWL(VOWL::OnDatatype), Term::Iri(iri)],
-                 ..,
-                 [_, Term::RDF(VRDF::Type), Term::RDFS(VRDFS::Datatype)]] => {
+                [[_, Term::OWL(VOWL::OnDatatype), Term::Iri(iri)], .., [_, Term::RDF(VRDF::Type), Term::RDFS(VRDFS::Datatype)]] =>
+                {
                     let facet_nodes = v.to_vec();
-                    let facets:Vec<FacetRestriction> = facet_nodes
+                    let facets: Vec<FacetRestriction> = facet_nodes
                         .into_iter()
-                        .filter_map(|t|
-                                    if let [_, Term::OWL(VOWL::WithRestrictions), Term::BNode(bnode)] = t {
-                                        let facet_triples = facet_map.remove(&bnode)?;
-                                        let mut facet_restrictions:Vec<FacetRestriction> = vec![];
-                                        for facet_triple in facet_triples {
-                                            facet_restrictions.push(
-                                                match facet_triple {
-                                                    [_, Term::FacetTerm(facet), literal] => {
-                                                        FacetRestriction {
-                                                            f: facet,
-                                                            l: self.to_literal(&literal)?
-                                                        }
-                                                    }
-                                                    _ => {
-                                                        return None;
-                                                    }
-                                                }
-                                            )
+                        .filter_map(|t| {
+                            if let [_, Term::OWL(VOWL::WithRestrictions), Term::BNode(bnode)] = t {
+                                let facet_triples = facet_map.remove(&bnode)?;
+                                let mut facet_restrictions: Vec<FacetRestriction> = vec![];
+                                for facet_triple in facet_triples {
+                                    facet_restrictions.push(match facet_triple {
+                                        [_, Term::FacetTerm(facet), literal] => FacetRestriction {
+                                            f: facet,
+                                            l: self.to_literal(&literal)?,
+                                        },
+                                        _ => {
+                                            return None;
                                         }
-                                        Some(facet_restrictions)
-                                    }
-                                    else {
-                                        None
-                                    }
-                        )
+                                    })
+                                }
+                                Some(facet_restrictions)
+                            } else {
+                                None
+                            }
+                        })
                         .flatten()
                         .collect();
 
-                    some!{
+                    some! {
                         DataRange::DatatypeRestriction(
                             iri.into(),
                             facets
                         )
                     }
                 }
-                _ => None
+                _ => None,
             };
 
             if let Some(dr) = dr {
                 self.data_range.insert(this_bnode, dr);
-            }
-            else {
+            } else {
                 self.bnode.insert(this_bnode, v);
             }
         }
@@ -573,9 +563,7 @@ impl<'a> OntologyParser<'a> {
         self.bnode.extend(facet_map);
     }
 
-    fn object_property_expressions(
-        &mut self,
-    )  {
+    fn object_property_expressions(&mut self) {
         for (this_bnode, v) in std::mem::take(&mut self.bnode) {
             let mut ope = None;
             let mut new_triple = vec![];
@@ -591,7 +579,8 @@ impl<'a> OntologyParser<'a> {
             }
 
             if let Some(ope) = ope {
-                self.object_property_expression.insert(this_bnode.clone(), ope);
+                self.object_property_expression
+                    .insert(this_bnode.clone(), ope);
             }
 
             if new_triple.len() > 0 {
@@ -607,17 +596,11 @@ impl<'a> OntologyParser<'a> {
         }
     }
 
-    fn to_sope(
-        &mut self,
-        t: &Term,
-    ) -> Option<SubObjectPropertyExpression> {
+    fn to_sope(&mut self, t: &Term) -> Option<SubObjectPropertyExpression> {
         Some(self.to_ope(t)?.into())
     }
 
-    fn to_ope(
-        &mut self,
-        t: &Term,
-    ) -> Option<ObjectPropertyExpression> {
+    fn to_ope(&mut self, t: &Term) -> Option<ObjectPropertyExpression> {
         match self.find_property_kind(t)? {
             PropertyExpression::ObjectPropertyExpression(ope) => Some(ope),
             _ => None,
@@ -638,10 +621,7 @@ impl<'a> OntologyParser<'a> {
         }
     }
 
-    fn to_ce(
-        &mut self,
-        tce: &Term,
-    ) -> Option<ClassExpression> {
+    fn to_ce(&mut self, tce: &Term) -> Option<ClassExpression> {
         match tce {
             Term::Iri(cl) => Some(Class(cl.clone()).into()),
             Term::BNode(id) => self.class_expression.remove(id),
@@ -649,11 +629,9 @@ impl<'a> OntologyParser<'a> {
         }
     }
 
-    fn to_ce_seq(
-        &mut self,
-        bnodeid: &SpBNode,
-    ) -> Option<Vec<ClassExpression>> {
-        let v: Vec<Option<ClassExpression>> = self.bnode_seq
+    fn to_ce_seq(&mut self, bnodeid: &SpBNode) -> Option<Vec<ClassExpression>> {
+        let v: Vec<Option<ClassExpression>> = self
+            .bnode_seq
             .remove(bnodeid)
             .as_ref()?
             .into_iter()
@@ -665,7 +643,8 @@ impl<'a> OntologyParser<'a> {
     }
 
     fn to_ni_seq(&mut self, bnodeid: &SpBNode) -> Option<Vec<NamedIndividual>> {
-        let v: Vec<Option<NamedIndividual>> = self.bnode_seq
+        let v: Vec<Option<NamedIndividual>> = self
+            .bnode_seq
             .remove(bnodeid)
             .as_ref()?
             .into_iter()
@@ -675,8 +654,9 @@ impl<'a> OntologyParser<'a> {
         v.into_iter().collect()
     }
 
-    fn to_dr_seq(&mut self, bnodeid: &SpBNode) -> Option<Vec<DataRange>>{
-        let v: Vec<Option<DataRange>> = self.bnode_seq
+    fn to_dr_seq(&mut self, bnodeid: &SpBNode) -> Option<Vec<DataRange>> {
+        let v: Vec<Option<DataRange>> = self
+            .bnode_seq
             .remove(bnodeid)
             .as_ref()?
             .into_iter()
@@ -687,8 +667,9 @@ impl<'a> OntologyParser<'a> {
     }
 
     // TODO Fix code duplication
-    fn to_literal_seq(&mut self, bnodeid: &SpBNode) -> Option<Vec<Literal>>{
-        let v: Vec<Option<Literal>> = self.bnode_seq
+    fn to_literal_seq(&mut self, bnodeid: &SpBNode) -> Option<Vec<Literal>> {
+        let v: Vec<Option<Literal>> = self
+            .bnode_seq
             .remove(bnodeid)
             .as_ref()?
             .into_iter()
@@ -704,9 +685,7 @@ impl<'a> OntologyParser<'a> {
                 let dt: Datatype = iri.into();
                 Some(dt.into())
             }
-            Term::BNode(id) => {
-                self.data_range.remove(id)
-            }
+            Term::BNode(id) => self.data_range.remove(id),
             _ => todo!(),
         }
     }
@@ -739,10 +718,7 @@ impl<'a> OntologyParser<'a> {
         })
     }
 
-    fn find_property_kind(
-        &mut self,
-        term: &Term,
-    ) -> Option<PropertyExpression> {
+    fn find_property_kind(&mut self, term: &Term) -> Option<PropertyExpression> {
         match term {
             Term::Iri(iri) => match find_declaration_kind(&self.o, iri) {
                 Some(NamedEntityKind::AnnotationProperty) => {
@@ -761,10 +737,7 @@ impl<'a> OntologyParser<'a> {
         }
     }
 
-    fn class_expressions(
-        &mut self,
-    ) {
-
+    fn class_expressions(&mut self) {
         let class_expression_len = self.class_expression.len();
         for (this_bnode, v) in std::mem::take(&mut self.bnode) {
             // rustfmt breaks this (putting the triples all on one
@@ -982,13 +955,53 @@ impl<'a> OntologyParser<'a> {
         }
     }
 
-    fn axioms(
-        &mut self,
-    ) {
-        for triple in std::mem::take(&mut self.simple)
-            .into_iter()
-            .chain(std::mem::take(&mut self.bnode).into_iter().map(|(_k, v)| v).flatten())
-        {
+    fn axioms(&mut self) {
+        for (this_bnode, v) in std::mem::take(&mut self.bnode) {
+            let axiom: Option<Axiom> = match v.as_slice() {
+                [[_, Term::OWL(VOWL::AssertionProperty), pr],
+                 [_, Term::OWL(VOWL::SourceIndividual), Term::Iri(i)],
+                 [_, target_type, target],
+                 [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::NegativePropertyAssertion)],
+                ] => some! {
+                    match target_type {
+                        Term::OWL(VOWL::TargetIndividual) =>
+                            NegativeObjectPropertyAssertion {
+                                ope: self.to_ope(pr)?,
+                                from: i.into(),
+                                to: self.to_iri(target)?.into(),
+                            }.into(),
+                        Term::OWL(VOWL::TargetValue) =>
+                            NegativeDataPropertyAssertion {
+                                dp: self.to_dp(pr)?,
+                                from: i.into(),
+                                to: self.to_literal(target)?,
+                            }.into(),
+                        _ => todo!()
+                    }
+                },
+                [[_, Term::OWL(VOWL::DistinctMembers), Term::BNode(bnodeid)],
+                 [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::AllDifferent)]] => some! {
+                    DifferentIndividuals (
+                        self.to_ni_seq(bnodeid)?
+                    ).into()
+                },
+                _ => None
+            };
+
+            if let Some(axiom) = axiom {
+                self.merge(AnnotatedAxiom { axiom, ann: BTreeSet::new() })
+            }
+            else {
+                self.bnode.insert(this_bnode,v);
+            }
+        }
+
+        for triple in std::mem::take(&mut self.simple).into_iter().chain(
+            std::mem::take(&mut self.bnode)
+                .into_iter()
+                .map(|(_k, v)| v)
+                .flatten(),
+        ) {
             let axiom: Option<Axiom> = match &triple {
                 [Term::Iri(sub), Term::RDFS(VRDFS::SubClassOf), tce] => some! {
                     SubClassOf {
@@ -1001,7 +1014,7 @@ impl<'a> OntologyParser<'a> {
                 // EquivalentClasses have any other EquivalentClasses
                 // and add to that axiom
                 [Term::Iri(a), Term::OWL(VOWL::EquivalentClass), b] => {
-                    some!{
+                    some! {
                         match find_declaration_kind(&self.o, a)? {
                             NamedEntityKind::Class => {
                                 EquivalentClasses(vec![
@@ -1234,29 +1247,66 @@ impl<'a> OntologyParser<'a> {
                         PropertyExpression::DataProperty(dp) => EquivalentDataProperties (
                             vec![dp, self.to_dp(s)?]
                         )
-                            .into(),
+                        .into(),
                         _ => todo!()
                     }
                 },
-
+                [Term::Iri(sub), Term::OWL(VOWL::SameAs), Term::Iri(obj)] => some! {
+                    SameIndividual(vec![NamedIndividual(sub.clone()),
+                                        NamedIndividual(obj.clone())]).into()
+                },
+                [Term::Iri(sub), Term::RDF(VRDF::Type), Term::Iri(obj)] => some! {
+                    ClassAssertion {
+                        ce: Class(obj.clone()).into(),
+                        i: NamedIndividual(sub.clone()).into()
+                    }.into()
+                },
+                [Term::Iri(sub), Term::Iri(pred), t @ Term::Literal(_, _)] => some! {
+                    match (find_declaration_kind(&self.o, sub)?,
+                           find_declaration_kind(&self.o, pred)?) {
+                        (NamedEntityKind::NamedIndividual,
+                         NamedEntityKind::DataProperty) => {
+                            DataPropertyAssertion {
+                                dp: DataProperty(pred.clone()).into(),
+                                from: NamedIndividual(sub.clone()),
+                                to: self.to_literal(t)?
+                            }.into()
+                        }
+                        _ => todo!()
+                    }
+                },
+                [Term::Iri(sub), Term::Iri(pred), Term::Iri(obj)] => some! {
+                    match (find_declaration_kind(&self.o, sub)?,
+                           find_declaration_kind(&self.o, pred)?,
+                           find_declaration_kind(&self.o, obj)?) {
+                        (NamedEntityKind::NamedIndividual,
+                         NamedEntityKind::ObjectProperty,
+                         NamedEntityKind::NamedIndividual) => {
+                            ObjectPropertyAssertion {
+                                ope: ObjectProperty(pred.clone()).into(),
+                                from: NamedIndividual(sub.clone()),
+                                to: NamedIndividual(obj.clone())
+                            }.into()
+                        }
+                        _ => todo!()
+                    }
+                },
                 _ => None,
             };
 
             if let Some(axiom) = axiom {
-                let ann = self.ann_map.remove(&triple).unwrap_or_else(|| BTreeSet::new());
-                self.merge(AnnotatedAxiom {
-                    axiom,
-                    ann
-                })
+                let ann = self
+                    .ann_map
+                    .remove(&triple)
+                    .unwrap_or_else(|| BTreeSet::new());
+                self.merge(AnnotatedAxiom { axiom, ann })
             } else {
                 self.simple.push(triple)
             }
         }
     }
 
-    fn simple_annotations(
-        &mut self,
-    ) {
+    fn simple_annotations(&mut self) {
         for triple in std::mem::take(&mut self.simple) {
             if let Some(iri) = match &triple {
                 [Term::Iri(iri), Term::RDFS(rdfs), _] if rdfs.is_builtin() => Some(iri),
@@ -1267,14 +1317,17 @@ impl<'a> OntologyParser<'a> {
                 }
                 _ => None,
             } {
-                let ann = self.ann_map.remove(&triple).unwrap_or_else(|| BTreeSet::new());
+                let ann = self
+                    .ann_map
+                    .remove(&triple)
+                    .unwrap_or_else(|| BTreeSet::new());
                 self.merge(AnnotatedAxiom {
                     axiom: AnnotationAssertion {
                         subject: iri.clone(),
                         ann: self.annotation(&triple),
                     }
                     .into(),
-                    ann
+                    ann,
                 });
             } else {
                 self.simple.push(triple);
@@ -1297,6 +1350,7 @@ impl<'a> OntologyParser<'a> {
             })
             .collect();
 
+        dbg!(&triple);
         Self::group_triples(triple, &mut self.simple, &mut self.bnode);
 
         // sort the triples, so that I can get a dependable order
@@ -1369,7 +1423,6 @@ impl<'a> OntologyParser<'a> {
 
         // Table 16: Axioms without annotations
         self.axioms();
-
 
         // Regroup so that they print out nicer
         let mut simple_left = vec![];
@@ -1800,40 +1853,40 @@ mod test {
         compare("data-min-cardinality");
     }
 
-    // #[test]
-    // fn class_assertion() {
-    //     compare("class-assertion");
-    // }
+    #[test]
+    fn class_assertion() {
+        compare("class-assertion");
+    }
 
-    // #[test]
-    // fn data_property_assertion() {
-    //     compare("data-property-assertion");
-    // }
+    #[test]
+    fn data_property_assertion() {
+        compare("data-property-assertion");
+    }
 
-    // #[test]
-    // fn same_individual() {
-    //     compare("same-individual");
-    // }
+    #[test]
+    fn same_individual() {
+        compare("same-individual");
+    }
 
-    // #[test]
-    // fn different_individuals() {
-    //     compare("different-individual");
-    // }
+    #[test]
+    fn different_individuals() {
+        compare("different-individual");
+    }
 
-    // #[test]
-    // fn negative_data_property_assertion() {
-    //     compare("negative-data-property-assertion");
-    // }
+    #[test]
+    fn negative_data_property_assertion() {
+        compare("negative-data-property-assertion");
+    }
 
-    // #[test]
-    // fn negative_object_property_assertion() {
-    //     compare("negative-object-property-assertion");
-    // }
+    #[test]
+    fn negative_object_property_assertion() {
+        compare("negative-object-property-assertion");
+    }
 
-    // #[test]
-    // fn object_property_assertion() {
-    //     compare("object-property-assertion");
-    // }
+    #[test]
+    fn object_property_assertion() {
+        compare("object-property-assertion");
+    }
 
     #[test]
     fn data_has_key() {
