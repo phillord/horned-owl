@@ -1,5 +1,7 @@
+EXCLUDE=ontology.clj other.clj other-property.clj
+
 PREQ=$(wildcard *.clj)
-PREQ_EXC=$(filter-out ontology.clj,$(PREQ))
+PREQ_EXC=$(filter-out $(EXCLUDE),$(PREQ))
 
 TARGETS=
 

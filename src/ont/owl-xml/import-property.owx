@@ -15,6 +15,19 @@
     <Prefix name="rdfs" IRI="http://www.w3.org/2000/01/rdf-schema#"/>
     <Prefix name="other" IRI="http://www.example.com/other-iri#"/>
     <Import>http://www.example.com/other-iri</Import>
+    <Declaration>
+        <Class IRI="#A"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="#B"/>
+    </Declaration>
+    <SubClassOf>
+        <Class IRI="#B"/>
+        <ObjectSomeValuesFrom>
+            <ObjectProperty abbreviatedIRI="other:other-o"/>
+            <Class IRI="#A"/>
+        </ObjectSomeValuesFrom>
+    </SubClassOf>
 </Ontology>
 
 

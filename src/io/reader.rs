@@ -328,6 +328,9 @@ from_start! {
             match (datatype_iri, lang, literal) {
                 (None, None, literal) =>
                     Literal::Simple{literal},
+                (Some(ref datatype_iri), None, literal)
+                    if **datatype_iri == "http://www.w3.org/2001/XMLSchema#string" =>
+                    Literal::Simple{literal},
                 (None, Some(lang), literal) =>
                     Literal::Language{literal, lang},
                 (Some(ref datatype_iri), Some(ref lang), ref literal)

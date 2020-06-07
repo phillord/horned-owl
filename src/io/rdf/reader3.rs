@@ -958,41 +958,44 @@ impl<'a> OntologyParser<'a> {
     fn axioms(&mut self) {
         for (this_bnode, v) in std::mem::take(&mut self.bnode) {
             let axiom: Option<Axiom> = match v.as_slice() {
-                [[_, Term::OWL(VOWL::AssertionProperty), pr],
-                 [_, Term::OWL(VOWL::SourceIndividual), Term::Iri(i)],
-                 [_, target_type, target],
-                 [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::NegativePropertyAssertion)],
-                ] => some! {
-                    match target_type {
-                        Term::OWL(VOWL::TargetIndividual) =>
-                            NegativeObjectPropertyAssertion {
-                                ope: self.to_ope(pr)?,
-                                from: i.into(),
-                                to: self.to_iri(target)?.into(),
-                            }.into(),
-                        Term::OWL(VOWL::TargetValue) =>
-                            NegativeDataPropertyAssertion {
-                                dp: self.to_dp(pr)?,
-                                from: i.into(),
-                                to: self.to_literal(target)?,
-                            }.into(),
-                        _ => todo!()
+                [[_, Term::OWL(VOWL::AssertionProperty), pr], [_, Term::OWL(VOWL::SourceIndividual), Term::Iri(i)], [_, target_type, target], [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::NegativePropertyAssertion)]] =>
+                {
+                    some! {
+                        match target_type {
+                            Term::OWL(VOWL::TargetIndividual) =>
+                                NegativeObjectPropertyAssertion {
+                                    ope: self.to_ope(pr)?,
+                                    from: i.into(),
+                                    to: self.to_iri(target)?.into(),
+                                }.into(),
+                            Term::OWL(VOWL::TargetValue) =>
+                                NegativeDataPropertyAssertion {
+                                    dp: self.to_dp(pr)?,
+                                    from: i.into(),
+                                    to: self.to_literal(target)?,
+                                }.into(),
+                            _ => todo!()
+                        }
                     }
-                },
-                [[_, Term::OWL(VOWL::DistinctMembers), Term::BNode(bnodeid)],
-                 [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::AllDifferent)]] => some! {
-                    DifferentIndividuals (
-                        self.to_ni_seq(bnodeid)?
-                    ).into()
-                },
-                _ => None
+                }
+                [[_, Term::OWL(VOWL::DistinctMembers), Term::BNode(bnodeid)], [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::AllDifferent)]] =>
+                {
+                    some! {
+                        DifferentIndividuals (
+                            self.to_ni_seq(bnodeid)?
+                        ).into()
+                    }
+                }
+                _ => None,
             };
 
             if let Some(axiom) = axiom {
-                self.merge(AnnotatedAxiom { axiom, ann: BTreeSet::new() })
-            }
-            else {
-                self.bnode.insert(this_bnode,v);
+                self.merge(AnnotatedAxiom {
+                    axiom,
+                    ann: BTreeSet::new(),
+                })
+            } else {
+                self.bnode.insert(this_bnode, v);
             }
         }
 
@@ -1002,6 +1005,10 @@ impl<'a> OntologyParser<'a> {
                 .map(|(_k, v)| v)
                 .flatten(),
         ) {
+            dbg!("checking", &triple, &self.o.id.iri);
+            dbg!(
+                matches!(&triple, [Term::Iri(s), Term::Iri(_), _] if self.o.id.iri.as_ref() == Some(&s))
+            );
             let axiom: Option<Axiom> = match &triple {
                 [Term::Iri(sub), Term::RDFS(VRDFS::SubClassOf), tce] => some! {
                     SubClassOf {
@@ -1261,6 +1268,12 @@ impl<'a> OntologyParser<'a> {
                         i: NamedIndividual(sub.clone()).into()
                     }.into()
                 },
+                [Term::Iri(s), Term::Iri(_), _] if self.o.id.iri.as_ref() == Some(&s) => some! {
+                    OntologyAnnotation(
+                        self.annotation(&triple)
+                    ).into()
+                },
+
                 [Term::Iri(sub), Term::Iri(pred), t @ Term::Literal(_, _)] => some! {
                     match (find_declaration_kind(&self.o, sub)?,
                            find_declaration_kind(&self.o, pred)?) {
@@ -1350,7 +1363,7 @@ impl<'a> OntologyParser<'a> {
             })
             .collect();
 
-        dbg!(&triple);
+        //dbg!(&triple);
         Self::group_triples(triple, &mut self.simple, &mut self.bnode);
 
         // sort the triples, so that I can get a dependable order
@@ -1505,7 +1518,14 @@ mod test {
 
         let r = read(bufread);
 
-        assert!(r.is_ok(), "Expected ontology, get failure: {:?}", r.err());
+        if let Err(e) = r {
+            panic!(
+                "Expected ontology, get failure: {:?} {:?}",
+                e,
+                e.backtrace()
+            );
+        }
+
         r.unwrap()
     }
 
@@ -1653,10 +1673,10 @@ mod test {
         compare("one-comment");
     }
 
-    // #[test]
-    // fn one_ontology_annotation() {
-    //     compare("one-ontology-annotation");
-    // }
+    #[test]
+    fn one_ontology_annotation() {
+        compare("one-ontology-annotation");
+    }
 
     #[test]
     fn one_equivalent_class() {
