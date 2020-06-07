@@ -20,9 +20,10 @@ use failure::SyncFailure;
 
 use log::{debug, trace};
 
-use sophia::term::BNodeId;
-use sophia::term::IriData;
-use sophia::term::LiteralKind;
+use sophia::term::blank_node::BlankNode;
+use sophia::term::iri::Iri;
+use sophia::term::variable::Variable;
+use sophia::term::literal::Literal as SpLiteral;
 
 use std::cmp::Ordering;
 use std::collections::BTreeSet;
@@ -32,8 +33,8 @@ use std::rc::Rc;
 
 // Two type aliases for "SoPhia" entities.
 type SpTerm = sophia::term::Term<Rc<str>>;
-type SpIri = IriData<Rc<str>>;
-type SpBNode = BNodeId<Rc<str>>;
+type SpIri = Iri<Rc<str>>;
+type SpBlankNode = BlankNode<Rc<str>>;
 
 macro_rules! some {
     ($body:expr) => {
@@ -44,14 +45,15 @@ macro_rules! some {
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 enum Term {
     Iri(IRI),
-    BNode(SpBNode),
-    Literal(Rc<str>, LiteralKind<Rc<str>>),
-    Variable(Rc<str>),
+    BNode(SpBlankNode),
+    Literal(SpLiteral<Rc<str>>),
+    Variable(Variable<Rc<str>>),
     OWL(VOWL),
     RDF(VRDF),
     RDFS(VRDFS),
     FacetTerm(Facet),
 }
+
 
 impl Term {
     fn ord(&self) -> isize {
@@ -62,7 +64,7 @@ impl Term {
             FacetTerm(_) => 4,
             Iri(_) => 5,
             BNode(_) => 6,
-            Literal(_, _) => 7,
+            Literal(_) => 7,
             Variable(_) => 8,
         }
     }
@@ -83,7 +85,7 @@ impl Ord for Term {
             (FacetTerm(s), FacetTerm(o)) => s.cmp(o),
             (Iri(s), Iri(o)) => s.to_string().cmp(&o.to_string()),
             (BNode(s), BNode(o)) => (*s).cmp(&(*o)),
-            (Literal(s, _), Literal(o, _)) => s.cmp(o),
+            (Literal(s), Literal(o)) => (s.txt()).cmp(o.txt()),
             (Variable(s), Variable(o)) => s.cmp(o),
             _ => self.ord().cmp(&other.ord()),
         }
@@ -137,7 +139,13 @@ trait Convert {
 
 impl Convert for SpIri {
     fn to_iri(&self, b: &Build) -> IRI {
-        b.iri(self.to_string())
+        b.iri(self.chars().collect::<String>())
+    }
+}
+
+impl Convert for sophia::term::iri::Iri<&str> {
+    fn to_iri(&self, b: &Build) -> IRI {
+        b.iri(self.chars().collect::<String>())
     }
 }
 
@@ -217,7 +225,7 @@ fn to_term(t: &SpTerm, m: &HashMap<SpTerm, Term>, b: &Build) -> Term {
         match t {
             sophia::term::Term::Iri(i) => Iri(i.to_iri(b)),
             sophia::term::Term::BNode(id) => BNode(id.clone()),
-            sophia::term::Term::Literal(l, k) => Literal(l.clone(), k.clone()),
+            sophia::term::Term::Literal(l) => Literal(l.clone()),
             sophia::term::Term::Variable(v) => Variable(v.clone()),
         }
     }
@@ -234,12 +242,12 @@ struct OntologyParser<'a> {
     b: &'a Build,
 
     simple: Vec<[Term; 3]>,
-    bnode: HashMap<SpBNode, Vec<[Term; 3]>>,
-    bnode_seq: HashMap<SpBNode, Vec<Term>>,
+    bnode: HashMap<SpBlankNode, Vec<[Term; 3]>>,
+    bnode_seq: HashMap<SpBlankNode, Vec<Term>>,
 
-    class_expression: HashMap<SpBNode, ClassExpression>,
-    object_property_expression: HashMap<SpBNode, ObjectPropertyExpression>,
-    data_range: HashMap<SpBNode, DataRange>,
+    class_expression: HashMap<SpBlankNode, ClassExpression>,
+    object_property_expression: HashMap<SpBlankNode, ObjectPropertyExpression>,
+    data_range: HashMap<SpBlankNode, DataRange>,
     ann_map: HashMap<[Term; 3], BTreeSet<Annotation>>,
 }
 
@@ -262,7 +270,7 @@ impl<'a> OntologyParser<'a> {
     fn group_triples(
         triple: Vec<[Term; 3]>,
         simple: &mut Vec<[Term; 3]>,
-        bnode: &mut HashMap<SpBNode, Vec<[Term; 3]>>,
+        bnode: &mut HashMap<SpBlankNode, Vec<[Term; 3]>>,
     ) {
         // Next group together triples on a BNode, so we have
         // HashMap<BNodeID, Vec<[SpTerm; 3]> All of which should be
@@ -386,7 +394,7 @@ impl<'a> OntologyParser<'a> {
                 let iri = self.b.iri(rdfs.iri_s());
                 self.annotation(&[s.clone(), Term::Iri(iri), b.clone()])
             }
-            [_, Iri(p), ob @ Term::Literal(_, _)] => Annotation {
+            [_, Iri(p), ob @ Term::Literal(_)] => Annotation {
                 ap: AnnotationProperty(p.clone()),
                 av: self.to_literal(ob).unwrap().into(),
             },
@@ -470,7 +478,7 @@ impl<'a> OntologyParser<'a> {
     fn data_ranges(&mut self) {
         let data_range_len = self.data_range.len();
 
-        let mut facet_map: HashMap<SpBNode, Vec<[Term; 3]>> = HashMap::new();
+        let mut facet_map: HashMap<SpBlankNode, Vec<[Term; 3]>> = HashMap::new();
 
         for (k, v) in std::mem::take(&mut self.bnode) {
             match v.as_slice() {
@@ -629,7 +637,7 @@ impl<'a> OntologyParser<'a> {
         }
     }
 
-    fn to_ce_seq(&mut self, bnodeid: &SpBNode) -> Option<Vec<ClassExpression>> {
+    fn to_ce_seq(&mut self, bnodeid: &SpBlankNode) -> Option<Vec<ClassExpression>> {
         let v: Vec<Option<ClassExpression>> = self
             .bnode_seq
             .remove(bnodeid)
@@ -642,7 +650,7 @@ impl<'a> OntologyParser<'a> {
         v.into_iter().collect()
     }
 
-    fn to_ni_seq(&mut self, bnodeid: &SpBNode) -> Option<Vec<NamedIndividual>> {
+    fn to_ni_seq(&mut self, bnodeid: &SpBlankNode) -> Option<Vec<NamedIndividual>> {
         let v: Vec<Option<NamedIndividual>> = self
             .bnode_seq
             .remove(bnodeid)
@@ -654,7 +662,7 @@ impl<'a> OntologyParser<'a> {
         v.into_iter().collect()
     }
 
-    fn to_dr_seq(&mut self, bnodeid: &SpBNode) -> Option<Vec<DataRange>> {
+    fn to_dr_seq(&mut self, bnodeid: &SpBlankNode) -> Option<Vec<DataRange>> {
         let v: Vec<Option<DataRange>> = self
             .bnode_seq
             .remove(bnodeid)
@@ -667,7 +675,7 @@ impl<'a> OntologyParser<'a> {
     }
 
     // TODO Fix code duplication
-    fn to_literal_seq(&mut self, bnodeid: &SpBNode) -> Option<Vec<Literal>> {
+    fn to_literal_seq(&mut self, bnodeid: &SpBlankNode) -> Option<Vec<Literal>> {
         let v: Vec<Option<Literal>> = self
             .bnode_seq
             .remove(bnodeid)
@@ -692,28 +700,30 @@ impl<'a> OntologyParser<'a> {
 
     fn to_u32(&self, t: &Term) -> Option<u32> {
         match t {
-            Term::Literal(val, LiteralKind::Datatype(_)) => val.parse::<u32>().ok(),
+            Term::Literal(val) => val.txt().parse::<u32>().ok(),
             _ => None,
         }
     }
 
     fn to_literal(&self, t: &Term) -> Option<Literal> {
         Some(match t {
-            Term::Literal(ob, LiteralKind::Lang(lang)) => Literal::Language {
-                lang: lang.clone().to_string(),
-                literal: ob.clone().to_string(),
-            },
-            Term::Literal(ob, LiteralKind::Datatype(iri))
-                if iri.to_string() == "http://www.w3.org/2001/XMLSchema#string" =>
-            {
-                Literal::Simple {
-                    literal: ob.clone().to_string(),
+            Term::Literal(ob) => {
+                if let Some(lang) = ob.lang() {
+                    Literal::Language {
+                        lang: lang.clone().to_string(),
+                        literal: ob.value().to_string(),
+                    }
+                } else if ob.dt() == *"http://www.w3.org/2001/XMLSchema#string" {
+                    Literal::Simple {
+                        literal: ob.value().to_string(),
+                    }
+                } else {
+                    Literal::Datatype {
+                        datatype_iri: ob.dt().to_iri(self.b),
+                        literal: ob.value().to_string(),
+                    }
                 }
             }
-            Term::Literal(ob, LiteralKind::Datatype(iri)) => Literal::Datatype {
-                datatype_iri: iri.to_iri(self.b),
-                literal: ob.clone().to_string(),
-            },
             _ => return None,
         })
     }
@@ -1274,7 +1284,7 @@ impl<'a> OntologyParser<'a> {
                     ).into()
                 },
 
-                [Term::Iri(sub), Term::Iri(pred), t @ Term::Literal(_, _)] => some! {
+                [Term::Iri(sub), Term::Iri(pred), t @ Term::Literal(_)] => some! {
                     match (find_declaration_kind(&self.o, sub)?,
                            find_declaration_kind(&self.o, pred)?) {
                         (NamedEntityKind::NamedIndividual,
@@ -1480,12 +1490,12 @@ impl<'a> OntologyParser<'a> {
 pub fn read_with_build<R: BufRead>(
     bufread: &mut R,
     build: &Build,
-) -> Result<(Ontology, PrefixMapping), Error> {
-    let parser = sophia::parser::xml::Config::default();
-    let triple_iter = parser.parse_bufread(bufread);
+) -> Result<(Ontology, PrefixMapping), Error>
+{
+    let triple_iter = sophia::parser::xml::parse_bufread(bufread);
 
     let triple_result: Result<Vec<_>, _> = triple_iter.collect();
-    let triple_v: Vec<[SpTerm; 3]> = triple_result.map_err(SyncFailure::new)?;
+    let triple_v: Vec<[SpTerm; 3]> = triple_result.unwrap();
 
     return OntologyParser::new(build)
         .read(triple_v)

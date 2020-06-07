@@ -22,7 +22,7 @@ lazy_static="1.4.0"
 log = {version="0.4.8"}
 quick-xml="0.12.4"
 indexmap="1.0.2"
-sophia = {version="0.3.0", features=["xml"]}
+sophia = {version="0.5.3", features=["xml"]}
 
 [dev-dependencies]
 bencher = "0.1.4"

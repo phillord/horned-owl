@@ -22,9 +22,9 @@ type SpTerm = Term<Rc<str>>;
 fn p_tup(triple: &[SpTerm; 3]) {
     println!(
         "{}\n\t{}\n\t{}",
-        &triple[0].n3(),
-        &triple[1].n3(),
-        &triple[2].n3()
+        &triple[0].value(),
+        &triple[1].value(),
+        &triple[2].value()
     );
 }
 
@@ -50,8 +50,7 @@ fn matcher(matches:ArgMatches) -> Result<(),Error> {
 
     let file = File::open(input)?;
     let bufreader = BufReader::new(file);
-    let parser = sophia::parser::xml::Config::default();
-    let triple_iter = parser.parse_bufread(bufreader);
+    let triple_iter = sophia::parser::xml::parse_bufread(bufreader);
 
     for i in triple_iter {
         p_tup(&i.unwrap());
