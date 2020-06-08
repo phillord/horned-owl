@@ -346,6 +346,21 @@ impl<'a> OntologyParser<'a> {
     }
 
     fn resolve_imports(&mut self) {
+        for t in std::mem::take(&mut self.simple) {
+            match t {
+                [Term::Iri(o), Term::OWL(VOWL::Imports), Term::Iri(imp)] =>
+                {
+                    self.merge(
+                        AnnotatedAxiom{
+                            axiom: Import(imp).into(),
+                            ann: BTreeSet::new()
+                        }
+                    );
+                }
+                _ => self.simple.push(t.clone())
+            }
+        }
+
         // Section 3.1.2/table 4 of RDF Graphs
     }
 
@@ -1015,10 +1030,6 @@ impl<'a> OntologyParser<'a> {
                 .map(|(_k, v)| v)
                 .flatten(),
         ) {
-            dbg!("checking", &triple, &self.o.id.iri);
-            dbg!(
-                matches!(&triple, [Term::Iri(s), Term::Iri(_), _] if self.o.id.iri.as_ref() == Some(&s))
-            );
             let axiom: Option<Axiom> = match &triple {
                 [Term::Iri(sub), Term::RDFS(VRDFS::SubClassOf), tce] => some! {
                     SubClassOf {
@@ -1773,10 +1784,10 @@ mod test {
         compare("named-individual");
     }
 
-    // #[test]
-    // fn import() {
-    //     compare("import");
-    // }
+    #[test]
+    fn import() {
+        compare("import");
+    }
 
     #[test]
     fn datatype() {

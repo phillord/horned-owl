@@ -147,6 +147,7 @@ pub enum OWL {
     FunctionalProperty,
     HasKey,
     HasValue,
+    Imports,
     IntersectionOf,
     InverseFunctionalProperty,
     InverseOf,
@@ -206,6 +207,7 @@ lazy_meta! {
     EquivalentClass, extend(OWL, "equivalentClass");
     EquivalentProperty, extend(OWL, "equivalentProperty");
     FunctionalProperty, extend(OWL, "FunctionalProperty");
+    Imports, extend(OWL, "imports");
     IntersectionOf, extend(OWL, "intersectionOf");
     InverseFunctionalProperty, extend(OWL, "InverseFunctionalProperty");
     InverseOf, extend(OWL, "inverseOf");
