@@ -348,7 +348,7 @@ impl<'a> OntologyParser<'a> {
     fn resolve_imports(&mut self) {
         for t in std::mem::take(&mut self.simple) {
             match t {
-                [Term::Iri(o), Term::OWL(VOWL::Imports), Term::Iri(imp)] =>
+                [Term::Iri(_), Term::OWL(VOWL::Imports), Term::Iri(imp)] =>
                 {
                     self.merge(
                         AnnotatedAxiom{
@@ -492,23 +492,26 @@ impl<'a> OntologyParser<'a> {
 
     fn data_ranges(&mut self) {
         let data_range_len = self.data_range.len();
-
-        let mut facet_map: HashMap<SpBlankNode, Vec<[Term; 3]>> = HashMap::new();
+        let mut facet_map: HashMap<Term, [Term; 3]> = HashMap::new();
 
         for (k, v) in std::mem::take(&mut self.bnode) {
+            dbg!(&v);
             match v.as_slice() {
-                [[_, Term::FacetTerm(_), _]] => {
-                    facet_map.insert(k, v);
+                [triple @ [_, Term::FacetTerm(_),_]] => {
+                    dbg!("matched");
+                    facet_map.insert(Term::BNode(k), triple.clone());
                 }
                 _ => {
                     self.bnode.insert(k, v);
                 }
             }
         }
+        dbg!(&facet_map);
 
         for (this_bnode, v) in std::mem::take(&mut self.bnode) {
             let dr = match v.as_slice() {
-                [[_, Term::OWL(VOWL::IntersectionOf), Term::BNode(bnodeid)], [_, Term::RDF(VRDF::Type), Term::RDFS(VRDFS::Datatype)]] =>
+                [[_, Term::OWL(VOWL::IntersectionOf), Term::BNode(bnodeid)],
+                 [_, Term::RDF(VRDF::Type), Term::RDFS(VRDFS::Datatype)]] =>
                 {
                     some! {
                         DataRange::DataIntersectionOf(
@@ -516,7 +519,8 @@ impl<'a> OntologyParser<'a> {
                         )
                     }
                 }
-                [[_, Term::OWL(VOWL::DatatypeComplementOf), term], [_, Term::RDF(VRDF::Type), Term::RDFS(VRDFS::Datatype)]] =>
+                [[_, Term::OWL(VOWL::DatatypeComplementOf), term],
+                 [_, Term::RDF(VRDF::Type), Term::RDFS(VRDFS::Datatype)]] =>
                 {
                     some! {
                       DataRange::DataComplementOf(
@@ -524,7 +528,8 @@ impl<'a> OntologyParser<'a> {
                         )
                     }
                 }
-                [[_, Term::OWL(VOWL::OneOf), Term::BNode(bnode)], [_, Term::RDF(VRDF::Type), Term::RDFS(VRDFS::Datatype)]] =>
+                [[_, Term::OWL(VOWL::OneOf), Term::BNode(bnode)],
+                 [_, Term::RDF(VRDF::Type), Term::RDFS(VRDFS::Datatype)]] =>
                 {
                     some! {
                         DataRange::DataOneOf(
@@ -532,39 +537,75 @@ impl<'a> OntologyParser<'a> {
                         )
                     }
                 }
-                [[_, Term::OWL(VOWL::OnDatatype), Term::Iri(iri)], .., [_, Term::RDF(VRDF::Type), Term::RDFS(VRDFS::Datatype)]] =>
+                [[_, Term::OWL(VOWL::OnDatatype), Term::Iri(iri)],
+                 [_, Term::OWL(VOWL::WithRestrictions), Term::BNode(id)],
+                 [_, Term::RDF(VRDF::Type), Term::RDFS(VRDFS::Datatype)]] =>
                 {
-                    let facet_nodes = v.to_vec();
-                    let facets: Vec<FacetRestriction> = facet_nodes
-                        .into_iter()
-                        .filter_map(|t| {
-                            if let [_, Term::OWL(VOWL::WithRestrictions), Term::BNode(bnode)] = t {
-                                let facet_triples = facet_map.remove(&bnode)?;
-                                let mut facet_restrictions: Vec<FacetRestriction> = vec![];
-                                for facet_triple in facet_triples {
-                                    facet_restrictions.push(match facet_triple {
-                                        [_, Term::FacetTerm(facet), literal] => FacetRestriction {
-                                            f: facet,
-                                            l: self.to_literal(&literal)?,
-                                        },
-                                        _ => {
-                                            return None;
-                                        }
-                                    })
-                                }
-                                Some(facet_restrictions)
-                            } else {
-                                None
-                            }
-                        })
-                        .flatten()
-                        .collect();
-
                     some! {
-                        DataRange::DatatypeRestriction(
-                            iri.into(),
-                            facets
-                        )
+                        {
+                            // This is all broken. The WithRestrictions
+                            // contains needs to be captured, which then has
+                            // aBNode which has a sequence attached. The
+                            // sequence has bnodes which point to the multiple
+                            // DRs inside the restriction. So, we just need to
+                            // work on those bnodes which are available to us
+                            // from the seq.
+
+                            // Need to change facet_map to support
+                            // data_ranges. So, we really need to have a
+                            // facet_map at top level, and run it before data range!
+                            dbg!(&id);
+                            dbg!(&self.bnode_seq);
+                            dbg!(&facet_map);
+                            let facet_seq = self.bnode_seq
+                                .remove(id)?;
+                            dbg!(&facet_seq);
+                            let some_facets:Vec<Option<FacetRestriction>> =
+                                facet_seq.into_iter().map(|id|
+                                                          match facet_map.remove(&id)? {
+                                                              [_, Term::FacetTerm(facet), literal] => Some(
+                                                                  FacetRestriction {
+                                                                      f: facet,
+                                                                      l: self.to_literal(&literal)?,
+                                                                  }
+                                                              ),
+                                                              _ => None
+                                                          }
+                                )
+                                .collect();
+                            dbg!(&some_facets);
+                            let facets:Option<Vec<FacetRestriction>> = some_facets.into_iter().collect();
+                            dbg!(&facets);
+                            //let facets = self.to_literal_seq(id)?;
+                            // let facets: Vec<FacetRestriction> = facet_nodes
+                            //     .into_iter()
+                            //     .filter_map(|t| {
+                            //         if let [_, Term::OWL(VOWL::WithRestrictions), Term::BNode(bnode)] = t {
+                            //             let facet_triples = self.facet_map.remove(&bnode)?;
+                            //             let mut facet_restrictions: Vec<FacetRestriction> = vec![];
+                            //             for facet_triple in facet_triples {
+                            //                 facet_restrictions.push(match facet_triple {
+                            //                     [_, Term::FacetTerm(facet), literal] => FacetRestriction {
+                            //                         f: facet,
+                            //                         l: self.to_literal(&literal)?,
+                            //                     },
+                            //                     _ => {
+                            //                         return None;
+                            //                     }
+                            //                 })
+                            //             }
+                            //             Some(facet_restrictions)
+                            //         } else {
+                            //             None
+                            //         }
+                            //     })
+                            //     .flatten()
+                            //     .collect();
+                            DataRange::DatatypeRestriction(
+                                iri.into(),
+                                facets?
+                            )
+                        }
                     }
                 }
                 _ => None,
@@ -583,7 +624,13 @@ impl<'a> OntologyParser<'a> {
 
         // Shove any remaining facets back onto bnode so that they get
         // reported at the end
-        self.bnode.extend(facet_map);
+        self.bnode.extend(
+            facet_map.into_iter()
+                .filter_map(|(k, v)|
+                            match k {
+                                Term::BNode(id) => Some((id, vec![v])),
+                                _ => None
+                            }));
     }
 
     fn object_property_expressions(&mut self) {
@@ -983,7 +1030,10 @@ impl<'a> OntologyParser<'a> {
     fn axioms(&mut self) {
         for (this_bnode, v) in std::mem::take(&mut self.bnode) {
             let axiom: Option<Axiom> = match v.as_slice() {
-                [[_, Term::OWL(VOWL::AssertionProperty), pr], [_, Term::OWL(VOWL::SourceIndividual), Term::Iri(i)], [_, target_type, target], [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::NegativePropertyAssertion)]] =>
+                [[_, Term::OWL(VOWL::AssertionProperty), pr],
+                 [_, Term::OWL(VOWL::SourceIndividual), Term::Iri(i)],
+                 [_, target_type, target],
+                 [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::NegativePropertyAssertion)]] =>
                 {
                     some! {
                         match target_type {
@@ -1003,7 +1053,8 @@ impl<'a> OntologyParser<'a> {
                         }
                     }
                 }
-                [[_, Term::OWL(VOWL::DistinctMembers), Term::BNode(bnodeid)], [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::AllDifferent)]] =>
+                [[_, Term::OWL(VOWL::DistinctMembers), Term::BNode(bnodeid)],
+                 [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::AllDifferent)]] =>
                 {
                     some! {
                         DifferentIndividuals (
@@ -1346,7 +1397,6 @@ impl<'a> OntologyParser<'a> {
                 [Term::Iri(iri), Term::RDFS(rdfs), _] if rdfs.is_builtin() => Some(iri),
                 [Term::Iri(iri), Term::OWL(VOWL::VersionInfo), _] => Some(iri),
                 [Term::Iri(iri), Term::Iri(ap), _] if is_annotation_property(&self.o, &ap) => {
-                    eprintln!("is annotation");
                     Some(iri)
                 }
                 _ => None,
@@ -1371,7 +1421,6 @@ impl<'a> OntologyParser<'a> {
 
     fn read(mut self, triple: Vec<[SpTerm; 3]>) -> Result<Ontology, Error> {
         // move to our own Terms, with IRIs swapped
-
         let m = vocab_lookup();
         let triple: Vec<[Term; 3]> = triple
             .into_iter()
@@ -1384,7 +1433,9 @@ impl<'a> OntologyParser<'a> {
             })
             .collect();
 
-        //dbg!(&triple);
+
+
+        dbg!(&triple);
         Self::group_triples(triple, &mut self.simple, &mut self.bnode);
 
         // sort the triples, so that I can get a dependable order
@@ -1452,6 +1503,7 @@ impl<'a> OntologyParser<'a> {
 
         // Table 8:
         self.object_property_expressions();
+
         // Table 13: Parsing of Class Expressions
         self.class_expressions();
 
@@ -1503,9 +1555,9 @@ pub fn read_with_build<R: BufRead>(
     build: &Build,
 ) -> Result<(Ontology, PrefixMapping), Error>
 {
-    let triple_iter = sophia::parser::xml::parse_bufread(bufread);
-
-    let triple_result: Result<Vec<_>, _> = triple_iter.collect();
+    let triple_iter = sophia::parser::xml2::parse_bufread(bufread);
+    use sophia::{term::{Term}, triple::stream::TripleSource};
+    let triple_result: Result<Vec<_>, _> = triple_iter.collect_triples();
     let triple_v: Vec<[SpTerm; 3]> = triple_result.unwrap();
 
     return OntologyParser::new(build)
@@ -1749,10 +1801,10 @@ mod test {
         compare("subproperty-chain");
     }
 
-    // #[test]
-    // fn one_subproperty_chain_with_inverse() {
-    //     compare("subproperty-chain-with-inverse");
-    // }
+    #[test]
+    fn one_subproperty_chain_with_inverse() {
+        compare("subproperty-chain-with-inverse");
+    }
 
     #[test]
     fn annotation_on_annotation() {
