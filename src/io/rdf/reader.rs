@@ -1587,7 +1587,7 @@ mod test {
 
     fn compare_str(rdfread: &str, xmlread: &str) {
         let (rdfont, _rdfmapping) = read_ok(&mut rdfread.as_bytes());
-        let (xmlont, _xmlmapping) = crate::io::reader::test::read_ok(&mut xmlread.as_bytes());
+        let (xmlont, _xmlmapping) = crate::io::owx::reader::test::read_ok(&mut xmlread.as_bytes());
 
         //dbg!(&rdfont); if true {panic!()};
 

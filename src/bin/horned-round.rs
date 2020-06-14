@@ -8,8 +8,8 @@ use clap::ArgMatches;
 
 use failure::Error;
 
-use horned_owl::io::reader::read;
-use horned_owl::io::writer::write;
+use horned_owl::io::owx::reader::read;
+use horned_owl::io::owx::writer::write;
 
 use std::io::BufReader;
 use std::fs::File;

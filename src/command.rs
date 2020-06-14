@@ -12,7 +12,7 @@ pub fn parse_path(path: &Path) -> Result<(Ontology, PrefixMapping), Error> {
 
     Ok(
         match path.extension().map(|s| s.to_str()).flatten() {
-            Some("oxl") => super::io::reader::read(&mut bufreader)?,
+            Some("oxl") => super::io::owx::reader::read(&mut bufreader)?,
             Some("owl") => super::io::rdf::reader::read(&mut bufreader)?,
             _ => todo!()
         }

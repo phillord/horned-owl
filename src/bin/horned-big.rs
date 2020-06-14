@@ -4,7 +4,7 @@ use clap::ArgMatches;
 
 use failure::Error;
 
-use horned_owl::io::writer::write;
+use horned_owl::io::owx::writer::write;
 use horned_owl::model::Build;
 use horned_owl::model::Ontology;
 

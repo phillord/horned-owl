@@ -1,2 +1,2 @@
-pub mod oxl;
+pub mod owx;
 pub mod rdf;
