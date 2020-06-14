@@ -613,9 +613,6 @@ fn data_cardinality_restriction<R: BufRead>(
     ))
 }
 
-
-
-
 from_start! {
     PropertyExpression, r, e,
     {
@@ -1155,10 +1152,7 @@ pub mod test {
         assert_eq!(ont.annotation_assertion().count(), 2);
 
         let aa = ont.annotation_assertion().next().unwrap();
-        assert_eq!(
-            *(aa.subject),
-            "http://www.example.com/iri#C"
-        );
+        assert_eq!(*(aa.subject), "http://www.example.com/iri#C");
 
         assert_eq!(
             String::from(&aa.ann.ap),
@@ -1207,10 +1201,7 @@ pub mod test {
         let ont_s = include_str!("../../ont/owl-xml/annotation-on-subclass.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
-        let annotated_axiom = ont
-            .annotated_axiom(AxiomKind::SubClassOf)
-            .next()
-            .unwrap();
+        let annotated_axiom = ont.annotated_axiom(AxiomKind::SubClassOf).next().unwrap();
         assert_eq!(annotated_axiom.ann.len(), 1);
     }
 
@@ -1231,10 +1222,10 @@ pub mod test {
         assert_eq!(ont.sub_class().count(), 1);
         let sc: &SubClassOf = ont.sub_class().next().unwrap();
         match &sc.sup {
-            ClassExpression::ObjectSomeValuesFrom{ope:_, bce} => {
+            ClassExpression::ObjectSomeValuesFrom { ope: _, bce } => {
                 matches!(**bce, ClassExpression::ObjectComplementOf(_));
             }
-            _=> panic!()
+            _ => panic!(),
         }
 
         assert_eq!(ont.declare_object_property().count(), 1);
@@ -1351,7 +1342,7 @@ pub mod test {
         assert_eq!(ont.sub_object_property().count(), 1);
     }
 
-        #[test]
+    #[test]
     fn test_sub_oproperty_inverse() {
         let ont_s = include_str!("../../ont/owl-xml/suboproperty-inverse.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
