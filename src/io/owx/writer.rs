@@ -54,7 +54,8 @@ fn iri_maybe(elem: &mut BytesStart, key: &str, iri: &Option<IRI>) {
 }
 
 fn attribute<I>(elem: &mut BytesStart, key: &str, val: I)
-    where I: Into<String>
+where
+    I: Into<String>,
 {
     elem.push_attribute((key, &(val.into())[..]));
 }
@@ -992,7 +993,9 @@ mod test {
 
     #[test]
     fn round_one_ontology_annotation() {
-        assert_round(include_str!("../../ont/owl-xml/one-ontology-annotation.owx"));
+        assert_round(include_str!(
+            "../../ont/owl-xml/one-ontology-annotation.owx"
+        ));
     }
 
     #[test]
@@ -1027,7 +1030,9 @@ mod test {
 
     #[test]
     fn round_one_annotated_transitive() {
-        assert_round(include_str!("../../ont/owl-xml/annotation-on-transitive.owx"));
+        assert_round(include_str!(
+            "../../ont/owl-xml/annotation-on-transitive.owx"
+        ));
     }
 
     #[test]
@@ -1113,7 +1118,9 @@ mod test {
 
     #[test]
     fn object_exact_cardinality() {
-        assert_round(include_str!("../../ont/owl-xml/object-exact-cardinality.owx"));
+        assert_round(include_str!(
+            "../../ont/owl-xml/object-exact-cardinality.owx"
+        ));
     }
 
     #[test]
@@ -1182,7 +1189,9 @@ mod test {
 
     #[test]
     fn data_property_assertion() {
-        assert_round(include_str!("../../ont/owl-xml/data-property-assertion.owx"));
+        assert_round(include_str!(
+            "../../ont/owl-xml/data-property-assertion.owx"
+        ));
     }
 
     #[test]
@@ -1211,7 +1220,9 @@ mod test {
 
     #[test]
     fn object_property_assertion() {
-        assert_round(include_str!("../../ont/owl-xml/object-property-assertion.owx"));
+        assert_round(include_str!(
+            "../../ont/owl-xml/object-property-assertion.owx"
+        ));
     }
 
     #[test]
@@ -1231,12 +1242,16 @@ mod test {
 
     #[test]
     fn data_property_equivalent() {
-        assert_round(include_str!("../../ont/owl-xml/data-property-equivalent.owx"));
+        assert_round(include_str!(
+            "../../ont/owl-xml/data-property-equivalent.owx"
+        ));
     }
 
     #[test]
     fn data_property_functional() {
-        assert_round(include_str!("../../ont/owl-xml/data-property-functional.owx"));
+        assert_round(include_str!(
+            "../../ont/owl-xml/data-property-functional.owx"
+        ));
     }
 
     #[test]
@@ -1308,12 +1323,16 @@ mod test {
 
     #[test]
     fn object_property_reflexive() {
-        assert_round(include_str!("../../ont/owl-xml/object-property-reflexive.owx"));
+        assert_round(include_str!(
+            "../../ont/owl-xml/object-property-reflexive.owx"
+        ));
     }
 
     #[test]
     fn object_property_symmetric() {
-        assert_round(include_str!("../../ont/owl-xml/object-property-symmetric.owx"));
+        assert_round(include_str!(
+            "../../ont/owl-xml/object-property-symmetric.owx"
+        ));
     }
 
     #[test]
