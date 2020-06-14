@@ -8,12 +8,9 @@ use clap::ArgMatches;
 
 use failure::Error;
 
-use horned_owl::io::reader::read;
-use horned_owl::error::CommandError;
+use horned_owl::{command::parse_path, error::CommandError};
 
-use std::collections::HashMap;
-use std::io::BufReader;
-use std::fs::File;
+use std::{path::Path, collections::HashMap};
 
 fn main() -> Result<(),Error> {
     let matches =
@@ -34,9 +31,7 @@ fn matcher(matches:ArgMatches) -> Result<(),Error> {
     let input = matches.value_of("INPUT")
         .ok_or(CommandError::MissingArgument)?;
 
-    let file = File::open(input)?;
-    let mut bufreader = BufReader::new(file);
-    let (ont, mapping) = read(&mut bufreader)?;
+    let (ont, mapping) = parse_path(Path::new(input))?;
 
     let hash_map: HashMap<&String, &String> = mapping.mappings().collect();
     println!("Ontology:\n{:?}\n\nMapping:\n{:?}", ont, hash_map);

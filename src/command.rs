@@ -1,3 +1,24 @@
+use crate::model::Ontology;
+use curie::PrefixMapping;
+
+use failure::Error;
+
+use std::{path::Path, fs::File, io::BufReader};
+
+pub fn parse_path(path: &Path) -> Result<(Ontology, PrefixMapping), Error> {
+    let file = File::open(&path)?;
+    let mut bufreader = BufReader::new(file);
+
+
+    Ok(
+        match path.extension().map(|s| s.to_str()).flatten() {
+            Some("oxl") => super::io::reader::read(&mut bufreader)?,
+            Some("owl") => super::io::rdf::reader::read(&mut bufreader)?,
+            _ => todo!()
+        }
+    )
+}
+
 pub mod naming {
     use crate::model::AxiomKind;
     use crate::model::AxiomKind::*;

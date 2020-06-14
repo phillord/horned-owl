@@ -9,10 +9,9 @@ use clap::ArgMatches;
 use failure::Error;
 
 use horned_owl::error::CommandError;
-use horned_owl::io::reader::read;
+use horned_owl::command::parse_path;
 
-use std::io::BufReader;
-use std::fs::File;
+use std::path::Path;
 
 fn main() -> Result<(),Error> {
     let matches =
@@ -33,9 +32,7 @@ fn matcher(matches:&ArgMatches) -> Result<(),Error>{
     let input = matches.value_of("INPUT")
         .ok_or(CommandError::MissingArgument)?;
 
-    let file = File::open(input).unwrap();
-    let mut bufreader = BufReader::new(file);
-    let (_,_) = read(&mut bufreader)?;
+    parse_path(Path::new(input))?;
 
     println!("Parse Complete: {:?}", input);
     Ok(())

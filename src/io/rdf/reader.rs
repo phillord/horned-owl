@@ -495,10 +495,8 @@ impl<'a> OntologyParser<'a> {
         let mut facet_map: HashMap<Term, [Term; 3]> = HashMap::new();
 
         for (k, v) in std::mem::take(&mut self.bnode) {
-            dbg!(&v);
             match v.as_slice() {
                 [triple @ [_, Term::FacetTerm(_),_]] => {
-                    dbg!("matched");
                     facet_map.insert(Term::BNode(k), triple.clone());
                 }
                 _ => {
@@ -506,7 +504,6 @@ impl<'a> OntologyParser<'a> {
                 }
             }
         }
-        dbg!(&facet_map);
 
         for (this_bnode, v) in std::mem::take(&mut self.bnode) {
             let dr = match v.as_slice() {
@@ -554,12 +551,8 @@ impl<'a> OntologyParser<'a> {
                             // Need to change facet_map to support
                             // data_ranges. So, we really need to have a
                             // facet_map at top level, and run it before data range!
-                            dbg!(&id);
-                            dbg!(&self.bnode_seq);
-                            dbg!(&facet_map);
                             let facet_seq = self.bnode_seq
                                 .remove(id)?;
-                            dbg!(&facet_seq);
                             let some_facets:Vec<Option<FacetRestriction>> =
                                 facet_seq.into_iter().map(|id|
                                                           match facet_map.remove(&id)? {
@@ -573,34 +566,8 @@ impl<'a> OntologyParser<'a> {
                                                           }
                                 )
                                 .collect();
-                            dbg!(&some_facets);
+
                             let facets:Option<Vec<FacetRestriction>> = some_facets.into_iter().collect();
-                            dbg!(&facets);
-                            //let facets = self.to_literal_seq(id)?;
-                            // let facets: Vec<FacetRestriction> = facet_nodes
-                            //     .into_iter()
-                            //     .filter_map(|t| {
-                            //         if let [_, Term::OWL(VOWL::WithRestrictions), Term::BNode(bnode)] = t {
-                            //             let facet_triples = self.facet_map.remove(&bnode)?;
-                            //             let mut facet_restrictions: Vec<FacetRestriction> = vec![];
-                            //             for facet_triple in facet_triples {
-                            //                 facet_restrictions.push(match facet_triple {
-                            //                     [_, Term::FacetTerm(facet), literal] => FacetRestriction {
-                            //                         f: facet,
-                            //                         l: self.to_literal(&literal)?,
-                            //                     },
-                            //                     _ => {
-                            //                         return None;
-                            //                     }
-                            //                 })
-                            //             }
-                            //             Some(facet_restrictions)
-                            //         } else {
-                            //             None
-                            //         }
-                            //     })
-                            //     .flatten()
-                            //     .collect();
                             DataRange::DatatypeRestriction(
                                 iri.into(),
                                 facets?
@@ -1434,8 +1401,6 @@ impl<'a> OntologyParser<'a> {
             .collect();
 
 
-
-        dbg!(&triple);
         Self::group_triples(triple, &mut self.simple, &mut self.bnode);
 
         // sort the triples, so that I can get a dependable order
@@ -1555,10 +1520,12 @@ pub fn read_with_build<R: BufRead>(
     build: &Build,
 ) -> Result<(Ontology, PrefixMapping), Error>
 {
+    eprintln!("sofia read");
     let triple_iter = sophia::parser::xml2::parse_bufread(bufread);
     use sophia::{term::{Term}, triple::stream::TripleSource};
     let triple_result: Result<Vec<_>, _> = triple_iter.collect_triples();
     let triple_v: Vec<[SpTerm; 3]> = triple_result.unwrap();
+    eprintln!("sofia completed");
 
     return OntologyParser::new(build)
         .read(triple_v)
