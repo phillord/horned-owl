@@ -14,23 +14,25 @@ use horned_owl::error::CommandError;
 
 use std::path::Path;
 
-fn main() -> Result<(),Error> {
-    let matches =
-        App::new("horned-summary")
+fn main() -> Result<(), Error> {
+    let matches = App::new("horned-summary")
         .version("0.1")
         .about("Summary Statistics for an OWL file.")
         .author("Phillip Lord")
-        .arg(Arg::with_name("INPUT")
-             .help("Sets the input file to use")
-             .required(true)
-             .index(1))
+        .arg(
+            Arg::with_name("INPUT")
+                .help("Sets the input file to use")
+                .required(true)
+                .index(1),
+        )
         .get_matches();
 
     matcher(&matches)
 }
 
-fn matcher(matches:&ArgMatches) -> Result<(),Error>{
-    let input = matches.value_of("INPUT")
+fn matcher(matches: &ArgMatches) -> Result<(), Error> {
+    let input = matches
+        .value_of("INPUT")
         .ok_or(CommandError::MissingArgument)?;
 
     let (ont, _mapping) = parse_path(Path::new(input))?;
@@ -45,7 +47,6 @@ fn matcher(matches:&ArgMatches) -> Result<(),Error>{
     for (axk, size) in summary.with_axiom_types() {
         println!("\t{0:<40} | {1:<5}", name(axk), size);
     }
-
 
     Ok(())
 }

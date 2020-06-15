@@ -103,12 +103,10 @@ pub enum RDFS {
 impl RDFS {
     pub fn is_builtin(&self) -> bool {
         match self {
-            RDFS::Label | RDFS::Comment
-                | RDFS::SeeAlso | RDFS::IsDefinedBy => true,
+            RDFS::Label | RDFS::Comment | RDFS::SeeAlso | RDFS::IsDefinedBy => true,
             _ => false,
         }
     }
-
 }
 
 lazy_meta! {
@@ -247,13 +245,11 @@ lazy_meta! {
     WithRestrictions, extend(OWL, "withRestrictions");
 }
 
-pub fn to_built_in_entity(iri: &IRI) -> Option<NamedEntityKind>
-{
+pub fn to_built_in_entity(iri: &IRI) -> Option<NamedEntityKind> {
     let ir = iri.as_ref();
     match ir {
-        _ if ir == OWL::TopDataProperty.iri_s() =>
-            Some(NamedEntityKind::DataProperty),
-        _ => None
+        _ if ir == OWL::TopDataProperty.iri_s() => Some(NamedEntityKind::DataProperty),
+        _ => None,
     }
 }
 
@@ -273,36 +269,43 @@ fn meta_testing() {
     );
 }
 
-pub fn entity_for_iri(type_iri: &str, entity_iri: &str, b: &Build) -> Result<NamedEntity,Error> {
+pub fn entity_for_iri(type_iri: &str, entity_iri: &str, b: &Build) -> Result<NamedEntity, Error> {
     // Datatypes are handled here because they are not a
     // "type" but an "RDF schema" element.
     if type_iri == "http://www.w3.org/2000/01/rdf-schema#Datatype" {
         return Ok(b.datatype(entity_iri).into());
     }
 
-    if type_iri.len() < 30  {
+    if type_iri.len() < 30 {
         bail!("IRI is not for a type of entity:{}", type_iri);
     }
 
-    Ok(
-        match &type_iri[30..] {
-            "Class" => b.class(entity_iri).into(),
-            "ObjectProperty" => b.object_property(entity_iri).into(),
-            "DatatypeProperty" => b.data_property(entity_iri).into(),
-            "AnnotationProperty" => b.annotation_property(entity_iri).into(),
-            "NamedIndividual" => b.named_individual(entity_iri).into(),
-            _ => bail!("IRI is not a type of entity:{}", type_iri),
-        })
+    Ok(match &type_iri[30..] {
+        "Class" => b.class(entity_iri).into(),
+        "ObjectProperty" => b.object_property(entity_iri).into(),
+        "DatatypeProperty" => b.data_property(entity_iri).into(),
+        "AnnotationProperty" => b.annotation_property(entity_iri).into(),
+        "NamedIndividual" => b.named_individual(entity_iri).into(),
+        _ => bail!("IRI is not a type of entity:{}", type_iri),
+    })
 }
 
 #[test]
 pub fn test_entity_for_iri() {
     let b = Build::new();
 
-    assert!(entity_for_iri("http://www.w3.org/2002/07/owl#Class",
-                           "http://www.example.com", &b).is_ok());
-    assert!(entity_for_iri("http://www.w3.org/2002/07/owl#Fred",
-                                 "http://www.example.com", &b).is_err());
+    assert!(entity_for_iri(
+        "http://www.w3.org/2002/07/owl#Class",
+        "http://www.example.com",
+        &b
+    )
+    .is_ok());
+    assert!(entity_for_iri(
+        "http://www.w3.org/2002/07/owl#Fred",
+        "http://www.example.com",
+        &b
+    )
+    .is_err());
 }
 
 pub enum OWL2Datatype {
@@ -349,13 +352,19 @@ pub fn is_annotation_builtin(iri: &String) -> bool {
 }
 
 #[test]
-fn annotation_builtin(){
-    assert!(is_annotation_builtin(&"http://www.w3.org/2002/07/owl#deprecated".to_string()));
-    assert!(is_annotation_builtin(&"http://www.w3.org/2000/01/rdf-schema#comment".to_string()));
-    assert!(!is_annotation_builtin(&"http://www.w3.org/2002/07/owl#fred".to_string()));
+fn annotation_builtin() {
+    assert!(is_annotation_builtin(
+        &"http://www.w3.org/2002/07/owl#deprecated".to_string()
+    ));
+    assert!(is_annotation_builtin(
+        &"http://www.w3.org/2000/01/rdf-schema#comment".to_string()
+    ));
+    assert!(!is_annotation_builtin(
+        &"http://www.w3.org/2002/07/owl#fred".to_string()
+    ));
 }
 
-lazy_meta!{
+lazy_meta! {
     Facet, IRIString, METAFACET;
     Length, extend(XSD, "length");
     MinLength, extend(XSD, "minLength");

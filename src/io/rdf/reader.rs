@@ -1,4 +1,3 @@
-#![allow(unused_imports)]
 use Term::*;
 
 use curie::PrefixMapping;
@@ -16,14 +15,12 @@ use crate::vocab::RDFS as VRDFS;
 
 use enum_meta::Meta;
 use failure::Error;
-use failure::SyncFailure;
-
-use log::{debug, trace};
 
 use sophia::term::blank_node::BlankNode;
 use sophia::term::iri::Iri;
-use sophia::term::variable::Variable;
 use sophia::term::literal::Literal as SpLiteral;
+use sophia::term::variable::Variable;
+use sophia::triple::stream::TripleSource;
 
 use std::cmp::Ordering;
 use std::collections::BTreeSet;
@@ -53,7 +50,6 @@ enum Term {
     RDFS(VRDFS),
     FacetTerm(Facet),
 }
-
 
 impl Term {
     fn ord(&self) -> isize {
@@ -293,7 +289,6 @@ impl<'a> OntologyParser<'a> {
         let mut extended = false;
 
         for (k, v) in std::mem::take(&mut self.bnode) {
-            #[rustfmt::skip]
             let _ = match v.as_slice() {
                 [[_, Term::RDF(VRDF::First), val],
                  [_, Term::RDF(VRDF::Rest), Term::BNode(bnode_id)],
@@ -322,7 +317,6 @@ impl<'a> OntologyParser<'a> {
 
     fn stitch_seqs(&mut self) {
         for (k, v) in std::mem::take(&mut self.bnode) {
-            #[rustfmt::skip]
             let _ = match v.as_slice() {
                 [[_, Term::RDF(VRDF::First), val],
                  [_, Term::RDF(VRDF::Rest), Term::RDF(VRDF::Nil)],
@@ -348,16 +342,13 @@ impl<'a> OntologyParser<'a> {
     fn resolve_imports(&mut self) {
         for t in std::mem::take(&mut self.simple) {
             match t {
-                [Term::Iri(_), Term::OWL(VOWL::Imports), Term::Iri(imp)] =>
-                {
-                    self.merge(
-                        AnnotatedAxiom{
-                            axiom: Import(imp).into(),
-                            ann: BTreeSet::new()
-                        }
-                    );
+                [Term::Iri(_), Term::OWL(VOWL::Imports), Term::Iri(imp)] => {
+                    self.merge(AnnotatedAxiom {
+                        axiom: Import(imp).into(),
+                        ann: BTreeSet::new(),
+                    });
                 }
-                _ => self.simple.push(t.clone())
+                _ => self.simple.push(t.clone()),
             }
         }
 
@@ -432,12 +423,10 @@ impl<'a> OntologyParser<'a> {
     fn axiom_annotations(&mut self) {
         for (k, v) in std::mem::take(&mut self.bnode) {
             match v.as_slice() {
-                #[rustfmt::skip]
-                [[_, Term::OWL(VOWL::AnnotatedProperty), p],
-                 [_, Term::OWL(VOWL::AnnotatedSource), sb],
-                 [_, Term::OWL(VOWL::AnnotatedTarget), ob],
-                 [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Axiom)],
-                 ann @ ..] =>
+                [[_, Term::OWL(VOWL::AnnotatedProperty), p],//:
+                 [_, Term::OWL(VOWL::AnnotatedSource), sb],//:
+                 [_, Term::OWL(VOWL::AnnotatedTarget), ob],//:
+                 [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Axiom)], ann @ ..] =>
                 {
                     self.ann_map.insert(
                         [sb.clone(), p.clone(), ob.clone()],
@@ -496,7 +485,7 @@ impl<'a> OntologyParser<'a> {
 
         for (k, v) in std::mem::take(&mut self.bnode) {
             match v.as_slice() {
-                [triple @ [_, Term::FacetTerm(_),_]] => {
+                [triple @ [_, Term::FacetTerm(_), _]] => {
                     facet_map.insert(Term::BNode(k), triple.clone());
                 }
                 _ => {
@@ -507,7 +496,7 @@ impl<'a> OntologyParser<'a> {
 
         for (this_bnode, v) in std::mem::take(&mut self.bnode) {
             let dr = match v.as_slice() {
-                [[_, Term::OWL(VOWL::IntersectionOf), Term::BNode(bnodeid)],
+                [[_, Term::OWL(VOWL::IntersectionOf), Term::BNode(bnodeid)],//: rustfmt hard line!
                  [_, Term::RDF(VRDF::Type), Term::RDFS(VRDFS::Datatype)]] =>
                 {
                     some! {
@@ -516,7 +505,7 @@ impl<'a> OntologyParser<'a> {
                         )
                     }
                 }
-                [[_, Term::OWL(VOWL::DatatypeComplementOf), term],
+                [[_, Term::OWL(VOWL::DatatypeComplementOf), term],//:
                  [_, Term::RDF(VRDF::Type), Term::RDFS(VRDFS::Datatype)]] =>
                 {
                     some! {
@@ -525,7 +514,7 @@ impl<'a> OntologyParser<'a> {
                         )
                     }
                 }
-                [[_, Term::OWL(VOWL::OneOf), Term::BNode(bnode)],
+                [[_, Term::OWL(VOWL::OneOf), Term::BNode(bnode)],//:
                  [_, Term::RDF(VRDF::Type), Term::RDFS(VRDFS::Datatype)]] =>
                 {
                     some! {
@@ -534,23 +523,12 @@ impl<'a> OntologyParser<'a> {
                         )
                     }
                 }
-                [[_, Term::OWL(VOWL::OnDatatype), Term::Iri(iri)],
-                 [_, Term::OWL(VOWL::WithRestrictions), Term::BNode(id)],
+                [[_, Term::OWL(VOWL::OnDatatype), Term::Iri(iri)],//:
+                 [_, Term::OWL(VOWL::WithRestrictions), Term::BNode(id)],//:
                  [_, Term::RDF(VRDF::Type), Term::RDFS(VRDFS::Datatype)]] =>
                 {
                     some! {
                         {
-                            // This is all broken. The WithRestrictions
-                            // contains needs to be captured, which then has
-                            // aBNode which has a sequence attached. The
-                            // sequence has bnodes which point to the multiple
-                            // DRs inside the restriction. So, we just need to
-                            // work on those bnodes which are available to us
-                            // from the seq.
-
-                            // Need to change facet_map to support
-                            // data_ranges. So, we really need to have a
-                            // facet_map at top level, and run it before data range!
                             let facet_seq = self.bnode_seq
                                 .remove(id)?;
                             let some_facets:Vec<Option<FacetRestriction>> =
@@ -591,13 +569,11 @@ impl<'a> OntologyParser<'a> {
 
         // Shove any remaining facets back onto bnode so that they get
         // reported at the end
-        self.bnode.extend(
-            facet_map.into_iter()
-                .filter_map(|(k, v)|
-                            match k {
-                                Term::BNode(id) => Some((id, vec![v])),
-                                _ => None
-                            }));
+        self.bnode
+            .extend(facet_map.into_iter().filter_map(|(k, v)| match k {
+                Term::BNode(id) => Some((id, vec![v])),
+                _ => None,
+            }));
     }
 
     fn object_property_expressions(&mut self) {
@@ -781,10 +757,9 @@ impl<'a> OntologyParser<'a> {
         for (this_bnode, v) in std::mem::take(&mut self.bnode) {
             // rustfmt breaks this (putting the triples all on one
             // line) so skip
-            #[rustfmt::skip]
             let ce = match v.as_slice() {
-                [[_, Term::OWL(VOWL::OnProperty), pr],
-                 [_, Term::OWL(VOWL::SomeValuesFrom), ce_or_dr],
+                [[_, Term::OWL(VOWL::OnProperty), pr],//:
+                 [_, Term::OWL(VOWL::SomeValuesFrom), ce_or_dr],//:
                  [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Restriction)]] => {
                     some! {
                         match self.find_property_kind(pr)? {
@@ -804,8 +779,8 @@ impl<'a> OntologyParser<'a> {
                         }
                     }
                 },
-                [[_, Term::OWL(VOWL::HasValue), val],
-                 [_, Term::OWL(VOWL::OnProperty), pr],
+                [[_, Term::OWL(VOWL::HasValue), val],//:
+                 [_, Term::OWL(VOWL::OnProperty), pr],//:
                  [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Restriction)]] => {
                     some! {
                         match self.find_property_kind(pr)? {
@@ -825,8 +800,8 @@ impl<'a> OntologyParser<'a> {
                         }
                     }
                 },
-                [[_, Term::OWL(VOWL::AllValuesFrom), ce_or_dr],
-                 [_, Term::OWL(VOWL::OnProperty), pr],
+                [[_, Term::OWL(VOWL::AllValuesFrom), ce_or_dr],//:
+                 [_, Term::OWL(VOWL::OnProperty), pr],//:
                  [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Restriction)]] => {
                     some! {
                         match self.find_property_kind(pr)? {
@@ -846,7 +821,7 @@ impl<'a> OntologyParser<'a> {
                         }
                     }
                 },
-                [[_, Term::OWL(VOWL::OneOf), Term::BNode(bnodeid)],
+                [[_, Term::OWL(VOWL::OneOf), Term::BNode(bnodeid)],//:
                  [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Class)]] => {
                     some!{
                         ClassExpression::ObjectOneOf(
@@ -854,7 +829,7 @@ impl<'a> OntologyParser<'a> {
                         )
                     }
                 },
-                [[_, Term::OWL(VOWL::IntersectionOf), Term::BNode(bnodeid)],
+                [[_, Term::OWL(VOWL::IntersectionOf), Term::BNode(bnodeid)],//:
                  [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Class)]] => {
                     some!{
                         ClassExpression::ObjectIntersectionOf(
@@ -862,7 +837,7 @@ impl<'a> OntologyParser<'a> {
                         )
                     }
                 },
-                [[_, Term::OWL(VOWL::UnionOf), Term::BNode(bnodeid)],
+                [[_, Term::OWL(VOWL::UnionOf), Term::BNode(bnodeid)],//:
                  [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Class)]] => {
                     some!{
                         ClassExpression::ObjectUnionOf(
@@ -872,7 +847,7 @@ impl<'a> OntologyParser<'a> {
                         )
                     }
                 },
-                [[_, Term::OWL(VOWL::ComplementOf), tce],
+                [[_, Term::OWL(VOWL::ComplementOf), tce],//:
                  [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Class)]] => {
                     some!{
                         ClassExpression::ObjectComplementOf(
@@ -880,9 +855,9 @@ impl<'a> OntologyParser<'a> {
                         )
                     }
                 },
-                [[_, Term::OWL(VOWL::OnDataRange), dr],
-                 [_, Term::OWL(VOWL::OnProperty), Term::Iri(pr)],
-                 [_, Term::OWL(VOWL::QualifiedCardinality), literal],
+                [[_, Term::OWL(VOWL::OnDataRange), dr],//:
+                 [_, Term::OWL(VOWL::OnProperty), Term::Iri(pr)],//:
+                 [_, Term::OWL(VOWL::QualifiedCardinality), literal],//:
                  [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Restriction)]
                 ] => {
                     some!{
@@ -894,9 +869,9 @@ impl<'a> OntologyParser<'a> {
                         }
                     }
                 }
-                [[_, Term::OWL(VOWL::MaxQualifiedCardinality), literal],
-                 [_, Term::OWL(VOWL::OnDataRange), dr],
-                 [_, Term::OWL(VOWL::OnProperty), Term::Iri(pr)],
+                [[_, Term::OWL(VOWL::MaxQualifiedCardinality), literal],//:
+                 [_, Term::OWL(VOWL::OnDataRange), dr],//:
+                 [_, Term::OWL(VOWL::OnProperty), Term::Iri(pr)],//:
                  [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Restriction)]
                 ] => {
                     some!{
@@ -908,9 +883,9 @@ impl<'a> OntologyParser<'a> {
                         }
                     }
                 }
-                [[_, Term::OWL(VOWL::MinQualifiedCardinality), literal],
-                 [_, Term::OWL(VOWL::OnDataRange), dr],
-                 [_, Term::OWL(VOWL::OnProperty), Term::Iri(pr)],
+                [[_, Term::OWL(VOWL::MinQualifiedCardinality), literal],//:
+                 [_, Term::OWL(VOWL::OnDataRange), dr],//:
+                 [_, Term::OWL(VOWL::OnProperty), Term::Iri(pr)],//:
                  [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Restriction)]
                 ] => {
                     some!{
@@ -922,9 +897,9 @@ impl<'a> OntologyParser<'a> {
                         }
                     }
                 }
-                [[_, Term::OWL(VOWL::OnClass), tce],
-                 [_, Term::OWL(VOWL::OnProperty), Term::Iri(pr)],
-                 [_, Term::OWL(VOWL::QualifiedCardinality), literal],
+                [[_, Term::OWL(VOWL::OnClass), tce],//:
+                 [_, Term::OWL(VOWL::OnProperty), Term::Iri(pr)],//:
+                 [_, Term::OWL(VOWL::QualifiedCardinality), literal],//:
                  [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Restriction)]
                 ] => {
                     some!{
@@ -936,9 +911,9 @@ impl<'a> OntologyParser<'a> {
                         }
                     }
                 }
-                [[_, Term::OWL(VOWL::MinQualifiedCardinality), literal],
-                 [_, Term::OWL(VOWL::OnClass), tce],
-                 [_, Term::OWL(VOWL::OnProperty), Term::Iri(pr)],
+                [[_, Term::OWL(VOWL::MinQualifiedCardinality), literal],//:
+                 [_, Term::OWL(VOWL::OnClass), tce],//:
+                 [_, Term::OWL(VOWL::OnProperty), Term::Iri(pr)],//:
                  [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Restriction)]
                 ] => {
                     some!{
@@ -950,9 +925,9 @@ impl<'a> OntologyParser<'a> {
                         }
                     }
                 }
-                [[_, Term::OWL(VOWL::MaxQualifiedCardinality), literal],
-                 [_, Term::OWL(VOWL::OnClass), tce],
-                 [_, Term::OWL(VOWL::OnProperty), Term::Iri(pr)],
+                [[_, Term::OWL(VOWL::MaxQualifiedCardinality), literal],//:
+                 [_, Term::OWL(VOWL::OnClass), tce],//:
+                 [_, Term::OWL(VOWL::OnProperty), Term::Iri(pr)],//:
                  [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Restriction)]
                 ] => {
                     some!{
@@ -964,8 +939,8 @@ impl<'a> OntologyParser<'a> {
                         }
                     }
                 }
-                [[_, Term::OWL(VOWL::MaxCardinality), literal],
-                 [_, Term::OWL(VOWL::OnProperty), Term::Iri(pr)],
+                [[_, Term::OWL(VOWL::MaxCardinality), literal],//:
+                 [_, Term::OWL(VOWL::OnProperty), Term::Iri(pr)],//:
                  [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Restriction)]
                 ] => {
                     some!{
@@ -997,9 +972,9 @@ impl<'a> OntologyParser<'a> {
     fn axioms(&mut self) {
         for (this_bnode, v) in std::mem::take(&mut self.bnode) {
             let axiom: Option<Axiom> = match v.as_slice() {
-                [[_, Term::OWL(VOWL::AssertionProperty), pr],
-                 [_, Term::OWL(VOWL::SourceIndividual), Term::Iri(i)],
-                 [_, target_type, target],
+                [[_, Term::OWL(VOWL::AssertionProperty), pr],//:
+                 [_, Term::OWL(VOWL::SourceIndividual), Term::Iri(i)],//:
+                 [_, target_type, target],//:
                  [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::NegativePropertyAssertion)]] =>
                 {
                     some! {
@@ -1020,7 +995,7 @@ impl<'a> OntologyParser<'a> {
                         }
                     }
                 }
-                [[_, Term::OWL(VOWL::DistinctMembers), Term::BNode(bnodeid)],
+                [[_, Term::OWL(VOWL::DistinctMembers), Term::BNode(bnodeid)],//:
                  [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::AllDifferent)]] =>
                 {
                     some! {
@@ -1400,7 +1375,6 @@ impl<'a> OntologyParser<'a> {
             })
             .collect();
 
-
         Self::group_triples(triple, &mut self.simple, &mut self.bnode);
 
         // sort the triples, so that I can get a dependable order
@@ -1518,11 +1492,9 @@ impl<'a> OntologyParser<'a> {
 pub fn read_with_build<R: BufRead>(
     bufread: &mut R,
     build: &Build,
-) -> Result<(Ontology, PrefixMapping), Error>
-{
+) -> Result<(Ontology, PrefixMapping), Error> {
     eprintln!("sofia read");
     let triple_iter = sophia::parser::xml2::parse_bufread(bufread);
-    use sophia::{term::{Term}, triple::stream::TripleSource};
     let triple_result: Result<Vec<_>, _> = triple_iter.collect_triples();
     let triple_v: Vec<[SpTerm; 3]> = triple_result.unwrap();
     eprintln!("sofia completed");

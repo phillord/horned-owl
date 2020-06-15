@@ -17,8 +17,7 @@ fn a_thousand_classes(bench: &mut Bencher) {
     })
 }
 
-
-fn big_tree(bench: &mut Bencher){
+fn big_tree(bench: &mut Bencher) {
     bench.iter(|| {
         let mut o = Ontology::new();
         let mut i = 10_000;
@@ -26,15 +25,14 @@ fn big_tree(bench: &mut Bencher){
     })
 }
 
-fn create_tree(o:&mut Ontology, n:&mut i32){
+fn create_tree(o: &mut Ontology, n: &mut i32) {
     let b = Build::default();
     let i = b.iri(format!("http://example.com/a{}", n));
     let c = b.class(i);
-    create_tree_0(o, vec![c], n );
+    create_tree_0(o, vec![c], n);
 }
 
-fn create_tree_0(o:&mut Ontology,
-                 current:Vec<Class>, remaining:&mut i32){
+fn create_tree_0(o: &mut Ontology, current: Vec<Class>, remaining: &mut i32) {
     let b = Build::default();
     let mut next = vec![];
 
@@ -51,21 +49,21 @@ fn create_tree_0(o:&mut Ontology,
 
         o.insert(SubClassOf::new(
             ClassExpression::Class(curr.clone()),
-            ClassExpression::Class(c)
+            ClassExpression::Class(c),
         ));
         o.insert(SubClassOf::new(
             ClassExpression::Class(curr),
-            ClassExpression::Class(d)
+            ClassExpression::Class(d),
         ));
 
         if *remaining < 0 {
-            return
+            return;
         }
     }
     create_tree_0(o, next, remaining);
 }
 
-fn is_subclass_with_many_direct_subclasses(bench: &mut Bencher){
+fn is_subclass_with_many_direct_subclasses(bench: &mut Bencher) {
     bench.iter(|| {
         let b = Build::default();
         let mut o = Ontology::new();
@@ -74,7 +72,7 @@ fn is_subclass_with_many_direct_subclasses(bench: &mut Bencher){
 
         let n = 1_000;
         for m in 1..n {
-            let i =b.iri(format!("http://example.com/b{}", m));
+            let i = b.iri(format!("http://example.com/b{}", m));
             let d = b.class(i);
             o.insert(SubClassOf::new(
                 ClassExpression::Class(c.clone()),
@@ -86,22 +84,23 @@ fn is_subclass_with_many_direct_subclasses(bench: &mut Bencher){
         let d = b.class(i);
         o.declare(d.clone());
 
-        assert!(!o.is_subclass(&d,&c));
-        assert!(o.is_subclass(&c,&d));
+        assert!(!o.is_subclass(&d, &c));
+        assert!(o.is_subclass(&c, &d));
     })
 }
 
-
-
-benchmark_group!(benches, a_thousand_classes, big_tree, is_subclass_with_many_direct_subclasses);
-
+benchmark_group!(
+    benches,
+    a_thousand_classes,
+    big_tree,
+    is_subclass_with_many_direct_subclasses
+);
 
 use std::fs::File;
 use std::io::BufReader;
 
-
-fn io_read(bench: &mut Bencher){
-    bench.iter(||{
+fn io_read(bench: &mut Bencher) {
+    bench.iter(|| {
         let f = File::open("benches/ont/o100.owl").ok().unwrap();
         let mut f = BufReader::new(f);
 
@@ -111,4 +110,4 @@ fn io_read(bench: &mut Bencher){
 
 benchmark_group!(iobenches, io_read);
 
-benchmark_main!(benches,iobenches);
+benchmark_main!(benches, iobenches);

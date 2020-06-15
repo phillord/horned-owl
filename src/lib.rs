@@ -29,7 +29,7 @@ extern crate failure;
 
 pub mod command;
 pub mod error;
-pub mod io;
 pub mod index;
+pub mod io;
 pub mod model;
 pub mod vocab;

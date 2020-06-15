@@ -24,31 +24,46 @@ pub fn update_logically_equal_axiom<'a>(o: &'a mut Ontology, mut axiom: Annotate
 
 pub fn find_declaration_kind(o: &Ontology, iri: &IRI) -> Option<NamedEntityKind> {
     match 10 {
-        _ if find_logically_equal_axiom
-            (o, &DeclareClass(Class(iri.clone())).into()).is_some() => {
-                return Some(NamedEntityKind::Class)
-            }
-        _ if find_logically_equal_axiom
-            (o, &DeclareObjectProperty(ObjectProperty(iri.clone())).into()).is_some() => {
-                return Some(NamedEntityKind::ObjectProperty)
-            }
-        _ if find_logically_equal_axiom
-            (o, &DeclareAnnotationProperty(AnnotationProperty
-                                           (iri.clone())).into()).is_some() => {
-                return Some(NamedEntityKind::AnnotationProperty)
-            }
-        _ if find_logically_equal_axiom
-            (o, &DeclareDataProperty(DataProperty(iri.clone())).into()).is_some() => {
-                return Some(NamedEntityKind::DataProperty)
-            }
-        _ if find_logically_equal_axiom
-            (o, &DeclareNamedIndividual(NamedIndividual(iri.clone())).into()).is_some() => {
-                return Some(NamedEntityKind::NamedIndividual)
-            }
-        _ if find_logically_equal_axiom
-            (o, &DeclareDatatype(Datatype(iri.clone())).into()).is_some() => {
-                return Some(NamedEntityKind::Datatype)
-            }
+        _ if find_logically_equal_axiom(o, &DeclareClass(Class(iri.clone())).into()).is_some() => {
+            return Some(NamedEntityKind::Class)
+        }
+        _ if find_logically_equal_axiom(
+            o,
+            &DeclareObjectProperty(ObjectProperty(iri.clone())).into(),
+        )
+        .is_some() =>
+        {
+            return Some(NamedEntityKind::ObjectProperty)
+        }
+        _ if find_logically_equal_axiom(
+            o,
+            &DeclareAnnotationProperty(AnnotationProperty(iri.clone())).into(),
+        )
+        .is_some() =>
+        {
+            return Some(NamedEntityKind::AnnotationProperty)
+        }
+        _ if find_logically_equal_axiom(
+            o,
+            &DeclareDataProperty(DataProperty(iri.clone())).into(),
+        )
+        .is_some() =>
+        {
+            return Some(NamedEntityKind::DataProperty)
+        }
+        _ if find_logically_equal_axiom(
+            o,
+            &DeclareNamedIndividual(NamedIndividual(iri.clone())).into(),
+        )
+        .is_some() =>
+        {
+            return Some(NamedEntityKind::NamedIndividual)
+        }
+        _ if find_logically_equal_axiom(o, &DeclareDatatype(Datatype(iri.clone())).into())
+            .is_some() =>
+        {
+            return Some(NamedEntityKind::Datatype)
+        }
         _ => {
             return crate::vocab::to_built_in_entity(iri);
         }
@@ -58,7 +73,7 @@ pub fn find_declaration_kind(o: &Ontology, iri: &IRI) -> Option<NamedEntityKind>
 pub fn is_annotation_property(o: &Ontology, iri: &IRI) -> bool {
     match find_declaration_kind(o, iri) {
         Some(NamedEntityKind::AnnotationProperty) => true,
-        _ => false
+        _ => false,
     }
 }
 
@@ -135,7 +150,6 @@ mod test {
             let aa = o.iter().next().unwrap();
 
             assert_eq!(aa.ann.iter().count(), 2);
-
         }
     }
 
@@ -162,5 +176,4 @@ mod test {
             None
         );
     }
-
 }

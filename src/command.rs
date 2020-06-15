@@ -3,20 +3,17 @@ use curie::PrefixMapping;
 
 use failure::Error;
 
-use std::{path::Path, fs::File, io::BufReader};
+use std::{fs::File, io::BufReader, path::Path};
 
 pub fn parse_path(path: &Path) -> Result<(Ontology, PrefixMapping), Error> {
     let file = File::open(&path)?;
     let mut bufreader = BufReader::new(file);
 
-
-    Ok(
-        match path.extension().map(|s| s.to_str()).flatten() {
-            Some("oxl") => super::io::owx::reader::read(&mut bufreader)?,
-            Some("owl") => super::io::rdf::reader::read(&mut bufreader)?,
-            _ => todo!()
-        }
-    )
+    Ok(match path.extension().map(|s| s.to_str()).flatten() {
+        Some("oxl") => super::io::owx::reader::read(&mut bufreader)?,
+        Some("owl") => super::io::rdf::reader::read(&mut bufreader)?,
+        _ => todo!(),
+    })
 }
 
 pub mod naming {
@@ -75,9 +72,9 @@ pub mod naming {
 
 pub mod summary {
 
-    use indexmap::map::IndexMap;
     use crate::model::AxiomKind;
     use crate::model::Ontology;
+    use indexmap::map::IndexMap;
 
     #[derive(Debug)]
     pub struct SummaryStatistics {
@@ -87,8 +84,8 @@ pub mod summary {
     }
 
     impl SummaryStatistics {
-        pub fn with_axiom_types(&self) -> impl Iterator<Item=(&AxiomKind,&usize)> + '_ {
-            self.axiom_type.iter().filter(|&(_, v)| v > &0 )
+        pub fn with_axiom_types(&self) -> impl Iterator<Item = (&AxiomKind, &usize)> + '_ {
+            self.axiom_type.iter().filter(|&(_, v)| v > &0)
         }
     }
 
@@ -108,5 +105,4 @@ pub mod summary {
 
         im
     }
-
 }
