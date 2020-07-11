@@ -1,11 +1,11 @@
-use crate::model::Ontology;
+use crate::ontology::simple::SimpleOntology;
 use curie::PrefixMapping;
 
 use failure::Error;
 
 use std::{fs::File, io::BufReader, path::Path};
 
-pub fn parse_path(path: &Path) -> Result<(Ontology, PrefixMapping), Error> {
+pub fn parse_path(path: &Path) -> Result<(SimpleOntology, PrefixMapping), Error> {
     let file = File::open(&path)?;
     let mut bufreader = BufReader::new(file);
 
@@ -72,8 +72,7 @@ pub mod naming {
 
 pub mod summary {
 
-    use crate::model::AxiomKind;
-    use crate::model::Ontology;
+    use crate::{ontology::simple::SimpleOntology, model::AxiomKind};
     use indexmap::map::IndexMap;
 
     #[derive(Debug)]
@@ -89,15 +88,15 @@ pub mod summary {
         }
     }
 
-    pub fn summarize(ont: &Ontology) -> SummaryStatistics {
+    pub fn summarize(ont: &SimpleOntology) -> SummaryStatistics {
         SummaryStatistics {
-            logical_axiom: ont.iter().count(),
-            annotation_axiom: ont.iter().map(|aa| aa.ann.iter().count()).sum::<usize>(),
+            logical_axiom: ont.into_iter().count(),
+            annotation_axiom: ont.into_iter().map(|aa| aa.ann.iter().count()).sum::<usize>(),
             axiom_type: axiom_types(ont),
         }
     }
 
-    fn axiom_types(ont: &Ontology) -> IndexMap<AxiomKind, usize> {
+    fn axiom_types(ont: &SimpleOntology) -> IndexMap<AxiomKind, usize> {
         let mut im = IndexMap::new();
         for ax in AxiomKind::all_kinds() {
             im.insert(ax, ont.axiom(ax).count());

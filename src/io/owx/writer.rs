@@ -3,7 +3,7 @@ use curie::PrefixMapping;
 use crate::model::Kinded;
 use crate::model::*;
 use crate::vocab::Namespace::*;
-use crate::vocab::WithIRI;
+use crate::{ontology::simple::SimpleOntology, vocab::WithIRI};
 
 use quick_xml::events::BytesDecl;
 use quick_xml::events::BytesEnd;
@@ -23,7 +23,7 @@ use failure::Error;
 /// [XML](https://www.w3.org/TR/owl2-xml-serialization/) syntax.
 pub fn write(
     write: &mut dyn StdWrite,
-    ont: &Ontology,
+    ont: &SimpleOntology,
     mapping: Option<&PrefixMapping>,
 ) -> Result<(), Error> {
     let mut writer = Writer::new_with_indent(write, b' ', 4);
@@ -36,7 +36,7 @@ pub fn write(
         None => &default_mapper,
     };
 
-    ont.render(&mut writer, &mapping)?;
+    render_ont(ont, &mut writer, &mapping)?;
 
     Ok(())
 }
@@ -210,34 +210,34 @@ macro_rules! content0 {
     };
 }
 
-render! {
-    Ontology, self, w, m,
-    {
-        w.write_event(Event::Decl(BytesDecl::new(&b"1.0"[..], None, None)))?;
+fn render_ont<W>(o: &SimpleOntology, w: &mut Writer<W>, m: &PrefixMapping) -> Result<(), Error>
+where
+    W: StdWrite,
+{
+    w.write_event(Event::Decl(BytesDecl::new(&b"1.0"[..], None, None)))?;
 
-        let mut elem = BytesStart::owned_name("Ontology");
-        elem.push_attribute((b"xmlns" as &[u8], OWL.iri_b()));
-        iri_maybe(&mut elem, "ontologyIRI", &self.id.iri);
-        iri_maybe(&mut elem, "versionIRI", &self.id.viri);
+    let mut elem = BytesStart::owned_name("Ontology");
+    elem.push_attribute((b"xmlns" as &[u8], OWL.iri_b()));
+    iri_maybe(&mut elem, "ontologyIRI", &o.id().iri);
+    iri_maybe(&mut elem, "versionIRI", &o.id().viri);
 
-        w.write_event(Event::Start(elem))?;
+    w.write_event(Event::Start(elem))?;
 
-        let elem = BytesEnd::owned(b"Ontology".to_vec());
+    let elem = BytesEnd::owned(b"Ontology".to_vec());
 
-        m.render(w, m)?;
+    m.render(w, m)?;
 
-        for axk in AxiomKind::all_kinds() {
-            for ax in self.annotated_axiom(axk) {
-                ax.render(w, m)?;
-            }
+    for axk in AxiomKind::all_kinds() {
+        for ax in o.annotated_axiom(axk) {
+            ax.render(w, m)?;
         }
-
-
-        w.write_event(Event::End(elem))?;
-
-        Ok(())
     }
+
+    w.write_event(Event::End(elem))?;
+
+    Ok(())
 }
+
 
 // Render Impl for container and collection types
 impl<'a, T: Render<'a, W>, W: StdWrite> Render<'a, W> for BTreeSet<T> {
@@ -819,7 +819,7 @@ mod test {
 
     use self::mktemp::Temp;
     use super::*;
-    use crate::io::owx::reader::*;
+    use crate::{io::owx::reader::*, ontology::simple::SimpleOntology};
 
     use std::collections::HashMap;
 
@@ -828,7 +828,7 @@ mod test {
     use std::io::BufReader;
     use std::io::BufWriter;
 
-    fn read_ok<R: BufRead>(bufread: &mut R) -> (Ontology, PrefixMapping) {
+    fn read_ok<R: BufRead>(bufread: &mut R) -> (SimpleOntology, PrefixMapping) {
         let r = read(bufread);
         assert!(r.is_ok(), "Expected ontology, got failure:{:?}", r.err());
         r.ok().unwrap()
@@ -836,11 +836,11 @@ mod test {
 
     #[test]
     fn test_ont_rt() {
-        let mut ont = Ontology::new();
+        let mut ont = SimpleOntology::new();
         let build = Build::new();
 
         let iri = build.iri("http://www.example.com/a".to_string());
-        ont.id.iri = Some(iri);
+        ont.mut_id().iri = Some(iri);
         let temp_file = Temp::new_file().unwrap();
         let file = File::create(&temp_file).ok().unwrap();
         write(&mut BufWriter::new(file), &ont, None).ok().unwrap();
@@ -848,10 +848,11 @@ mod test {
         let file = File::open(&temp_file).ok().unwrap();
         let (ont2, _) = read_ok(&mut BufReader::new(file));
 
-        assert_eq!(ont.id.iri, ont2.id.iri);
+        assert_eq!(ont.id().iri, ont2.id().iri);
     }
 
-    fn roundtrip(ont: &str) -> (Ontology, PrefixMapping, Ontology, PrefixMapping) {
+    fn roundtrip(ont: &str) -> (SimpleOntology, PrefixMapping,
+                                SimpleOntology, PrefixMapping) {
         let (ont_orig, prefix_orig) = read_ok(&mut ont.as_bytes());
         let mut temp_file = Temp::new_file().unwrap();
 
@@ -872,7 +873,8 @@ mod test {
         return (ont_orig, prefix_orig, ont_round, prefix_round);
     }
 
-    fn assert_round(ont: &str) -> (Ontology, PrefixMapping, Ontology, PrefixMapping) {
+    fn assert_round(ont: &str) -> (SimpleOntology, PrefixMapping,
+                                   SimpleOntology, PrefixMapping) {
         let (ont_orig, prefix_orig, ont_round, prefix_round) = roundtrip(ont);
 
         assert_eq!(ont_orig, ont_round);
@@ -891,7 +893,7 @@ mod test {
         let (ont_orig, _prefix_orig, ont_round, _prefix_round) =
             roundtrip(include_str!("../../ont/owl-xml/ont.owx"));
 
-        assert_eq!(ont_orig.id.iri, ont_round.id.iri);
+        assert_eq!(ont_orig.id().iri, ont_round.id().iri);
     }
 
     #[test]

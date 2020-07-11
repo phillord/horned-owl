@@ -4,7 +4,7 @@ use crate::model::*;
 use crate::vocab::Namespace::*;
 use crate::vocab::OWL2Datatype;
 use crate::vocab::WithIRI;
-use crate::vocab::OWL;
+use crate::{ontology::simple::SimpleOntology, vocab::OWL};
 
 use std::borrow::Cow;
 use std::collections::BTreeSet;
@@ -59,7 +59,7 @@ where
     ns_buf: Vec<u8>,
 }
 
-pub fn read<R: BufRead>(bufread: &mut R) -> Result<(Ontology, PrefixMapping), Error> {
+pub fn read<R: BufRead>(bufread: &mut R) -> Result<(SimpleOntology, PrefixMapping), Error> {
     let b = Build::new();
     read_with_build(bufread, &b)
 }
@@ -67,9 +67,9 @@ pub fn read<R: BufRead>(bufread: &mut R) -> Result<(Ontology, PrefixMapping), Er
 pub fn read_with_build<R: BufRead>(
     bufread: &mut R,
     build: &Build,
-) -> Result<(Ontology, PrefixMapping), Error> {
+) -> Result<(SimpleOntology, PrefixMapping), Error> {
     let reader: Reader<&mut R> = Reader::from_reader(bufread);
-    let mut ont = Ontology::new();
+    let mut ont = SimpleOntology::default();
     let mapping = PrefixMapping::default();
 
     let mut r = Read {
@@ -92,8 +92,8 @@ pub fn read_with_build<R: BufRead>(
                             r.mapping.set_default(&s.unwrap());
                         }
 
-                        ont.id.iri = read_a_iri_attr(&mut r, e, b"ontologyIRI")?;
-                        ont.id.viri = read_a_iri_attr(&mut r, e, b"versionIRI")?;
+                        ont.mut_id().iri = read_a_iri_attr(&mut r, e, b"ontologyIRI")?;
+                        ont.mut_id().viri = read_a_iri_attr(&mut r, e, b"versionIRI")?;
                     }
                     b"Prefix" => {
                         let iri = attrib_value(&mut r, e, b"IRI")?;
@@ -383,7 +383,10 @@ fn axiom_from_start<R: BufRead>(
             av: from_next(r)?,
         })
         .into(),
-        b"Declaration" => declaration(from_start(r, e)?),
+        b"Declaration" => {
+            let ne: NamedEntity = from_start(r, e)?;
+            ne.into()
+        },
         b"SubClassOf" => SubClassOf {
             sub: from_start(r, e)?,
             sup: from_next(r)?,
@@ -1079,8 +1082,9 @@ from_xml! {IRI, r, end,
 pub mod test {
     use super::*;
     use std::collections::HashMap;
+    use crate::ontology::simple::SimpleOntology;
 
-    pub fn read_ok<R: BufRead>(bufread: &mut R) -> (Ontology, PrefixMapping) {
+    pub fn read_ok<R: BufRead>(bufread: &mut R) -> (SimpleOntology, PrefixMapping) {
         let r = read(bufread);
         assert!(r.is_ok(), "Expected ontology, got failure:{:?}", r.err());
         r.ok().unwrap()
@@ -1100,7 +1104,8 @@ pub mod test {
         let ont_s = include_str!("../../ont/owl-xml/ont.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
-        assert_eq!(*ont.id.iri.unwrap(), "http://www.example.com/iri");
+        assert_eq!(ont.id().iri.as_ref().unwrap().as_ref(),
+                   "http://www.example.com/iri");
     }
 
     #[test]
@@ -1108,7 +1113,8 @@ pub mod test {
         let ont_s = include_str!("../../ont/owl-xml/one-ont-from-horned.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
-        assert_eq!(*ont.id.iri.unwrap(), "http://example.com/iri");
+        assert_eq!(ont.id().iri.as_ref().unwrap().as_ref(),
+                   "http://example.com/iri");
     }
 
     #[test]

@@ -23,13 +23,14 @@
 #[macro_use]
 extern crate failure;
 //#[macro_use]
-//extern crate log;
-//extern crate indexmap;
-//extern crate quick_xml;
+extern crate log;
+extern crate indexmap;
+extern crate quick_xml;
 
 pub mod command;
 pub mod error;
 pub mod index;
 pub mod io;
 pub mod model;
+pub mod ontology;
 pub mod vocab;

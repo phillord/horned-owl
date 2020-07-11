@@ -11,7 +11,7 @@ use crate::model::*;
 use crate::vocab::WithIRI;
 use crate::vocab::OWL as VOWL;
 use crate::vocab::RDF as VRDF;
-use crate::vocab::RDFS as VRDFS;
+use crate::{ontology::simple::SimpleOntology, vocab::RDFS as VRDFS};
 
 use enum_meta::Meta;
 use failure::Error;
@@ -234,7 +234,7 @@ macro_rules! d {
 }
 
 struct OntologyParser<'a> {
-    o: Ontology,
+    o: SimpleOntology,
     b: &'a Build,
 
     simple: Vec<[Term; 3]>,
@@ -376,8 +376,8 @@ impl<'a> OntologyParser<'a> {
             }
         }
 
-        self.o.id.iri = iri;
-        self.o.id.viri = viri;
+        self.o.mut_id().iri = iri;
+        self.o.mut_id().viri = viri;
     }
 
     fn backward_compat(&mut self) {
@@ -469,8 +469,9 @@ impl<'a> OntologyParser<'a> {
                     .ann_map
                     .remove(&triple)
                     .unwrap_or_else(|| BTreeSet::new());
+                let ne: NamedEntity = entity;
                 self.merge(AnnotatedAxiom {
-                    axiom: declaration(entity),
+                    axiom: ne.into(),
                     ann,
                 });
             } else {
@@ -1282,7 +1283,7 @@ impl<'a> OntologyParser<'a> {
                         i: NamedIndividual(sub.clone()).into()
                     }.into()
                 },
-                [Term::Iri(s), Term::Iri(_), _] if self.o.id.iri.as_ref() == Some(&s) => some! {
+                [Term::Iri(s), Term::Iri(_), _] if self.o.id().iri.as_ref() == Some(&s) => some! {
                     OntologyAnnotation(
                         self.annotation(&triple)
                     ).into()
@@ -1361,7 +1362,7 @@ impl<'a> OntologyParser<'a> {
         }
     }
 
-    fn read(mut self, triple: Vec<[SpTerm; 3]>) -> Result<Ontology, Error> {
+    fn read(mut self, triple: Vec<[SpTerm; 3]>) -> Result<SimpleOntology, Error> {
         // move to our own Terms, with IRIs swapped
         let m = vocab_lookup();
         let triple: Vec<[Term; 3]> = triple
@@ -1492,7 +1493,7 @@ impl<'a> OntologyParser<'a> {
 pub fn read_with_build<R: BufRead>(
     bufread: &mut R,
     build: &Build,
-) -> Result<(Ontology, PrefixMapping), Error> {
+) -> Result<(SimpleOntology, PrefixMapping), Error> {
     eprintln!("sofia read");
     let triple_iter = sophia::parser::xml2::parse_bufread(bufread);
     let triple_result: Result<Vec<_>, _> = triple_iter.collect_triples();
@@ -1504,7 +1505,7 @@ pub fn read_with_build<R: BufRead>(
         .map(|o| return (o, PrefixMapping::default()));
 }
 
-pub fn read<R: BufRead>(bufread: &mut R) -> Result<(Ontology, PrefixMapping), Error> {
+pub fn read<R: BufRead>(bufread: &mut R) -> Result<(SimpleOntology, PrefixMapping), Error> {
     let b = Build::new();
     read_with_build(bufread, &b)
 }
@@ -1525,7 +1526,7 @@ mod test {
             .try_init();
     }
 
-    fn read_ok<R: BufRead>(bufread: &mut R) -> (Ontology, PrefixMapping) {
+    fn read_ok<R: BufRead>(bufread: &mut R) -> (SimpleOntology, PrefixMapping) {
         init_log();
 
         let r = read(bufread);

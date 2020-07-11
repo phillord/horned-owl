@@ -6,7 +6,8 @@ use failure::Error;
 
 use horned_owl::io::owx::writer::write;
 use horned_owl::model::Build;
-use horned_owl::model::Ontology;
+use horned_owl::model::MutableOntology;
+use horned_owl::ontology::simple::SimpleOntology;
 
 use std::io::stdout;
 
@@ -30,7 +31,7 @@ fn matcher(matches: ArgMatches) -> Result<(), Error> {
     let size: isize = matches.value_of("SIZE").unwrap().parse()?;
 
     let b = Build::new();
-    let mut o = Ontology::new();
+    let mut o = SimpleOntology::new();
 
     for i in 1..size {
         o.declare(b.class(format!("https://www.example.com/o{}", i)));
