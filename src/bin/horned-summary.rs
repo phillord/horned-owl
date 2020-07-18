@@ -37,7 +37,7 @@ fn matcher(matches: &ArgMatches) -> Result<(), Error> {
 
     let (ont, _mapping) = parse_path(Path::new(input))?;
 
-    let summary = summarize(&ont);
+    let summary = summarize(ont);
     println!("Ontology has:");
     println!("Logical Axioms: {}", summary.logical_axiom);
     println!("Annotation Axioms: {}", summary.annotation_axiom);

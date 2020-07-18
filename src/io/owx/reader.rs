@@ -1082,12 +1082,13 @@ from_xml! {IRI, r, end,
 pub mod test {
     use super::*;
     use std::collections::HashMap;
-    use crate::ontology::simple::SimpleOntology;
+    use crate::ontology::axiom_mapped::AxiomMappedOntology;
 
-    pub fn read_ok<R: BufRead>(bufread: &mut R) -> (SimpleOntology, PrefixMapping) {
+    pub fn read_ok<R: BufRead>(bufread: &mut R) -> (AxiomMappedOntology, PrefixMapping) {
         let r = read(bufread);
         assert!(r.is_ok(), "Expected ontology, got failure:{:?}", r.err());
-        r.ok().unwrap()
+        let (o, m) = r.ok().unwrap();
+        (o.into(), m)
     }
 
     #[test]
@@ -1103,7 +1104,7 @@ pub mod test {
     fn test_simple_ontology() {
         let ont_s = include_str!("../../ont/owl-xml/ont.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
-
+        dbg!(&ont);
         assert_eq!(ont.id().iri.as_ref().unwrap().as_ref(),
                    "http://www.example.com/iri");
     }
@@ -1191,6 +1192,7 @@ pub mod test {
         let ont_s = include_str!("../../ont/owl-xml/oproperty.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
+        dbg!(&ont);
         assert_eq!(ont.declare_object_property().count(), 1);
     }
 

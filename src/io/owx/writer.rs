@@ -3,7 +3,10 @@ use curie::PrefixMapping;
 use crate::model::Kinded;
 use crate::model::*;
 use crate::vocab::Namespace::*;
-use crate::{ontology::simple::SimpleOntology, vocab::WithIRI};
+use crate::{
+    ontology::axiom_mapped::AxiomMappedOntology,
+    vocab::WithIRI
+};
 
 use quick_xml::events::BytesDecl;
 use quick_xml::events::BytesEnd;
@@ -23,7 +26,7 @@ use failure::Error;
 /// [XML](https://www.w3.org/TR/owl2-xml-serialization/) syntax.
 pub fn write(
     write: &mut dyn StdWrite,
-    ont: &SimpleOntology,
+    ont: &AxiomMappedOntology,
     mapping: Option<&PrefixMapping>,
 ) -> Result<(), Error> {
     let mut writer = Writer::new_with_indent(write, b' ', 4);
@@ -210,7 +213,7 @@ macro_rules! content0 {
     };
 }
 
-fn render_ont<W>(o: &SimpleOntology, w: &mut Writer<W>, m: &PrefixMapping) -> Result<(), Error>
+fn render_ont<W>(o: &AxiomMappedOntology, w: &mut Writer<W>, m: &PrefixMapping) -> Result<(), Error>
 where
     W: StdWrite,
 {
@@ -819,7 +822,7 @@ mod test {
 
     use self::mktemp::Temp;
     use super::*;
-    use crate::{io::owx::reader::*, ontology::simple::SimpleOntology};
+    use crate::{io::owx::reader::*};
 
     use std::collections::HashMap;
 
@@ -828,15 +831,16 @@ mod test {
     use std::io::BufReader;
     use std::io::BufWriter;
 
-    fn read_ok<R: BufRead>(bufread: &mut R) -> (SimpleOntology, PrefixMapping) {
+    fn read_ok<R: BufRead>(bufread: &mut R) -> (AxiomMappedOntology, PrefixMapping) {
         let r = read(bufread);
         assert!(r.is_ok(), "Expected ontology, got failure:{:?}", r.err());
-        r.ok().unwrap()
+        let (o, m) = r.ok().unwrap();
+        (o.into(), m)
     }
 
     #[test]
     fn test_ont_rt() {
-        let mut ont = SimpleOntology::new();
+        let mut ont = AxiomMappedOntology::new();
         let build = Build::new();
 
         let iri = build.iri("http://www.example.com/a".to_string());
@@ -851,8 +855,8 @@ mod test {
         assert_eq!(ont.id().iri, ont2.id().iri);
     }
 
-    fn roundtrip(ont: &str) -> (SimpleOntology, PrefixMapping,
-                                SimpleOntology, PrefixMapping) {
+    fn roundtrip(ont: &str) -> (AxiomMappedOntology, PrefixMapping,
+                                AxiomMappedOntology, PrefixMapping) {
         let (ont_orig, prefix_orig) = read_ok(&mut ont.as_bytes());
         let mut temp_file = Temp::new_file().unwrap();
 
@@ -867,14 +871,13 @@ mod test {
         let file = File::open(&temp_file).ok().unwrap();
 
         let (ont_round, prefix_round) = read_ok(&mut BufReader::new(&file));
-
         temp_file.release();
 
         return (ont_orig, prefix_orig, ont_round, prefix_round);
     }
 
-    fn assert_round(ont: &str) -> (SimpleOntology, PrefixMapping,
-                                   SimpleOntology, PrefixMapping) {
+    fn assert_round(ont: &str) -> (AxiomMappedOntology, PrefixMapping,
+                                   AxiomMappedOntology, PrefixMapping) {
         let (ont_orig, prefix_orig, ont_round, prefix_round) = roundtrip(ont);
 
         assert_eq!(ont_orig, ont_round);

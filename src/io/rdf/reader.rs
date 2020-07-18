@@ -11,7 +11,7 @@ use crate::model::*;
 use crate::vocab::WithIRI;
 use crate::vocab::OWL as VOWL;
 use crate::vocab::RDF as VRDF;
-use crate::{ontology::simple::SimpleOntology, vocab::RDFS as VRDFS};
+use crate::{ontology::axiom_mapped::AxiomMappedOntology, vocab::RDFS as VRDFS};
 
 use enum_meta::Meta;
 use failure::Error;
@@ -234,7 +234,7 @@ macro_rules! d {
 }
 
 struct OntologyParser<'a> {
-    o: SimpleOntology,
+    o: AxiomMappedOntology,
     b: &'a Build,
 
     simple: Vec<[Term; 3]>,
@@ -1362,7 +1362,7 @@ impl<'a> OntologyParser<'a> {
         }
     }
 
-    fn read(mut self, triple: Vec<[SpTerm; 3]>) -> Result<SimpleOntology, Error> {
+    fn read(mut self, triple: Vec<[SpTerm; 3]>) -> Result<AxiomMappedOntology, Error> {
         // move to our own Terms, with IRIs swapped
         let m = vocab_lookup();
         let triple: Vec<[Term; 3]> = triple
@@ -1493,7 +1493,7 @@ impl<'a> OntologyParser<'a> {
 pub fn read_with_build<R: BufRead>(
     bufread: &mut R,
     build: &Build,
-) -> Result<(SimpleOntology, PrefixMapping), Error> {
+) -> Result<(AxiomMappedOntology, PrefixMapping), Error> {
     eprintln!("sofia read");
     let triple_iter = sophia::parser::xml2::parse_bufread(bufread);
     let triple_result: Result<Vec<_>, _> = triple_iter.collect_triples();
@@ -1505,7 +1505,7 @@ pub fn read_with_build<R: BufRead>(
         .map(|o| return (o, PrefixMapping::default()));
 }
 
-pub fn read<R: BufRead>(bufread: &mut R) -> Result<(SimpleOntology, PrefixMapping), Error> {
+pub fn read<R: BufRead>(bufread: &mut R) -> Result<(AxiomMappedOntology, PrefixMapping), Error> {
     let b = Build::new();
     read_with_build(bufread, &b)
 }
@@ -1526,7 +1526,7 @@ mod test {
             .try_init();
     }
 
-    fn read_ok<R: BufRead>(bufread: &mut R) -> (SimpleOntology, PrefixMapping) {
+    fn read_ok<R: BufRead>(bufread: &mut R) -> (AxiomMappedOntology, PrefixMapping) {
         init_log();
 
         let r = read(bufread);

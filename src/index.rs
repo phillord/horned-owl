@@ -1,17 +1,20 @@
-use crate::{ontology::simple::SimpleOntology, model::*};
+use crate::ontology::axiom_mapped::AxiomMappedOntology;
+
+use crate::model::*;
 
 pub fn find_logically_equal_axiom<'a>(
-    o: &'a SimpleOntology,
+    o: &'a AxiomMappedOntology,
     axiom: &AnnotatedAxiom,
 ) -> Option<&'a AnnotatedAxiom> {
     // Find any axiom in Ontology which is the same as AnnotatedAxiom,
     // ignoring the Annotations
+    let o: &AxiomMappedOntology = o.into();
     o.annotated_axiom(axiom.kind())
         .find(|ax| ax.logical_eq(axiom))
 }
 
 // Find an axiom which is logically equal and merge it's annotations
-pub fn update_logically_equal_axiom<'a>(o: &mut SimpleOntology, mut axiom: AnnotatedAxiom) {
+pub fn update_logically_equal_axiom<'a>(o: &mut AxiomMappedOntology, mut axiom: AnnotatedAxiom) {
     let some_eq_axiom = find_logically_equal_axiom(o, &axiom);
 
     if let Some(eq_axiom) = some_eq_axiom.cloned() {
@@ -22,7 +25,7 @@ pub fn update_logically_equal_axiom<'a>(o: &mut SimpleOntology, mut axiom: Annot
     o.insert(axiom);
 }
 
-pub fn find_declaration_kind<'a>(o: &SimpleOntology, iri: &IRI) -> Option<NamedEntityKind> {
+pub fn find_declaration_kind<'a>(o: &AxiomMappedOntology, iri: &IRI) -> Option<NamedEntityKind> {
     match 10 {
         _ if find_logically_equal_axiom(o, &DeclareClass(Class(iri.clone())).into()).is_some() => {
             return Some(NamedEntityKind::Class)
@@ -70,7 +73,7 @@ pub fn find_declaration_kind<'a>(o: &SimpleOntology, iri: &IRI) -> Option<NamedE
     }
 }
 
-pub fn is_annotation_property(o: &SimpleOntology, iri: &IRI) -> bool {
+pub fn is_annotation_property(o: &AxiomMappedOntology, iri: &IRI) -> bool {
     match find_declaration_kind(o, iri) {
         Some(NamedEntityKind::AnnotationProperty) => true,
         _ => false,
@@ -85,7 +88,7 @@ mod test {
     #[test]
     fn test_find_equal_axiom() {
         let b = Build::new();
-        let mut o = SimpleOntology::new();
+        let mut o = AxiomMappedOntology::new();
 
         let c = b.class("http://www.example.com");
         o.declare(c);
@@ -109,7 +112,7 @@ mod test {
     fn test_update_equal_axiom() {
         let b = Build::new();
         {
-            let mut o = SimpleOntology::new();
+            let mut o = AxiomMappedOntology::new();
             let ne: NamedEntity = b.class("http://www.example.com").into();
             let ax: Axiom = ne.into();
             let mut dec: AnnotatedAxiom = ax.into();
@@ -134,7 +137,7 @@ mod test {
         }
 
         {
-            let mut o = SimpleOntology::new();
+            let mut o = AxiomMappedOntology::new();
             let ne: NamedEntity = b.class("http://www.example.com").into();
             let ax: Axiom = ne.into();
             let mut dec: AnnotatedAxiom = ax.into();
@@ -164,7 +167,7 @@ mod test {
     #[test]
     fn test_find_declaration_single() {
         let b = Build::new();
-        let mut o = SimpleOntology::new();
+        let mut o = AxiomMappedOntology::new();
 
         o.declare(b.class("http://www.example.com/c"));
         o.declare(b.object_property("http://www.example.com/ob"));

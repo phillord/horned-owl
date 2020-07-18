@@ -11,7 +11,9 @@ pub fn parse_path(path: &Path) -> Result<(SimpleOntology, PrefixMapping), Error>
 
     Ok(match path.extension().map(|s| s.to_str()).flatten() {
         Some("oxl") => super::io::owx::reader::read(&mut bufreader)?,
-        Some("owl") => super::io::rdf::reader::read(&mut bufreader)?,
+        Some("owl") =>
+            super::io::rdf::reader::read(&mut bufreader)
+            .map(|(o, m)| (o.into_iter().collect(), m))?,
         _ => todo!(),
     })
 }
@@ -72,7 +74,7 @@ pub mod naming {
 
 pub mod summary {
 
-    use crate::{ontology::simple::SimpleOntology, model::AxiomKind};
+    use crate::{ontology::axiom_mapped::AxiomMappedOntology, model::AxiomKind};
     use indexmap::map::IndexMap;
 
     #[derive(Debug)]
@@ -88,15 +90,17 @@ pub mod summary {
         }
     }
 
-    pub fn summarize(ont: &SimpleOntology) -> SummaryStatistics {
+    pub fn summarize<O: Into<AxiomMappedOntology>>(ont: O) -> SummaryStatistics where O:  {
+        let ont:AxiomMappedOntology = ont.into();
         SummaryStatistics {
-            logical_axiom: ont.into_iter().count(),
-            annotation_axiom: ont.into_iter().map(|aa| aa.ann.iter().count()).sum::<usize>(),
+            logical_axiom: ont.iter().count(),
+            annotation_axiom: ont.iter().map(|aa| aa.ann.iter().count()).sum::<usize>(),
             axiom_type: axiom_types(ont),
         }
     }
 
-    fn axiom_types(ont: &SimpleOntology) -> IndexMap<AxiomKind, usize> {
+    fn axiom_types<O: Into<AxiomMappedOntology>>(ont: O) -> IndexMap<AxiomKind, usize> {
+        let ont:AxiomMappedOntology = ont.into();
         let mut im = IndexMap::new();
         for ax in AxiomKind::all_kinds() {
             im.insert(ax, ont.axiom(ax).count());

@@ -1390,7 +1390,7 @@ impl From<Class> for Box<ClassExpression> {
 /// An ontology is identified by an IRI which is expected to remain
 /// stable over the lifetime of the ontology, and a version IRI which
 /// is expected to change between versions.
-#[derive(Debug, Default, Eq, PartialEq)]
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct OntologyID {
     pub iri: Option<IRI>,
     pub viri: Option<IRI>,
@@ -1419,7 +1419,9 @@ pub trait MutableOntology {
     where
         A: Into<AnnotatedAxiom>;
 
-    fn remove(&mut self, ax: &AnnotatedAxiom) -> bool;
+    fn remove(&mut self, ax: &AnnotatedAxiom) -> bool {
+        self.take(ax).is_some()
+    }
 
     fn take(&mut self, ax: &AnnotatedAxiom) -> Option<AnnotatedAxiom>;
 
@@ -1436,13 +1438,17 @@ pub trait MutableOntology {
     /// ```
     fn declare<N>(&mut self, ne: N) -> bool
     where
-        N: Into<NamedEntity>;
+        N: Into<NamedEntity> {
+        let ne: NamedEntity = ne.into();
+        let ax: Axiom = ne.into();
+        self.insert(ax)
+    }
 }
 
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::ontology::simple::*;
+    use crate::ontology::{axiom_mapped::AxiomMappedOntology};
 
     #[test]
     fn test_iri_from_string() {
@@ -1489,7 +1495,7 @@ mod test {
 
     #[test]
     fn test_class() {
-        let mut o = SimpleOntology::new();
+        let mut o = AxiomMappedOntology::new();
         let c = Build::new().class("http://www.example.com");
         o.insert(DeclareClass(c));
 
@@ -1500,7 +1506,7 @@ mod test {
     fn test_class_declare() {
         let c = Build::new().class("http://www.example.com");
 
-        let mut o = SimpleOntology::new();
+        let mut o = AxiomMappedOntology::new();
         o.declare(c);
 
         assert_eq!(o.declare_class().count(), 1);
