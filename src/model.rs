@@ -1495,21 +1495,21 @@ mod test {
 
     #[test]
     fn test_class() {
-        let mut o = AxiomMappedOntology::new();
+        let mut o = AxiomMappedOntology::default();
         let c = Build::new().class("http://www.example.com");
         o.insert(DeclareClass(c));
 
-        assert_eq!(o.declare_class().count(), 1);
+        assert_eq!(o.i().declare_class().count(), 1);
     }
 
     #[test]
     fn test_class_declare() {
         let c = Build::new().class("http://www.example.com");
 
-        let mut o = AxiomMappedOntology::new();
+        let mut o = AxiomMappedOntology::default();
         o.declare(c);
 
-        assert_eq!(o.declare_class().count(), 1);
+        assert_eq!(o.i().declare_class().count(), 1);
     }
 
     #[test]

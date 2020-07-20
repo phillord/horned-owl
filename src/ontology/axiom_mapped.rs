@@ -1,19 +1,18 @@
-use std::{
-    cell::RefCell,
-    collections::{BTreeMap, BTreeSet, VecDeque}
-};
-use std::iter::FromIterator;
-
-use crate::model::*;
-use super::simple::SimpleOntology;
-
-
 // Macro implementations. The core data model of horned is fairly
 // duplicative -- an axiom, for instance, has three different Rust
 // entities: a struct representing the data, an enum variant which can
 // contain the struct, and a empty enum variant that can be used to
 // describe one or the other of these types and operate as a key for
 // the kind.
+
+use std::{
+    cell::RefCell,
+    collections::{BTreeMap, BTreeSet, VecDeque},
+    rc::Rc,
+};
+use crate::model::*;
+use super::simple::SimpleOntology;
+use super::indexed::{OneIndexedOntology, OntologyIndex};
 
 /// Return all axioms of a specific `AxiomKind`
 #[allow(unused_macros)]
@@ -34,7 +33,7 @@ macro_rules! onimpl {
         onimpl!($kind, $method, stringify!($kind));
     };
     ($kind:ident, $method:ident, $skind:expr) => {
-        impl AxiomMappedOntology {
+        impl AxiomMappedIndex {
             #[doc = "Return all instances of"]
             #[doc = $skind]
             #[doc = "in the ontology."]
@@ -46,27 +45,24 @@ macro_rules! onimpl {
 }
 
 #[derive(Debug, Default, Eq, PartialEq)]
-pub struct AxiomMappedOntology {
-    id: OntologyID,
-    // The use an BTreeMap keyed on AxiomKind allows efficient
-    // retrieval of axioms. Otherwise, we'd have to iterate through
-    // the lot every time.
-    axiom: RefCell<BTreeMap<AxiomKind, BTreeSet<AnnotatedAxiom>>>,
+pub struct AxiomMappedIndex {
+    axiom: RefCell<BTreeMap<AxiomKind, BTreeSet<Rc<AnnotatedAxiom>>>>
 }
 
-impl AxiomMappedOntology {
+
+impl AxiomMappedIndex {
     /// Create a new ontology.
     ///
     /// # Examples
     /// ```
     /// # use horned_owl::ontology::axiom_mapped::AxiomMappedOntology;
-    /// let o = AxiomMappedOntology::new();
-    /// let o2 = AxiomMappedOntology::new();
+    /// let o = AxiomMappedOntology::default();
+    /// let o2 = AxiomMappedOntology::default();
     ///
     /// assert_eq!(o, o2);
     /// ```
-    pub fn new() -> AxiomMappedOntology {
-        AxiomMappedOntology::default()
+    pub fn new() -> AxiomMappedIndex {
+        AxiomMappedIndex::default()
     }
     /// Fetch the axioms hashmap as a raw pointer.
     ///
@@ -74,7 +70,7 @@ impl AxiomMappedOntology {
     /// instantiated, which means that it effects equality of the
     /// ontology. It should only be used where the intention is to
     /// update the ontology.
-    fn axioms_as_ptr(&self, axk: AxiomKind) -> *mut BTreeMap<AxiomKind, BTreeSet<AnnotatedAxiom>> {
+    fn axioms_as_ptr(&self, axk: AxiomKind) -> *mut BTreeMap<AxiomKind, BTreeSet<Rc<AnnotatedAxiom>>> {
         self.axiom
             .borrow_mut()
             .entry(axk)
@@ -83,17 +79,18 @@ impl AxiomMappedOntology {
     }
 
     /// Fetch the axioms for the given kind.
-    fn set_for_kind(&self, axk: AxiomKind) -> Option<&BTreeSet<AnnotatedAxiom>> {
+    fn set_for_kind(&self, axk: AxiomKind) -> Option<&BTreeSet<Rc<AnnotatedAxiom>>> {
         unsafe { (*self.axiom.as_ptr()).get(&axk) }
     }
 
     /// Fetch the axioms for given kind as a mutable ref.
-    fn mut_set_for_kind(&mut self, axk: AxiomKind) -> &mut BTreeSet<AnnotatedAxiom> {
+    fn mut_set_for_kind(&mut self, axk: AxiomKind) -> &mut BTreeSet<Rc<AnnotatedAxiom>> {
         unsafe { (*self.axioms_as_ptr(axk)).get_mut(&axk).unwrap() }
     }
 
     /// Gets an iterator that visits the annotated axioms of the ontology.
     pub fn iter(&self) -> SimpleIter {
+        // TODO -- what can't this just use flat_map?
         SimpleIter {
             ont: self,
             inner: None,
@@ -107,17 +104,22 @@ impl AxiomMappedOntology {
     /// ```
     /// # use horned_owl::model::*;
     /// # use horned_owl::ontology::axiom_mapped::AxiomMappedOntology;
-    /// let mut o = AxiomMappedOntology::new();
+    /// let mut o = AxiomMappedOntology::default();
     /// let b = Build::new();
     /// o.declare(b.class("http://www.example.com/a"));
     /// o.declare(b.object_property("http://www.example.com/r"));
     ///
-    /// assert_eq!(o.annotated_axiom(AxiomKind::DeclareClass).count(), 1);
+    /// assert_eq!(o.i().annotated_axiom(AxiomKind::DeclareClass).count(), 1);
     /// ```
     ///
     /// See also `axiom` for access to the `Axiom` without annotations.
     pub fn annotated_axiom(&self, axk: AxiomKind) -> impl Iterator<Item = &AnnotatedAxiom> {
-        self.set_for_kind(axk).into_iter().flat_map(|hs| hs.iter())
+        self.set_for_kind(axk)
+            // Iterate over option
+            .into_iter()
+            // flatten option iterator!
+            .flat_map(|hs| hs.iter())
+            .map(|rc| &**rc)
     }
 
     /// Fetch the Axiom for a given kind
@@ -126,22 +128,21 @@ impl AxiomMappedOntology {
     /// ```
     /// # use horned_owl::model::*;
     /// # use horned_owl::ontology::axiom_mapped::AxiomMappedOntology;
-    /// let mut o = AxiomMappedOntology::new();
+    /// let mut o = AxiomMappedOntology::default();
     /// let b = Build::new();
     /// o.declare(b.class("http://www.example.com/a"));
     /// o.declare(b.object_property("http://www.example.com/r"));
     ///
-    /// assert_eq!(o.axiom(AxiomKind::DeclareClass).count(), 1);
+    /// assert_eq!(o.i().axiom(AxiomKind::DeclareClass).count(), 1);
     /// ```
     ///
     /// See methods such as `declare_class` for access to the Axiom
     /// struct directly.
     pub fn axiom(&self, axk: AxiomKind) -> impl Iterator<Item = &Axiom> {
-        self.annotated_axiom(axk).map(|ann| &ann.axiom)
+        self.annotated_axiom(axk)
+            .map(|ann| &ann.axiom)
     }
-
 }
-
 // In the ideal world, we would have generated these onimpl! calls as
 // part of the axiom macro. This should be possible, as their is a
 // fixed relationship between the struct name and the method name.
@@ -195,23 +196,11 @@ onimpl! {AnnotationPropertyDomain, annotation_property_domain}
 onimpl! {AnnotationPropertyRange, annotation_property_range}
 
 
-impl Ontology for AxiomMappedOntology {
-    fn id(&self) -> &OntologyID {
-        &self.id
-    }
-
-    fn mut_id(&mut self) -> &mut OntologyID {
-        &mut self.id
-    }
-}
-
-
-
 /// An iterator over the annotated axioms of an `Ontology`.
 pub struct SimpleIter<'a> {
-    ont: &'a AxiomMappedOntology,
+    ont: &'a AxiomMappedIndex,
     kinds: VecDeque<&'a AxiomKind>,
-    inner: Option<<&'a BTreeSet<AnnotatedAxiom> as IntoIterator>::IntoIter>,
+    inner: Option<<&'a BTreeSet<Rc<AnnotatedAxiom>> as IntoIterator>::IntoIter>,
 }
 
 impl<'a> Iterator for SimpleIter<'a> {
@@ -227,14 +216,14 @@ impl<'a> Iterator for SimpleIter<'a> {
         if !self.kinds.is_empty() {
             let kind = self.kinds.pop_front().unwrap();
             self.inner = self.ont.set_for_kind(*kind).map(BTreeSet::iter);
-            self.next()
+            self.next().map(|rc| &*rc)
         } else {
             None
         }
     }
 }
 
-impl<'a> IntoIterator for &'a AxiomMappedOntology {
+impl<'a> IntoIterator for &'a AxiomMappedIndex {
     type Item = &'a AnnotatedAxiom;
     type IntoIter = SimpleIter<'a>;
     fn into_iter(self) -> Self::IntoIter {
@@ -246,128 +235,52 @@ impl<'a> IntoIterator for &'a AxiomMappedOntology {
     }
 }
 
-/// An owning iterator over the annotated axioms of an `Ontology`.
-pub struct SimpleIntoIter {
-    inner: <BTreeMap<AxiomKind, BTreeSet<AnnotatedAxiom>> as IntoIterator>::IntoIter,
-    current: Option<<BTreeSet<AnnotatedAxiom> as IntoIterator>::IntoIter>,
-}
-
-impl Iterator for SimpleIntoIter {
-    type Item = AnnotatedAxiom;
-    fn next(&mut self) -> Option<Self::Item> {
-        // Consume the current iterator if there are items left.
-        if let Some(ref mut it) = self.current {
-            if let Some(axiom) = it.next() {
-                return Some(axiom);
-            }
-        }
-        // Attempt to consume the iterator for the next axiom kind
-        if let Some((_, axioms)) = self.inner.next() {
-            self.current = Some(axioms.into_iter());
-            self.next()
-        } else {
-            None
-        }
-    }
-}
-
-impl IntoIterator for AxiomMappedOntology {
-    type Item = AnnotatedAxiom;
-    type IntoIter = SimpleIntoIter;
-    fn into_iter(self) -> Self::IntoIter {
-        SimpleIntoIter {
-            inner: self.axiom.into_inner().into_iter(),
-            current: None,
-        }
-    }
-}
-
-
-impl MutableOntology for AxiomMappedOntology {
-    /// Insert an axiom into the ontology.
-    ///
-    /// # Examples
-    /// ```
-    /// # use horned_owl::model::*;
-    /// # use horned_owl::ontology::axiom_mapped::AxiomMappedOntology;
-    /// let mut o = AxiomMappedOntology::new();
-    /// let b = Build::new();
-    /// o.insert(DeclareClass(b.class("http://www.example.com/a")));
-    /// o.insert(DeclareObjectProperty(b.object_property("http://www.example.com/r")));
-    /// ```
-    ///
-    /// See `declare` for an easier way to declare named entities.
-    fn insert<A>(&mut self, ax: A) -> bool
-    where
-        A: Into<AnnotatedAxiom>,
-    {
-        let ax: AnnotatedAxiom = ax.into();
-
+impl OntologyIndex for AxiomMappedIndex {
+    fn index_insert(&mut self, ax: Rc<AnnotatedAxiom>) -> bool {
         self.mut_set_for_kind(ax.kind()).insert(ax)
     }
 
-    fn remove(&mut self, ax: &AnnotatedAxiom) -> bool {
-        self.mut_set_for_kind(ax.kind()).remove(&ax)
+    fn index_take(&mut self, ax: &AnnotatedAxiom) -> Option<AnnotatedAxiom> {
+        self.mut_set_for_kind(ax.kind()).take(ax)
+            .map(|rcax|
+                 Rc::try_unwrap(rcax).unwrap_or_else (|rcax| (*rcax).clone())
+            )
     }
 
-    fn take(&mut self, ax: &AnnotatedAxiom) -> Option<AnnotatedAxiom> {
-        self.mut_set_for_kind(ax.kind()).take(&ax)
-    }
-
-    /// Declare an NamedEntity for the ontology.
-    ///
-    /// # Examples
-    /// ```
-    /// # use horned_owl::model::*;
-    /// # use horned_owl::ontology::axiom_mapped::AxiomMappedOntology;
-    /// let mut o = AxiomMappedOntology::new();
-    /// let b = Build::new();
-    /// o.declare(b.class("http://www.example.com/a"));
-    /// o.declare(b.object_property("http://www.example.com/r"));
-    /// ```
-    fn declare<N>(&mut self, ne: N) -> bool
-    where
-        N: Into<NamedEntity>,
-    {
-        let ne: NamedEntity = ne.into();
-        let ax: Axiom = ne.into();
-        self.insert(ax)
+    fn index_remove(&mut self, ax: &AnnotatedAxiom) -> bool {
+        self.mut_set_for_kind(ax.kind()).remove(ax)
     }
 }
 
+pub type AxiomMappedOntology = OneIndexedOntology<AxiomMappedIndex>;
 
-impl FromIterator<AnnotatedAxiom> for AxiomMappedOntology {
-    fn from_iter<I: IntoIterator<Item=AnnotatedAxiom>>(iter: I) -> Self {
-        let mut so = AxiomMappedOntology::default();
-
-        for i in iter {
-            so.insert(i);
-        }
-
-        so
-    }
-}
-
-impl<'a> FromIterator<&'a AnnotatedAxiom> for AxiomMappedOntology {
-    fn from_iter<I: IntoIterator<Item=&'a AnnotatedAxiom>>(iter: I) -> Self {
-        let mut so = AxiomMappedOntology::default();
-
-        for i in iter {
-            so.insert(i.clone());
-        }
-
-        so
+/// An owning iterator over the annotated axioms of an `Ontology`.
+impl IntoIterator for AxiomMappedOntology {
+    type Item = AnnotatedAxiom;
+    type IntoIter = std::vec::IntoIter<AnnotatedAxiom>;
+    fn into_iter(self) -> Self::IntoIter {
+        let btreemap = self.index().axiom.into_inner();
+        let v:Vec<AnnotatedAxiom> = btreemap.into_iter()
+            .map(|(_k,v)| v)
+            .flat_map(BTreeSet::into_iter)
+            .map(Rc::try_unwrap)
+            .map(Result::unwrap).collect();
+        v.into_iter()
     }
 }
 
 impl From<SimpleOntology> for AxiomMappedOntology {
     fn from(mut so: SimpleOntology) -> AxiomMappedOntology {
         let mut id = so.mut_id().clone();
-        let mut amo: AxiomMappedOntology = so.into_iter().collect();
+        let mut amo = AxiomMappedOntology::default();
+        for ax in so {
+            amo.insert(ax);
+        }
         std::mem::swap(amo.mut_id(), &mut id);
         amo
     }
 }
+
 
 #[cfg(test)]
 mod test {
@@ -376,14 +289,14 @@ mod test {
 
     #[test]
     fn test_ontology_cons() {
-        let _ = AxiomMappedOntology::new();
+        let _ = AxiomMappedOntology::default();
         assert!(true);
     }
 
     #[test]
     fn test_ontology_iter_empty() {
         // Empty ontologies should stop iteration right away
-        let mut it = AxiomMappedOntology::new().into_iter();
+        let mut it = AxiomMappedOntology::default().into_iter();
         assert_eq!(it.next(), None);
         assert_eq!(it.next(), None);
     }
@@ -392,7 +305,7 @@ mod test {
     fn test_ontology_into_iter() {
         // Setup
         let build = Build::new();
-        let mut o = AxiomMappedOntology::new();
+        let mut o = AxiomMappedOntology::default();
         let decl1 = DeclareClass(build.class("http://www.example.com#a"));
         let decl2 = DeclareClass(build.class("http://www.example.com#b"));
         let decl3 = DeclareClass(build.class("http://www.example.com#c"));
@@ -439,8 +352,8 @@ mod test {
     #[test]
     fn test_ontology_into_iter_empty() {
         // Empty ontologies should stop iteration right away
-        let o = AxiomMappedOntology::new();
-        let mut it = (&o).into_iter();
+        let o = AxiomMappedOntology::default();
+        let mut it = o.into_iter();
         assert_eq!(it.next(), None);
         assert_eq!(it.next(), None);
     }
@@ -449,7 +362,7 @@ mod test {
     fn test_ontology_iter() {
         // Setup
         let build = Build::new();
-        let mut o = AxiomMappedOntology::new();
+        let mut o = AxiomMappedOntology::default();
         let decl1 = DeclareClass(build.class("http://www.example.com#a"));
         let decl2 = DeclareClass(build.class("http://www.example.com#b"));
         let decl3 = DeclareClass(build.class("http://www.example.com#c"));
@@ -468,7 +381,7 @@ mod test {
         o.insert(decl3.clone());
 
         // Iteration is based on ascending order of axiom kinds.
-        let mut it = (&o).into_iter();
+        let mut it = (&o).i().iter();
         assert_eq!(
             it.next(),
             Some(&AnnotatedAxiom::from(Axiom::DeclareClass(decl1)))
@@ -492,6 +405,4 @@ mod test {
         assert_eq!(it.next(), None);
         assert_eq!(it.next(), None);
     }
-
-
 }

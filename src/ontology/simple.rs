@@ -118,7 +118,6 @@ impl FromIterator<AnnotatedAxiom> for SimpleOntology {
     }
 }
 
-
 #[cfg(test)]
 mod test {
     use super::SimpleOntology;

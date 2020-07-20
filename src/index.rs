@@ -9,7 +9,7 @@ pub fn find_logically_equal_axiom<'a>(
     // Find any axiom in Ontology which is the same as AnnotatedAxiom,
     // ignoring the Annotations
     let o: &AxiomMappedOntology = o.into();
-    o.annotated_axiom(axiom.kind())
+    o.i().annotated_axiom(axiom.kind())
         .find(|ax| ax.logical_eq(axiom))
 }
 
@@ -88,7 +88,7 @@ mod test {
     #[test]
     fn test_find_equal_axiom() {
         let b = Build::new();
-        let mut o = AxiomMappedOntology::new();
+        let mut o = AxiomMappedOntology::default();
 
         let c = b.class("http://www.example.com");
         o.declare(c);
@@ -112,7 +112,7 @@ mod test {
     fn test_update_equal_axiom() {
         let b = Build::new();
         {
-            let mut o = AxiomMappedOntology::new();
+            let mut o = AxiomMappedOntology::default();
             let ne: NamedEntity = b.class("http://www.example.com").into();
             let ax: Axiom = ne.into();
             let mut dec: AnnotatedAxiom = ax.into();
@@ -133,11 +133,11 @@ mod test {
 
             o.insert(dec);
             o.insert(dec2);
-            assert_eq!(o.iter().count(), 2);
+            assert_eq!(o.i().iter().count(), 2);
         }
 
         {
-            let mut o = AxiomMappedOntology::new();
+            let mut o = AxiomMappedOntology::default();
             let ne: NamedEntity = b.class("http://www.example.com").into();
             let ax: Axiom = ne.into();
             let mut dec: AnnotatedAxiom = ax.into();
@@ -156,9 +156,9 @@ mod test {
 
             o.insert(dec);
             update_logically_equal_axiom(&mut o, dec2);
-            assert_eq!(o.iter().count(), 1);
+            assert_eq!(o.i().iter().count(), 1);
 
-            let aa = o.iter().next().unwrap();
+            let aa = o.i().iter().next().unwrap();
 
             assert_eq!(aa.ann.iter().count(), 2);
         }
@@ -167,7 +167,7 @@ mod test {
     #[test]
     fn test_find_declaration_single() {
         let b = Build::new();
-        let mut o = AxiomMappedOntology::new();
+        let mut o = AxiomMappedOntology::default();
 
         o.declare(b.class("http://www.example.com/c"));
         o.declare(b.object_property("http://www.example.com/ob"));

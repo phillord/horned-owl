@@ -38,5 +38,5 @@ fn matcher(matches: ArgMatches) -> Result<(), Error> {
     let mut bufreader = BufReader::new(file);
     let (o, p) = read(&mut bufreader)?;
 
-    write(&mut stdout(), &o.into_iter().collect(), Some(&p))
+    write(&mut stdout(), &o.into(), Some(&p))
 }

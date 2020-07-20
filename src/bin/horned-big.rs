@@ -37,5 +37,5 @@ fn matcher(matches: ArgMatches) -> Result<(), Error> {
         o.declare(b.class(format!("https://www.example.com/o{}", i)));
     }
 
-    write(&mut stdout(), &o.into_iter().collect(), None)
+    write(&mut stdout(), &o.into(), None)
 }

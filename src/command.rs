@@ -93,8 +93,8 @@ pub mod summary {
     pub fn summarize<O: Into<AxiomMappedOntology>>(ont: O) -> SummaryStatistics where O:  {
         let ont:AxiomMappedOntology = ont.into();
         SummaryStatistics {
-            logical_axiom: ont.iter().count(),
-            annotation_axiom: ont.iter().map(|aa| aa.ann.iter().count()).sum::<usize>(),
+            logical_axiom: ont.i().iter().count(),
+            annotation_axiom: ont.i().iter().map(|aa| aa.ann.iter().count()).sum::<usize>(),
             axiom_type: axiom_types(ont),
         }
     }
@@ -103,7 +103,7 @@ pub mod summary {
         let ont:AxiomMappedOntology = ont.into();
         let mut im = IndexMap::new();
         for ax in AxiomKind::all_kinds() {
-            im.insert(ax, ont.axiom(ax).count());
+            im.insert(ax, ont.i().axiom(ax).count());
         }
 
         im

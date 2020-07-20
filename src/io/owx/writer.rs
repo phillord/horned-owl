@@ -231,7 +231,7 @@ where
     m.render(w, m)?;
 
     for axk in AxiomKind::all_kinds() {
-        for ax in o.annotated_axiom(axk) {
+        for ax in o.i().annotated_axiom(axk) {
             ax.render(w, m)?;
         }
     }
@@ -840,7 +840,7 @@ mod test {
 
     #[test]
     fn test_ont_rt() {
-        let mut ont = AxiomMappedOntology::new();
+        let mut ont = AxiomMappedOntology::default();
         let build = Build::new();
 
         let iri = build.iri("http://www.example.com/a".to_string());

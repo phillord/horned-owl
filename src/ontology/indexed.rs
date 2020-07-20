@@ -1,4 +1,4 @@
-use crate::model::{AnnotatedAxiom, MutableOntology};
+use crate::model::{AnnotatedAxiom, MutableOntology, OntologyID, Ontology};
 use std::rc::Rc;
 
 pub trait OntologyIndex {
@@ -9,15 +9,30 @@ pub trait OntologyIndex {
     fn index_take(&mut self, ax: &AnnotatedAxiom) -> Option<AnnotatedAxiom>;
 }
 
-pub struct OneIndexedOntology<I:OntologyIndex>(I);
+#[derive(Default, Debug, Eq, PartialEq)]
+pub struct OneIndexedOntology<I:OntologyIndex>(I, OntologyID);
 
 impl<I:OntologyIndex> OneIndexedOntology<I> {
     pub fn new(i: I) -> Self {
-        OneIndexedOntology(i)
+        OneIndexedOntology(i, Default::default())
     }
 
     pub fn i(&self) -> &I {
         &self.0
+    }
+
+    pub fn index(self) -> I {
+        self.0
+    }
+}
+
+impl<I:OntologyIndex> Ontology for OneIndexedOntology<I> {
+    fn id(&self) -> &OntologyID {
+        &self.1
+    }
+
+    fn mut_id(&mut self) -> &mut OntologyID {
+        &mut self.1
     }
 }
 
@@ -33,12 +48,11 @@ impl<I:OntologyIndex> MutableOntology for OneIndexedOntology<I> {
     }
 }
 
-
-pub struct TwoIndexedOntology<I:OntologyIndex, J: OntologyIndex> (I, J);
+pub struct TwoIndexedOntology<I:OntologyIndex, J: OntologyIndex> (I, J, OntologyID);
 
 impl<I:OntologyIndex, J: OntologyIndex> TwoIndexedOntology<I, J> {
     pub fn new(i: I, j: J) -> Self {
-        TwoIndexedOntology(i, j)
+        TwoIndexedOntology(i, j, Default::default())
     }
 
     pub fn i(&self) -> &I {
@@ -50,7 +64,17 @@ impl<I:OntologyIndex, J: OntologyIndex> TwoIndexedOntology<I, J> {
     }
 }
 
-impl<I:OntologyIndex, J: OntologyIndex> MutableOntology for TwoIndexedOntology<I, J> {
+impl<I:OntologyIndex, J:OntologyIndex> Ontology for TwoIndexedOntology<I, J> {
+    fn id(&self) -> &OntologyID {
+        &self.2
+    }
+
+    fn mut_id(&mut self) -> &mut OntologyID {
+        &mut self.2
+    }
+}
+
+impl<I:OntologyIndex, J:OntologyIndex> MutableOntology for TwoIndexedOntology<I, J> {
     fn insert<A:Into<AnnotatedAxiom>>(&mut self, ax: A) -> bool {
         let rc = Rc::new(ax.into());
         self.index_insert(rc)
@@ -73,3 +97,10 @@ impl<I: OntologyIndex, J: OntologyIndex> OntologyIndex for TwoIndexedOntology<I,
         self.1.index_take(ax).or(rtn)
     }
 }
+
+/*
+pub struct ThreeIndexedOntology<I:OntologyIndex,
+                                J: OntologyIndex,
+                                K: OntologyIndex>
+    (TwoIndexedOntology<I, TwoIndexedOntology<J, K>> );
+*/
