@@ -1,14 +1,7 @@
-Version 0.8.0
-=============
-
-For version 0.8.0, the main data model will be altered to make
-Ontology a trait. This will allow the different parsers to return
-different implementations.
-
 Version 0.9.0
 =============
 
-Implement an indexed ontology to allow rapid RDF parsing
+Implement `OntologyIndex`s to support rapid RDF parsing
 
 Version 0.10.0
 ==============
