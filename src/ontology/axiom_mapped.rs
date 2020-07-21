@@ -11,7 +11,7 @@ use std::{
     rc::Rc,
 };
 use crate::model::*;
-use super::simple::SimpleOntology;
+use super::set::SetOntology;
 use super::indexed::{OneIndexedOntology, OntologyIndex};
 
 /// Return all axioms of a specific `AxiomKind`
@@ -89,9 +89,9 @@ impl AxiomMappedIndex {
     }
 
     /// Gets an iterator that visits the annotated axioms of the ontology.
-    pub fn iter(&self) -> SimpleIter {
+    pub fn iter(&self) -> AxiomMappedIter {
         // TODO -- what can't this just use flat_map?
-        SimpleIter {
+        AxiomMappedIter {
             ont: self,
             inner: None,
             kinds: unsafe { (*self.axiom.as_ptr()).keys().collect() },
@@ -197,13 +197,13 @@ onimpl! {AnnotationPropertyRange, annotation_property_range}
 
 
 /// An iterator over the annotated axioms of an `Ontology`.
-pub struct SimpleIter<'a> {
+pub struct AxiomMappedIter<'a> {
     ont: &'a AxiomMappedIndex,
     kinds: VecDeque<&'a AxiomKind>,
     inner: Option<<&'a BTreeSet<Rc<AnnotatedAxiom>> as IntoIterator>::IntoIter>,
 }
 
-impl<'a> Iterator for SimpleIter<'a> {
+impl<'a> Iterator for AxiomMappedIter<'a> {
     type Item = &'a AnnotatedAxiom;
     fn next(&mut self) -> Option<Self::Item> {
         // Consume the current iterator if there are items left.
@@ -225,9 +225,9 @@ impl<'a> Iterator for SimpleIter<'a> {
 
 impl<'a> IntoIterator for &'a AxiomMappedIndex {
     type Item = &'a AnnotatedAxiom;
-    type IntoIter = SimpleIter<'a>;
+    type IntoIter = AxiomMappedIter<'a>;
     fn into_iter(self) -> Self::IntoIter {
-        SimpleIter {
+        AxiomMappedIter {
             ont: self,
             inner: None,
             kinds: unsafe { (*self.axiom.as_ptr()).keys().collect() },
@@ -269,8 +269,8 @@ impl IntoIterator for AxiomMappedOntology {
     }
 }
 
-impl From<SimpleOntology> for AxiomMappedOntology {
-    fn from(mut so: SimpleOntology) -> AxiomMappedOntology {
+impl From<SetOntology> for AxiomMappedOntology {
+    fn from(mut so: SetOntology) -> AxiomMappedOntology {
         let mut id = so.mut_id().clone();
         let mut amo = AxiomMappedOntology::default();
         for ax in so {

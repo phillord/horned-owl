@@ -4,7 +4,7 @@ use crate::model::*;
 
 
 #[derive(Debug, Default, Eq, PartialEq)]
-pub struct SimpleOntology {
+pub struct SetOntology {
     id: OntologyID,
     // The use an BTreeMap keyed on AxiomKind allows efficient
     // retrieval of axioms. Otherwise, we'd have to iterate through
@@ -12,28 +12,28 @@ pub struct SimpleOntology {
     axiom: HashSet<AnnotatedAxiom>,
 }
 
-impl SimpleOntology {
+impl SetOntology {
     /// Create a new ontology.
     ///
     /// # Examples
     /// ```
-    /// # use horned_owl::ontology::simple::SimpleOntology;
-    /// let o = SimpleOntology::new();
-    /// let o2 = SimpleOntology::new();
+    /// # use horned_owl::ontology::set::SetOntology;
+    /// let o = SetOntology::new();
+    /// let o2 = SetOntology::new();
     ///
     /// assert_eq!(o, o2);
     /// ```
-    pub fn new() -> SimpleOntology {
-        SimpleOntology::default()
+    pub fn new() -> SetOntology {
+        SetOntology::default()
     }
 
     /// Gets an iterator that visits the annotated axioms of the ontology.
-    pub fn iter(&self) -> SimpleIter<'_> {
-        SimpleIter(self.axiom.iter())
+    pub fn iter(&self) -> SetIter<'_> {
+        SetIter(self.axiom.iter())
     }
 }
 
-impl Ontology for SimpleOntology {
+impl Ontology for SetOntology {
     fn id(&self) -> &OntologyID {
         &self.id
     }
@@ -43,50 +43,50 @@ impl Ontology for SimpleOntology {
     }
 }
 
-pub struct SimpleIter<'a>(std::collections::hash_set::Iter<'a, AnnotatedAxiom>);
+pub struct SetIter<'a>(std::collections::hash_set::Iter<'a, AnnotatedAxiom>);
 
-impl<'a> Iterator for SimpleIter<'a> {
+impl<'a> Iterator for SetIter<'a> {
     type Item = &'a AnnotatedAxiom;
     fn next(&mut self) -> Option<Self::Item> {
         self.0.next()
     }
 }
 
-impl<'a> IntoIterator for &'a SimpleOntology {
+impl<'a> IntoIterator for &'a SetOntology {
     type Item = &'a AnnotatedAxiom;
-    type IntoIter = SimpleIter<'a>;
+    type IntoIter = SetIter<'a>;
     fn into_iter(self) -> Self::IntoIter {
         self.iter()
     }
 }
 
 /// An owning iterator over the annotated axioms of an `Ontology`.
-pub struct SimpleIntoIter(std::collections::hash_set::IntoIter<AnnotatedAxiom>);
+pub struct SetIntoIter(std::collections::hash_set::IntoIter<AnnotatedAxiom>);
 
-impl Iterator for SimpleIntoIter {
+impl Iterator for SetIntoIter {
     type Item = AnnotatedAxiom;
     fn next(&mut self) -> Option<Self::Item> {
        self.0.next()
     }
 }
 
-impl IntoIterator for SimpleOntology{
+impl IntoIterator for SetOntology{
     type Item = AnnotatedAxiom;
-    type IntoIter = SimpleIntoIter;
+    type IntoIter = SetIntoIter;
     fn into_iter(self) -> Self::IntoIter {
-        SimpleIntoIter(self.axiom.into_iter())
+        SetIntoIter(self.axiom.into_iter())
     }
 }
 
 
-impl MutableOntology for SimpleOntology {
+impl MutableOntology for SetOntology {
     /// Insert an axiom into the ontology.
     ///
     /// # Examples
     /// ```
     /// # use horned_owl::model::*;
-    /// # use horned_owl::ontology::simple::SimpleOntology;
-    /// let mut o = SimpleOntology::new();
+    /// # use horned_owl::ontology::set::SetOntology;
+    /// let mut o = SetOntology::new();
     /// let b = Build::new();
     /// o.insert(DeclareClass(b.class("http://www.example.com/a")));
     /// o.insert(DeclareObjectProperty(b.object_property("http://www.example.com/r")));
@@ -109,9 +109,9 @@ impl MutableOntology for SimpleOntology {
     }
 }
 
-impl FromIterator<AnnotatedAxiom> for SimpleOntology {
+impl FromIterator<AnnotatedAxiom> for SetOntology {
     fn from_iter<I: IntoIterator<Item=AnnotatedAxiom>>(iter: I) -> Self {
-        SimpleOntology {
+        SetOntology {
             id: Default::default(),
             axiom: HashSet::from_iter(iter)
         }
@@ -120,19 +120,19 @@ impl FromIterator<AnnotatedAxiom> for SimpleOntology {
 
 #[cfg(test)]
 mod test {
-    use super::SimpleOntology;
+    use super::SetOntology;
     use crate::model::*;
 
     #[test]
     fn test_ontology_cons() {
-        let _ = SimpleOntology::new();
+        let _ = SetOntology::new();
         assert!(true);
     }
 
     #[test]
     fn test_ontology_iter_empty() {
         // Empty ontologies should stop iteration right away
-        let mut it = SimpleOntology::new().into_iter();
+        let mut it = SetOntology::new().into_iter();
         assert_eq!(it.next(), None);
         assert_eq!(it.next(), None);
     }
@@ -141,7 +141,7 @@ mod test {
     fn test_ontology_into_iter() {
         // Setup
         let build = Build::new();
-        let mut o = SimpleOntology::new();
+        let mut o = SetOntology::new();
         let decl1 = DeclareClass(build.class("http://www.example.com#a"));
         let decl2 = DeclareClass(build.class("http://www.example.com#b"));
         let decl3 = DeclareClass(build.class("http://www.example.com#c"));
@@ -190,7 +190,7 @@ mod test {
     #[test]
     fn test_ontology_into_iter_empty() {
         // Empty ontologies should stop iteration right away
-        let o = SimpleOntology::new();
+        let o = SetOntology::new();
         let mut it = (&o).into_iter();
         assert_eq!(it.next(), None);
         assert_eq!(it.next(), None);
@@ -200,7 +200,7 @@ mod test {
     fn test_ontology_iter() {
         // Setup
         let build = Build::new();
-        let mut o = SimpleOntology::new();
+        let mut o = SetOntology::new();
         let decl1 = DeclareClass(build.class("http://www.example.com#a"));
         let decl2 = DeclareClass(build.class("http://www.example.com#b"));
         let decl3 = DeclareClass(build.class("http://www.example.com#c"));

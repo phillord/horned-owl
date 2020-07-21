@@ -1,11 +1,11 @@
-use crate::ontology::simple::SimpleOntology;
+use crate::ontology::set::SetOntology;
 use curie::PrefixMapping;
 
 use failure::Error;
 
 use std::{fs::File, io::BufReader, path::Path};
 
-pub fn parse_path(path: &Path) -> Result<(SimpleOntology, PrefixMapping), Error> {
+pub fn parse_path(path: &Path) -> Result<(SetOntology, PrefixMapping), Error> {
     let file = File::open(&path)?;
     let mut bufreader = BufReader::new(file);
 

@@ -1407,8 +1407,8 @@ pub trait MutableOntology {
     /// # Examples
     /// ```
     /// # use horned_owl::model::*;
-    /// # use horned_owl::ontology::simple::SimpleOntology;
-    /// let mut o = SimpleOntology::new();
+    /// # use horned_owl::ontology::set::SetOntology;
+    /// let mut o = SetOntology::new();
     /// let b = Build::new();
     /// o.insert(DeclareClass(b.class("http://www.example.com/a")));
     /// o.insert(DeclareObjectProperty(b.object_property("http://www.example.com/r")));
@@ -1430,8 +1430,8 @@ pub trait MutableOntology {
     /// # Examples
     /// ```
     /// # use horned_owl::model::*;
-    /// # use horned_owl::ontology::simple::SimpleOntology;
-    /// let mut o = SimpleOntology::new();
+    /// # use horned_owl::ontology::set::SetOntology;
+    /// let mut o = SetOntology::new();
     /// let b = Build::new();
     /// o.declare(b.class("http://www.example.com/a"));
     /// o.declare(b.object_property("http://www.example.com/r"));

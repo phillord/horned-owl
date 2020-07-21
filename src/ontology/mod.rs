@@ -2,7 +2,7 @@
 // Different ontology implementations
 pub mod axiom_mapped;
 pub mod indexed;
-pub mod simple;
+pub mod set;
 
 // There isn't a very formal interface here, but a set of traits that
 // can be implemented.

@@ -4,7 +4,7 @@ use crate::model::*;
 use crate::vocab::Namespace::*;
 use crate::vocab::OWL2Datatype;
 use crate::vocab::WithIRI;
-use crate::{ontology::simple::SimpleOntology, vocab::OWL};
+use crate::{ontology::set::SetOntology, vocab::OWL};
 
 use std::borrow::Cow;
 use std::collections::BTreeSet;
@@ -59,7 +59,7 @@ where
     ns_buf: Vec<u8>,
 }
 
-pub fn read<R: BufRead>(bufread: &mut R) -> Result<(SimpleOntology, PrefixMapping), Error> {
+pub fn read<R: BufRead>(bufread: &mut R) -> Result<(SetOntology, PrefixMapping), Error> {
     let b = Build::new();
     read_with_build(bufread, &b)
 }
@@ -67,9 +67,9 @@ pub fn read<R: BufRead>(bufread: &mut R) -> Result<(SimpleOntology, PrefixMappin
 pub fn read_with_build<R: BufRead>(
     bufread: &mut R,
     build: &Build,
-) -> Result<(SimpleOntology, PrefixMapping), Error> {
+) -> Result<(SetOntology, PrefixMapping), Error> {
     let reader: Reader<&mut R> = Reader::from_reader(bufread);
-    let mut ont = SimpleOntology::default();
+    let mut ont = SetOntology::default();
     let mapping = PrefixMapping::default();
 
     let mut r = Read {
