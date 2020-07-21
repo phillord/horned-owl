@@ -12,7 +12,12 @@ use std::{
 };
 use crate::model::*;
 use super::set::SetOntology;
-use super::indexed::{OneIndexedOntology, OntologyIndex};
+
+use super::indexed::{
+    OneIndexedOntology,
+    OntologyIndex,
+    rc_unwrap_or_clone,
+};
 
 /// Return all axioms of a specific `AxiomKind`
 #[allow(unused_macros)]
@@ -242,9 +247,7 @@ impl OntologyIndex for AxiomMappedIndex {
 
     fn index_take(&mut self, ax: &AnnotatedAxiom) -> Option<AnnotatedAxiom> {
         self.mut_set_for_kind(ax.kind()).take(ax)
-            .map(|rcax|
-                 Rc::try_unwrap(rcax).unwrap_or_else (|rcax| (*rcax).clone())
-            )
+            .map(rc_unwrap_or_clone)
     }
 
     fn index_remove(&mut self, ax: &AnnotatedAxiom) -> bool {

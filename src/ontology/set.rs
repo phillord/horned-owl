@@ -1,7 +1,7 @@
-use std::{collections::HashSet, iter::FromIterator};
+use std::{collections::HashSet, iter::FromIterator, rc::Rc};
 
+use super::indexed::{rc_unwrap_or_clone, OntologyIndex};
 use crate::model::*;
-
 
 #[derive(Debug, Default, Eq, PartialEq)]
 pub struct SetOntology {
@@ -66,18 +66,17 @@ pub struct SetIntoIter(std::collections::hash_set::IntoIter<AnnotatedAxiom>);
 impl Iterator for SetIntoIter {
     type Item = AnnotatedAxiom;
     fn next(&mut self) -> Option<Self::Item> {
-       self.0.next()
+        self.0.next()
     }
 }
 
-impl IntoIterator for SetOntology{
+impl IntoIterator for SetOntology {
     type Item = AnnotatedAxiom;
     type IntoIter = SetIntoIter;
     fn into_iter(self) -> Self::IntoIter {
         SetIntoIter(self.axiom.into_iter())
     }
 }
-
 
 impl MutableOntology for SetOntology {
     /// Insert an axiom into the ontology.
@@ -110,18 +109,59 @@ impl MutableOntology for SetOntology {
 }
 
 impl FromIterator<AnnotatedAxiom> for SetOntology {
-    fn from_iter<I: IntoIterator<Item=AnnotatedAxiom>>(iter: I) -> Self {
+    fn from_iter<I: IntoIterator<Item = AnnotatedAxiom>>(iter: I) -> Self {
         SetOntology {
             id: Default::default(),
-            axiom: HashSet::from_iter(iter)
+            axiom: HashSet::from_iter(iter),
         }
     }
 }
 
+#[derive(Debug, Default, Eq, PartialEq)]
+pub struct SetIndex(HashSet<Rc<AnnotatedAxiom>>);
+
+impl OntologyIndex for SetIndex {
+    fn index_insert(&mut self, ax: Rc<AnnotatedAxiom>) -> bool {
+        self.0.insert(ax)
+    }
+
+    fn index_take(&mut self, ax: &AnnotatedAxiom) -> Option<AnnotatedAxiom> {
+        self.0.take(ax).map(rc_unwrap_or_clone)
+    }
+
+    fn index_remove(&mut self, ax: &AnnotatedAxiom) -> bool {
+        self.0.remove(ax)
+    }
+}
+
+impl IntoIterator for SetIndex {
+    type Item = AnnotatedAxiom;
+    type IntoIter = std::vec::IntoIter<AnnotatedAxiom>;
+    fn into_iter(self) -> Self::IntoIter {
+        let v:Vec<AnnotatedAxiom> = self.0.into_iter()
+            .map(Rc::try_unwrap)
+            .map(Result::unwrap)
+            .collect();
+        v.into_iter()
+    }
+}
+
+impl<'a> IntoIterator for &'a SetIndex {
+    type Item = &'a AnnotatedAxiom;
+    type IntoIter = std::vec::IntoIter<&'a AnnotatedAxiom>;
+    fn into_iter(self) -> Self::IntoIter {
+        let v:Vec<&'a AnnotatedAxiom> = self.0.iter()
+            .map(|rcax| &**rcax)
+            .collect();
+        v.into_iter()
+    }
+}
+
+
 #[cfg(test)]
 mod test {
-    use super::SetOntology;
-    use crate::model::*;
+    use super::{SetIndex, SetOntology};
+    use crate::{ontology::indexed::OneIndexedOntology, model::*};
 
     #[test]
     fn test_ontology_cons() {
@@ -160,7 +200,7 @@ mod test {
         o.insert(decl3.clone());
 
         // Iteration is based on ascending order of axiom kinds.
-        let mut v:Vec<_> = o.into_iter().collect();
+        let mut v: Vec<_> = o.into_iter().collect();
         v.sort();
         let mut it = v.into_iter();
         assert_eq!(
@@ -219,7 +259,7 @@ mod test {
         o.insert(decl3.clone());
 
         // Iteration is set based so undefined in order. So, sort first.
-        let mut v:Vec<_> = (&o).into_iter().collect();
+        let mut v: Vec<_> = (&o).into_iter().collect();
         v.sort();
         let mut it = v.into_iter();
         assert_eq!(
@@ -247,4 +287,126 @@ mod test {
     }
 
 
+    #[test]
+    fn test_index_cons() {
+        let _ = SetIndex::default();
+        assert!(true);
+    }
+
+    #[test]
+    fn test_index_iter_empty() {
+        // Empty ontologies should stop iteration right away
+        let mut it = SetIndex::default().into_iter();
+        assert_eq!(it.next(), None);
+        assert_eq!(it.next(), None);
+    }
+
+    #[test]
+    fn test_index_into_iter() {
+        // Setup
+        let build = Build::new();
+        let mut o = OneIndexedOntology::new(SetIndex::default());
+        let decl1 = DeclareClass(build.class("http://www.example.com#a"));
+        let decl2 = DeclareClass(build.class("http://www.example.com#b"));
+        let decl3 = DeclareClass(build.class("http://www.example.com#c"));
+        let disj1 = DisjointClasses(vec![
+            ClassExpression::Class(build.class("http://www.example.com#a")),
+            ClassExpression::Class(build.class("http://www.example.com#b")),
+        ]);
+        let disj2 = DisjointClasses(vec![
+            ClassExpression::Class(build.class("http://www.example.com#b")),
+            ClassExpression::Class(build.class("http://www.example.com#c")),
+        ]);
+        o.insert(disj1.clone());
+        o.insert(disj2.clone());
+        o.insert(decl1.clone());
+        o.insert(decl2.clone());
+        o.insert(decl3.clone());
+
+        // Iteration is based on ascending order of axiom kinds.
+        let mut v: Vec<_> = o.index().into_iter().collect();
+        v.sort();
+        let mut it = v.into_iter();
+        assert_eq!(
+            it.next(),
+            Some(AnnotatedAxiom::from(Axiom::DeclareClass(decl1)))
+        );
+        assert_eq!(
+            it.next(),
+            Some(AnnotatedAxiom::from(Axiom::DeclareClass(decl2)))
+        );
+        assert_eq!(
+            it.next(),
+            Some(AnnotatedAxiom::from(Axiom::DeclareClass(decl3)))
+        );
+        assert_eq!(
+            it.next(),
+            Some(AnnotatedAxiom::from(Axiom::DisjointClasses(disj1)))
+        );
+        assert_eq!(
+            it.next(),
+            Some(AnnotatedAxiom::from(Axiom::DisjointClasses(disj2)))
+        );
+        assert_eq!(it.next(), None);
+        assert_eq!(it.next(), None);
+    }
+
+    #[test]
+    fn test_index_into_iter_empty() {
+        // Empty ontologies should stop iteration right away
+        let o = OneIndexedOntology::new(SetIndex::default());
+        let mut it = o.i().into_iter();
+        assert_eq!(it.next(), None);
+        assert_eq!(it.next(), None);
+    }
+
+    #[test]
+    fn test_index_iter() {
+        // Setup
+        let build = Build::new();
+        let mut o = OneIndexedOntology::new(SetIndex::default());
+        let decl1 = DeclareClass(build.class("http://www.example.com#a"));
+        let decl2 = DeclareClass(build.class("http://www.example.com#b"));
+        let decl3 = DeclareClass(build.class("http://www.example.com#c"));
+        let disj1 = DisjointClasses(vec![
+            ClassExpression::Class(build.class("http://www.example.com#a")),
+            ClassExpression::Class(build.class("http://www.example.com#b")),
+        ]);
+        let disj2 = DisjointClasses(vec![
+            ClassExpression::Class(build.class("http://www.example.com#b")),
+            ClassExpression::Class(build.class("http://www.example.com#c")),
+        ]);
+        o.insert(disj1.clone());
+        o.insert(disj2.clone());
+        o.insert(decl1.clone());
+        o.insert(decl2.clone());
+        o.insert(decl3.clone());
+
+        // Iteration is set based so undefined in order. So, sort first.
+        let mut v: Vec<_> = o.i().into_iter().collect();
+        v.sort();
+        let mut it = v.into_iter();
+        assert_eq!(
+            it.next(),
+            Some(&AnnotatedAxiom::from(Axiom::DeclareClass(decl1)))
+        );
+        assert_eq!(
+            it.next(),
+            Some(&AnnotatedAxiom::from(Axiom::DeclareClass(decl2)))
+        );
+        assert_eq!(
+            it.next(),
+            Some(&AnnotatedAxiom::from(Axiom::DeclareClass(decl3)))
+        );
+        assert_eq!(
+            it.next(),
+            Some(&AnnotatedAxiom::from(Axiom::DisjointClasses(disj1)))
+        );
+        assert_eq!(
+            it.next(),
+            Some(&AnnotatedAxiom::from(Axiom::DisjointClasses(disj2)))
+        );
+        assert_eq!(it.next(), None);
+        assert_eq!(it.next(), None);
+    }
 }

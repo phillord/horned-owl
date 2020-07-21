@@ -104,3 +104,10 @@ pub struct ThreeIndexedOntology<I:OntologyIndex,
                                 K: OntologyIndex>
     (TwoIndexedOntology<I, TwoIndexedOntology<J, K>> );
 */
+
+
+
+// Utility
+pub (crate) fn rc_unwrap_or_clone(rcax:Rc<AnnotatedAxiom>) -> AnnotatedAxiom {
+    Rc::try_unwrap(rcax).unwrap_or_else(|rcax| (*rcax).clone())
+}
