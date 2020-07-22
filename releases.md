@@ -1,4 +1,4 @@
-Version 0.8.0
+Version 0.7.0
 =============
 
 `Ontology` and `MutableOntology` are now traits, allowing different
@@ -18,9 +18,10 @@ More specifically:
    `SetIndex` is also available which is composable with other
    indexes.
 
+TODO: Rename sub_class to sub_class_of in AxiomMappedIndex
 
 
-Version 0.7.0
+Version 0.6.0
 =============
 
 ## Functionally complete OWL/RDF parser.

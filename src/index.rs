@@ -1,3 +1,8 @@
+//! Search facilities for Ontologies
+//!
+//! This library provides simple search facilities.
+//!
+//! It is currently being deprecated in favour of [`OntologyIndex`](../ontology/indexed/OntologyIndex.html)
 use crate::ontology::axiom_mapped::AxiomMappedOntology;
 
 use crate::model::*;

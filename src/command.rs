@@ -1,3 +1,4 @@
+//! Support for Horned command line programmes
 use crate::ontology::set::SetOntology;
 use curie::PrefixMapping;
 

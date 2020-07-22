@@ -1,3 +1,4 @@
+//! Standard Vocabularies for OWL
 use self::Namespace::*;
 use enum_meta::*;
 

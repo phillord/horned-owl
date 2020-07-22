@@ -1,4 +1,21 @@
-//! This module implements the basic data data structre for OWL2.
+//! This module implements the basic data data structure for OWL2.
+
+//! # Overview
+//!
+//! This module consists of a core data model, most of which are
+//! concrete implementations.
+//!
+//! An `Ontology` is represented with an interface similar to a
+//! `HashSet` but using a trait. No methods are provided to search or
+//! access the contents of an `Ontology` which are instead provided by
+//! [implementations](../ontology/index.html). Each `Ontology` is a set of
+//! `AnnotatedAxiom` instances, which consists of an `Axiom` and a set
+//! of `Annotation`. The `Axiom` itself is a large enum representing
+//! the different axioms that OWL2 supports.
+
+//! Efficiency is gained from the use of an IRI which is a newtype
+//! over an `Rc<String>`.
+
 
 //! # Naming
 //!
@@ -1145,6 +1162,7 @@ impl From<ObjectPropertyExpression> for SubObjectPropertyExpression {
     }
 }
 
+/// A property expression
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum PropertyExpression {
     ObjectPropertyExpression(ObjectPropertyExpression),
@@ -1396,11 +1414,13 @@ pub struct OntologyID {
     pub viri: Option<IRI>,
 }
 
+/// Access or change the `OntologyID` of an `Ontology`
 pub trait Ontology {
     fn id(&self) -> &OntologyID;
     fn mut_id(&mut self) -> &mut OntologyID;
 }
 
+/// Add or remove axioms to an `MutableOntology`
 pub trait MutableOntology {
     /// Insert an axiom into the ontology.
     ///

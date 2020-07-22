@@ -3,13 +3,14 @@ extern crate bencher;
 extern crate horned_owl;
 
 use horned_owl::model::*;
+use horned_owl::ontology::set::*;
 
 use bencher::Bencher;
 
 fn a_thousand_classes(bench: &mut Bencher) {
     bench.iter(|| {
         let b = Build::default();
-        let mut o = Ontology::new();
+        let mut o = SetOntology::new();
         for m in 1..1000 {
             let i = b.iri(format!("http://example.com/b{}", m));
             let _c = o.declare(b.class(i));
@@ -19,20 +20,20 @@ fn a_thousand_classes(bench: &mut Bencher) {
 
 fn big_tree(bench: &mut Bencher) {
     bench.iter(|| {
-        let mut o = Ontology::new();
+        let mut o = SetOntology::new();
         let mut i = 10_000;
         create_tree(&mut o, &mut i);
     })
 }
 
-fn create_tree(o: &mut Ontology, n: &mut i32) {
+fn create_tree(o: &mut SetOntology, n: &mut i32) {
     let b = Build::default();
     let i = b.iri(format!("http://example.com/a{}", n));
     let c = b.class(i);
     create_tree_0(o, vec![c], n);
 }
 
-fn create_tree_0(o: &mut Ontology, current: Vec<Class>, remaining: &mut i32) {
+fn create_tree_0(o: &mut SetOntology, current: Vec<Class>, remaining: &mut i32) {
     let b = Build::default();
     let mut next = vec![];
 
@@ -66,7 +67,7 @@ fn create_tree_0(o: &mut Ontology, current: Vec<Class>, remaining: &mut i32) {
 fn is_subclass_with_many_direct_subclasses(bench: &mut Bencher) {
     bench.iter(|| {
         let b = Build::default();
-        let mut o = Ontology::new();
+        let mut o = SetOntology::new();
         let i = b.iri("http://example.com/a".to_string());
         let c = b.class(i);
 
@@ -104,10 +105,11 @@ fn io_read(bench: &mut Bencher) {
         let f = File::open("benches/ont/o100.owl").ok().unwrap();
         let mut f = BufReader::new(f);
 
-        horned_owl::io::reader::read(&mut f).ok();
+        horned_owl::io::owx::reader::read(&mut f).ok();
     })
 }
 
 benchmark_group!(iobenches, io_read);
 
 benchmark_main!(benches, iobenches);
+

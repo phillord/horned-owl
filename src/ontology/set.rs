@@ -1,8 +1,15 @@
+//! Rapid, simple, in-memory `Ontology` and `OntologyIndex`
 use std::{collections::HashSet, iter::FromIterator, rc::Rc};
 
 use super::indexed::{rc_unwrap_or_clone, OntologyIndex};
 use crate::model::*;
 
+/// An Ontology backed by a set. This should be the fastest and least
+/// overhead implementation of an ontology. It provides rapid testing
+/// of whether an equivalent axiom exists, and is iterable.
+///
+/// It should be more rapid that the using `SetIndex` inside
+/// `OneIndexedOntology`, as it involves no `Rc` overhead.
 #[derive(Debug, Default, Eq, PartialEq)]
 pub struct SetOntology {
     id: OntologyID,
@@ -43,6 +50,7 @@ impl Ontology for SetOntology {
     }
 }
 
+/// An Interator for `SetOntology`
 pub struct SetIter<'a>(std::collections::hash_set::Iter<'a, AnnotatedAxiom>);
 
 impl<'a> Iterator for SetIter<'a> {
@@ -117,6 +125,9 @@ impl FromIterator<AnnotatedAxiom> for SetOntology {
     }
 }
 
+/// An `OntologyIndex` implemented over an in-memory HashSet. When
+/// combined with an `IndexedOntology` this should be nearly as
+/// fastest as `SetOntology`.
 #[derive(Debug, Default, Eq, PartialEq)]
 pub struct SetIndex(HashSet<Rc<AnnotatedAxiom>>);
 

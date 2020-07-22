@@ -1,10 +1,15 @@
-// Macro implementations. The core data model of horned is fairly
-// duplicative -- an axiom, for instance, has three different Rust
-// entities: a struct representing the data, an enum variant which can
-// contain the struct, and a empty enum variant that can be used to
-// describe one or the other of these types and operate as a key for
-// the kind.
+//! Access `AnnotatedAxiom` by their kind.
 
+//! # Overview
+//!
+//! This module provides an `AxiomMappedIndex` which provides rapid
+//! access to all axioms of a given type.
+//!
+//! As well as being iterable, it provides `axiom` and
+//! `annotated_axiom` which iterate over a particular `AxiomKind` of
+//! `Axiom` or `AnnotatedAxiom`, or methods such as `sub_class_of`, or
+//! `object_property_domain` which iterate over `SubClassOf` or
+//! `ObjectPropertyDomain` axioms respectively.
 use std::{
     cell::RefCell,
     collections::{BTreeMap, BTreeSet, VecDeque},
