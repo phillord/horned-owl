@@ -168,7 +168,7 @@ onimpl! {DeclareAnnotationProperty, declare_annotation_property}
 onimpl! {DeclareDataProperty, declare_data_property}
 onimpl! {DeclareNamedIndividual, declare_named_individual}
 onimpl! {DeclareDatatype, declare_datatype}
-onimpl! {SubClassOf, sub_class}
+onimpl! {SubClassOf, sub_class_of}
 onimpl! {EquivalentClasses, equivalent_class}
 onimpl! {DisjointClasses, disjoint_class}
 onimpl! {DisjointUnion, disjoint_union}

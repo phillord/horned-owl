@@ -1201,7 +1201,7 @@ pub mod test {
         let ont_s = include_str!("../../ont/owl-xml/subclass.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
-        assert_eq!(ont.i().sub_class().count(), 1);
+        assert_eq!(ont.i().sub_class_of().count(), 1);
     }
 
     #[test]
@@ -1218,7 +1218,7 @@ pub mod test {
         let ont_s = include_str!("../../ont/owl-xml/some.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
-        assert_eq!(ont.i().sub_class().count(), 1);
+        assert_eq!(ont.i().sub_class_of().count(), 1);
         assert_eq!(ont.i().declare_object_property().count(), 1);
     }
 
@@ -1227,8 +1227,8 @@ pub mod test {
         let ont_s = include_str!("../../ont/owl-xml/some-not.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
-        assert_eq!(ont.i().sub_class().count(), 1);
-        let sc: &SubClassOf = ont.i().sub_class().next().unwrap();
+        assert_eq!(ont.i().sub_class_of().count(), 1);
+        let sc: &SubClassOf = ont.i().sub_class_of().next().unwrap();
         match &sc.sup {
             ClassExpression::ObjectSomeValuesFrom { ope: _, bce } => {
                 matches!(**bce, ClassExpression::ObjectComplementOf(_));
@@ -1244,7 +1244,7 @@ pub mod test {
         let ont_s = include_str!("../../ont/owl-xml/only.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
-        assert_eq!(ont.i().sub_class().count(), 1);
+        assert_eq!(ont.i().sub_class_of().count(), 1);
         assert_eq!(ont.i().declare_class().count(), 2);
         assert_eq!(ont.i().declare_object_property().count(), 1);
     }
@@ -1254,9 +1254,9 @@ pub mod test {
         let ont_s = include_str!("../../ont/owl-xml/and.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
-        assert_eq!(ont.i().sub_class().count(), 1);
+        assert_eq!(ont.i().sub_class_of().count(), 1);
 
-        let sc = ont.i().sub_class().next().unwrap();
+        let sc = ont.i().sub_class_of().next().unwrap();
         assert!(matches!(&sc.sup, ClassExpression::ObjectIntersectionOf(_)));
     }
 
@@ -1265,9 +1265,9 @@ pub mod test {
         let ont_s = include_str!("../../ont/owl-xml/or.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
-        assert_eq!(ont.i().sub_class().count(), 1);
+        assert_eq!(ont.i().sub_class_of().count(), 1);
 
-        let sc = ont.i().sub_class().next().unwrap();
+        let sc = ont.i().sub_class_of().next().unwrap();
         assert!(matches!(&sc.sup, ClassExpression::ObjectUnionOf(_)));
     }
 
@@ -1276,7 +1276,7 @@ pub mod test {
         let ont_s = include_str!("../../ont/owl-xml/not.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
-        assert_eq!(ont.i().sub_class().count(), 1);
+        assert_eq!(ont.i().sub_class_of().count(), 1);
     }
 
     #[test]
@@ -1507,7 +1507,7 @@ pub mod test {
         let ont_s = include_str!("../../ont/owl-xml/object-has-value.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
-        let ss = ont.i().sub_class().next().unwrap();
+        let ss = ont.i().sub_class_of().next().unwrap();
         if let ClassExpression::ObjectHasValue { ope: _, i: _ } = ss.sup {
             return;
         }
@@ -1519,7 +1519,7 @@ pub mod test {
         let ont_s = include_str!("../../ont/owl-xml/object-one-of.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
-        let ss = ont.i().sub_class().next().unwrap();
+        let ss = ont.i().sub_class_of().next().unwrap();
         if let ClassExpression::ObjectOneOf(ref o) = ss.sub {
             assert_eq!(o.len(), 2);
         }
@@ -1530,7 +1530,7 @@ pub mod test {
         let ont_s = include_str!("../../ont/owl-xml/object-has-self.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
-        let ss = ont.i().sub_class().next().unwrap();
+        let ss = ont.i().sub_class_of().next().unwrap();
         match ss.sup {
             ClassExpression::ObjectHasSelf(ObjectPropertyExpression::ObjectProperty(ref op)) => {
                 assert_eq!(String::from(op), "http://example.com/iri#o")
@@ -1546,10 +1546,10 @@ pub mod test {
         let ont_s = include_str!("../../ont/owl-xml/some-inverse.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
-        assert_eq!(ont.i().sub_class().count(), 1);
+        assert_eq!(ont.i().sub_class_of().count(), 1);
         assert_eq!(ont.i().declare_object_property().count(), 1);
 
-        let sc = ont.i().sub_class().next().unwrap();
+        let sc = ont.i().sub_class_of().next().unwrap();
         let some = &sc.sup;
 
         assert_eq!(
@@ -1569,10 +1569,10 @@ pub mod test {
         let ont_s = include_str!("../../ont/owl-xml/object-min-cardinality.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
-        assert_eq!(ont.i().sub_class().count(), 1);
+        assert_eq!(ont.i().sub_class_of().count(), 1);
         assert_eq!(ont.i().declare_object_property().count(), 1);
 
-        let sc = ont.i().sub_class().next().unwrap();
+        let sc = ont.i().sub_class_of().next().unwrap();
         let some = &sc.sup;
 
         let (n, o, c) = match some {
@@ -1601,7 +1601,7 @@ pub mod test {
         let ont_s = include_str!("../../ont/owl-xml/object-unqualified-max-cardinality.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
-        assert_eq!(ont.i().sub_class().count(), 1);
+        assert_eq!(ont.i().sub_class_of().count(), 1);
     }
 
     #[test]
@@ -1609,10 +1609,10 @@ pub mod test {
         let ont_s = include_str!("../../ont/owl-xml/object-max-cardinality.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
-        assert_eq!(ont.i().sub_class().count(), 1);
+        assert_eq!(ont.i().sub_class_of().count(), 1);
         assert_eq!(ont.i().declare_object_property().count(), 1);
 
-        let sc = ont.i().sub_class().next().unwrap();
+        let sc = ont.i().sub_class_of().next().unwrap();
         let some = &sc.sup;
 
         let (n, o, c) = match some {
@@ -1641,10 +1641,10 @@ pub mod test {
         let ont_s = include_str!("../../ont/owl-xml/object-exact-cardinality.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
-        assert_eq!(ont.i().sub_class().count(), 1);
+        assert_eq!(ont.i().sub_class_of().count(), 1);
         assert_eq!(ont.i().declare_object_property().count(), 1);
 
-        let sc = ont.i().sub_class().next().unwrap();
+        let sc = ont.i().sub_class_of().next().unwrap();
         let some = &sc.sup;
 
         let (n, o, c) = match some {
@@ -1729,7 +1729,7 @@ pub mod test {
         let ont_s = include_str!("../../ont/owl-xml/data-some.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
-        assert_eq!(ont.i().sub_class().count(), 1);
+        assert_eq!(ont.i().sub_class_of().count(), 1);
     }
 
     #[test]
@@ -1737,7 +1737,7 @@ pub mod test {
         let ont_s = include_str!("../../ont/owl-xml/facet-restriction.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
-        assert_eq!(ont.i().sub_class().count(), 1);
+        assert_eq!(ont.i().sub_class_of().count(), 1);
     }
 
     #[test]
@@ -1745,8 +1745,8 @@ pub mod test {
         let ont_s = include_str!("../../ont/owl-xml/data-only.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
-        let cl = &ont.i().sub_class().next().unwrap().sup;
-        assert_eq!(ont.i().sub_class().count(), 1);
+        let cl = &ont.i().sub_class_of().next().unwrap().sup;
+        assert_eq!(ont.i().sub_class_of().count(), 1);
         if let ClassExpression::DataAllValuesFrom {
             dp: ref _dp,
             dr: ref _dr,
@@ -1763,8 +1763,8 @@ pub mod test {
         let ont_s = include_str!("../../ont/owl-xml/data-exact-cardinality.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
-        let cl = &ont.i().sub_class().next().unwrap().sup;
-        assert_eq!(ont.i().sub_class().count(), 1);
+        let cl = &ont.i().sub_class_of().next().unwrap().sup;
+        assert_eq!(ont.i().sub_class_of().count(), 1);
         if let ClassExpression::DataExactCardinality {
             n: ref _n,
             dp: ref _dp,
@@ -1781,8 +1781,8 @@ pub mod test {
     fn data_unqualified_cardinality() {
         let ont_s = include_str!("../../ont/owl-xml/data-unqualified-exact.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
-        let cl = &ont.i().sub_class().next().unwrap().sup;
-        assert_eq!(ont.i().sub_class().count(), 1);
+        let cl = &ont.i().sub_class_of().next().unwrap().sup;
+        assert_eq!(ont.i().sub_class_of().count(), 1);
         if let ClassExpression::DataExactCardinality {
             n: ref _n,
             dp: ref _dp,
@@ -1803,8 +1803,8 @@ pub mod test {
         let ont_s = include_str!("../../ont/owl-xml/data-min-cardinality.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
-        let cl = &ont.i().sub_class().next().unwrap().sup;
-        assert_eq!(ont.i().sub_class().count(), 1);
+        let cl = &ont.i().sub_class_of().next().unwrap().sup;
+        assert_eq!(ont.i().sub_class_of().count(), 1);
         if let ClassExpression::DataMinCardinality {
             n: ref _n,
             dp: ref _dp,
@@ -1822,8 +1822,8 @@ pub mod test {
         let ont_s = include_str!("../../ont/owl-xml/data-max-cardinality.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
-        let cl = &ont.i().sub_class().next().unwrap().sup;
-        assert_eq!(ont.i().sub_class().count(), 1);
+        let cl = &ont.i().sub_class_of().next().unwrap().sup;
+        assert_eq!(ont.i().sub_class_of().count(), 1);
         if let ClassExpression::DataMaxCardinality {
             n: ref _n,
             dp: ref _dp,
@@ -1841,7 +1841,7 @@ pub mod test {
         let ont_s = include_str!("../../ont/owl-xml/data-has-value.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
-        assert_eq!(1, ont.i().sub_class().count());
+        assert_eq!(1, ont.i().sub_class_of().count());
     }
 
     #[test]
