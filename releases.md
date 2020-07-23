@@ -18,9 +18,6 @@ More specifically:
    `SetIndex` is also available which is composable with other
    indexes.
 
-TODO: Rename sub_class to sub_class_of in AxiomMappedIndex
-
-
 Version 0.6.0
 =============
 

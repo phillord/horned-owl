@@ -62,8 +62,9 @@ pub trait OntologyIndex {
 
 
 /// A NullOntologyIndex which does nothing.
-pub struct NullOntologyIndex();
-impl OntologyIndex for NullOntologyIndex {
+#[derive(Default)]
+pub struct NullIndex();
+impl OntologyIndex for NullIndex {
     /// Insert an item, always returns false
     fn index_insert(&mut self, _ax: Rc<AnnotatedAxiom>) -> bool {
         false
@@ -129,8 +130,8 @@ impl<I:OntologyIndex> MutableOntology for OneIndexedOntology<I> {
 pub struct TwoIndexedOntology<I:OntologyIndex, J: OntologyIndex> (I, J, OntologyID);
 
 impl<I:OntologyIndex, J: OntologyIndex> TwoIndexedOntology<I, J> {
-    pub fn new(i: I, j: J) -> Self {
-        TwoIndexedOntology(i, j, Default::default())
+    pub fn new(i: I, j: J, id:OntologyID) -> Self {
+        TwoIndexedOntology(i, j, id)
     }
 
     pub fn i(&self) -> &I {
@@ -332,4 +333,191 @@ impl<I:OntologyIndex,
 // Utility
 pub (crate) fn rc_unwrap_or_clone(rcax:Rc<AnnotatedAxiom>) -> AnnotatedAxiom {
     Rc::try_unwrap(rcax).unwrap_or_else(|rcax| (*rcax).clone())
+}
+
+
+
+#[cfg(test)]
+mod test {
+
+    use super::{TwoIndexedOntology, NullIndex, OneIndexedOntology, ThreeIndexedOntology, FourIndexedOntology};
+    use crate
+        ::{
+            ontology::set::SetIndex,
+            model
+                ::{
+                    AnnotatedAxiom, Build, MutableOntology,
+                    NamedEntity,
+                }};
+
+    fn stuff() -> (AnnotatedAxiom,
+                   AnnotatedAxiom,
+                   AnnotatedAxiom) {
+        let b = Build::new();
+        let c:NamedEntity = b.class("http://www.example.com/c").into();
+        let o:NamedEntity = b.object_property("http://www.example.com/p").into();
+        let b:NamedEntity = b.data_property("http://www.example.com/d").into();
+
+
+        (
+            c.into(),
+            o.into(),
+            b.into(),
+        )
+    }
+
+    #[test]
+    fn one_cons(){
+        let _o = OneIndexedOntology::new(SetIndex::default());
+        assert!(true);
+    }
+
+    #[test]
+    fn one_insert() {
+        let mut o = OneIndexedOntology::new(SetIndex::default());
+        let e = stuff();
+        o.insert(e.0);
+        o.insert(e.1);
+        o.insert(e.2);
+
+        assert_eq!(o.i().into_iter().count(), 3);
+    }
+
+    #[test]
+    fn one_remove() {
+        let mut o = OneIndexedOntology::new(SetIndex::default());
+        let e = stuff();
+        o.insert(e.0.clone());
+        o.insert(e.1.clone());
+        o.insert(e.2.clone());
+
+        assert_eq!(o.i().into_iter().count(), 3);
+        assert!(o.remove(&e.0));
+        assert!(o.remove(&e.1));
+        assert!(o.remove(&e.2));
+
+        assert_eq!(o.i().into_iter().count(), 0);
+        assert!(!o.remove(&e.0));
+        assert!(!o.remove(&e.1));
+        assert!(!o.remove(&e.2));
+    }
+
+    #[test]
+    fn two_cons(){
+        let _o = TwoIndexedOntology::new(
+            SetIndex::default(),
+            SetIndex::default(),
+            Default::default(),
+        );
+        assert!(true);
+
+        let _o = TwoIndexedOntology::new(
+            SetIndex::default(),
+            NullIndex::default(),
+            Default::default(),
+        );
+        assert!(true);
+    }
+
+    #[test]
+    fn two_insert() {
+        let mut o = TwoIndexedOntology::new(
+            SetIndex::default(),
+            SetIndex::default(),
+            Default::default(),
+        );
+        let e = stuff();
+        o.insert(e.0);
+        o.insert(e.1);
+        o.insert(e.2);
+
+        assert_eq!(o.i().into_iter().count(), 3);
+        assert_eq!(o.j().into_iter().count(), 3);
+        assert_eq!(o.i(), o.j());
+    }
+
+    #[test]
+    fn two_remove() {
+        let mut o = TwoIndexedOntology::new(
+            SetIndex::default(),
+            SetIndex::default(),
+            Default::default(),
+        );
+
+        let e = stuff();
+        o.insert(e.0.clone());
+        o.insert(e.1.clone());
+        o.insert(e.2.clone());
+
+        assert_eq!(o.i().into_iter().count(), 3);
+        assert!(o.remove(&e.0));
+        assert!(o.remove(&e.1));
+        assert!(o.remove(&e.2));
+
+        assert_eq!(o.i().into_iter().count(), 0);
+        assert!(!o.remove(&e.0));
+        assert!(!o.remove(&e.1));
+        assert!(!o.remove(&e.2));
+        assert_eq!(o.i(), o.j());
+    }
+
+
+    #[test]
+    fn three_remove() {
+        let mut o = ThreeIndexedOntology::new(
+            SetIndex::default(),
+            SetIndex::default(),
+            SetIndex::default(),
+            Default::default(),
+        );
+
+        let e = stuff();
+        o.insert(e.0.clone());
+        o.insert(e.1.clone());
+        o.insert(e.2.clone());
+
+        assert_eq!(o.i().into_iter().count(), 3);
+        assert!(o.remove(&e.0));
+        assert!(o.remove(&e.1));
+        assert!(o.remove(&e.2));
+
+        assert_eq!(o.i().into_iter().count(), 0);
+        assert!(!o.remove(&e.0));
+        assert!(!o.remove(&e.1));
+        assert!(!o.remove(&e.2));
+
+        assert_eq!(o.i(), o.j());
+        assert_eq!(o.i(), o.k());
+    }
+
+    #[test]
+    fn four_remove() {
+        let mut o = FourIndexedOntology::new(
+            SetIndex::default(),
+            SetIndex::default(),
+            SetIndex::default(),
+            SetIndex::default(),
+            Default::default(),
+        );
+
+        let e = stuff();
+        o.insert(e.0.clone());
+        o.insert(e.1.clone());
+        o.insert(e.2.clone());
+
+        assert_eq!(o.i().into_iter().count(), 3);
+        assert!(o.remove(&e.0));
+        assert!(o.remove(&e.1));
+        assert!(o.remove(&e.2));
+
+        assert_eq!(o.i().into_iter().count(), 0);
+        assert!(!o.remove(&e.0));
+        assert!(!o.remove(&e.1));
+        assert!(!o.remove(&e.2));
+
+        assert_eq!(o.i(), o.j());
+        assert_eq!(o.i(), o.k());
+        assert_eq!(o.i(), o.l());
+    }
+
 }
