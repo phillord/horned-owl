@@ -3,10 +3,7 @@ use curie::PrefixMapping;
 use crate::model::Kinded;
 use crate::model::*;
 use crate::vocab::Namespace::*;
-use crate::{
-    ontology::axiom_mapped::AxiomMappedOntology,
-    vocab::WithIRI
-};
+use crate::{ontology::axiom_mapped::AxiomMappedOntology, vocab::WithIRI};
 
 use quick_xml::events::BytesDecl;
 use quick_xml::events::BytesEnd;
@@ -240,7 +237,6 @@ where
 
     Ok(())
 }
-
 
 // Render Impl for container and collection types
 impl<'a, T: Render<'a, W>, W: StdWrite> Render<'a, W> for BTreeSet<T> {
@@ -822,7 +818,7 @@ mod test {
 
     use self::mktemp::Temp;
     use super::*;
-    use crate::{io::owx::reader::*};
+    use crate::io::owx::reader::*;
 
     use std::collections::HashMap;
 
@@ -855,8 +851,14 @@ mod test {
         assert_eq!(ont.id().iri, ont2.id().iri);
     }
 
-    fn roundtrip(ont: &str) -> (AxiomMappedOntology, PrefixMapping,
-                                AxiomMappedOntology, PrefixMapping) {
+    fn roundtrip(
+        ont: &str,
+    ) -> (
+        AxiomMappedOntology,
+        PrefixMapping,
+        AxiomMappedOntology,
+        PrefixMapping,
+    ) {
         let (ont_orig, prefix_orig) = read_ok(&mut ont.as_bytes());
         let mut temp_file = Temp::new_file().unwrap();
 
@@ -876,8 +878,14 @@ mod test {
         return (ont_orig, prefix_orig, ont_round, prefix_round);
     }
 
-    fn assert_round(ont: &str) -> (AxiomMappedOntology, PrefixMapping,
-                                   AxiomMappedOntology, PrefixMapping) {
+    fn assert_round(
+        ont: &str,
+    ) -> (
+        AxiomMappedOntology,
+        PrefixMapping,
+        AxiomMappedOntology,
+        PrefixMapping,
+    ) {
         let (ont_orig, prefix_orig, ont_round, prefix_round) = roundtrip(ont);
 
         assert_eq!(ont_orig, ont_round);

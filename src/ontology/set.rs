@@ -149,7 +149,9 @@ impl IntoIterator for SetIndex {
     type Item = AnnotatedAxiom;
     type IntoIter = std::vec::IntoIter<AnnotatedAxiom>;
     fn into_iter(self) -> Self::IntoIter {
-        let v:Vec<AnnotatedAxiom> = self.0.into_iter()
+        let v: Vec<AnnotatedAxiom> = self
+            .0
+            .into_iter()
             .map(Rc::try_unwrap)
             .map(Result::unwrap)
             .collect();
@@ -161,18 +163,15 @@ impl<'a> IntoIterator for &'a SetIndex {
     type Item = &'a AnnotatedAxiom;
     type IntoIter = std::vec::IntoIter<&'a AnnotatedAxiom>;
     fn into_iter(self) -> Self::IntoIter {
-        let v:Vec<&'a AnnotatedAxiom> = self.0.iter()
-            .map(|rcax| &**rcax)
-            .collect();
+        let v: Vec<&'a AnnotatedAxiom> = self.0.iter().map(|rcax| &**rcax).collect();
         v.into_iter()
     }
 }
 
-
 #[cfg(test)]
 mod test {
     use super::{SetIndex, SetOntology};
-    use crate::{ontology::indexed::OneIndexedOntology, model::*};
+    use crate::{model::*, ontology::indexed::OneIndexedOntology};
 
     #[test]
     fn test_ontology_cons() {
@@ -296,7 +295,6 @@ mod test {
         assert_eq!(it.next(), None);
         assert_eq!(it.next(), None);
     }
-
 
     #[test]
     fn test_index_cons() {

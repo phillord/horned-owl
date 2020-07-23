@@ -386,7 +386,7 @@ fn axiom_from_start<R: BufRead>(
         b"Declaration" => {
             let ne: NamedEntity = from_start(r, e)?;
             ne.into()
-        },
+        }
         b"SubClassOf" => SubClassOf {
             sub: from_start(r, e)?,
             sup: from_next(r)?,
@@ -1081,8 +1081,8 @@ from_xml! {IRI, r, end,
 #[cfg(test)]
 pub mod test {
     use super::*;
-    use std::collections::HashMap;
     use crate::ontology::axiom_mapped::AxiomMappedOntology;
+    use std::collections::HashMap;
 
     pub fn read_ok<R: BufRead>(bufread: &mut R) -> (AxiomMappedOntology, PrefixMapping) {
         let r = read(bufread);
@@ -1105,8 +1105,10 @@ pub mod test {
         let ont_s = include_str!("../../ont/owl-xml/ont.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
         dbg!(&ont);
-        assert_eq!(ont.id().iri.as_ref().unwrap().as_ref(),
-                   "http://www.example.com/iri");
+        assert_eq!(
+            ont.id().iri.as_ref().unwrap().as_ref(),
+            "http://www.example.com/iri"
+        );
     }
 
     #[test]
@@ -1114,8 +1116,10 @@ pub mod test {
         let ont_s = include_str!("../../ont/owl-xml/one-ont-from-horned.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
-        assert_eq!(ont.id().iri.as_ref().unwrap().as_ref(),
-                   "http://example.com/iri");
+        assert_eq!(
+            ont.id().iri.as_ref().unwrap().as_ref(),
+            "http://example.com/iri"
+        );
     }
 
     #[test]
@@ -1137,7 +1141,11 @@ pub mod test {
 
         assert_eq!(ont.i().declare_class().count(), 1);
 
-        let aa = ont.i().annotated_axiom(AxiomKind::DeclareClass).next().unwrap();
+        let aa = ont
+            .i()
+            .annotated_axiom(AxiomKind::DeclareClass)
+            .next()
+            .unwrap();
 
         assert_eq!(aa.ann.len(), 1);
 
@@ -1209,7 +1217,11 @@ pub mod test {
         let ont_s = include_str!("../../ont/owl-xml/annotation-on-subclass.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
-        let annotated_axiom = ont.i().annotated_axiom(AxiomKind::SubClassOf).next().unwrap();
+        let annotated_axiom = ont
+            .i()
+            .annotated_axiom(AxiomKind::SubClassOf)
+            .next()
+            .unwrap();
         assert_eq!(annotated_axiom.ann.len(), 1);
     }
 

@@ -16,7 +16,6 @@
 //! Efficiency is gained from the use of an IRI which is a newtype
 //! over an `Rc<String>`.
 
-
 //! # Naming
 //!
 //! The OWL specification is large and complicated. This library,
@@ -448,7 +447,7 @@ impl From<NamedEntity> for Axiom {
 }
 
 impl From<NamedEntity> for AnnotatedAxiom {
-    fn from(ne:NamedEntity) -> AnnotatedAxiom {
+    fn from(ne: NamedEntity) -> AnnotatedAxiom {
         let ax: Axiom = ne.into();
         ax.into()
     }
@@ -522,7 +521,6 @@ impl Kinded for AnnotatedAxiom {
         self.axiom.kind()
     }
 }
-
 
 /// Add `Kinded` and `From` for each axiom.
 macro_rules! axiomimpl {
@@ -1050,7 +1048,6 @@ axioms! {
     }
 }
 
-
 // Non-axiom data structures associated with OWL
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum Literal {
@@ -1458,7 +1455,8 @@ pub trait MutableOntology {
     /// ```
     fn declare<N>(&mut self, ne: N) -> bool
     where
-        N: Into<NamedEntity> {
+        N: Into<NamedEntity>,
+    {
         let ne: NamedEntity = ne.into();
         let ax: Axiom = ne.into();
         self.insert(ax)
@@ -1468,7 +1466,7 @@ pub trait MutableOntology {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::ontology::{axiom_mapped::AxiomMappedOntology};
+    use crate::ontology::axiom_mapped::AxiomMappedOntology;
 
     #[test]
     fn test_iri_from_string() {

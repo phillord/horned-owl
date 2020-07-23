@@ -14,7 +14,8 @@ pub fn find_logically_equal_axiom<'a>(
     // Find any axiom in Ontology which is the same as AnnotatedAxiom,
     // ignoring the Annotations
     let o: &AxiomMappedOntology = o.into();
-    o.i().annotated_axiom(axiom.kind())
+    o.i()
+        .annotated_axiom(axiom.kind())
         .find(|ax| ax.logical_eq(axiom))
 }
 

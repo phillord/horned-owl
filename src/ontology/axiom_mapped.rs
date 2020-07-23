@@ -10,19 +10,15 @@
 //! `Axiom` or `AnnotatedAxiom`, or methods such as `sub_class_of`, or
 //! `object_property_domain` which iterate over `SubClassOf` or
 //! `ObjectPropertyDomain` axioms respectively.
+use super::set::SetOntology;
+use crate::model::*;
 use std::{
     cell::RefCell,
     collections::{BTreeMap, BTreeSet, VecDeque},
     rc::Rc,
 };
-use crate::model::*;
-use super::set::SetOntology;
 
-use super::indexed::{
-    OneIndexedOntology,
-    OntologyIndex,
-    rc_unwrap_or_clone,
-};
+use super::indexed::{rc_unwrap_or_clone, OneIndexedOntology, OntologyIndex};
 
 /// Return all axioms of a specific `AxiomKind`
 #[allow(unused_macros)]
@@ -56,9 +52,8 @@ macro_rules! onimpl {
 
 #[derive(Debug, Default, Eq, PartialEq)]
 pub struct AxiomMappedIndex {
-    axiom: RefCell<BTreeMap<AxiomKind, BTreeSet<Rc<AnnotatedAxiom>>>>
+    axiom: RefCell<BTreeMap<AxiomKind, BTreeSet<Rc<AnnotatedAxiom>>>>,
 }
-
 
 impl AxiomMappedIndex {
     /// Create a new ontology.
@@ -80,7 +75,10 @@ impl AxiomMappedIndex {
     /// instantiated, which means that it effects equality of the
     /// ontology. It should only be used where the intention is to
     /// update the ontology.
-    fn axioms_as_ptr(&self, axk: AxiomKind) -> *mut BTreeMap<AxiomKind, BTreeSet<Rc<AnnotatedAxiom>>> {
+    fn axioms_as_ptr(
+        &self,
+        axk: AxiomKind,
+    ) -> *mut BTreeMap<AxiomKind, BTreeSet<Rc<AnnotatedAxiom>>> {
         self.axiom
             .borrow_mut()
             .entry(axk)
@@ -149,8 +147,7 @@ impl AxiomMappedIndex {
     /// See methods such as `declare_class` for access to the Axiom
     /// struct directly.
     pub fn axiom(&self, axk: AxiomKind) -> impl Iterator<Item = &Axiom> {
-        self.annotated_axiom(axk)
-            .map(|ann| &ann.axiom)
+        self.annotated_axiom(axk).map(|ann| &ann.axiom)
     }
 }
 // In the ideal world, we would have generated these onimpl! calls as
@@ -205,7 +202,6 @@ onimpl! {SubAnnotationPropertyOf, sub_annotation_property_of}
 onimpl! {AnnotationPropertyDomain, annotation_property_domain}
 onimpl! {AnnotationPropertyRange, annotation_property_range}
 
-
 /// An iterator over the annotated axioms of an `Ontology`.
 pub struct AxiomMappedIter<'a> {
     ont: &'a AxiomMappedIndex,
@@ -251,7 +247,8 @@ impl OntologyIndex for AxiomMappedIndex {
     }
 
     fn index_take(&mut self, ax: &AnnotatedAxiom) -> Option<AnnotatedAxiom> {
-        self.mut_set_for_kind(ax.kind()).take(ax)
+        self.mut_set_for_kind(ax.kind())
+            .take(ax)
             .map(rc_unwrap_or_clone)
     }
 
@@ -268,11 +265,13 @@ impl IntoIterator for AxiomMappedOntology {
     type IntoIter = std::vec::IntoIter<AnnotatedAxiom>;
     fn into_iter(self) -> Self::IntoIter {
         let btreemap = self.index().axiom.into_inner();
-        let v:Vec<AnnotatedAxiom> = btreemap.into_iter()
-            .map(|(_k,v)| v)
+        let v: Vec<AnnotatedAxiom> = btreemap
+            .into_iter()
+            .map(|(_k, v)| v)
             .flat_map(BTreeSet::into_iter)
             .map(Rc::try_unwrap)
-            .map(Result::unwrap).collect();
+            .map(Result::unwrap)
+            .collect();
         v.into_iter()
     }
 }
@@ -288,7 +287,6 @@ impl From<SetOntology> for AxiomMappedOntology {
         amo
     }
 }
-
 
 #[cfg(test)]
 mod test {

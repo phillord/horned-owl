@@ -112,4 +112,3 @@ fn io_read(bench: &mut Bencher) {
 benchmark_group!(iobenches, io_read);
 
 benchmark_main!(benches, iobenches);
-

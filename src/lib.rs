@@ -37,8 +37,8 @@
 #[macro_use]
 extern crate failure;
 //#[macro_use]
-extern crate log;
 extern crate indexmap;
+extern crate log;
 extern crate quick_xml;
 
 pub mod command;
