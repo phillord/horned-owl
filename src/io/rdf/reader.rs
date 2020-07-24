@@ -16,6 +16,8 @@ use crate::{ontology::axiom_mapped::AxiomMappedOntology, vocab::RDFS as VRDFS};
 use enum_meta::Meta;
 use failure::Error;
 
+use sophia_api::term::TTerm;
+
 use sophia::term::blank_node::BlankNode;
 use sophia::term::iri::Iri;
 use sophia::term::literal::Literal as SpLiteral;
@@ -719,7 +721,9 @@ impl<'a> OntologyParser<'a> {
                         lang: lang.clone().to_string(),
                         literal: ob.value().to_string(),
                     }
-                } else if ob.dt() == *"http://www.w3.org/2001/XMLSchema#string" {
+                } else if ob.dt().to_string() ==
+                    // Sophia uses n3
+                    "<http://www.w3.org/2001/XMLSchema#string>" {
                     Literal::Simple {
                         literal: ob.value().to_string(),
                     }
@@ -1495,7 +1499,7 @@ pub fn read_with_build<R: BufRead>(
     build: &Build,
 ) -> Result<(AxiomMappedOntology, PrefixMapping), Error> {
     eprintln!("sofia read");
-    let triple_iter = sophia::parser::xml2::parse_bufread(bufread);
+    let triple_iter = sophia::parser::xml::parse_bufread(bufread);
     let triple_result: Result<Vec<_>, _> = triple_iter.collect_triples();
     let triple_v: Vec<[SpTerm; 3]> = triple_result.unwrap();
     eprintln!("sofia completed");

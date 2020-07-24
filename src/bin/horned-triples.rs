@@ -14,6 +14,8 @@ use std::fs::File;
 use std::io::BufReader;
 use std::rc::Rc;
 
+use sophia_api::term::TTerm;
+use sophia_api::triple::stream::TripleSource;
 use sophia::term::Term;
 
 type SpTerm = Term<Rc<str>>;
@@ -51,9 +53,11 @@ fn matcher(matches: ArgMatches) -> Result<(), Error> {
     let file = File::open(input)?;
     let bufreader = BufReader::new(file);
     let triple_iter = sophia::parser::xml::parse_bufread(bufreader);
+    let triple_result: Result<Vec<_>, _> = triple_iter.collect_triples();
+    let triple_v: Vec<[SpTerm; 3]> = triple_result.unwrap();
 
-    for i in triple_iter {
-        p_tup(&i.unwrap());
+    for i in triple_v {
+        p_tup(&i);
     }
 
     Ok(())
