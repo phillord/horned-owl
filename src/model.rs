@@ -363,6 +363,12 @@ macro_rules! named {
                 }
             }
 
+            impl From<$name> for NamedEntityKind {
+                fn from(_n:$name) -> NamedEntityKind {
+                    NamedEntityKind::$name
+                }
+            }
+
             impl $name {
                 pub fn is<I>(&self, iri: I) -> bool
                     where I:Into<IRI>
@@ -380,6 +386,8 @@ macro_rules! named {
         ) *
     }
 }
+
+
 
 named! {
     /// An OWL
@@ -720,7 +728,6 @@ axioms! {
     ///
     /// See also [`DeclareClass`](struct.DeclareClass.html)
     DeclareAnnotationProperty (AnnotationProperty),
-
     /// Declares that an IRI represents a DataProperty in the
     /// ontology.
     ///

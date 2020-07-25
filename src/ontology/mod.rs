@@ -27,7 +27,14 @@
 //! `OntologyIndex` that allows rapid retrieval of all
 //! `AnnotatedAxiom` instances of a given kind.
 
+//! Other indexes are less general purpose. The
+//! [`declaration_mapped`](declaration_mapped.html) indexes only
+//! declaration axioms, allowing rapid look up of the declarated type
+//! of an IRI. As it ignores most axioms passed to it, it does not
+//! provide iteration.
+
 pub mod axiom_mapped;
+pub mod declaration_mapped;
 pub mod indexed;
 pub mod set;
 
