@@ -11,10 +11,16 @@ pub fn parse_path(path: &Path) -> Result<(SetOntology, PrefixMapping), Error> {
     let mut bufreader = BufReader::new(file);
 
     Ok(match path.extension().map(|s| s.to_str()).flatten() {
-        Some("oxl") => super::io::owx::reader::read(&mut bufreader)?,
+        Some("owx") => super::io::owx::reader::read(&mut bufreader)?,
         Some("owl") => super::io::rdf::reader::read(&mut bufreader)
-            .map(|(o, m)| (o.into_iter().collect(), m))?,
-        _ => todo!(),
+            .map(|(o, m)| (
+                o.into(),
+                m
+            ))?,
+        a @ _ => {
+            eprintln!("Do not know how to parse file with extension: {:?}", a);
+            todo!()
+        },
     })
 }
 

@@ -202,6 +202,25 @@ onimpl! {SubAnnotationPropertyOf, sub_annotation_property_of}
 onimpl! {AnnotationPropertyDomain, annotation_property_domain}
 onimpl! {AnnotationPropertyRange, annotation_property_range}
 
+
+/// An owning iterator over the annotated axioms of an `Ontology`.
+impl IntoIterator for AxiomMappedIndex {
+    type Item = AnnotatedAxiom;
+    type IntoIter = std::vec::IntoIter<AnnotatedAxiom>;
+    fn into_iter(self) -> Self::IntoIter {
+        let btreemap = self.axiom.into_inner();
+        let v: Vec<AnnotatedAxiom> = btreemap
+            .into_iter()
+            .map(|(_k, v)| v)
+            .flat_map(BTreeSet::into_iter)
+            .map(Rc::try_unwrap)
+            .map(Result::unwrap)
+            .collect();
+        v.into_iter()
+    }
+}
+
+
 /// An iterator over the annotated axioms of an `Ontology`.
 pub struct AxiomMappedIter<'a> {
     ont: &'a AxiomMappedIndex,
@@ -228,6 +247,7 @@ impl<'a> Iterator for AxiomMappedIter<'a> {
         }
     }
 }
+
 
 impl<'a> IntoIterator for &'a AxiomMappedIndex {
     type Item = &'a AnnotatedAxiom;
@@ -264,17 +284,10 @@ impl IntoIterator for AxiomMappedOntology {
     type Item = AnnotatedAxiom;
     type IntoIter = std::vec::IntoIter<AnnotatedAxiom>;
     fn into_iter(self) -> Self::IntoIter {
-        let btreemap = self.index().axiom.into_inner();
-        let v: Vec<AnnotatedAxiom> = btreemap
-            .into_iter()
-            .map(|(_k, v)| v)
-            .flat_map(BTreeSet::into_iter)
-            .map(Rc::try_unwrap)
-            .map(Result::unwrap)
-            .collect();
-        v.into_iter()
+        self.index().into_iter()
     }
 }
+
 
 impl From<SetOntology> for AxiomMappedOntology {
     fn from(mut so: SetOntology) -> AxiomMappedOntology {

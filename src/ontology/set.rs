@@ -125,6 +125,26 @@ impl FromIterator<AnnotatedAxiom> for SetOntology {
     }
 }
 
+impl<I> From<(OntologyID, I)> for SetOntology
+where I:Iterator<Item=AnnotatedAxiom>
+{
+    fn from((mut oid,i):(OntologyID, I)) -> SetOntology {
+        let mut so:SetOntology = i.collect();
+        std::mem::swap(so.mut_id(), &mut oid);
+        so
+    }
+}
+
+impl<O, I> From<(O, I)> for SetOntology
+where I:Iterator<Item=AnnotatedAxiom>,
+      O: Ontology
+{
+    fn from((mut o,i):(O, I)) -> SetOntology {
+        (o.mut_id().clone(), i).into()
+    }
+}
+
+
 /// An `OntologyIndex` implemented over an in-memory HashSet. When
 /// combined with an `IndexedOntology` this should be nearly as
 /// fastest as `SetOntology`.
@@ -291,6 +311,41 @@ mod test {
         assert_eq!(
             it.next(),
             Some(&AnnotatedAxiom::from(Axiom::DisjointClasses(disj2)))
+        );
+        assert_eq!(it.next(), None);
+        assert_eq!(it.next(), None);
+    }
+
+    #[test]
+    fn test_ontology_into() {
+        // Setup
+        let build = Build::new();
+        let mut o = SetOntology::new();
+        let decl1 = DeclareClass(build.class("http://www.example.com#a"));
+        let decl2 = DeclareClass(build.class("http://www.example.com#b"));
+        let decl3 = DeclareClass(build.class("http://www.example.com#c"));
+
+        o.insert(decl1.clone());
+        o.insert(decl2.clone());
+        o.insert(decl3.clone());
+
+        let newo: SetOntology = (o.mut_id().clone(), o.into_iter()).into();
+
+        // Iteration is set based so undefined in order. So, sort first.
+        let mut v: Vec<_> = (&newo).into_iter().collect();
+        v.sort();
+        let mut it = v.into_iter();
+        assert_eq!(
+            it.next(),
+            Some(&AnnotatedAxiom::from(Axiom::DeclareClass(decl1)))
+        );
+        assert_eq!(
+            it.next(),
+            Some(&AnnotatedAxiom::from(Axiom::DeclareClass(decl2)))
+        );
+        assert_eq!(
+            it.next(),
+            Some(&AnnotatedAxiom::from(Axiom::DeclareClass(decl3)))
         );
         assert_eq!(it.next(), None);
         assert_eq!(it.next(), None);

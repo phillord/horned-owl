@@ -2,8 +2,6 @@ use Term::*;
 
 use curie::PrefixMapping;
 
-use crate::index::find_declaration_kind;
-use crate::index::is_annotation_property;
 use crate::index::update_logically_equal_axiom;
 use crate::model::Literal;
 use crate::model::*;
@@ -11,7 +9,14 @@ use crate::model::*;
 use crate::vocab::WithIRI;
 use crate::vocab::OWL as VOWL;
 use crate::vocab::RDF as VRDF;
-use crate::{ontology::axiom_mapped::AxiomMappedOntology, vocab::RDFS as VRDFS};
+use crate::{ontology::
+            {
+                set::SetOntology,
+                axiom_mapped::AxiomMappedIndex,
+                declaration_mapped::DeclarationMappedIndex,
+                indexed::TwoIndexedOntology
+            },
+            vocab::RDFS as VRDFS};
 
 use enum_meta::Meta;
 use failure::Error;
@@ -235,8 +240,19 @@ macro_rules! d {
     };
 }
 
+pub type RDFOntology = TwoIndexedOntology<AxiomMappedIndex, DeclarationMappedIndex>;
+
+impl From<RDFOntology> for SetOntology {
+    fn from(so: RDFOntology) -> SetOntology { 
+        let id: OntologyID = so.id().clone();
+        (id, so.index().0.into_iter()).into()
+    }
+}
+
+
+
 struct OntologyParser<'a> {
-    o: AxiomMappedOntology,
+    o: RDFOntology,
     b: &'a Build,
 
     simple: Vec<[Term; 3]>,
@@ -738,9 +754,13 @@ impl<'a> OntologyParser<'a> {
         })
     }
 
+    fn find_declaration_kind(&mut self, iri: &IRI) -> Option<NamedEntityKind> {
+        self.o.j().declaration_kind(iri)
+    }
+
     fn find_property_kind(&mut self, term: &Term) -> Option<PropertyExpression> {
         match term {
-            Term::Iri(iri) => match find_declaration_kind(&self.o, iri) {
+            Term::Iri(iri) => match self.find_declaration_kind(iri) {
                 Some(NamedEntityKind::AnnotationProperty) => {
                     Some(PropertyExpression::AnnotationProperty(iri.into()))
                 }
@@ -1041,7 +1061,7 @@ impl<'a> OntologyParser<'a> {
                 // and add to that axiom
                 [Term::Iri(a), Term::OWL(VOWL::EquivalentClass), b] => {
                     some! {
-                        match find_declaration_kind(&self.o, a)? {
+                        match self.find_declaration_kind(a)? {
                             NamedEntityKind::Class => {
                                 EquivalentClasses(vec![
                                     // The order is not important here, but
@@ -1294,8 +1314,8 @@ impl<'a> OntologyParser<'a> {
                 },
 
                 [Term::Iri(sub), Term::Iri(pred), t @ Term::Literal(_)] => some! {
-                    match (find_declaration_kind(&self.o, sub)?,
-                           find_declaration_kind(&self.o, pred)?) {
+                    match (self.find_declaration_kind(sub)?,
+                           self.find_declaration_kind(pred)?) {
                         (NamedEntityKind::NamedIndividual,
                          NamedEntityKind::DataProperty) => {
                             DataPropertyAssertion {
@@ -1308,9 +1328,9 @@ impl<'a> OntologyParser<'a> {
                     }
                 },
                 [Term::Iri(sub), Term::Iri(pred), Term::Iri(obj)] => some! {
-                    match (find_declaration_kind(&self.o, sub)?,
-                           find_declaration_kind(&self.o, pred)?,
-                           find_declaration_kind(&self.o, obj)?) {
+                    match (self.find_declaration_kind(sub)?,
+                           self.find_declaration_kind(pred)?,
+                           self.find_declaration_kind(obj)?) {
                         (NamedEntityKind::NamedIndividual,
                          NamedEntityKind::ObjectProperty,
                          NamedEntityKind::NamedIndividual) => {
@@ -1343,7 +1363,7 @@ impl<'a> OntologyParser<'a> {
             if let Some(iri) = match &triple {
                 [Term::Iri(iri), Term::RDFS(rdfs), _] if rdfs.is_builtin() => Some(iri),
                 [Term::Iri(iri), Term::OWL(VOWL::VersionInfo), _] => Some(iri),
-                [Term::Iri(iri), Term::Iri(ap), _] if is_annotation_property(&self.o, &ap) => {
+                [Term::Iri(iri), Term::Iri(ap), _] if self.o.j().is_annotation_property(&ap) => {
                     Some(iri)
                 }
                 _ => None,
@@ -1366,7 +1386,7 @@ impl<'a> OntologyParser<'a> {
         }
     }
 
-    fn read(mut self, triple: Vec<[SpTerm; 3]>) -> Result<AxiomMappedOntology, Error> {
+    fn read(mut self, triple: Vec<[SpTerm; 3]>) -> Result<RDFOntology, Error> {
         // move to our own Terms, with IRIs swapped
         let m = vocab_lookup();
         let triple: Vec<[Term; 3]> = triple
@@ -1390,10 +1410,10 @@ impl<'a> OntologyParser<'a> {
         self.stitch_seqs();
 
         // Table 10
-        self.axiom_annotations();
+        dbg!(self.axiom_annotations());
 
-        self.resolve_imports();
-        self.backward_compat();
+        dbg!(self.resolve_imports());
+        dbg!(self.backward_compat());
 
         // for t in bnode.values() {
         //     match t.as_slice()[0] {
@@ -1424,7 +1444,7 @@ impl<'a> OntologyParser<'a> {
         // to read an ontology just for declarations. At the moment, I
         // don't know how to get to another set of triples for these
         // -- we will need some kind of factory.
-        self.headers();
+        dbg!(self.headers());
 
         // Can we pull out annotations at this point and handle them
         // as we do in reader2? Tranform them into a triple which we
@@ -1438,21 +1458,21 @@ impl<'a> OntologyParser<'a> {
         // Table 7: Declarations (this should be simple, if we have a
         // generic solution for handling annotations, there is no
         // handling of bnodes).
-        self.declarations();
+        dbg!(self.declarations());
 
         // Table 10
-        self.simple_annotations();
+        dbg!(self.simple_annotations());
 
-        self.data_ranges();
+        dbg!(self.data_ranges());
 
         // Table 8:
-        self.object_property_expressions();
+        dbg!(self.object_property_expressions());
 
         // Table 13: Parsing of Class Expressions
-        self.class_expressions();
+        dbg!(self.class_expressions());
 
         // Table 16: Axioms without annotations
-        self.axioms();
+        dbg!(self.axioms());
 
         // Regroup so that they print out nicer
         let mut simple_left = vec![];
@@ -1497,7 +1517,7 @@ impl<'a> OntologyParser<'a> {
 pub fn read_with_build<R: BufRead>(
     bufread: &mut R,
     build: &Build,
-) -> Result<(AxiomMappedOntology, PrefixMapping), Error> {
+) -> Result<(RDFOntology, PrefixMapping), Error> {
     eprintln!("sofia read");
     let triple_iter = sophia::parser::xml::parse_bufread(bufread);
     let triple_result: Result<Vec<_>, _> = triple_iter.collect_triples();
@@ -1509,7 +1529,7 @@ pub fn read_with_build<R: BufRead>(
         .map(|o| return (o, PrefixMapping::default()));
 }
 
-pub fn read<R: BufRead>(bufread: &mut R) -> Result<(AxiomMappedOntology, PrefixMapping), Error> {
+pub fn read<R: BufRead>(bufread: &mut R) -> Result<(RDFOntology, PrefixMapping), Error> {
     let b = Build::new();
     read_with_build(bufread, &b)
 }
@@ -1530,7 +1550,7 @@ mod test {
             .try_init();
     }
 
-    fn read_ok<R: BufRead>(bufread: &mut R) -> (AxiomMappedOntology, PrefixMapping) {
+    fn read_ok<R: BufRead>(bufread: &mut R) -> (RDFOntology, PrefixMapping) {
         init_log();
 
         let r = read(bufread);
@@ -1565,6 +1585,8 @@ mod test {
     fn compare_str(rdfread: &str, xmlread: &str) {
         let (rdfont, _rdfmapping) = read_ok(&mut rdfread.as_bytes());
         let (xmlont, _xmlmapping) = crate::io::owx::reader::test::read_ok(&mut xmlread.as_bytes());
+        let rdfont: SetOntology = rdfont.into();
+        let xmlont: SetOntology = (xmlont.id().clone(), xmlont.into_iter()).into();
 
         //dbg!(&rdfont); if true {panic!()};
 

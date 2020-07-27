@@ -12,12 +12,20 @@ use std::{
     rc::Rc,
 };
 
-#[derive(Default)]
+#[derive(Debug, Default)]
 pub struct DeclarationMappedIndex(HashMap<IRI, NamedEntityKind>);
 
 impl DeclarationMappedIndex {
+    pub fn is_annotation_property(&self, iri: &IRI) -> bool {
+        match self.declaration_kind(iri) {
+            Some(NamedEntityKind::AnnotationProperty) => true,
+            _ => false,
+        }
+    }
+
     pub fn declaration_kind(&self, iri: &IRI) -> Option<NamedEntityKind>{
         self.0.get(iri).cloned()
+            .or_else(|| crate::vocab::to_built_in_entity(iri))
     }
 
     fn aa_to_ne(&self, ax: &AnnotatedAxiom) -> Option<NamedEntityKind> {
@@ -26,12 +34,14 @@ impl DeclarationMappedIndex {
             AxiomKind::DeclareObjectProperty |
             AxiomKind::DeclareAnnotationProperty |
             AxiomKind::DeclareDataProperty |
+            AxiomKind::DeclareDatatype |
             AxiomKind::DeclareNamedIndividual => {
                 match ax.clone().axiom {
                     Axiom::DeclareClass(dc) => Some(dc.0.into()),
                     Axiom::DeclareObjectProperty(op) => Some(op.0.into()),
                     Axiom::DeclareAnnotationProperty(ap) => Some(ap.0.into()),
                     Axiom::DeclareDataProperty(dp) => Some(dp.0.into()),
+                    Axiom::DeclareDatatype(dt) => Some(dt.0.into()),
                     Axiom::DeclareNamedIndividual(ni) => Some(ni.0.into()),
                     _ => None
                 }
@@ -46,12 +56,14 @@ impl DeclarationMappedIndex {
             AxiomKind::DeclareObjectProperty |
             AxiomKind::DeclareAnnotationProperty |
             AxiomKind::DeclareDataProperty |
+            AxiomKind::DeclareDatatype |
             AxiomKind::DeclareNamedIndividual => {
                 match ax.clone().axiom {
                     Axiom::DeclareClass(dc) => Some(dc.0.into()),
                     Axiom::DeclareObjectProperty(op) => Some(op.0.into()),
                     Axiom::DeclareAnnotationProperty(ap) => Some(ap.0.into()),
                     Axiom::DeclareDataProperty(dp) => Some(dp.0.into()),
+                    Axiom::DeclareDatatype(dt) => Some(dt.0.into()),
                     Axiom::DeclareNamedIndividual(ni) => Some(ni.0.into()),
                     _ => None
                 }
@@ -104,6 +116,7 @@ impl OntologyIndex for DeclarationMappedIndex {
 mod test{
     use crate::model::{AnnotatedAxiom, Build, NamedEntity, NamedEntityKind};
     use crate::ontology::indexed::OntologyIndex;
+    use crate::vocab::{OWL, WithIRI};
     use super::DeclarationMappedIndex;
     fn stuff() -> (AnnotatedAxiom, AnnotatedAxiom, AnnotatedAxiom) {
         let b = Build::new();
@@ -144,5 +157,17 @@ mod test{
                    Some(NamedEntityKind::ObjectProperty));
         assert_eq!(d.declaration_kind(&b.iri("http://www.example.com/d")),
                    Some(NamedEntityKind::DataProperty));
+    }
+
+    #[test]
+    fn test_declaration_builtin() {
+        let d = DeclarationMappedIndex::default();
+        let b = Build::new();
+        assert_eq!(
+            d.declaration_kind(&b.iri(OWL::TopDataProperty.iri_s())),
+            Some(NamedEntityKind::DataProperty)
+        );
+
+
     }
 }
