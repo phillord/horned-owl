@@ -11,10 +11,10 @@ use crate::vocab::OWL as VOWL;
 use crate::vocab::RDF as VRDF;
 use crate::{ontology::
             {
-                set::SetOntology,
-                axiom_mapped::AxiomMappedIndex,
+                set::{SetIndex,SetOntology},
                 declaration_mapped::DeclarationMappedIndex,
-                indexed::TwoIndexedOntology
+                logically_equal::LogicallyEqualIndex,
+                indexed::ThreeIndexedOntology
             },
             vocab::RDFS as VRDFS};
 
@@ -240,12 +240,16 @@ macro_rules! d {
     };
 }
 
-pub type RDFOntology = TwoIndexedOntology<AxiomMappedIndex, DeclarationMappedIndex>;
+pub type RDFOntology = ThreeIndexedOntology<SetIndex,DeclarationMappedIndex,LogicallyEqualIndex>;
 
 impl From<RDFOntology> for SetOntology {
     fn from(so: RDFOntology) -> SetOntology { 
         let id: OntologyID = so.id().clone();
-        (id, so.index().0.into_iter()).into()
+        let (si, i1, i2) = so.index();
+        // Drop the rest of these so that we can consume the Rc
+        drop(i1);
+        drop(i2);
+        (id, si.into_iter()).into()
     }
 }
 
@@ -1481,11 +1485,11 @@ impl<'a> OntologyParser<'a> {
         Self::group_triples(self.simple, &mut simple_left, &mut bnode_left);
 
         if simple_left.len() > 0 {
-            dbg!("simple remaining", simple_left);
+            dbg!("simple remaining", simple_left.len());
         }
 
         if bnode_left.len() > 0 {
-            dbg!("bnode left", bnode_left);
+            dbg!("bnode left", bnode_left.len());
         }
 
         if self.bnode_seq.len() > 0 {
@@ -1510,6 +1514,7 @@ impl<'a> OntologyParser<'a> {
                 self.object_property_expression
             );
         }
+        
         Ok(self.o)
     }
 }

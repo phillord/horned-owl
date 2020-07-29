@@ -28,6 +28,14 @@ impl LogicallyEqualIndex {
     pub fn logical_contains(&self, ax: &AnnotatedAxiom) -> bool {
         self.0.contains_key(&ax.axiom)
     }
+
+    pub fn logical_get(&self, ax: &AnnotatedAxiom) -> Option<&AnnotatedAxiom> {
+        self.0.get(&ax.axiom).map(|rcax| &**rcax)
+    }
+
+    pub fn logical_get_rc(&self, ax: &AnnotatedAxiom) -> Option<Rc<AnnotatedAxiom>> {
+        self.0.get(&ax.axiom).cloned()
+    }
 }
 
 #[cfg(test)]
