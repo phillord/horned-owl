@@ -1588,4 +1588,24 @@ mod test {
 
         assert_eq!(obpe.as_property().unwrap(), &obp);
     }
+
+    #[test]
+    fn test_axiom_equality() {
+        let b = Build::new();
+
+        let ann = Annotation {
+            ap: b.annotation_property("http://www.example.com/ap"),
+            av: b.iri("http://www.example.com/av").into()
+        };
+
+        let mut decl1:AnnotatedAxiom =
+            DeclareClass(b.class("http://www.example.com#a")).into();
+        let decl2 = decl1.clone();
+
+        assert_eq!(decl1, decl2);
+
+
+        decl1.ann.insert(ann);
+        assert!(!(decl1 == decl2));
+    }
 }

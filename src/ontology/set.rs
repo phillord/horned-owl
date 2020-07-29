@@ -165,6 +165,12 @@ impl OntologyIndex for SetIndex {
     }
 }
 
+impl SetIndex {
+    pub fn contains(&self, ax:&AnnotatedAxiom) -> bool {
+        self.0.contains(ax)
+    }
+}
+
 impl IntoIterator for SetIndex {
     type Item = AnnotatedAxiom;
     type IntoIter = std::vec::IntoIter<AnnotatedAxiom>;
