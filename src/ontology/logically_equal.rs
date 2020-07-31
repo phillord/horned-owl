@@ -1,11 +1,18 @@
 use crate::model::{
     AnnotatedAxiom,
-    Axiom
+    Axiom,
+    MutableOntology
 };
 
+use std::convert::AsRef;
 use std::collections::HashMap;
 use std::rc::Rc;
-use super::indexed::{rc_unwrap_or_clone, OntologyIndex};
+use super::indexed::{
+    rc_unwrap_or_clone,
+    OntologyIndex,
+    TwoIndexedOntology,
+    ThreeIndexedOntology
+};
 
 #[derive(Debug,Default)]
 pub struct LogicallyEqualIndex(HashMap<Axiom, Rc<AnnotatedAxiom>>);
@@ -35,6 +42,59 @@ impl LogicallyEqualIndex {
 
     pub fn logical_get_rc(&self, ax: &AnnotatedAxiom) -> Option<Rc<AnnotatedAxiom>> {
         self.0.get(&ax.axiom).cloned()
+    }
+}
+
+impl<I: OntologyIndex> AsRef<LogicallyEqualIndex> for
+    TwoIndexedOntology<I, LogicallyEqualIndex> {
+    fn as_ref(&self) -> &LogicallyEqualIndex {
+        self.j()
+    }
+}
+
+impl<I, J> AsRef<LogicallyEqualIndex> for
+    ThreeIndexedOntology<I, J, LogicallyEqualIndex>
+where I: OntologyIndex,
+      J: OntologyIndex,
+{
+    fn as_ref(&self) -> &LogicallyEqualIndex {
+        self.k()
+    }
+}
+
+
+pub fn update_or_insert_logically_equal_axiom<'a, O>(o: &mut O, axiom: AnnotatedAxiom)
+where O:MutableOntology+AsRef<LogicallyEqualIndex>
+{
+    if let Some(axiom) = update_logically_equal_axiom(o, axiom) {
+        o.insert(axiom);
+    }
+}
+
+pub fn update_logically_equal_axiom<'a, O> (o: &mut O, mut axiom: AnnotatedAxiom)
+                                            -> Option<AnnotatedAxiom>
+where O:MutableOntology+AsRef<LogicallyEqualIndex> {
+
+    let lei:&LogicallyEqualIndex = o.as_ref();
+    let src = lei.logical_get_rc(&axiom);
+    // Does the logically equal axiom exist
+    if let Some(rc) = src {
+        // Remove the rc from everywhere
+        o.remove(&*rc);
+        //dbg!(&rc);
+        //dbg!(Rc::strong_count(&rc));
+
+        // Un-rc
+        let mut logical_axiom = Rc::try_unwrap(rc).unwrap();
+        // Extend it
+        logical_axiom.ann.append(&mut axiom.ann);
+        // Insert it
+        o.insert(logical_axiom);
+        None
+    }
+    else {
+        // Otherwise put the one we have in
+        Some(axiom)
     }
 }
 
@@ -109,6 +169,62 @@ mod test {
         assert!(o.j().logical_contains(&decl1));
         assert!(o.j().logical_contains(&decl2));
         assert!(o.j().logical_contains(&decl3));
+    }
+
+    #[test]
+    fn test_update_equal_axiom() {
+        let b = Build::new();
+        {
+            let mut o:TwoIndexedOntology<SetIndex,LogicallyEqualIndex> = Default::default();
+            let ne: NamedEntity = b.class("http://www.example.com").into();
+            let ax: Axiom = ne.into();
+            let mut dec: AnnotatedAxiom = ax.into();
+
+            dec.ann.insert(Annotation {
+                ap: b.annotation_property("http://www.example.com/p1"),
+                av: b.iri("http://www.example.com/a1").into(),
+            });
+
+            let ne: NamedEntity = b.class("http://www.example.com").into();
+            let ax: Axiom = ne.into();
+            let mut dec2: AnnotatedAxiom = ax.into();
+
+            dec2.ann.insert(Annotation {
+                ap: b.annotation_property("http://www.example.com/p1"),
+                av: b.iri("http://www.example.com/a2").into(),
+            });
+
+            o.insert(dec);
+            o.insert(dec2);
+            assert_eq!(o.i().into_iter().count(), 2);
+        }
+
+        {
+        let mut o:TwoIndexedOntology<SetIndex,LogicallyEqualIndex> = Default::default();
+            let ne: NamedEntity = b.class("http://www.example.com").into();
+            let ax: Axiom = ne.into();
+            let mut dec: AnnotatedAxiom = ax.into();
+            dec.ann.insert(Annotation {
+                ap: b.annotation_property("http://www.example.com/p1"),
+                av: b.iri("http://www.example.com/a1").into(),
+            });
+
+            let ne: NamedEntity = b.class("http://www.example.com").into();
+            let ax: Axiom = ne.into();
+            let mut dec2: AnnotatedAxiom = ax.into();
+            dec2.ann.insert(Annotation {
+                ap: b.annotation_property("http://www.example.com/p1"),
+                av: b.iri("http://www.example.com/a2").into(),
+            });
+
+            o.insert(dec);
+            update_logically_equal_axiom(&mut o, dec2);
+            assert_eq!(o.i().into_iter().count(), 1);
+
+            let aa = o.i().into_iter().next().unwrap();
+
+            assert_eq!(aa.ann.iter().count(), 2);
+        }
     }
 
 }

@@ -2,7 +2,7 @@ use Term::*;
 
 use curie::PrefixMapping;
 
-use crate::index::update_logically_equal_axiom;
+
 use crate::model::Literal;
 use crate::model::*;
 
@@ -13,8 +13,12 @@ use crate::{ontology::
             {
                 set::{SetIndex,SetOntology},
                 declaration_mapped::DeclarationMappedIndex,
-                logically_equal::LogicallyEqualIndex,
-                indexed::ThreeIndexedOntology
+                indexed::ThreeIndexedOntology,
+                logically_equal::
+                {
+                    LogicallyEqualIndex,
+                    update_or_insert_logically_equal_axiom,
+                },
             },
             vocab::RDFS as VRDFS};
 
@@ -439,7 +443,7 @@ impl<'a> OntologyParser<'a> {
 
     fn merge<A: Into<AnnotatedAxiom>>(&mut self, ax: A) {
         let ax = ax.into();
-        update_logically_equal_axiom(&mut self.o, ax);
+        update_or_insert_logically_equal_axiom(&mut self.o, ax);
     }
 
     fn axiom_annotations(&mut self) {

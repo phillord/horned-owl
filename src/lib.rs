@@ -43,7 +43,6 @@ extern crate quick_xml;
 
 pub mod command;
 pub mod error;
-pub mod index;
 pub mod io;
 pub mod model;
 pub mod ontology;
