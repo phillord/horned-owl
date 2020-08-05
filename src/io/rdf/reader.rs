@@ -1497,25 +1497,25 @@ impl<'a> OntologyParser<'a> {
         }
 
         if self.bnode_seq.len() > 0 {
-            dbg!("sequences remaining", self.bnode_seq);
+            dbg!("sequences remaining", self.bnode_seq.len());
         }
 
         if self.ann_map.len() > 0 {
-            dbg!("annotations remaining", self.ann_map);
+            dbg!("annotations remaining", self.ann_map.len());
         }
 
         if self.class_expression.len() > 0 {
-            dbg!("class_expression remaining", self.class_expression);
+            dbg!("class_expression remaining", self.class_expression.len());
         }
 
         if self.data_range.len() > 0 {
-            dbg!("data range remaining", self.data_range);
+            dbg!("data range remaining", self.data_range.len());
         }
 
         if self.object_property_expression.len() > 0 {
             dbg!(
                 "object property expression remaining",
-                self.object_property_expression
+                self.object_property_expression.len()
             );
         }
         

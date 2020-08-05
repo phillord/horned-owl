@@ -1,0 +1,5 @@
+#!/bin/bash
+perf record --call-graph dwarf,16384 -e cpu-clock -F 997 target/release/horned-parse ~/src/large/gene-ontology/go.owl
+
+PATH=$PATH:~/subversion-checkout/FlameGraph/
+perf script | stackcollapse-perf.pl | stackcollapse-recursive.pl | c++filt | flamegraph.pl > flame.svg

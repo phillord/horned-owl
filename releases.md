@@ -1,3 +1,9 @@
+Version 0.8.0
+=============
+
+The RDF parser has been made several orders of magnitude faster, by
+removing quadratic updating of axioms.
+
 Version 0.7.0
 =============
 

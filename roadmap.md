@@ -1,24 +1,25 @@
-
-Version 0.8.0
+Version 0.9.0
 =============
 
-Implement `OntologyIndex`s to support rapid RDF parsing
-Remove index.rs
+Redesign RDF parser interface into two phases, one for imports,
+then second with alternative importer.
 
-Version 0.9.0
+Add simple, local import resolver.
+
+Version next
 ==============
 
 Reconsider sofia vs Rio.
 Add an RDF writer
 
 
-Version 0.10.0
+Version next
 ==============
 
 Clean up command line code. Add a multiplexer `horned-owl dump` ->
 `horned-dump`
 
-Version 0.11.0
+Version next
 ==============
 
 Consider tighter integration with other crates, especially for
