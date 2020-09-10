@@ -247,7 +247,7 @@ macro_rules! d {
 pub type RDFOntology = ThreeIndexedOntology<SetIndex,DeclarationMappedIndex,LogicallyEqualIndex>;
 
 impl From<RDFOntology> for SetOntology {
-    fn from(so: RDFOntology) -> SetOntology { 
+    fn from(so: RDFOntology) -> SetOntology {
         let id: OntologyID = so.id().clone();
         let (si, i1, i2) = so.index();
         // Drop the rest of these so that we can consume the Rc
@@ -257,12 +257,16 @@ impl From<RDFOntology> for SetOntology {
     }
 }
 
+enum OntologyParserState {
+    New, Imports, Declarations, Parse
+}
 
 
-struct OntologyParser<'a> {
+pub struct OntologyParser<'a> {
     o: RDFOntology,
     b: &'a Build,
 
+    triple: Vec<[SpTerm; 3]>,
     simple: Vec<[Term; 3]>,
     bnode: HashMap<SpBlankNode, Vec<[Term; 3]>>,
     bnode_seq: HashMap<SpBlankNode, Vec<Term>>,
@@ -271,14 +275,17 @@ struct OntologyParser<'a> {
     object_property_expression: HashMap<SpBlankNode, ObjectPropertyExpression>,
     data_range: HashMap<SpBlankNode, DataRange>,
     ann_map: HashMap<[Term; 3], BTreeSet<Annotation>>,
+    state: OntologyParserState,
+    error: Result<(),Error>,
 }
 
 impl<'a> OntologyParser<'a> {
-    fn new(b: &'a Build) -> OntologyParser {
+    pub fn new(b: &'a Build, triple: Vec<[SpTerm; 3]>) -> OntologyParser {
         OntologyParser {
             o: d!(),
             b,
 
+            triple,
             simple: d!(),
             bnode: d!(),
             bnode_seq: d!(),
@@ -286,6 +293,8 @@ impl<'a> OntologyParser<'a> {
             object_property_expression: d!(),
             data_range: d!(),
             ann_map: d!(),
+            state: OntologyParserState::New,
+            error: Ok(()),
         }
     }
 
@@ -1394,80 +1403,107 @@ impl<'a> OntologyParser<'a> {
         }
     }
 
-    fn read(mut self, triple: Vec<[SpTerm; 3]>) -> Result<RDFOntology, Error> {
-        // move to our own Terms, with IRIs swapped
-        let m = vocab_lookup();
-        let triple: Vec<[Term; 3]> = triple
-            .into_iter()
-            .map(|t| {
-                [
-                    to_term(&t[0], &m, self.b),
-                    to_term(&t[1], &m, self.b),
-                    to_term(&t[2], &m, self.b),
-                ]
-            })
-            .collect();
+    /// Parse all imports and add to the Ontology.
+    /// Return an error is we are in the wrong state
+    pub fn parse_imports(&mut self) -> Result<(), Error> {
+        match self.state {
+            OntologyParserState::New => {
+                // move to our own Terms, with IRIs swapped
+                let m = vocab_lookup();
+                let triple: Vec<[Term; 3]> = std::mem::take(&mut self.triple)
+                    .into_iter()
+                    .map(|t| {
+                        [
+                            to_term(&t[0], &m, self.b),
+                            to_term(&t[1], &m, self.b),
+                            to_term(&t[2], &m, self.b),
+                        ]
+                    })
+                    .collect();
 
-        Self::group_triples(triple, &mut self.simple, &mut self.bnode);
+                Self::group_triples(triple, &mut self.simple, &mut self.bnode);
 
-        // sort the triples, so that I can get a dependable order
-        for (_, vec) in self.bnode.iter_mut() {
-            vec.sort();
+                // sort the triples, so that I can get a dependable order
+                for (_, vec) in self.bnode.iter_mut() {
+                    vec.sort();
+                }
+
+                self.stitch_seqs();
+
+                // Table 10
+                dbg!(self.axiom_annotations());
+                dbg!(self.resolve_imports());
+                self.state = OntologyParserState::Imports;
+                Ok(())
+            }
+            _ => todo!()
         }
+    }
 
-        self.stitch_seqs();
+    /// Parse all declarations and add to the ontology.
+    /// Error if we are not in the right state
+    pub fn parse_declarations(&mut self) -> Result<(), Error> {
+        match self.state {
+            OntologyParserState::Imports => {
+                dbg!(self.backward_compat());
 
-        // Table 10
-        dbg!(self.axiom_annotations());
+                // for t in bnode.values() {
+                //     match t.as_slice()[0] {
+                //         [BNode(s), RDF(VRDF::First), ob] => {
+                //             //let v = vec![];
+                //             // So, we have captured first (value of which is ob)
+                //             // Rest of the sequence could be either in
+                //             // bnode_seq or in bnode -- confusing
+                //             //bnode_seq.insert(s.clone(), self.seq())
+                //         }
+                //     }
+                // }
 
-        dbg!(self.resolve_imports());
-        dbg!(self.backward_compat());
+                // Then handle SEQ this should give HashMap<BNodeID,
+                // Vec<[SpTerm]> where the BNodeID is the first node of the
+                // seq, and the SpTerms are the next in order. This will
+                // require multiple passes through the triples (This is Table
+                // 3 in the structural Specification)
 
-        // for t in bnode.values() {
-        //     match t.as_slice()[0] {
-        //         [BNode(s), RDF(VRDF::First), ob] => {
-        //             //let v = vec![];
-        //             // So, we have captured first (value of which is ob)
-        //             // Rest of the sequence could be either in
-        //             // bnode_seq or in bnode -- confusing
-        //             //bnode_seq.insert(s.clone(), self.seq())
-        //         }
-        //     }
-        // }
+                // At this point we should have everything we need to be able
+                // to make all the entities that we need, already grouped into
+                // a place we can access it.
 
-        // Then handle SEQ this should give HashMap<BNodeID,
-        // Vec<[SpTerm]> where the BNodeID is the first node of the
-        // seq, and the SpTerms are the next in order. This will
-        // require multiple passes through the triples (This is Table
-        // 3 in the structural Specification)
+                // Now we work through the tables in the RDF serialization
 
-        // At this point we should have everything we need to be able
-        // to make all the entities that we need, already grouped into
-        // a place we can access it.
+                // Table 4: headers. To do this fully requires imports also,
+                // but we need to fudge this a little. We need to be to able
+                // to read an ontology just for declarations. At the moment, I
+                // don't know how to get to another set of triples for these
+                // -- we will need some kind of factory.
+                dbg!(self.headers());
 
-        // Now we work through the tables in the RDF serialization
+                // Can we pull out annotations at this point and handle them
+                // as we do in reader2? Tranform them into a triple which we
+                // handle normally, then bung the annotation on later?
 
-        // Table 4: headers. To do this fully requires imports also,
-        // but we need to fudge this a little. We need to be to able
-        // to read an ontology just for declarations. At the moment, I
-        // don't know how to get to another set of triples for these
-        // -- we will need some kind of factory.
-        dbg!(self.headers());
+                // Table 5: Backward compability -- skip this for now (maybe
+                // for ever)
 
-        // Can we pull out annotations at this point and handle them
-        // as we do in reader2? Tranform them into a triple which we
-        // handle normally, then bung the annotation on later?
+                // Table 6: Don't understand this
 
-        // Table 5: Backward compability -- skip this for now (maybe
-        // for ever)
+                // Table 7: Declarations (this should be simple, if we have a
+                // generic solution for handling annotations, there is no
+                // handling of bnodes).
+                dbg!(self.declarations());
+                self.state = OntologyParserState::Declarations;
+                Ok(())
+            }
+            _ => todo!()
+        }
+    }
 
-        // Table 6: Don't understand this
-
-        // Table 7: Declarations (this should be simple, if we have a
-        // generic solution for handling annotations, there is no
-        // handling of bnodes).
-        dbg!(self.declarations());
-
+    /// Complete the parse of the ontology.
+    ///
+    /// rf is a Vec of references to the import closure. These RDF
+    /// ontologies do not need to be completely parsed, but will be
+    /// relied on to resolve declarations.
+    pub fn finish_parse(&mut self, _rf: Vec<&RDFOntology>) -> Result<(), Error> {
         // Table 10
         dbg!(self.simple_annotations());
 
@@ -1486,14 +1522,17 @@ impl<'a> OntologyParser<'a> {
         let mut simple_left = vec![];
         let mut bnode_left = HashMap::default();
 
-        Self::group_triples(self.simple, &mut simple_left, &mut bnode_left);
+        Self::group_triples(std::mem::take(&mut self.simple),
+                            &mut simple_left, &mut bnode_left);
 
         if simple_left.len() > 0 {
             dbg!("simple remaining", simple_left.len());
+            dbg!("simple", simple_left);
         }
 
         if bnode_left.len() > 0 {
             dbg!("bnode left", bnode_left.len());
+            dbg!("bnode", bnode_left);
         }
 
         if self.bnode_seq.len() > 0 {
@@ -1518,8 +1557,40 @@ impl<'a> OntologyParser<'a> {
                 self.object_property_expression.len()
             );
         }
-        
-        Ok(self.o)
+        self.state = OntologyParserState::Parse;
+        Ok(())
+    }
+
+    pub fn parse(mut self) -> Result<RDFOntology,Error> {
+        match self.error {
+            Err(_) => return self.as_ontology(),
+            Ok(_) => (),
+        };
+
+        match self.state {
+            OntologyParserState::New => {
+                self.error = self.parse_imports();
+                self.parse()
+            }
+            OntologyParserState::Imports => {
+                self.error = self.parse_declarations();
+                self.parse()
+            }
+            OntologyParserState::Declarations => {
+                self.error = self.finish_parse(vec![]);
+                self.parse()
+            }
+            OntologyParserState::Parse => self.as_ontology(),
+        }
+    }
+
+    pub fn ontology_ref(&self) -> &RDFOntology {
+        &self.o
+    }
+
+    /// Consume the parser and return an Ontology.
+    pub fn as_ontology(self) -> Result<RDFOntology, Error> {
+        self.error.and(Ok(self.o))
     }
 }
 
@@ -1533,8 +1604,8 @@ pub fn read_with_build<R: BufRead>(
     let triple_v: Vec<[SpTerm; 3]> = triple_result.unwrap();
     eprintln!("sofia completed");
 
-    return OntologyParser::new(build)
-        .read(triple_v)
+    return OntologyParser::new(build, triple_v)
+        .parse()
         .map(|o| return (o, PrefixMapping::default()));
 }
 
