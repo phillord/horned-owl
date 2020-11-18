@@ -257,6 +257,7 @@ impl From<RDFOntology> for SetOntology {
     }
 }
 
+#[derive(Debug)]
 enum OntologyParserState {
     New, Imports, Declarations, Parse
 }
@@ -1444,6 +1445,11 @@ impl<'a> OntologyParser<'a> {
     /// Error if we are not in the right state
     pub fn parse_declarations(&mut self) -> Result<(), Error> {
         match self.state {
+            OntologyParserState::New => {
+                self.parse_imports().and_then(
+                    |_| self.parse_declarations()
+                )
+            }
             OntologyParserState::Imports => {
                 dbg!(self.backward_compat());
 
@@ -1490,11 +1496,13 @@ impl<'a> OntologyParser<'a> {
                 // Table 7: Declarations (this should be simple, if we have a
                 // generic solution for handling annotations, there is no
                 // handling of bnodes).
-                dbg!(self.declarations());
+                self.declarations();
                 self.state = OntologyParserState::Declarations;
                 Ok(())
             }
-            _ => todo!()
+            _ => {
+                todo!();
+            }
         }
     }
 
@@ -1594,17 +1602,22 @@ impl<'a> OntologyParser<'a> {
     }
 }
 
+pub fn parser_with_build<'a, 'b, R: BufRead>(
+    bufread: &'a mut R,
+    build: &'b Build,
+) -> OntologyParser<'b> {
+    let triple_iter = sophia::parser::xml::parse_bufread(bufread);
+    let triple_result: Result<Vec<_>, _> = triple_iter.collect_triples();
+    let triple_v: Vec<[SpTerm; 3]> = triple_result.unwrap();
+
+    OntologyParser::new(build, triple_v)
+}
+
 pub fn read_with_build<R: BufRead>(
     bufread: &mut R,
     build: &Build,
 ) -> Result<(RDFOntology, PrefixMapping), Error> {
-    eprintln!("sofia read");
-    let triple_iter = sophia::parser::xml::parse_bufread(bufread);
-    let triple_result: Result<Vec<_>, _> = triple_iter.collect_triples();
-    let triple_v: Vec<[SpTerm; 3]> = triple_result.unwrap();
-    eprintln!("sofia completed");
-
-    return OntologyParser::new(build, triple_v)
+    return parser_with_build(bufread, build)
         .parse()
         .map(|o| return (o, PrefixMapping::default()));
 }
@@ -1622,6 +1635,7 @@ mod test {
     use std::path::PathBuf;
 
     use pretty_assertions::assert_eq;
+    use crate::ontology::axiom_mapped::AxiomMappedOntology;
 
     fn init_log() {
         let _ = env_logger::builder()
@@ -1660,6 +1674,15 @@ mod test {
             &slurp::read_all_to_string(format!("{}/../../ont/owl-xml/{}.owx", dir, testowl))
                 .unwrap(),
         );
+    }
+
+    fn slurp_rdfont(testrdf:&str) -> std::string::String {
+        let dir_path_buf = PathBuf::from(file!());
+        let dir = dir_path_buf.parent().unwrap().to_string_lossy();
+
+        slurp::read_all_to_string(format!("{}/../../ont/owl-rdf/{}.owl",
+                                           dir, testrdf))
+                .unwrap()
     }
 
     fn compare_str(rdfread: &str, xmlread: &str) {
@@ -1885,6 +1908,30 @@ mod test {
     #[test]
     fn import() {
         compare("import");
+    }
+
+    #[test]
+    fn import_with_partial_parse(){
+        let b = Build::new();
+        let mut p = parser_with_build(&mut slurp_rdfont("import").as_bytes(), &b);
+        let _ = p.parse_imports();
+
+        let rdfont = p.as_ontology().unwrap();
+        let so:SetOntology = rdfont.into();
+        let amont:AxiomMappedOntology = so.into();
+        assert_eq!(amont.i().import().count(), 1);
+    }
+
+    #[test]
+    fn declaration_with_partial_parse(){
+        let b = Build::new();
+        let mut p = parser_with_build(&mut slurp_rdfont("class").as_bytes(), &b);
+        let _ = p.parse_declarations();
+
+        let rdfont = p.as_ontology().unwrap();
+        let so:SetOntology = rdfont.into();
+        let amont:AxiomMappedOntology = so.into();
+        assert_eq!(amont.i().declare_class().count(), 1);
     }
 
     #[test]
