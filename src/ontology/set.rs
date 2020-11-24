@@ -17,6 +17,7 @@ pub struct SetOntology {
     // retrieval of axioms. Otherwise, we'd have to iterate through
     // the lot every time.
     axiom: HashSet<AnnotatedAxiom>,
+    doc_iri: Option<IRI>
 }
 
 impl SetOntology {
@@ -47,6 +48,14 @@ impl Ontology for SetOntology {
 
     fn mut_id(&mut self) -> &mut OntologyID {
         &mut self.id
+    }
+
+    fn doc_iri(&self) -> &Option<IRI> {
+        &self.doc_iri
+    }
+
+    fn mut_doc_iri(&mut self) -> &Option<IRI>{
+        &mut self.doc_iri
     }
 }
 
@@ -121,6 +130,7 @@ impl FromIterator<AnnotatedAxiom> for SetOntology {
         SetOntology {
             id: Default::default(),
             axiom: HashSet::from_iter(iter),
+            ..Default::default()
         }
     }
 }

@@ -1422,6 +1422,8 @@ pub struct OntologyID {
 pub trait Ontology {
     fn id(&self) -> &OntologyID;
     fn mut_id(&mut self) -> &mut OntologyID;
+    fn doc_iri(&self) -> &Option<IRI>;
+    fn mut_doc_iri(&mut self) -> &Option<IRI>;
 }
 
 /// Add or remove axioms to an `MutableOntology`

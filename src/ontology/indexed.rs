@@ -18,7 +18,7 @@
 //! and `ThreeIndexedOntology`, each of which operate something like a
 //! named tuple, allowing differently typed `OntologyIndex` objects to
 //! be added.
-use crate::model::{AnnotatedAxiom, MutableOntology, Ontology, OntologyID};
+use crate::model::{AnnotatedAxiom, MutableOntology, Ontology, OntologyID, IRI};
 use std::rc::Rc;
 
 /// An `OntologyIndex` object.
@@ -83,11 +83,11 @@ impl OntologyIndex for NullIndex {
 /// A `OneIndexedOntology` operates as a simple adaptor betweeen any
 /// `OntologyIndex` and an `Ontology`.
 #[derive(Default, Debug, Eq, PartialEq)]
-pub struct OneIndexedOntology<I: OntologyIndex>(I, OntologyID);
+pub struct OneIndexedOntology<I: OntologyIndex>(I, OntologyID, Option<IRI>);
 
 impl<I: OntologyIndex> OneIndexedOntology<I> {
     pub fn new(i: I) -> Self {
-        OneIndexedOntology(i, Default::default())
+        OneIndexedOntology(i, Default::default(), Default::default())
     }
 
     pub fn i(&self) -> &I {
@@ -107,6 +107,14 @@ impl<I: OntologyIndex> Ontology for OneIndexedOntology<I> {
     fn mut_id(&mut self) -> &mut OntologyID {
         &mut self.1
     }
+
+    fn doc_iri(&self) -> &Option<IRI>{
+        &self.2
+    }
+
+    fn mut_doc_iri(&mut self) -> &Option<IRI>{
+        &mut self.2
+    }
 }
 
 impl<I: OntologyIndex> MutableOntology for OneIndexedOntology<I> {
@@ -124,11 +132,11 @@ impl<I: OntologyIndex> MutableOntology for OneIndexedOntology<I> {
 /// `OntologyIndex`. It itself implements `OntologyIndex` so that it
 /// can be composed.
 #[derive(Default, Debug)]
-pub struct TwoIndexedOntology<I: OntologyIndex, J: OntologyIndex>(I, J, OntologyID);
+pub struct TwoIndexedOntology<I: OntologyIndex, J: OntologyIndex>(I, J, OntologyID, Option<IRI>);
 
 impl<I: OntologyIndex, J: OntologyIndex> TwoIndexedOntology<I, J> {
     pub fn new(i: I, j: J, id: OntologyID) -> Self {
-        TwoIndexedOntology(i, j, id)
+        TwoIndexedOntology(i, j, id, Default::default())
     }
 
     pub fn i(&self) -> &I {
@@ -151,6 +159,14 @@ impl<I: OntologyIndex, J: OntologyIndex> Ontology for TwoIndexedOntology<I, J> {
 
     fn mut_id(&mut self) -> &mut OntologyID {
         &mut self.2
+    }
+
+    fn doc_iri(&self) -> &Option<IRI> {
+        &self.3
+    }
+
+    fn mut_doc_iri(&mut self) -> &Option<IRI>{
+        &mut self.3
     }
 }
 
@@ -188,8 +204,9 @@ impl<I: OntologyIndex, J: OntologyIndex, K: OntologyIndex> ThreeIndexedOntology<
     pub fn new(i: I, j: J, k: K, id: OntologyID) -> Self {
         ThreeIndexedOntology(TwoIndexedOntology(
             i,
-            TwoIndexedOntology(j, k, Default::default()),
+            TwoIndexedOntology(j, k, Default::default(), Default::default()),
             id,
+            Default::default()
         ))
     }
 
@@ -220,6 +237,14 @@ impl<I: OntologyIndex, J: OntologyIndex, K: OntologyIndex> Ontology
 
     fn mut_id(&mut self) -> &mut OntologyID {
         self.0.mut_id()
+    }
+
+    fn doc_iri(&self) -> &Option<IRI> {
+        self.0.doc_iri()
+    }
+
+    fn mut_doc_iri(&mut self) -> &Option<IRI>{
+        self.0.mut_doc_iri()
     }
 }
 
@@ -265,8 +290,10 @@ impl<I: OntologyIndex, J: OntologyIndex, K: OntologyIndex, L: OntologyIndex>
     pub fn new(i: I, j: J, k: K, l: L, id: OntologyID) -> Self {
         FourIndexedOntology(TwoIndexedOntology(
             i,
-            ThreeIndexedOntology::new(j, k, l, Default::default()),
+            ThreeIndexedOntology::new(j, k, l,
+                                      Default::default()),
             id,
+            Default::default(),
         ))
     }
 
@@ -301,6 +328,14 @@ impl<I: OntologyIndex, J: OntologyIndex, K: OntologyIndex, L: OntologyIndex> Ont
 
     fn mut_id(&mut self) -> &mut OntologyID {
         self.0.mut_id()
+    }
+
+    fn doc_iri(&self) -> &Option<IRI> {
+        self.0.doc_iri()
+    }
+
+    fn mut_doc_iri(&mut self) -> &Option<IRI>{
+        self.0.mut_doc_iri()
     }
 }
 
