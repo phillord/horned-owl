@@ -135,6 +135,7 @@ impl<'a> From<&'a IRI> for String {
     }
 }
 
+
 /// `Build` creates new `IRI` and `NamedEntity` instances.
 ///
 /// There is caching for performance. An `IRI` or `NamedEntity` with a
