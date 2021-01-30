@@ -28,9 +28,11 @@ sophia_api = "0.6.0"
 sophia_iri = "0.6.0"
 
 [dev-dependencies]
+assert_cmd = "0.10"
 bencher = "0.1.4"
 env_logger = "0.7.1"
 mktemp = "0.3.1"
+predicates = "1"
 pretty_assertions = "0.6.1"
 slurp = "1.0.1"
 

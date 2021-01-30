@@ -1,21 +1,21 @@
-@prefix : <http://www.example.com/other-iri#> .
+@prefix : <http://www.example.com/other-property#> .
 @prefix o: <http://www.example.com/iri#> .
 @prefix owl: <http://www.w3.org/2002/07/owl#> .
 @prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
 @prefix xml: <http://www.w3.org/XML/1998/namespace> .
 @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
 @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
-@prefix other: <http://www.example.com/other-iri#> .
-@base <http://www.example.com/other-iri> .
+@prefix other: <http://www.example.com/other-property#> .
+@base <http://www.example.com/other-property> .
 
-<http://www.example.com/other-iri> rdf:type owl:Ontology ;
-                                    owl:versionIRI <http://www.example.com/other-viri> .
+<http://www.example.com/other-property> rdf:type owl:Ontology ;
+                                         owl:versionIRI <http://www.example.com/other-property-viri> .
 
 #################################################################
 #    Object Properties
 #################################################################
 
-###  http://www.example.com/other-iri#other-o
+###  http://www.example.com/other-property#other-o
 other:other-o rdf:type owl:ObjectProperty .
 
 

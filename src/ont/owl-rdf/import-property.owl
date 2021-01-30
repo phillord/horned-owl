@@ -7,10 +7,10 @@
      xmlns:xml="http://www.w3.org/XML/1998/namespace"
      xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
      xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"
-     xmlns:other="http://www.example.com/other-iri#">
+     xmlns:other="http://www.example.com/other-property#">
     <owl:Ontology rdf:about="http://www.example.com/iri">
         <owl:versionIRI rdf:resource="http://www.example.com/viri"/>
-        <owl:imports rdf:resource="http://www.example.com/other-iri"/>
+        <owl:imports rdf:resource="http://www.example.com/other-property"/>
     </owl:Ontology>
     
 
@@ -37,7 +37,7 @@
     <owl:Class rdf:about="http://www.example.com/iri#B">
         <rdfs:subClassOf>
             <owl:Restriction>
-                <owl:onProperty rdf:resource="http://www.example.com/other-iri#other-o"/>
+                <owl:onProperty rdf:resource="http://www.example.com/other-property#other-o"/>
                 <owl:someValuesFrom rdf:resource="http://www.example.com/iri#A"/>
             </owl:Restriction>
         </rdfs:subClassOf>

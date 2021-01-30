@@ -1,10 +1,14 @@
 //! Support for Horned command line programmes
-use crate::ontology::set::SetOntology;
+
+use crate::{model::{Build, IRI},
+            ontology::{axiom_mapped::AxiomMappedOntology,
+                       set::SetOntology},
+            resolve::{localize_iri, strict_resolve_iri}};
 use curie::PrefixMapping;
 
 use failure::Error;
 
-use std::{fs::File, io::BufReader, path::Path};
+use std::{fs::File, io::{BufReader, Write}, path::Path};
 
 pub fn parse_path(path: &Path) -> Result<(SetOntology, PrefixMapping), Error> {
     let file = File::open(&path)?;
@@ -22,6 +26,45 @@ pub fn parse_path(path: &Path) -> Result<(SetOntology, PrefixMapping), Error> {
             todo!()
         },
     })
+}
+
+pub fn materialize(input: &str) -> Result<Vec<IRI>,Error> {
+    let mut v = vec![];
+    materialize_1(input, &mut v, true)?;
+    Ok(v)
+}
+
+pub fn materialize_1<'a>(input: &str, done: &'a mut Vec<IRI>, recurse: bool)
+                         -> Result<&'a mut Vec<IRI>,Error> {
+    let (ont, _mapping) = parse_path(Path::new(input))?;
+
+    let amont:AxiomMappedOntology = ont.into();
+    let import = amont.i().import();
+
+    let b = Build::new();
+
+    // Get all the imports
+    for i in import {
+        dbg!("import: {:?}", i);
+        if !done.contains(&i.0) {
+            println!("Retrieving Ontology: {}", &i.0);
+            let imported_data = strict_resolve_iri(&i.0);
+            done.push(i.0.clone());
+
+            let local:String = localize_iri(&i.0, &b.iri(input)).into();
+
+            let mut file = File::create(&local)?;
+            file.write_all(&imported_data)?;
+            if recurse {
+                materialize_1(&local, done, true)?;
+            }
+        }
+        else {
+            println!("Already materialized: {}", &i.0);
+        }
+    }
+
+    Ok(done)
 }
 
 pub mod naming {

@@ -1,3 +1,4 @@
+## Exclude these because they will be generated when something else imports them
 EXCLUDE=ontology.clj other.clj other-property.clj
 
 PREQ=$(wildcard *.clj)

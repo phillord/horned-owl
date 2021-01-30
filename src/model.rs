@@ -90,9 +90,10 @@
 //! };
 //! ```
 
-use std::cell::RefCell;
+use std::{cell::RefCell, fmt::Formatter};
 use std::cmp::Ordering;
 use std::collections::BTreeSet;
+use std::fmt::Display;
 use std::hash::Hash;
 use std::hash::Hasher;
 use std::ops::Deref;
@@ -132,6 +133,12 @@ impl From<IRI> for String {
 impl<'a> From<&'a IRI> for String {
     fn from(i: &'a IRI) -> String {
         (*i.0).clone()
+    }
+}
+
+impl Display for IRI {
+    fn fmt(&self, f: &mut Formatter<'_>) -> ::std::fmt::Result {
+        f.write_str(&self.0)
     }
 }
 

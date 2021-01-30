@@ -2,8 +2,8 @@
   (:use [tawny.owl]))
 
 (defontology other
-  :iri "http://www.example.com/other-iri"
-  :viri "http://www.example.com/other-viri"
+  :iri "http://www.example.com/other-property"
+  :viri "http://www.example.com/other-property-viri"
   :noname true)
 
 (defoproperty other-o)

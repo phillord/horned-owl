@@ -6,6 +6,8 @@ then second with alternative importer.
 
 Add simple, local import resolver.
 
+Consider RDF parser, errors and reporting of left over triples
+
 Version next
 ==============
 

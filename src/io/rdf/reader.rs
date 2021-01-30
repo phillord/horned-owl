@@ -20,7 +20,8 @@ use crate::{ontology::
                     update_or_insert_logically_equal_axiom,
                 },
             },
-            vocab::RDFS as VRDFS};
+            vocab::RDFS as VRDFS, resolve::strict_resolve_iri
+};
 
 use enum_meta::Meta;
 use failure::Error;
@@ -37,6 +38,7 @@ use std::cmp::Ordering;
 use std::collections::BTreeSet;
 use std::collections::HashMap;
 use std::io::BufRead;
+use std::io::Cursor;
 use std::rc::Rc;
 
 // Two type aliases for "SoPhia" entities.
@@ -299,6 +301,21 @@ impl<'a> OntologyParser<'a> {
         }
     }
 
+    pub fn from_bufread<'b, R: BufRead>(b: &'a Build, bufread: &'b mut R)
+                                        -> OntologyParser<'a> {
+        let triple_iter = sophia::parser::xml::parse_bufread(bufread);
+        let triple_result: Result<Vec<_>, _> = triple_iter.collect_triples();
+        let triple_v: Vec<[SpTerm; 3]> = triple_result.unwrap();
+        OntologyParser::new(b, triple_v)
+    }
+
+
+    pub fn from_doc_iri(b: &'a Build, iri: &IRI) -> OntologyParser<'a> {
+        OntologyParser::from_bufread(
+            b, &mut Cursor::new(strict_resolve_iri(iri))
+        )
+    }
+
     fn group_triples(
         triple: Vec<[Term; 3]>,
         simple: &mut Vec<[Term; 3]>,
@@ -436,6 +453,10 @@ impl<'a> OntologyParser<'a> {
                 let iri = self.b.iri(rdfs.iri_s());
                 self.annotation(&[s.clone(), Term::Iri(iri), b.clone()])
             }
+            [s, OWL(owl), b] => {
+                let iri = self.b.iri(owl.iri_s());
+                self.annotation(&[s.clone(), Term::Iri(iri), b.clone()])
+            }
             [_, Iri(p), ob @ Term::Literal(_)] => Annotation {
                 ap: AnnotationProperty(p.clone()),
                 av: self.to_literal(ob).unwrap().into(),
@@ -447,7 +468,10 @@ impl<'a> OntologyParser<'a> {
                     av: ob.clone().into(),
                 }
             }
-            _ => todo!(),
+            _ => {
+                dbg!(t);
+                todo!()
+            }
         }
     }
 
@@ -1606,11 +1630,7 @@ pub fn parser_with_build<'a, 'b, R: BufRead>(
     bufread: &'a mut R,
     build: &'b Build,
 ) -> OntologyParser<'b> {
-    let triple_iter = sophia::parser::xml::parse_bufread(bufread);
-    let triple_result: Result<Vec<_>, _> = triple_iter.collect_triples();
-    let triple_v: Vec<[SpTerm; 3]> = triple_result.unwrap();
-
-    OntologyParser::new(build, triple_v)
+    OntologyParser::from_bufread(build, bufread)
 }
 
 pub fn read_with_build<R: BufRead>(
@@ -1699,6 +1719,23 @@ mod test {
         //let xmlmapping: &HashMap<&String, &String> = &xmlmapping.mappings().collect();
 
         //assert_eq!(rdfmapping, xmlmapping);
+    }
+
+    #[test]
+    fn read_iri() {
+        let dir_path_buf = PathBuf::from(file!());
+        let dir = dir_path_buf.parent().unwrap()
+            .parent().unwrap()
+            .parent().unwrap();
+        let cdir = dir.canonicalize().unwrap();
+        let b = Build::new();
+        let i:IRI = b.iri(
+            format!("file://{}/ont/owl-rdf/and.owl", cdir.to_string_lossy())
+        );
+
+        let op = OntologyParser::from_doc_iri(&b, &i);
+        let _o = op.parse().unwrap();
+        assert!(true);
     }
 
     #[test]
