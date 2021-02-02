@@ -23,6 +23,11 @@ fn main() -> Result<(), Error> {
                 .required(true)
                 .index(1),
         )
+        .arg(
+            Arg::with_name("incomplete")
+             .long("incomplete")
+             .short("l")
+        )
         .get_matches();
 
     matcher(matches)
@@ -38,12 +43,16 @@ fn matcher(matches: ArgMatches) -> Result<(), Error> {
     match r {
         horned_owl::io::ParserOutput::OWXParser(ont, map) => {
             let hash_map: HashMap<&String, &String> = map.mappings().collect();
-            println!("Ontology:\n{:?}\n\nMapping:\n{:?}", ont, hash_map);
+            println!("Ontology:\n{:?}\n\nMapping:\n{:#?}", ont, hash_map);
             Ok(())
 
         }
         horned_owl::io::ParserOutput::RDFParser(ont, inc) => {
-            println!("Ontology:\n{:?}\n\nIncomplete Parse:\n{:?}",ont, inc);
+            if !matches.is_present("incomplete") {
+                println!("Ontology:\n{:?}", ont);
+            }
+            
+            println!("Incomplete Parse:\n{:#?}", inc);
             Ok(())
         }
     }

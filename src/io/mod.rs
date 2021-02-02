@@ -18,6 +18,22 @@ pub enum ParserOutput
     RDFParser(RDFOntology, IncompleteParse),
 }
 
+impl ParserOutput {
+    pub fn decompose(self) -> (SetOntology,
+                               Option<PrefixMapping>,
+                               Option<IncompleteParse>)
+    {
+        match self {
+            ParserOutput::OWXParser(o, m) => {
+                (o, Some(m), None)
+            }
+            ParserOutput::RDFParser(o, i) => {
+                (o.into(), None, Some(i))
+            }
+        }
+    }
+}
+
 impl From<(SetOntology, PrefixMapping)> for ParserOutput{
     fn from(sop: (SetOntology, PrefixMapping)) -> ParserOutput {
         ParserOutput::OWXParser(sop.0, sop.1)
@@ -47,4 +63,3 @@ impl From<ParserOutput> for AxiomMappedOntology {
         }
     }
 }
-
