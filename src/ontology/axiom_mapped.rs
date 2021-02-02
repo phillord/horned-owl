@@ -291,13 +291,24 @@ impl IntoIterator for AxiomMappedOntology {
 
 impl From<SetOntology> for AxiomMappedOntology {
     fn from(mut so: SetOntology) -> AxiomMappedOntology {
-        let mut id = so.mut_id().clone();
         let mut amo = AxiomMappedOntology::default();
+        std::mem::swap(amo.mut_id(), &mut so.mut_id());
         for ax in so {
             amo.insert(ax);
         }
-        std::mem::swap(amo.mut_id(), &mut id);
         amo
+    }
+}
+
+impl From<AxiomMappedOntology> for SetOntology {
+    fn from(mut amo: AxiomMappedOntology) -> SetOntology {
+        let mut so = SetOntology::default();
+        std::mem::swap(so.mut_id(), amo.mut_id());
+
+        for ax in amo {
+            so.insert(ax);
+        }
+        so
     }
 }
 

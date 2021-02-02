@@ -1,26 +1,21 @@
 //! Support for Horned command line programmes
 
-use crate::{model::{Build, IRI},
-            ontology::{axiom_mapped::AxiomMappedOntology,
-                       set::SetOntology},
+use crate::{io::ParserOutput, model::{Build, IRI},
+            ontology::{axiom_mapped::AxiomMappedOntology},
             resolve::{localize_iri, strict_resolve_iri}};
-use curie::PrefixMapping;
 
 use failure::Error;
 
 use std::{fs::File, io::{BufReader, Write}, path::Path};
 
-pub fn parse_path(path: &Path) -> Result<(SetOntology, PrefixMapping), Error> {
+pub fn parse_path(path: &Path) -> Result<ParserOutput, Error>
+{
     let file = File::open(&path)?;
     let mut bufreader = BufReader::new(file);
 
     Ok(match path.extension().map(|s| s.to_str()).flatten() {
-        Some("owx") => super::io::owx::reader::read(&mut bufreader)?,
-        Some("owl") => super::io::rdf::reader::read(&mut bufreader)
-            .map(|(o, m)| (
-                o.into(),
-                m
-            ))?,
+        Some("owx") => super::io::owx::reader::read(&mut bufreader)?.into(),
+        Some("owl") => super::io::rdf::reader::read(&mut bufreader)?.into(),
         a @ _ => {
             eprintln!("Do not know how to parse file with extension: {:?}", a);
             todo!()
@@ -36,9 +31,7 @@ pub fn materialize(input: &str) -> Result<Vec<IRI>,Error> {
 
 pub fn materialize_1<'a>(input: &str, done: &'a mut Vec<IRI>, recurse: bool)
                          -> Result<&'a mut Vec<IRI>,Error> {
-    let (ont, _mapping) = parse_path(Path::new(input))?;
-
-    let amont:AxiomMappedOntology = ont.into();
+    let amont:AxiomMappedOntology = parse_path(Path::new(input))?.into();
     let import = amont.i().import();
 
     let b = Build::new();

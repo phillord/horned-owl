@@ -1,9 +1,6 @@
 use Term::*;
 
-use curie::PrefixMapping;
-
-
-use crate::model::Literal;
+use crate::{model::Literal, ontology::axiom_mapped::AxiomMappedOntology};
 use crate::model::*;
 
 use crate::vocab::WithIRI;
@@ -53,7 +50,7 @@ macro_rules! some {
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
-enum Term {
+pub enum Term {
     Iri(IRI),
     BNode(SpBlankNode),
     Literal(SpLiteral<Rc<str>>),
@@ -259,11 +256,29 @@ impl From<RDFOntology> for SetOntology {
     }
 }
 
+impl From<RDFOntology> for AxiomMappedOntology {
+    fn from(rdfo: RDFOntology) -> AxiomMappedOntology {
+        let so: SetOntology = rdfo.into();
+        so.into()
+    }
+}
+
 #[derive(Debug)]
 enum OntologyParserState {
     New, Imports, Declarations, Parse
 }
 
+#[derive(Debug, Default)]
+pub struct IncompleteParse {
+    pub simple: Vec<[Term; 3]>,
+    pub bnode: Vec<Vec<[Term; 3]>>,
+    pub bnode_seq: Vec<Vec<Term>>,
+
+    pub class_expression: Vec<ClassExpression>,
+    pub object_property_expression: Vec<ObjectPropertyExpression>,
+    pub data_range: Vec<DataRange>,
+    pub ann_map: HashMap<[Term;3], BTreeSet<Annotation>>,
+}
 
 pub struct OntologyParser<'a> {
     o: RDFOntology,
@@ -1537,67 +1552,27 @@ impl<'a> OntologyParser<'a> {
     /// relied on to resolve declarations.
     pub fn finish_parse(&mut self, _rf: Vec<&RDFOntology>) -> Result<(), Error> {
         // Table 10
-        dbg!(self.simple_annotations());
+        self.simple_annotations();
 
-        dbg!(self.data_ranges());
+        self.data_ranges();
 
         // Table 8:
-        dbg!(self.object_property_expressions());
+        self.object_property_expressions();
 
         // Table 13: Parsing of Class Expressions
-        dbg!(self.class_expressions());
+        self.class_expressions();
 
         // Table 16: Axioms without annotations
-        dbg!(self.axioms());
+        self.axioms();
 
-        // Regroup so that they print out nicer
-        let mut simple_left = vec![];
-        let mut bnode_left = HashMap::default();
-
-        Self::group_triples(std::mem::take(&mut self.simple),
-                            &mut simple_left, &mut bnode_left);
-
-        if simple_left.len() > 0 {
-            dbg!("simple remaining", simple_left.len());
-            dbg!("simple", simple_left);
-        }
-
-        if bnode_left.len() > 0 {
-            dbg!("bnode left", bnode_left.len());
-            dbg!("bnode", bnode_left);
-        }
-
-        if self.bnode_seq.len() > 0 {
-            dbg!("sequences remaining", self.bnode_seq.len());
-        }
-
-        if self.ann_map.len() > 0 {
-            dbg!("annotations remaining", self.ann_map.len());
-        }
-
-        if self.class_expression.len() > 0 {
-            dbg!("class_expression remaining", self.class_expression.len());
-        }
-
-        if self.data_range.len() > 0 {
-            dbg!("data range remaining", self.data_range.len());
-        }
-
-        if self.object_property_expression.len() > 0 {
-            dbg!(
-                "object property expression remaining",
-                self.object_property_expression.len()
-            );
-        }
         self.state = OntologyParserState::Parse;
         Ok(())
     }
 
-    pub fn parse(mut self) -> Result<RDFOntology,Error> {
-        match self.error {
-            Err(_) => return self.as_ontology(),
-            Ok(_) => (),
-        };
+    pub fn parse(mut self) -> Result<(RDFOntology, IncompleteParse),Error> {
+        if self.error.is_err() {
+            return Err(self.error.unwrap_err());
+        }
 
         match self.state {
             OntologyParserState::New => {
@@ -1612,7 +1587,7 @@ impl<'a> OntologyParser<'a> {
                 self.error = self.finish_parse(vec![]);
                 self.parse()
             }
-            OntologyParserState::Parse => self.as_ontology(),
+            OntologyParserState::Parse => self.as_ontology_and_incomplete(),
         }
     }
 
@@ -1623,6 +1598,35 @@ impl<'a> OntologyParser<'a> {
     /// Consume the parser and return an Ontology.
     pub fn as_ontology(self) -> Result<RDFOntology, Error> {
         self.error.and(Ok(self.o))
+    }
+
+    /// Consume the parser and return an Ontology and any data
+    /// structures that have not been fully parsed
+    pub fn as_ontology_and_incomplete(mut self) -> Result<(RDFOntology, IncompleteParse), Error> {
+        if self.error.is_err() {
+            return Err(self.error.unwrap_err());
+        }
+
+        // Regroup so that they print out nicer
+        let mut simple = vec![];
+        let mut bnode = HashMap::default();
+
+        Self::group_triples(std::mem::take(&mut self.simple),
+                            &mut simple, &mut bnode);
+
+        let bnode:Vec<_> = bnode.into_iter().map(|kv| kv.1).collect();
+        let bnode_seq:Vec<_> = self.bnode_seq.into_iter().map(|kv| kv.1).collect();
+        let class_expression:Vec<_> = self.class_expression.into_iter().map(|kv| kv.1).collect();
+        let object_property_expression:Vec<_> = self.object_property_expression
+            .into_iter().map(|kv| kv.1).collect();
+        let data_range = self.data_range.into_iter().map(|kv| kv.1).collect();
+
+        Ok((self.o, IncompleteParse {
+            simple, bnode, bnode_seq, class_expression,
+            object_property_expression, data_range,
+            ann_map: self.ann_map
+        }
+        ))
     }
 }
 
@@ -1636,13 +1640,11 @@ pub fn parser_with_build<'a, 'b, R: BufRead>(
 pub fn read_with_build<R: BufRead>(
     bufread: &mut R,
     build: &Build,
-) -> Result<(RDFOntology, PrefixMapping), Error> {
-    return parser_with_build(bufread, build)
-        .parse()
-        .map(|o| return (o, PrefixMapping::default()));
+) -> Result<(RDFOntology, IncompleteParse), Error> {
+    parser_with_build(bufread, build).parse()
 }
 
-pub fn read<R: BufRead>(bufread: &mut R) -> Result<(RDFOntology, PrefixMapping), Error> {
+pub fn read<R: BufRead>(bufread: &mut R) -> Result<(RDFOntology, IncompleteParse), Error> {
     let b = Build::new();
     read_with_build(bufread, &b)
 }
@@ -1664,7 +1666,7 @@ mod test {
             .try_init();
     }
 
-    fn read_ok<R: BufRead>(bufread: &mut R) -> (RDFOntology, PrefixMapping) {
+    fn read_ok<R: BufRead>(bufread: &mut R) -> RDFOntology {
         init_log();
 
         let r = read(bufread);
@@ -1677,7 +1679,7 @@ mod test {
             );
         }
 
-        r.unwrap()
+        r.unwrap().0
     }
 
     fn compare(test: &str) {
@@ -1706,10 +1708,9 @@ mod test {
     }
 
     fn compare_str(rdfread: &str, xmlread: &str) {
-        let (rdfont, _rdfmapping) = read_ok(&mut rdfread.as_bytes());
-        let (xmlont, _xmlmapping) = crate::io::owx::reader::test::read_ok(&mut xmlread.as_bytes());
-        let rdfont: SetOntology = rdfont.into();
-        let xmlont: SetOntology = (xmlont.id().clone(), xmlont.into_iter()).into();
+        let rdfont: SetOntology = read_ok(&mut rdfread.as_bytes()).into();
+        let xmlont: SetOntology = crate::io::owx::reader::test::read_ok(&mut xmlread.as_bytes())
+            .0.into();
 
         //dbg!(&rdfont); if true {panic!()};
 

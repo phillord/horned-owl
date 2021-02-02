@@ -8,7 +8,7 @@ use clap::ArgMatches;
 
 use failure::Error;
 
-use horned_owl::command::naming::name;
+use horned_owl::{command::naming::name, ontology::axiom_mapped::AxiomMappedOntology};
 use horned_owl::command::{parse_path, summary::summarize};
 use horned_owl::error::CommandError;
 
@@ -35,7 +35,7 @@ fn matcher(matches: &ArgMatches) -> Result<(), Error> {
         .value_of("INPUT")
         .ok_or(CommandError::MissingArgument)?;
 
-    let (ont, _mapping) = parse_path(Path::new(input))?;
+    let ont:AxiomMappedOntology = parse_path(Path::new(input))?.into();
 
     let summary = summarize(ont);
     println!("Ontology has:");

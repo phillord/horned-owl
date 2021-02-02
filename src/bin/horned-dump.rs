@@ -33,9 +33,18 @@ fn matcher(matches: ArgMatches) -> Result<(), Error> {
         .value_of("INPUT")
         .ok_or(CommandError::MissingArgument)?;
 
-    let (ont, mapping) = parse_path(Path::new(input))?;
+    let r = parse_path(Path::new(input))?;
 
-    let hash_map: HashMap<&String, &String> = mapping.mappings().collect();
-    println!("Ontology:\n{:?}\n\nMapping:\n{:?}", ont, hash_map);
-    Ok(())
+    match r {
+        horned_owl::io::ParserOutput::OWXParser(ont, map) => {
+            let hash_map: HashMap<&String, &String> = map.mappings().collect();
+            println!("Ontology:\n{:?}\n\nMapping:\n{:?}", ont, hash_map);
+            Ok(())
+
+        }
+        horned_owl::io::ParserOutput::RDFParser(ont, inc) => {
+            println!("Ontology:\n{:?}\n\nIncomplete Parse:\n{:?}",ont, inc);
+            Ok(())
+        }
+    }
 }
