@@ -8,7 +8,7 @@ use clap::ArgMatches;
 
 use failure::Error;
 
-use horned_owl::{command::parse_path, error::CommandError};
+use horned_owl::{command::parse_path, error::CommandError, ontology::set::SetOntology};
 
 use std::{collections::HashMap, path::Path};
 
@@ -49,9 +49,10 @@ fn matcher(matches: ArgMatches) -> Result<(), Error> {
         }
         horned_owl::io::ParserOutput::RDFParser(ont, inc) => {
             if !matches.is_present("incomplete") {
-                println!("Ontology:\n{:?}", ont);
+                let so:SetOntology = ont.into();
+                println!("Ontology:\n{:#?}", so);
             }
-            
+
             println!("Incomplete Parse:\n{:#?}", inc);
             Ok(())
         }
