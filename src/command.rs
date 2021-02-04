@@ -38,7 +38,6 @@ pub fn materialize_1<'a>(input: &str, done: &'a mut Vec<IRI>, recurse: bool)
 
     // Get all the imports
     for i in import {
-        dbg!("import: {:?}", i);
         if !done.contains(&i.0) {
             println!("Retrieving Ontology: {}", &i.0);
             let imported_data = strict_resolve_iri(&i.0);

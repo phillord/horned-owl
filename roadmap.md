@@ -16,6 +16,14 @@ Add an RDF writer
 
 
 Version next
+============
+
+Parser Headbutting.
+
+The RDF parser miss
+
+
+Version next
 ==============
 
 Clean up command line code. Add a multiplexer `horned-owl dump` ->

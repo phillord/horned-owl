@@ -8,7 +8,7 @@ use clap::ArgMatches;
 
 use failure::Error;
 
-use horned_owl::{command::naming::name, ontology::axiom_mapped::AxiomMappedOntology};
+use horned_owl::{command::naming::name};
 use horned_owl::command::{parse_path, summary::summarize};
 use horned_owl::error::CommandError;
 

@@ -6,7 +6,7 @@ Cargo.lock
 /benches/ont/o5000*.owl
 /notes.org
 /src/main.rs
-/Makefile
 /src/ont/temp.owl
 /src/ont/owl-xml/family-other.owl
 /tmp/
+/big-owl

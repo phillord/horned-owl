@@ -1,0 +1,36 @@
+<?xml version="1.0"?>
+<rdf:RDF xmlns="http://purl.obolibrary.org/obo/go.owl#"
+     xml:base="http://purl.obolibrary.org/obo/go.owl"
+     xmlns:dc="http://purl.org/dc/elements/1.1/"
+     xmlns:go="http://purl.obolibrary.org/obo/go#"
+     xmlns:obo="http://www.geneontology.org/formats/oboInOwl#http://purl.obolibrary.org/obo/"
+     xmlns:owl="http://www.w3.org/2002/07/owl#"
+     xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+     xmlns:xml="http://www.w3.org/XML/1998/namespace"
+     xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+     xmlns:obo1="http://purl.obolibrary.org/obo/"
+     xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"
+     xmlns:terms="http://purl.org/dc/terms/"
+     xmlns:terms2="http://www.geneontology.org/formats/oboInOwl#http://purl.org/dc/terms/"
+     xmlns:oboInOwl="http://www.geneontology.org/formats/oboInOwl#">
+    <owl:Ontology rdf:about="http://purl.obolibrary.org/obo/go.owl">
+    </owl:Ontology>
+
+    <owl:Class rdf:about="http://purl.obolibrary.org/obo/GO_0006633">
+      <!-- Snip the defintiion of this class because we don't need it -->
+    </owl:Class>
+
+    <owl:Class rdf:about="http://purl.obolibrary.org/obo/GO_0000036">
+      <owl:equivalentClass>
+        <owl:Class>
+          <owl:intersectionOf rdf:parseType="Collection">
+            <rdf:Description rdf:about="http://purl.obolibrary.org/obo/GO_0140414"/>
+            <owl:Restriction>
+              <owl:onProperty rdf:resource="http://purl.obolibrary.org/obo/BFO_0000050"/>
+              <owl:someValuesFrom rdf:resource="http://purl.obolibrary.org/obo/GO_0006633"/>
+            </owl:Restriction>
+          </owl:intersectionOf>
+        </owl:Class>
+      </owl:equivalentClass>
+    </owl:Class>
+</rdf:RDF>
