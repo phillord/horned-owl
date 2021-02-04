@@ -30,7 +30,7 @@ fn matcher(matches: ArgMatches) -> Result<(), Error> {
         .value_of("INPUT")
         .ok_or(CommandError::MissingArgument)?;
 
-    let v = materialize(input);
+    let v = materialize(input)?;
     println!("Materialized");
     for i in v {
         println!("\t{:?}", i);
