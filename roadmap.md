@@ -1,14 +1,4 @@
-Version 0.9.0
-=============
-
-Redesign RDF parser interface into two phases, one for imports,
-then second with alternative importer.
-
-Add simple, local import resolver.
-
-Consider RDF parser, errors and reporting of left over triples
-
-Version next
+Version 0.10.0
 ==============
 
 Reconsider sofia vs Rio.
@@ -20,7 +10,7 @@ Version next
 
 Parser Headbutting.
 
-The RDF parser miss
+The RDF parser near miss, add strict/lax mode
 
 
 Version next
