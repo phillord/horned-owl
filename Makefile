@@ -60,3 +60,10 @@ materialize-with-bfo: ./tmp/ont-with-bfo.owl
 
 parse-go-snippet:
 	cargo run --bin horned-parse -- ./dev/go-short.owl
+
+materialize-dto:
+	$(MAKE) -C ./big-owl/dto dto_complete.owl
+	cargo run --bin horned-materialize -- ./big-owl/dto/dto_complete.owl
+
+parse_dto_gpcr:
+	cargo run --bin horned-parse -- ./big-owl/dto/dto_vocabulary_gpcr_gene.owl

@@ -1471,8 +1471,8 @@ impl<'a> OntologyParser<'a> {
                 self.stitch_seqs();
 
                 // Table 10
-                dbg!(self.axiom_annotations());
-                dbg!(self.resolve_imports());
+                self.axiom_annotations();
+                self.resolve_imports();
                 self.state = OntologyParserState::Imports;
                 Ok(())
             }

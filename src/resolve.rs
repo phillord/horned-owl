@@ -8,8 +8,8 @@ use crate::model::{Build, IRI};
 //     // Read it!
 // }
 
-// Guess whether there is a file that is probably `iri` but local to
-// `doc_iri`.
+// Given an `iri`, return the IRI local to `doc_iri` that this would
+// have.
 pub fn localize_iri(iri:&IRI, doc_iri:&IRI) -> IRI {
     let b = Build::new();
     let (_,term_iri) = iri.split_at(iri.rfind('/').unwrap() + 1);
@@ -19,7 +19,7 @@ pub fn localize_iri(iri:&IRI, doc_iri:&IRI) -> IRI {
             format!("{}/{}", doc_iri.split_at(index).0, term_iri)
         }
         else{
-            format!("{}", doc_iri)
+            format!("./{}", term_iri)
         }
     )
 }

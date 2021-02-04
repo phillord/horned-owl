@@ -1,25 +1,51 @@
 //! Support for Horned command line programmes
 
-use crate::{io::ParserOutput, model::{Build, IRI},
-            ontology::{axiom_mapped::AxiomMappedOntology},
-            resolve::{localize_iri, strict_resolve_iri}};
+use crate::{io::{ParserOutput, ResourceType}, model::{Build, IRI}, ontology::{axiom_mapped::AxiomMappedOntology}, resolve::{localize_iri, strict_resolve_iri}};
 
 use failure::Error;
 
 use std::{fs::File, io::{BufReader, Write}, path::Path};
+
+pub fn path_type(path: &Path) -> Option<ResourceType> {
+   match path.extension().map(|s| s.to_str()).flatten() {
+       Some("owx") => Some(ResourceType::OWX),
+       Some("owl") => Some(ResourceType::RDF),
+       _ => None,
+   }
+}
 
 pub fn parse_path(path: &Path) -> Result<ParserOutput, Error>
 {
     let file = File::open(&path)?;
     let mut bufreader = BufReader::new(file);
 
-    Ok(match path.extension().map(|s| s.to_str()).flatten() {
-        Some("owx") => super::io::owx::reader::read(&mut bufreader)?.into(),
-        Some("owl") => super::io::rdf::reader::read(&mut bufreader)?.into(),
-        a @ _ => {
-            eprintln!("Do not know how to parse file with extension: {:?}", a);
+    Ok(match path_type(path) {
+        Some(ResourceType::OWX) => super::io::owx::reader::read(&mut bufreader)?.into(),
+        Some(ResourceType::RDF) => super::io::rdf::reader::read(&mut bufreader)?.into(),
+        _ => {
+            eprintln!("Do not know how to parse file with path: {:?}", path);
             todo!()
         },
+    })
+}
+
+/// Parse but only as far as the imports, if that makes sense.
+pub fn parse_imports(path: &Path) -> Result<ParserOutput, Error> {
+    let file = File::open(&path)?;
+    let mut bufreader = BufReader::new(file);
+    Ok(match path_type(path) {
+        Some(ResourceType::OWX) => super::io::owx::reader::read(&mut bufreader)?.into(),
+        Some(ResourceType::RDF) => {
+            let b = Build::new();
+            let mut p = crate::io::rdf::reader::parser_with_build(&mut bufreader,
+                                                              &b);
+            p.parse_imports()?;
+            p.as_ontology_and_incomplete()?.into()
+        }
+        _ => {
+            eprintln!("Do not know how to parse file with path: {:?}", path);
+            todo!()
+        }
     })
 }
 
@@ -31,7 +57,8 @@ pub fn materialize(input: &str) -> Result<Vec<IRI>,Error> {
 
 pub fn materialize_1<'a>(input: &str, done: &'a mut Vec<IRI>, recurse: bool)
                          -> Result<&'a mut Vec<IRI>,Error> {
-    let amont:AxiomMappedOntology = parse_path(Path::new(input))?.into();
+    println!("Parsing: {}", input);
+    let amont:AxiomMappedOntology = parse_imports(Path::new(input))?.into();
     let import = amont.i().import();
 
     let b = Build::new();
@@ -39,14 +66,20 @@ pub fn materialize_1<'a>(input: &str, done: &'a mut Vec<IRI>, recurse: bool)
     // Get all the imports
     for i in import {
         if !done.contains(&i.0) {
-            println!("Retrieving Ontology: {}", &i.0);
-            let imported_data = strict_resolve_iri(&i.0);
-            done.push(i.0.clone());
 
             let local:String = localize_iri(&i.0, &b.iri(input)).into();
-
-            let mut file = File::create(&local)?;
-            file.write_all(&imported_data)?;
+            let local_path = Path::new(&local);
+            if !local_path.exists() {
+                println!("Retrieving Ontology: {}", &i.0);
+                let imported_data = strict_resolve_iri(&i.0);
+                done.push(i.0.clone());
+                println!("Saving to {}", local);
+                let mut file = File::create(&local)?;
+                file.write_all(&imported_data)?;
+            }
+            else {
+                println!("Already Present: {}", local);
+            }
             if recurse {
                 materialize_1(&local, done, true)?;
             }

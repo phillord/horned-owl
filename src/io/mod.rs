@@ -12,6 +12,9 @@ use crate::ontology
 
 use self::rdf::reader::{IncompleteParse, RDFOntology};
 
+
+pub enum ResourceType{OWX, RDF}
+
 pub enum ParserOutput
 {
     OWXParser(SetOntology, PrefixMapping),
