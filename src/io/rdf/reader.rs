@@ -1,4 +1,5 @@
 use Term::*;
+use rio_api::{model::{BlankNode, NamedNode, NamedOrBlankNode}, parser::TriplesParser};
 
 use crate::{model::Literal, ontology::axiom_mapped::AxiomMappedOntology};
 use crate::model::*;
@@ -23,13 +24,6 @@ use crate::{ontology::
 use enum_meta::Meta;
 use failure::Error;
 
-use sophia_api::term::TTerm;
-
-use sophia::term::blank_node::BlankNode;
-use sophia::term::iri::Iri;
-use sophia::term::literal::Literal as SpLiteral;
-use sophia::term::variable::Variable;
-use sophia::triple::stream::TripleSource;
 
 use std::cmp::Ordering;
 use std::collections::BTreeSet;
@@ -38,10 +32,7 @@ use std::io::BufRead;
 use std::io::Cursor;
 use std::rc::Rc;
 
-// Two type aliases for "SoPhia" entities.
-type SpTerm = sophia::term::Term<Rc<str>>;
-type SpIri = Iri<Rc<str>>;
-type SpBlankNode = BlankNode<Rc<str>>;
+type RioTerm<'a> = ::rio_api::model::Term<'a>;
 
 macro_rules! some {
     ($body:expr) => {
@@ -49,12 +40,14 @@ macro_rules! some {
     };
 }
 
+#[derive(Clone, Debug, Eq, Hash, PartialEq, Ord, PartialOrd)]
+pub struct BNode(Rc<String>);
+
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub enum Term {
     Iri(IRI),
-    BNode(SpBlankNode),
-    Literal(SpLiteral<Rc<str>>),
-    Variable(Variable<Rc<str>>),
+    BNode(BNode),
+    Literal(Literal),
     OWL(VOWL),
     RDF(VRDF),
     RDFS(VRDFS),
@@ -69,9 +62,8 @@ impl Term {
             RDFS(_) => 3,
             FacetTerm(_) => 4,
             Iri(_) => 5,
-            BNode(_) => 6,
+            Term::BNode(_) => 6,
             Literal(_) => 7,
-            Variable(_) => 8,
         }
     }
 }
@@ -90,9 +82,8 @@ impl Ord for Term {
             (RDFS(s), RDFS(o)) => s.cmp(o),
             (FacetTerm(s), FacetTerm(o)) => s.cmp(o),
             (Iri(s), Iri(o)) => s.to_string().cmp(&o.to_string()),
-            (BNode(s), BNode(o)) => (*s).cmp(&(*o)),
-            (Literal(s), Literal(o)) => (s.txt()).cmp(o.txt()),
-            (Variable(s), Variable(o)) => s.cmp(o),
+            (Term::BNode(s), Term::BNode(o)) => (*s).cmp(&(*o)),
+            (Literal(s), Literal(o)) => (s.literal()).cmp(o.literal()),
             _ => self.ord().cmp(&other.ord()),
         }
     }
@@ -143,15 +134,16 @@ trait Convert {
     fn to_iri(&self, b: &Build) -> IRI;
 }
 
-impl Convert for SpIri {
-    fn to_iri(&self, b: &Build) -> IRI {
-        b.iri(self.chars().collect::<String>())
-    }
-}
+// TODO
+// impl Convert for SpIri {
+//     fn to_iri(&self, b: &Build) -> IRI {
+//         b.iri(self.chars().collect::<String>())
+//     }
+// }
 
-impl Convert for sophia::term::iri::Iri<&str> {
+impl Convert for rio_api::model::NamedNode<'_> {
     fn to_iri(&self, b: &Build) -> IRI {
-        b.iri(self.chars().collect::<String>())
+        b.iri(&self.to_string())
     }
 }
 
@@ -170,11 +162,11 @@ trait TryBuild<N: From<IRI>> {
     }
 }
 
-impl<N: From<IRI>> TryBuild<N> for Option<SpIri> {
-    fn to_some_iri(&self, b: &Build) -> Option<IRI> {
-        self.as_ref().map(|i| i.to_iri(b))
-    }
-}
+// impl<N: From<IRI>> TryBuild<N> for Option<SpIri> {
+//     fn to_some_iri(&self, b: &Build) -> Option<IRI> {
+//         self.as_ref().map(|i| i.to_iri(b))
+//     }
+// }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 enum OrTerm {
@@ -194,46 +186,80 @@ impl From<Term> for OrTerm {
     }
 }
 
-fn vocab_to_term<'a, V: WithIRI<'a>>(v: &V) -> SpTerm {
-    // unwrap should be safe for all known WithIRIs
-    sophia::term::Term::new_iri(Rc::from(v.iri_str())).unwrap()
-}
-
-fn vocab_lookup() -> HashMap<SpTerm, Term> {
+fn vocab_lookup() -> HashMap<&'static String, Term> {
     let mut m = HashMap::default();
 
     for v in VOWL::all() {
         match v {
             // Skip the builtin properties or we have to treat them separately
             VOWL::TopDataProperty => None,
-            _ => m.insert(vocab_to_term(&v), Term::OWL(v)),
+            _ => m.insert(v.iri_s(), Term::OWL(v)),
         };
     }
 
     for v in VRDFS::all() {
-        m.insert(vocab_to_term(&v), Term::RDFS(v));
+        m.insert(v.iri_s(), Term::RDFS(v));
     }
 
     for v in VRDF::all() {
-        m.insert(vocab_to_term(&v), Term::RDF(v));
+        m.insert(v.iri_s(), Term::RDF(v));
     }
 
     for v in Facet::all() {
-        m.insert(vocab_to_term(&v), Term::FacetTerm(v));
+        m.insert(v.iri_s(), Term::FacetTerm(v));
     }
     m
 }
 
-fn to_term(t: &SpTerm, m: &HashMap<SpTerm, Term>, b: &Build) -> Term {
-    if let Some(t) = m.get(t) {
-        t.clone()
-    } else {
-        match t {
-            sophia::term::Term::Iri(i) => Iri(i.to_iri(b)),
-            sophia::term::Term::BNode(id) => BNode(id.clone()),
-            sophia::term::Term::Literal(l) => Literal(l.clone()),
-            sophia::term::Term::Variable(v) => Variable(v.clone()),
+
+fn to_term_nn<'a>(nn: &'a NamedNode,
+                  m: &HashMap<&String, Term>,
+                  b: &Build) -> Term {
+    let s = nn.iri.to_string();
+    if let Some(term) = m.get(&s) {
+        return term.clone();
+    }
+    Term::Iri(b.iri(s))
+}
+
+fn to_term_bn<'a>(nn: &'a BlankNode) -> Term {
+    Term::BNode(BNode(nn.id.to_string().into()))
+}
+
+fn to_term_lt<'a>(lt: &'a rio_api::model::Literal, b: &Build)-> Term {
+    match lt {
+        rio_api::model::Literal::Simple{value} =>
+            Term::Literal(Literal::Simple{literal:value.to_string()}),
+        rio_api::model::Literal::LanguageTaggedString { value, language } =>
+            Term::Literal(Literal::Language{literal:value.to_string(), lang: language.to_string()}),
+        rio_api::model::Literal::Typed { value, datatype }
+        if datatype.iri == "http://www.w3.org/2001/XMLSchema#string" =>
+            Term::Literal(Literal::Simple{literal: value.to_string()}),
+        rio_api::model::Literal::Typed { value, datatype } => {
+            Term::Literal(Literal::Datatype{literal: value.to_string(),
+                                            datatype_iri: b.iri(datatype.iri.to_string())})
         }
+    }
+}
+
+fn to_term_nnb<'a>(nnb: &'a NamedOrBlankNode,
+                   m: &HashMap<&String, Term>,
+                   b: &Build) -> Term {
+    match nnb {
+        NamedOrBlankNode::NamedNode(nn) => {
+            to_term_nn(nn, m, b)
+        }
+        NamedOrBlankNode::BlankNode(bn) => {
+            to_term_bn(bn)
+        }
+    }
+}
+
+fn to_term<'a>(t: &'a RioTerm, m: &HashMap<&String, Term>, b: &Build) -> Term {
+    match t {
+        rio_api::model::Term::NamedNode(iri) => to_term_nn(iri, m, b),
+        rio_api::model::Term::BlankNode(id) => to_term_bn(id),
+        rio_api::model::Term::Literal(l) => to_term_lt(l, b)
     }
 }
 
@@ -284,21 +310,21 @@ pub struct OntologyParser<'a> {
     o: RDFOntology,
     b: &'a Build,
 
-    triple: Vec<[SpTerm; 3]>,
+    triple: Vec<[Term; 3]>,
     simple: Vec<[Term; 3]>,
-    bnode: HashMap<SpBlankNode, Vec<[Term; 3]>>,
-    bnode_seq: HashMap<SpBlankNode, Vec<Term>>,
+    bnode: HashMap<BNode, Vec<[Term; 3]>>,
+    bnode_seq: HashMap<BNode, Vec<Term>>,
 
-    class_expression: HashMap<SpBlankNode, ClassExpression>,
-    object_property_expression: HashMap<SpBlankNode, ObjectPropertyExpression>,
-    data_range: HashMap<SpBlankNode, DataRange>,
+    class_expression: HashMap<BNode, ClassExpression>,
+    object_property_expression: HashMap<BNode, ObjectPropertyExpression>,
+    data_range: HashMap<BNode, DataRange>,
     ann_map: HashMap<[Term; 3], BTreeSet<Annotation>>,
     state: OntologyParserState,
     error: Result<(),Error>,
 }
 
 impl<'a> OntologyParser<'a> {
-    pub fn new(b: &'a Build, triple: Vec<[SpTerm; 3]>) -> OntologyParser {
+    pub fn new(b: &'a Build, triple: Vec<[Term; 3]>) -> OntologyParser {
         OntologyParser {
             o: d!(),
             b,
@@ -318,12 +344,22 @@ impl<'a> OntologyParser<'a> {
 
     pub fn from_bufread<'b, R: BufRead>(b: &'a Build, bufread: &'b mut R)
                                         -> OntologyParser<'a> {
-        let triple_iter = sophia::parser::xml::parse_bufread(bufread);
-        let triple_result: Result<Vec<_>, _> = triple_iter.collect_triples();
-        let triple_v: Vec<[SpTerm; 3]> = triple_result.unwrap();
+        let m = vocab_lookup();
+        let triple_iter = rio_xml::RdfXmlParser::new(bufread, None).into_iter(
+            |rio_triple|
+            Ok(
+                [
+                    to_term_nnb(&rio_triple.subject, &m, b),
+                    to_term_nn(&rio_triple.predicate, &m, b),
+                    to_term(&rio_triple.object, &m, b)
+                ]
+            )
+        );
+        let results: Vec<Result<[Term; 3], Error>> = triple_iter.collect();
+        let triples: Result<Vec<_>, _> = results.into_iter().collect();
+        let triple_v: Vec<[Term; 3]> = triples.unwrap();
         OntologyParser::new(b, triple_v)
     }
-
 
     pub fn from_doc_iri(b: &'a Build, iri: &IRI) -> OntologyParser<'a> {
         OntologyParser::from_bufread(
@@ -334,7 +370,7 @@ impl<'a> OntologyParser<'a> {
     fn group_triples(
         triple: Vec<[Term; 3]>,
         simple: &mut Vec<[Term; 3]>,
-        bnode: &mut HashMap<SpBlankNode, Vec<[Term; 3]>>,
+        bnode: &mut HashMap<BNode, Vec<[Term; 3]>>,
     ) {
         // Next group together triples on a BNode, so we have
         // HashMap<BNodeID, Vec<[SpTerm; 3]> All of which should be
@@ -342,7 +378,7 @@ impl<'a> OntologyParser<'a> {
         // gather these in a single pass.
         for t in &triple {
             match t {
-                [BNode(id), _, _] => {
+                [Term::BNode(id), _, _] => {
                     let v = bnode.entry(id.clone()).or_insert_with(Vec::new);
                     v.push(t.clone())
                 }
@@ -718,7 +754,7 @@ impl<'a> OntologyParser<'a> {
         }
     }
 
-    fn to_ce_seq(&mut self, bnodeid: &SpBlankNode) -> Option<Vec<ClassExpression>> {
+    fn to_ce_seq(&mut self, bnodeid: &BNode) -> Option<Vec<ClassExpression>> {
         let v: Vec<Option<ClassExpression>> = self
             .bnode_seq
             .remove(bnodeid)
@@ -731,7 +767,7 @@ impl<'a> OntologyParser<'a> {
         v.into_iter().collect()
     }
 
-    fn to_ni_seq(&mut self, bnodeid: &SpBlankNode) -> Option<Vec<NamedIndividual>> {
+    fn to_ni_seq(&mut self, bnodeid: &BNode) -> Option<Vec<NamedIndividual>> {
         let v: Vec<Option<NamedIndividual>> = self
             .bnode_seq
             .remove(bnodeid)
@@ -743,7 +779,7 @@ impl<'a> OntologyParser<'a> {
         v.into_iter().collect()
     }
 
-    fn to_dr_seq(&mut self, bnodeid: &SpBlankNode) -> Option<Vec<DataRange>> {
+    fn to_dr_seq(&mut self, bnodeid: &BNode) -> Option<Vec<DataRange>> {
         let v: Vec<Option<DataRange>> = self
             .bnode_seq
             .remove(bnodeid)
@@ -756,7 +792,7 @@ impl<'a> OntologyParser<'a> {
     }
 
     // TODO Fix code duplication
-    fn to_literal_seq(&mut self, bnodeid: &SpBlankNode) -> Option<Vec<Literal>> {
+    fn to_literal_seq(&mut self, bnodeid: &BNode) -> Option<Vec<Literal>> {
         let v: Vec<Option<Literal>> = self
             .bnode_seq
             .remove(bnodeid)
@@ -781,34 +817,16 @@ impl<'a> OntologyParser<'a> {
 
     fn to_u32(&self, t: &Term) -> Option<u32> {
         match t {
-            Term::Literal(val) => val.txt().parse::<u32>().ok(),
+            Term::Literal(val) => val.literal().parse::<u32>().ok(),
             _ => None,
         }
     }
 
     fn to_literal(&self, t: &Term) -> Option<Literal> {
-        Some(match t {
-            Term::Literal(ob) => {
-                if let Some(lang) = ob.lang() {
-                    Literal::Language {
-                        lang: lang.clone().to_string(),
-                        literal: ob.value().to_string(),
-                    }
-                } else if ob.dt().to_string() ==
-                    // Sophia uses n3
-                    "<http://www.w3.org/2001/XMLSchema#string>" {
-                    Literal::Simple {
-                        literal: ob.value().to_string(),
-                    }
-                } else {
-                    Literal::Datatype {
-                        datatype_iri: ob.dt().to_iri(self.b),
-                        literal: ob.value().to_string(),
-                    }
-                }
-            }
+        match t {
+            Term::Literal(ob) => Some(ob.clone()),
             _ => return None,
-        })
+        }
     }
 
     fn find_declaration_kind(&mut self, iri: &IRI) -> Option<NamedEntityKind> {
@@ -1448,19 +1466,7 @@ impl<'a> OntologyParser<'a> {
     pub fn parse_imports(&mut self) -> Result<(), Error> {
         match self.state {
             OntologyParserState::New => {
-                // move to our own Terms, with IRIs swapped
-                let m = vocab_lookup();
-                let triple: Vec<[Term; 3]> = std::mem::take(&mut self.triple)
-                    .into_iter()
-                    .map(|t| {
-                        [
-                            to_term(&t[0], &m, self.b),
-                            to_term(&t[1], &m, self.b),
-                            to_term(&t[2], &m, self.b),
-                        ]
-                    })
-                    .collect();
-
+                let triple = std::mem::take(&mut self.triple);
                 Self::group_triples(triple, &mut self.simple, &mut self.bnode);
 
                 // sort the triples, so that I can get a dependable order
