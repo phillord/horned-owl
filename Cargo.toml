@@ -23,8 +23,8 @@ lazy_static="1.4.0"
 log = {version="0.4.8"}
 quick-xml="0.12.4"
 indexmap="1.0.2"
-rio_api="0.5.1"
-rio_xml="0.5.1"
+rio_api={git="https://github.com/oxigraph/rio.git"}
+rio_xml={git="https://github.com/oxigraph/rio.git"}
 
 [dev-dependencies]
 assert_cmd = "0.10"

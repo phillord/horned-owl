@@ -306,6 +306,18 @@ pub struct IncompleteParse {
     pub ann_map: HashMap<[Term;3], BTreeSet<Annotation>>,
 }
 
+impl IncompleteParse {
+    pub fn is_complete(&self) -> bool {
+        self.simple.is_empty() &&
+            self.bnode.is_empty() &&
+            self.bnode_seq.is_empty() &&
+            self.class_expression.is_empty() &&
+            self.object_property_expression.is_empty() &&
+            self.data_range.is_empty() &&
+            self.ann_map.is_empty()
+    }
+}
+
 pub struct OntologyParser<'a> {
     o: RDFOntology,
     b: &'a Build,
