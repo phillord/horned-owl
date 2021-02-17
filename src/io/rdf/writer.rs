@@ -43,13 +43,8 @@ impl AsRef<str> for BlankNodeId {
 
 trait Render {
     fn render<W:Write>(&self, f:&mut RdfXmlFormatter<W>,
-                       bng: &mut BlankNodeIdGenerator)-> Result<(), Error>;
-}
-
-trait RenderFromBNode {
-    fn render_from<W:Write>(&self, f:&mut RdfXmlFormatter<W>,
-                            bng: &mut BlankNodeIdGenerator,
-                            b: &BlankNode)-> Result<(), Error>;
+                       bng: &mut BlankNodeIdGenerator)->
+        Result<Option<BlankNode>, Error>;
 }
 
 /// The types in `Render` are too long to type.
@@ -58,9 +53,23 @@ macro_rules! render {
      $body:tt) => {
         impl Render for $type {
             fn render<W:Write>(& $self, $f:&mut RdfXmlFormatter<W>,
-                               $bng: &mut BlankNodeIdGenerator)-> Result<(), Error>
+                               $bng: &mut BlankNodeIdGenerator)-> Result<Option<BlankNode>, Error>
                 $body
         }
+    }
+}
+
+macro_rules! triples {
+    ($f:ident) => {};
+    ($f:ident, $sub:expr, $pred:expr, $ob:expr) => {
+        $f.format(&to_triple(
+                $sub, $pred, $ob
+            ))?
+        ;
+    };
+    ($f:ident, $sub:expr, $pred:expr, $ob:expr, $($rest:expr),+) => {
+        triples!($f, $sub, $pred, $ob);
+        triples!($f, $($rest),*);
     }
 }
 
@@ -69,16 +78,14 @@ macro_rules! render_triple {
         render! {
             $type, $self, f, _bng,
             {
-                f.format(&t(
-                    $sub, $pred, $ob
-                ))?;
-                Ok(())
+                triples!(f, $sub, $pred, $ob);
+                Ok(None)
             }
         }
     }
 }
 
-fn t<'a, NB, NN, T>(subject:NB, predicate:NN, object:T) -> Triple<'a>
+fn to_triple<'a, NB, NN, T>(subject:NB, predicate:NN, object:T) -> Triple<'a>
 where NB: Into<NamedOrBlankNode<'a>>,
       NN: Into<NamedNode<'a>>,
       T: Into<Term<'a>>
@@ -152,30 +159,31 @@ render! {
     &AxiomMappedOntology, self, f, bng,
     {
         if let Some(iri) = &self.id().iri {
-            f.format(&t(
-                iri.as_ref(),
-                RDF::Type,
-                OWL::Ontology))?;
-            if let Some(viri) = &self.id().viri {
-                f.format(&t(
+            triples!(f,
                     iri.as_ref(),
-                    OWL::VersionIRI,
-                    viri.as_ref()))?;
+                    RDF::Type,
+                    OWL::Ontology);
+
+            if let Some(viri) = &self.id().viri {
+                triples!(f,
+                        iri.as_ref(),
+                        OWL::VersionIRI,
+                        viri.as_ref());
             }
 
             let imp = self.i().import();
             for i in imp {
-                f.format(&t(
-                    iri.as_ref(),
-                    OWL::Imports,
-                    &i.0))?;
+                triples!(f,
+                        iri.as_ref(),
+                        OWL::Imports,
+                        &i.0);
             }
 
             for ax in self.i().iter() {
                 ax.render(f, bng)?;
             }
         }
-        Ok(())
+        Ok(None)
     }
 }
 
@@ -191,7 +199,7 @@ render! {
     {
         match self {
             // We render imports earlier
-            Axiom::Import(_ax) => Ok(()),
+            Axiom::Import(_ax) => Ok(None),
             //Axiom::OntologyAnnotation(ax) => ax.render(f, bng)?,
             Axiom::DeclareClass(ax) => ax.render(f, bng),
             Axiom::DeclareObjectProperty(ax) => ax.render(f, bng),
