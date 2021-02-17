@@ -5,9 +5,7 @@ use rio_xml::{RdfXmlFormatter};
 use rio_api::{formatter::TriplesFormatter, model::BlankNode};
 use rio_api::model::Triple;
 
-use crate::{model::*,
-            ontology::axiom_mapped::AxiomMappedOntology,
-            vocab::{OWL, RDF, WithIRI}};
+use crate::{model::*, ontology::axiom_mapped::AxiomMappedOntology, vocab::{OWL, RDF, RDFS, WithIRI}};
 
 pub fn write<W:Write>(
     write: &mut W,
@@ -62,6 +60,20 @@ macro_rules! render {
             fn render<W:Write>(& $self, $f:&mut RdfXmlFormatter<W>,
                                $bng: &mut BlankNodeIdGenerator)-> Result<(), Error>
                 $body
+        }
+    }
+}
+
+macro_rules! render_triple {
+    ($type:ty, $self:ident, $sub:expr, $pred:expr, $ob:expr) => {
+        render! {
+            $type, $self, f, _bng,
+            {
+                f.format(&t(
+                    $sub, $pred, $ob
+                ))?;
+                Ok(())
+            }
         }
     }
 }
@@ -137,7 +149,7 @@ impl<'a> From<&'a IRI> for Term<'a> {
 
 
 render! {
-    &AxiomMappedOntology, self, f, _bng,
+    &AxiomMappedOntology, self, f, bng,
     {
         if let Some(iri) = &self.id().iri {
             f.format(&t(
@@ -158,10 +170,103 @@ render! {
                     OWL::Imports,
                     &i.0))?;
             }
+
+            for ax in self.i().iter() {
+                ax.render(f, bng)?;
+            }
         }
         Ok(())
     }
 }
+
+render! {
+    AnnotatedAxiom, self, f, bng,
+    {
+        self.axiom.render(f, bng)
+    }
+}
+
+render! {
+    Axiom, self, f, bng,
+    {
+        match self {
+            // We render imports earlier
+            Axiom::Import(_ax) => Ok(()),
+            //Axiom::OntologyAnnotation(ax) => ax.render(f, bng)?,
+            Axiom::DeclareClass(ax) => ax.render(f, bng),
+            Axiom::DeclareObjectProperty(ax) => ax.render(f, bng),
+            Axiom::DeclareAnnotationProperty(ax) => ax.render(f, bng),
+            Axiom::DeclareDataProperty(ax) => ax.render(f, bng),
+            // Axiom::DeclareNamedIndividual(ax) => ax.render(f, bng)?,
+            Axiom::DeclareDatatype(ax) => ax.render(f, bng),
+            // Axiom::SubClassOf(ax) => ax.render(f, bng)?,
+            // Axiom::EquivalentClasses(ax) => ax.render(f, bng)?,
+            // Axiom::DisjointClasses(ax) => ax.render(f, bng)?,
+            // Axiom::DisjointUnion(ax) => ax.render(f, bng)?,
+            // Axiom::SubObjectPropertyOf(ax) => ax.render(f, bng)?,
+            // Axiom::EquivalentObjectProperties(ax) => ax.render(f, bng)?,
+            // Axiom::DisjointObjectProperties(ax) => ax.render(f, bng)?,
+            // Axiom::InverseObjectProperties(ax) => ax.render(f, bng)?,
+            // Axiom::ObjectPropertyDomain(ax) => ax.render(f, bng)?,
+            // Axiom::ObjectPropertyRange(ax) => ax.render(f, bng)?,
+            // Axiom::FunctionalObjectProperty(ax) => ax.render(f, bng)?,
+            // Axiom::InverseFunctionalObjectProperty(ax) => ax.render(f, bng)?,
+            // Axiom::ReflexiveObjectProperty(ax) => ax.render(f, bng)?,
+            // Axiom::IrreflexiveObjectProperty(ax) => ax.render(f, bng)?,
+            // Axiom::SymmetricObjectProperty(ax) => ax.render(f, bng)?,
+            // Axiom::AsymmetricObjectProperty(ax) => ax.render(f, bng)?,
+            // Axiom::TransitiveObjectProperty(ax) => ax.render(f, bng)?,
+            // Axiom::SubDataPropertyOf(ax) => ax.render(f, bng)?,
+            // Axiom::EquivalentDataProperties(ax) => ax.render(f, bng)?,
+            // Axiom::DisjointDataProperties(ax) => ax.render(f, bng)?,
+            // Axiom::DataPropertyDomain(ax) => ax.render(f, bng)?,
+            // Axiom::DataPropertyRange(ax) => ax.render(f, bng)?,
+            // Axiom::FunctionalDataProperty(ax) => ax.render(f, bng)?,
+            // Axiom::DatatypeDefinition(ax) => ax.render(f, bng)?,
+            // Axiom::HasKey(ax) => ax.render(f, bng)?,
+            // Axiom::SameIndividual(ax) => ax.render(f, bng)?,
+            // Axiom::DifferentIndividuals(ax) => ax.render(f, bng)?,
+            // Axiom::ClassAssertion(ax) => ax.render(f, bng)?,
+            // Axiom::ObjectPropertyAssertion(ax) => ax.render(f, bng)?,
+            // Axiom::NegativeObjectPropertyAssertion(ax) => ax.render(f, bng)?,
+            // Axiom::DataPropertyAssertion(ax) => ax.render(f, bng)?,
+            // Axiom::NegativeDataPropertyAssertion(ax) => ax.render(f, bng)?,
+            // Axiom::AnnotationAssertion(ax) => ax.render(f, bng)?,
+            // Axiom::SubAnnotationPropertyOf(ax) => ax.render(f, bng)?,
+            // Axiom::AnnotationPropertyDomain(ax) => ax.render(f, bng)?,
+            // Axiom::AnnotationPropertyRange(ax) => ax.render(f,
+            // bng)?
+            _ => todo!()
+        }
+    }
+}
+
+render_triple! {
+    DeclareClass, self,
+    &self.0.0, RDF::Type, OWL::Class
+}
+
+render_triple! {
+    DeclareDatatype, self,
+    &self.0.0, RDF::Type, RDFS::Datatype
+}
+
+render_triple! {
+    DeclareObjectProperty, self,
+    &self.0.0, RDF::Type, OWL::ObjectProperty
+}
+
+render_triple! {
+    DeclareDataProperty, self,
+    &self.0.0, RDF::Type, OWL::DatatypeProperty
+}
+
+render_triple! {
+    DeclareAnnotationProperty, self,
+    &self.0.0, RDF::Type, OWL::AnnotationProperty
+
+}
+
 
 #[cfg(test)]
 mod test {
@@ -260,13 +365,10 @@ mod test {
     //     assert_eq!(prefix_orig_map, prefix_round_map);
     // }
 
-    // #[test]
-    // fn round_class() {
-    //     let (ont_orig, ont_round) =
-    //         roundtrip(include_str!("../../ont/owl-rdf/class.owl"));
-
-    //     assert_eq!(ont_orig, ont_round);
-    // }
+    #[test]
+    fn round_class() {
+        assert_round(include_str!("../../ont/owl-rdf/class.owl"));
+    }
 
     // #[test]
     // fn round_class_with_annotation() {
@@ -285,10 +387,10 @@ mod test {
     //     assert_eq!(ont_orig, ont_round);
     // }
 
-    // #[test]
-    // fn round_oproperty() {
-    //     assert_round(include_str!("../../ont/owl-rdf/oproperty.owl"));
-    // }
+    #[test]
+    fn round_oproperty() {
+        assert_round(include_str!("../../ont/owl-rdf/oproperty.owl"));
+    }
 
     // #[test]
     // fn round_some() {
@@ -315,10 +417,10 @@ mod test {
     //     assert_round(include_str!("../../ont/owl-rdf/not.owl"));
     // }
 
-    // #[test]
-    // fn round_annotation_property() {
-    //     assert_round(include_str!("../../ont/owl-rdf/annotation-property.owl"));
-    // }
+    #[test]
+    fn round_annotation_property() {
+        assert_round(include_str!("../../ont/owl-rdf/annotation-property.owl"));
+    }
 
     // #[test]
     // fn round_annotation() {
@@ -413,10 +515,10 @@ mod test {
     //     assert_round(include_str!("../../ont/owl-rdf/sub-annotation.owl"));
     // }
 
-    // #[test]
-    // fn round_data_property() {
-    //     assert_round(include_str!("../../ont/owl-rdf/data-property.owl"));
-    // }
+    #[test]
+    fn round_data_property() {
+        assert_round(include_str!("../../ont/owl-rdf/data-property.owl"));
+    }
 
     // #[test]
     // fn round_literal_escaped() {
@@ -433,10 +535,10 @@ mod test {
         assert_round(include_str!("../../ont/owl-rdf/import.owl"));
     }
 
-    // #[test]
-    // fn datatype() {
-    //     assert_round(include_str!("../../ont/owl-rdf/datatype.owl"));
-    // }
+    #[test]
+    fn datatype() {
+        assert_round(include_str!("../../ont/owl-rdf/datatype.owl"));
+    }
 
     // #[test]
     // fn object_has_value() {
