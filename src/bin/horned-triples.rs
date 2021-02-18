@@ -10,21 +10,28 @@ use failure::Error;
 
 use horned_owl::error::CommandError;
 
-use rio_api::parser::TriplesParser;
+use rio_api::{formatter::TriplesFormatter, model::Triple, parser::TriplesParser};
+use rio_xml::RdfXmlFormatter;
 
-use std::fs::File;
+use std::{fs::File, io::stdout};
 use std::io::BufReader;
 
 fn main() -> Result<(), Error> {
-    let matches = App::new("horned-parse")
+    let matches = App::new("horned-triples")
         .version("0.1")
-        .about("Parse an OWL File and dump the data structures")
+        .about("Parse RDF and dump the triples")
         .author("Phillip Lord")
         .arg(
             Arg::with_name("INPUT")
                 .help("Sets the input file to use")
                 .required(true)
                 .index(1),
+        )
+        .arg(
+            Arg::with_name("round")
+                .long("round")
+                .help("Dump the triples")
+                .required(false)
         )
         .get_matches();
 
@@ -51,6 +58,19 @@ fn matcher(matches: ArgMatches) -> Result<(), Error> {
 
     for t in v {
         println!("{}", t.unwrap());
+    }
+
+    if matches.is_present("round") {
+        println!("\n");
+        let b = stdout();
+        let mut f = RdfXmlFormatter::with_indentation(&b, 4)?;
+        let file = File::open(input)?;
+        let bufreader = BufReader::new(file);
+        let _: Vec<Result<_, _>>
+            = rio_xml::RdfXmlParser::new(bufreader, None).into_iter(
+                |rio_triple| f.format(&rio_triple)
+            ).collect();
+        f.finish()?;
     }
 
     Ok(())
