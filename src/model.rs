@@ -97,7 +97,8 @@ use std::fmt::Display;
 use std::hash::Hash;
 use std::hash::Hasher;
 use std::ops::Deref;
-use std::rc::Rc;
+//use std::rc::Rc;
+use std::sync::Arc;
 
 /// An
 /// [IRI](https://en.wikipedia.org/wiki/Internationalized_Resource_Identifier)
@@ -107,7 +108,7 @@ use std::rc::Rc;
 /// created through `Build`; this caches the underlying String meaning
 /// that IRIs are light-weight to `clone`.
 #[derive(Clone, Debug, Eq, PartialEq, Hash, PartialOrd, Ord)]
-pub struct IRI(Rc<String>);
+pub struct IRI(Arc<String>);
 
 impl AsRef<str> for IRI {
     fn as_ref(&self) -> &str {
@@ -125,7 +126,7 @@ impl Deref for IRI {
 
 impl From<IRI> for String {
     fn from(i: IRI) -> String {
-        // Clone Rc'd value
+        // Clone Arc'd value
         (*i.0).clone()
     }
 }
@@ -157,11 +158,11 @@ impl Display for IRI {
 // both could be replaced by traits or enums straight-forwardly
 // enough, to enable threading.
 #[derive(Debug, Default)]
-pub struct Build(Rc<RefCell<BTreeSet<IRI>>>);
+pub struct Build(Arc<RefCell<BTreeSet<IRI>>>);
 
 impl Build {
     pub fn new() -> Build {
-        Build(Rc::new(RefCell::new(BTreeSet::new())))
+        Build(Arc::new(RefCell::new(BTreeSet::new())))
     }
 
     /// Constructs a new `IRI`
@@ -178,7 +179,7 @@ impl Build {
     where
         S: Into<String>,
     {
-        let iri = IRI(Rc::new(s.into()));
+        let iri = IRI(Arc::new(s.into()));
 
         let mut cache = self.0.borrow_mut();
         if cache.contains(&iri) {
@@ -645,6 +646,19 @@ macro_rules! axioms {
                        })
             }
         }
+
+        impl std::fmt::Display for AxiomKind {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                write!(f, "{}",
+                       match self {
+                           $(
+                               AxiomKind::$name => stringify!($name)
+                           ),*
+
+                       })
+            }
+        }
+
 
         /// An axiom
         ///
@@ -1505,10 +1519,10 @@ mod test {
         assert_eq!(iri1, iri2);
 
         // these are the same object in memory
-        assert!(Rc::ptr_eq(&iri1.0, &iri2.0));
+        assert!(Arc::ptr_eq(&iri1.0, &iri2.0));
 
         // iri1, iri2 and one in the cache == 3
-        assert_eq!(Rc::strong_count(&iri1.0), 3);
+        assert_eq!(Arc::strong_count(&iri1.0), 3);
     }
 
     #[test]

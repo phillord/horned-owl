@@ -6,7 +6,7 @@ use crate::model::{
 
 use std::convert::AsRef;
 use std::collections::HashMap;
-use std::rc::Rc;
+use std::sync::Arc;
 use super::indexed::{
     rc_unwrap_or_clone,
     OntologyIndex,
@@ -15,10 +15,10 @@ use super::indexed::{
 };
 
 #[derive(Debug,Default)]
-pub struct LogicallyEqualIndex(HashMap<Axiom, Rc<AnnotatedAxiom>>);
+pub struct LogicallyEqualIndex(HashMap<Axiom, Arc<AnnotatedAxiom>>);
 
 impl OntologyIndex for LogicallyEqualIndex {
-    fn index_insert(&mut self, ax: Rc<AnnotatedAxiom>) -> bool {
+    fn index_insert(&mut self, ax: Arc<AnnotatedAxiom>) -> bool {
         self.0.insert(ax.axiom.clone(), ax).is_some()
     }
 
@@ -40,7 +40,7 @@ impl LogicallyEqualIndex {
         self.0.get(&ax.axiom).map(|rcax| &**rcax)
     }
 
-    pub fn logical_get_rc(&self, ax: &AnnotatedAxiom) -> Option<Rc<AnnotatedAxiom>> {
+    pub fn logical_get_rc(&self, ax: &AnnotatedAxiom) -> Option<Arc<AnnotatedAxiom>> {
         self.0.get(&ax.axiom).cloned()
     }
 }
@@ -85,7 +85,7 @@ where O:MutableOntology+AsRef<LogicallyEqualIndex> {
         //dbg!(Rc::strong_count(&rc));
 
         // Un-rc
-        let mut logical_axiom = Rc::try_unwrap(rc).unwrap();
+        let mut logical_axiom = Arc::try_unwrap(rc).unwrap();
         // Extend it
         logical_axiom.ann.append(&mut axiom.ann);
         // Insert it
@@ -124,9 +124,9 @@ mod test {
         let decl3:AnnotatedAxiom =
             DeclareClass(build.class("http://www.example.com#c")).into();
 
-        o.index_insert(Rc::new(decl1.clone()));
-        o.index_insert(Rc::new(decl2.clone()));
-        o.index_insert(Rc::new(decl3.clone()));
+        o.index_insert(Arc::new(decl1.clone()));
+        o.index_insert(Arc::new(decl2.clone()));
+        o.index_insert(Arc::new(decl3.clone()));
 
         assert!(o.logical_contains(&decl1));
         assert!(o.logical_contains(&decl2));

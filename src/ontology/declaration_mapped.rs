@@ -9,7 +9,7 @@ use super::indexed::OntologyIndex;
 
 use std::{
     collections::HashMap,
-    rc::Rc,
+    sync::Arc,
 };
 
 #[derive(Debug, Default)]
@@ -71,6 +71,7 @@ impl DeclarationMappedIndex {
             _ => None
         }
     }
+
 }
 
 macro_rules! some {
@@ -81,7 +82,7 @@ macro_rules! some {
 
 
 impl OntologyIndex for DeclarationMappedIndex {
-    fn index_insert(&mut self, ax: Rc<AnnotatedAxiom>) -> bool {
+    fn index_insert(&mut self, ax: Arc<AnnotatedAxiom>) -> bool {
         let s = some!{
             self.0.insert(self.aa_to_iri(&*ax)?,
                           self.aa_to_ne(&*ax)?)

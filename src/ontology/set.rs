@@ -1,5 +1,5 @@
 //! Rapid, simple, in-memory `Ontology` and `OntologyIndex`
-use std::{collections::HashSet, iter::FromIterator, rc::Rc};
+use std::{collections::HashSet, iter::FromIterator, sync::Arc};
 
 use super::indexed::{rc_unwrap_or_clone, OntologyIndex};
 use crate::model::*;
@@ -159,10 +159,10 @@ where I:Iterator<Item=AnnotatedAxiom>,
 /// combined with an `IndexedOntology` this should be nearly as
 /// fastest as `SetOntology`.
 #[derive(Debug, Default, Eq, PartialEq)]
-pub struct SetIndex(HashSet<Rc<AnnotatedAxiom>>);
+pub struct SetIndex(HashSet<Arc<AnnotatedAxiom>>);
 
 impl OntologyIndex for SetIndex {
-    fn index_insert(&mut self, ax: Rc<AnnotatedAxiom>) -> bool {
+    fn index_insert(&mut self, ax: Arc<AnnotatedAxiom>) -> bool {
         self.0.insert(ax)
     }
 
@@ -188,7 +188,7 @@ impl IntoIterator for SetIndex {
         let v: Vec<AnnotatedAxiom> = self
             .0
             .into_iter()
-            .map(Rc::try_unwrap)
+            .map(Arc::try_unwrap)
             .map(Result::unwrap)
             .collect();
         v.into_iter()

@@ -19,7 +19,7 @@
 //! named tuple, allowing differently typed `OntologyIndex` objects to
 //! be added.
 use crate::model::{AnnotatedAxiom, MutableOntology, Ontology, OntologyID, IRI};
-use std::rc::Rc;
+use std::sync::Arc;
 
 /// An `OntologyIndex` object.
 ///
@@ -41,7 +41,7 @@ pub trait OntologyIndex {
     /// If the index did not have this value present, true is returned.
     ///
     /// If the index did have this value present, false is returned.
-    fn index_insert(&mut self, ax: Rc<AnnotatedAxiom>) -> bool;
+    fn index_insert(&mut self, ax: Arc<AnnotatedAxiom>) -> bool;
 
     /// Remove an AnnotatedAxiom from the index.
     ///
@@ -65,7 +65,7 @@ pub trait OntologyIndex {
 pub struct NullIndex();
 impl OntologyIndex for NullIndex {
     /// Insert an item, always returns false
-    fn index_insert(&mut self, _ax: Rc<AnnotatedAxiom>) -> bool {
+    fn index_insert(&mut self, _ax: Arc<AnnotatedAxiom>) -> bool {
         false
     }
 
@@ -119,7 +119,7 @@ impl<I: OntologyIndex> Ontology for OneIndexedOntology<I> {
 
 impl<I: OntologyIndex> MutableOntology for OneIndexedOntology<I> {
     fn insert<A: Into<AnnotatedAxiom>>(&mut self, ax: A) -> bool {
-        let rc = Rc::new(ax.into());
+        let rc = Arc::new(ax.into());
         self.0.index_insert(rc)
     }
 
@@ -172,7 +172,7 @@ impl<I: OntologyIndex, J: OntologyIndex> Ontology for TwoIndexedOntology<I, J> {
 
 impl<I: OntologyIndex, J: OntologyIndex> MutableOntology for TwoIndexedOntology<I, J> {
     fn insert<A: Into<AnnotatedAxiom>>(&mut self, ax: A) -> bool {
-        let rc = Rc::new(ax.into());
+        let rc = Arc::new(ax.into());
         self.index_insert(rc)
     }
 
@@ -182,7 +182,7 @@ impl<I: OntologyIndex, J: OntologyIndex> MutableOntology for TwoIndexedOntology<
 }
 
 impl<I: OntologyIndex, J: OntologyIndex> OntologyIndex for TwoIndexedOntology<I, J> {
-    fn index_insert(&mut self, ax: Rc<AnnotatedAxiom>) -> bool {
+    fn index_insert(&mut self, ax: Arc<AnnotatedAxiom>) -> bool {
         let rtn = self.0.index_insert(ax.clone());
         // Don't short cirtuit
         self.1.index_insert(ax) || rtn
@@ -263,7 +263,7 @@ impl<I: OntologyIndex, J: OntologyIndex, K: OntologyIndex> MutableOntology
 impl<I: OntologyIndex, J: OntologyIndex, K: OntologyIndex> OntologyIndex
     for ThreeIndexedOntology<I, J, K>
 {
-    fn index_insert(&mut self, ax: Rc<AnnotatedAxiom>) -> bool {
+    fn index_insert(&mut self, ax: Arc<AnnotatedAxiom>) -> bool {
         let rtn = (self.0).0.index_insert(ax.clone());
         // Don't short cirtuit
         (self.0).1.index_insert(ax) || rtn
@@ -352,8 +352,8 @@ impl<I: OntologyIndex, J: OntologyIndex, K: OntologyIndex, L: OntologyIndex> Mut
 }
 
 // Utility
-pub(crate) fn rc_unwrap_or_clone(rcax: Rc<AnnotatedAxiom>) -> AnnotatedAxiom {
-    Rc::try_unwrap(rcax).unwrap_or_else(|rcax| (*rcax).clone())
+pub(crate) fn rc_unwrap_or_clone(rcax: Arc<AnnotatedAxiom>) -> AnnotatedAxiom {
+    Arc::try_unwrap(rcax).unwrap_or_else(|rcax| (*rcax).clone())
 }
 
 #[cfg(test)]

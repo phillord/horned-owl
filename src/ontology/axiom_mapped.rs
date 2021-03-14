@@ -15,7 +15,7 @@ use crate::model::*;
 use std::{
     cell::RefCell,
     collections::{BTreeMap, BTreeSet, VecDeque},
-    rc::Rc,
+    sync::Arc,
 };
 
 use super::indexed::{rc_unwrap_or_clone, OneIndexedOntology, OntologyIndex};
@@ -52,7 +52,7 @@ macro_rules! onimpl {
 
 #[derive(Debug, Default, Eq, PartialEq)]
 pub struct AxiomMappedIndex {
-    axiom: RefCell<BTreeMap<AxiomKind, BTreeSet<Rc<AnnotatedAxiom>>>>,
+    axiom: RefCell<BTreeMap<AxiomKind, BTreeSet<Arc<AnnotatedAxiom>>>>,
 }
 
 impl AxiomMappedIndex {
@@ -78,7 +78,7 @@ impl AxiomMappedIndex {
     fn axioms_as_ptr(
         &self,
         axk: AxiomKind,
-    ) -> *mut BTreeMap<AxiomKind, BTreeSet<Rc<AnnotatedAxiom>>> {
+    ) -> *mut BTreeMap<AxiomKind, BTreeSet<Arc<AnnotatedAxiom>>> {
         self.axiom
             .borrow_mut()
             .entry(axk)
@@ -87,12 +87,12 @@ impl AxiomMappedIndex {
     }
 
     /// Fetch the axioms for the given kind.
-    fn set_for_kind(&self, axk: AxiomKind) -> Option<&BTreeSet<Rc<AnnotatedAxiom>>> {
+    fn set_for_kind(&self, axk: AxiomKind) -> Option<&BTreeSet<Arc<AnnotatedAxiom>>> {
         unsafe { (*self.axiom.as_ptr()).get(&axk) }
     }
 
     /// Fetch the axioms for given kind as a mutable ref.
-    fn mut_set_for_kind(&mut self, axk: AxiomKind) -> &mut BTreeSet<Rc<AnnotatedAxiom>> {
+    fn mut_set_for_kind(&mut self, axk: AxiomKind) -> &mut BTreeSet<Arc<AnnotatedAxiom>> {
         unsafe { (*self.axioms_as_ptr(axk)).get_mut(&axk).unwrap() }
     }
 
@@ -213,7 +213,7 @@ impl IntoIterator for AxiomMappedIndex {
             .into_iter()
             .map(|(_k, v)| v)
             .flat_map(BTreeSet::into_iter)
-            .map(Rc::try_unwrap)
+            .map(Arc::try_unwrap)
             .map(Result::unwrap)
             .collect();
         v.into_iter()
@@ -225,7 +225,7 @@ impl IntoIterator for AxiomMappedIndex {
 pub struct AxiomMappedIter<'a> {
     ont: &'a AxiomMappedIndex,
     kinds: VecDeque<&'a AxiomKind>,
-    inner: Option<<&'a BTreeSet<Rc<AnnotatedAxiom>> as IntoIterator>::IntoIter>,
+    inner: Option<<&'a BTreeSet<Arc<AnnotatedAxiom>> as IntoIterator>::IntoIter>,
 }
 
 impl<'a> Iterator for AxiomMappedIter<'a> {
@@ -248,7 +248,6 @@ impl<'a> Iterator for AxiomMappedIter<'a> {
     }
 }
 
-
 impl<'a> IntoIterator for &'a AxiomMappedIndex {
     type Item = &'a AnnotatedAxiom;
     type IntoIter = AxiomMappedIter<'a>;
@@ -262,7 +261,7 @@ impl<'a> IntoIterator for &'a AxiomMappedIndex {
 }
 
 impl OntologyIndex for AxiomMappedIndex {
-    fn index_insert(&mut self, ax: Rc<AnnotatedAxiom>) -> bool {
+    fn index_insert(&mut self, ax: Arc<AnnotatedAxiom>) -> bool {
         self.mut_set_for_kind(ax.kind()).insert(ax)
     }
 
@@ -287,7 +286,6 @@ impl IntoIterator for AxiomMappedOntology {
         self.index().into_iter()
     }
 }
-
 
 impl From<SetOntology> for AxiomMappedOntology {
     fn from(mut so: SetOntology) -> AxiomMappedOntology {
