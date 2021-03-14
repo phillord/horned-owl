@@ -10,8 +10,7 @@ use failure::Error;
 
 use horned_owl::error::CommandError;
 
-use rio_api::{formatter::TriplesFormatter, model::Triple, parser::TriplesParser};
-use rio_xml::RdfXmlFormatter;
+use rio_api::parser::TriplesParser;
 
 use std::{fs::File, io::stdout};
 use std::io::BufReader;
@@ -61,14 +60,30 @@ fn matcher(matches: ArgMatches) -> Result<(), Error> {
     }
 
     if matches.is_present("round") {
-        println!("\n");
+        println!("\nRoundTripping:\n");
         let b = stdout();
-        let mut f = RdfXmlFormatter::with_indentation(&b, 4)?;
+        //let b = std::io::sink();
+
+        let mut p = indexmap::IndexMap::new();
+        p.insert("http://www.w3.org/2002/07/owl#".to_string(),"owl".to_string());
+        p.insert("http://www.w3.org/XML/1998/namespace".to_string(),"xml".to_string());
+        p.insert("http://www.w3.org/2001/XMLSchema#".to_string(),"xsd".to_string());
+        p.insert("http://www.w3.org/2000/01/rdf-schema#".to_string(), "rdfs".to_string());
+
+        let mut f:rio_xml::chunked_formatter::PrettyRdfXmlFormatter<String,_> =
+            rio_xml::chunked_formatter::PrettyRdfXmlFormatter::new
+            (b,
+             rio_xml::chunked_formatter::ChunkedRdfXmlFormatterConfig::all()
+            )?;
+        //let mut f = rio_xml::RdfXmlFormatter::with_indentation(&b, 4)?;
         let file = File::open(input)?;
         let bufreader = BufReader::new(file);
-        let _: Vec<Result<_, _>>
+        let _: Vec<Result<_,_>>
             = rio_xml::RdfXmlParser::new(bufreader, None).into_iter(
-                |rio_triple| f.format(&rio_triple)
+                |rio_triple| {
+                    let t = rio_triple.into();
+                    f.format(t)
+                }
             ).collect();
         f.finish()?;
     }

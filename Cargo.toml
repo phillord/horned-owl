@@ -23,10 +23,10 @@ lazy_static="1.4.0"
 log = {version="0.4.8"}
 quick-xml="0.12.4"
 indexmap="1.0.2"
-rio_api={git="https://github.com/oxigraph/rio.git"}
-rio_xml={git="https://github.com/oxigraph/rio.git"}
-# rio_api={path="./rio/api"}
-# rio_xml={path="./rio/xml"}
+#rio_api={git="https://github.com/oxigraph/rio.git"}
+#rio_xml={git="https://github.com/oxigraph/rio.git"}
+rio_api={path="./rio/api"}
+rio_xml={path="./rio/xml"}
 
 
 [dev-dependencies]
