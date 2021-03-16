@@ -329,12 +329,12 @@ from_start! {
                 (None, None, literal) =>
                     Literal::Simple{literal},
                 (Some(ref datatype_iri), None, literal)
-                    if **datatype_iri == "http://www.w3.org/2001/XMLSchema#string" =>
+                    if **datatype_iri == *"http://www.w3.org/2001/XMLSchema#string" =>
                     Literal::Simple{literal},
                 (None, Some(lang), literal) =>
                     Literal::Language{literal, lang},
                 (Some(ref datatype_iri), Some(ref lang), ref literal)
-                    if **datatype_iri == "http://www.w3.org/1999/02/22-rdf-syntax-ns#PlainLiteral"
+                    if **datatype_iri == *"http://www.w3.org/1999/02/22-rdf-syntax-ns#PlainLiteral"
                     => Literal::Language{literal:literal.to_string(), lang:lang.to_string()},
                 (Some(_), Some(_), _)
                     => bail!("Literal with language tag and incorrect datatype"),
@@ -1167,7 +1167,7 @@ pub mod test {
         assert_eq!(ont.i().annotation_assertion().count(), 2);
 
         let aa = ont.i().annotation_assertion().next().unwrap();
-        assert_eq!(*(aa.subject), "http://www.example.com/iri#C");
+        assert_eq!(*(aa.subject), *"http://www.example.com/iri#C");
 
         assert_eq!(
             String::from(&aa.ann.ap),

@@ -107,32 +107,37 @@ use std::rc::Rc;
 /// created through `Build`; this caches the underlying String meaning
 /// that IRIs are light-weight to `clone`.
 #[derive(Clone, Debug, Eq, PartialEq, Hash, PartialOrd, Ord)]
-pub struct IRI(Rc<String>);
+pub struct IRI(Rc<str>);
 
-impl AsRef<str> for IRI {
-    fn as_ref(&self) -> &str {
-        &self.0.as_str()
+impl Deref for IRI {
+    type Target=str;
+
+    fn deref(&self) -> &Self::Target {
+        self.0.as_ref()
     }
 }
 
-impl Deref for IRI {
-    type Target = String;
+impl AsRef<str> for IRI {
+    fn as_ref(&self) -> &str {
+        &self.0.as_ref()
+    }
+}
 
-    fn deref(&self) -> &String {
-        &self.0
+impl From<&IRI> for Rc<str> {
+    fn from(i:&IRI) -> Rc<str> {
+        i.0.clone().into()
+    }
+}
+
+impl From<&IRI> for String {
+    fn from(i:&IRI) -> String {
+        i.0.as_ref().to_string()
     }
 }
 
 impl From<IRI> for String {
-    fn from(i: IRI) -> String {
-        // Clone Rc'd value
-        (*i.0).clone()
-    }
-}
-
-impl<'a> From<&'a IRI> for String {
-    fn from(i: &'a IRI) -> String {
-        (*i.0).clone()
+    fn from(i:IRI) -> String {
+        i.0.as_ref().to_string()
     }
 }
 
@@ -178,7 +183,8 @@ impl Build {
     where
         S: Into<String>,
     {
-        let iri = IRI(Rc::new(s.into()));
+        let s:String = s.into();
+        let iri = IRI(s.into());
 
         let mut cache = self.0.borrow_mut();
         if cache.contains(&iri) {
