@@ -83,6 +83,13 @@ trait Render {
     fn render<W:Write>(&self, f:&mut PrettyRdfXmlFormatter<Rc<str>, W>,
                        ng: &mut NodeGenerator) ->
         Result<Option<AsRefNamedOrBlankNode<Rc<str>>>, Error>;
+
+    fn render_to<W:Write>(&self, f:&mut PrettyRdfXmlFormatter<Rc<str>, W>,
+                          ng: &mut NodeGenerator) ->
+        Result<AsRefNamedOrBlankNode<Rc<str>>, Error> {
+            self.render(f, ng)?.ok_or_else
+                (|| format_err!("Attempt to unpack an empty node"))
+        }
 }
 
 /// The types in `Render` are too long to type.
@@ -97,6 +104,7 @@ macro_rules! render {
         }
     }
 }
+
 macro_rules! triples {
     ($f:ident) => {};
     ($f:ident, $sub:expr, $pred:expr, $ob:expr) => {
@@ -174,7 +182,6 @@ render! {
             }
 
             for ax in self.i().iter() {
-                println!("Render: {:#?}", ax);
                 ax.render(f, ng)?;
             }
         }
@@ -252,10 +259,8 @@ render! {
                 ClassExpression::Class(cl) => Some((&cl.0).into()),
                 ClassExpression::ObjectSomeValuesFrom{ref bce, ref ope} => {
                     let bn = ng.bn();
-                    let node_ce = bce.render(f, ng)?.
-                        ok_or(format_err!("Can't happen"))?;
-                    let node_ope = ope.render(f, ng)?.
-                        ok_or(format_err!("Can't happen"))?;
+                    let node_ce = bce.render_to(f, ng)?;
+                    let node_ope = ope.render_to(f, ng)?;
 
                     triples!(
                         f,
@@ -318,10 +323,8 @@ render_triple! {
 render! {
     SubClassOf, self, f, ng,
     {
-        let sub = self.sub.render(f, ng)?.
-            ok_or(format_err!("Can't happen"))?;
-        let obj = self.sup.render(f, ng)?.
-            ok_or(format_err!("Can't happen"))?;
+        let sub = self.sub.render_to(f, ng)?;
+        let obj = self.sup.render_to(f, ng)?;
 
         triples!(f,
                  sub,
@@ -354,9 +357,6 @@ mod test {
         assert!(r.is_ok(), "Expected ontology, got failure:{:?}", r.err());
         let (o, incomplete) = r.ok().unwrap();
 
-        println!("read_ok: {:#?}", o);
-        println!("incomplete@ {:#?}", incomplete);
-
         assert!(incomplete.is_complete(), "Read Not Complete: {:#?}", incomplete);
         o.into()
     }
@@ -384,7 +384,6 @@ mod test {
         SetOntology,
         SetOntology,
     ) {
-        println!("Read first time:");
         let ont_orig = read_ok(&mut ont.as_bytes());
         let mut temp_file = Temp::new_file().unwrap();
 
@@ -398,9 +397,6 @@ mod test {
         buf_writer.flush().ok();
 
         let file = File::open(&temp_file).ok().unwrap();
-        println!("Output File: {}", std::fs::read_to_string(&temp_file).unwrap());
-
-        println!("Reread");
         let ont_round = read_ok(&mut BufReader::new(&file));
 
         temp_file.release();
