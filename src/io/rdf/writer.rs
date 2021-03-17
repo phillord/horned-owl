@@ -1,72 +1,109 @@
-use std::{io::Write};
+use std::{collections::HashSet, io::Write, rc::Rc};
 
 use failure::Error;
-use rio_xml::{RdfXmlFormatter};
-use rio_api::{formatter::TriplesFormatter};
-use rio_api::model::Triple;
-
-use crate::{model::*, ontology::axiom_mapped::AxiomMappedOntology, vocab::{OWL, RDF, RDFS, WithIRI}};
+use rio_xml::chunked_formatter::{AsRefBlankNode, AsRefNamedNode, AsRefNamedOrBlankNode, AsRefTerm, AsRefTriple, ChunkedRdfXmlFormatterConfig, PrettyRdfXmlFormatter};
+use crate::{model::*, ontology::axiom_mapped::AxiomMappedOntology, vocab::{OWL, RDF, RDFS, WithIRI, Vocab}};
 
 pub fn write<W:Write>(
     write: &mut W,
     ont: &AxiomMappedOntology,
 ) -> Result<(), Error> {
 
-    let mut f = RdfXmlFormatter::with_indentation(write, 4)?;
-    let mut bng = BlankNodeIdGenerator::default();
+    // Entirely unsatisfying to set this randomly here, but we can't
+    // access ns our parser yet
+    let mut p = indexmap::IndexMap::new();
+    p.insert("http://www.w3.org/2002/07/owl#".to_string(),"owl".to_string());
+    p.insert("http://www.w3.org/XML/1998/namespace".to_string(),"xml".to_string());
+    p.insert("http://www.w3.org/2001/XMLSchema#".to_string(),"xsd".to_string());
+    p.insert("http://www.w3.org/2000/01/rdf-schema#".to_string(), "rdfs".to_string());
+
+    let mut f:PrettyRdfXmlFormatter<Rc<str>,_> = PrettyRdfXmlFormatter::new(
+        write,
+        ChunkedRdfXmlFormatterConfig::all().prefix(p)
+    )?;
+    let mut bng = NodeGenerator::default();
     ont.render(&mut f, &mut bng)?;
     f.finish()?;
     Ok(())
 }
 
 #[derive(Default)]
-struct BlankNodeIdGenerator {
+struct NodeGenerator {
     i: u64,
+    b: HashSet<Rc<str>>
 }
 
-impl BlankNodeIdGenerator {
-    pub fn generate(&mut self) -> BlankNodeId {
+
+impl NodeGenerator {
+    pub fn nn<V:Into<Vocab>>(&mut self, v:V) -> AsRefNamedNode<Rc<str>> {
+        AsRefNamedNode::new(self.cache_rc(v)).into()
+    }
+
+    fn cache_rc<V:Into<Vocab>>(&mut self, v:V) -> Rc<str> {
+        let voc:&str = v.into().iri_s();
+        if let Some(rc) = self.b.get(voc) {
+            return rc.clone();
+        }
+
+        let rc:Rc<str> = (*voc).into();
+        self.b.insert(rc.clone());
+        rc
+    }
+
+    pub fn bn(&mut self) -> AsRefNamedOrBlankNode<Rc<str>> {
         self.i += 1;
-        BlankNodeId(format!{"bn{}", self.i})
+        AsRefNamedOrBlankNode::BlankNode(
+            AsRefBlankNode{
+                id: format!{"bn{}", self.i}.into()
+            }
+        )
     }
 }
 
-#[derive(Debug)]
-struct BlankNodeId(String);
-
-impl AsRef<str> for BlankNodeId {
-    fn as_ref(&self) -> &str {
-        self.0.as_ref()
+impl From<&IRI> for AsRefTerm<Rc<str>> {
+    fn from(iri: &IRI) -> Self {
+        AsRefNamedNode::new(iri.into()).into()
     }
 }
 
+impl From<&IRI> for AsRefNamedNode<Rc<str>> {
+    fn from(iri: &IRI) -> Self {
+        AsRefNamedNode::new(iri.into())
+    }
+}
+
+impl From<&IRI> for AsRefNamedOrBlankNode<Rc<str>> {
+    fn from(iri: &IRI) -> Self {
+        let nn:AsRefNamedNode<Rc<str>> = iri.into();
+        nn.into()
+    }
+}
 
 trait Render {
-    fn render<W:Write>(&self, f:&mut RdfXmlFormatter<W>,
-                       bng: &mut BlankNodeIdGenerator)->
-        Result<Option<NamedOrBlankNode>, Error>;
+    fn render<W:Write>(&self, f:&mut PrettyRdfXmlFormatter<Rc<str>, W>,
+                       ng: &mut NodeGenerator) ->
+        Result<Option<AsRefNamedOrBlankNode<Rc<str>>>, Error>;
 }
 
 /// The types in `Render` are too long to type.
 macro_rules! render {
-    ($type:ty, $self:ident, $f:ident, $bng:ident,
+    ($type:ty, $self:ident, $f:ident, $ng:ident,
      $body:tt) => {
         impl Render for $type {
-            fn render<W:Write>(& $self, $f:&mut RdfXmlFormatter<W>,
-                               $bng: &mut BlankNodeIdGenerator)-> Result<Option<NamedOrBlankNode>, Error>
+            fn render<W:Write>(& $self, $f:&mut PrettyRdfXmlFormatter<Rc<str>, W>,
+                               $ng: &mut NodeGenerator)
+                               -> Result<Option<AsRefNamedOrBlankNode<Rc<str>>>, Error>
                 $body
         }
     }
 }
-
 macro_rules! triples {
     ($f:ident) => {};
     ($f:ident, $sub:expr, $pred:expr, $ob:expr) => {
-        $f.format(&to_triple(
-                $sub, $pred, $ob
-            ))?
-        ;
-    };
+        $f.format(to_triple(
+                 $sub, $pred, $ob
+                ))?;
+     };
     ($f:ident, $sub:expr, $pred:expr, $ob:expr, $($rest:expr),+) => {
         triples!($f, $sub, $pred, $ob);
         triples!($f, $($rest),*);
@@ -74,9 +111,9 @@ macro_rules! triples {
 }
 
 macro_rules! render_triple {
-    ($type:ty, $self:ident, $sub:expr, $pred:expr, $ob:expr) => {
+    ($type:ty, $self:ident, $ng:ident, $sub:expr, $pred:expr, $ob:expr) => {
         render! {
-            $type, $self, f, _bng,
+            $type, $self, f, $ng,
             {
                 triples!(f, $sub, $pred, $ob);
                 Ok(None)
@@ -85,109 +122,60 @@ macro_rules! render_triple {
     }
 }
 
-fn to_triple<'a, NB, NN, T>(subject:NB, predicate:NN, object:T) -> Triple<'a>
-where NB: Into<NamedOrBlankNode<'a>>,
-      NN: Into<NamedNode<'a>>,
-      T: Into<Term<'a>>
+fn to_triple<'a, NB, NN, T>(subject:NB, predicate:NN, object:T) -> AsRefTriple<Rc<str>>
+where NB: Into<AsRefNamedOrBlankNode<Rc<str>>>,
+      NN: Into<AsRefNamedNode<Rc<str>>>,
+      T: Into<AsRefTerm<Rc<str>>>
 {
-    Triple{
-        subject: subject.into().0,
-        predicate: predicate.into().0,
-        object: object.into().0,
+    AsRefTriple{
+        subject: subject.into(),
+        predicate: predicate.into(),
+        object: object.into(),
     }
 }
 
-// New types for Rio API terms or we cannot do the generic impls that
-// come next
-struct NamedOrBlankNode<'a>(rio_api::model::NamedOrBlankNode<'a>);
-struct NamedNode<'a>(rio_api::model::NamedNode<'a>);
-struct Term<'a>(rio_api::model::Term<'a>);
 
-// But having made new types we now need converts
-impl<'a> From<NamedOrBlankNode<'a>> for Term<'a> {
-    fn from(nnb: NamedOrBlankNode<'a>) -> Self {
-        Term(nnb.0.into())
-    }
+impl<'a, T: Render> Render for Box<T> {
+    fn render<W:Write>(&self, f:&mut PrettyRdfXmlFormatter<Rc<str>, W>,
+                       bng: &mut NodeGenerator) ->
+        Result<Option<AsRefNamedOrBlankNode<Rc<str>>>, Error> {
+            (**self).render(f, bng)
+        }
 }
-
-impl<'a, WI:WithIRI<'a>> From<WI> for NamedNode<'a> {
-    fn from(wi: WI) -> Self {
-        NamedNode(rio_api::model::NamedNode{iri:wi.iri_str()})
-    }
-}
-
-impl<'a, WI:WithIRI<'a>> From<WI> for Term<'a> {
-    fn from(wi: WI) -> Self {
-        let nn:NamedNode = wi.into();
-        Term(nn.0.into())
-    }
-}
-
-impl<'a> From<&'a str> for NamedNode<'a> {
-    fn from(iri: &'a str) -> Self {
-        NamedNode(rio_api::model::NamedNode{iri})
-    }
-}
-
-impl<'a> From<&'a str> for NamedOrBlankNode<'a> {
-    fn from(iri: &'a str) -> Self {
-        let nn:NamedNode = iri.into();
-        NamedOrBlankNode(nn.0.into())
-    }
-}
-
-impl<'a> From<&'a str> for Term<'a> {
-    fn from(iri: &'a str) -> Self {
-        let nn:NamedNode = iri.into();
-        Term(nn.0.into())
-    }
-}
-
-impl<'a> From<&'a IRI> for NamedNode<'a> {
-    fn from(iri: &'a IRI) -> Self {
-        iri.as_ref().into()
-    }
-}
-
-impl<'a> From<&'a IRI> for NamedOrBlankNode<'a> {
-    fn from(iri: &'a IRI) -> Self {
-        iri.as_ref().into()
-    }
-}
-
-impl<'a> From<&'a IRI> for Term<'a> {
-    fn from(iri: &'a IRI) -> Self {
-        iri.as_ref().into()
-    }
-}
-
 
 render! {
-    &AxiomMappedOntology, self, f, bng,
+    &AxiomMappedOntology, self, f, ng,
     {
         if let Some(iri) = &self.id().iri {
-            triples!(f,
-                    iri.as_ref(),
-                    RDF::Type,
-                    OWL::Ontology);
+            triples!(
+                f,
+                iri,
+                ng.nn(RDF::Type),
+                ng.nn(OWL::Ontology)
+            );
 
             if let Some(viri) = &self.id().viri {
-                triples!(f,
-                        iri.as_ref(),
-                        OWL::VersionIRI,
-                        viri.as_ref());
+                triples!(
+                    f,
+                    iri,
+                    ng.nn(OWL::VersionIRI),
+                    viri
+                );
             }
 
             let imp = self.i().import();
             for i in imp {
-                triples!(f,
-                        iri.as_ref(),
-                        OWL::Imports,
-                        &i.0);
+                triples!(
+                    f,
+                    iri,
+                    ng.nn(OWL::Imports),
+                    &i.0
+                );
             }
 
             for ax in self.i().iter() {
-                ax.render(f, bng)?;
+                println!("Render: {:#?}", ax);
+                ax.render(f, ng)?;
             }
         }
         Ok(None)
@@ -195,121 +183,149 @@ render! {
 }
 
 render! {
-    AnnotatedAxiom, self, f, bng,
+    AnnotatedAxiom, self, f, ng,
     {
-        self.axiom.render(f, bng)
+        self.axiom.render(f, ng)
     }
 }
 
 render! {
-    Axiom, self, f, bng,
+    Axiom, self, f, ng,
     {
         match self {
             // We render imports earlier
             Axiom::Import(_ax) => Ok(None),
-            //Axiom::OntologyAnnotation(ax) => ax.render(f, bng),
-            Axiom::DeclareClass(ax) => ax.render(f, bng),
-            Axiom::DeclareObjectProperty(ax) => ax.render(f, bng),
-            Axiom::DeclareAnnotationProperty(ax) => ax.render(f, bng),
-            Axiom::DeclareDataProperty(ax) => ax.render(f, bng),
-            Axiom::DeclareNamedIndividual(ax) => ax.render(f, bng),
-            Axiom::DeclareDatatype(ax) => ax.render(f, bng),
-            Axiom::SubClassOf(ax) => ax.render(f, bng),
-            // Axiom::EquivalentClasses(ax) => ax.render(f, bng),
-            // Axiom::DisjointClasses(ax) => ax.render(f, bng),
-            // Axiom::DisjointUnion(ax) => ax.render(f, bng),
-            // Axiom::SubObjectPropertyOf(ax) => ax.render(f, bng),
-            // Axiom::EquivalentObjectProperties(ax) => ax.render(f, bng),
-            // Axiom::DisjointObjectProperties(ax) => ax.render(f, bng),
-            // Axiom::InverseObjectProperties(ax) => ax.render(f, bng),
-            // Axiom::ObjectPropertyDomain(ax) => ax.render(f, bng),
-            // Axiom::ObjectPropertyRange(ax) => ax.render(f, bng),
-            // Axiom::FunctionalObjectProperty(ax) => ax.render(f, bng),
-            // Axiom::InverseFunctionalObjectProperty(ax) => ax.render(f, bng),
-            // Axiom::ReflexiveObjectProperty(ax) => ax.render(f, bng),
-            // Axiom::IrreflexiveObjectProperty(ax) => ax.render(f, bng),
-            // Axiom::SymmetricObjectProperty(ax) => ax.render(f, bng),
-            // Axiom::AsymmetricObjectProperty(ax) => ax.render(f, bng),
-            // Axiom::TransitiveObjectProperty(ax) => ax.render(f, bng),
-            // Axiom::SubDataPropertyOf(ax) => ax.render(f, bng),
-            // Axiom::EquivalentDataProperties(ax) => ax.render(f, bng),
-            // Axiom::DisjointDataProperties(ax) => ax.render(f, bng),
-            // Axiom::DataPropertyDomain(ax) => ax.render(f, bng),
-            // Axiom::DataPropertyRange(ax) => ax.render(f, bng),
-            // Axiom::FunctionalDataProperty(ax) => ax.render(f, bng),
-            // Axiom::DatatypeDefinition(ax) => ax.render(f, bng),
-            // Axiom::HasKey(ax) => ax.render(f, bng),
-            // Axiom::SameIndividual(ax) => ax.render(f, bng),
-            // Axiom::DifferentIndividuals(ax) => ax.render(f, bng),
-            // Axiom::ClassAssertion(ax) => ax.render(f, bng),
-            // Axiom::ObjectPropertyAssertion(ax) => ax.render(f, bng),
-            // Axiom::NegativeObjectPropertyAssertion(ax) => ax.render(f, bng),
-            // Axiom::DataPropertyAssertion(ax) => ax.render(f, bng),
-            // Axiom::NegativeDataPropertyAssertion(ax) => ax.render(f, bng),
-            // Axiom::AnnotationAssertion(ax) => ax.render(f, bng),
-            // Axiom::SubAnnotationPropertyOf(ax) => ax.render(f, bng),
-            // Axiom::AnnotationPropertyDomain(ax) => ax.render(f, bng),
+            //Axiom::OntologyAnnotation(ax) => ax.render(f, ng),
+            Axiom::DeclareClass(ax) => ax.render(f, ng),
+            Axiom::DeclareObjectProperty(ax) => ax.render(f, ng),
+            Axiom::DeclareAnnotationProperty(ax) => ax.render(f, ng),
+            Axiom::DeclareDataProperty(ax) => ax.render(f, ng),
+            Axiom::DeclareNamedIndividual(ax) => ax.render(f, ng),
+            Axiom::DeclareDatatype(ax) => ax.render(f, ng),
+            Axiom::SubClassOf(ax) => ax.render(f, ng),
+            // Axiom::EquivalentClasses(ax) => ax.render(f, ng),
+            // Axiom::DisjointClasses(ax) => ax.render(f, ng),
+            // Axiom::DisjointUnion(ax) => ax.render(f, ng),
+            // Axiom::SubObjectPropertyOf(ax) => ax.render(f, ng),
+            // Axiom::EquivalentObjectProperties(ax) => ax.render(f, ng),
+            // Axiom::DisjointObjectProperties(ax) => ax.render(f, ng),
+            // Axiom::InverseObjectProperties(ax) => ax.render(f, ng),
+            // Axiom::ObjectPropertyDomain(ax) => ax.render(f, ng),
+            // Axiom::ObjectPropertyRange(ax) => ax.render(f, ng),
+            // Axiom::FunctionalObjectProperty(ax) => ax.render(f, ng),
+            // Axiom::InverseFunctionalObjectProperty(ax) => ax.render(f, ng),
+            // Axiom::ReflexiveObjectProperty(ax) => ax.render(f, ng),
+            // Axiom::IrreflexiveObjectProperty(ax) => ax.render(f, ng),
+            // Axiom::SymmetricObjectProperty(ax) => ax.render(f, ng),
+            // Axiom::AsymmetricObjectProperty(ax) => ax.render(f, ng),
+            // Axiom::TransitiveObjectProperty(ax) => ax.render(f, ng),
+            // Axiom::SubDataPropertyOf(ax) => ax.render(f, ng),
+            // Axiom::EquivalentDataProperties(ax) => ax.render(f, ng),
+            // Axiom::DisjointDataProperties(ax) => ax.render(f, ng),
+            // Axiom::DataPropertyDomain(ax) => ax.render(f, ng),
+            // Axiom::DataPropertyRange(ax) => ax.render(f, ng),
+            // Axiom::FunctionalDataProperty(ax) => ax.render(f, ng),
+            // Axiom::DatatypeDefinition(ax) => ax.render(f, ng),
+            // Axiom::HasKey(ax) => ax.render(f, ng),
+            // Axiom::SameIndividual(ax) => ax.render(f, ng),
+            // Axiom::DifferentIndividuals(ax) => ax.render(f, ng),
+            // Axiom::ClassAssertion(ax) => ax.render(f, ng),
+            // Axiom::ObjectPropertyAssertion(ax) => ax.render(f, ng),
+            // Axiom::NegativeObjectPropertyAssertion(ax) => ax.render(f, ng),
+            // Axiom::DataPropertyAssertion(ax) => ax.render(f, ng),
+            // Axiom::NegativeDataPropertyAssertion(ax) => ax.render(f, ng),
+            // Axiom::AnnotationAssertion(ax) => ax.render(f, ng),
+            // Axiom::SubAnnotationPropertyOf(ax) => ax.render(f, ng),
+            // Axiom::AnnotationPropertyDomain(ax) => ax.render(f, ng),
             // Axiom::AnnotationPropertyRange(ax) => ax.render(f,
-            // bng)
-            _ => todo!()
+            // ng)
+            _ => todo!("TODO: {:?}", self)
         }
     }
 }
 
 render! {
-    ClassExpression, self, _f, _bng,
+    ClassExpression, self, f, ng,
     {
         Ok(
             match self {
                 ClassExpression::Class(cl) => Some((&cl.0).into()),
-                _=> todo!()
+                ClassExpression::ObjectSomeValuesFrom{ref bce, ref ope} => {
+                    let bn = ng.bn();
+                    let node_ce = bce.render(f, ng)?.
+                        ok_or(format_err!("Can't happen"))?;
+                    let node_ope = ope.render(f, ng)?.
+                        ok_or(format_err!("Can't happen"))?;
+
+                    triples!(
+                        f,
+                        bn.clone(), ng.nn(RDF::Type), ng.nn(OWL::Restriction),
+                        bn.clone(), ng.nn(OWL::OnProperty), node_ope,
+                        bn.clone(), ng.nn(OWL::SomeValuesFrom), node_ce
+                    );
+
+                    Some(bn)
+                }
+                _=> todo!("TODO: {:?}", self)
             }
         )
     }
 }
 
-
+render! {
+    ObjectPropertyExpression, self, _f, _ng,
+    {
+        Ok(
+            match self {
+                ObjectPropertyExpression::ObjectProperty(op)
+                    => Some((&op.0).into()),
+                ObjectPropertyExpression::InverseObjectProperty(_op)
+                    => todo!()
+            }
+        )
+    }
+}
 render_triple! {
-    DeclareClass, self,
-    &self.0.0, RDF::Type, OWL::Class
+    DeclareClass, self, ng,
+    &self.0.0, ng.nn(RDF::Type), ng.nn(OWL::Class)
 }
 
 render_triple! {
-    DeclareDatatype, self,
-    &self.0.0, RDF::Type, RDFS::Datatype
+    DeclareDatatype, self, ng,
+    &self.0.0, ng.nn(RDF::Type), ng.nn(RDFS::Datatype)
 }
 
 render_triple! {
-    DeclareObjectProperty, self,
-    &self.0.0, RDF::Type, OWL::ObjectProperty
+    DeclareObjectProperty, self, ng,
+    &self.0.0, ng.nn(RDF::Type), ng.nn(OWL::ObjectProperty)
 }
 
 render_triple! {
-    DeclareDataProperty, self,
-    &self.0.0, RDF::Type, OWL::DatatypeProperty
+    DeclareDataProperty, self, ng,
+    &self.0.0, ng.nn(RDF::Type), ng.nn(OWL::DatatypeProperty)
 }
 
 render_triple! {
-    DeclareAnnotationProperty, self,
-    &self.0.0, RDF::Type, OWL::AnnotationProperty
+    DeclareAnnotationProperty, self, ng,
+    &self.0.0, ng.nn(RDF::Type), ng.nn(OWL::AnnotationProperty)
 }
 
 render_triple! {
-    DeclareNamedIndividual, self,
-    &self.0.0, RDF::Type, OWL::NamedIndividual
+    DeclareNamedIndividual, self, ng,
+    &self.0.0, ng.nn(RDF::Type), ng.nn(OWL::NamedIndividual)
 }
 
 render! {
-    SubClassOf, self, f, bng,
+    SubClassOf, self, f, ng,
     {
-        let sub:NamedOrBlankNode = self.sub.render(f, bng)?.
+        let sub = self.sub.render(f, ng)?.
             ok_or(format_err!("Can't happen"))?;
-        let obj:NamedOrBlankNode = self.sup.render(f, bng)?.
+        let obj = self.sup.render(f, ng)?.
             ok_or(format_err!("Can't happen"))?;
 
         triples!(f,
                  sub,
-                 RDFS::SubClassOf,
+                 ng.nn(RDFS::SubClassOf),
                  obj
         );
         Ok(None)
@@ -337,6 +353,10 @@ mod test {
         let r = crate::io::rdf::reader::read(bufread);
         assert!(r.is_ok(), "Expected ontology, got failure:{:?}", r.err());
         let (o, incomplete) = r.ok().unwrap();
+
+        println!("read_ok: {:#?}", o);
+        println!("incomplete@ {:#?}", incomplete);
+
         assert!(incomplete.is_complete(), "Read Not Complete: {:#?}", incomplete);
         o.into()
     }
@@ -364,6 +384,7 @@ mod test {
         SetOntology,
         SetOntology,
     ) {
+        println!("Read first time:");
         let ont_orig = read_ok(&mut ont.as_bytes());
         let mut temp_file = Temp::new_file().unwrap();
 
@@ -377,8 +398,11 @@ mod test {
         buf_writer.flush().ok();
 
         let file = File::open(&temp_file).ok().unwrap();
+        println!("Output File: {}", std::fs::read_to_string(&temp_file).unwrap());
 
+        println!("Reread");
         let ont_round = read_ok(&mut BufReader::new(&file));
+
         temp_file.release();
 
         return (ont_orig, ont_round);
@@ -426,10 +450,10 @@ mod test {
         assert_round(include_str!("../../ont/owl-rdf/oproperty.owl"));
     }
 
-    // #[test]
-    // fn round_some() {
-    //     assert_round(include_str!("../../ont/owl-rdf/some.owl"));
-    // }
+    #[test]
+    fn round_some() {
+        assert_round(include_str!("../../ont/owl-rdf/some.owl"));
+    }
 
     // #[test]
     // fn round_only() {

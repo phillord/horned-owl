@@ -402,3 +402,46 @@ fn facet_meta() {
         Facet::MinExclusive
     );
 }
+
+
+
+
+pub enum Vocab {
+    RDF(RDF),
+    RDFS(RDFS),
+    OWL(OWL),
+    Namespace(Namespace)
+}
+
+impl<'a> Meta<&'a IRIString> for Vocab {
+    fn meta(&self) -> &'a IRIString {
+        match self {
+            Self::RDF(rdf) => rdf.meta(),
+            Self::RDFS(rdfs) => rdfs.meta(),
+            Self::OWL(owl) => owl.meta(),
+            Self::Namespace(ns) => ns.meta(),
+        }
+    }
+
+    fn all() -> Vec<Self> {
+        todo!()
+    }
+}
+
+impl From<RDF> for Vocab {
+    fn from(rdf: RDF) -> Self {
+        Self::RDF(rdf)
+    }
+}
+
+impl From<RDFS> for Vocab {
+    fn from(rdf: RDFS) -> Self {
+        Self::RDFS(rdf)
+    }
+}
+
+impl From<OWL> for Vocab {
+    fn from(owl: OWL) -> Self {
+        Self::OWL(owl)
+    }
+}
