@@ -143,13 +143,42 @@ where NB: Into<AsRefNamedOrBlankNode<Rc<str>>>,
 }
 
 
-impl<'a, T: Render> Render for Box<T> {
+impl<T: Render> Render for Box<T> {
     fn render<W:Write>(&self, f:&mut PrettyRdfXmlFormatter<Rc<str>, W>,
-                       bng: &mut NodeGenerator) ->
-        Result<Option<AsRefNamedOrBlankNode<Rc<str>>>, Error> {
-            (**self).render(f, bng)
-        }
+                       ng: &mut NodeGenerator)
+                       -> Result<Option<AsRefNamedOrBlankNode<Rc<str>>>, Error> {
+        (**self).render(f, ng)
+    }
 }
+use std::fmt::Debug;
+impl<T: Debug + Render> Render for &Vec<T> {
+    fn render<W:Write>(&self, f:&mut PrettyRdfXmlFormatter<Rc<str>, W>,
+                       ng: &mut NodeGenerator)
+                       -> Result<Option<AsRefNamedOrBlankNode<Rc<str>>>, Error> {
+        let mut rest:Option<AsRefNamedOrBlankNode<Rc<str>>> = None;
+        for i in self.iter().rev() {
+            let bn = &ng.bn();
+            let item = i.render_to(f, ng)?;
+
+            triples!(
+                f, bn.clone(), ng.nn(RDF::First), item
+            );
+
+            if let Some(r) = rest.take() {
+                triples!(
+                    f, bn.clone(), ng.nn(RDF::Rest), r
+                );
+            } else {
+                triples!(
+                    f, bn.clone(), ng.nn(RDF::Rest), ng.nn(RDF::Nil)
+                );
+            }
+            rest = Some(bn.clone())
+        }
+        Ok(rest)
+    }
+}
+
 
 render! {
     &AxiomMappedOntology, self, f, ng,
@@ -257,6 +286,32 @@ render! {
         Ok(
             match self {
                 ClassExpression::Class(cl) => Some((&cl.0).into()),
+                ClassExpression::ObjectIntersectionOf(v)=>{
+                    let bn = ng.bn();
+                    let node_seq = v.render_to(f, ng)?;
+
+                    triples!(
+                         f,
+                         bn.clone(), ng.nn(RDF::Type), ng.nn(OWL::Class),
+                         bn.clone(), ng.nn(OWL::IntersectionOf), node_seq
+                    );
+
+                    Some(bn)
+                }
+                ClassExpression::ObjectUnionOf(v) => {
+                    let bn = ng.bn();
+                    let node_seq = v.render_to(f, ng)?;
+
+                    triples!(
+                        f,
+                        bn.clone(), ng.nn(RDF::Type), ng.nn(OWL::Class),
+                        bn.clone(), ng.nn(OWL::UnionOf), node_seq
+                    );
+
+                    Some(bn)
+                                }
+                ClassExpression::ObjectComplementOf(_) => todo!(),
+                ClassExpression::ObjectOneOf(_) => todo!(),
                 ClassExpression::ObjectSomeValuesFrom{ref bce, ref ope} => {
                     let bn = ng.bn();
                     let node_ce = bce.render_to(f, ng)?;
@@ -271,7 +326,31 @@ render! {
 
                     Some(bn)
                 }
-                _=> todo!("TODO: {:?}", self)
+                ClassExpression::ObjectAllValuesFrom{ope, bce} => {
+                    let bn = ng.bn();
+                    let node_ce = bce.render_to(f, ng)?;
+                    let node_ope = ope.render_to(f, ng)?;
+
+                    triples!(
+                        f,
+                        bn.clone(), ng.nn(RDF::Type), ng.nn(OWL::Restriction),
+                        bn.clone(), ng.nn(OWL::OnProperty), node_ope,
+                        bn.clone(), ng.nn(OWL::AllValuesFrom), node_ce
+                    );
+
+                    Some(bn)
+                }
+                ClassExpression::ObjectHasValue{ope:_ope, i:_i} => todo!(),
+                ClassExpression::ObjectHasSelf(_ope) =>todo!(),
+                ClassExpression::ObjectMinCardinality{n:_n, ope:_ope, bce:_bce} =>todo!(),
+                ClassExpression::ObjectMaxCardinality{n:_n, ope:_ope, bce:_bce} =>todo!(),
+                ClassExpression::ObjectExactCardinality{n:_n, ope:_ope, bce:_bce} =>todo!(),
+                ClassExpression::DataSomeValuesFrom{dp:_dp, dr:_dr} => todo!(),
+                ClassExpression::DataAllValuesFrom{dp:_dp, dr:_dr} => todo!(),
+                ClassExpression::DataHasValue{dp:_dp, l:_l}=>todo!(),
+                ClassExpression::DataMinCardinality{n:_n,dp:_dp,dr:_dr} => todo!(),
+                ClassExpression::DataMaxCardinality{n:_n,dp:_dp,dr:_dr} => todo!(),
+                ClassExpression::DataExactCardinality{n:_n,dp:_dp,dr:_dr} => todo!(),
             }
         )
     }
@@ -451,20 +530,20 @@ mod test {
         assert_round(include_str!("../../ont/owl-rdf/some.owl"));
     }
 
-    // #[test]
-    // fn round_only() {
-    //     assert_round(include_str!("../../ont/owl-rdf/only.owl"));
-    // }
+    #[test]
+    fn round_only() {
+        assert_round(include_str!("../../ont/owl-rdf/only.owl"));
+    }
 
-    // #[test]
-    // fn round_and() {
-    //     assert_round(include_str!("../../ont/owl-rdf/and.owl"));
-    // }
+    #[test]
+    fn round_and() {
+        assert_round(include_str!("../../ont/owl-rdf/and.owl"));
+    }
 
-    // #[test]
-    // fn round_or() {
-    //     assert_round(include_str!("../../ont/owl-rdf/or.owl"));
-    // }
+    #[test]
+    fn round_or() {
+        assert_round(include_str!("../../ont/owl-rdf/or.owl"));
+    }
 
     // #[test]
     // fn round_not() {
