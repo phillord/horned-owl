@@ -8,7 +8,6 @@ pub fn write<W:Write>(
     write: &mut W,
     ont: &AxiomMappedOntology,
 ) -> Result<(), Error> {
-
     // Entirely unsatisfying to set this randomly here, but we can't
     // access ns our parser yet
     let mut p = indexmap::IndexMap::new();
@@ -79,18 +78,25 @@ impl From<&IRI> for AsRefNamedOrBlankNode<Rc<str>> {
     }
 }
 
+
 trait Render {
     fn render<W:Write>(&self, f:&mut PrettyRdfXmlFormatter<Rc<str>, W>,
                        ng: &mut NodeGenerator) ->
-        Result<Option<AsRefNamedOrBlankNode<Rc<str>>>, Error>;
-
-    fn render_to<W:Write>(&self, f:&mut PrettyRdfXmlFormatter<Rc<str>, W>,
-                          ng: &mut NodeGenerator) ->
-        Result<AsRefNamedOrBlankNode<Rc<str>>, Error> {
-            self.render(f, ng)?.ok_or_else
-                (|| format_err!("Attempt to unpack an empty node"))
-        }
+        Result<(), Error>;
 }
+
+trait RenderToNode {
+    fn render<W:Write>(&self, f:&mut PrettyRdfXmlFormatter<Rc<str>, W>,
+                       ng: &mut NodeGenerator) ->
+        Result<AsRefNamedOrBlankNode<Rc<str>>, Error>;
+}
+
+trait RenderToVec {
+    fn render<W:Write>(&self, f:&mut PrettyRdfXmlFormatter<Rc<str>, W>,
+                       ng: &mut NodeGenerator) ->
+        Result<Vec<AsRefTriple<Rc<str>>>, Error>;
+}
+
 
 /// The types in `Render` are too long to type.
 macro_rules! render {
@@ -99,7 +105,31 @@ macro_rules! render {
         impl Render for $type {
             fn render<W:Write>(& $self, $f:&mut PrettyRdfXmlFormatter<Rc<str>, W>,
                                $ng: &mut NodeGenerator)
-                               -> Result<Option<AsRefNamedOrBlankNode<Rc<str>>>, Error>
+                               -> Result<(), Error>
+                $body
+        }
+    }
+}
+
+macro_rules! render_to_node {
+    ($type:ty, $self:ident, $f:ident, $ng:ident,
+     $body:tt) => {
+        impl RenderToNode for $type {
+            fn render<W:Write>(& $self, $f:&mut PrettyRdfXmlFormatter<Rc<str>, W>,
+                               $ng: &mut NodeGenerator)
+                               -> Result<AsRefNamedOrBlankNode<Rc<str>>, Error>
+                $body
+        }
+    }
+}
+
+macro_rules! render_to_vec {
+    ($type:ty, $self:ident, $f:ident, $ng:ident,
+     $body:tt) => {
+        impl RenderToVec for $type {
+            fn render<W:Write>(& $self, $f:&mut PrettyRdfXmlFormatter<Rc<str>, W>,
+                               $ng: &mut NodeGenerator)
+                               -> Result<Vec<AsRefTriple<Rc<str>>>, Error>
                 $body
         }
     }
@@ -118,13 +148,54 @@ macro_rules! triples {
     }
 }
 
-macro_rules! render_triple {
+macro_rules! triples_to_node {
+    ($f:ident) => {};
+    ($f:ident, $sub:expr, $pred:expr, $ob:expr) => {
+        {
+            let s = $sub;
+
+            $f.format(to_triple(
+                s.clone(), $pred, $ob
+            ))?;
+
+            s
+        }
+    };
+    ($f:ident, $sub:expr, $pred:expr, $ob:expr, $($rest:expr),+) => {
+        {
+            let s = triples_to_node!($f, $sub, $pred, $ob);
+            triples!($f, $($rest),*);
+
+            s
+        }
+    }
+}
+
+macro_rules! triples_to_vec {
+    ($f:ident) => {};
+    ($f:ident, $sub:expr, $pred:expr, $ob:expr) => {
+        {
+            let t = to_triple($sub, $pred, $ob);
+            $f.format(t.clone())?;
+
+            vec![t]
+        }
+     };
+    ($f:ident, $sub:expr, $pred:expr, $ob:expr, $($rest:expr),+) => {
+        {
+            let mut v = triples_to_vec!($f, $sub, $pred, $ob);
+            v.extend(triples_to_vec!($f, $($rest),*));
+            v
+        }
+    }
+}
+
+macro_rules! render_triple_to_vec {
     ($type:ty, $self:ident, $ng:ident, $sub:expr, $pred:expr, $ob:expr) => {
-        render! {
+        render_to_vec! {
             $type, $self, f, $ng,
             {
-                triples!(f, $sub, $pred, $ob);
-                Ok(None)
+                Ok(triples_to_vec!(f, $sub, $pred, $ob))
             }
         }
     }
@@ -142,23 +213,23 @@ where NB: Into<AsRefNamedOrBlankNode<Rc<str>>>,
     }
 }
 
+// impl<T: Render> RenderToVec for Box<T> {
+//     fn render<W:Write>(&self, f:&mut PrettyRdfXmlFormatter<Rc<str>, W>,
+//                        ng: &mut NodeGenerator) ->
+//         Result<Vec<AsRefTriple<Rc<str>>>, Error> {
+//             (**self).render(f, ng)
+//         }
+// }
 
-impl<T: Render> Render for Box<T> {
-    fn render<W:Write>(&self, f:&mut PrettyRdfXmlFormatter<Rc<str>, W>,
-                       ng: &mut NodeGenerator)
-                       -> Result<Option<AsRefNamedOrBlankNode<Rc<str>>>, Error> {
-        (**self).render(f, ng)
-    }
-}
 use std::fmt::Debug;
-impl<T: Debug + Render> Render for &Vec<T> {
+impl<T: Debug + RenderToNode> RenderToNode for &Vec<T> {
     fn render<W:Write>(&self, f:&mut PrettyRdfXmlFormatter<Rc<str>, W>,
                        ng: &mut NodeGenerator)
-                       -> Result<Option<AsRefNamedOrBlankNode<Rc<str>>>, Error> {
+                       -> Result<AsRefNamedOrBlankNode<Rc<str>>, Error> {
         let mut rest:Option<AsRefNamedOrBlankNode<Rc<str>>> = None;
         for i in self.iter().rev() {
             let bn = &ng.bn();
-            let item = i.render_to(f, ng)?;
+            let item = i.render(f, ng)?;
 
             triples!(
                 f, bn.clone(), ng.nn(RDF::First), item
@@ -175,7 +246,8 @@ impl<T: Debug + Render> Render for &Vec<T> {
             }
             rest = Some(bn.clone())
         }
-        Ok(rest)
+        // Panic if Vec is zero length!
+        Ok(rest.unwrap())
     }
 }
 
@@ -214,23 +286,25 @@ render! {
                 ax.render(f, ng)?;
             }
         }
-        Ok(None)
+        Ok(())
     }
 }
 
 render! {
     AnnotatedAxiom, self, f, ng,
     {
-        self.axiom.render(f, ng)
+        self.axiom.render(f, ng)?;
+        // TODO Render annotations
+        Ok(())
     }
 }
 
-render! {
+render_to_vec! {
     Axiom, self, f, ng,
     {
         match self {
             // We render imports earlier
-            Axiom::Import(_ax) => Ok(None),
+            Axiom::Import(_ax) => Ok(vec![]),
             //Axiom::OntologyAnnotation(ax) => ax.render(f, ng),
             Axiom::DeclareClass(ax) => ax.render(f, ng),
             Axiom::DeclareObjectProperty(ax) => ax.render(f, ng),
@@ -280,65 +354,57 @@ render! {
     }
 }
 
-render! {
+render_to_node! {
     ClassExpression, self, f, ng,
     {
         Ok(
             match self {
-                ClassExpression::Class(cl) => Some((&cl.0).into()),
+                ClassExpression::Class(cl) => (&cl.0).into(),
                 ClassExpression::ObjectIntersectionOf(v)=>{
                     let bn = ng.bn();
-                    let node_seq = v.render_to(f, ng)?;
+                    let node_seq = v.render(f, ng)?;
 
-                    triples!(
+                    triples_to_node!(
                          f,
                          bn.clone(), ng.nn(RDF::Type), ng.nn(OWL::Class),
                          bn.clone(), ng.nn(OWL::IntersectionOf), node_seq
-                    );
-
-                    Some(bn)
+                    )
                 }
                 ClassExpression::ObjectUnionOf(v) => {
                     let bn = ng.bn();
-                    let node_seq = v.render_to(f, ng)?;
+                    let node_seq = v.render(f, ng)?;
 
-                    triples!(
+                    triples_to_node!(
                         f,
                         bn.clone(), ng.nn(RDF::Type), ng.nn(OWL::Class),
                         bn.clone(), ng.nn(OWL::UnionOf), node_seq
-                    );
-
-                    Some(bn)
-                                }
+                    )
+                }
                 ClassExpression::ObjectComplementOf(_) => todo!(),
                 ClassExpression::ObjectOneOf(_) => todo!(),
                 ClassExpression::ObjectSomeValuesFrom{ref bce, ref ope} => {
                     let bn = ng.bn();
-                    let node_ce = bce.render_to(f, ng)?;
-                    let node_ope = ope.render_to(f, ng)?;
+                    let node_ce = bce.render(f, ng)?;
+                    let node_ope = ope.render(f, ng)?;
 
-                    triples!(
+                    triples_to_node!(
                         f,
                         bn.clone(), ng.nn(RDF::Type), ng.nn(OWL::Restriction),
                         bn.clone(), ng.nn(OWL::OnProperty), node_ope,
                         bn.clone(), ng.nn(OWL::SomeValuesFrom), node_ce
-                    );
-
-                    Some(bn)
+                    )
                 }
                 ClassExpression::ObjectAllValuesFrom{ope, bce} => {
                     let bn = ng.bn();
-                    let node_ce = bce.render_to(f, ng)?;
-                    let node_ope = ope.render_to(f, ng)?;
+                    let node_ce = bce.render(f, ng)?;
+                    let node_ope = ope.render(f, ng)?;
 
-                    triples!(
+                    triples_to_node!(
                         f,
                         bn.clone(), ng.nn(RDF::Type), ng.nn(OWL::Restriction),
                         bn.clone(), ng.nn(OWL::OnProperty), node_ope,
                         bn.clone(), ng.nn(OWL::AllValuesFrom), node_ce
-                    );
-
-                    Some(bn)
+                    )
                 }
                 ClassExpression::ObjectHasValue{ope:_ope, i:_i} => todo!(),
                 ClassExpression::ObjectHasSelf(_ope) =>todo!(),
@@ -356,61 +422,63 @@ render! {
     }
 }
 
-render! {
+render_to_node! {
     ObjectPropertyExpression, self, _f, _ng,
     {
         Ok(
             match self {
                 ObjectPropertyExpression::ObjectProperty(op)
-                    => Some((&op.0).into()),
+                    => (&op.0).into(),
                 ObjectPropertyExpression::InverseObjectProperty(_op)
                     => todo!()
             }
         )
     }
 }
-render_triple! {
+
+render_triple_to_vec! {
     DeclareClass, self, ng,
     &self.0.0, ng.nn(RDF::Type), ng.nn(OWL::Class)
 }
 
-render_triple! {
+render_triple_to_vec! {
     DeclareDatatype, self, ng,
     &self.0.0, ng.nn(RDF::Type), ng.nn(RDFS::Datatype)
 }
 
-render_triple! {
+render_triple_to_vec! {
     DeclareObjectProperty, self, ng,
     &self.0.0, ng.nn(RDF::Type), ng.nn(OWL::ObjectProperty)
 }
 
-render_triple! {
+render_triple_to_vec! {
     DeclareDataProperty, self, ng,
     &self.0.0, ng.nn(RDF::Type), ng.nn(OWL::DatatypeProperty)
 }
 
-render_triple! {
+render_triple_to_vec! {
     DeclareAnnotationProperty, self, ng,
     &self.0.0, ng.nn(RDF::Type), ng.nn(OWL::AnnotationProperty)
 }
 
-render_triple! {
+render_triple_to_vec! {
     DeclareNamedIndividual, self, ng,
     &self.0.0, ng.nn(RDF::Type), ng.nn(OWL::NamedIndividual)
 }
 
-render! {
+render_to_vec! {
     SubClassOf, self, f, ng,
     {
-        let sub = self.sub.render_to(f, ng)?;
-        let obj = self.sup.render_to(f, ng)?;
+        let sub = self.sub.render(f, ng)?;
+        let obj = self.sup.render(f, ng)?;
 
-        triples!(f,
-                 sub,
-                 ng.nn(RDFS::SubClassOf),
-                 obj
-        );
-        Ok(None)
+        Ok(
+            triples_to_vec!(f,
+                            sub,
+                            ng.nn(RDFS::SubClassOf),
+                            obj
+            )
+        )
     }
 }
 
@@ -491,6 +559,8 @@ mod test {
     ) {
         let (ont_orig, ont_round) = roundtrip(ont);
 
+        println!("ont_orig\n{:#?}", ont_orig);
+        println!("ont_round\n{:#?}", ont_round);
         assert_eq!(ont_orig, ont_round);
 
         return (ont_orig, ont_round);
@@ -506,14 +576,12 @@ mod test {
         assert_round(include_str!("../../ont/owl-rdf/class.owl"));
     }
 
-    // #[test]
-    // fn round_class_with_annotation() {
-    //     let (ont_orig, _prefix_orig, ont_round, _prefix_round) = roundtrip(include_str!(
-    //         "../../ont/owl-rdf/declaration-with-annotation.owl"
-    //     ));
-
-    //     assert_eq!(ont_orig, ont_round);
-    // }
+    #[test]
+    fn round_class_with_annotation() {
+        assert_round(include_str!(
+            "../../ont/owl-rdf/declaration-with-annotation.owl"
+        ));
+    }
 
     #[test]
     fn round_subclass() {
@@ -930,3 +998,4 @@ mod test {
     // }
 
 }
+
