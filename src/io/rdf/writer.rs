@@ -79,22 +79,10 @@ impl From<&IRI> for AsRefNamedOrBlankNode<Rc<str>> {
 }
 
 
-trait Render {
+trait Render<R> {
     fn render<W:Write>(&self, f:&mut PrettyRdfXmlFormatter<Rc<str>, W>,
                        ng: &mut NodeGenerator) ->
-        Result<(), Error>;
-}
-
-trait RenderToNode {
-    fn render<W:Write>(&self, f:&mut PrettyRdfXmlFormatter<Rc<str>, W>,
-                       ng: &mut NodeGenerator) ->
-        Result<AsRefNamedOrBlankNode<Rc<str>>, Error>;
-}
-
-trait RenderToVec {
-    fn render<W:Write>(&self, f:&mut PrettyRdfXmlFormatter<Rc<str>, W>,
-                       ng: &mut NodeGenerator) ->
-        Result<Vec<AsRefTriple<Rc<str>>>, Error>;
+        Result<R, Error>;
 }
 
 
@@ -102,7 +90,7 @@ trait RenderToVec {
 macro_rules! render {
     ($type:ty, $self:ident, $f:ident, $ng:ident,
      $body:tt) => {
-        impl Render for $type {
+        impl Render<()> for $type {
             fn render<W:Write>(& $self, $f:&mut PrettyRdfXmlFormatter<Rc<str>, W>,
                                $ng: &mut NodeGenerator)
                                -> Result<(), Error>
@@ -114,7 +102,7 @@ macro_rules! render {
 macro_rules! render_to_node {
     ($type:ty, $self:ident, $f:ident, $ng:ident,
      $body:tt) => {
-        impl RenderToNode for $type {
+        impl Render<AsRefNamedOrBlankNode<Rc<str>>> for $type {
             fn render<W:Write>(& $self, $f:&mut PrettyRdfXmlFormatter<Rc<str>, W>,
                                $ng: &mut NodeGenerator)
                                -> Result<AsRefNamedOrBlankNode<Rc<str>>, Error>
@@ -126,7 +114,7 @@ macro_rules! render_to_node {
 macro_rules! render_to_vec {
     ($type:ty, $self:ident, $f:ident, $ng:ident,
      $body:tt) => {
-        impl RenderToVec for $type {
+        impl Render<Vec<AsRefTriple<Rc<str>>>> for $type {
             fn render<W:Write>(& $self, $f:&mut PrettyRdfXmlFormatter<Rc<str>, W>,
                                $ng: &mut NodeGenerator)
                                -> Result<Vec<AsRefTriple<Rc<str>>>, Error>
@@ -222,7 +210,7 @@ where NB: Into<AsRefNamedOrBlankNode<Rc<str>>>,
 // }
 
 use std::fmt::Debug;
-impl<T: Debug + RenderToNode> RenderToNode for &Vec<T> {
+impl<T: Debug + Render<AsRefNamedOrBlankNode<Rc<str>>>> Render<AsRefNamedOrBlankNode<Rc<str>>> for &Vec<T> {
     fn render<W:Write>(&self, f:&mut PrettyRdfXmlFormatter<Rc<str>, W>,
                        ng: &mut NodeGenerator)
                        -> Result<AsRefNamedOrBlankNode<Rc<str>>, Error> {
