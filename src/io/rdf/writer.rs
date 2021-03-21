@@ -1,4 +1,4 @@
-use std::{collections::HashSet, io::Write, rc::Rc};
+use std::{collections::HashSet, fmt::Debug, io::Write, rc::Rc};
 
 use failure::Error;
 use rio_xml::chunked_formatter::{AsRefBlankNode, AsRefNamedNode, AsRefNamedOrBlankNode, AsRefTerm, AsRefTriple, ChunkedRdfXmlFormatterConfig, PrettyRdfXmlFormatter};
@@ -88,12 +88,12 @@ trait Render<R> {
 
 /// The types in `Render` are too long to type.
 macro_rules! render {
-    ($type:ty, $self:ident, $f:ident, $ng:ident,
+    ($type:ty, $self:ident, $f:ident, $ng:ident, $return:ty,
      $body:tt) => {
-        impl Render<()> for $type {
+        impl Render<$return> for $type {
             fn render<W:Write>(& $self, $f:&mut PrettyRdfXmlFormatter<Rc<str>, W>,
                                $ng: &mut NodeGenerator)
-                               -> Result<(), Error>
+                               -> Result<$return, Error>
                 $body
         }
     }
@@ -102,24 +102,14 @@ macro_rules! render {
 macro_rules! render_to_node {
     ($type:ty, $self:ident, $f:ident, $ng:ident,
      $body:tt) => {
-        impl Render<AsRefNamedOrBlankNode<Rc<str>>> for $type {
-            fn render<W:Write>(& $self, $f:&mut PrettyRdfXmlFormatter<Rc<str>, W>,
-                               $ng: &mut NodeGenerator)
-                               -> Result<AsRefNamedOrBlankNode<Rc<str>>, Error>
-                $body
-        }
+        render!{$type,$self, $f, $ng, AsRefNamedOrBlankNode<Rc<str>>, $body}
     }
 }
 
 macro_rules! render_to_vec {
     ($type:ty, $self:ident, $f:ident, $ng:ident,
      $body:tt) => {
-        impl Render<Vec<AsRefTriple<Rc<str>>>> for $type {
-            fn render<W:Write>(& $self, $f:&mut PrettyRdfXmlFormatter<Rc<str>, W>,
-                               $ng: &mut NodeGenerator)
-                               -> Result<Vec<AsRefTriple<Rc<str>>>, Error>
-                $body
-        }
+        render!{$type, $self, $f, $ng, Vec<AsRefTriple<Rc<str>>>, $body}
     }
 }
 
@@ -201,15 +191,7 @@ where NB: Into<AsRefNamedOrBlankNode<Rc<str>>>,
     }
 }
 
-// impl<T: Render> RenderToVec for Box<T> {
-//     fn render<W:Write>(&self, f:&mut PrettyRdfXmlFormatter<Rc<str>, W>,
-//                        ng: &mut NodeGenerator) ->
-//         Result<Vec<AsRefTriple<Rc<str>>>, Error> {
-//             (**self).render(f, ng)
-//         }
-// }
 
-use std::fmt::Debug;
 impl<T: Debug + Render<AsRefNamedOrBlankNode<Rc<str>>>> Render<AsRefNamedOrBlankNode<Rc<str>>> for &Vec<T> {
     fn render<W:Write>(&self, f:&mut PrettyRdfXmlFormatter<Rc<str>, W>,
                        ng: &mut NodeGenerator)
@@ -241,7 +223,7 @@ impl<T: Debug + Render<AsRefNamedOrBlankNode<Rc<str>>>> Render<AsRefNamedOrBlank
 
 
 render! {
-    &AxiomMappedOntology, self, f, ng,
+    &AxiomMappedOntology, self, f, ng, (),
     {
         if let Some(iri) = &self.id().iri {
             triples!(
