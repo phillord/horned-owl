@@ -1,7 +1,7 @@
-use std::{collections::HashSet, fmt::Debug, io::Write, rc::Rc};
+use std::{collections::{BTreeSet, HashSet}, fmt::Debug, io::Write, rc::Rc};
 
 use failure::Error;
-use rio_xml::chunked_formatter::{AsRefBlankNode, AsRefNamedNode, AsRefNamedOrBlankNode, AsRefTerm, AsRefTriple, ChunkedRdfXmlFormatterConfig, PrettyRdfXmlFormatter};
+use rio_xml::chunked_formatter::{AsRefBlankNode, AsRefLiteral, AsRefNamedNode, AsRefNamedOrBlankNode, AsRefTerm, AsRefTriple, ChunkedRdfXmlFormatterConfig, PrettyRdfXmlFormatter};
 use crate::{model::*, ontology::axiom_mapped::AxiomMappedOntology, vocab::{OWL, RDF, RDFS, WithIRI, Vocab}};
 
 pub fn write<W:Write>(
@@ -29,7 +29,8 @@ pub fn write<W:Write>(
 #[derive(Default)]
 struct NodeGenerator {
     i: u64,
-    b: HashSet<Rc<str>>
+    b: HashSet<Rc<str>>,
+    this_bn: Option<AsRefNamedOrBlankNode<Rc<str>>>
 }
 
 
@@ -56,6 +57,14 @@ impl NodeGenerator {
                 id: format!{"bn{}", self.i}.into()
             }
         )
+    }
+
+    pub fn keep_this_bn(&mut self, bn:AsRefNamedOrBlankNode<Rc<str>>) {
+        self.this_bn = Some(bn);
+    }
+
+    pub fn this_bn(&mut self) -> Option<AsRefNamedOrBlankNode<Rc<str>>> {
+        self.this_bn.take()
     }
 }
 
@@ -85,6 +94,24 @@ trait Render<R> {
         Result<R, Error>;
 }
 
+enum Annotatable<A:AsRef<str>> {
+    Main(AsRefTriple<A>),
+    Multiple(Vec<AsRefTriple<A>>),
+    Blank(AsRefBlankNode<A>)
+}
+
+impl From<AsRefTriple<Rc<str>>> for Annotatable<Rc<str>> {
+    fn from(t: AsRefTriple<Rc<str>>) -> Self {
+        Self::Main(t)
+    }
+}
+
+impl From<Vec<AsRefTriple<Rc<str>>>> for Annotatable<Rc<str>> {
+    fn from(t: Vec<AsRefTriple<Rc<str>>>) -> Self {
+        Self::Multiple(t)
+    }
+}
+
 
 /// The types in `Render` are too long to type.
 macro_rules! render {
@@ -110,6 +137,27 @@ macro_rules! render_to_vec {
     ($type:ty, $self:ident, $f:ident, $ng:ident,
      $body:tt) => {
         render!{$type, $self, $f, $ng, Vec<AsRefTriple<Rc<str>>>, $body}
+    }
+}
+
+macro_rules! render_triple {
+    ($type:ty, $self:ident, $ng:ident, $sub:expr, $pred:expr, $ob:expr) => {
+        render! {
+            $type, $self, f, $ng, AsRefTriple<Rc<str>>,
+            {
+                Ok(triple!(f, $sub, $pred, $ob))
+            }
+        }
+    }
+}
+
+macro_rules! triple {
+    ($f:ident, $sub:expr, $pred:expr, $ob:expr) => {
+        {
+            let t = to_triple($sub, $pred, $ob);
+            $f.format(t.clone())?;
+            t
+        }
     }
 }
 
@@ -168,16 +216,6 @@ macro_rules! triples_to_vec {
     }
 }
 
-macro_rules! render_triple_to_vec {
-    ($type:ty, $self:ident, $ng:ident, $sub:expr, $pred:expr, $ob:expr) => {
-        render_to_vec! {
-            $type, $self, f, $ng,
-            {
-                Ok(triples_to_vec!(f, $sub, $pred, $ob))
-            }
-        }
-    }
-}
 
 fn to_triple<'a, NB, NN, T>(subject:NB, predicate:NN, object:T) -> AsRefTriple<Rc<str>>
 where NB: Into<AsRefNamedOrBlankNode<Rc<str>>>,
@@ -221,6 +259,18 @@ impl<T: Debug + Render<AsRefNamedOrBlankNode<Rc<str>>>> Render<AsRefNamedOrBlank
     }
 }
 
+impl Render<()> for BTreeSet<Annotation> {
+    fn render<W:Write>(&self, f:&mut PrettyRdfXmlFormatter<Rc<str>, W>,
+                       ng: &mut NodeGenerator)
+                       -> Result<(), Error>
+    {
+        for r in self.iter() {
+            r.render(f, ng)?;
+        }
+        Ok(())
+    }
+}
+
 
 render! {
     &AxiomMappedOntology, self, f, ng, (),
@@ -260,67 +310,128 @@ render! {
     }
 }
 
+impl Render<()> for AnnotatedAxiom {
+    fn render<W:Write>(&self, f:&mut PrettyRdfXmlFormatter<Rc<str>, W>,
+                       ng: &mut NodeGenerator)
+                           -> Result<(), Error> {
+        let ax:Annotatable<Rc<str>> = self.axiom.render(f, ng)?;
+        Ok(
+            if self.ann.len() != 0 {
+                match ax {
+                    Annotatable::Main(t) => {
+                        let bn = ng.bn();
+                        triples! (f,
+                                  bn.clone(), ng.nn(RDF::Type), ng.nn(OWL::Axiom),
+                                  bn.clone(), ng.nn(OWL::AnnotatedSource), t.subject,
+                                  bn.clone(), ng.nn(OWL::AnnotatedProperty), t.predicate,
+                                  bn.clone(), ng.nn(OWL::AnnotatedTarget), t.object
+                                  // And the rest!
+                        );
+
+                        ng.keep_this_bn(bn.clone());
+
+                        //let s = self.ann.iter().next().unwrap();
+                        //s.render(f, ng);
+                        &self.ann.render(f, ng);
+                    }
+                    _ => {
+                        ()
+                        // todo!()
+                    }
+                }
+            }
+        )
+    }
+}
+
+
 render! {
-    AnnotatedAxiom, self, f, ng,
+    Annotation, self, f, ng, (),
     {
-        self.axiom.render(f, ng)?;
-        // TODO Render annotations
+        let bn = ng.this_bn().ok_or_else(|| format_err!("No bnode available"))?;
+
+        match &self.av {
+            AnnotationValue::Literal(l) => {
+                let obj:AsRefTerm<Rc<str>> =
+                    match l {
+                        Literal::Simple{literal} =>
+                            AsRefTerm::Literal(AsRefLiteral::Simple{value:literal.clone().into()}),
+                        Literal::Language{literal, lang} =>
+                            AsRefTerm::Literal(AsRefLiteral::LanguageTaggedString{value:literal.clone().into(),
+                                                                                  language: lang.clone().into()}),
+                        Literal::Datatype{literal, datatype_iri} =>
+                            AsRefTerm::Literal(AsRefLiteral::Typed{value:literal.clone().into(),
+                                                                   datatype:datatype_iri.into()})
+                    };
+
+                triples!(f, bn, &self.ap.0, obj);
+            }
+        AnnotationValue::IRI(iri) => {
+                triples!(
+                    f, bn, &self.ap.0, iri
+                );
+            }
+        }
         Ok(())
     }
 }
 
-render_to_vec! {
-    Axiom, self, f, ng,
+impl Render<Annotatable<Rc<str>>> for Axiom {
+        fn render<W:Write>(&self, f:&mut PrettyRdfXmlFormatter<Rc<str>, W>,
+                           ng: &mut NodeGenerator)
+                           -> Result<Annotatable<Rc<str>>, Error>
     {
-        match self {
-            // We render imports earlier
-            Axiom::Import(_ax) => Ok(vec![]),
-            //Axiom::OntologyAnnotation(ax) => ax.render(f, ng),
-            Axiom::DeclareClass(ax) => ax.render(f, ng),
-            Axiom::DeclareObjectProperty(ax) => ax.render(f, ng),
-            Axiom::DeclareAnnotationProperty(ax) => ax.render(f, ng),
-            Axiom::DeclareDataProperty(ax) => ax.render(f, ng),
-            Axiom::DeclareNamedIndividual(ax) => ax.render(f, ng),
-            Axiom::DeclareDatatype(ax) => ax.render(f, ng),
-            Axiom::SubClassOf(ax) => ax.render(f, ng),
-            // Axiom::EquivalentClasses(ax) => ax.render(f, ng),
-            // Axiom::DisjointClasses(ax) => ax.render(f, ng),
-            // Axiom::DisjointUnion(ax) => ax.render(f, ng),
-            // Axiom::SubObjectPropertyOf(ax) => ax.render(f, ng),
-            // Axiom::EquivalentObjectProperties(ax) => ax.render(f, ng),
-            // Axiom::DisjointObjectProperties(ax) => ax.render(f, ng),
-            // Axiom::InverseObjectProperties(ax) => ax.render(f, ng),
-            // Axiom::ObjectPropertyDomain(ax) => ax.render(f, ng),
-            // Axiom::ObjectPropertyRange(ax) => ax.render(f, ng),
-            // Axiom::FunctionalObjectProperty(ax) => ax.render(f, ng),
-            // Axiom::InverseFunctionalObjectProperty(ax) => ax.render(f, ng),
-            // Axiom::ReflexiveObjectProperty(ax) => ax.render(f, ng),
-            // Axiom::IrreflexiveObjectProperty(ax) => ax.render(f, ng),
-            // Axiom::SymmetricObjectProperty(ax) => ax.render(f, ng),
-            // Axiom::AsymmetricObjectProperty(ax) => ax.render(f, ng),
-            // Axiom::TransitiveObjectProperty(ax) => ax.render(f, ng),
-            // Axiom::SubDataPropertyOf(ax) => ax.render(f, ng),
-            // Axiom::EquivalentDataProperties(ax) => ax.render(f, ng),
-            // Axiom::DisjointDataProperties(ax) => ax.render(f, ng),
-            // Axiom::DataPropertyDomain(ax) => ax.render(f, ng),
-            // Axiom::DataPropertyRange(ax) => ax.render(f, ng),
-            // Axiom::FunctionalDataProperty(ax) => ax.render(f, ng),
-            // Axiom::DatatypeDefinition(ax) => ax.render(f, ng),
-            // Axiom::HasKey(ax) => ax.render(f, ng),
-            // Axiom::SameIndividual(ax) => ax.render(f, ng),
-            // Axiom::DifferentIndividuals(ax) => ax.render(f, ng),
-            // Axiom::ClassAssertion(ax) => ax.render(f, ng),
-            // Axiom::ObjectPropertyAssertion(ax) => ax.render(f, ng),
-            // Axiom::NegativeObjectPropertyAssertion(ax) => ax.render(f, ng),
-            // Axiom::DataPropertyAssertion(ax) => ax.render(f, ng),
-            // Axiom::NegativeDataPropertyAssertion(ax) => ax.render(f, ng),
-            // Axiom::AnnotationAssertion(ax) => ax.render(f, ng),
-            // Axiom::SubAnnotationPropertyOf(ax) => ax.render(f, ng),
-            // Axiom::AnnotationPropertyDomain(ax) => ax.render(f, ng),
-            // Axiom::AnnotationPropertyRange(ax) => ax.render(f,
-            // ng)
-            _ => todo!("TODO: {:?}", self)
-        }
+        Ok(
+            match self {
+                // We render imports earlier
+                Axiom::Import(_ax) => vec![].into(),
+                //Axiom::OntologyAnnotation(ax) => ax.render(f, ng),
+                Axiom::DeclareClass(ax) => ax.render(f, ng)?.into(),
+                Axiom::DeclareObjectProperty(ax) => ax.render(f, ng)?.into(),
+                Axiom::DeclareAnnotationProperty(ax) => ax.render(f, ng)?.into(),
+                Axiom::DeclareDataProperty(ax) => ax.render(f, ng)?.into(),
+                Axiom::DeclareNamedIndividual(ax) => ax.render(f, ng)?.into(),
+                Axiom::DeclareDatatype(ax) => ax.render(f, ng)?.into(),
+                Axiom::SubClassOf(ax) => ax.render(f, ng)?.into(),
+                // Axiom::EquivalentClasses(ax) => ax.render(f, ng),
+                // Axiom::DisjointClasses(ax) => ax.render(f, ng),
+                // Axiom::DisjointUnion(ax) => ax.render(f, ng),
+                // Axiom::SubObjectPropertyOf(ax) => ax.render(f, ng),
+                // Axiom::EquivalentObjectProperties(ax) => ax.render(f, ng),
+                // Axiom::DisjointObjectProperties(ax) => ax.render(f, ng),
+                // Axiom::InverseObjectProperties(ax) => ax.render(f, ng),
+                // Axiom::ObjectPropertyDomain(ax) => ax.render(f, ng),
+                // Axiom::ObjectPropertyRange(ax) => ax.render(f, ng),
+                // Axiom::FunctionalObjectProperty(ax) => ax.render(f, ng),
+                // Axiom::InverseFunctionalObjectProperty(ax) => ax.render(f, ng),
+                // Axiom::ReflexiveObjectProperty(ax) => ax.render(f, ng),
+                // Axiom::IrreflexiveObjectProperty(ax) => ax.render(f, ng),
+                // Axiom::SymmetricObjectProperty(ax) => ax.render(f, ng),
+                // Axiom::AsymmetricObjectProperty(ax) => ax.render(f, ng),
+                // Axiom::TransitiveObjectProperty(ax) => ax.render(f, ng),
+                // Axiom::SubDataPropertyOf(ax) => ax.render(f, ng),
+                // Axiom::EquivalentDataProperties(ax) => ax.render(f, ng),
+                // Axiom::DisjointDataProperties(ax) => ax.render(f, ng),
+                // Axiom::DataPropertyDomain(ax) => ax.render(f, ng),
+                // Axiom::DataPropertyRange(ax) => ax.render(f, ng),
+                // Axiom::FunctionalDataProperty(ax) => ax.render(f, ng),
+                // Axiom::DatatypeDefinition(ax) => ax.render(f, ng),
+                // Axiom::HasKey(ax) => ax.render(f, ng),
+                // Axiom::SameIndividual(ax) => ax.render(f, ng),
+                // Axiom::DifferentIndividuals(ax) => ax.render(f, ng),
+                // Axiom::ClassAssertion(ax) => ax.render(f, ng),
+                // Axiom::ObjectPropertyAssertion(ax) => ax.render(f, ng),
+                // Axiom::NegativeObjectPropertyAssertion(ax) => ax.render(f, ng),
+                // Axiom::DataPropertyAssertion(ax) => ax.render(f, ng),
+                // Axiom::NegativeDataPropertyAssertion(ax) => ax.render(f, ng),
+                // Axiom::AnnotationAssertion(ax) => ax.render(f, ng),
+                // Axiom::SubAnnotationPropertyOf(ax) => ax.render(f, ng),
+                // Axiom::AnnotationPropertyDomain(ax) => ax.render(f, ng),
+                // Axiom::AnnotationPropertyRange(ax) => ax.render(f,
+                // ng)
+                _ => todo!("TODO: {:?}", self)
+            }
+        )
     }
 }
 
@@ -406,47 +517,48 @@ render_to_node! {
     }
 }
 
-render_triple_to_vec! {
+
+render_triple! {
     DeclareClass, self, ng,
     &self.0.0, ng.nn(RDF::Type), ng.nn(OWL::Class)
 }
 
-render_triple_to_vec! {
+render_triple! {
     DeclareDatatype, self, ng,
     &self.0.0, ng.nn(RDF::Type), ng.nn(RDFS::Datatype)
 }
 
-render_triple_to_vec! {
+render_triple!{
     DeclareObjectProperty, self, ng,
     &self.0.0, ng.nn(RDF::Type), ng.nn(OWL::ObjectProperty)
 }
 
-render_triple_to_vec! {
+render_triple!{
     DeclareDataProperty, self, ng,
     &self.0.0, ng.nn(RDF::Type), ng.nn(OWL::DatatypeProperty)
 }
 
-render_triple_to_vec! {
+render_triple!{
     DeclareAnnotationProperty, self, ng,
     &self.0.0, ng.nn(RDF::Type), ng.nn(OWL::AnnotationProperty)
 }
 
-render_triple_to_vec! {
+render_triple!{
     DeclareNamedIndividual, self, ng,
     &self.0.0, ng.nn(RDF::Type), ng.nn(OWL::NamedIndividual)
 }
 
-render_to_vec! {
-    SubClassOf, self, f, ng,
+render! {
+    SubClassOf, self, f, ng, AsRefTriple<Rc<str>>,
     {
         let sub = self.sub.render(f, ng)?;
         let obj = self.sup.render(f, ng)?;
 
         Ok(
-            triples_to_vec!(f,
-                            sub,
-                            ng.nn(RDFS::SubClassOf),
-                            obj
+            triple!(f,
+                    sub,
+                    ng.nn(RDFS::SubClassOf),
+                    obj
             )
         )
     }
