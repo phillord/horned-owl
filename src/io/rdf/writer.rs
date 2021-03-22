@@ -758,15 +758,15 @@ mod test {
         assert_round(include_str!("../../ont/owl-rdf/annotation-range.owl"));
     }
 
-    // #[test]
-    // fn round_label() {
-    //     assert_round(include_str!("../../ont/owl-rdf/label.owl"));
-    // }
+    #[test]
+    fn round_label() {
+        assert_round(include_str!("../../ont/owl-rdf/label.owl"));
+    }
 
-    // #[test]
-    // fn round_one_comment() {
-    //     assert_round(include_str!("../../ont/owl-rdf/one-comment.owl"));
-    // }
+    #[test]
+    fn round_one_comment() {
+         assert_round(include_str!("../../ont/owl-rdf/one-comment.owl"));
+    }
 
     // #[test]
     // fn round_one_ontology_annotation() {
