@@ -330,8 +330,6 @@ impl Render<()> for AnnotatedAxiom {
 
                         ng.keep_this_bn(bn.clone());
 
-                        //let s = self.ann.iter().next().unwrap();
-                        //s.render(f, ng);
                         &self.ann.render(f, ng);
                     }
                     _ => {
@@ -346,33 +344,64 @@ impl Render<()> for AnnotatedAxiom {
 
 
 render! {
-    Annotation, self, f, ng, (),
+    Annotation, self, f, ng, AsRefTriple<Rc<str>>,
     {
         let bn = ng.this_bn().ok_or_else(|| format_err!("No bnode available"))?;
 
-        match &self.av {
-            AnnotationValue::Literal(l) => {
-                let obj:AsRefTerm<Rc<str>> =
-                    match l {
-                        Literal::Simple{literal} =>
-                            AsRefTerm::Literal(AsRefLiteral::Simple{value:literal.clone().into()}),
-                        Literal::Language{literal, lang} =>
-                            AsRefTerm::Literal(AsRefLiteral::LanguageTaggedString{value:literal.clone().into(),
-                                                                                  language: lang.clone().into()}),
-                        Literal::Datatype{literal, datatype_iri} =>
-                            AsRefTerm::Literal(AsRefLiteral::Typed{value:literal.clone().into(),
-                                                                   datatype:datatype_iri.into()})
-                    };
+        Ok(
+            match &self.av {
+                AnnotationValue::Literal(l) => {
+                    let obj:AsRefTerm<Rc<str>> =
+                        match l {
+                            Literal::Simple{literal} =>
+                                AsRefTerm::Literal(AsRefLiteral::Simple{value:literal.clone().into()}),
+                            Literal::Language{literal, lang} =>
+                                AsRefTerm::Literal(AsRefLiteral::LanguageTaggedString{value:literal.clone().into(),
+                                                                                      language: lang.clone().into()}),
+                            Literal::Datatype{literal, datatype_iri} =>
+                                AsRefTerm::Literal(AsRefLiteral::Typed{value:literal.clone().into(),
+                                                                       datatype:datatype_iri.into()})
+                        };
 
-                triples!(f, bn, &self.ap.0, obj);
+                    triple!(f, bn, &self.ap.0, obj)
+                }
+                AnnotationValue::IRI(iri) => {
+                    triple!(
+                        f, bn, &self.ap.0, iri
+                    )
+                }
             }
-        AnnotationValue::IRI(iri) => {
-                triples!(
-                    f, bn, &self.ap.0, iri
-                );
-            }
-        }
-        Ok(())
+        )
+    }
+}
+
+
+render!{
+    AnnotationAssertion, self, f, ng, AsRefTriple<Rc<str>>,
+    {
+        let nbn:AsRefNamedOrBlankNode<Rc<str>> = (&self.subject).into();
+        ng.keep_this_bn(nbn);
+
+        self.ann.render(f, ng)
+    }
+}
+
+
+render! {
+    AnnotationPropertyDomain, self, f, ng, AsRefTriple<Rc<str>>,
+    {
+        Ok(
+            triple!(f, &self.ap.0, ng.nn(RDFS::Domain), &self.iri)
+        )
+    }
+}
+
+render! {
+    AnnotationPropertyRange, self, f, ng, AsRefTriple<Rc<str>>,
+    {
+        Ok(
+            triple!(f, &self.ap.0, ng.nn(RDFS::Range), &self.iri)
+        )
     }
 }
 
@@ -385,7 +414,7 @@ impl Render<Annotatable<Rc<str>>> for Axiom {
             match self {
                 // We render imports earlier
                 Axiom::Import(_ax) => vec![].into(),
-                //Axiom::OntologyAnnotation(ax) => ax.render(f, ng),
+                //Axiom::OntologyAnnotation(ax) => ax.render(f, ng)?.into(),
                 Axiom::DeclareClass(ax) => ax.render(f, ng)?.into(),
                 Axiom::DeclareObjectProperty(ax) => ax.render(f, ng)?.into(),
                 Axiom::DeclareAnnotationProperty(ax) => ax.render(f, ng)?.into(),
@@ -393,42 +422,41 @@ impl Render<Annotatable<Rc<str>>> for Axiom {
                 Axiom::DeclareNamedIndividual(ax) => ax.render(f, ng)?.into(),
                 Axiom::DeclareDatatype(ax) => ax.render(f, ng)?.into(),
                 Axiom::SubClassOf(ax) => ax.render(f, ng)?.into(),
-                // Axiom::EquivalentClasses(ax) => ax.render(f, ng),
-                // Axiom::DisjointClasses(ax) => ax.render(f, ng),
-                // Axiom::DisjointUnion(ax) => ax.render(f, ng),
-                // Axiom::SubObjectPropertyOf(ax) => ax.render(f, ng),
-                // Axiom::EquivalentObjectProperties(ax) => ax.render(f, ng),
-                // Axiom::DisjointObjectProperties(ax) => ax.render(f, ng),
-                // Axiom::InverseObjectProperties(ax) => ax.render(f, ng),
-                // Axiom::ObjectPropertyDomain(ax) => ax.render(f, ng),
-                // Axiom::ObjectPropertyRange(ax) => ax.render(f, ng),
-                // Axiom::FunctionalObjectProperty(ax) => ax.render(f, ng),
-                // Axiom::InverseFunctionalObjectProperty(ax) => ax.render(f, ng),
-                // Axiom::ReflexiveObjectProperty(ax) => ax.render(f, ng),
-                // Axiom::IrreflexiveObjectProperty(ax) => ax.render(f, ng),
-                // Axiom::SymmetricObjectProperty(ax) => ax.render(f, ng),
-                // Axiom::AsymmetricObjectProperty(ax) => ax.render(f, ng),
-                // Axiom::TransitiveObjectProperty(ax) => ax.render(f, ng),
-                // Axiom::SubDataPropertyOf(ax) => ax.render(f, ng),
-                // Axiom::EquivalentDataProperties(ax) => ax.render(f, ng),
-                // Axiom::DisjointDataProperties(ax) => ax.render(f, ng),
-                // Axiom::DataPropertyDomain(ax) => ax.render(f, ng),
-                // Axiom::DataPropertyRange(ax) => ax.render(f, ng),
-                // Axiom::FunctionalDataProperty(ax) => ax.render(f, ng),
-                // Axiom::DatatypeDefinition(ax) => ax.render(f, ng),
-                // Axiom::HasKey(ax) => ax.render(f, ng),
-                // Axiom::SameIndividual(ax) => ax.render(f, ng),
-                // Axiom::DifferentIndividuals(ax) => ax.render(f, ng),
-                // Axiom::ClassAssertion(ax) => ax.render(f, ng),
-                // Axiom::ObjectPropertyAssertion(ax) => ax.render(f, ng),
-                // Axiom::NegativeObjectPropertyAssertion(ax) => ax.render(f, ng),
-                // Axiom::DataPropertyAssertion(ax) => ax.render(f, ng),
-                // Axiom::NegativeDataPropertyAssertion(ax) => ax.render(f, ng),
-                // Axiom::AnnotationAssertion(ax) => ax.render(f, ng),
-                // Axiom::SubAnnotationPropertyOf(ax) => ax.render(f, ng),
-                // Axiom::AnnotationPropertyDomain(ax) => ax.render(f, ng),
-                // Axiom::AnnotationPropertyRange(ax) => ax.render(f,
-                // ng)
+                // Axiom::EquivalentClasses(ax) => ax.render(f, ng)?.into(),
+                // Axiom::DisjointClasses(ax) => ax.render(f, ng)?.into(),
+                // Axiom::DisjointUnion(ax) => ax.render(f, ng)?.into(),
+                // Axiom::SubObjectPropertyOf(ax) => ax.render(f, ng)?.into(),
+                // Axiom::EquivalentObjectProperties(ax) => ax.render(f, ng)?.into(),
+                // Axiom::DisjointObjectProperties(ax) => ax.render(f, ng)?.into(),
+                // Axiom::InverseObjectProperties(ax) => ax.render(f, ng)?.into(),
+                // Axiom::ObjectPropertyDomain(ax) => ax.render(f, ng)?.into(),
+                // Axiom::ObjectPropertyRange(ax) => ax.render(f, ng)?.into(),
+                // Axiom::FunctionalObjectProperty(ax) => ax.render(f, ng)?.into(),
+                // Axiom::InverseFunctionalObjectProperty(ax) => ax.render(f, ng)?.into(),
+                // Axiom::ReflexiveObjectProperty(ax) => ax.render(f, ng)?.into(),
+                // Axiom::IrreflexiveObjectProperty(ax) => ax.render(f, ng)?.into(),
+                // Axiom::SymmetricObjectProperty(ax) => ax.render(f, ng)?.into(),
+                // Axiom::AsymmetricObjectProperty(ax) => ax.render(f, ng)?.into(),
+                // Axiom::TransitiveObjectProperty(ax) => ax.render(f, ng)?.into(),
+                // Axiom::SubDataPropertyOf(ax) => ax.render(f, ng)?.into(),
+                // Axiom::EquivalentDataProperties(ax) => ax.render(f, ng)?.into(),
+                // Axiom::DisjointDataProperties(ax) => ax.render(f, ng)?.into(),
+                // Axiom::DataPropertyDomain(ax) => ax.render(f, ng)?.into(),
+                // Axiom::DataPropertyRange(ax) => ax.render(f, ng)?.into(),
+                // Axiom::FunctionalDataProperty(ax) => ax.render(f, ng)?.into(),
+                // Axiom::DatatypeDefinition(ax) => ax.render(f, ng)?.into(),
+                // Axiom::HasKey(ax) => ax.render(f, ng)?.into(),
+                // Axiom::SameIndividual(ax) => ax.render(f, ng)?.into(),
+                // Axiom::DifferentIndividuals(ax) => ax.render(f, ng)?.into(),
+                // Axiom::ClassAssertion(ax) => ax.render(f, ng)?.into(),
+                // Axiom::ObjectPropertyAssertion(ax) => ax.render(f, ng)?.into(),
+                // Axiom::NegativeObjectPropertyAssertion(ax) => ax.render(f, ng)?.into(),
+                // Axiom::DataPropertyAssertion(ax) => ax.render(f, ng)?.into(),
+                // Axiom::NegativeDataPropertyAssertion(ax) => ax.render(f, ng)?.into(),
+                Axiom::AnnotationAssertion(ax) => ax.render(f, ng)?.into(),
+                // Axiom::SubAnnotationPropertyOf(ax) => ax.render(f, ng)?.into(),
+                Axiom::AnnotationPropertyDomain(ax) => ax.render(f, ng)?.into(),
+                Axiom::AnnotationPropertyRange(ax) => ax.render(f, ng)?.into(),
                 _ => todo!("TODO: {:?}", self)
             }
         )
@@ -461,7 +489,17 @@ render_to_node! {
                         bn.clone(), ng.nn(OWL::UnionOf), node_seq
                     )
                 }
-                ClassExpression::ObjectComplementOf(_) => todo!(),
+                ClassExpression::ObjectComplementOf(bce) => {
+                    let bn = ng.bn();
+
+                    let node_ce = (*bce).render(f, ng)?;
+
+                    triples_to_node!(
+                        f,
+                        bn.clone(), ng.nn(RDF::Type), ng.nn(OWL::Class),
+                        bn, ng.nn(OWL::ComplementOf), node_ce
+                    )
+                },
                 ClassExpression::ObjectOneOf(_) => todo!(),
                 ClassExpression::ObjectSomeValuesFrom{ref bce, ref ope} => {
                     let bn = ng.bn();
@@ -695,30 +733,30 @@ mod test {
         assert_round(include_str!("../../ont/owl-rdf/or.owl"));
     }
 
-    // #[test]
-    // fn round_not() {
-    //     assert_round(include_str!("../../ont/owl-rdf/not.owl"));
-    // }
+    #[test]
+    fn round_not() {
+        assert_round(include_str!("../../ont/owl-rdf/not.owl"));
+    }
 
     #[test]
     fn round_annotation_property() {
         assert_round(include_str!("../../ont/owl-rdf/annotation-property.owl"));
     }
 
-    // #[test]
-    // fn round_annotation() {
-    //     assert_round(include_str!("../../ont/owl-rdf/annotation.owl"));
-    // }
+    #[test]
+    fn round_annotation() {
+        assert_round(include_str!("../../ont/owl-rdf/annotation.owl"));
+    }
 
-    // #[test]
-    // fn round_annotation_domain() {
-    //     assert_round(include_str!("../../ont/owl-rdf/annotation-domain.owl"));
-    // }
+    #[test]
+    fn round_annotation_domain() {
+        assert_round(include_str!("../../ont/owl-rdf/annotation-domain.owl"));
+    }
 
-    // #[test]
-    // fn round_annotation_range() {
-    //     assert_round(include_str!("../../ont/owl-rdf/annotation-range.owl"));
-    // }
+    #[test]
+    fn round_annotation_range() {
+        assert_round(include_str!("../../ont/owl-rdf/annotation-range.owl"));
+    }
 
     // #[test]
     // fn round_label() {
