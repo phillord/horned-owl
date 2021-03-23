@@ -1012,13 +1012,13 @@ mod test {
     }
 
     #[test]
-    fn round_one_equivalent_class() {
-        assert_round(include_str!("../../ont/owl-xml/one-equivalent.owx"));
+    fn round_equivalent_class() {
+        assert_round(include_str!("../../ont/owl-xml/equivalent-class.owx"));
     }
 
     #[test]
-    fn round_one_disjoint_class() {
-        assert_round(include_str!("../../ont/owl-xml/one-disjoint.owx"));
+    fn round_disjoint_class() {
+        assert_round(include_str!("../../ont/owl-xml/disjoint-class.owx"));
     }
 
     #[test]

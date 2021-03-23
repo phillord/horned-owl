@@ -393,7 +393,7 @@ fn axiom_from_start<R: BufRead>(
         }
         .into(),
         b"EquivalentClasses" => {
-            EquivalentClasses(from_start_to_end(r, e, b"EquivalentClasses")?).into()
+            dbg!(EquivalentClasses(from_start_to_end(r, e, b"EquivalentClasses")?).into())
         }
         b"DisjointClasses" => DisjointClasses(from_start_to_end(r, e, b"DisjointClasses")?).into(),
         b"DisjointUnion" => DisjointUnion(from_start(r, e)?, till_end(r, b"DisjointUnion")?).into(),
@@ -528,24 +528,25 @@ fn axiom_from_start<R: BufRead>(
     })
 }
 
-fn from_start_to_end<R: BufRead, T: FromStart>(
+fn from_start_to_end<R: BufRead, T: FromStart + std::fmt::Debug>(
     r: &mut Read<R>,
     e: &BytesStart,
     end_tag: &[u8],
 ) -> Result<Vec<T>, Error> {
     let mut v = Vec::new();
     v.push(from_start(r, e)?);
+    dbg!(&v);
     till_end_with(r, end_tag, v)
 }
 
 // Keep reading entities, till end_tag is reached
-fn till_end<R: BufRead, T: FromStart>(r: &mut Read<R>, end_tag: &[u8]) -> Result<Vec<T>, Error> {
+fn till_end<R: BufRead, T: FromStart + std::fmt::Debug>(r: &mut Read<R>, end_tag: &[u8]) -> Result<Vec<T>, Error> {
     let operands: Vec<T> = Vec::new();
     till_end_with(r, end_tag, operands)
 }
 
 // Keep reading entities, till end_tag is reached
-fn till_end_with<R: BufRead, T: FromStart>(
+fn till_end_with<R: BufRead, T: FromStart + std::fmt::Debug>(
     r: &mut Read<R>,
     end_tag: &[u8],
     mut operands: Vec<T>,
@@ -556,10 +557,12 @@ fn till_end_with<R: BufRead, T: FromStart>(
             (ref ns, Event::Empty(ref e)) if is_owl(ns) => {
                 let op = from_start(r, e)?;
                 operands.push(op);
+                dbg!{&operands};
             }
             (ref ns, Event::Start(ref e)) if is_owl(ns) => {
                 let op = from_start(r, e)?;
                 operands.push(op);
+                dbg!(&operands);
             }
             (ref ns, Event::End(ref e)) if is_owl_name(ns, e, end_tag) => {
                 return Ok(operands);
@@ -1331,16 +1334,16 @@ pub mod test {
     }
 
     #[test]
-    fn test_one_equivalent_class() {
-        let ont_s = include_str!("../../ont/owl-xml/one-equivalent.owx");
+    fn test_equivalent_class() {
+        let ont_s = include_str!("../../ont/owl-xml/equivalent-class.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
         assert_eq!(ont.i().equivalent_class().count(), 1);
     }
 
     #[test]
-    fn test_one_disjoint_class() {
-        let ont_s = include_str!("../../ont/owl-xml/one-disjoint.owx");
+    fn test_disjoint_class() {
+        let ont_s = include_str!("../../ont/owl-xml/disjoint-class.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
         assert_eq!(ont.i().disjoint_class().count(), 1);

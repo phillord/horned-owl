@@ -419,7 +419,7 @@ impl Render<Annotatable<Rc<str>>> for Axiom {
             match self {
                 // We render imports and ontology annotations earlier
                 Axiom::Import(_ax) => vec![].into(),
-                Axiom::OntologyAnnotation(ax) => vec![].into(),
+                Axiom::OntologyAnnotation(_ax) => vec![].into(),
                 Axiom::DeclareClass(ax) => ax.render(f, ng)?.into(),
                 Axiom::DeclareObjectProperty(ax) => ax.render(f, ng)?.into(),
                 Axiom::DeclareAnnotationProperty(ax) => ax.render(f, ng)?.into(),
@@ -427,8 +427,8 @@ impl Render<Annotatable<Rc<str>>> for Axiom {
                 Axiom::DeclareNamedIndividual(ax) => ax.render(f, ng)?.into(),
                 Axiom::DeclareDatatype(ax) => ax.render(f, ng)?.into(),
                 Axiom::SubClassOf(ax) => ax.render(f, ng)?.into(),
-                // Axiom::EquivalentClasses(ax) => ax.render(f, ng)?.into(),
-                // Axiom::DisjointClasses(ax) => ax.render(f, ng)?.into(),
+                Axiom::EquivalentClasses(ax) => ax.render(f, ng)?.into(),
+                Axiom::DisjointClasses(ax) => ax.render(f, ng)?.into(),
                 // Axiom::DisjointUnion(ax) => ax.render(f, ng)?.into(),
                 // Axiom::SubObjectPropertyOf(ax) => ax.render(f, ng)?.into(),
                 // Axiom::EquivalentObjectProperties(ax) => ax.render(f, ng)?.into(),
@@ -543,6 +543,47 @@ render_to_node! {
                 ClassExpression::DataExactCardinality{n:_n,dp:_dp,dr:_dr} => todo!(),
             }
         )
+    }
+}
+
+render_to_vec! {
+    EquivalentClasses, self, f, ng,
+    {
+        let mut i = self.0.iter();
+
+        let first = i.next().ok_or_else(|| format_err!("Equivalent Class axiom with no classes"))?;
+        let first = first.render(f, ng)?;
+        let mut v = vec![];
+        for c in i {
+            let eq = c.render(f, ng)?;
+            v.extend(
+                triples_to_vec!(
+                    f, first.clone(), ng.nn(OWL::EquivalentClass), eq
+                )
+            );
+        }
+        dbg!(&v);
+        Ok(v)
+    }
+}
+
+render_to_vec! {
+    DisjointClasses, self, f, ng,
+    {
+        let mut i = self.0.iter();
+        let first = i.next().ok_or_else(|| format_err!("Disjoint Class axiom with no classes"))?;
+        let first = first.render(f, ng)?;
+        let mut v = vec![];
+        for c in i {
+            let eq = c.render(f, ng)?;
+            v.extend(
+                triples_to_vec!(
+                    f, first.clone(), ng.nn(OWL::DisjointWith), eq
+                )
+            );
+        }
+
+        Ok(v)
     }
 }
 
@@ -667,7 +708,6 @@ mod test {
             .ok()
             .unwrap();
         buf_writer.flush().ok();
-
         let file = File::open(&temp_file).ok().unwrap();
         let ont_round = read_ok(&mut BufReader::new(&file));
 
@@ -780,15 +820,15 @@ mod test {
         ));
     }
 
-    // #[test]
-    // fn round_one_equivalent_class() {
-    //     assert_round(include_str!("../../ont/owl-rdf/one-equivalent.owl"));
-    // }
+    #[test]
+    fn round_equivalent_class() {
+        assert_round(include_str!("../../ont/owl-rdf/equivalent-class.owl"));
+    }
 
-    // #[test]
-    // fn round_one_disjoint_class() {
-    //     assert_round(include_str!("../../ont/owl-rdf/one-disjoint.owl"));
-    // }
+    #[test]
+    fn round_disjoint_class() {
+        assert_round(include_str!("../../ont/owl-rdf/disjoint-class.owl"));
+    }
 
     // #[test]
     // fn round_disjoint_union() {

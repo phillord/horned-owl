@@ -1150,12 +1150,11 @@ impl<'a> OntologyParser<'a> {
                     some! {
                         match self.find_declaration_kind(a)? {
                             NamedEntityKind::Class => {
-                                EquivalentClasses(vec![
-                                    // The order is not important here, but
-                                    // this way around matches with the XML reader
-                                    self.to_ce(b)?,
-                                    Class(a.clone()).into(),
-                                ]).into()
+                                EquivalentClasses(
+                                    vec![
+                                        Class(a.clone()).into(),
+                                        self.to_ce(b)?,
+                                    ]).into()
                             }
                             NamedEntityKind::Datatype => {
                                 DatatypeDefinition{
@@ -1275,10 +1274,8 @@ impl<'a> OntologyParser<'a> {
                 [Term::Iri(a), Term::OWL(VOWL::DisjointWith), Term::Iri(b)] => {
                     Some(
                         DisjointClasses(vec![
-                            // The order is not important here, but
-                            // this way around matches with the XML reader
-                            Class(b.clone()).into(),
                             Class(a.clone()).into(),
+                            Class(b.clone()).into(),
                         ])
                         .into(),
                     )
@@ -1877,13 +1874,18 @@ mod test {
     }
 
     #[test]
-    fn one_equivalent_class() {
-        compare("one-equivalent");
+    fn equivalent_class() {
+        compare("equivalent-class");
     }
 
     #[test]
-    fn one_disjoint_class() {
-        compare("one-disjoint");
+    fn equivalent_classes() {
+        compare("equivalent_classes");
+    }
+
+    #[test]
+    fn disjoint_class() {
+        compare("disjoint-class");
     }
 
     #[test]
