@@ -301,6 +301,11 @@ render! {
                     &i.0
                 );
             }
+            let oa = self.i().ontology_annotation();
+            ng.keep_this_bn(iri.into());
+            for a in oa {
+                a.0.render(f, ng)?;
+            }
 
             for ax in self.i().iter() {
                 ax.render(f, ng)?;
@@ -412,9 +417,9 @@ impl Render<Annotatable<Rc<str>>> for Axiom {
     {
         Ok(
             match self {
-                // We render imports earlier
+                // We render imports and ontology annotations earlier
                 Axiom::Import(_ax) => vec![].into(),
-                //Axiom::OntologyAnnotation(ax) => ax.render(f, ng)?.into(),
+                Axiom::OntologyAnnotation(ax) => vec![].into(),
                 Axiom::DeclareClass(ax) => ax.render(f, ng)?.into(),
                 Axiom::DeclareObjectProperty(ax) => ax.render(f, ng)?.into(),
                 Axiom::DeclareAnnotationProperty(ax) => ax.render(f, ng)?.into(),
@@ -768,12 +773,12 @@ mod test {
          assert_round(include_str!("../../ont/owl-rdf/one-comment.owl"));
     }
 
-    // #[test]
-    // fn round_one_ontology_annotation() {
-    //     assert_round(include_str!(
-    //         "../../ont/owl-rdf/one-ontology-annotation.owl"
-    //     ));
-    // }
+    #[test]
+    fn round_one_ontology_annotation() {
+        assert_round(include_str!(
+            "../../ont/owl-rdf/one-ontology-annotation.owl"
+        ));
+    }
 
     // #[test]
     // fn round_one_equivalent_class() {
