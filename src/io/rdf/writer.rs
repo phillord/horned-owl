@@ -234,8 +234,10 @@ impl<T: Debug + Render<AsRefNamedOrBlankNode<Rc<str>>>> Render<AsRefNamedOrBlank
     fn render<W:Write>(&self, f:&mut PrettyRdfXmlFormatter<Rc<str>, W>,
                        ng: &mut NodeGenerator)
                        -> Result<AsRefNamedOrBlankNode<Rc<str>>, Error> {
+        dbg!("render vec");
         let mut rest:Option<AsRefNamedOrBlankNode<Rc<str>>> = None;
         for i in self.iter().rev() {
+            dbg!(i);
             let bn = &ng.bn();
             let item = i.render(f, ng)?;
 
@@ -622,29 +624,34 @@ render_to_node! {
     }
 }
 
-render_to_node! {
-    SubObjectPropertyExpression, self, f, ng,
-    {
-        Ok(
-            match self {
-                Self::ObjectPropertyChain(v) => v.render(f, ng)?,
-                Self::ObjectPropertyExpression(e) => e.render(f, ng)?
-            }
-        )
-    }
-}
-
 render!{
     SubObjectPropertyOf, self, f, ng, AsRefTriple<Rc<str>>,
     {
-        let s = (&self.sub).render(f, ng)?;
-        let o = (&self.sup).render(f, ng)?;
-
-        Ok(
-            triple!{
-                f, s, ng.nn(RDFS::SubPropertyOf), o
+        match &self.sub {
+            SubObjectPropertyExpression::ObjectPropertyChain(v) => {
+                // The subject and object are the other way around for
+                // an object property chain from an object property
+                // expression.
+                //
+                // It makes little sense to me.
+                let s = (&self.sup).render(f, ng)?;
+                let o = v.render(f, ng)?;
+                Ok(
+                    triple!{
+                        f, s, ng.nn(OWL::PropertyChainAxiom), o
+                    }
+                )
             }
-        )
+            SubObjectPropertyExpression::ObjectPropertyExpression(e) =>{
+                let s = e.render(f, ng)?;
+                let o = (&self.sup).render(f, ng)?;
+                Ok(
+                    triple!{
+                        f, s, ng.nn(RDFS::SubPropertyOf), o
+                    }
+                )
+            }
+        }
     }
 }
 
@@ -922,10 +929,10 @@ mod test {
         ));
     }
 
-    // #[test]
-    // fn round_one_subproperty_chain() {
-    //     assert_round(include_str!("../../ont/owl-rdf/subproperty-chain.owl"));
-    // }
+    #[test]
+    fn round_subproperty_chain() {
+        assert_round(include_str!("../../ont/owl-rdf/subproperty-chain.owl"));
+    }
 
     // #[test]
     // fn round_one_subproperty_chain_with_inverse() {

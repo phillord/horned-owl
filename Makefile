@@ -20,6 +20,8 @@ bubo: just-bubo test
 test:
 	cargo test
 
+quick-test:
+	cargo test --lib --bins --tests -- --skip integration
 tmp:
 	mkdir tmp
 
