@@ -1028,7 +1028,7 @@ mod test {
 
     #[test]
     fn round_one_sub_property() {
-        assert_round(include_str!("../../ont/owl-xml/one-suboproperty.owx"));
+        assert_round(include_str!("../../ont/owl-xml/suboproperty.owx"));
     }
 
     #[test]

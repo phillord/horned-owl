@@ -429,11 +429,11 @@ impl Render<Annotatable<Rc<str>>> for Axiom {
                 Axiom::SubClassOf(ax) => ax.render(f, ng)?.into(),
                 Axiom::EquivalentClasses(ax) => ax.render(f, ng)?.into(),
                 Axiom::DisjointClasses(ax) => ax.render(f, ng)?.into(),
-                // Axiom::DisjointUnion(ax) => ax.render(f, ng)?.into(),
-                // Axiom::SubObjectPropertyOf(ax) => ax.render(f, ng)?.into(),
+                Axiom::DisjointUnion(ax) => ax.render(f, ng)?.into(),
+                Axiom::SubObjectPropertyOf(ax) => ax.render(f, ng)?.into(),
                 // Axiom::EquivalentObjectProperties(ax) => ax.render(f, ng)?.into(),
                 // Axiom::DisjointObjectProperties(ax) => ax.render(f, ng)?.into(),
-                // Axiom::InverseObjectProperties(ax) => ax.render(f, ng)?.into(),
+                Axiom::InverseObjectProperties(ax) => ax.render(f, ng)?.into(),
                 // Axiom::ObjectPropertyDomain(ax) => ax.render(f, ng)?.into(),
                 // Axiom::ObjectPropertyRange(ax) => ax.render(f, ng)?.into(),
                 // Axiom::FunctionalObjectProperty(ax) => ax.render(f, ng)?.into(),
@@ -442,7 +442,7 @@ impl Render<Annotatable<Rc<str>>> for Axiom {
                 // Axiom::IrreflexiveObjectProperty(ax) => ax.render(f, ng)?.into(),
                 // Axiom::SymmetricObjectProperty(ax) => ax.render(f, ng)?.into(),
                 // Axiom::AsymmetricObjectProperty(ax) => ax.render(f, ng)?.into(),
-                // Axiom::TransitiveObjectProperty(ax) => ax.render(f, ng)?.into(),
+                Axiom::TransitiveObjectProperty(ax) => ax.render(f, ng)?.into(),
                 // Axiom::SubDataPropertyOf(ax) => ax.render(f, ng)?.into(),
                 // Axiom::EquivalentDataProperties(ax) => ax.render(f, ng)?.into(),
                 // Axiom::DisjointDataProperties(ax) => ax.render(f, ng)?.into(),
@@ -473,8 +473,8 @@ render_to_node! {
     {
         Ok(
             match self {
-                ClassExpression::Class(cl) => (&cl.0).into(),
-                ClassExpression::ObjectIntersectionOf(v)=>{
+                Self::Class(cl) => (&cl.0).into(),
+                Self::ObjectIntersectionOf(v)=>{
                     let bn = ng.bn();
                     let node_seq = v.render(f, ng)?;
 
@@ -484,7 +484,7 @@ render_to_node! {
                          bn.clone(), ng.nn(OWL::IntersectionOf), node_seq
                     )
                 }
-                ClassExpression::ObjectUnionOf(v) => {
+                Self::ObjectUnionOf(v) => {
                     let bn = ng.bn();
                     let node_seq = v.render(f, ng)?;
 
@@ -494,7 +494,7 @@ render_to_node! {
                         bn.clone(), ng.nn(OWL::UnionOf), node_seq
                     )
                 }
-                ClassExpression::ObjectComplementOf(bce) => {
+                Self::ObjectComplementOf(bce) => {
                     let bn = ng.bn();
 
                     let node_ce = (*bce).render(f, ng)?;
@@ -505,8 +505,8 @@ render_to_node! {
                         bn, ng.nn(OWL::ComplementOf), node_ce
                     )
                 },
-                ClassExpression::ObjectOneOf(_) => todo!(),
-                ClassExpression::ObjectSomeValuesFrom{ref bce, ref ope} => {
+                Self::ObjectOneOf(_) => todo!(),
+                Self::ObjectSomeValuesFrom{ref bce, ref ope} => {
                     let bn = ng.bn();
                     let node_ce = bce.render(f, ng)?;
                     let node_ope = ope.render(f, ng)?;
@@ -518,7 +518,7 @@ render_to_node! {
                         bn.clone(), ng.nn(OWL::SomeValuesFrom), node_ce
                     )
                 }
-                ClassExpression::ObjectAllValuesFrom{ope, bce} => {
+                Self::ObjectAllValuesFrom{ope, bce} => {
                     let bn = ng.bn();
                     let node_ce = bce.render(f, ng)?;
                     let node_ope = ope.render(f, ng)?;
@@ -530,18 +530,60 @@ render_to_node! {
                         bn.clone(), ng.nn(OWL::AllValuesFrom), node_ce
                     )
                 }
-                ClassExpression::ObjectHasValue{ope:_ope, i:_i} => todo!(),
-                ClassExpression::ObjectHasSelf(_ope) =>todo!(),
-                ClassExpression::ObjectMinCardinality{n:_n, ope:_ope, bce:_bce} =>todo!(),
-                ClassExpression::ObjectMaxCardinality{n:_n, ope:_ope, bce:_bce} =>todo!(),
-                ClassExpression::ObjectExactCardinality{n:_n, ope:_ope, bce:_bce} =>todo!(),
-                ClassExpression::DataSomeValuesFrom{dp:_dp, dr:_dr} => todo!(),
-                ClassExpression::DataAllValuesFrom{dp:_dp, dr:_dr} => todo!(),
-                ClassExpression::DataHasValue{dp:_dp, l:_l}=>todo!(),
-                ClassExpression::DataMinCardinality{n:_n,dp:_dp,dr:_dr} => todo!(),
-                ClassExpression::DataMaxCardinality{n:_n,dp:_dp,dr:_dr} => todo!(),
-                ClassExpression::DataExactCardinality{n:_n,dp:_dp,dr:_dr} => todo!(),
+                Self::ObjectHasValue{ope:_ope, i:_i} => todo!(),
+                Self::ObjectHasSelf(_ope) =>todo!(),
+                Self::ObjectMinCardinality{n:_n, ope:_ope, bce:_bce} =>todo!(),
+                Self::ObjectMaxCardinality{n:_n, ope:_ope, bce:_bce} =>todo!(),
+                Self::ObjectExactCardinality{n:_n, ope:_ope, bce:_bce} =>todo!(),
+                Self::DataSomeValuesFrom{dp:_dp, dr:_dr} => todo!(),
+                Self::DataAllValuesFrom{dp:_dp, dr:_dr} => todo!(),
+                Self::DataHasValue{dp:_dp, l:_l}=>todo!(),
+                Self::DataMinCardinality{n:_n,dp:_dp,dr:_dr} => todo!(),
+                Self::DataMaxCardinality{n:_n,dp:_dp,dr:_dr} => todo!(),
+                Self::DataExactCardinality{n:_n,dp:_dp,dr:_dr} => todo!(),
             }
+        )
+    }
+}
+
+fn nary<W:Write>(f:&mut PrettyRdfXmlFormatter<Rc<str>, W>, ng:&mut NodeGenerator,
+                 entities:&Vec<ClassExpression>, pred:AsRefNamedNode<Rc<str>>)
+                 -> Result<Vec<AsRefTriple<Rc<str>>>, Error>
+{
+    let mut i = entities.iter();
+    let first = i.next().ok_or_else(|| format_err!("N-ary Class axiom with no classes"))?;
+    let first = first.render(f, ng)?;
+    let mut v = vec![];
+    for c in i {
+        let eq = c.render(f, ng)?;
+        v.extend(
+            triples_to_vec!(
+                f, first.clone(), pred.clone(), eq
+            )
+        );
+    }
+    Ok(v)
+}
+
+
+render_to_vec! {
+    DisjointClasses, self, f, ng,
+    {
+        let pred = ng.nn(OWL::DisjointWith);
+        nary(f, ng, &self.0, pred)
+    }
+}
+
+render_to_vec! {
+    DisjointUnion, self, f, ng,
+    {
+        let c:AsRefNamedOrBlankNode<Rc<str>> = (&self.0.0).into();
+        let v = (&self.1).render(f, ng)?;
+
+        Ok(
+            triples_to_vec!(
+                f, c, ng.nn(OWL::DisjointUnionOf), v
+            )
         )
     }
 }
@@ -549,41 +591,20 @@ render_to_node! {
 render_to_vec! {
     EquivalentClasses, self, f, ng,
     {
-        let mut i = self.0.iter();
-
-        let first = i.next().ok_or_else(|| format_err!("Equivalent Class axiom with no classes"))?;
-        let first = first.render(f, ng)?;
-        let mut v = vec![];
-        for c in i {
-            let eq = c.render(f, ng)?;
-            v.extend(
-                triples_to_vec!(
-                    f, first.clone(), ng.nn(OWL::EquivalentClass), eq
-                )
-            );
-        }
-        dbg!(&v);
-        Ok(v)
+        let pred = ng.nn(OWL::EquivalentClass);
+        nary(f, ng, &self.0, pred)
     }
 }
 
-render_to_vec! {
-    DisjointClasses, self, f, ng,
-    {
-        let mut i = self.0.iter();
-        let first = i.next().ok_or_else(|| format_err!("Disjoint Class axiom with no classes"))?;
-        let first = first.render(f, ng)?;
-        let mut v = vec![];
-        for c in i {
-            let eq = c.render(f, ng)?;
-            v.extend(
-                triples_to_vec!(
-                    f, first.clone(), ng.nn(OWL::DisjointWith), eq
-                )
-            );
-        }
 
-        Ok(v)
+render! {
+    InverseObjectProperties, self, f, ng, AsRefTriple<Rc<str>>,
+    {
+        Ok(
+            triple!(
+                f, &self.0.0, ng.nn(OWL::InverseOf), &self.1.0
+            )
+        )
     }
 }
 
@@ -592,15 +613,59 @@ render_to_node! {
     {
         Ok(
             match self {
-                ObjectPropertyExpression::ObjectProperty(op)
+                Self::ObjectProperty(op)
                     => (&op.0).into(),
-                ObjectPropertyExpression::InverseObjectProperty(_op)
+                Self::InverseObjectProperty(_op)
                     => todo!()
             }
         )
     }
 }
 
+render_to_node! {
+    SubObjectPropertyExpression, self, f, ng,
+    {
+        Ok(
+            match self {
+                Self::ObjectPropertyChain(v) => v.render(f, ng)?,
+                Self::ObjectPropertyExpression(e) => e.render(f, ng)?
+            }
+        )
+    }
+}
+
+render!{
+    SubObjectPropertyOf, self, f, ng, AsRefTriple<Rc<str>>,
+    {
+        let s = (&self.sub).render(f, ng)?;
+        let o = (&self.sup).render(f, ng)?;
+
+        Ok(
+            triple!{
+                f, s, ng.nn(RDFS::SubPropertyOf), o
+            }
+        )
+    }
+}
+
+fn obj_prop_char<W:Write>(ob:&ObjectPropertyExpression, f:&mut PrettyRdfXmlFormatter<Rc<str>, W>,
+                 ng:&mut NodeGenerator, chr:OWL)
+                 -> Result<AsRefTriple<Rc<str>>, Error> {
+    let s = ob.render(f, ng)?;
+
+    Ok(
+        triple! {
+            f, s, ng.nn(RDF::Type), ng.nn(chr)
+        }
+    )
+}
+
+render!{
+    TransitiveObjectProperty, self, f, ng, AsRefTriple<Rc<str>>,
+    {
+       obj_prop_char(&self.0, f, ng, OWL::TransitiveProperty)
+    }
+}
 
 render_triple! {
     DeclareClass, self, ng,
@@ -830,32 +895,32 @@ mod test {
         assert_round(include_str!("../../ont/owl-rdf/disjoint-class.owl"));
     }
 
-    // #[test]
-    // fn round_disjoint_union() {
-    //     assert_round(include_str!("../../ont/owl-rdf/disjoint-union.owl"));
-    // }
+    #[test]
+    fn round_disjoint_union() {
+        assert_round(include_str!("../../ont/owl-rdf/disjoint-union.owl"));
+    }
 
-    // #[test]
-    // fn round_one_sub_property() {
-    //     assert_round(include_str!("../../ont/owl-rdf/one-suboproperty.owl"));
-    // }
+    #[test]
+    fn round_one_sub_property() {
+        assert_round(include_str!("../../ont/owl-rdf/suboproperty.owl"));
+    }
 
-    // #[test]
-    // fn round_one_inverse() {
-    //     assert_round(include_str!("../../ont/owl-rdf/inverse-properties.owl"));
-    // }
+    #[test]
+    fn round_one_inverse() {
+        assert_round(include_str!("../../ont/owl-rdf/inverse-properties.owl"));
+    }
 
-    // #[test]
-    // fn round_one_transitive() {
-    //     assert_round(include_str!("../../ont/owl-rdf/transitive-properties.owl"));
-    // }
+    #[test]
+    fn round_one_transitive() {
+        assert_round(include_str!("../../ont/owl-rdf/transitive-properties.owl"));
+    }
 
-    // #[test]
-    // fn round_one_annotated_transitive() {
-    //     assert_round(include_str!(
-    //         "../../ont/owl-rdf/annotation-on-transitive.owl"
-    //     ));
-    // }
+    #[test]
+    fn round_one_annotated_transitive() {
+        assert_round(include_str!(
+            "../../ont/owl-rdf/annotation-on-transitive.owl"
+        ));
+    }
 
     // #[test]
     // fn round_one_subproperty_chain() {
