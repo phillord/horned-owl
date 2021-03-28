@@ -14,7 +14,7 @@ license = "LGPL-3.0"
 edition = "2018"
 
 [dependencies]
-curie = "0.0.8"
+curie = "0.1.1"
 curl = "0.4.34"
 clap = "2.31.2"
 enum_meta = "0.6.0"
