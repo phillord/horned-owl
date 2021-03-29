@@ -2,7 +2,10 @@ use std::{collections::{BTreeSet, HashSet}, fmt::Debug, io::Write, rc::Rc};
 
 use failure::Error;
 use rio_xml::chunked_formatter::{AsRefBlankNode, AsRefLiteral, AsRefNamedNode, AsRefNamedOrBlankNode, AsRefTerm, AsRefTriple, ChunkedRdfXmlFormatterConfig, PrettyRdfXmlFormatter};
-use crate::{model::*, ontology::axiom_mapped::AxiomMappedOntology, vocab::{OWL, RDF, RDFS, WithIRI, Vocab}};
+use crate::{
+    model::*, ontology::axiom_mapped::AxiomMappedOntology,
+    vocab::{is_thing, OWL, RDF, RDFS, XSD, WithIRI, Vocab}
+};
 
 pub fn write<W:Write>(
     write: &mut W,
@@ -22,6 +25,11 @@ pub fn write<W:Write>(
     )?;
     let mut bng = NodeGenerator::default();
     ont.render(&mut f, &mut bng)?;
+
+    // for i in f.triples() {
+    //     println!("{}", i.printable());
+    // }
+
     f.finish()?;
     Ok(())
 }
@@ -230,14 +238,14 @@ where NB: Into<AsRefNamedOrBlankNode<Rc<str>>>,
 }
 
 
-impl<T: Debug + Render<AsRefNamedOrBlankNode<Rc<str>>>> Render<AsRefNamedOrBlankNode<Rc<str>>> for &Vec<T> {
+impl<T> Render<AsRefTerm<Rc<str>>> for &Vec<T>
+where
+    T: Debug + Render<AsRefTerm<Rc<str>>> {
     fn render<W:Write>(&self, f:&mut PrettyRdfXmlFormatter<Rc<str>, W>,
                        ng: &mut NodeGenerator)
-                       -> Result<AsRefNamedOrBlankNode<Rc<str>>, Error> {
-        dbg!("render vec");
-        let mut rest:Option<AsRefNamedOrBlankNode<Rc<str>>> = None;
+                       -> Result<AsRefTerm<Rc<str>>, Error> {
+        let mut rest:Option<AsRefTerm<Rc<str>>> = None;
         for i in self.iter().rev() {
-            dbg!(i);
             let bn = &ng.bn();
             let item = i.render(f, ng)?;
 
@@ -254,7 +262,7 @@ impl<T: Debug + Render<AsRefNamedOrBlankNode<Rc<str>>>> Render<AsRefNamedOrBlank
                     f, bn.clone(), ng.nn(RDF::Rest), ng.nn(RDF::Nil)
                 );
             }
-            rest = Some(bn.clone())
+            rest = Some(bn.clone().into())
         }
         // Panic if Vec is zero length!
         Ok(rest.unwrap())
@@ -349,6 +357,24 @@ impl Render<()> for AnnotatedAxiom {
     }
 }
 
+render! {
+    Literal, self, f, ng, AsRefTerm<Rc<str>>,
+    {
+        Ok(
+            match self {
+                Literal::Simple{literal} =>
+                    AsRefTerm::Literal(AsRefLiteral::Simple{value:literal.clone().into()}),
+                Literal::Language{literal, lang} =>
+                    AsRefTerm::Literal(AsRefLiteral::LanguageTaggedString{value:literal.clone().into(),
+                                                                          language: lang.clone().into()}),
+                Literal::Datatype{literal, datatype_iri} =>
+                    AsRefTerm::Literal(AsRefLiteral::Typed{value:literal.clone().into(),
+                                                           datatype:datatype_iri.into()})
+            }
+        )
+    }
+}
+
 
 render! {
     Annotation, self, f, ng, AsRefTriple<Rc<str>>,
@@ -358,17 +384,7 @@ render! {
         Ok(
             match &self.av {
                 AnnotationValue::Literal(l) => {
-                    let obj:AsRefTerm<Rc<str>> =
-                        match l {
-                            Literal::Simple{literal} =>
-                                AsRefTerm::Literal(AsRefLiteral::Simple{value:literal.clone().into()}),
-                            Literal::Language{literal, lang} =>
-                                AsRefTerm::Literal(AsRefLiteral::LanguageTaggedString{value:literal.clone().into(),
-                                                                                      language: lang.clone().into()}),
-                            Literal::Datatype{literal, datatype_iri} =>
-                                AsRefTerm::Literal(AsRefLiteral::Typed{value:literal.clone().into(),
-                                                                       datatype:datatype_iri.into()})
-                        };
+                    let obj = l.render(f, ng)?;
 
                     triple!(f, bn, &self.ap.0, obj)
                 }
@@ -451,7 +467,7 @@ impl Render<Annotatable<Rc<str>>> for Axiom {
                 // Axiom::DataPropertyDomain(ax) => ax.render(f, ng)?.into(),
                 // Axiom::DataPropertyRange(ax) => ax.render(f, ng)?.into(),
                 // Axiom::FunctionalDataProperty(ax) => ax.render(f, ng)?.into(),
-                // Axiom::DatatypeDefinition(ax) => ax.render(f, ng)?.into(),
+                Axiom::DatatypeDefinition(ax) => ax.render(f, ng)?.into(),
                 // Axiom::HasKey(ax) => ax.render(f, ng)?.into(),
                 // Axiom::SameIndividual(ax) => ax.render(f, ng)?.into(),
                 // Axiom::DifferentIndividuals(ax) => ax.render(f, ng)?.into(),
@@ -461,13 +477,140 @@ impl Render<Annotatable<Rc<str>>> for Axiom {
                 // Axiom::DataPropertyAssertion(ax) => ax.render(f, ng)?.into(),
                 // Axiom::NegativeDataPropertyAssertion(ax) => ax.render(f, ng)?.into(),
                 Axiom::AnnotationAssertion(ax) => ax.render(f, ng)?.into(),
-                // Axiom::SubAnnotationPropertyOf(ax) => ax.render(f, ng)?.into(),
+                Axiom::SubAnnotationPropertyOf(ax) => ax.render(f, ng)?.into(),
                 Axiom::AnnotationPropertyDomain(ax) => ax.render(f, ng)?.into(),
                 Axiom::AnnotationPropertyRange(ax) => ax.render(f, ng)?.into(),
                 _ => todo!("TODO: {:?}", self)
             }
         )
     }
+}
+
+render_to_node! {
+    DataRange, self, f, ng,
+    {
+        Ok(
+            match self {
+                Self::Datatype(dt) => (&dt.0).into(),
+                Self::DataIntersectionOf(v) => {
+                    let vbn = v.render(f, ng)?;
+                    let bn = ng.bn();
+
+                    triples_to_node!(
+                        f,
+                        bn.clone(), ng.nn(RDF::Type), ng.nn(RDFS::Datatype),
+                        bn, ng.nn(OWL::IntersectionOf), vbn
+                    )
+                }
+                Self::DataUnionOf(v) => {
+                    let vbn = v.render(f, ng)?;
+                    let bn = ng.bn();
+
+                    triples_to_node!(
+                        f,
+                        bn.clone(), ng.nn(RDF::Type), ng.nn(RDFS::Datatype),
+                        bn, ng.nn(OWL::UnionOf), vbn
+                    )
+                }
+                Self::DataComplementOf(bdr) => {
+                    //_:x rdf:type rdfs:Datatype .
+                    //_:x owl:datatypeComplementOf T(DR) .
+                    let node_dr = bdr.render(f, ng)?;
+                    let bn = ng.bn();
+
+                    triples_to_node!(
+                        f,
+                        bn.clone(), ng.nn(RDF::Type), ng.nn(RDFS::Datatype),
+                        bn, ng.nn(OWL::DatatypeComplementOf), node_dr
+                    )
+                }
+                Self::DataOneOf(v) => {
+                    let l = v.pop();
+                    let vbn = v.render(f, ng).unwrap();
+                    let bn = ng.bn();
+
+                    triples_to_node!(
+                        f,
+                        bn.clone(), ng.nn(RDF::Type), ng.nn(RDFS::Datatype),
+                        bn, ng.nn(OWL::OneOf), vbn
+                    )
+                }
+                _ => {
+
+                    todo!()
+                }
+            }
+        )
+    }
+}
+
+render! {
+    DatatypeDefinition, self, f, ng, AsRefTriple<Rc<str>>,
+    {
+        let node_dr = self.range.render(f, ng)?;
+        Ok(
+            triple!(f, &self.kind.0, ng.nn(OWL::EquivalentClass), node_dr)
+        )
+    }
+}
+
+render! {
+    SubAnnotationPropertyOf, self, f, ng, AsRefTriple<Rc<str>>,
+    {
+        Ok(
+            triple!(f, &self.sub.0, ng.nn(RDFS::SubPropertyOf), &self.sup.0)
+        )
+    }
+}
+
+render_to_node! {
+    NamedIndividual, self, _f, _ng,
+    {
+        Ok(
+            (&self.0).into()
+        )
+    }
+}
+
+fn obj_cardinality<W:Write>(n:&u32, ope:&ObjectPropertyExpression, bce:&Box<ClassExpression>,
+                            unqual:AsRefNamedNode<Rc<str>>,
+                            qual:AsRefNamedNode<Rc<str>>,
+                            f:&mut PrettyRdfXmlFormatter<Rc<str>,W>,
+               ng:&mut NodeGenerator) -> Result<AsRefNamedOrBlankNode<Rc<str>>,Error> {
+    //_:x rdf:type owl:Restriction .
+    //_:x owl:onProperty T(OPE) .
+    //_:x owl:maxCardinality "n"^^xsd:nonNegativeInteger ._:x
+    let bn = ng.bn();
+    let node_ope = ope.render(f, ng)?;
+    let node_n = AsRefTerm::Literal (
+        AsRefLiteral::Typed {
+            value: format!("{}", n).into(),
+            datatype: ng.nn(XSD::NonNegativeInteger)
+        }
+    );
+
+    // Unqualified Only
+    triples!(
+        f,
+        bn.clone(), ng.nn(RDF::Type), ng.nn(OWL::Restriction),
+        bn.clone(), ng.nn(OWL::OnProperty), node_ope
+    );
+
+    if let ClassExpression::Class(ref cl) = **bce {
+        if is_thing(&cl.0) {
+            triples!(f, bn.clone(), unqual, node_n);
+            return Ok(bn);
+        }
+    }
+    let node_ce = bce.render(f, ng)?;
+
+    Ok(
+        triples_to_node!(
+            f,
+            bn.clone(), qual, node_n,
+            bn, ng.nn(OWL::OnClass), node_ce
+        )
+    )
 }
 
 render_to_node! {
@@ -507,7 +650,16 @@ render_to_node! {
                         bn, ng.nn(OWL::ComplementOf), node_ce
                     )
                 },
-                Self::ObjectOneOf(_) => todo!(),
+                Self::ObjectOneOf(v) => {
+                    let bn = ng.bn();
+                    let node_seq = v.render(f, ng)?;
+
+                    triples_to_node!(
+                        f,
+                        bn.clone(), ng.nn(RDF::Type), ng.nn(OWL::Class),
+                        bn, ng.nn(OWL::OneOf), node_seq
+                    )
+                }
                 Self::ObjectSomeValuesFrom{ref bce, ref ope} => {
                     let bn = ng.bn();
                     let node_ce = bce.render(f, ng)?;
@@ -532,11 +684,40 @@ render_to_node! {
                         bn.clone(), ng.nn(OWL::AllValuesFrom), node_ce
                     )
                 }
-                Self::ObjectHasValue{ope:_ope, i:_i} => todo!(),
+                Self::ObjectHasValue{ope, i} => {
+                    //_:x rdf:type owl:Restriction .
+                    //_:x owl:onProperty T(OPE) .
+                    // :x owl:hasValue T(a) .
+                    let bn = ng.bn();
+
+                    let node_ope = ope.render(f, ng)?;
+
+                    triples_to_node!(
+                        f,
+                        bn.clone(), ng.nn(RDF::Type), ng.nn(OWL::Restriction),
+                        bn.clone(), ng.nn(OWL::OnProperty), node_ope,
+                        bn, ng.nn(OWL::HasValue), &i.into()
+                    )
+                }
                 Self::ObjectHasSelf(_ope) =>todo!(),
-                Self::ObjectMinCardinality{n:_n, ope:_ope, bce:_bce} =>todo!(),
-                Self::ObjectMaxCardinality{n:_n, ope:_ope, bce:_bce} =>todo!(),
-                Self::ObjectExactCardinality{n:_n, ope:_ope, bce:_bce} =>todo!(),
+                Self::ObjectMinCardinality{n, ope, bce} => {
+                    obj_cardinality(n, ope, bce,
+                                    ng.nn(OWL::MinCardinality),
+                                    ng.nn(OWL::MinQualifiedCardinality),
+                                    f, ng)?
+                },
+                Self::ObjectMaxCardinality{n, ope, bce} => {
+                    obj_cardinality(n, ope, bce,
+                                    ng.nn(OWL::MaxCardinality),
+                                    ng.nn(OWL::MaxQualifiedCardinality),
+                                    f, ng)?
+                }
+                Self::ObjectExactCardinality{n, ope, bce} => {
+                    obj_cardinality(n, ope, bce,
+                                    ng.nn(OWL::Cardinality),
+                                    ng.nn(OWL::QualifiedCardinality),
+                                    f, ng)?
+                },
                 Self::DataSomeValuesFrom{dp:_dp, dr:_dr} => todo!(),
                 Self::DataAllValuesFrom{dp:_dp, dr:_dr} => todo!(),
                 Self::DataHasValue{dp:_dp, l:_l}=>todo!(),
@@ -611,14 +792,20 @@ render! {
 }
 
 render_to_node! {
-    ObjectPropertyExpression, self, _f, _ng,
+    ObjectPropertyExpression, self, f, ng,
     {
         Ok(
             match self {
                 Self::ObjectProperty(op)
                     => (&op.0).into(),
-                Self::InverseObjectProperty(_op)
-                    => todo!()
+                Self::InverseObjectProperty(op)
+                    => {
+                        let o:AsRefTerm<Rc<str>> = (&op.0).into();
+
+                        triples_to_node!{
+                            f, ng.bn(), ng.nn(OWL::InverseOf), o
+                        }
+                    }
             }
         )
     }
@@ -934,24 +1121,24 @@ mod test {
         assert_round(include_str!("../../ont/owl-rdf/subproperty-chain.owl"));
     }
 
-    // #[test]
-    // fn round_one_subproperty_chain_with_inverse() {
-    //     assert_round(include_str!(
-    //         "../../ont/owl-rdf/subproperty-chain-with-inverse.owl"
-    //     ));
-    // }
+    #[test]
+    fn round_one_subproperty_chain_with_inverse() {
+        assert_round(include_str!(
+            "../../ont/owl-rdf/subproperty-chain-with-inverse.owl"
+        ));
+    }
 
-    // #[test]
-    // fn round_annotation_on_annotation() {
-    //     assert_round(include_str!(
-    //         "../../ont/owl-rdf/annotation-with-annotation.owl"
-    //     ));
-    // }
+    #[test]
+    fn round_annotation_on_annotation() {
+        assert_round(include_str!(
+            "../../ont/owl-rdf/annotation-with-annotation.owl"
+        ));
+    }
 
-    // #[test]
-    // fn round_sub_annotation() {
-    //     assert_round(include_str!("../../ont/owl-rdf/sub-annotation.owl"));
-    // }
+    #[test]
+    fn round_sub_annotation() {
+        assert_round(include_str!("../../ont/owl-rdf/sub-annotation.owl"));
+    }
 
     #[test]
     fn round_data_property() {
@@ -978,69 +1165,69 @@ mod test {
         assert_round(include_str!("../../ont/owl-rdf/datatype.owl"));
     }
 
-    // #[test]
-    // fn object_has_value() {
-    //     assert_round(include_str!("../../ont/owl-rdf/object-has-value.owl"));
-    // }
+    #[test]
+    fn object_has_value() {
+        assert_round(include_str!("../../ont/owl-rdf/object-has-value.owl"));
+    }
 
-    // #[test]
-    // fn object_one_of() {
-    //     assert_round(include_str!("../../ont/owl-rdf/object-one-of.owl"));
-    // }
+    #[test]
+    fn object_one_of() {
+        assert_round(include_str!("../../ont/owl-rdf/object-one-of.owl"));
+    }
 
-    // #[test]
-    // fn inverse() {
-    //     assert_round(include_str!("../../ont/owl-rdf/some-inverse.owl"));
-    // }
+    #[test]
+    fn inverse() {
+        assert_round(include_str!("../../ont/owl-rdf/some-inverse.owl"));
+    }
 
-    // #[test]
-    // fn object_unqualified_cardinality() {
-    //     assert_round(include_str!(
-    //         "../../ont/owl-rdf/object-unqualified-max-cardinality.owl"
-    //     ));
-    // }
+    #[test]
+    fn object_unqualified_cardinality() {
+        assert_round(include_str!(
+            "../../ont/owl-rdf/object-unqualified-max-cardinality.owl"
+        ));
+    }
 
-    // #[test]
-    // fn object_min_cardinality() {
-    //     assert_round(include_str!("../../ont/owl-rdf/object-min-cardinality.owl"));
-    // }
+    #[test]
+    fn object_min_cardinality() {
+        assert_round(include_str!("../../ont/owl-rdf/object-min-cardinality.owl"));
+    }
 
-    // #[test]
-    // fn object_max_cardinality() {
-    //     assert_round(include_str!("../../ont/owl-rdf/object-max-cardinality.owl"));
-    // }
+    #[test]
+    fn object_max_cardinality() {
+        assert_round(include_str!("../../ont/owl-rdf/object-max-cardinality.owl"));
+    }
 
-    // #[test]
-    // fn object_exact_cardinality() {
-    //     assert_round(include_str!(
-    //         "../../ont/owl-rdf/object-exact-cardinality.owl"
-    //     ));
-    // }
+    #[test]
+    fn object_exact_cardinality() {
+        assert_round(include_str!(
+            "../../ont/owl-rdf/object-exact-cardinality.owl"
+        ));
+    }
 
-    // #[test]
-    // fn datatype_alias() {
-    //     assert_round(include_str!("../../ont/owl-rdf/datatype-alias.owl"));
-    // }
+    #[test]
+    fn datatype_alias() {
+        assert_round(include_str!("../../ont/owl-rdf/datatype-alias.owl"));
+    }
 
-    // #[test]
-    // fn datatype_intersection() {
-    //     assert_round(include_str!("../../ont/owl-rdf/datatype-intersection.owl"));
-    // }
+    #[test]
+    fn datatype_intersection() {
+        assert_round(include_str!("../../ont/owl-rdf/datatype-intersection.owl"));
+    }
 
-    // #[test]
-    // fn datatype_union() {
-    //     assert_round(include_str!("../../ont/owl-rdf/datatype-union.owl"));
-    // }
+    #[test]
+    fn datatype_union() {
+        assert_round(include_str!("../../ont/owl-rdf/datatype-union.owl"));
+    }
 
-    // #[test]
-    // fn datatype_complement() {
-    //     assert_round(include_str!("../../ont/owl-rdf/datatype-complement.owl"));
-    // }
+    #[test]
+    fn datatype_complement() {
+        assert_round(include_str!("../../ont/owl-rdf/datatype-complement.owl"));
+    }
 
-    // #[test]
-    // fn datatype_oneof() {
-    //     assert_round(include_str!("../../ont/owl-rdf/datatype-oneof.owl"));
-    // }
+    #[test]
+    fn datatype_oneof() {
+        assert_round(include_str!("../../ont/owl-rdf/datatype-oneof.owl"));
+    }
 
     // #[test]
     // fn datatype_some() {

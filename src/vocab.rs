@@ -134,6 +134,7 @@ pub enum OWL {
     AssertionProperty,
     AsymmetricProperty,
     Axiom,
+    Cardinality,
     Class,
     ComplementOf,
     DatatypeComplementOf,
@@ -153,6 +154,7 @@ pub enum OWL {
     IrreflexiveProperty,
     MaxCardinality,
     MaxQualifiedCardinality,
+    MinCardinality,
     MinQualifiedCardinality,
     NamedIndividual,
     NegativePropertyAssertion,
@@ -203,6 +205,7 @@ lazy_meta! {
     DisjointUnionOf, extend(OWL, "disjointUnionOf");
     DisjointWith, extend(OWL, "disjointWith");
     DistinctMembers, extend(OWL, "distinctMembers");
+    Cardinality, extend(OWL, "cardinality");
     EquivalentClass, extend(OWL, "equivalentClass");
     EquivalentProperty, extend(OWL, "equivalentProperty");
     FunctionalProperty, extend(OWL, "FunctionalProperty");
@@ -215,6 +218,7 @@ lazy_meta! {
     HasValue, extend(OWL, "hasValue");
     MaxCardinality, extend(OWL, "maxCardinality");
     MaxQualifiedCardinality, extend(OWL, "maxQualifiedCardinality");
+    MinCardinality, extend(OWL, "minCardinality");
     MinQualifiedCardinality, extend(OWL, "minQualifiedCardinality");
     NamedIndividual, extend(OWL, "NamedIndividual");
     NegativePropertyAssertion, extend(OWL, "NegativePropertyAssertion");
@@ -244,6 +248,14 @@ lazy_meta! {
     VersionIRI, extend(OWL, "versionIRI");
     VersionInfo, extend(OWL, "versionInfo");
     WithRestrictions, extend(OWL, "withRestrictions");
+}
+
+pub fn is_thing(iri: &IRI) -> bool {
+    iri.as_ref() == OWL::Thing.iri_s()
+}
+
+pub fn is_nothing(iri: &IRI) -> bool {
+    iri.as_ref() == OWL::Nothing.iri_s()
 }
 
 pub fn to_built_in_entity(iri: &IRI) -> Option<NamedEntityKind> {
@@ -380,6 +392,7 @@ lazy_meta! {
     LangRange, extend(RDF, "langRange");
 }
 
+
 #[test]
 fn facet_meta() {
     assert_eq!(
@@ -403,13 +416,21 @@ fn facet_meta() {
     );
 }
 
+pub enum XSD {
+    NonNegativeInteger
+}
 
+lazy_meta! {
+    XSD, IRIString, METAXSD;
+    NonNegativeInteger, extend(XSD, "nonNegativeInteger")
+}
 
 
 pub enum Vocab {
     RDF(RDF),
     RDFS(RDFS),
     OWL(OWL),
+    XSD(XSD),
     Namespace(Namespace)
 }
 
@@ -419,6 +440,7 @@ impl<'a> Meta<&'a IRIString> for Vocab {
             Self::RDF(rdf) => rdf.meta(),
             Self::RDFS(rdfs) => rdfs.meta(),
             Self::OWL(owl) => owl.meta(),
+            Self::XSD(xsd) => xsd.meta(),
             Self::Namespace(ns) => ns.meta(),
         }
     }
@@ -435,13 +457,19 @@ impl From<RDF> for Vocab {
 }
 
 impl From<RDFS> for Vocab {
-    fn from(rdf: RDFS) -> Self {
-        Self::RDFS(rdf)
+    fn from(rdfs: RDFS) -> Self {
+        Self::RDFS(rdfs)
     }
 }
 
 impl From<OWL> for Vocab {
     fn from(owl: OWL) -> Self {
         Self::OWL(owl)
+    }
+}
+
+impl From<XSD> for Vocab {
+    fn from(xsd: XSD) -> Self {
+        Self::XSD(xsd)
     }
 }
