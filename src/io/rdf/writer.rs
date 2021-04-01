@@ -544,11 +544,37 @@ render_to_node! {
                         bn, ng.nn(OWL::OneOf), vbn
                     )
                 }
-                _ => {
+                Self::DatatypeRestriction(dt, vfr) => {
+                    // _:x rdf:type rdfs:Datatype .
+                    // _:x owl:onDatatype T(DT) .
+                    // _:x owl:withRestrictions T(SEQ _:y1 ... _:yn) .
+                    // _:y1 F1 lt1 .
+                    //  ...
+                    // _:yn Fn ltn .
+                    let bn = ng.bn();
+                    let node_dt:AsRefTerm<_> = (&dt.0).into();
+                    let node_vft:AsRefTerm<_> = vfr.render(f, ng)?.into();
 
-                    todo!()
+                    triples_to_node!(
+                        f,
+                        bn.clone(), ng.nn(RDF::Type), ng.nn(RDFS::Datatype),
+                        bn.clone(), ng.nn(OWL::OnDatatype), node_dt,
+                        bn, ng.nn(OWL::WithRestrictions), node_vft
+                    )
                 }
             }
+        )
+    }
+}
+
+render_to_node! {
+    FacetRestriction, self, f, ng,
+    {
+        let bn = ng.bn();
+        let l:AsRefTerm<_> = self.l.render(f, ng)?;
+
+        Ok(
+            triples_to_node!(f, bn, ng.nn(&self.f), l)
         )
     }
 }
@@ -618,6 +644,37 @@ fn obj_cardinality<W:Write>(n:&u32, ope:&ObjectPropertyExpression, bce:&Box<Clas
             f,
             bn.clone(), qual, node_n,
             bn, ng.nn(OWL::OnClass), node_ce
+        )
+    )
+}
+
+fn data_cardinality<W:Write>(n:&u32, dp:&DataProperty, dr: &DataRange,
+                             qual:AsRefNamedNode<Rc<str>>,
+                             f:&mut PrettyRdfXmlFormatter<Rc<str>,W>,
+                             ng:&mut NodeGenerator) -> Result<AsRefNamedOrBlankNode<Rc<str>>,Error> {
+
+    // _:x rdf:type owl:Restriction .
+    // _:x owl:onProperty T(DPE) .
+    // _:x owl:maxQualifiedCardinality "n"^^xsd:nonNegativeInteger .
+    // _:x owl:onDataRange T(DR) .
+    let bn = ng.bn();
+    let node_dp:AsRefTerm<_> = (&dp.0).into();
+    let node_n = AsRefTerm::Literal (
+        AsRefLiteral::Typed {
+            value: format!("{}", n).into(),
+            datatype: ng.nn(XSD::NonNegativeInteger)
+        }
+    );
+    let node_dr:AsRefTerm<_> = dr.render(f, ng)?;
+
+    // Unqualified Only
+    Ok(
+        triples_to_node!(
+            f,
+            bn.clone(), ng.nn(RDF::Type), ng.nn(OWL::Restriction),
+            bn.clone(), ng.nn(OWL::OnProperty), node_dp,
+            bn.clone(), qual, node_n,
+            bn, ng.nn(OWL::OnDataRange), node_dr
         )
     )
 }
@@ -752,10 +809,30 @@ render_to_node! {
                         bn, ng.nn(OWL::AllValuesFrom), node_dr
                     }
                 }
-                Self::DataHasValue{dp:_dp, l:_l}=>todo!(),
-                Self::DataMinCardinality{n:_n,dp:_dp,dr:_dr} => todo!(),
-                Self::DataMaxCardinality{n:_n,dp:_dp,dr:_dr} => todo!(),
-                Self::DataExactCardinality{n:_n,dp:_dp,dr:_dr} => todo!(),
+                Self::DataHasValue{dp, l} => {
+                    //  :x rdf:type owl:Restriction .
+                    // _:x owl:onProperty T(DPE) .
+                    // _:x owl:hasValue T(lt) .
+                    let bn = ng.bn();
+                    let node_dp:AsRefTerm<_> = (&dp.0).into();
+                    let node_l:AsRefTerm<_> = l.render(f, ng)?;
+
+                    triples_to_node!(
+                        f,
+                        bn.clone(), ng.nn(RDF::Type), ng.nn(OWL::Restriction),
+                        bn.clone(), ng.nn(OWL::OnProperty), node_dp,
+                        bn, ng.nn(OWL::HasValue), node_l
+                    )
+                }
+                Self::DataMinCardinality{n, dp, dr} => {
+                    data_cardinality(n, dp, dr, ng.nn(OWL::MinQualifiedCardinality), f, ng)?
+                }
+                Self::DataMaxCardinality{n, dp, dr} => {
+                    data_cardinality(n, dp, dr, ng.nn(OWL::MaxQualifiedCardinality), f, ng)?
+                }
+                Self::DataExactCardinality{n, dp, dr} => {
+                    data_cardinality(n, dp, dr, ng.nn(OWL::QualifiedCardinality), f, ng)?
+                },
             }
         )
     }
@@ -1266,35 +1343,35 @@ mod test {
         assert_round(include_str!("../../ont/owl-rdf/data-some.owl"));
     }
 
-    // #[test]
-    // fn facet_restriction() {
-    //     assert_round(include_str!("../../ont/owl-rdf/facet-restriction.owl"));
-    // }
+    #[test]
+    fn facet_restriction() {
+        assert_round(include_str!("../../ont/owl-rdf/facet-restriction.owl"));
+    }
 
     #[test]
     fn data_only() {
         assert_round(include_str!("../../ont/owl-rdf/data-only.owl"));
     }
-    
-    // #[test]
-    // fn data_exact_cardinality() {
-    //     assert_round(include_str!("../../ont/owl-rdf/data-exact-cardinality.owl"));
-    // }
 
-    // #[test]
-    // fn data_has_value() {
-    //     assert_round(include_str!("../../ont/owl-rdf/data-has-value.owl"));
-    // }
+    #[test]
+    fn data_exact_cardinality() {
+        assert_round(include_str!("../../ont/owl-rdf/data-exact-cardinality.owl"));
+    }
 
-    // #[test]
-    // fn data_max_cardinality() {
-    //     assert_round(include_str!("../../ont/owl-rdf/data-max-cardinality.owl"));
-    // }
+    #[test]
+    fn data_has_value() {
+        assert_round(include_str!("../../ont/owl-rdf/data-has-value.owl"));
+    }
 
-    // #[test]
-    // fn data_min_cardinality() {
-    //     assert_round(include_str!("../../ont/owl-rdf/data-min-cardinality.owl"));
-    // }
+    #[test]
+    fn data_max_cardinality() {
+        assert_round(include_str!("../../ont/owl-rdf/data-max-cardinality.owl"));
+    }
+
+    #[test]
+    fn data_min_cardinality() {
+        assert_round(include_str!("../../ont/owl-rdf/data-min-cardinality.owl"));
+    }
 
     // #[test]
     // fn class_assertion() {

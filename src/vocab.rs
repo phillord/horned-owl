@@ -427,6 +427,7 @@ lazy_meta! {
 
 
 pub enum Vocab {
+    Facet(Facet),
     RDF(RDF),
     RDFS(RDFS),
     OWL(OWL),
@@ -437,6 +438,7 @@ pub enum Vocab {
 impl<'a> Meta<&'a IRIString> for Vocab {
     fn meta(&self) -> &'a IRIString {
         match self {
+            Self::Facet(facet) => facet.meta(),
             Self::RDF(rdf) => rdf.meta(),
             Self::RDFS(rdfs) => rdfs.meta(),
             Self::OWL(owl) => owl.meta(),
@@ -447,6 +449,18 @@ impl<'a> Meta<&'a IRIString> for Vocab {
 
     fn all() -> Vec<Self> {
         todo!()
+    }
+}
+
+impl From<Facet> for Vocab {
+    fn from(facet: Facet) -> Self {
+        Self::Facet(facet)
+    }
+}
+
+impl From<&Facet> for Vocab {
+    fn from(facet: &Facet) -> Self {
+        Self::Facet(facet.clone())
     }
 }
 
