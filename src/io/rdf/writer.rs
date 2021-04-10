@@ -478,23 +478,61 @@ impl Render<Annotatable<Rc<str>>> for Axiom {
                 // Axiom::DataPropertyRange(ax) => ax.render(f, ng)?.into(),
                 // Axiom::FunctionalDataProperty(ax) => ax.render(f, ng)?.into(),
                 Axiom::DatatypeDefinition(ax) => ax.render(f, ng)?.into(),
-                // Axiom::HasKey(ax) => ax.render(f, ng)?.into(),
-                // Axiom::SameIndividual(ax) => ax.render(f, ng)?.into(),
+                Axiom::HasKey(ax) => ax.render(f, ng)?.into(),
+                Axiom::SameIndividual(ax) => ax.render(f, ng)?.into(),
                 // Axiom::DifferentIndividuals(ax) => ax.render(f, ng)?.into(),
                 // Axiom::ClassAssertion(ax) => ax.render(f, ng)?.into(),
                 // Axiom::ObjectPropertyAssertion(ax) => ax.render(f, ng)?.into(),
                 // Axiom::NegativeObjectPropertyAssertion(ax) => ax.render(f, ng)?.into(),
-                // Axiom::DataPropertyAssertion(ax) => ax.render(f, ng)?.into(),
+                Axiom::DataPropertyAssertion(ax) => ax.render(f, ng)?.into(),
                 // Axiom::NegativeDataPropertyAssertion(ax) => ax.render(f, ng)?.into(),
                 Axiom::AnnotationAssertion(ax) => ax.render(f, ng)?.into(),
                 Axiom::SubAnnotationPropertyOf(ax) => ax.render(f, ng)?.into(),
                 Axiom::AnnotationPropertyDomain(ax) => ax.render(f, ng)?.into(),
                 Axiom::AnnotationPropertyRange(ax) => ax.render(f, ng)?.into(),
+                Axiom::ClassAssertion(ax) => ax.render(f, ng)?.into(),
                 _ => todo!("TODO: {:?}", self)
             }
         )
     }
 }
+
+render_to_vec! {
+    SameIndividual, self, f, ng,
+    {
+        //T(a1) owl:sameAs T(a2) .
+        //...
+        //T(an-1) owl:sameAs T(an) .
+        let pred = ng.nn(OWL::SameAs);
+        nary(f, ng, &self.0, pred)
+    }
+}
+
+render! {
+    DataPropertyAssertion, self, f, ng, AsRefTriple<Rc<str>>,
+    {
+        //T(a) T(DPE) T(lt) .
+        let node_dp:AsRefNamedNode<_> = (&self.dp.0).into();
+        let node_i:AsRefNamedOrBlankNode<_> = (&self.from.0).into();
+        let node_lit:AsRefTerm<_> = self.to.render(f, ng)?;
+        Ok(
+            triple!(f, node_i, node_dp, node_lit)
+        )
+    }
+}
+
+render! {
+    ClassAssertion, self, f, ng, AsRefTriple<Rc<str>>,
+    {   // T(a) rdf:type T(CE) .
+        let node_ce:AsRefTerm<_> = self.ce.render(f, ng)?;
+        let node_i:AsRefNamedOrBlankNode<_> = (&self.i.0).into();
+
+        Ok(
+            triple!(f, node_i, ng.nn(RDF::Type), node_ce)
+        )
+    }
+}
+
 
 render_to_node! {
     DataRange, self, f, ng,
@@ -535,7 +573,7 @@ render_to_node! {
                     )
                 }
                 Self::DataOneOf(v) => {
-                    let vbn = v.render(f, ng).unwrap();
+                    let vbn = v.render(f, ng)?;
                     let bn = ng.bn();
 
                     triples_to_node!(
@@ -838,8 +876,8 @@ render_to_node! {
     }
 }
 
-fn nary<W:Write>(f:&mut PrettyRdfXmlFormatter<Rc<str>, W>, ng:&mut NodeGenerator,
-                 entities:&Vec<ClassExpression>, pred:AsRefNamedNode<Rc<str>>)
+fn nary<R:Render<AsRefNamedOrBlankNode<Rc<str>>>,W:Write>(f:&mut PrettyRdfXmlFormatter<Rc<str>, W>, ng:&mut NodeGenerator,
+                 entities:&Vec<R>, pred:AsRefNamedNode<Rc<str>>)
                  -> Result<Vec<AsRefTriple<Rc<str>>>, Error>
 {
     let mut i = entities.iter();
@@ -847,7 +885,7 @@ fn nary<W:Write>(f:&mut PrettyRdfXmlFormatter<Rc<str>, W>, ng:&mut NodeGenerator
     let first:AsRefNamedOrBlankNode<_> = first.render(f, ng)?;
     let mut v = vec![];
     for c in i {
-        let eq:AsRefTerm<_> = c.render(f, ng)?;
+        let eq:AsRefNamedOrBlankNode<_> = c.render(f, ng)?;
         v.extend(
             triples_to_vec!(
                 f, first.clone(), pred.clone(), eq
@@ -857,6 +895,35 @@ fn nary<W:Write>(f:&mut PrettyRdfXmlFormatter<Rc<str>, W>, ng:&mut NodeGenerator
     Ok(v)
 }
 
+render_to_vec! {
+    HasKey, self, f, ng,
+    {
+        //T(CE) owl:hasKey T(SEQ OPE1 ... OPEm DPE1 ... DPEn ) .
+        let node_ce:AsRefNamedOrBlankNode<_> = self.ce.render(f, ng)?;
+        let node_vpe:AsRefTerm<_> = (&self.vpe).render(f, ng)?;
+        // let g:String = &self.vpe[0];
+        // let node_vpe:AsRefTerm<_> = g.render(f, ng)?;
+
+        Ok(
+            triples_to_vec!(
+                f, node_ce, ng.nn(OWL::HasKey), node_vpe
+            )
+        )
+    }
+}
+
+render_to_node! {
+    PropertyExpression, self, f, ng,
+    {
+        Ok(
+            match self {
+                Self::ObjectPropertyExpression(ope) => ope.render(f, ng)?,
+                Self::DataProperty(dp) => (&dp.0).into(),
+                Self::AnnotationProperty(ap) => (&ap.0).into()
+            }
+        )
+    }
+}
 
 render_to_vec! {
     DisjointClasses, self, f, ng,
@@ -1373,22 +1440,22 @@ mod test {
         assert_round(include_str!("../../ont/owl-rdf/data-min-cardinality.owl"));
     }
 
-    // #[test]
-    // fn class_assertion() {
-    //     assert_round(include_str!("../../ont/owl-rdf/class-assertion.owl"));
-    // }
+    #[test]
+    fn class_assertion() {
+        assert_round(include_str!("../../ont/owl-rdf/class-assertion.owl"));
+    }
 
-    // #[test]
-    // fn data_property_assertion() {
-    //     assert_round(include_str!(
-    //         "../../ont/owl-rdf/data-property-assertion.owl"
-    //     ));
-    // }
+    #[test]
+    fn data_property_assertion() {
+        assert_round(include_str!(
+            "../../ont/owl-rdf/data-property-assertion.owl"
+        ));
+    }
 
-    // #[test]
-    // fn same_individual() {
-    //     assert_round(include_str!("../../ont/owl-rdf/same-individual.owl"));
-    // }
+    #[test]
+    fn same_individual() {
+        assert_round(include_str!("../../ont/owl-rdf/same-individual.owl"));
+    }
 
     // #[test]
     // fn different_individuals() {
@@ -1416,10 +1483,10 @@ mod test {
     //     ));
     // }
 
-    // #[test]
-    // fn data_has_key() {
-    //     assert_round(include_str!("../../ont/owl-rdf/data-has-key.owl"));
-    // }
+    #[test]
+    fn data_has_key() {
+        assert_round(include_str!("../../ont/owl-rdf/data-has-key.owl"));
+    }
 
     // #[test]
     // fn data_property_disjoint() {
@@ -1469,10 +1536,15 @@ mod test {
     //     ));
     // }
 
-    // #[test]
-    // fn object_has_key() {
-    //     assert_round(include_str!("../../ont/owl-rdf/object-has-key.owl"));
-    // }
+    #[test]
+    fn object_has_key() {
+        assert_round(include_str!("../../ont/owl-rdf/object-has-key.owl"));
+    }
+
+    #[test]
+    fn object_has_key_complicated() {
+        assert_round(include_str!("../../ont/owl-rdf/multi-has-key.owl"));
+    }
 
     // #[test]
     // fn object_property_asymmetric() {
@@ -1532,4 +1604,3 @@ mod test {
     // }
 
 }
-
