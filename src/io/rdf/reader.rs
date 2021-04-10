@@ -1107,6 +1107,15 @@ impl<'a> OntologyParser<'a> {
                         }
                     }
                 }
+                [[_, Term::OWL(VOWL::Members), Term::BNode(bnodeid)],//:
+                 [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::AllDifferent)]] =>
+                {
+                    some! {
+                        DifferentIndividuals (
+                            self.to_ni_seq(bnodeid)?
+                        ).into()
+                    }
+                }
                 [[_, Term::OWL(VOWL::DistinctMembers), Term::BNode(bnodeid)],//:
                  [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::AllDifferent)]] =>
                 {

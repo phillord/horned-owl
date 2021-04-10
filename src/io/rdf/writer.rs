@@ -480,7 +480,7 @@ impl Render<Annotatable<Rc<str>>> for Axiom {
                 Axiom::DatatypeDefinition(ax) => ax.render(f, ng)?.into(),
                 Axiom::HasKey(ax) => ax.render(f, ng)?.into(),
                 Axiom::SameIndividual(ax) => ax.render(f, ng)?.into(),
-                // Axiom::DifferentIndividuals(ax) => ax.render(f, ng)?.into(),
+                Axiom::DifferentIndividuals(ax) => ax.render(f, ng)?.into(),
                 // Axiom::ClassAssertion(ax) => ax.render(f, ng)?.into(),
                 // Axiom::ObjectPropertyAssertion(ax) => ax.render(f, ng)?.into(),
                 // Axiom::NegativeObjectPropertyAssertion(ax) => ax.render(f, ng)?.into(),
@@ -493,6 +493,28 @@ impl Render<Annotatable<Rc<str>>> for Axiom {
                 Axiom::ClassAssertion(ax) => ax.render(f, ng)?.into(),
                 _ => todo!("TODO: {:?}", self)
             }
+        )
+    }
+}
+
+render_to_vec! {
+    DifferentIndividuals, self, f, ng,
+    {
+        // DifferentIndividuals( a1 a2 ) T(a1) owl:differentFrom T(a2) .
+        // DifferentIndividuals( a1 ... an ), n > 2 _:x rdf:type owl:AllDifferent .
+        // _:x owl:members T(SEQ a1 ... an) .
+
+        // Need to support also DisjointData/ObjectProperties which
+        // have the same pattern
+        let bn = ng.bn();
+        let node_v:AsRefTerm<_> = (&self.0).render(f, ng)?;
+
+        Ok(
+            triples_to_vec!(
+                f,
+                bn.clone(), ng.nn(RDF::Type), ng.nn(OWL::AllDifferent),
+                bn, ng.nn(OWL::Members), node_v
+            )
         )
     }
 }
@@ -1457,10 +1479,10 @@ mod test {
         assert_round(include_str!("../../ont/owl-rdf/same-individual.owl"));
     }
 
-    // #[test]
-    // fn different_individuals() {
-    //     assert_round(include_str!("../../ont/owl-rdf/different-individual.owl"));
-    // }
+    #[test]
+    fn different_individuals() {
+        assert_round(include_str!("../../ont/owl-rdf/different-individual.owl"));
+    }
 
     // #[test]
     // fn negative_data_property_assertion() {

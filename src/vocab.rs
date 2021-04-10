@@ -154,6 +154,7 @@ pub enum OWL {
     IrreflexiveProperty,
     MaxCardinality,
     MaxQualifiedCardinality,
+    Members,
     MinCardinality,
     MinQualifiedCardinality,
     NamedIndividual,
@@ -218,6 +219,7 @@ lazy_meta! {
     HasValue, extend(OWL, "hasValue");
     MaxCardinality, extend(OWL, "maxCardinality");
     MaxQualifiedCardinality, extend(OWL, "maxQualifiedCardinality");
+    Members, extend(OWL, "members");
     MinCardinality, extend(OWL, "minCardinality");
     MinQualifiedCardinality, extend(OWL, "minQualifiedCardinality");
     NamedIndividual, extend(OWL, "NamedIndividual");
