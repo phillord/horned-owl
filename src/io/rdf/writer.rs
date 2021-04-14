@@ -105,7 +105,7 @@ trait Render<R> {
 enum Annotatable<A:AsRef<str>> {
     Main(AsRefTriple<A>),
     Multiple(Vec<AsRefTriple<A>>),
-    Blank(AsRefBlankNode<A>)
+    //Blank(AsRefBlankNode<A>)
 }
 
 impl From<AsRefTriple<Rc<str>>> for Annotatable<Rc<str>> {
@@ -483,9 +483,9 @@ impl Render<Annotatable<Rc<str>>> for Axiom {
                 Axiom::DifferentIndividuals(ax) => ax.render(f, ng)?.into(),
                 // Axiom::ClassAssertion(ax) => ax.render(f, ng)?.into(),
                 // Axiom::ObjectPropertyAssertion(ax) => ax.render(f, ng)?.into(),
-                // Axiom::NegativeObjectPropertyAssertion(ax) => ax.render(f, ng)?.into(),
+                Axiom::NegativeObjectPropertyAssertion(ax) => ax.render(f, ng)?.into(),
                 Axiom::DataPropertyAssertion(ax) => ax.render(f, ng)?.into(),
-                // Axiom::NegativeDataPropertyAssertion(ax) => ax.render(f, ng)?.into(),
+                Axiom::NegativeDataPropertyAssertion(ax) => ax.render(f, ng)?.into(),
                 Axiom::AnnotationAssertion(ax) => ax.render(f, ng)?.into(),
                 Axiom::SubAnnotationPropertyOf(ax) => ax.render(f, ng)?.into(),
                 Axiom::AnnotationPropertyDomain(ax) => ax.render(f, ng)?.into(),
@@ -493,6 +493,56 @@ impl Render<Annotatable<Rc<str>>> for Axiom {
                 Axiom::ClassAssertion(ax) => ax.render(f, ng)?.into(),
                 _ => todo!("TODO: {:?}", self)
             }
+        )
+    }
+}
+
+
+render_to_vec! {
+    NegativeObjectPropertyAssertion, self, f, ng,
+    {
+        // NegativeObjectPropertyAssertion( OPE a1 a2 )
+        //_:x rdf:type owl:NegativePropertyAssertion .
+        //_:x owl:sourceIndividual T(a1) .
+        //_:x owl:assertionProperty T(OPE) .
+        //_:x owl:targetIndividual T(a2) .
+        let bn = ng.bn();
+        let node_lt:AsRefTerm<_> = self.to.render(f, ng)?;
+        let node_ope:AsRefTerm<_> = self.ope.render(f, ng)?;
+        let node_a:AsRefTerm<_> = self.from.render(f, ng)?;
+
+        Ok(
+            triples_to_vec!(
+                f,
+                bn.clone(), ng.nn(RDF::Type), ng.nn(OWL::NegativePropertyAssertion),
+                bn.clone(), ng.nn(OWL::SourceIndividual), node_a,
+                bn.clone(), ng.nn(OWL::AssertionProperty), node_ope,
+                bn.clone(), ng.nn(OWL::TargetIndividual), node_lt
+            )
+        )
+    }
+}
+render_to_vec! {
+    NegativeDataPropertyAssertion, self, f, ng,
+    {
+        // NegativeDataPropertyAssertion( DPE a1 a2 )
+        //_:x rdf:type owl:NegativePropertyAssertion .
+        //_:x owl:sourceIndividual T(a) .
+        //_:x owl:assertionProperty T(DPE) .
+        //_:x owl:targetValue T(lt) .
+        let bn = ng.bn();
+        let node_lt:AsRefTerm<_> = self.to.render(f, ng)?;
+        let node_dp:AsRefTerm<_> = (&self.dp.0).into();
+        let node_a:AsRefTerm<_> = self.from.render(f, ng)?;
+
+        Ok(
+            triples_to_vec!(
+                f,
+                bn.clone(), ng.nn(RDF::Type), ng.nn(OWL::NegativePropertyAssertion),
+                bn.clone(), ng.nn(OWL::SourceIndividual), node_a,
+                bn.clone(), ng.nn(OWL::AssertionProperty), node_dp,
+                bn.clone(), ng.nn(OWL::TargetValue), node_lt
+            )
         )
     }
 }
@@ -1484,19 +1534,19 @@ mod test {
         assert_round(include_str!("../../ont/owl-rdf/different-individual.owl"));
     }
 
-    // #[test]
-    // fn negative_data_property_assertion() {
-    //     assert_round(include_str!(
-    //         "../../ont/owl-rdf/negative-data-property-assertion.owl"
-    //     ));
-    // }
+    #[test]
+    fn negative_data_property_assertion() {
+        assert_round(include_str!(
+            "../../ont/owl-rdf/negative-data-property-assertion.owl"
+        ));
+    }
 
-    // #[test]
-    // fn negative_object_property_assertion() {
-    //     assert_round(include_str!(
-    //         "../../ont/owl-rdf/negative-object-property-assertion.owl"
-    //     ));
-    // }
+    #[test]
+    fn negative_object_property_assertion() {
+        assert_round(include_str!(
+            "../../ont/owl-rdf/negative-object-property-assertion.owl"
+        ));
+    }
 
     // #[test]
     // fn object_property_assertion() {
