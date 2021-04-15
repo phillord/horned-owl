@@ -371,7 +371,7 @@ impl<'a> OntologyParser<'a> {
         let results: Vec<Result<[Term; 3], Error>> = triple_iter.collect();
         let triples: Result<Vec<_>, _> = results.into_iter().collect();
         let triple_v: Vec<[Term; 3]> = triples.unwrap();
-        dbg!(&triple_v);
+        //dbg!(&triple_v);
         OntologyParser::new(b, triple_v)
     }
 

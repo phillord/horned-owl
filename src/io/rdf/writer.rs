@@ -460,7 +460,7 @@ impl Render<Annotatable<Rc<str>>> for Axiom {
                 Axiom::DisjointUnion(ax) => ax.render(f, ng)?.into(),
                 Axiom::SubObjectPropertyOf(ax) => ax.render(f, ng)?.into(),
                 // Axiom::EquivalentObjectProperties(ax) => ax.render(f, ng)?.into(),
-                // Axiom::DisjointObjectProperties(ax) => ax.render(f, ng)?.into(),
+                Axiom::DisjointObjectProperties(ax) => ax.render(f, ng)?.into(),
                 Axiom::InverseObjectProperties(ax) => ax.render(f, ng)?.into(),
                 // Axiom::ObjectPropertyDomain(ax) => ax.render(f, ng)?.into(),
                 // Axiom::ObjectPropertyRange(ax) => ax.render(f, ng)?.into(),
@@ -473,8 +473,8 @@ impl Render<Annotatable<Rc<str>>> for Axiom {
                 Axiom::TransitiveObjectProperty(ax) => ax.render(f, ng)?.into(),
                 // Axiom::SubDataPropertyOf(ax) => ax.render(f, ng)?.into(),
                 // Axiom::EquivalentDataProperties(ax) => ax.render(f, ng)?.into(),
-                //Axiom::DisjointDataProperties(ax) => ax.render(f, ng)?.into(),
-                // Axiom::DataPropertyDomain(ax) => ax.render(f, ng)?.into(),
+                Axiom::DisjointDataProperties(ax) => ax.render(f, ng)?.into(),
+                Axiom::DataPropertyDomain(ax) => ax.render(f, ng)?.into(),
                 // Axiom::DataPropertyRange(ax) => ax.render(f, ng)?.into(),
                 // Axiom::FunctionalDataProperty(ax) => ax.render(f, ng)?.into(),
                 Axiom::DatatypeDefinition(ax) => ax.render(f, ng)?.into(),
@@ -497,17 +497,41 @@ impl Render<Annotatable<Rc<str>>> for Axiom {
     }
 }
 
-// render! {
-//     DisjointDataProperties, self, f, ng,
-//     {
-//         // x owl:propertyDisjointWith y .
-//         // { OPE(x) ≠ ε and OPE(y) ≠ ε } DisjointObjectProperties( OPE(x) OPE(y) )
-//         // _:x rdf:type owl:AllDisjointProperties .
-//         // _:x owl:members T(SEQ y1 ... yn) .
-//         // { n ≥ 2 and OPE(yi) ≠ ε for each 1 ≤ i ≤ n } 
-//         todo!()
-//     }
-// }
+render! {
+    DataPropertyDomain, self, f, ng, AsRefTriple<Rc<str>>,
+    {
+        let node_dp:AsRefNamedOrBlankNode<Rc<str>> = self.dp.render(f, ng)?;
+        let node_ce:AsRefTerm<Rc<str>> = self.ce.render(f, ng)?;
+
+        Ok(
+            triple!(
+                f, node_dp, ng.nn(RDFS::Domain), node_ce
+            )
+        )
+    }
+}
+
+render_to_vec! {
+    DisjointObjectProperties, self, f, ng,
+    {
+        members(f, ng,
+                OWL::PropertyDisjointWith,
+                OWL::AllDisjointProperties,
+                &self.0
+        )
+    }
+}
+
+render_to_vec! {
+    DisjointDataProperties, self, f, ng,
+    {
+        members(f, ng,
+                OWL::PropertyDisjointWith,
+                OWL::AllDisjointProperties,
+                &self.0
+        )
+    }
+}
 
 render! {
     ObjectPropertyAssertion, self, f, _ng, AsRefTriple<Rc<str>>,
@@ -778,6 +802,15 @@ render! {
 
 render_to_node! {
     NamedIndividual, self, _f, _ng,
+    {
+        Ok(
+            (&self.0).into()
+        )
+    }
+}
+
+render_to_node! {
+    DataProperty, self, _f, _ng,
     {
         Ok(
             (&self.0).into()
@@ -1633,15 +1666,15 @@ mod test {
         assert_round(include_str!("../../ont/owl-rdf/data-has-key.owl"));
     }
 
-    // #[test]
-    // fn data_property_disjoint() {
-    //     assert_round(include_str!("../../ont/owl-rdf/data-property-disjoint.owl"));
-    // }
+    #[test]
+    fn data_property_disjoint() {
+        assert_round(include_str!("../../ont/owl-rdf/data-property-disjoint.owl"));
+    }
 
-    // #[test]
-    // fn data_property_domain() {
-    //     assert_round(include_str!("../../ont/owl-rdf/data-property-domain.owl"));
-    // }
+    #[test]
+    fn data_property_domain() {
+        assert_round(include_str!("../../ont/owl-rdf/data-property-domain.owl"));
+    }
 
     // #[test]
     // fn data_property_equivalent() {
@@ -1667,12 +1700,12 @@ mod test {
     //     assert_round(include_str!("../../ont/owl-rdf/data-property-sub.owl"));
     // }
 
-    // #[test]
-    // fn disjoint_object_properties() {
-    //     assert_round(include_str!(
-    //         "../../ont/owl-rdf/disjoint-object-properties.owl"
-    //     ));
-    // }
+    #[test]
+    fn disjoint_object_properties() {
+        assert_round(include_str!(
+            "../../ont/owl-rdf/disjoint-object-properties.owl"
+        ));
+    }
 
     // #[test]
     // fn equivalent_object_properties() {

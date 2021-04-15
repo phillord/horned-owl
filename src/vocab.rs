@@ -126,6 +126,7 @@ lazy_meta! {
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum OWL {
     AllDifferent,
+    AllDisjointProperties,
     AllValuesFrom,
     AnnotatedProperty,
     AnnotatedSource,
@@ -192,6 +193,7 @@ lazy_meta! {
     OWL, IRIString, METAOWL;
 
     AllDifferent, extend(OWL, "AllDifferent");
+    AllDisjointProperties, extend(OWL, "AllDisjointProperties");
     AllValuesFrom, extend(OWL, "allValuesFrom");
     AnnotatedProperty, extend(OWL, "annotatedProperty");
     AnnotatedSource, extend(OWL, "annotatedSource");
