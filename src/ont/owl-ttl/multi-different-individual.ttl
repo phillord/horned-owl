@@ -22,6 +22,10 @@ o:I rdf:type owl:NamedIndividual .
 o:J rdf:type owl:NamedIndividual .
 
 
+###  http://www.example.com/iri#K
+o:K rdf:type owl:NamedIndividual .
+
+
 #################################################################
 #    General axioms
 #################################################################
@@ -29,6 +33,7 @@ o:J rdf:type owl:NamedIndividual .
 [ rdf:type owl:AllDifferent ;
   owl:distinctMembers ( o:I
                         o:J
+                        o:K
                       )
 ] .
 

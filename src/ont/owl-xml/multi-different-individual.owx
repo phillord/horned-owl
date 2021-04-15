@@ -19,9 +19,13 @@
     <Declaration>
         <NamedIndividual IRI="#J"/>
     </Declaration>
+    <Declaration>
+        <NamedIndividual IRI="#K"/>
+    </Declaration>
     <DifferentIndividuals>
         <NamedIndividual IRI="#I"/>
         <NamedIndividual IRI="#J"/>
+        <NamedIndividual IRI="#K"/>
     </DifferentIndividuals>
 </Ontology>
 

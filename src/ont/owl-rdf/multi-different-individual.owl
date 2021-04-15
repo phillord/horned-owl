@@ -36,6 +36,12 @@
     
 
 
+    <!-- http://www.example.com/iri#K -->
+
+    <owl:NamedIndividual rdf:about="http://www.example.com/iri#K"/>
+    
+
+
     <!-- 
     ///////////////////////////////////////////////////////////////////////////////////////
     //
@@ -49,6 +55,7 @@
         <owl:distinctMembers rdf:parseType="Collection">
             <rdf:Description rdf:about="http://www.example.com/iri#I"/>
             <rdf:Description rdf:about="http://www.example.com/iri#J"/>
+            <rdf:Description rdf:about="http://www.example.com/iri#K"/>
         </owl:distinctMembers>
     </rdf:Description>
 </rdf:RDF>

@@ -473,7 +473,7 @@ impl Render<Annotatable<Rc<str>>> for Axiom {
                 Axiom::TransitiveObjectProperty(ax) => ax.render(f, ng)?.into(),
                 // Axiom::SubDataPropertyOf(ax) => ax.render(f, ng)?.into(),
                 // Axiom::EquivalentDataProperties(ax) => ax.render(f, ng)?.into(),
-                // Axiom::DisjointDataProperties(ax) => ax.render(f, ng)?.into(),
+                //Axiom::DisjointDataProperties(ax) => ax.render(f, ng)?.into(),
                 // Axiom::DataPropertyDomain(ax) => ax.render(f, ng)?.into(),
                 // Axiom::DataPropertyRange(ax) => ax.render(f, ng)?.into(),
                 // Axiom::FunctionalDataProperty(ax) => ax.render(f, ng)?.into(),
@@ -482,7 +482,7 @@ impl Render<Annotatable<Rc<str>>> for Axiom {
                 Axiom::SameIndividual(ax) => ax.render(f, ng)?.into(),
                 Axiom::DifferentIndividuals(ax) => ax.render(f, ng)?.into(),
                 // Axiom::ClassAssertion(ax) => ax.render(f, ng)?.into(),
-                // Axiom::ObjectPropertyAssertion(ax) => ax.render(f, ng)?.into(),
+                Axiom::ObjectPropertyAssertion(ax) => ax.render(f, ng)?.into(),
                 Axiom::NegativeObjectPropertyAssertion(ax) => ax.render(f, ng)?.into(),
                 Axiom::DataPropertyAssertion(ax) => ax.render(f, ng)?.into(),
                 Axiom::NegativeDataPropertyAssertion(ax) => ax.render(f, ng)?.into(),
@@ -497,6 +497,49 @@ impl Render<Annotatable<Rc<str>>> for Axiom {
     }
 }
 
+// render! {
+//     DisjointDataProperties, self, f, ng,
+//     {
+//         // x owl:propertyDisjointWith y .
+//         // { OPE(x) ≠ ε and OPE(y) ≠ ε } DisjointObjectProperties( OPE(x) OPE(y) )
+//         // _:x rdf:type owl:AllDisjointProperties .
+//         // _:x owl:members T(SEQ y1 ... yn) .
+//         // { n ≥ 2 and OPE(yi) ≠ ε for each 1 ≤ i ≤ n } 
+//         todo!()
+//     }
+// }
+
+render! {
+    ObjectPropertyAssertion, self, f, _ng, AsRefTriple<Rc<str>>,
+    {
+        match &self.ope {
+            ObjectPropertyExpression::ObjectProperty(op) => {
+                //ObjectPropertyAssertion( OP a1 a2 ) T(a1) T(OP) T(a2) .
+                let node_from:AsRefNamedOrBlankNode<_> = (&self.from.0).into();
+                let node_op:AsRefNamedNode<_> = (&op.0).into();
+                let node_to:AsRefTerm<_> = (&self.to.0).into();
+                Ok(
+                    triple! (
+                        f,
+                        node_from, node_op, node_to
+                    )
+                )
+            },
+            ObjectPropertyExpression::InverseObjectProperty(op) => {
+                //ObjectPropertyAssertion( OP a1 a2 ) T(a1) T(OP) T(a2) .
+                let node_to:AsRefNamedOrBlankNode<_> = (&self.to.0).into();
+                let node_op:AsRefNamedNode<_> = (&op.0).into();
+                let node_from:AsRefTerm<_> = (&self.from.0).into();
+                Ok(
+                    triple! (
+                        f,
+                        node_to, node_op, node_from
+                    )
+                )
+            },
+        }
+    }
+}
 
 render_to_vec! {
     NegativeObjectPropertyAssertion, self, f, ng,
@@ -547,25 +590,50 @@ render_to_vec! {
     }
 }
 
+fn members<R:Debug + Render<AsRefNamedOrBlankNode<Rc<str>>>,W:Write>
+    (f:&mut PrettyRdfXmlFormatter<Rc<str>, W>,
+     ng:&mut NodeGenerator,
+     ty_two:OWL,
+     ty_n:OWL, members:&Vec<R>) -> Result<Vec<AsRefTriple<Rc<str>>>,Error>
+{
+    // DifferentIndividuals( a1 a2 ) T(a1) owl:differentFrom T(a2) .
+    // DifferentIndividuals( a1 ... an ), n > 2 _:x rdf:type owl:AllDifferent .
+    // _:x owl:members T(SEQ a1 ... an) .
+    match members.len() {
+        1 => panic!("A members axiom needs at least two members, and I should know how to make errors"),
+        2 => {
+            let a:AsRefNamedOrBlankNode<_> = members[0].render(f, ng)?;
+            let b:AsRefTerm<_> = members[1].render(f, ng)?.into();
+            Ok(
+                triples_to_vec! (
+                    f, a, ng.nn(ty_two), b
+                )
+            )
+        }
+        _ => {
+            let bn = ng.bn();
+            let node_v:AsRefTerm<_> = members.render(f, ng)?;
+
+            Ok(
+                triples_to_vec!(
+                    f,
+                    bn.clone(), ng.nn(RDF::Type), ng.nn(ty_n),
+                    bn, ng.nn(OWL::Members), node_v
+                )
+            )
+        }
+    }
+}
+
 render_to_vec! {
     DifferentIndividuals, self, f, ng,
     {
-        // DifferentIndividuals( a1 a2 ) T(a1) owl:differentFrom T(a2) .
-        // DifferentIndividuals( a1 ... an ), n > 2 _:x rdf:type owl:AllDifferent .
-        // _:x owl:members T(SEQ a1 ... an) .
-
         // Need to support also DisjointData/ObjectProperties which
         // have the same pattern
-        let bn = ng.bn();
-        let node_v:AsRefTerm<_> = (&self.0).render(f, ng)?;
-
-        Ok(
-            triples_to_vec!(
-                f,
-                bn.clone(), ng.nn(RDF::Type), ng.nn(OWL::AllDifferent),
-                bn, ng.nn(OWL::Members), node_v
-            )
-        )
+        members(f, ng,
+                OWL::DifferentFrom,
+                OWL::AllDifferent,
+                &self.0)
     }
 }
 
@@ -1535,6 +1603,11 @@ mod test {
     }
 
     #[test]
+    fn multi_different_individuals() {
+        assert_round(include_str!("../../ont/owl-rdf/multi-different-individual.owl"));
+    }
+
+    #[test]
     fn negative_data_property_assertion() {
         assert_round(include_str!(
             "../../ont/owl-rdf/negative-data-property-assertion.owl"
@@ -1548,12 +1621,12 @@ mod test {
         ));
     }
 
-    // #[test]
-    // fn object_property_assertion() {
-    //     assert_round(include_str!(
-    //         "../../ont/owl-rdf/object-property-assertion.owl"
-    //     ));
-    // }
+    #[test]
+    fn object_property_assertion() {
+        assert_round(include_str!(
+            "../../ont/owl-rdf/object-property-assertion.owl"
+        ));
+    }
 
     #[test]
     fn data_has_key() {

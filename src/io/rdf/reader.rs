@@ -318,6 +318,7 @@ impl IncompleteParse {
     }
 }
 
+#[derive(Debug)]
 pub struct OntologyParser<'a> {
     o: RDFOntology,
     b: &'a Build,
@@ -370,6 +371,7 @@ impl<'a> OntologyParser<'a> {
         let results: Vec<Result<[Term; 3], Error>> = triple_iter.collect();
         let triples: Result<Vec<_>, _> = results.into_iter().collect();
         let triple_v: Vec<[Term; 3]> = triples.unwrap();
+        dbg!(&triple_v);
         OntologyParser::new(b, triple_v)
     }
 
@@ -1400,6 +1402,13 @@ impl<'a> OntologyParser<'a> {
                         i: NamedIndividual(sub.clone()).into()
                     }.into()
                 },
+                [Term::Iri(i), Term::OWL(VOWL::DifferentFrom), Term::Iri(j)] => {
+                    some! {
+                        DifferentIndividuals (
+                            vec![i.into(), j.into()]
+                        ).into()
+                    }
+                }
                 [Term::Iri(s), Term::Iri(_), _] if self.o.id().iri.as_ref() == Some(&s) => some! {
                     OntologyAnnotation(
                         self.annotation(&triple)
