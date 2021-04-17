@@ -70,6 +70,36 @@ impl IRIMappedIndex {
                     _ => None,
                 }
             },
+            AxiomKind::EquivalentClasses => {
+                match ax.clone().axiom {
+                    Axiom::EquivalentClasses(EquivalentClasses(eles)) => {
+                        if let Some(clsexp) = eles.iter().next() {
+                            match clsexp {
+                                ClassExpression::Class(c) => Some(c.0.clone()),
+                                _ => None,  //to do - generic method to get IRI for any class expression to avoid duplicating this block?
+                            }
+                        } else {
+                            None
+                        }
+                    },
+                    _ => None,
+                }
+            },
+            AxiomKind::DisjointClasses => {
+                match ax.clone().axiom {
+                    Axiom::DisjointClasses(DisjointClasses(eles)) => {
+                        if let Some(clsexp) = eles.iter().next() {
+                            match clsexp {
+                                ClassExpression::Class(c) => Some(c.0.clone()),
+                                _ => None,
+                            }
+                        } else {
+                            None
+                        }
+                    },
+                    _ => None,
+                }
+            },
             _ => None,
         }
     }
