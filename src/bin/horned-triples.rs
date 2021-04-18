@@ -70,10 +70,10 @@ fn matcher(matches: ArgMatches) -> Result<(), Error> {
         p.insert("http://www.w3.org/2001/XMLSchema#".to_string(),"xsd".to_string());
         p.insert("http://www.w3.org/2000/01/rdf-schema#".to_string(), "rdfs".to_string());
 
-        let mut f:rio_xml::chunked_formatter::PrettyRdfXmlFormatter<String,_> =
-            rio_xml::chunked_formatter::PrettyRdfXmlFormatter::new
+        let mut f:pretty_rdf::PrettyRdfXmlFormatter<String,_> =
+            pretty_rdf::PrettyRdfXmlFormatter::new
             (b,
-             rio_xml::chunked_formatter::ChunkedRdfXmlFormatterConfig::all()
+             pretty_rdf::ChunkedRdfXmlFormatterConfig::all()
             )?;
         //let mut f = rio_xml::RdfXmlFormatter::with_indentation(&b, 4)?;
         let file = File::open(input)?;

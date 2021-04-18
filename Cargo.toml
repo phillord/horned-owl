@@ -23,11 +23,10 @@ lazy_static="1.4.0"
 log = {version="0.4.8"}
 quick-xml="0.12.4"
 indexmap="1.0.2"
-#rio_api={git="https://github.com/oxigraph/rio.git"}
-#rio_xml={git="https://github.com/oxigraph/rio.git"}
-rio_api={path="./rio/api"}
-rio_xml={path="./rio/xml"}
-
+rio_api="0.5.3"
+rio_xml="0.5.3"
+pretty_rdf="0.1.0"
+##pretty_rdf={path="./pretty_rdf"}
 
 [dev-dependencies]
 assert_cmd = "0.10"

@@ -1,7 +1,7 @@
 use std::{collections::{BTreeSet, HashSet}, fmt::Debug, io::Write, rc::Rc};
 
 use failure::Error;
-use rio_xml::chunked_formatter::{AsRefBlankNode, AsRefLiteral, AsRefNamedNode, AsRefNamedOrBlankNode, AsRefTerm, AsRefTriple, ChunkedRdfXmlFormatterConfig, PrettyRdfXmlFormatter};
+use pretty_rdf::{PBlankNode, PLiteral, PNamedNode, PNamedOrBlankNode, PTerm, PTriple, ChunkedRdfXmlFormatterConfig, PrettyRdfXmlFormatter};
 use crate::{
     model::*, ontology::axiom_mapped::AxiomMappedOntology,
     vocab::{is_thing, OWL, RDF, RDFS, XSD, WithIRI, Vocab}
@@ -38,13 +38,13 @@ pub fn write<W:Write>(
 struct NodeGenerator {
     i: u64,
     b: HashSet<Rc<str>>,
-    this_bn: Option<AsRefNamedOrBlankNode<Rc<str>>>
+    this_bn: Option<PNamedOrBlankNode<Rc<str>>>
 }
 
 
 impl NodeGenerator {
-    pub fn nn<V:Into<Vocab>>(&mut self, v:V) -> AsRefNamedNode<Rc<str>> {
-        AsRefNamedNode::new(self.cache_rc(v)).into()
+    pub fn nn<V:Into<Vocab>>(&mut self, v:V) -> PNamedNode<Rc<str>> {
+        PNamedNode::new(self.cache_rc(v)).into()
     }
 
     fn cache_rc<V:Into<Vocab>>(&mut self, v:V) -> Rc<str> {
@@ -58,39 +58,39 @@ impl NodeGenerator {
         rc
     }
 
-    pub fn bn(&mut self) -> AsRefNamedOrBlankNode<Rc<str>> {
+    pub fn bn(&mut self) -> PNamedOrBlankNode<Rc<str>> {
         self.i += 1;
-        AsRefNamedOrBlankNode::BlankNode(
-            AsRefBlankNode{
+        PNamedOrBlankNode::BlankNode(
+            PBlankNode{
                 id: format!{"bn{}", self.i}.into()
             }
         )
     }
 
-    pub fn keep_this_bn(&mut self, bn:AsRefNamedOrBlankNode<Rc<str>>) {
+    pub fn keep_this_bn(&mut self, bn:PNamedOrBlankNode<Rc<str>>) {
         self.this_bn = Some(bn);
     }
 
-    pub fn this_bn(&mut self) -> Option<AsRefNamedOrBlankNode<Rc<str>>> {
+    pub fn this_bn(&mut self) -> Option<PNamedOrBlankNode<Rc<str>>> {
         self.this_bn.take()
     }
 }
 
-impl From<&IRI> for AsRefTerm<Rc<str>> {
+impl From<&IRI> for PTerm<Rc<str>> {
     fn from(iri: &IRI) -> Self {
-        AsRefNamedNode::new(iri.into()).into()
+        PNamedNode::new(iri.into()).into()
     }
 }
 
-impl From<&IRI> for AsRefNamedNode<Rc<str>> {
+impl From<&IRI> for PNamedNode<Rc<str>> {
     fn from(iri: &IRI) -> Self {
-        AsRefNamedNode::new(iri.into())
+        PNamedNode::new(iri.into())
     }
 }
 
-impl From<&IRI> for AsRefNamedOrBlankNode<Rc<str>> {
+impl From<&IRI> for PNamedOrBlankNode<Rc<str>> {
     fn from(iri: &IRI) -> Self {
-        let nn:AsRefNamedNode<Rc<str>> = iri.into();
+        let nn:PNamedNode<Rc<str>> = iri.into();
         nn.into()
     }
 }
@@ -103,19 +103,19 @@ trait Render<R> {
 }
 
 enum Annotatable<A:AsRef<str>> {
-    Main(AsRefTriple<A>),
-    Multiple(Vec<AsRefTriple<A>>),
-    //Blank(AsRefBlankNode<A>)
+    Main(PTriple<A>),
+    Multiple(Vec<PTriple<A>>),
+    //Blank(PBlankNode<A>)
 }
 
-impl From<AsRefTriple<Rc<str>>> for Annotatable<Rc<str>> {
-    fn from(t: AsRefTriple<Rc<str>>) -> Self {
+impl From<PTriple<Rc<str>>> for Annotatable<Rc<str>> {
+    fn from(t: PTriple<Rc<str>>) -> Self {
         Self::Main(t)
     }
 }
 
-impl From<Vec<AsRefTriple<Rc<str>>>> for Annotatable<Rc<str>> {
-    fn from(t: Vec<AsRefTriple<Rc<str>>>) -> Self {
+impl From<Vec<PTriple<Rc<str>>>> for Annotatable<Rc<str>> {
+    fn from(t: Vec<PTriple<Rc<str>>>) -> Self {
         Self::Multiple(t)
     }
 }
@@ -137,21 +137,21 @@ macro_rules! render {
 macro_rules! render_to_node {
     ($type:ty, $self:ident, $f:ident, $ng:ident,
      $body:tt) => {
-        render!{$type,$self, $f, $ng, AsRefNamedOrBlankNode<Rc<str>>, $body}
+        render!{$type,$self, $f, $ng, PNamedOrBlankNode<Rc<str>>, $body}
     }
 }
 
 macro_rules! render_to_vec {
     ($type:ty, $self:ident, $f:ident, $ng:ident,
      $body:tt) => {
-        render!{$type, $self, $f, $ng, Vec<AsRefTriple<Rc<str>>>, $body}
+        render!{$type, $self, $f, $ng, Vec<PTriple<Rc<str>>>, $body}
     }
 }
 
 macro_rules! render_triple {
     ($type:ty, $self:ident, $ng:ident, $sub:expr, $pred:expr, $ob:expr) => {
         render! {
-            $type, $self, f, $ng, AsRefTriple<Rc<str>>,
+            $type, $self, f, $ng, PTriple<Rc<str>>,
             {
                 Ok(triple!(f, $sub, $pred, $ob))
             }
@@ -225,36 +225,36 @@ macro_rules! triples_to_vec {
 }
 
 
-fn to_triple<'a, NB, NN, T>(subject:NB, predicate:NN, object:T) -> AsRefTriple<Rc<str>>
-where NB: Into<AsRefNamedOrBlankNode<Rc<str>>>,
-      NN: Into<AsRefNamedNode<Rc<str>>>,
-      T: Into<AsRefTerm<Rc<str>>>
+fn to_triple<'a, NB, NN, T>(subject:NB, predicate:NN, object:T) -> PTriple<Rc<str>>
+where NB: Into<PNamedOrBlankNode<Rc<str>>>,
+      NN: Into<PNamedNode<Rc<str>>>,
+      T: Into<PTerm<Rc<str>>>
 {
-    AsRefTriple{
+    PTriple{
         subject: subject.into(),
         predicate: predicate.into(),
         object: object.into(),
     }
 }
 
-impl<R> Render<AsRefTerm<Rc<str>>> for R
+impl<R> Render<PTerm<Rc<str>>> for R
 where
-    R: Render<AsRefNamedOrBlankNode<Rc<str>>>
+    R: Render<PNamedOrBlankNode<Rc<str>>>
 {
     fn render<W:Write>(&self, f:&mut PrettyRdfXmlFormatter<Rc<str>, W>,
                        ng: &mut NodeGenerator)
-                       -> Result<AsRefTerm<Rc<str>>, Error> {
+                       -> Result<PTerm<Rc<str>>, Error> {
         Ok(self.render(f, ng)?.into())
     }
 }
 
-impl<T> Render<AsRefTerm<Rc<str>>> for &Vec<T>
+impl<T> Render<PTerm<Rc<str>>> for &Vec<T>
 where
-    T: Debug + Render<AsRefTerm<Rc<str>>> {
+    T: Debug + Render<PTerm<Rc<str>>> {
     fn render<W:Write>(&self, f:&mut PrettyRdfXmlFormatter<Rc<str>, W>,
                        ng: &mut NodeGenerator)
-                       -> Result<AsRefTerm<Rc<str>>, Error> {
-        let mut rest:Option<AsRefTerm<Rc<str>>> = None;
+                       -> Result<PTerm<Rc<str>>, Error> {
+        let mut rest:Option<PTerm<Rc<str>>> = None;
         for i in self.iter().rev() {
             let bn = &ng.bn();
             let item = i.render(f, ng)?;
@@ -368,17 +368,17 @@ impl Render<()> for AnnotatedAxiom {
 }
 
 render! {
-    Literal, self, _f, _ng, AsRefTerm<Rc<str>>,
+    Literal, self, _f, _ng, PTerm<Rc<str>>,
     {
         Ok(
             match self {
                 Literal::Simple{literal} =>
-                    AsRefTerm::Literal(AsRefLiteral::Simple{value:literal.clone().into()}),
+                    PTerm::Literal(PLiteral::Simple{value:literal.clone().into()}),
                 Literal::Language{literal, lang} =>
-                    AsRefTerm::Literal(AsRefLiteral::LanguageTaggedString{value:literal.clone().into(),
+                    PTerm::Literal(PLiteral::LanguageTaggedString{value:literal.clone().into(),
                                                                           language: lang.clone().into()}),
                 Literal::Datatype{literal, datatype_iri} =>
-                    AsRefTerm::Literal(AsRefLiteral::Typed{value:literal.clone().into(),
+                    PTerm::Literal(PLiteral::Typed{value:literal.clone().into(),
                                                            datatype:datatype_iri.into()})
             }
         )
@@ -387,7 +387,7 @@ render! {
 
 
 render! {
-    Annotation, self, f, ng, AsRefTriple<Rc<str>>,
+    Annotation, self, f, ng, PTriple<Rc<str>>,
     {
         let bn = ng.this_bn().ok_or_else(|| format_err!("No bnode available"))?;
 
@@ -410,9 +410,9 @@ render! {
 
 
 render!{
-    AnnotationAssertion, self, f, ng, AsRefTriple<Rc<str>>,
+    AnnotationAssertion, self, f, ng, PTriple<Rc<str>>,
     {
-        let nbn:AsRefNamedOrBlankNode<Rc<str>> = (&self.subject).into();
+        let nbn:PNamedOrBlankNode<Rc<str>> = (&self.subject).into();
         ng.keep_this_bn(nbn);
 
         self.ann.render(f, ng)
@@ -421,7 +421,7 @@ render!{
 
 
 render! {
-    AnnotationPropertyDomain, self, f, ng, AsRefTriple<Rc<str>>,
+    AnnotationPropertyDomain, self, f, ng, PTriple<Rc<str>>,
     {
         Ok(
             triple!(f, &self.ap.0, ng.nn(RDFS::Domain), &self.iri)
@@ -430,7 +430,7 @@ render! {
 }
 
 render! {
-    AnnotationPropertyRange, self, f, ng, AsRefTriple<Rc<str>>,
+    AnnotationPropertyRange, self, f, ng, PTriple<Rc<str>>,
     {
         Ok(
             triple!(f, &self.ap.0, ng.nn(RDFS::Range), &self.iri)
@@ -459,7 +459,7 @@ impl Render<Annotatable<Rc<str>>> for Axiom {
                 Axiom::DisjointClasses(ax) => ax.render(f, ng)?.into(),
                 Axiom::DisjointUnion(ax) => ax.render(f, ng)?.into(),
                 Axiom::SubObjectPropertyOf(ax) => ax.render(f, ng)?.into(),
-                // Axiom::EquivalentObjectProperties(ax) => ax.render(f, ng)?.into(),
+                Axiom::EquivalentObjectProperties(ax) => ax.render(f, ng)?.into(),
                 Axiom::DisjointObjectProperties(ax) => ax.render(f, ng)?.into(),
                 Axiom::InverseObjectProperties(ax) => ax.render(f, ng)?.into(),
                 // Axiom::ObjectPropertyDomain(ax) => ax.render(f, ng)?.into(),
@@ -472,7 +472,7 @@ impl Render<Annotatable<Rc<str>>> for Axiom {
                 // Axiom::AsymmetricObjectProperty(ax) => ax.render(f, ng)?.into(),
                 Axiom::TransitiveObjectProperty(ax) => ax.render(f, ng)?.into(),
                 // Axiom::SubDataPropertyOf(ax) => ax.render(f, ng)?.into(),
-                // Axiom::EquivalentDataProperties(ax) => ax.render(f, ng)?.into(),
+                Axiom::EquivalentDataProperties(ax) => ax.render(f, ng)?.into(),
                 Axiom::DisjointDataProperties(ax) => ax.render(f, ng)?.into(),
                 Axiom::DataPropertyDomain(ax) => ax.render(f, ng)?.into(),
                 // Axiom::DataPropertyRange(ax) => ax.render(f, ng)?.into(),
@@ -497,11 +497,27 @@ impl Render<Annotatable<Rc<str>>> for Axiom {
     }
 }
 
-render! {
-    DataPropertyDomain, self, f, ng, AsRefTriple<Rc<str>>,
+render_to_vec! {
+    EquivalentDataProperties, self, f, ng,
     {
-        let node_dp:AsRefNamedOrBlankNode<Rc<str>> = self.dp.render(f, ng)?;
-        let node_ce:AsRefTerm<Rc<str>> = self.ce.render(f, ng)?;
+        let pred = ng.nn(OWL::EquivalentProperty);
+        nary(f, ng, &self.0, pred)
+    }
+}
+
+render_to_vec! {
+    EquivalentObjectProperties, self, f, ng,
+    {
+        let pred = ng.nn(OWL::EquivalentProperty);
+        nary(f, ng, &self.0, pred)
+    }
+}
+
+render! {
+    DataPropertyDomain, self, f, ng, PTriple<Rc<str>>,
+    {
+        let node_dp:PNamedOrBlankNode<Rc<str>> = self.dp.render(f, ng)?;
+        let node_ce:PTerm<Rc<str>> = self.ce.render(f, ng)?;
 
         Ok(
             triple!(
@@ -534,14 +550,14 @@ render_to_vec! {
 }
 
 render! {
-    ObjectPropertyAssertion, self, f, _ng, AsRefTriple<Rc<str>>,
+    ObjectPropertyAssertion, self, f, _ng, PTriple<Rc<str>>,
     {
         match &self.ope {
             ObjectPropertyExpression::ObjectProperty(op) => {
                 //ObjectPropertyAssertion( OP a1 a2 ) T(a1) T(OP) T(a2) .
-                let node_from:AsRefNamedOrBlankNode<_> = (&self.from.0).into();
-                let node_op:AsRefNamedNode<_> = (&op.0).into();
-                let node_to:AsRefTerm<_> = (&self.to.0).into();
+                let node_from:PNamedOrBlankNode<_> = (&self.from.0).into();
+                let node_op:PNamedNode<_> = (&op.0).into();
+                let node_to:PTerm<_> = (&self.to.0).into();
                 Ok(
                     triple! (
                         f,
@@ -551,9 +567,9 @@ render! {
             },
             ObjectPropertyExpression::InverseObjectProperty(op) => {
                 //ObjectPropertyAssertion( OP a1 a2 ) T(a1) T(OP) T(a2) .
-                let node_to:AsRefNamedOrBlankNode<_> = (&self.to.0).into();
-                let node_op:AsRefNamedNode<_> = (&op.0).into();
-                let node_from:AsRefTerm<_> = (&self.from.0).into();
+                let node_to:PNamedOrBlankNode<_> = (&self.to.0).into();
+                let node_op:PNamedNode<_> = (&op.0).into();
+                let node_from:PTerm<_> = (&self.from.0).into();
                 Ok(
                     triple! (
                         f,
@@ -574,9 +590,9 @@ render_to_vec! {
         //_:x owl:assertionProperty T(OPE) .
         //_:x owl:targetIndividual T(a2) .
         let bn = ng.bn();
-        let node_lt:AsRefTerm<_> = self.to.render(f, ng)?;
-        let node_ope:AsRefTerm<_> = self.ope.render(f, ng)?;
-        let node_a:AsRefTerm<_> = self.from.render(f, ng)?;
+        let node_lt:PTerm<_> = self.to.render(f, ng)?;
+        let node_ope:PTerm<_> = self.ope.render(f, ng)?;
+        let node_a:PTerm<_> = self.from.render(f, ng)?;
 
         Ok(
             triples_to_vec!(
@@ -598,9 +614,9 @@ render_to_vec! {
         //_:x owl:assertionProperty T(DPE) .
         //_:x owl:targetValue T(lt) .
         let bn = ng.bn();
-        let node_lt:AsRefTerm<_> = self.to.render(f, ng)?;
-        let node_dp:AsRefTerm<_> = (&self.dp.0).into();
-        let node_a:AsRefTerm<_> = self.from.render(f, ng)?;
+        let node_lt:PTerm<_> = self.to.render(f, ng)?;
+        let node_dp:PTerm<_> = (&self.dp.0).into();
+        let node_a:PTerm<_> = self.from.render(f, ng)?;
 
         Ok(
             triples_to_vec!(
@@ -614,11 +630,11 @@ render_to_vec! {
     }
 }
 
-fn members<R:Debug + Render<AsRefNamedOrBlankNode<Rc<str>>>,W:Write>
+fn members<R:Debug + Render<PNamedOrBlankNode<Rc<str>>>,W:Write>
     (f:&mut PrettyRdfXmlFormatter<Rc<str>, W>,
      ng:&mut NodeGenerator,
      ty_two:OWL,
-     ty_n:OWL, members:&Vec<R>) -> Result<Vec<AsRefTriple<Rc<str>>>,Error>
+     ty_n:OWL, members:&Vec<R>) -> Result<Vec<PTriple<Rc<str>>>,Error>
 {
     // DifferentIndividuals( a1 a2 ) T(a1) owl:differentFrom T(a2) .
     // DifferentIndividuals( a1 ... an ), n > 2 _:x rdf:type owl:AllDifferent .
@@ -626,8 +642,8 @@ fn members<R:Debug + Render<AsRefNamedOrBlankNode<Rc<str>>>,W:Write>
     match members.len() {
         1 => panic!("A members axiom needs at least two members, and I should know how to make errors"),
         2 => {
-            let a:AsRefNamedOrBlankNode<_> = members[0].render(f, ng)?;
-            let b:AsRefTerm<_> = members[1].render(f, ng)?.into();
+            let a:PNamedOrBlankNode<_> = members[0].render(f, ng)?;
+            let b:PTerm<_> = members[1].render(f, ng)?.into();
             Ok(
                 triples_to_vec! (
                     f, a, ng.nn(ty_two), b
@@ -636,7 +652,7 @@ fn members<R:Debug + Render<AsRefNamedOrBlankNode<Rc<str>>>,W:Write>
         }
         _ => {
             let bn = ng.bn();
-            let node_v:AsRefTerm<_> = members.render(f, ng)?;
+            let node_v:PTerm<_> = members.render(f, ng)?;
 
             Ok(
                 triples_to_vec!(
@@ -673,12 +689,12 @@ render_to_vec! {
 }
 
 render! {
-    DataPropertyAssertion, self, f, ng, AsRefTriple<Rc<str>>,
+    DataPropertyAssertion, self, f, ng, PTriple<Rc<str>>,
     {
         //T(a) T(DPE) T(lt) .
-        let node_dp:AsRefNamedNode<_> = (&self.dp.0).into();
-        let node_i:AsRefNamedOrBlankNode<_> = (&self.from.0).into();
-        let node_lit:AsRefTerm<_> = self.to.render(f, ng)?;
+        let node_dp:PNamedNode<_> = (&self.dp.0).into();
+        let node_i:PNamedOrBlankNode<_> = (&self.from.0).into();
+        let node_lit:PTerm<_> = self.to.render(f, ng)?;
         Ok(
             triple!(f, node_i, node_dp, node_lit)
         )
@@ -686,10 +702,10 @@ render! {
 }
 
 render! {
-    ClassAssertion, self, f, ng, AsRefTriple<Rc<str>>,
+    ClassAssertion, self, f, ng, PTriple<Rc<str>>,
     {   // T(a) rdf:type T(CE) .
-        let node_ce:AsRefTerm<_> = self.ce.render(f, ng)?;
-        let node_i:AsRefNamedOrBlankNode<_> = (&self.i.0).into();
+        let node_ce:PTerm<_> = self.ce.render(f, ng)?;
+        let node_i:PNamedOrBlankNode<_> = (&self.i.0).into();
 
         Ok(
             triple!(f, node_i, ng.nn(RDF::Type), node_ce)
@@ -727,7 +743,7 @@ render_to_node! {
                 Self::DataComplementOf(bdr) => {
                     //_:x rdf:type rdfs:Datatype .
                     //_:x owl:datatypeComplementOf T(DR) .
-                    let node_dr:AsRefTerm<Rc<str>> = bdr.render(f, ng)?;
+                    let node_dr:PTerm<Rc<str>> = bdr.render(f, ng)?;
                     let bn = ng.bn();
 
                     triples_to_node!(
@@ -754,8 +770,8 @@ render_to_node! {
                     //  ...
                     // _:yn Fn ltn .
                     let bn = ng.bn();
-                    let node_dt:AsRefTerm<_> = (&dt.0).into();
-                    let node_vft:AsRefTerm<_> = vfr.render(f, ng)?.into();
+                    let node_dt:PTerm<_> = (&dt.0).into();
+                    let node_vft:PTerm<_> = vfr.render(f, ng)?.into();
 
                     triples_to_node!(
                         f,
@@ -773,7 +789,7 @@ render_to_node! {
     FacetRestriction, self, f, ng,
     {
         let bn = ng.bn();
-        let l:AsRefTerm<_> = self.l.render(f, ng)?;
+        let l:PTerm<_> = self.l.render(f, ng)?;
 
         Ok(
             triples_to_node!(f, bn, ng.nn(&self.f), l)
@@ -782,9 +798,9 @@ render_to_node! {
 }
 
 render! {
-    DatatypeDefinition, self, f, ng, AsRefTriple<Rc<str>>,
+    DatatypeDefinition, self, f, ng, PTriple<Rc<str>>,
     {
-        let node_dr:AsRefTerm<Rc<str>> = self.range.render(f, ng)?;
+        let node_dr:PTerm<Rc<str>> = self.range.render(f, ng)?;
         Ok(
             triple!(f, &self.kind.0, ng.nn(OWL::EquivalentClass), node_dr)
         )
@@ -792,7 +808,7 @@ render! {
 }
 
 render! {
-    SubAnnotationPropertyOf, self, f, ng, AsRefTriple<Rc<str>>,
+    SubAnnotationPropertyOf, self, f, ng, PTriple<Rc<str>>,
     {
         Ok(
             triple!(f, &self.sub.0, ng.nn(RDFS::SubPropertyOf), &self.sup.0)
@@ -819,17 +835,17 @@ render_to_node! {
 }
 
 fn obj_cardinality<W:Write>(n:&u32, ope:&ObjectPropertyExpression, bce:&Box<ClassExpression>,
-                            unqual:AsRefNamedNode<Rc<str>>,
-                            qual:AsRefNamedNode<Rc<str>>,
+                            unqual:PNamedNode<Rc<str>>,
+                            qual:PNamedNode<Rc<str>>,
                             f:&mut PrettyRdfXmlFormatter<Rc<str>,W>,
-               ng:&mut NodeGenerator) -> Result<AsRefNamedOrBlankNode<Rc<str>>,Error> {
+               ng:&mut NodeGenerator) -> Result<PNamedOrBlankNode<Rc<str>>,Error> {
     //_:x rdf:type owl:Restriction .
     //_:x owl:onProperty T(OPE) .
     //_:x owl:maxCardinality "n"^^xsd:nonNegativeInteger ._:x
     let bn = ng.bn();
-    let node_ope:AsRefTerm<_> = ope.render(f, ng)?;
-    let node_n = AsRefTerm::Literal (
-        AsRefLiteral::Typed {
+    let node_ope:PTerm<_> = ope.render(f, ng)?;
+    let node_n = PTerm::Literal (
+        PLiteral::Typed {
             value: format!("{}", n).into(),
             datatype: ng.nn(XSD::NonNegativeInteger)
         }
@@ -848,7 +864,7 @@ fn obj_cardinality<W:Write>(n:&u32, ope:&ObjectPropertyExpression, bce:&Box<Clas
             return Ok(bn);
         }
     }
-    let node_ce:AsRefTerm<_> = bce.render(f, ng)?;
+    let node_ce:PTerm<_> = bce.render(f, ng)?;
 
     Ok(
         triples_to_node!(
@@ -860,23 +876,23 @@ fn obj_cardinality<W:Write>(n:&u32, ope:&ObjectPropertyExpression, bce:&Box<Clas
 }
 
 fn data_cardinality<W:Write>(n:&u32, dp:&DataProperty, dr: &DataRange,
-                             qual:AsRefNamedNode<Rc<str>>,
+                             qual:PNamedNode<Rc<str>>,
                              f:&mut PrettyRdfXmlFormatter<Rc<str>,W>,
-                             ng:&mut NodeGenerator) -> Result<AsRefNamedOrBlankNode<Rc<str>>,Error> {
+                             ng:&mut NodeGenerator) -> Result<PNamedOrBlankNode<Rc<str>>,Error> {
 
     // _:x rdf:type owl:Restriction .
     // _:x owl:onProperty T(DPE) .
     // _:x owl:maxQualifiedCardinality "n"^^xsd:nonNegativeInteger .
     // _:x owl:onDataRange T(DR) .
     let bn = ng.bn();
-    let node_dp:AsRefTerm<_> = (&dp.0).into();
-    let node_n = AsRefTerm::Literal (
-        AsRefLiteral::Typed {
+    let node_dp:PTerm<_> = (&dp.0).into();
+    let node_n = PTerm::Literal (
+        PLiteral::Typed {
             value: format!("{}", n).into(),
             datatype: ng.nn(XSD::NonNegativeInteger)
         }
     );
-    let node_dr:AsRefTerm<_> = dr.render(f, ng)?;
+    let node_dr:PTerm<_> = dr.render(f, ng)?;
 
     // Unqualified Only
     Ok(
@@ -919,7 +935,7 @@ render_to_node! {
                 Self::ObjectComplementOf(bce) => {
                     let bn = ng.bn();
 
-                    let node_ce:AsRefTerm<_> = (*bce).render(f, ng)?;
+                    let node_ce:PTerm<_> = (*bce).render(f, ng)?;
 
                     triples_to_node!(
                         f,
@@ -939,8 +955,8 @@ render_to_node! {
                 }
                 Self::ObjectSomeValuesFrom{ref bce, ref ope} => {
                     let bn = ng.bn();
-                    let node_ce:AsRefTerm<_> = bce.render(f, ng)?;
-                    let node_ope:AsRefTerm<_> = ope.render(f, ng)?;
+                    let node_ce:PTerm<_> = bce.render(f, ng)?;
+                    let node_ope:PTerm<_> = ope.render(f, ng)?;
 
                     triples_to_node!(
                         f,
@@ -951,8 +967,8 @@ render_to_node! {
                 }
                 Self::ObjectAllValuesFrom{ope, bce} => {
                     let bn = ng.bn();
-                    let node_ce:AsRefTerm<_> = bce.render(f, ng)?;
-                    let node_ope:AsRefTerm<_> = ope.render(f, ng)?;
+                    let node_ce:PTerm<_> = bce.render(f, ng)?;
+                    let node_ope:PTerm<_> = ope.render(f, ng)?;
 
                     triples_to_node!(
                         f,
@@ -967,7 +983,7 @@ render_to_node! {
                     // :x owl:hasValue T(a) .
                     let bn = ng.bn();
 
-                    let node_ope:AsRefTerm<_> = ope.render(f, ng)?;
+                    let node_ope:PTerm<_> = ope.render(f, ng)?;
 
                     triples_to_node!(
                         f,
@@ -1000,8 +1016,8 @@ render_to_node! {
                     //_:x owl:onProperty T(DPE) .
                     //_:x owl:someValuesFrom T(DR) .
                     let bn = ng.bn();
-                    let node_dpe:AsRefTerm<_> = (&dp.0).into();
-                    let node_dr:AsRefTerm<_> = dr.render(f, ng)?;
+                    let node_dpe:PTerm<_> = (&dp.0).into();
+                    let node_dr:PTerm<_> = dr.render(f, ng)?;
                     triples_to_node!{
                         f,
                         bn.clone(), ng.nn(RDF::Type), ng.nn(OWL::Restriction),
@@ -1011,8 +1027,8 @@ render_to_node! {
                 }
                 Self::DataAllValuesFrom{dp, dr} => {
                     let bn = ng.bn();
-                    let node_dpe:AsRefTerm<_> = (&dp.0).into();
-                    let node_dr:AsRefTerm<_> = dr.render(f, ng)?;
+                    let node_dpe:PTerm<_> = (&dp.0).into();
+                    let node_dr:PTerm<_> = dr.render(f, ng)?;
                     triples_to_node!{
                         f,
                         bn.clone(), ng.nn(RDF::Type), ng.nn(OWL::Restriction),
@@ -1025,8 +1041,8 @@ render_to_node! {
                     // _:x owl:onProperty T(DPE) .
                     // _:x owl:hasValue T(lt) .
                     let bn = ng.bn();
-                    let node_dp:AsRefTerm<_> = (&dp.0).into();
-                    let node_l:AsRefTerm<_> = l.render(f, ng)?;
+                    let node_dp:PTerm<_> = (&dp.0).into();
+                    let node_l:PTerm<_> = l.render(f, ng)?;
 
                     triples_to_node!(
                         f,
@@ -1049,16 +1065,16 @@ render_to_node! {
     }
 }
 
-fn nary<R:Render<AsRefNamedOrBlankNode<Rc<str>>>,W:Write>(f:&mut PrettyRdfXmlFormatter<Rc<str>, W>, ng:&mut NodeGenerator,
-                 entities:&Vec<R>, pred:AsRefNamedNode<Rc<str>>)
-                 -> Result<Vec<AsRefTriple<Rc<str>>>, Error>
+fn nary<R:Render<PNamedOrBlankNode<Rc<str>>>,W:Write>(f:&mut PrettyRdfXmlFormatter<Rc<str>, W>, ng:&mut NodeGenerator,
+                 entities:&Vec<R>, pred:PNamedNode<Rc<str>>)
+                 -> Result<Vec<PTriple<Rc<str>>>, Error>
 {
     let mut i = entities.iter();
     let first = i.next().ok_or_else(|| format_err!("N-ary Class axiom with no classes"))?;
-    let first:AsRefNamedOrBlankNode<_> = first.render(f, ng)?;
+    let first:PNamedOrBlankNode<_> = first.render(f, ng)?;
     let mut v = vec![];
     for c in i {
-        let eq:AsRefNamedOrBlankNode<_> = c.render(f, ng)?;
+        let eq:PNamedOrBlankNode<_> = c.render(f, ng)?;
         v.extend(
             triples_to_vec!(
                 f, first.clone(), pred.clone(), eq
@@ -1072,10 +1088,10 @@ render_to_vec! {
     HasKey, self, f, ng,
     {
         //T(CE) owl:hasKey T(SEQ OPE1 ... OPEm DPE1 ... DPEn ) .
-        let node_ce:AsRefNamedOrBlankNode<_> = self.ce.render(f, ng)?;
-        let node_vpe:AsRefTerm<_> = (&self.vpe).render(f, ng)?;
+        let node_ce:PNamedOrBlankNode<_> = self.ce.render(f, ng)?;
+        let node_vpe:PTerm<_> = (&self.vpe).render(f, ng)?;
         // let g:String = &self.vpe[0];
-        // let node_vpe:AsRefTerm<_> = g.render(f, ng)?;
+        // let node_vpe:PTerm<_> = g.render(f, ng)?;
 
         Ok(
             triples_to_vec!(
@@ -1109,7 +1125,7 @@ render_to_vec! {
 render_to_vec! {
     DisjointUnion, self, f, ng,
     {
-        let c:AsRefNamedOrBlankNode<Rc<str>> = (&self.0.0).into();
+        let c:PNamedOrBlankNode<Rc<str>> = (&self.0.0).into();
         let v = (&self.1).render(f, ng)?;
 
         Ok(
@@ -1130,7 +1146,7 @@ render_to_vec! {
 
 
 render! {
-    InverseObjectProperties, self, f, ng, AsRefTriple<Rc<str>>,
+    InverseObjectProperties, self, f, ng, PTriple<Rc<str>>,
     {
         Ok(
             triple!(
@@ -1149,7 +1165,7 @@ render_to_node! {
                     => (&op.0).into(),
                 Self::InverseObjectProperty(op)
                     => {
-                        let o:AsRefTerm<Rc<str>> = (&op.0).into();
+                        let o:PTerm<Rc<str>> = (&op.0).into();
 
                         triples_to_node!{
                             f, ng.bn(), ng.nn(OWL::InverseOf), o
@@ -1161,7 +1177,7 @@ render_to_node! {
 }
 
 render!{
-    SubObjectPropertyOf, self, f, ng, AsRefTriple<Rc<str>>,
+    SubObjectPropertyOf, self, f, ng, PTriple<Rc<str>>,
     {
         match &self.sub {
             SubObjectPropertyExpression::ObjectPropertyChain(v) => {
@@ -1170,7 +1186,7 @@ render!{
                 // expression.
                 //
                 // It makes little sense to me.
-                let s:AsRefNamedOrBlankNode<_> = (&self.sup).render(f, ng)?;
+                let s:PNamedOrBlankNode<_> = (&self.sup).render(f, ng)?;
                 let o = v.render(f, ng)?;
                 Ok(
                     triple!{
@@ -1179,8 +1195,8 @@ render!{
                 )
             }
             SubObjectPropertyExpression::ObjectPropertyExpression(e) =>{
-                let s:AsRefNamedOrBlankNode<_> = e.render(f, ng)?;
-                let o:AsRefTerm<_> = (&self.sup).render(f, ng)?;
+                let s:PNamedOrBlankNode<_> = e.render(f, ng)?;
+                let o:PTerm<_> = (&self.sup).render(f, ng)?;
                 Ok(
                     triple!{
                         f, s, ng.nn(RDFS::SubPropertyOf), o
@@ -1193,8 +1209,8 @@ render!{
 
 fn obj_prop_char<W:Write>(ob:&ObjectPropertyExpression, f:&mut PrettyRdfXmlFormatter<Rc<str>, W>,
                  ng:&mut NodeGenerator, chr:OWL)
-                 -> Result<AsRefTriple<Rc<str>>, Error> {
-    let s:AsRefNamedOrBlankNode<_> = ob.render(f, ng)?;
+                 -> Result<PTriple<Rc<str>>, Error> {
+    let s:PNamedOrBlankNode<_> = ob.render(f, ng)?;
 
     Ok(
         triple! {
@@ -1204,7 +1220,7 @@ fn obj_prop_char<W:Write>(ob:&ObjectPropertyExpression, f:&mut PrettyRdfXmlForma
 }
 
 render!{
-    TransitiveObjectProperty, self, f, ng, AsRefTriple<Rc<str>>,
+    TransitiveObjectProperty, self, f, ng, PTriple<Rc<str>>,
     {
        obj_prop_char(&self.0, f, ng, OWL::TransitiveProperty)
     }
@@ -1241,10 +1257,10 @@ render_triple!{
 }
 
 render! {
-    SubClassOf, self, f, ng, AsRefTriple<Rc<str>>,
+    SubClassOf, self, f, ng, PTriple<Rc<str>>,
     {
-        let sub:AsRefNamedOrBlankNode<_> = self.sub.render(f, ng)?;
-        let obj:AsRefTerm<_> = self.sup.render(f, ng)?;
+        let sub:PNamedOrBlankNode<_> = self.sub.render(f, ng)?;
+        let obj:PTerm<_> = self.sup.render(f, ng)?;
 
         Ok(
             triple!(f,
@@ -1676,12 +1692,12 @@ mod test {
         assert_round(include_str!("../../ont/owl-rdf/data-property-domain.owl"));
     }
 
-    // #[test]
-    // fn data_property_equivalent() {
-    //     assert_round(include_str!(
-    //         "../../ont/owl-rdf/data-property-equivalent.owl"
-    //     ));
-    // }
+    #[test]
+    fn data_property_equivalent() {
+        assert_round(include_str!(
+            "../../ont/owl-rdf/data-property-equivalent.owl"
+        ));
+    }
 
     // #[test]
     // fn data_property_functional() {
@@ -1707,12 +1723,12 @@ mod test {
         ));
     }
 
-    // #[test]
-    // fn equivalent_object_properties() {
-    //     assert_round(include_str!(
-    //         "../../ont/owl-rdf/equivalent-object-properties.owl"
-    //     ));
-    // }
+    #[test]
+    fn equivalent_object_properties() {
+        assert_round(include_str!(
+            "../../ont/owl-rdf/equivalent-object-properties.owl"
+        ));
+    }
 
     #[test]
     fn object_has_key() {
