@@ -471,12 +471,12 @@ impl Render<Annotatable<Rc<str>>> for Axiom {
                 // Axiom::SymmetricObjectProperty(ax) => ax.render(f, ng)?.into(),
                 // Axiom::AsymmetricObjectProperty(ax) => ax.render(f, ng)?.into(),
                 Axiom::TransitiveObjectProperty(ax) => ax.render(f, ng)?.into(),
-                // Axiom::SubDataPropertyOf(ax) => ax.render(f, ng)?.into(),
+                Axiom::SubDataPropertyOf(ax) => ax.render(f, ng)?.into(),
                 Axiom::EquivalentDataProperties(ax) => ax.render(f, ng)?.into(),
                 Axiom::DisjointDataProperties(ax) => ax.render(f, ng)?.into(),
                 Axiom::DataPropertyDomain(ax) => ax.render(f, ng)?.into(),
-                // Axiom::DataPropertyRange(ax) => ax.render(f, ng)?.into(),
-                // Axiom::FunctionalDataProperty(ax) => ax.render(f, ng)?.into(),
+                Axiom::DataPropertyRange(ax) => ax.render(f, ng)?.into(),
+                Axiom::FunctionalDataProperty(ax) => ax.render(f, ng)?.into(),
                 Axiom::DatatypeDefinition(ax) => ax.render(f, ng)?.into(),
                 Axiom::HasKey(ax) => ax.render(f, ng)?.into(),
                 Axiom::SameIndividual(ax) => ax.render(f, ng)?.into(),
@@ -493,6 +493,48 @@ impl Render<Annotatable<Rc<str>>> for Axiom {
                 Axiom::ClassAssertion(ax) => ax.render(f, ng)?.into(),
                 _ => todo!("TODO: {:?}", self)
             }
+        )
+    }
+}
+
+
+render! {
+    SubDataPropertyOf, self, f, ng, PTriple<Rc<str>>,
+    {
+        // T(DPE1) rdfs:subPropertyOf T(DPE2) .
+        let node_sub:PNamedOrBlankNode<_> = self.sub.render(f, ng)?;
+        let node_sup:PTerm<_> = self.sup.render(f, ng)?;
+
+        Ok(
+            triple!(f,
+                    node_sub, ng.nn(RDFS::SubPropertyOf), node_sup
+            )
+        )
+    }
+}
+
+render! {
+    DataPropertyRange, self, f, ng, PTriple<Rc<str>>,
+    {
+        let node_dp:PNamedOrBlankNode<_> = self.dp.render(f, ng)?;
+        let node_dr:PTerm<_> = self.dr.render(f, ng)?;
+
+        Ok(
+            triple!(f,
+                    node_dp, ng.nn(RDFS::Range), node_dr
+            )
+        )
+    }
+}
+
+render! {
+    FunctionalDataProperty, self, f, ng, PTriple<Rc<str>>,
+    {
+        let node_pr:PNamedOrBlankNode<_> = self.0.render(f, ng)?;
+        Ok(
+            triple!(f,
+                    node_pr, ng.nn(RDF::Type), ng.nn(OWL::FunctionalProperty)
+            )
         )
     }
 }
@@ -1699,22 +1741,22 @@ mod test {
         ));
     }
 
-    // #[test]
-    // fn data_property_functional() {
-    //     assert_round(include_str!(
-    //         "../../ont/owl-rdf/data-property-functional.owl"
-    //     ));
-    // }
+    #[test]
+    fn data_property_functional() {
+        assert_round(include_str!(
+            "../../ont/owl-rdf/data-property-functional.owl"
+        ));
+    }
 
-    // #[test]
-    // fn data_property_range() {
-    //     assert_round(include_str!("../../ont/owl-rdf/data-property-range.owl"));
-    // }
+    #[test]
+    fn data_property_range() {
+        assert_round(include_str!("../../ont/owl-rdf/data-property-range.owl"));
+    }
 
-    // #[test]
-    // fn data_property_sub() {
-    //     assert_round(include_str!("../../ont/owl-rdf/data-property-sub.owl"));
-    // }
+    #[test]
+    fn data_property_sub() {
+        assert_round(include_str!("../../ont/owl-rdf/data-property-sub.owl"));
+    }
 
     #[test]
     fn disjoint_object_properties() {
