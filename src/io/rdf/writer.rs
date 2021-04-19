@@ -359,7 +359,6 @@ impl Render<()> for AnnotatedAxiom {
                     }
                     _ => {
                         ()
-                        // todo!()
                     }
                 }
             }
@@ -462,14 +461,14 @@ impl Render<Annotatable<Rc<str>>> for Axiom {
                 Axiom::EquivalentObjectProperties(ax) => ax.render(f, ng)?.into(),
                 Axiom::DisjointObjectProperties(ax) => ax.render(f, ng)?.into(),
                 Axiom::InverseObjectProperties(ax) => ax.render(f, ng)?.into(),
-                // Axiom::ObjectPropertyDomain(ax) => ax.render(f, ng)?.into(),
-                // Axiom::ObjectPropertyRange(ax) => ax.render(f, ng)?.into(),
-                // Axiom::FunctionalObjectProperty(ax) => ax.render(f, ng)?.into(),
-                // Axiom::InverseFunctionalObjectProperty(ax) => ax.render(f, ng)?.into(),
-                // Axiom::ReflexiveObjectProperty(ax) => ax.render(f, ng)?.into(),
-                // Axiom::IrreflexiveObjectProperty(ax) => ax.render(f, ng)?.into(),
-                // Axiom::SymmetricObjectProperty(ax) => ax.render(f, ng)?.into(),
-                // Axiom::AsymmetricObjectProperty(ax) => ax.render(f, ng)?.into(),
+                Axiom::ObjectPropertyDomain(ax) => ax.render(f, ng)?.into(),
+                Axiom::ObjectPropertyRange(ax) => ax.render(f, ng)?.into(),
+                Axiom::FunctionalObjectProperty(ax) => ax.render(f, ng)?.into(),
+                Axiom::InverseFunctionalObjectProperty(ax) => ax.render(f, ng)?.into(),
+                Axiom::ReflexiveObjectProperty(ax) => ax.render(f, ng)?.into(),
+                Axiom::IrreflexiveObjectProperty(ax) => ax.render(f, ng)?.into(),
+                Axiom::SymmetricObjectProperty(ax) => ax.render(f, ng)?.into(),
+                Axiom::AsymmetricObjectProperty(ax) => ax.render(f, ng)?.into(),
                 Axiom::TransitiveObjectProperty(ax) => ax.render(f, ng)?.into(),
                 Axiom::SubDataPropertyOf(ax) => ax.render(f, ng)?.into(),
                 Axiom::EquivalentDataProperties(ax) => ax.render(f, ng)?.into(),
@@ -481,7 +480,6 @@ impl Render<Annotatable<Rc<str>>> for Axiom {
                 Axiom::HasKey(ax) => ax.render(f, ng)?.into(),
                 Axiom::SameIndividual(ax) => ax.render(f, ng)?.into(),
                 Axiom::DifferentIndividuals(ax) => ax.render(f, ng)?.into(),
-                // Axiom::ClassAssertion(ax) => ax.render(f, ng)?.into(),
                 Axiom::ObjectPropertyAssertion(ax) => ax.render(f, ng)?.into(),
                 Axiom::NegativeObjectPropertyAssertion(ax) => ax.render(f, ng)?.into(),
                 Axiom::DataPropertyAssertion(ax) => ax.render(f, ng)?.into(),
@@ -491,9 +489,79 @@ impl Render<Annotatable<Rc<str>>> for Axiom {
                 Axiom::AnnotationPropertyDomain(ax) => ax.render(f, ng)?.into(),
                 Axiom::AnnotationPropertyRange(ax) => ax.render(f, ng)?.into(),
                 Axiom::ClassAssertion(ax) => ax.render(f, ng)?.into(),
-                _ => todo!("TODO: {:?}", self)
             }
         )
+    }
+}
+
+render!{
+    ObjectPropertyRange, self, f, ng, PTriple<Rc<str>>,
+    {
+        let node_ope:PNamedOrBlankNode<_> = self.ope.render(f, ng)?;
+        let node_ce:PTerm<_> = self.ce.render(f, ng)?;
+
+        Ok(
+            triple!(f,
+                    node_ope, ng.nn(RDFS::Range), node_ce
+            )
+        )
+    }
+}
+
+render!{
+    ObjectPropertyDomain, self, f, ng, PTriple<Rc<str>>,
+    {
+        let node_ope:PNamedOrBlankNode<_> = self.ope.render(f, ng)?;
+        let node_ce:PTerm<_> = self.ce.render(f, ng)?;
+
+        Ok(
+            triple!(f,
+                    node_ope, ng.nn(RDFS::Domain), node_ce
+            )
+        )
+    }
+}
+
+render!{
+    IrreflexiveObjectProperty, self, f, ng, PTriple<Rc<str>>,
+    {
+        obj_prop_char(&self.0, f, ng, OWL::IrreflexiveProperty)
+    }
+}
+
+render!{
+    InverseFunctionalObjectProperty, self, f, ng, PTriple<Rc<str>>,
+    {
+        obj_prop_char(&self.0, f, ng, OWL::InverseFunctionalProperty)
+    }
+}
+
+render!{
+    FunctionalObjectProperty, self, f, ng, PTriple<Rc<str>>,
+    {
+        obj_prop_char(&self.0, f, ng, OWL::FunctionalProperty)
+    }
+}
+
+
+render!{
+    ReflexiveObjectProperty, self, f, ng, PTriple<Rc<str>>,
+    {
+        obj_prop_char(&self.0, f, ng, OWL::ReflexiveProperty)
+    }
+}
+
+render!{
+    SymmetricObjectProperty, self, f, ng, PTriple<Rc<str>>,
+    {
+        obj_prop_char(&self.0, f, ng, OWL::SymmetricProperty)
+    }
+}
+
+render!{
+    AsymmetricObjectProperty, self, f, ng, PTriple<Rc<str>>,
+    {
+       obj_prop_char(&self.0, f, ng, OWL::AsymmetricProperty)
     }
 }
 
@@ -1782,61 +1850,60 @@ mod test {
         assert_round(include_str!("../../ont/owl-rdf/multi-has-key.owl"));
     }
 
-    // #[test]
-    // fn object_property_asymmetric() {
-    //     assert_round(include_str!(
-    //         "../../ont/owl-rdf/object-property-asymmetric.owl"
-    //     ));
-    // }
+    #[test]
+    fn object_property_asymmetric() {
+        assert_round(include_str!(
+            "../../ont/owl-rdf/object-property-asymmetric.owl"
+        ));
+    }
 
-    // #[test]
-    // fn object_property_domain() {
-    //     assert_round(include_str!("../../ont/owl-rdf/object-property-domain.owl"));
-    // }
+    #[test]
+    fn object_property_domain() {
+        assert_round(include_str!("../../ont/owl-rdf/object-property-domain.owl"));
+    }
 
-    // #[test]
-    // fn object_property_functional() {
-    //     assert_round(include_str!(
-    //         "../../ont/owl-rdf/object-property-functional.owl"
-    //     ));
-    // }
+    #[test]
+    fn object_property_functional() {
+        assert_round(include_str!(
+            "../../ont/owl-rdf/object-property-functional.owl"
+        ));
+    }
 
-    // #[test]
-    // fn object_property_inverse_functional() {
-    //     assert_round(include_str!(
-    //         "../../ont/owl-rdf/object-property-inverse-functional.owl"
-    //     ));
-    // }
+    #[test]
+    fn object_property_inverse_functional() {
+        assert_round(include_str!(
+            "../../ont/owl-rdf/object-property-inverse-functional.owl"
+        ));
+    }
 
-    // #[test]
-    // fn object_property_irreflexive() {
-    //     assert_round(include_str!(
-    //         "../../ont/owl-rdf/object-property-irreflexive.owl"
-    //     ));
-    // }
+    #[test]
+    fn object_property_irreflexive() {
+        assert_round(include_str!(
+            "../../ont/owl-rdf/object-property-irreflexive.owl"
+        ));
+    }
 
-    // #[test]
-    // fn object_property_range() {
-    //     assert_round(include_str!("../../ont/owl-rdf/object-property-range.owl"));
-    // }
+    #[test]
+    fn object_property_range() {
+        assert_round(include_str!("../../ont/owl-rdf/object-property-range.owl"));
+    }
 
-    // #[test]
-    // fn object_property_reflexive() {
-    //     assert_round(include_str!(
-    //         "../../ont/owl-rdf/object-property-reflexive.owl"
-    //     ));
-    // }
+    #[test]
+    fn object_property_reflexive() {
+        assert_round(include_str!(
+            "../../ont/owl-rdf/object-property-reflexive.owl"
+        ));
+    }
 
-    // #[test]
-    // fn object_property_symmetric() {
-    //     assert_round(include_str!(
-    //         "../../ont/owl-rdf/object-property-symmetric.owl"
-    //     ));
-    // }
+    #[test]
+    fn object_property_symmetric() {
+        assert_round(include_str!(
+            "../../ont/owl-rdf/object-property-symmetric.owl"
+        ));
+    }
 
     // #[test]
     // fn family() {
     //     assert_round(include_str!("../../ont/owl-rdf/family.owl"));
     // }
-
 }
