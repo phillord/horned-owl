@@ -4,7 +4,6 @@
      xmlns:family-other="http://homepages.cs.ncl.ac.uk/phillip.lord/scratch/family-other.owl##"
      xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
      xmlns:owl="http://www.w3.org/2002/07/owl#"
-     xmlns:tawny="http://www.purl.org/ontolink/tawny#"
      xmlns:xml="http://www.w3.org/XML/1998/namespace"
      xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
      xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"
@@ -628,7 +627,7 @@
     <!-- http://example.com/owl/families/Jack -->
 
     <owl:NamedIndividual rdf:about="http://example.com/owl/families/Jack">
-        <rdf:type rdf:resource="http://example.com/owl/families/Person"/>
+      <rdf:type rdf:resource="http://example.com/owl/families/Person"/>
         <rdf:type>
             <owl:Class>
                 <owl:complementOf rdf:resource="http://example.com/owl/families/Parent"/>

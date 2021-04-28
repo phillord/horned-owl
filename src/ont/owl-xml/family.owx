@@ -1,128 +1,102 @@
 <?xml version="1.0"?>
 <Ontology xmlns="http://www.w3.org/2002/07/owl#"
      xml:base="http://example.com/owl/families/"
-     xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"
-     xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
      xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
      xmlns:xml="http://www.w3.org/XML/1998/namespace"
+     xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+     xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"
      ontologyIRI="http://example.com/owl/families/">
-    <Prefix name="family" IRI="http://example.com/owl/families/#"/>
-    <Prefix name="family-other" IRI="http://homepages.cs.ncl.ac.uk/phillip.lord/scratch/family-other.owl##"/>
-    <Prefix name="rdf" IRI="http://www.w3.org/1999/02/22-rdf-syntax-ns#"/>
-    <Prefix name="rdfs" IRI="http://www.w3.org/2000/01/rdf-schema#"/>
-    <Prefix name="xsd" IRI="http://www.w3.org/2001/XMLSchema#"/>
     <Prefix name="owl" IRI="http://www.w3.org/2002/07/owl#"/>
+    <Prefix name="rdf" IRI="http://www.w3.org/1999/02/22-rdf-syntax-ns#"/>
+    <Prefix name="xml" IRI="http://www.w3.org/XML/1998/namespace"/>
+    <Prefix name="xsd" IRI="http://www.w3.org/2001/XMLSchema#"/>
+    <Prefix name="rdfs" IRI="http://www.w3.org/2000/01/rdf-schema#"/>
+    <Prefix name="family" IRI="http://example.com/owl/families/"/>
+    <Prefix name="family-other" IRI="http://homepages.cs.ncl.ac.uk/phillip.lord/scratch/family-other.owl##"/>
     <Import>http://homepages.cs.ncl.ac.uk/phillip.lord/scratch/family-other.owl#</Import>
-    <Declaration>
-        <Class IRI="Adult"/>
-    </Declaration>
-    <Declaration>
-        <Class IRI="ChildlessPerson"/>
-    </Declaration>
-    <Declaration>
-        <Class IRI="Dead"/>
-    </Declaration>
-    <Declaration>
-        <Class IRI="Father"/>
-    </Declaration>
-    <Declaration>
-        <Class IRI="Female"/>
-    </Declaration>
-    <Declaration>
-        <Class IRI="Grandfather"/>
-    </Declaration>
     <Declaration>
         <Class IRI="HappyPerson"/>
     </Declaration>
     <Declaration>
-        <Class IRI="Human"/>
-    </Declaration>
-    <Declaration>
-        <Class IRI="JohnsChildren"/>
-    </Declaration>
-    <Declaration>
-        <Class IRI="Man"/>
-    </Declaration>
-    <Declaration>
-        <Class IRI="Mother"/>
-    </Declaration>
-    <Declaration>
-        <Class IRI="MyBirthdayGuests"/>
-    </Declaration>
-    <Declaration>
-        <Class IRI="NarcisticPerson"/>
-    </Declaration>
-    <Declaration>
-        <Class IRI="Orphan"/>
-    </Declaration>
-    <Declaration>
-        <Class IRI="Parent"/>
-    </Declaration>
-    <Declaration>
-        <Class IRI="Person"/>
-    </Declaration>
-    <Declaration>
-        <Class IRI="SocialRole"/>
-    </Declaration>
-    <Declaration>
-        <Class IRI="Teenager"/>
-    </Declaration>
-    <Declaration>
-        <Class IRI="Woman"/>
-    </Declaration>
-    <Declaration>
-        <Class IRI="YoungChild"/>
-    </Declaration>
-    <Declaration>
-        <ObjectProperty IRI="hasAncestor"/>
-    </Declaration>
-    <Declaration>
-        <ObjectProperty IRI="hasBrother"/>
-    </Declaration>
-    <Declaration>
-        <ObjectProperty IRI="hasChild"/>
-    </Declaration>
-    <Declaration>
-        <ObjectProperty IRI="hasDaughter"/>
-    </Declaration>
-    <Declaration>
-        <ObjectProperty IRI="hasFather"/>
-    </Declaration>
-    <Declaration>
-        <ObjectProperty IRI="hasGrandparent"/>
-    </Declaration>
-    <Declaration>
-        <ObjectProperty IRI="hasHusband"/>
-    </Declaration>
-    <Declaration>
-        <ObjectProperty IRI="hasParent"/>
-    </Declaration>
-    <Declaration>
-        <ObjectProperty IRI="hasRelative"/>
+        <Class IRI="Adult"/>
     </Declaration>
     <Declaration>
         <ObjectProperty IRI="hasSon"/>
     </Declaration>
     <Declaration>
-        <ObjectProperty IRI="hasSpouse"/>
+        <Class IRI="Parent"/>
     </Declaration>
     <Declaration>
-        <ObjectProperty IRI="hasUncle"/>
+        <NamedIndividual IRI="Jim"/>
     </Declaration>
     <Declaration>
-        <ObjectProperty IRI="hasWife"/>
-    </Declaration>
-    <Declaration>
-        <ObjectProperty IRI="loves"/>
-    </Declaration>
-    <Declaration>
-        <ObjectProperty IRI="parentOf"/>
+        <Class IRI="NarcisticPerson"/>
     </Declaration>
     <Declaration>
         <DataProperty IRI="hasAge"/>
     </Declaration>
     <Declaration>
+        <ObjectProperty IRI="hasRelative"/>
+    </Declaration>
+    <Declaration>
+        <NamedIndividual IRI="Jack"/>
+    </Declaration>
+    <Declaration>
+        <ObjectProperty IRI="hasBrother"/>
+    </Declaration>
+    <Declaration>
+        <ObjectProperty IRI="hasUncle"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="Dead"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="Teenager"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="Person"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="Man"/>
+    </Declaration>
+    <Declaration>
+        <ObjectProperty IRI="hasFather"/>
+    </Declaration>
+    <Declaration>
+        <ObjectProperty IRI="hasDaughter"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="Woman"/>
+    </Declaration>
+    <Declaration>
+        <NamedIndividual IRI="Susan"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="Human"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="Father"/>
+    </Declaration>
+    <Declaration>
+        <ObjectProperty IRI="hasHusband"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="Female"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="ChildlessPerson"/>
+    </Declaration>
+    <Declaration>
+        <NamedIndividual IRI="John"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="Mother"/>
+    </Declaration>
+    <Declaration>
         <DataProperty IRI="hasSSN"/>
+    </Declaration>
+    <Declaration>
+        <ObjectProperty IRI="parentOf"/>
     </Declaration>
     <Declaration>
         <NamedIndividual IRI="Bill"/>
@@ -131,41 +105,68 @@
         <NamedIndividual IRI="Father"/>
     </Declaration>
     <Declaration>
-        <NamedIndividual IRI="Jack"/>
-    </Declaration>
-    <Declaration>
-        <NamedIndividual IRI="James"/>
-    </Declaration>
-    <Declaration>
-        <NamedIndividual IRI="Jim"/>
-    </Declaration>
-    <Declaration>
-        <NamedIndividual IRI="John"/>
+        <Class IRI="YoungChild"/>
     </Declaration>
     <Declaration>
         <NamedIndividual IRI="Mary"/>
     </Declaration>
     <Declaration>
-        <NamedIndividual IRI="Meg"/>
-    </Declaration>
-    <Declaration>
-        <NamedIndividual IRI="Susan"/>
-    </Declaration>
-    <Declaration>
-        <Datatype IRI="majorAge"/>
-    </Declaration>
-    <Declaration>
         <Datatype IRI="minorAge"/>
+    </Declaration>
+    <Declaration>
+        <ObjectProperty IRI="hasWife"/>
+    </Declaration>
+    <Declaration>
+        <ObjectProperty IRI="hasSpouse"/>
+    </Declaration>
+    <Declaration>
+        <Datatype IRI="toddlerAge"/>
     </Declaration>
     <Declaration>
         <Datatype IRI="personAge"/>
     </Declaration>
     <Declaration>
-        <Datatype IRI="toddlerAge"/>
+        <ObjectProperty IRI="hasGrandparent"/>
+    </Declaration>
+    <Declaration>
+        <NamedIndividual IRI="Meg"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="Grandfather"/>
+    </Declaration>
+    <Declaration>
+        <ObjectProperty IRI="loves"/>
+    </Declaration>
+    <Declaration>
+        <NamedIndividual IRI="James"/>
+    </Declaration>
+    <Declaration>
+        <Datatype IRI="majorAge"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="MyBirthdayGuests"/>
+    </Declaration>
+    <Declaration>
+        <ObjectProperty IRI="hasParent"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="JohnsChildren"/>
+    </Declaration>
+    <Declaration>
+        <ObjectProperty IRI="hasAncestor"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="Orphan"/>
+    </Declaration>
+    <Declaration>
+        <ObjectProperty IRI="hasChild"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="SocialRole"/>
     </Declaration>
     <EquivalentClasses>
         <Class IRI="Adult"/>
-        <Class abbreviatedIRI="family-other:Grownup"/>
+        <Class IRI="http://homepages.cs.ncl.ac.uk/phillip.lord/scratch/family-other.owl#Grownup"/>
     </EquivalentClasses>
     <EquivalentClasses>
         <Class IRI="ChildlessPerson"/>
@@ -210,9 +211,9 @@
     <EquivalentClasses>
         <Class IRI="MyBirthdayGuests"/>
         <ObjectOneOf>
+            <NamedIndividual IRI="Bill"/>
             <NamedIndividual IRI="John"/>
             <NamedIndividual IRI="Mary"/>
-            <NamedIndividual IRI="Bill"/>
         </ObjectOneOf>
     </EquivalentClasses>
     <EquivalentClasses>
@@ -275,7 +276,7 @@
     <SubClassOf>
         <Annotation>
             <AnnotationProperty abbreviatedIRI="rdfs:comment"/>
-            <Literal xml:lang="en">States that every man is a person</Literal>
+            <Literal xml:lang="en" datatypeIRI="http://www.w3.org/1999/02/22-rdf-syntax-ns#PlainLiteral">States that every man is a person</Literal>
         </Annotation>
         <Class IRI="Man"/>
         <Class IRI="Person"/>
@@ -304,11 +305,19 @@
         <Class IRI="Person"/>
     </SubClassOf>
     <SubClassOf>
+        <Annotation>
+            <AnnotationProperty abbreviatedIRI="rdfs:comment"/>
+            <Literal xml:lang="en" datatypeIRI="http://www.w3.org/1999/02/22-rdf-syntax-ns#PlainLiteral">States that every woman in a person</Literal>
+        </Annotation>
+        <Class IRI="Woman"/>
+        <Class IRI="Person"/>
+    </SubClassOf>
+    <SubClassOf>
         <ObjectIntersectionOf>
             <Class IRI="Female"/>
             <ObjectOneOf>
-                <NamedIndividual IRI="Mary"/>
                 <NamedIndividual IRI="Bill"/>
+                <NamedIndividual IRI="Mary"/>
                 <NamedIndividual IRI="Meg"/>
             </ObjectOneOf>
         </ObjectIntersectionOf>
@@ -386,62 +395,20 @@
         <NamedIndividual IRI="Mary"/>
     </ClassAssertion>
     <SameIndividual>
-        <NamedIndividual IRI="Bill"/>
-    </SameIndividual>
-    <SameIndividual>
-        <NamedIndividual IRI="Father"/>
-    </SameIndividual>
-    <SameIndividual>
-        <NamedIndividual IRI="Jack"/>
-    </SameIndividual>
-    <SameIndividual>
         <NamedIndividual IRI="James"/>
         <NamedIndividual IRI="Jim"/>
     </SameIndividual>
     <SameIndividual>
-        <NamedIndividual IRI="Jim"/>
-    </SameIndividual>
-    <SameIndividual>
         <NamedIndividual IRI="John"/>
-        <NamedIndividual abbreviatedIRI="family-other:JohnBrown"/>
+        <NamedIndividual IRI="http://homepages.cs.ncl.ac.uk/phillip.lord/scratch/family-other.owl#JohnBrown"/>
     </SameIndividual>
     <SameIndividual>
         <NamedIndividual IRI="Mary"/>
-        <NamedIndividual abbreviatedIRI="family-other:MaryBrown"/>
+        <NamedIndividual IRI="http://homepages.cs.ncl.ac.uk/phillip.lord/scratch/family-other.owl#MaryBrown"/>
     </SameIndividual>
-    <SameIndividual>
-        <NamedIndividual IRI="Meg"/>
-    </SameIndividual>
-    <SameIndividual>
-        <NamedIndividual IRI="Susan"/>
-    </SameIndividual>
-    <DifferentIndividuals>
-        <NamedIndividual IRI="Bill"/>
-    </DifferentIndividuals>
     <DifferentIndividuals>
         <NamedIndividual IRI="Bill"/>
         <NamedIndividual IRI="John"/>
-    </DifferentIndividuals>
-    <DifferentIndividuals>
-        <NamedIndividual IRI="Father"/>
-    </DifferentIndividuals>
-    <DifferentIndividuals>
-        <NamedIndividual IRI="Jack"/>
-    </DifferentIndividuals>
-    <DifferentIndividuals>
-        <NamedIndividual IRI="James"/>
-    </DifferentIndividuals>
-    <DifferentIndividuals>
-        <NamedIndividual IRI="Jim"/>
-    </DifferentIndividuals>
-    <DifferentIndividuals>
-        <NamedIndividual IRI="Mary"/>
-    </DifferentIndividuals>
-    <DifferentIndividuals>
-        <NamedIndividual IRI="Meg"/>
-    </DifferentIndividuals>
-    <DifferentIndividuals>
-        <NamedIndividual IRI="Susan"/>
     </DifferentIndividuals>
     <ObjectPropertyAssertion>
         <ObjectProperty IRI="hasWife"/>
@@ -469,8 +436,8 @@
         <Literal datatypeIRI="http://www.w3.org/2001/XMLSchema#integer">53</Literal>
     </NegativeDataPropertyAssertion>
     <EquivalentObjectProperties>
-        <ObjectProperty abbreviatedIRI="family-other:child"/>
         <ObjectProperty IRI="hasChild"/>
+        <ObjectProperty IRI="http://homepages.cs.ncl.ac.uk/phillip.lord/scratch/family-other.owl#child"/>
     </EquivalentObjectProperties>
     <SubObjectPropertyOf>
         <ObjectProperty IRI="hasFather"/>
@@ -481,8 +448,8 @@
         <ObjectProperty IRI="hasSpouse"/>
     </SubObjectPropertyOf>
     <InverseObjectProperties>
-        <ObjectProperty IRI="hasParent"/>
         <ObjectProperty IRI="hasChild"/>
+        <ObjectProperty IRI="hasParent"/>
     </InverseObjectProperties>
     <FunctionalObjectProperty>
         <ObjectProperty IRI="hasHusband"/>
@@ -537,7 +504,7 @@
     </SubObjectPropertyOf>
     <EquivalentDataProperties>
         <DataProperty IRI="hasAge"/>
-        <DataProperty abbreviatedIRI="family-other:age"/>
+        <DataProperty IRI="http://homepages.cs.ncl.ac.uk/phillip.lord/scratch/family-other.owl#age"/>
     </EquivalentDataProperties>
     <FunctionalDataProperty>
         <DataProperty IRI="hasAge"/>
@@ -557,7 +524,7 @@
     <AnnotationAssertion>
         <AnnotationProperty abbreviatedIRI="rdfs:comment"/>
         <IRI>Person</IRI>
-        <Literal xml:lang="en">Represents the set of all people.</Literal>
+        <Literal xml:lang="en" datatypeIRI="http://www.w3.org/1999/02/22-rdf-syntax-ns#PlainLiteral">Represents the set of all people.</Literal>
     </AnnotationAssertion>
     <DatatypeDefinition>
         <Datatype IRI="majorAge"/>
@@ -600,3 +567,8 @@
         </DataOneOf>
     </DatatypeDefinition>
 </Ontology>
+
+
+
+<!-- Generated by the OWL API (version 4.2.8.20170104-2310) https://github.com/owlcs/owlapi -->
+

@@ -4,15 +4,11 @@
      xmlns:family-other="http://homepages.cs.ncl.ac.uk/phillip.lord/scratch/family-other.owl#"
      xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
      xmlns:owl="http://www.w3.org/2002/07/owl#"
-     xmlns:tawny="http://www.purl.org/ontolink/tawny#"
      xmlns:xml="http://www.w3.org/XML/1998/namespace"
      xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
      xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"
      xmlns:family="http://example.com/owl/families/#">
-    <owl:Ontology rdf:about="http://homepages.cs.ncl.ac.uk/phillip.lord/scratch/family-other.owl#">
-        <owl:imports rdf:resource="http://www.purl.org/ontolink/tawny"/>
-        <tawny:name xml:lang="en">family-other</tawny:name>
-    </owl:Ontology>
+    <owl:Ontology rdf:about="http://homepages.cs.ncl.ac.uk/phillip.lord/scratch/family-other.owl#"/>
     
 
 
@@ -29,9 +25,7 @@
 
     <!-- http://homepages.cs.ncl.ac.uk/phillip.lord/scratch/family-other.owl#child -->
 
-    <owl:ObjectProperty rdf:about="http://homepages.cs.ncl.ac.uk/phillip.lord/scratch/family-other.owl#child">
-        <tawny:name xml:lang="en">child</tawny:name>
-    </owl:ObjectProperty>
+    <owl:ObjectProperty rdf:about="http://homepages.cs.ncl.ac.uk/phillip.lord/scratch/family-other.owl#child"/>
     
 
 
@@ -48,9 +42,7 @@
 
     <!-- http://homepages.cs.ncl.ac.uk/phillip.lord/scratch/family-other.owl#age -->
 
-    <owl:DatatypeProperty rdf:about="http://homepages.cs.ncl.ac.uk/phillip.lord/scratch/family-other.owl#age">
-        <tawny:name xml:lang="en">age</tawny:name>
-    </owl:DatatypeProperty>
+    <owl:DatatypeProperty rdf:about="http://homepages.cs.ncl.ac.uk/phillip.lord/scratch/family-other.owl#age"/>
     
 
 
@@ -67,9 +59,7 @@
 
     <!-- http://homepages.cs.ncl.ac.uk/phillip.lord/scratch/family-other.owl#Grownup -->
 
-    <owl:Class rdf:about="http://homepages.cs.ncl.ac.uk/phillip.lord/scratch/family-other.owl#Grownup">
-        <tawny:name xml:lang="en">Grownup</tawny:name>
-    </owl:Class>
+    <owl:Class rdf:about="http://homepages.cs.ncl.ac.uk/phillip.lord/scratch/family-other.owl#Grownup"/>
     
 
 
@@ -86,17 +76,13 @@
 
     <!-- http://homepages.cs.ncl.ac.uk/phillip.lord/scratch/family-other.owl#JohnBrown -->
 
-    <owl:NamedIndividual rdf:about="http://homepages.cs.ncl.ac.uk/phillip.lord/scratch/family-other.owl#JohnBrown">
-        <tawny:name xml:lang="en">JohnBrown</tawny:name>
-    </owl:NamedIndividual>
+    <owl:NamedIndividual rdf:about="http://homepages.cs.ncl.ac.uk/phillip.lord/scratch/family-other.owl#JohnBrown"/>
     
 
 
     <!-- http://homepages.cs.ncl.ac.uk/phillip.lord/scratch/family-other.owl#MaryBrown -->
 
-    <owl:NamedIndividual rdf:about="http://homepages.cs.ncl.ac.uk/phillip.lord/scratch/family-other.owl#MaryBrown">
-        <tawny:name xml:lang="en">MaryBrown</tawny:name>
-    </owl:NamedIndividual>
+    <owl:NamedIndividual rdf:about="http://homepages.cs.ncl.ac.uk/phillip.lord/scratch/family-other.owl#MaryBrown"/>
 </rdf:RDF>
 
 
