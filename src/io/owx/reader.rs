@@ -393,7 +393,7 @@ fn axiom_from_start<R: BufRead>(
         }
         .into(),
         b"EquivalentClasses" => {
-            dbg!(EquivalentClasses(from_start_to_end(r, e, b"EquivalentClasses")?).into())
+            EquivalentClasses(from_start_to_end(r, e, b"EquivalentClasses")?).into()
         }
         b"DisjointClasses" => DisjointClasses(from_start_to_end(r, e, b"DisjointClasses")?).into(),
         b"DisjointUnion" => DisjointUnion(from_start(r, e)?, till_end(r, b"DisjointUnion")?).into(),
@@ -535,7 +535,6 @@ fn from_start_to_end<R: BufRead, T: FromStart + std::fmt::Debug>(
 ) -> Result<Vec<T>, Error> {
     let mut v = Vec::new();
     v.push(from_start(r, e)?);
-    dbg!(&v);
     till_end_with(r, end_tag, v)
 }
 
@@ -557,12 +556,10 @@ fn till_end_with<R: BufRead, T: FromStart + std::fmt::Debug>(
             (ref ns, Event::Empty(ref e)) if is_owl(ns) => {
                 let op = from_start(r, e)?;
                 operands.push(op);
-                dbg!{&operands};
             }
             (ref ns, Event::Start(ref e)) if is_owl(ns) => {
                 let op = from_start(r, e)?;
                 operands.push(op);
-                dbg!(&operands);
             }
             (ref ns, Event::End(ref e)) if is_owl_name(ns, e, end_tag) => {
                 return Ok(operands);
@@ -1876,6 +1873,36 @@ pub mod test {
 
         let di = ont.i().different_individuals().next().unwrap();
         assert_eq!(2, di.0.len());
+    }
+
+    #[test]
+    fn type_complex() {
+        let ont_s = include_str!("../../ont/owl-xml/type-complex.owx");
+        let (ont, _) = read_ok(&mut ont_s.as_bytes());
+
+        assert_eq!(1, ont.i().class_assertion().count());
+        let ca = ont.i().class_assertion().next().unwrap();
+        assert!{
+            matches!{
+                &ca.ce, ClassExpression::ObjectComplementOf(_c)
+            }
+        }
+    }
+
+    #[test]
+    fn type_individual_datatype() {
+        let ont_s = include_str!("../../ont/owl-xml/type-individual-datatype.owx");
+        let (ont, _) = read_ok(&mut ont_s.as_bytes());
+
+        assert_eq!(1, ont.i().class_assertion().count());
+        let ca = ont.i().class_assertion().next().unwrap();
+        dbg!(&ont);
+
+        assert!{
+            matches!{
+                &ca.ce, ClassExpression::ObjectMinCardinality{n:_, ope:_, bce:_}
+            }
+        };
     }
 
     #[test]

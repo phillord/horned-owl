@@ -583,7 +583,9 @@ impl<'a> OntologyParser<'a> {
                         Term::OWL(VOWL::DatatypeProperty) => Some(DataProperty(s.clone()).into()),
                         Term::OWL(VOWL::NamedIndividual) => Some(NamedIndividual(s.clone()).into()),
                         Term::RDFS(VRDFS::Datatype) => Some(Datatype(s.clone()).into()),
-                        _ => None,
+                        _ => {
+                            None
+                        },
                     }
                 }
                 _ => None,
@@ -871,6 +873,7 @@ impl<'a> OntologyParser<'a> {
         for (this_bnode, v) in std::mem::take(&mut self.bnode) {
             // rustfmt breaks this (putting the triples all on one
             // line) so skip
+            println!("V: {:?}", v);
             let ce = match v.as_slice() {
                 [[_, Term::OWL(VOWL::OnProperty), pr],//:
                  [_, Term::OWL(VOWL::SomeValuesFrom), ce_or_dr],//:
@@ -1011,6 +1014,23 @@ impl<'a> OntologyParser<'a> {
                         }
                     }
                 }
+                //_:x rdf:type owl:Restriction .
+                //_:x owl:cardinality NN_INT(n) .
+                //_:x owl:onProperty y .
+                //{ OPE(y) ≠ ε }
+                [[_, Term::OWL(VOWL::Cardinality), literal],//:
+                 [_, Term::OWL(VOWL::OnProperty), Term::Iri(pr)],//:
+                 [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Restriction)]
+                ] => {
+                    some!{
+                        ClassExpression::ObjectExactCardinality
+                        {
+                            n:self.to_u32(literal)?,
+                            ope: pr.into(),
+                            bce: self.b.class(VOWL::Thing.iri_s()).into()
+                        }
+                    }
+                }
                 [[_, Term::OWL(VOWL::OnClass), tce],//:
                  [_, Term::OWL(VOWL::OnProperty), Term::Iri(pr)],//:
                  [_, Term::OWL(VOWL::QualifiedCardinality), literal],//:
@@ -1022,6 +1042,19 @@ impl<'a> OntologyParser<'a> {
                             n:self.to_u32(literal)?,
                             ope: pr.into(),
                             bce: self.to_ce(tce)?.into()
+                        }
+                    }
+                }
+                [[_, Term::OWL(VOWL::MinCardinality), literal],//:
+                 [_, Term::OWL(VOWL::OnProperty), Term::Iri(pr)],//:
+                 [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Restriction)]
+                ] => {
+                    some!{
+                        ClassExpression::ObjectMinCardinality
+                        {
+                            n:self.to_u32(literal)?,
+                            ope: pr.into(),
+                            bce: self.b.class(VOWL::Thing.iri_s()).into()
                         }
                     }
                 }
@@ -1039,6 +1072,19 @@ impl<'a> OntologyParser<'a> {
                         }
                     }
                 }
+                [[_, Term::OWL(VOWL::MaxCardinality), literal],//:
+                 [_, Term::OWL(VOWL::OnProperty), Term::Iri(pr)],//:
+                 [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Restriction)]
+                ] => {
+                    some!{
+                        ClassExpression::ObjectMaxCardinality
+                        {
+                            n:self.to_u32(literal)?,
+                            ope: pr.into(),
+                            bce: self.b.class(VOWL::Thing.iri_s()).into()
+                        }
+                    }
+                }
                 [[_, Term::OWL(VOWL::MaxQualifiedCardinality), literal],//:
                  [_, Term::OWL(VOWL::OnClass), tce],//:
                  [_, Term::OWL(VOWL::OnProperty), Term::Iri(pr)],//:
@@ -1053,21 +1099,6 @@ impl<'a> OntologyParser<'a> {
                         }
                     }
                 }
-                [[_, Term::OWL(VOWL::MaxCardinality), literal],//:
-                 [_, Term::OWL(VOWL::OnProperty), Term::Iri(pr)],//:
-                 [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Restriction)]
-                ] => {
-                    some!{
-                        ClassExpression::ObjectMaxCardinality
-                        {
-                            n:self.to_u32(literal)?,
-                            ope: pr.into(),
-                            bce: self.b.class(VOWL::Thing.iri_s().to_string()).into()
-                        }
-                    }
-                }
-
-
                 _a => None,
             };
 
@@ -1146,6 +1177,7 @@ impl<'a> OntologyParser<'a> {
                 .map(|(_k, v)| v)
                 .flatten(),
         ) {
+            println!("Matching:{:?}", triple);
             let axiom: Option<Axiom> = match &triple {
                 [Term::Iri(sub), Term::RDFS(VRDFS::SubClassOf), tce] => some! {
                     SubClassOf {
@@ -1159,21 +1191,23 @@ impl<'a> OntologyParser<'a> {
                 // and add to that axiom
                 [Term::Iri(a), Term::OWL(VOWL::EquivalentClass), b] => {
                     some! {
-                        match self.find_declaration_kind(a)? {
-                            NamedEntityKind::Class => {
-                                EquivalentClasses(
-                                    vec![
-                                        Class(a.clone()).into(),
-                                        self.to_ce(b)?,
-                                    ]).into()
+                        {
+                            match self.find_declaration_kind(a)? {
+                                NamedEntityKind::Class => {
+                                    EquivalentClasses(
+                                        vec![
+                                            Class(a.clone()).into(),
+                                            self.to_ce(b)?,
+                                        ]).into()
+                                }
+                                NamedEntityKind::Datatype => {
+                                    DatatypeDefinition{
+                                        kind: Datatype(a.clone()).into(),
+                                        range: self.to_dr(b)?,
+                                    }.into()
+                                }
+                                _=> todo!()
                             }
-                            NamedEntityKind::Datatype => {
-                                DatatypeDefinition{
-                                    kind: Datatype(a.clone()).into(),
-                                    range: self.to_dr(b)?,
-                                }.into()
-                            }
-                            _=> todo!()
                         }
                     }
                 }
@@ -1281,6 +1315,15 @@ impl<'a> OntologyParser<'a> {
                         }
                     }
                 }
+                [Term::Iri(sub), Term::RDF(VRDF::Type), cls] => some! {
+                    {
+                        println!("ClassAssertion:{:?}", cls);
+                        ClassAssertion {
+                            ce: self.to_ce(cls)?,
+                            i: NamedIndividual(sub.clone()).into()
+                        }.into()
+                    }
+                },
 
                 [Term::Iri(a), Term::OWL(VOWL::DisjointWith), Term::Iri(b)] => {
                     Some(
@@ -1395,12 +1438,6 @@ impl<'a> OntologyParser<'a> {
                 [Term::Iri(sub), Term::OWL(VOWL::SameAs), Term::Iri(obj)] => some! {
                     SameIndividual(vec![NamedIndividual(sub.clone()),
                                         NamedIndividual(obj.clone())]).into()
-                },
-                [Term::Iri(sub), Term::RDF(VRDF::Type), Term::Iri(obj)] => some! {
-                    ClassAssertion {
-                        ce: Class(obj.clone()).into(),
-                        i: NamedIndividual(sub.clone()).into()
-                    }.into()
                 },
                 [Term::Iri(i), Term::OWL(VOWL::DifferentFrom), Term::Iri(j)] => {
                     some! {
@@ -1554,7 +1591,7 @@ impl<'a> OntologyParser<'a> {
                 // to read an ontology just for declarations. At the moment, I
                 // don't know how to get to another set of triples for these
                 // -- we will need some kind of factory.
-                dbg!(self.headers());
+                self.headers();
 
                 // Can we pull out annotations at this point and handle them
                 // as we do in reader2? Tranform them into a triple which we
@@ -1735,9 +1772,9 @@ mod test {
         let dir_path_buf = PathBuf::from(file!());
         let dir = dir_path_buf.parent().unwrap().to_string_lossy();
 
-        slurp::read_all_to_string(format!("{}/../../ont/owl-rdf/{}.owl",
-                                           dir, testrdf))
-                .unwrap()
+        slurp::read_all_to_string(dbg!(format!("{}/../../ont/owl-rdf/{}.owl",
+                                               dir, testrdf)))
+            .unwrap()
     }
 
     fn compare_str(rdfread: &str, xmlread: &str) {
@@ -2239,6 +2276,45 @@ mod test {
     fn object_property_symmetric() {
         compare("object-property-symmetric");
     }
+
+    #[test]
+    fn family_other() {
+        compare("family-other")
+    }
+
+    #[test]
+    fn type_complex() {
+        compare("type-complex")
+    }
+
+    #[test]
+    fn type_individual_datatype() {
+        compare("type-individual-datatype")
+    }
+
+    #[test]
+    fn type_individual_datatype_unqualified() {
+        compare("type-individual-datatype-unqualified")
+    }
+
+    // #[test]
+    // fn family_import() -> Result<(),Error>{
+    //     let b = Build::new();
+    //     let p = parser_with_build(&mut slurp_rdfont("family-other").as_bytes(), &b);
+    //     let (family_other, incomplete) = p.parse()?;
+    //     assert!(incomplete.is_complete());
+
+
+    //     let mut p = parser_with_build(&mut slurp_rdfont("family").as_bytes(), &b);
+    //     p.parse_imports()?;
+    //     p.parse_declarations()?;
+    //     p.finish_parse(vec![&family_other])?;
+
+    //     let (_rdfont, incomplete) = p.as_ontology_and_incomplete()?;
+
+    //     assert!(incomplete.is_complete());
+    //     Ok(())
+    //    }
 
     // #[test]
     // fn family() {
