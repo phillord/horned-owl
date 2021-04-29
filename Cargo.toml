@@ -15,7 +15,6 @@ edition = "2018"
 
 [dependencies]
 curie = "0.0.8"
-curl = "0.4.34"
 clap = "2.31.2"
 enum_meta = "0.6.0"
 failure = "0.1.2"
@@ -28,6 +27,7 @@ rio_xml="0.5.3"
 pretty_rdf="0.1.0"
 ##pretty_rdf={path="./pretty_rdf"}
 slurp = "1.0.1"
+ureq="2.1.1"
 
 [dev-dependencies]
 assert_cmd = "0.10"

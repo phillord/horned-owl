@@ -1792,22 +1792,22 @@ mod test {
         //assert_eq!(rdfmapping, xmlmapping);
     }
 
-    #[test]
-    fn read_iri() {
-        let dir_path_buf = PathBuf::from(file!());
-        let dir = dir_path_buf.parent().unwrap()
-            .parent().unwrap()
-            .parent().unwrap();
-        let cdir = dir.canonicalize().unwrap();
-        let b = Build::new();
-        let i:IRI = b.iri(
-            format!("file://{}/ont/owl-rdf/and.owl", cdir.to_string_lossy())
-        );
+    // #[test]
+    // fn read_iri() {
+    //     let dir_path_buf = PathBuf::from(file!());
+    //     let dir = dir_path_buf.parent().unwrap()
+    //         .parent().unwrap()
+    //         .parent().unwrap();
+    //     let cdir = dir.canonicalize().unwrap();
+    //     let b = Build::new();
+    //     let i:IRI = b.iri(
+    //         format!("file://{}/ont/owl-rdf/and.owl", cdir.to_string_lossy())
+    //     );
 
-        let op = OntologyParser::from_doc_iri(&b, &i);
-        let _o = op.parse().unwrap();
-        assert!(true);
-    }
+    //     let op = OntologyParser::from_doc_iri(&b, &i);
+    //     let _o = op.parse().unwrap();
+    //     assert!(true);
+    // }
 
     #[test]
     fn class() {

@@ -75,7 +75,7 @@ pub fn materialize_1<'a>(input: &str, done: &'a mut Vec<IRI>, recurse: bool)
                 done.push(i.0.clone());
                 println!("Saving to {}", local);
                 let mut file = File::create(&local)?;
-                file.write_all(&imported_data)?;
+                file.write_all(&imported_data.as_bytes())?;
             }
             else {
                 println!("Already Present: {}", local);

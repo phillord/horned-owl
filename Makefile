@@ -28,7 +28,7 @@ tmp:
 integration-prepare: tmp
 
 integration-clean:
-	rm ./tmp/bfo.owl
+	- rm ./tmp/bfo.owl
 
 ## Main integration tests run as unit tests
 integration: integration-prepare integration-clean ./tmp/ont-with-bfo.owl
