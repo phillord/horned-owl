@@ -964,10 +964,9 @@ impl<'a> OntologyParser<'a> {
                 },
                 [[_, Term::OWL(VOWL::IntersectionOf), Term::BNode(bnodeid)],//:
                  [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Class)]] => {
-                    println!("matched itnersection");
                     some!{
                         ClassExpression::ObjectIntersectionOf(
-                            dbg!{self.to_ce_seq(bnodeid)}?
+                            self.to_ce_seq(bnodeid)?
                         )
                     }
                 },
