@@ -43,12 +43,12 @@ fn matcher(matches: &ArgMatches) -> Result<(), Error> {
 
     println!("\n\nIncompleted Parsed");
     println!("\tSimple Triples: {:#?}", incomplete.simple);
-    println!("\tbnode: {}", incomplete.bnode.len());
-    println!("\tsequences: {}", incomplete.bnode_seq.len());
-    println!("\tClass Expressions: {}", incomplete.class_expression.len());
-    println!("\tObject Property Expressions: {}", incomplete.object_property_expression.len());
-    println!("\tData Range: {}", incomplete.data_range.len());
-    println!("\tAnnotations: {}", incomplete.ann_map.len());
+    println!("\tbnode: {:#?}", incomplete.bnode);
+    println!("\tsequences: {:#?}", incomplete.bnode_seq);
+    println!("\tClass Expressions: {:#?}", incomplete.class_expression);
+    println!("\tObject Property Expressions: {:#?}", incomplete.object_property_expression);
+    println!("\tData Range: {:#?}", incomplete.data_range);
+    println!("\tAnnotations: {:#?}", incomplete.ann_map);
 
     Ok(())
 }

@@ -771,14 +771,31 @@ impl<'a> OntologyParser<'a> {
     }
 
     fn to_ce_seq(&mut self, bnodeid: &BNode) -> Option<Vec<ClassExpression>> {
+        if !self.bnode_seq
+            .get(bnodeid)?
+            .iter()
+            .all(|tce|
+                 match tce {
+                     Term::BNode(id) => self.class_expression.contains_key(id),
+                     _=> true,
+                 }
+            ) {
+                return None;
+        }
+
+
         let v: Vec<Option<ClassExpression>> = self
             .bnode_seq
             .remove(bnodeid)
             .as_ref()?
             .into_iter()
-            .map(|tce| self.to_ce(tce))
+            .map(|tce| {
+                self.to_ce(tce)
+            })
             .collect();
 
+        // Check all not None. If any are, return all the
+        // class_expressions are are Some!
         // All or nothing
         v.into_iter().collect()
     }
@@ -873,7 +890,6 @@ impl<'a> OntologyParser<'a> {
         for (this_bnode, v) in std::mem::take(&mut self.bnode) {
             // rustfmt breaks this (putting the triples all on one
             // line) so skip
-            println!("V: {:?}", v);
             let ce = match v.as_slice() {
                 [[_, Term::OWL(VOWL::OnProperty), pr],//:
                  [_, Term::OWL(VOWL::SomeValuesFrom), ce_or_dr],//:
@@ -948,9 +964,10 @@ impl<'a> OntologyParser<'a> {
                 },
                 [[_, Term::OWL(VOWL::IntersectionOf), Term::BNode(bnodeid)],//:
                  [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Class)]] => {
+                    println!("matched itnersection");
                     some!{
                         ClassExpression::ObjectIntersectionOf(
-                            self.to_ce_seq(bnodeid)?
+                            dbg!{self.to_ce_seq(bnodeid)}?
                         )
                     }
                 },
@@ -1177,7 +1194,6 @@ impl<'a> OntologyParser<'a> {
                 .map(|(_k, v)| v)
                 .flatten(),
         ) {
-            println!("Matching:{:?}", triple);
             let axiom: Option<Axiom> = match &triple {
                 [Term::Iri(sub), Term::RDFS(VRDFS::SubClassOf), tce] => some! {
                     SubClassOf {
@@ -1317,7 +1333,6 @@ impl<'a> OntologyParser<'a> {
                 }
                 [Term::Iri(sub), Term::RDF(VRDF::Type), cls] => some! {
                     {
-                        println!("ClassAssertion:{:?}", cls);
                         ClassAssertion {
                             ce: self.to_ce(cls)?,
                             i: NamedIndividual(sub.clone()).into()
@@ -1632,6 +1647,7 @@ impl<'a> OntologyParser<'a> {
         // Table 13: Parsing of Class Expressions
         self.class_expressions();
 
+        dbg!(&self.class_expression);
         // Table 16: Axioms without annotations
         self.axioms();
 
@@ -1749,7 +1765,10 @@ mod test {
             );
         }
 
-        r.unwrap().0
+        let (ont, incomp) = r.unwrap();
+
+        assert!(incomp.is_complete());
+        ont
     }
 
     fn compare(test: &str) {
@@ -2295,6 +2314,16 @@ mod test {
     #[test]
     fn type_individual_datatype_unqualified() {
         compare("type-individual-datatype-unqualified")
+    }
+
+    #[test]
+    fn intersection() {
+        compare("intersection")
+    }
+
+    #[test]
+    fn happy_person() {
+        compare("happy_person")
     }
 
     // #[test]
