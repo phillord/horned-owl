@@ -100,6 +100,14 @@ impl IRIMappedIndex {
                     _ => None,
                 }
             },
+            AxiomKind::DisjointUnion => {
+                match ax.clone().axiom {
+                    Axiom::DisjointUnion(DisjointUnion(clsexp, _eles)) => {
+                        Some(clsexp.0.clone())
+                    },
+                    _ => None,
+                }
+            },
             _ => None,
         }
     }
@@ -288,7 +296,7 @@ impl IRIMappedOntology {
     pub fn update_axiom(&mut self, ax: &AnnotatedAxiom, new_ax: AnnotatedAxiom)
                                     -> bool {
 
-        self.take(ax); //I think this removes the old one???? Check though.
+        self.take(ax);
         self.insert(new_ax)
     }
 }
