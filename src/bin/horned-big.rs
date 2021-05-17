@@ -33,7 +33,7 @@ fn matcher(matches: ArgMatches) -> Result<(), Error> {
     let b = Build::new();
     let mut o = SetOntology::new();
 
-    for i in 1..size {
+    for i in 1..size+1 {
         o.declare(b.class(format!("https://www.example.com/o{}", i)));
     }
 
