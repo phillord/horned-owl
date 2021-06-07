@@ -17,6 +17,8 @@ use quick_xml::Reader;
 
 use failure::Error;
 
+use log::warn;
+
 #[derive(Debug, Fail)]
 enum ReadError {
     #[fail(display = "End Tag Arrived Unexpectedly: {} at {}", tag, pos)]
@@ -114,8 +116,14 @@ pub fn read_with_build<R: BufRead>(
                         ont.insert(Import(IRI::from_xml(&mut r, b"Import")?));
                     }
                     _ => {
-                        let aa = AnnotatedAxiom::from_start(&mut r, e)?;
-                        ont.insert(aa);
+                        //let aa = AnnotatedAxiom::from_start(&mut r, e)?;
+                        let outcome = AnnotatedAxiom::from_start(&mut r, e);
+                        if let Err(e) = outcome {
+                            println!("Got an error: {}; skipping...",e);
+                            warn!("An error: {}; skipped.", e);
+                        } else if let Ok(aa) = outcome {
+                            ont.insert(aa);
+                        }
                     }
                 }
             }
