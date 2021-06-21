@@ -18,6 +18,8 @@ use super::indexed::{rc_unwrap_or_clone, OneIndexedOntology, TwoIndexedOntology,
 use super::axiom_mapped::AxiomMappedIndex;
 use super::declaration_mapped::DeclarationMappedIndex;
 
+use std::collections::HashSet;
+
 macro_rules! some {
     ($body:expr) => {
         (|| Some($body))()
@@ -35,7 +37,10 @@ impl IRIMappedIndex {
         IRIMappedIndex::default()
     }
 
-    fn aa_to_iri(&self, ax: &AnnotatedAxiom) -> Option<IRI> {
+    fn aa_to_iris(&self, ax: &AnnotatedAxiom) -> HashSet<IRI> {
+
+        let mut iris = HashSet::new();
+
         match ax.kind() {
             AxiomKind::DeclareClass |
             AxiomKind::DeclareObjectProperty |
@@ -44,72 +49,70 @@ impl IRIMappedIndex {
             AxiomKind::DeclareDatatype |
             AxiomKind::DeclareNamedIndividual => {
                 match ax.clone().axiom {
-                    Axiom::DeclareClass(dc) => Some(dc.0.into()),
-                    Axiom::DeclareObjectProperty(op) => Some(op.0.into()),
-                    Axiom::DeclareAnnotationProperty(ap) => Some(ap.0.into()),
-                    Axiom::DeclareDataProperty(dp) => Some(dp.0.into()),
-                    Axiom::DeclareDatatype(dt) => Some(dt.0.into()),
-                    Axiom::DeclareNamedIndividual(ni) => Some(ni.0.into()),
-                    _ => None
+                    Axiom::DeclareClass(dc) => {iris.insert(dc.0.into());},
+                    Axiom::DeclareObjectProperty(op) => {iris.insert(op.0.into());},
+                    Axiom::DeclareAnnotationProperty(ap) => {iris.insert(ap.0.into());},
+                    Axiom::DeclareDataProperty(dp) => {iris.insert(dp.0.into());},
+                    Axiom::DeclareDatatype(dt) => {iris.insert(dt.0.into());},
+                    Axiom::DeclareNamedIndividual(ni) => {iris.insert(ni.0.into());},
+                    _ => ()
                 }
             },
             AxiomKind::AnnotationAssertion => {
                 match ax.clone().axiom {
-                    Axiom::AnnotationAssertion(AnnotationAssertion{subject,ann:_}) => Some(subject),
-                    _ => None,
+                    Axiom::AnnotationAssertion(AnnotationAssertion{subject,ann:_}) => {iris.insert(subject);},
+                    _ => (),
                 }
             },
             AxiomKind::SubClassOf => {
                 match ax.clone().axiom {
                     Axiom::SubClassOf(SubClassOf{sup:_,sub}) => {
                         match sub {
-                            ClassExpression::Class(c) => Some(c.0.into()),
-                            _ => None,
+                            ClassExpression::Class(c) => {iris.insert(c.0.into());},
+                            _ => (),
                         }
                     },
-                    _ => None,
+                    _ => (),
                 }
             },
             AxiomKind::EquivalentClasses => {
                 match ax.clone().axiom {
                     Axiom::EquivalentClasses(EquivalentClasses(eles)) => {
-                        if let Some(clsexp) = eles.iter().next() {
+                        for clsexp in eles {
                             match clsexp {
-                                ClassExpression::Class(c) => Some(c.0.clone()),
-                                _ => None,  //to do - generic method to get IRI for any class expression to avoid duplicating this block?
+                                ClassExpression::Class(c) => {iris.insert(c.0.clone());},
+                                _ => (),  //to do - generic method to get IRI for any class expression to avoid duplicating this block?
                             }
-                        } else {
-                            None
                         }
                     },
-                    _ => None,
+                    _ => (),
                 }
             },
             AxiomKind::DisjointClasses => {
                 match ax.clone().axiom {
                     Axiom::DisjointClasses(DisjointClasses(eles)) => {
-                        if let Some(clsexp) = eles.iter().next() {
+                        for clsexp in eles {
                             match clsexp {
-                                ClassExpression::Class(c) => Some(c.0.clone()),
-                                _ => None,
+                                ClassExpression::Class(c) => {iris.insert(c.0.clone());},
+                                _ => (),
                             }
-                        } else {
-                            None
-                        }
+                        } 
                     },
-                    _ => None,
+                    _ => (),
                 }
             },
             AxiomKind::DisjointUnion => {
                 match ax.clone().axiom {
                     Axiom::DisjointUnion(DisjointUnion(clsexp, _eles)) => {
-                        Some(clsexp.0.clone())
+                        iris.insert(clsexp.0.clone());
                     },
-                    _ => None,
+                    _ => (),
                 }
             },
-            _ => None,
-        }
+            _ => (),
+        };
+
+        iris
     }
 
     /// Fetch the iris hashmap as a raw pointer.
@@ -253,27 +256,38 @@ impl<'a> IntoIterator for &'a IRIMappedIndex {
 
 impl OntologyIndex for IRIMappedIndex {
     fn index_insert(&mut self, ax: Arc<AnnotatedAxiom>) -> bool {
-        if let Some(iri) = self.aa_to_iri(&*ax) {
-            let s = some! {
-                self.mut_set_for_iri(iri).insert(ax)
-            };
-            s.is_some()
+        let iris = self.aa_to_iris(&*ax);
+        if !iris.is_empty() {
+            for iri in iris.iter() {
+                self.mut_set_for_iri(iri.clone()).insert(ax.clone());
+            }
+            true
         } else {
             false
+        }
+    }
+
+    fn index_take(&mut self, ax: &AnnotatedAxiom) -> Option<AnnotatedAxiom> {
+        let iris = self.aa_to_iris(ax);
+        if !iris.is_empty() {
+            let iri = iris.iter().next();
+            if let Some(iri) = iri {
+                self.mut_set_for_iri(iri.clone())
+                    .take(ax)
+                    .map(rc_unwrap_or_clone)
+            } else {
+                None
+            }
+        } else {
+            None
         }
 
     }
 
-    fn index_take(&mut self, ax: &AnnotatedAxiom) -> Option<AnnotatedAxiom> {
-        self.mut_set_for_iri(self.aa_to_iri(ax)?)
-            .take(ax)
-            .map(rc_unwrap_or_clone)
-    }
-
     fn index_remove(&mut self, ax: &AnnotatedAxiom) -> bool {
-        if let Some(iri) = self.aa_to_iri(ax) {
+        if let Some(iri) = self.aa_to_iris(ax).iter().next() {
             let s = some!{
-                self.mut_set_for_iri(iri).remove(ax)
+                self.mut_set_for_iri(iri.clone()).remove(ax)
             };
             s.is_some()
         } else {
