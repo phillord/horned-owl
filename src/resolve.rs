@@ -40,7 +40,6 @@ pub fn strict_resolve_iri(iri: &IRI) -> String {
 mod test{
     use super::*;
     use crate::model::Build;
-    use std::path::PathBuf;
 
     #[test]
     fn localize() {

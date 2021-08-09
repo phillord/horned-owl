@@ -7,3 +7,4 @@
 (defclass B :super (some other/other-o A))
 
 (save-all)
+
