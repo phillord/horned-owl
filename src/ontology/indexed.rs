@@ -10,7 +10,7 @@
 //! `OntologyIndex` objects as the backing store for its
 //! `AnnotatedAxiom`. These `AnnotatedAxiom` objects are shared
 //! between different `OntologyIndex` objects using `Rc`. The
-//! `OntologyIndex` interace does not provide any mechanisms for
+//! `OntologyIndex` interface does not provide any mechanisms for
 //! searching or querying the index which need to be provided by
 //! concrete implementations.
 
@@ -108,7 +108,7 @@ impl<A: ForIRI, AA: ForIndex<A>> OntologyIndex<A, AA> for NullIndex {
     }
 }
 
-/// A `OneIndexedOntology` operates as a simple adaptor betweeen any
+/// A `OneIndexedOntology` operates as a simple adaptor between any
 /// `OntologyIndex` and an `Ontology`.
 #[derive(Default, Debug, Eq, PartialEq)]
 pub struct OneIndexedOntology<A, AA, I>(I, OntologyID<A>, Option<IRI<A>>, PhantomData<AA>);
@@ -378,7 +378,7 @@ impl<
 {
     fn index_insert(&mut self, ax: AA) -> bool {
         let rtn = (self.0).0.index_insert(ax.clone());
-        // Don't short cirtuit
+        // Don't short circuit
         (self.0).1.index_insert(ax) || rtn
     }
 

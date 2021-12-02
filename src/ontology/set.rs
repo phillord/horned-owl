@@ -75,7 +75,7 @@ impl<A: ForIRI> Ontology<A> for SetOntology<A> {
     }
 }
 
-/// An Interator for `SetOntology`
+/// An Iterator for `SetOntology`
 pub struct SetIter<'a, A: ForIRI>(std::collections::hash_set::Iter<'a, AnnotatedAxiom<A>>);
 
 impl<'a, A: ForIRI> Iterator for SetIter<'a, A> {
