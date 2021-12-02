@@ -705,7 +705,7 @@ pub trait Kinded {
     fn kind(&self) -> AxiomKind;
 }
 
-/// An `AnnotatedAxiom` is an `Axiom` with one orpmore `Annotation`.
+/// An `AnnotatedAxiom` is an `Axiom` with one or more `Annotation`.
 #[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
 pub struct AnnotatedAxiom<A> {
     pub axiom: Axiom<A>,
@@ -986,7 +986,7 @@ axioms! {
         sub: ClassExpression<A>
     },
 
-    /// An equivalance relationship between two `ClassExpression`.
+    /// An equivalence relationship between two `ClassExpression`.
     ///
     /// All instances of `ClassExpression` are also instances
     /// of other other.
@@ -1008,7 +1008,7 @@ axioms! {
 
     /// A sub property relationship between two object properties.
     ///
-    /// The existance of the sub property relationship between two
+    /// The existence of the sub property relationship between two
     /// individuals also implies the super property relationship
     /// also. The super property can also be a property chain.
     /// So, if `s` is a super property of `r` then `a r b` implies `a
@@ -1166,7 +1166,7 @@ axioms! {
     /// See also: [Functional Data Property]:(https://www.w3.org/TR/owl2-syntax/#Functional_Data_Properties)
     FunctionalDataProperty(DataProperty<A>),
 
-    /// Defintion of a datatype.
+    /// Definition of a datatype.
     ///
     /// See also: [Datatype Definitions](https://www.w3.org/TR/owl2-syntax/#Datatype_Definitions)
     DatatypeDefinition {
@@ -1565,11 +1565,11 @@ pub enum ClassExpression<A> {
         bce: Box<ClassExpression<A>>,
     },
 
-    /// An exististential relationship.
+    /// An existential relationship.
     ///
     /// This is the anonymous class of individuals `i` which have the
     /// relationship `dp` to the data range, `dr`. Every individual
-    /// `i` must have this relationship to data constrainted by `dr`.
+    /// `i` must have this relationship to data constrained by `dr`.
     ///
     /// See also: [Existential Quantification](https://www.w3.org/TR/owl2-syntax/#Existential_Quantification_2)
     DataSomeValuesFrom {

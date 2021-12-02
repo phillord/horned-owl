@@ -1784,10 +1784,10 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
                 self.headers();
 
                 // Can we pull out annotations at this point and handle them
-                // as we do in reader2? Tranform them into a triple which we
+                // as we do in reader2? Transform them into a triple which we
                 // handle normally, then bung the annotation on later?
 
-                // Table 5: Backward compability -- skip this for now (maybe
+                // Table 5: Backward compatibility -- skip this for now (maybe
                 // for ever)
 
                 // Table 6: Don't understand this

@@ -187,7 +187,7 @@ onimpl! {InverseFunctionalObjectProperty, inverse_functional_object_property}
 onimpl! {ReflexiveObjectProperty, reflexive_object_property}
 onimpl! {IrreflexiveObjectProperty, irreflexive_object_property}
 onimpl! {SymmetricObjectProperty, symmetric_object_property}
-onimpl! {AsymmetricObjectProperty, assymmetric_object_property}
+onimpl! {AsymmetricObjectProperty, asymmetric_object_property}
 onimpl! {TransitiveObjectProperty, transitive_object_property}
 onimpl! {SubDataPropertyOf, sub_data_property_of}
 onimpl! {EquivalentDataProperties, equivalent_data_properties}
