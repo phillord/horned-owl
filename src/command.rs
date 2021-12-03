@@ -1,6 +1,6 @@
 //! Support for Horned command line programmes
 
-use crate::{io::{ParserOutput, ResourceType}, model::{Build, IRI}, ontology::{axiom_mapped::AxiomMappedOntology}, resolve::{localize_iri, strict_resolve_iri}};
+use crate::{io::{ParserOutput, ResourceType}, model::{Build, IRI}, ontology::{axiom_mapped::AxiomMappedOntology}, resolve::{localize_iri, strict_resolve_iri}, error::ParserError};
 
 use failure::Error;
 
@@ -14,39 +14,47 @@ pub fn path_type(path: &Path) -> Option<ResourceType> {
    }
 }
 
+/// Reads the content of a file and tries to parse it as an OWL ontology.
+/// The reader is chosen by inspecting the file extension.
+/// If the extension is supported, the corresponding `Reader` is called.
+/// Otherwise, an error is returned.
 pub fn parse_path(path: &Path) -> Result<ParserOutput, Error>
 {
     let file = File::open(&path)?;
     let mut bufreader = BufReader::new(file);
 
-    Ok(match path_type(path) {
-        Some(ResourceType::OWX) => super::io::owx::reader::read(&mut bufreader)?.into(),
-        Some(ResourceType::RDF) => super::io::rdf::reader::read(&mut bufreader)?.into(),
-        _ => {
-            eprintln!("Do not know how to parse file with path: {:?}", path);
-            todo!()
+    match path_type(path) {
+        Some(rc_type) => {
+            match rc_type {
+                ResourceType::OWX => super::io::owx::reader::read(&mut bufreader).map(
+                    |op| op.into()
+                ),
+                ResourceType::RDF => super::io::rdf::reader::read(&mut bufreader).map(|tio| tio.into()),
+            }
         },
-    })
+        None => Err(ParserError::FormatNotSupported { path: Box::from(path) }.into()),
+    }
 }
 
 /// Parse but only as far as the imports, if that makes sense.
 pub fn parse_imports(path: &Path) -> Result<ParserOutput, Error> {
     let file = File::open(&path)?;
     let mut bufreader = BufReader::new(file);
-    Ok(match path_type(path) {
-        Some(ResourceType::OWX) => super::io::owx::reader::read(&mut bufreader)?.into(),
-        Some(ResourceType::RDF) => {
-            let b = Build::new();
-            let mut p = crate::io::rdf::reader::parser_with_build(&mut bufreader,
-                                                              &b);
-            p.parse_imports()?;
-            p.as_ontology_and_incomplete()?.into()
+
+    match path_type(path) {
+        Some(rc_type) => {
+            match rc_type {
+                ResourceType::OWX => super::io::owx::reader::read(&mut bufreader).map(|op| op.into()),
+                ResourceType::RDF => {
+                    let b = Build::new();
+                    let mut p = crate::io::rdf::reader::parser_with_build(&mut bufreader,&b);
+                    p.parse_imports()?;
+                    p.as_ontology_and_incomplete().map(|tio| tio.into())
+                }
+            }
         }
-        _ => {
-            eprintln!("Do not know how to parse file with path: {:?}", path);
-            todo!()
-        }
-    })
+        None => Err(ParserError::FormatNotSupported { path: Box::from(path) }.into())
+    }
 }
 
 pub fn materialize(input: &str) -> Result<Vec<IRI>,Error> {

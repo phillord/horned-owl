@@ -30,7 +30,7 @@ pub fn resolve_iri(iri:&IRI, doc_iri: &IRI) -> Vec<u8> {
     strict_resolve_iri(&localize_iri(iri, doc_iri))
 }
 
-// Return the ontology as Vec<u8> from `iri`.
+/// Return the ontology as Vec<u8> from `iri`.
 pub fn strict_resolve_iri(iri: &IRI) -> Vec<u8> {
     let mut data = Vec::new();
     let mut handle = Easy::new();
