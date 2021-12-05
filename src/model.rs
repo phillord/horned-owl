@@ -78,15 +78,15 @@
 //! ```
 //! //ObjectPropertyAssertion {
 //! //ope: ObjectPropertyExpression,
-//! //from: NamedIndividual,
-//! //to: NamedIndividual,
+//! //from: Individual,
+//! //to: Individual,
 //! //}
 //! # use horned_owl::model::*;
 //! let b = Build::new();
 //! let opa = ObjectPropertyAssertion {
 //!     ope: b.object_property("http://www.example.com/op").into(),
-//!     from: b.named_individual("http://www.example.com/i1"),
-//!     to: b.named_individual("http://www.example.com/i2"),
+//!     from: b.named_individual("http://www.example.com/i1").into(),
+//!     to: b.named_individual("http://www.example.com/i2").into(),
 //! };
 //! ```
 
@@ -448,6 +448,73 @@ named! {
     /// about and can be identified by name.
     NamedIndividual
 }
+
+#[derive(Clone, Debug, Eq, PartialEq, Hash, PartialOrd, Ord)]
+pub struct AnonymousIndividual(pub Rc<str>);
+
+impl Deref for AnonymousIndividual {
+    type Target=str;
+
+    fn deref(&self) -> &Self::Target {
+        self.0.as_ref()
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Hash, PartialOrd, Ord)]
+pub enum Individual{
+    Anonymous(AnonymousIndividual),
+    Named(NamedIndividual),
+}
+
+impl Deref for Individual {
+    type Target=str;
+
+    fn deref(&self) -> &Self::Target {
+        match self {
+            Individual::Named(ni) => &*ni.0,
+            Individual::Anonymous(ai) => &*ai,
+        }
+    }
+}
+
+
+impl From<NamedIndividual> for Individual {
+    fn from(ni:NamedIndividual) -> Individual {
+        Self::Named(ni)
+    }
+}
+
+impl From<AnonymousIndividual> for Individual {
+    fn from(ai:AnonymousIndividual) -> Individual {
+        Self::Anonymous(ai)
+    }
+}
+
+impl From<Rc<str>> for AnonymousIndividual {
+    fn from(rc:Rc<str>) -> AnonymousIndividual {
+        AnonymousIndividual(rc)
+    }
+}
+
+impl From<String> for AnonymousIndividual {
+    fn from(s:String) -> AnonymousIndividual {
+        AnonymousIndividual(s.into())
+    }
+
+}
+impl From<&IRI> for Individual {
+    fn from(iri:&IRI) -> Individual {
+        let ni:NamedIndividual = iri.into();
+        ni.into()
+    }
+}
+
+impl From<IRI> for Individual {
+    fn from(iri:IRI) -> Individual {
+        Individual::from(&iri)
+    }
+}
+
 
 impl From<NamedEntity> for Axiom {
     fn from(ne: NamedEntity) -> Axiom {
@@ -972,14 +1039,14 @@ axioms! {
     ///
     /// See also: [Individual Equality](https://www.w3.org/TR/owl2-syntax/#Individual_Equality)
     SameIndividual (
-        Vec<NamedIndividual>
+        Vec<Individual>
     ),
 
     /// A different individuals expression.
     ///
     /// See also: [Individual Inequality](https://www.w3.org/TR/owl2-syntax/#Individual_Inequality)
     DifferentIndividuals (
-        Vec<NamedIndividual>
+        Vec<Individual>
     ),
 
     /// A class assertion expression.
@@ -989,7 +1056,7 @@ axioms! {
     /// See also: [Class Assertions](https://www.w3.org/TR/owl2-syntax/#Class_Assertions)
     ClassAssertion {
         ce: ClassExpression,
-        i: NamedIndividual
+        i: Individual
     },
 
     /// An object property assertion.
@@ -999,8 +1066,8 @@ axioms! {
     /// See also: [Positive Object Property Assertions](https://www.w3.org/TR/owl2-syntax/#Positive_Object_Property_Assertions)
     ObjectPropertyAssertion {
         ope: ObjectPropertyExpression,
-        from: NamedIndividual,
-        to: NamedIndividual
+        from: Individual,
+        to: Individual
     },
 
     /// A negative object property assertion.
@@ -1010,8 +1077,8 @@ axioms! {
     /// See also: [Negative Object Property Assertions](https://www.w3.org/TR/owl2-syntax/#Negative_Object_Property_Assertions)
     NegativeObjectPropertyAssertion {
         ope: ObjectPropertyExpression,
-        from: NamedIndividual,
-        to: NamedIndividual
+        from: Individual,
+        to: Individual
     },
 
     /// A data property assertion.
@@ -1021,7 +1088,7 @@ axioms! {
     /// See also: [Data Property Assertion](https://www.w3.org/TR/owl2-syntax/#Positive_Data_Property_Assertions)
     DataPropertyAssertion {
         dp: DataProperty,
-        from: NamedIndividual,
+        from: Individual,
         to: Literal
     },
 
@@ -1032,7 +1099,7 @@ axioms! {
     /// See also [Negative Data Property Assertions](https://www.w3.org/TR/owl2-syntax/#Negative_Data_Property_Assertions)
     NegativeDataPropertyAssertion {
         dp: DataProperty,
-        from: NamedIndividual,
+        from: Individual,
         to: Literal
     },
 
@@ -1043,7 +1110,7 @@ axioms! {
     /// `annotation_subject`. Annotations refer to an `IRI` rather
     /// than the `NamedEntity` identified by that `IRI`.
     AnnotationAssertion {
-        subject:IRI,
+        subject: Individual,
         ann: Annotation
     },
 
@@ -1052,7 +1119,7 @@ axioms! {
     /// Implies that any annotation of the type `sub_property` is also
     /// an annotation of the type `super_property`.
     SubAnnotationPropertyOf {
-        sup:AnnotationProperty,
+        sup: AnnotationProperty,
         sub: AnnotationProperty
     },
 
@@ -1268,7 +1335,7 @@ pub enum ClassExpression {
     ///
     /// This is the class containing exactly the given set of
     /// individuals.
-    ObjectOneOf(Vec<NamedIndividual>),
+    ObjectOneOf(Vec<Individual>),
 
     /// An existential relationship
     ///
@@ -1298,7 +1365,7 @@ pub enum ClassExpression {
     /// in `c` must have this relationship to the individual `i`
     ObjectHasValue {
         ope: ObjectPropertyExpression,
-        i: NamedIndividual,
+        i: Individual,
     },
 
     /// The class of individuals which have a relation to themselves

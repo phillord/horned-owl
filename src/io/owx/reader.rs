@@ -799,6 +799,43 @@ from_start! {
 }
 
 from_start! {
+    Individual,r, e,
+    {
+        match e.local_name() {
+            b"AnonymousIndividual" =>{
+                eprintln!("About to read anonymous");
+                let ai:AnonymousIndividual = from_start(r, e)?;
+                eprintln!("Read anonymous");
+                Ok(ai.into())
+            }
+            b"NamedIndividual" =>{
+                let ni:NamedIndividual = from_start(r, e)?;
+                Ok(ni.into())
+            }
+            b"IRI" | b"AbbreviatedIRI" => {
+                let iri:IRI = from_start(r, e)?;
+                let ni:NamedIndividual = iri.into();
+                Ok(ni.into())
+            }
+            l => {
+                todo!("{:?}",std::str::from_utf8(l))
+            }
+        }
+    }
+}
+
+from_start! {
+    AnonymousIndividual, r, e,
+    {
+        let ai:AnonymousIndividual =
+            attrib_value(r, e, b"nodeID")?.ok_or(
+                error_missing_attribute("nodeID Expected", r)
+            )?.into();
+        Ok(ai)
+    }
+}
+
+from_start! {
     NamedIndividual, r, e,
     {
         named_entity_from_start(r, e, b"NamedIndividual")
@@ -1069,8 +1106,7 @@ from_xml! {IRI, r, end,
                         if is_owl_name(ns, e, end) =>
                     {
                         return iri.ok_or_else(
-                            || error_unexpected_end_tag(end, r)
-                        );
+                            || error_unexpected_end_tag(end, r)                        );
                     },
                     _=>{}
                 }
@@ -1104,7 +1140,6 @@ pub mod test {
     fn test_simple_ontology() {
         let ont_s = include_str!("../../ont/owl-xml/ont.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
-        dbg!(&ont);
         assert_eq!(
             ont.id().iri.as_ref().unwrap().as_ref(),
             "http://www.example.com/iri"
@@ -1161,7 +1196,6 @@ pub mod test {
         let ont_s = include_str!("../../ont/owl-xml/class_with_two_annotations.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
-        dbg!(&ont);
         assert_eq!(ont.i().declare_class().count(), 1);
 
         assert_eq!(ont.i().annotation_assertion().count(), 2);
@@ -1200,7 +1234,6 @@ pub mod test {
         let ont_s = include_str!("../../ont/owl-xml/oproperty.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
-        dbg!(&ont);
         assert_eq!(ont.i().declare_object_property().count(), 1);
     }
 
@@ -1876,6 +1909,16 @@ pub mod test {
     }
 
     #[test]
+    fn annotation_with_anonymous() {
+        let ont_s = include_str!("../../ont/owl-xml/annotation-with-anonymous.owx");
+        let (ont, _) = read_ok(&mut ont_s.as_bytes());
+
+        assert_eq!(ont.i().annotation_assertion().count(), 1);
+
+        let _aa = ont.i().annotation_assertion().next();
+    }
+
+    #[test]
     fn type_complex() {
         let ont_s = include_str!("../../ont/owl-xml/type-complex.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
@@ -1896,7 +1939,6 @@ pub mod test {
 
         assert_eq!(1, ont.i().class_assertion().count());
         let ca = ont.i().class_assertion().next().unwrap();
-        dbg!(&ont);
 
         assert!{
             matches!{

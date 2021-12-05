@@ -95,6 +95,62 @@ impl From<&IRI> for PNamedOrBlankNode<Rc<str>> {
     }
 }
 
+impl From<&NamedIndividual> for PTerm<Rc<str>> {
+    fn from(ni: &NamedIndividual) -> Self {
+        (&ni.0).into()
+    }
+}
+
+impl From<&NamedIndividual> for PNamedNode<Rc<str>> {
+    fn from(ni: &NamedIndividual) -> Self {
+        (&ni.0).into()
+    }
+}
+
+impl From<&NamedIndividual> for PNamedOrBlankNode<Rc<str>> {
+    fn from(ni: &NamedIndividual) -> Self {
+        let nn:PNamedNode<Rc<str>> = ni.into();
+        nn.into()
+    }
+}
+
+impl From<&AnonymousIndividual> for PTerm<Rc<str>> {
+    fn from(ai: &AnonymousIndividual) -> Self {
+        PBlankNode::new(ai.0.clone()).into()
+    }
+}
+
+impl From<&AnonymousIndividual> for PBlankNode<Rc<str>> {
+    fn from(ai: &AnonymousIndividual) -> Self {
+        PBlankNode::new(ai.0.clone()).into()
+    }
+}
+
+impl From<&AnonymousIndividual> for PNamedOrBlankNode<Rc<str>> {
+    fn from(ai: &AnonymousIndividual) -> Self {
+        let bn:PBlankNode<Rc<str>> = ai.into();
+        bn.into()
+    }
+}
+
+impl From<&Individual> for PTerm<Rc<str>> {
+    fn from(ind: &Individual) -> Self {
+        match ind {
+            Individual::Named(ni) => ni.into(),
+            Individual::Anonymous(ai) => ai.into(),
+        }
+
+    }
+}
+
+impl From<&Individual> for PNamedOrBlankNode<Rc<str>> {
+    fn from(ind: &Individual) -> Self {
+        match ind {
+            Individual::Named(ni) => ni.into(),
+            Individual::Anonymous(ai) => ai.into(),
+        }
+    }
+}
 
 trait Render<R> {
     fn render<W:Write>(&self, f:&mut PrettyRdfXmlFormatter<Rc<str>, W>,
@@ -355,7 +411,7 @@ impl Render<()> for AnnotatedAxiom {
 
                         ng.keep_this_bn(bn.clone());
 
-                        &self.ann.render(f, ng);
+                        let _ = &self.ann.render(f, ng);
                     }
                     _ => {
                         ()
@@ -660,14 +716,14 @@ render_to_vec! {
 }
 
 render! {
-    ObjectPropertyAssertion, self, f, _ng, PTriple<Rc<str>>,
+    ObjectPropertyAssertion, self, f, ng, PTriple<Rc<str>>,
     {
         match &self.ope {
             ObjectPropertyExpression::ObjectProperty(op) => {
                 //ObjectPropertyAssertion( OP a1 a2 ) T(a1) T(OP) T(a2) .
-                let node_from:PNamedOrBlankNode<_> = (&self.from.0).into();
+                let node_from:PNamedOrBlankNode<_> = self.from.render(f, ng)?;
                 let node_op:PNamedNode<_> = (&op.0).into();
-                let node_to:PTerm<_> = (&self.to.0).into();
+                let node_to:PTerm<_> = self.to.render(f,ng)?;
                 Ok(
                     triple! (
                         f,
@@ -677,9 +733,9 @@ render! {
             },
             ObjectPropertyExpression::InverseObjectProperty(op) => {
                 //ObjectPropertyAssertion( OP a1 a2 ) T(a1) T(OP) T(a2) .
-                let node_to:PNamedOrBlankNode<_> = (&self.to.0).into();
+                let node_to:PNamedOrBlankNode<_> = self.to.render(f, ng)?;
                 let node_op:PNamedNode<_> = (&op.0).into();
-                let node_from:PTerm<_> = (&self.from.0).into();
+                let node_from:PTerm<_> = self.from.render(f, ng)?;
                 Ok(
                     triple! (
                         f,
@@ -803,7 +859,7 @@ render! {
     {
         //T(a) T(DPE) T(lt) .
         let node_dp:PNamedNode<_> = (&self.dp.0).into();
-        let node_i:PNamedOrBlankNode<_> = (&self.from.0).into();
+        let node_i:PNamedOrBlankNode<_> = self.from.render(f, ng)?;
         let node_lit:PTerm<_> = self.to.render(f, ng)?;
         Ok(
             triple!(f, node_i, node_dp, node_lit)
@@ -815,7 +871,7 @@ render! {
     ClassAssertion, self, f, ng, PTriple<Rc<str>>,
     {   // T(a) rdf:type T(CE) .
         let node_ce:PTerm<_> = self.ce.render(f, ng)?;
-        let node_i:PNamedOrBlankNode<_> = (&self.i.0).into();
+        let node_i:PNamedOrBlankNode<_> = self.i.render(f, ng)?;
 
         Ok(
             triple!(f, node_i, ng.nn(RDF::Type), node_ce)
@@ -922,6 +978,25 @@ render! {
     {
         Ok(
             triple!(f, &self.sub.0, ng.nn(RDFS::SubPropertyOf), &self.sup.0)
+        )
+    }
+}
+
+render_to_node! {
+    Individual, self, f, ng,
+    {
+        match self {
+            Self::Named(ni) => ni.render(f, ng),
+            Self::Anonymous(ai) => ai.render(f, ng),
+        }
+    }
+}
+
+render_to_node! {
+    AnonymousIndividual, self, _f, _ng,
+    {
+        Ok(
+            PNamedOrBlankNode::BlankNode(PBlankNode::new(self.0.clone()))
         )
     }
 }
@@ -1094,12 +1169,13 @@ render_to_node! {
                     let bn = ng.bn();
 
                     let node_ope:PTerm<_> = ope.render(f, ng)?;
+                    let ind:PTerm<_>= i.render(f, ng)?;
 
                     triples_to_node!(
                         f,
                         bn.clone(), ng.nn(RDF::Type), ng.nn(OWL::Restriction),
                         bn.clone(), ng.nn(OWL::OnProperty), node_ope,
-                        bn, ng.nn(OWL::HasValue), &i.into()
+                        bn, ng.nn(OWL::HasValue), ind
                     )
                 }
                 Self::ObjectHasSelf(_ope) =>todo!(),
@@ -1899,6 +1975,13 @@ mod test {
     fn object_property_symmetric() {
         assert_round(include_str!(
             "../../ont/owl-rdf/object-property-symmetric.owl"
+        ));
+    }
+
+    #[test]
+    fn annotation_with_anonymous() {
+        assert_round(include_str!(
+            "../../ont/owl-rdf/annotation-with-anonymous.owl"
         ));
     }
 

@@ -41,7 +41,7 @@ macro_rules! some {
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq, Ord, PartialOrd)]
-pub struct BNode(Rc<String>);
+pub struct BNode(Rc<str>);
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub enum Term {
@@ -800,13 +800,16 @@ impl<'a> OntologyParser<'a> {
         v.into_iter().collect()
     }
 
-    fn to_ni_seq(&mut self, bnodeid: &BNode) -> Option<Vec<NamedIndividual>> {
-        let v: Vec<Option<NamedIndividual>> = self
+    fn to_ni_seq(&mut self, bnodeid: &BNode) -> Option<Vec<Individual>> {
+        let v: Vec<Option<Individual>> = self
             .bnode_seq
             .remove(bnodeid)
             .as_ref()?
             .into_iter()
-            .map(|t| self.to_iri(t).map(|iri| NamedIndividual(iri.clone())))
+            .map(|t| self.to_iri(t)
+                 .map(|iri|
+                      NamedIndividual(iri.clone())
+                      .into()))
             .collect();
 
         v.into_iter().collect()
@@ -1456,8 +1459,8 @@ impl<'a> OntologyParser<'a> {
                     }
                 },
                 [Term::Iri(sub), Term::OWL(VOWL::SameAs), Term::Iri(obj)] => some! {
-                    SameIndividual(vec![NamedIndividual(sub.clone()),
-                                        NamedIndividual(obj.clone())]).into()
+                    SameIndividual(vec![sub.into(),
+                                        obj.into()]).into()
                 },
                 [Term::Iri(i), Term::OWL(VOWL::DifferentFrom), Term::Iri(j)] => {
                     some! {
@@ -1479,7 +1482,7 @@ impl<'a> OntologyParser<'a> {
                          NamedEntityKind::DataProperty) => {
                             DataPropertyAssertion {
                                 dp: DataProperty(pred.clone()).into(),
-                                from: NamedIndividual(sub.clone()),
+                                from: sub.into(),
                                 to: self.to_literal(t)?
                             }.into()
                         }
@@ -1495,8 +1498,8 @@ impl<'a> OntologyParser<'a> {
                          NamedEntityKind::NamedIndividual) => {
                             ObjectPropertyAssertion {
                                 ope: ObjectProperty(pred.clone()).into(),
-                                from: NamedIndividual(sub.clone()),
-                                to: NamedIndividual(obj.clone())
+                                from: sub.into(),
+                                to: obj.into()
                             }.into()
                         }
                         _ => todo!()
@@ -1519,30 +1522,76 @@ impl<'a> OntologyParser<'a> {
 
     fn simple_annotations(&mut self) {
         for triple in std::mem::take(&mut self.simple) {
-            if let Some(iri) = match &triple {
-                [Term::Iri(iri), Term::RDFS(rdfs), _] if rdfs.is_builtin() => Some(iri),
-                [Term::Iri(iri), Term::OWL(VOWL::VersionInfo), _] => Some(iri),
-                [Term::Iri(iri), Term::Iri(ap), _] if self.o.j().is_annotation_property(&ap) => {
-                    Some(iri)
-                }
-                _ => None,
-            } {
-                let ann = self
+            let firi = |s:&mut OntologyParser, t, iri:&IRI| {
+                let ann = s
                     .ann_map
-                    .remove(&triple)
+                    .remove(t)
                     .unwrap_or_else(|| BTreeSet::new());
-                self.merge(AnnotatedAxiom {
+                s.merge(AnnotatedAxiom {
                     axiom: AnnotationAssertion {
-                        subject: iri.clone(),
-                        ann: self.annotation(&triple),
+                        subject: iri.into(),
+                        ann: s.annotation(t),
                     }
                     .into(),
-                    ann,
-                });
-            } else {
-                self.simple.push(triple);
+                ann,
+                })
+            };
+
+            match &triple {
+                [Term::Iri(iri), Term::RDFS(rdfs), _] if rdfs.is_builtin() => {
+                    firi(self, &triple, iri)
+                }
+                [Term::Iri(iri), Term::OWL(VOWL::VersionInfo), _] => {
+                    firi(self, &triple, iri)
+                }
+                [Term::Iri(iri), Term::Iri(ap), _] if (&self.o).j().is_annotation_property(&ap) => {
+                    firi(self, &triple, iri)
+                }
+                _ => {
+                    self.simple.push(triple);
+                }
             }
         }
+        for (k, v) in std::mem::take(&mut self.bnode){
+            let fbnode = |s:&mut OntologyParser, t, ind:&BNode| {
+                let ann = s
+                    .ann_map
+                    .remove(t)
+                    .unwrap_or_else(|| BTreeSet::new());
+                let ind:AnonymousIndividual = ind.0.clone().into();
+                s.merge(AnnotatedAxiom {
+                    axiom: AnnotationAssertion {
+                        subject: ind.into(),
+                        ann: s.annotation(t),
+                    }
+                    .into(),
+                ann,
+                })
+            };
+
+            match v.as_slice() {
+                [triple@[Term::BNode(ind), Term::RDFS(rdfs), _]] if rdfs.is_builtin() => {
+                    fbnode(self, &triple, ind)
+                }
+                [triple@[Term::BNode(ind), Term::OWL(VOWL::VersionInfo), _]] => {
+                    fbnode(self, &triple, ind)
+                }
+                [triple@[Term::BNode(ind), Term::Iri(ap), _]] if (&self.o).j().is_annotation_property(&ap) => {
+                    fbnode(self, &triple, ind)
+                }
+                _=>{
+                    self.bnode.insert(k, v);
+                }
+
+            }
+        }
+
+
+/*
+
+
+*/
+
     }
 
     /// Parse all imports and add to the Ontology.
@@ -1770,7 +1819,6 @@ mod test {
         }
 
         let (ont, incomp) = r.unwrap();
-
         assert!(incomp.is_complete());
         ont
     }
@@ -2346,6 +2394,21 @@ mod test {
         assert!(incomplete.is_complete());
         Ok(())
      }
+
+
+    #[test]
+    fn annotation_with_anonymous() {
+        let s = slurp_rdfont("annotation-with-anonymous");
+        let ont:AxiomMappedOntology = read_ok(
+            &mut s.as_bytes()
+        ).into();
+
+        // We cannot do the usual "compare" because the anonymous
+        // individuals break a direct comparision
+        assert_eq!(ont.i().annotation_assertion().count(), 1);
+
+        let _aa = ont.i().annotation_assertion().next();
+    }
 
     // #[test]
     // fn import_property() {

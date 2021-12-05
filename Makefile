@@ -22,6 +22,7 @@ test:
 
 quick-test:
 	cargo test --lib --bins --tests -- --skip integration
+
 tmp:
 	mkdir tmp
 
