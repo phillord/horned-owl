@@ -1,8 +1,7 @@
-Version 0.10.0
+Version 0.11.0
 ==============
 
-Reconsider sofia vs Rio.
-Add an RDF writer
+Support fully multi file ontology parsing
 
 
 Version next

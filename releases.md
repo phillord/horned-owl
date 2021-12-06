@@ -5,6 +5,8 @@ The major change is to move the RDF parser to RIO. RDF parsing now has
 preliminary support for ontologies which require knowledge from
 outside the current one to parse fully.
 
+An RDF writer has been added.
+
 Version 0.9.0
 =============
 
