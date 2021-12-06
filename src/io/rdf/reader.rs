@@ -1,5 +1,5 @@
 use Term::*;
-use rio_api::{model::{BlankNode, NamedNode, NamedOrBlankNode}, parser::TriplesParser};
+use rio_api::{model::{BlankNode, NamedNode, Subject}, parser::TriplesParser};
 
 use crate::{model::Literal, ontology::axiom_mapped::AxiomMappedOntology};
 use crate::model::*;
@@ -242,16 +242,18 @@ fn to_term_lt<'a>(lt: &'a rio_api::model::Literal, b: &Build)-> Term {
     }
 }
 
-fn to_term_nnb<'a>(nnb: &'a NamedOrBlankNode,
+fn to_term_nnb<'a>(nnb: &'a Subject,
                    m: &HashMap<&String, Term>,
                    b: &Build) -> Term {
     match nnb {
-        NamedOrBlankNode::NamedNode(nn) => {
+        Subject::NamedNode(nn) => {
             to_term_nn(nn, m, b)
         }
-        NamedOrBlankNode::BlankNode(bn) => {
+        Subject::BlankNode(bn) => {
             to_term_bn(bn)
         }
+        Subject::Triple(_) =>
+            unimplemented!("Triple subjects are not implemented")
     }
 }
 
@@ -259,7 +261,8 @@ fn to_term<'a>(t: &'a RioTerm, m: &HashMap<&String, Term>, b: &Build) -> Term {
     match t {
         rio_api::model::Term::NamedNode(iri) => to_term_nn(iri, m, b),
         rio_api::model::Term::BlankNode(id) => to_term_bn(id),
-        rio_api::model::Term::Literal(l) => to_term_lt(l, b)
+        rio_api::model::Term::Literal(l) => to_term_lt(l, b),
+        rio_api::model::Term::Triple(_) => unimplemented!("Triple subjects are not implemented")
     }
 }
 

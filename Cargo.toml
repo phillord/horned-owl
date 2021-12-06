@@ -22,9 +22,9 @@ lazy_static="1.4.0"
 log = {version="0.4.8"}
 quick-xml="0.12.4"
 indexmap="1.0.2"
-rio_api="0.5.3"
-rio_xml="0.5.3"
-pretty_rdf="0.1.0"
+rio_api="0.6.1"
+rio_xml="0.6.1"
+pretty_rdf="0.1.2"
 ##pretty_rdf={path="./pretty_rdf"}
 slurp = "1.0.1"
 ureq="2.1.1"
