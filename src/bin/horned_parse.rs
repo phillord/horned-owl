@@ -14,7 +14,12 @@ use horned_owl::error::CommandError;
 use std::path::Path;
 
 fn main() -> Result<(), Error> {
-    let matches = App::new("horned-parse")
+    let matches = app("horned-parse").get_matches();
+    matcher(&matches)
+}
+
+pub(crate) fn app(name: &str) -> App<'static, 'static> {
+    App::new(name)
         .version("0.1")
         .about("Parse an OWL File")
         .author("Phillip Lord")
@@ -24,12 +29,9 @@ fn main() -> Result<(), Error> {
                 .required(true)
                 .index(1),
         )
-        .get_matches();
-
-    matcher(&matches)
 }
 
-fn matcher(matches: &ArgMatches) -> Result<(), Error> {
+pub(crate) fn matcher(matches: &ArgMatches) -> Result<(), Error> {
     let input = matches
         .value_of("INPUT")
         .ok_or(CommandError::MissingArgument)?;
@@ -81,5 +83,4 @@ mod test {
 
         Ok(())
     }
-
 }

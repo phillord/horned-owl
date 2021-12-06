@@ -8,13 +8,17 @@ use clap::ArgMatches;
 
 use failure::Error;
 
-
 use horned_owl::command::parse_path;
 
-use std::{io::{stdout}, path::Path};
+use std::{io::stdout, path::Path};
 
 fn main() -> Result<(), Error> {
-    let matches = App::new("horned-round")
+    let matches = app("horned-round").get_matches();
+    matcher(&matches)
+}
+
+pub(crate) fn app(name: &str) -> App<'static, 'static> {
+    App::new(name)
         .version("0.1")
         .about("Parse and Render an OWL Ontology")
         .author("Phillip Lord")
@@ -24,30 +28,22 @@ fn main() -> Result<(), Error> {
                 .required(true)
                 .index(1),
         )
-        .get_matches();
-
-    matcher(matches)
 }
 
-fn matcher(matches: ArgMatches) -> Result<(), Error> {
+pub(crate) fn matcher(matches: &ArgMatches) -> Result<(), Error> {
     let input = matches.value_of("INPUT").unwrap();
 
     let res = parse_path(Path::new(input))?;
 
     match res {
         horned_owl::io::ParserOutput::OWXParser(so, pm) => {
-            horned_owl::io::owx::writer::write(
-                &mut stdout(), &so.into(), Some(&pm)
-            )
+            horned_owl::io::owx::writer::write(&mut stdout(), &so.into(), Some(&pm))
         }
         horned_owl::io::ParserOutput::RDFParser(rdfo, _ip) => {
-            horned_owl::io::rdf::writer::write(
-                &mut stdout(), &rdfo.into()
-            )
+            horned_owl::io::rdf::writer::write(&mut stdout(), &rdfo.into())
         }
     }
 }
-
 
 #[cfg(test)]
 mod test {
@@ -78,5 +74,4 @@ mod test {
 
         Ok(())
     }
-
 }

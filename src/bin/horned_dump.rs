@@ -13,7 +13,12 @@ use horned_owl::{command::parse_path, error::CommandError, ontology::set::SetOnt
 use std::{collections::HashMap, path::Path};
 
 fn main() -> Result<(), Error> {
-    let matches = App::new("horned-parse")
+    let matches = app("horned-dump").get_matches();
+    matcher(&matches)
+}
+
+pub(crate) fn app(name: &str) -> App<'static, 'static> {
+    App::new(name)
         .version("0.1")
         .about("Parse an OWL File and dump the data structures")
         .author("Phillip Lord")
@@ -23,17 +28,10 @@ fn main() -> Result<(), Error> {
                 .required(true)
                 .index(1),
         )
-        .arg(
-            Arg::with_name("incomplete")
-             .long("incomplete")
-             .short("l")
-        )
-        .get_matches();
-
-    matcher(matches)
+        .arg(Arg::with_name("incomplete").long("incomplete").short("l"))
 }
 
-fn matcher(matches: ArgMatches) -> Result<(), Error> {
+pub(crate) fn matcher(matches: &ArgMatches) -> Result<(), Error> {
     let input = matches
         .value_of("INPUT")
         .ok_or(CommandError::MissingArgument)?;
@@ -45,11 +43,10 @@ fn matcher(matches: ArgMatches) -> Result<(), Error> {
             let hash_map: HashMap<&String, &String> = map.mappings().collect();
             println!("Ontology:\n{:#?}\n\nMapping:\n{:#?}", ont, hash_map);
             Ok(())
-
         }
         horned_owl::io::ParserOutput::RDFParser(ont, inc) => {
             if !matches.is_present("incomplete") {
-                let so:SetOntology = ont.into();
+                let so: SetOntology = ont.into();
                 println!("Ontology:\n{:#?}", so);
             }
 

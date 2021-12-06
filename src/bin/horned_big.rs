@@ -12,7 +12,12 @@ use horned_owl::ontology::set::SetOntology;
 use std::io::stdout;
 
 fn main() -> Result<(), Error> {
-    let matches = App::new("horned-big")
+    let matches = app("horned-big").get_matches();
+    matcher(&matches)
+}
+
+pub(crate) fn app(name: &str) -> App<'static, 'static> {
+    App::new(name)
         .version("0.1")
         .about("Generate a big OWL file for testing")
         .author("Phillip Lord")
@@ -22,18 +27,15 @@ fn main() -> Result<(), Error> {
                 .required(true)
                 .index(1),
         )
-        .get_matches();
-
-    matcher(matches)
 }
 
-fn matcher(matches: ArgMatches) -> Result<(), Error> {
+pub(crate) fn matcher(matches: &ArgMatches) -> Result<(), Error> {
     let size: isize = matches.value_of("SIZE").unwrap().parse()?;
 
     let b = Build::new();
     let mut o = SetOntology::new();
 
-    for i in 1..size+1 {
+    for i in 1..size + 1 {
         o.declare(b.class(format!("https://www.example.com/o{}", i)));
     }
 

@@ -41,6 +41,11 @@ slurp = "1.0.1"
 [profile.release]
 debug = true
 
+[[bin]]
+edition = "2018"
+name = "horned"
+path = "src/bin/horned.rs"
+
 [[bench]]
 name = "horned"
 harness = false
