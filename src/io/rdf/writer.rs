@@ -1,28 +1,40 @@
 use std::{collections::{BTreeSet, HashSet}, fmt::Debug, io::Write, rc::Rc};
-
-use failure::Error;
 use pretty_rdf::{PBlankNode, PLiteral, PNamedNode, PSubject, PTerm, PTriple, ChunkedRdfXmlFormatterConfig, PrettyRdfXmlFormatter};
 use crate::{
     model::*, ontology::axiom_mapped::AxiomMappedOntology,
     vocab::{is_thing, OWL, RDF, RDFS, XSD, WithIRI, Vocab}
 };
 
+use thiserror::Error;
+
+#[derive(Debug, Error)]
+pub enum WriteError {
+    // Use to replace bail!/format_err from failure crate. Should specialize
+    #[error("{0}")]
+    GeneralError(String),
+    #[error("Oops")]
+    Underlying(#[source] Box<dyn std::error::Error>)
+}
+
+impl From<std::io::Error> for WriteError {
+    fn from(e: std::io::Error) -> Self {
+        WriteError::Underlying(Box::new(e))
+    }
+}
+
 pub fn write<W:Write>(
     write: &mut W,
     ont: &AxiomMappedOntology,
-) -> Result<(), Error> {
+) -> Result<(), WriteError> {
     // Entirely unsatisfying to set this randomly here, but we can't
     // access ns our parser yet
     let mut p = indexmap::IndexMap::new();
     p.insert("http://www.w3.org/2002/07/owl#".to_string(),"owl".to_string());
     p.insert("http://www.w3.org/XML/1998/namespace".to_string(),"xml".to_string());
-    p.insert("http://www.w3.org/2001/XMLSchema#".to_string(),"xsd".to_string());
-    p.insert("http://www.w3.org/2000/01/rdf-schema#".to_string(), "rdfs".to_string());
-
     let mut f:PrettyRdfXmlFormatter<Rc<str>,_> = PrettyRdfXmlFormatter::new(
         write,
         ChunkedRdfXmlFormatterConfig::all().prefix(p)
-    )?;
+    ).map_err(|s| WriteError::Underlying(Box::new(s)))?;
     let mut bng = NodeGenerator::default();
     ont.render(&mut f, &mut bng)?;
 
@@ -30,7 +42,7 @@ pub fn write<W:Write>(
     //     println!("{}", i.printable());
     // }
 
-    f.finish()?;
+    f.finish().map_err(|s| WriteError::Underlying(Box::new(s)))?;
     Ok(())
 }
 
@@ -155,7 +167,7 @@ impl From<&Individual> for PSubject<Rc<str>> {
 trait Render<R> {
     fn render<W:Write>(&self, f:&mut PrettyRdfXmlFormatter<Rc<str>, W>,
                        ng: &mut NodeGenerator) ->
-        Result<R, Error>;
+        Result<R, WriteError>;
 }
 
 enum Annotatable<A:AsRef<str>> {
@@ -184,7 +196,7 @@ macro_rules! render {
         impl Render<$return> for $type {
             fn render<W:Write>(& $self, $f:&mut PrettyRdfXmlFormatter<Rc<str>, W>,
                                $ng: &mut NodeGenerator)
-                               -> Result<$return, Error>
+                               -> Result<$return, WriteError>
                 $body
         }
     }
@@ -299,7 +311,7 @@ where
 {
     fn render<W:Write>(&self, f:&mut PrettyRdfXmlFormatter<Rc<str>, W>,
                        ng: &mut NodeGenerator)
-                       -> Result<PTerm<Rc<str>>, Error> {
+                       -> Result<PTerm<Rc<str>>, WriteError> {
         Ok(self.render(f, ng)?.into())
     }
 }
@@ -309,7 +321,7 @@ where
     T: Debug + Render<PTerm<Rc<str>>> {
     fn render<W:Write>(&self, f:&mut PrettyRdfXmlFormatter<Rc<str>, W>,
                        ng: &mut NodeGenerator)
-                       -> Result<PTerm<Rc<str>>, Error> {
+                       -> Result<PTerm<Rc<str>>, WriteError> {
         let mut rest:Option<PTerm<Rc<str>>> = None;
         for i in self.iter().rev() {
             let bn = &ng.bn();
@@ -338,7 +350,7 @@ where
 impl Render<()> for BTreeSet<Annotation> {
     fn render<W:Write>(&self, f:&mut PrettyRdfXmlFormatter<Rc<str>, W>,
                        ng: &mut NodeGenerator)
-                       -> Result<(), Error>
+                       -> Result<(), WriteError>
     {
         for r in self.iter() {
             r.render(f, ng)?;
@@ -394,7 +406,7 @@ render! {
 impl Render<()> for AnnotatedAxiom {
     fn render<W:Write>(&self, f:&mut PrettyRdfXmlFormatter<Rc<str>, W>,
                        ng: &mut NodeGenerator)
-                           -> Result<(), Error> {
+                           -> Result<(), WriteError> {
         let ax:Annotatable<Rc<str>> = self.axiom.render(f, ng)?;
         Ok(
             if self.ann.len() != 0 {
@@ -444,7 +456,7 @@ render! {
 render! {
     Annotation, self, f, ng, PTriple<Rc<str>>,
     {
-        let bn = ng.this_bn().ok_or_else(|| format_err!("No bnode available"))?;
+        let bn = ng.this_bn().ok_or_else(|| WriteError::GeneralError("No bnode available".to_string()))?;
 
         Ok(
             match &self.av {
@@ -496,7 +508,7 @@ render! {
 impl Render<Annotatable<Rc<str>>> for Axiom {
         fn render<W:Write>(&self, f:&mut PrettyRdfXmlFormatter<Rc<str>, W>,
                            ng: &mut NodeGenerator)
-                           -> Result<Annotatable<Rc<str>>, Error>
+                           -> Result<Annotatable<Rc<str>>, WriteError>
     {
         Ok(
             match self {
@@ -800,7 +812,7 @@ fn members<R:Debug + Render<PSubject<Rc<str>>>,W:Write>
     (f:&mut PrettyRdfXmlFormatter<Rc<str>, W>,
      ng:&mut NodeGenerator,
      ty_two:OWL,
-     ty_n:OWL, members:&Vec<R>) -> Result<Vec<PTriple<Rc<str>>>,Error>
+     ty_n:OWL, members:&Vec<R>) -> Result<Vec<PTriple<Rc<str>>>,WriteError>
 {
     // DifferentIndividuals( a1 a2 ) T(a1) owl:differentFrom T(a2) .
     // DifferentIndividuals( a1 ... an ), n > 2 _:x rdf:type owl:AllDifferent .
@@ -1023,7 +1035,7 @@ fn obj_cardinality<W:Write>(n:&u32, ope:&ObjectPropertyExpression, bce:&Box<Clas
                             unqual:PNamedNode<Rc<str>>,
                             qual:PNamedNode<Rc<str>>,
                             f:&mut PrettyRdfXmlFormatter<Rc<str>,W>,
-               ng:&mut NodeGenerator) -> Result<PSubject<Rc<str>>,Error> {
+               ng:&mut NodeGenerator) -> Result<PSubject<Rc<str>>,WriteError> {
     //_:x rdf:type owl:Restriction .
     //_:x owl:onProperty T(OPE) .
     //_:x owl:maxCardinality "n"^^xsd:nonNegativeInteger ._:x
@@ -1063,7 +1075,7 @@ fn obj_cardinality<W:Write>(n:&u32, ope:&ObjectPropertyExpression, bce:&Box<Clas
 fn data_cardinality<W:Write>(n:&u32, dp:&DataProperty, dr: &DataRange,
                              qual:PNamedNode<Rc<str>>,
                              f:&mut PrettyRdfXmlFormatter<Rc<str>,W>,
-                             ng:&mut NodeGenerator) -> Result<PSubject<Rc<str>>,Error> {
+                             ng:&mut NodeGenerator) -> Result<PSubject<Rc<str>>,WriteError> {
 
     // _:x rdf:type owl:Restriction .
     // _:x owl:onProperty T(DPE) .
@@ -1253,10 +1265,10 @@ render_to_node! {
 
 fn nary<R:Render<PSubject<Rc<str>>>,W:Write>(f:&mut PrettyRdfXmlFormatter<Rc<str>, W>, ng:&mut NodeGenerator,
                  entities:&Vec<R>, pred:PNamedNode<Rc<str>>)
-                 -> Result<Vec<PTriple<Rc<str>>>, Error>
+                 -> Result<Vec<PTriple<Rc<str>>>, WriteError>
 {
     let mut i = entities.iter();
-    let first = i.next().ok_or_else(|| format_err!("N-ary Class axiom with no classes"))?;
+    let first = i.next().ok_or_else(|| WriteError::GeneralError("N-ary Class axiom with no classes".to_string()))?;
     let first:PSubject<_> = first.render(f, ng)?;
     let mut v = vec![];
     for c in i {
@@ -1395,7 +1407,7 @@ render!{
 
 fn obj_prop_char<W:Write>(ob:&ObjectPropertyExpression, f:&mut PrettyRdfXmlFormatter<Rc<str>, W>,
                  ng:&mut NodeGenerator, chr:OWL)
-                 -> Result<PTriple<Rc<str>>, Error> {
+                 -> Result<PTriple<Rc<str>>, WriteError> {
     let s:PSubject<_> = ob.render(f, ng)?;
 
     Ok(

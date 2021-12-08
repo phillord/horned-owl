@@ -1,21 +1,19 @@
 extern crate clap;
-extern crate failure;
 extern crate horned_owl;
 
 use clap::App;
 use clap::Arg;
 use clap::ArgMatches;
 
-use failure::Error;
-
 use horned_owl::error::CommandError;
 
+use horned_owl::error::underlying;
 use rio_api::parser::TriplesParser;
 
 use std::{fs::File, io::stdout};
 use std::io::BufReader;
 
-fn main() -> Result<(), Error> {
+fn main() -> Result<(), CommandError> {
     let matches = App::new("horned-triples")
         .version("0.1")
         .about("Parse RDF and dump the triples")
@@ -37,14 +35,14 @@ fn main() -> Result<(), Error> {
     matcher(matches)
 }
 
-fn matcher(matches: ArgMatches) -> Result<(), Error> {
+fn matcher(matches: ArgMatches) -> Result<(), CommandError> {
     let input = matches
         .value_of("INPUT")
         .ok_or(CommandError::MissingArgument)?;
 
-    let file = File::open(input)?;
+    let file = File::open(input).map_err(underlying)?;
     let bufreader = BufReader::new(file);
-    let v: Vec<Result<String, Error>>
+    let v: Vec<Result<String, CommandError>>
         = rio_xml::RdfXmlParser::new(bufreader, None).into_iter(
             |rio_triple| Ok(
                 format!("{}\n\t{}\n\t{}",
@@ -74,9 +72,9 @@ fn matcher(matches: ArgMatches) -> Result<(), Error> {
             pretty_rdf::PrettyRdfXmlFormatter::new
             (b,
              pretty_rdf::ChunkedRdfXmlFormatterConfig::all()
-            )?;
+            ).map_err(underlying)?;
         //let mut f = rio_xml::RdfXmlFormatter::with_indentation(&b, 4)?;
-        let file = File::open(input)?;
+        let file = File::open(input).map_err(underlying)?;
         let bufreader = BufReader::new(file);
         let _: Vec<Result<_,_>>
             = rio_xml::RdfXmlParser::new(bufreader, None).into_iter(
@@ -85,7 +83,7 @@ fn matcher(matches: ArgMatches) -> Result<(), Error> {
                     f.format(t)
                 }
             ).collect();
-        f.finish()?;
+        f.finish().map_err(underlying)?;
     }
 
     Ok(())

@@ -1,19 +1,17 @@
 extern crate clap;
-extern crate failure;
 extern crate horned_owl;
 
 use clap::App;
 use clap::Arg;
 use clap::ArgMatches;
 
-use failure::Error;
-
-
 use horned_owl::command::parse_path;
+use horned_owl::error::CommandError;
+use horned_owl::error::underlying;
 
 use std::{io::{stdout}, path::Path};
 
-fn main() -> Result<(), Error> {
+fn main() -> Result<(), CommandError> {
     let matches = App::new("horned-round")
         .version("0.1")
         .about("Parse and Render an OWL Ontology")
@@ -29,21 +27,21 @@ fn main() -> Result<(), Error> {
     matcher(matches)
 }
 
-fn matcher(matches: ArgMatches) -> Result<(), Error> {
+fn matcher(matches: ArgMatches) -> Result<(), CommandError> {
     let input = matches.value_of("INPUT").unwrap();
 
-    let res = parse_path(Path::new(input))?;
+    let res = parse_path(Path::new(input)).map_err(underlying)?;
 
     match res {
         horned_owl::io::ParserOutput::OWXParser(so, pm) => {
             horned_owl::io::owx::writer::write(
                 &mut stdout(), &so.into(), Some(&pm)
-            )
+            ).map_err(underlying)
         }
         horned_owl::io::ParserOutput::RDFParser(rdfo, _ip) => {
             horned_owl::io::rdf::writer::write(
                 &mut stdout(), &rdfo.into()
-            )
+            ).map_err(underlying)
         }
     }
 }

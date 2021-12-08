@@ -1,16 +1,13 @@
 extern crate clap;
-extern crate failure;
 extern crate horned_owl;
 
 use clap::App;
 use clap::Arg;
 use clap::ArgMatches;
 
-use failure::Error;
-
 use horned_owl::{command::materialize, error::CommandError};
 
-fn main() -> Result<(), Error> {
+fn main() -> Result<(), CommandError> {
     let matches = App::new("horned-materialize")
         .version("0.1")
         .about("Parse an OWL file and download all the imports.")
@@ -25,7 +22,7 @@ fn main() -> Result<(), Error> {
     matcher(matches)
 }
 
-fn matcher(matches: ArgMatches) -> Result<(), Error> {
+fn matcher(matches: ArgMatches) -> Result<(), CommandError> {
     let input = matches
         .value_of("INPUT")
         .ok_or(CommandError::MissingArgument)?;

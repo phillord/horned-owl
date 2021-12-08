@@ -1,19 +1,16 @@
 extern crate clap;
-extern crate failure;
 extern crate horned_owl;
 
 use clap::App;
 use clap::Arg;
 use clap::ArgMatches;
 
-use failure::Error;
-
 use horned_owl::command::parse_path;
 use horned_owl::error::CommandError;
 
 use std::path::Path;
 
-fn main() -> Result<(), Error> {
+fn main() -> Result<(), CommandError> {
     let matches = App::new("horned-parse")
         .version("0.1")
         .about("Parse an OWL File")
@@ -29,7 +26,7 @@ fn main() -> Result<(), Error> {
     matcher(&matches)
 }
 
-fn matcher(matches: &ArgMatches) -> Result<(), Error> {
+fn matcher(matches: &ArgMatches) -> Result<(), CommandError> {
     let input = matches
         .value_of("INPUT")
         .ok_or(CommandError::MissingArgument)?;

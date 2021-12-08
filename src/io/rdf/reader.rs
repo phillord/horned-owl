@@ -1,5 +1,6 @@
 use Term::*;
 use rio_api::{model::{BlankNode, NamedNode, Subject}, parser::TriplesParser};
+use rio_xml::RdfXmlError;
 
 use crate::{model::Literal, ontology::axiom_mapped::AxiomMappedOntology};
 use crate::model::*;
@@ -22,7 +23,7 @@ use crate::{ontology::
 };
 
 use enum_meta::Meta;
-use failure::Error;
+use thiserror::Error;
 
 
 use std::cmp::Ordering;
@@ -31,6 +32,23 @@ use std::collections::HashMap;
 use std::io::BufRead;
 use std::io::Cursor;
 use std::rc::Rc;
+
+#[derive(Debug, Error)]
+pub enum ReadError {
+    // Use to replace bail!/format_err from failure crate. Should specialize
+    #[error("{0}")]
+    GeneralError(String),
+
+    #[error("{0}")]
+    RdfError(#[source] RdfXmlError)
+}
+
+impl From<RdfXmlError> for ReadError {
+    fn from(e: RdfXmlError) -> Self {
+        ReadError::RdfError(e)
+    }
+}
+
 
 type RioTerm<'a> = ::rio_api::model::Term<'a>;
 
@@ -150,14 +168,14 @@ impl Convert for rio_api::model::NamedNode<'_> {
 trait TryBuild<N: From<IRI>> {
     fn to_some_iri(&self, b: &Build) -> Option<IRI>;
 
-    fn to_iri_maybe(&self, b: &Build) -> Result<IRI, Error> {
+    fn to_iri_maybe(&self, b: &Build) -> Result<IRI, ReadError> {
         match self.to_some_iri(b) {
             Some(iri) => Ok(iri),
             None => todo!("Fix this"),
         }
     }
 
-    fn try_build(&self, b: &Build) -> Result<N, Error> {
+    fn try_build(&self, b: &Build) -> Result<N, ReadError> {
         Ok(self.to_iri_maybe(b)?.into())
     }
 }
@@ -336,7 +354,7 @@ pub struct OntologyParser<'a> {
     data_range: HashMap<BNode, DataRange>,
     ann_map: HashMap<[Term; 3], BTreeSet<Annotation>>,
     state: OntologyParserState,
-    error: Result<(),Error>,
+    error: Result<(),ReadError>,
 }
 
 impl<'a> OntologyParser<'a> {
@@ -371,7 +389,7 @@ impl<'a> OntologyParser<'a> {
                 ]
             )
         );
-        let results: Vec<Result<[Term; 3], Error>> = triple_iter.collect();
+        let results: Vec<Result<[Term; 3], ReadError>> = triple_iter.collect();
         let triples: Result<Vec<_>, _> = results.into_iter().collect();
         let triple_v: Vec<[Term; 3]> = triples.unwrap();
         //dbg!(&triple_v);
@@ -1599,7 +1617,7 @@ impl<'a> OntologyParser<'a> {
 
     /// Parse all imports and add to the Ontology.
     /// Return an error is we are in the wrong state
-    pub fn parse_imports(&mut self) -> Result<(), Error> {
+    pub fn parse_imports(&mut self) -> Result<(), ReadError> {
         match self.state {
             OntologyParserState::New => {
                 let triple = std::mem::take(&mut self.triple);
@@ -1623,8 +1641,8 @@ impl<'a> OntologyParser<'a> {
     }
 
     /// Parse all declarations and add to the ontology.
-    /// Error if we are not in the right state
-    pub fn parse_declarations(&mut self) -> Result<(), Error> {
+    /// ReadError if we are not in the right state
+    pub fn parse_declarations(&mut self) -> Result<(), ReadError> {
         match self.state {
             OntologyParserState::New => {
                 self.parse_imports().and_then(
@@ -1692,7 +1710,7 @@ impl<'a> OntologyParser<'a> {
     /// ic is a Vec of references to the import closure. These RDF
     /// ontologies do not need to be completely parsed, but will be
     /// relied on to resolve declarations.
-    pub fn finish_parse(&mut self, ic: &[&RDFOntology]) -> Result<(), Error> {
+    pub fn finish_parse(&mut self, ic: &[&RDFOntology]) -> Result<(), ReadError> {
         // Table 10
         self.simple_annotations();
 
@@ -1711,7 +1729,7 @@ impl<'a> OntologyParser<'a> {
         Ok(())
     }
 
-    pub fn parse(mut self) -> Result<(RDFOntology, IncompleteParse),Error> {
+    pub fn parse(mut self) -> Result<(RDFOntology, IncompleteParse),ReadError> {
         if self.error.is_err() {
             return Err(self.error.unwrap_err());
         }
@@ -1738,13 +1756,13 @@ impl<'a> OntologyParser<'a> {
     }
 
     /// Consume the parser and return an Ontology.
-    pub fn as_ontology(self) -> Result<RDFOntology, Error> {
+    pub fn as_ontology(self) -> Result<RDFOntology, ReadError> {
         self.error.and(Ok(self.o))
     }
 
     /// Consume the parser and return an Ontology and any data
     /// structures that have not been fully parsed
-    pub fn as_ontology_and_incomplete(mut self) -> Result<(RDFOntology, IncompleteParse), Error> {
+    pub fn as_ontology_and_incomplete(mut self) -> Result<(RDFOntology, IncompleteParse), ReadError> {
         if self.error.is_err() {
             return Err(self.error.unwrap_err());
         }
@@ -1782,11 +1800,11 @@ pub fn parser_with_build<'a, 'b, R: BufRead>(
 pub fn read_with_build<R: BufRead>(
     bufread: &mut R,
     build: &Build,
-) -> Result<(RDFOntology, IncompleteParse), Error> {
+) -> Result<(RDFOntology, IncompleteParse), ReadError> {
     parser_with_build(bufread, build).parse()
 }
 
-pub fn read<R: BufRead>(bufread: &mut R) -> Result<(RDFOntology, IncompleteParse), Error> {
+pub fn read<R: BufRead>(bufread: &mut R) -> Result<(RDFOntology, IncompleteParse), ReadError> {
     let b = Build::new();
     read_with_build(bufread, &b)
 }
@@ -1815,9 +1833,8 @@ mod test {
 
         if let Err(e) = r {
             panic!(
-                "Expected ontology, get failure: {:?} {:?}",
+                "Expected ontology, get failure: {:?}",
                 e,
-                e.backtrace()
             );
         }
 
@@ -2382,7 +2399,7 @@ mod test {
     }
 
     #[test]
-    fn import_property_in_bits() -> Result<(),Error>{
+    fn import_property_in_bits() -> Result<(),ReadError>{
         let b = Build::new();
         let p = parser_with_build(&mut slurp_rdfont("other-property").as_bytes(), &b);
         let (family_other, incomplete) = p.parse()?;
@@ -2419,7 +2436,7 @@ mod test {
     // }
 
     // #[test]
-    // fn family_import() -> Result<(),Error>{
+    // fn family_import() -> Result<(),ReadError>{
     //     let b = Build::new();
     //     let p = parser_with_build(&mut slurp_rdfont("family-other").as_bytes(), &b);
     //     let (family_other, incomplete) = p.parse()?;

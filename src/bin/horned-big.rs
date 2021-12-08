@@ -2,8 +2,8 @@ use clap::App;
 use clap::Arg;
 use clap::ArgMatches;
 
-use failure::Error;
-
+use horned_owl::error::CommandError;
+use horned_owl::error::underlying;
 use horned_owl::io::owx::writer::write;
 use horned_owl::model::Build;
 use horned_owl::model::MutableOntology;
@@ -11,7 +11,7 @@ use horned_owl::ontology::set::SetOntology;
 
 use std::io::stdout;
 
-fn main() -> Result<(), Error> {
+fn main() -> Result<(), CommandError> {
     let matches = App::new("horned-big")
         .version("0.1")
         .about("Generate a big OWL file for testing")
@@ -27,8 +27,9 @@ fn main() -> Result<(), Error> {
     matcher(matches)
 }
 
-fn matcher(matches: ArgMatches) -> Result<(), Error> {
-    let size: isize = matches.value_of("SIZE").unwrap().parse()?;
+fn matcher(matches: ArgMatches) -> Result<(), CommandError> {
+    let size: isize = matches.value_of("SIZE").unwrap()
+        .parse().map_err(|e| CommandError::Underlying(Box::new(e)))?;
 
     let b = Build::new();
     let mut o = SetOntology::new();
@@ -37,5 +38,5 @@ fn matcher(matches: ArgMatches) -> Result<(), Error> {
         o.declare(b.class(format!("https://www.example.com/o{}", i)));
     }
 
-    write(&mut stdout(), &o.into(), None)
+    write(&mut stdout(), &o.into(), None).map_err(underlying)
 }

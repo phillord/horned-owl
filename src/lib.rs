@@ -34,8 +34,7 @@
 //! faster than the OWL API for some tasks.
 //extern crate curie;
 //extern crate enum_meta;
-#[macro_use]
-extern crate failure;
+
 //#[macro_use]
 extern crate indexmap;
 extern crate log;

@@ -1,10 +1,11 @@
 //! Support for Horned command line programmes
 
-use crate::{io::{ParserOutput, ResourceType}, model::{Build, IRI}, ontology::{axiom_mapped::AxiomMappedOntology}, resolve::{localize_iri, strict_resolve_iri}};
+use crate::{error::{CommandError, underlying}, io::{ParserOutput, ResourceType}, model::{Build, IRI}, ontology::{axiom_mapped::AxiomMappedOntology}, resolve::{localize_iri, strict_resolve_iri}};
 
-use failure::Error;
 
 use std::{fs::File, io::{BufReader, Write}, path::Path};
+
+
 
 pub fn path_type(path: &Path) -> Option<ResourceType> {
    match path.extension().map(|s| s.to_str()).flatten() {
@@ -14,14 +15,18 @@ pub fn path_type(path: &Path) -> Option<ResourceType> {
    }
 }
 
-pub fn parse_path(path: &Path) -> Result<ParserOutput, Error>
+pub fn parse_path(path: &Path) -> Result<ParserOutput, CommandError>
 {
-    let file = File::open(&path)?;
+    let file = File::open(&path).map_err(underlying)?;
     let mut bufreader = BufReader::new(file);
 
     Ok(match path_type(path) {
-        Some(ResourceType::OWX) => super::io::owx::reader::read(&mut bufreader)?.into(),
-        Some(ResourceType::RDF) => super::io::rdf::reader::read(&mut bufreader)?.into(),
+        Some(ResourceType::OWX) => super::io::owx::reader::read(&mut bufreader)
+            .map_err(underlying)?
+            .into(),
+        Some(ResourceType::RDF) => super::io::rdf::reader::read(&mut bufreader)
+            .map_err(underlying)?
+            .into(),
         _ => {
             eprintln!("Do not know how to parse file with path: {:?}", path);
             todo!()
@@ -30,17 +35,19 @@ pub fn parse_path(path: &Path) -> Result<ParserOutput, Error>
 }
 
 /// Parse but only as far as the imports, if that makes sense.
-pub fn parse_imports(path: &Path) -> Result<ParserOutput, Error> {
-    let file = File::open(&path)?;
+pub fn parse_imports(path: &Path) -> Result<ParserOutput, CommandError> {
+    let file = File::open(&path)
+        .map_err(underlying)?;
     let mut bufreader = BufReader::new(file);
     Ok(match path_type(path) {
-        Some(ResourceType::OWX) => super::io::owx::reader::read(&mut bufreader)?.into(),
+        Some(ResourceType::OWX) => super::io::owx::reader::read(&mut bufreader)
+            .map_err(underlying)?.into(),
         Some(ResourceType::RDF) => {
             let b = Build::new();
             let mut p = crate::io::rdf::reader::parser_with_build(&mut bufreader,
                                                               &b);
-            p.parse_imports()?;
-            p.as_ontology_and_incomplete()?.into()
+            p.parse_imports().map_err(underlying)?;
+            p.as_ontology_and_incomplete().map_err(underlying)?.into()
         }
         _ => {
             eprintln!("Do not know how to parse file with path: {:?}", path);
@@ -49,16 +56,17 @@ pub fn parse_imports(path: &Path) -> Result<ParserOutput, Error> {
     })
 }
 
-pub fn materialize(input: &str) -> Result<Vec<IRI>,Error> {
+pub fn materialize(input: &str) -> Result<Vec<IRI>, CommandError> {
     let mut v = vec![];
     materialize_1(input, &mut v, true)?;
     Ok(v)
 }
 
 pub fn materialize_1<'a>(input: &str, done: &'a mut Vec<IRI>, recurse: bool)
-                         -> Result<&'a mut Vec<IRI>,Error> {
+                         -> Result<&'a mut Vec<IRI>, CommandError> {
     println!("Parsing: {}", input);
-    let amont:AxiomMappedOntology = parse_imports(Path::new(input))?.into();
+    let amont:AxiomMappedOntology = parse_imports(Path::new(input))
+        .map_err(underlying)?.into();
     let import = amont.i().import();
 
     let b = Build::new();
@@ -74,8 +82,10 @@ pub fn materialize_1<'a>(input: &str, done: &'a mut Vec<IRI>, recurse: bool)
                 let imported_data = strict_resolve_iri(&i.0);
                 done.push(i.0.clone());
                 println!("Saving to {}", local);
-                let mut file = File::create(&local)?;
-                file.write_all(&imported_data.as_bytes())?;
+                let mut file = File::create(&local)
+                    .map_err(underlying)?;
+                file.write_all(&imported_data.as_bytes())
+                    .map_err(underlying)?;
             }
             else {
                 println!("Already Present: {}", local);
@@ -190,5 +200,3 @@ pub mod summary {
         im
     }
 }
-
-

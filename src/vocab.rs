@@ -8,7 +8,14 @@ use crate::model::NamedEntity;
 use crate::model::NamedEntityKind;
 use crate::model::IRI;
 
-use failure::Error;
+use thiserror::Error;
+
+#[derive(Debug, Error)]
+pub enum VocabError {
+    // Use to replace bail!/format_err from failure crate. Should specialize
+    #[error("{0}")]
+    GeneralError(String),
+}
 
 pub trait WithIRI<'a>: Meta<&'a IRIString> {
     /// Return a string representation of the IRI associated with this
@@ -288,7 +295,7 @@ fn meta_testing() {
     );
 }
 
-pub fn entity_for_iri(type_iri: &str, entity_iri: &str, b: &Build) -> Result<NamedEntity, Error> {
+pub fn entity_for_iri(type_iri: &str, entity_iri: &str, b: &Build) -> Result<NamedEntity, VocabError> {
     // Datatypes are handled here because they are not a
     // "type" but an "RDF schema" element.
     if type_iri == "http://www.w3.org/2000/01/rdf-schema#Datatype" {
@@ -296,7 +303,8 @@ pub fn entity_for_iri(type_iri: &str, entity_iri: &str, b: &Build) -> Result<Nam
     }
 
     if type_iri.len() < 30 {
-        bail!("IRI is not for a type of entity:{}", type_iri);
+        return Err(VocabError::GeneralError(
+            format!("IRI is not for a type of entity:{}", type_iri)));
     }
 
     Ok(match &type_iri[30..] {
@@ -305,7 +313,8 @@ pub fn entity_for_iri(type_iri: &str, entity_iri: &str, b: &Build) -> Result<Nam
         "DatatypeProperty" => b.data_property(entity_iri).into(),
         "AnnotationProperty" => b.annotation_property(entity_iri).into(),
         "NamedIndividual" => b.named_individual(entity_iri).into(),
-        _ => bail!("IRI is not a type of entity:{}", type_iri),
+        _ => return Err(VocabError::GeneralError(
+            format!("IRI is not a type of entity:{}", type_iri))),
     })
 }
 

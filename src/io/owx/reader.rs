@@ -9,43 +9,57 @@ use crate::{ontology::set::SetOntology, vocab::OWL};
 use std::borrow::Cow;
 use std::collections::BTreeSet;
 use std::io::BufRead;
+use std::num::ParseIntError;
 
 use quick_xml::events::BytesEnd;
 use quick_xml::events::BytesStart;
 use quick_xml::events::Event;
 use quick_xml::Reader;
 
-use failure::Error;
+use thiserror::Error;
 
-#[derive(Debug, Fail)]
-enum ReadError {
-    #[fail(display = "End Tag Arrived Unexpectedly: {} at {}", tag, pos)]
+#[derive(Debug, Error)]
+pub enum ReadError {
+    #[error("End Tag Arrived Unexpectedly: {tag} at {pos}")]
     UnexpectedEndTag { tag: String, pos: usize },
 
-    #[fail(display = "Missing End Tag: expected {} after {}", tag, pos)]
+    #[error("Missing End Tag: expected {tag} after {pos}")]
     MissingEndTag { tag: String, pos: usize },
 
-    #[fail(display = "Missing element: Expected {} at {}", tag, pos)]
+    #[error("Missing element: Expected {tag} at {pos}")]
     MissingElement { tag: String, pos: usize },
 
-    #[fail(display = "Missing attribute: Expected {} at {}", attribute, pos)]
+    #[error("Missing attribute: Expected {attribute} at {pos}")]
     MissingAttribute { attribute: String, pos: usize },
 
-    #[fail(
-        display = "Unknown Entity: Expected Kind of {}, found {} at {}",
-        kind, found, pos
-    )]
+    #[error("Unknown Entity: Expected Kind of {kind}, found {found} at {pos}")]
     UnknownEntity {
         kind: String,
         found: String,
         pos: usize,
     },
 
-    #[fail(display = "Unexpected Tag: found {} at {}", tag, pos)]
+    #[error("Unexpected Tag: found {tag} at {pos}")]
     UnexpectedTag { tag: String, pos: usize },
 
-    #[fail(display = "Unexpected End of File: {}", pos)]
+    #[error("Unexpected End of File: {pos}")]
     UnexpectedEof { pos: usize },
+
+    #[error("Literal with language tag and incorrect datatype")]
+    BrokenLiteral,
+
+    #[error("Error during XML parsing: {0}")]
+    XMLError(quick_xml::Error),
+
+    #[error("Cannot parse value as integer: {0}")]
+    ParseInt(#[source] ParseIntError)
+}
+
+
+impl From<quick_xml::Error> for ReadError{
+    fn from(e: quick_xml::Error) -> Self {
+        Self::XMLError(e)
+    }
 }
 
 struct Read<'a, R>
@@ -59,7 +73,7 @@ where
     ns_buf: Vec<u8>,
 }
 
-pub fn read<R: BufRead>(bufread: &mut R) -> Result<(SetOntology, PrefixMapping), Error> {
+pub fn read<R: BufRead>(bufread: &mut R) -> Result<(SetOntology, PrefixMapping), ReadError> {
     let b = Build::new();
     read_with_build(bufread, &b)
 }
@@ -67,7 +81,7 @@ pub fn read<R: BufRead>(bufread: &mut R) -> Result<(SetOntology, PrefixMapping),
 pub fn read_with_build<R: BufRead>(
     bufread: &mut R,
     build: &Build,
-) -> Result<(SetOntology, PrefixMapping), Error> {
+) -> Result<(SetOntology, PrefixMapping), ReadError> {
     let reader: Reader<&mut R> = Reader::from_reader(bufread);
     let mut ont = SetOntology::default();
     let mapping = PrefixMapping::default();
@@ -142,7 +156,7 @@ pub fn read_with_build<R: BufRead>(
 /// non-lexical lifetimes appears, it should be possible to make
 /// this a straight alias for `read_namespaced_event`, and still
 /// have it all work.
-fn read_event<R: BufRead>(read: &mut Read<R>) -> Result<(Vec<u8>, Event<'static>), Error> {
+fn read_event<R: BufRead>(read: &mut Read<R>) -> Result<(Vec<u8>, Event<'static>), ReadError> {
     let r = read
         .reader
         .read_namespaced_event(&mut read.buf, &mut read.ns_buf);
@@ -157,9 +171,9 @@ fn read_event<R: BufRead>(read: &mut Read<R>) -> Result<(Vec<u8>, Event<'static>
     }
 }
 
-fn decode_expand_curie_maybe<R: BufRead>(r: &mut Read<R>, val: &[u8]) -> String {
+fn decode_expand_curie_maybe<R: BufRead>(r: &mut Read<R>, val: &[u8]) -> Result<String,ReadError> {
     let s = r.reader.decode(val).into_owned();
-    expand_curie_maybe(r, s)
+    Ok(expand_curie_maybe(r, s))
 }
 
 /// Expand a curie if there is an appropriate prefix
@@ -172,7 +186,7 @@ fn expand_curie_maybe<R: BufRead>(r: &mut Read<R>, val: String) -> String {
     }
 }
 
-fn attrib_value_b<'a>(event: &'a BytesStart, tag: &[u8]) -> Result<Option<Cow<'a, [u8]>>, Error> {
+fn attrib_value_b<'a>(event: &'a BytesStart, tag: &[u8]) -> Result<Option<Cow<'a, [u8]>>, ReadError> {
     for res in event.attributes() {
         let attrib = res?;
         if attrib.key == tag {
@@ -187,11 +201,11 @@ fn attrib_value<R: BufRead>(
     r: &mut Read<R>,
     event: &BytesStart,
     tag: &[u8],
-) -> Result<Option<String>, Error> {
+) -> Result<Option<String>, ReadError> {
     attrib_value_b(event, tag).map(|res| res.map(|val| r.reader.decode(&val).into_owned()))
 }
 
-fn read_iri_attr<R: BufRead>(r: &mut Read<R>, event: &BytesStart) -> Result<Option<IRI>, Error> {
+fn read_iri_attr<R: BufRead>(r: &mut Read<R>, event: &BytesStart) -> Result<Option<IRI>, ReadError> {
     let iri = read_a_iri_attr(r, event, b"IRI")?;
     Ok(if iri.is_some() {
         iri
@@ -204,7 +218,7 @@ fn read_a_iri_attr<R: BufRead>(
     r: &mut Read<R>,
     event: &BytesStart,
     tag: &[u8],
-) -> Result<Option<IRI>, Error> {
+) -> Result<Option<IRI>, ReadError> {
     Ok(
         // check for the attrib, if malformed return
         attrib_value(r, event, tag)?.
@@ -217,7 +231,7 @@ fn read_a_iri_attr<R: BufRead>(
     )
 }
 
-fn error_missing_end_tag<R: BufRead>(tag: &[u8], r: &mut Read<R>, pos: usize) -> Error {
+fn error_missing_end_tag<R: BufRead>(tag: &[u8], r: &mut Read<R>, pos: usize) -> ReadError {
     ReadError::MissingEndTag {
         tag: r.reader.decode(tag).into_owned(),
         pos,
@@ -225,7 +239,7 @@ fn error_missing_end_tag<R: BufRead>(tag: &[u8], r: &mut Read<R>, pos: usize) ->
     .into()
 }
 
-fn error_missing_attribute<A: Into<String>, R: BufRead>(attribute: A, r: &mut Read<R>) -> Error {
+fn error_missing_attribute<A: Into<String>, R: BufRead>(attribute: A, r: &mut Read<R>) -> ReadError {
     ReadError::MissingAttribute {
         attribute: attribute.into(),
         pos: r.reader.buffer_position(),
@@ -233,7 +247,7 @@ fn error_missing_attribute<A: Into<String>, R: BufRead>(attribute: A, r: &mut Re
     .into()
 }
 
-fn error_unexpected_tag<R: BufRead>(tag: &[u8], r: &mut Read<R>) -> Error {
+fn error_unexpected_tag<R: BufRead>(tag: &[u8], r: &mut Read<R>) -> ReadError {
     ReadError::UnexpectedTag {
         tag: r.reader.decode(tag).into_owned(),
         pos: r.reader.buffer_position(),
@@ -241,7 +255,7 @@ fn error_unexpected_tag<R: BufRead>(tag: &[u8], r: &mut Read<R>) -> Error {
     .into()
 }
 
-fn error_unexpected_end_tag<R: BufRead>(tag: &[u8], r: &mut Read<R>) -> Error {
+fn error_unexpected_end_tag<R: BufRead>(tag: &[u8], r: &mut Read<R>) -> ReadError {
     ReadError::UnexpectedEndTag {
         tag: r.reader.decode(tag).into_owned(),
         pos: r.reader.buffer_position(),
@@ -253,7 +267,7 @@ fn error_unknown_entity<A: Into<String>, R: BufRead>(
     kind: A,
     found: &[u8],
     r: &mut Read<R>,
-) -> Error {
+) -> ReadError {
     ReadError::UnknownEntity {
         kind: kind.into(),
         found: r.reader.decode(found).into_owned(),
@@ -262,7 +276,7 @@ fn error_unknown_entity<A: Into<String>, R: BufRead>(
     .into()
 }
 
-fn error_missing_element<R: BufRead>(tag: &[u8], r: &mut Read<R>) -> Error {
+fn error_missing_element<R: BufRead>(tag: &[u8], r: &mut Read<R>) -> ReadError {
     ReadError::MissingElement {
         tag: r.reader.decode(tag).into_owned(),
         pos: r.reader.buffer_position(),
@@ -279,13 +293,13 @@ fn is_owl_name(ns: &[u8], e: &BytesEnd, tag: &[u8]) -> bool {
 }
 
 trait FromStart: Sized {
-    fn from_start<R: BufRead>(r: &mut Read<R>, e: &BytesStart) -> Result<Self, Error>;
+    fn from_start<R: BufRead>(r: &mut Read<R>, e: &BytesStart) -> Result<Self, ReadError>;
 }
 
 macro_rules! from_start {
     ($type:ident, $r:ident, $e:ident, $body:tt) => {
         impl FromStart for $type {
-            fn from_start<R: BufRead>($r: &mut Read<R>, $e: &BytesStart) -> Result<$type, Error> {
+            fn from_start<R: BufRead>($r: &mut Read<R>, $e: &BytesStart) -> Result<$type, ReadError> {
                 $body
             }
         }
@@ -293,7 +307,7 @@ macro_rules! from_start {
 }
 
 /// Potentially unbalanced
-fn named_entity_from_start<R, T>(r: &mut Read<R>, e: &BytesStart, tag: &[u8]) -> Result<T, Error>
+fn named_entity_from_start<R, T>(r: &mut Read<R>, e: &BytesStart, tag: &[u8]) -> Result<T, ReadError>
 where
     R: BufRead,
     T: From<IRI>,
@@ -313,7 +327,7 @@ where
     Err(error_missing_element(b"IRI", r))
 }
 
-fn from_start<R: BufRead, T: FromStart>(r: &mut Read<R>, e: &BytesStart) -> Result<T, Error> {
+fn from_start<R: BufRead, T: FromStart>(r: &mut Read<R>, e: &BytesStart) -> Result<T, ReadError> {
     T::from_start(r, e)
 }
 
@@ -337,7 +351,7 @@ from_start! {
                     if **datatype_iri == *"http://www.w3.org/1999/02/22-rdf-syntax-ns#PlainLiteral"
                     => Literal::Language{literal:literal.to_string(), lang:lang.to_string()},
                 (Some(_), Some(_), _)
-                    => bail!("Literal with language tag and incorrect datatype"),
+                    => Err(ReadError::BrokenLiteral)?,
                 (Some(datatype_iri), None, literal)
                     => Literal::Datatype{literal, datatype_iri},
             })
@@ -376,7 +390,7 @@ fn axiom_from_start<R: BufRead>(
     r: &mut Read<R>,
     e: &BytesStart,
     axiom_kind: &[u8],
-) -> Result<Axiom, Error> {
+) -> Result<Axiom, ReadError> {
     Ok(match axiom_kind {
         b"Annotation" => OntologyAnnotation(Annotation {
             ap: from_start(r, e)?,
@@ -532,14 +546,14 @@ fn from_start_to_end<R: BufRead, T: FromStart + std::fmt::Debug>(
     r: &mut Read<R>,
     e: &BytesStart,
     end_tag: &[u8],
-) -> Result<Vec<T>, Error> {
+) -> Result<Vec<T>, ReadError> {
     let mut v = Vec::new();
     v.push(from_start(r, e)?);
     till_end_with(r, end_tag, v)
 }
 
 // Keep reading entities, till end_tag is reached
-fn till_end<R: BufRead, T: FromStart + std::fmt::Debug>(r: &mut Read<R>, end_tag: &[u8]) -> Result<Vec<T>, Error> {
+fn till_end<R: BufRead, T: FromStart + std::fmt::Debug>(r: &mut Read<R>, end_tag: &[u8]) -> Result<Vec<T>, ReadError> {
     let operands: Vec<T> = Vec::new();
     till_end_with(r, end_tag, operands)
 }
@@ -549,7 +563,7 @@ fn till_end_with<R: BufRead, T: FromStart + std::fmt::Debug>(
     r: &mut Read<R>,
     end_tag: &[u8],
     mut operands: Vec<T>,
-) -> Result<Vec<T>, Error> {
+) -> Result<Vec<T>, ReadError> {
     loop {
         let e = read_event(r)?;
         match e {
@@ -573,7 +587,7 @@ fn object_cardinality_restriction<R: BufRead>(
     r: &mut Read<R>,
     e: &BytesStart,
     end_tag: &[u8],
-) -> Result<(u32, ObjectPropertyExpression, Box<ClassExpression>), Error> {
+) -> Result<(u32, ObjectPropertyExpression, Box<ClassExpression>), ReadError> {
     let n = attrib_value(r, e, b"cardinality")?;
     let n = n.ok_or_else(|| error_missing_attribute("cardinality", r))?;
 
@@ -581,7 +595,7 @@ fn object_cardinality_restriction<R: BufRead>(
     let mut vce: Vec<ClassExpression> = till_end(r, end_tag)?;
 
     Ok((
-        n.parse::<u32>()?,
+        n.parse::<u32>().map_err(|s| ReadError::ParseInt(s))?,
         ope,
         Box::new(match vce.len() {
             0 => r.build.class(OWL::Thing.iri_s().to_string()).into(),
@@ -595,7 +609,7 @@ fn data_cardinality_restriction<R: BufRead>(
     r: &mut Read<R>,
     e: &BytesStart,
     end_tag: &[u8],
-) -> Result<(u32, DataProperty, DataRange), Error> {
+) -> Result<(u32, DataProperty, DataRange), ReadError> {
     let n = attrib_value(r, e, b"cardinality")?;
     let n = n.ok_or_else(|| (error_missing_attribute("cardinality", r)))?;
 
@@ -603,7 +617,7 @@ fn data_cardinality_restriction<R: BufRead>(
     let mut vdr: Vec<DataRange> = till_end(r, end_tag)?;
 
     Ok((
-        n.parse::<u32>()?,
+        n.parse::<u32>().map_err(|s|ReadError::ParseInt(s))?,
         dp,
         match vdr.len() {
             0 => r
@@ -988,19 +1002,19 @@ from_start! {
 }
 
 trait FromXML: Sized {
-    fn from_xml<R: BufRead>(newread: &mut Read<R>, end_tag: &[u8]) -> Result<Self, Error> {
+    fn from_xml<R: BufRead>(newread: &mut Read<R>, end_tag: &[u8]) -> Result<Self, ReadError> {
         let s = Self::from_xml_nc(newread, end_tag);
         newread.buf.clear();
         s
     }
 
-    fn from_xml_nc<R: BufRead>(newread: &mut Read<R>, end_tag: &[u8]) -> Result<Self, Error>;
+    fn from_xml_nc<R: BufRead>(newread: &mut Read<R>, end_tag: &[u8]) -> Result<Self, ReadError>;
 }
 
 macro_rules! from_xml {
     ($type:ident, $r:ident, $end:ident, $body:tt) => {
         impl FromXML for $type {
-            fn from_xml_nc<R: BufRead>($r: &mut Read<R>, $end: &[u8]) -> Result<$type, Error> {
+            fn from_xml_nc<R: BufRead>($r: &mut Read<R>, $end: &[u8]) -> Result<$type, ReadError> {
                 $body
             }
         }
@@ -1047,7 +1061,7 @@ from_xml! {
 
 }
 
-fn from_next<R: BufRead, T: FromStart>(r: &mut Read<R>) -> Result<T, Error> {
+fn from_next<R: BufRead, T: FromStart>(r: &mut Read<R>) -> Result<T, ReadError> {
     loop {
         let e = read_event(r)?;
         match e {
@@ -1059,7 +1073,7 @@ fn from_next<R: BufRead, T: FromStart>(r: &mut Read<R>) -> Result<T, Error> {
     }
 }
 
-fn discard_till<R: BufRead>(r: &mut Read<R>, end: &[u8]) -> Result<(), Error> {
+fn discard_till<R: BufRead>(r: &mut Read<R>, end: &[u8]) -> Result<(), ReadError> {
     let pos = r.reader.buffer_position();
     loop {
         let e = read_event(r)?;
@@ -1100,7 +1114,7 @@ from_xml! {IRI, r, end,
                 match e {
                     (ref _ns,Event::Text(ref e)) => {
                         iri = Some(r.build.iri
-                                   (decode_expand_curie_maybe(r, e)));
+                                   (decode_expand_curie_maybe(r, e)?));
                     },
                     (ref ns, Event::End(ref e))
                         if is_owl_name(ns, e, end) =>

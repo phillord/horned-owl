@@ -15,7 +15,23 @@ use quick_xml::Writer;
 use std::collections::BTreeSet;
 use std::io::Write as StdWrite;
 
-use failure::Error;
+use thiserror::Error;
+
+#[derive(Debug, Error)]
+pub enum WriteError {
+    // Use to replace bail!/format_err from failure crate. Should specialize
+    #[error("{0}")]
+    GeneralError(String),
+
+    #[error("XML Error:{0}")]
+    XMLError(quick_xml::Error)
+}
+
+impl From<quick_xml::Error> for WriteError {
+    fn from(e: quick_xml::Error) -> Self {
+        Self::XMLError(e)
+    }
+}
 
 /// Write an Ontology to `write`, using the given PrefixMapping
 ///
@@ -25,7 +41,7 @@ pub fn write(
     write: &mut dyn StdWrite,
     ont: &AxiomMappedOntology,
     mapping: Option<&PrefixMapping>,
-) -> Result<(), Error> {
+) -> Result<(), WriteError> {
     let mut writer = Writer::new_with_indent(write, b' ', 4);
 
     // Ensure we have a prefix mapping; the default is a no-op and
@@ -77,7 +93,7 @@ fn with_iri<'a, I, W>(
     mapping: &'a PrefixMapping,
     tag: &[u8],
     into_iri: I,
-) -> Result<(), Error>
+) -> Result<(), WriteError>
 where
     I: Into<IRI>,
     W: StdWrite,
@@ -150,9 +166,9 @@ fn tag_for_kind(axk: AxiomKind) -> &'static [u8] {
 /// does not a `Declaration` tag, just the internal `Class` tag.
 trait Render<'a, W: StdWrite> {
     /// Render a entity to Write
-    fn render(&self, w: &mut Writer<W>, mapping: &'a PrefixMapping) -> Result<(), Error>;
+    fn render(&self, w: &mut Writer<W>, mapping: &'a PrefixMapping) -> Result<(), WriteError>;
 
-    fn within(&self, w: &mut Writer<W>, m: &'a PrefixMapping, tag: &[u8]) -> Result<(), Error> {
+    fn within(&self, w: &mut Writer<W>, m: &'a PrefixMapping, tag: &[u8]) -> Result<(), WriteError> {
         let open = BytesStart::borrowed(tag, tag.len());
         w.write_event(Event::Start(open))?;
 
@@ -168,7 +184,7 @@ trait Render<'a, W: StdWrite> {
         w: &mut Writer<W>,
         m: &'a PrefixMapping,
         open: BytesStart,
-    ) -> Result<(), Error> {
+    ) -> Result<(), WriteError> {
         let clone = open.clone();
         w.write_event(Event::Start(clone))?;
 
@@ -187,7 +203,7 @@ macro_rules! render {
 
         impl <'a, W:StdWrite> Render<'a, W> for $type {
             fn render(& $self, $write:&mut Writer<W>, $map: &'a PrefixMapping)
-                      -> Result<(),Error>
+                      -> Result<(),WriteError>
                 where W: StdWrite
                 $body
         }
@@ -210,7 +226,7 @@ macro_rules! content0 {
     };
 }
 
-fn render_ont<W>(o: &AxiomMappedOntology, w: &mut Writer<W>, m: &PrefixMapping) -> Result<(), Error>
+fn render_ont<W>(o: &AxiomMappedOntology, w: &mut Writer<W>, m: &PrefixMapping) -> Result<(), WriteError>
 where
     W: StdWrite,
 {
@@ -240,7 +256,7 @@ where
 
 // Render Impl for container and collection types
 impl<'a, T: Render<'a, W>, W: StdWrite> Render<'a, W> for BTreeSet<T> {
-    fn render(&self, w: &mut Writer<W>, m: &'a PrefixMapping) -> Result<(), Error> {
+    fn render(&self, w: &mut Writer<W>, m: &'a PrefixMapping) -> Result<(), WriteError> {
         for item in self.iter() {
             item.render(w, m)?;
         }
@@ -250,7 +266,7 @@ impl<'a, T: Render<'a, W>, W: StdWrite> Render<'a, W> for BTreeSet<T> {
 }
 
 impl<'a, O: Render<'a, W>, W: StdWrite> Render<'a, W> for Vec<O> {
-    fn render(&self, w: &mut Writer<W>, m: &'a PrefixMapping) -> Result<(), Error>
+    fn render(&self, w: &mut Writer<W>, m: &'a PrefixMapping) -> Result<(), WriteError>
     where
         W: StdWrite,
     {
@@ -263,7 +279,7 @@ impl<'a, O: Render<'a, W>, W: StdWrite> Render<'a, W> for Vec<O> {
 }
 
 impl<'a, T: Render<'a, W>, W: StdWrite> Render<'a, W> for Box<T> {
-    fn render(&self, w: &mut Writer<W>, m: &'a PrefixMapping) -> Result<(), Error> {
+    fn render(&self, w: &mut Writer<W>, m: &'a PrefixMapping) -> Result<(), WriteError> {
         (**self).render(w, m)?;
 
         Ok(())
@@ -271,7 +287,7 @@ impl<'a, T: Render<'a, W>, W: StdWrite> Render<'a, W> for Box<T> {
 }
 
 impl<'a, A: Render<'a, W>, W: StdWrite> Render<'a, W> for (&'a A,) {
-    fn render(&self, w: &mut Writer<W>, m: &'a PrefixMapping) -> Result<(), Error> {
+    fn render(&self, w: &mut Writer<W>, m: &'a PrefixMapping) -> Result<(), WriteError> {
         (&self.0).render(w, m)?;
 
         Ok(())
@@ -279,7 +295,7 @@ impl<'a, A: Render<'a, W>, W: StdWrite> Render<'a, W> for (&'a A,) {
 }
 
 impl<'a, A: Render<'a, W>, B: Render<'a, W>, W: StdWrite> Render<'a, W> for (&'a A, &'a B) {
-    fn render(&self, w: &mut Writer<W>, m: &'a PrefixMapping) -> Result<(), Error> {
+    fn render(&self, w: &mut Writer<W>, m: &'a PrefixMapping) -> Result<(), WriteError> {
         (&self.0).render(w, m)?;
         (&self.1).render(w, m)?;
 
@@ -290,7 +306,7 @@ impl<'a, A: Render<'a, W>, B: Render<'a, W>, W: StdWrite> Render<'a, W> for (&'a
 impl<'a, A: Render<'a, W>, B: Render<'a, W>, C: Render<'a, W>, W: StdWrite> Render<'a, W>
     for (&'a A, &'a B, &'a C)
 {
-    fn render(&self, w: &mut Writer<W>, m: &'a PrefixMapping) -> Result<(), Error> {
+    fn render(&self, w: &mut Writer<W>, m: &'a PrefixMapping) -> Result<(), WriteError> {
         (&self.0).render(w, m)?;
         (&self.1).render(w, m)?;
         (&self.2).render(w, m)?;
