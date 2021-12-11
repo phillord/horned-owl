@@ -172,7 +172,7 @@ fn read_event<R: BufRead>(read: &mut Read<R>) -> Result<(Vec<u8>, Event<'static>
 }
 
 fn decode_expand_curie_maybe<R: BufRead>(r: &mut Read<R>, val: &[u8]) -> Result<String,ReadError> {
-    let s = r.reader.decode(val).into_owned();
+    let s = r.reader.decode(val)?.to_string();
     Ok(expand_curie_maybe(r, s))
 }
 
@@ -202,7 +202,15 @@ fn attrib_value<R: BufRead>(
     event: &BytesStart,
     tag: &[u8],
 ) -> Result<Option<String>, ReadError> {
-    attrib_value_b(event, tag).map(|res| res.map(|val| r.reader.decode(&val).into_owned()))
+    // Get the attrib, handling error
+    let val_opt_cow_u8 = attrib_value_b(event, tag)?;
+    // Decode the attrib
+    let val_opt_res_str = val_opt_cow_u8.as_ref().map(|val| r.reader.decode(val));
+    // Handle error from decode
+    let val_opt_str = val_opt_res_str.transpose()?;
+
+    // Turn into a string and report ok
+    Ok(val_opt_str.map(|s| s.to_string()))
 }
 
 fn read_iri_attr<R: BufRead>(r: &mut Read<R>, event: &BytesStart) -> Result<Option<IRI>, ReadError> {
@@ -231,36 +239,53 @@ fn read_a_iri_attr<R: BufRead>(
     )
 }
 
-fn error_missing_end_tag<R: BufRead>(tag: &[u8], r: &mut Read<R>, pos: usize) -> ReadError {
-    ReadError::MissingEndTag {
-        tag: r.reader.decode(tag).into_owned(),
-        pos,
-    }
-    .into()
+fn decode_tag<R:BufRead>(tag: &[u8], r: &mut Read<R>) -> Result<String,ReadError>{
+    Ok(r.reader.decode(tag)?.to_string())
 }
 
-fn error_missing_attribute<A: Into<String>, R: BufRead>(attribute: A, r: &mut Read<R>) -> ReadError {
+fn error_missing_end_tag<R: BufRead>(tag: &[u8], r: &mut Read<R>, pos: usize) -> ReadError {
+    match decode_tag(tag, r) {
+        Ok(tag) => {
+            ReadError::MissingEndTag {
+                tag,
+                pos,
+            }
+        }
+        Err(e) => e
+    }
+}
+
+fn error_missing_attribute<A: Into<String>, R: BufRead>(attribute: A, r: &mut Read<R>)
+                                                        -> ReadError {
     ReadError::MissingAttribute {
         attribute: attribute.into(),
-        pos: r.reader.buffer_position(),
+                pos: r.reader.buffer_position(),
     }
-    .into()
 }
 
+
 fn error_unexpected_tag<R: BufRead>(tag: &[u8], r: &mut Read<R>) -> ReadError {
-    ReadError::UnexpectedTag {
-        tag: r.reader.decode(tag).into_owned(),
-        pos: r.reader.buffer_position(),
+    match decode_tag(tag, r) {
+        Ok(tag) => {
+            ReadError::UnexpectedTag {
+                tag,
+                pos: r.reader.buffer_position(),
+            }
+        },
+        Err(e) => e
     }
-    .into()
 }
 
 fn error_unexpected_end_tag<R: BufRead>(tag: &[u8], r: &mut Read<R>) -> ReadError {
-    ReadError::UnexpectedEndTag {
-        tag: r.reader.decode(tag).into_owned(),
-        pos: r.reader.buffer_position(),
+    match decode_tag(tag, r) {
+        Ok(tag) => {
+            ReadError::UnexpectedEndTag {
+                tag,
+                pos: r.reader.buffer_position(),
+            }
+        },
+        Err(e) => e
     }
-    .into()
 }
 
 fn error_unknown_entity<A: Into<String>, R: BufRead>(
@@ -268,20 +293,26 @@ fn error_unknown_entity<A: Into<String>, R: BufRead>(
     found: &[u8],
     r: &mut Read<R>,
 ) -> ReadError {
-    ReadError::UnknownEntity {
-        kind: kind.into(),
-        found: r.reader.decode(found).into_owned(),
-        pos: r.reader.buffer_position(),
+    match decode_tag(found, r) {
+        Ok(found) =>
+            ReadError::UnknownEntity {
+                kind: kind.into(),
+                found,
+                pos: r.reader.buffer_position(),
+            },
+        Err(e) => e
     }
-    .into()
 }
 
 fn error_missing_element<R: BufRead>(tag: &[u8], r: &mut Read<R>) -> ReadError {
-    ReadError::MissingElement {
-        tag: r.reader.decode(tag).into_owned(),
-        pos: r.reader.buffer_position(),
+    match decode_tag(tag,r) {
+        Ok(tag) =>
+            ReadError::MissingElement {
+                tag,
+                pos: r.reader.buffer_position(),
+            },
+        Err(e) => e
     }
-    .into()
 }
 
 fn is_owl(ns: &[u8]) -> bool {
@@ -314,17 +345,19 @@ where
 {
     if let Some(iri) = read_iri_attr(r, e)? {
         if e.local_name() == tag {
-            return Ok(T::from(iri));
+            return Ok(T::from(iri))
         } else {
-            return Err(error_unknown_entity(
-                ::std::str::from_utf8(tag).unwrap(),
-                e.local_name(),
-                r,
-            ));
+            return Err(
+                error_unknown_entity(
+                    ::std::str::from_utf8(tag).unwrap(),
+                    e.local_name(),
+                    r,
+                )
+            )
         }
     }
 
-    Err(error_missing_element(b"IRI", r))
+    return Err(error_missing_element(b"IRI", r));
 }
 
 fn from_start<R: BufRead, T: FromStart>(r: &mut Read<R>, e: &BytesStart) -> Result<T, ReadError> {
