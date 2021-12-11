@@ -35,6 +35,12 @@ Think about Errors
 
 These are not well thought out at the moment.
 
+These have been re-written to take advantage of more recent changes in
+the Rust error trait. But there is a lot of inconsistency in the
+handling -- in some cases, very detailed, in others very blunt. Error
+types from individual files could be co-ordinated. And the commands
+should probably stop returning such specific errors.
+
 
 Removing a layer of complexity in Axiom
 ---------------------------------------
