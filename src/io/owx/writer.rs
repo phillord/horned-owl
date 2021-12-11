@@ -899,7 +899,7 @@ mod test {
         PrefixMapping,
     ) {
         let (ont_orig, prefix_orig) = read_ok(&mut ont.as_bytes());
-        let mut temp_file = Temp::new_file().unwrap();
+        let temp_file = Temp::new_file().unwrap();
 
         let file = File::create(&temp_file).ok().unwrap();
         let mut buf_writer = BufWriter::new(&file);
