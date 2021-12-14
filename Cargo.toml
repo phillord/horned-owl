@@ -42,6 +42,43 @@ slurp = "1.0.1"
 [profile.release]
 debug = true
 
+[[bin]]
+name = "horned"
+path = "src/bin/horned.rs"
+
+[[bin]]
+name = "horned-big"
+path = "src/bin/horned_big.rs"
+
+[[bin]]
+name = "horned-dump"
+path = "src/bin/horned_dump.rs"
+
+[[bin]]
+name = "horned-materialize"
+path = "src/bin/horned_materialize.rs"
+
+[[bin]]
+name = "horned-parse"
+path = "src/bin/horned_parse.rs"
+
+[[bin]]
+name = "horned-round"
+path = "src/bin/horned_round.rs"
+
+[[bin]]
+name = "horned-summary"
+path = "src/bin/horned_summary.rs"
+
+[[bin]]
+name = "horned-triples"
+path = "src/bin/horned_triples.rs"
+
+[[bin]]
+name = "horned-unparsed"
+path = "src/bin/horned_unparsed.rs"
+
+
 [[bench]]
 name = "horned"
 harness = false

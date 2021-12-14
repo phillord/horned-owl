@@ -10,8 +10,14 @@ use horned_owl::error::CommandError;
 
 use std::path::Path;
 
+#[allow(dead_code)]
 fn main() -> Result<(), CommandError> {
-    let matches = App::new("horned-parse")
+    let matches = app("horned-parse").get_matches();
+    matcher(&matches)
+}
+
+pub(crate) fn app(name: &str) -> App<'static, 'static> {
+    App::new(name)
         .version("0.1")
         .about("Parse an OWL File")
         .author("Phillip Lord")
@@ -21,12 +27,9 @@ fn main() -> Result<(), CommandError> {
                 .required(true)
                 .index(1),
         )
-        .get_matches();
-
-    matcher(&matches)
 }
 
-fn matcher(matches: &ArgMatches) -> Result<(), CommandError> {
+pub(crate) fn matcher(matches: &ArgMatches) -> Result<(), CommandError> {
     let input = matches
         .value_of("INPUT")
         .ok_or(CommandError::MissingArgument)?;
@@ -78,5 +81,4 @@ mod test {
 
         Ok(())
     }
-
 }

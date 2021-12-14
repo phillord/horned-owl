@@ -5,14 +5,20 @@ use clap::App;
 use clap::Arg;
 use clap::ArgMatches;
 
-use horned_owl::{command::naming::name};
+use horned_owl::command::naming::name;
 use horned_owl::command::{parse_path, summary::summarize};
 use horned_owl::error::CommandError;
 
 use std::path::Path;
 
+#[allow(dead_code)]
 fn main() -> Result<(), CommandError> {
-    let matches = App::new("horned-summary")
+    let matches = app("horned-summary").get_matches();
+    matcher(&matches)
+}
+
+pub(crate) fn app(name: &str) -> App<'static, 'static> {
+    App::new(name)
         .version("0.1")
         .about("Summary Statistics for an OWL file.")
         .author("Phillip Lord")
@@ -22,12 +28,9 @@ fn main() -> Result<(), CommandError> {
                 .required(true)
                 .index(1),
         )
-        .get_matches();
-
-    matcher(&matches)
 }
 
-fn matcher(matches: &ArgMatches) -> Result<(), CommandError> {
+pub(crate) fn matcher(matches: &ArgMatches) -> Result<(), CommandError> {
     let input = matches
         .value_of("INPUT")
         .ok_or(CommandError::MissingArgument)?;
@@ -58,7 +61,10 @@ fn matcher(matches: &ArgMatches) -> Result<(), CommandError> {
         println!("\tbnode: {}", i.bnode.len());
         println!("\tsequences: {}", i.bnode_seq.len());
         println!("\tClass Expressions: {}", i.class_expression.len());
-        println!("\tObject Property Expressions: {}", i.object_property_expression.len());
+        println!(
+            "\tObject Property Expressions: {}",
+            i.object_property_expression.len()
+        );
         println!("\tData Range: {}", i.data_range.len());
         println!("\tAnnotations: {}", i.ann_map.len())
     }

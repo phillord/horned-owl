@@ -9,10 +9,16 @@ use horned_owl::command::parse_path;
 use horned_owl::error::CommandError;
 use horned_owl::error::underlying;
 
-use std::{io::{stdout}, path::Path};
+use std::{io::stdout, path::Path};
 
+#[allow(dead_code)]
 fn main() -> Result<(), CommandError> {
-    let matches = App::new("horned-round")
+    let matches = app("horned-round").get_matches();
+    matcher(&matches)
+}
+
+pub(crate) fn app(name: &str) -> App<'static, 'static> {
+    App::new(name)
         .version("0.1")
         .about("Parse and Render an OWL Ontology")
         .author("Phillip Lord")
@@ -22,12 +28,9 @@ fn main() -> Result<(), CommandError> {
                 .required(true)
                 .index(1),
         )
-        .get_matches();
-
-    matcher(matches)
 }
 
-fn matcher(matches: ArgMatches) -> Result<(), CommandError> {
+pub(crate) fn matcher(matches: &ArgMatches) -> Result<(), CommandError> {
     let input = matches.value_of("INPUT").unwrap();
 
     let res = parse_path(Path::new(input)).map_err(underlying)?;
@@ -45,7 +48,6 @@ fn matcher(matches: ArgMatches) -> Result<(), CommandError> {
         }
     }
 }
-
 
 #[cfg(test)]
 mod test {
@@ -76,5 +78,4 @@ mod test {
 
         Ok(())
     }
-
 }
