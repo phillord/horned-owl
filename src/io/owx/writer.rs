@@ -401,6 +401,27 @@ render! {
         Ok(())
     }
 }
+
+render! {
+    Individual, self, w, m,
+    {
+        match self {
+            Self::Anonymous(ai) => ai.render(w, m),
+            Self::Named(ni) => ni.render(w, m)
+        }
+    }
+}
+
+render! {
+    AnonymousIndividual, self, w, _m,
+    {
+        let mut prefix = BytesStart::owned_name("AnonymousIndividual");
+        prefix.push_attribute(("nodeID", &self[..]));
+        w.write_event(Event::Empty(prefix))?;
+        Ok(())
+    }
+}
+
 render! {
     NamedIndividual, self, w, m,
     {
@@ -409,6 +430,8 @@ render! {
         Ok(())
     }
 }
+
+
 
 render! {
     ClassExpression, self, w, m,
@@ -1012,13 +1035,13 @@ mod test {
     }
 
     #[test]
-    fn round_one_equivalent_class() {
-        assert_round(include_str!("../../ont/owl-xml/one-equivalent.owx"));
+    fn round_equivalent_class() {
+        assert_round(include_str!("../../ont/owl-xml/equivalent-class.owx"));
     }
 
     #[test]
-    fn round_one_disjoint_class() {
-        assert_round(include_str!("../../ont/owl-xml/one-disjoint.owx"));
+    fn round_disjoint_class() {
+        assert_round(include_str!("../../ont/owl-xml/disjoint-class.owx"));
     }
 
     #[test]
@@ -1028,7 +1051,7 @@ mod test {
 
     #[test]
     fn round_one_sub_property() {
-        assert_round(include_str!("../../ont/owl-xml/one-suboproperty.owx"));
+        assert_round(include_str!("../../ont/owl-xml/suboproperty.owx"));
     }
 
     #[test]
@@ -1345,6 +1368,13 @@ mod test {
     fn object_property_symmetric() {
         assert_round(include_str!(
             "../../ont/owl-xml/object-property-symmetric.owx"
+        ));
+    }
+
+    #[test]
+    fn annotation_with_anonymous() {
+        assert_round(include_str!(
+            "../../ont/owl-xml/annotation-with-anonymous.owx"
         ));
     }
 

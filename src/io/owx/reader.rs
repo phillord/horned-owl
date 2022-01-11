@@ -334,12 +334,12 @@ from_start! {
                 (None, None, literal) =>
                     Literal::Simple{literal},
                 (Some(ref datatype_iri), None, literal)
-                    if **datatype_iri == "http://www.w3.org/2001/XMLSchema#string" =>
+                    if **datatype_iri == *"http://www.w3.org/2001/XMLSchema#string" =>
                     Literal::Simple{literal},
                 (None, Some(lang), literal) =>
                     Literal::Language{literal, lang},
                 (Some(ref datatype_iri), Some(ref lang), ref literal)
-                    if **datatype_iri == "http://www.w3.org/1999/02/22-rdf-syntax-ns#PlainLiteral"
+                    if **datatype_iri == *"http://www.w3.org/1999/02/22-rdf-syntax-ns#PlainLiteral"
                     => Literal::Language{literal:literal.to_string(), lang:lang.to_string()},
                 (Some(_), Some(_), _)
                     => bail!("Literal with language tag and incorrect datatype"),
@@ -533,7 +533,7 @@ fn axiom_from_start<R: BufRead>(
     })
 }
 
-fn from_start_to_end<R: BufRead, T: FromStart>(
+fn from_start_to_end<R: BufRead, T: FromStart + std::fmt::Debug>(
     r: &mut Read<R>,
     e: &BytesStart,
     end_tag: &[u8],
@@ -544,13 +544,13 @@ fn from_start_to_end<R: BufRead, T: FromStart>(
 }
 
 // Keep reading entities, till end_tag is reached
-fn till_end<R: BufRead, T: FromStart>(r: &mut Read<R>, end_tag: &[u8]) -> Result<Vec<T>, Error> {
+fn till_end<R: BufRead, T: FromStart + std::fmt::Debug>(r: &mut Read<R>, end_tag: &[u8]) -> Result<Vec<T>, Error> {
     let operands: Vec<T> = Vec::new();
     till_end_with(r, end_tag, operands)
 }
 
 // Keep reading entities, till end_tag is reached
-fn till_end_with<R: BufRead, T: FromStart>(
+fn till_end_with<R: BufRead, T: FromStart + std::fmt::Debug>(
     r: &mut Read<R>,
     end_tag: &[u8],
     mut operands: Vec<T>,
@@ -800,6 +800,43 @@ from_start! {
     DataProperty, r, e,
     {
         named_entity_from_start(r, e, b"DataProperty")
+    }
+}
+
+from_start! {
+    Individual,r, e,
+    {
+        match e.local_name() {
+            b"AnonymousIndividual" =>{
+                eprintln!("About to read anonymous");
+                let ai:AnonymousIndividual = from_start(r, e)?;
+                eprintln!("Read anonymous");
+                Ok(ai.into())
+            }
+            b"NamedIndividual" =>{
+                let ni:NamedIndividual = from_start(r, e)?;
+                Ok(ni.into())
+            }
+            b"IRI" | b"AbbreviatedIRI" => {
+                let iri:IRI = from_start(r, e)?;
+                let ni:NamedIndividual = iri.into();
+                Ok(ni.into())
+            }
+            l => {
+                todo!("{:?}",std::str::from_utf8(l))
+            }
+        }
+    }
+}
+
+from_start! {
+    AnonymousIndividual, r, e,
+    {
+        let ai:AnonymousIndividual =
+            attrib_value(r, e, b"nodeID")?.ok_or(
+                error_missing_attribute("nodeID Expected", r)
+            )?.into();
+        Ok(ai)
     }
 }
 
@@ -1074,8 +1111,7 @@ from_xml! {IRI, r, end,
                         if is_owl_name(ns, e, end) =>
                     {
                         return iri.ok_or_else(
-                            || error_unexpected_end_tag(end, r)
-                        );
+                            || error_unexpected_end_tag(end, r)                        );
                     },
                     _=>{}
                 }
@@ -1109,7 +1145,6 @@ pub mod test {
     fn test_simple_ontology() {
         let ont_s = include_str!("../../ont/owl-xml/ont.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
-        dbg!(&ont);
         assert_eq!(
             ont.id().iri.as_ref().unwrap().as_ref(),
             "http://www.example.com/iri"
@@ -1166,13 +1201,12 @@ pub mod test {
         let ont_s = include_str!("../../ont/owl-xml/class_with_two_annotations.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
-        dbg!(&ont);
         assert_eq!(ont.i().declare_class().count(), 1);
 
         assert_eq!(ont.i().annotation_assertion().count(), 2);
 
         let aa = ont.i().annotation_assertion().next().unwrap();
-        assert_eq!(*(aa.subject), "http://www.example.com/iri#C");
+        assert_eq!(*(aa.subject), *"http://www.example.com/iri#C");
 
         assert_eq!(
             String::from(&aa.ann.ap),
@@ -1205,7 +1239,6 @@ pub mod test {
         let ont_s = include_str!("../../ont/owl-xml/oproperty.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
-        dbg!(&ont);
         assert_eq!(ont.i().declare_object_property().count(), 1);
     }
 
@@ -1336,16 +1369,16 @@ pub mod test {
     }
 
     #[test]
-    fn test_one_equivalent_class() {
-        let ont_s = include_str!("../../ont/owl-xml/one-equivalent.owx");
+    fn test_equivalent_class() {
+        let ont_s = include_str!("../../ont/owl-xml/equivalent-class.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
         assert_eq!(ont.i().equivalent_class().count(), 1);
     }
 
     #[test]
-    fn test_one_disjoint_class() {
-        let ont_s = include_str!("../../ont/owl-xml/one-disjoint.owx");
+    fn test_disjoint_class() {
+        let ont_s = include_str!("../../ont/owl-xml/disjoint-class.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
         assert_eq!(ont.i().disjoint_class().count(), 1);
@@ -1878,6 +1911,45 @@ pub mod test {
 
         let di = ont.i().different_individuals().next().unwrap();
         assert_eq!(2, di.0.len());
+    }
+
+    #[test]
+    fn annotation_with_anonymous() {
+        let ont_s = include_str!("../../ont/owl-xml/annotation-with-anonymous.owx");
+        let (ont, _) = read_ok(&mut ont_s.as_bytes());
+
+        assert_eq!(ont.i().annotation_assertion().count(), 1);
+
+        let _aa = ont.i().annotation_assertion().next();
+    }
+
+    #[test]
+    fn type_complex() {
+        let ont_s = include_str!("../../ont/owl-xml/type-complex.owx");
+        let (ont, _) = read_ok(&mut ont_s.as_bytes());
+
+        assert_eq!(1, ont.i().class_assertion().count());
+        let ca = ont.i().class_assertion().next().unwrap();
+        assert!{
+            matches!{
+                &ca.ce, ClassExpression::ObjectComplementOf(_c)
+            }
+        }
+    }
+
+    #[test]
+    fn type_individual_datatype() {
+        let ont_s = include_str!("../../ont/owl-xml/type-individual-datatype.owx");
+        let (ont, _) = read_ok(&mut ont_s.as_bytes());
+
+        assert_eq!(1, ont.i().class_assertion().count());
+        let ca = ont.i().class_assertion().next().unwrap();
+
+        assert!{
+            matches!{
+                &ca.ce, ClassExpression::ObjectMinCardinality{n:_, ope:_, bce:_}
+            }
+        };
     }
 
     #[test]

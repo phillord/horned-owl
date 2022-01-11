@@ -43,7 +43,7 @@ fn matcher(matches: ArgMatches) -> Result<(), Error> {
     match r {
         horned_owl::io::ParserOutput::OWXParser(ont, map) => {
             let hash_map: HashMap<&String, &String> = map.mappings().collect();
-            println!("Ontology:\n{:?}\n\nMapping:\n{:#?}", ont, hash_map);
+            println!("Ontology:\n{:#?}\n\nMapping:\n{:#?}", ont, hash_map);
             Ok(())
 
         }

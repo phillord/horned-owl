@@ -20,13 +20,16 @@ bubo: just-bubo test
 test:
 	cargo test
 
+quick-test:
+	cargo test --lib --bins --tests -- --skip integration
+
 tmp:
 	mkdir tmp
 
 integration-prepare: tmp
 
 integration-clean:
-	rm ./tmp/bfo.owl
+	- rm ./tmp/bfo.owl
 
 ## Main integration tests run as unit tests
 integration: integration-prepare integration-clean ./tmp/ont-with-bfo.owl
@@ -67,3 +70,21 @@ materialize-dto:
 
 parse_dto_gpcr:
 	cargo run --bin horned-parse -- ./big-owl/dto/dto_vocabulary_gpcr_gene.owl
+
+triples-round-ont:
+	cargo run --bin horned-triples -- --round ./src/ont/owl-rdf/ont.owl
+
+triples-round-class:
+	cargo run --bin horned-triples -- --round ./src/ont/owl-rdf/class.owl
+
+triples-round-and:
+	cargo run --bin horned-triples -- --round ./src/ont/owl-rdf/and.owl
+
+triples-round-family:
+	cargo run --bin horned-triples -- --round ./src/ont/owl-rdf/family.owl
+
+triples-round-all:
+	set -e; for i in ./src/ont/owl-rdf/*owl;\
+	do cargo run --bin horned-triples -- --round $$i;\
+	echo;echo;echo;\
+	done

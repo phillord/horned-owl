@@ -1,6 +1,6 @@
 [package]
 name = "horned-owl"
-version = "0.9.0-experimental"
+version = "0.10.1-alpha.0-experimental"
 authors = ["Phillip Lord <phillip.lord@russet.org.uk>"]
 description = "Library and Command Line tools for OWL Ontologies"
 
@@ -14,8 +14,7 @@ license = "LGPL-3.0"
 edition = "2018"
 
 [dependencies]
-curie = "0.1.1"
-curl = "0.4.34"
+curie = "0.0.8"
 clap = "2.31.2"
 enum_meta = "0.6.0"
 failure = "0.1.2"
@@ -23,9 +22,12 @@ lazy_static="1.4.0"
 log = {version="0.4.8"}
 quick-xml="0.12.4"
 indexmap="1.0.2"
-sophia = {version="0.6.2",features=["xml"]}
-sophia_api = "0.6.2"
-sophia_iri = "0.6.2"
+rio_api="0.6.1"
+rio_xml="0.6.1"
+pretty_rdf="0.1.2"
+##pretty_rdf={path="./pretty_rdf"}
+slurp = "1.0.1"
+ureq="2.1.1"
 
 [dev-dependencies]
 assert_cmd = "0.10"

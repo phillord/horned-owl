@@ -10,35 +10,27 @@ use failure::Error;
 
 use horned_owl::error::CommandError;
 
-use std::fs::File;
+use rio_api::parser::TriplesParser;
+
+use std::{fs::File, io::stdout};
 use std::io::BufReader;
-use std::rc::Rc;
-
-use sophia_api::term::TTerm;
-use sophia_api::triple::stream::TripleSource;
-use sophia::term::Term;
-
-type SpTerm = Term<Rc<str>>;
-
-fn p_tup(triple: &[SpTerm; 3]) {
-    println!(
-        "{}\n\t{}\n\t{}",
-        &triple[0].value(),
-        &triple[1].value(),
-        &triple[2].value()
-    );
-}
 
 fn main() -> Result<(), Error> {
-    let matches = App::new("horned-parse")
+    let matches = App::new("horned-triples")
         .version("0.1")
-        .about("Parse an OWL File and dump the data structures")
+        .about("Parse RDF and dump the triples")
         .author("Phillip Lord")
         .arg(
             Arg::with_name("INPUT")
                 .help("Sets the input file to use")
                 .required(true)
                 .index(1),
+        )
+        .arg(
+            Arg::with_name("round")
+                .long("round")
+                .help("Dump the triples")
+                .required(false)
         )
         .get_matches();
 
@@ -52,12 +44,48 @@ fn matcher(matches: ArgMatches) -> Result<(), Error> {
 
     let file = File::open(input)?;
     let bufreader = BufReader::new(file);
-    let triple_iter = sophia::parser::xml::parse_bufread(bufreader);
-    let triple_result: Result<Vec<_>, _> = triple_iter.collect_triples();
-    let triple_v: Vec<[SpTerm; 3]> = triple_result.unwrap();
+    let v: Vec<Result<String, Error>>
+        = rio_xml::RdfXmlParser::new(bufreader, None).into_iter(
+            |rio_triple| Ok(
+                format!("{}\n\t{}\n\t{}",
+                        rio_triple.subject,
+                        rio_triple.predicate,
+                        rio_triple.object
+                )
+            )
+    ).collect();
 
-    for i in triple_v {
-        p_tup(&i);
+    for t in v {
+        println!("{}", t.unwrap());
+    }
+
+    if matches.is_present("round") {
+        println!("\nRoundTripping:\n");
+        let b = stdout();
+        //let b = std::io::sink();
+
+        let mut p = indexmap::IndexMap::new();
+        p.insert("http://www.w3.org/2002/07/owl#".to_string(),"owl".to_string());
+        p.insert("http://www.w3.org/XML/1998/namespace".to_string(),"xml".to_string());
+        p.insert("http://www.w3.org/2001/XMLSchema#".to_string(),"xsd".to_string());
+        p.insert("http://www.w3.org/2000/01/rdf-schema#".to_string(), "rdfs".to_string());
+
+        let mut f:pretty_rdf::PrettyRdfXmlFormatter<String,_> =
+            pretty_rdf::PrettyRdfXmlFormatter::new
+            (b,
+             pretty_rdf::ChunkedRdfXmlFormatterConfig::all()
+            )?;
+        //let mut f = rio_xml::RdfXmlFormatter::with_indentation(&b, 4)?;
+        let file = File::open(input)?;
+        let bufreader = BufReader::new(file);
+        let _: Vec<Result<_,_>>
+            = rio_xml::RdfXmlParser::new(bufreader, None).into_iter(
+                |rio_triple| {
+                    let t = rio_triple.into();
+                    f.format(t)
+                }
+            ).collect();
+        f.finish()?;
     }
 
     Ok(())

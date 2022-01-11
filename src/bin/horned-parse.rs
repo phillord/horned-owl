@@ -47,7 +47,7 @@ mod test {
     use std::process::Command; // Run programs
 
     #[test]
-    fn file_doesnt_exist() -> Result<(), Box<dyn std::error::Error>> {
+    fn integration_file_doesnt_exist() -> Result<(), Box<dyn std::error::Error>> {
         let mut cmd = Command::cargo_bin("horned-parse")?;
 
         cmd.arg("test/file/doesnt/exist");
@@ -59,7 +59,7 @@ mod test {
     }
 
     #[test]
-    fn parse_ontology_rdf() -> Result<(), Box<dyn std::error::Error>> {
+    fn integration_parse_ontology_rdf() -> Result<(), Box<dyn std::error::Error>> {
         let mut cmd = Command::cargo_bin("horned-parse")?;
 
         cmd.arg("src/ont/owl-rdf/and.owl");
@@ -71,7 +71,7 @@ mod test {
     }
 
     #[test]
-    fn parse_ontology_xml() -> Result<(), Box<dyn std::error::Error>> {
+    fn integration_parse_ontology_xml() -> Result<(), Box<dyn std::error::Error>> {
         let mut cmd = Command::cargo_bin("horned-parse")?;
 
         cmd.arg("src/ont/owl-xml/and.owx");

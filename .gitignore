@@ -10,3 +10,4 @@ Cargo.lock
 /src/ont/owl-xml/family-other.owl
 /tmp/
 /big-owl
+/rio

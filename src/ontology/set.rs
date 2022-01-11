@@ -10,7 +10,7 @@ use crate::model::*;
 ///
 /// It should be more rapid that the using `SetIndex` inside
 /// `OneIndexedOntology`, as it involves no `Rc` overhead.
-#[derive(Debug, Default, Eq, PartialEq)]
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct SetOntology {
     id: OntologyID,
     // The use an BTreeMap keyed on AxiomKind allows efficient
