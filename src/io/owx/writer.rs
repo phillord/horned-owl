@@ -642,11 +642,21 @@ contents! {
     ClassAssertion, self, (&self.ce, &self.i)
 }
 
-contents! {
-    AnnotationAssertion, self,
-    (&self.ann.ap,
-     &self.subject,
-     &self.ann.av)
+render! {
+    AnnotationAssertion, self, w, m,
+    {
+        (&self.ann.ap).render(w, m)?;
+        if let Individual::Named(named) = &self.subject {
+            // render in an <IRI> or <abbreviatedIRI> tag directly
+            named.0.render(w, m)?;
+        } else {
+            // render in an <AnonymousIndividual> tag
+            self.subject.render(w, m)?;
+        }
+        (&self.ann.av).render(w, m)?;
+
+        Ok(())
+    }
 }
 
 render! {
