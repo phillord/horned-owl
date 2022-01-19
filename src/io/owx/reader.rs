@@ -171,18 +171,37 @@ fn read_event<R: BufRead>(read: &mut Read<R>) -> Result<(Vec<u8>, Event<'static>
     }
 }
 
-fn decode_expand_curie_maybe<R: BufRead>(r: &mut Read<R>, val: &[u8]) -> Result<String,ReadError> {
-    let s = r.reader.decode(val)?.to_string();
-    Ok(expand_curie_maybe(r, s))
+fn decode_expand_curie_maybe<'a, R: BufRead>(r: &mut Read<R>, val: &'a [u8]) -> Result<Cow<'a, str>, ReadError> {
+    // Okay, so a lot of matching, but without this the borrow checker
+    // is gonna complain. This let's us do the following:
+    // - if the CURIE can be decoded without replacement, and if it is
+    //   already a complete IRI, we don't have to copy it, and we can
+    //   return it as as borrowed string.
+    // - in any other case, we need to perform a copy, otherwise the decoded
+    //   string / unabbreviated IRI is not going to live long enough.
+    #[cfg(feature = "quick-xml/encoding")]
+    match r.reader.decode(val) {
+        Cow::Borrowed(b) => expand_curie_maybe(r, b),
+        Cow::Owned(o) => match expand_curie_maybe(r, &o) {
+            Cow::Borrowed(b) => Cow::Owned(b.to_string()),
+            Cow::Owned(o) => Cow::Owned(o),
+        },
+    }
+
+    #[cfg(not(feature = "quick-xml/encoding"))]
+    match r.reader.decode(val) {
+        Ok(curie) => Ok(expand_curie_maybe(r, curie)),
+        Err(e) => Err(ReadError::from(e))
+    }
 }
 
 /// Expand a curie if there is an appropriate prefix
-fn expand_curie_maybe<R: BufRead>(r: &mut Read<R>, val: String) -> String {
+fn expand_curie_maybe<'a, R: BufRead>(r: &mut Read<R>, val: &'a str) -> Cow<'a, str> {
     match r.mapping.expand_curie_string(&val) {
         // If we expand use this
-        Ok(n) => n,
+        Ok(n) => Cow::Owned(n),
         // Else assume it's a complete URI
-        Err(_e) => val,
+        Err(_e) => Cow::Borrowed(val),
     }
 }
 
@@ -235,7 +254,7 @@ fn read_a_iri_attr<R: BufRead>(
                 // Into an iri
                 r.build.iri(
                     // or a curie
-                    expand_curie_maybe(r, st))),
+                    expand_curie_maybe(r, &st))),
     )
 }
 
@@ -631,7 +650,7 @@ fn object_cardinality_restriction<R: BufRead>(
         n.parse::<u32>().map_err(|s| ReadError::ParseInt(s))?,
         ope,
         Box::new(match vce.len() {
-            0 => r.build.class(OWL::Thing.iri_s().to_string()).into(),
+            0 => r.build.class(OWL::Thing.iri_s()).into(),
             1 => vce.remove(0),
             _ => Err(error_unexpected_tag(end_tag, r))?,
         }),
@@ -655,7 +674,7 @@ fn data_cardinality_restriction<R: BufRead>(
         match vdr.len() {
             0 => r
                 .build
-                .datatype(OWL2Datatype::RDFSLiteral.iri_s().to_string())
+                .datatype(OWL2Datatype::RDFSLiteral.iri_s())
                 .into(),
             1 => vdr.remove(0),
             _ => Err(error_unexpected_tag(end_tag, r))?,
