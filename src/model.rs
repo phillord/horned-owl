@@ -189,18 +189,17 @@ impl Build {
     /// ```
     pub fn iri<S>(&self, s: S) -> IRI
     where
-        S: Into<String>,
+        S: AsRef<str>,
     {
-        let s:String = s.into();
-        let iri = IRI(s.into());
-
         let mut cache = self.0.borrow_mut();
-        if cache.contains(&iri) {
-            return cache.get(&iri).unwrap().clone();
+        if let Some(iri) = cache.get(s.as_ref()) {
+            iri.clone()
+        } else {
+            let iri = IRI(Rc::from(s.as_ref()));
+            cache.insert(iri.clone());
+            iri
         }
 
-        cache.insert(iri.clone());
-        iri
     }
 
     /// Constructs a new `Class`.
@@ -219,7 +218,7 @@ impl Build {
     ///
     pub fn class<S>(&self, s: S) -> Class
     where
-        S: Into<String>,
+        S: AsRef<str>,
     {
         Class(self.iri(s))
     }
@@ -238,7 +237,7 @@ impl Build {
     /// ```
     pub fn object_property<S>(&self, s: S) -> ObjectProperty
     where
-        S: Into<String>,
+        S: AsRef<str>,
     {
         ObjectProperty(self.iri(s))
     }
@@ -257,7 +256,7 @@ impl Build {
     /// ```
     pub fn annotation_property<S>(&self, s: S) -> AnnotationProperty
     where
-        S: Into<String>,
+        S: AsRef<str>,
     {
         AnnotationProperty(self.iri(s))
     }
@@ -276,7 +275,7 @@ impl Build {
     /// ```
     pub fn data_property<S>(&self, s: S) -> DataProperty
     where
-        S: Into<String>,
+        S: AsRef<str>,
     {
         DataProperty(self.iri(s))
     }
@@ -295,7 +294,7 @@ impl Build {
     /// ```
     pub fn named_individual<S>(&self, s: S) -> NamedIndividual
     where
-        S: Into<String>,
+        S: AsRef<str>,
     {
         NamedIndividual(self.iri(s))
     }
@@ -314,7 +313,7 @@ impl Build {
     /// ```
     pub fn datatype<S>(&self, s: S) -> Datatype
     where
-        S: Into<String>,
+        S: AsRef<str>,
     {
         Datatype(self.iri(s))
     }
