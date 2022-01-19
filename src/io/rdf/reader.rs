@@ -204,40 +204,39 @@ impl From<Term> for OrTerm {
     }
 }
 
-fn vocab_lookup() -> HashMap<&'static String, Term> {
+fn vocab_lookup() -> HashMap<&'static str, Term> {
     let mut m = HashMap::default();
 
     for v in VOWL::all() {
         match v {
             // Skip the builtin properties or we have to treat them separately
             VOWL::TopDataProperty => None,
-            _ => m.insert(v.iri_s(), Term::OWL(v)),
+            _ => m.insert(v.iri_s().as_str(), Term::OWL(v)),
         };
     }
 
     for v in VRDFS::all() {
-        m.insert(v.iri_s(), Term::RDFS(v));
+        m.insert(v.iri_s().as_str(), Term::RDFS(v));
     }
 
     for v in VRDF::all() {
-        m.insert(v.iri_s(), Term::RDF(v));
+        m.insert(v.iri_s().as_str(), Term::RDF(v));
     }
 
     for v in Facet::all() {
-        m.insert(v.iri_s(), Term::FacetTerm(v));
+        m.insert(v.iri_s().as_str(), Term::FacetTerm(v));
     }
     m
 }
 
 
 fn to_term_nn<'a>(nn: &'a NamedNode,
-                  m: &HashMap<&String, Term>,
+                  m: &HashMap<&str, Term>,
                   b: &Build) -> Term {
-    let s = nn.iri.to_string();
-    if let Some(term) = m.get(&s) {
+    if let Some(term) = m.get(&nn.iri) {
         return term.clone();
     }
-    Term::Iri(b.iri(s))
+    Term::Iri(b.iri(nn.iri))
 }
 
 fn to_term_bn<'a>(nn: &'a BlankNode) -> Term {
@@ -261,7 +260,7 @@ fn to_term_lt<'a>(lt: &'a rio_api::model::Literal, b: &Build)-> Term {
 }
 
 fn to_term_nnb<'a>(nnb: &'a Subject,
-                   m: &HashMap<&String, Term>,
+                   m: &HashMap<&str, Term>,
                    b: &Build) -> Term {
     match nnb {
         Subject::NamedNode(nn) => {
@@ -275,7 +274,7 @@ fn to_term_nnb<'a>(nnb: &'a Subject,
     }
 }
 
-fn to_term<'a>(t: &'a RioTerm, m: &HashMap<&String, Term>, b: &Build) -> Term {
+fn to_term<'a>(t: &'a RioTerm, m: &HashMap<&str, Term>, b: &Build) -> Term {
     match t {
         rio_api::model::Term::NamedNode(iri) => to_term_nn(iri, m, b),
         rio_api::model::Term::BlankNode(id) => to_term_bn(id),
