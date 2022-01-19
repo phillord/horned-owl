@@ -161,7 +161,7 @@ trait Convert {
 
 impl Convert for rio_api::model::NamedNode<'_> {
     fn to_iri(&self, b: &Build) -> IRI {
-        b.iri(&self.to_string())
+        b.iri(&self.iri)
     }
 }
 
@@ -255,7 +255,7 @@ fn to_term_lt<'a>(lt: &'a rio_api::model::Literal, b: &Build)-> Term {
             Term::Literal(Literal::Simple{literal: value.to_string()}),
         rio_api::model::Literal::Typed { value, datatype } => {
             Term::Literal(Literal::Datatype{literal: value.to_string(),
-                                            datatype_iri: b.iri(datatype.iri.to_string())})
+                                            datatype_iri: b.iri(datatype.iri)})
         }
     }
 }
