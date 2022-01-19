@@ -90,10 +90,12 @@
 //! };
 //! ```
 
-use std::{cell::RefCell, fmt::Formatter};
+use std::borrow::Borrow;
+use std::cell::RefCell;
 use std::cmp::Ordering;
 use std::collections::BTreeSet;
 use std::fmt::Display;
+use std::fmt::Formatter;
 use std::hash::Hash;
 use std::hash::Hasher;
 use std::ops::Deref;
@@ -120,6 +122,12 @@ impl Deref for IRI {
 impl AsRef<str> for IRI {
     fn as_ref(&self) -> &str {
         &self.0.as_ref()
+    }
+}
+
+impl Borrow<str> for IRI {
+    fn borrow(&self) -> &str {
+        self.as_ref()
     }
 }
 
