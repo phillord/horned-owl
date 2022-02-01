@@ -479,7 +479,7 @@ render! {
 render!{
     AnnotationAssertion, self, f, ng, PTriple<Rc<str>>,
     {
-        let nbn:PSubject<Rc<str>> = (&self.subject).into();
+        let nbn:PSubject<Rc<str>> = (&self.subject).render(f, ng)?;
         ng.keep_this_bn(nbn);
 
         self.ann.render(f, ng)
@@ -1018,6 +1018,18 @@ render_to_node! {
     {
         Ok(
             (&self.0).into()
+        )
+    }
+}
+
+render_to_node! {
+    AnnotationSubject, self, f, ng,
+    {
+        Ok(
+            match self {
+                Self::AnonymousIndividual(ai) => ai.render(f, ng)?,
+                Self::IRI(iri) => iri.into(),
+            }
         )
     }
 }

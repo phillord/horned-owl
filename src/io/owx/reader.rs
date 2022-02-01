@@ -872,6 +872,26 @@ from_start! {
 }
 
 from_start! {
+    AnnotationSubject, r, e,
+    {
+        match e.local_name() {
+            b"AnonymousIndividual" =>{
+                let ai:AnonymousIndividual = from_start(r, e)?;
+                Ok(ai.into())
+            }
+            b"IRI" | b"AbbreviatedIRI" => {
+                let iri:IRI = from_start(r, e)?;
+                Ok(iri.into())
+            }
+            l => {
+                todo!("{:?}",std::str::from_utf8(l))
+            }
+        }
+
+    }
+}
+
+from_start! {
     AnonymousIndividual, r, e,
     {
         let ai:AnonymousIndividual =

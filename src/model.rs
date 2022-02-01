@@ -515,6 +515,48 @@ impl From<IRI> for Individual {
     }
 }
 
+#[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
+pub enum AnnotationSubject {
+    IRI(IRI),
+    AnonymousIndividual(AnonymousIndividual),
+}
+
+impl Deref for AnnotationSubject {
+    type Target=str;
+
+    fn deref(&self) -> &Self::Target {
+        match self {
+            Self::IRI(iri) => &*iri,
+            Self::AnonymousIndividual(ai) => &*ai,
+        }
+    }
+}
+
+impl From<IRI> for AnnotationSubject {
+    fn from(iri:IRI) -> AnnotationSubject {
+        AnnotationSubject::IRI(iri)
+    }
+}
+
+impl From<AnonymousIndividual> for AnnotationSubject {
+    fn from(anon:AnonymousIndividual) -> AnnotationSubject {
+        AnnotationSubject::AnonymousIndividual(anon)
+    }
+}
+
+impl From<&IRI> for AnnotationSubject {
+    fn from(iri:&IRI) -> AnnotationSubject {
+        AnnotationSubject::IRI(iri.clone())
+    }
+}
+
+impl From<&AnonymousIndividual> for AnnotationSubject {
+    fn from(anon:&AnonymousIndividual) -> AnnotationSubject {
+        AnnotationSubject::AnonymousIndividual(anon.clone())
+    }
+}
+
+
 
 impl From<NamedEntity> for Axiom {
     fn from(ne: NamedEntity) -> Axiom {
@@ -1110,7 +1152,7 @@ axioms! {
     /// `annotation_subject`. Annotations refer to an `IRI` rather
     /// than the `NamedEntity` identified by that `IRI`.
     AnnotationAssertion {
-        subject: Individual,
+        subject: AnnotationSubject,
         ann: Annotation
     },
 
