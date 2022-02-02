@@ -35,7 +35,7 @@ pub(crate) fn matcher(matches: &ArgMatches) -> Result<(), CommandError> {
 
     let res = parse_path(Path::new(input)).map_err(underlying)?;
 
-    match res {
+    let rtn = match res {
         horned_owl::io::ParserOutput::OWXParser(so, pm) => {
             horned_owl::io::owx::writer::write(
                 &mut stdout(), &so.into(), Some(&pm)
@@ -46,7 +46,11 @@ pub(crate) fn matcher(matches: &ArgMatches) -> Result<(), CommandError> {
                 &mut stdout(), &rdfo.into()
             ).map_err(underlying)
         }
-    }
+    };
+    // Finish off nicely
+    println!("");
+
+    rtn
 }
 
 #[cfg(test)]

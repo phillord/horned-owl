@@ -448,6 +448,16 @@ render! {
 }
 
 
+render! {
+    AnnotationSubject, self, w, m,
+    {
+        match self {
+            Self::AnonymousIndividual(ai) => ai.render(w, m),
+            Self::IRI(iri) => iri.render(w, m),
+        }
+    }
+}
+
 
 render! {
     ClassExpression, self, w, m,
@@ -890,14 +900,13 @@ mod test {
         assert_eq!(ont.id().iri, ont2.id().iri);
     }
 
-    fn roundtrip(
-        ont: &str,
-    ) -> (
-        AxiomMappedOntology,
-        PrefixMapping,
-        AxiomMappedOntology,
-        PrefixMapping,
-    ) {
+    fn roundtrip_1(ont:&str) ->
+        (
+            AxiomMappedOntology,
+            PrefixMapping,
+            Temp
+        )
+    {
         let (ont_orig, prefix_orig) = read_ok(&mut ont.as_bytes());
         let temp_file = Temp::new_file().unwrap();
 
@@ -908,6 +917,28 @@ mod test {
             .ok()
             .unwrap();
         buf_writer.flush().ok();
+
+        (ont_orig, prefix_orig, temp_file)
+    }
+
+    fn roundtrip_to_string (
+        ont: &str,
+    ) -> String {
+        let t = roundtrip_1(ont).2;
+        let s = std::fs::read_to_string(&t);
+        t.release();
+        s.ok().unwrap()
+    }
+
+    fn roundtrip(
+        ont: &str,
+    ) -> (
+        AxiomMappedOntology,
+        PrefixMapping,
+        AxiomMappedOntology,
+        PrefixMapping,
+    ) {
+        let (ont_orig, prefix_orig, temp_file) = roundtrip_1(ont);
 
         let file = File::open(&temp_file).ok().unwrap();
 
@@ -1020,7 +1051,16 @@ mod test {
 
     #[test]
     fn round_annotation() {
-        assert_round(include_str!("../../ont/owl-xml/annotation.owx"));
+        let s = include_str!("../../ont/owl-xml/annotation.owx");
+        assert_round(s);
+
+        // https://github.com/phillord/horned-owl/pull/32
+        // Check that we are serializing IRIs and not NamedIndividuals
+        let s = roundtrip_to_string(s);
+        dbg!(&s);
+        assert!(!s.contains("<NamedIndividual"));
+        // I still do not understand IRI vs AbbreviatedIRI
+        assert!(s.contains("<AbbreviatedIRI>"));
     }
 
     #[test]
