@@ -59,16 +59,16 @@ where
     ns_buf: Vec<u8>,
 }
 
-pub fn read<R: BufRead>(bufread: &mut R) -> Result<(Ontology, PrefixMapping), Error> {
+pub fn read<R: BufRead>(bufread: R) -> Result<(Ontology, PrefixMapping), Error> {
     let b = Build::new();
     read_with_build(bufread, &b)
 }
 
 pub fn read_with_build<R: BufRead>(
-    bufread: &mut R,
+    bufread: R,
     build: &Build,
 ) -> Result<(Ontology, PrefixMapping), Error> {
-    let reader: Reader<&mut R> = Reader::from_reader(bufread);
+    let reader: Reader<R> = Reader::from_reader(bufread);
     let mut ont = Ontology::new();
     let mapping = PrefixMapping::default();
 
