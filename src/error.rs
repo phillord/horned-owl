@@ -1,4 +1,6 @@
 //! Errors
+
+use std::path::PathBuf;
 #[derive(Debug, Fail)]
 pub enum CommandError {
     #[fail(display = "An argument that was expected is missing")]
@@ -9,5 +11,5 @@ pub enum CommandError {
 #[derive(Debug, Fail)]
 pub enum ParserError {
     #[fail(display = "Do not know how to parse file with path: {:?}", path)]
-    FormatNotSupported{ path: Box<std::path::Path> }
+    FormatNotSupported{ path: PathBuf }
 }

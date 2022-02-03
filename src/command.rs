@@ -32,7 +32,7 @@ pub fn parse_path(path: &Path) -> Result<ParserOutput, Error>
                 ResourceType::RDF => super::io::rdf::reader::read(&mut bufreader).map(|tio| tio.into()),
             }
         },
-        None => Err(ParserError::FormatNotSupported { path: Box::from(path) }.into()),
+        None => Err(ParserError::FormatNotSupported { path: path.into() }.into()),
     }
 }
 
@@ -53,7 +53,7 @@ pub fn parse_imports(path: &Path) -> Result<ParserOutput, Error> {
                 }
             }
         }
-        None => Err(ParserError::FormatNotSupported { path: Box::from(path) }.into())
+        None => Err(ParserError::FormatNotSupported { path: path.into() }.into())
     }
 }
 
