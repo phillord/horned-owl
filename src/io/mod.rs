@@ -3,7 +3,6 @@
 pub mod owx;
 pub mod rdf;
 
-
 use curie::PrefixMapping;
 
 use crate::ontology
@@ -11,7 +10,6 @@ use crate::ontology
        set::SetOntology};
 
 use self::rdf::reader::{IncompleteParse, RDFOntology};
-
 
 pub enum ResourceType{OWX, RDF}
 
