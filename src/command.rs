@@ -1,6 +1,6 @@
 //! Support for Horned command line programmes
 
-use crate::{error::{CommandError, underlying}, io::{ParserOutput, ResourceType}, model::{Build, IRI}, ontology::{axiom_mapped::AxiomMappedOntology}, resolve::{localize_iri, strict_resolve_iri}};
+use crate::{error::{CommandError, underlying, ParserError}, io::{ParserOutput, ResourceType}, model::{Build, IRI}, ontology::{axiom_mapped::AxiomMappedOntology}, resolve::{localize_iri, strict_resolve_iri}};
 
 
 use std::{fs::File, io::{BufReader, Write}, path::Path};
@@ -27,9 +27,10 @@ pub fn parse_path(path: &Path) -> Result<ParserOutput, CommandError>
         Some(ResourceType::RDF) => super::io::rdf::reader::read(&mut bufreader)
             .map_err(underlying)?
             .into(),
-        _ => {
-            eprintln!("Do not know how to parse file with path: {:?}", path);
-            todo!()
+        None => {
+            return Err(
+                underlying(ParserError::FormatNotSupported{path:path.into()})
+            );
         },
     })
 }
@@ -49,9 +50,10 @@ pub fn parse_imports(path: &Path) -> Result<ParserOutput, CommandError> {
             p.parse_imports().map_err(underlying)?;
             p.as_ontology_and_incomplete().map_err(underlying)?.into()
         }
-        _ => {
-            eprintln!("Do not know how to parse file with path: {:?}", path);
-            todo!()
+        None => {
+            return Err(
+                underlying(ParserError::FormatNotSupported{path:path.into()})
+            );
         }
     })
 }
