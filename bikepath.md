@@ -1,6 +1,16 @@
 Version 0.12.0
 ==============
 
+Make
+
+public struct <A:AsRef<Str>>IRI(A)
+
+to enable the use of horned in a multithreaded environment
+
+
+Version next
+============
+
 Support fully multi file ontology parsing
 
 
