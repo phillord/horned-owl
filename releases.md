@@ -1,3 +1,17 @@
+Version 0.11.0
+==============
+
+This release includes a new command `horned` which multiplexes all the
+other commands. Thanks for Filippo De Bortoli for this addition.
+
+There has been one model change with the introduction of
+AnnotationSubject.
+
+There has been a significant refactoring and updating of dependencies,
+particularly the removal of the `failure` crate dependency.
+
+There have been a number of performance updates thanks to Martin Larralde.
+
 Version 0.10.0
 ==============
 
