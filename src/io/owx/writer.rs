@@ -37,8 +37,8 @@ impl From<quick_xml::Error> for WriteError {
 ///
 /// The ontology is written in OWL
 /// [XML](https://www.w3.org/TR/owl2-xml-serialization/) syntax.
-pub fn write(
-    write: &mut dyn StdWrite,
+pub fn write<W:StdWrite>(
+    write: W,
     ont: &AxiomMappedOntology,
     mapping: Option<&PrefixMapping>,
 ) -> Result<(), WriteError> {
