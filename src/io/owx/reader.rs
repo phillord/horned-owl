@@ -79,10 +79,10 @@ pub fn read<R: BufRead>(bufread: &mut R) -> Result<(SetOntology, PrefixMapping),
 }
 
 pub fn read_with_build<R: BufRead>(
-    bufread: &mut R,
+    bufread: R,
     build: &Build,
 ) -> Result<(SetOntology, PrefixMapping), ReadError> {
-    let reader: Reader<&mut R> = Reader::from_reader(bufread);
+    let reader: Reader<R> = Reader::from_reader(bufread);
     let mut ont = SetOntology::default();
     let mapping = PrefixMapping::default();
 
