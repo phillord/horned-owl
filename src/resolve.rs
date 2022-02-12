@@ -1,5 +1,6 @@
 use crate::model::{Build, IRI};
 
+#[cfg (feature = "remote")]
 use ureq;
 
 // fn from_dir_bufread<R: BufRead>(dir: PathBuf, iri:&String) -> R {
@@ -31,13 +32,21 @@ pub fn resolve_iri(iri:&IRI, doc_iri: &IRI) -> String {
 }
 
 // Return the ontology as Vec<u8> from `iri`.
+#[cfg (feature = "remote")]
 pub fn strict_resolve_iri(iri: &IRI) -> String {
     let s:String = iri.into();
     ureq::get(&s).call().unwrap().into_string().unwrap()
 }
 
+#[cfg (not(feature = "remote"))]
+pub fn strict_resolve_iri(_iri: &IRI) -> String {
+    todo!("fail")
+}
+
 #[cfg(test)]
 mod test{
+    use std::path::PathBuf;
+
     use super::*;
     use crate::model::Build;
 
@@ -61,20 +70,14 @@ mod test{
         assert_eq!(localize_iri(&iri, &doc_iri), local);
     }
 
-    // #[test]
-    // fn simple_iri() {
-    //     let dir_path_buf = PathBuf::from(file!());
-    //     let dir = dir_path_buf.parent().unwrap();
-    //     let cdir = dir.canonicalize().unwrap();
-    //     let b = Build::new();
-    //     let i:IRI = b.iri(
-    //         format!("file://{}/ont/owl-rdf/and.owl", cdir.to_string_lossy())
-    //     );
+    #[test]
+    fn simple_iri() {
+        let dir_path_buf = PathBuf::from(file!());
+        let b = Build::new();
+        let i:IRI = b.iri(
+            "http://www.example.com"
+        );
 
-    //     let s:String = strict_resolve_iri(&i);
-
-    //     let ont_s = include_str!("./ont/owl-rdf/and.owl");
-
-    //     assert_eq!(s, ont_s);
-    //}
+        strict_resolve_iri(&i);
+    }
 }

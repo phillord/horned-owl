@@ -27,10 +27,13 @@ rio_xml="0.6.1"
 pretty_rdf="0.1.2"
 ##pretty_rdf={path="./pretty_rdf"}
 slurp = "1.0.1"
-ureq="2.1.1"
+ureq={version="2.1.1", optional=true}
 
+[features]
+remote = ["ureq"]
 
 [dev-dependencies]
+horned-owl = {path=".", features = ["remote"]}
 assert_cmd = "2.0.2"
 bencher = "0.1.4"
 env_logger = "0.9.0"
