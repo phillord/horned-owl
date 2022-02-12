@@ -54,7 +54,7 @@ impl Ontology for SetOntology {
         &self.doc_iri
     }
 
-    fn mut_doc_iri(&mut self) -> &Option<IRI>{
+    fn mut_doc_iri(&mut self) -> &mut Option<IRI>{
         &mut self.doc_iri
     }
 }

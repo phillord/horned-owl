@@ -112,7 +112,7 @@ impl<I: OntologyIndex> Ontology for OneIndexedOntology<I> {
         &self.2
     }
 
-    fn mut_doc_iri(&mut self) -> &Option<IRI>{
+    fn mut_doc_iri(&mut self) -> &mut Option<IRI>{
         &mut self.2
     }
 }
@@ -165,7 +165,7 @@ impl<I: OntologyIndex, J: OntologyIndex> Ontology for TwoIndexedOntology<I, J> {
         &self.3
     }
 
-    fn mut_doc_iri(&mut self) -> &Option<IRI>{
+    fn mut_doc_iri(&mut self) -> &mut Option<IRI>{
         &mut self.3
     }
 }
@@ -243,7 +243,7 @@ impl<I: OntologyIndex, J: OntologyIndex, K: OntologyIndex> Ontology
         self.0.doc_iri()
     }
 
-    fn mut_doc_iri(&mut self) -> &Option<IRI>{
+    fn mut_doc_iri(&mut self) -> &mut Option<IRI>{
         self.0.mut_doc_iri()
     }
 }
@@ -334,7 +334,7 @@ impl<I: OntologyIndex, J: OntologyIndex, K: OntologyIndex, L: OntologyIndex> Ont
         self.0.doc_iri()
     }
 
-    fn mut_doc_iri(&mut self) -> &Option<IRI>{
+    fn mut_doc_iri(&mut self) -> &mut Option<IRI>{
         self.0.mut_doc_iri()
     }
 }
