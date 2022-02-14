@@ -1,8 +1,17 @@
-use std::{collections::{BTreeSet, HashSet}, fmt::Debug, io::Write, rc::Rc};
-use pretty_rdf::{PBlankNode, PLiteral, PNamedNode, PSubject, PTerm, PTriple, ChunkedRdfXmlFormatterConfig, PrettyRdfXmlFormatter};
 use crate::{
-    model::*, ontology::axiom_mapped::AxiomMappedOntology,
-    vocab::{is_thing, OWL, RDF, RDFS, XSD, WithIRI, Vocab}
+    model::*,
+    ontology::axiom_mapped::AxiomMappedOntology,
+    vocab::{is_thing, Vocab, WithIRI, OWL, RDF, RDFS, XSD},
+};
+use pretty_rdf::{
+    ChunkedRdfXmlFormatterConfig, PBlankNode, PLiteral, PNamedNode, PSubject, PTerm, PTriple,
+    PrettyRdfXmlFormatter,
+};
+use std::{
+    collections::{BTreeSet, HashSet},
+    fmt::Debug,
+    io::Write,
+    rc::Rc,
 };
 
 use thiserror::Error;
@@ -13,7 +22,7 @@ pub enum WriteError {
     #[error("{0}")]
     GeneralError(String),
     #[error("Oops")]
-    Underlying(#[source] Box<dyn std::error::Error>)
+    Underlying(#[source] Box<dyn std::error::Error>),
 }
 
 impl From<std::io::Error> for WriteError {
@@ -22,19 +31,21 @@ impl From<std::io::Error> for WriteError {
     }
 }
 
-pub fn write<W:Write>(
-    write: &mut W,
-    ont: &AxiomMappedOntology,
-) -> Result<(), WriteError> {
+pub fn write<W: Write>(write: &mut W, ont: &AxiomMappedOntology) -> Result<(), WriteError> {
     // Entirely unsatisfying to set this randomly here, but we can't
     // access ns our parser yet
     let mut p = indexmap::IndexMap::new();
-    p.insert("http://www.w3.org/2002/07/owl#".to_string(),"owl".to_string());
-    p.insert("http://www.w3.org/XML/1998/namespace".to_string(),"xml".to_string());
-    let mut f:PrettyRdfXmlFormatter<Rc<str>,_> = PrettyRdfXmlFormatter::new(
-        write,
-        ChunkedRdfXmlFormatterConfig::all().prefix(p)
-    ).map_err(|s| WriteError::Underlying(Box::new(s)))?;
+    p.insert(
+        "http://www.w3.org/2002/07/owl#".to_string(),
+        "owl".to_string(),
+    );
+    p.insert(
+        "http://www.w3.org/XML/1998/namespace".to_string(),
+        "xml".to_string(),
+    );
+    let mut f: PrettyRdfXmlFormatter<Rc<str>, _> =
+        PrettyRdfXmlFormatter::new(write, ChunkedRdfXmlFormatterConfig::all().prefix(p))
+            .map_err(|s| WriteError::Underlying(Box::new(s)))?;
     let mut bng = NodeGenerator::default();
     ont.render(&mut f, &mut bng)?;
 
@@ -42,7 +53,8 @@ pub fn write<W:Write>(
     //     println!("{}", i.printable());
     // }
 
-    f.finish().map_err(|s| WriteError::Underlying(Box::new(s)))?;
+    f.finish()
+        .map_err(|s| WriteError::Underlying(Box::new(s)))?;
     Ok(())
 }
 
@@ -50,36 +62,33 @@ pub fn write<W:Write>(
 struct NodeGenerator {
     i: u64,
     b: HashSet<Rc<str>>,
-    this_bn: Option<PSubject<Rc<str>>>
+    this_bn: Option<PSubject<Rc<str>>>,
 }
 
-
 impl NodeGenerator {
-    pub fn nn<V:Into<Vocab>>(&mut self, v:V) -> PNamedNode<Rc<str>> {
+    pub fn nn<V: Into<Vocab>>(&mut self, v: V) -> PNamedNode<Rc<str>> {
         PNamedNode::new(self.cache_rc(v)).into()
     }
 
-    fn cache_rc<V:Into<Vocab>>(&mut self, v:V) -> Rc<str> {
-        let voc:&str = v.into().iri_s();
+    fn cache_rc<V: Into<Vocab>>(&mut self, v: V) -> Rc<str> {
+        let voc: &str = v.into().iri_s();
         if let Some(rc) = self.b.get(voc) {
             return rc.clone();
         }
 
-        let rc:Rc<str> = (*voc).into();
+        let rc: Rc<str> = (*voc).into();
         self.b.insert(rc.clone());
         rc
     }
 
     pub fn bn(&mut self) -> PSubject<Rc<str>> {
         self.i += 1;
-        PSubject::BlankNode(
-            PBlankNode{
-                id: format!{"bn{}", self.i}.into()
-            }
-        )
+        PSubject::BlankNode(PBlankNode {
+            id: format! {"bn{}", self.i}.into(),
+        })
     }
 
-    pub fn keep_this_bn(&mut self, bn:PSubject<Rc<str>>) {
+    pub fn keep_this_bn(&mut self, bn: PSubject<Rc<str>>) {
         self.this_bn = Some(bn);
     }
 
@@ -102,7 +111,7 @@ impl From<&IRI> for PNamedNode<Rc<str>> {
 
 impl From<&IRI> for PSubject<Rc<str>> {
     fn from(iri: &IRI) -> Self {
-        let nn:PNamedNode<Rc<str>> = iri.into();
+        let nn: PNamedNode<Rc<str>> = iri.into();
         nn.into()
     }
 }
@@ -121,7 +130,7 @@ impl From<&NamedIndividual> for PNamedNode<Rc<str>> {
 
 impl From<&NamedIndividual> for PSubject<Rc<str>> {
     fn from(ni: &NamedIndividual) -> Self {
-        let nn:PNamedNode<Rc<str>> = ni.into();
+        let nn: PNamedNode<Rc<str>> = ni.into();
         nn.into()
     }
 }
@@ -140,7 +149,7 @@ impl From<&AnonymousIndividual> for PBlankNode<Rc<str>> {
 
 impl From<&AnonymousIndividual> for PSubject<Rc<str>> {
     fn from(ai: &AnonymousIndividual) -> Self {
-        let bn:PBlankNode<Rc<str>> = ai.into();
+        let bn: PBlankNode<Rc<str>> = ai.into();
         bn.into()
     }
 }
@@ -151,7 +160,6 @@ impl From<&Individual> for PTerm<Rc<str>> {
             Individual::Named(ni) => ni.into(),
             Individual::Anonymous(ai) => ai.into(),
         }
-
     }
 }
 
@@ -165,12 +173,14 @@ impl From<&Individual> for PSubject<Rc<str>> {
 }
 
 trait Render<R> {
-    fn render<W:Write>(&self, f:&mut PrettyRdfXmlFormatter<Rc<str>, W>,
-                       ng: &mut NodeGenerator) ->
-        Result<R, WriteError>;
+    fn render<W: Write>(
+        &self,
+        f: &mut PrettyRdfXmlFormatter<Rc<str>, W>,
+        ng: &mut NodeGenerator,
+    ) -> Result<R, WriteError>;
 }
 
-enum Annotatable<A:AsRef<str>> {
+enum Annotatable<A: AsRef<str>> {
     Main(PTriple<A>),
     Multiple(Vec<PTriple<A>>),
     //Blank(PBlankNode<A>)
@@ -188,7 +198,6 @@ impl From<Vec<PTriple<Rc<str>>>> for Annotatable<Rc<str>> {
     }
 }
 
-
 /// The types in `Render` are too long to type.
 macro_rules! render {
     ($type:ty, $self:ident, $f:ident, $ng:ident, $return:ty,
@@ -205,15 +214,15 @@ macro_rules! render {
 macro_rules! render_to_node {
     ($type:ty, $self:ident, $f:ident, $ng:ident,
      $body:tt) => {
-        render!{$type,$self, $f, $ng, PSubject<Rc<str>>, $body}
-    }
+        render! {$type,$self, $f, $ng, PSubject<Rc<str>>, $body}
+    };
 }
 
 macro_rules! render_to_vec {
     ($type:ty, $self:ident, $f:ident, $ng:ident,
      $body:tt) => {
-        render!{$type, $self, $f, $ng, Vec<PTriple<Rc<str>>>, $body}
-    }
+        render! {$type, $self, $f, $ng, Vec<PTriple<Rc<str>>>, $body}
+    };
 }
 
 macro_rules! render_triple {
@@ -224,17 +233,15 @@ macro_rules! render_triple {
                 Ok(triple!(f, $sub, $pred, $ob))
             }
         }
-    }
+    };
 }
 
 macro_rules! triple {
-    ($f:ident, $sub:expr, $pred:expr, $ob:expr) => {
-        {
-            let t = to_triple($sub, $pred, $ob);
-            $f.format(t.clone())?;
-            t
-        }
-    }
+    ($f:ident, $sub:expr, $pred:expr, $ob:expr) => {{
+        let t = to_triple($sub, $pred, $ob);
+        $f.format(t.clone())?;
+        t
+    }};
 }
 
 macro_rules! triples {
@@ -292,13 +299,13 @@ macro_rules! triples_to_vec {
     }
 }
 
-
-fn to_triple<'a, NB, NN, T>(subject:NB, predicate:NN, object:T) -> PTriple<Rc<str>>
-where NB: Into<PSubject<Rc<str>>>,
-      NN: Into<PNamedNode<Rc<str>>>,
-      T: Into<PTerm<Rc<str>>>
+fn to_triple<'a, NB, NN, T>(subject: NB, predicate: NN, object: T) -> PTriple<Rc<str>>
+where
+    NB: Into<PSubject<Rc<str>>>,
+    NN: Into<PNamedNode<Rc<str>>>,
+    T: Into<PTerm<Rc<str>>>,
 {
-    PTriple{
+    PTriple {
         subject: subject.into(),
         predicate: predicate.into(),
         object: object.into(),
@@ -307,38 +314,37 @@ where NB: Into<PSubject<Rc<str>>>,
 
 impl<R> Render<PTerm<Rc<str>>> for R
 where
-    R: Render<PSubject<Rc<str>>>
+    R: Render<PSubject<Rc<str>>>,
 {
-    fn render<W:Write>(&self, f:&mut PrettyRdfXmlFormatter<Rc<str>, W>,
-                       ng: &mut NodeGenerator)
-                       -> Result<PTerm<Rc<str>>, WriteError> {
+    fn render<W: Write>(
+        &self,
+        f: &mut PrettyRdfXmlFormatter<Rc<str>, W>,
+        ng: &mut NodeGenerator,
+    ) -> Result<PTerm<Rc<str>>, WriteError> {
         Ok(self.render(f, ng)?.into())
     }
 }
 
 impl<T> Render<PTerm<Rc<str>>> for &Vec<T>
 where
-    T: Debug + Render<PTerm<Rc<str>>> {
-    fn render<W:Write>(&self, f:&mut PrettyRdfXmlFormatter<Rc<str>, W>,
-                       ng: &mut NodeGenerator)
-                       -> Result<PTerm<Rc<str>>, WriteError> {
-        let mut rest:Option<PTerm<Rc<str>>> = None;
+    T: Debug + Render<PTerm<Rc<str>>>,
+{
+    fn render<W: Write>(
+        &self,
+        f: &mut PrettyRdfXmlFormatter<Rc<str>, W>,
+        ng: &mut NodeGenerator,
+    ) -> Result<PTerm<Rc<str>>, WriteError> {
+        let mut rest: Option<PTerm<Rc<str>>> = None;
         for i in self.iter().rev() {
             let bn = &ng.bn();
             let item = i.render(f, ng)?;
 
-            triples!(
-                f, bn.clone(), ng.nn(RDF::First), item
-            );
+            triples!(f, bn.clone(), ng.nn(RDF::First), item);
 
             if let Some(r) = rest.take() {
-                triples!(
-                    f, bn.clone(), ng.nn(RDF::Rest), r
-                );
+                triples!(f, bn.clone(), ng.nn(RDF::Rest), r);
             } else {
-                triples!(
-                    f, bn.clone(), ng.nn(RDF::Rest), ng.nn(RDF::Nil)
-                );
+                triples!(f, bn.clone(), ng.nn(RDF::Rest), ng.nn(RDF::Nil));
             }
             rest = Some(bn.clone().into())
         }
@@ -348,17 +354,17 @@ where
 }
 
 impl Render<()> for BTreeSet<Annotation> {
-    fn render<W:Write>(&self, f:&mut PrettyRdfXmlFormatter<Rc<str>, W>,
-                       ng: &mut NodeGenerator)
-                       -> Result<(), WriteError>
-    {
+    fn render<W: Write>(
+        &self,
+        f: &mut PrettyRdfXmlFormatter<Rc<str>, W>,
+        ng: &mut NodeGenerator,
+    ) -> Result<(), WriteError> {
         for r in self.iter() {
             r.render(f, ng)?;
         }
         Ok(())
     }
 }
-
 
 render! {
     &AxiomMappedOntology, self, f, ng, (),
@@ -404,33 +410,39 @@ render! {
 }
 
 impl Render<()> for AnnotatedAxiom {
-    fn render<W:Write>(&self, f:&mut PrettyRdfXmlFormatter<Rc<str>, W>,
-                       ng: &mut NodeGenerator)
-                           -> Result<(), WriteError> {
-        let ax:Annotatable<Rc<str>> = self.axiom.render(f, ng)?;
-        Ok(
-            if self.ann.len() != 0 {
-                match ax {
-                    Annotatable::Main(t) => {
-                        let bn = ng.bn();
-                        triples! (f,
-                                  bn.clone(), ng.nn(RDF::Type), ng.nn(OWL::Axiom),
-                                  bn.clone(), ng.nn(OWL::AnnotatedSource), t.subject,
-                                  bn.clone(), ng.nn(OWL::AnnotatedProperty), t.predicate,
-                                  bn.clone(), ng.nn(OWL::AnnotatedTarget), t.object
-                                  // And the rest!
-                        );
+    fn render<W: Write>(
+        &self,
+        f: &mut PrettyRdfXmlFormatter<Rc<str>, W>,
+        ng: &mut NodeGenerator,
+    ) -> Result<(), WriteError> {
+        let ax: Annotatable<Rc<str>> = self.axiom.render(f, ng)?;
+        Ok(if self.ann.len() != 0 {
+            match ax {
+                Annotatable::Main(t) => {
+                    let bn = ng.bn();
+                    triples!(
+                        f,
+                        bn.clone(),
+                        ng.nn(RDF::Type),
+                        ng.nn(OWL::Axiom),
+                        bn.clone(),
+                        ng.nn(OWL::AnnotatedSource),
+                        t.subject,
+                        bn.clone(),
+                        ng.nn(OWL::AnnotatedProperty),
+                        t.predicate,
+                        bn.clone(),
+                        ng.nn(OWL::AnnotatedTarget),
+                        t.object // And the rest!
+                    );
 
-                        ng.keep_this_bn(bn.clone());
+                    ng.keep_this_bn(bn.clone());
 
-                        let _ = &self.ann.render(f, ng);
-                    }
-                    _ => {
-                        ()
-                    }
+                    let _ = &self.ann.render(f, ng);
                 }
+                _ => (),
             }
-        )
+        })
     }
 }
 
@@ -451,7 +463,6 @@ render! {
         )
     }
 }
-
 
 render! {
     Annotation, self, f, ng, PTriple<Rc<str>>,
@@ -475,8 +486,7 @@ render! {
     }
 }
 
-
-render!{
+render! {
     AnnotationAssertion, self, f, ng, PTriple<Rc<str>>,
     {
         let nbn:PSubject<Rc<str>> = (&self.subject).render(f, ng)?;
@@ -485,7 +495,6 @@ render!{
         self.ann.render(f, ng)
     }
 }
-
 
 render! {
     AnnotationPropertyDomain, self, f, ng, PTriple<Rc<str>>,
@@ -506,63 +515,62 @@ render! {
 }
 
 impl Render<Annotatable<Rc<str>>> for Axiom {
-        fn render<W:Write>(&self, f:&mut PrettyRdfXmlFormatter<Rc<str>, W>,
-                           ng: &mut NodeGenerator)
-                           -> Result<Annotatable<Rc<str>>, WriteError>
-    {
-        Ok(
-            match self {
-                // We render imports and ontology annotations earlier
-                Axiom::Import(_ax) => vec![].into(),
-                Axiom::OntologyAnnotation(_ax) => vec![].into(),
-                Axiom::DeclareClass(ax) => ax.render(f, ng)?.into(),
-                Axiom::DeclareObjectProperty(ax) => ax.render(f, ng)?.into(),
-                Axiom::DeclareAnnotationProperty(ax) => ax.render(f, ng)?.into(),
-                Axiom::DeclareDataProperty(ax) => ax.render(f, ng)?.into(),
-                Axiom::DeclareNamedIndividual(ax) => ax.render(f, ng)?.into(),
-                Axiom::DeclareDatatype(ax) => ax.render(f, ng)?.into(),
-                Axiom::SubClassOf(ax) => ax.render(f, ng)?.into(),
-                Axiom::EquivalentClasses(ax) => ax.render(f, ng)?.into(),
-                Axiom::DisjointClasses(ax) => ax.render(f, ng)?.into(),
-                Axiom::DisjointUnion(ax) => ax.render(f, ng)?.into(),
-                Axiom::SubObjectPropertyOf(ax) => ax.render(f, ng)?.into(),
-                Axiom::EquivalentObjectProperties(ax) => ax.render(f, ng)?.into(),
-                Axiom::DisjointObjectProperties(ax) => ax.render(f, ng)?.into(),
-                Axiom::InverseObjectProperties(ax) => ax.render(f, ng)?.into(),
-                Axiom::ObjectPropertyDomain(ax) => ax.render(f, ng)?.into(),
-                Axiom::ObjectPropertyRange(ax) => ax.render(f, ng)?.into(),
-                Axiom::FunctionalObjectProperty(ax) => ax.render(f, ng)?.into(),
-                Axiom::InverseFunctionalObjectProperty(ax) => ax.render(f, ng)?.into(),
-                Axiom::ReflexiveObjectProperty(ax) => ax.render(f, ng)?.into(),
-                Axiom::IrreflexiveObjectProperty(ax) => ax.render(f, ng)?.into(),
-                Axiom::SymmetricObjectProperty(ax) => ax.render(f, ng)?.into(),
-                Axiom::AsymmetricObjectProperty(ax) => ax.render(f, ng)?.into(),
-                Axiom::TransitiveObjectProperty(ax) => ax.render(f, ng)?.into(),
-                Axiom::SubDataPropertyOf(ax) => ax.render(f, ng)?.into(),
-                Axiom::EquivalentDataProperties(ax) => ax.render(f, ng)?.into(),
-                Axiom::DisjointDataProperties(ax) => ax.render(f, ng)?.into(),
-                Axiom::DataPropertyDomain(ax) => ax.render(f, ng)?.into(),
-                Axiom::DataPropertyRange(ax) => ax.render(f, ng)?.into(),
-                Axiom::FunctionalDataProperty(ax) => ax.render(f, ng)?.into(),
-                Axiom::DatatypeDefinition(ax) => ax.render(f, ng)?.into(),
-                Axiom::HasKey(ax) => ax.render(f, ng)?.into(),
-                Axiom::SameIndividual(ax) => ax.render(f, ng)?.into(),
-                Axiom::DifferentIndividuals(ax) => ax.render(f, ng)?.into(),
-                Axiom::ObjectPropertyAssertion(ax) => ax.render(f, ng)?.into(),
-                Axiom::NegativeObjectPropertyAssertion(ax) => ax.render(f, ng)?.into(),
-                Axiom::DataPropertyAssertion(ax) => ax.render(f, ng)?.into(),
-                Axiom::NegativeDataPropertyAssertion(ax) => ax.render(f, ng)?.into(),
-                Axiom::AnnotationAssertion(ax) => ax.render(f, ng)?.into(),
-                Axiom::SubAnnotationPropertyOf(ax) => ax.render(f, ng)?.into(),
-                Axiom::AnnotationPropertyDomain(ax) => ax.render(f, ng)?.into(),
-                Axiom::AnnotationPropertyRange(ax) => ax.render(f, ng)?.into(),
-                Axiom::ClassAssertion(ax) => ax.render(f, ng)?.into(),
-            }
-        )
+    fn render<W: Write>(
+        &self,
+        f: &mut PrettyRdfXmlFormatter<Rc<str>, W>,
+        ng: &mut NodeGenerator,
+    ) -> Result<Annotatable<Rc<str>>, WriteError> {
+        Ok(match self {
+            // We render imports and ontology annotations earlier
+            Axiom::Import(_ax) => vec![].into(),
+            Axiom::OntologyAnnotation(_ax) => vec![].into(),
+            Axiom::DeclareClass(ax) => ax.render(f, ng)?.into(),
+            Axiom::DeclareObjectProperty(ax) => ax.render(f, ng)?.into(),
+            Axiom::DeclareAnnotationProperty(ax) => ax.render(f, ng)?.into(),
+            Axiom::DeclareDataProperty(ax) => ax.render(f, ng)?.into(),
+            Axiom::DeclareNamedIndividual(ax) => ax.render(f, ng)?.into(),
+            Axiom::DeclareDatatype(ax) => ax.render(f, ng)?.into(),
+            Axiom::SubClassOf(ax) => ax.render(f, ng)?.into(),
+            Axiom::EquivalentClasses(ax) => ax.render(f, ng)?.into(),
+            Axiom::DisjointClasses(ax) => ax.render(f, ng)?.into(),
+            Axiom::DisjointUnion(ax) => ax.render(f, ng)?.into(),
+            Axiom::SubObjectPropertyOf(ax) => ax.render(f, ng)?.into(),
+            Axiom::EquivalentObjectProperties(ax) => ax.render(f, ng)?.into(),
+            Axiom::DisjointObjectProperties(ax) => ax.render(f, ng)?.into(),
+            Axiom::InverseObjectProperties(ax) => ax.render(f, ng)?.into(),
+            Axiom::ObjectPropertyDomain(ax) => ax.render(f, ng)?.into(),
+            Axiom::ObjectPropertyRange(ax) => ax.render(f, ng)?.into(),
+            Axiom::FunctionalObjectProperty(ax) => ax.render(f, ng)?.into(),
+            Axiom::InverseFunctionalObjectProperty(ax) => ax.render(f, ng)?.into(),
+            Axiom::ReflexiveObjectProperty(ax) => ax.render(f, ng)?.into(),
+            Axiom::IrreflexiveObjectProperty(ax) => ax.render(f, ng)?.into(),
+            Axiom::SymmetricObjectProperty(ax) => ax.render(f, ng)?.into(),
+            Axiom::AsymmetricObjectProperty(ax) => ax.render(f, ng)?.into(),
+            Axiom::TransitiveObjectProperty(ax) => ax.render(f, ng)?.into(),
+            Axiom::SubDataPropertyOf(ax) => ax.render(f, ng)?.into(),
+            Axiom::EquivalentDataProperties(ax) => ax.render(f, ng)?.into(),
+            Axiom::DisjointDataProperties(ax) => ax.render(f, ng)?.into(),
+            Axiom::DataPropertyDomain(ax) => ax.render(f, ng)?.into(),
+            Axiom::DataPropertyRange(ax) => ax.render(f, ng)?.into(),
+            Axiom::FunctionalDataProperty(ax) => ax.render(f, ng)?.into(),
+            Axiom::DatatypeDefinition(ax) => ax.render(f, ng)?.into(),
+            Axiom::HasKey(ax) => ax.render(f, ng)?.into(),
+            Axiom::SameIndividual(ax) => ax.render(f, ng)?.into(),
+            Axiom::DifferentIndividuals(ax) => ax.render(f, ng)?.into(),
+            Axiom::ObjectPropertyAssertion(ax) => ax.render(f, ng)?.into(),
+            Axiom::NegativeObjectPropertyAssertion(ax) => ax.render(f, ng)?.into(),
+            Axiom::DataPropertyAssertion(ax) => ax.render(f, ng)?.into(),
+            Axiom::NegativeDataPropertyAssertion(ax) => ax.render(f, ng)?.into(),
+            Axiom::AnnotationAssertion(ax) => ax.render(f, ng)?.into(),
+            Axiom::SubAnnotationPropertyOf(ax) => ax.render(f, ng)?.into(),
+            Axiom::AnnotationPropertyDomain(ax) => ax.render(f, ng)?.into(),
+            Axiom::AnnotationPropertyRange(ax) => ax.render(f, ng)?.into(),
+            Axiom::ClassAssertion(ax) => ax.render(f, ng)?.into(),
+        })
     }
 }
 
-render!{
+render! {
     ObjectPropertyRange, self, f, ng, PTriple<Rc<str>>,
     {
         let node_ope:PSubject<_> = self.ope.render(f, ng)?;
@@ -576,7 +584,7 @@ render!{
     }
 }
 
-render!{
+render! {
     ObjectPropertyDomain, self, f, ng, PTriple<Rc<str>>,
     {
         let node_ope:PSubject<_> = self.ope.render(f, ng)?;
@@ -590,49 +598,47 @@ render!{
     }
 }
 
-render!{
+render! {
     IrreflexiveObjectProperty, self, f, ng, PTriple<Rc<str>>,
     {
         obj_prop_char(&self.0, f, ng, OWL::IrreflexiveProperty)
     }
 }
 
-render!{
+render! {
     InverseFunctionalObjectProperty, self, f, ng, PTriple<Rc<str>>,
     {
         obj_prop_char(&self.0, f, ng, OWL::InverseFunctionalProperty)
     }
 }
 
-render!{
+render! {
     FunctionalObjectProperty, self, f, ng, PTriple<Rc<str>>,
     {
         obj_prop_char(&self.0, f, ng, OWL::FunctionalProperty)
     }
 }
 
-
-render!{
+render! {
     ReflexiveObjectProperty, self, f, ng, PTriple<Rc<str>>,
     {
         obj_prop_char(&self.0, f, ng, OWL::ReflexiveProperty)
     }
 }
 
-render!{
+render! {
     SymmetricObjectProperty, self, f, ng, PTriple<Rc<str>>,
     {
         obj_prop_char(&self.0, f, ng, OWL::SymmetricProperty)
     }
 }
 
-render!{
+render! {
     AsymmetricObjectProperty, self, f, ng, PTriple<Rc<str>>,
     {
        obj_prop_char(&self.0, f, ng, OWL::AsymmetricProperty)
     }
 }
-
 
 render! {
     SubDataPropertyOf, self, f, ng, PTriple<Rc<str>>,
@@ -808,37 +814,38 @@ render_to_vec! {
     }
 }
 
-fn members<R:Debug + Render<PSubject<Rc<str>>>,W:Write>
-    (f:&mut PrettyRdfXmlFormatter<Rc<str>, W>,
-     ng:&mut NodeGenerator,
-     ty_two:OWL,
-     ty_n:OWL, members:&Vec<R>) -> Result<Vec<PTriple<Rc<str>>>,WriteError>
-{
+fn members<R: Debug + Render<PSubject<Rc<str>>>, W: Write>(
+    f: &mut PrettyRdfXmlFormatter<Rc<str>, W>,
+    ng: &mut NodeGenerator,
+    ty_two: OWL,
+    ty_n: OWL,
+    members: &Vec<R>,
+) -> Result<Vec<PTriple<Rc<str>>>, WriteError> {
     // DifferentIndividuals( a1 a2 ) T(a1) owl:differentFrom T(a2) .
     // DifferentIndividuals( a1 ... an ), n > 2 _:x rdf:type owl:AllDifferent .
     // _:x owl:members T(SEQ a1 ... an) .
     match members.len() {
-        1 => panic!("A members axiom needs at least two members, and I should know how to make errors"),
+        1 => panic!(
+            "A members axiom needs at least two members, and I should know how to make errors"
+        ),
         2 => {
-            let a:PSubject<_> = members[0].render(f, ng)?;
-            let b:PTerm<_> = members[1].render(f, ng)?.into();
-            Ok(
-                triples_to_vec! (
-                    f, a, ng.nn(ty_two), b
-                )
-            )
+            let a: PSubject<_> = members[0].render(f, ng)?;
+            let b: PTerm<_> = members[1].render(f, ng)?.into();
+            Ok(triples_to_vec!(f, a, ng.nn(ty_two), b))
         }
         _ => {
             let bn = ng.bn();
-            let node_v:PTerm<_> = members.render(f, ng)?;
+            let node_v: PTerm<_> = members.render(f, ng)?;
 
-            Ok(
-                triples_to_vec!(
-                    f,
-                    bn.clone(), ng.nn(RDF::Type), ng.nn(ty_n),
-                    bn, ng.nn(OWL::Members), node_v
-                )
-            )
+            Ok(triples_to_vec!(
+                f,
+                bn.clone(),
+                ng.nn(RDF::Type),
+                ng.nn(ty_n),
+                bn,
+                ng.nn(OWL::Members),
+                node_v
+            ))
         }
     }
 }
@@ -890,7 +897,6 @@ render! {
         )
     }
 }
-
 
 render_to_node! {
     DataRange, self, f, ng,
@@ -1043,28 +1049,34 @@ render_to_node! {
     }
 }
 
-fn obj_cardinality<W:Write>(n:&u32, ope:&ObjectPropertyExpression, bce:&Box<ClassExpression>,
-                            unqual:PNamedNode<Rc<str>>,
-                            qual:PNamedNode<Rc<str>>,
-                            f:&mut PrettyRdfXmlFormatter<Rc<str>,W>,
-               ng:&mut NodeGenerator) -> Result<PSubject<Rc<str>>,WriteError> {
+fn obj_cardinality<W: Write>(
+    n: &u32,
+    ope: &ObjectPropertyExpression,
+    bce: &Box<ClassExpression>,
+    unqual: PNamedNode<Rc<str>>,
+    qual: PNamedNode<Rc<str>>,
+    f: &mut PrettyRdfXmlFormatter<Rc<str>, W>,
+    ng: &mut NodeGenerator,
+) -> Result<PSubject<Rc<str>>, WriteError> {
     //_:x rdf:type owl:Restriction .
     //_:x owl:onProperty T(OPE) .
     //_:x owl:maxCardinality "n"^^xsd:nonNegativeInteger ._:x
     let bn = ng.bn();
-    let node_ope:PTerm<_> = ope.render(f, ng)?;
-    let node_n = PTerm::Literal (
-        PLiteral::Typed {
-            value: format!("{}", n).into(),
-            datatype: ng.nn(XSD::NonNegativeInteger)
-        }
-    );
+    let node_ope: PTerm<_> = ope.render(f, ng)?;
+    let node_n = PTerm::Literal(PLiteral::Typed {
+        value: format!("{}", n).into(),
+        datatype: ng.nn(XSD::NonNegativeInteger),
+    });
 
     // Unqualified Only
     triples!(
         f,
-        bn.clone(), ng.nn(RDF::Type), ng.nn(OWL::Restriction),
-        bn.clone(), ng.nn(OWL::OnProperty), node_ope
+        bn.clone(),
+        ng.nn(RDF::Type),
+        ng.nn(OWL::Restriction),
+        bn.clone(),
+        ng.nn(OWL::OnProperty),
+        node_ope
     );
 
     if let ClassExpression::Class(ref cl) = **bce {
@@ -1073,46 +1085,55 @@ fn obj_cardinality<W:Write>(n:&u32, ope:&ObjectPropertyExpression, bce:&Box<Clas
             return Ok(bn);
         }
     }
-    let node_ce:PTerm<_> = bce.render(f, ng)?;
+    let node_ce: PTerm<_> = bce.render(f, ng)?;
 
-    Ok(
-        triples_to_node!(
-            f,
-            bn.clone(), qual, node_n,
-            bn, ng.nn(OWL::OnClass), node_ce
-        )
-    )
+    Ok(triples_to_node!(
+        f,
+        bn.clone(),
+        qual,
+        node_n,
+        bn,
+        ng.nn(OWL::OnClass),
+        node_ce
+    ))
 }
 
-fn data_cardinality<W:Write>(n:&u32, dp:&DataProperty, dr: &DataRange,
-                             qual:PNamedNode<Rc<str>>,
-                             f:&mut PrettyRdfXmlFormatter<Rc<str>,W>,
-                             ng:&mut NodeGenerator) -> Result<PSubject<Rc<str>>,WriteError> {
-
+fn data_cardinality<W: Write>(
+    n: &u32,
+    dp: &DataProperty,
+    dr: &DataRange,
+    qual: PNamedNode<Rc<str>>,
+    f: &mut PrettyRdfXmlFormatter<Rc<str>, W>,
+    ng: &mut NodeGenerator,
+) -> Result<PSubject<Rc<str>>, WriteError> {
     // _:x rdf:type owl:Restriction .
     // _:x owl:onProperty T(DPE) .
     // _:x owl:maxQualifiedCardinality "n"^^xsd:nonNegativeInteger .
     // _:x owl:onDataRange T(DR) .
     let bn = ng.bn();
-    let node_dp:PTerm<_> = (&dp.0).into();
-    let node_n = PTerm::Literal (
-        PLiteral::Typed {
-            value: format!("{}", n).into(),
-            datatype: ng.nn(XSD::NonNegativeInteger)
-        }
-    );
-    let node_dr:PTerm<_> = dr.render(f, ng)?;
+    let node_dp: PTerm<_> = (&dp.0).into();
+    let node_n = PTerm::Literal(PLiteral::Typed {
+        value: format!("{}", n).into(),
+        datatype: ng.nn(XSD::NonNegativeInteger),
+    });
+    let node_dr: PTerm<_> = dr.render(f, ng)?;
 
     // Unqualified Only
-    Ok(
-        triples_to_node!(
-            f,
-            bn.clone(), ng.nn(RDF::Type), ng.nn(OWL::Restriction),
-            bn.clone(), ng.nn(OWL::OnProperty), node_dp,
-            bn.clone(), qual, node_n,
-            bn, ng.nn(OWL::OnDataRange), node_dr
-        )
-    )
+    Ok(triples_to_node!(
+        f,
+        bn.clone(),
+        ng.nn(RDF::Type),
+        ng.nn(OWL::Restriction),
+        bn.clone(),
+        ng.nn(OWL::OnProperty),
+        node_dp,
+        bn.clone(),
+        qual,
+        node_n,
+        bn,
+        ng.nn(OWL::OnDataRange),
+        node_dr
+    ))
 }
 
 render_to_node! {
@@ -1275,21 +1296,21 @@ render_to_node! {
     }
 }
 
-fn nary<R:Render<PSubject<Rc<str>>>,W:Write>(f:&mut PrettyRdfXmlFormatter<Rc<str>, W>, ng:&mut NodeGenerator,
-                 entities:&Vec<R>, pred:PNamedNode<Rc<str>>)
-                 -> Result<Vec<PTriple<Rc<str>>>, WriteError>
-{
+fn nary<R: Render<PSubject<Rc<str>>>, W: Write>(
+    f: &mut PrettyRdfXmlFormatter<Rc<str>, W>,
+    ng: &mut NodeGenerator,
+    entities: &Vec<R>,
+    pred: PNamedNode<Rc<str>>,
+) -> Result<Vec<PTriple<Rc<str>>>, WriteError> {
     let mut i = entities.iter();
-    let first = i.next().ok_or_else(|| WriteError::GeneralError("N-ary Class axiom with no classes".to_string()))?;
-    let first:PSubject<_> = first.render(f, ng)?;
+    let first = i
+        .next()
+        .ok_or_else(|| WriteError::GeneralError("N-ary Class axiom with no classes".to_string()))?;
+    let first: PSubject<_> = first.render(f, ng)?;
     let mut v = vec![];
     for c in i {
-        let eq:PSubject<_> = c.render(f, ng)?;
-        v.extend(
-            triples_to_vec!(
-                f, first.clone(), pred.clone(), eq
-            )
-        );
+        let eq: PSubject<_> = c.render(f, ng)?;
+        v.extend(triples_to_vec!(f, first.clone(), pred.clone(), eq));
     }
     Ok(v)
 }
@@ -1354,7 +1375,6 @@ render_to_vec! {
     }
 }
 
-
 render! {
     InverseObjectProperties, self, f, ng, PTriple<Rc<str>>,
     {
@@ -1386,7 +1406,7 @@ render_to_node! {
     }
 }
 
-render!{
+render! {
     SubObjectPropertyOf, self, f, ng, PTriple<Rc<str>>,
     {
         match &self.sub {
@@ -1417,19 +1437,20 @@ render!{
     }
 }
 
-fn obj_prop_char<W:Write>(ob:&ObjectPropertyExpression, f:&mut PrettyRdfXmlFormatter<Rc<str>, W>,
-                 ng:&mut NodeGenerator, chr:OWL)
-                 -> Result<PTriple<Rc<str>>, WriteError> {
-    let s:PSubject<_> = ob.render(f, ng)?;
+fn obj_prop_char<W: Write>(
+    ob: &ObjectPropertyExpression,
+    f: &mut PrettyRdfXmlFormatter<Rc<str>, W>,
+    ng: &mut NodeGenerator,
+    chr: OWL,
+) -> Result<PTriple<Rc<str>>, WriteError> {
+    let s: PSubject<_> = ob.render(f, ng)?;
 
-    Ok(
-        triple! {
-            f, s, ng.nn(RDF::Type), ng.nn(chr)
-        }
-    )
+    Ok(triple! {
+        f, s, ng.nn(RDF::Type), ng.nn(chr)
+    })
 }
 
-render!{
+render! {
     TransitiveObjectProperty, self, f, ng, PTriple<Rc<str>>,
     {
        obj_prop_char(&self.0, f, ng, OWL::TransitiveProperty)
@@ -1446,22 +1467,22 @@ render_triple! {
     &self.0.0, ng.nn(RDF::Type), ng.nn(RDFS::Datatype)
 }
 
-render_triple!{
+render_triple! {
     DeclareObjectProperty, self, ng,
     &self.0.0, ng.nn(RDF::Type), ng.nn(OWL::ObjectProperty)
 }
 
-render_triple!{
+render_triple! {
     DeclareDataProperty, self, ng,
     &self.0.0, ng.nn(RDF::Type), ng.nn(OWL::DatatypeProperty)
 }
 
-render_triple!{
+render_triple! {
     DeclareAnnotationProperty, self, ng,
     &self.0.0, ng.nn(RDF::Type), ng.nn(OWL::AnnotationProperty)
 }
 
-render_triple!{
+render_triple! {
     DeclareNamedIndividual, self, ng,
     &self.0.0, ng.nn(RDF::Type), ng.nn(OWL::NamedIndividual)
 }
@@ -1482,7 +1503,6 @@ render! {
     }
 }
 
-
 #[cfg(test)]
 mod test {
 
@@ -1495,7 +1515,10 @@ mod test {
     // use std::collections::HashMap;
 
     // use std::fs::File;
-    use std::{fs::File, io::{BufRead, BufReader, BufWriter}};
+    use std::{
+        fs::File,
+        io::{BufRead, BufReader, BufWriter},
+    };
     // use std::io::BufReader;
     // use std::io::BufWriter;
 
@@ -1504,7 +1527,11 @@ mod test {
         assert!(r.is_ok(), "Expected ontology, got failure:{:?}", r.err());
         let (o, incomplete) = r.ok().unwrap();
 
-        assert!(incomplete.is_complete(), "Read Not Complete: {:#?}", incomplete);
+        assert!(
+            incomplete.is_complete(),
+            "Read Not Complete: {:#?}",
+            incomplete
+        );
         o.into()
     }
 
@@ -1525,12 +1552,7 @@ mod test {
         assert_eq!(ont.id().iri, ont2.id().iri);
     }
 
-    fn roundtrip(
-        ont: &str,
-    ) -> (
-        SetOntology,
-        SetOntology,
-    ) {
+    fn roundtrip(ont: &str) -> (SetOntology, SetOntology) {
         let ont_orig = read_ok(&mut ont.as_bytes());
         let temp_file = Temp::new_file().unwrap();
 
@@ -1538,9 +1560,7 @@ mod test {
         let mut buf_writer = BufWriter::new(&file);
 
         let amo: AxiomMappedOntology = ont_orig.clone().into();
-        write(&mut buf_writer, &amo)
-            .ok()
-            .unwrap();
+        write(&mut buf_writer, &amo).ok().unwrap();
         buf_writer.flush().ok();
         let file = File::open(&temp_file).ok().unwrap();
         let ont_round = read_ok(&mut BufReader::new(&file));
@@ -1550,12 +1570,7 @@ mod test {
         return (ont_orig, ont_round);
     }
 
-    fn assert_round(
-        ont: &str,
-    ) -> (
-        SetOntology,
-        SetOntology,
-    ) {
+    fn assert_round(ont: &str) -> (SetOntology, SetOntology) {
         let (ont_orig, ont_round) = roundtrip(ont);
 
         println!("ont_orig\n{:#?}", ont_orig);
@@ -1644,7 +1659,7 @@ mod test {
 
     #[test]
     fn round_one_comment() {
-         assert_round(include_str!("../../ont/owl-rdf/one-comment.owl"));
+        assert_round(include_str!("../../ont/owl-rdf/one-comment.owl"));
     }
 
     #[test]
@@ -1863,7 +1878,9 @@ mod test {
 
     #[test]
     fn multi_different_individuals() {
-        assert_round(include_str!("../../ont/owl-rdf/multi-different-individual.owl"));
+        assert_round(include_str!(
+            "../../ont/owl-rdf/multi-different-individual.owl"
+        ));
     }
 
     #[test]

@@ -6,8 +6,8 @@ use clap::Arg;
 use clap::ArgMatches;
 
 use horned_owl::command::parse_path;
-use horned_owl::error::CommandError;
 use horned_owl::error::underlying;
+use horned_owl::error::CommandError;
 
 use std::{io::stdout, path::Path};
 
@@ -37,14 +37,11 @@ pub(crate) fn matcher(matches: &ArgMatches) -> Result<(), CommandError> {
 
     let rtn = match res {
         horned_owl::io::ParserOutput::OWXParser(so, pm) => {
-            horned_owl::io::owx::writer::write(
-                &mut stdout(), &so.into(), Some(&pm)
-            ).map_err(underlying)
+            horned_owl::io::owx::writer::write(&mut stdout(), &so.into(), Some(&pm))
+                .map_err(underlying)
         }
         horned_owl::io::ParserOutput::RDFParser(rdfo, _ip) => {
-            horned_owl::io::rdf::writer::write(
-                &mut stdout(), &rdfo.into()
-            ).map_err(underlying)
+            horned_owl::io::rdf::writer::write(&mut stdout(), &rdfo.into()).map_err(underlying)
         }
     };
     // Finish off nicely

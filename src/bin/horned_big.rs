@@ -2,8 +2,8 @@ use clap::App;
 use clap::Arg;
 use clap::ArgMatches;
 
-use horned_owl::error::CommandError;
 use horned_owl::error::underlying;
+use horned_owl::error::CommandError;
 use horned_owl::io::owx::writer::write;
 use horned_owl::model::Build;
 use horned_owl::model::MutableOntology;
@@ -31,8 +31,11 @@ pub(crate) fn app(name: &str) -> App<'static, 'static> {
 }
 
 pub(crate) fn matcher(matches: &ArgMatches) -> Result<(), CommandError> {
-    let size: isize = matches.value_of("SIZE").unwrap()
-        .parse().map_err(|e| CommandError::Underlying(Box::new(e)))?;
+    let size: isize = matches
+        .value_of("SIZE")
+        .unwrap()
+        .parse()
+        .map_err(|e| CommandError::Underlying(Box::new(e)))?;
 
     let b = Build::new();
     let mut o = SetOntology::new();

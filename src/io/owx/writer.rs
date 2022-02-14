@@ -24,7 +24,7 @@ pub enum WriteError {
     GeneralError(String),
 
     #[error("XML Error:{0}")]
-    XMLError(quick_xml::Error)
+    XMLError(quick_xml::Error),
 }
 
 impl From<quick_xml::Error> for WriteError {
@@ -37,7 +37,7 @@ impl From<quick_xml::Error> for WriteError {
 ///
 /// The ontology is written in OWL
 /// [XML](https://www.w3.org/TR/owl2-xml-serialization/) syntax.
-pub fn write<W:StdWrite>(
+pub fn write<W: StdWrite>(
     write: W,
     ont: &AxiomMappedOntology,
     mapping: Option<&PrefixMapping>,
@@ -168,7 +168,12 @@ trait Render<'a, W: StdWrite> {
     /// Render a entity to Write
     fn render(&self, w: &mut Writer<W>, mapping: &'a PrefixMapping) -> Result<(), WriteError>;
 
-    fn within(&self, w: &mut Writer<W>, m: &'a PrefixMapping, tag: &[u8]) -> Result<(), WriteError> {
+    fn within(
+        &self,
+        w: &mut Writer<W>,
+        m: &'a PrefixMapping,
+        tag: &[u8],
+    ) -> Result<(), WriteError> {
         let open = BytesStart::borrowed(tag, tag.len());
         w.write_event(Event::Start(open))?;
 
@@ -226,7 +231,11 @@ macro_rules! content0 {
     };
 }
 
-fn render_ont<W>(o: &AxiomMappedOntology, w: &mut Writer<W>, m: &PrefixMapping) -> Result<(), WriteError>
+fn render_ont<W>(
+    o: &AxiomMappedOntology,
+    w: &mut Writer<W>,
+    m: &PrefixMapping,
+) -> Result<(), WriteError>
 where
     W: StdWrite,
 {
@@ -447,7 +456,6 @@ render! {
     }
 }
 
-
 render! {
     AnnotationSubject, self, w, m,
     {
@@ -457,7 +465,6 @@ render! {
         }
     }
 }
-
 
 render! {
     ClassExpression, self, w, m,
@@ -900,13 +907,7 @@ mod test {
         assert_eq!(ont.id().iri, ont2.id().iri);
     }
 
-    fn roundtrip_1(ont:&str) ->
-        (
-            AxiomMappedOntology,
-            PrefixMapping,
-            Temp
-        )
-    {
+    fn roundtrip_1(ont: &str) -> (AxiomMappedOntology, PrefixMapping, Temp) {
         let (ont_orig, prefix_orig) = read_ok(&mut ont.as_bytes());
         let temp_file = Temp::new_file().unwrap();
 
@@ -921,9 +922,7 @@ mod test {
         (ont_orig, prefix_orig, temp_file)
     }
 
-    fn roundtrip_to_string (
-        ont: &str,
-    ) -> String {
+    fn roundtrip_to_string(ont: &str) -> String {
         let t = roundtrip_1(ont).2;
         let s = std::fs::read_to_string(&t);
         t.release();

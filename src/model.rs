@@ -112,7 +112,7 @@ use std::rc::Rc;
 pub struct IRI(Rc<str>);
 
 impl Deref for IRI {
-    type Target=str;
+    type Target = str;
 
     fn deref(&self) -> &Self::Target {
         self.0.as_ref()
@@ -132,19 +132,19 @@ impl Borrow<str> for IRI {
 }
 
 impl From<&IRI> for Rc<str> {
-    fn from(i:&IRI) -> Rc<str> {
+    fn from(i: &IRI) -> Rc<str> {
         i.0.clone().into()
     }
 }
 
 impl From<&IRI> for String {
-    fn from(i:&IRI) -> String {
+    fn from(i: &IRI) -> String {
         i.0.as_ref().to_string()
     }
 }
 
 impl From<IRI> for String {
-    fn from(i:IRI) -> String {
+    fn from(i: IRI) -> String {
         i.0.as_ref().to_string()
     }
 }
@@ -154,7 +154,6 @@ impl Display for IRI {
         f.write_str(&self.0)
     }
 }
-
 
 /// `Build` creates new `IRI` and `NamedEntity` instances.
 ///
@@ -199,7 +198,6 @@ impl Build {
             cache.insert(iri.clone());
             iri
         }
-
     }
 
     /// Constructs a new `Class`.
@@ -408,8 +406,6 @@ macro_rules! named {
     }
 }
 
-
-
 named! {
     /// An OWL
     /// [Class](https://www.w3.org/TR/2012/REC-owl2-primer-20121211/#Classes_and_Instances)
@@ -460,7 +456,7 @@ named! {
 pub struct AnonymousIndividual(pub Rc<str>);
 
 impl Deref for AnonymousIndividual {
-    type Target=str;
+    type Target = str;
 
     fn deref(&self) -> &Self::Target {
         self.0.as_ref()
@@ -468,13 +464,13 @@ impl Deref for AnonymousIndividual {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash, PartialOrd, Ord)]
-pub enum Individual{
+pub enum Individual {
     Anonymous(AnonymousIndividual),
     Named(NamedIndividual),
 }
 
 impl Deref for Individual {
-    type Target=str;
+    type Target = str;
 
     fn deref(&self) -> &Self::Target {
         match self {
@@ -484,40 +480,38 @@ impl Deref for Individual {
     }
 }
 
-
 impl From<NamedIndividual> for Individual {
-    fn from(ni:NamedIndividual) -> Individual {
+    fn from(ni: NamedIndividual) -> Individual {
         Self::Named(ni)
     }
 }
 
 impl From<AnonymousIndividual> for Individual {
-    fn from(ai:AnonymousIndividual) -> Individual {
+    fn from(ai: AnonymousIndividual) -> Individual {
         Self::Anonymous(ai)
     }
 }
 
 impl From<Rc<str>> for AnonymousIndividual {
-    fn from(rc:Rc<str>) -> AnonymousIndividual {
+    fn from(rc: Rc<str>) -> AnonymousIndividual {
         AnonymousIndividual(rc)
     }
 }
 
 impl From<String> for AnonymousIndividual {
-    fn from(s:String) -> AnonymousIndividual {
+    fn from(s: String) -> AnonymousIndividual {
         AnonymousIndividual(s.into())
     }
-
 }
 impl From<&IRI> for Individual {
-    fn from(iri:&IRI) -> Individual {
-        let ni:NamedIndividual = iri.into();
+    fn from(iri: &IRI) -> Individual {
+        let ni: NamedIndividual = iri.into();
         ni.into()
     }
 }
 
 impl From<IRI> for Individual {
-    fn from(iri:IRI) -> Individual {
+    fn from(iri: IRI) -> Individual {
         Individual::from(&iri)
     }
 }
@@ -529,7 +523,7 @@ pub enum AnnotationSubject {
 }
 
 impl Deref for AnnotationSubject {
-    type Target=str;
+    type Target = str;
 
     fn deref(&self) -> &Self::Target {
         match self {
@@ -540,30 +534,28 @@ impl Deref for AnnotationSubject {
 }
 
 impl From<IRI> for AnnotationSubject {
-    fn from(iri:IRI) -> AnnotationSubject {
+    fn from(iri: IRI) -> AnnotationSubject {
         AnnotationSubject::IRI(iri)
     }
 }
 
 impl From<AnonymousIndividual> for AnnotationSubject {
-    fn from(anon:AnonymousIndividual) -> AnnotationSubject {
+    fn from(anon: AnonymousIndividual) -> AnnotationSubject {
         AnnotationSubject::AnonymousIndividual(anon)
     }
 }
 
 impl From<&IRI> for AnnotationSubject {
-    fn from(iri:&IRI) -> AnnotationSubject {
+    fn from(iri: &IRI) -> AnnotationSubject {
         AnnotationSubject::IRI(iri.clone())
     }
 }
 
 impl From<&AnonymousIndividual> for AnnotationSubject {
-    fn from(anon:&AnonymousIndividual) -> AnnotationSubject {
+    fn from(anon: &AnonymousIndividual) -> AnnotationSubject {
         AnnotationSubject::AnonymousIndividual(anon.clone())
     }
 }
-
-
 
 impl From<NamedEntity> for Axiom {
     fn from(ne: NamedEntity) -> Axiom {
@@ -1727,15 +1719,13 @@ mod test {
 
         let ann = Annotation {
             ap: b.annotation_property("http://www.example.com/ap"),
-            av: b.iri("http://www.example.com/av").into()
+            av: b.iri("http://www.example.com/av").into(),
         };
 
-        let mut decl1:AnnotatedAxiom =
-            DeclareClass(b.class("http://www.example.com#a")).into();
+        let mut decl1: AnnotatedAxiom = DeclareClass(b.class("http://www.example.com#a")).into();
         let decl2 = decl1.clone();
 
         assert_eq!(decl1, decl2);
-
 
         decl1.ann.insert(ann);
         assert!(!(decl1 == decl2));

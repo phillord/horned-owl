@@ -52,11 +52,10 @@ pub enum ReadError {
     XMLError(quick_xml::Error),
 
     #[error("Cannot parse value as integer: {0}")]
-    ParseInt(#[source] ParseIntError)
+    ParseInt(#[source] ParseIntError),
 }
 
-
-impl From<quick_xml::Error> for ReadError{
+impl From<quick_xml::Error> for ReadError {
     fn from(e: quick_xml::Error) -> Self {
         Self::XMLError(e)
     }
@@ -171,7 +170,10 @@ fn read_event<R: BufRead>(read: &mut Read<R>) -> Result<(Vec<u8>, Event<'static>
     }
 }
 
-fn decode_expand_curie_maybe<'a, R: BufRead>(r: &mut Read<R>, val: &'a [u8]) -> Result<Cow<'a, str>, ReadError> {
+fn decode_expand_curie_maybe<'a, R: BufRead>(
+    r: &mut Read<R>,
+    val: &'a [u8],
+) -> Result<Cow<'a, str>, ReadError> {
     // Okay, so a lot of matching, but without this the borrow checker
     // is gonna complain. This let's us do the following:
     // - if the CURIE can be decoded without replacement, and if it is
@@ -191,7 +193,7 @@ fn decode_expand_curie_maybe<'a, R: BufRead>(r: &mut Read<R>, val: &'a [u8]) -> 
     #[cfg(not(feature = "quick-xml/encoding"))]
     match r.reader.decode(val) {
         Ok(curie) => Ok(expand_curie_maybe(r, curie)),
-        Err(e) => Err(ReadError::from(e))
+        Err(e) => Err(ReadError::from(e)),
     }
 }
 
@@ -205,7 +207,10 @@ fn expand_curie_maybe<'a, R: BufRead>(r: &mut Read<R>, val: &'a str) -> Cow<'a, 
     }
 }
 
-fn attrib_value_b<'a>(event: &'a BytesStart, tag: &[u8]) -> Result<Option<Cow<'a, [u8]>>, ReadError> {
+fn attrib_value_b<'a>(
+    event: &'a BytesStart,
+    tag: &[u8],
+) -> Result<Option<Cow<'a, [u8]>>, ReadError> {
     for res in event.attributes() {
         let attrib = res?;
         if attrib.key == tag {
@@ -232,7 +237,10 @@ fn attrib_value<R: BufRead>(
     Ok(val_opt_str.map(|s| s.to_string()))
 }
 
-fn read_iri_attr<R: BufRead>(r: &mut Read<R>, event: &BytesStart) -> Result<Option<IRI>, ReadError> {
+fn read_iri_attr<R: BufRead>(
+    r: &mut Read<R>,
+    event: &BytesStart,
+) -> Result<Option<IRI>, ReadError> {
     let iri = read_a_iri_attr(r, event, b"IRI")?;
     Ok(if iri.is_some() {
         iri
@@ -258,52 +266,44 @@ fn read_a_iri_attr<R: BufRead>(
     )
 }
 
-fn decode_tag<R:BufRead>(tag: &[u8], r: &mut Read<R>) -> Result<String,ReadError>{
+fn decode_tag<R: BufRead>(tag: &[u8], r: &mut Read<R>) -> Result<String, ReadError> {
     Ok(r.reader.decode(tag)?.to_string())
 }
 
 fn error_missing_end_tag<R: BufRead>(tag: &[u8], r: &mut Read<R>, pos: usize) -> ReadError {
     match decode_tag(tag, r) {
-        Ok(tag) => {
-            ReadError::MissingEndTag {
-                tag,
-                pos,
-            }
-        }
-        Err(e) => e
+        Ok(tag) => ReadError::MissingEndTag { tag, pos },
+        Err(e) => e,
     }
 }
 
-fn error_missing_attribute<A: Into<String>, R: BufRead>(attribute: A, r: &mut Read<R>)
-                                                        -> ReadError {
+fn error_missing_attribute<A: Into<String>, R: BufRead>(
+    attribute: A,
+    r: &mut Read<R>,
+) -> ReadError {
     ReadError::MissingAttribute {
         attribute: attribute.into(),
-                pos: r.reader.buffer_position(),
+        pos: r.reader.buffer_position(),
     }
 }
-
 
 fn error_unexpected_tag<R: BufRead>(tag: &[u8], r: &mut Read<R>) -> ReadError {
     match decode_tag(tag, r) {
-        Ok(tag) => {
-            ReadError::UnexpectedTag {
-                tag,
-                pos: r.reader.buffer_position(),
-            }
+        Ok(tag) => ReadError::UnexpectedTag {
+            tag,
+            pos: r.reader.buffer_position(),
         },
-        Err(e) => e
+        Err(e) => e,
     }
 }
 
 fn error_unexpected_end_tag<R: BufRead>(tag: &[u8], r: &mut Read<R>) -> ReadError {
     match decode_tag(tag, r) {
-        Ok(tag) => {
-            ReadError::UnexpectedEndTag {
-                tag,
-                pos: r.reader.buffer_position(),
-            }
+        Ok(tag) => ReadError::UnexpectedEndTag {
+            tag,
+            pos: r.reader.buffer_position(),
         },
-        Err(e) => e
+        Err(e) => e,
     }
 }
 
@@ -313,24 +313,22 @@ fn error_unknown_entity<A: Into<String>, R: BufRead>(
     r: &mut Read<R>,
 ) -> ReadError {
     match decode_tag(found, r) {
-        Ok(found) =>
-            ReadError::UnknownEntity {
-                kind: kind.into(),
-                found,
-                pos: r.reader.buffer_position(),
-            },
-        Err(e) => e
+        Ok(found) => ReadError::UnknownEntity {
+            kind: kind.into(),
+            found,
+            pos: r.reader.buffer_position(),
+        },
+        Err(e) => e,
     }
 }
 
 fn error_missing_element<R: BufRead>(tag: &[u8], r: &mut Read<R>) -> ReadError {
-    match decode_tag(tag,r) {
-        Ok(tag) =>
-            ReadError::MissingElement {
-                tag,
-                pos: r.reader.buffer_position(),
-            },
-        Err(e) => e
+    match decode_tag(tag, r) {
+        Ok(tag) => ReadError::MissingElement {
+            tag,
+            pos: r.reader.buffer_position(),
+        },
+        Err(e) => e,
     }
 }
 
@@ -349,7 +347,10 @@ trait FromStart: Sized {
 macro_rules! from_start {
     ($type:ident, $r:ident, $e:ident, $body:tt) => {
         impl FromStart for $type {
-            fn from_start<R: BufRead>($r: &mut Read<R>, $e: &BytesStart) -> Result<$type, ReadError> {
+            fn from_start<R: BufRead>(
+                $r: &mut Read<R>,
+                $e: &BytesStart,
+            ) -> Result<$type, ReadError> {
                 $body
             }
         }
@@ -357,22 +358,24 @@ macro_rules! from_start {
 }
 
 /// Potentially unbalanced
-fn named_entity_from_start<R, T>(r: &mut Read<R>, e: &BytesStart, tag: &[u8]) -> Result<T, ReadError>
+fn named_entity_from_start<R, T>(
+    r: &mut Read<R>,
+    e: &BytesStart,
+    tag: &[u8],
+) -> Result<T, ReadError>
 where
     R: BufRead,
     T: From<IRI>,
 {
     if let Some(iri) = read_iri_attr(r, e)? {
         if e.local_name() == tag {
-            return Ok(T::from(iri))
+            return Ok(T::from(iri));
         } else {
-            return Err(
-                error_unknown_entity(
-                    ::std::str::from_utf8(tag).unwrap(),
-                    e.local_name(),
-                    r,
-                )
-            )
+            return Err(error_unknown_entity(
+                ::std::str::from_utf8(tag).unwrap(),
+                e.local_name(),
+                r,
+            ));
         }
     }
 
@@ -605,7 +608,10 @@ fn from_start_to_end<R: BufRead, T: FromStart + std::fmt::Debug>(
 }
 
 // Keep reading entities, till end_tag is reached
-fn till_end<R: BufRead, T: FromStart + std::fmt::Debug>(r: &mut Read<R>, end_tag: &[u8]) -> Result<Vec<T>, ReadError> {
+fn till_end<R: BufRead, T: FromStart + std::fmt::Debug>(
+    r: &mut Read<R>,
+    end_tag: &[u8],
+) -> Result<Vec<T>, ReadError> {
     let operands: Vec<T> = Vec::new();
     till_end_with(r, end_tag, operands)
 }
@@ -669,13 +675,10 @@ fn data_cardinality_restriction<R: BufRead>(
     let mut vdr: Vec<DataRange> = till_end(r, end_tag)?;
 
     Ok((
-        n.parse::<u32>().map_err(|s|ReadError::ParseInt(s))?,
+        n.parse::<u32>().map_err(|s| ReadError::ParseInt(s))?,
         dp,
         match vdr.len() {
-            0 => r
-                .build
-                .datatype(OWL2Datatype::RDFSLiteral.iri_s())
-                .into(),
+            0 => r.build.datatype(OWL2Datatype::RDFSLiteral.iri_s()).into(),
             1 => vdr.remove(0),
             _ => Err(error_unexpected_tag(end_tag, r))?,
         },
@@ -2011,7 +2014,7 @@ pub mod test {
 
         assert_eq!(1, ont.i().class_assertion().count());
         let ca = ont.i().class_assertion().next().unwrap();
-        assert!{
+        assert! {
             matches!{
                 &ca.ce, ClassExpression::ObjectComplementOf(_c)
             }
@@ -2026,7 +2029,7 @@ pub mod test {
         assert_eq!(1, ont.i().class_assertion().count());
         let ca = ont.i().class_assertion().next().unwrap();
 
-        assert!{
+        assert! {
             matches!{
                 &ca.ce, ClassExpression::ObjectMinCardinality{n:_, ope:_, bce:_}
             }

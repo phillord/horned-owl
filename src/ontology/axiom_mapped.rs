@@ -202,7 +202,6 @@ onimpl! {SubAnnotationPropertyOf, sub_annotation_property_of}
 onimpl! {AnnotationPropertyDomain, annotation_property_domain}
 onimpl! {AnnotationPropertyRange, annotation_property_range}
 
-
 /// An owning iterator over the annotated axioms of an `Ontology`.
 impl IntoIterator for AxiomMappedIndex {
     type Item = AnnotatedAxiom;
@@ -219,7 +218,6 @@ impl IntoIterator for AxiomMappedIndex {
         v.into_iter()
     }
 }
-
 
 /// An iterator over the annotated axioms of an `Ontology`.
 pub struct AxiomMappedIter<'a> {
@@ -247,7 +245,6 @@ impl<'a> Iterator for AxiomMappedIter<'a> {
         }
     }
 }
-
 
 impl<'a> IntoIterator for &'a AxiomMappedIndex {
     type Item = &'a AnnotatedAxiom;
@@ -287,7 +284,6 @@ impl IntoIterator for AxiomMappedOntology {
         self.index().into_iter()
     }
 }
-
 
 impl From<SetOntology> for AxiomMappedOntology {
     fn from(mut so: SetOntology) -> AxiomMappedOntology {

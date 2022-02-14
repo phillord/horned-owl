@@ -17,7 +17,7 @@ pub struct SetOntology {
     // retrieval of axioms. Otherwise, we'd have to iterate through
     // the lot every time.
     axiom: HashSet<AnnotatedAxiom>,
-    doc_iri: Option<IRI>
+    doc_iri: Option<IRI>,
 }
 
 impl SetOntology {
@@ -54,7 +54,7 @@ impl Ontology for SetOntology {
         &self.doc_iri
     }
 
-    fn mut_doc_iri(&mut self) -> &mut Option<IRI>{
+    fn mut_doc_iri(&mut self) -> &mut Option<IRI> {
         &mut self.doc_iri
     }
 }
@@ -136,24 +136,25 @@ impl FromIterator<AnnotatedAxiom> for SetOntology {
 }
 
 impl<I> From<(OntologyID, I)> for SetOntology
-where I:Iterator<Item=AnnotatedAxiom>
+where
+    I: Iterator<Item = AnnotatedAxiom>,
 {
-    fn from((mut oid,i):(OntologyID, I)) -> SetOntology {
-        let mut so:SetOntology = i.collect();
+    fn from((mut oid, i): (OntologyID, I)) -> SetOntology {
+        let mut so: SetOntology = i.collect();
         std::mem::swap(so.mut_id(), &mut oid);
         so
     }
 }
 
 impl<O, I> From<(O, I)> for SetOntology
-where I:Iterator<Item=AnnotatedAxiom>,
-      O: Ontology
+where
+    I: Iterator<Item = AnnotatedAxiom>,
+    O: Ontology,
 {
-    fn from((mut o,i):(O, I)) -> SetOntology {
+    fn from((mut o, i): (O, I)) -> SetOntology {
         (o.mut_id().clone(), i).into()
     }
 }
-
 
 /// An `OntologyIndex` implemented over an in-memory HashSet. When
 /// combined with an `IndexedOntology` this should be nearly as
@@ -176,7 +177,7 @@ impl OntologyIndex for SetIndex {
 }
 
 impl SetIndex {
-    pub fn contains(&self, ax:&AnnotatedAxiom) -> bool {
+    pub fn contains(&self, ax: &AnnotatedAxiom) -> bool {
         self.0.contains(ax)
     }
 }

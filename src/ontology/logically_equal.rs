@@ -1,20 +1,11 @@
-use crate::model::{
-    AnnotatedAxiom,
-    Axiom,
-    MutableOntology
-};
+use crate::model::{AnnotatedAxiom, Axiom, MutableOntology};
 
-use std::convert::AsRef;
+use super::indexed::{rc_unwrap_or_clone, OntologyIndex, ThreeIndexedOntology, TwoIndexedOntology};
 use std::collections::HashMap;
+use std::convert::AsRef;
 use std::rc::Rc;
-use super::indexed::{
-    rc_unwrap_or_clone,
-    OntologyIndex,
-    TwoIndexedOntology,
-    ThreeIndexedOntology
-};
 
-#[derive(Debug,Default)]
+#[derive(Debug, Default)]
 pub struct LogicallyEqualIndex(HashMap<Axiom, Rc<AnnotatedAxiom>>);
 
 impl OntologyIndex for LogicallyEqualIndex {
@@ -45,37 +36,39 @@ impl LogicallyEqualIndex {
     }
 }
 
-impl<I: OntologyIndex> AsRef<LogicallyEqualIndex> for
-    TwoIndexedOntology<I, LogicallyEqualIndex> {
+impl<I: OntologyIndex> AsRef<LogicallyEqualIndex> for TwoIndexedOntology<I, LogicallyEqualIndex> {
     fn as_ref(&self) -> &LogicallyEqualIndex {
         self.j()
     }
 }
 
-impl<I, J> AsRef<LogicallyEqualIndex> for
-    ThreeIndexedOntology<I, J, LogicallyEqualIndex>
-where I: OntologyIndex,
-      J: OntologyIndex,
+impl<I, J> AsRef<LogicallyEqualIndex> for ThreeIndexedOntology<I, J, LogicallyEqualIndex>
+where
+    I: OntologyIndex,
+    J: OntologyIndex,
 {
     fn as_ref(&self) -> &LogicallyEqualIndex {
         self.k()
     }
 }
 
-
 pub fn update_or_insert_logically_equal_axiom<'a, O>(o: &mut O, axiom: AnnotatedAxiom)
-where O:MutableOntology+AsRef<LogicallyEqualIndex>
+where
+    O: MutableOntology + AsRef<LogicallyEqualIndex>,
 {
     if let Some(axiom) = update_logically_equal_axiom(o, axiom) {
         o.insert(axiom);
     }
 }
 
-pub fn update_logically_equal_axiom<'a, O> (o: &mut O, mut axiom: AnnotatedAxiom)
-                                            -> Option<AnnotatedAxiom>
-where O:MutableOntology+AsRef<LogicallyEqualIndex> {
-
-    let lei:&LogicallyEqualIndex = o.as_ref();
+pub fn update_logically_equal_axiom<'a, O>(
+    o: &mut O,
+    mut axiom: AnnotatedAxiom,
+) -> Option<AnnotatedAxiom>
+where
+    O: MutableOntology + AsRef<LogicallyEqualIndex>,
+{
+    let lei: &LogicallyEqualIndex = o.as_ref();
     let src = lei.logical_get_rc(&axiom);
     // Does the logically equal axiom exist
     if let Some(rc) = src {
@@ -91,8 +84,7 @@ where O:MutableOntology+AsRef<LogicallyEqualIndex> {
         // Insert it
         o.insert(logical_axiom);
         None
-    }
-    else {
+    } else {
         // Otherwise put the one we have in
         Some(axiom)
     }
@@ -117,12 +109,9 @@ mod test {
         // Setup
         let build = Build::new();
         let mut o = LogicallyEqualIndex::default();
-        let decl1:AnnotatedAxiom =
-            DeclareClass(build.class("http://www.example.com#a")).into();
-        let decl2:AnnotatedAxiom =
-            DeclareClass(build.class("http://www.example.com#b")).into();
-        let decl3:AnnotatedAxiom =
-            DeclareClass(build.class("http://www.example.com#c")).into();
+        let decl1: AnnotatedAxiom = DeclareClass(build.class("http://www.example.com#a")).into();
+        let decl2: AnnotatedAxiom = DeclareClass(build.class("http://www.example.com#b")).into();
+        let decl3: AnnotatedAxiom = DeclareClass(build.class("http://www.example.com#c")).into();
 
         o.index_insert(Rc::new(decl1.clone()));
         o.index_insert(Rc::new(decl2.clone()));
@@ -137,20 +126,16 @@ mod test {
     fn annotation_not_equal_retrieve() {
         // Setup
         let b = Build::new();
-        let mut o:TwoIndexedOntology<SetIndex,LogicallyEqualIndex> = Default::default();
+        let mut o: TwoIndexedOntology<SetIndex, LogicallyEqualIndex> = Default::default();
 
         let ann = Annotation {
             ap: b.annotation_property("http://www.example.com/ap"),
-            av: b.iri("http://www.example.com/av").into()
+            av: b.iri("http://www.example.com/av").into(),
         };
 
-        let decl1:AnnotatedAxiom =
-            DeclareClass(b.class("http://www.example.com#a")).into();
-        let decl2:AnnotatedAxiom =
-            DeclareClass(b.class("http://www.example.com#b")).into();
-        let decl3:AnnotatedAxiom =
-            DeclareClass(b.class("http://www.example.com#c")).into();
-
+        let decl1: AnnotatedAxiom = DeclareClass(b.class("http://www.example.com#a")).into();
+        let decl2: AnnotatedAxiom = DeclareClass(b.class("http://www.example.com#b")).into();
+        let decl3: AnnotatedAxiom = DeclareClass(b.class("http://www.example.com#c")).into();
 
         let mut decl1_a = decl1.clone();
         decl1_a.ann.insert(ann.clone());
@@ -175,7 +160,7 @@ mod test {
     fn test_update_equal_axiom() {
         let b = Build::new();
         {
-            let mut o:TwoIndexedOntology<SetIndex,LogicallyEqualIndex> = Default::default();
+            let mut o: TwoIndexedOntology<SetIndex, LogicallyEqualIndex> = Default::default();
             let ne: NamedEntity = b.class("http://www.example.com").into();
             let ax: Axiom = ne.into();
             let mut dec: AnnotatedAxiom = ax.into();
@@ -200,7 +185,7 @@ mod test {
         }
 
         {
-        let mut o:TwoIndexedOntology<SetIndex,LogicallyEqualIndex> = Default::default();
+            let mut o: TwoIndexedOntology<SetIndex, LogicallyEqualIndex> = Default::default();
             let ne: NamedEntity = b.class("http://www.example.com").into();
             let ax: Axiom = ne.into();
             let mut dec: AnnotatedAxiom = ax.into();
@@ -226,5 +211,4 @@ mod test {
             assert_eq!(aa.ann.iter().count(), 2);
         }
     }
-
 }

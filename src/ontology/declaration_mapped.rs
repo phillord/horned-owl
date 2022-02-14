@@ -1,16 +1,10 @@
 //! An index that provides rapid look up via declaration kind
 
-use crate::model::{
-    AnnotatedAxiom,
-    AxiomKind, Axiom, Kinded, IRI, NamedEntityKind
-};
+use crate::model::{AnnotatedAxiom, Axiom, AxiomKind, Kinded, NamedEntityKind, IRI};
 
 use super::indexed::OntologyIndex;
 
-use std::{
-    collections::HashMap,
-    rc::Rc,
-};
+use std::{collections::HashMap, rc::Rc};
 
 #[derive(Debug, Default)]
 pub struct DeclarationMappedIndex(HashMap<IRI, NamedEntityKind>);
@@ -23,52 +17,50 @@ impl DeclarationMappedIndex {
         }
     }
 
-    pub fn declaration_kind(&self, iri: &IRI) -> Option<NamedEntityKind>{
-        self.0.get(iri).cloned()
+    pub fn declaration_kind(&self, iri: &IRI) -> Option<NamedEntityKind> {
+        self.0
+            .get(iri)
+            .cloned()
             .or_else(|| crate::vocab::to_built_in_entity(iri))
     }
 
     fn aa_to_ne(&self, ax: &AnnotatedAxiom) -> Option<NamedEntityKind> {
         match ax.kind() {
-            AxiomKind::DeclareClass |
-            AxiomKind::DeclareObjectProperty |
-            AxiomKind::DeclareAnnotationProperty |
-            AxiomKind::DeclareDataProperty |
-            AxiomKind::DeclareDatatype |
-            AxiomKind::DeclareNamedIndividual => {
-                match ax.clone().axiom {
-                    Axiom::DeclareClass(dc) => Some(dc.0.into()),
-                    Axiom::DeclareObjectProperty(op) => Some(op.0.into()),
-                    Axiom::DeclareAnnotationProperty(ap) => Some(ap.0.into()),
-                    Axiom::DeclareDataProperty(dp) => Some(dp.0.into()),
-                    Axiom::DeclareDatatype(dt) => Some(dt.0.into()),
-                    Axiom::DeclareNamedIndividual(ni) => Some(ni.0.into()),
-                    _ => None
-                }
-            }
-            _ => None
-       }
+            AxiomKind::DeclareClass
+            | AxiomKind::DeclareObjectProperty
+            | AxiomKind::DeclareAnnotationProperty
+            | AxiomKind::DeclareDataProperty
+            | AxiomKind::DeclareDatatype
+            | AxiomKind::DeclareNamedIndividual => match ax.clone().axiom {
+                Axiom::DeclareClass(dc) => Some(dc.0.into()),
+                Axiom::DeclareObjectProperty(op) => Some(op.0.into()),
+                Axiom::DeclareAnnotationProperty(ap) => Some(ap.0.into()),
+                Axiom::DeclareDataProperty(dp) => Some(dp.0.into()),
+                Axiom::DeclareDatatype(dt) => Some(dt.0.into()),
+                Axiom::DeclareNamedIndividual(ni) => Some(ni.0.into()),
+                _ => None,
+            },
+            _ => None,
+        }
     }
 
     fn aa_to_iri(&self, ax: &AnnotatedAxiom) -> Option<IRI> {
         match ax.kind() {
-            AxiomKind::DeclareClass |
-            AxiomKind::DeclareObjectProperty |
-            AxiomKind::DeclareAnnotationProperty |
-            AxiomKind::DeclareDataProperty |
-            AxiomKind::DeclareDatatype |
-            AxiomKind::DeclareNamedIndividual => {
-                match ax.clone().axiom {
-                    Axiom::DeclareClass(dc) => Some(dc.0.into()),
-                    Axiom::DeclareObjectProperty(op) => Some(op.0.into()),
-                    Axiom::DeclareAnnotationProperty(ap) => Some(ap.0.into()),
-                    Axiom::DeclareDataProperty(dp) => Some(dp.0.into()),
-                    Axiom::DeclareDatatype(dt) => Some(dt.0.into()),
-                    Axiom::DeclareNamedIndividual(ni) => Some(ni.0.into()),
-                    _ => None
-                }
-            }
-            _ => None
+            AxiomKind::DeclareClass
+            | AxiomKind::DeclareObjectProperty
+            | AxiomKind::DeclareAnnotationProperty
+            | AxiomKind::DeclareDataProperty
+            | AxiomKind::DeclareDatatype
+            | AxiomKind::DeclareNamedIndividual => match ax.clone().axiom {
+                Axiom::DeclareClass(dc) => Some(dc.0.into()),
+                Axiom::DeclareObjectProperty(op) => Some(op.0.into()),
+                Axiom::DeclareAnnotationProperty(ap) => Some(ap.0.into()),
+                Axiom::DeclareDataProperty(dp) => Some(dp.0.into()),
+                Axiom::DeclareDatatype(dt) => Some(dt.0.into()),
+                Axiom::DeclareNamedIndividual(ni) => Some(ni.0.into()),
+                _ => None,
+            },
+            _ => None,
         }
     }
 }
@@ -79,10 +71,9 @@ macro_rules! some {
     };
 }
 
-
 impl OntologyIndex for DeclarationMappedIndex {
     fn index_insert(&mut self, ax: Rc<AnnotatedAxiom>) -> bool {
-        let s = some!{
+        let s = some! {
             self.0.insert(self.aa_to_iri(&*ax)?,
                           self.aa_to_ne(&*ax)?)
         };
@@ -96,14 +87,13 @@ impl OntologyIndex for DeclarationMappedIndex {
 
         if s.is_some() {
             Some(ax.clone())
-        }
-        else {
+        } else {
             None
         }
     }
 
     fn index_remove(&mut self, ax: &AnnotatedAxiom) -> bool {
-        let s = some!{
+        let s = some! {
             self.0.remove(&self.aa_to_iri(&*ax)?)
         };
 
@@ -111,13 +101,12 @@ impl OntologyIndex for DeclarationMappedIndex {
     }
 }
 
-
 #[cfg(test)]
-mod test{
+mod test {
+    use super::DeclarationMappedIndex;
     use crate::model::{AnnotatedAxiom, Build, NamedEntity, NamedEntityKind};
     use crate::ontology::indexed::OntologyIndex;
-    use crate::vocab::{OWL, WithIRI};
-    use super::DeclarationMappedIndex;
+    use crate::vocab::{WithIRI, OWL};
     fn stuff() -> (AnnotatedAxiom, AnnotatedAxiom, AnnotatedAxiom) {
         let b = Build::new();
         let c: NamedEntity = b.class("http://www.example.com/c").into();
@@ -151,12 +140,18 @@ mod test{
         assert!(d.index_insert(s.2.into()));
 
         let b = Build::new();
-        assert_eq!(d.declaration_kind(&b.iri("http://www.example.com/c")),
-                   Some(NamedEntityKind::Class));
-        assert_eq!(d.declaration_kind(&b.iri("http://www.example.com/p")),
-                   Some(NamedEntityKind::ObjectProperty));
-        assert_eq!(d.declaration_kind(&b.iri("http://www.example.com/d")),
-                   Some(NamedEntityKind::DataProperty));
+        assert_eq!(
+            d.declaration_kind(&b.iri("http://www.example.com/c")),
+            Some(NamedEntityKind::Class)
+        );
+        assert_eq!(
+            d.declaration_kind(&b.iri("http://www.example.com/p")),
+            Some(NamedEntityKind::ObjectProperty)
+        );
+        assert_eq!(
+            d.declaration_kind(&b.iri("http://www.example.com/d")),
+            Some(NamedEntityKind::DataProperty)
+        );
     }
 
     #[test]
@@ -167,7 +162,5 @@ mod test{
             d.declaration_kind(&b.iri(OWL::TopDataProperty.iri_s())),
             Some(NamedEntityKind::DataProperty)
         );
-
-
     }
 }

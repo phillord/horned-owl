@@ -108,11 +108,11 @@ impl<I: OntologyIndex> Ontology for OneIndexedOntology<I> {
         &mut self.1
     }
 
-    fn doc_iri(&self) -> &Option<IRI>{
+    fn doc_iri(&self) -> &Option<IRI> {
         &self.2
     }
 
-    fn mut_doc_iri(&mut self) -> &mut Option<IRI>{
+    fn mut_doc_iri(&mut self) -> &mut Option<IRI> {
         &mut self.2
     }
 }
@@ -165,7 +165,7 @@ impl<I: OntologyIndex, J: OntologyIndex> Ontology for TwoIndexedOntology<I, J> {
         &self.3
     }
 
-    fn mut_doc_iri(&mut self) -> &mut Option<IRI>{
+    fn mut_doc_iri(&mut self) -> &mut Option<IRI> {
         &mut self.3
     }
 }
@@ -206,7 +206,7 @@ impl<I: OntologyIndex, J: OntologyIndex, K: OntologyIndex> ThreeIndexedOntology<
             i,
             TwoIndexedOntology(j, k, Default::default(), Default::default()),
             id,
-            Default::default()
+            Default::default(),
         ))
     }
 
@@ -243,7 +243,7 @@ impl<I: OntologyIndex, J: OntologyIndex, K: OntologyIndex> Ontology
         self.0.doc_iri()
     }
 
-    fn mut_doc_iri(&mut self) -> &mut Option<IRI>{
+    fn mut_doc_iri(&mut self) -> &mut Option<IRI> {
         self.0.mut_doc_iri()
     }
 }
@@ -290,8 +290,7 @@ impl<I: OntologyIndex, J: OntologyIndex, K: OntologyIndex, L: OntologyIndex>
     pub fn new(i: I, j: J, k: K, l: L, id: OntologyID) -> Self {
         FourIndexedOntology(TwoIndexedOntology(
             i,
-            ThreeIndexedOntology::new(j, k, l,
-                                      Default::default()),
+            ThreeIndexedOntology::new(j, k, l, Default::default()),
             id,
             Default::default(),
         ))
@@ -334,7 +333,7 @@ impl<I: OntologyIndex, J: OntologyIndex, K: OntologyIndex, L: OntologyIndex> Ont
         self.0.doc_iri()
     }
 
-    fn mut_doc_iri(&mut self) -> &mut Option<IRI>{
+    fn mut_doc_iri(&mut self) -> &mut Option<IRI> {
         self.0.mut_doc_iri()
     }
 }

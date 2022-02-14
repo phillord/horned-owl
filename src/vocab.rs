@@ -295,7 +295,11 @@ fn meta_testing() {
     );
 }
 
-pub fn entity_for_iri(type_iri: &str, entity_iri: &str, b: &Build) -> Result<NamedEntity, VocabError> {
+pub fn entity_for_iri(
+    type_iri: &str,
+    entity_iri: &str,
+    b: &Build,
+) -> Result<NamedEntity, VocabError> {
     // Datatypes are handled here because they are not a
     // "type" but an "RDF schema" element.
     if type_iri == "http://www.w3.org/2000/01/rdf-schema#Datatype" {
@@ -303,8 +307,10 @@ pub fn entity_for_iri(type_iri: &str, entity_iri: &str, b: &Build) -> Result<Nam
     }
 
     if type_iri.len() < 30 {
-        return Err(VocabError::GeneralError(
-            format!("IRI is not for a type of entity:{}", type_iri)));
+        return Err(VocabError::GeneralError(format!(
+            "IRI is not for a type of entity:{}",
+            type_iri
+        )));
     }
 
     Ok(match &type_iri[30..] {
@@ -313,8 +319,12 @@ pub fn entity_for_iri(type_iri: &str, entity_iri: &str, b: &Build) -> Result<Nam
         "DatatypeProperty" => b.data_property(entity_iri).into(),
         "AnnotationProperty" => b.annotation_property(entity_iri).into(),
         "NamedIndividual" => b.named_individual(entity_iri).into(),
-        _ => return Err(VocabError::GeneralError(
-            format!("IRI is not a type of entity:{}", type_iri))),
+        _ => {
+            return Err(VocabError::GeneralError(format!(
+                "IRI is not a type of entity:{}",
+                type_iri
+            )))
+        }
     })
 }
 
@@ -407,7 +417,6 @@ lazy_meta! {
     LangRange, extend(RDF, "langRange");
 }
 
-
 #[test]
 fn facet_meta() {
     assert_eq!(
@@ -432,7 +441,7 @@ fn facet_meta() {
 }
 
 pub enum XSD {
-    NonNegativeInteger
+    NonNegativeInteger,
 }
 
 lazy_meta! {
@@ -440,14 +449,13 @@ lazy_meta! {
     NonNegativeInteger, extend(XSD, "nonNegativeInteger")
 }
 
-
 pub enum Vocab {
     Facet(Facet),
     RDF(RDF),
     RDFS(RDFS),
     OWL(OWL),
     XSD(XSD),
-    Namespace(Namespace)
+    Namespace(Namespace),
 }
 
 impl<'a> Meta<&'a IRIString> for Vocab {
