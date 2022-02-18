@@ -1,0 +1,8 @@
+[package]
+name = "rust_temp"
+version = "0.1.0"
+authors = ["Phillip Lord <phillip.lord@russet.org.uk>"]
+description="Not a real library but a place to try out new stuff"
+edition="2021"
+
+
