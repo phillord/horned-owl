@@ -4,6 +4,7 @@ use enum_meta::*;
 
 use crate::model::Build;
 use crate::model::Facet;
+use crate::model::ForIRI;
 use crate::model::NamedEntity;
 use crate::model::NamedEntityKind;
 use crate::model::IRI;
@@ -263,15 +264,15 @@ lazy_meta! {
     WithRestrictions, extend(OWL, "withRestrictions");
 }
 
-pub fn is_thing(iri: &IRI) -> bool {
+pub fn is_thing<A: ForIRI>(iri: &IRI<A>) -> bool {
     iri.as_ref() == OWL::Thing.iri_s()
 }
 
-pub fn is_nothing(iri: &IRI) -> bool {
+pub fn is_nothing<A: ForIRI>(iri: &IRI<A>) -> bool {
     iri.as_ref() == OWL::Nothing.iri_s()
 }
 
-pub fn to_built_in_entity(iri: &IRI) -> Option<NamedEntityKind> {
+pub fn to_built_in_entity<A: ForIRI>(iri: &IRI<A>) -> Option<NamedEntityKind> {
     let ir = iri.as_ref();
     match ir {
         _ if ir == OWL::TopDataProperty.iri_s() => Some(NamedEntityKind::DataProperty),
@@ -295,25 +296,25 @@ fn meta_testing() {
     );
 }
 
-pub fn entity_for_iri(
-    type_iri: &str,
-    entity_iri: &str,
-    b: &Build,
-) -> Result<NamedEntity, VocabError> {
+pub fn entity_for_iri<A: ForIRI>(
+    type_iri: A,
+    entity_iri: A,
+    b: &Build<A>,
+) -> Result<NamedEntity<A>, VocabError> {
     // Datatypes are handled here because they are not a
     // "type" but an "RDF schema" element.
-    if type_iri == "http://www.w3.org/2000/01/rdf-schema#Datatype" {
+    if type_iri.borrow() == "http://www.w3.org/2000/01/rdf-schema#Datatype" {
         return Ok(b.datatype(entity_iri).into());
     }
 
-    if type_iri.len() < 30 {
+    if type_iri.borrow().len() < 30 {
         return Err(VocabError::GeneralError(format!(
             "IRI is not for a type of entity:{}",
             type_iri
         )));
     }
 
-    Ok(match &type_iri[30..] {
+    Ok(match &type_iri.borrow()[30..] {
         "Class" => b.class(entity_iri).into(),
         "ObjectProperty" => b.object_property(entity_iri).into(),
         "DatatypeProperty" => b.data_property(entity_iri).into(),

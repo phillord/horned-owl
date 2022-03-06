@@ -94,6 +94,7 @@ use std::borrow::Borrow;
 use std::cell::RefCell;
 use std::cmp::Ordering;
 use std::collections::BTreeSet;
+use std::fmt::Debug;
 use std::fmt::Display;
 use std::fmt::Formatter;
 use std::hash::Hash;
@@ -109,7 +110,12 @@ use std::rc::Rc;
 /// created through `Build`; this caches the underlying String meaning
 /// that IRIs are light-weight to `clone`.
 #[derive(Clone, Debug, Eq, PartialEq, Hash, PartialOrd, Ord)]
-pub struct IRI(Rc<str>);
+pub struct IRI<A:ForIRI>(A);
+
+pub trait ForIRI: Borrow<str> + Eq + PartialEq + Ord + PartialOrd + Debug + Clone {}
+
+impl<T: ?Sized> ForIRI for T where
+    T: Borrow<str> + Eq + PartialEq + Ord + PartialOrd + Debug + Clone {}
 
 impl Deref for IRI {
     type Target = str;
