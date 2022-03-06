@@ -3,6 +3,7 @@ use curie::PrefixMapping;
 use crate::model::Kinded;
 use crate::model::*;
 use crate::vocab::Namespace::*;
+use crate::ontology::indexed::ForIndex;
 use crate::{ontology::axiom_mapped::AxiomMappedOntology, vocab::WithIRI};
 
 use quick_xml::events::BytesDecl;
@@ -37,9 +38,9 @@ impl From<quick_xml::Error> for WriteError {
 ///
 /// The ontology is written in OWL
 /// [XML](https://www.w3.org/TR/owl2-xml-serialization/) syntax.
-pub fn write<W: StdWrite>(
+pub fn write<A: ForIRI, AA: ForIndex<A>, W: StdWrite>(
     write: W,
-    ont: &AxiomMappedOntology,
+    ont: &AxiomMappedOntology<A, AA>,
     mapping: Option<&PrefixMapping>,
 ) -> Result<(), WriteError> {
     let mut writer = Writer::new_with_indent(write, b' ', 4);
@@ -60,7 +61,7 @@ pub fn write<W: StdWrite>(
 /// Add an IRI to BytesStart as a element if necessary
 ///
 /// `key` is the attribute name to use.
-fn iri_maybe(elem: &mut BytesStart, key: &str, iri: &Option<IRI>) {
+fn iri_maybe<A: ForIRI>(elem: &mut BytesStart, key: &str, iri: &Option<IRI<A>>) {
     match iri {
         Some(iri) => {
             elem.push_attribute((key, &(*iri)[..]));
@@ -88,17 +89,17 @@ fn iri_or_curie<'a>(mapping: &'a PrefixMapping, elem: &mut BytesStart, iri: &str
 }
 
 /// Write a tag with an IRI attribute.
-fn with_iri<'a, I, W>(
+fn with_iri<'a, A: ForIRI, I, W>(
     w: &mut Writer<W>,
     mapping: &'a PrefixMapping,
     tag: &[u8],
     into_iri: I,
 ) -> Result<(), WriteError>
 where
-    I: Into<IRI>,
+    I: Into<IRI<A>>,
     W: StdWrite,
 {
-    let iri: IRI = into_iri.into();
+    let iri: IRI<_> = into_iri.into();
     let mut bytes_start = BytesStart::borrowed(tag, tag.len());
 
     let iri_string: String = iri.into();
@@ -203,10 +204,10 @@ trait Render<'a, W: StdWrite> {
 
 /// The types in `Render` are too long to type.
 macro_rules! render {
-    ($type:ty, $self:ident, $write:ident, $map:ident,
+    ($type:ident, $self:ident, $write:ident, $map:ident,
      $body:tt) => {
 
-        impl <'a, W:StdWrite> Render<'a, W> for $type {
+        impl <'a, A:ForIRI, W:StdWrite> Render<'a, W> for $type<A> {
             fn render(& $self, $write:&mut Writer<W>, $map: &'a PrefixMapping)
                       -> Result<(),WriteError>
                 where W: StdWrite
@@ -216,7 +217,7 @@ macro_rules! render {
 }
 
 macro_rules! contents {
-    ($type:ty, $self:ident, $body:expr) => {
+    ($type:ident, $self:ident, $body:expr) => {
         render! {$type, $self, w, m,{
                 $body.render(w, m)?;
                 Ok(())
@@ -226,13 +227,13 @@ macro_rules! contents {
 }
 
 macro_rules! content0 {
-    ($type:ty) => {
+    ($type:ident) => {
         contents! {$type, self, &self.0}
     };
 }
 
-fn render_ont<W>(
-    o: &AxiomMappedOntology,
+fn render_ont<A: ForIRI, AA:ForIndex<A>, W>(
+    o: &AxiomMappedOntology<A, AA>,
     w: &mut Writer<W>,
     m: &PrefixMapping,
 ) -> Result<(), WriteError>
@@ -324,10 +325,9 @@ impl<'a, A: Render<'a, W>, B: Render<'a, W>, C: Render<'a, W>, W: StdWrite> Rend
     }
 }
 
-render! {
-    PrefixMapping, self, w, _m,
-    {
-        for pre in self.mappings() {
+impl<'a, W:StdWrite> Render<'a, W> for PrefixMapping {
+    fn render(&self, w:&mut Writer<W>, _: &'a PrefixMapping) -> Result<(), WriteError>
+    {    for pre in self.mappings() {
             let mut prefix = BytesStart::owned_name("Prefix");
             prefix.push_attribute(("name", &pre.0[..]));
             prefix.push_attribute(("IRI", &pre.1[..]));
@@ -338,8 +338,8 @@ render! {
     }
 }
 
-render! {
-    String, self, w, _m,
+impl<'a, W:StdWrite> Render<'a, W> for String {
+    fn render(&self, w:&mut Writer<W>, _: &'a PrefixMapping) -> Result<(), WriteError>
     {
         w.write_event(Event::Text(BytesText::from_plain_str(&self[..])))?;
         Ok(())
@@ -392,14 +392,15 @@ render! {
     }
 }
 
-render! {
-    &'a ObjectProperty, self, w, m,
-    {
-        with_iri(w, m, b"ObjectProperty", *self)?;
+// render! {
+//     &'a ObjectProperty, self, w, m,
+//     {
+//         with_iri(w, m, b"ObjectProperty", *self)?;
 
-        Ok(())
-    }
-}
+//         Ok(())
+//     }
+// }
+
 render! {
     ObjectProperty, self, w, m,
     {
@@ -882,8 +883,11 @@ mod test {
     use std::io::BufRead;
     use std::io::BufReader;
     use std::io::BufWriter;
+    use crate::ontology::axiom_mapped::RcAxiomMappedOntology;
+    use crate::model::Ontology;
 
-    fn read_ok<R: BufRead>(bufread: &mut R) -> (AxiomMappedOntology, PrefixMapping) {
+    fn read_ok<R: BufRead>(bufread: &mut R)
+                           -> (RcAxiomMappedOntology, PrefixMapping) {
         let r = read(bufread);
         assert!(r.is_ok(), "Expected ontology, got failure:{:?}", r.err());
         let (o, m) = r.ok().unwrap();
@@ -892,7 +896,7 @@ mod test {
 
     #[test]
     fn test_ont_rt() {
-        let mut ont = AxiomMappedOntology::default();
+        let mut ont = AxiomMappedOntology::new_rc();
         let build = Build::new();
 
         let iri = build.iri("http://www.example.com/a".to_string());
@@ -907,7 +911,7 @@ mod test {
         assert_eq!(ont.id().iri, ont2.id().iri);
     }
 
-    fn roundtrip_1(ont: &str) -> (AxiomMappedOntology, PrefixMapping, Temp) {
+    fn roundtrip_1(ont: &str) -> (RcAxiomMappedOntology, PrefixMapping, Temp) {
         let (ont_orig, prefix_orig) = read_ok(&mut ont.as_bytes());
         let temp_file = Temp::new_file().unwrap();
 
@@ -932,9 +936,9 @@ mod test {
     fn roundtrip(
         ont: &str,
     ) -> (
-        AxiomMappedOntology,
+        RcAxiomMappedOntology,
         PrefixMapping,
-        AxiomMappedOntology,
+        RcAxiomMappedOntology,
         PrefixMapping,
     ) {
         let (ont_orig, prefix_orig, temp_file) = roundtrip_1(ont);
@@ -950,9 +954,9 @@ mod test {
     fn assert_round(
         ont: &str,
     ) -> (
-        AxiomMappedOntology,
+        RcAxiomMappedOntology,
         PrefixMapping,
-        AxiomMappedOntology,
+        RcAxiomMappedOntology,
         PrefixMapping,
     ) {
         let (ont_orig, prefix_orig, ont_round, prefix_round) = roundtrip(ont);

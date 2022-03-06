@@ -7,7 +7,10 @@ use clap::ArgMatches;
 
 use horned_owl::error::underlying;
 use horned_owl::error::CommandError;
+use horned_owl::io::rdf::reader::RDFOntology;
+use horned_owl::model::AnnotatedAxiom;
 
+use std::rc::Rc;
 use std::{fs::File, io::BufReader, path::Path};
 
 #[allow(dead_code)]
@@ -34,7 +37,8 @@ pub(crate) fn matcher(matches: &ArgMatches) -> Result<(), CommandError> {
         .value_of("INPUT")
         .ok_or(CommandError::MissingArgument)?;
 
-    let (_ont, incomplete) = horned_owl::io::rdf::reader::read(&mut BufReader::new(
+    let (_ont, incomplete):(RDFOntology<Rc<str>, Rc<AnnotatedAxiom<Rc<str>>>>,_)
+        = horned_owl::io::rdf::reader::read(&mut BufReader::new(
         File::open(Path::new(input)).map_err(underlying)?,
     ))
     .map_err(underlying)?
