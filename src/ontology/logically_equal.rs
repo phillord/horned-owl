@@ -1,4 +1,4 @@
-use crate::model::{AnnotatedAxiom, Axiom, MutableOntology};
+use crate::model::{AnnotatedAxiom, Axiom, MutableOntology, ForIRI};
 
 use super::indexed::{rc_unwrap_or_clone, OntologyIndex, ThreeIndexedOntology, TwoIndexedOntology};
 use std::collections::HashMap;
@@ -6,43 +6,43 @@ use std::convert::AsRef;
 use std::rc::Rc;
 
 #[derive(Debug, Default)]
-pub struct LogicallyEqualIndex(HashMap<Axiom, Rc<AnnotatedAxiom>>);
+pub struct LogicallyEqualIndex<A: ForIRI>(HashMap<Axiom<A>, Rc<AnnotatedAxiom<A>>>);
 
-impl OntologyIndex for LogicallyEqualIndex {
-    fn index_insert(&mut self, ax: Rc<AnnotatedAxiom>) -> bool {
+impl<A: ForIRI> OntologyIndex for LogicallyEqualIndex<A> {
+    fn index_insert(&mut self, ax: Rc<AnnotatedAxiom<A>>) -> bool {
         self.0.insert(ax.axiom.clone(), ax).is_some()
     }
 
-    fn index_take(&mut self, ax: &AnnotatedAxiom) -> Option<AnnotatedAxiom> {
+    fn index_take(&mut self, ax: &AnnotatedAxiom<A>) -> Option<AnnotatedAxiom<A>> {
         self.0.remove(&ax.axiom).map(rc_unwrap_or_clone)
     }
 
-    fn index_remove(&mut self, ax: &AnnotatedAxiom) -> bool {
+    fn index_remove(&mut self, ax: &AnnotatedAxiom<A>) -> bool {
         self.0.remove(&ax.axiom).is_some()
     }
 }
 
-impl LogicallyEqualIndex {
-    pub fn logical_contains(&self, ax: &AnnotatedAxiom) -> bool {
+impl<A: ForIRI> LogicallyEqualIndex<A> {
+    pub fn logical_contains(&self, ax: &AnnotatedAxiom<A>) -> bool {
         self.0.contains_key(&ax.axiom)
     }
 
-    pub fn logical_get(&self, ax: &AnnotatedAxiom) -> Option<&AnnotatedAxiom> {
+    pub fn logical_get(&self, ax: &AnnotatedAxiom<A>) -> Option<&AnnotatedAxiom<A>> {
         self.0.get(&ax.axiom).map(|rcax| &**rcax)
     }
 
-    pub fn logical_get_rc(&self, ax: &AnnotatedAxiom) -> Option<Rc<AnnotatedAxiom>> {
+    pub fn logical_get_rc(&self, ax: &AnnotatedAxiom<A>) -> Option<Rc<AnnotatedAxiom<A>>> {
         self.0.get(&ax.axiom).cloned()
     }
 }
 
-impl<I: OntologyIndex> AsRef<LogicallyEqualIndex> for TwoIndexedOntology<I, LogicallyEqualIndex> {
-    fn as_ref(&self) -> &LogicallyEqualIndex {
+impl<A: ForIRI, I: OntologyIndex> AsRef<LogicallyEqualIndex<A>> for TwoIndexedOntology<A, LogicallyEqualIndex<A>> {
+    fn as_ref(&self) -> &LogicallyEqualIndex<A> {
         self.j()
     }
 }
 
-impl<I, J> AsRef<LogicallyEqualIndex> for ThreeIndexedOntology<I, J, LogicallyEqualIndex>
+impl<A: ForIRI, I, J> AsRef<LogicallyEqualIndex<A>> for ThreeIndexedOntology<A, I, J, LogicallyEqualIndex<A>>
 where
     I: OntologyIndex,
     J: OntologyIndex,

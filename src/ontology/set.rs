@@ -11,16 +11,16 @@ use crate::model::*;
 /// It should be more rapid that the using `SetIndex` inside
 /// `OneIndexedOntology`, as it involves no `Rc` overhead.
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
-pub struct SetOntology {
+pub struct SetOntology<A:ForIRI> {
     id: OntologyID,
     // The use an BTreeMap keyed on AxiomKind allows efficient
     // retrieval of axioms. Otherwise, we'd have to iterate through
     // the lot every time.
-    axiom: HashSet<AnnotatedAxiom>,
-    doc_iri: Option<IRI>,
+    axiom: HashSet<AnnotatedAxiom<A>>,
+    doc_iri: Option<IRI<A>>,
 }
 
-impl SetOntology {
+impl<A: ForIRI> SetOntology<A> {
     /// Create a new ontology.
     ///
     /// # Examples
@@ -31,7 +31,7 @@ impl SetOntology {
     ///
     /// assert_eq!(o, o2);
     /// ```
-    pub fn new() -> SetOntology {
+    pub fn new() -> SetOntology<A> {
         SetOntology::default()
     }
 
@@ -41,36 +41,36 @@ impl SetOntology {
     }
 }
 
-impl Ontology for SetOntology {
-    fn id(&self) -> &OntologyID {
+impl<A: ForIRI> Ontology<A> for SetOntology<A> {
+    fn id(&self) -> &OntologyID<A> {
         &self.id
     }
 
-    fn mut_id(&mut self) -> &mut OntologyID {
+    fn mut_id(&mut self) -> &mut OntologyID<A> {
         &mut self.id
     }
 
-    fn doc_iri(&self) -> &Option<IRI> {
+    fn doc_iri(&self) -> &Option<IRI<A>> {
         &self.doc_iri
     }
 
-    fn mut_doc_iri(&mut self) -> &mut Option<IRI> {
+    fn mut_doc_iri(&mut self) -> &mut Option<IRI<A>> {
         &mut self.doc_iri
     }
 }
 
 /// An Interator for `SetOntology`
-pub struct SetIter<'a>(std::collections::hash_set::Iter<'a, AnnotatedAxiom>);
+pub struct SetIter<'a, A: ForIRI>(std::collections::hash_set::Iter<'a, AnnotatedAxiom<A>>);
 
-impl<'a> Iterator for SetIter<'a> {
-    type Item = &'a AnnotatedAxiom;
+impl<'a, A: ForIRI> Iterator for SetIter<'a,A> {
+    type Item = &'a AnnotatedAxiom<A>;
     fn next(&mut self) -> Option<Self::Item> {
         self.0.next()
     }
 }
 
-impl<'a> IntoIterator for &'a SetOntology {
-    type Item = &'a AnnotatedAxiom;
+impl<'a, A: ForIRI> IntoIterator for &'a SetOntology<A> {
+    type Item = &'a AnnotatedAxiom<A>;
     type IntoIter = SetIter<'a>;
     fn into_iter(self) -> Self::IntoIter {
         self.iter()
@@ -78,24 +78,24 @@ impl<'a> IntoIterator for &'a SetOntology {
 }
 
 /// An owning iterator over the annotated axioms of an `Ontology`.
-pub struct SetIntoIter(std::collections::hash_set::IntoIter<AnnotatedAxiom>);
+pub struct SetIntoIter<A: ForIRI>(std::collections::hash_set::IntoIter<AnnotatedAxiom<A>>);
 
-impl Iterator for SetIntoIter {
-    type Item = AnnotatedAxiom;
+impl<A: ForIRI> Iterator for SetIntoIter<A> {
+    type Item = AnnotatedAxiom<A>;
     fn next(&mut self) -> Option<Self::Item> {
         self.0.next()
     }
 }
 
-impl IntoIterator for SetOntology {
-    type Item = AnnotatedAxiom;
+impl<A: ForIRI> IntoIterator for SetOntology<A> {
+    type Item = AnnotatedAxiom<A>;
     type IntoIter = SetIntoIter;
     fn into_iter(self) -> Self::IntoIter {
         SetIntoIter(self.axiom.into_iter())
     }
 }
 
-impl MutableOntology for SetOntology {
+impl<A: ForIRI> MutableOntology<A> for SetOntology<A> {
     /// Insert an axiom into the ontology.
     ///
     /// # Examples
@@ -109,24 +109,24 @@ impl MutableOntology for SetOntology {
     /// ```
     ///
     /// See `declare` for an easier way to declare named entities.
-    fn insert<A>(&mut self, ax: A) -> bool
+    fn insert<AA>(&mut self, ax: AA) -> bool
     where
-        A: Into<AnnotatedAxiom>,
+        AA: Into<AnnotatedAxiom<A>>,
     {
         self.axiom.insert(ax.into())
     }
 
-    fn remove(&mut self, ax: &AnnotatedAxiom) -> bool {
+    fn remove(&mut self, ax: &AnnotatedAxiom<A>) -> bool {
         self.axiom.remove(ax)
     }
 
-    fn take(&mut self, ax: &AnnotatedAxiom) -> Option<AnnotatedAxiom> {
+    fn take(&mut self, ax: &AnnotatedAxiom<A>) -> Option<AnnotatedAxiom<A>> {
         self.axiom.take(ax)
     }
 }
 
-impl FromIterator<AnnotatedAxiom> for SetOntology {
-    fn from_iter<I: IntoIterator<Item = AnnotatedAxiom>>(iter: I) -> Self {
+impl<A: ForIRI> FromIterator<AnnotatedAxiom<A>> for SetOntology<A> {
+    fn from_iter<I: IntoIterator<Item = AnnotatedAxiom<A>>>(iter: I) -> Self {
         SetOntology {
             id: Default::default(),
             axiom: HashSet::from_iter(iter),
@@ -135,23 +135,23 @@ impl FromIterator<AnnotatedAxiom> for SetOntology {
     }
 }
 
-impl<I> From<(OntologyID, I)> for SetOntology
+impl<A: ForIRI, I> From<(OntologyID, I)> for SetOntology<A>
 where
-    I: Iterator<Item = AnnotatedAxiom>,
+    I: Iterator<Item = AnnotatedAxiom<A>>,
 {
-    fn from((mut oid, i): (OntologyID, I)) -> SetOntology {
+    fn from((mut oid, i): (OntologyID<A>, I)) -> SetOntology<A> {
         let mut so: SetOntology = i.collect();
         std::mem::swap(so.mut_id(), &mut oid);
         so
     }
 }
 
-impl<O, I> From<(O, I)> for SetOntology
+impl<A: ForIRI, O, I> From<(O, I)> for SetOntology<A>
 where
-    I: Iterator<Item = AnnotatedAxiom>,
+    I: Iterator<Item = AnnotatedAxiom<A>>,
     O: Ontology,
 {
-    fn from((mut o, i): (O, I)) -> SetOntology {
+    fn from((mut o, i): (O, I)) -> SetOntology<A> {
         (o.mut_id().clone(), i).into()
     }
 }
@@ -160,33 +160,33 @@ where
 /// combined with an `IndexedOntology` this should be nearly as
 /// fastest as `SetOntology`.
 #[derive(Debug, Default, Eq, PartialEq)]
-pub struct SetIndex(HashSet<Rc<AnnotatedAxiom>>);
+pub struct SetIndex<A: ForIRI>(HashSet<Rc<AnnotatedAxiom<A>>>);
 
-impl OntologyIndex for SetIndex {
-    fn index_insert(&mut self, ax: Rc<AnnotatedAxiom>) -> bool {
+impl<A: ForIRI> OntologyIndex<A> for SetIndex<A> {
+    fn index_insert(&mut self, ax: Rc<AnnotatedAxiom<A>>) -> bool {
         self.0.insert(ax)
     }
 
-    fn index_take(&mut self, ax: &AnnotatedAxiom) -> Option<AnnotatedAxiom> {
+    fn index_take(&mut self, ax: &AnnotatedAxiom<A>) -> Option<AnnotatedAxiom<A>> {
         self.0.take(ax).map(rc_unwrap_or_clone)
     }
 
-    fn index_remove(&mut self, ax: &AnnotatedAxiom) -> bool {
+    fn index_remove(&mut self, ax: &AnnotatedAxiom<A>) -> bool {
         self.0.remove(ax)
     }
 }
 
-impl SetIndex {
-    pub fn contains(&self, ax: &AnnotatedAxiom) -> bool {
+impl<A: ForIRI> SetIndex<A> {
+    pub fn contains(&self, ax: &AnnotatedAxiom<A>) -> bool {
         self.0.contains(ax)
     }
 }
 
-impl IntoIterator for SetIndex {
-    type Item = AnnotatedAxiom;
-    type IntoIter = std::vec::IntoIter<AnnotatedAxiom>;
+impl<A: ForIRI> IntoIterator for SetIndex<A> {
+    type Item = AnnotatedAxiom<A>;
+    type IntoIter = std::vec::IntoIter<AnnotatedAxiom<A>>;
     fn into_iter(self) -> Self::IntoIter {
-        let v: Vec<AnnotatedAxiom> = self
+        let v: Vec<AnnotatedAxiom<A>> = self
             .0
             .into_iter()
             .map(Rc::try_unwrap)
@@ -196,11 +196,11 @@ impl IntoIterator for SetIndex {
     }
 }
 
-impl<'a> IntoIterator for &'a SetIndex {
-    type Item = &'a AnnotatedAxiom;
-    type IntoIter = std::vec::IntoIter<&'a AnnotatedAxiom>;
+impl<'a, A: ForIRI> IntoIterator for &'a SetIndex<A> {
+    type Item = &'a AnnotatedAxiom<A>;
+    type IntoIter = std::vec::IntoIter<&'a AnnotatedAxiom<A>>;
     fn into_iter(self) -> Self::IntoIter {
-        let v: Vec<&'a AnnotatedAxiom> = self.0.iter().map(|rcax| &**rcax).collect();
+        let v: Vec<&'a AnnotatedAxiom<A>> = self.0.iter().map(|rcax| &**rcax).collect();
         v.into_iter()
     }
 }

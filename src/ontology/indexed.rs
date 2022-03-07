@@ -35,20 +35,20 @@ use std::rc::Rc;
 /// least one `OntologyIndex` object for an `IndexedOntology` should
 /// do, or the it will be dropped entirely. The `SetIndex` is a simple
 /// way to achieving this.
-pub trait OntologyIndex {
+pub trait OntologyIndex<A: ForIRI> {
     /// Potentially insert an AnnotatedAxiom to the index.
     ///
     /// If the index did not have this value present, true is returned.
     ///
     /// If the index did have this value present, false is returned.
-    fn index_insert(&mut self, ax: Rc<AnnotatedAxiom>) -> bool;
+    fn index_insert(&mut self, ax: Rc<AnnotatedAxiom<A>>) -> bool;
 
     /// Remove an AnnotatedAxiom from the index.
     ///
     /// If the index did have this value present, true is returned.
     ///
     /// If the index did not have this value present, false is returned.
-    fn index_remove(&mut self, ax: &AnnotatedAxiom) -> bool {
+    fn index_remove(&mut self, ax: &AnnotatedAxiom<A>) -> bool {
         self.index_take(ax).is_some()
     }
 
@@ -57,25 +57,25 @@ pub trait OntologyIndex {
     /// Return the Some<AnnotatedAxiom if it is in the index.
     ///
     /// Return None if it does not.
-    fn index_take(&mut self, ax: &AnnotatedAxiom) -> Option<AnnotatedAxiom>;
+    fn index_take(&mut self, ax: &AnnotatedAxiom<A>) -> Option<AnnotatedAxiom<A>>;
 }
 
 /// A NullOntologyIndex which does nothing.
 #[derive(Default)]
 pub struct NullIndex();
-impl OntologyIndex for NullIndex {
+impl<A: ForIRI> OntologyIndex for NullIndex {
     /// Insert an item, always returns false
-    fn index_insert(&mut self, _ax: Rc<AnnotatedAxiom>) -> bool {
+    fn index_insert(&mut self, _ax: Rc<AnnotatedAxiom<A>>) -> bool {
         false
     }
 
     /// Remove an item, always returns false
-    fn index_remove(&mut self, _ax: &AnnotatedAxiom) -> bool {
+    fn index_remove(&mut self, _ax: &AnnotatedAxiom<A>) -> bool {
         false
     }
 
     /// Returns the item, always returns `None`
-    fn index_take(&mut self, _ax: &AnnotatedAxiom) -> Option<AnnotatedAxiom> {
+    fn index_take(&mut self, _ax: &AnnotatedAxiom<A>) -> Option<AnnotatedAxiom<A>> {
         None
     }
 }
@@ -83,7 +83,7 @@ impl OntologyIndex for NullIndex {
 /// A `OneIndexedOntology` operates as a simple adaptor betweeen any
 /// `OntologyIndex` and an `Ontology`.
 #[derive(Default, Debug, Eq, PartialEq)]
-pub struct OneIndexedOntology<I: OntologyIndex>(I, OntologyID, Option<IRI>);
+pub struct OneIndexedOntology<A: ForIRI, I: OntologyIndex>(I, OntologyID<A>, Option<IRI<A>>);
 
 impl<I: OntologyIndex> OneIndexedOntology<I> {
     pub fn new(i: I) -> Self {
