@@ -115,19 +115,19 @@ pub struct IRI<A:ForIRI>(A);
 pub trait ForIRI: Borrow<str> + Eq + PartialEq + Ord + PartialOrd + Debug + Clone {}
 
 impl<T: ?Sized> ForIRI for T where
-    T: Borrow<str> + Eq + PartialEq + Ord + PartialOrd + Debug + Clone {}
+    T: Borrow<str> + Deref + Eq + PartialEq + Ord + PartialOrd + Debug + Clone {}
 
 impl<A: ForIRI> Deref for IRI<A> {
     type Target = str;
 
     fn deref(&self) -> &Self::Target {
-        self.0.as_ref()
+        self.0.borrow()
     }
 }
 
 impl<A: ForIRI> AsRef<str> for IRI<A> {
     fn as_ref(&self) -> &str {
-        &self.0.as_ref()
+        self.0.borrow()
     }
 }
 
@@ -145,19 +145,19 @@ impl From<&IRI<Rc<str>>> for Rc<str> {
 
 impl<A: ForIRI> From<&IRI<A>> for String {
     fn from(i: &IRI<A>) -> String {
-        i.0.as_ref().to_string()
+        i.0.borrow().to_string()
     }
 }
 
 impl<A: ForIRI> From<IRI<A>> for String {
     fn from(i: IRI<A>) -> String {
-        i.0.as_ref().to_string()
+        i.0.borrow().to_string()
     }
 }
 
 impl<A: ForIRI> Display for IRI<A> {
     fn fmt(&self, f: &mut Formatter<'_>) -> ::std::fmt::Result {
-        f.write_str(&self.0)
+        f.write_str(&self.0.borrow())
     }
 }
 
@@ -194,13 +194,14 @@ impl<A: ForIRI> Build<A> {
     /// ```
     pub fn iri<S>(&self, s: S) -> IRI<A>
     where
-        S: AsRef<str>,
+        A: From<S>,
+        S: Borrow<str>,
     {
         let mut cache = self.0.borrow_mut();
-        if let Some(iri) = cache.get(s.as_ref()) {
+        if let Some(iri) = cache.get(s.borrow()) {
             iri.clone()
         } else {
-            let iri = IRI(Rc::from(s.as_ref()));
+            let iri = IRI(s.into());
             cache.insert(iri.clone());
             iri
         }
@@ -222,7 +223,8 @@ impl<A: ForIRI> Build<A> {
     ///
     pub fn class<S>(&self, s: S) -> Class<A>
     where
-        S: AsRef<str>,
+        A: From<S>,
+        S: Borrow<str>,
     {
         Class(self.iri(s))
     }
@@ -241,7 +243,8 @@ impl<A: ForIRI> Build<A> {
     /// ```
     pub fn object_property<S>(&self, s: S) -> ObjectProperty<A>
     where
-        S: AsRef<str>,
+        A: From<S>,
+        S: Borrow<str>,
     {
         ObjectProperty(self.iri(s))
     }
@@ -260,7 +263,8 @@ impl<A: ForIRI> Build<A> {
     /// ```
     pub fn annotation_property<S>(&self, s: S) -> AnnotationProperty<A>
     where
-        S: AsRef<str>,
+        A: From<S>,
+        S: Borrow<str>,
     {
         AnnotationProperty(self.iri(s))
     }
@@ -279,7 +283,8 @@ impl<A: ForIRI> Build<A> {
     /// ```
     pub fn data_property<S>(&self, s: S) -> DataProperty<A>
     where
-        S: AsRef<str>,
+        A: From<S>,
+        S: Borrow<str>,
     {
         DataProperty(self.iri(s))
     }
@@ -298,7 +303,8 @@ impl<A: ForIRI> Build<A> {
     /// ```
     pub fn named_individual<S>(&self, s: S) -> NamedIndividual<A>
     where
-        S: AsRef<str>,
+        A: From<S>,
+        S: Borrow<str>,
     {
         NamedIndividual(self.iri(s))
     }
@@ -317,7 +323,8 @@ impl<A: ForIRI> Build<A> {
     /// ```
     pub fn datatype<S>(&self, s: S) -> Datatype<A>
     where
-        S: AsRef<str>,
+        A: From<S>,
+        S: Borrow<str>,
     {
         Datatype(self.iri(s))
     }
@@ -337,16 +344,16 @@ macro_rules! named {
         /// equivalent form. The individual structs for each variant
         /// provide us types for use elsewhere in the library.
         #[derive(Debug, Eq, PartialEq, Hash)]
-        pub enum NamedEntity<A>{
+        pub enum NamedEntity<A:ForIRI>{
             $($name($name<A>)),*
         }
 
         $(
             $(#[$attr]) *
             #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-            pub struct $name<A>(pub IRI<A>);
+            pub struct $name<A:ForIRI>(pub IRI<A>);
 
-            impl<A> From<IRI<A>> for $name<A> {
+            impl<A: ForIRI> From<IRI<A>> for $name<A> {
                 fn from(iri: IRI<A>) -> $name<A> {
                     $name(iri)
                 }
@@ -358,43 +365,43 @@ macro_rules! named {
             //     }
             // }
 
-            impl<A: Borrow<str>> From<$name<A>> for String {
+            impl<A: ForIRI> From<$name<A>> for String {
                 fn from(n: $name<A>) -> String {
                     n.0.0.borrow().to_string()
                 }
             }
 
-            impl<'a,A: Borrow<str>> From<&'a $name<A>> for String {
+            impl<'a, A: ForIRI> From<&'a $name<A>> for String {
                 fn from(n: &$name<A>) -> String {
                     n.0.0.borrow().to_string()
                 }
             }
 
-            impl<A> From<$name<A>> for IRI<A> {
+            impl<A: ForIRI> From<$name<A>> for IRI<A> {
                 fn from(n: $name<A>) -> IRI<A> {
                     n.0
                 }
             }
 
-            impl<'a, A: Clone> From<&'a $name<A>> for IRI<A> {
+            impl<'a, A: ForIRI> From<&'a $name<A>> for IRI<A> {
                 fn from(n: &$name<A>) -> IRI<A> {
                     (n.0).clone()
                 }
             }
 
-            impl<A> From<$name<A>> for NamedEntity<A> {
+            impl<A: ForIRI> From<$name<A>> for NamedEntity<A> {
                 fn from(n:$name<A>) -> NamedEntity<A> {
                     NamedEntity::$name(n)
                 }
             }
 
-            impl<A> From<$name<A>> for NamedEntityKind {
+            impl<A: ForIRI> From<$name<A>> for NamedEntityKind {
                 fn from(_n:$name<A>) -> NamedEntityKind {
                     NamedEntityKind::$name
                 }
             }
 
-            impl<A: Borrow<str> + Eq + PartialEq> $name<A> {
+            impl<A:ForIRI> $name<A> {
                 pub fn is<I>(&self, iri: I) -> bool
                     where I:Into<IRI<A>>
                 {
@@ -465,7 +472,7 @@ impl<A: ForIRI> Deref for AnonymousIndividual<A> {
     type Target = str;
 
     fn deref(&self) -> &Self::Target {
-        self.0.as_ref()
+        self.0.borrow()
     }
 }
 
@@ -510,7 +517,7 @@ impl From<String> for AnonymousIndividual<Rc<str>> {
     }
 }
 impl<A: ForIRI> From<&IRI<A>> for Individual<A> {
-    fn from(iri: &IRI) -> Individual {
+    fn from(iri: &IRI<A>) -> Individual<A> {
         let ni: NamedIndividual = iri.into();
         ni.into()
     }
@@ -540,7 +547,7 @@ impl<A: ForIRI> Deref for AnnotationSubject<A> {
 }
 
 impl<A: ForIRI> From<IRI<A>> for AnnotationSubject<A> {
-    fn from(iri: IRI) -> AnnotationSubject {
+    fn from(iri: IRI<A>) -> AnnotationSubject<A> {
         AnnotationSubject::IRI(iri)
     }
 }
@@ -661,19 +668,19 @@ impl<A: ForIRI> Kinded for AnnotatedAxiom<A> {
 /// Add `Kinded` and `From` for each axiom.
 macro_rules! axiomimpl {
     ($A:ident, $name:ident) => {
-        impl<$A:> From<$name<$A>> for Axiom<$A> {
+        impl<$A:ForIRI> From<$name<$A>> for Axiom<$A> {
             fn from(ax: $name<$A>) -> Axiom<$A> {
                 Axiom::$name(ax)
             }
         }
 
-        impl<$A:> From<$name<$A>> for AnnotatedAxiom<$A> {
+        impl<$A:ForIRI> From<$name<$A>> for AnnotatedAxiom<$A> {
             fn from(ax: $name<$A>) -> AnnotatedAxiom<$A> {
                 AnnotatedAxiom::from(Axiom::from(ax))
             }
         }
 
-        impl<$A:> Kinded for $name<$A> {
+        impl<$A:ForIRI> Kinded for $name<$A> {
             fn kind(&self) -> AxiomKind {
                 AxiomKind::$name
             }
@@ -695,7 +702,7 @@ macro_rules! axiom {
     {
         $(#[$attr]) *
         #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-        pub struct $name<$A>($(pub $tt),*);
+        pub struct $name<$A:ForIRI>($(pub $tt),*);
         axiomimpl!($A, $name);
     };
     ($A:ident $name:ident {
@@ -705,12 +712,12 @@ macro_rules! axiom {
     ) => {
         $(#[$attr]) *
         #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-        pub struct $name<$A>
+        pub struct $name<$A:ForIRI>
         {
             $(pub $field_name: $field_type),*,
         }
 
-        impl<$A> $name<$A> {
+        impl<$A:ForIRI> $name<$A> {
             pub fn new($($field_name: $field_type),*)
                 -> $name<$A>
             {
@@ -783,11 +790,11 @@ macro_rules! axioms {
         /// type for all structs. The struct and enum variants all
         /// share identical names.
         #[derive(Clone, Eq, Hash, Ord, PartialEq, PartialOrd)]
-        pub enum Axiom<$A>{
+        pub enum Axiom<$A:ForIRI>{
             $($name($name<$A>)),*
         }
 
-        impl<$A: std::fmt::Debug> std::fmt::Debug for Axiom<$A> {
+        impl<$A:ForIRI> std::fmt::Debug for Axiom<$A> {
             fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
                 write!(f, "Axiom::{}({})",
                        match self {
@@ -806,7 +813,7 @@ macro_rules! axioms {
             }
         }
 
-        impl<$A:> Kinded for Axiom<$A>
+        impl<$A:ForIRI> Kinded for Axiom<$A>
         {
             fn kind(&self) -> AxiomKind
             {
@@ -1532,7 +1539,7 @@ impl<'a, A: ForIRI> From<&'a Class<A>> for ClassExpression<A> {
 }
 
 impl<A: ForIRI> From<Class<A>> for Box<ClassExpression<A>> {
-    fn from(c: Class) -> Box<ClassExpression<A>> {
+    fn from(c: Class<A>) -> Box<ClassExpression<A>> {
         Box::new(c.into())
     }
 }
