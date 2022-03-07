@@ -117,7 +117,7 @@ pub trait ForIRI: Borrow<str> + Eq + PartialEq + Ord + PartialOrd + Debug + Clon
 impl<T: ?Sized> ForIRI for T where
     T: Borrow<str> + Eq + PartialEq + Ord + PartialOrd + Debug + Clone {}
 
-impl Deref for IRI {
+impl<A: ForIRI> Deref for IRI<A> {
     type Target = str;
 
     fn deref(&self) -> &Self::Target {
@@ -125,37 +125,37 @@ impl Deref for IRI {
     }
 }
 
-impl AsRef<str> for IRI {
+impl<A: ForIRI> AsRef<str> for IRI<A> {
     fn as_ref(&self) -> &str {
         &self.0.as_ref()
     }
 }
 
-impl Borrow<str> for IRI {
+impl<A: ForIRI> Borrow<str> for IRI<A> {
     fn borrow(&self) -> &str {
         self.as_ref()
     }
 }
 
-impl From<&IRI> for Rc<str> {
+impl From<&IRI<Rc<str>>> for Rc<str> {
     fn from(i: &IRI) -> Rc<str> {
         i.0.clone().into()
     }
 }
 
-impl From<&IRI> for String {
+impl<A: ForIRI> From<&IRI<A>> for String {
     fn from(i: &IRI) -> String {
         i.0.as_ref().to_string()
     }
 }
 
-impl From<IRI> for String {
+impl<A: ForIRI> From<IRI<A>> for String {
     fn from(i: IRI) -> String {
         i.0.as_ref().to_string()
     }
 }
 
-impl Display for IRI {
+impl<A: ForIRI> Display for IRI<A> {
     fn fmt(&self, f: &mut Formatter<'_>) -> ::std::fmt::Result {
         f.write_str(&self.0)
     }
@@ -337,66 +337,66 @@ macro_rules! named {
         /// equivalent form. The individual structs for each variant
         /// provide us types for use elsewhere in the library.
         #[derive(Debug, Eq, PartialEq, Hash)]
-        pub enum NamedEntity{
-            $($name($name)),*
+        pub enum NamedEntity<A>{
+            $($name($name<A>)),*
         }
 
         $(
             $(#[$attr]) *
             #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-            pub struct $name(pub IRI);
+            pub struct $name<A>(pub IRI<A>);
 
-            impl From<IRI> for $name {
-                fn from(iri: IRI) -> $name {
-                    Self::from(&iri)
+            impl<A> From<IRI<A>> for $name<A> {
+                fn from(iri: IRI<A>) -> $name<A> {
+                    $name(iri)
                 }
             }
 
-            impl <'a> From<&'a IRI> for $name {
-                fn from(iri: &IRI) -> $name {
-                    $name(iri.clone())
+            // impl<'a, A: Borrow<str>> From<&'a IRI<A>> for $name<A> {
+            //     fn from(iri: &IRI<A>) -> $name<A> {
+            //         $name(iri.clone())
+            //     }
+            // }
+
+            impl<A: Borrow<str>> From<$name<A>> for String {
+                fn from(n: $name<A>) -> String {
+                    n.0.0.borrow().to_string()
                 }
             }
 
-            impl From<$name> for String {
-                fn from(n: $name) -> String {
-                    String::from(n.0)
+            impl<'a,A: Borrow<str>> From<&'a $name<A>> for String {
+                fn from(n: &$name<A>) -> String {
+                    n.0.0.borrow().to_string()
                 }
             }
 
-            impl <'a> From<&'a $name> for String {
-                fn from(n: &$name) -> String {
-                    String::from(&n.0)
+            impl<A> From<$name<A>> for IRI<A> {
+                fn from(n: $name<A>) -> IRI<A> {
+                    n.0
                 }
             }
 
-            impl From<$name> for IRI {
-                fn from(n: $name) -> IRI {
-                    Self::from(&n)
-                }
-            }
-
-            impl <'a> From<&'a $name> for IRI {
-                fn from(n: &$name) -> IRI {
+            impl<'a, A: Clone> From<&'a $name<A>> for IRI<A> {
+                fn from(n: &$name<A>) -> IRI<A> {
                     (n.0).clone()
                 }
             }
 
-            impl From<$name> for NamedEntity {
-                fn from(n:$name) -> NamedEntity {
+            impl<A> From<$name<A>> for NamedEntity<A> {
+                fn from(n:$name<A>) -> NamedEntity<A> {
                     NamedEntity::$name(n)
                 }
             }
 
-            impl From<$name> for NamedEntityKind {
-                fn from(_n:$name) -> NamedEntityKind {
+            impl<A> From<$name<A>> for NamedEntityKind {
+                fn from(_n:$name<A>) -> NamedEntityKind {
                     NamedEntityKind::$name
                 }
             }
 
-            impl $name {
+            impl<A: Borrow<str> + Eq + PartialEq> $name<A> {
                 pub fn is<I>(&self, iri: I) -> bool
-                    where I:Into<IRI>
+                    where I:Into<IRI<A>>
                 {
                     self.0 == iri.into()
                 }
@@ -404,7 +404,7 @@ macro_rules! named {
                 pub fn is_s<S>(&self, iri:S) -> bool
                     where S:Into<String>
                 {
-                    *(self.0).0 == iri.into()
+                    self.0.0.borrow() == iri.into()
                 }
 
             }
@@ -459,9 +459,9 @@ named! {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash, PartialOrd, Ord)]
-pub struct AnonymousIndividual(pub Rc<str>);
+pub struct AnonymousIndividual<A: ForIRI>(pub A);
 
-impl Deref for AnonymousIndividual {
+impl<A: ForIRI> Deref for AnonymousIndividual<A> {
     type Target = str;
 
     fn deref(&self) -> &Self::Target {
@@ -470,12 +470,12 @@ impl Deref for AnonymousIndividual {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash, PartialOrd, Ord)]
-pub enum Individual {
-    Anonymous(AnonymousIndividual),
-    Named(NamedIndividual),
+pub enum Individual<A: ForIRI> {
+    Anonymous(AnonymousIndividual<A>),
+    Named(NamedIndividual<A>),
 }
 
-impl Deref for Individual {
+impl<A: ForIRI> Deref for Individual<A> {
     type Target = str;
 
     fn deref(&self) -> &Self::Target {
@@ -486,49 +486,49 @@ impl Deref for Individual {
     }
 }
 
-impl From<NamedIndividual> for Individual {
-    fn from(ni: NamedIndividual) -> Individual {
+impl<A: ForIRI> From<NamedIndividual<A>> for Individual<A> {
+    fn from(ni: NamedIndividual<A>) -> Individual<A> {
         Self::Named(ni)
     }
 }
 
-impl From<AnonymousIndividual> for Individual {
-    fn from(ai: AnonymousIndividual) -> Individual {
+impl<A: ForIRI> From<AnonymousIndividual<A>> for Individual<A> {
+    fn from(ai: AnonymousIndividual<A>) -> Individual<A> {
         Self::Anonymous(ai)
     }
 }
 
-impl From<Rc<str>> for AnonymousIndividual {
-    fn from(rc: Rc<str>) -> AnonymousIndividual {
+impl From<Rc<str>> for AnonymousIndividual<Rc<str>> {
+    fn from(rc: Rc<str>) -> AnonymousIndividual<Rc<str>> {
         AnonymousIndividual(rc)
     }
 }
 
-impl From<String> for AnonymousIndividual {
-    fn from(s: String) -> AnonymousIndividual {
+impl From<String> for AnonymousIndividual<Rc<str>> {
+    fn from(s: String) -> AnonymousIndividual<Rc<str>> {
         AnonymousIndividual(s.into())
     }
 }
-impl From<&IRI> for Individual {
+impl<A: ForIRI> From<&IRI<A>> for Individual<A> {
     fn from(iri: &IRI) -> Individual {
         let ni: NamedIndividual = iri.into();
         ni.into()
     }
 }
 
-impl From<IRI> for Individual {
-    fn from(iri: IRI) -> Individual {
+impl<A: ForIRI> From<IRI<A>> for Individual<A> {
+    fn from(iri: IRI<A>) -> Individual<A> {
         Individual::from(&iri)
     }
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
-pub enum AnnotationSubject {
-    IRI(IRI),
-    AnonymousIndividual(AnonymousIndividual),
+pub enum AnnotationSubject<A: ForIRI> {
+    IRI(IRI<A>),
+    AnonymousIndividual(AnonymousIndividual<A>),
 }
 
-impl Deref for AnnotationSubject {
+impl<A: ForIRI> Deref for AnnotationSubject<A> {
     type Target = str;
 
     fn deref(&self) -> &Self::Target {
@@ -539,32 +539,32 @@ impl Deref for AnnotationSubject {
     }
 }
 
-impl From<IRI> for AnnotationSubject {
+impl<A: ForIRI> From<IRI<A>> for AnnotationSubject<A> {
     fn from(iri: IRI) -> AnnotationSubject {
         AnnotationSubject::IRI(iri)
     }
 }
 
-impl From<AnonymousIndividual> for AnnotationSubject {
-    fn from(anon: AnonymousIndividual) -> AnnotationSubject {
+impl<A: ForIRI> From<AnonymousIndividual<A>> for AnnotationSubject<A> {
+    fn from(anon: AnonymousIndividual<A>) -> AnnotationSubject<A> {
         AnnotationSubject::AnonymousIndividual(anon)
     }
 }
 
-impl From<&IRI> for AnnotationSubject {
-    fn from(iri: &IRI) -> AnnotationSubject {
+impl<A: ForIRI> From<&IRI<A>> for AnnotationSubject<A> {
+    fn from(iri: &IRI<A>) -> AnnotationSubject<A> {
         AnnotationSubject::IRI(iri.clone())
     }
 }
 
-impl From<&AnonymousIndividual> for AnnotationSubject {
-    fn from(anon: &AnonymousIndividual) -> AnnotationSubject {
+impl<A: ForIRI> From<&AnonymousIndividual<A>> for AnnotationSubject<A> {
+    fn from(anon: &AnonymousIndividual<A>) -> AnnotationSubject<A> {
         AnnotationSubject::AnonymousIndividual(anon.clone())
     }
 }
 
-impl From<NamedEntity> for Axiom {
-    fn from(ne: NamedEntity) -> Axiom {
+impl<A: ForIRI> From<NamedEntity<A>> for Axiom<A> {
+    fn from(ne: NamedEntity<A>) -> Axiom<A> {
         match ne {
             NamedEntity::Class(c) => Axiom::DeclareClass(DeclareClass(c)),
             NamedEntity::ObjectProperty(obp) => {
@@ -582,8 +582,8 @@ impl From<NamedEntity> for Axiom {
     }
 }
 
-impl From<NamedEntity> for AnnotatedAxiom {
-    fn from(ne: NamedEntity) -> AnnotatedAxiom {
+impl<A: ForIRI> From<NamedEntity<A>> for AnnotatedAxiom<A> {
+    fn from(ne: NamedEntity<A>) -> AnnotatedAxiom<A> {
         let ax: Axiom = ne.into();
         ax.into()
     }
@@ -610,15 +610,15 @@ pub trait Kinded {
 
 /// An `AnnotatedAxiom` is an `Axiom` with one orpmore `Annotation`.
 #[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
-pub struct AnnotatedAxiom {
-    pub axiom: Axiom,
-    pub ann: BTreeSet<Annotation>,
+pub struct AnnotatedAxiom<A: ForIRI> {
+    pub axiom: Axiom<A>,
+    pub ann: BTreeSet<Annotation<A>>,
 }
 
-impl AnnotatedAxiom {
-    pub fn new<I>(axiom: I, ann: BTreeSet<Annotation>) -> AnnotatedAxiom
+impl<A: ForIRI> AnnotatedAxiom<A> {
+    pub fn new<I>(axiom: I, ann: BTreeSet<Annotation<A>>) -> AnnotatedAxiom<A>
     where
-        I: Into<Axiom>,
+        I: Into<Axiom<A>>,
     {
         AnnotatedAxiom {
             axiom: axiom.into(),
@@ -626,15 +626,15 @@ impl AnnotatedAxiom {
         }
     }
 
-    pub fn logical_cmp(&self, other: &AnnotatedAxiom) -> Ordering {
+    pub fn logical_cmp(&self, other: &AnnotatedAxiom<A>) -> Ordering {
         self.axiom.cmp(&other.axiom)
     }
 
-    pub fn logical_partial_cmp(&self, other: &AnnotatedAxiom) -> Option<Ordering> {
+    pub fn logical_partial_cmp(&self, other: &AnnotatedAxiom<A>) -> Option<Ordering> {
         Some(self.cmp(other))
     }
 
-    pub fn logical_eq(&self, other: &AnnotatedAxiom) -> bool {
+    pub fn logical_eq(&self, other: &AnnotatedAxiom<A>) -> bool {
         self.axiom == other.axiom
     }
 
@@ -643,8 +643,8 @@ impl AnnotatedAxiom {
     }
 }
 
-impl From<Axiom> for AnnotatedAxiom {
-    fn from(axiom: Axiom) -> AnnotatedAxiom {
+impl<A: ForIRI> From<Axiom<A>> for AnnotatedAxiom<A> {
+    fn from(axiom: Axiom<A>) -> AnnotatedAxiom<A> {
         AnnotatedAxiom {
             axiom,
             ann: BTreeSet::new(),
@@ -652,7 +652,7 @@ impl From<Axiom> for AnnotatedAxiom {
     }
 }
 
-impl Kinded for AnnotatedAxiom {
+impl<A: ForIRI> Kinded for AnnotatedAxiom<A> {
     fn kind(&self) -> AxiomKind {
         self.axiom.kind()
     }
@@ -660,20 +660,20 @@ impl Kinded for AnnotatedAxiom {
 
 /// Add `Kinded` and `From` for each axiom.
 macro_rules! axiomimpl {
-    ($name:ident) => {
-        impl From<$name> for Axiom {
-            fn from(ax: $name) -> Axiom {
+    ($A:ident, $name:ident) => {
+        impl<$A:> From<$name<$A>> for Axiom<$A> {
+            fn from(ax: $name<$A>) -> Axiom<$A> {
                 Axiom::$name(ax)
             }
         }
 
-        impl From<$name> for AnnotatedAxiom {
-            fn from(ax: $name) -> AnnotatedAxiom {
+        impl<$A:> From<$name<$A>> for AnnotatedAxiom<$A> {
+            fn from(ax: $name<$A>) -> AnnotatedAxiom<$A> {
                 AnnotatedAxiom::from(Axiom::from(ax))
             }
         }
 
-        impl Kinded for $name {
+        impl<$A:> Kinded for $name<$A> {
             fn kind(&self) -> AxiomKind {
                 AxiomKind::$name
             }
@@ -691,28 +691,28 @@ macro_rules! axiomimpl {
 // noticed that the quick_error crate passes afterwards and it's easy
 // to get to work this way. As it's an internal macro, I think this is fine.
 macro_rules! axiom {
-    ($name:ident ($($tt:ty),*) $(#[$attr:meta])*) =>
+    ($A:ident $name:ident ($($tt:ty),*) $(#[$attr:meta])*) =>
     {
         $(#[$attr]) *
         #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-        pub struct $name($(pub $tt),*);
-        axiomimpl!($name);
+        pub struct $name<$A>($(pub $tt),*);
+        axiomimpl!($A, $name);
     };
-    ($name:ident {
+    ($A:ident $name:ident {
         $($field_name:ident: $field_type:ty),*
-    }
-    $(#[$attr:meta])*
+     }
+     $(#[$attr:meta])*
     ) => {
         $(#[$attr]) *
         #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-        pub struct $name
+        pub struct $name<$A>
         {
             $(pub $field_name: $field_type),*,
         }
 
-        impl $name {
+        impl<$A> $name<$A> {
             pub fn new($($field_name: $field_type),*)
-                -> $name
+                -> $name<$A>
             {
                 $name {
                     $($field_name),*
@@ -720,7 +720,7 @@ macro_rules! axiom {
             }
 
         }
-        axiomimpl!($name);
+        axiomimpl!($A, $name);
     }
 }
 
@@ -732,7 +732,8 @@ macro_rules! axiom {
 // names at once so we can generate the AxiomKind and Axiom
 // enums.
 macro_rules! axioms {
-    ($($(#[$attr:meta])* $name:ident $tt:tt),*)
+    ($A:ident,
+     $($(#[$attr:meta])* $name:ident $tt:tt),*)
         =>
     {
         /// Contains all different kinds of axiom
@@ -782,11 +783,11 @@ macro_rules! axioms {
         /// type for all structs. The struct and enum variants all
         /// share identical names.
         #[derive(Clone, Eq, Hash, Ord, PartialEq, PartialOrd)]
-        pub enum Axiom{
-            $($name($name)),*
+        pub enum Axiom<$A>{
+            $($name($name<$A>)),*
         }
 
-        impl std::fmt::Debug for Axiom {
+        impl<$A: std::fmt::Debug> std::fmt::Debug for Axiom<$A> {
             fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
                 write!(f, "Axiom::{}({})",
                        match self {
@@ -805,7 +806,7 @@ macro_rules! axioms {
             }
         }
 
-        impl Kinded for Axiom
+        impl<$A:> Kinded for Axiom<$A>
         {
             fn kind(&self) -> AxiomKind
             {
@@ -821,18 +822,19 @@ macro_rules! axioms {
 
         $(
             axiom!(
-                $name $tt $(#[$attr]) *
+                $A $name $tt $(#[$attr]) *
             );
         ) *
     }
 }
 
 axioms! {
+    A,
     /// An annotation associated with this Ontology
-    OntologyAnnotation (Annotation),
+    OntologyAnnotation (Annotation<A>),
 
     /// Declares that an IRI is an import of this ontology
-    Import(IRI),
+    Import(IRI<A>),
 
     // Declaration Axioms
 
@@ -843,34 +845,34 @@ axioms! {
     /// an ontology where there is no declaration, the end ontology
     /// will change profile to OWL Full.  See also the [OWL
     /// Primer](https://www.w3.org/TR/2012/REC-owl2-primer-20121211/#Entity_Declarations)
-    DeclareClass(Class),
+    DeclareClass(Class<A>),
 
     /// Declares that an IRI represents an ObjectProperty in the
     /// Ontology.
     ///
     /// See also [`DeclareClass`](struct.DeclareClass.html)
-    DeclareObjectProperty(ObjectProperty),
+    DeclareObjectProperty(ObjectProperty<A>),
 
     /// Declares that an IRI represents an AnnotationProperty in the
     /// Ontology.
     ///
     /// See also [`DeclareClass`](struct.DeclareClass.html)
-    DeclareAnnotationProperty (AnnotationProperty),
+    DeclareAnnotationProperty (AnnotationProperty<A>),
     /// Declares that an IRI represents a DataProperty in the
     /// ontology.
     ///
     /// See also [`DeclareClass`](struct.DeclareClass.html)
-    DeclareDataProperty (DataProperty),
+    DeclareDataProperty (DataProperty<A>),
 
     /// Declare that an IRI represents a NamedIndividual in the
     /// ontology.
     ///
     /// See also [`DeclareClass`](struct.DeclareClass.html)
-    DeclareNamedIndividual (NamedIndividual),
+    DeclareNamedIndividual (NamedIndividual<A>),
 
     /// Declare that an IRI represents a Datatype in the ontology.
     ///
-    DeclareDatatype(Datatype),
+    DeclareDatatype(Datatype<A>),
 
     // Class Axioms
 
@@ -879,27 +881,27 @@ axioms! {
     /// All instances of `sub_class` are also instances of
     /// `super_class`.
     SubClassOf{
-        sup: ClassExpression,
-        sub: ClassExpression
+        sup: ClassExpression<A>,
+        sub: ClassExpression<A>
     },
 
     /// An equivalance relationship between two `ClassExpression`.
     ///
     /// All instances of `ClassExpression` are also instances
     /// of other other.
-    EquivalentClasses(Vec<ClassExpression>),
+    EquivalentClasses(Vec<ClassExpression<A>>),
 
     /// A disjoint relationship between two `ClassExpression`
     ///
     /// No instance of one `ClassExpression` can also be an instance
     /// of any of the others.
-    DisjointClasses(Vec<ClassExpression>),
+    DisjointClasses(Vec<ClassExpression<A>>),
 
     /// A disjoint union expression between one `ClassExpression` and
     /// a set of others.
     ///
     /// See also: https://www.w3.org/TR/owl2-syntax/#Disjoint_Union_of_Class_Expressions
-    DisjointUnion(Class, Vec<ClassExpression>),
+    DisjointUnion(Class<A>, Vec<ClassExpression<A>>),
 
     // ObjectProperty axioms
 
@@ -914,21 +916,21 @@ axioms! {
     /// See also: [Property Hierarchies](https://www.w3.org/TR/2012/REC-owl2-primer-20121211/#Property_Hierarchies)
     /// See also: [Property Chains](https://www.w3.org/TR/2012/REC-owl2-primer-20121211/#Property_Chains)
     SubObjectPropertyOf{
-        sup: ObjectPropertyExpression,
-        sub: SubObjectPropertyExpression
+        sup: ObjectPropertyExpression<A>,
+        sub: SubObjectPropertyExpression<A>
     },
 
     /// An equivalent object properties relationship.
     ///
     /// States that two object properties are semantically identical
     /// to each other.
-    EquivalentObjectProperties(Vec<ObjectPropertyExpression>),
+    EquivalentObjectProperties(Vec<ObjectPropertyExpression<A>>),
 
     /// A disjoint object property relationship.
     ///
     /// This states that is an individual is connected by one of these
     /// object properties, it cannot be connected by any of the others.
-    DisjointObjectProperties(Vec<ObjectPropertyExpression>),
+    DisjointObjectProperties(Vec<ObjectPropertyExpression<A>>),
 
     /// An inverse relationship between two object properties.
     ///
@@ -937,7 +939,7 @@ axioms! {
     /// `s` are transitive, then `a r b` implies `b r a`.
     ///
     /// See also: [Property Characteristics](https://www.w3.org/TR/2012/REC-owl2-primer-20121211/#Property_Characteristics)
-    InverseObjectProperties(ObjectProperty,ObjectProperty),
+    InverseObjectProperties(ObjectProperty<A>,ObjectProperty<A>),
 
     /// The domain of the object property.
     ///
@@ -946,7 +948,7 @@ axioms! {
     /// instances of `ce`
     ///
     /// See also: [Domain](https://www.w3.org/TR/owl2-syntax/#Object_Property_Domain)
-    ObjectPropertyDomain{ope:ObjectPropertyExpression, ce:ClassExpression},
+    ObjectPropertyDomain{ope:ObjectPropertyExpression<A>, ce:ClassExpression<A>},
 
     /// The range of the object property.
     ///
@@ -954,7 +956,7 @@ axioms! {
     /// relationship `ope`, then it is an individual of `ce`.1
     ///
     /// See also: [Domain](https://www.w3.org/TR/owl2-syntax/#Object_Property_Range)
-    ObjectPropertyRange{ope:ObjectPropertyExpression, ce:ClassExpression},
+    ObjectPropertyRange{ope:ObjectPropertyExpression<A>, ce:ClassExpression<A>},
 
     /// The functional characteristic.
     ///
@@ -963,7 +965,7 @@ axioms! {
     /// property expression.
     ///
     /// See also: [Functional](https://www.w3.org/TR/owl2-syntax/#Functional_Object_Properties)
-    FunctionalObjectProperty(ObjectPropertyExpression),
+    FunctionalObjectProperty(ObjectPropertyExpression<A>),
 
     /// The inverse functional characteristic
     ///
@@ -972,7 +974,7 @@ axioms! {
     /// expression.
     ///
     /// See also: [Inverse Functional](https://www.w3.org/TR/owl2-syntax/#Inverse-Functional_Object_Properties)
-    InverseFunctionalObjectProperty(ObjectPropertyExpression),
+    InverseFunctionalObjectProperty(ObjectPropertyExpression<A>),
 
     /// The reflexive characteristic
     ///
@@ -980,21 +982,21 @@ axioms! {
     /// ObjectPropertyExpression is connected to itself.
     ///
     /// See also: [Reflexive](https://www.w3.org/TR/owl2-syntax/#Reflexive_Object_Properties)
-    ReflexiveObjectProperty(ObjectPropertyExpression),
+    ReflexiveObjectProperty(ObjectPropertyExpression<A>),
 
     /// The irreflexive characteristic
     ///
     /// No individual can be connected to itself by this property.
     ///
     /// See also: [Irreflexive](https://www.w3.org/TR/owl2-syntax/#Irreflexive_Object_Properties)
-    IrreflexiveObjectProperty(ObjectPropertyExpression),
+    IrreflexiveObjectProperty(ObjectPropertyExpression<A>),
 
     /// The symmetric characteristic
     ///
     /// If an individual `i` is connected to `j` by this
     /// ObjectPropertyExpression, then `j` is also connected by `i`
     /// See also: [Symmetric](https://www.w3.org/TR/owl2-syntax/#Symmetric_Object_Properties)
-    SymmetricObjectProperty(ObjectPropertyExpression),
+    SymmetricObjectProperty(ObjectPropertyExpression<A>),
 
     /// The asymmetric characteristic.
     ///
@@ -1003,7 +1005,7 @@ axioms! {
     /// by the ObjectPropertyExpression.
     ///
     /// See also: [Asymmetric](https://www.w3.org/TR/owl2-syntax/#Asymmetric_Object_Properties)
-    AsymmetricObjectProperty(ObjectPropertyExpression),
+    AsymmetricObjectProperty(ObjectPropertyExpression<A>),
 
     /// A transitive relationship between two object properties.
     ///
@@ -1011,7 +1013,7 @@ axioms! {
     /// c` also.
     ///
     /// See also: [TransitiveObjectProperty](https://www.w3.org/TR/owl2-syntax/#Transitive_Object_Properties)
-    TransitiveObjectProperty(ObjectPropertyExpression),
+    TransitiveObjectProperty(ObjectPropertyExpression<A>),
 
     /// A sub data property relationship.
     ///
@@ -1020,8 +1022,8 @@ axioms! {
     ///
     /// See also: [Data Subproperties](https://www.w3.org/TR/owl2-syntax/#Data_Subproperties)
     SubDataPropertyOf {
-        sup:DataProperty,
-        sub:DataProperty
+        sup:DataProperty<A>,
+        sub:DataProperty<A>
     },
 
     /// An equivalent data property relationship.
@@ -1029,7 +1031,7 @@ axioms! {
     /// All these DataProperties are semantically identical.
     ///
     /// See also: [EquivalentDataproperties](https://www.w3.org/TR/owl2-syntax/#Equivalent_Data_Properties)
-    EquivalentDataProperties(Vec<DataProperty>),
+    EquivalentDataProperties(Vec<DataProperty<A>>),
 
     /// A disjoint data property relationship.
     ///
@@ -1037,7 +1039,7 @@ axioms! {
     /// by more than one of these DataProperty relations.
     ///
     /// See also: [DisjointDataProperties](https://www.w3.org/TR/owl2-syntax/#Disjoint_Data_Properties)
-    DisjointDataProperties(Vec<DataProperty>),
+    DisjointDataProperties(Vec<DataProperty<A>>),
 
     /// The domain of a DataProperty.
     ///
@@ -1045,7 +1047,7 @@ axioms! {
     /// of type `ce`.
     ///
     /// See also: [Data Property Domain](https://www.w3.org/TR/owl2-syntax/#Disjoint_Data_Properties)
-    DataPropertyDomain{dp:DataProperty,ce:ClassExpression},
+    DataPropertyDomain{dp:DataProperty<A>,ce:ClassExpression<A>},
 
     /// The range of a DataProperty.
     ///
@@ -1053,7 +1055,7 @@ axioms! {
     /// `l`, then `l` must by in `dr`.
     ///
     /// See also: [Data Property Range](https://www.w3.org/TR/owl2-syntax/#Data_Property_Range)
-    DataPropertyRange{dp:DataProperty,dr:DataRange},
+    DataPropertyRange{dp:DataProperty<A>,dr:DataRange<A>},
 
     /// The functional DataProperty characteristic.
     ///
@@ -1061,14 +1063,14 @@ axioms! {
     /// by this DataProperty.
     ///
     /// See also: [Functional Data Property]:(https://www.w3.org/TR/owl2-syntax/#Functional_Data_Properties)
-    FunctionalDataProperty(DataProperty),
+    FunctionalDataProperty(DataProperty<A>),
 
     /// Defintion of a datatype.
     ///
     /// See also: [Datatype Definitions](https://www.w3.org/TR/owl2-syntax/#Datatype_Definitions)
     DatatypeDefinition {
-        kind: Datatype,
-        range: DataRange
+        kind: Datatype<A>,
+        range: DataRange<A>
     },
 
     /// A key
@@ -1079,21 +1081,21 @@ axioms! {
     /// inferred.
     ///
     /// See also: [Keys](https://www.w3.org/TR/owl2-syntax/#Keys)
-    HasKey{ce:ClassExpression, vpe:Vec<PropertyExpression>},
+    HasKey{ce:ClassExpression<A>, vpe:Vec<PropertyExpression<A>>},
 
     // Assertions
     /// A same individual expression.
     ///
     /// See also: [Individual Equality](https://www.w3.org/TR/owl2-syntax/#Individual_Equality)
     SameIndividual (
-        Vec<Individual>
+        Vec<Individual<A>>
     ),
 
     /// A different individuals expression.
     ///
     /// See also: [Individual Inequality](https://www.w3.org/TR/owl2-syntax/#Individual_Inequality)
     DifferentIndividuals (
-        Vec<Individual>
+        Vec<Individual<A>>
     ),
 
     /// A class assertion expression.
@@ -1102,8 +1104,8 @@ axioms! {
     ///
     /// See also: [Class Assertions](https://www.w3.org/TR/owl2-syntax/#Class_Assertions)
     ClassAssertion {
-        ce: ClassExpression,
-        i: Individual
+        ce: ClassExpression<A>,
+        i: Individual<A>
     },
 
     /// An object property assertion.
@@ -1112,9 +1114,9 @@ axioms! {
     ///
     /// See also: [Positive Object Property Assertions](https://www.w3.org/TR/owl2-syntax/#Positive_Object_Property_Assertions)
     ObjectPropertyAssertion {
-        ope: ObjectPropertyExpression,
-        from: Individual,
-        to: Individual
+        ope: ObjectPropertyExpression<A>,
+        from: Individual<A>,
+        to: Individual<A>
     },
 
     /// A negative object property assertion.
@@ -1123,9 +1125,9 @@ axioms! {
     ///
     /// See also: [Negative Object Property Assertions](https://www.w3.org/TR/owl2-syntax/#Negative_Object_Property_Assertions)
     NegativeObjectPropertyAssertion {
-        ope: ObjectPropertyExpression,
-        from: Individual,
-        to: Individual
+        ope: ObjectPropertyExpression<A>,
+        from: Individual<A>,
+        to: Individual<A>
     },
 
     /// A data property assertion.
@@ -1134,9 +1136,9 @@ axioms! {
     ///
     /// See also: [Data Property Assertion](https://www.w3.org/TR/owl2-syntax/#Positive_Data_Property_Assertions)
     DataPropertyAssertion {
-        dp: DataProperty,
-        from: Individual,
-        to: Literal
+        dp: DataProperty<A>,
+        from: Individual<A>,
+        to: Literal<A>
     },
 
     /// A negative data property assertion.
@@ -1145,9 +1147,9 @@ axioms! {
     ///
     /// See also [Negative Data Property Assertions](https://www.w3.org/TR/owl2-syntax/#Negative_Data_Property_Assertions)
     NegativeDataPropertyAssertion {
-        dp: DataProperty,
-        from: Individual,
-        to: Literal
+        dp: DataProperty<A>,
+        from: Individual<A>,
+        to: Literal<A>
     },
 
     // Annotation Axioms
@@ -1157,8 +1159,8 @@ axioms! {
     /// `annotation_subject`. Annotations refer to an `IRI` rather
     /// than the `NamedEntity` identified by that `IRI`.
     AnnotationAssertion {
-        subject: AnnotationSubject,
-        ann: Annotation
+        subject: AnnotationSubject<A>,
+        ann: Annotation<A>
     },
 
     /// An sub-property assertion for annotation properties.
@@ -1166,20 +1168,20 @@ axioms! {
     /// Implies that any annotation of the type `sub_property` is also
     /// an annotation of the type `super_property`.
     SubAnnotationPropertyOf {
-        sup: AnnotationProperty,
-        sub: AnnotationProperty
+        sup: AnnotationProperty<A>,
+        sub: AnnotationProperty<A>
     },
 
     /// Assert the domain of an `AnnotationProperty`
     AnnotationPropertyDomain {
-        ap: AnnotationProperty,
-        iri: IRI
+        ap: AnnotationProperty<A>,
+        iri: IRI<A>
     },
 
     /// Assert the range of an `AnnotationProperty`
     AnnotationPropertyRange {
-        ap: AnnotationProperty,
-        iri: IRI
+        ap: AnnotationProperty<A>,
+        iri: IRI<A>
     }
 }
 
