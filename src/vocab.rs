@@ -309,7 +309,7 @@ pub fn entity_for_iri<A: ForIRI>(
 
     if type_iri.borrow().len() < 30 {
         return Err(VocabError::GeneralError(format!(
-            "IRI is not for a type of entity:{}",
+            "IRI is not for a type of entity:{:?}",
             type_iri
         )));
     }
@@ -322,7 +322,7 @@ pub fn entity_for_iri<A: ForIRI>(
         "NamedIndividual" => b.named_individual(entity_iri).into(),
         _ => {
             return Err(VocabError::GeneralError(format!(
-                "IRI is not a type of entity:{}",
+                "IRI is not a type of entity:{:?}",
                 type_iri
             )))
         }

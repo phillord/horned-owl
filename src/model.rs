@@ -112,10 +112,10 @@ use std::rc::Rc;
 #[derive(Clone, Debug, Eq, PartialEq, Hash, PartialOrd, Ord)]
 pub struct IRI<A:ForIRI>(A);
 
-pub trait ForIRI: Borrow<str> + Eq + PartialEq + Ord + PartialOrd + Debug + Clone {}
+pub trait ForIRI: Borrow<str> + Eq + Hash + PartialEq + Ord + PartialOrd + Debug + Clone {}
 
 impl<T: ?Sized> ForIRI for T where
-    T: Borrow<str> + Deref + Eq + PartialEq + Ord + PartialOrd + Debug + Clone {}
+    T: Borrow<str> + Eq + Hash + PartialEq + Ord + PartialOrd + Debug + Clone {}
 
 impl<A: ForIRI> Deref for IRI<A> {
     type Target = str;
@@ -359,11 +359,11 @@ macro_rules! named {
                 }
             }
 
-            // impl<'a, A: Borrow<str>> From<&'a IRI<A>> for $name<A> {
-            //     fn from(iri: &IRI<A>) -> $name<A> {
-            //         $name(iri.clone())
-            //     }
-            // }
+            impl<'a, A: ForIRI> From<&'a IRI<A>> for $name<A> {
+                 fn from(iri: &IRI<A>) -> $name<A> {
+                     $name(iri.clone())
+                 }
+            }
 
             impl<A: ForIRI> From<$name<A>> for String {
                 fn from(n: $name<A>) -> String {
@@ -518,7 +518,7 @@ impl From<String> for AnonymousIndividual<Rc<str>> {
 }
 impl<A: ForIRI> From<&IRI<A>> for Individual<A> {
     fn from(iri: &IRI<A>) -> Individual<A> {
-        let ni: NamedIndividual = iri.into();
+        let ni: NamedIndividual<_> = iri.into();
         ni.into()
     }
 }
@@ -591,7 +591,7 @@ impl<A: ForIRI> From<NamedEntity<A>> for Axiom<A> {
 
 impl<A: ForIRI> From<NamedEntity<A>> for AnnotatedAxiom<A> {
     fn from(ne: NamedEntity<A>) -> AnnotatedAxiom<A> {
-        let ax: Axiom = ne.into();
+        let ax: Axiom<_> = ne.into();
         ax.into()
     }
 }
@@ -1268,7 +1268,7 @@ impl<A: ForIRI> From<ObjectProperty<A>> for ObjectPropertyExpression<A> {
 
 impl<A: ForIRI> From<IRI<A>> for ObjectPropertyExpression<A> {
     fn from(iri: IRI<A>) -> ObjectPropertyExpression<A> {
-        let op: ObjectProperty = iri.into();
+        let op: ObjectProperty<_> = iri.into();
         op.into()
     }
 }
@@ -1603,8 +1603,8 @@ pub trait MutableOntology<A: ForIRI> {
     where
         N: Into<NamedEntity<A>>,
     {
-        let ne: NamedEntity = ne.into();
-        let ax: Axiom = ne.into();
+        let ne: NamedEntity<_> = ne.into();
+        let ax: Axiom<_> = ne.into();
         self.insert(ax)
     }
 }
