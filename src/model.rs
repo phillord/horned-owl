@@ -138,19 +138,19 @@ impl<A: ForIRI> Borrow<str> for IRI<A> {
 }
 
 impl From<&IRI<Rc<str>>> for Rc<str> {
-    fn from(i: &IRI) -> Rc<str> {
+    fn from(i: &IRI<Rc<str>>) -> Rc<str> {
         i.0.clone().into()
     }
 }
 
 impl<A: ForIRI> From<&IRI<A>> for String {
-    fn from(i: &IRI) -> String {
+    fn from(i: &IRI<A>) -> String {
         i.0.as_ref().to_string()
     }
 }
 
 impl<A: ForIRI> From<IRI<A>> for String {
-    fn from(i: IRI) -> String {
+    fn from(i: IRI<A>) -> String {
         i.0.as_ref().to_string()
     }
 }
@@ -175,11 +175,11 @@ impl<A: ForIRI> Display for IRI<A> {
 // both could be replaced by traits or enums straight-forwardly
 // enough, to enable threading.
 #[derive(Debug, Default)]
-pub struct Build(Rc<RefCell<BTreeSet<IRI>>>);
+pub struct Build<A: ForIRI>(RefCell<BTreeSet<IRI<A>>>);
 
-impl Build {
-    pub fn new() -> Build {
-        Build(Rc::new(RefCell::new(BTreeSet::new())))
+impl<A: ForIRI> Build<A> {
+    pub fn new() -> Build<A> {
+        Build(RefCell::new(BTreeSet::new()))
     }
 
     /// Constructs a new `IRI`
@@ -192,7 +192,7 @@ impl Build {
     /// let iri = b.iri("http://www.example.com");
     /// assert_eq!("http://www.example.com", String::from(iri));
     /// ```
-    pub fn iri<S>(&self, s: S) -> IRI
+    pub fn iri<S>(&self, s: S) -> IRI<A>
     where
         S: AsRef<str>,
     {
@@ -220,7 +220,7 @@ impl Build {
     /// assert_eq!(c1, c2);
     /// ```
     ///
-    pub fn class<S>(&self, s: S) -> Class
+    pub fn class<S>(&self, s: S) -> Class<A>
     where
         S: AsRef<str>,
     {
@@ -239,7 +239,7 @@ impl Build {
     ///
     /// assert_eq!(obp1, obp2);
     /// ```
-    pub fn object_property<S>(&self, s: S) -> ObjectProperty
+    pub fn object_property<S>(&self, s: S) -> ObjectProperty<A>
     where
         S: AsRef<str>,
     {
@@ -258,7 +258,7 @@ impl Build {
     ///
     /// assert_eq!(anp1, anp2);
     /// ```
-    pub fn annotation_property<S>(&self, s: S) -> AnnotationProperty
+    pub fn annotation_property<S>(&self, s: S) -> AnnotationProperty<A>
     where
         S: AsRef<str>,
     {
@@ -277,7 +277,7 @@ impl Build {
     ///
     /// assert_eq!(dp1, dp2);
     /// ```
-    pub fn data_property<S>(&self, s: S) -> DataProperty
+    pub fn data_property<S>(&self, s: S) -> DataProperty<A>
     where
         S: AsRef<str>,
     {
@@ -296,7 +296,7 @@ impl Build {
     ///
     /// assert_eq!(ni1, ni2);
     /// ```
-    pub fn named_individual<S>(&self, s: S) -> NamedIndividual
+    pub fn named_individual<S>(&self, s: S) -> NamedIndividual<A>
     where
         S: AsRef<str>,
     {
@@ -315,7 +315,7 @@ impl Build {
     ///
     /// assert_eq!(ni1, ni2);
     /// ```
-    pub fn datatype<S>(&self, s: S) -> Datatype
+    pub fn datatype<S>(&self, s: S) -> Datatype<A>
     where
         S: AsRef<str>,
     {
@@ -591,11 +591,11 @@ impl<A: ForIRI> From<NamedEntity<A>> for AnnotatedAxiom<A> {
 
 /// An interface providing access to any `Annotation` attached to an
 /// entity.
-trait Annotated {
+trait Annotated<A: ForIRI> {
     /// Return the annotation
     ///
     /// The returned `BTreeSet` may be empty.
-    fn annotation(&self) -> &BTreeSet<Annotation>;
+    fn annotation(&self) -> &BTreeSet<Annotation<A>>;
 }
 
 /// An interface providing access to the `AxiomKind`
@@ -1187,7 +1187,7 @@ axioms! {
 
 // Non-axiom data structures associated with OWL
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub enum Literal {
+pub enum Literal<A: ForIRI> {
     // Simple Literals are syntactic sugar for a Datatype with type:
     // http://www.w3.org/2001/XMLSchema#string
     Simple { literal: String },
@@ -1195,10 +1195,10 @@ pub enum Literal {
     // an implicit) of datatype
     // http://www.w3.org/1999/02/22-rdf-syntax-ns#langString
     Language { literal: String, lang: String },
-    Datatype { literal: String, datatype_iri: IRI },
+    Datatype { literal: String, datatype_iri: IRI<A> },
 }
 
-impl Literal {
+impl<A: ForIRI> Literal<A> {
     pub fn literal(&self) -> &String {
         match self {
             Literal::Simple { literal } => literal,
@@ -1220,60 +1220,60 @@ impl Literal {
 /// Annotations are associated an IRI and describe that IRI in a
 /// particular way, defined by the property.
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub struct Annotation {
-    pub ap: AnnotationProperty,
-    pub av: AnnotationValue,
+pub struct Annotation<A: ForIRI> {
+    pub ap: AnnotationProperty<A>,
+    pub av: AnnotationValue<A>,
 }
 
 /// The value of an annotation
 ///
 /// This Enum is currently not complete.
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub enum AnnotationValue {
-    Literal(Literal),
-    IRI(IRI),
+pub enum AnnotationValue<A: ForIRI> {
+    Literal(Literal<A>),
+    IRI(IRI<A>),
 }
 
-impl From<Literal> for AnnotationValue {
-    fn from(literal: Literal) -> AnnotationValue {
+impl<A: ForIRI> From<Literal<A>> for AnnotationValue<A> {
+    fn from(literal: Literal<A>) -> AnnotationValue<A> {
         AnnotationValue::Literal(literal)
     }
 }
 
-impl From<IRI> for AnnotationValue {
-    fn from(iri: IRI) -> AnnotationValue {
+impl<A: ForIRI> From<IRI<A>> for AnnotationValue<A> {
+    fn from(iri: IRI<A>) -> AnnotationValue<A> {
         AnnotationValue::IRI(iri)
     }
 }
 
 /// A object property expression
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub enum ObjectPropertyExpression {
-    ObjectProperty(ObjectProperty),
-    InverseObjectProperty(ObjectProperty),
+pub enum ObjectPropertyExpression<A: ForIRI> {
+    ObjectProperty(ObjectProperty<A>),
+    InverseObjectProperty(ObjectProperty<A>),
 }
 
-impl From<ObjectProperty> for ObjectPropertyExpression {
-    fn from(op: ObjectProperty) -> ObjectPropertyExpression {
+impl<A: ForIRI> From<ObjectProperty<A>> for ObjectPropertyExpression<A> {
+    fn from(op: ObjectProperty<A>) -> ObjectPropertyExpression<A> {
         ObjectPropertyExpression::ObjectProperty(op)
     }
 }
 
-impl From<IRI> for ObjectPropertyExpression {
-    fn from(iri: IRI) -> ObjectPropertyExpression {
+impl<A: ForIRI> From<IRI<A>> for ObjectPropertyExpression<A> {
+    fn from(iri: IRI<A>) -> ObjectPropertyExpression<A> {
         let op: ObjectProperty = iri.into();
         op.into()
     }
 }
 
-impl From<&IRI> for ObjectPropertyExpression {
-    fn from(iri: &IRI) -> ObjectPropertyExpression {
+impl<A: ForIRI> From<&IRI<A>> for ObjectPropertyExpression<A> {
+    fn from(iri: &IRI<A>) -> ObjectPropertyExpression<A> {
         iri.clone().into()
     }
 }
 
-impl ObjectPropertyExpression {
-    pub fn as_property(&self) -> Option<&ObjectProperty> {
+impl<A: ForIRI> ObjectPropertyExpression<A> {
+    pub fn as_property(&self) -> Option<&ObjectProperty<A>> {
         match self {
             ObjectPropertyExpression::ObjectProperty(op) => Some(op),
             ObjectPropertyExpression::InverseObjectProperty(_) => None,
@@ -1283,43 +1283,43 @@ impl ObjectPropertyExpression {
 
 /// A sub-object property expression
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub enum SubObjectPropertyExpression {
+pub enum SubObjectPropertyExpression<A: ForIRI> {
     // We use Vec here rather than BTreeSet because, perhaps
     // surprisingly, BTreeSet is not itself hashable.
-    ObjectPropertyChain(Vec<ObjectPropertyExpression>),
-    ObjectPropertyExpression(ObjectPropertyExpression),
+    ObjectPropertyChain(Vec<ObjectPropertyExpression<A>>),
+    ObjectPropertyExpression(ObjectPropertyExpression<A>),
 }
 
-impl From<ObjectPropertyExpression> for SubObjectPropertyExpression {
-    fn from(ope: ObjectPropertyExpression) -> SubObjectPropertyExpression {
+impl<A: ForIRI> From<ObjectPropertyExpression<A>> for SubObjectPropertyExpression<A> {
+    fn from(ope: ObjectPropertyExpression<A>) -> SubObjectPropertyExpression<A> {
         SubObjectPropertyExpression::ObjectPropertyExpression(ope)
     }
 }
 
 /// A property expression
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub enum PropertyExpression {
-    ObjectPropertyExpression(ObjectPropertyExpression),
-    DataProperty(DataProperty),
-    AnnotationProperty(AnnotationProperty),
+pub enum PropertyExpression<A: ForIRI> {
+    ObjectPropertyExpression(ObjectPropertyExpression<A>),
+    DataProperty(DataProperty<A>),
+    AnnotationProperty(AnnotationProperty<A>),
 }
 
-impl From<ObjectPropertyExpression> for PropertyExpression {
-    fn from(ope: ObjectPropertyExpression) -> PropertyExpression {
+impl<A: ForIRI> From<ObjectPropertyExpression<A>> for PropertyExpression<A> {
+    fn from(ope: ObjectPropertyExpression<A>) -> PropertyExpression<A> {
         PropertyExpression::ObjectPropertyExpression(ope)
     }
 }
-impl From<DataProperty> for PropertyExpression {
-    fn from(dp: DataProperty) -> PropertyExpression {
+impl<A: ForIRI> From<DataProperty<A>> for PropertyExpression<A> {
+    fn from(dp: DataProperty<A>) -> PropertyExpression<A> {
         PropertyExpression::DataProperty(dp)
     }
 }
 
 // Data!!!
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub struct FacetRestriction {
+pub struct FacetRestriction<A: ForIRI> {
     pub f: Facet,
-    pub l: Literal,
+    pub l: Literal<A>,
 }
 
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
@@ -1338,17 +1338,17 @@ pub enum Facet {
 }
 
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub enum DataRange {
-    Datatype(Datatype),
-    DataIntersectionOf(Vec<DataRange>),
-    DataUnionOf(Vec<DataRange>),
-    DataComplementOf(Box<DataRange>),
-    DataOneOf(Vec<Literal>),
-    DatatypeRestriction(Datatype, Vec<FacetRestriction>),
+pub enum DataRange<A: ForIRI> {
+    Datatype(Datatype<A>),
+    DataIntersectionOf(Vec<DataRange<A>>),
+    DataUnionOf(Vec<DataRange<A>>),
+    DataComplementOf(Box<DataRange<A>>),
+    DataOneOf(Vec<Literal<A>>),
+    DatatypeRestriction(Datatype<A>, Vec<FacetRestriction<A>>),
 }
 
-impl From<Datatype> for DataRange {
-    fn from(dr: Datatype) -> DataRange {
+impl<A: ForIRI> From<Datatype<A>> for DataRange<A> {
+    fn from(dr: Datatype<A>) -> DataRange<A> {
         DataRange::Datatype(dr)
     }
 }
@@ -1358,33 +1358,33 @@ impl From<Datatype> for DataRange {
 /// As well as a named class, it is possible to define classes of
 /// individuals based on these class constructors.
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub enum ClassExpression {
+pub enum ClassExpression<A: ForIRI> {
     /// A named class
-    Class(Class),
+    Class(Class<A>),
 
     /// The boolean and
     ///
     /// The class of individuals which are individuals of all these
     /// classes.
-    ObjectIntersectionOf(Vec<ClassExpression>),
+    ObjectIntersectionOf(Vec<ClassExpression<A>>),
 
     /// The boolean or
     ///
     /// The class of individuals which are individuals of any of these
     /// classes.
-    ObjectUnionOf(Vec<ClassExpression>),
+    ObjectUnionOf(Vec<ClassExpression<A>>),
 
     /// The boolean not
     ///
     /// The class of individuals which are not individuals of any of
     /// these classes.
-    ObjectComplementOf(Box<ClassExpression>),
+    ObjectComplementOf(Box<ClassExpression<A>>),
 
     /// An enumeration of individuals
     ///
     /// This is the class containing exactly the given set of
     /// individuals.
-    ObjectOneOf(Vec<Individual>),
+    ObjectOneOf(Vec<Individual<A>>),
 
     /// An existential relationship
     ///
@@ -1392,8 +1392,8 @@ pub enum ClassExpression {
     /// relationship `o` to a class expression `ce`. Every individual
     /// in `i` must have this relationship to one individual in `ce`.
     ObjectSomeValuesFrom {
-        ope: ObjectPropertyExpression,
-        bce: Box<ClassExpression>,
+        ope: ObjectPropertyExpression<A>,
+        bce: Box<ClassExpression<A>>,
     },
 
     /// A universal relationship
@@ -1403,8 +1403,8 @@ pub enum ClassExpression {
     /// `ce`. This does not imply that the `i` necessarily has any
     /// relation `r`.
     ObjectAllValuesFrom {
-        ope: ObjectPropertyExpression,
-        bce: Box<ClassExpression>,
+        ope: ObjectPropertyExpression<A>,
+        bce: Box<ClassExpression<A>>,
     },
 
     /// An existential relationship to an individual
@@ -1413,15 +1413,15 @@ pub enum ClassExpression {
     /// relationship `o` to another individual `i`. Every individual
     /// in `c` must have this relationship to the individual `i`
     ObjectHasValue {
-        ope: ObjectPropertyExpression,
-        i: Individual,
+        ope: ObjectPropertyExpression<A>,
+        i: Individual<A>,
     },
 
     /// The class of individuals which have a relation to themselves
     ///
     /// Given a object property `r`, this class defines all the
     /// individuals where `i r i`.
-    ObjectHasSelf(ObjectPropertyExpression),
+    ObjectHasSelf(ObjectPropertyExpression<A>),
 
     /// A min cardinality relationship between individuals
     ///
@@ -1430,8 +1430,8 @@ pub enum ClassExpression {
     /// least `n` other individuals.
     ObjectMinCardinality {
         n: u32,
-        ope: ObjectPropertyExpression,
-        bce: Box<ClassExpression>,
+        ope: ObjectPropertyExpression<A>,
+        bce: Box<ClassExpression<A>>,
     },
 
     /// A max cardinality relationship between individuals
@@ -1441,8 +1441,8 @@ pub enum ClassExpression {
     /// most `n` other individuals.
     ObjectMaxCardinality {
         n: u32,
-        ope: ObjectPropertyExpression,
-        bce: Box<ClassExpression>,
+        ope: ObjectPropertyExpression<A>,
+        bce: Box<ClassExpression<A>>,
     },
 
     /// An exact cardinality relationship between individuals
@@ -1452,8 +1452,8 @@ pub enum ClassExpression {
     /// `n` other individuals.
     ObjectExactCardinality {
         n: u32,
-        ope: ObjectPropertyExpression,
-        bce: Box<ClassExpression>,
+        ope: ObjectPropertyExpression<A>,
+        bce: Box<ClassExpression<A>>,
     },
 
     /// An exististential relationship.
@@ -1463,7 +1463,7 @@ pub enum ClassExpression {
     /// `i` must have this relationship to data constrainted by `dr`.
     ///
     /// See also: [Existential Quantification](https://www.w3.org/TR/owl2-syntax/#Existential_Quantification_2)
-    DataSomeValuesFrom { dp: DataProperty, dr: DataRange },
+    DataSomeValuesFrom { dp: DataProperty<A>, dr: DataRange<A> },
 
     /// A universal relationship.
     ///
@@ -1472,7 +1472,7 @@ pub enum ClassExpression {
     /// type `dr`.
     ///
     /// See also [Universal Quantification](https://www.w3.org/TR/owl2-syntax/#Universal_Quantification_2)
-    DataAllValuesFrom { dp: DataProperty, dr: DataRange },
+    DataAllValuesFrom { dp: DataProperty<A>, dr: DataRange<A> },
 
     /// A has-value relationship.
 
@@ -1480,7 +1480,7 @@ pub enum ClassExpression {
     /// relationship `dp` to exactly the literal `l`.
 
     /// See also [Value Restriction](https://www.w3.org/TR/owl2-syntax/#Literal_Value_Restriction)
-    DataHasValue { dp: DataProperty, l: Literal },
+    DataHasValue { dp: DataProperty<A>, l: Literal<A> },
 
     /// A minimum cardinality restriction
 
@@ -1490,8 +1490,8 @@ pub enum ClassExpression {
     /// See also [Min Cardinality](https://www.w3.org/TR/owl2-syntax/#Minimum_Cardinality_2)
     DataMinCardinality {
         n: u32,
-        dp: DataProperty,
-        dr: DataRange,
+        dp: DataProperty<A>,
+        dr: DataRange<A>,
     },
 
     /// A max cardinality restriction
@@ -1502,8 +1502,8 @@ pub enum ClassExpression {
     /// See also [Max Cardinality](https://www.w3.org/TR/owl2-syntax/#Maximum_Cardinality_2)
     DataMaxCardinality {
         n: u32,
-        dp: DataProperty,
-        dr: DataRange,
+        dp: DataProperty<A>,
+        dr: DataRange<A>,
     },
 
     /// An exact cardinality restriction
@@ -1514,25 +1514,25 @@ pub enum ClassExpression {
     /// See also [Exactly Cardinality](https://www.w3.org/TR/owl2-syntax/#Exact_Cardinality_2)
     DataExactCardinality {
         n: u32,
-        dp: DataProperty,
-        dr: DataRange,
+        dp: DataProperty<A>,
+        dr: DataRange<A>,
     },
 }
 
-impl From<Class> for ClassExpression {
-    fn from(c: Class) -> ClassExpression {
+impl<A: ForIRI> From<Class<A>> for ClassExpression<A> {
+    fn from(c: Class<A>) -> ClassExpression<A> {
         ClassExpression::Class(c)
     }
 }
 
-impl<'a> From<&'a Class> for ClassExpression {
-    fn from(c: &'a Class) -> ClassExpression {
+impl<'a, A: ForIRI> From<&'a Class<A>> for ClassExpression<A> {
+    fn from(c: &'a Class<A>) -> ClassExpression<A> {
         ClassExpression::Class(c.clone())
     }
 }
 
-impl From<Class> for Box<ClassExpression> {
-    fn from(c: Class) -> Box<ClassExpression> {
+impl<A: ForIRI> From<Class<A>> for Box<ClassExpression<A>> {
+    fn from(c: Class) -> Box<ClassExpression<A>> {
         Box::new(c.into())
     }
 }
@@ -1543,21 +1543,21 @@ impl From<Class> for Box<ClassExpression> {
 /// stable over the lifetime of the ontology, and a version IRI which
 /// is expected to change between versions.
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
-pub struct OntologyID {
-    pub iri: Option<IRI>,
-    pub viri: Option<IRI>,
+pub struct OntologyID<A: ForIRI> {
+    pub iri: Option<IRI<A>>,
+    pub viri: Option<IRI<A>>,
 }
 
 /// Access or change the `OntologyID` of an `Ontology`
-pub trait Ontology {
-    fn id(&self) -> &OntologyID;
-    fn mut_id(&mut self) -> &mut OntologyID;
-    fn doc_iri(&self) -> &Option<IRI>;
-    fn mut_doc_iri(&mut self) -> &mut Option<IRI>;
+pub trait Ontology<A: ForIRI> {
+    fn id(&self) -> &OntologyID<A>;
+    fn mut_id(&mut self) -> &mut OntologyID<A>;
+    fn doc_iri(&self) -> &Option<IRI<A>>;
+    fn mut_doc_iri(&mut self) -> &mut Option<IRI<A>>;
 }
 
 /// Add or remove axioms to an `MutableOntology`
-pub trait MutableOntology {
+pub trait MutableOntology<A: ForIRI> {
     /// Insert an axiom into the ontology.
     ///
     /// # Examples
@@ -1571,15 +1571,15 @@ pub trait MutableOntology {
     /// ```
     ///
     /// See `declare` for an easier way to declare named entities.
-    fn insert<A>(&mut self, ax: A) -> bool
+    fn insert<AA>(&mut self, ax: AA) -> bool
     where
-        A: Into<AnnotatedAxiom>;
+        AA: Into<AnnotatedAxiom<A>>;
 
-    fn remove(&mut self, ax: &AnnotatedAxiom) -> bool {
+    fn remove(&mut self, ax: &AnnotatedAxiom<A>) -> bool {
         self.take(ax).is_some()
     }
 
-    fn take(&mut self, ax: &AnnotatedAxiom) -> Option<AnnotatedAxiom>;
+    fn take(&mut self, ax: &AnnotatedAxiom<A>) -> Option<AnnotatedAxiom<A>>;
 
     /// Declare an NamedEntity for the ontology.
     ///
@@ -1594,7 +1594,7 @@ pub trait MutableOntology {
     /// ```
     fn declare<N>(&mut self, ne: N) -> bool
     where
-        N: Into<NamedEntity>,
+        N: Into<NamedEntity<A>>,
     {
         let ne: NamedEntity = ne.into();
         let ax: Axiom = ne.into();
