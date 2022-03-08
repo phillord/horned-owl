@@ -39,11 +39,11 @@ macro_rules! onimpl {
         onimpl!($kind, $method, stringify!($kind));
     };
     ($kind:ident, $method:ident, $skind:expr) => {
-        impl AxiomMappedIndex {
+        impl<A: ForIRI> AxiomMappedIndex<A> {
             #[doc = "Return all instances of"]
             #[doc = $skind]
             #[doc = "in the ontology."]
-            pub fn $method(&self) -> impl Iterator<Item = &$kind> {
+            pub fn $method(&self) -> impl Iterator<Item = &$kind<A>> {
                 on!(self, $kind)
             }
         }
@@ -67,8 +67,11 @@ impl<A: ForIRI> AxiomMappedIndex<A> {
     /// assert_eq!(o, o2);
     /// ```
     pub fn new() -> AxiomMappedIndex<A> {
-        AxiomMappedIndex::default()
+        AxiomMappedIndex{
+            axiom: RefCell::new(BTreeMap::new())
+        }
     }
+
     /// Fetch the axioms hashmap as a raw pointer.
     ///
     /// This method also ensures that the BTreeSet for `axk` is
@@ -97,7 +100,7 @@ impl<A: ForIRI> AxiomMappedIndex<A> {
     }
 
     /// Gets an iterator that visits the annotated axioms of the ontology.
-    pub fn iter(&self) -> AxiomMappedIter {
+    pub fn iter(&self) -> AxiomMappedIter<A> {
         // TODO -- what can't this just use flat_map?
         AxiomMappedIter {
             ont: self,
@@ -276,6 +279,18 @@ impl<A: ForIRI> OntologyIndex<A> for AxiomMappedIndex<A> {
 
 pub type AxiomMappedOntology<A> = OneIndexedOntology<A, AxiomMappedIndex<A>>;
 
+impl<A: ForIRI> AxiomMappedOntology<A> {
+    pub fn new_amo() -> AxiomMappedOntology<A> {
+        OneIndexedOntology::new(AxiomMappedIndex::new())
+    }
+}
+
+impl AxiomMappedOntology<Rc<str>> {
+    pub fn new_rc() -> AxiomMappedOntology<Rc<str>> {
+        AxiomMappedOntology::new_amo()
+    }
+}
+
 /// An owning iterator over the annotated axioms of an `Ontology`.
 impl<A: ForIRI> IntoIterator for AxiomMappedOntology<A> {
     type Item = AnnotatedAxiom<A>;
@@ -287,7 +302,7 @@ impl<A: ForIRI> IntoIterator for AxiomMappedOntology<A> {
 
 impl<A: ForIRI> From<SetOntology<A>> for AxiomMappedOntology<A> {
     fn from(mut so: SetOntology<A>) -> AxiomMappedOntology<A> {
-        let mut amo = AxiomMappedOntology::default();
+        let mut amo = AxiomMappedOntology::new_amo();
         std::mem::swap(amo.mut_id(), &mut so.mut_id());
         for ax in so {
             amo.insert(ax);
@@ -298,7 +313,7 @@ impl<A: ForIRI> From<SetOntology<A>> for AxiomMappedOntology<A> {
 
 impl<A: ForIRI> From<AxiomMappedOntology<A>> for SetOntology<A> {
     fn from(mut amo: AxiomMappedOntology<A>) -> SetOntology<A> {
-        let mut so = SetOntology::default();
+        let mut so = SetOntology::new();
         std::mem::swap(so.mut_id(), amo.mut_id());
 
         for ax in amo {

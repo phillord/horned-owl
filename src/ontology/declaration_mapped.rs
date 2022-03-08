@@ -1,30 +1,30 @@
 //! An index that provides rapid look up via declaration kind
 
-use crate::model::{AnnotatedAxiom, Axiom, AxiomKind, Kinded, NamedEntityKind, IRI};
+use crate::model::{AnnotatedAxiom, Axiom, AxiomKind, Kinded, NamedEntityKind, IRI, ForIRI};
 
 use super::indexed::OntologyIndex;
 
 use std::{collections::HashMap, rc::Rc};
 
 #[derive(Debug, Default)]
-pub struct DeclarationMappedIndex(HashMap<IRI, NamedEntityKind>);
+pub struct DeclarationMappedIndex<A: ForIRI>(HashMap<IRI<A>, NamedEntityKind>);
 
-impl DeclarationMappedIndex {
-    pub fn is_annotation_property(&self, iri: &IRI) -> bool {
+impl<A: ForIRI> DeclarationMappedIndex<A> {
+    pub fn is_annotation_property(&self, iri: &IRI<A>) -> bool {
         match self.declaration_kind(iri) {
             Some(NamedEntityKind::AnnotationProperty) => true,
             _ => false,
         }
     }
 
-    pub fn declaration_kind(&self, iri: &IRI) -> Option<NamedEntityKind> {
+    pub fn declaration_kind(&self, iri: &IRI<A>) -> Option<NamedEntityKind> {
         self.0
             .get(iri)
             .cloned()
             .or_else(|| crate::vocab::to_built_in_entity(iri))
     }
 
-    fn aa_to_ne(&self, ax: &AnnotatedAxiom) -> Option<NamedEntityKind> {
+    fn aa_to_ne(&self, ax: &AnnotatedAxiom<A>) -> Option<NamedEntityKind> {
         match ax.kind() {
             AxiomKind::DeclareClass
             | AxiomKind::DeclareObjectProperty
@@ -44,7 +44,7 @@ impl DeclarationMappedIndex {
         }
     }
 
-    fn aa_to_iri(&self, ax: &AnnotatedAxiom) -> Option<IRI> {
+    fn aa_to_iri(&self, ax: &AnnotatedAxiom<A>) -> Option<IRI<A>> {
         match ax.kind() {
             AxiomKind::DeclareClass
             | AxiomKind::DeclareObjectProperty
@@ -71,8 +71,8 @@ macro_rules! some {
     };
 }
 
-impl OntologyIndex for DeclarationMappedIndex {
-    fn index_insert(&mut self, ax: Rc<AnnotatedAxiom>) -> bool {
+impl<A: ForIRI> OntologyIndex<A> for DeclarationMappedIndex<A> {
+    fn index_insert(&mut self, ax: Rc<AnnotatedAxiom<A>>) -> bool {
         let s = some! {
             self.0.insert(self.aa_to_iri(&*ax)?,
                           self.aa_to_ne(&*ax)?)
@@ -80,7 +80,7 @@ impl OntologyIndex for DeclarationMappedIndex {
         s.is_some()
     }
 
-    fn index_take(&mut self, ax: &AnnotatedAxiom) -> Option<AnnotatedAxiom> {
+    fn index_take(&mut self, ax: &AnnotatedAxiom<A>) -> Option<AnnotatedAxiom<A>> {
         let s = some! {
             self.0.remove(&self.aa_to_iri(&*ax)?)
         };
@@ -92,7 +92,7 @@ impl OntologyIndex for DeclarationMappedIndex {
         }
     }
 
-    fn index_remove(&mut self, ax: &AnnotatedAxiom) -> bool {
+    fn index_remove(&mut self, ax: &AnnotatedAxiom<A>) -> bool {
         let s = some! {
             self.0.remove(&self.aa_to_iri(&*ax)?)
         };

@@ -1549,10 +1549,16 @@ impl<A: ForIRI> From<Class<A>> for Box<ClassExpression<A>> {
 /// An ontology is identified by an IRI which is expected to remain
 /// stable over the lifetime of the ontology, and a version IRI which
 /// is expected to change between versions.
-#[derive(Clone, Debug, Default, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct OntologyID<A: ForIRI> {
     pub iri: Option<IRI<A>>,
     pub viri: Option<IRI<A>>,
+}
+
+impl<A:ForIRI> Default for OntologyID<A> {
+    fn default() -> OntologyID<A> {
+        OntologyID { iri: None, viri: None }
+    }
 }
 
 /// Access or change the `OntologyID` of an `Ontology`

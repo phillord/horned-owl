@@ -8,7 +8,7 @@ use std::rc::Rc;
 #[derive(Debug, Default)]
 pub struct LogicallyEqualIndex<A: ForIRI>(HashMap<Axiom<A>, Rc<AnnotatedAxiom<A>>>);
 
-impl<A: ForIRI> OntologyIndex for LogicallyEqualIndex<A> {
+impl<A: ForIRI> OntologyIndex<A> for LogicallyEqualIndex<A> {
     fn index_insert(&mut self, ax: Rc<AnnotatedAxiom<A>>) -> bool {
         self.0.insert(ax.axiom.clone(), ax).is_some()
     }
@@ -36,39 +36,41 @@ impl<A: ForIRI> LogicallyEqualIndex<A> {
     }
 }
 
-impl<A: ForIRI, I: OntologyIndex> AsRef<LogicallyEqualIndex<A>> for TwoIndexedOntology<A, LogicallyEqualIndex<A>> {
+impl<A: ForIRI, I: OntologyIndex<A>> AsRef<LogicallyEqualIndex<A>>
+    for TwoIndexedOntology<A, I, LogicallyEqualIndex<A>> {
     fn as_ref(&self) -> &LogicallyEqualIndex<A> {
         self.j()
     }
 }
 
-impl<A: ForIRI, I, J> AsRef<LogicallyEqualIndex<A>> for ThreeIndexedOntology<A, I, J, LogicallyEqualIndex<A>>
+impl<A: ForIRI, I, J> AsRef<LogicallyEqualIndex<A>>
+    for ThreeIndexedOntology<A, I, J, LogicallyEqualIndex<A>>
 where
-    I: OntologyIndex,
-    J: OntologyIndex,
+    I: OntologyIndex<A>,
+    J: OntologyIndex<A>,
 {
-    fn as_ref(&self) -> &LogicallyEqualIndex {
+    fn as_ref(&self) -> &LogicallyEqualIndex<A> {
         self.k()
     }
 }
 
-pub fn update_or_insert_logically_equal_axiom<'a, O>(o: &mut O, axiom: AnnotatedAxiom)
+pub fn update_or_insert_logically_equal_axiom<'a, A: ForIRI, O>(o: &mut O, axiom: AnnotatedAxiom<A>)
 where
-    O: MutableOntology + AsRef<LogicallyEqualIndex>,
+    O: MutableOntology<A> + AsRef<LogicallyEqualIndex<A>>,
 {
     if let Some(axiom) = update_logically_equal_axiom(o, axiom) {
         o.insert(axiom);
     }
 }
 
-pub fn update_logically_equal_axiom<'a, O>(
+pub fn update_logically_equal_axiom<'a, A: ForIRI, O>(
     o: &mut O,
-    mut axiom: AnnotatedAxiom,
-) -> Option<AnnotatedAxiom>
+    mut axiom: AnnotatedAxiom<A>,
+) -> Option<AnnotatedAxiom<A>>
 where
-    O: MutableOntology + AsRef<LogicallyEqualIndex>,
+    O: MutableOntology<A> + AsRef<LogicallyEqualIndex<A>>,
 {
-    let lei: &LogicallyEqualIndex = o.as_ref();
+    let lei: &LogicallyEqualIndex<_> = o.as_ref();
     let src = lei.logical_get_rc(&axiom);
     // Does the logically equal axiom exist
     if let Some(rc) = src {
