@@ -10,6 +10,10 @@ use std::{collections::HashMap, rc::Rc};
 pub struct DeclarationMappedIndex<A: ForIRI>(HashMap<IRI<A>, NamedEntityKind>);
 
 impl<A: ForIRI> DeclarationMappedIndex<A> {
+    pub fn new() -> DeclarationMappedIndex<A> {
+        DeclarationMappedIndex(HashMap::new())
+    }
+
     pub fn is_annotation_property(&self, iri: &IRI<A>) -> bool {
         match self.declaration_kind(iri) {
             Some(NamedEntityKind::AnnotationProperty) => true,
@@ -101,30 +105,39 @@ impl<A: ForIRI> OntologyIndex<A> for DeclarationMappedIndex<A> {
     }
 }
 
+impl DeclarationMappedIndex<Rc<str>> {
+    pub fn new_rc() -> Self {
+        Self::new()
+    }
+}
+
+
 #[cfg(test)]
 mod test {
+    use std::rc::Rc;
+
     use super::DeclarationMappedIndex;
     use crate::model::{AnnotatedAxiom, Build, NamedEntity, NamedEntityKind};
     use crate::ontology::indexed::OntologyIndex;
     use crate::vocab::{WithIRI, OWL};
-    fn stuff() -> (AnnotatedAxiom, AnnotatedAxiom, AnnotatedAxiom) {
-        let b = Build::new();
-        let c: NamedEntity = b.class("http://www.example.com/c").into();
-        let o: NamedEntity = b.object_property("http://www.example.com/p").into();
-        let b: NamedEntity = b.data_property("http://www.example.com/d").into();
+    fn stuff() -> (AnnotatedAxiom<Rc<str>>, AnnotatedAxiom<Rc<str>>, AnnotatedAxiom<Rc<str>>) {
+        let b = Build::new_rc();
+        let c: NamedEntity<_> = b.class("http://www.example.com/c").into();
+        let o: NamedEntity<_> = b.object_property("http://www.example.com/p").into();
+        let b: NamedEntity<_> = b.data_property("http://www.example.com/d").into();
 
         (c.into(), o.into(), b.into())
     }
 
     #[test]
     fn test_cons() {
-        let _d = DeclarationMappedIndex::default();
+        let _d:DeclarationMappedIndex<Rc<str>> = DeclarationMappedIndex::new();
         assert!(true);
     }
 
     #[test]
     fn test_insert() {
-        let mut d = DeclarationMappedIndex::default();
+        let mut d = DeclarationMappedIndex::new();
         let s = stuff();
         assert!(d.index_insert(s.0.into()));
         assert!(d.index_insert(s.1.into()));
@@ -133,7 +146,7 @@ mod test {
 
     #[test]
     fn test_declaration() {
-        let mut d = DeclarationMappedIndex::default();
+        let mut d = DeclarationMappedIndex::new();
         let s = stuff();
         assert!(d.index_insert(s.0.into()));
         assert!(d.index_insert(s.1.into()));
@@ -156,10 +169,10 @@ mod test {
 
     #[test]
     fn test_declaration_builtin() {
-        let d = DeclarationMappedIndex::default();
-        let b = Build::new();
+        let d = DeclarationMappedIndex::new();
+        let b = Build::new_rc();
         assert_eq!(
-            d.declaration_kind(&b.iri(OWL::TopDataProperty.iri_s())),
+            d.declaration_kind(&b.iri(OWL::TopDataProperty.iri_str())),
             Some(NamedEntityKind::DataProperty)
         );
     }

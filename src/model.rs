@@ -42,7 +42,7 @@
 //! ```
 //! # use horned_owl::model::*;
 //! // TransitiveObjectProperty(ObjectProperty)
-//! let b = Build::new();
+//! let b = Build::new_rc();
 //! let top = TransitiveObjectProperty(ObjectPropertyExpression::ObjectProperty
 //!                          (b.object_property("http://www.example.com/op")));
 //! ```
@@ -50,7 +50,7 @@
 //! ```
 //! # use horned_owl::model::*;
 //! // ObjectSomeValuesFrom{ope:PropertyExpression, ce:ClassExpression}
-//! let b = Build::new();
+//! let b = Build::new_rc();
 //! let some = ClassExpression::ObjectSomeValuesFrom{
 //!                 ope: b.object_property("http://www.example.com/p").into(),
 //!                 bce: b.class("http://www.example.com/c").into()
@@ -60,7 +60,7 @@
 //! ```
 //! # use horned_owl::model::*;
 //! // InverseObjectProperty(ObjectProperty, ObjectProperty)
-//! let b = Build::new();
+//! let b = Build::new_rc();
 //! let iop = InverseObjectProperties
 //!             (b.object_property("http://www.example.com/op1"),
 //!              b.object_property("http://www.example.com/op2"));
@@ -69,7 +69,7 @@
 //! ```
 //! # use horned_owl::model::*;
 //! // EquivalentClasses(Vec<ClassExpression>)
-//! let b = Build::new();
+//! let b = Build::new_rc();
 //! let ec = EquivalentClasses
 //!           (vec!(b.class("http://www.example.com/op1").into(),
 //!                 b.class("http://www.example.com/op2").into()));
@@ -82,7 +82,7 @@
 //! //to: Individual,
 //! //}
 //! # use horned_owl::model::*;
-//! let b = Build::new();
+//! let b = Build::new_rc();
 //! let opa = ObjectPropertyAssertion {
 //!     ope: b.object_property("http://www.example.com/op").into(),
 //!     from: b.named_individual("http://www.example.com/i1").into(),
@@ -101,6 +101,7 @@ use std::hash::Hash;
 use std::hash::Hasher;
 use std::ops::Deref;
 use std::rc::Rc;
+use std::sync::Arc;
 
 /// An
 /// [IRI](https://en.wikipedia.org/wiki/Internationalized_Resource_Identifier)
@@ -140,6 +141,12 @@ impl<A: ForIRI> Borrow<str> for IRI<A> {
 impl From<&IRI<Rc<str>>> for Rc<str> {
     fn from(i: &IRI<Rc<str>>) -> Rc<str> {
         i.0.clone().into()
+    }
+}
+
+impl From<IRI<Rc<str>>> for Rc<str> {
+    fn from(i:IRI<Rc<str>>) -> Rc<str> {
+        i.0
     }
 }
 
@@ -188,7 +195,7 @@ impl<A: ForIRI> Build<A> {
     ///
     /// ```
     /// # use horned_owl::model::*;
-    /// let b = Build::new();
+    /// let b = Build::new_rc();
     /// let iri = b.iri("http://www.example.com");
     /// assert_eq!("http://www.example.com", String::from(iri));
     /// ```
@@ -214,7 +221,7 @@ impl<A: ForIRI> Build<A> {
     ///
     /// ```
     /// # use horned_owl::model::*;
-    /// let b = Build::new();
+    /// let b = Build::new_rc();
     /// let c1 = b.class("http://www.example.com".to_string());
     /// let c2 = b.class("http://www.example.com");
     ///
@@ -235,7 +242,7 @@ impl<A: ForIRI> Build<A> {
     ///
     /// ```
     /// # use horned_owl::model::*;
-    /// let b = Build::new();
+    /// let b = Build::new_rc();
     /// let obp1 = b.object_property("http://www.example.com".to_string());
     /// let obp2 = b.object_property("http://www.example.com");
     ///
@@ -255,7 +262,7 @@ impl<A: ForIRI> Build<A> {
     ///
     /// ```
     /// # use horned_owl::model::*;
-    /// let b = Build::new();
+    /// let b = Build::new_rc();
     /// let anp1 = b.annotation_property("http://www.example.com".to_string());
     /// let anp2 = b.annotation_property("http://www.example.com");
     ///
@@ -275,7 +282,7 @@ impl<A: ForIRI> Build<A> {
     ///
     /// ```
     /// # use horned_owl::model::*;
-    /// let b = Build::new();
+    /// let b = Build::new_rc();
     /// let dp1 = b.data_property("http://www.example.com".to_string());
     /// let dp2 = b.data_property("http://www.example.com");
     ///
@@ -295,7 +302,7 @@ impl<A: ForIRI> Build<A> {
     ///
     /// ```
     /// # use horned_owl::model::*;
-    /// let b = Build::new();
+    /// let b = Build::new_rc();
     /// let ni1 = b.named_individual("http://www.example.com".to_string());
     /// let ni2 = b.named_individual("http://www.example.com");
     ///
@@ -315,7 +322,7 @@ impl<A: ForIRI> Build<A> {
     ///
     /// ```
     /// # use horned_owl::model::*;
-    /// let b = Build::new();
+    /// let b = Build::new_rc();
     /// let ni1 = b.datatype("http://www.example.com".to_string());
     /// let ni2 = b.datatype("http://www.example.com");
     ///
@@ -327,6 +334,18 @@ impl<A: ForIRI> Build<A> {
         S: Borrow<str>,
     {
         Datatype(self.iri(s))
+    }
+}
+
+impl Build<Rc<str>> {
+    pub fn new_rc() -> Build<Rc<str>> {
+        Build::new()
+    }
+}
+
+impl Build<Arc<str>> {
+    pub fn new_arc() -> Build<Arc<str>> {
+        Build::new()
     }
 }
 
@@ -1577,7 +1596,7 @@ pub trait MutableOntology<A: ForIRI> {
     /// ```
     /// # use horned_owl::model::*;
     /// # use horned_owl::ontology::set::SetOntology;
-    /// let mut o = SetOntology::new();
+    /// let mut o = SetOntology::new_rc();
     /// let b = Build::new();
     /// o.insert(DeclareClass(b.class("http://www.example.com/a")));
     /// o.insert(DeclareObjectProperty(b.object_property("http://www.example.com/r")));
@@ -1600,7 +1619,7 @@ pub trait MutableOntology<A: ForIRI> {
     /// ```
     /// # use horned_owl::model::*;
     /// # use horned_owl::ontology::set::SetOntology;
-    /// let mut o = SetOntology::new();
+    /// let mut o = SetOntology::new_rc();
     /// let b = Build::new();
     /// o.declare(b.class("http://www.example.com/a"));
     /// o.declare(b.object_property("http://www.example.com/r"));
@@ -1622,7 +1641,7 @@ mod test {
 
     #[test]
     fn test_iri_from_string() {
-        let build = Build::new();
+        let build = Build::new_rc();
         let iri = build.iri("http://www.example.com");
 
         assert_eq!(String::from(iri), "http://www.example.com");
@@ -1648,7 +1667,7 @@ mod test {
 
     #[test]
     fn test_iri_string_creation() {
-        let build = Build::new();
+        let build = Build::new_rc();
 
         let iri_string = build.iri("http://www.example.com".to_string());
         let iri_static = build.iri("http://www.example.com");
@@ -1665,7 +1684,7 @@ mod test {
 
     #[test]
     fn test_class() {
-        let mut o = AxiomMappedOntology::default();
+        let mut o = AxiomMappedOntology::new_rc();
         let c = Build::new().class("http://www.example.com");
         o.insert(DeclareClass(c));
 
@@ -1674,9 +1693,9 @@ mod test {
 
     #[test]
     fn test_class_declare() {
-        let c = Build::new().class("http://www.example.com");
+        let c = Build::new_rc().class("http://www.example.com");
 
-        let mut o = AxiomMappedOntology::default();
+        let mut o = AxiomMappedOntology::new_rc();
         o.declare(c);
 
         assert_eq!(o.i().declare_class().count(), 1);
@@ -1684,30 +1703,30 @@ mod test {
 
     #[test]
     fn test_class_convertors() {
-        let c = Build::new().class("http://www.example.com");
-        let i = Build::new().iri("http://www.example.com");
+        let c = Build::new_rc().class("http://www.example.com");
+        let i = Build::new_rc().iri("http://www.example.com");
 
-        let i1: IRI = c.clone().into();
+        let i1: IRI<_> = c.clone().into();
         assert_eq!(i, i1);
 
-        let c1: Class = Class::from(i);
+        let c1: Class<_> = Class::from(i);
         assert_eq!(c, c1);
 
-        let ne: NamedEntity = c.clone().into();
+        let ne: NamedEntity<_> = c.clone().into();
         assert_eq!(ne, NamedEntity::Class(c));
     }
 
     #[test]
     fn test_class_string_ref() {
         let s = String::from("http://www.example.com");
-        let c = Build::new().class(s.clone());
+        let c = Build::new_rc().class(s.clone());
 
         assert!(c.is_s(s));
     }
 
     #[test]
     fn test_is() {
-        let c = Build::new().class("http://www.example.com");
+        let c = Build::new_rc().class("http://www.example.com");
         let i = Build::new().named_individual("http://www.example.com");
         let iri = Build::new().iri("http://www.example.com");
 
@@ -1718,15 +1737,15 @@ mod test {
 
     #[test]
     fn test_axiom_convertors() {
-        let c = Build::new().class("http://www.example.com");
+        let c = Build::new_rc().class("http://www.example.com");
 
         let dc = DisjointClasses(vec![c.clone().into(), c.clone().into()]);
-        let _aa: Axiom = dc.into();
+        let _aa: Axiom<_> = dc.into();
     }
 
     #[test]
     fn test_object_property_expression() {
-        let b = Build::new();
+        let b = Build::new_rc();
         let obp = b.object_property("http://www.example.com");
 
         let obpe = ObjectPropertyExpression::ObjectProperty(obp.clone());
@@ -1736,14 +1755,14 @@ mod test {
 
     #[test]
     fn test_axiom_equality() {
-        let b = Build::new();
+        let b = Build::new_rc();
 
         let ann = Annotation {
             ap: b.annotation_property("http://www.example.com/ap"),
             av: b.iri("http://www.example.com/av").into(),
         };
 
-        let mut decl1: AnnotatedAxiom = DeclareClass(b.class("http://www.example.com#a")).into();
+        let mut decl1: AnnotatedAxiom<_> = DeclareClass(b.class("http://www.example.com#a")).into();
         let decl2 = decl1.clone();
 
         assert_eq!(decl1, decl2);
@@ -1752,3 +1771,4 @@ mod test {
         assert!(!(decl1 == decl2));
     }
 }
+

@@ -369,6 +369,8 @@ pub(crate) fn rc_unwrap_or_clone<A: ForIRI>(rcax: Rc<AnnotatedAxiom<A>>) -> Anno
 #[cfg(test)]
 mod test {
 
+    use std::rc::Rc;
+
     use super::{
         FourIndexedOntology, NullIndex, OneIndexedOntology, ThreeIndexedOntology,
         TwoIndexedOntology,
@@ -378,24 +380,24 @@ mod test {
         ontology::set::SetIndex,
     };
 
-    fn stuff() -> (AnnotatedAxiom, AnnotatedAxiom, AnnotatedAxiom) {
-        let b = Build::new();
-        let c: NamedEntity = b.class("http://www.example.com/c").into();
-        let o: NamedEntity = b.object_property("http://www.example.com/p").into();
-        let b: NamedEntity = b.data_property("http://www.example.com/d").into();
+    fn stuff() -> (AnnotatedAxiom<Rc<str>>, AnnotatedAxiom<Rc<str>>, AnnotatedAxiom<Rc<str>>) {
+        let b = Build::new_rc();
+        let c: NamedEntity<_> = b.class("http://www.example.com/c").into();
+        let o: NamedEntity<_> = b.object_property("http://www.example.com/p").into();
+        let b: NamedEntity<_> = b.data_property("http://www.example.com/d").into();
 
         (c.into(), o.into(), b.into())
     }
 
     #[test]
     fn one_cons() {
-        let _o = OneIndexedOntology::new(SetIndex::default());
+        let _o:OneIndexedOntology<Rc<str>, _> = OneIndexedOntology::new(SetIndex::new());
         assert!(true);
     }
 
     #[test]
     fn one_insert() {
-        let mut o = OneIndexedOntology::new(SetIndex::default());
+        let mut o = OneIndexedOntology::new(SetIndex::new());
         let e = stuff();
         o.insert(e.0);
         o.insert(e.1);
@@ -406,7 +408,7 @@ mod test {
 
     #[test]
     fn one_remove() {
-        let mut o = OneIndexedOntology::new(SetIndex::default());
+        let mut o = OneIndexedOntology::new(SetIndex::new());
         let e = stuff();
         o.insert(e.0.clone());
         o.insert(e.1.clone());
@@ -426,11 +428,11 @@ mod test {
     #[test]
     fn two_cons() {
         let _o =
-            TwoIndexedOntology::new(SetIndex::default(), SetIndex::default(), Default::default());
+            TwoIndexedOntology::new(SetIndex::new_rc(), SetIndex::new(), Default::default());
         assert!(true);
 
         let _o = TwoIndexedOntology::new(
-            SetIndex::default(),
+            SetIndex::new_rc(),
             NullIndex::default(),
             Default::default(),
         );
@@ -440,7 +442,7 @@ mod test {
     #[test]
     fn two_insert() {
         let mut o =
-            TwoIndexedOntology::new(SetIndex::default(), SetIndex::default(), Default::default());
+            TwoIndexedOntology::new(SetIndex::new_rc(), SetIndex::new(), Default::default());
         let e = stuff();
         o.insert(e.0);
         o.insert(e.1);
@@ -454,7 +456,7 @@ mod test {
     #[test]
     fn two_remove() {
         let mut o =
-            TwoIndexedOntology::new(SetIndex::default(), SetIndex::default(), Default::default());
+            TwoIndexedOntology::new(SetIndex::new_rc(), SetIndex::new(), Default::default());
 
         let e = stuff();
         o.insert(e.0.clone());
@@ -476,9 +478,9 @@ mod test {
     #[test]
     fn three_remove() {
         let mut o = ThreeIndexedOntology::new(
-            SetIndex::default(),
-            SetIndex::default(),
-            SetIndex::default(),
+            SetIndex::new_rc(),
+            SetIndex::new(),
+            SetIndex::new(),
             Default::default(),
         );
 
@@ -504,10 +506,10 @@ mod test {
     #[test]
     fn four_remove() {
         let mut o = FourIndexedOntology::new(
-            SetIndex::default(),
-            SetIndex::default(),
-            SetIndex::default(),
-            SetIndex::default(),
+            SetIndex::new_rc(),
+            SetIndex::new(),
+            SetIndex::new(),
+            SetIndex::new(),
             Default::default(),
         );
 
