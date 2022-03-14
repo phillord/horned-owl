@@ -60,10 +60,10 @@ macro_rules! some {
 pub struct BNode(Rc<str>);
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
-pub enum Term {
-    Iri(IRI),
+pub enum Term<A: ForIRI> {
+    Iri(IRI<A>),
     BNode(BNode),
-    Literal(Literal),
+    Literal(Literal<A>),
     OWL(VOWL),
     RDF(VRDF),
     RDFS(VRDFS),
@@ -90,8 +90,8 @@ impl Term {
 //     }
 // }
 
-impl Ord for Term {
-    fn cmp(&self, other: &Term) -> Ordering {
+impl<A: ForIRI> Ord for Term<A> {
+    fn cmp(&self, other: &Term<A>) -> Ordering {
         match (self, other) {
             (OWL(s), OWL(o)) => s.cmp(o),
             (RDF(s), RDF(o)) => s.cmp(o),
@@ -105,7 +105,7 @@ impl Ord for Term {
     }
 }
 
-impl PartialOrd for Term {
+impl<A: ForIRI> PartialOrd for Term<A> {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
@@ -185,24 +185,24 @@ trait TryBuild<N: From<IRI>> {
 // }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-enum OrTerm {
-    Term(Term),
-    ClassExpression(ClassExpression),
+enum OrTerm<A: ForIRI> {
+    Term(Term<A>),
+    ClassExpression(ClassExpression<A>),
 }
 
-impl From<ClassExpression> for OrTerm {
-    fn from(c: ClassExpression) -> OrTerm {
+impl<A: ForIRI> From<ClassExpression<A>> for OrTerm<A> {
+    fn from(c: ClassExpression<A>) -> OrTerm<A> {
         OrTerm::ClassExpression(c)
     }
 }
 
-impl From<Term> for OrTerm {
-    fn from(t: Term) -> OrTerm {
+impl<A: ForIRI> From<Term<A>> for OrTerm<A> {
+    fn from(t: Term<A>) -> OrTerm<A> {
         OrTerm::Term(t)
     }
 }
 
-fn vocab_lookup() -> HashMap<&'static str, Term> {
+fn vocab_lookup<A: ForIRI>() -> HashMap<&'static str, Term<A>> {
     let mut m = HashMap::default();
 
     for v in VOWL::all() {
@@ -227,18 +227,18 @@ fn vocab_lookup() -> HashMap<&'static str, Term> {
     m
 }
 
-fn to_term_nn<'a>(nn: &'a NamedNode, m: &HashMap<&str, Term>, b: &Build) -> Term {
+fn to_term_nn<'a, A: ForIRI>(nn: &'a NamedNode, m: &HashMap<&str, Term<A>>, b: &Build<A>) -> Term<A> {
     if let Some(term) = m.get(&nn.iri) {
         return term.clone();
     }
     Term::Iri(b.iri(nn.iri))
 }
 
-fn to_term_bn<'a>(nn: &'a BlankNode) -> Term {
+fn to_term_bn<'a, A: ForIRI>(nn: &'a BlankNode) -> Term<A> {
     Term::BNode(BNode(nn.id.to_string().into()))
 }
 
-fn to_term_lt<'a>(lt: &'a rio_api::model::Literal, b: &Build) -> Term {
+fn to_term_lt<'a, A: ForIRI>(lt: &'a rio_api::model::Literal, b: &Build<A>) -> Term<A> {
     match lt {
         rio_api::model::Literal::Simple { value } => Term::Literal(Literal::Simple {
             literal: value.to_string(),
@@ -286,10 +286,10 @@ macro_rules! d {
     };
 }
 
-pub type RDFOntology = ThreeIndexedOntology<SetIndex, DeclarationMappedIndex, LogicallyEqualIndex>;
+pub type RDFOntology<A> = ThreeIndexedOntology<A, SetIndex<A>, DeclarationMappedIndex<A>, LogicallyEqualIndex<A>>;
 
-impl From<RDFOntology> for SetOntology {
-    fn from(so: RDFOntology) -> SetOntology {
+impl<A: ForIRI> From<RDFOntology<A>> for SetOntology<A> {
+    fn from(so: RDFOntology<A>) -> SetOntology<A> {
         let id: OntologyID = so.id().clone();
         let (si, i1, i2) = so.index();
         // Drop the rest of these so that we can consume the Rc
@@ -299,8 +299,8 @@ impl From<RDFOntology> for SetOntology {
     }
 }
 
-impl From<RDFOntology> for AxiomMappedOntology {
-    fn from(rdfo: RDFOntology) -> AxiomMappedOntology {
+impl<A: ForIRI> From<RDFOntology<A>> for AxiomMappedOntology<A> {
+    fn from(rdfo: RDFOntology<A>) -> AxiomMappedOntology<A> {
         let so: SetOntology = rdfo.into();
         so.into()
     }
@@ -315,15 +315,15 @@ enum OntologyParserState {
 }
 
 #[derive(Debug, Default)]
-pub struct IncompleteParse {
-    pub simple: Vec<[Term; 3]>,
-    pub bnode: Vec<Vec<[Term; 3]>>,
-    pub bnode_seq: Vec<Vec<Term>>,
+pub struct IncompleteParse<A: ForIRI> {
+    pub simple: Vec<[Term<A>; 3]>,
+    pub bnode: Vec<Vec<[Term<A>; 3]>>,
+    pub bnode_seq: Vec<Vec<Term<A>>>,
 
-    pub class_expression: Vec<ClassExpression>,
-    pub object_property_expression: Vec<ObjectPropertyExpression>,
-    pub data_range: Vec<DataRange>,
-    pub ann_map: HashMap<[Term; 3], BTreeSet<Annotation>>,
+    pub class_expression: Vec<ClassExpression<A>>,
+    pub object_property_expression: Vec<ObjectPropertyExpression<A>>,
+    pub data_range: Vec<DataRange<A>>,
+    pub ann_map: HashMap<[Term<A>; 3], BTreeSet<Annotation<A>>>,
 }
 
 impl IncompleteParse {
@@ -339,25 +339,25 @@ impl IncompleteParse {
 }
 
 #[derive(Debug)]
-pub struct OntologyParser<'a> {
-    o: RDFOntology,
-    b: &'a Build,
+pub struct OntologyParser<'a, A: ForIRI> {
+    o: RDFOntology<A>,
+    b: &'a Build<A>,
 
-    triple: Vec<[Term; 3]>,
-    simple: Vec<[Term; 3]>,
-    bnode: HashMap<BNode, Vec<[Term; 3]>>,
-    bnode_seq: HashMap<BNode, Vec<Term>>,
+    triple: Vec<[Term<A>; 3]>,
+    simple: Vec<[Term<A>; 3]>,
+    bnode: HashMap<BNode, Vec<[Term<A>; 3]>>,
+    bnode_seq: HashMap<BNode, Vec<Term<A>>>,
 
-    class_expression: HashMap<BNode, ClassExpression>,
-    object_property_expression: HashMap<BNode, ObjectPropertyExpression>,
-    data_range: HashMap<BNode, DataRange>,
-    ann_map: HashMap<[Term; 3], BTreeSet<Annotation>>,
+    class_expression: HashMap<BNode, ClassExpression<A>>,
+    object_property_expression: HashMap<BNode, ObjectPropertyExpression<A>>,
+    data_range: HashMap<BNode, DataRange<A>>,
+    ann_map: HashMap<[Term<A>; 3], BTreeSet<Annotation<A>>>,
     state: OntologyParserState,
     error: Result<(), ReadError>,
 }
 
-impl<'a> OntologyParser<'a> {
-    pub fn new(b: &'a Build, triple: Vec<[Term; 3]>) -> OntologyParser {
+impl<'a, A: ForIRI> OntologyParser<'a, A> {
+    pub fn new(b: &'a Build, triple: Vec<[Term<A>; 3]>) -> OntologyParser<'a, A> {
         OntologyParser {
             o: d!(),
             b,
@@ -554,7 +554,7 @@ impl<'a> OntologyParser<'a> {
         }
     }
 
-    fn merge<A: Into<AnnotatedAxiom>>(&mut self, ax: A) {
+    fn merge<AA: Into<AnnotatedAxiom<A>>>(&mut self, ax: AA) {
         let ax = ax.into();
         update_or_insert_logically_equal_axiom(&mut self.o, ax);
     }

@@ -5,7 +5,7 @@ pub mod rdf;
 
 use curie::PrefixMapping;
 
-use crate::ontology::{axiom_mapped::AxiomMappedOntology, set::SetOntology};
+use crate::{ontology::{axiom_mapped::AxiomMappedOntology, set::SetOntology}, model::ForIRI};
 
 use self::rdf::reader::{IncompleteParse, RDFOntology};
 
@@ -14,13 +14,13 @@ pub enum ResourceType {
     RDF,
 }
 
-pub enum ParserOutput {
-    OWXParser(SetOntology, PrefixMapping),
-    RDFParser(RDFOntology, IncompleteParse),
+pub enum ParserOutput<A: ForIRI> {
+    OWXParser(SetOntology<A>, PrefixMapping),
+    RDFParser(RDFOntology<A>, IncompleteParse<A>),
 }
 
-impl ParserOutput {
-    pub fn decompose(self) -> (SetOntology, Option<PrefixMapping>, Option<IncompleteParse>) {
+impl<A: ForIRI> ParserOutput<A> {
+    pub fn decompose(self) -> (SetOntology<A>, Option<PrefixMapping>, Option<IncompleteParse<A>>) {
         match self {
             ParserOutput::OWXParser(o, m) => (o, Some(m), None),
             ParserOutput::RDFParser(o, i) => (o.into(), None, Some(i)),
@@ -28,20 +28,20 @@ impl ParserOutput {
     }
 }
 
-impl From<(SetOntology, PrefixMapping)> for ParserOutput {
-    fn from(sop: (SetOntology, PrefixMapping)) -> ParserOutput {
+impl<A: ForIRI> From<(SetOntology<A>, PrefixMapping)> for ParserOutput<A> {
+    fn from(sop: (SetOntology<A>, PrefixMapping)) -> ParserOutput<A> {
         ParserOutput::OWXParser(sop.0, sop.1)
     }
 }
 
-impl From<(RDFOntology, IncompleteParse)> for ParserOutput {
-    fn from(rop: (RDFOntology, IncompleteParse)) -> ParserOutput {
+impl<A: ForIRI> From<(RDFOntology<A>, IncompleteParse<A>)> for ParserOutput<A> {
+    fn from(rop: (RDFOntology<A>, IncompleteParse<A>)) -> ParserOutput<A> {
         ParserOutput::RDFParser(rop.0, rop.1)
     }
 }
 
-impl From<ParserOutput> for SetOntology {
-    fn from(p: ParserOutput) -> SetOntology {
+impl<A: ForIRI> From<ParserOutput<A>> for SetOntology<A> {
+    fn from(p: ParserOutput<A>) -> SetOntology<A> {
         match p {
             ParserOutput::OWXParser(so, _) => so,
             ParserOutput::RDFParser(rdfo, _) => rdfo.into(),
@@ -49,8 +49,8 @@ impl From<ParserOutput> for SetOntology {
     }
 }
 
-impl From<ParserOutput> for AxiomMappedOntology {
-    fn from(p: ParserOutput) -> AxiomMappedOntology {
+impl<A: ForIRI> From<ParserOutput<A>> for AxiomMappedOntology<A> {
+    fn from(p: ParserOutput<A>) -> AxiomMappedOntology<A> {
         match p {
             ParserOutput::OWXParser(so, _) => so.into(),
             ParserOutput::RDFParser(rdfo, _) => rdfo.into(),

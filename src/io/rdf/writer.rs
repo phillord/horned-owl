@@ -97,65 +97,65 @@ impl NodeGenerator {
     }
 }
 
-impl From<&IRI> for PTerm<Rc<str>> {
-    fn from(iri: &IRI) -> Self {
+impl<A> From<&IRI<A>> for PTerm<Rc<str>> {
+    fn from(iri: &IRI<A>) -> Self {
         PNamedNode::new(iri.into()).into()
     }
 }
 
-impl From<&IRI> for PNamedNode<Rc<str>> {
-    fn from(iri: &IRI) -> Self {
+impl<A> From<&IRI<A>> for PNamedNode<Rc<str>> {
+    fn from(iri: &IRI<A>) -> Self {
         PNamedNode::new(iri.into())
     }
 }
 
-impl From<&IRI> for PSubject<Rc<str>> {
-    fn from(iri: &IRI) -> Self {
+impl<A> From<&IRI<A>> for PSubject<Rc<str>> {
+    fn from(iri: &IRI<A>) -> Self {
         let nn: PNamedNode<Rc<str>> = iri.into();
         nn.into()
     }
 }
 
-impl From<&NamedIndividual> for PTerm<Rc<str>> {
-    fn from(ni: &NamedIndividual) -> Self {
+impl<A> From<&NamedIndividual<A>> for PTerm<Rc<str>> {
+    fn from(ni: &NamedIndividual<A>) -> Self {
         (&ni.0).into()
     }
 }
 
-impl From<&NamedIndividual> for PNamedNode<Rc<str>> {
-    fn from(ni: &NamedIndividual) -> Self {
+impl<A> From<&NamedIndividual<A>> for PNamedNode<Rc<str>> {
+    fn from(ni: &NamedIndividual<A>) -> Self {
         (&ni.0).into()
     }
 }
 
-impl From<&NamedIndividual> for PSubject<Rc<str>> {
-    fn from(ni: &NamedIndividual) -> Self {
+impl<A> From<&NamedIndividual<A>> for PSubject<Rc<str>> {
+    fn from(ni: &NamedIndividual<A>) -> Self {
         let nn: PNamedNode<Rc<str>> = ni.into();
         nn.into()
     }
 }
 
-impl From<&AnonymousIndividual> for PTerm<Rc<str>> {
-    fn from(ai: &AnonymousIndividual) -> Self {
+impl<A> From<&AnonymousIndividual<A>> for PTerm<Rc<str>> {
+    fn from(ai: &AnonymousIndividual<A>) -> Self {
         PBlankNode::new(ai.0.clone()).into()
     }
 }
 
-impl From<&AnonymousIndividual> for PBlankNode<Rc<str>> {
-    fn from(ai: &AnonymousIndividual) -> Self {
+impl<A> From<&AnonymousIndividual<A>> for PBlankNode<Rc<str>> {
+    fn from(ai: &AnonymousIndividual<A>) -> Self {
         PBlankNode::new(ai.0.clone()).into()
     }
 }
 
-impl From<&AnonymousIndividual> for PSubject<Rc<str>> {
-    fn from(ai: &AnonymousIndividual) -> Self {
+impl<A> From<&AnonymousIndividual<A>> for PSubject<Rc<str>> {
+    fn from(ai: &AnonymousIndividual<A>) -> Self {
         let bn: PBlankNode<Rc<str>> = ai.into();
         bn.into()
     }
 }
 
-impl From<&Individual> for PTerm<Rc<str>> {
-    fn from(ind: &Individual) -> Self {
+impl<A> From<&Individual<A>> for PTerm<Rc<str>> {
+    fn from(ind: &Individual<A>) -> Self {
         match ind {
             Individual::Named(ni) => ni.into(),
             Individual::Anonymous(ai) => ai.into(),
@@ -163,8 +163,8 @@ impl From<&Individual> for PTerm<Rc<str>> {
     }
 }
 
-impl From<&Individual> for PSubject<Rc<str>> {
-    fn from(ind: &Individual) -> Self {
+impl<A> From<&Individual<A>> for PSubject<Rc<str>> {
+    fn from(ind: &Individual<A>) -> Self {
         match ind {
             Individual::Named(ni) => ni.into(),
             Individual::Anonymous(ai) => ai.into(),
@@ -200,9 +200,9 @@ impl From<Vec<PTriple<Rc<str>>>> for Annotatable<Rc<str>> {
 
 /// The types in `Render` are too long to type.
 macro_rules! render {
-    ($type:ty, $self:ident, $f:ident, $ng:ident, $return:ty,
+    ($type:ident, $self:ident, $f:ident, $ng:ident, $return:ty,
      $body:tt) => {
-        impl Render<$return> for $type {
+        impl<A> Render<$return> for $type<A> {
             fn render<W:Write>(& $self, $f:&mut PrettyRdfXmlFormatter<Rc<str>, W>,
                                $ng: &mut NodeGenerator)
                                -> Result<$return, WriteError>
@@ -212,21 +212,21 @@ macro_rules! render {
 }
 
 macro_rules! render_to_node {
-    ($type:ty, $self:ident, $f:ident, $ng:ident,
+    ($type:ident, $self:ident, $f:ident, $ng:ident,
      $body:tt) => {
-        render! {$type,$self, $f, $ng, PSubject<Rc<str>>, $body}
+        render! {$type, $self, $f, $ng, PSubject<Rc<str>>, $body}
     };
 }
 
 macro_rules! render_to_vec {
-    ($type:ty, $self:ident, $f:ident, $ng:ident,
+    ($type:ident, $self:ident, $f:ident, $ng:ident,
      $body:tt) => {
         render! {$type, $self, $f, $ng, Vec<PTriple<Rc<str>>>, $body}
     };
 }
 
 macro_rules! render_triple {
-    ($type:ty, $self:ident, $ng:ident, $sub:expr, $pred:expr, $ob:expr) => {
+    ($type:ident, $self:ident, $ng:ident, $sub:expr, $pred:expr, $ob:expr) => {
         render! {
             $type, $self, f, $ng, PTriple<Rc<str>>,
             {
@@ -353,7 +353,7 @@ where
     }
 }
 
-impl Render<()> for BTreeSet<Annotation> {
+impl<A: ForIRI> Render<()> for BTreeSet<Annotation<A>> {
     fn render<W: Write>(
         &self,
         f: &mut PrettyRdfXmlFormatter<Rc<str>, W>,
@@ -366,9 +366,12 @@ impl Render<()> for BTreeSet<Annotation> {
     }
 }
 
-render! {
-    &AxiomMappedOntology, self, f, ng, (),
-    {
+impl<A: Clone + Ord> Render<()> for &AxiomMappedOntology<A> {
+    fn render<W: Write>(
+        &self,
+        f: &mut PrettyRdfXmlFormatter<Rc<str>, W>,
+        ng: &mut NodeGenerator,
+    ) -> Result<(), WriteError> {
         if let Some(iri) = &self.id().iri {
             triples!(
                 f,
@@ -409,7 +412,7 @@ render! {
     }
 }
 
-impl Render<()> for AnnotatedAxiom {
+impl<A: ForIRI> Render<()> for AnnotatedAxiom<A> {
     fn render<W: Write>(
         &self,
         f: &mut PrettyRdfXmlFormatter<Rc<str>, W>,
@@ -514,12 +517,12 @@ render! {
     }
 }
 
-impl Render<Annotatable<Rc<str>>> for Axiom {
+impl<A: ForIRI> Render<Annotatable<A>> for Axiom<A> {
     fn render<W: Write>(
         &self,
-        f: &mut PrettyRdfXmlFormatter<Rc<str>, W>,
+        f: &mut PrettyRdfXmlFormatter<A, W>,
         ng: &mut NodeGenerator,
-    ) -> Result<Annotatable<Rc<str>>, WriteError> {
+    ) -> Result<Annotatable<A>, WriteError> {
         Ok(match self {
             // We render imports and ontology annotations earlier
             Axiom::Import(_ax) => vec![].into(),

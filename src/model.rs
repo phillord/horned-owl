@@ -111,7 +111,7 @@ use std::sync::Arc;
 /// created through `Build`; this caches the underlying String meaning
 /// that IRIs are light-weight to `clone`.
 #[derive(Clone, Debug, Eq, PartialEq, Hash, PartialOrd, Ord)]
-pub struct IRI<A:ForIRI>(A);
+pub struct IRI<A>(A);
 
 pub trait ForIRI: Borrow<str> + Eq + Hash + PartialEq + Ord + PartialOrd + Debug + Clone {}
 

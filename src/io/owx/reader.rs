@@ -61,26 +61,26 @@ impl From<quick_xml::Error> for ReadError {
     }
 }
 
-struct Read<'a, R>
+struct Read<'a, A, R>
 where
     R: BufRead,
 {
-    build: &'a Build,
+    build: &'a Build<A>,
     mapping: PrefixMapping,
     reader: Reader<R>,
     buf: Vec<u8>,
     ns_buf: Vec<u8>,
 }
 
-pub fn read<R: BufRead>(bufread: &mut R) -> Result<(SetOntology, PrefixMapping), ReadError> {
+pub fn read<A: ForIRI, R: BufRead>(bufread: &mut R) -> Result<(SetOntology<A>, PrefixMapping), ReadError> {
     let b = Build::new();
     read_with_build(bufread, &b)
 }
 
-pub fn read_with_build<R: BufRead>(
+pub fn read_with_build<A: ForIRI, R: BufRead>(
     bufread: R,
-    build: &Build,
-) -> Result<(SetOntology, PrefixMapping), ReadError> {
+    build: &Build<A>,
+) -> Result<(SetOntology<A>, PrefixMapping), ReadError> {
     let reader: Reader<R> = Reader::from_reader(bufread);
     let mut ont = SetOntology::default();
     let mapping = PrefixMapping::default();
@@ -155,7 +155,7 @@ pub fn read_with_build<R: BufRead>(
 /// non-lexical lifetimes appears, it should be possible to make
 /// this a straight alias for `read_namespaced_event`, and still
 /// have it all work.
-fn read_event<R: BufRead>(read: &mut Read<R>) -> Result<(Vec<u8>, Event<'static>), ReadError> {
+fn read_event<A: ForIRI, R: BufRead>(read: &mut Read<A, R>) -> Result<(Vec<u8>, Event<'static>), ReadError> {
     let r = read
         .reader
         .read_namespaced_event(&mut read.buf, &mut read.ns_buf);
@@ -170,8 +170,8 @@ fn read_event<R: BufRead>(read: &mut Read<R>) -> Result<(Vec<u8>, Event<'static>
     }
 }
 
-fn decode_expand_curie_maybe<'a, R: BufRead>(
-    r: &mut Read<R>,
+fn decode_expand_curie_maybe<'a, A: ForIRI, R: BufRead>(
+    r: &mut Read<A, R>,
     val: &'a [u8],
 ) -> Result<Cow<'a, str>, ReadError> {
     // Okay, so a lot of matching, but without this the borrow checker
@@ -198,7 +198,7 @@ fn decode_expand_curie_maybe<'a, R: BufRead>(
 }
 
 /// Expand a curie if there is an appropriate prefix
-fn expand_curie_maybe<'a, R: BufRead>(r: &mut Read<R>, val: &'a str) -> Cow<'a, str> {
+fn expand_curie_maybe<'a, A: ForIRI, R: BufRead>(r: &mut Read<A, R>, val: &'a str) -> Cow<'a, str> {
     match r.mapping.expand_curie_string(&val) {
         // If we expand use this
         Ok(n) => Cow::Owned(n),
@@ -221,8 +221,8 @@ fn attrib_value_b<'a>(
     Ok(None)
 }
 
-fn attrib_value<R: BufRead>(
-    r: &mut Read<R>,
+fn attrib_value<A, R: BufRead>(
+    r: &mut Read<A, R>,
     event: &BytesStart,
     tag: &[u8],
 ) -> Result<Option<String>, ReadError> {
@@ -237,10 +237,10 @@ fn attrib_value<R: BufRead>(
     Ok(val_opt_str.map(|s| s.to_string()))
 }
 
-fn read_iri_attr<R: BufRead>(
-    r: &mut Read<R>,
+fn read_iri_attr<A, R: BufRead>(
+    r: &mut Read<A, R>,
     event: &BytesStart,
-) -> Result<Option<IRI>, ReadError> {
+) -> Result<Option<IRI<A>>, ReadError> {
     let iri = read_a_iri_attr(r, event, b"IRI")?;
     Ok(if iri.is_some() {
         iri
@@ -249,11 +249,11 @@ fn read_iri_attr<R: BufRead>(
     })
 }
 
-fn read_a_iri_attr<R: BufRead>(
-    r: &mut Read<R>,
+fn read_a_iri_attr<A, R: BufRead>(
+    r: &mut Read<A, R>,
     event: &BytesStart,
     tag: &[u8],
-) -> Result<Option<IRI>, ReadError> {
+) -> Result<Option<IRI<A>>, ReadError> {
     Ok(
         // check for the attrib, if malformed return
         attrib_value(r, event, tag)?.
@@ -266,20 +266,20 @@ fn read_a_iri_attr<R: BufRead>(
     )
 }
 
-fn decode_tag<R: BufRead>(tag: &[u8], r: &mut Read<R>) -> Result<String, ReadError> {
+fn decode_tag<A, R: BufRead>(tag: &[u8], r: &mut Read<A, R>) -> Result<String, ReadError> {
     Ok(r.reader.decode(tag)?.to_string())
 }
 
-fn error_missing_end_tag<R: BufRead>(tag: &[u8], r: &mut Read<R>, pos: usize) -> ReadError {
+fn error_missing_end_tag<A, R: BufRead>(tag: &[u8], r: &mut Read<A, R>, pos: usize) -> ReadError {
     match decode_tag(tag, r) {
         Ok(tag) => ReadError::MissingEndTag { tag, pos },
         Err(e) => e,
     }
 }
 
-fn error_missing_attribute<A: Into<String>, R: BufRead>(
-    attribute: A,
-    r: &mut Read<R>,
+fn error_missing_attribute<A: ForIRI, AT: Into<String>, R: BufRead>(
+    attribute: AT,
+    r: &mut Read<A, R>,
 ) -> ReadError {
     ReadError::MissingAttribute {
         attribute: attribute.into(),
@@ -322,7 +322,7 @@ fn error_unknown_entity<A: Into<String>, R: BufRead>(
     }
 }
 
-fn error_missing_element<R: BufRead>(tag: &[u8], r: &mut Read<R>) -> ReadError {
+fn error_missing_element<A: ForIRI, R: BufRead>(tag: &[u8], r: &mut Read<A, R>) -> ReadError {
     match decode_tag(tag, r) {
         Ok(tag) => ReadError::MissingElement {
             tag,
@@ -340,13 +340,13 @@ fn is_owl_name(ns: &[u8], e: &BytesEnd, tag: &[u8]) -> bool {
     is_owl(ns) && e.local_name() == tag
 }
 
-trait FromStart: Sized {
-    fn from_start<R: BufRead>(r: &mut Read<R>, e: &BytesStart) -> Result<Self, ReadError>;
+trait FromStart<A>: Sized {
+    fn from_start<R: BufRead>(r: &mut Read<A, >, e: &BytesStart) -> Result<Self, ReadError>;
 }
 
 macro_rules! from_start {
     ($type:ident, $r:ident, $e:ident, $body:tt) => {
-        impl FromStart for $type {
+        impl<A: ForIRI> FromStart<A> for $type<A> {
             fn from_start<R: BufRead>(
                 $r: &mut Read<R>,
                 $e: &BytesStart,
@@ -1076,7 +1076,7 @@ from_start! {
     }
 }
 
-trait FromXML: Sized {
+trait FromXML<A>: Sized {
     fn from_xml<R: BufRead>(newread: &mut Read<R>, end_tag: &[u8]) -> Result<Self, ReadError> {
         let s = Self::from_xml_nc(newread, end_tag);
         newread.buf.clear();
@@ -1088,8 +1088,8 @@ trait FromXML: Sized {
 
 macro_rules! from_xml {
     ($type:ident, $r:ident, $end:ident, $body:tt) => {
-        impl FromXML for $type {
-            fn from_xml_nc<R: BufRead>($r: &mut Read<R>, $end: &[u8]) -> Result<$type, ReadError> {
+        impl<A: ForIRI> FromXML<A> for $type<A> {
+            fn from_xml_nc<R: BufRead>($r: &mut Read<A,R>, $end: &[u8]) -> Result<$type<A>, ReadError> {
                 $body
             }
         }

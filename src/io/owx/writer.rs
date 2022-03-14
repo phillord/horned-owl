@@ -203,10 +203,10 @@ trait Render<'a, W: StdWrite> {
 
 /// The types in `Render` are too long to type.
 macro_rules! render {
-    ($type:ty, $self:ident, $write:ident, $map:ident,
+    ($type:ident, $self:ident, $write:ident, $map:ident,
      $body:tt) => {
 
-        impl <'a, W:StdWrite> Render<'a, W> for $type {
+        impl <'a, A:ForIRI, W:StdWrite> Render<'a, W> for $type<A> {
             fn render(& $self, $write:&mut Writer<W>, $map: &'a PrefixMapping)
                       -> Result<(),WriteError>
                 where W: StdWrite
@@ -216,7 +216,7 @@ macro_rules! render {
 }
 
 macro_rules! contents {
-    ($type:ty, $self:ident, $body:expr) => {
+    ($type:ident, $self:ident, $body:expr) => {
         render! {$type, $self, w, m,{
                 $body.render(w, m)?;
                 Ok(())
@@ -226,7 +226,7 @@ macro_rules! contents {
 }
 
 macro_rules! content0 {
-    ($type:ty) => {
+    ($type:ident) => {
         contents! {$type, self, &self.0}
     };
 }
@@ -324,10 +324,9 @@ impl<'a, A: Render<'a, W>, B: Render<'a, W>, C: Render<'a, W>, W: StdWrite> Rend
     }
 }
 
-render! {
-    PrefixMapping, self, w, _m,
-    {
-        for pre in self.mappings() {
+impl<'a, W:StdWrite> Render<'a, W> for PrefixMapping {
+    fn render(&self, w:&mut Writer<W>, _: &'a PrefixMapping) -> Result<(), WriteError>
+    {    for pre in self.mappings() {
             let mut prefix = BytesStart::owned_name("Prefix");
             prefix.push_attribute(("name", &pre.0[..]));
             prefix.push_attribute(("IRI", &pre.1[..]));
@@ -338,8 +337,8 @@ render! {
     }
 }
 
-render! {
-    String, self, w, _m,
+impl<'a, W:StdWrite> Render<'a, W> for String {
+    fn render(&self, w:&mut Writer<W>, _: &'a String) -> Result<(), WriteError>
     {
         w.write_event(Event::Text(BytesText::from_plain_str(&self[..])))?;
         Ok(())
@@ -392,14 +391,15 @@ render! {
     }
 }
 
-render! {
-    &'a ObjectProperty, self, w, m,
-    {
-        with_iri(w, m, b"ObjectProperty", *self)?;
+// render! {
+//     &'a ObjectProperty, self, w, m,
+//     {
+//         with_iri(w, m, b"ObjectProperty", *self)?;
 
-        Ok(())
-    }
-}
+//         Ok(())
+//     }
+// }
+
 render! {
     ObjectProperty, self, w, m,
     {
