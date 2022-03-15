@@ -37,9 +37,9 @@ impl From<quick_xml::Error> for WriteError {
 ///
 /// The ontology is written in OWL
 /// [XML](https://www.w3.org/TR/owl2-xml-serialization/) syntax.
-pub fn write<W: StdWrite>(
+pub fn write<A: ForIRI, W: StdWrite>(
     write: W,
-    ont: &AxiomMappedOntology,
+    ont: &AxiomMappedOntology<A>,
     mapping: Option<&PrefixMapping>,
 ) -> Result<(), WriteError> {
     let mut writer = Writer::new_with_indent(write, b' ', 4);
@@ -60,7 +60,7 @@ pub fn write<W: StdWrite>(
 /// Add an IRI to BytesStart as a element if necessary
 ///
 /// `key` is the attribute name to use.
-fn iri_maybe(elem: &mut BytesStart, key: &str, iri: &Option<IRI>) {
+fn iri_maybe<A: ForIRI>(elem: &mut BytesStart, key: &str, iri: &Option<IRI<A>>) {
     match iri {
         Some(iri) => {
             elem.push_attribute((key, &(*iri)[..]));
@@ -88,14 +88,14 @@ fn iri_or_curie<'a>(mapping: &'a PrefixMapping, elem: &mut BytesStart, iri: &str
 }
 
 /// Write a tag with an IRI attribute.
-fn with_iri<'a, I, W>(
+fn with_iri<'a, A: ForIRI, I, W>(
     w: &mut Writer<W>,
     mapping: &'a PrefixMapping,
     tag: &[u8],
     into_iri: I,
 ) -> Result<(), WriteError>
 where
-    I: Into<IRI>,
+    I: Into<IRI<A>>,
     W: StdWrite,
 {
     let iri: IRI = into_iri.into();
@@ -231,8 +231,8 @@ macro_rules! content0 {
     };
 }
 
-fn render_ont<W>(
-    o: &AxiomMappedOntology,
+fn render_ont<A: ForIRI, W>(
+    o: &AxiomMappedOntology<A>,
     w: &mut Writer<W>,
     m: &PrefixMapping,
 ) -> Result<(), WriteError>

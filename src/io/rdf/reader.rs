@@ -70,7 +70,7 @@ pub enum Term<A: ForIRI> {
     FacetTerm(Facet),
 }
 
-impl Term {
+impl<A: ForIRI> Term<A> {
     fn ord(&self) -> isize {
         match self {
             OWL(_) => 1,
@@ -146,8 +146,8 @@ impl<A: ForIRI> PartialOrd for Term<A> {
 //     }
 // }
 
-trait Convert {
-    fn to_iri(&self, b: &Build) -> IRI;
+trait Convert<A: ForIRI> {
+    fn to_iri(&self, b: &Build<A>) -> IRI<A>;
 }
 
 // TODO
@@ -157,23 +157,23 @@ trait Convert {
 //     }
 // }
 
-impl Convert for rio_api::model::NamedNode<'_> {
-    fn to_iri(&self, b: &Build) -> IRI {
+impl<A: ForIRI> Convert<A> for rio_api::model::NamedNode<'_> {
+    fn to_iri(&self, b: &Build<A>) -> IRI<A> {
         b.iri(&self.iri)
     }
 }
 
-trait TryBuild<N: From<IRI>> {
-    fn to_some_iri(&self, b: &Build) -> Option<IRI>;
+trait TryBuild<A: ForIRI, N: From<IRI<A>>> {
+    fn to_some_iri(&self, b: &Build<A>) -> Option<IRI<A>>;
 
-    fn to_iri_maybe(&self, b: &Build) -> Result<IRI, ReadError> {
+    fn to_iri_maybe(&self, b: &Build<A>) -> Result<IRI<A>, ReadError> {
         match self.to_some_iri(b) {
             Some(iri) => Ok(iri),
             None => todo!("Fix this"),
         }
     }
 
-    fn try_build(&self, b: &Build) -> Result<N, ReadError> {
+    fn try_build(&self, b: &Build<A>) -> Result<N, ReadError> {
         Ok(self.to_iri_maybe(b)?.into())
     }
 }
@@ -263,7 +263,7 @@ fn to_term_lt<'a, A: ForIRI>(lt: &'a rio_api::model::Literal, b: &Build<A>) -> T
     }
 }
 
-fn to_term_nnb<'a>(nnb: &'a Subject, m: &HashMap<&str, Term>, b: &Build) -> Term {
+fn to_term_nnb<'a, A: ForIRI>(nnb: &'a Subject, m: &HashMap<&str, Term<A>>, b: &Build<A>) -> Term<A> {
     match nnb {
         Subject::NamedNode(nn) => to_term_nn(nn, m, b),
         Subject::BlankNode(bn) => to_term_bn(bn),
@@ -271,7 +271,7 @@ fn to_term_nnb<'a>(nnb: &'a Subject, m: &HashMap<&str, Term>, b: &Build) -> Term
     }
 }
 
-fn to_term<'a>(t: &'a RioTerm, m: &HashMap<&str, Term>, b: &Build) -> Term {
+fn to_term<'a, A: ForIRI>(t: &'a RioTerm, m: &HashMap<&str, Term<A>>, b: &Build<A>) -> Term<A> {
     match t {
         rio_api::model::Term::NamedNode(iri) => to_term_nn(iri, m, b),
         rio_api::model::Term::BlankNode(id) => to_term_bn(id),
@@ -326,7 +326,7 @@ pub struct IncompleteParse<A: ForIRI> {
     pub ann_map: HashMap<[Term<A>; 3], BTreeSet<Annotation<A>>>,
 }
 
-impl IncompleteParse {
+impl<A: ForIRI> IncompleteParse<A> {
     pub fn is_complete(&self) -> bool {
         self.simple.is_empty()
             && self.bnode.is_empty()
@@ -357,7 +357,7 @@ pub struct OntologyParser<'a, A: ForIRI> {
 }
 
 impl<'a, A: ForIRI> OntologyParser<'a, A> {
-    pub fn new(b: &'a Build, triple: Vec<[Term<A>; 3]>) -> OntologyParser<'a, A> {
+    pub fn new(b: &'a Build<A>, triple: Vec<[Term<A>; 3]>) -> OntologyParser<'a, A> {
         OntologyParser {
             o: d!(),
             b,
@@ -375,7 +375,7 @@ impl<'a, A: ForIRI> OntologyParser<'a, A> {
         }
     }
 
-    pub fn from_bufread<'b, R: BufRead>(b: &'a Build, bufread: &'b mut R) -> OntologyParser<'a> {
+    pub fn from_bufread<'b, R: BufRead>(b: &'a Build<A>, bufread: &'b mut R) -> OntologyParser<'a, A> {
         let m = vocab_lookup();
         let triple_iter = rio_xml::RdfXmlParser::new(bufread, None).into_iter(|rio_triple| {
             Ok([
@@ -384,21 +384,21 @@ impl<'a, A: ForIRI> OntologyParser<'a, A> {
                 to_term(&rio_triple.object, &m, b),
             ])
         });
-        let results: Vec<Result<[Term; 3], ReadError>> = triple_iter.collect();
+        let results: Vec<Result<[Term<A>; 3], ReadError>> = triple_iter.collect();
         let triples: Result<Vec<_>, _> = results.into_iter().collect();
-        let triple_v: Vec<[Term; 3]> = triples.unwrap();
+        let triple_v: Vec<[Term<A>; 3]> = triples.unwrap();
         //dbg!(&triple_v);
         OntologyParser::new(b, triple_v)
     }
 
-    pub fn from_doc_iri(b: &'a Build, iri: &IRI) -> OntologyParser<'a> {
+    pub fn from_doc_iri(b: &'a Build<A>, iri: &IRI<A>) -> OntologyParser<'a, A> {
         OntologyParser::from_bufread(b, &mut Cursor::new(strict_resolve_iri(iri)))
     }
 
     fn group_triples(
-        triple: Vec<[Term; 3]>,
-        simple: &mut Vec<[Term; 3]>,
-        bnode: &mut HashMap<BNode, Vec<[Term; 3]>>,
+        triple: Vec<[Term<A>; 3]>,
+        simple: &mut Vec<[Term<A>; 3]>,
+        bnode: &mut HashMap<BNode, Vec<[Term<A>; 3]>>,
     ) {
         // Next group together triples on a BNode, so we have
         // HashMap<BNodeID, Vec<[SpTerm; 3]> All of which should be
@@ -516,7 +516,7 @@ impl<'a, A: ForIRI> OntologyParser<'a, A> {
         // Table 5, Table 6
     }
 
-    fn parse_annotations(&self, triples: &[[Term; 3]]) -> BTreeSet<Annotation> {
+    fn parse_annotations(&self, triples: &[[Term<A>; 3]]) -> BTreeSet<Annotation<A>> {
         let mut ann = BTreeSet::default();
         for a in triples {
             ann.insert(self.annotation(a));
@@ -524,7 +524,7 @@ impl<'a, A: ForIRI> OntologyParser<'a, A> {
         ann
     }
 
-    fn annotation(&self, t: &[Term; 3]) -> Annotation {
+    fn annotation(&self, t: &[Term<A>; 3]) -> Annotation<A> {
         match t {
             // We assume that anything passed to here is an
             // annotation built in type
@@ -742,39 +742,39 @@ impl<'a, A: ForIRI> OntologyParser<'a, A> {
         }
     }
 
-    fn to_iri(&self, t: &Term) -> Option<IRI> {
+    fn to_iri(&self, t: &Term<A>) -> Option<IRI<A>> {
         match t {
             Term::Iri(iri) => Some(iri.clone()),
             _ => None,
         }
     }
 
-    fn to_sope(&mut self, t: &Term, ic: &[&RDFOntology]) -> Option<SubObjectPropertyExpression> {
+    fn to_sope(&mut self, t: &Term<A>, ic: &[&RDFOntology<A>]) -> Option<SubObjectPropertyExpression<A>> {
         Some(self.to_ope(t, ic)?.into())
     }
 
-    fn to_ope(&mut self, t: &Term, ic: &[&RDFOntology]) -> Option<ObjectPropertyExpression> {
+    fn to_ope(&mut self, t: &Term<A>, ic: &[&RDFOntology<A>]) -> Option<ObjectPropertyExpression<A>> {
         match self.find_property_kind(t, ic)? {
             PropertyExpression::ObjectPropertyExpression(ope) => Some(ope),
             _ => None,
         }
     }
 
-    fn to_ap(&mut self, t: &Term, ic: &[&RDFOntology]) -> Option<AnnotationProperty> {
+    fn to_ap(&mut self, t: &Term<A>, ic: &[&RDFOntology<A>]) -> Option<AnnotationProperty<A>> {
         match self.find_property_kind(t, ic)? {
             PropertyExpression::AnnotationProperty(ap) => Some(ap),
             _ => None,
         }
     }
 
-    fn to_dp(&mut self, t: &Term, ic: &[&RDFOntology]) -> Option<DataProperty> {
+    fn to_dp(&mut self, t: &Term<A>, ic: &[&RDFOntology<A>]) -> Option<DataProperty<A>> {
         match self.find_property_kind(t, ic)? {
             PropertyExpression::DataProperty(dp) => Some(dp),
             _ => None,
         }
     }
 
-    fn to_ce(&mut self, tce: &Term) -> Option<ClassExpression> {
+    fn to_ce(&mut self, tce: &Term<A>) -> Option<ClassExpression<A>> {
         match tce {
             Term::Iri(cl) => Some(Class(cl.clone()).into()),
             Term::BNode(id) => self.class_expression.remove(id),
@@ -782,7 +782,7 @@ impl<'a, A: ForIRI> OntologyParser<'a, A> {
         }
     }
 
-    fn to_ce_seq(&mut self, bnodeid: &BNode) -> Option<Vec<ClassExpression>> {
+    fn to_ce_seq(&mut self, bnodeid: &BNode) -> Option<Vec<ClassExpression<A>>> {
         if !self.bnode_seq.get(bnodeid)?.iter().all(|tce| match tce {
             Term::BNode(id) => self.class_expression.contains_key(id),
             _ => true,
@@ -790,7 +790,7 @@ impl<'a, A: ForIRI> OntologyParser<'a, A> {
             return None;
         }
 
-        let v: Vec<Option<ClassExpression>> = self
+        let v: Vec<Option<ClassExpression<A>>> = self
             .bnode_seq
             .remove(bnodeid)
             .as_ref()?
@@ -804,7 +804,7 @@ impl<'a, A: ForIRI> OntologyParser<'a, A> {
         v.into_iter().collect()
     }
 
-    fn to_ni_seq(&mut self, bnodeid: &BNode) -> Option<Vec<Individual>> {
+    fn to_ni_seq(&mut self, bnodeid: &BNode) -> Option<Vec<Individual<A>>> {
         let v: Vec<Option<Individual>> = self
             .bnode_seq
             .remove(bnodeid)
@@ -819,7 +819,7 @@ impl<'a, A: ForIRI> OntologyParser<'a, A> {
         v.into_iter().collect()
     }
 
-    fn to_dr_seq(&mut self, bnodeid: &BNode) -> Option<Vec<DataRange>> {
+    fn to_dr_seq(&mut self, bnodeid: &BNode) -> Option<Vec<DataRange<A>>> {
         let v: Vec<Option<DataRange>> = self
             .bnode_seq
             .remove(bnodeid)
@@ -832,7 +832,7 @@ impl<'a, A: ForIRI> OntologyParser<'a, A> {
     }
 
     // TODO Fix code duplication
-    fn to_literal_seq(&mut self, bnodeid: &BNode) -> Option<Vec<Literal>> {
+    fn to_literal_seq(&mut self, bnodeid: &BNode) -> Option<Vec<Literal<A>>> {
         let v: Vec<Option<Literal>> = self
             .bnode_seq
             .remove(bnodeid)
@@ -844,7 +844,7 @@ impl<'a, A: ForIRI> OntologyParser<'a, A> {
         v.into_iter().collect()
     }
 
-    fn to_dr(&mut self, t: &Term) -> Option<DataRange> {
+    fn to_dr(&mut self, t: &Term<A>) -> Option<DataRange<A>> {
         match t {
             Term::Iri(iri) => {
                 let dt: Datatype = iri.into();
@@ -855,21 +855,21 @@ impl<'a, A: ForIRI> OntologyParser<'a, A> {
         }
     }
 
-    fn to_u32(&self, t: &Term) -> Option<u32> {
+    fn to_u32(&self, t: &Term<A>) -> Option<u32> {
         match t {
             Term::Literal(val) => val.literal().parse::<u32>().ok(),
             _ => None,
         }
     }
 
-    fn to_literal(&self, t: &Term) -> Option<Literal> {
+    fn to_literal(&self, t: &Term<A>) -> Option<Literal<A>> {
         match t {
             Term::Literal(ob) => Some(ob.clone()),
             _ => return None,
         }
     }
 
-    fn find_declaration_kind(&mut self, iri: &IRI, ic: &[&RDFOntology]) -> Option<NamedEntityKind> {
+    fn find_declaration_kind(&mut self, iri: &IRI<A>, ic: &[&RDFOntology<A>]) -> Option<NamedEntityKind> {
         [&self.o]
             .iter()
             .chain(ic.iter())
@@ -880,9 +880,9 @@ impl<'a, A: ForIRI> OntologyParser<'a, A> {
 
     fn find_property_kind(
         &mut self,
-        term: &Term,
-        ic: &[&RDFOntology],
-    ) -> Option<PropertyExpression> {
+        term: &Term<A>,
+        ic: &[&RDFOntology<A>],
+    ) -> Option<PropertyExpression<A>> {
         match term {
             Term::Iri(iri) => match self.find_declaration_kind(iri, ic) {
                 Some(NamedEntityKind::AnnotationProperty) => {
@@ -901,7 +901,7 @@ impl<'a, A: ForIRI> OntologyParser<'a, A> {
         }
     }
 
-    fn class_expressions(&mut self, ic: &[&RDFOntology]) {
+    fn class_expressions(&mut self, ic: &[&RDFOntology<A>]) {
         let class_expression_len = self.class_expression.len();
         for (this_bnode, v) in std::mem::take(&mut self.bnode) {
             // rustfmt breaks this (putting the triples all on one
@@ -1146,7 +1146,7 @@ impl<'a, A: ForIRI> OntologyParser<'a, A> {
         }
     }
 
-    fn axioms(&mut self, ic: &[&RDFOntology]) {
+    fn axioms(&mut self, ic: &[&RDFOntology<A>]) {
         for (this_bnode, v) in std::mem::take(&mut self.bnode) {
             let axiom: Option<Axiom> = match v.as_slice() {
                 [[_, Term::OWL(VOWL::AssertionProperty), pr],//:
@@ -1679,7 +1679,7 @@ impl<'a, A: ForIRI> OntologyParser<'a, A> {
     /// ic is a Vec of references to the import closure. These RDF
     /// ontologies do not need to be completely parsed, but will be
     /// relied on to resolve declarations.
-    pub fn finish_parse(&mut self, ic: &[&RDFOntology]) -> Result<(), ReadError> {
+    pub fn finish_parse(&mut self, ic: &[&RDFOntology<A>]) -> Result<(), ReadError> {
         // Table 10
         self.simple_annotations();
 
@@ -1698,7 +1698,7 @@ impl<'a, A: ForIRI> OntologyParser<'a, A> {
         Ok(())
     }
 
-    pub fn parse(mut self) -> Result<(RDFOntology, IncompleteParse), ReadError> {
+    pub fn parse(mut self) -> Result<(RDFOntology<A>, IncompleteParse<A>), ReadError> {
         if self.error.is_err() {
             return Err(self.error.unwrap_err());
         }
@@ -1720,12 +1720,12 @@ impl<'a, A: ForIRI> OntologyParser<'a, A> {
         }
     }
 
-    pub fn ontology_ref(&self) -> &RDFOntology {
+    pub fn ontology_ref(&self) -> &RDFOntology<A> {
         &self.o
     }
 
     /// Consume the parser and return an Ontology.
-    pub fn as_ontology(self) -> Result<RDFOntology, ReadError> {
+    pub fn as_ontology(self) -> Result<RDFOntology<A>, ReadError> {
         self.error.and(Ok(self.o))
     }
 
@@ -1733,7 +1733,7 @@ impl<'a, A: ForIRI> OntologyParser<'a, A> {
     /// structures that have not been fully parsed
     pub fn as_ontology_and_incomplete(
         mut self,
-    ) -> Result<(RDFOntology, IncompleteParse), ReadError> {
+    ) -> Result<(RDFOntology<A>, IncompleteParse<A>), ReadError> {
         if self.error.is_err() {
             return Err(self.error.unwrap_err());
         }
@@ -1769,21 +1769,21 @@ impl<'a, A: ForIRI> OntologyParser<'a, A> {
     }
 }
 
-pub fn parser_with_build<'a, 'b, R: BufRead>(
+pub fn parser_with_build<'a, 'b, A: ForIRI, R: BufRead>(
     bufread: &'a mut R,
-    build: &'b Build,
-) -> OntologyParser<'b> {
+    build: &'b Build<A>,
+) -> OntologyParser<'b, A> {
     OntologyParser::from_bufread(build, bufread)
 }
 
-pub fn read_with_build<R: BufRead>(
+pub fn read_with_build<A, R: BufRead>(
     bufread: &mut R,
-    build: &Build,
-) -> Result<(RDFOntology, IncompleteParse), ReadError> {
+    build: &Build<A>,
+) -> Result<(RDFOntology<A>, IncompleteParse<A>), ReadError> {
     parser_with_build(bufread, build).parse()
 }
 
-pub fn read<R: BufRead>(bufread: &mut R) -> Result<(RDFOntology, IncompleteParse), ReadError> {
+pub fn read<A, R: BufRead>(bufread: &mut R) -> Result<(RDFOntology<A>, IncompleteParse<A>), ReadError> {
     let b = Build::new();
     read_with_build(bufread, &b)
 }
