@@ -1776,14 +1776,14 @@ pub fn parser_with_build<'a, 'b, A: ForIRI, R: BufRead>(
     OntologyParser::from_bufread(build, bufread)
 }
 
-pub fn read_with_build<A, R: BufRead>(
+pub fn read_with_build<A: ForIRI, R: BufRead>(
     bufread: &mut R,
     build: &Build<A>,
 ) -> Result<(RDFOntology<A>, IncompleteParse<A>), ReadError> {
     parser_with_build(bufread, build).parse()
 }
 
-pub fn read<A, R: BufRead>(bufread: &mut R) -> Result<(RDFOntology<A>, IncompleteParse<A>), ReadError> {
+pub fn read<A: ForIRI, R: BufRead>(bufread: &mut R) -> Result<(RDFOntology<A>, IncompleteParse<A>), ReadError> {
     let b = Build::new();
     read_with_build(bufread, &b)
 }

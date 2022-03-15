@@ -61,7 +61,7 @@ impl From<quick_xml::Error> for ReadError {
     }
 }
 
-struct Read<'a, A, R>
+struct Read<'a, A:ForIRI, R>
 where
     R: BufRead,
 {
@@ -221,7 +221,7 @@ fn attrib_value_b<'a>(
     Ok(None)
 }
 
-fn attrib_value<A, R: BufRead>(
+fn attrib_value<A: ForIRI, R: BufRead>(
     r: &mut Read<A, R>,
     event: &BytesStart,
     tag: &[u8],
@@ -237,7 +237,7 @@ fn attrib_value<A, R: BufRead>(
     Ok(val_opt_str.map(|s| s.to_string()))
 }
 
-fn read_iri_attr<A, R: BufRead>(
+fn read_iri_attr<A: ForIRI, R: BufRead>(
     r: &mut Read<A, R>,
     event: &BytesStart,
 ) -> Result<Option<IRI<A>>, ReadError> {
@@ -249,7 +249,7 @@ fn read_iri_attr<A, R: BufRead>(
     })
 }
 
-fn read_a_iri_attr<A, R: BufRead>(
+fn read_a_iri_attr<A: ForIRI, R: BufRead>(
     r: &mut Read<A, R>,
     event: &BytesStart,
     tag: &[u8],
@@ -266,11 +266,11 @@ fn read_a_iri_attr<A, R: BufRead>(
     )
 }
 
-fn decode_tag<A, R: BufRead>(tag: &[u8], r: &mut Read<A, R>) -> Result<String, ReadError> {
+fn decode_tag<A: ForIRI, R: BufRead>(tag: &[u8], r: &mut Read<A, R>) -> Result<String, ReadError> {
     Ok(r.reader.decode(tag)?.to_string())
 }
 
-fn error_missing_end_tag<A, R: BufRead>(tag: &[u8], r: &mut Read<A, R>, pos: usize) -> ReadError {
+fn error_missing_end_tag<A: ForIRI, R: BufRead>(tag: &[u8], r: &mut Read<A, R>, pos: usize) -> ReadError {
     match decode_tag(tag, r) {
         Ok(tag) => ReadError::MissingEndTag { tag, pos },
         Err(e) => e,
@@ -307,7 +307,7 @@ fn error_unexpected_end_tag<A: ForIRI, R: BufRead>(tag: &[u8], r: &mut Read<A, R
     }
 }
 
-fn error_unknown_entity<A, AA: Into<String>, R: BufRead>(
+fn error_unknown_entity<A: ForIRI, AA: Into<String>, R: BufRead>(
     kind: AA,
     found: &[u8],
     r: &mut Read<A, R>,
@@ -340,7 +340,7 @@ fn is_owl_name(ns: &[u8], e: &BytesEnd, tag: &[u8]) -> bool {
     is_owl(ns) && e.local_name() == tag
 }
 
-trait FromStart<A>: Sized {
+trait FromStart<A: ForIRI>: Sized {
     fn from_start<R: BufRead>(r: &mut Read<A, R>, e: &BytesStart) -> Result<Self, ReadError>;
 }
 
@@ -383,7 +383,7 @@ where
     return Err(error_missing_element(b"IRI", r));
 }
 
-fn from_start<A, R: BufRead, T: FromStart<A>>(r: &mut Read<A, R>, e: &BytesStart) -> Result<T, ReadError> {
+fn from_start<A:ForIRI, R: BufRead, T: FromStart<A>>(r: &mut Read<A, R>, e: &BytesStart) -> Result<T, ReadError> {
     T::from_start(r, e)
 }
 
@@ -1077,7 +1077,7 @@ from_start! {
     }
 }
 
-trait FromXML<A>: Sized {
+trait FromXML<A: ForIRI>: Sized {
     fn from_xml<R: BufRead>(newread: &mut Read<A, R>, end_tag: &[u8]) -> Result<Self, ReadError> {
         let s = Self::from_xml_nc(newread, end_tag);
         newread.buf.clear();

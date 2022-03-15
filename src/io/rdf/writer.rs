@@ -31,7 +31,7 @@ impl From<std::io::Error> for WriteError {
     }
 }
 
-pub fn write<W: Write>(write: &mut W, ont: &AxiomMappedOntology) -> Result<(), WriteError> {
+pub fn write<A: ForIRI, W: Write>(write: &mut W, ont: &AxiomMappedOntology<A>) -> Result<(), WriteError> {
     // Entirely unsatisfying to set this randomly here, but we can't
     // access ns our parser yet
     let mut p = indexmap::IndexMap::new();
@@ -97,64 +97,64 @@ impl NodeGenerator {
     }
 }
 
-impl<A> From<&IRI<A>> for PTerm<Rc<str>> {
+impl<A:ForIRI> From<&IRI<A>> for PTerm<Rc<str>> {
     fn from(iri: &IRI<A>) -> Self {
         PNamedNode::new(iri.into()).into()
     }
 }
 
-impl<A> From<&IRI<A>> for PNamedNode<Rc<str>> {
+impl<A: ForIRI> From<&IRI<A>> for PNamedNode<Rc<str>> {
     fn from(iri: &IRI<A>) -> Self {
         PNamedNode::new(iri.into())
     }
 }
 
-impl<A> From<&IRI<A>> for PSubject<Rc<str>> {
+impl<A: ForIRI> From<&IRI<A>> for PSubject<Rc<str>> {
     fn from(iri: &IRI<A>) -> Self {
         let nn: PNamedNode<Rc<str>> = iri.into();
         nn.into()
     }
 }
 
-impl<A> From<&NamedIndividual<A>> for PTerm<Rc<str>> {
+impl<A: ForIRI> From<&NamedIndividual<A>> for PTerm<Rc<str>> {
     fn from(ni: &NamedIndividual<A>) -> Self {
         (&ni.0).into()
     }
 }
 
-impl<A> From<&NamedIndividual<A>> for PNamedNode<Rc<str>> {
+impl<A: ForIRI> From<&NamedIndividual<A>> for PNamedNode<Rc<str>> {
     fn from(ni: &NamedIndividual<A>) -> Self {
         (&ni.0).into()
     }
 }
 
-impl<A> From<&NamedIndividual<A>> for PSubject<Rc<str>> {
+impl<A: ForIRI> From<&NamedIndividual<A>> for PSubject<Rc<str>> {
     fn from(ni: &NamedIndividual<A>) -> Self {
         let nn: PNamedNode<Rc<str>> = ni.into();
         nn.into()
     }
 }
 
-impl<A> From<&AnonymousIndividual<A>> for PTerm<Rc<str>> {
+impl<A: ForIRI> From<&AnonymousIndividual<A>> for PTerm<Rc<str>> {
     fn from(ai: &AnonymousIndividual<A>) -> Self {
         PBlankNode::new(ai.0.clone()).into()
     }
 }
 
-impl<A> From<&AnonymousIndividual<A>> for PBlankNode<Rc<str>> {
+impl<A: ForIRI> From<&AnonymousIndividual<A>> for PBlankNode<Rc<str>> {
     fn from(ai: &AnonymousIndividual<A>) -> Self {
         PBlankNode::new(ai.0.clone()).into()
     }
 }
 
-impl<A> From<&AnonymousIndividual<A>> for PSubject<Rc<str>> {
+impl<A: ForIRI> From<&AnonymousIndividual<A>> for PSubject<Rc<str>> {
     fn from(ai: &AnonymousIndividual<A>) -> Self {
         let bn: PBlankNode<Rc<str>> = ai.into();
         bn.into()
     }
 }
 
-impl<A> From<&Individual<A>> for PTerm<Rc<str>> {
+impl<A: ForIRI> From<&Individual<A>> for PTerm<Rc<str>> {
     fn from(ind: &Individual<A>) -> Self {
         match ind {
             Individual::Named(ni) => ni.into(),
@@ -163,7 +163,7 @@ impl<A> From<&Individual<A>> for PTerm<Rc<str>> {
     }
 }
 
-impl<A> From<&Individual<A>> for PSubject<Rc<str>> {
+impl<A: ForIRI> From<&Individual<A>> for PSubject<Rc<str>> {
     fn from(ind: &Individual<A>) -> Self {
         match ind {
             Individual::Named(ni) => ni.into(),
@@ -180,7 +180,7 @@ trait Render<R> {
     ) -> Result<R, WriteError>;
 }
 
-enum Annotatable<A: AsRef<str>> {
+enum Annotatable<A: ForIRI> {
     Main(PTriple<A>),
     Multiple(Vec<PTriple<A>>),
     //Blank(PBlankNode<A>)
@@ -366,7 +366,7 @@ impl<A: ForIRI> Render<()> for BTreeSet<Annotation<A>> {
     }
 }
 
-impl<A: Clone + Ord> Render<()> for &AxiomMappedOntology<A> {
+impl<A: ForIRI> Render<()> for &AxiomMappedOntology<A> {
     fn render<W: Write>(
         &self,
         f: &mut PrettyRdfXmlFormatter<Rc<str>, W>,
@@ -1052,10 +1052,10 @@ render_to_node! {
     }
 }
 
-fn obj_cardinality<W: Write>(
+fn obj_cardinality<A: ForIRI, W: Write>(
     n: &u32,
-    ope: &ObjectPropertyExpression,
-    bce: &Box<ClassExpression>,
+    ope: &ObjectPropertyExpression<A>,
+    bce: &Box<ClassExpression<A>>,
     unqual: PNamedNode<Rc<str>>,
     qual: PNamedNode<Rc<str>>,
     f: &mut PrettyRdfXmlFormatter<Rc<str>, W>,
@@ -1101,10 +1101,10 @@ fn obj_cardinality<W: Write>(
     ))
 }
 
-fn data_cardinality<W: Write>(
+fn data_cardinality<A: ForIRI, W: Write>(
     n: &u32,
-    dp: &DataProperty,
-    dr: &DataRange,
+    dp: &DataProperty<A>,
+    dr: &DataRange<A>,
     qual: PNamedNode<Rc<str>>,
     f: &mut PrettyRdfXmlFormatter<Rc<str>, W>,
     ng: &mut NodeGenerator,
@@ -1440,8 +1440,8 @@ render! {
     }
 }
 
-fn obj_prop_char<W: Write>(
-    ob: &ObjectPropertyExpression,
+fn obj_prop_char<A: ForIRI, W: Write>(
+    ob: &ObjectPropertyExpression<A>,
     f: &mut PrettyRdfXmlFormatter<Rc<str>, W>,
     ng: &mut NodeGenerator,
     chr: OWL,
