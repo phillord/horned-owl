@@ -159,7 +159,7 @@ trait Convert<A: ForIRI> {
 
 impl<A: ForIRI> Convert<A> for rio_api::model::NamedNode<'_> {
     fn to_iri(&self, b: &Build<A>) -> IRI<A> {
-        b.iri(&self.iri)
+        b.iri(self.iri)
     }
 }
 

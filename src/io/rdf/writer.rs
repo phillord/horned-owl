@@ -202,7 +202,7 @@ impl From<Vec<PTriple<Rc<str>>>> for Annotatable<Rc<str>> {
 macro_rules! render {
     ($type:ident, $self:ident, $f:ident, $ng:ident, $return:ty,
      $body:tt) => {
-        impl<A> Render<$return> for $type<A> {
+        impl<A: ForIRI> Render<$return> for $type<A> {
             fn render<W:Write>(& $self, $f:&mut PrettyRdfXmlFormatter<Rc<str>, W>,
                                $ng: &mut NodeGenerator)
                                -> Result<$return, WriteError>
@@ -520,7 +520,7 @@ render! {
 impl<A: ForIRI> Render<Annotatable<A>> for Axiom<A> {
     fn render<W: Write>(
         &self,
-        f: &mut PrettyRdfXmlFormatter<A, W>,
+        f: &mut PrettyRdfXmlFormatter<Rc<str>, W>,
         ng: &mut NodeGenerator,
     ) -> Result<Annotatable<A>, WriteError> {
         Ok(match self {

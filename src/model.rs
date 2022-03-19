@@ -113,10 +113,13 @@ use std::sync::Arc;
 #[derive(Clone, Debug, Eq, PartialEq, Hash, PartialOrd, Ord)]
 pub struct IRI<A>(A);
 
-pub trait ForIRI: Borrow<str> + Eq + Hash + PartialEq + Ord + PartialOrd + Debug + Clone {}
+pub trait ForIRI: AsRef<str> + Borrow<str> + Eq + From<String> + Hash + PartialEq + Ord + PartialOrd + Debug + Clone {}
 
 impl<T: ?Sized> ForIRI for T where
-    T: Borrow<str> + Eq + Hash + PartialEq + Ord + PartialOrd + Debug + Clone {}
+    T: AsRef<str> + Borrow<str> + Eq + From<String> + Hash + PartialEq + Ord + PartialOrd + Debug + Clone {}
+
+
+
 
 impl<A: ForIRI> Deref for IRI<A> {
     type Target = str;
@@ -199,16 +202,13 @@ impl<A: ForIRI> Build<A> {
     /// let iri = b.iri("http://www.example.com");
     /// assert_eq!("http://www.example.com", String::from(iri));
     /// ```
-    pub fn iri<S>(&self, s: S) -> IRI<A>
-    where
-        A: From<S>,
-        S: Borrow<str>,
+    pub fn iri<S: Borrow<str>>(&self, s: S) -> IRI<A>
     {
         let mut cache = self.0.borrow_mut();
         if let Some(iri) = cache.get(s.borrow()) {
             iri.clone()
         } else {
-            let iri = IRI(s.into());
+            let iri = IRI(s.borrow().to_string().into());
             cache.insert(iri.clone());
             iri
         }
@@ -230,7 +230,6 @@ impl<A: ForIRI> Build<A> {
     ///
     pub fn class<S>(&self, s: S) -> Class<A>
     where
-        A: From<S>,
         S: Borrow<str>,
     {
         Class(self.iri(s))
@@ -250,7 +249,6 @@ impl<A: ForIRI> Build<A> {
     /// ```
     pub fn object_property<S>(&self, s: S) -> ObjectProperty<A>
     where
-        A: From<S>,
         S: Borrow<str>,
     {
         ObjectProperty(self.iri(s))
@@ -270,8 +268,7 @@ impl<A: ForIRI> Build<A> {
     /// ```
     pub fn annotation_property<S>(&self, s: S) -> AnnotationProperty<A>
     where
-        A: From<S>,
-        S: Borrow<str>,
+        S: Borrow<str>
     {
         AnnotationProperty(self.iri(s))
     }
@@ -290,8 +287,7 @@ impl<A: ForIRI> Build<A> {
     /// ```
     pub fn data_property<S>(&self, s: S) -> DataProperty<A>
     where
-        A: From<S>,
-        S: Borrow<str>,
+        S: Borrow<str>
     {
         DataProperty(self.iri(s))
     }
@@ -310,7 +306,6 @@ impl<A: ForIRI> Build<A> {
     /// ```
     pub fn named_individual<S>(&self, s: S) -> NamedIndividual<A>
     where
-        A: From<S>,
         S: Borrow<str>,
     {
         NamedIndividual(self.iri(s))
@@ -330,7 +325,6 @@ impl<A: ForIRI> Build<A> {
     /// ```
     pub fn datatype<S>(&self, s: S) -> Datatype<A>
     where
-        A: From<S>,
         S: Borrow<str>,
     {
         Datatype(self.iri(s))

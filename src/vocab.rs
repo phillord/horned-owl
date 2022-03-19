@@ -11,6 +11,8 @@ use crate::model::IRI;
 
 use thiserror::Error;
 
+use std::borrow::Borrow;
+
 #[derive(Debug, Error)]
 pub enum VocabError {
     // Use to replace bail!/format_err from failure crate. Should specialize
@@ -296,9 +298,9 @@ fn meta_testing() {
     );
 }
 
-pub fn entity_for_iri<A: ForIRI>(
-    type_iri: A,
-    entity_iri: A,
+pub fn entity_for_iri<A: ForIRI, S: Borrow<str>>(
+    type_iri: S,
+    entity_iri: S,
     b: &Build<A>,
 ) -> Result<NamedEntity<A>, VocabError> {
     // Datatypes are handled here because they are not a
@@ -310,7 +312,7 @@ pub fn entity_for_iri<A: ForIRI>(
     if type_iri.borrow().len() < 30 {
         return Err(VocabError::GeneralError(format!(
             "IRI is not for a type of entity:{:?}",
-            type_iri
+            type_iri.borrow()
         )));
     }
 
@@ -323,7 +325,7 @@ pub fn entity_for_iri<A: ForIRI>(
         _ => {
             return Err(VocabError::GeneralError(format!(
                 "IRI is not a type of entity:{:?}",
-                type_iri
+                type_iri.borrow()
             )))
         }
     })
@@ -331,7 +333,7 @@ pub fn entity_for_iri<A: ForIRI>(
 
 #[test]
 pub fn test_entity_for_iri() {
-    let b = Build::new();
+    let b = Build::new_rc();
 
     assert!(entity_for_iri(
         "http://www.w3.org/2002/07/owl#Class",

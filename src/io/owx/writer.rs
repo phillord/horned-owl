@@ -338,7 +338,7 @@ impl<'a, W:StdWrite> Render<'a, W> for PrefixMapping {
 }
 
 impl<'a, W:StdWrite> Render<'a, W> for String {
-    fn render(&self, w:&mut Writer<W>, _: &'a String) -> Result<(), WriteError>
+    fn render(&self, w:&mut Writer<W>, _: &'a PrefixMapping) -> Result<(), WriteError>
     {
         w.write_event(Event::Text(BytesText::from_plain_str(&self[..])))?;
         Ok(())

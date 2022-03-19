@@ -82,7 +82,7 @@ pub fn read_with_build<A: ForIRI, R: BufRead>(
     build: &Build<A>,
 ) -> Result<(SetOntology<A>, PrefixMapping), ReadError> {
     let reader: Reader<R> = Reader::from_reader(bufread);
-    let mut ont = SetOntology::default();
+    let mut ont = SetOntology::new();
     let mapping = PrefixMapping::default();
 
     let mut r = Read {
@@ -249,7 +249,7 @@ fn read_iri_attr<A: ForIRI, R: BufRead>(
     })
 }
 
-fn read_a_iri_attr<A: ForIRI, R: BufRead>(
+fn read_a_iri_attr<'a, A: ForIRI, R: BufRead>(
     r: &mut Read<A, R>,
     event: &BytesStart,
     tag: &[u8],
@@ -258,11 +258,15 @@ fn read_a_iri_attr<A: ForIRI, R: BufRead>(
         // check for the attrib, if malformed return
         attrib_value(r, event, tag)?.
         // or transform the some String
-            map(|st|
+            map(|st| {
+                let x = expand_curie_maybe(r, &st[..]);
+
                 // Into an iri
                 r.build.iri(
                     // or a curie
-                    expand_curie_maybe(r, &st))),
+                    x
+                )
+            })
     )
 }
 
@@ -454,7 +458,7 @@ fn axiom_from_start<A: ForIRI, R: BufRead>(
         })
         .into(),
         b"Declaration" => {
-            let ne: NamedEntity = from_start(r, e)?;
+            let ne: NamedEntity<_> = from_start(r, e)?;
             ne.into()
         }
         b"SubClassOf" => SubClassOf {
@@ -651,13 +655,13 @@ fn object_cardinality_restriction<A: ForIRI, R: BufRead>(
     let n = n.ok_or_else(|| error_missing_attribute("cardinality", r))?;
 
     let ope = from_next(r)?;
-    let mut vce: Vec<ClassExpression> = till_end(r, end_tag)?;
+    let mut vce: Vec<ClassExpression<_>> = till_end(r, end_tag)?;
 
     Ok((
         n.parse::<u32>().map_err(|s| ReadError::ParseInt(s))?,
         ope,
         Box::new(match vce.len() {
-            0 => r.build.class(OWL::Thing.iri_s()).into(),
+            0 => r.build.class(OWL::Thing.iri_str()).into(),
             1 => vce.remove(0),
             _ => Err(error_unexpected_tag(end_tag, r))?,
         }),
@@ -679,7 +683,7 @@ fn data_cardinality_restriction<A: ForIRI, R: BufRead>(
         n.parse::<u32>().map_err(|s| ReadError::ParseInt(s))?,
         dp,
         match vdr.len() {
-            0 => r.build.datatype(OWL2Datatype::RDFSLiteral.iri_s()).into(),
+            0 => r.build.datatype(OWL2Datatype::RDFSLiteral.iri_str()).into(),
             1 => vdr.remove(0),
             _ => Err(error_unexpected_tag(end_tag, r))?,
         },
