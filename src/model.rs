@@ -113,13 +113,18 @@ use std::sync::Arc;
 #[derive(Clone, Debug, Eq, PartialEq, Hash, PartialOrd, Ord)]
 pub struct IRI<A>(A);
 
-pub trait ForIRI: AsRef<str> + Borrow<str> + Eq + From<String> + Hash + PartialEq + Ord + PartialOrd + Debug + Clone {}
+pub trait ForIRI: AsRef<str> + Borrow<str> + Eq + From<String> + Hash + PartialEq + Ord + PartialOrd + Debug + Clone {
+}
 
 impl<T: ?Sized> ForIRI for T where
-    T: AsRef<str> + Borrow<str> + Eq + From<String> + Hash + PartialEq + Ord + PartialOrd + Debug + Clone {}
+    T: AsRef<str> + Borrow<str> + Eq + From<String> + Hash + PartialEq + Ord + PartialOrd + Debug + Clone {
+}
 
-
-
+impl<A: ForIRI> IRI<A> {
+    pub fn underlying(&self) -> A {
+        self.0.clone()
+    }
+}
 
 impl<A: ForIRI> Deref for IRI<A> {
     type Target = str;
@@ -185,11 +190,39 @@ impl<A: ForIRI> Display for IRI<A> {
 // both could be replaced by traits or enums straight-forwardly
 // enough, to enable threading.
 #[derive(Debug, Default)]
-pub struct Build<A: ForIRI>(RefCell<BTreeSet<IRI<A>>>);
+pub struct Build<A: ForIRI>(
+    RefCell<BTreeSet<IRI<A>>>,
+    RefCell<BTreeSet<AnonymousIndividual<A>>>
+);
 
 impl<A: ForIRI> Build<A> {
     pub fn new() -> Build<A> {
-        Build(RefCell::new(BTreeSet::new()))
+        Build(
+            RefCell::new(BTreeSet::new()),
+            RefCell::new(BTreeSet::new())
+        )
+    }
+
+    /// Constructs a new `AnonymousIndividual`
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use horned_owl::model::*;
+    /// let b = Build::new_rc();
+    /// let anon = b.anon("anon00001");
+    /// assert_eq!("anon00001", String::from(anon));
+    /// ```
+    pub fn anon<S: Borrow<str>>(&self, s: S) -> AnonymousIndividual<A>
+    {
+        let mut cache = self.1.borrow_mut();
+        if let Some(anon) = cache.get(s.borrow()) {
+            anon.clone()
+        } else {
+            let anon = AnonymousIndividual(s.borrow().to_string().into());
+            cache.insert(anon.clone());
+            anon
+        }
     }
 
     /// Constructs a new `IRI`
@@ -488,6 +521,25 @@ impl<A: ForIRI> Deref for AnonymousIndividual<A> {
         self.0.borrow()
     }
 }
+
+impl<A: ForIRI> AsRef<str> for AnonymousIndividual<A> {
+    fn as_ref(&self) -> &str {
+        self.0.borrow()
+    }
+}
+
+impl<A: ForIRI> Borrow<str> for AnonymousIndividual<A> {
+    fn borrow(&self) -> &str {
+        self.as_ref()
+    }
+}
+
+impl<A: ForIRI> From<AnonymousIndividual<A>> for String {
+    fn from(i: AnonymousIndividual<A>) -> String {
+        i.0.borrow().to_string()
+    }
+}
+
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash, PartialOrd, Ord)]
 pub enum Individual<A: ForIRI> {

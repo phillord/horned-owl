@@ -97,64 +97,64 @@ impl NodeGenerator {
     }
 }
 
-impl<A:ForIRI> From<&IRI<A>> for PTerm<Rc<str>> {
+impl<A:ForIRI> From<&IRI<A>> for PTerm<A> {
     fn from(iri: &IRI<A>) -> Self {
-        PNamedNode::new(iri.into()).into()
+        PNamedNode::new(iri.underlying()).into()
     }
 }
 
-impl<A: ForIRI> From<&IRI<A>> for PNamedNode<Rc<str>> {
+impl<A: ForIRI> From<&IRI<A>> for PNamedNode<A> {
     fn from(iri: &IRI<A>) -> Self {
-        PNamedNode::new(iri.into())
+        PNamedNode::new(iri.underlying())
     }
 }
 
-impl<A: ForIRI> From<&IRI<A>> for PSubject<Rc<str>> {
+impl<A: ForIRI> From<&IRI<A>> for PSubject<A> {
     fn from(iri: &IRI<A>) -> Self {
-        let nn: PNamedNode<Rc<str>> = iri.into();
+        let nn = PNamedNode::new(iri.underlying());
         nn.into()
     }
 }
 
-impl<A: ForIRI> From<&NamedIndividual<A>> for PTerm<Rc<str>> {
+impl<A: ForIRI> From<&NamedIndividual<A>> for PTerm<A> {
     fn from(ni: &NamedIndividual<A>) -> Self {
         (&ni.0).into()
     }
 }
 
-impl<A: ForIRI> From<&NamedIndividual<A>> for PNamedNode<Rc<str>> {
+impl<A: ForIRI> From<&NamedIndividual<A>> for PNamedNode<A> {
     fn from(ni: &NamedIndividual<A>) -> Self {
         (&ni.0).into()
     }
 }
 
-impl<A: ForIRI> From<&NamedIndividual<A>> for PSubject<Rc<str>> {
+impl<A: ForIRI> From<&NamedIndividual<A>> for PSubject<A> {
     fn from(ni: &NamedIndividual<A>) -> Self {
-        let nn: PNamedNode<Rc<str>> = ni.into();
+        let nn: PNamedNode<A> = ni.into();
         nn.into()
     }
 }
 
-impl<A: ForIRI> From<&AnonymousIndividual<A>> for PTerm<Rc<str>> {
+impl<A: ForIRI> From<&AnonymousIndividual<A>> for PTerm<A> {
     fn from(ai: &AnonymousIndividual<A>) -> Self {
         PBlankNode::new(ai.0.clone()).into()
     }
 }
 
-impl<A: ForIRI> From<&AnonymousIndividual<A>> for PBlankNode<Rc<str>> {
+impl<A: ForIRI> From<&AnonymousIndividual<A>> for PBlankNode<A> {
     fn from(ai: &AnonymousIndividual<A>) -> Self {
         PBlankNode::new(ai.0.clone()).into()
     }
 }
 
-impl<A: ForIRI> From<&AnonymousIndividual<A>> for PSubject<Rc<str>> {
+impl<A: ForIRI> From<&AnonymousIndividual<A>> for PSubject<A> {
     fn from(ai: &AnonymousIndividual<A>) -> Self {
-        let bn: PBlankNode<Rc<str>> = ai.into();
+        let bn: PBlankNode<A> = ai.into();
         bn.into()
     }
 }
 
-impl<A: ForIRI> From<&Individual<A>> for PTerm<Rc<str>> {
+impl<A: ForIRI> From<&Individual<A>> for PTerm<A> {
     fn from(ind: &Individual<A>) -> Self {
         match ind {
             Individual::Named(ni) => ni.into(),
@@ -163,7 +163,7 @@ impl<A: ForIRI> From<&Individual<A>> for PTerm<Rc<str>> {
     }
 }
 
-impl<A: ForIRI> From<&Individual<A>> for PSubject<Rc<str>> {
+impl<A: ForIRI> From<&Individual<A>> for PSubject<A> {
     fn from(ind: &Individual<A>) -> Self {
         match ind {
             Individual::Named(ni) => ni.into(),
@@ -173,9 +173,9 @@ impl<A: ForIRI> From<&Individual<A>> for PSubject<Rc<str>> {
 }
 
 trait Render<R> {
-    fn render<W: Write>(
+    fn render<A: ForIRI, W: Write>(
         &self,
-        f: &mut PrettyRdfXmlFormatter<Rc<str>, W>,
+        f: &mut PrettyRdfXmlFormatter<A, W>,
         ng: &mut NodeGenerator,
     ) -> Result<R, WriteError>;
 }
@@ -312,29 +312,29 @@ where
     }
 }
 
-impl<R> Render<PTerm<Rc<str>>> for R
+impl<A:ForIRI, R> Render<PTerm<A>> for R
 where
-    R: Render<PSubject<Rc<str>>>,
+    R: Render<PSubject<A>>,
 {
     fn render<W: Write>(
         &self,
-        f: &mut PrettyRdfXmlFormatter<Rc<str>, W>,
+        f: &mut PrettyRdfXmlFormatter<A, W>,
         ng: &mut NodeGenerator,
-    ) -> Result<PTerm<Rc<str>>, WriteError> {
+    ) -> Result<PTerm<A>, WriteError> {
         Ok(self.render(f, ng)?.into())
     }
 }
 
-impl<T> Render<PTerm<Rc<str>>> for &Vec<T>
+impl<A: ForIRI, T> Render<PTerm<A>> for &Vec<T>
 where
-    T: Debug + Render<PTerm<Rc<str>>>,
+    T: Debug + Render<PTerm<A>>,
 {
     fn render<W: Write>(
         &self,
-        f: &mut PrettyRdfXmlFormatter<Rc<str>, W>,
+        f: &mut PrettyRdfXmlFormatter<A, W>,
         ng: &mut NodeGenerator,
-    ) -> Result<PTerm<Rc<str>>, WriteError> {
-        let mut rest: Option<PTerm<Rc<str>>> = None;
+    ) -> Result<PTerm<A>, WriteError> {
+        let mut rest: Option<PTerm<A>> = None;
         for i in self.iter().rev() {
             let bn = &ng.bn();
             let item = i.render(f, ng)?;
@@ -356,7 +356,7 @@ where
 impl<A: ForIRI> Render<()> for BTreeSet<Annotation<A>> {
     fn render<W: Write>(
         &self,
-        f: &mut PrettyRdfXmlFormatter<Rc<str>, W>,
+        f: &mut PrettyRdfXmlFormatter<A, W>,
         ng: &mut NodeGenerator,
     ) -> Result<(), WriteError> {
         for r in self.iter() {
@@ -369,7 +369,7 @@ impl<A: ForIRI> Render<()> for BTreeSet<Annotation<A>> {
 impl<A: ForIRI> Render<()> for &AxiomMappedOntology<A> {
     fn render<W: Write>(
         &self,
-        f: &mut PrettyRdfXmlFormatter<Rc<str>, W>,
+        f: &mut PrettyRdfXmlFormatter<A, W>,
         ng: &mut NodeGenerator,
     ) -> Result<(), WriteError> {
         if let Some(iri) = &self.id().iri {
@@ -415,10 +415,10 @@ impl<A: ForIRI> Render<()> for &AxiomMappedOntology<A> {
 impl<A: ForIRI> Render<()> for AnnotatedAxiom<A> {
     fn render<W: Write>(
         &self,
-        f: &mut PrettyRdfXmlFormatter<Rc<str>, W>,
+        f: &mut PrettyRdfXmlFormatter<A, W>,
         ng: &mut NodeGenerator,
     ) -> Result<(), WriteError> {
-        let ax: Annotatable<Rc<str>> = self.axiom.render(f, ng)?;
+        let ax: Annotatable<A> = self.axiom.render(f, ng)?;
         Ok(if self.ann.len() != 0 {
             match ax {
                 Annotatable::Main(t) => {
@@ -450,7 +450,7 @@ impl<A: ForIRI> Render<()> for AnnotatedAxiom<A> {
 }
 
 render! {
-    Literal, self, _f, _ng, PTerm<Rc<str>>,
+    Literal, self, _f, _ng, PTerm<A>,
     {
         Ok(
             match self {
@@ -468,7 +468,7 @@ render! {
 }
 
 render! {
-    Annotation, self, f, ng, PTriple<Rc<str>>,
+    Annotation, self, f, ng, PTriple<A>,
     {
         let bn = ng.this_bn().ok_or_else(|| WriteError::GeneralError("No bnode available".to_string()))?;
 
@@ -490,9 +490,9 @@ render! {
 }
 
 render! {
-    AnnotationAssertion, self, f, ng, PTriple<Rc<str>>,
+    AnnotationAssertion, self, f, ng, PTriple<A>,
     {
-        let nbn:PSubject<Rc<str>> = (&self.subject).render(f, ng)?;
+        let nbn:PSubject<A> = (&self.subject).render(f, ng)?;
         ng.keep_this_bn(nbn);
 
         self.ann.render(f, ng)
@@ -500,7 +500,7 @@ render! {
 }
 
 render! {
-    AnnotationPropertyDomain, self, f, ng, PTriple<Rc<str>>,
+    AnnotationPropertyDomain, self, f, ng, PTriple<A>,
     {
         Ok(
             triple!(f, &self.ap.0, ng.nn(RDFS::Domain), &self.iri)
@@ -509,7 +509,7 @@ render! {
 }
 
 render! {
-    AnnotationPropertyRange, self, f, ng, PTriple<Rc<str>>,
+    AnnotationPropertyRange, self, f, ng, PTriple<A>,
     {
         Ok(
             triple!(f, &self.ap.0, ng.nn(RDFS::Range), &self.iri)
@@ -520,7 +520,7 @@ render! {
 impl<A: ForIRI> Render<Annotatable<A>> for Axiom<A> {
     fn render<W: Write>(
         &self,
-        f: &mut PrettyRdfXmlFormatter<Rc<str>, W>,
+        f: &mut PrettyRdfXmlFormatter<A, W>,
         ng: &mut NodeGenerator,
     ) -> Result<Annotatable<A>, WriteError> {
         Ok(match self {
@@ -574,7 +574,7 @@ impl<A: ForIRI> Render<Annotatable<A>> for Axiom<A> {
 }
 
 render! {
-    ObjectPropertyRange, self, f, ng, PTriple<Rc<str>>,
+    ObjectPropertyRange, self, f, ng, PTriple<A>,
     {
         let node_ope:PSubject<_> = self.ope.render(f, ng)?;
         let node_ce:PTerm<_> = self.ce.render(f, ng)?;
@@ -588,7 +588,7 @@ render! {
 }
 
 render! {
-    ObjectPropertyDomain, self, f, ng, PTriple<Rc<str>>,
+    ObjectPropertyDomain, self, f, ng, PTriple<A>,
     {
         let node_ope:PSubject<_> = self.ope.render(f, ng)?;
         let node_ce:PTerm<_> = self.ce.render(f, ng)?;
@@ -602,49 +602,49 @@ render! {
 }
 
 render! {
-    IrreflexiveObjectProperty, self, f, ng, PTriple<Rc<str>>,
+    IrreflexiveObjectProperty, self, f, ng, PTriple<A>,
     {
         obj_prop_char(&self.0, f, ng, OWL::IrreflexiveProperty)
     }
 }
 
 render! {
-    InverseFunctionalObjectProperty, self, f, ng, PTriple<Rc<str>>,
+    InverseFunctionalObjectProperty, self, f, ng, PTriple<A>,
     {
         obj_prop_char(&self.0, f, ng, OWL::InverseFunctionalProperty)
     }
 }
 
 render! {
-    FunctionalObjectProperty, self, f, ng, PTriple<Rc<str>>,
+    FunctionalObjectProperty, self, f, ng, PTriple<A>,
     {
         obj_prop_char(&self.0, f, ng, OWL::FunctionalProperty)
     }
 }
 
 render! {
-    ReflexiveObjectProperty, self, f, ng, PTriple<Rc<str>>,
+    ReflexiveObjectProperty, self, f, ng, PTriple<A>,
     {
         obj_prop_char(&self.0, f, ng, OWL::ReflexiveProperty)
     }
 }
 
 render! {
-    SymmetricObjectProperty, self, f, ng, PTriple<Rc<str>>,
+    SymmetricObjectProperty, self, f, ng, PTriple<A>,
     {
         obj_prop_char(&self.0, f, ng, OWL::SymmetricProperty)
     }
 }
 
 render! {
-    AsymmetricObjectProperty, self, f, ng, PTriple<Rc<str>>,
+    AsymmetricObjectProperty, self, f, ng, PTriple<A>,
     {
        obj_prop_char(&self.0, f, ng, OWL::AsymmetricProperty)
     }
 }
 
 render! {
-    SubDataPropertyOf, self, f, ng, PTriple<Rc<str>>,
+    SubDataPropertyOf, self, f, ng, PTriple<A>,
     {
         // T(DPE1) rdfs:subPropertyOf T(DPE2) .
         let node_sub:PSubject<_> = self.sub.render(f, ng)?;
@@ -659,7 +659,7 @@ render! {
 }
 
 render! {
-    DataPropertyRange, self, f, ng, PTriple<Rc<str>>,
+    DataPropertyRange, self, f, ng, PTriple<A>,
     {
         let node_dp:PSubject<_> = self.dp.render(f, ng)?;
         let node_dr:PTerm<_> = self.dr.render(f, ng)?;
@@ -673,7 +673,7 @@ render! {
 }
 
 render! {
-    FunctionalDataProperty, self, f, ng, PTriple<Rc<str>>,
+    FunctionalDataProperty, self, f, ng, PTriple<A>,
     {
         let node_pr:PSubject<_> = self.0.render(f, ng)?;
         Ok(
@@ -701,10 +701,10 @@ render_to_vec! {
 }
 
 render! {
-    DataPropertyDomain, self, f, ng, PTriple<Rc<str>>,
+    DataPropertyDomain, self, f, ng, PTriple<A>,
     {
-        let node_dp:PSubject<Rc<str>> = self.dp.render(f, ng)?;
-        let node_ce:PTerm<Rc<str>> = self.ce.render(f, ng)?;
+        let node_dp:PSubject<A> = self.dp.render(f, ng)?;
+        let node_ce:PTerm<A> = self.ce.render(f, ng)?;
 
         Ok(
             triple!(
@@ -737,7 +737,7 @@ render_to_vec! {
 }
 
 render! {
-    ObjectPropertyAssertion, self, f, ng, PTriple<Rc<str>>,
+    ObjectPropertyAssertion, self, f, ng, PTriple<A>,
     {
         match &self.ope {
             ObjectPropertyExpression::ObjectProperty(op) => {
@@ -817,13 +817,13 @@ render_to_vec! {
     }
 }
 
-fn members<R: Debug + Render<PSubject<Rc<str>>>, W: Write>(
-    f: &mut PrettyRdfXmlFormatter<Rc<str>, W>,
+fn members<A: ForIRI, R: Debug + Render<PSubject<A>>, W: Write>(
+    f: &mut PrettyRdfXmlFormatter<A, W>,
     ng: &mut NodeGenerator,
     ty_two: OWL,
     ty_n: OWL,
     members: &Vec<R>,
-) -> Result<Vec<PTriple<Rc<str>>>, WriteError> {
+) -> Result<Vec<PTriple<A>>, WriteError> {
     // DifferentIndividuals( a1 a2 ) T(a1) owl:differentFrom T(a2) .
     // DifferentIndividuals( a1 ... an ), n > 2 _:x rdf:type owl:AllDifferent .
     // _:x owl:members T(SEQ a1 ... an) .
@@ -877,7 +877,7 @@ render_to_vec! {
 }
 
 render! {
-    DataPropertyAssertion, self, f, ng, PTriple<Rc<str>>,
+    DataPropertyAssertion, self, f, ng, PTriple<A>,
     {
         //T(a) T(DPE) T(lt) .
         let node_dp:PNamedNode<_> = (&self.dp.0).into();
@@ -890,7 +890,7 @@ render! {
 }
 
 render! {
-    ClassAssertion, self, f, ng, PTriple<Rc<str>>,
+    ClassAssertion, self, f, ng, PTriple<A>,
     {   // T(a) rdf:type T(CE) .
         let node_ce:PTerm<_> = self.ce.render(f, ng)?;
         let node_i:PSubject<_> = self.i.render(f, ng)?;
@@ -930,7 +930,7 @@ render_to_node! {
                 Self::DataComplementOf(bdr) => {
                     //_:x rdf:type rdfs:Datatype .
                     //_:x owl:datatypeComplementOf T(DR) .
-                    let node_dr:PTerm<Rc<str>> = bdr.render(f, ng)?;
+                    let node_dr:PTerm<A> = bdr.render(f, ng)?;
                     let bn = ng.bn();
 
                     triples_to_node!(
@@ -985,9 +985,9 @@ render_to_node! {
 }
 
 render! {
-    DatatypeDefinition, self, f, ng, PTriple<Rc<str>>,
+    DatatypeDefinition, self, f, ng, PTriple<A>,
     {
-        let node_dr:PTerm<Rc<str>> = self.range.render(f, ng)?;
+        let node_dr:PTerm<A> = self.range.render(f, ng)?;
         Ok(
             triple!(f, &self.kind.0, ng.nn(OWL::EquivalentClass), node_dr)
         )
@@ -995,7 +995,7 @@ render! {
 }
 
 render! {
-    SubAnnotationPropertyOf, self, f, ng, PTriple<Rc<str>>,
+    SubAnnotationPropertyOf, self, f, ng, PTriple<A>,
     {
         Ok(
             triple!(f, &self.sub.0, ng.nn(RDFS::SubPropertyOf), &self.sup.0)
@@ -1056,11 +1056,11 @@ fn obj_cardinality<A: ForIRI, W: Write>(
     n: &u32,
     ope: &ObjectPropertyExpression<A>,
     bce: &Box<ClassExpression<A>>,
-    unqual: PNamedNode<Rc<str>>,
-    qual: PNamedNode<Rc<str>>,
-    f: &mut PrettyRdfXmlFormatter<Rc<str>, W>,
+    unqual: PNamedNode<A>,
+    qual: PNamedNode<A>,
+    f: &mut PrettyRdfXmlFormatter<A, W>,
     ng: &mut NodeGenerator,
-) -> Result<PSubject<Rc<str>>, WriteError> {
+) -> Result<PSubject<A>, WriteError> {
     //_:x rdf:type owl:Restriction .
     //_:x owl:onProperty T(OPE) .
     //_:x owl:maxCardinality "n"^^xsd:nonNegativeInteger ._:x
@@ -1105,10 +1105,10 @@ fn data_cardinality<A: ForIRI, W: Write>(
     n: &u32,
     dp: &DataProperty<A>,
     dr: &DataRange<A>,
-    qual: PNamedNode<Rc<str>>,
-    f: &mut PrettyRdfXmlFormatter<Rc<str>, W>,
+    qual: PNamedNode<A>,
+    f: &mut PrettyRdfXmlFormatter<A, W>,
     ng: &mut NodeGenerator,
-) -> Result<PSubject<Rc<str>>, WriteError> {
+) -> Result<PSubject<A>, WriteError> {
     // _:x rdf:type owl:Restriction .
     // _:x owl:onProperty T(DPE) .
     // _:x owl:maxQualifiedCardinality "n"^^xsd:nonNegativeInteger .
@@ -1299,12 +1299,12 @@ render_to_node! {
     }
 }
 
-fn nary<R: Render<PSubject<Rc<str>>>, W: Write>(
-    f: &mut PrettyRdfXmlFormatter<Rc<str>, W>,
+fn nary<A: ForIRI, R: Render<PSubject<A>>, W: Write>(
+    f: &mut PrettyRdfXmlFormatter<A, W>,
     ng: &mut NodeGenerator,
     entities: &Vec<R>,
-    pred: PNamedNode<Rc<str>>,
-) -> Result<Vec<PTriple<Rc<str>>>, WriteError> {
+    pred: PNamedNode<A>,
+) -> Result<Vec<PTriple<A>>, WriteError> {
     let mut i = entities.iter();
     let first = i
         .next()
@@ -1359,7 +1359,7 @@ render_to_vec! {
 render_to_vec! {
     DisjointUnion, self, f, ng,
     {
-        let c:PSubject<Rc<str>> = (&self.0.0).into();
+        let c:PSubject<A> = (&self.0.0).into();
         let v = (&self.1).render(f, ng)?;
 
         Ok(
@@ -1379,7 +1379,7 @@ render_to_vec! {
 }
 
 render! {
-    InverseObjectProperties, self, f, ng, PTriple<Rc<str>>,
+    InverseObjectProperties, self, f, ng, PTriple<A>,
     {
         Ok(
             triple!(
@@ -1398,7 +1398,7 @@ render_to_node! {
                     => (&op.0).into(),
                 Self::InverseObjectProperty(op)
                     => {
-                        let o:PTerm<Rc<str>> = (&op.0).into();
+                        let o:PTerm<A> = (&op.0).into();
 
                         triples_to_node!{
                             f, ng.bn(), ng.nn(OWL::InverseOf), o
@@ -1410,7 +1410,7 @@ render_to_node! {
 }
 
 render! {
-    SubObjectPropertyOf, self, f, ng, PTriple<Rc<str>>,
+    SubObjectPropertyOf, self, f, ng, PTriple<A>,
     {
         match &self.sub {
             SubObjectPropertyExpression::ObjectPropertyChain(v) => {
@@ -1442,10 +1442,10 @@ render! {
 
 fn obj_prop_char<A: ForIRI, W: Write>(
     ob: &ObjectPropertyExpression<A>,
-    f: &mut PrettyRdfXmlFormatter<Rc<str>, W>,
+    f: &mut PrettyRdfXmlFormatter<A, W>,
     ng: &mut NodeGenerator,
     chr: OWL,
-) -> Result<PTriple<Rc<str>>, WriteError> {
+) -> Result<PTriple<A>, WriteError> {
     let s: PSubject<_> = ob.render(f, ng)?;
 
     Ok(triple! {
@@ -1454,7 +1454,7 @@ fn obj_prop_char<A: ForIRI, W: Write>(
 }
 
 render! {
-    TransitiveObjectProperty, self, f, ng, PTriple<Rc<str>>,
+    TransitiveObjectProperty, self, f, ng, PTriple<A>,
     {
        obj_prop_char(&self.0, f, ng, OWL::TransitiveProperty)
     }
@@ -1491,7 +1491,7 @@ render_triple! {
 }
 
 render! {
-    SubClassOf, self, f, ng, PTriple<Rc<str>>,
+    SubClassOf, self, f, ng, PTriple<A>,
     {
         let sub:PSubject<_> = self.sub.render(f, ng)?;
         let obj:PTerm<_> = self.sup.render(f, ng)?;

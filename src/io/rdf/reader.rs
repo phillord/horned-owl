@@ -1556,7 +1556,7 @@ impl<'a, A: ForIRI> OntologyParser<'a, A> {
         for (k, v) in std::mem::take(&mut self.bnode) {
             let fbnode = |s: &mut OntologyParser<'a, A>, t, ind: &BNode| {
                 let ann = s.ann_map.remove(t).unwrap_or_else(|| BTreeSet::new());
-                let ind: AnonymousIndividual<A> = ind.0.clone().into();
+                let ind: AnonymousIndividual<A> = self.b.anon(ind.0);
                 s.merge(AnnotatedAxiom {
                     axiom: AnnotationAssertion {
                         subject: ind.into(),
