@@ -290,7 +290,7 @@ pub type RDFOntology<A> = ThreeIndexedOntology<A, SetIndex<A>, DeclarationMapped
 
 impl<A: ForIRI> From<RDFOntology<A>> for SetOntology<A> {
     fn from(so: RDFOntology<A>) -> SetOntology<A> {
-        let id: OntologyID = so.id().clone();
+        let id: OntologyID<_> = so.id().clone();
         let (si, i1, i2) = so.index();
         // Drop the rest of these so that we can consume the Rc
         drop(i1);
@@ -301,7 +301,7 @@ impl<A: ForIRI> From<RDFOntology<A>> for SetOntology<A> {
 
 impl<A: ForIRI> From<RDFOntology<A>> for AxiomMappedOntology<A> {
     fn from(rdfo: RDFOntology<A>) -> AxiomMappedOntology<A> {
-        let so: SetOntology = rdfo.into();
+        let so: SetOntology<_> = rdfo.into();
         so.into()
     }
 }
@@ -359,7 +359,12 @@ pub struct OntologyParser<'a, A: ForIRI> {
 impl<'a, A: ForIRI> OntologyParser<'a, A> {
     pub fn new(b: &'a Build<A>, triple: Vec<[Term<A>; 3]>) -> OntologyParser<'a, A> {
         OntologyParser {
-            o: d!(),
+            o: ThreeIndexedOntology::new(
+                SetIndex::new(),
+                DeclarationMappedIndex::new(),
+                LogicallyEqualIndex::new(),
+                d!()
+            ),
             b,
 
             triple,
@@ -491,8 +496,8 @@ impl<'a, A: ForIRI> OntologyParser<'a, A> {
         //Section 3.1.2/table 4
         //   *:x rdf:type owl:Ontology .
         //[ *:x owl:versionIRI *:y .]
-        let mut iri: Option<IRI> = None;
-        let mut viri: Option<IRI> = None;
+        let mut iri: Option<IRI<_>> = None;
+        let mut viri: Option<IRI<_>> = None;
 
         for t in std::mem::take(&mut self.simple) {
             match t {
@@ -529,11 +534,11 @@ impl<'a, A: ForIRI> OntologyParser<'a, A> {
             // We assume that anything passed to here is an
             // annotation built in type
             [s, RDFS(rdfs), b] => {
-                let iri = self.b.iri(rdfs.iri_s());
+                let iri = self.b.iri(rdfs.iri_str());
                 self.annotation(&[s.clone(), Term::Iri(iri), b.clone()])
             }
             [s, OWL(owl), b] => {
-                let iri = self.b.iri(owl.iri_s());
+                let iri = self.b.iri(owl.iri_str());
                 self.annotation(&[s.clone(), Term::Iri(iri), b.clone()])
             }
             [_, Iri(p), ob @ Term::Literal(_)] => Annotation {
@@ -608,7 +613,7 @@ impl<'a, A: ForIRI> OntologyParser<'a, A> {
                     .ann_map
                     .remove(&triple)
                     .unwrap_or_else(|| BTreeSet::new());
-                let ne: NamedEntity = entity;
+                let ne: NamedEntity<_> = entity;
                 self.merge(AnnotatedAxiom {
                     axiom: ne.into(),
                     ann,
@@ -621,7 +626,7 @@ impl<'a, A: ForIRI> OntologyParser<'a, A> {
 
     fn data_ranges(&mut self) {
         let data_range_len = self.data_range.len();
-        let mut facet_map: HashMap<Term, [Term; 3]> = HashMap::new();
+        let mut facet_map: HashMap<Term<A>, [Term<A>; 3]> = HashMap::new();
 
         for (k, v) in std::mem::take(&mut self.bnode) {
             match v.as_slice() {
@@ -671,7 +676,7 @@ impl<'a, A: ForIRI> OntologyParser<'a, A> {
                         {
                             let facet_seq = self.bnode_seq
                                 .remove(id)?;
-                            let some_facets:Vec<Option<FacetRestriction>> =
+                            let some_facets:Vec<Option<FacetRestriction<_>>> =
                                 facet_seq.into_iter().map(|id|
                                                           match facet_map.remove(&id)? {
                                                               [_, Term::FacetTerm(facet), literal] => Some(
@@ -685,7 +690,7 @@ impl<'a, A: ForIRI> OntologyParser<'a, A> {
                                 )
                                 .collect();
 
-                            let facets:Option<Vec<FacetRestriction>> = some_facets.into_iter().collect();
+                            let facets:Option<Vec<FacetRestriction<_>>> = some_facets.into_iter().collect();
                             DataRange::DatatypeRestriction(
                                 iri.into(),
                                 facets?
@@ -805,7 +810,7 @@ impl<'a, A: ForIRI> OntologyParser<'a, A> {
     }
 
     fn to_ni_seq(&mut self, bnodeid: &BNode) -> Option<Vec<Individual<A>>> {
-        let v: Vec<Option<Individual>> = self
+        let v: Vec<Option<Individual<_>>> = self
             .bnode_seq
             .remove(bnodeid)
             .as_ref()?
@@ -820,7 +825,7 @@ impl<'a, A: ForIRI> OntologyParser<'a, A> {
     }
 
     fn to_dr_seq(&mut self, bnodeid: &BNode) -> Option<Vec<DataRange<A>>> {
-        let v: Vec<Option<DataRange>> = self
+        let v: Vec<Option<DataRange<_>>> = self
             .bnode_seq
             .remove(bnodeid)
             .as_ref()?
@@ -833,7 +838,7 @@ impl<'a, A: ForIRI> OntologyParser<'a, A> {
 
     // TODO Fix code duplication
     fn to_literal_seq(&mut self, bnodeid: &BNode) -> Option<Vec<Literal<A>>> {
-        let v: Vec<Option<Literal>> = self
+        let v: Vec<Option<Literal<_>>> = self
             .bnode_seq
             .remove(bnodeid)
             .as_ref()?
@@ -847,7 +852,7 @@ impl<'a, A: ForIRI> OntologyParser<'a, A> {
     fn to_dr(&mut self, t: &Term<A>) -> Option<DataRange<A>> {
         match t {
             Term::Iri(iri) => {
-                let dt: Datatype = iri.into();
+                let dt: Datatype<_> = iri.into();
                 Some(dt.into())
             }
             Term::BNode(id) => self.data_range.remove(id),
@@ -1059,7 +1064,7 @@ impl<'a, A: ForIRI> OntologyParser<'a, A> {
                         {
                             n:self.to_u32(literal)?,
                             ope: pr.into(),
-                            bce: self.b.class(VOWL::Thing.iri_s()).into()
+                            bce: self.b.class(VOWL::Thing.iri_str()).into()
                         }
                     }
                 }
@@ -1086,7 +1091,7 @@ impl<'a, A: ForIRI> OntologyParser<'a, A> {
                         {
                             n:self.to_u32(literal)?,
                             ope: pr.into(),
-                            bce: self.b.class(VOWL::Thing.iri_s()).into()
+                            bce: self.b.class(VOWL::Thing.iri_str()).into()
                         }
                     }
                 }
@@ -1113,7 +1118,7 @@ impl<'a, A: ForIRI> OntologyParser<'a, A> {
                         {
                             n:self.to_u32(literal)?,
                             ope: pr.into(),
-                            bce: self.b.class(VOWL::Thing.iri_s()).into()
+                            bce: self.b.class(VOWL::Thing.iri_str()).into()
                         }
                     }
                 }
@@ -1148,7 +1153,7 @@ impl<'a, A: ForIRI> OntologyParser<'a, A> {
 
     fn axioms(&mut self, ic: &[&RDFOntology<A>]) {
         for (this_bnode, v) in std::mem::take(&mut self.bnode) {
-            let axiom: Option<Axiom> = match v.as_slice() {
+            let axiom: Option<Axiom<_>> = match v.as_slice() {
                 [[_, Term::OWL(VOWL::AssertionProperty), pr],//:
                  [_, Term::OWL(VOWL::SourceIndividual), Term::Iri(i)],//:
                  [_, target_type, target],//:
@@ -1209,7 +1214,7 @@ impl<'a, A: ForIRI> OntologyParser<'a, A> {
                 .map(|(_k, v)| v)
                 .flatten(),
         ) {
-            let axiom: Option<Axiom> = match &triple {
+            let axiom: Option<Axiom<_>> = match &triple {
                 [Term::Iri(sub), Term::RDFS(VRDFS::SubClassOf), tce] => some! {
                     SubClassOf {
                         sub: Class(sub.clone()).into(),
@@ -1245,12 +1250,12 @@ impl<'a, A: ForIRI> OntologyParser<'a, A> {
                 [class, Term::OWL(VOWL::HasKey), Term::BNode(bnodeid)] => {
                     some! {
                         {
-                            let v:Vec<Option<PropertyExpression>> = self.bnode_seq
+                            let v:Vec<Option<PropertyExpression<_>>> = self.bnode_seq
                                 .remove(&bnodeid)?
                                 .into_iter()
                                 .map(|pr| self.find_property_kind(&pr, ic))
                                 .collect();
-                            let vpe: Option<Vec<PropertyExpression>> = v.into_iter().collect();
+                            let vpe: Option<Vec<PropertyExpression<_>>> = v.into_iter().collect();
 
                             HasKey{
                                 ce:self.to_ce(class)?,
@@ -1523,7 +1528,7 @@ impl<'a, A: ForIRI> OntologyParser<'a, A> {
 
     fn simple_annotations(&mut self) {
         for triple in std::mem::take(&mut self.simple) {
-            let firi = |s: &mut OntologyParser, t, iri: &IRI| {
+            let firi = |s: &mut OntologyParser<_>, t, iri: &IRI<_>| {
                 let ann = s.ann_map.remove(t).unwrap_or_else(|| BTreeSet::new());
                 s.merge(AnnotatedAxiom {
                     axiom: AnnotationAssertion {
@@ -1549,9 +1554,9 @@ impl<'a, A: ForIRI> OntologyParser<'a, A> {
             }
         }
         for (k, v) in std::mem::take(&mut self.bnode) {
-            let fbnode = |s: &mut OntologyParser, t, ind: &BNode| {
+            let fbnode = |s: &mut OntologyParser<'a, A>, t, ind: &BNode| {
                 let ann = s.ann_map.remove(t).unwrap_or_else(|| BTreeSet::new());
-                let ind: AnonymousIndividual = ind.0.clone().into();
+                let ind: AnonymousIndividual<A> = ind.0.clone().into();
                 s.merge(AnnotatedAxiom {
                     axiom: AnnotationAssertion {
                         subject: ind.into(),

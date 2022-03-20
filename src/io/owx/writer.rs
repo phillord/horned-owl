@@ -98,7 +98,7 @@ where
     I: Into<IRI<A>>,
     W: StdWrite,
 {
-    let iri: IRI = into_iri.into();
+    let iri: IRI<_> = into_iri.into();
     let mut bytes_start = BytesStart::borrowed(tag, tag.len());
 
     let iri_string: String = iri.into();

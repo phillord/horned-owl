@@ -677,7 +677,7 @@ fn data_cardinality_restriction<A: ForIRI, R: BufRead>(
     let n = n.ok_or_else(|| (error_missing_attribute("cardinality", r)))?;
 
     let dp = from_next(r)?;
-    let mut vdr: Vec<DataRange> = till_end(r, end_tag)?;
+    let mut vdr: Vec<DataRange<_>> = till_end(r, end_tag)?;
 
     Ok((
         n.parse::<u32>().map_err(|s| ReadError::ParseInt(s))?,
