@@ -72,17 +72,20 @@ impl<A:ForIRI> Default for NodeGenerator<A> {
 
 
 impl<A:ForIRI> NodeGenerator<A> {
+
+    /// Generate a NamedNode from a given Vocab element.
     pub fn nn<V: Into<Vocab>>(&mut self, v: V) -> PNamedNode<A> {
-        PNamedNode::new(self.cache_rc(v)).into()
+        PNamedNode::new(self.cache_rc(v))
     }
 
+    /// Return an cached version of PNamedNode value.
     fn cache_rc<V: Into<Vocab>>(&mut self, v: V) -> A {
         let voc: &str = v.into().iri_s();
         if let Some(rc) = self.b.get(voc) {
             return rc.clone();
         }
 
-        let rc:A = (*voc).into();
+        let rc:A = (*voc).to_string().into();
         self.b.insert(rc.clone());
         rc
     }
@@ -336,9 +339,9 @@ where
 //     }
 // }
 
-impl<A: ForIRI, T> Render<A, PTerm<A>> for &Vec<T>
+impl<A: ForIRI, T> Render<A, PTerm<A>> for &Vec-> Result<$type<A>, ReadError><T>
 where
-    T: Debug + Render<A, PTerm<A>>,
+    T: Debug + Render<A, PSubject<A>>,
 {
     fn render<W: Write>(
         &self,
@@ -588,7 +591,7 @@ render! {
     ObjectPropertyRange, self, f, ng, PTriple,
     {
         let node_ope:PSubject<_> = self.ope.render(f, ng)?;
-        let node_ce:PTerm<_> = self.ce.render(f, ng)?;
+        let node_ce:PTerm<_> = self.ce.render(f, ng)?.into();
 
         Ok(
             triple!(f,
@@ -602,7 +605,7 @@ render! {
     ObjectPropertyDomain, self, f, ng, PTriple,
     {
         let node_ope:PSubject<_> = self.ope.render(f, ng)?;
-        let node_ce:PTerm<_> = self.ce.render(f, ng)?;
+        let node_ce:PTerm<_> = self.ce.render(f, ng)?.into();
 
         Ok(
             triple!(f,
@@ -659,7 +662,7 @@ render! {
     {
         // T(DPE1) rdfs:subPropertyOf T(DPE2) .
         let node_sub:PSubject<_> = self.sub.render(f, ng)?;
-        let node_sup:PTerm<_> = self.sup.render(f, ng)?;
+        let node_sup:PTerm<_> = self.sup.render(f, ng)?.into();
 
         Ok(
             triple!(f,
@@ -673,7 +676,7 @@ render! {
     DataPropertyRange, self, f, ng, PTriple,
     {
         let node_dp:PSubject<_> = self.dp.render(f, ng)?;
-        let node_dr:PTerm<_> = self.dr.render(f, ng)?;
+        let node_dr:PTerm<_> = self.dr.render(f, ng)?.into();
 
         Ok(
             triple!(f,
@@ -715,7 +718,7 @@ render! {
     DataPropertyDomain, self, f, ng, PTriple,
     {
         let node_dp:PSubject<A> = self.dp.render(f, ng)?;
-        let node_ce:PTerm<A> = self.ce.render(f, ng)?;
+        let node_ce:PTerm<A> = self.ce.render(f, ng)?.into();
 
         Ok(
             triple!(
@@ -728,6 +731,7 @@ render! {
 render_to_vec! {
     DisjointObjectProperties, self, f, ng,
     {
+        //& self.0 Vec<ObjectPropertyExpression>
         members(f, ng,
                 OWL::PropertyDisjointWith,
                 OWL::AllDisjointProperties,
@@ -739,6 +743,7 @@ render_to_vec! {
 render_to_vec! {
     DisjointDataProperties, self, f, ng,
     {
+        //&self.0 Vec<DataProperty>
         members(f, ng,
                 OWL::PropertyDisjointWith,
                 OWL::AllDisjointProperties,
@@ -755,7 +760,7 @@ render! {
                 //ObjectPropertyAssertion( OP a1 a2 ) T(a1) T(OP) T(a2) .
                 let node_from:PSubject<_> = self.from.render(f, ng)?;
                 let node_op:PNamedNode<_> = (&op.0).into();
-                let node_to:PTerm<_> = self.to.render(f,ng)?;
+                let node_to:PTerm<_> = self.to.render(f,ng)?.into();
                 Ok(
                     triple! (
                         f,
@@ -767,7 +772,7 @@ render! {
                 //ObjectPropertyAssertion( OP a1 a2 ) T(a1) T(OP) T(a2) .
                 let node_to:PSubject<_> = self.to.render(f, ng)?;
                 let node_op:PNamedNode<_> = (&op.0).into();
-                let node_from:PTerm<_> = self.from.render(f, ng)?;
+                let node_from:PTerm<_> = self.from.render(f, ng)?.into();
                 Ok(
                     triple! (
                         f,
@@ -788,9 +793,9 @@ render_to_vec! {
         //_:x owl:assertionProperty T(OPE) .
         //_:x owl:targetIndividual T(a2) .
         let bn = ng.bn();
-        let node_lt:PTerm<_> = self.to.render(f, ng)?;
-        let node_ope:PTerm<_> = self.ope.render(f, ng)?;
-        let node_a:PTerm<_> = self.from.render(f, ng)?;
+        let node_lt:PTerm<_> = self.to.render(f, ng)?.into();
+        let node_ope:PTerm<_> = self.ope.render(f, ng)?.into();
+        let node_a:PTerm<_> = self.from.render(f, ng)?.into();
 
         Ok(
             triples_to_vec!(
@@ -814,7 +819,7 @@ render_to_vec! {
         let bn = ng.bn();
         let node_lt:PTerm<_> = self.to.render(f, ng)?;
         let node_dp:PTerm<_> = (&self.dp.0).into();
-        let node_a:PTerm<_> = self.from.render(f, ng)?;
+        let node_a:PTerm<_> = self.from.render(f, ng)?.into();
 
         Ok(
             triples_to_vec!(
@@ -833,7 +838,7 @@ fn members<A: ForIRI, R: Debug + Render<A, PSubject<A>>, W: Write>(
     ng: &mut NodeGenerator<A>,
     ty_two: OWL,
     ty_n: OWL,
-    members: &Vec<R>,
+    members: &Vec<R>, 
 ) -> Result<Vec<PTriple<A>>, WriteError> {
     // DifferentIndividuals( a1 a2 ) T(a1) owl:differentFrom T(a2) .
     // DifferentIndividuals( a1 ... an ), n > 2 _:x rdf:type owl:AllDifferent .
@@ -869,6 +874,7 @@ render_to_vec! {
     {
         // Need to support also DisjointData/ObjectProperties which
         // have the same pattern
+        //self.0: Vec<Individual>
         members(f, ng,
                 OWL::DifferentFrom,
                 OWL::AllDifferent,
@@ -903,7 +909,7 @@ render! {
 render! {
     ClassAssertion, self, f, ng, PTriple,
     {   // T(a) rdf:type T(CE) .
-        let node_ce:PTerm<_> = self.ce.render(f, ng)?;
+        let node_ce:PTerm<_> = self.ce.render(f, ng)?.into();
         let node_i:PSubject<_> = self.i.render(f, ng)?;
 
         Ok(
@@ -941,7 +947,7 @@ render_to_node! {
                 Self::DataComplementOf(bdr) => {
                     //_:x rdf:type rdfs:Datatype .
                     //_:x owl:datatypeComplementOf T(DR) .
-                    let node_dr:PTerm<A> = bdr.render(f, ng)?;
+                    let node_dr:PTerm<A> = bdr.render(f, ng)?.into();
                     let bn = ng.bn();
 
                     triples_to_node!(
@@ -1076,7 +1082,7 @@ fn obj_cardinality<A: ForIRI, W: Write>(
     //_:x owl:onProperty T(OPE) .
     //_:x owl:maxCardinality "n"^^xsd:nonNegativeInteger ._:x
     let bn = ng.bn();
-    let node_ope: PTerm<_> = ope.render(f, ng)?;
+    let node_ope: PTerm<_> = ope.render(f, ng)?.into();
     let node_n = PTerm::Literal(PLiteral::Typed {
         value: format!("{}", n).into(),
         datatype: ng.nn(XSD::NonNegativeInteger),
@@ -1099,7 +1105,7 @@ fn obj_cardinality<A: ForIRI, W: Write>(
             return Ok(bn);
         }
     }
-    let node_ce: PTerm<_> = bce.render(f, ng)?;
+    let node_ce: PTerm<_> = bce.render(f, ng)?.into();
 
     Ok(triples_to_node!(
         f,
@@ -1130,7 +1136,7 @@ fn data_cardinality<A: ForIRI, W: Write>(
         value: format!("{}", n).into(),
         datatype: ng.nn(XSD::NonNegativeInteger),
     });
-    let node_dr: PTerm<_> = dr.render(f, ng)?;
+    let node_dr: PTerm<_> = dr.render(f, ng)?.into();
 
     // Unqualified Only
     Ok(triples_to_node!(

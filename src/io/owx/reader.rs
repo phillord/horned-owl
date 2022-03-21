@@ -815,7 +815,7 @@ from_start! {
 from_start! {
     AnnotatedAxiom, r, e,
     {
-        let mut annotation: BTreeSet<Annotation> = BTreeSet::new();
+        let mut annotation: BTreeSet<Annotation<_>> = BTreeSet::new();
         let axiom_kind:&[u8] = e.local_name();
 
         loop {
@@ -878,17 +878,17 @@ from_start! {
         match e.local_name() {
             b"AnonymousIndividual" =>{
                 eprintln!("About to read anonymous");
-                let ai:AnonymousIndividual = from_start(r, e)?;
+                let ai:AnonymousIndividual<_> = from_start(r, e)?;
                 eprintln!("Read anonymous");
                 Ok(ai.into())
             }
             b"NamedIndividual" =>{
-                let ni:NamedIndividual = from_start(r, e)?;
+                let ni:NamedIndividual<_> = from_start(r, e)?;
                 Ok(ni.into())
             }
             b"IRI" | b"AbbreviatedIRI" => {
-                let iri:IRI = from_start(r, e)?;
-                let ni:NamedIndividual = iri.into();
+                let iri:IRI<_> = from_start(r, e)?;
+                let ni:NamedIndividual<_> = iri.into();
                 Ok(ni.into())
             }
             l => {
@@ -903,11 +903,11 @@ from_start! {
     {
         match e.local_name() {
             b"AnonymousIndividual" =>{
-                let ai:AnonymousIndividual = from_start(r, e)?;
+                let ai:AnonymousIndividual<_> = from_start(r, e)?;
                 Ok(ai.into())
             }
             b"IRI" | b"AbbreviatedIRI" => {
-                let iri:IRI = from_start(r, e)?;
+                let iri:IRI<_> = from_start(r, e)?;
                 Ok(iri.into())
             }
             l => {
@@ -918,13 +918,18 @@ from_start! {
     }
 }
 
-from_start! {
-    AnonymousIndividual, r, e,
-    {
-        let ai:AnonymousIndividual =
-            attrib_value(r, e, b"nodeID")?.ok_or(
-                error_missing_attribute("nodeID Expected", r)
-            )?.into();
+impl<A: ForIRI> FromStart<A> for AnonymousIndividual<A> {
+    fn from_start<R: BufRead>(
+        r: &mut Read<A, R>,
+        e: &BytesStart,
+    ) -> Result<AnonymousIndividual<A>, ReadError>
+        {
+        let ai:AnonymousIndividual<_> =
+                r.build.anon(
+                    attrib_value(r, e, b"nodeID")?.ok_or(
+                        error_missing_attribute("nodeID Expected", r)
+                    )?
+                );
         Ok(ai)
     }
 }
@@ -1105,8 +1110,8 @@ from_xml! {
     Annotation, r, end,
     {
 
-        let mut ap:Option<AnnotationProperty> = None;
-        let mut av:Option<AnnotationValue> = None;
+        let mut ap:Option<AnnotationProperty<_>> = None;
+        let mut av:Option<AnnotationValue<_>> = None;
 
         loop {
             let e = read_event(r)?;
@@ -1188,7 +1193,7 @@ from_start! {
 
 from_xml! {IRI, r, end,
         {
-            let mut iri: Option<IRI> = None;
+            let mut iri: Option<IRI<_>> = None;
             loop {
                 let e = read_event(r)?;
                 match e {
