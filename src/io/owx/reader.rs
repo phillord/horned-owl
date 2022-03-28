@@ -1217,9 +1217,9 @@ from_xml! {IRI, r, end,
 pub mod test {
     use super::*;
     use crate::ontology::axiom_mapped::AxiomMappedOntology;
-    use std::collections::HashMap;
+    use std::{collections::HashMap, rc::Rc};
 
-    pub fn read_ok<R: BufRead>(bufread: &mut R) -> (AxiomMappedOntology, PrefixMapping) {
+    pub fn read_ok<R: BufRead>(bufread: &mut R) -> (AxiomMappedOntology<Rc<str>>, PrefixMapping) {
         let r = read(bufread);
         assert!(r.is_ok(), "Expected ontology, got failure:{:?}", r.err());
         let (o, m) = r.ok().unwrap();
@@ -1372,7 +1372,7 @@ pub mod test {
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
         assert_eq!(ont.i().sub_class_of().count(), 1);
-        let sc: &SubClassOf = ont.i().sub_class_of().next().unwrap();
+        let sc: &SubClassOf<_> = ont.i().sub_class_of().next().unwrap();
         match &sc.sup {
             ClassExpression::ObjectSomeValuesFrom { ope: _, bce } => {
                 matches!(**bce, ClassExpression::ObjectComplementOf(_));
@@ -1548,7 +1548,7 @@ pub mod test {
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
         let mut ann_i = ont.i().annotated_axiom(AxiomKind::AnnotationAssertion);
-        let ann: &AnnotatedAxiom = ann_i.next().unwrap();
+        let ann: &AnnotatedAxiom<_> = ann_i.next().unwrap();
         assert_eq!(ann.ann.len(), 1);
     }
 

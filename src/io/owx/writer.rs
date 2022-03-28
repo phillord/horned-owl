@@ -882,8 +882,9 @@ mod test {
     use std::io::BufRead;
     use std::io::BufReader;
     use std::io::BufWriter;
+    use std::rc::Rc;
 
-    fn read_ok<R: BufRead>(bufread: &mut R) -> (AxiomMappedOntology, PrefixMapping) {
+    fn read_ok<A: ForIRI, R: BufRead>(bufread: &mut R) -> (AxiomMappedOntology<A>, PrefixMapping) {
         let r = read(bufread);
         assert!(r.is_ok(), "Expected ontology, got failure:{:?}", r.err());
         let (o, m) = r.ok().unwrap();
@@ -892,7 +893,7 @@ mod test {
 
     #[test]
     fn test_ont_rt() {
-        let mut ont = AxiomMappedOntology::default();
+        let mut ont = AxiomMappedOntology::new_rc();
         let build = Build::new();
 
         let iri = build.iri("http://www.example.com/a".to_string());
@@ -907,7 +908,7 @@ mod test {
         assert_eq!(ont.id().iri, ont2.id().iri);
     }
 
-    fn roundtrip_1(ont: &str) -> (AxiomMappedOntology, PrefixMapping, Temp) {
+    fn roundtrip_1(ont: &str) -> (AxiomMappedOntology<Rc<str>>, PrefixMapping, Temp) {
         let (ont_orig, prefix_orig) = read_ok(&mut ont.as_bytes());
         let temp_file = Temp::new_file().unwrap();
 
@@ -932,9 +933,9 @@ mod test {
     fn roundtrip(
         ont: &str,
     ) -> (
-        AxiomMappedOntology,
+        AxiomMappedOntology<Rc<str>>,
         PrefixMapping,
-        AxiomMappedOntology,
+        AxiomMappedOntology<Rc<str>>,
         PrefixMapping,
     ) {
         let (ont_orig, prefix_orig, temp_file) = roundtrip_1(ont);
@@ -950,9 +951,9 @@ mod test {
     fn assert_round(
         ont: &str,
     ) -> (
-        AxiomMappedOntology,
+        AxiomMappedOntology<Rc<str>>,
         PrefixMapping,
-        AxiomMappedOntology,
+        AxiomMappedOntology<Rc<str>>,
         PrefixMapping,
     ) {
         let (ont_orig, prefix_orig, ont_round, prefix_round) = roundtrip(ont);

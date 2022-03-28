@@ -11,7 +11,7 @@ use crate::{
 use std::{
     fs::File,
     io::{BufReader, Write},
-    path::Path,
+    path::Path, rc::Rc,
 };
 
 pub fn path_type(path: &Path) -> Option<ResourceType> {
@@ -22,7 +22,7 @@ pub fn path_type(path: &Path) -> Option<ResourceType> {
     }
 }
 
-pub fn parse_path(path: &Path) -> Result<ParserOutput, CommandError> {
+pub fn parse_path(path: &Path) -> Result<ParserOutput<Rc<str>>, CommandError> {
     let file = File::open(&path).map_err(underlying)?;
     let mut bufreader = BufReader::new(file);
 
@@ -42,7 +42,7 @@ pub fn parse_path(path: &Path) -> Result<ParserOutput, CommandError> {
 }
 
 /// Parse but only as far as the imports, if that makes sense.
-pub fn parse_imports(path: &Path) -> Result<ParserOutput, CommandError> {
+pub fn parse_imports(path: &Path) -> Result<ParserOutput<Rc<str>>, CommandError> {
     let file = File::open(&path).map_err(underlying)?;
     let mut bufreader = BufReader::new(file);
     Ok(match path_type(path) {
@@ -63,7 +63,7 @@ pub fn parse_imports(path: &Path) -> Result<ParserOutput, CommandError> {
     })
 }
 
-pub fn materialize(input: &str) -> Result<Vec<IRI>, CommandError> {
+pub fn materialize(input: &str) -> Result<Vec<IRI<Rc<str>>>, CommandError> {
     let mut v = vec![];
     materialize_1(input, &mut v, true)?;
     Ok(v)
@@ -71,14 +71,14 @@ pub fn materialize(input: &str) -> Result<Vec<IRI>, CommandError> {
 
 pub fn materialize_1<'a>(
     input: &str,
-    done: &'a mut Vec<IRI>,
+    done: &'a mut Vec<IRI<Rc<str>>>,
     recurse: bool,
-) -> Result<&'a mut Vec<IRI>, CommandError> {
+) -> Result<&'a mut Vec<IRI<Rc<str>>>, CommandError> {
     println!("Parsing: {}", input);
-    let amont: AxiomMappedOntology = parse_imports(Path::new(input)).map_err(underlying)?.into();
+    let amont: AxiomMappedOntology<_> = parse_imports(Path::new(input)).map_err(underlying)?.into();
     let import = amont.i().import();
 
-    let b = Build::new();
+    let b = Build::new_rc();
 
     // Get all the imports
     for i in import {
@@ -163,7 +163,7 @@ pub mod naming {
 
 pub mod summary {
 
-    use crate::{model::AxiomKind, ontology::axiom_mapped::AxiomMappedOntology};
+    use crate::{model::{AxiomKind, ForIRI}, ontology::axiom_mapped::AxiomMappedOntology};
     use indexmap::map::IndexMap;
 
     #[derive(Debug)]
@@ -179,11 +179,11 @@ pub mod summary {
         }
     }
 
-    pub fn summarize<O: Into<AxiomMappedOntology>>(ont: O) -> SummaryStatistics
+    pub fn summarize<A: ForIRI, O: Into<AxiomMappedOntology<A>>>(ont: O) -> SummaryStatistics
     where
         O:,
     {
-        let ont: AxiomMappedOntology = ont.into();
+        let ont: AxiomMappedOntology<_> = ont.into();
         SummaryStatistics {
             logical_axiom: ont.i().iter().count(),
             annotation_axiom: ont
@@ -195,8 +195,8 @@ pub mod summary {
         }
     }
 
-    fn axiom_types<O: Into<AxiomMappedOntology>>(ont: O) -> IndexMap<AxiomKind, usize> {
-        let ont: AxiomMappedOntology = ont.into();
+    fn axiom_types<A: ForIRI, O: Into<AxiomMappedOntology<A>>>(ont: O) -> IndexMap<AxiomKind, usize> {
+        let ont: AxiomMappedOntology<_> = ont.into();
         let mut im = IndexMap::new();
         for ax in AxiomKind::all_kinds() {
             im.insert(ax, ont.i().axiom(ax).count());

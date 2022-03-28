@@ -339,9 +339,34 @@ where
 //     }
 // }
 
-impl<A: ForIRI, T> Render<A, PTerm<A>> for &Vec-> Result<$type<A>, ReadError><T>
+
+fn render_vec_subject<A:ForIRI, T: Render<A, PSubject<A>>, W:Write>(
+    v:&Vec<T>,
+    f: &mut PrettyRdfXmlFormatter<A, W>,
+    ng: &mut NodeGenerator<A>
+)    -> Result<PTerm<A>, WriteError>
+{
+    let mut rest: Option<PTerm<A>> = None;
+    for i in v.iter().rev() {
+        let bn = &ng.bn();
+        let item = i.render(f, ng)?;
+
+        triples!(f, bn.clone(), ng.nn(RDF::First), item);
+
+        if let Some(r) = rest.take() {
+            triples!(f, bn.clone(), ng.nn(RDF::Rest), r);
+        } else {
+            triples!(f, bn.clone(), ng.nn(RDF::Rest), ng.nn(RDF::Nil));
+        }
+        rest = Some(bn.clone().into())
+    }
+    // Panic if Vec is zero length!
+    Ok(rest.unwrap())
+}
+
+impl<A: ForIRI, T> Render<A, PTerm<A>> for &Vec<T>
 where
-    T: Debug + Render<A, PSubject<A>>,
+    T: Debug + Render<A, PTerm<A>>,
 {
     fn render<W: Write>(
         &self,
@@ -854,7 +879,7 @@ fn members<A: ForIRI, R: Debug + Render<A, PSubject<A>>, W: Write>(
         }
         _ => {
             let bn = ng.bn();
-            let node_v: PTerm<_> = members.render(f, ng)?;
+            let node_v: PTerm<_> = render_vec_subject(members, f, ng)?;
 
             Ok(triples_to_vec!(
                 f,
@@ -925,7 +950,7 @@ render_to_node! {
             match self {
                 Self::Datatype(dt) => (&dt.0).into(),
                 Self::DataIntersectionOf(v) => {
-                    let vbn = v.render(f, ng)?;
+                    let vbn = render_vec_subject(v, f, ng)?;
                     let bn = ng.bn();
 
                     triples_to_node!(
@@ -935,7 +960,7 @@ render_to_node! {
                     )
                 }
                 Self::DataUnionOf(v) => {
-                    let vbn = v.render(f, ng)?;
+                    let vbn = render_vec_subject(v, f, ng)?;
                     let bn = ng.bn();
 
                     triples_to_node!(
@@ -975,7 +1000,7 @@ render_to_node! {
                     // _:yn Fn ltn .
                     let bn = ng.bn();
                     let node_dt:PTerm<_> = (&dt.0).into();
-                    let node_vft:PTerm<_> = vfr.render(f, ng)?.into();
+                    let node_vft:PTerm<_> = render_vec_subject(vfr, f, ng)?.into();
 
                     triples_to_node!(
                         f,
@@ -1004,7 +1029,7 @@ render_to_node! {
 render! {
     DatatypeDefinition, self, f, ng, PTriple,
     {
-        let node_dr:PTerm = self.range.render(f, ng)?;
+        let node_dr:PTerm<_> = self.range.render(f, ng)?.into();
         Ok(
             triple!(f, &self.kind.0, ng.nn(OWL::EquivalentClass), node_dr)
         )
@@ -1164,7 +1189,7 @@ render_to_node! {
                 Self::Class(cl) => (&cl.0).into(),
                 Self::ObjectIntersectionOf(v)=>{
                     let bn = ng.bn();
-                    let node_seq = v.render(f, ng)?;
+                    let node_seq = render_vec_subject(v, f, ng)?;
 
                     triples_to_node!(
                          f,
@@ -1174,7 +1199,7 @@ render_to_node! {
                 }
                 Self::ObjectUnionOf(v) => {
                     let bn = ng.bn();
-                    let node_seq = v.render(f, ng)?;
+                    let node_seq = render_vec_subject(v, f, ng)?;
 
                     triples_to_node!(
                         f,
@@ -1185,7 +1210,7 @@ render_to_node! {
                 Self::ObjectComplementOf(bce) => {
                     let bn = ng.bn();
 
-                    let node_ce:PTerm<_> = (*bce).render(f, ng)?;
+                    let node_ce:PTerm<_> = (*bce).render(f, ng)?.into();
 
                     triples_to_node!(
                         f,
@@ -1195,7 +1220,7 @@ render_to_node! {
                 },
                 Self::ObjectOneOf(v) => {
                     let bn = ng.bn();
-                    let node_seq = v.render(f, ng)?;
+                    let node_seq = render_vec_subject(v, f, ng)?;
 
                     triples_to_node!(
                         f,
@@ -1205,8 +1230,8 @@ render_to_node! {
                 }
                 Self::ObjectSomeValuesFrom{ref bce, ref ope} => {
                     let bn = ng.bn();
-                    let node_ce:PTerm<_> = bce.render(f, ng)?;
-                    let node_ope:PTerm<_> = ope.render(f, ng)?;
+                    let node_ce:PTerm<_> = bce.render(f, ng)?.into();
+                    let node_ope:PTerm<_> = ope.render(f, ng)?.into();
 
                     triples_to_node!(
                         f,
@@ -1217,8 +1242,8 @@ render_to_node! {
                 }
                 Self::ObjectAllValuesFrom{ope, bce} => {
                     let bn = ng.bn();
-                    let node_ce:PTerm<_> = bce.render(f, ng)?;
-                    let node_ope:PTerm<_> = ope.render(f, ng)?;
+                    let node_ce:PTerm<_> = bce.render(f, ng)?.into();
+                    let node_ope:PTerm<_> = ope.render(f, ng)?.into();
 
                     triples_to_node!(
                         f,
@@ -1233,8 +1258,8 @@ render_to_node! {
                     // :x owl:hasValue T(a) .
                     let bn = ng.bn();
 
-                    let node_ope:PTerm<_> = ope.render(f, ng)?;
-                    let ind:PTerm<_>= i.render(f, ng)?;
+                    let node_ope:PTerm<_> = ope.render(f, ng)?.into();
+                    let ind:PTerm<_>= i.render(f, ng)?.into();
 
                     triples_to_node!(
                         f,
@@ -1268,7 +1293,7 @@ render_to_node! {
                     //_:x owl:someValuesFrom T(DR) .
                     let bn = ng.bn();
                     let node_dpe:PTerm<_> = (&dp.0).into();
-                    let node_dr:PTerm<_> = dr.render(f, ng)?;
+                    let node_dr:PTerm<_> = dr.render(f, ng)?.into();
                     triples_to_node!{
                         f,
                         bn.clone(), ng.nn(RDF::Type), ng.nn(OWL::Restriction),
@@ -1279,7 +1304,7 @@ render_to_node! {
                 Self::DataAllValuesFrom{dp, dr} => {
                     let bn = ng.bn();
                     let node_dpe:PTerm<_> = (&dp.0).into();
-                    let node_dr:PTerm<_> = dr.render(f, ng)?;
+                    let node_dr:PTerm<_> = dr.render(f, ng)?.into();
                     triples_to_node!{
                         f,
                         bn.clone(), ng.nn(RDF::Type), ng.nn(OWL::Restriction),
@@ -1340,7 +1365,7 @@ render_to_vec! {
     {
         //T(CE) owl:hasKey T(SEQ OPE1 ... OPEm DPE1 ... DPEn ) .
         let node_ce:PSubject<_> = self.ce.render(f, ng)?;
-        let node_vpe:PTerm<_> = (&self.vpe).render(f, ng)?;
+        let node_vpe:PTerm<_> = render_vec_subject(&self.vpe, f, ng)?;
         // let g:String = &self.vpe[0];
         // let node_vpe:PTerm<_> = g.render(f, ng)?;
 
@@ -1377,7 +1402,7 @@ render_to_vec! {
     DisjointUnion, self, f, ng,
     {
         let c:PSubject<A> = (&self.0.0).into();
-        let v = (&self.1).render(f, ng)?;
+        let v = render_vec_subject(&self.1, f, ng)?;
 
         Ok(
             triples_to_vec!(
@@ -1415,7 +1440,7 @@ render_to_node! {
                     => (&op.0).into(),
                 Self::InverseObjectProperty(op)
                     => {
-                        let o:PTerm = (&op.0).into();
+                        let o:PTerm<_> = (&op.0).into();
 
                         triples_to_node!{
                             f, ng.bn(), ng.nn(OWL::InverseOf), o
@@ -1437,7 +1462,7 @@ render! {
                 //
                 // It makes little sense to me.
                 let s:PSubject<_> = (&self.sup).render(f, ng)?;
-                let o = v.render(f, ng)?;
+                let o = render_vec_subject(v, f, ng)?;
                 Ok(
                     triple!{
                         f, s, ng.nn(OWL::PropertyChainAxiom), o
@@ -1446,7 +1471,7 @@ render! {
             }
             SubObjectPropertyExpression::ObjectPropertyExpression(e) =>{
                 let s:PSubject<_> = e.render(f, ng)?;
-                let o:PTerm<_> = (&self.sup).render(f, ng)?;
+                let o:PTerm<_> = (&self.sup).render(f, ng)?.into();
                 Ok(
                     triple!{
                         f, s, ng.nn(RDFS::SubPropertyOf), o
@@ -1511,7 +1536,7 @@ render! {
     SubClassOf, self, f, ng, PTriple,
     {
         let sub:PSubject<_> = self.sub.render(f, ng)?;
-        let obj:PTerm<_> = self.sup.render(f, ng)?;
+        let obj:PTerm<_> = self.sup.render(f, ng)?.into();
 
         Ok(
             triple!(f,
@@ -1537,12 +1562,12 @@ mod test {
     // use std::fs::File;
     use std::{
         fs::File,
-        io::{BufRead, BufReader, BufWriter},
+        io::{BufRead, BufReader, BufWriter}, rc::Rc,
     };
     // use std::io::BufReader;
     // use std::io::BufWriter;
 
-    fn read_ok<R: BufRead>(bufread: &mut R) -> SetOntology {
+    fn read_ok<A: ForIRI, R: BufRead>(bufread: &mut R) -> SetOntology<A> {
         let r = crate::io::rdf::reader::read(bufread);
         assert!(r.is_ok(), "Expected ontology, got failure:{:?}", r.err());
         let (o, incomplete) = r.ok().unwrap();
@@ -1557,7 +1582,7 @@ mod test {
 
     #[test]
     fn test_ont_rt() {
-        let mut ont = AxiomMappedOntology::default();
+        let mut ont = AxiomMappedOntology::new_rc();
         let build = Build::new();
 
         let iri = build.iri("http://www.example.com/a".to_string());
@@ -1572,14 +1597,14 @@ mod test {
         assert_eq!(ont.id().iri, ont2.id().iri);
     }
 
-    fn roundtrip(ont: &str) -> (SetOntology, SetOntology) {
+    fn roundtrip(ont: &str) -> (SetOntology<Rc<str>>, SetOntology<Rc<str>>) {
         let ont_orig = read_ok(&mut ont.as_bytes());
         let temp_file = Temp::new_file().unwrap();
 
         let file = File::create(&temp_file).ok().unwrap();
         let mut buf_writer = BufWriter::new(&file);
 
-        let amo: AxiomMappedOntology = ont_orig.clone().into();
+        let amo: AxiomMappedOntology<_> = ont_orig.clone().into();
         write(&mut buf_writer, &amo).ok().unwrap();
         buf_writer.flush().ok();
         let file = File::open(&temp_file).ok().unwrap();
@@ -1590,7 +1615,7 @@ mod test {
         return (ont_orig, ont_round);
     }
 
-    fn assert_round(ont: &str) -> (SetOntology, SetOntology) {
+    fn assert_round(ont: &str) -> (SetOntology<Rc<str>>, SetOntology<Rc<str>>) {
         let (ont_orig, ont_round) = roundtrip(ont);
 
         println!("ont_orig\n{:#?}", ont_orig);

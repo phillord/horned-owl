@@ -37,7 +37,7 @@ pub(crate) fn matcher(matches: &ArgMatches) -> Result<(), CommandError> {
         .parse()
         .map_err(|e| CommandError::Underlying(Box::new(e)))?;
 
-    let b = Build::new();
+    let b = Build::new_rc();
     let mut o = SetOntology::new();
 
     for i in 1..size + 1 {

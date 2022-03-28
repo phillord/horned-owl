@@ -30,7 +30,6 @@ use std::collections::BTreeSet;
 use std::collections::HashMap;
 use std::io::BufRead;
 use std::io::Cursor;
-use std::rc::Rc;
 
 #[derive(Debug, Error)]
 pub enum ReadError {
@@ -57,12 +56,12 @@ macro_rules! some {
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq, Ord, PartialOrd)]
-pub struct BNode(Rc<str>);
+pub struct BNode<A: ForIRI>(A);
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub enum Term<A: ForIRI> {
     Iri(IRI<A>),
-    BNode(BNode),
+    BNode(BNode<A>),
     Literal(Literal<A>),
     OWL(VOWL),
     RDF(VRDF),
@@ -345,12 +344,12 @@ pub struct OntologyParser<'a, A: ForIRI> {
 
     triple: Vec<[Term<A>; 3]>,
     simple: Vec<[Term<A>; 3]>,
-    bnode: HashMap<BNode, Vec<[Term<A>; 3]>>,
-    bnode_seq: HashMap<BNode, Vec<Term<A>>>,
+    bnode: HashMap<BNode<A>, Vec<[Term<A>; 3]>>,
+    bnode_seq: HashMap<BNode<A>, Vec<Term<A>>>,
 
-    class_expression: HashMap<BNode, ClassExpression<A>>,
-    object_property_expression: HashMap<BNode, ObjectPropertyExpression<A>>,
-    data_range: HashMap<BNode, DataRange<A>>,
+    class_expression: HashMap<BNode<A>, ClassExpression<A>>,
+    object_property_expression: HashMap<BNode<A>, ObjectPropertyExpression<A>>,
+    data_range: HashMap<BNode<A>, DataRange<A>>,
     ann_map: HashMap<[Term<A>; 3], BTreeSet<Annotation<A>>>,
     state: OntologyParserState,
     error: Result<(), ReadError>,
@@ -403,7 +402,7 @@ impl<'a, A: ForIRI> OntologyParser<'a, A> {
     fn group_triples(
         triple: Vec<[Term<A>; 3]>,
         simple: &mut Vec<[Term<A>; 3]>,
-        bnode: &mut HashMap<BNode, Vec<[Term<A>; 3]>>,
+        bnode: &mut HashMap<BNode<A>, Vec<[Term<A>; 3]>>,
     ) {
         // Next group together triples on a BNode, so we have
         // HashMap<BNodeID, Vec<[SpTerm; 3]> All of which should be
@@ -787,7 +786,7 @@ impl<'a, A: ForIRI> OntologyParser<'a, A> {
         }
     }
 
-    fn to_ce_seq(&mut self, bnodeid: &BNode) -> Option<Vec<ClassExpression<A>>> {
+    fn to_ce_seq(&mut self, bnodeid: &BNode<A>) -> Option<Vec<ClassExpression<A>>> {
         if !self.bnode_seq.get(bnodeid)?.iter().all(|tce| match tce {
             Term::BNode(id) => self.class_expression.contains_key(id),
             _ => true,
@@ -809,7 +808,7 @@ impl<'a, A: ForIRI> OntologyParser<'a, A> {
         v.into_iter().collect()
     }
 
-    fn to_ni_seq(&mut self, bnodeid: &BNode) -> Option<Vec<Individual<A>>> {
+    fn to_ni_seq(&mut self, bnodeid: &BNode<A>) -> Option<Vec<Individual<A>>> {
         let v: Vec<Option<Individual<_>>> = self
             .bnode_seq
             .remove(bnodeid)
@@ -824,7 +823,7 @@ impl<'a, A: ForIRI> OntologyParser<'a, A> {
         v.into_iter().collect()
     }
 
-    fn to_dr_seq(&mut self, bnodeid: &BNode) -> Option<Vec<DataRange<A>>> {
+    fn to_dr_seq(&mut self, bnodeid: &BNode<A>) -> Option<Vec<DataRange<A>>> {
         let v: Vec<Option<DataRange<_>>> = self
             .bnode_seq
             .remove(bnodeid)
@@ -837,7 +836,7 @@ impl<'a, A: ForIRI> OntologyParser<'a, A> {
     }
 
     // TODO Fix code duplication
-    fn to_literal_seq(&mut self, bnodeid: &BNode) -> Option<Vec<Literal<A>>> {
+    fn to_literal_seq(&mut self, bnodeid: &BNode<A>) -> Option<Vec<Literal<A>>> {
         let v: Vec<Option<Literal<_>>> = self
             .bnode_seq
             .remove(bnodeid)
@@ -1554,9 +1553,9 @@ impl<'a, A: ForIRI> OntologyParser<'a, A> {
             }
         }
         for (k, v) in std::mem::take(&mut self.bnode) {
-            let fbnode = |s: &mut OntologyParser<'a, A>, t, ind: &BNode| {
+            let fbnode = |s: &mut OntologyParser<'a, A>, t, ind: &BNode<A>| {
                 let ann = s.ann_map.remove(t).unwrap_or_else(|| BTreeSet::new());
-                let ind: AnonymousIndividual<A> = self.b.anon(ind.0);
+                let ind: AnonymousIndividual<A> = s.b.anon(ind.0.clone());
                 s.merge(AnnotatedAxiom {
                     axiom: AnnotationAssertion {
                         subject: ind.into(),
@@ -1799,6 +1798,7 @@ mod test {
 
     use std::io::Write;
     use std::path::PathBuf;
+    use std::rc::Rc;
 
     use crate::ontology::axiom_mapped::AxiomMappedOntology;
     use pretty_assertions::assert_eq;
@@ -1810,7 +1810,7 @@ mod test {
             .try_init();
     }
 
-    fn read_ok<R: BufRead>(bufread: &mut R) -> RDFOntology {
+    fn read_ok<R: BufRead>(bufread: &mut R) -> RDFOntology<Rc<str>> {
         init_log();
 
         let r = read(bufread);
@@ -1849,8 +1849,8 @@ mod test {
     }
 
     fn compare_str(rdfread: &str, xmlread: &str) {
-        let rdfont: SetOntology = read_ok(&mut rdfread.as_bytes()).into();
-        let xmlont: SetOntology = crate::io::owx::reader::test::read_ok(&mut xmlread.as_bytes())
+        let rdfont: SetOntology<_> = read_ok(&mut rdfread.as_bytes()).into();
+        let xmlont: SetOntology<_> = crate::io::owx::reader::test::read_ok(&mut xmlread.as_bytes())
             .0
             .into();
 
@@ -2097,25 +2097,25 @@ mod test {
 
     #[test]
     fn import_with_partial_parse() {
-        let b = Build::new();
+        let b = Build::new_rc();
         let mut p = parser_with_build(&mut slurp_rdfont("import").as_bytes(), &b);
         let _ = p.parse_imports();
 
         let rdfont = p.as_ontology().unwrap();
-        let so: SetOntology = rdfont.into();
-        let amont: AxiomMappedOntology = so.into();
+        let so: SetOntology<_> = rdfont.into();
+        let amont: AxiomMappedOntology<_> = so.into();
         assert_eq!(amont.i().import().count(), 1);
     }
 
     #[test]
     fn declaration_with_partial_parse() {
-        let b = Build::new();
+        let b = Build::new_rc();
         let mut p = parser_with_build(&mut slurp_rdfont("class").as_bytes(), &b);
         let _ = p.parse_declarations();
 
         let rdfont = p.as_ontology().unwrap();
-        let so: SetOntology = rdfont.into();
-        let amont: AxiomMappedOntology = so.into();
+        let so: SetOntology<_> = rdfont.into();
+        let amont: AxiomMappedOntology<_> = so.into();
         assert_eq!(amont.i().declare_class().count(), 1);
     }
 
@@ -2381,7 +2381,7 @@ mod test {
 
     #[test]
     fn import_property_in_bits() -> Result<(), ReadError> {
-        let b = Build::new();
+        let b = Build::new_rc();
         let p = parser_with_build(&mut slurp_rdfont("other-property").as_bytes(), &b);
         let (family_other, incomplete) = p.parse()?;
         assert!(incomplete.is_complete());
@@ -2399,7 +2399,7 @@ mod test {
     #[test]
     fn annotation_with_anonymous() {
         let s = slurp_rdfont("annotation-with-anonymous");
-        let ont: AxiomMappedOntology = read_ok(&mut s.as_bytes()).into();
+        let ont: AxiomMappedOntology<_> = read_ok(&mut s.as_bytes()).into();
 
         // We cannot do the usual "compare" because the anonymous
         // individuals break a direct comparision

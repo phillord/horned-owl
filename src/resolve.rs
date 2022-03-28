@@ -49,7 +49,7 @@ mod test {
 
     #[test]
     fn localize() {
-        let b = Build::new();
+        let b = Build::new_rc();
 
         let doc_iri = b.iri("file://blah/and.owl");
 
@@ -63,8 +63,8 @@ mod test {
     #[test]
     fn simple_iri() {
         let _dir_path_buf = PathBuf::from(file!());
-        let b = Build::new();
-        let i: IRI = b.iri("http://www.example.com");
+        let b = Build::new_rc();
+        let i: IRI<_> = b.iri("http://www.example.com");
 
         strict_resolve_iri(&i);
     }

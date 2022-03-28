@@ -44,7 +44,7 @@ pub(crate) fn matcher(matches: &ArgMatches) -> Result<(), CommandError> {
         }
         horned_owl::io::ParserOutput::RDFParser(ont, inc) => {
             if !matches.is_present("incomplete") {
-                let so: SetOntology = ont.into();
+                let so: SetOntology<_> = ont.into();
                 println!("Ontology:\n{:#?}", so);
             }
 

@@ -1,5 +1,5 @@
-use crate::model::{Ontology, IRI};
+use crate::model::{Ontology, IRI, ForIRI};
 
 use std::collections::HashMap;
 
-pub struct OntologyCollection(HashMap<IRI, Box<dyn Ontology>>);
+pub struct OntologyCollection<A: ForIRI>(HashMap<IRI<A>, Box<dyn Ontology<A>>>);
