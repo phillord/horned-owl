@@ -19,7 +19,15 @@
 //! named tuple, allowing differently typed `OntologyIndex` objects to
 //! be added.
 use crate::model::{AnnotatedAxiom, MutableOntology, Ontology, OntologyID, IRI, ForIRI};
+use std::borrow::Borrow;
 use std::rc::Rc;
+
+
+pub trait ForIndex<A:ForIRI>: Borrow<AnnotatedAxiom<A>> {}
+
+impl<A:ForIRI, T: ?Sized> ForIndex<A> for T
+    where T: Borrow<AnnotatedAxiom<A>>
+{}
 
 /// An `OntologyIndex` object.
 ///
@@ -48,16 +56,16 @@ pub trait OntologyIndex<A: ForIRI> {
     /// If the index did have this value present, true is returned.
     ///
     /// If the index did not have this value present, false is returned.
-    fn index_remove(&mut self, ax: &AnnotatedAxiom<A>) -> bool {
-        self.index_take(ax).is_some()
-    }
+    fn index_remove(&mut self, ax: &AnnotatedAxiom<A>) -> bool;
 
-    /// Take an AnnotatedAxiom from the index.
-    ///
-    /// Return the Some<AnnotatedAxiom if it is in the index.
-    ///
-    /// Return None if it does not.
-    fn index_take(&mut self, ax: &AnnotatedAxiom<A>) -> Option<AnnotatedAxiom<A>>;
+    fn index_take(&mut self, ax: &AnnotatedAxiom<A>) -> Option<AnnotatedAxiom<A>> {
+        if self.index_remove(ax) {
+            Some(ax.clone())
+        }
+        else {
+            None
+        }
+    }
 }
 
 /// A NullOntologyIndex which does nothing.
@@ -72,11 +80,6 @@ impl<A: ForIRI> OntologyIndex<A> for NullIndex {
     /// Remove an item, always returns false
     fn index_remove(&mut self, _ax: &AnnotatedAxiom<A>) -> bool {
         false
-    }
-
-    /// Returns the item, always returns `None`
-    fn index_take(&mut self, _ax: &AnnotatedAxiom<A>) -> Option<AnnotatedAxiom<A>> {
-        None
     }
 }
 
@@ -123,7 +126,7 @@ impl<A: ForIRI, I: OntologyIndex<A>> MutableOntology<A> for OneIndexedOntology<A
         self.0.index_insert(rc)
     }
 
-    fn take(&mut self, ax: &AnnotatedAxiom<A>) -> Option<AnnotatedAxiom<A>> {
+    fn take(&mut self, ax:& AnnotatedAxiom<A>) -> Option<AnnotatedAxiom<A>> {
         self.0.index_take(ax)
     }
 }
@@ -186,13 +189,14 @@ impl<A: ForIRI, I: OntologyIndex<A>, J: OntologyIndex<A>> MutableOntology<A> for
 impl<A: ForIRI, I: OntologyIndex<A>, J: OntologyIndex<A>> OntologyIndex<A> for TwoIndexedOntology<A, I, J> {
     fn index_insert(&mut self, ax: Rc<AnnotatedAxiom<A>>) -> bool {
         let rtn = self.0.index_insert(ax.clone());
-        // Don't short cirtuit
+        // Don't short circuit
         self.1.index_insert(ax) || rtn
     }
 
-    fn index_take(&mut self, ax: &AnnotatedAxiom<A>) -> Option<AnnotatedAxiom<A>> {
-        let rtn = self.0.index_take(ax);
-        self.1.index_take(ax).or(rtn)
+    fn index_remove(&mut self, ax: &AnnotatedAxiom<A>) -> bool {
+        let rtn = self.0.index_remove(ax);
+        // Don't short circuit
+        self.1.index_remove(ax) || rtn
     }
 }
 
@@ -276,16 +280,17 @@ impl<A: ForIRI, I: OntologyIndex<A>, J: OntologyIndex<A>,
         (self.0).1.index_insert(ax) || rtn
     }
 
-    fn index_take(&mut self, ax: &AnnotatedAxiom<A>) -> Option<AnnotatedAxiom<A>> {
-        let rtn = (self.0).0.index_take(ax);
-        (self.0).1.index_take(ax).or(rtn)
+    fn index_remove(&mut self, ax: &AnnotatedAxiom<A>) -> bool {
+        let rtn = self.0.index_remove(ax);
+        // Don't short circuit
+        (self.0).1.index_remove(ax) || rtn
     }
 }
 
 /// FourIndexedOntology supports three indexes.
 #[derive(Default, Debug)]
 pub struct FourIndexedOntology<
-        A: ForIRI, 
+        A: ForIRI,
     I: OntologyIndex<A>,
     J: OntologyIndex<A>,
     K: OntologyIndex<A>,

@@ -1,7 +1,7 @@
 //! Rapid, simple, in-memory `Ontology` and `OntologyIndex`
 use std::{collections::HashSet, iter::FromIterator, rc::Rc};
 
-use super::indexed::{rc_unwrap_or_clone, OntologyIndex};
+use super::indexed::{OntologyIndex};
 use crate::model::*;
 
 /// An Ontology backed by a set. This should be the fastest and least
@@ -176,10 +176,6 @@ pub struct SetIndex<A: ForIRI>(HashSet<Rc<AnnotatedAxiom<A>>>);
 impl<A: ForIRI> OntologyIndex<A> for SetIndex<A> {
     fn index_insert(&mut self, ax: Rc<AnnotatedAxiom<A>>) -> bool {
         self.0.insert(ax)
-    }
-
-    fn index_take(&mut self, ax: &AnnotatedAxiom<A>) -> Option<AnnotatedAxiom<A>> {
-        self.0.take(ax).map(rc_unwrap_or_clone)
     }
 
     fn index_remove(&mut self, ax: &AnnotatedAxiom<A>) -> bool {

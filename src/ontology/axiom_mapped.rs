@@ -18,7 +18,7 @@ use std::{
     rc::Rc,
 };
 
-use super::indexed::{rc_unwrap_or_clone, OneIndexedOntology, OntologyIndex};
+use super::indexed::{OneIndexedOntology, OntologyIndex};
 
 /// Return all axioms of a specific `AxiomKind`
 #[allow(unused_macros)]
@@ -265,12 +265,6 @@ impl<'a, A: ForIRI> IntoIterator for &'a AxiomMappedIndex<A> {
 impl<A: ForIRI> OntologyIndex<A> for AxiomMappedIndex<A> {
     fn index_insert(&mut self, ax: Rc<AnnotatedAxiom<A>>) -> bool {
         self.mut_set_for_kind(ax.kind()).insert(ax)
-    }
-
-    fn index_take(&mut self, ax: &AnnotatedAxiom<A>) -> Option<AnnotatedAxiom<A>> {
-        self.mut_set_for_kind(ax.kind())
-            .take(ax)
-            .map(rc_unwrap_or_clone)
     }
 
     fn index_remove(&mut self, ax: &AnnotatedAxiom<A>) -> bool {

@@ -84,18 +84,6 @@ impl<A: ForIRI> OntologyIndex<A> for DeclarationMappedIndex<A> {
         s.is_some()
     }
 
-    fn index_take(&mut self, ax: &AnnotatedAxiom<A>) -> Option<AnnotatedAxiom<A>> {
-        let s = some! {
-            self.0.remove(&self.aa_to_iri(&*ax)?)
-        };
-
-        if s.is_some() {
-            Some(ax.clone())
-        } else {
-            None
-        }
-    }
-
     fn index_remove(&mut self, ax: &AnnotatedAxiom<A>) -> bool {
         let s = some! {
             self.0.remove(&self.aa_to_iri(&*ax)?)

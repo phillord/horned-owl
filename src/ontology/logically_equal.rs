@@ -1,6 +1,6 @@
 use crate::model::{AnnotatedAxiom, Axiom, MutableOntology, ForIRI};
 
-use super::indexed::{rc_unwrap_or_clone, OntologyIndex, ThreeIndexedOntology, TwoIndexedOntology};
+use super::indexed::{OntologyIndex, ThreeIndexedOntology, TwoIndexedOntology};
 use std::collections::HashMap;
 use std::convert::AsRef;
 use std::rc::Rc;
@@ -17,10 +17,6 @@ impl<A: ForIRI> LogicallyEqualIndex<A> {
 impl<A: ForIRI> OntologyIndex<A> for LogicallyEqualIndex<A> {
     fn index_insert(&mut self, ax: Rc<AnnotatedAxiom<A>>) -> bool {
         self.0.insert(ax.axiom.clone(), ax).is_some()
-    }
-
-    fn index_take(&mut self, ax: &AnnotatedAxiom<A>) -> Option<AnnotatedAxiom<A>> {
-        self.0.remove(&ax.axiom).map(rc_unwrap_or_clone)
     }
 
     fn index_remove(&mut self, ax: &AnnotatedAxiom<A>) -> bool {
