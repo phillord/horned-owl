@@ -115,7 +115,7 @@ fn io_read(bench: &mut Bencher) {
 
 fn bigger_tree<A:ForIRI>(b: Build<A>){
     let mut o = SetOntology::new();
-    let mut i = 50_000;
+    let mut i = 100_000;
     create_tree(&b, &mut o, &mut i);
 }
 
