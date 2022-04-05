@@ -3,8 +3,10 @@
 use crate::{
     error::{underlying, CommandError, ParserError},
     io::{ParserOutput, ResourceType},
-    model::{Build, IRI},
-    ontology::axiom_mapped::AxiomMappedOntology,
+    model::{AnnotatedAxiom, Build, IRI},
+    ontology::{
+        axiom_mapped::AxiomMappedOntology,
+    },
     resolve::{localize_iri, strict_resolve_iri},
 };
 
@@ -22,7 +24,7 @@ pub fn path_type(path: &Path) -> Option<ResourceType> {
     }
 }
 
-pub fn parse_path(path: &Path) -> Result<ParserOutput<Rc<str>>, CommandError> {
+pub fn parse_path(path: &Path) -> Result<ParserOutput<Rc<str>, Rc<AnnotatedAxiom<Rc<str>>>>, CommandError> {
     let file = File::open(&path).map_err(underlying)?;
     let mut bufreader = BufReader::new(file);
 
@@ -42,7 +44,7 @@ pub fn parse_path(path: &Path) -> Result<ParserOutput<Rc<str>>, CommandError> {
 }
 
 /// Parse but only as far as the imports, if that makes sense.
-pub fn parse_imports(path: &Path) -> Result<ParserOutput<Rc<str>>, CommandError> {
+pub fn parse_imports(path: &Path) -> Result<ParserOutput<Rc<str>, Rc<AnnotatedAxiom<Rc<str>>>>, CommandError> {
     let file = File::open(&path).map_err(underlying)?;
     let mut bufreader = BufReader::new(file);
     Ok(match path_type(path) {
@@ -163,7 +165,12 @@ pub mod naming {
 
 pub mod summary {
 
-    use crate::{model::{AxiomKind, ForIRI}, ontology::axiom_mapped::AxiomMappedOntology};
+    use crate::{model::{AxiomKind, ForIRI},
+                ontology::{
+                    axiom_mapped::AxiomMappedOntology,
+                    indexed::ForIndex,
+                }
+    };
     use indexmap::map::IndexMap;
 
     #[derive(Debug)]
@@ -179,7 +186,7 @@ pub mod summary {
         }
     }
 
-    pub fn summarize<A: ForIRI, O: Into<AxiomMappedOntology<A>>>(ont: O) -> SummaryStatistics
+    pub fn summarize<A: ForIRI, AA: ForIndex<A>, O: Into<AxiomMappedOntology<A, AA>>>(ont: O) -> SummaryStatistics
     where
         O:,
     {
@@ -195,7 +202,7 @@ pub mod summary {
         }
     }
 
-    fn axiom_types<A: ForIRI, O: Into<AxiomMappedOntology<A>>>(ont: O) -> IndexMap<AxiomKind, usize> {
+    fn axiom_types<A: ForIRI, AA: ForIndex<A>, O: Into<AxiomMappedOntology<A, AA>>>(ont: O) -> IndexMap<AxiomKind, usize> {
         let ont: AxiomMappedOntology<_> = ont.into();
         let mut im = IndexMap::new();
         for ax in AxiomKind::all_kinds() {

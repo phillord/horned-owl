@@ -3,6 +3,7 @@ use curie::PrefixMapping;
 use crate::model::Kinded;
 use crate::model::*;
 use crate::vocab::Namespace::*;
+use crate::ontology::indexed::ForIndex;
 use crate::{ontology::axiom_mapped::AxiomMappedOntology, vocab::WithIRI};
 
 use quick_xml::events::BytesDecl;
@@ -37,9 +38,9 @@ impl From<quick_xml::Error> for WriteError {
 ///
 /// The ontology is written in OWL
 /// [XML](https://www.w3.org/TR/owl2-xml-serialization/) syntax.
-pub fn write<A: ForIRI, W: StdWrite>(
+pub fn write<A: ForIRI, AA: ForIndex<A>, W: StdWrite>(
     write: W,
-    ont: &AxiomMappedOntology<A>,
+    ont: &AxiomMappedOntology<A, AA>,
     mapping: Option<&PrefixMapping>,
 ) -> Result<(), WriteError> {
     let mut writer = Writer::new_with_indent(write, b' ', 4);
@@ -231,8 +232,8 @@ macro_rules! content0 {
     };
 }
 
-fn render_ont<A: ForIRI, W>(
-    o: &AxiomMappedOntology<A>,
+fn render_ont<A: ForIRI, AA:ForIndex<A>, W>(
+    o: &AxiomMappedOntology<A, AA>,
     w: &mut Writer<W>,
     m: &PrefixMapping,
 ) -> Result<(), WriteError>

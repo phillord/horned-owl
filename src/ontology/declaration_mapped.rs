@@ -2,15 +2,16 @@
 
 use crate::model::{AnnotatedAxiom, Axiom, AxiomKind, Kinded, NamedEntityKind, IRI, ForIRI};
 
+use super::indexed::ForIndex;
 use super::indexed::OntologyIndex;
 
 use std::{collections::HashMap, rc::Rc};
 
 #[derive(Debug, Default)]
-pub struct DeclarationMappedIndex<A: ForIRI>(HashMap<IRI<A>, NamedEntityKind>);
+pub struct DeclarationMappedIndex<A: ForIRI, AA: ForIndex<A>>(HashMap<IRI<A>, NamedEntityKind>);
 
-impl<A: ForIRI> DeclarationMappedIndex<A> {
-    pub fn new() -> DeclarationMappedIndex<A> {
+impl<A: ForIRI, AA: ForIndex<A>> DeclarationMappedIndex<A, AA> {
+    pub fn new() -> DeclarationMappedIndex<A, AA> {
         DeclarationMappedIndex(HashMap::new())
     }
 
@@ -75,8 +76,8 @@ macro_rules! some {
     };
 }
 
-impl<A: ForIRI> OntologyIndex<A> for DeclarationMappedIndex<A> {
-    fn index_insert(&mut self, ax: Rc<AnnotatedAxiom<A>>) -> bool {
+impl<A: ForIRI, AA: ForIndex<A>> OntologyIndex<A, AA> for DeclarationMappedIndex<A, AA> {
+    fn index_insert(&mut self, ax: AA) -> bool {
         let s = some! {
             self.0.insert(self.aa_to_iri(&*ax)?,
                           self.aa_to_ne(&*ax)?)
@@ -93,7 +94,7 @@ impl<A: ForIRI> OntologyIndex<A> for DeclarationMappedIndex<A> {
     }
 }
 
-impl DeclarationMappedIndex<Rc<str>> {
+impl DeclarationMappedIndex<Rc<str>, Rc<AnnotatedAxiom<Rc<str>>>> {
     pub fn new_rc() -> Self {
         Self::new()
     }

@@ -22,8 +22,9 @@ use crate::model::{AnnotatedAxiom, MutableOntology, Ontology, OntologyID, IRI, F
 use std::borrow::Borrow;
 use std::rc::Rc;
 
-
-pub trait ForIndex<A:ForIRI>: Borrow<AnnotatedAxiom<A>> {}
+pub trait ForIndex: Borrow<AnnotatedAxiom<A>> {
+    type A:Borrow<AnnotatedAxiom<A>>;
+}
 
 impl<A:ForIRI, T: ?Sized> ForIndex<A> for T
     where T: Borrow<AnnotatedAxiom<A>>
@@ -44,12 +45,13 @@ impl<A:ForIRI, T: ?Sized> ForIndex<A> for T
 /// do, or the it will be dropped entirely. The `SetIndex` is a simple
 /// way to achieving this.
 pub trait OntologyIndex<A: ForIRI> {
+
     /// Potentially insert an AnnotatedAxiom to the index.
     ///
     /// If the index did not have this value present, true is returned.
     ///
     /// If the index did have this value present, false is returned.
-    fn index_insert(&mut self, ax: Rc<AnnotatedAxiom<A>>) -> bool;
+    fn index_insert<AA:ForIndex<A>>(&mut self, ax: AA) -> bool;
 
     /// Remove an AnnotatedAxiom from the index.
     ///
@@ -73,7 +75,7 @@ pub trait OntologyIndex<A: ForIRI> {
 pub struct NullIndex();
 impl<A: ForIRI> OntologyIndex<A> for NullIndex {
     /// Insert an item, always returns false
-    fn index_insert(&mut self, _ax: Rc<AnnotatedAxiom<A>>) -> bool {
+    fn index_insert<AA:ForIndex<A>>(&mut self, _ax: AA) -> bool {
         false
     }
 
@@ -83,10 +85,11 @@ impl<A: ForIRI> OntologyIndex<A> for NullIndex {
     }
 }
 
+
 /// A `OneIndexedOntology` operates as a simple adaptor betweeen any
 /// `OntologyIndex` and an `Ontology`.
 #[derive(Default, Debug, Eq, PartialEq)]
-pub struct OneIndexedOntology<A: ForIRI, I: OntologyIndex<A>>(I, OntologyID<A>, Option<IRI<A>>);
+pub struct OneIndexedOntology<A:ForIRI, I>(I, OntologyID<A>, Option<IRI<A>>);
 
 impl<A: ForIRI, I: OntologyIndex<A>> OneIndexedOntology<A, I> {
     pub fn new(i: I) -> Self {
@@ -102,7 +105,7 @@ impl<A: ForIRI, I: OntologyIndex<A>> OneIndexedOntology<A, I> {
     }
 }
 
-impl<A: ForIRI,I: OntologyIndex<A>> Ontology<A> for OneIndexedOntology<A, I> {
+impl<A: ForIRI, I: OntologyIndex<A>> Ontology<A> for OneIndexedOntology<A, I> {
     fn id(&self) -> &OntologyID<A> {
         &self.1
     }
@@ -121,7 +124,7 @@ impl<A: ForIRI,I: OntologyIndex<A>> Ontology<A> for OneIndexedOntology<A, I> {
 }
 
 impl<A: ForIRI, I: OntologyIndex<A>> MutableOntology<A> for OneIndexedOntology<A, I> {
-    fn insert<AA: Into<AnnotatedAxiom<A>>>(&mut self, ax: AA) -> bool {
+    fn insert<IAA: Into<AnnotatedAxiom<A>>>(&mut self, ax: IAA) -> bool {
         let rc = Rc::new(ax.into());
         self.0.index_insert(rc)
     }
@@ -131,14 +134,15 @@ impl<A: ForIRI, I: OntologyIndex<A>> MutableOntology<A> for OneIndexedOntology<A
     }
 }
 
+/*
 /// A `TwoIndexOntology` implements `Ontology` and supports two
 /// `OntologyIndex`. It itself implements `OntologyIndex` so that it
 /// can be composed.
 #[derive(Default, Debug)]
-pub struct TwoIndexedOntology<A: ForIRI, I: OntologyIndex<A>, J: OntologyIndex<A>>
+pub struct TwoIndexedOntology<A: ForIRI, AA: ForIndex<A>, I: OntologyIndex<A, AA>, J: OntologyIndex<A, AA>>
     (I, J, OntologyID<A>, Option<IRI<A>>);
 
-impl<A: ForIRI, I: OntologyIndex<A>, J: OntologyIndex<A>> TwoIndexedOntology<A, I, J> {
+impl<A: ForIRI, AA: ForIndex<A>, I: OntologyIndex<A, AA>, J: OntologyIndex<A, AA>> TwoIndexedOntology<A, AA, I, J> {
     pub fn new(i: I, j: J, id: OntologyID<A>) -> Self {
         TwoIndexedOntology(i, j, id, Default::default())
     }
@@ -156,8 +160,8 @@ impl<A: ForIRI, I: OntologyIndex<A>, J: OntologyIndex<A>> TwoIndexedOntology<A, 
     }
 }
 
-impl<A: ForIRI, I: OntologyIndex<A>, J: OntologyIndex<A>> Ontology<A>
-    for TwoIndexedOntology<A, I, J> {
+impl<A: ForIRI, AA: ForIndex<A>, I: OntologyIndex<A, AA>, J: OntologyIndex<A, AA>> Ontology<A>
+    for TwoIndexedOntology<A, AA, I, J> {
     fn id(&self) -> &OntologyID<A> {
         &self.2
     }
@@ -175,8 +179,8 @@ impl<A: ForIRI, I: OntologyIndex<A>, J: OntologyIndex<A>> Ontology<A>
     }
 }
 
-impl<A: ForIRI, I: OntologyIndex<A>, J: OntologyIndex<A>> MutableOntology<A> for TwoIndexedOntology<A, I, J> {
-    fn insert<AA: Into<AnnotatedAxiom<A>>>(&mut self, ax: AA) -> bool {
+impl<A: ForIRI, AA: ForIndex<A>, I: OntologyIndex<A, AA>, J: OntologyIndex<A, AA>> MutableOntology<A> for TwoIndexedOntology<A, AA, I, J> {
+    fn insert<IAA: Into<AnnotatedAxiom<A>>>(&mut self, ax: IAA) -> bool {
         let rc = Rc::new(ax.into());
         self.index_insert(rc)
     }
@@ -186,8 +190,8 @@ impl<A: ForIRI, I: OntologyIndex<A>, J: OntologyIndex<A>> MutableOntology<A> for
     }
 }
 
-impl<A: ForIRI, I: OntologyIndex<A>, J: OntologyIndex<A>> OntologyIndex<A> for TwoIndexedOntology<A, I, J> {
-    fn index_insert(&mut self, ax: Rc<AnnotatedAxiom<A>>) -> bool {
+impl<A: ForIRI, AA: ForIndex<A>, I: OntologyIndex<A, AA>, J: OntologyIndex<A, AA>> OntologyIndex<A, AA> for TwoIndexedOntology<A, AA, I, J> {
+    fn index_insert(&mut self, ax: AA) -> bool {
         let rtn = self.0.index_insert(ax.clone());
         // Don't short circuit
         self.1.index_insert(ax) || rtn
@@ -202,13 +206,13 @@ impl<A: ForIRI, I: OntologyIndex<A>, J: OntologyIndex<A>> OntologyIndex<A> for T
 
 /// ThreeIndexedOntology supports three indexes.
 #[derive(Default, Debug)]
-pub struct ThreeIndexedOntology<A: ForIRI, I: OntologyIndex<A>, J: OntologyIndex<A>,
-                                K: OntologyIndex<A>>(
-    TwoIndexedOntology<A, I, TwoIndexedOntology<A, J, K>>,
+pub struct ThreeIndexedOntology<A: ForIRI, AA: ForIndex<A>, I: OntologyIndex<A, AA>, J: OntologyIndex<A, AA>,
+                                K: OntologyIndex<A, AA>>(
+    TwoIndexedOntology<A, AA, I, TwoIndexedOntology<A, AA, J, K>>,
 );
 
-impl<A: ForIRI, I: OntologyIndex<A>, J: OntologyIndex<A>,
-     K: OntologyIndex<A>> ThreeIndexedOntology<A, I, J, K> {
+impl<A: ForIRI, AA: ForIndex<A>, I: OntologyIndex<A, AA>, J: OntologyIndex<A, AA>,
+     K: OntologyIndex<A, AA>> ThreeIndexedOntology<A, AA, I, J, K> {
     pub fn new(i: I, j: J, k: K, id: OntologyID<A>) -> Self {
         ThreeIndexedOntology(TwoIndexedOntology(
             i,
@@ -236,9 +240,9 @@ impl<A: ForIRI, I: OntologyIndex<A>, J: OntologyIndex<A>,
     }
 }
 
-impl<A: ForIRI, I: OntologyIndex<A>, J: OntologyIndex<A>,
-     K: OntologyIndex<A>> Ontology<A>
-    for ThreeIndexedOntology<A, I, J, K>
+impl<A: ForIRI, AA: ForIndex<A>, I: OntologyIndex<A, AA>, J: OntologyIndex<A, AA>,
+     K: OntologyIndex<A, AA>> Ontology<A>
+    for ThreeIndexedOntology<A, AA, I, J, K>
 {
     fn id(&self) -> &OntologyID<A> {
         self.0.id()
@@ -257,11 +261,11 @@ impl<A: ForIRI, I: OntologyIndex<A>, J: OntologyIndex<A>,
     }
 }
 
-impl<A: ForIRI, I: OntologyIndex<A>, J: OntologyIndex<A>,
-     K: OntologyIndex<A>> MutableOntology<A>
-    for ThreeIndexedOntology<A, I, J, K>
+impl<A: ForIRI, AA: ForIndex<A>, I: OntologyIndex<A, AA>, J: OntologyIndex<A, AA>,
+     K: OntologyIndex<A, AA>> MutableOntology<A>
+    for ThreeIndexedOntology<A, AA, I, J, K>
 {
-    fn insert<AA: Into<AnnotatedAxiom<A>>>(&mut self, ax: AA) -> bool {
+    fn insert<IAA: Into<AnnotatedAxiom<A>>>(&mut self, ax: IAA) -> bool {
         self.0.insert(ax)
     }
 
@@ -270,9 +274,9 @@ impl<A: ForIRI, I: OntologyIndex<A>, J: OntologyIndex<A>,
     }
 }
 
-impl<A: ForIRI, I: OntologyIndex<A>, J: OntologyIndex<A>,
-     K: OntologyIndex<A>> OntologyIndex<A>
-    for ThreeIndexedOntology<A, I, J, K>
+impl<A: ForIRI, AA: ForIndex<A>, I: OntologyIndex<A, AA>, J: OntologyIndex<A, AA>,
+     K: OntologyIndex<A, AA>> OntologyIndex<A, AA>
+    for ThreeIndexedOntology<A, AA, I, J, K>
 {
     fn index_insert(&mut self, ax: Rc<AnnotatedAxiom<A>>) -> bool {
         let rtn = (self.0).0.index_insert(ax.clone());
@@ -291,15 +295,16 @@ impl<A: ForIRI, I: OntologyIndex<A>, J: OntologyIndex<A>,
 #[derive(Default, Debug)]
 pub struct FourIndexedOntology<
         A: ForIRI,
-    I: OntologyIndex<A>,
-    J: OntologyIndex<A>,
-    K: OntologyIndex<A>,
-    L: OntologyIndex<A>,
->(TwoIndexedOntology<A, I, ThreeIndexedOntology<A, J, K, L>>);
+    AA: ForIndex<A>,
+    I: OntologyIndex<A, AA>,
+    J: OntologyIndex<A, AA>,
+    K: OntologyIndex<A, AA>,
+    L: OntologyIndex<A, AA>,
+>(TwoIndexedOntology<A, AA, I, ThreeIndexedOntology<A, AA, J, K, L>>);
 
-impl<A: ForIRI, I: OntologyIndex<A>, J: OntologyIndex<A>,
-     K: OntologyIndex<A>, L: OntologyIndex<A>>
-    FourIndexedOntology<A, I, J, K, L>
+impl<A: ForIRI, AA: ForIndex<A>, I: OntologyIndex<A, AA>, J: OntologyIndex<A, AA>,
+     K: OntologyIndex<A, AA>, L: OntologyIndex<A, AA>>
+    FourIndexedOntology<A, AA, I, J, K, L>
 {
     pub fn new(i: I, j: J, k: K, l: L, id: OntologyID<A>) -> Self {
         FourIndexedOntology(TwoIndexedOntology(
@@ -332,9 +337,9 @@ impl<A: ForIRI, I: OntologyIndex<A>, J: OntologyIndex<A>,
     }
 }
 
-impl<A: ForIRI, I: OntologyIndex<A>, J: OntologyIndex<A>,
-     K: OntologyIndex<A>, L: OntologyIndex<A>> Ontology<A>
-    for FourIndexedOntology<A, I, J, K, L>
+impl<A: ForIRI, AA: ForIndex<A>, I: OntologyIndex<A, AA>, J: OntologyIndex<A, AA>,
+     K: OntologyIndex<A,AA>, L: OntologyIndex<A, AA>> Ontology<A>
+    for FourIndexedOntology<A, AA, I, J, K, L>
 {
     fn id(&self) -> &OntologyID<A> {
         self.0.id()
@@ -353,11 +358,11 @@ impl<A: ForIRI, I: OntologyIndex<A>, J: OntologyIndex<A>,
     }
 }
 
-impl<A: ForIRI, I: OntologyIndex<A>, J: OntologyIndex<A>,
-     K: OntologyIndex<A>, L: OntologyIndex<A>> MutableOntology<A>
-    for FourIndexedOntology<A, I, J, K, L>
+impl<A: ForIRI, AA:ForIndex<A>, I: OntologyIndex<A, AA>, J: OntologyIndex<A, AA>,
+     K: OntologyIndex<A, AA>, L: OntologyIndex<A, AA>> MutableOntology<A>
+    for FourIndexedOntology<A, AA, I, J, K, L>
 {
-    fn insert<AA: Into<AnnotatedAxiom<A>>>(&mut self, ax: AA) -> bool {
+    fn insert<IAA: Into<AnnotatedAxiom<A>>>(&mut self, ax: IAA) -> bool {
         self.0.insert(ax)
     }
 
@@ -538,3 +543,4 @@ mod test {
         assert_eq!(o.i(), o.l());
     }
 }
+*/

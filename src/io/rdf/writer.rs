@@ -3,6 +3,9 @@ use crate::{
     ontology::axiom_mapped::AxiomMappedOntology,
     vocab::{is_thing, Vocab, WithIRI, OWL, RDF, RDFS, XSD},
 };
+
+use crate::ontology::indexed::ForIndex;
+
 use pretty_rdf::{
     ChunkedRdfXmlFormatterConfig, PBlankNode, PLiteral, PNamedNode, PSubject, PTerm, PTriple,
     PrettyRdfXmlFormatter,
@@ -30,7 +33,7 @@ impl From<std::io::Error> for WriteError {
     }
 }
 
-pub fn write<A: ForIRI, W: Write>(write: &mut W, ont: &AxiomMappedOntology<A>) -> Result<(), WriteError> {
+pub fn write<A: ForIRI, AA:ForIndex<A>, W: Write>(write: &mut W, ont: &AxiomMappedOntology<A, AA>) -> Result<(), WriteError> {
     // Entirely unsatisfying to set this randomly here, but we can't
     // access ns our parser yet
     let mut p = indexmap::IndexMap::new();
@@ -405,7 +408,7 @@ impl<A: ForIRI> Render<A, ()> for BTreeSet<Annotation<A>> {
     }
 }
 
-impl<A: ForIRI> Render<A, ()> for &AxiomMappedOntology<A> {
+impl<A: ForIRI, AA: ForIndex<A>> Render<A, ()> for &AxiomMappedOntology<A, AA> {
     fn render<W: Write>(
         &self,
         f: &mut PrettyRdfXmlFormatter<A, W>,

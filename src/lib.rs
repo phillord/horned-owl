@@ -41,11 +41,11 @@ extern crate log;
 extern crate quick_xml;
 
 pub mod collection;
-pub mod command;
+//pub mod command;
 pub mod error;
-pub mod io;
+//pub mod io;
 pub mod model;
 pub mod ontology;
-pub mod resolve;
+//pub mod resolve;
 pub mod vocab;
 

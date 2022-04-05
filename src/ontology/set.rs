@@ -1,6 +1,7 @@
 //! Rapid, simple, in-memory `Ontology` and `OntologyIndex`
 use std::{collections::HashSet, iter::FromIterator, rc::Rc};
 
+use super::indexed::ForIndex;
 use super::indexed::{OntologyIndex};
 use crate::model::*;
 
@@ -171,9 +172,11 @@ where
 /// combined with an `IndexedOntology` this should be nearly as
 /// fastest as `SetOntology`.
 #[derive(Debug, Default, Eq, PartialEq)]
-pub struct SetIndex<A: ForIRI>(HashSet<Rc<AnnotatedAxiom<A>>>);
+pub struct SetIndex<AA>(
+    HashSet<AA>,
+);
 
-impl<A: ForIRI> OntologyIndex<A> for SetIndex<A> {
+impl<A: ForIRI, AA: ForIndex<A>> OntologyIndex<A> for SetIndex<AA> {
     fn index_insert(&mut self, ax: Rc<AnnotatedAxiom<A>>) -> bool {
         self.0.insert(ax)
     }
@@ -183,8 +186,8 @@ impl<A: ForIRI> OntologyIndex<A> for SetIndex<A> {
     }
 }
 
-impl<A: ForIRI> SetIndex<A> {
-    pub fn new() -> SetIndex<A> {
+impl<A: ForIRI, AA: ForIndex<A>> SetIndex<AA> {
+    pub fn new() -> SetIndex<AA> {
         SetIndex(HashSet::new())
     }
     pub fn contains(&self, ax: &AnnotatedAxiom<A>) -> bool {
@@ -192,13 +195,13 @@ impl<A: ForIRI> SetIndex<A> {
     }
 }
 
-impl SetIndex<Rc<str>> {
+impl SetIndex<Rc<AnnotatedAxiom<Rc<str>>>> {
     pub fn new_rc() -> Self {
         Self::new()
     }
 }
 
-impl<A: ForIRI> IntoIterator for SetIndex<A> {
+impl<A: ForIRI, AA: ForIndex<A>> IntoIterator for SetIndex<AA> {
     type Item = AnnotatedAxiom<A>;
     type IntoIter = std::vec::IntoIter<AnnotatedAxiom<A>>;
     fn into_iter(self) -> Self::IntoIter {
@@ -212,7 +215,7 @@ impl<A: ForIRI> IntoIterator for SetIndex<A> {
     }
 }
 
-impl<'a, A: ForIRI> IntoIterator for &'a SetIndex<A> {
+impl<'a, A: ForIRI, AA: ForIndex<A>> IntoIterator for &'a SetIndex<AA> {
     type Item = &'a AnnotatedAxiom<A>;
     type IntoIter = std::vec::IntoIter<&'a AnnotatedAxiom<A>>;
     fn into_iter(self) -> Self::IntoIter {

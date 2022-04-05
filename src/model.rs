@@ -190,7 +190,7 @@ impl<A: ForIRI> Display for IRI<A> {
 // both could be replaced by traits or enums straight-forwardly
 // enough, to enable threading.
 #[derive(Debug, Default)]
-pub struct Build<A: ForIRI>(
+pub struct Build<A>(
     RefCell<BTreeSet<IRI<A>>>,
     RefCell<BTreeSet<AnonymousIndividual<A>>>
 );
@@ -390,14 +390,14 @@ macro_rules! named {
         /// equivalent form. The individual structs for each variant
         /// provide us types for use elsewhere in the library.
         #[derive(Debug, Eq, PartialEq, Hash)]
-        pub enum NamedEntity<A:ForIRI>{
+        pub enum NamedEntity<A>{
             $($name($name<A>)),*
         }
 
         $(
             $(#[$attr]) *
             #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-            pub struct $name<A:ForIRI>(pub IRI<A>);
+            pub struct $name<A>(pub IRI<A>);
 
             impl<A: ForIRI> From<IRI<A>> for $name<A> {
                 fn from(iri: IRI<A>) -> $name<A> {
@@ -1370,7 +1370,7 @@ impl<A: ForIRI> From<ObjectPropertyExpression<A>> for SubObjectPropertyExpressio
 
 /// A property expression
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub enum PropertyExpression<A: ForIRI> {
+pub enum PropertyExpression<A> {
     ObjectPropertyExpression(ObjectPropertyExpression<A>),
     DataProperty(DataProperty<A>),
     AnnotationProperty(AnnotationProperty<A>),
@@ -1389,7 +1389,7 @@ impl<A: ForIRI> From<DataProperty<A>> for PropertyExpression<A> {
 
 // Data!!!
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub struct FacetRestriction<A: ForIRI> {
+pub struct FacetRestriction<A> {
     pub f: Facet,
     pub l: Literal<A>,
 }
@@ -1410,7 +1410,7 @@ pub enum Facet {
 }
 
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub enum DataRange<A: ForIRI> {
+pub enum DataRange<A> {
     Datatype(Datatype<A>),
     DataIntersectionOf(Vec<DataRange<A>>),
     DataUnionOf(Vec<DataRange<A>>),
@@ -1430,7 +1430,7 @@ impl<A: ForIRI> From<Datatype<A>> for DataRange<A> {
 /// As well as a named class, it is possible to define classes of
 /// individuals based on these class constructors.
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub enum ClassExpression<A: ForIRI> {
+pub enum ClassExpression<A> {
     /// A named class
     Class(Class<A>),
 
@@ -1615,7 +1615,7 @@ impl<A: ForIRI> From<Class<A>> for Box<ClassExpression<A>> {
 /// stable over the lifetime of the ontology, and a version IRI which
 /// is expected to change between versions.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct OntologyID<A: ForIRI> {
+pub struct OntologyID<A> {
     pub iri: Option<IRI<A>>,
     pub viri: Option<IRI<A>>,
 }
@@ -1627,7 +1627,7 @@ impl<A:ForIRI> Default for OntologyID<A> {
 }
 
 /// Access or change the `OntologyID` of an `Ontology`
-pub trait Ontology<A: ForIRI> {
+pub trait Ontology<A> {
     fn id(&self) -> &OntologyID<A>;
     fn mut_id(&mut self) -> &mut OntologyID<A>;
     fn doc_iri(&self) -> &Option<IRI<A>>;
@@ -1635,7 +1635,7 @@ pub trait Ontology<A: ForIRI> {
 }
 
 /// Add or remove axioms to an `MutableOntology`
-pub trait MutableOntology<A: ForIRI> {
+pub trait MutableOntology<A> {
     /// Insert an axiom into the ontology.
     ///
     /// # Examples
@@ -1679,7 +1679,7 @@ pub trait MutableOntology<A: ForIRI> {
         self.insert(ax)
     }
 }
-
+/*
 #[cfg(test)]
 mod test {
     use super::*;
@@ -1818,3 +1818,4 @@ mod test {
     }
 }
 
+*/
