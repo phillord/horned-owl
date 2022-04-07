@@ -20,15 +20,25 @@
 //! be added.
 use crate::model::{AnnotatedAxiom, MutableOntology, Ontology, OntologyID, IRI, ForIRI};
 use std::borrow::Borrow;
-use std::rc::Rc;
+use std::marker::PhantomData;
+use std::hash::Hash;
 
-pub trait ForIndex: Borrow<AnnotatedAxiom<A>> {
-    type A:Borrow<AnnotatedAxiom<A>>;
+pub trait ForIndex<A:ForIRI>: Borrow<AnnotatedAxiom<A>> + Eq + From<AnnotatedAxiom<A>>
+    + Hash + Ord + PartialEq + PartialOrd {
+    fn unwrap(&self) -> AnnotatedAxiom<A>
+    {
+        (*self.borrow()).clone()
+    }
 }
 
 impl<A:ForIRI, T: ?Sized> ForIndex<A> for T
-    where T: Borrow<AnnotatedAxiom<A>>
+    where T: Borrow<AnnotatedAxiom<A>> + Eq + From<AnnotatedAxiom<A>> + Hash + Ord + PartialEq + PartialOrd
 {}
+
+
+
+
+
 
 /// An `OntologyIndex` object.
 ///
@@ -44,14 +54,14 @@ impl<A:ForIRI, T: ?Sized> ForIndex<A> for T
 /// least one `OntologyIndex` object for an `IndexedOntology` should
 /// do, or the it will be dropped entirely. The `SetIndex` is a simple
 /// way to achieving this.
-pub trait OntologyIndex<A: ForIRI> {
+pub trait OntologyIndex<A: ForIRI, AA:ForIndex<A>> {
 
     /// Potentially insert an AnnotatedAxiom to the index.
     ///
     /// If the index did not have this value present, true is returned.
     ///
     /// If the index did have this value present, false is returned.
-    fn index_insert<AA:ForIndex<A>>(&mut self, ax: AA) -> bool;
+    fn index_insert(&mut self, ax: AA) -> bool;
 
     /// Remove an AnnotatedAxiom from the index.
     ///
@@ -73,9 +83,9 @@ pub trait OntologyIndex<A: ForIRI> {
 /// A NullOntologyIndex which does nothing.
 #[derive(Default)]
 pub struct NullIndex();
-impl<A: ForIRI> OntologyIndex<A> for NullIndex {
+impl<A: ForIRI, AA:ForIndex<A>> OntologyIndex<A, AA> for NullIndex {
     /// Insert an item, always returns false
-    fn index_insert<AA:ForIndex<A>>(&mut self, _ax: AA) -> bool {
+    fn index_insert(&mut self, _ax: AA) -> bool {
         false
     }
 
@@ -85,15 +95,14 @@ impl<A: ForIRI> OntologyIndex<A> for NullIndex {
     }
 }
 
-
 /// A `OneIndexedOntology` operates as a simple adaptor betweeen any
 /// `OntologyIndex` and an `Ontology`.
 #[derive(Default, Debug, Eq, PartialEq)]
-pub struct OneIndexedOntology<A:ForIRI, I>(I, OntologyID<A>, Option<IRI<A>>);
+pub struct OneIndexedOntology<A, AA, I>(I, OntologyID<A>, Option<IRI<A>>, PhantomData<AA>);
 
-impl<A: ForIRI, I: OntologyIndex<A>> OneIndexedOntology<A, I> {
+impl<A: ForIRI, AA:ForIndex<A>, I: OntologyIndex<A, AA>> OneIndexedOntology<A, AA, I> {
     pub fn new(i: I) -> Self {
-        OneIndexedOntology(i, Default::default(), Default::default())
+        OneIndexedOntology(i, Default::default(), Default::default(), Default::default())
     }
 
     pub fn i(&self) -> &I {
@@ -105,7 +114,7 @@ impl<A: ForIRI, I: OntologyIndex<A>> OneIndexedOntology<A, I> {
     }
 }
 
-impl<A: ForIRI, I: OntologyIndex<A>> Ontology<A> for OneIndexedOntology<A, I> {
+impl<A: ForIRI, AA:ForIndex<A>, I: OntologyIndex<A, AA>> Ontology<A> for OneIndexedOntology<A, AA, I> {
     fn id(&self) -> &OntologyID<A> {
         &self.1
     }
@@ -123,10 +132,10 @@ impl<A: ForIRI, I: OntologyIndex<A>> Ontology<A> for OneIndexedOntology<A, I> {
     }
 }
 
-impl<A: ForIRI, I: OntologyIndex<A>> MutableOntology<A> for OneIndexedOntology<A, I> {
+impl<A: ForIRI, AA:ForIndex<A>, I: OntologyIndex<A, AA>> MutableOntology<A> for OneIndexedOntology<A, AA, I> {
     fn insert<IAA: Into<AnnotatedAxiom<A>>>(&mut self, ax: IAA) -> bool {
-        let rc = Rc::new(ax.into());
-        self.0.index_insert(rc)
+        let ax = ax.into();
+        self.0.index_insert(ax.into())
     }
 
     fn take(&mut self, ax:& AnnotatedAxiom<A>) -> Option<AnnotatedAxiom<A>> {

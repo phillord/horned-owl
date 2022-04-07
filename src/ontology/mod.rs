@@ -33,8 +33,8 @@
 //! of an IRI. As it ignores most axioms passed to it, it does not
 //! provide iteration.
 
-//pub mod axiom_mapped;
-//pub mod declaration_mapped;
+pub mod axiom_mapped;
+pub mod declaration_mapped;
 pub mod indexed;
 //pub mod logically_equal;
 pub mod set;

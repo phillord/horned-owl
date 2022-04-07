@@ -4,7 +4,7 @@ use std::{collections::HashSet, iter::FromIterator, rc::Rc};
 use super::indexed::ForIndex;
 use super::indexed::{OntologyIndex};
 use crate::model::*;
-
+use std::marker::PhantomData;
 /// An Ontology backed by a set. This should be the fastest and least
 /// overhead implementation of an ontology. It provides rapid testing
 /// of whether an equivalent axiom exists, and is iterable.
@@ -26,6 +26,7 @@ impl SetOntology<Rc<str>> {
         SetOntology::new()
     }
 }
+
 impl<A: ForIRI> SetOntology<A> {
     /// Create a new ontology.
     ///
@@ -171,13 +172,14 @@ where
 /// An `OntologyIndex` implemented over an in-memory HashSet. When
 /// combined with an `IndexedOntology` this should be nearly as
 /// fastest as `SetOntology`.
-#[derive(Debug, Default, Eq, PartialEq)]
-pub struct SetIndex<AA>(
+#[derive(Debug, Default)]
+pub struct SetIndex<A, AA>(
     HashSet<AA>,
+    PhantomData<A>
 );
 
-impl<A: ForIRI, AA: ForIndex<A>> OntologyIndex<A> for SetIndex<AA> {
-    fn index_insert(&mut self, ax: Rc<AnnotatedAxiom<A>>) -> bool {
+impl<A: ForIRI, AA: ForIndex<A>> OntologyIndex<A, AA> for SetIndex<A, AA> {
+    fn index_insert(&mut self, ax: AA) -> bool {
         self.0.insert(ax)
     }
 
@@ -186,40 +188,42 @@ impl<A: ForIRI, AA: ForIndex<A>> OntologyIndex<A> for SetIndex<AA> {
     }
 }
 
-impl<A: ForIRI, AA: ForIndex<A>> SetIndex<AA> {
-    pub fn new() -> SetIndex<AA> {
-        SetIndex(HashSet::new())
+impl<A:ForIRI, AA:ForIndex<A>> SetIndex<A, AA> {
+    pub fn new() -> SetIndex<A, AA> {
+        SetIndex(Default::default(), Default::default())
     }
-    pub fn contains(&self, ax: &AnnotatedAxiom<A>) -> bool {
+
+    pub fn contains(&self, ax: &AnnotatedAxiom<A>) -> bool
+    {
         self.0.contains(ax)
     }
 }
 
-impl SetIndex<Rc<AnnotatedAxiom<Rc<str>>>> {
+impl SetIndex<Rc<str>, Rc<AnnotatedAxiom<Rc<str>>>> {
     pub fn new_rc() -> Self {
         Self::new()
     }
 }
 
-impl<A: ForIRI, AA: ForIndex<A>> IntoIterator for SetIndex<AA> {
+impl<A: ForIRI, AA: ForIndex<A>> IntoIterator for SetIndex<A, AA>
+{
     type Item = AnnotatedAxiom<A>;
     type IntoIter = std::vec::IntoIter<AnnotatedAxiom<A>>;
     fn into_iter(self) -> Self::IntoIter {
-        let v: Vec<AnnotatedAxiom<A>> = self
+        let v: Vec<AnnotatedAxiom<_>> = self
             .0
             .into_iter()
-            .map(Rc::try_unwrap)
-            .map(Result::unwrap)
+            .map(|fi| fi.unwrap())
             .collect();
         v.into_iter()
     }
 }
 
-impl<'a, A: ForIRI, AA: ForIndex<A>> IntoIterator for &'a SetIndex<AA> {
+impl<'a, A: ForIRI, AA: ForIndex<A>> IntoIterator for &'a SetIndex<A, AA> {
     type Item = &'a AnnotatedAxiom<A>;
     type IntoIter = std::vec::IntoIter<&'a AnnotatedAxiom<A>>;
     fn into_iter(self) -> Self::IntoIter {
-        let v: Vec<&'a AnnotatedAxiom<A>> = self.0.iter().map(|rcax| &**rcax).collect();
+        let v: Vec<&'a AnnotatedAxiom<A>> = self.0.iter().map(|fiac| fiac.borrow()).collect();
         v.into_iter()
     }
 }
@@ -405,7 +409,7 @@ mod test {
     fn test_index_into_iter() {
         // Setup
         let build = Build::new_rc();
-        let mut o = OneIndexedOntology::new(SetIndex::new());
+        let mut o = OneIndexedOntology::new(SetIndex::new_rc());
         let decl1 = DeclareClass(build.class("http://www.example.com#a"));
         let decl2 = DeclareClass(build.class("http://www.example.com#b"));
         let decl3 = DeclareClass(build.class("http://www.example.com#c"));
@@ -464,7 +468,7 @@ mod test {
     fn test_index_iter() {
         // Setup
         let build = Build::new_rc();
-        let mut o = OneIndexedOntology::new(SetIndex::new());
+        let mut o = OneIndexedOntology::new(SetIndex::new_rc());
         let decl1 = DeclareClass(build.class("http://www.example.com#a"));
         let decl2 = DeclareClass(build.class("http://www.example.com#b"));
         let decl3 = DeclareClass(build.class("http://www.example.com#c"));

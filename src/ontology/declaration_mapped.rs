@@ -6,13 +6,15 @@ use super::indexed::ForIndex;
 use super::indexed::OntologyIndex;
 
 use std::{collections::HashMap, rc::Rc};
+use std::marker::PhantomData;
 
 #[derive(Debug, Default)]
-pub struct DeclarationMappedIndex<A: ForIRI, AA: ForIndex<A>>(HashMap<IRI<A>, NamedEntityKind>);
+pub struct DeclarationMappedIndex<A: ForIRI, AA:ForIndex<A>>(HashMap<IRI<A>, NamedEntityKind>,
+                                                             PhantomData<AA>);
 
-impl<A: ForIRI, AA: ForIndex<A>> DeclarationMappedIndex<A, AA> {
+impl<A: ForIRI, AA:ForIndex<A>> DeclarationMappedIndex<A, AA> {
     pub fn new() -> DeclarationMappedIndex<A, AA> {
-        DeclarationMappedIndex(HashMap::new())
+        DeclarationMappedIndex(HashMap::new(), Default::default())
     }
 
     pub fn is_annotation_property(&self, iri: &IRI<A>) -> bool {
@@ -79,8 +81,8 @@ macro_rules! some {
 impl<A: ForIRI, AA: ForIndex<A>> OntologyIndex<A, AA> for DeclarationMappedIndex<A, AA> {
     fn index_insert(&mut self, ax: AA) -> bool {
         let s = some! {
-            self.0.insert(self.aa_to_iri(&*ax)?,
-                          self.aa_to_ne(&*ax)?)
+            self.0.insert(self.aa_to_iri(ax.borrow())?,
+                          self.aa_to_ne(ax.borrow())?)
         };
         s.is_some()
     }
@@ -120,13 +122,13 @@ mod test {
 
     #[test]
     fn test_cons() {
-        let _d:DeclarationMappedIndex<Rc<str>> = DeclarationMappedIndex::new();
+        let _d = DeclarationMappedIndex::new_rc();
         assert!(true);
     }
 
     #[test]
     fn test_insert() {
-        let mut d = DeclarationMappedIndex::new();
+        let mut d = DeclarationMappedIndex::new_rc();
         let s = stuff();
         assert!(d.index_insert(s.0.into()));
         assert!(d.index_insert(s.1.into()));
@@ -135,7 +137,7 @@ mod test {
 
     #[test]
     fn test_declaration() {
-        let mut d = DeclarationMappedIndex::new();
+        let mut d = DeclarationMappedIndex::new_rc();
         let s = stuff();
         assert!(d.index_insert(s.0.into()));
         assert!(d.index_insert(s.1.into()));
@@ -158,7 +160,7 @@ mod test {
 
     #[test]
     fn test_declaration_builtin() {
-        let d = DeclarationMappedIndex::new();
+        let d = DeclarationMappedIndex::new_rc();
         let b = Build::new_rc();
         assert_eq!(
             d.declaration_kind(&b.iri(OWL::TopDataProperty.iri_str())),

@@ -113,11 +113,13 @@ use std::sync::Arc;
 #[derive(Clone, Debug, Eq, PartialEq, Hash, PartialOrd, Ord)]
 pub struct IRI<A>(A);
 
-pub trait ForIRI: AsRef<str> + Borrow<str> + Eq + From<String> + Hash + PartialEq + Ord + PartialOrd + Debug + Clone {
+pub trait ForIRI: AsRef<str> + Borrow<str> + Clone + Debug + Eq +
+    From<String> + Hash + PartialEq + Ord + PartialOrd {
 }
 
 impl<T: ?Sized> ForIRI for T where
-    T: AsRef<str> + Borrow<str> + Eq + From<String> + Hash + PartialEq + Ord + PartialOrd + Debug + Clone {
+    T: AsRef<str> + Borrow<str> + Clone + Debug + Eq +
+    From<String> + Hash + PartialEq + Ord + PartialOrd {
 }
 
 impl<A: ForIRI> IRI<A> {
@@ -190,7 +192,7 @@ impl<A: ForIRI> Display for IRI<A> {
 // both could be replaced by traits or enums straight-forwardly
 // enough, to enable threading.
 #[derive(Debug, Default)]
-pub struct Build<A>(
+pub struct Build<A:ForIRI>(
     RefCell<BTreeSet<IRI<A>>>,
     RefCell<BTreeSet<AnonymousIndividual<A>>>
 );
@@ -512,7 +514,7 @@ named! {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash, PartialOrd, Ord)]
-pub struct AnonymousIndividual<A: ForIRI>(pub A);
+pub struct AnonymousIndividual<A>(pub A);
 
 impl<A: ForIRI> Deref for AnonymousIndividual<A> {
     type Target = str;
@@ -542,7 +544,7 @@ impl<A: ForIRI> From<AnonymousIndividual<A>> for String {
 
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash, PartialOrd, Ord)]
-pub enum Individual<A: ForIRI> {
+pub enum Individual<A> {
     Anonymous(AnonymousIndividual<A>),
     Named(NamedIndividual<A>),
 }
@@ -595,7 +597,7 @@ impl<A: ForIRI> From<IRI<A>> for Individual<A> {
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
-pub enum AnnotationSubject<A: ForIRI> {
+pub enum AnnotationSubject<A> {
     IRI(IRI<A>),
     AnonymousIndividual(AnonymousIndividual<A>),
 }
@@ -663,7 +665,7 @@ impl<A: ForIRI> From<NamedEntity<A>> for AnnotatedAxiom<A> {
 
 /// An interface providing access to any `Annotation` attached to an
 /// entity.
-trait Annotated<A: ForIRI> {
+trait Annotated<A> {
     /// Return the annotation
     ///
     /// The returned `BTreeSet` may be empty.
@@ -682,7 +684,7 @@ pub trait Kinded {
 
 /// An `AnnotatedAxiom` is an `Axiom` with one orpmore `Annotation`.
 #[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
-pub struct AnnotatedAxiom<A: ForIRI> {
+pub struct AnnotatedAxiom<A> {
     pub axiom: Axiom<A>,
     pub ann: BTreeSet<Annotation<A>>,
 }
@@ -767,7 +769,7 @@ macro_rules! axiom {
     {
         $(#[$attr]) *
         #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-        pub struct $name<$A:ForIRI>($(pub $tt),*);
+        pub struct $name<$A>($(pub $tt),*);
         axiomimpl!($A, $name);
     };
     ($A:ident $name:ident {
@@ -777,7 +779,7 @@ macro_rules! axiom {
     ) => {
         $(#[$attr]) *
         #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-        pub struct $name<$A:ForIRI>
+        pub struct $name<$A>
         {
             $(pub $field_name: $field_type),*,
         }
@@ -854,29 +856,29 @@ macro_rules! axioms {
         /// (i.e. Axiom::SubClassOf(SubClassOf)), which is used as a union
         /// type for all structs. The struct and enum variants all
         /// share identical names.
-        #[derive(Clone, Eq, Hash, Ord, PartialEq, PartialOrd)]
-        pub enum Axiom<$A:ForIRI>{
+        #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+        pub enum Axiom<$A>{
             $($name($name<$A>)),*
         }
 
-        impl<$A:ForIRI> std::fmt::Debug for Axiom<$A> {
-            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                write!(f, "Axiom::{}({})",
-                       match self {
-                           $(
-                               Axiom::$name(_) =>
-                                   stringify!($name)
-                           ),*
-                       },
-                       match self {
-                           $(
-                               Axiom::$name(ax) =>
-                                   format!("{:?}", ax)
-                           ),*
-                       },
-                )
-            }
-        }
+        // impl<$A:ForIRI> std::fmt::Debug for Axiom<$A> {
+        //     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        //         write!(f, "Axiom::{}({})",
+        //                match self {
+        //                    $(
+        //                        Axiom::$name(_) =>
+        //                            stringify!($name)
+        //                    ),*
+        //                },
+        //                match self {
+        //                    $(
+        //                        Axiom::$name(ax) =>
+        //                            format!("{:?}", ax)
+        //                    ),*
+        //                },
+        //         )
+        //     }
+        // }
 
         impl<$A:ForIRI> Kinded for Axiom<$A>
         {
@@ -1259,7 +1261,7 @@ axioms! {
 
 // Non-axiom data structures associated with OWL
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub enum Literal<A: ForIRI> {
+pub enum Literal<A> {
     // Simple Literals are syntactic sugar for a Datatype with type:
     // http://www.w3.org/2001/XMLSchema#string
     Simple { literal: String },
@@ -1292,7 +1294,7 @@ impl<A: ForIRI> Literal<A> {
 /// Annotations are associated an IRI and describe that IRI in a
 /// particular way, defined by the property.
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub struct Annotation<A: ForIRI> {
+pub struct Annotation<A> {
     pub ap: AnnotationProperty<A>,
     pub av: AnnotationValue<A>,
 }
@@ -1301,7 +1303,7 @@ pub struct Annotation<A: ForIRI> {
 ///
 /// This Enum is currently not complete.
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub enum AnnotationValue<A: ForIRI> {
+pub enum AnnotationValue<A> {
     Literal(Literal<A>),
     IRI(IRI<A>),
 }
@@ -1320,7 +1322,7 @@ impl<A: ForIRI> From<IRI<A>> for AnnotationValue<A> {
 
 /// A object property expression
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub enum ObjectPropertyExpression<A: ForIRI> {
+pub enum ObjectPropertyExpression<A> {
     ObjectProperty(ObjectProperty<A>),
     InverseObjectProperty(ObjectProperty<A>),
 }
@@ -1355,7 +1357,7 @@ impl<A: ForIRI> ObjectPropertyExpression<A> {
 
 /// A sub-object property expression
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub enum SubObjectPropertyExpression<A: ForIRI> {
+pub enum SubObjectPropertyExpression<A> {
     // We use Vec here rather than BTreeSet because, perhaps
     // surprisingly, BTreeSet is not itself hashable.
     ObjectPropertyChain(Vec<ObjectPropertyExpression<A>>),
@@ -1620,7 +1622,7 @@ pub struct OntologyID<A> {
     pub viri: Option<IRI<A>>,
 }
 
-impl<A:ForIRI> Default for OntologyID<A> {
+impl<A> Default for OntologyID<A> {
     fn default() -> OntologyID<A> {
         OntologyID { iri: None, viri: None }
     }
@@ -1672,6 +1674,7 @@ pub trait MutableOntology<A> {
     /// ```
     fn declare<N>(&mut self, ne: N) -> bool
     where
+        A: ForIRI,
         N: Into<NamedEntity<A>>,
     {
         let ne: NamedEntity<_> = ne.into();
