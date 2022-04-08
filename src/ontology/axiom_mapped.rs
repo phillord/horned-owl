@@ -66,8 +66,8 @@ impl<A: ForIRI, AA:ForIndex<A>> AxiomMappedIndex<A, AA> {
     /// ```
     /// # use std::rc::Rc;
     /// # use horned_owl::ontology::axiom_mapped::AxiomMappedOntology;
-    /// let o = AxiomMappedOntology::new_rc();
-    /// let o2 = AxiomMappedOntology::new_rc();
+    /// let o = AxiomMappedOntology::new_amo_rc();
+    /// let o2 = AxiomMappedOntology::new_amo_rc();
     ///
     /// assert_eq!(o, o2);
     /// ```
@@ -121,7 +121,7 @@ impl<A: ForIRI, AA:ForIndex<A>> AxiomMappedIndex<A, AA> {
     /// ```
     /// # use horned_owl::model::*;
     /// # use horned_owl::ontology::axiom_mapped::AxiomMappedOntology;
-    /// let mut o = AxiomMappedOntology::new_rc();
+    /// let mut o = AxiomMappedOntology::new_amo_rc();
     /// let b = Build::new_rc();
     /// o.declare(b.class("http://www.example.com/a"));
     /// o.declare(b.object_property("http://www.example.com/r"));
@@ -145,7 +145,7 @@ impl<A: ForIRI, AA:ForIndex<A>> AxiomMappedIndex<A, AA> {
     /// ```
     /// # use horned_owl::model::*;
     /// # use horned_owl::ontology::axiom_mapped::AxiomMappedOntology;
-    /// let mut o = AxiomMappedOntology::new_rc();
+    /// let mut o = AxiomMappedOntology::new_amo_rc();
     /// let b = Build::new_rc();
     /// o.declare(b.class("http://www.example.com/a"));
     /// o.declare(b.object_property("http://www.example.com/r"));
@@ -285,7 +285,7 @@ impl<A: ForIRI, AA:ForIndex<A>> AxiomMappedOntology<A, AA> {
 }
 
 impl AxiomMappedOntology<Rc<str>, Rc<AnnotatedAxiom<Rc<str>>>> {
-    pub fn new_rc() -> Self {
+    pub fn new_amo_rc() -> Self {
         AxiomMappedOntology::new_amo()
     }
 }
@@ -329,14 +329,14 @@ mod test {
 
     #[test]
     fn test_ontology_cons() {
-        let _ = AxiomMappedOntology::new_rc();
+        let _ = AxiomMappedOntology::new_amo_rc();
         assert!(true);
     }
 
     #[test]
     fn test_ontology_iter_empty() {
         // Empty ontologies should stop iteration right away
-        let mut it = AxiomMappedOntology::new_rc().into_iter();
+        let mut it = AxiomMappedOntology::new_amo_rc().into_iter();
         assert_eq!(it.next(), None);
         assert_eq!(it.next(), None);
     }
@@ -345,7 +345,7 @@ mod test {
     fn test_ontology_into_iter() {
         // Setup
         let build = Build::new();
-        let mut o = AxiomMappedOntology::new_rc();
+        let mut o = AxiomMappedOntology::new_amo_rc();
         let decl1 = DeclareClass(build.class("http://www.example.com#a"));
         let decl2 = DeclareClass(build.class("http://www.example.com#b"));
         let decl3 = DeclareClass(build.class("http://www.example.com#c"));
@@ -392,7 +392,7 @@ mod test {
     #[test]
     fn test_ontology_into_iter_empty() {
         // Empty ontologies should stop iteration right away
-        let o = AxiomMappedOntology::new_rc();
+        let o = AxiomMappedOntology::new_amo_rc();
         let mut it = o.into_iter();
         assert_eq!(it.next(), None);
         assert_eq!(it.next(), None);
@@ -402,7 +402,7 @@ mod test {
     fn test_ontology_iter() {
         // Setup
         let build = Build::new_rc();
-        let mut o = AxiomMappedOntology::new_rc();
+        let mut o = AxiomMappedOntology::new_amo_rc();
         let decl1 = DeclareClass(build.class("http://www.example.com#a"));
         let decl2 = DeclareClass(build.class("http://www.example.com#b"));
         let decl3 = DeclareClass(build.class("http://www.example.com#c"));

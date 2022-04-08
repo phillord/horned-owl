@@ -172,8 +172,8 @@ where
 /// An `OntologyIndex` implemented over an in-memory HashSet. When
 /// combined with an `IndexedOntology` this should be nearly as
 /// fastest as `SetOntology`.
-#[derive(Debug, Default)]
-pub struct SetIndex<A, AA>(
+#[derive(Debug, Default, Eq, PartialEq)]
+pub struct SetIndex<A:ForIRI, AA:ForIndex<A>>(
     HashSet<AA>,
     PhantomData<A>
 );

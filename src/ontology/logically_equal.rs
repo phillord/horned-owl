@@ -10,14 +10,21 @@ use std::rc::Rc;
 pub struct LogicallyEqualIndex<A: ForIRI, AA: ForIndex<A>>(HashMap<Axiom<A>, AA>);
 
 impl<A: ForIRI, AA: ForIndex<A>> LogicallyEqualIndex<A, AA> {
-    pub fn new() -> LogicallyEqualIndex<A, AA> {
+    pub fn new() -> Self {
         LogicallyEqualIndex(HashMap::new())
     }
 }
 
+impl LogicallyEqualIndex<Rc<str>, Rc<AnnotatedAxiom<Rc<str>>>> {
+    pub fn new_rc() -> Self {
+        LogicallyEqualIndex::new()
+    }
+}
+
+
 impl<A: ForIRI, AA: ForIndex<A>> OntologyIndex<A, AA> for LogicallyEqualIndex<A, AA> {
     fn index_insert(&mut self, ax: AA) -> bool {
-        self.0.insert(ax.axiom.clone(), ax).is_some()
+        self.0.insert(ax.borrow().axiom.clone(), ax).is_some()
     }
 
     fn index_remove(&mut self, ax: &AnnotatedAxiom<A>) -> bool {
@@ -31,10 +38,10 @@ impl<A: ForIRI, AA: ForIndex<A>> LogicallyEqualIndex<A, AA> {
     }
 
     pub fn logical_get(&self, ax: &AnnotatedAxiom<A>) -> Option<&AnnotatedAxiom<A>> {
-        self.0.get(&ax.axiom).map(|rcax| &**rcax)
+        self.0.get(&ax.axiom).map(|fi| fi.borrow())
     }
 
-    pub fn logical_get_rc(&self, ax: &AnnotatedAxiom<A>) -> Option<Rc<AnnotatedAxiom<A>>> {
+    pub fn logical_get_rc(&self, ax: &AnnotatedAxiom<A>) -> Option<AA> {
         self.0.get(&ax.axiom).cloned()
     }
 }
@@ -73,17 +80,17 @@ pub fn update_logically_equal_axiom<'a, A: ForIRI, AA: ForIndex<A>, O>(
 where
     O: MutableOntology<A> + AsRef<LogicallyEqualIndex<A, AA>>,
 {
-    let lei: &LogicallyEqualIndex<_> = o.as_ref();
+    let lei: &LogicallyEqualIndex<_, _> = o.as_ref();
     let src = lei.logical_get_rc(&axiom);
     // Does the logically equal axiom exist
-    if let Some(rc) = src {
+    if let Some(fi) = src {
         // Remove the rc from everywhere
-        o.remove(&*rc);
+        o.remove(fi.borrow());
         //dbg!(&rc);
         //dbg!(Rc::strong_count(&rc));
 
         // Un-rc
-        let mut logical_axiom = Rc::try_unwrap(rc).unwrap();
+        let mut logical_axiom = fi.unwrap();
         // Extend it
         logical_axiom.ann.append(&mut axiom.ann);
         // Insert it
@@ -105,7 +112,7 @@ mod test {
 
     #[test]
     fn cons() {
-        let _lei:LogicallyEqualIndex<Rc<str>> = LogicallyEqualIndex::new();
+        let _lei = LogicallyEqualIndex::new_rc();
         assert!(true);
     }
 
@@ -131,8 +138,11 @@ mod test {
     fn annotation_not_equal_retrieve() {
         // Setup
         let b = Build::new_rc();
-        let mut o: TwoIndexedOntology<_, SetIndex<_>, LogicallyEqualIndex<_>> =
-            TwoIndexedOntology::new(SetIndex::new(), LogicallyEqualIndex::new(), OntologyID::default());
+        let mut o =
+            TwoIndexedOntology::new(SetIndex::new_rc(),
+                                    LogicallyEqualIndex::new(),
+                                    OntologyID::default(),
+            );
 
         let ann = Annotation {
             ap: b.annotation_property("http://www.example.com/ap"),
@@ -166,8 +176,10 @@ mod test {
     fn test_update_equal_axiom() {
         let b = Build::new_rc();
         {
-            let mut o: TwoIndexedOntology<_, SetIndex<_>, LogicallyEqualIndex<_>> =
-                TwoIndexedOntology::new(SetIndex::new(), LogicallyEqualIndex::new(), OntologyID::default());
+            let mut o =
+                TwoIndexedOntology::new(SetIndex::new_rc(),
+                                        LogicallyEqualIndex::new(),
+                                        OntologyID::default());
             let ne: NamedEntity<_> = b.class("http://www.example.com").into();
             let ax: Axiom<_> = ne.into();
             let mut dec: AnnotatedAxiom<_> = ax.into();
@@ -192,8 +204,8 @@ mod test {
         }
 
         {
-            let mut o: TwoIndexedOntology<_, SetIndex<_>, LogicallyEqualIndex<_>> =
-                TwoIndexedOntology::new(SetIndex::new(), LogicallyEqualIndex::new(), OntologyID::default());
+            let mut o =
+                TwoIndexedOntology::new(SetIndex::new_rc(), LogicallyEqualIndex::new(), OntologyID::default());
             let ne: NamedEntity<_> = b.class("http://www.example.com").into();
             let ax: Axiom<_> = ne.into();
             let mut dec: AnnotatedAxiom<_> = ax.into();
