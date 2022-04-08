@@ -8,6 +8,7 @@ use horned_owl::io::owx::writer::write;
 use horned_owl::model::Build;
 use horned_owl::model::MutableOntology;
 use horned_owl::ontology::set::SetOntology;
+use horned_owl::ontology::axiom_mapped::RcAxiomMappedOntology;
 
 use std::io::stdout;
 
@@ -38,11 +39,12 @@ pub(crate) fn matcher(matches: &ArgMatches) -> Result<(), CommandError> {
         .map_err(|e| CommandError::Underlying(Box::new(e)))?;
 
     let b = Build::new_rc();
-    let mut o = SetOntology::new();
+    let mut o = SetOntology::new_rc();
 
     for i in 1..size + 1 {
         o.declare(b.class(format!("https://www.example.com/o{}", i)));
     }
 
-    write(&mut stdout(), &o.into(), None).map_err(underlying)
+    let amo: RcAxiomMappedOntology = o.into();
+    write(&mut stdout(), &amo, None).map_err(underlying)
 }

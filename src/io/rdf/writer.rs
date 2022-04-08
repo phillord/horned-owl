@@ -1570,7 +1570,7 @@ mod test {
     // use std::io::BufReader;
     // use std::io::BufWriter;
 
-    fn read_ok<A: ForIRI, R: BufRead>(bufread: &mut R) -> SetOntology<A> {
+    fn read_ok<R: BufRead>(bufread: &mut R) -> SetOntology<Rc<str>> {
         let r = crate::io::rdf::reader::read(bufread);
         assert!(r.is_ok(), "Expected ontology, got failure:{:?}", r.err());
         let (o, incomplete) = r.ok().unwrap();
@@ -1607,7 +1607,7 @@ mod test {
         let file = File::create(&temp_file).ok().unwrap();
         let mut buf_writer = BufWriter::new(&file);
 
-        let amo: AxiomMappedOntology<_> = ont_orig.clone().into();
+        let amo: AxiomMappedOntology<Rc<str>, Rc<AnnotatedAxiom<Rc<str>>>> = ont_orig.clone().into();
         write(&mut buf_writer, &amo).ok().unwrap();
         buf_writer.flush().ok();
         let file = File::open(&temp_file).ok().unwrap();

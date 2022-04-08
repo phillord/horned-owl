@@ -31,6 +31,7 @@ use std::collections::BTreeSet;
 use std::collections::HashMap;
 use std::io::BufRead;
 use std::io::Cursor;
+use std::rc::Rc;
 
 #[derive(Debug, Error)]
 pub enum ReadError {
@@ -1528,7 +1529,7 @@ impl<'a, A: ForIRI, AA:ForIndex<A>> OntologyParser<'a, A, AA> {
 
     fn simple_annotations(&mut self) {
         for triple in std::mem::take(&mut self.simple) {
-            let firi = |s: &mut OntologyParser<_>, t, iri: &IRI<_>| {
+            let firi = |s: &mut OntologyParser<_, _>, t, iri: &IRI<_>| {
                 let ann = s.ann_map.remove(t).unwrap_or_else(|| BTreeSet::new());
                 s.merge(AnnotatedAxiom {
                     axiom: AnnotationAssertion {
@@ -1554,7 +1555,7 @@ impl<'a, A: ForIRI, AA:ForIndex<A>> OntologyParser<'a, A, AA> {
             }
         }
         for (k, v) in std::mem::take(&mut self.bnode) {
-            let fbnode = |s: &mut OntologyParser<'a, A>, t, ind: &BNode<A>| {
+            let fbnode = |s: &mut OntologyParser<_, _>, t, ind: &BNode<A>| {
                 let ann = s.ann_map.remove(t).unwrap_or_else(|| BTreeSet::new());
                 let ind: AnonymousIndividual<A> = s.b.anon(ind.0.clone());
                 s.merge(AnnotatedAxiom {
@@ -1788,8 +1789,9 @@ pub fn read_with_build<A: ForIRI, AA:ForIndex<A>, R: BufRead>(
     parser_with_build(bufread, build).parse()
 }
 
-pub fn read<A: ForIRI, AA: ForIndex<A>, R: BufRead>(bufread: &mut R) -> Result<(RDFOntology<A, AA>, IncompleteParse<A>), ReadError> {
-    let b = Build::new();
+pub fn read<R: BufRead>(bufread: &mut R) -> Result<(RDFOntology<Rc<str>, Rc<AnnotatedAxiom<Rc<str>>>>,
+                                                    IncompleteParse<Rc<str>>), ReadError> {
+    let b = Build::new_rc();
     read_with_build(bufread, &b)
 }
 
@@ -1801,7 +1803,7 @@ mod test {
     use std::path::PathBuf;
     use std::rc::Rc;
 
-    use crate::ontology::axiom_mapped::AxiomMappedOntology;
+    use crate::ontology::axiom_mapped::RcAxiomMappedOntology;
     use pretty_assertions::assert_eq;
 
     fn init_log() {
@@ -1811,7 +1813,7 @@ mod test {
             .try_init();
     }
 
-    fn read_ok<R: BufRead>(bufread: &mut R) -> RDFOntology<Rc<str>> {
+    fn read_ok<R: BufRead>(bufread: &mut R) -> RDFOntology<Rc<str>, Rc<AnnotatedAxiom<Rc<str>>>> {
         init_log();
 
         let r = read(bufread);
@@ -2099,24 +2101,24 @@ mod test {
     #[test]
     fn import_with_partial_parse() {
         let b = Build::new_rc();
-        let mut p = parser_with_build(&mut slurp_rdfont("import").as_bytes(), &b);
+        let mut p:OntologyParser<_, Rc<AnnotatedAxiom<Rc<str>>>> = parser_with_build(&mut slurp_rdfont("import").as_bytes(), &b);
         let _ = p.parse_imports();
 
         let rdfont = p.as_ontology().unwrap();
         let so: SetOntology<_> = rdfont.into();
-        let amont: AxiomMappedOntology<_> = so.into();
+        let amont: RcAxiomMappedOntology = so.into();
         assert_eq!(amont.i().import().count(), 1);
     }
 
     #[test]
     fn declaration_with_partial_parse() {
         let b = Build::new_rc();
-        let mut p = parser_with_build(&mut slurp_rdfont("class").as_bytes(), &b);
+        let mut p:OntologyParser<_, Rc<AnnotatedAxiom<Rc<str>>>> = parser_with_build(&mut slurp_rdfont("class").as_bytes(), &b);
         let _ = p.parse_declarations();
 
         let rdfont = p.as_ontology().unwrap();
         let so: SetOntology<_> = rdfont.into();
-        let amont: AxiomMappedOntology<_> = so.into();
+        let amont: RcAxiomMappedOntology = so.into();
         assert_eq!(amont.i().declare_class().count(), 1);
     }
 
@@ -2383,7 +2385,7 @@ mod test {
     #[test]
     fn import_property_in_bits() -> Result<(), ReadError> {
         let b = Build::new_rc();
-        let p = parser_with_build(&mut slurp_rdfont("other-property").as_bytes(), &b);
+        let p:OntologyParser<_, Rc<AnnotatedAxiom<Rc<str>>>> = parser_with_build(&mut slurp_rdfont("other-property").as_bytes(), &b);
         let (family_other, incomplete) = p.parse()?;
         assert!(incomplete.is_complete());
 
@@ -2400,7 +2402,7 @@ mod test {
     #[test]
     fn annotation_with_anonymous() {
         let s = slurp_rdfont("annotation-with-anonymous");
-        let ont: AxiomMappedOntology<_> = read_ok(&mut s.as_bytes()).into();
+        let ont: AxiomMappedOntology<_, _> = read_ok(&mut s.as_bytes()).into();
 
         // We cannot do the usual "compare" because the anonymous
         // individuals break a direct comparision

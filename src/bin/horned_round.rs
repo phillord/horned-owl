@@ -8,6 +8,7 @@ use clap::ArgMatches;
 use horned_owl::command::parse_path;
 use horned_owl::error::underlying;
 use horned_owl::error::CommandError;
+use horned_owl::ontology::axiom_mapped::RcAxiomMappedOntology;
 
 use std::{io::stdout, path::Path};
 
@@ -37,7 +38,8 @@ pub(crate) fn matcher(matches: &ArgMatches) -> Result<(), CommandError> {
 
     let rtn = match res {
         horned_owl::io::ParserOutput::OWXParser(so, pm) => {
-            horned_owl::io::owx::writer::write(&mut stdout(), &so.into(), Some(&pm))
+            let amo:RcAxiomMappedOntology = so.into();
+            horned_owl::io::owx::writer::write(&mut stdout(), &amo, Some(&pm))
                 .map_err(underlying)
         }
         horned_owl::io::ParserOutput::RDFParser(rdfo, _ip) => {

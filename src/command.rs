@@ -5,7 +5,7 @@ use crate::{
     io::{ParserOutput, ResourceType},
     model::{AnnotatedAxiom, Build, IRI},
     ontology::{
-        axiom_mapped::AxiomMappedOntology,
+        axiom_mapped::RcAxiomMappedOntology,
     },
     resolve::{localize_iri, strict_resolve_iri},
 };
@@ -77,7 +77,7 @@ pub fn materialize_1<'a>(
     recurse: bool,
 ) -> Result<&'a mut Vec<IRI<Rc<str>>>, CommandError> {
     println!("Parsing: {}", input);
-    let amont: AxiomMappedOntology<_> = parse_imports(Path::new(input)).map_err(underlying)?.into();
+    let amont: RcAxiomMappedOntology = parse_imports(Path::new(input)).map_err(underlying)?.into();
     let import = amont.i().import();
 
     let b = Build::new_rc();
@@ -165,11 +165,9 @@ pub mod naming {
 
 pub mod summary {
 
-    use crate::{model::{AxiomKind, ForIRI},
-                ontology::{
-                    axiom_mapped::AxiomMappedOntology,
-                    indexed::ForIndex,
-                }
+    use crate::{
+        model::AxiomKind,
+        ontology::axiom_mapped::RcAxiomMappedOntology,
     };
     use indexmap::map::IndexMap;
 
@@ -186,11 +184,11 @@ pub mod summary {
         }
     }
 
-    pub fn summarize<A: ForIRI, AA: ForIndex<A>, O: Into<AxiomMappedOntology<A, AA>>>(ont: O) -> SummaryStatistics
+    pub fn summarize<O: Into<RcAxiomMappedOntology>>(ont: O) -> SummaryStatistics
     where
         O:,
     {
-        let ont: AxiomMappedOntology<_> = ont.into();
+        let ont: RcAxiomMappedOntology = ont.into();
         SummaryStatistics {
             logical_axiom: ont.i().iter().count(),
             annotation_axiom: ont
@@ -202,8 +200,8 @@ pub mod summary {
         }
     }
 
-    fn axiom_types<A: ForIRI, AA: ForIndex<A>, O: Into<AxiomMappedOntology<A, AA>>>(ont: O) -> IndexMap<AxiomKind, usize> {
-        let ont: AxiomMappedOntology<_> = ont.into();
+    fn axiom_types<O: Into<RcAxiomMappedOntology>>(ont: O) -> IndexMap<AxiomKind, usize> {
+        let ont: RcAxiomMappedOntology = ont.into();
         let mut im = IndexMap::new();
         for ax in AxiomKind::all_kinds() {
             im.insert(ax, ont.i().axiom(ax).count());

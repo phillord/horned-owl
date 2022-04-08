@@ -10,6 +10,7 @@ use std::borrow::Cow;
 use std::collections::BTreeSet;
 use std::io::BufRead;
 use std::num::ParseIntError;
+use std::rc::Rc;
 
 use quick_xml::events::BytesEnd;
 use quick_xml::events::BytesStart;
@@ -72,7 +73,7 @@ where
     ns_buf: Vec<u8>,
 }
 
-pub fn read<A: ForIRI, R: BufRead>(bufread: &mut R) -> Result<(SetOntology<A>, PrefixMapping), ReadError> {
+pub fn read<R: BufRead>(bufread: &mut R) -> Result<(SetOntology<Rc<str>>, PrefixMapping), ReadError> {
     let b = Build::new();
     read_with_build(bufread, &b)
 }
@@ -1219,7 +1220,10 @@ pub mod test {
     use crate::ontology::axiom_mapped::AxiomMappedOntology;
     use std::{collections::HashMap, rc::Rc};
 
-    pub fn read_ok<R: BufRead>(bufread: &mut R) -> (AxiomMappedOntology<Rc<str>>, PrefixMapping) {
+    pub fn read_ok<R: BufRead>(bufread: &mut R) -> (AxiomMappedOntology
+                                                    <Rc<str>,
+                                                     Rc<AnnotatedAxiom<Rc<str>>>>,
+                                                    PrefixMapping) {
         let r = read(bufread);
         assert!(r.is_ok(), "Expected ontology, got failure:{:?}", r.err());
         let (o, m) = r.ok().unwrap();
