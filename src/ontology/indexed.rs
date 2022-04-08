@@ -23,6 +23,7 @@ use std::borrow::Borrow;
 use std::marker::PhantomData;
 use std::hash::Hash;
 use std::rc::Rc;
+use std::sync::Arc;
 
 pub trait ForIndex<A:ForIRI>: Borrow<AnnotatedAxiom<A>> + Clone + Eq + From<AnnotatedAxiom<A>>
     + Hash + Ord + PartialEq + PartialOrd {
@@ -122,6 +123,15 @@ where I: OntologyIndex<Rc<str>, Rc<AnnotatedAxiom<Rc<str>>>>
         Self::new(i)
     }
 }
+
+impl<I> OneIndexedOntology<Arc<str>, Arc<AnnotatedAxiom<Arc<str>>>, I>
+where I: OntologyIndex<Arc<str>, Arc<AnnotatedAxiom<Arc<str>>>>
+{
+    pub fn new_arc(i:I) -> OneIndexedOntology<Arc<str>, Arc<AnnotatedAxiom<Arc<str>>>, I> {
+        Self::new(i)
+    }
+}
+
 
 impl<A: ForIRI, AA:ForIndex<A>, I: OntologyIndex<A, AA>> Ontology<A> for OneIndexedOntology<A, AA, I> {
     fn id(&self) -> &OntologyID<A> {
