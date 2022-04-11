@@ -1,0 +1,1478 @@
+<?xml version="1.0"?>
+<rdf:RDF xmlns="http://www.ncl.ac.uk/pizza#"
+     xml:base="http://www.ncl.ac.uk/pizza"
+     xmlns:owl="http://www.w3.org/2002/07/owl#"
+     xmlns:piz="http://www.ncl.ac.uk/pizza#"
+     xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+     xmlns:xml="http://www.w3.org/XML/1998/namespace"
+     xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+     xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"
+     xmlns:pattern="http://www.w3id.org/ontolink/pattern.owl#"
+     >
+    <owl:Ontology rdf:about="http://www.ncl.ac.uk/pizza">
+        <rdfs:comment xml:lang="en">An example ontology modelled on the Pizza tutorial ontology from
+Manchester University, written using the tawny-owl library</rdfs:comment>
+        <rdfs:seeAlso xml:lang="en">Manchester Version</rdfs:seeAlso>
+    </owl:Ontology>
+    
+
+
+    <!-- 
+    ///////////////////////////////////////////////////////////////////////////////////////
+    //
+    // Annotation properties
+    //
+    ///////////////////////////////////////////////////////////////////////////////////////
+     -->
+
+    
+
+
+    <!-- http://www.ncl.ac.uk/pizza#creator -->
+
+    <owl:AnnotationProperty rdf:about="http://www.ncl.ac.uk/pizza#creator">
+        <creator xml:lang="en">Phillip Lord</creator>
+        <rdfs:subPropertyOf rdf:resource="http://www.w3.org/2000/01/rdf-schema#comment"/>
+    </owl:AnnotationProperty>
+    
+
+
+    <!-- http://www.ncl.ac.uk/pizza#myOpinion -->
+
+    <owl:AnnotationProperty rdf:about="http://www.ncl.ac.uk/pizza#myOpinion">
+        <creator xml:lang="en">Phillip Lord</creator>
+        <rdfs:comment xml:lang="en">Do I think this is a good pizza to eat?</rdfs:comment>
+        <rdfs:label xml:lang="en">My Opinion</rdfs:label>
+        <rdfs:subPropertyOf rdf:resource="http://www.w3.org/2000/01/rdf-schema#comment"/>
+    </owl:AnnotationProperty>
+    
+
+
+    <!-- http://www.w3id.org/ontolink/pattern.owl#facetvalue -->
+
+    <owl:AnnotationProperty rdf:about="http://www.w3id.org/ontolink/pattern.owl#facetvalue"/>
+    
+
+
+    <!-- http://www.w3id.org/ontolink/pattern.owl#inpattern -->
+
+    <owl:AnnotationProperty rdf:about="http://www.w3id.org/ontolink/pattern.owl#inpattern"/>
+    
+
+
+    <!-- 
+    ///////////////////////////////////////////////////////////////////////////////////////
+    //
+    // Object Properties
+    //
+    ///////////////////////////////////////////////////////////////////////////////////////
+     -->
+
+    
+
+
+    <!-- http://www.ncl.ac.uk/pizza#hasBase -->
+
+    <owl:ObjectProperty rdf:about="http://www.ncl.ac.uk/pizza#hasBase">
+        <rdfs:subPropertyOf rdf:resource="http://www.ncl.ac.uk/pizza#hasIngredient"/>
+        <rdf:type rdf:resource="http://www.w3.org/2002/07/owl#FunctionalProperty"/>
+        <rdfs:domain rdf:resource="http://www.ncl.ac.uk/pizza#Pizza"/>
+        <rdfs:range rdf:resource="http://www.ncl.ac.uk/pizza#PizzaBase"/>
+        <creator xml:lang="en">Phillip Lord</creator>
+        <rdfs:label xml:lang="it">con Baso </rdfs:label>
+    </owl:ObjectProperty>
+    
+
+
+    <!-- http://www.ncl.ac.uk/pizza#hasIngredient -->
+
+    <owl:ObjectProperty rdf:about="http://www.ncl.ac.uk/pizza#hasIngredient">
+        <owl:inverseOf rdf:resource="http://www.ncl.ac.uk/pizza#isIngredientOf"/>
+        <rdf:type rdf:resource="http://www.w3.org/2002/07/owl#TransitiveProperty"/>
+        <creator xml:lang="en">Phillip Lord</creator>
+        <rdfs:label xml:lang="it">con Ingredienti</rdfs:label>
+    </owl:ObjectProperty>
+    
+
+
+    <!-- http://www.ncl.ac.uk/pizza#hasSpiciness -->
+
+    <owl:ObjectProperty rdf:about="http://www.ncl.ac.uk/pizza#hasSpiciness">
+        <rdf:type rdf:resource="http://www.w3.org/2002/07/owl#FunctionalProperty"/>
+        <rdfs:range rdf:resource="http://www.ncl.ac.uk/pizza#Spiciness"/>
+        <creator xml:lang="en">Phillip Lord</creator>
+        <rdfs:label xml:lang="it">con Piccantezza</rdfs:label>
+        <pattern:inpattern rdf:nodeID="genid1"/>
+    </owl:ObjectProperty>
+    <rdf:Description rdf:nodeID="genid1"/>
+    
+
+
+    <!-- http://www.ncl.ac.uk/pizza#hasTopping -->
+
+    <owl:ObjectProperty rdf:about="http://www.ncl.ac.uk/pizza#hasTopping">
+        <rdfs:subPropertyOf rdf:resource="http://www.ncl.ac.uk/pizza#hasIngredient"/>
+        <rdfs:domain rdf:resource="http://www.ncl.ac.uk/pizza#Pizza"/>
+        <rdfs:range rdf:resource="http://www.ncl.ac.uk/pizza#PizzaTopping"/>
+        <creator xml:lang="en">Phillip Lord</creator>
+        <rdfs:label xml:lang="it">con Ingredienti</rdfs:label>
+    </owl:ObjectProperty>
+    
+
+
+    <!-- http://www.ncl.ac.uk/pizza#isIngredientOf -->
+
+    <owl:ObjectProperty rdf:about="http://www.ncl.ac.uk/pizza#isIngredientOf">
+        <rdf:type rdf:resource="http://www.w3.org/2002/07/owl#TransitiveProperty"/>
+        <creator xml:lang="en">Phillip Lord</creator>
+        <rdfs:label xml:lang="it">è Ingredienti di</rdfs:label>
+    </owl:ObjectProperty>
+    
+
+
+    <!-- 
+    ///////////////////////////////////////////////////////////////////////////////////////
+    //
+    // Data properties
+    //
+    ///////////////////////////////////////////////////////////////////////////////////////
+     -->
+
+    
+
+
+    <!-- http://www.ncl.ac.uk/pizza#hasCalorificContentValue -->
+
+    <owl:DatatypeProperty rdf:about="http://www.ncl.ac.uk/pizza#hasCalorificContentValue">
+        <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#integer"/>
+        <creator xml:lang="en">Phillip Lord</creator>
+    </owl:DatatypeProperty>
+    
+
+
+    <!-- 
+    ///////////////////////////////////////////////////////////////////////////////////////
+    //
+    // Classes
+    //
+    ///////////////////////////////////////////////////////////////////////////////////////
+     -->
+
+    
+
+
+    <!-- http://www.ncl.ac.uk/pizza#AnchoviesTopping -->
+
+    <owl:Class rdf:about="http://www.ncl.ac.uk/pizza#AnchoviesTopping">
+        <rdfs:subClassOf rdf:resource="http://www.ncl.ac.uk/pizza#FishTopping"/>
+        <creator xml:lang="en">Phillip Lord</creator>
+        <rdfs:label xml:lang="it">Acciughe Ingredienti</rdfs:label>
+    </owl:Class>
+    
+
+
+    <!-- http://www.ncl.ac.uk/pizza#ArtichokeTopping -->
+
+    <owl:Class rdf:about="http://www.ncl.ac.uk/pizza#ArtichokeTopping">
+        <rdfs:subClassOf rdf:resource="http://www.ncl.ac.uk/pizza#VegetableTopping"/>
+        <creator xml:lang="en">Phillip Lord</creator>
+        <rdfs:label xml:lang="it">Carciofi Ingredienti</rdfs:label>
+    </owl:Class>
+    
+
+
+    <!-- http://www.ncl.ac.uk/pizza#AsparagusTopping -->
+
+    <owl:Class rdf:about="http://www.ncl.ac.uk/pizza#AsparagusTopping">
+        <rdfs:subClassOf rdf:resource="http://www.ncl.ac.uk/pizza#VegetableTopping"/>
+        <creator xml:lang="en">Phillip Lord</creator>
+        <rdfs:label xml:lang="it">Asparagi Ingredienti</rdfs:label>
+    </owl:Class>
+    
+
+
+    <!-- http://www.ncl.ac.uk/pizza#BasilTopping -->
+
+    <owl:Class rdf:about="http://www.ncl.ac.uk/pizza#BasilTopping">
+        <rdfs:subClassOf rdf:resource="http://www.ncl.ac.uk/pizza#VegetableTopping"/>
+        <creator xml:lang="en">Phillip Lord</creator>
+    </owl:Class>
+    
+
+
+    <!-- http://www.ncl.ac.uk/pizza#CajunPizza -->
+
+    <owl:Class rdf:about="http://www.ncl.ac.uk/pizza#CajunPizza">
+        <rdfs:subClassOf rdf:resource="http://www.ncl.ac.uk/pizza#NamedPizza"/>
+        <rdfs:subClassOf>
+            <owl:Restriction>
+                <owl:onProperty rdf:resource="http://www.ncl.ac.uk/pizza#hasTopping"/>
+                <owl:someValuesFrom rdf:resource="http://www.ncl.ac.uk/pizza#MozzarellaTopping"/>
+            </owl:Restriction>
+        </rdfs:subClassOf>
+        <rdfs:subClassOf>
+            <owl:Restriction>
+                <owl:onProperty rdf:resource="http://www.ncl.ac.uk/pizza#hasTopping"/>
+                <owl:someValuesFrom rdf:resource="http://www.ncl.ac.uk/pizza#OnionTopping"/>
+            </owl:Restriction>
+        </rdfs:subClassOf>
+        <rdfs:subClassOf>
+            <owl:Restriction>
+                <owl:onProperty rdf:resource="http://www.ncl.ac.uk/pizza#hasTopping"/>
+                <owl:someValuesFrom rdf:resource="http://www.ncl.ac.uk/pizza#PeperonataTopping"/>
+            </owl:Restriction>
+        </rdfs:subClassOf>
+        <rdfs:subClassOf>
+            <owl:Restriction>
+                <owl:onProperty rdf:resource="http://www.ncl.ac.uk/pizza#hasTopping"/>
+                <owl:someValuesFrom rdf:resource="http://www.ncl.ac.uk/pizza#PrawnsTopping"/>
+            </owl:Restriction>
+        </rdfs:subClassOf>
+        <rdfs:subClassOf>
+            <owl:Restriction>
+                <owl:onProperty rdf:resource="http://www.ncl.ac.uk/pizza#hasTopping"/>
+                <owl:someValuesFrom rdf:resource="http://www.ncl.ac.uk/pizza#TobascoPepperSauce"/>
+            </owl:Restriction>
+        </rdfs:subClassOf>
+        <rdfs:subClassOf>
+            <owl:Restriction>
+                <owl:onProperty rdf:resource="http://www.ncl.ac.uk/pizza#hasTopping"/>
+                <owl:someValuesFrom rdf:resource="http://www.ncl.ac.uk/pizza#TomatoTopping"/>
+            </owl:Restriction>
+        </rdfs:subClassOf>
+        <rdfs:subClassOf>
+            <owl:Restriction>
+                <owl:onProperty rdf:resource="http://www.ncl.ac.uk/pizza#hasTopping"/>
+                <owl:allValuesFrom>
+                    <owl:Class>
+                        <owl:unionOf rdf:parseType="Collection">
+                            <rdf:Description rdf:about="http://www.ncl.ac.uk/pizza#MozzarellaTopping"/>
+                            <rdf:Description rdf:about="http://www.ncl.ac.uk/pizza#OnionTopping"/>
+                            <rdf:Description rdf:about="http://www.ncl.ac.uk/pizza#PeperonataTopping"/>
+                            <rdf:Description rdf:about="http://www.ncl.ac.uk/pizza#PrawnsTopping"/>
+                            <rdf:Description rdf:about="http://www.ncl.ac.uk/pizza#TobascoPepperSauce"/>
+                            <rdf:Description rdf:about="http://www.ncl.ac.uk/pizza#TomatoTopping"/>
+                        </owl:unionOf>
+                    </owl:Class>
+                </owl:allValuesFrom>
+            </owl:Restriction>
+        </rdfs:subClassOf>
+        <creator xml:lang="en">Phillip Lord</creator>
+        <rdfs:label xml:lang="it">Cajun Pizza</rdfs:label>
+    </owl:Class>
+    
+
+
+    <!-- http://www.ncl.ac.uk/pizza#CajunSpiceTopping -->
+
+    <owl:Class rdf:about="http://www.ncl.ac.uk/pizza#CajunSpiceTopping">
+        <rdfs:subClassOf rdf:resource="http://www.ncl.ac.uk/pizza#HerbSpiceTopping"/>
+        <owl:disjointWith rdf:resource="http://www.ncl.ac.uk/pizza#RosemaryTopping"/>
+        <creator xml:lang="en">Phillip Lord</creator>
+        <rdfs:label xml:lang="it">Cajun Spezia Ingredienti</rdfs:label>
+    </owl:Class>
+    
+
+
+    <!-- http://www.ncl.ac.uk/pizza#CaperTopping -->
+
+    <owl:Class rdf:about="http://www.ncl.ac.uk/pizza#CaperTopping">
+        <rdfs:subClassOf rdf:resource="http://www.ncl.ac.uk/pizza#VegetableTopping"/>
+        <creator xml:lang="en">Phillip Lord</creator>
+        <rdfs:label xml:lang="it">Cappero Ingredienti</rdfs:label>
+    </owl:Class>
+    
+
+
+    <!-- http://www.ncl.ac.uk/pizza#CapricciosaPizza -->
+
+    <owl:Class rdf:about="http://www.ncl.ac.uk/pizza#CapricciosaPizza">
+        <rdfs:subClassOf rdf:resource="http://www.ncl.ac.uk/pizza#NamedPizza"/>
+        <rdfs:subClassOf>
+            <owl:Restriction>
+                <owl:onProperty rdf:resource="http://www.ncl.ac.uk/pizza#hasTopping"/>
+                <owl:someValuesFrom rdf:resource="http://www.ncl.ac.uk/pizza#AnchoviesTopping"/>
+            </owl:Restriction>
+        </rdfs:subClassOf>
+        <rdfs:subClassOf>
+            <owl:Restriction>
+                <owl:onProperty rdf:resource="http://www.ncl.ac.uk/pizza#hasTopping"/>
+                <owl:someValuesFrom rdf:resource="http://www.ncl.ac.uk/pizza#CaperTopping"/>
+            </owl:Restriction>
+        </rdfs:subClassOf>
+        <rdfs:subClassOf>
+            <owl:Restriction>
+                <owl:onProperty rdf:resource="http://www.ncl.ac.uk/pizza#hasTopping"/>
+                <owl:someValuesFrom rdf:resource="http://www.ncl.ac.uk/pizza#HamTopping"/>
+            </owl:Restriction>
+        </rdfs:subClassOf>
+        <rdfs:subClassOf>
+            <owl:Restriction>
+                <owl:onProperty rdf:resource="http://www.ncl.ac.uk/pizza#hasTopping"/>
+                <owl:someValuesFrom rdf:resource="http://www.ncl.ac.uk/pizza#MozzarellaTopping"/>
+            </owl:Restriction>
+        </rdfs:subClassOf>
+        <rdfs:subClassOf>
+            <owl:Restriction>
+                <owl:onProperty rdf:resource="http://www.ncl.ac.uk/pizza#hasTopping"/>
+                <owl:someValuesFrom rdf:resource="http://www.ncl.ac.uk/pizza#OliveTopping"/>
+            </owl:Restriction>
+        </rdfs:subClassOf>
+        <rdfs:subClassOf>
+            <owl:Restriction>
+                <owl:onProperty rdf:resource="http://www.ncl.ac.uk/pizza#hasTopping"/>
+                <owl:someValuesFrom rdf:resource="http://www.ncl.ac.uk/pizza#PeperonataTopping"/>
+            </owl:Restriction>
+        </rdfs:subClassOf>
+        <rdfs:subClassOf>
+            <owl:Restriction>
+                <owl:onProperty rdf:resource="http://www.ncl.ac.uk/pizza#hasTopping"/>
+                <owl:someValuesFrom rdf:resource="http://www.ncl.ac.uk/pizza#TomatoTopping"/>
+            </owl:Restriction>
+        </rdfs:subClassOf>
+        <rdfs:subClassOf>
+            <owl:Restriction>
+                <owl:onProperty rdf:resource="http://www.ncl.ac.uk/pizza#hasTopping"/>
+                <owl:allValuesFrom>
+                    <owl:Class>
+                        <owl:unionOf rdf:parseType="Collection">
+                            <rdf:Description rdf:about="http://www.ncl.ac.uk/pizza#AnchoviesTopping"/>
+                            <rdf:Description rdf:about="http://www.ncl.ac.uk/pizza#CaperTopping"/>
+                            <rdf:Description rdf:about="http://www.ncl.ac.uk/pizza#HamTopping"/>
+                            <rdf:Description rdf:about="http://www.ncl.ac.uk/pizza#MozzarellaTopping"/>
+                            <rdf:Description rdf:about="http://www.ncl.ac.uk/pizza#OliveTopping"/>
+                            <rdf:Description rdf:about="http://www.ncl.ac.uk/pizza#PeperonataTopping"/>
+                            <rdf:Description rdf:about="http://www.ncl.ac.uk/pizza#TomatoTopping"/>
+                        </owl:unionOf>
+                    </owl:Class>
+                </owl:allValuesFrom>
+            </owl:Restriction>
+        </rdfs:subClassOf>
+        <creator xml:lang="en">Phillip Lord</creator>
+        <rdfs:label xml:lang="it">CapricciosaPizza</rdfs:label>
+    </owl:Class>
+    
+
+
+    <!-- http://www.ncl.ac.uk/pizza#CarrotTopping -->
+
+    <owl:Class rdf:about="http://www.ncl.ac.uk/pizza#CarrotTopping">
+        <rdfs:subClassOf rdf:resource="http://www.ncl.ac.uk/pizza#VegetableTopping"/>
+        <creator xml:lang="en">Phillip Lord</creator>
+    </owl:Class>
+    
+
+
+    <!-- http://www.ncl.ac.uk/pizza#CheeseTopping -->
+
+    <owl:Class rdf:about="http://www.ncl.ac.uk/pizza#CheeseTopping">
+        <rdfs:subClassOf rdf:resource="http://www.ncl.ac.uk/pizza#PizzaTopping"/>
+        <creator xml:lang="en">Phillip Lord</creator>
+        <rdfs:label xml:lang="it">Formaggio Ingredienti</rdfs:label>
+    </owl:Class>
+    
+
+
+    <!-- http://www.ncl.ac.uk/pizza#CheesyPizza -->
+
+    <owl:Class rdf:about="http://www.ncl.ac.uk/pizza#CheesyPizza">
+        <owl:equivalentClass>
+            <owl:Class>
+                <owl:intersectionOf rdf:parseType="Collection">
+                    <rdf:Description rdf:about="http://www.ncl.ac.uk/pizza#Pizza"/>
+                    <owl:Restriction>
+                        <owl:onProperty rdf:resource="http://www.ncl.ac.uk/pizza#hasTopping"/>
+                        <owl:someValuesFrom rdf:resource="http://www.ncl.ac.uk/pizza#CheeseTopping"/>
+                    </owl:Restriction>
+                </owl:intersectionOf>
+            </owl:Class>
+        </owl:equivalentClass>
+        <creator xml:lang="en">Phillip Lord</creator>
+        <rdfs:label xml:lang="it">Pizza con Formaggio</rdfs:label>
+    </owl:Class>
+    
+
+
+    <!-- http://www.ncl.ac.uk/pizza#CherryTomatoesTopping -->
+
+    <owl:Class rdf:about="http://www.ncl.ac.uk/pizza#CherryTomatoesTopping">
+        <rdfs:subClassOf rdf:resource="http://www.ncl.ac.uk/pizza#VegetableTopping"/>
+        <creator xml:lang="en">Phillip Lord</creator>
+    </owl:Class>
+    
+
+
+    <!-- http://www.ncl.ac.uk/pizza#ChickenTopping -->
+
+    <owl:Class rdf:about="http://www.ncl.ac.uk/pizza#ChickenTopping">
+        <rdfs:subClassOf rdf:resource="http://www.ncl.ac.uk/pizza#MeatTopping"/>
+        <creator xml:lang="en">Phillip Lord</creator>
+        <rdfs:label xml:lang="it">Pollo Ingredienti</rdfs:label>
+    </owl:Class>
+    
+
+
+    <!-- http://www.ncl.ac.uk/pizza#ChilliOilTopping -->
+
+    <owl:Class rdf:about="http://www.ncl.ac.uk/pizza#ChilliOilTopping">
+        <rdfs:subClassOf rdf:resource="http://www.ncl.ac.uk/pizza#VegetableTopping"/>
+        <creator xml:lang="en">Phillip Lord</creator>
+    </owl:Class>
+    
+
+
+    <!-- http://www.ncl.ac.uk/pizza#ChivesTopping -->
+
+    <owl:Class rdf:about="http://www.ncl.ac.uk/pizza#ChivesTopping">
+        <rdfs:subClassOf rdf:resource="http://www.ncl.ac.uk/pizza#VegetableTopping"/>
+        <creator xml:lang="en">Phillip Lord</creator>
+    </owl:Class>
+    
+
+
+    <!-- http://www.ncl.ac.uk/pizza#ChutneyTopping -->
+
+    <owl:Class rdf:about="http://www.ncl.ac.uk/pizza#ChutneyTopping">
+        <rdfs:subClassOf rdf:resource="http://www.ncl.ac.uk/pizza#VegetableTopping"/>
+        <creator xml:lang="en">Phillip Lord</creator>
+    </owl:Class>
+    
+
+
+    <!-- http://www.ncl.ac.uk/pizza#CorianderTopping -->
+
+    <owl:Class rdf:about="http://www.ncl.ac.uk/pizza#CorianderTopping">
+        <rdfs:subClassOf rdf:resource="http://www.ncl.ac.uk/pizza#VegetableTopping"/>
+        <creator xml:lang="en">Phillip Lord</creator>
+    </owl:Class>
+    
+
+
+    <!-- http://www.ncl.ac.uk/pizza#CuminTopping -->
+
+    <owl:Class rdf:about="http://www.ncl.ac.uk/pizza#CuminTopping">
+        <rdfs:subClassOf rdf:resource="http://www.ncl.ac.uk/pizza#VegetableTopping"/>
+        <creator xml:lang="en">Phillip Lord</creator>
+    </owl:Class>
+    
+
+
+    <!-- http://www.ncl.ac.uk/pizza#DeepPanBase -->
+
+    <owl:Class rdf:about="http://www.ncl.ac.uk/pizza#DeepPanBase">
+        <rdfs:subClassOf rdf:resource="http://www.ncl.ac.uk/pizza#PizzaBase"/>
+        <rdfs:subClassOf>
+            <owl:Restriction>
+                <owl:onProperty rdf:resource="http://www.ncl.ac.uk/pizza#hasCalorificContentValue"/>
+                <owl:hasValue rdf:datatype="http://www.w3.org/2001/XMLSchema#integer">250</owl:hasValue>
+            </owl:Restriction>
+        </rdfs:subClassOf>
+        <owl:disjointWith rdf:resource="http://www.ncl.ac.uk/pizza#ThinAndCrispyBase"/>
+        <creator xml:lang="en">Phillip Lord</creator>
+        <rdfs:label xml:lang="pt">BaseEspessa</rdfs:label>
+        <rdfs:label xml:lang="it">Disastro</rdfs:label>
+    </owl:Class>
+    
+
+
+    <!-- http://www.ncl.ac.uk/pizza#FishTopping -->
+
+    <owl:Class rdf:about="http://www.ncl.ac.uk/pizza#FishTopping">
+        <rdfs:subClassOf rdf:resource="http://www.ncl.ac.uk/pizza#PizzaTopping"/>
+        <creator xml:lang="en">Phillip Lord</creator>
+        <rdfs:label xml:lang="it">Pesce Ingredienti</rdfs:label>
+    </owl:Class>
+    
+
+
+    <!-- http://www.ncl.ac.uk/pizza#FourCheesePizza -->
+
+    <owl:Class rdf:about="http://www.ncl.ac.uk/pizza#FourCheesePizza">
+        <owl:equivalentClass>
+            <owl:Class>
+                <owl:intersectionOf rdf:parseType="Collection">
+                    <rdf:Description rdf:about="http://www.ncl.ac.uk/pizza#Pizza"/>
+                    <owl:Restriction>
+                        <owl:onProperty rdf:resource="http://www.ncl.ac.uk/pizza#hasTopping"/>
+                        <owl:qualifiedCardinality rdf:datatype="http://www.w3.org/2001/XMLSchema#nonNegativeInteger">4</owl:qualifiedCardinality>
+                        <owl:onClass rdf:resource="http://www.ncl.ac.uk/pizza#CheeseTopping"/>
+                    </owl:Restriction>
+                </owl:intersectionOf>
+            </owl:Class>
+        </owl:equivalentClass>
+        <creator xml:lang="en">Phillip Lord</creator>
+        <rdfs:label xml:lang="it">Pizza con Quattro Formaggio</rdfs:label>
+    </owl:Class>
+    
+
+
+    <!-- http://www.ncl.ac.uk/pizza#FruitTopping -->
+
+    <owl:Class rdf:about="http://www.ncl.ac.uk/pizza#FruitTopping">
+        <rdfs:subClassOf rdf:resource="http://www.ncl.ac.uk/pizza#PizzaTopping"/>
+        <creator xml:lang="en">Phillip Lord</creator>
+        <rdfs:label xml:lang="it">Frutta Ingredienti</rdfs:label>
+    </owl:Class>
+    
+
+
+    <!-- http://www.ncl.ac.uk/pizza#GarlicTopping -->
+
+    <owl:Class rdf:about="http://www.ncl.ac.uk/pizza#GarlicTopping">
+        <rdfs:subClassOf rdf:resource="http://www.ncl.ac.uk/pizza#VegetableTopping"/>
+        <creator xml:lang="en">Phillip Lord</creator>
+        <rdfs:label xml:lang="it">Aglio Ingredienti</rdfs:label>
+    </owl:Class>
+    
+
+
+    <!-- http://www.ncl.ac.uk/pizza#GoatsCheeseTopping -->
+
+    <owl:Class rdf:about="http://www.ncl.ac.uk/pizza#GoatsCheeseTopping">
+        <rdfs:subClassOf rdf:resource="http://www.ncl.ac.uk/pizza#CheeseTopping"/>
+        <creator xml:lang="en">Phillip Lord</creator>
+        <rdfs:label xml:lang="it">Formaggio di Capri Ingredienti</rdfs:label>
+    </owl:Class>
+    
+
+
+    <!-- http://www.ncl.ac.uk/pizza#GorgonzolaTopping -->
+
+    <owl:Class rdf:about="http://www.ncl.ac.uk/pizza#GorgonzolaTopping">
+        <rdfs:subClassOf rdf:resource="http://www.ncl.ac.uk/pizza#CheeseTopping"/>
+        <creator xml:lang="en">Phillip Lord</creator>
+        <rdfs:label xml:lang="it">Gorgonzola Ingredienti</rdfs:label>
+    </owl:Class>
+    
+
+
+    <!-- http://www.ncl.ac.uk/pizza#GreenPepperTopping -->
+
+    <owl:Class rdf:about="http://www.ncl.ac.uk/pizza#GreenPepperTopping">
+        <rdfs:subClassOf rdf:resource="http://www.ncl.ac.uk/pizza#PepperTopping"/>
+        <creator xml:lang="en">Phillip Lord</creator>
+        <rdfs:label xml:lang="it">Peperone Verde Ingredienti</rdfs:label>
+    </owl:Class>
+    
+
+
+    <!-- http://www.ncl.ac.uk/pizza#HamTopping -->
+
+    <owl:Class rdf:about="http://www.ncl.ac.uk/pizza#HamTopping">
+        <rdfs:subClassOf rdf:resource="http://www.ncl.ac.uk/pizza#MeatTopping"/>
+        <creator xml:lang="en">Phillip Lord</creator>
+        <rdfs:label xml:lang="it">Prosicuitto Crudo Ingredienti</rdfs:label>
+    </owl:Class>
+    
+
+
+    <!-- http://www.ncl.ac.uk/pizza#HerbSpiceTopping -->
+
+    <owl:Class rdf:about="http://www.ncl.ac.uk/pizza#HerbSpiceTopping">
+        <rdfs:subClassOf rdf:resource="http://www.ncl.ac.uk/pizza#PizzaTopping"/>
+        <creator xml:lang="en">Phillip Lord</creator>
+        <rdfs:label xml:lang="it">Erba Ingredienti</rdfs:label>
+    </owl:Class>
+    
+
+
+    <!-- http://www.ncl.ac.uk/pizza#HighCaloriePizza -->
+
+    <owl:Class rdf:about="http://www.ncl.ac.uk/pizza#HighCaloriePizza">
+        <owl:equivalentClass>
+            <owl:Restriction>
+                <owl:onProperty rdf:resource="http://www.ncl.ac.uk/pizza#hasCalorificContentValue"/>
+                <owl:someValuesFrom>
+                    <rdfs:Datatype>
+                        <owl:onDatatype rdf:resource="http://www.w3.org/2001/XMLSchema#integer"/>
+                        <owl:withRestrictions rdf:parseType="Collection">
+                            <rdf:Description>
+                                <xsd:minInclusive rdf:datatype="http://www.w3.org/2001/XMLSchema#integer">700</xsd:minInclusive>
+                            </rdf:Description>
+                        </owl:withRestrictions>
+                    </rdfs:Datatype>
+                </owl:someValuesFrom>
+            </owl:Restriction>
+        </owl:equivalentClass>
+        <creator xml:lang="en">Phillip Lord</creator>
+    </owl:Class>
+    
+
+
+    <!-- http://www.ncl.ac.uk/pizza#Hot -->
+
+    <owl:Class rdf:about="http://www.ncl.ac.uk/pizza#Hot">
+        <rdfs:subClassOf rdf:resource="http://www.ncl.ac.uk/pizza#Spiciness"/>
+        <creator xml:lang="en">Phillip Lord</creator>
+        <rdfs:label xml:lang="it">Molto Piccante</rdfs:label>
+        <pattern:facetvalue rdf:resource="http://www.ncl.ac.uk/pizza#hasSpiciness"/>
+        <pattern:inpattern rdf:nodeID="genid1"/>
+    </owl:Class>
+    
+
+
+    <!-- http://www.ncl.ac.uk/pizza#HotSpicedBeefTopping -->
+
+    <owl:Class rdf:about="http://www.ncl.ac.uk/pizza#HotSpicedBeefTopping">
+        <rdfs:subClassOf rdf:resource="http://www.ncl.ac.uk/pizza#MeatTopping"/>
+        <creator xml:lang="en">Phillip Lord</creator>
+        <rdfs:label xml:lang="it">Manzo Piccante Ingredienti</rdfs:label>
+    </owl:Class>
+    
+
+
+    <!-- http://www.ncl.ac.uk/pizza#InterestingPizza -->
+
+    <owl:Class rdf:about="http://www.ncl.ac.uk/pizza#InterestingPizza">
+        <owl:equivalentClass>
+            <owl:Class>
+                <owl:intersectionOf rdf:parseType="Collection">
+                    <rdf:Description rdf:about="http://www.ncl.ac.uk/pizza#Pizza"/>
+                    <owl:Restriction>
+                        <owl:onProperty rdf:resource="http://www.ncl.ac.uk/pizza#hasTopping"/>
+                        <owl:minQualifiedCardinality rdf:datatype="http://www.w3.org/2001/XMLSchema#nonNegativeInteger">3</owl:minQualifiedCardinality>
+                        <owl:onClass rdf:resource="http://www.ncl.ac.uk/pizza#PizzaTopping"/>
+                    </owl:Restriction>
+                </owl:intersectionOf>
+            </owl:Class>
+        </owl:equivalentClass>
+        <creator xml:lang="en">Phillip Lord</creator>
+        <rdfs:label xml:lang="it">Pizza Interessante</rdfs:label>
+    </owl:Class>
+    
+
+
+    <!-- http://www.ncl.ac.uk/pizza#JalapenoPepperTopping -->
+
+    <owl:Class rdf:about="http://www.ncl.ac.uk/pizza#JalapenoPepperTopping">
+        <rdfs:subClassOf rdf:resource="http://www.ncl.ac.uk/pizza#PepperTopping"/>
+        <creator xml:lang="en">Phillip Lord</creator>
+        <rdfs:label xml:lang="it">Pepperencino Jalapeno Ingredienti</rdfs:label>
+    </owl:Class>
+    
+
+
+    <!-- http://www.ncl.ac.uk/pizza#KalamataOlivesTopping -->
+
+    <owl:Class rdf:about="http://www.ncl.ac.uk/pizza#KalamataOlivesTopping">
+        <rdfs:subClassOf rdf:resource="http://www.ncl.ac.uk/pizza#VegetableTopping"/>
+        <creator xml:lang="en">Phillip Lord</creator>
+    </owl:Class>
+    
+
+
+    <!-- http://www.ncl.ac.uk/pizza#LeekTopping -->
+
+    <owl:Class rdf:about="http://www.ncl.ac.uk/pizza#LeekTopping">
+        <rdfs:subClassOf rdf:resource="http://www.ncl.ac.uk/pizza#VegetableTopping"/>
+        <creator xml:lang="en">Phillip Lord</creator>
+        <rdfs:label xml:lang="it">Porro Ingredienti</rdfs:label>
+    </owl:Class>
+    
+
+
+    <!-- http://www.ncl.ac.uk/pizza#LettuceTopping -->
+
+    <owl:Class rdf:about="http://www.ncl.ac.uk/pizza#LettuceTopping">
+        <rdfs:subClassOf rdf:resource="http://www.ncl.ac.uk/pizza#VegetableTopping"/>
+        <creator xml:lang="en">Phillip Lord</creator>
+    </owl:Class>
+    
+
+
+    <!-- http://www.ncl.ac.uk/pizza#LowCaloriePizza -->
+
+    <owl:Class rdf:about="http://www.ncl.ac.uk/pizza#LowCaloriePizza">
+        <owl:equivalentClass>
+            <owl:Restriction>
+                <owl:onProperty rdf:resource="http://www.ncl.ac.uk/pizza#hasCalorificContentValue"/>
+                <owl:someValuesFrom>
+                    <rdfs:Datatype>
+                        <owl:onDatatype rdf:resource="http://www.w3.org/2001/XMLSchema#integer"/>
+                        <owl:withRestrictions rdf:parseType="Collection">
+                            <rdf:Description>
+                                <xsd:maxInclusive rdf:datatype="http://www.w3.org/2001/XMLSchema#integer">400</xsd:maxInclusive>
+                            </rdf:Description>
+                        </owl:withRestrictions>
+                    </rdfs:Datatype>
+                </owl:someValuesFrom>
+            </owl:Restriction>
+        </owl:equivalentClass>
+        <creator xml:lang="en">Phillip Lord</creator>
+    </owl:Class>
+    
+
+
+    <!-- http://www.ncl.ac.uk/pizza#MargheritaPizza -->
+
+    <owl:Class rdf:about="http://www.ncl.ac.uk/pizza#MargheritaPizza">
+        <rdfs:subClassOf rdf:resource="http://www.ncl.ac.uk/pizza#NamedPizza"/>
+        <rdfs:subClassOf>
+            <owl:Restriction>
+                <owl:onProperty rdf:resource="http://www.ncl.ac.uk/pizza#hasTopping"/>
+                <owl:someValuesFrom rdf:resource="http://www.ncl.ac.uk/pizza#MozzarellaTopping"/>
+            </owl:Restriction>
+        </rdfs:subClassOf>
+        <rdfs:subClassOf>
+            <owl:Restriction>
+                <owl:onProperty rdf:resource="http://www.ncl.ac.uk/pizza#hasTopping"/>
+                <owl:someValuesFrom rdf:resource="http://www.ncl.ac.uk/pizza#TomatoTopping"/>
+            </owl:Restriction>
+        </rdfs:subClassOf>
+        <rdfs:subClassOf>
+            <owl:Restriction>
+                <owl:onProperty rdf:resource="http://www.ncl.ac.uk/pizza#hasTopping"/>
+                <owl:allValuesFrom>
+                    <owl:Class>
+                        <owl:unionOf rdf:parseType="Collection">
+                            <rdf:Description rdf:about="http://www.ncl.ac.uk/pizza#MozzarellaTopping"/>
+                            <rdf:Description rdf:about="http://www.ncl.ac.uk/pizza#TomatoTopping"/>
+                        </owl:unionOf>
+                    </owl:Class>
+                </owl:allValuesFrom>
+            </owl:Restriction>
+        </rdfs:subClassOf>
+        <creator xml:lang="en">Phillip Lord</creator>
+        <rdfs:label xml:lang="it">Pizza Margherita</rdfs:label>
+    </owl:Class>
+    
+
+
+    <!-- http://www.ncl.ac.uk/pizza#MeatTopping -->
+
+    <owl:Class rdf:about="http://www.ncl.ac.uk/pizza#MeatTopping">
+        <rdfs:subClassOf rdf:resource="http://www.ncl.ac.uk/pizza#PizzaTopping"/>
+        <creator xml:lang="en">Phillip Lord</creator>
+        <rdfs:label xml:lang="it">Carne Ingredienti</rdfs:label>
+    </owl:Class>
+    
+
+
+    <!-- http://www.ncl.ac.uk/pizza#Medium -->
+
+    <owl:Class rdf:about="http://www.ncl.ac.uk/pizza#Medium">
+        <rdfs:subClassOf rdf:resource="http://www.ncl.ac.uk/pizza#Spiciness"/>
+        <creator xml:lang="en">Phillip Lord</creator>
+        <rdfs:label xml:lang="it">Piccante</rdfs:label>
+        <pattern:facetvalue rdf:resource="http://www.ncl.ac.uk/pizza#hasSpiciness"/>
+        <pattern:inpattern rdf:nodeID="genid1"/>
+    </owl:Class>
+    
+
+
+    <!-- http://www.ncl.ac.uk/pizza#MediumCaloriePizza -->
+
+    <owl:Class rdf:about="http://www.ncl.ac.uk/pizza#MediumCaloriePizza">
+        <owl:equivalentClass>
+            <owl:Restriction>
+                <owl:onProperty rdf:resource="http://www.ncl.ac.uk/pizza#hasCalorificContentValue"/>
+                <owl:someValuesFrom>
+                    <rdfs:Datatype>
+                        <owl:onDatatype rdf:resource="http://www.w3.org/2001/XMLSchema#integer"/>
+                        <owl:withRestrictions rdf:parseType="Collection">
+                            <rdf:Description>
+                                <xsd:minInclusive rdf:datatype="http://www.w3.org/2001/XMLSchema#integer">400</xsd:minInclusive>
+                            </rdf:Description>
+                            <rdf:Description>
+                                <xsd:maxInclusive rdf:datatype="http://www.w3.org/2001/XMLSchema#integer">700</xsd:maxInclusive>
+                            </rdf:Description>
+                        </owl:withRestrictions>
+                    </rdfs:Datatype>
+                </owl:someValuesFrom>
+            </owl:Restriction>
+        </owl:equivalentClass>
+        <creator xml:lang="en">Phillip Lord</creator>
+    </owl:Class>
+    
+
+
+    <!-- http://www.ncl.ac.uk/pizza#Mild -->
+
+    <owl:Class rdf:about="http://www.ncl.ac.uk/pizza#Mild">
+        <rdfs:subClassOf rdf:resource="http://www.ncl.ac.uk/pizza#Spiciness"/>
+        <creator xml:lang="en">Phillip Lord</creator>
+        <rdfs:label xml:lang="it">Non Piccante</rdfs:label>
+        <pattern:facetvalue rdf:resource="http://www.ncl.ac.uk/pizza#hasSpiciness"/>
+        <pattern:inpattern rdf:nodeID="genid1"/>
+    </owl:Class>
+    
+
+
+    <!-- http://www.ncl.ac.uk/pizza#MixedSeafoodTopping -->
+
+    <owl:Class rdf:about="http://www.ncl.ac.uk/pizza#MixedSeafoodTopping">
+        <rdfs:subClassOf rdf:resource="http://www.ncl.ac.uk/pizza#FishTopping"/>
+        <creator xml:lang="en">Phillip Lord</creator>
+        <rdfs:label xml:lang="it">Frutta di Mare Ingredienti</rdfs:label>
+    </owl:Class>
+    
+
+
+    <!-- http://www.ncl.ac.uk/pizza#MozzarellaTopping -->
+
+    <owl:Class rdf:about="http://www.ncl.ac.uk/pizza#MozzarellaTopping">
+        <rdfs:subClassOf rdf:resource="http://www.ncl.ac.uk/pizza#CheeseTopping"/>
+        <creator xml:lang="en">Phillip Lord</creator>
+        <rdfs:label xml:lang="it">Mozzzarella Ingredienti</rdfs:label>
+    </owl:Class>
+    
+
+
+    <!-- http://www.ncl.ac.uk/pizza#MushroomTopping -->
+
+    <owl:Class rdf:about="http://www.ncl.ac.uk/pizza#MushroomTopping">
+        <rdfs:subClassOf rdf:resource="http://www.ncl.ac.uk/pizza#VegetableTopping"/>
+        <creator xml:lang="en">Phillip Lord</creator>
+        <rdfs:label xml:lang="it">Funghi Ingredienti</rdfs:label>
+    </owl:Class>
+    
+
+
+    <!-- http://www.ncl.ac.uk/pizza#NamedPizza -->
+
+    <owl:Class rdf:about="http://www.ncl.ac.uk/pizza#NamedPizza">
+        <rdfs:subClassOf rdf:resource="http://www.ncl.ac.uk/pizza#Pizza"/>
+        <creator xml:lang="en">Phillip Lord</creator>
+        <rdfs:label xml:lang="it">Pizza Con Nome</rdfs:label>
+    </owl:Class>
+    
+
+
+    <!-- http://www.ncl.ac.uk/pizza#NonVegetarianPizza -->
+
+    <owl:Class rdf:about="http://www.ncl.ac.uk/pizza#NonVegetarianPizza">
+        <owl:equivalentClass>
+            <owl:Class>
+                <owl:intersectionOf rdf:parseType="Collection">
+                    <rdf:Description rdf:about="http://www.ncl.ac.uk/pizza#Pizza"/>
+                    <owl:Class>
+                        <owl:complementOf rdf:resource="http://www.ncl.ac.uk/pizza#VegetarianPizza"/>
+                    </owl:Class>
+                </owl:intersectionOf>
+            </owl:Class>
+        </owl:equivalentClass>
+        <creator xml:lang="en">Phillip Lord</creator>
+        <myOpinion xml:lang="en">Not a good start.</myOpinion>
+        <rdfs:label xml:lang="it">Pizza con carne o pesce</rdfs:label>
+    </owl:Class>
+    
+
+
+    <!-- http://www.ncl.ac.uk/pizza#NutTopping -->
+
+    <owl:Class rdf:about="http://www.ncl.ac.uk/pizza#NutTopping">
+        <rdfs:subClassOf rdf:resource="http://www.ncl.ac.uk/pizza#PizzaTopping"/>
+        <creator xml:lang="en">Phillip Lord</creator>
+        <rdfs:label xml:lang="it">Noci Ingredienti</rdfs:label>
+    </owl:Class>
+    
+
+
+    <!-- http://www.ncl.ac.uk/pizza#OliveTopping -->
+
+    <owl:Class rdf:about="http://www.ncl.ac.uk/pizza#OliveTopping">
+        <rdfs:subClassOf rdf:resource="http://www.ncl.ac.uk/pizza#VegetableTopping"/>
+        <creator xml:lang="en">Phillip Lord</creator>
+        <rdfs:label xml:lang="it">Olive Ingredienti</rdfs:label>
+    </owl:Class>
+    
+
+
+    <!-- http://www.ncl.ac.uk/pizza#OnionTopping -->
+
+    <owl:Class rdf:about="http://www.ncl.ac.uk/pizza#OnionTopping">
+        <rdfs:subClassOf rdf:resource="http://www.ncl.ac.uk/pizza#VegetableTopping"/>
+        <creator xml:lang="en">Phillip Lord</creator>
+        <rdfs:label xml:lang="it">Cipolla Ingredienti</rdfs:label>
+    </owl:Class>
+    
+
+
+    <!-- http://www.ncl.ac.uk/pizza#ParmensePizza -->
+
+    <owl:Class rdf:about="http://www.ncl.ac.uk/pizza#ParmensePizza">
+        <rdfs:subClassOf rdf:resource="http://www.ncl.ac.uk/pizza#NamedPizza"/>
+        <rdfs:subClassOf>
+            <owl:Restriction>
+                <owl:onProperty rdf:resource="http://www.ncl.ac.uk/pizza#hasTopping"/>
+                <owl:someValuesFrom rdf:resource="http://www.ncl.ac.uk/pizza#AsparagusTopping"/>
+            </owl:Restriction>
+        </rdfs:subClassOf>
+        <rdfs:subClassOf>
+            <owl:Restriction>
+                <owl:onProperty rdf:resource="http://www.ncl.ac.uk/pizza#hasTopping"/>
+                <owl:someValuesFrom rdf:resource="http://www.ncl.ac.uk/pizza#HamTopping"/>
+            </owl:Restriction>
+        </rdfs:subClassOf>
+        <rdfs:subClassOf>
+            <owl:Restriction>
+                <owl:onProperty rdf:resource="http://www.ncl.ac.uk/pizza#hasTopping"/>
+                <owl:someValuesFrom rdf:resource="http://www.ncl.ac.uk/pizza#MozzarellaTopping"/>
+            </owl:Restriction>
+        </rdfs:subClassOf>
+        <rdfs:subClassOf>
+            <owl:Restriction>
+                <owl:onProperty rdf:resource="http://www.ncl.ac.uk/pizza#hasTopping"/>
+                <owl:someValuesFrom rdf:resource="http://www.ncl.ac.uk/pizza#ParmesanTopping"/>
+            </owl:Restriction>
+        </rdfs:subClassOf>
+        <rdfs:subClassOf>
+            <owl:Restriction>
+                <owl:onProperty rdf:resource="http://www.ncl.ac.uk/pizza#hasTopping"/>
+                <owl:someValuesFrom rdf:resource="http://www.ncl.ac.uk/pizza#TomatoTopping"/>
+            </owl:Restriction>
+        </rdfs:subClassOf>
+        <rdfs:subClassOf>
+            <owl:Restriction>
+                <owl:onProperty rdf:resource="http://www.ncl.ac.uk/pizza#hasTopping"/>
+                <owl:allValuesFrom>
+                    <owl:Class>
+                        <owl:unionOf rdf:parseType="Collection">
+                            <rdf:Description rdf:about="http://www.ncl.ac.uk/pizza#AsparagusTopping"/>
+                            <rdf:Description rdf:about="http://www.ncl.ac.uk/pizza#HamTopping"/>
+                            <rdf:Description rdf:about="http://www.ncl.ac.uk/pizza#MozzarellaTopping"/>
+                            <rdf:Description rdf:about="http://www.ncl.ac.uk/pizza#ParmesanTopping"/>
+                            <rdf:Description rdf:about="http://www.ncl.ac.uk/pizza#TomatoTopping"/>
+                        </owl:unionOf>
+                    </owl:Class>
+                </owl:allValuesFrom>
+            </owl:Restriction>
+        </rdfs:subClassOf>
+        <creator xml:lang="en">Phillip Lord</creator>
+    </owl:Class>
+    
+
+
+    <!-- http://www.ncl.ac.uk/pizza#ParmesanTopping -->
+
+    <owl:Class rdf:about="http://www.ncl.ac.uk/pizza#ParmesanTopping">
+        <rdfs:subClassOf rdf:resource="http://www.ncl.ac.uk/pizza#CheeseTopping"/>
+        <creator xml:lang="en">Phillip Lord</creator>
+        <rdfs:label xml:lang="it">Parmeggiano Ingredienti</rdfs:label>
+    </owl:Class>
+    
+
+
+    <!-- http://www.ncl.ac.uk/pizza#PeasTopping -->
+
+    <owl:Class rdf:about="http://www.ncl.ac.uk/pizza#PeasTopping">
+        <rdfs:subClassOf rdf:resource="http://www.ncl.ac.uk/pizza#VegetableTopping"/>
+        <creator xml:lang="en">Phillip Lord</creator>
+    </owl:Class>
+    
+
+
+    <!-- http://www.ncl.ac.uk/pizza#PeperonataTopping -->
+
+    <owl:Class rdf:about="http://www.ncl.ac.uk/pizza#PeperonataTopping">
+        <rdfs:subClassOf rdf:resource="http://www.ncl.ac.uk/pizza#PepperTopping"/>
+        <creator xml:lang="en">Phillip Lord</creator>
+        <rdfs:label xml:lang="it">Peperonata Topping</rdfs:label>
+    </owl:Class>
+    
+
+
+    <!-- http://www.ncl.ac.uk/pizza#PeperoniSausageTopping -->
+
+    <owl:Class rdf:about="http://www.ncl.ac.uk/pizza#PeperoniSausageTopping">
+        <rdfs:subClassOf rdf:resource="http://www.ncl.ac.uk/pizza#MeatTopping"/>
+        <creator xml:lang="en">Phillip Lord</creator>
+        <rdfs:label xml:lang="it">Peperoni Ingredienti</rdfs:label>
+    </owl:Class>
+    
+
+
+    <!-- http://www.ncl.ac.uk/pizza#PepperTopping -->
+
+    <owl:Class rdf:about="http://www.ncl.ac.uk/pizza#PepperTopping">
+        <rdfs:subClassOf rdf:resource="http://www.ncl.ac.uk/pizza#VegetableTopping"/>
+        <creator xml:lang="en">Phillip Lord</creator>
+        <rdfs:label xml:lang="it">Peperone Ingredienti</rdfs:label>
+    </owl:Class>
+    
+
+
+    <!-- http://www.ncl.ac.uk/pizza#PetitPoisTopping -->
+
+    <owl:Class rdf:about="http://www.ncl.ac.uk/pizza#PetitPoisTopping">
+        <rdfs:subClassOf rdf:resource="http://www.ncl.ac.uk/pizza#VegetableTopping"/>
+        <creator xml:lang="en">Phillip Lord</creator>
+        <rdfs:label xml:lang="it">Piselli Ingredienti</rdfs:label>
+    </owl:Class>
+    
+
+
+    <!-- http://www.ncl.ac.uk/pizza#PineKernels -->
+
+    <owl:Class rdf:about="http://www.ncl.ac.uk/pizza#PineKernels">
+        <rdfs:subClassOf rdf:resource="http://www.ncl.ac.uk/pizza#NutTopping"/>
+        <creator xml:lang="en">Phillip Lord</creator>
+        <rdfs:label xml:lang="it">Noci di Pino Ingredienti </rdfs:label>
+    </owl:Class>
+    
+
+
+    <!-- http://www.ncl.ac.uk/pizza#PineappleTopping -->
+
+    <owl:Class rdf:about="http://www.ncl.ac.uk/pizza#PineappleTopping">
+        <rdfs:subClassOf rdf:resource="http://www.ncl.ac.uk/pizza#FruitTopping"/>
+        <owl:disjointWith rdf:resource="http://www.ncl.ac.uk/pizza#SultanaTopping"/>
+        <creator xml:lang="en">Phillip Lord</creator>
+        <rdfs:label xml:lang="it">Ananas Ingredienti</rdfs:label>
+    </owl:Class>
+    
+
+
+    <!-- http://www.ncl.ac.uk/pizza#Pizza -->
+
+    <owl:Class rdf:about="http://www.ncl.ac.uk/pizza#Pizza">
+        <rdfs:subClassOf>
+            <owl:Restriction>
+                <owl:onProperty rdf:resource="http://www.ncl.ac.uk/pizza#hasBase"/>
+                <owl:someValuesFrom rdf:resource="http://www.ncl.ac.uk/pizza#PizzaBase"/>
+            </owl:Restriction>
+        </rdfs:subClassOf>
+        <rdfs:subClassOf>
+            <owl:Restriction>
+                <owl:onProperty rdf:resource="http://www.ncl.ac.uk/pizza#hasTopping"/>
+                <owl:someValuesFrom rdf:resource="http://www.ncl.ac.uk/pizza#PizzaTopping"/>
+            </owl:Restriction>
+        </rdfs:subClassOf>
+        <rdfs:subClassOf>
+            <owl:Restriction>
+                <owl:onProperty rdf:resource="http://www.ncl.ac.uk/pizza#hasCalorificContentValue"/>
+                <owl:someValuesFrom rdf:resource="http://www.w3.org/2001/XMLSchema#integer"/>
+            </owl:Restriction>
+        </rdfs:subClassOf>
+        <creator xml:lang="en">Phillip Lord</creator>
+        <rdfs:label xml:lang="en">Pizza</rdfs:label>
+        <rdfs:label xml:lang="it">Pizza</rdfs:label>
+    </owl:Class>
+    
+
+
+    <!-- http://www.ncl.ac.uk/pizza#PizzaBase -->
+
+    <owl:Class rdf:about="http://www.ncl.ac.uk/pizza#PizzaBase">
+        <owl:disjointWith rdf:resource="http://www.ncl.ac.uk/pizza#PizzaTopping"/>
+        <creator xml:lang="en">Phillip Lord</creator>
+        <rdfs:label xml:lang="it">Base di Pizza</rdfs:label>
+        <rdfs:label xml:lang="pt">BaseDaPizza</rdfs:label>
+    </owl:Class>
+    
+
+
+    <!-- http://www.ncl.ac.uk/pizza#PizzaComponent -->
+
+    <owl:Class rdf:about="http://www.ncl.ac.uk/pizza#PizzaComponent">
+        <creator xml:lang="en">Phillip Lord</creator>
+    </owl:Class>
+    
+
+
+    <!-- http://www.ncl.ac.uk/pizza#PizzaTopping -->
+
+    <owl:Class rdf:about="http://www.ncl.ac.uk/pizza#PizzaTopping">
+        <creator xml:lang="en">Phillip Lord</creator>
+        <rdfs:label xml:lang="it">Ingredienti di Pizza</rdfs:label>
+    </owl:Class>
+    
+
+
+    <!-- http://www.ncl.ac.uk/pizza#PrawnsTopping -->
+
+    <owl:Class rdf:about="http://www.ncl.ac.uk/pizza#PrawnsTopping">
+        <rdfs:subClassOf rdf:resource="http://www.ncl.ac.uk/pizza#FishTopping"/>
+        <creator xml:lang="en">Phillip Lord</creator>
+        <rdfs:label xml:lang="it">Gamberi Ingredienti</rdfs:label>
+    </owl:Class>
+    
+
+
+    <!-- http://www.ncl.ac.uk/pizza#RocketTopping -->
+
+    <owl:Class rdf:about="http://www.ncl.ac.uk/pizza#RocketTopping">
+        <rdfs:subClassOf rdf:resource="http://www.ncl.ac.uk/pizza#VegetableTopping"/>
+        <rdfs:subClassOf>
+            <owl:Restriction>
+                <owl:onProperty rdf:resource="http://www.ncl.ac.uk/pizza#hasSpiciness"/>
+                <owl:someValuesFrom rdf:resource="http://www.ncl.ac.uk/pizza#Mild"/>
+            </owl:Restriction>
+        </rdfs:subClassOf>
+        <creator xml:lang="en">Phillip Lord</creator>
+        <rdfs:label xml:lang="it">Rucola Ingredienti</rdfs:label>
+    </owl:Class>
+    
+
+
+    <!-- http://www.ncl.ac.uk/pizza#RosemaryTopping -->
+
+    <owl:Class rdf:about="http://www.ncl.ac.uk/pizza#RosemaryTopping">
+        <rdfs:subClassOf rdf:resource="http://www.ncl.ac.uk/pizza#HerbSpiceTopping"/>
+        <creator xml:lang="en">Phillip Lord</creator>
+        <rdfs:label xml:lang="it">Rosmarino Ingredienti</rdfs:label>
+    </owl:Class>
+    
+
+
+    <!-- http://www.ncl.ac.uk/pizza#SauceTopping -->
+
+    <owl:Class rdf:about="http://www.ncl.ac.uk/pizza#SauceTopping">
+        <rdfs:subClassOf rdf:resource="http://www.ncl.ac.uk/pizza#PizzaTopping"/>
+        <creator xml:lang="en">Phillip Lord</creator>
+        <rdfs:label xml:lang="it">Sugo Ingredienti</rdfs:label>
+    </owl:Class>
+    
+
+
+    <!-- http://www.ncl.ac.uk/pizza#SohoPizza -->
+
+    <owl:Class rdf:about="http://www.ncl.ac.uk/pizza#SohoPizza">
+        <rdfs:subClassOf rdf:resource="http://www.ncl.ac.uk/pizza#NamedPizza"/>
+        <rdfs:subClassOf>
+            <owl:Restriction>
+                <owl:onProperty rdf:resource="http://www.ncl.ac.uk/pizza#hasTopping"/>
+                <owl:someValuesFrom rdf:resource="http://www.ncl.ac.uk/pizza#GarlicTopping"/>
+            </owl:Restriction>
+        </rdfs:subClassOf>
+        <rdfs:subClassOf>
+            <owl:Restriction>
+                <owl:onProperty rdf:resource="http://www.ncl.ac.uk/pizza#hasTopping"/>
+                <owl:someValuesFrom rdf:resource="http://www.ncl.ac.uk/pizza#OliveTopping"/>
+            </owl:Restriction>
+        </rdfs:subClassOf>
+        <rdfs:subClassOf>
+            <owl:Restriction>
+                <owl:onProperty rdf:resource="http://www.ncl.ac.uk/pizza#hasTopping"/>
+                <owl:someValuesFrom rdf:resource="http://www.ncl.ac.uk/pizza#ParmesanTopping"/>
+            </owl:Restriction>
+        </rdfs:subClassOf>
+        <rdfs:subClassOf>
+            <owl:Restriction>
+                <owl:onProperty rdf:resource="http://www.ncl.ac.uk/pizza#hasTopping"/>
+                <owl:someValuesFrom rdf:resource="http://www.ncl.ac.uk/pizza#RocketTopping"/>
+            </owl:Restriction>
+        </rdfs:subClassOf>
+        <rdfs:subClassOf>
+            <owl:Restriction>
+                <owl:onProperty rdf:resource="http://www.ncl.ac.uk/pizza#hasTopping"/>
+                <owl:someValuesFrom rdf:resource="http://www.ncl.ac.uk/pizza#TomatoTopping"/>
+            </owl:Restriction>
+        </rdfs:subClassOf>
+        <rdfs:subClassOf>
+            <owl:Restriction>
+                <owl:onProperty rdf:resource="http://www.ncl.ac.uk/pizza#hasTopping"/>
+                <owl:allValuesFrom>
+                    <owl:Class>
+                        <owl:unionOf rdf:parseType="Collection">
+                            <rdf:Description rdf:about="http://www.ncl.ac.uk/pizza#GarlicTopping"/>
+                            <rdf:Description rdf:about="http://www.ncl.ac.uk/pizza#OliveTopping"/>
+                            <rdf:Description rdf:about="http://www.ncl.ac.uk/pizza#ParmesanTopping"/>
+                            <rdf:Description rdf:about="http://www.ncl.ac.uk/pizza#RocketTopping"/>
+                            <rdf:Description rdf:about="http://www.ncl.ac.uk/pizza#TomatoTopping"/>
+                        </owl:unionOf>
+                    </owl:Class>
+                </owl:allValuesFrom>
+            </owl:Restriction>
+        </rdfs:subClassOf>
+        <creator xml:lang="en">Phillip Lord</creator>
+        <rdfs:label xml:lang="it">Pizza da Soho</rdfs:label>
+    </owl:Class>
+    
+
+
+    <!-- http://www.ncl.ac.uk/pizza#Spiciness -->
+
+    <owl:Class rdf:about="http://www.ncl.ac.uk/pizza#Spiciness">
+        <owl:equivalentClass>
+            <owl:Class>
+                <owl:unionOf rdf:parseType="Collection">
+                    <rdf:Description rdf:about="http://www.ncl.ac.uk/pizza#Hot"/>
+                    <rdf:Description rdf:about="http://www.ncl.ac.uk/pizza#Medium"/>
+                    <rdf:Description rdf:about="http://www.ncl.ac.uk/pizza#Mild"/>
+                </owl:unionOf>
+            </owl:Class>
+        </owl:equivalentClass>
+        <creator xml:lang="en">Phillip Lord</creator>
+        <rdfs:label xml:lang="it">Piccantezza</rdfs:label>
+        <pattern:inpattern rdf:nodeID="genid1"/>
+    </owl:Class>
+    
+
+
+    <!-- http://www.ncl.ac.uk/pizza#SpinachTopping -->
+
+    <owl:Class rdf:about="http://www.ncl.ac.uk/pizza#SpinachTopping">
+        <rdfs:subClassOf rdf:resource="http://www.ncl.ac.uk/pizza#VegetableTopping"/>
+        <creator xml:lang="en">Phillip Lord</creator>
+        <rdfs:label xml:lang="it">Spinaci Ingredienti</rdfs:label>
+    </owl:Class>
+    
+
+
+    <!-- http://www.ncl.ac.uk/pizza#SultanaTopping -->
+
+    <owl:Class rdf:about="http://www.ncl.ac.uk/pizza#SultanaTopping">
+        <rdfs:subClassOf rdf:resource="http://www.ncl.ac.uk/pizza#FruitTopping"/>
+        <creator xml:lang="en">Phillip Lord</creator>
+        <rdfs:label xml:lang="it">Sultana Ingredienti</rdfs:label>
+    </owl:Class>
+    
+
+
+    <!-- http://www.ncl.ac.uk/pizza#SweetPepperTopping -->
+
+    <owl:Class rdf:about="http://www.ncl.ac.uk/pizza#SweetPepperTopping">
+        <rdfs:subClassOf rdf:resource="http://www.ncl.ac.uk/pizza#PepperTopping"/>
+        <creator xml:lang="en">Phillip Lord</creator>
+        <rdfs:label xml:lang="it">Peperone Dolce Ingredienti</rdfs:label>
+    </owl:Class>
+    
+
+
+    <!-- http://www.ncl.ac.uk/pizza#ThinAndCrispyBase -->
+
+    <owl:Class rdf:about="http://www.ncl.ac.uk/pizza#ThinAndCrispyBase">
+        <rdfs:subClassOf rdf:resource="http://www.ncl.ac.uk/pizza#PizzaBase"/>
+        <rdfs:subClassOf>
+            <owl:Restriction>
+                <owl:onProperty rdf:resource="http://www.ncl.ac.uk/pizza#hasCalorificContentValue"/>
+                <owl:hasValue rdf:datatype="http://www.w3.org/2001/XMLSchema#integer">150</owl:hasValue>
+            </owl:Restriction>
+        </rdfs:subClassOf>
+        <creator xml:lang="en">Phillip Lord</creator>
+        <rdfs:label xml:lang="it">Base di Pizza Normali</rdfs:label>
+        <rdfs:label xml:lang="pt">BaseFinaEQuebradica</rdfs:label>
+    </owl:Class>
+    
+
+
+    <!-- http://www.ncl.ac.uk/pizza#TobascoPepperSauce -->
+
+    <owl:Class rdf:about="http://www.ncl.ac.uk/pizza#TobascoPepperSauce">
+        <rdfs:subClassOf rdf:resource="http://www.ncl.ac.uk/pizza#SauceTopping"/>
+        <rdfs:subClassOf>
+            <owl:Restriction>
+                <owl:onProperty rdf:resource="http://www.ncl.ac.uk/pizza#hasSpiciness"/>
+                <owl:someValuesFrom rdf:resource="http://www.ncl.ac.uk/pizza#Hot"/>
+            </owl:Restriction>
+        </rdfs:subClassOf>
+        <creator xml:lang="en">Phillip Lord</creator>
+        <rdfs:label xml:lang="it">Sugo Tobasco Ingredienti</rdfs:label>
+    </owl:Class>
+    
+
+
+    <!-- http://www.ncl.ac.uk/pizza#TomatoTopping -->
+
+    <owl:Class rdf:about="http://www.ncl.ac.uk/pizza#TomatoTopping">
+        <rdfs:subClassOf rdf:resource="http://www.ncl.ac.uk/pizza#VegetableTopping"/>
+        <creator xml:lang="en">Phillip Lord</creator>
+        <rdfs:label xml:lang="it">Pomodorro Ingredienti</rdfs:label>
+    </owl:Class>
+    
+
+
+    <!-- http://www.ncl.ac.uk/pizza#VegetableTopping -->
+
+    <owl:Class rdf:about="http://www.ncl.ac.uk/pizza#VegetableTopping">
+        <rdfs:subClassOf rdf:resource="http://www.ncl.ac.uk/pizza#PizzaTopping"/>
+        <creator xml:lang="en">Phillip Lord</creator>
+        <rdfs:label xml:lang="it">Vegetale Ingredienti</rdfs:label>
+    </owl:Class>
+    
+
+
+    <!-- http://www.ncl.ac.uk/pizza#VegetarianPizza -->
+
+    <owl:Class rdf:about="http://www.ncl.ac.uk/pizza#VegetarianPizza">
+        <owl:equivalentClass>
+            <owl:Class>
+                <owl:intersectionOf rdf:parseType="Collection">
+                    <rdf:Description rdf:about="http://www.ncl.ac.uk/pizza#Pizza"/>
+                    <owl:Class>
+                        <owl:complementOf>
+                            <owl:Restriction>
+                                <owl:onProperty rdf:resource="http://www.ncl.ac.uk/pizza#hasTopping"/>
+                                <owl:someValuesFrom rdf:resource="http://www.ncl.ac.uk/pizza#FishTopping"/>
+                            </owl:Restriction>
+                        </owl:complementOf>
+                    </owl:Class>
+                    <owl:Class>
+                        <owl:complementOf>
+                            <owl:Restriction>
+                                <owl:onProperty rdf:resource="http://www.ncl.ac.uk/pizza#hasTopping"/>
+                                <owl:someValuesFrom rdf:resource="http://www.ncl.ac.uk/pizza#MeatTopping"/>
+                            </owl:Restriction>
+                        </owl:complementOf>
+                    </owl:Class>
+                </owl:intersectionOf>
+            </owl:Class>
+        </owl:equivalentClass>
+        <creator xml:lang="en">Phillip Lord</creator>
+        <myOpinion xml:lang="en">Always a good start.</myOpinion>
+        <rdfs:label xml:lang="it">Pizza Vegetariano</rdfs:label>
+    </owl:Class>
+    
+
+
+    <!-- http://www.ncl.ac.uk/pizza#VegetarianPizza2 -->
+
+    <owl:Class rdf:about="http://www.ncl.ac.uk/pizza#VegetarianPizza2">
+        <owl:equivalentClass>
+            <owl:Class>
+                <owl:intersectionOf rdf:parseType="Collection">
+                    <rdf:Description rdf:about="http://www.ncl.ac.uk/pizza#Pizza"/>
+                    <owl:Restriction>
+                        <owl:onProperty rdf:resource="http://www.ncl.ac.uk/pizza#hasTopping"/>
+                        <owl:allValuesFrom>
+                            <owl:Class>
+                                <owl:complementOf>
+                                    <owl:Class>
+                                        <owl:unionOf rdf:parseType="Collection">
+                                            <rdf:Description rdf:about="http://www.ncl.ac.uk/pizza#FishTopping"/>
+                                            <rdf:Description rdf:about="http://www.ncl.ac.uk/pizza#MeatTopping"/>
+                                        </owl:unionOf>
+                                    </owl:Class>
+                                </owl:complementOf>
+                            </owl:Class>
+                        </owl:allValuesFrom>
+                    </owl:Restriction>
+                </owl:intersectionOf>
+            </owl:Class>
+        </owl:equivalentClass>
+        <creator xml:lang="en">Phillip Lord</creator>
+        <rdfs:label xml:lang="it">Pizza Vegetariano (secondo definizione)</rdfs:label>
+    </owl:Class>
+    
+
+
+    <!-- 
+    ///////////////////////////////////////////////////////////////////////////////////////
+    //
+    // Individuals
+    //
+    ///////////////////////////////////////////////////////////////////////////////////////
+     -->
+
+    
+
+
+    <!-- http://www.ncl.ac.uk/pizza#ExampleMargheritaPizza -->
+
+    <owl:NamedIndividual rdf:about="http://www.ncl.ac.uk/pizza#ExampleMargheritaPizza">
+        <rdf:type rdf:resource="http://www.ncl.ac.uk/pizza#MargheritaPizza"/>
+        <hasCalorificContentValue rdf:datatype="http://www.w3.org/2001/XMLSchema#integer">300</hasCalorificContentValue>
+        <creator xml:lang="en">Phillip Lord</creator>
+    </owl:NamedIndividual>
+    
+
+
+    <!-- http://www.ncl.ac.uk/pizza#ExampleParmense -->
+
+    <owl:NamedIndividual rdf:about="http://www.ncl.ac.uk/pizza#ExampleParmense">
+        <rdf:type rdf:resource="http://www.ncl.ac.uk/pizza#ParmensePizza"/>
+        <hasCalorificContentValue rdf:datatype="http://www.w3.org/2001/XMLSchema#integer">700</hasCalorificContentValue>
+        <creator xml:lang="en">Phillip Lord</creator>
+    </owl:NamedIndividual>
+    
+
+
+    <!-- 
+    ///////////////////////////////////////////////////////////////////////////////////////
+    //
+    // General axioms
+    //
+    ///////////////////////////////////////////////////////////////////////////////////////
+     -->
+
+    <rdf:Description>
+        <rdf:type rdf:resource="http://www.w3.org/2002/07/owl#AllDisjointClasses"/>
+        <owl:members rdf:parseType="Collection">
+            <rdf:Description rdf:about="http://www.ncl.ac.uk/pizza#AnchoviesTopping"/>
+            <rdf:Description rdf:about="http://www.ncl.ac.uk/pizza#MixedSeafoodTopping"/>
+            <rdf:Description rdf:about="http://www.ncl.ac.uk/pizza#PrawnsTopping"/>
+        </owl:members>
+    </rdf:Description>
+    <rdf:Description>
+        <rdf:type rdf:resource="http://www.w3.org/2002/07/owl#AllDisjointClasses"/>
+        <owl:members rdf:parseType="Collection">
+            <rdf:Description rdf:about="http://www.ncl.ac.uk/pizza#ArtichokeTopping"/>
+            <rdf:Description rdf:about="http://www.ncl.ac.uk/pizza#AsparagusTopping"/>
+            <rdf:Description rdf:about="http://www.ncl.ac.uk/pizza#CaperTopping"/>
+            <rdf:Description rdf:about="http://www.ncl.ac.uk/pizza#GarlicTopping"/>
+            <rdf:Description rdf:about="http://www.ncl.ac.uk/pizza#LeekTopping"/>
+            <rdf:Description rdf:about="http://www.ncl.ac.uk/pizza#MushroomTopping"/>
+            <rdf:Description rdf:about="http://www.ncl.ac.uk/pizza#OliveTopping"/>
+            <rdf:Description rdf:about="http://www.ncl.ac.uk/pizza#OnionTopping"/>
+            <rdf:Description rdf:about="http://www.ncl.ac.uk/pizza#PepperTopping"/>
+            <rdf:Description rdf:about="http://www.ncl.ac.uk/pizza#PetitPoisTopping"/>
+            <rdf:Description rdf:about="http://www.ncl.ac.uk/pizza#RocketTopping"/>
+            <rdf:Description rdf:about="http://www.ncl.ac.uk/pizza#SpinachTopping"/>
+            <rdf:Description rdf:about="http://www.ncl.ac.uk/pizza#TomatoTopping"/>
+        </owl:members>
+    </rdf:Description>
+    <rdf:Description>
+        <rdf:type rdf:resource="http://www.w3.org/2002/07/owl#AllDisjointClasses"/>
+        <owl:members rdf:parseType="Collection">
+            <rdf:Description rdf:about="http://www.ncl.ac.uk/pizza#CajunPizza"/>
+            <rdf:Description rdf:about="http://www.ncl.ac.uk/pizza#CapricciosaPizza"/>
+            <rdf:Description rdf:about="http://www.ncl.ac.uk/pizza#MargheritaPizza"/>
+            <rdf:Description rdf:about="http://www.ncl.ac.uk/pizza#ParmensePizza"/>
+            <rdf:Description rdf:about="http://www.ncl.ac.uk/pizza#SohoPizza"/>
+        </owl:members>
+    </rdf:Description>
+    <rdf:Description>
+        <rdf:type rdf:resource="http://www.w3.org/2002/07/owl#AllDisjointClasses"/>
+        <owl:members rdf:parseType="Collection">
+            <rdf:Description rdf:about="http://www.ncl.ac.uk/pizza#CheeseTopping"/>
+            <rdf:Description rdf:about="http://www.ncl.ac.uk/pizza#FishTopping"/>
+            <rdf:Description rdf:about="http://www.ncl.ac.uk/pizza#FruitTopping"/>
+            <rdf:Description rdf:about="http://www.ncl.ac.uk/pizza#HerbSpiceTopping"/>
+            <rdf:Description rdf:about="http://www.ncl.ac.uk/pizza#MeatTopping"/>
+            <rdf:Description rdf:about="http://www.ncl.ac.uk/pizza#NutTopping"/>
+            <rdf:Description rdf:about="http://www.ncl.ac.uk/pizza#SauceTopping"/>
+            <rdf:Description rdf:about="http://www.ncl.ac.uk/pizza#VegetableTopping"/>
+        </owl:members>
+    </rdf:Description>
+    <rdf:Description>
+        <rdf:type rdf:resource="http://www.w3.org/2002/07/owl#AllDisjointClasses"/>
+        <owl:members rdf:parseType="Collection">
+            <rdf:Description rdf:about="http://www.ncl.ac.uk/pizza#ChickenTopping"/>
+            <rdf:Description rdf:about="http://www.ncl.ac.uk/pizza#HamTopping"/>
+            <rdf:Description rdf:about="http://www.ncl.ac.uk/pizza#HotSpicedBeefTopping"/>
+            <rdf:Description rdf:about="http://www.ncl.ac.uk/pizza#PeperoniSausageTopping"/>
+        </owl:members>
+    </rdf:Description>
+    <rdf:Description>
+        <rdf:type rdf:resource="http://www.w3.org/2002/07/owl#AllDisjointClasses"/>
+        <owl:members rdf:parseType="Collection">
+            <rdf:Description rdf:about="http://www.ncl.ac.uk/pizza#GoatsCheeseTopping"/>
+            <rdf:Description rdf:about="http://www.ncl.ac.uk/pizza#GorgonzolaTopping"/>
+            <rdf:Description rdf:about="http://www.ncl.ac.uk/pizza#MozzarellaTopping"/>
+            <rdf:Description rdf:about="http://www.ncl.ac.uk/pizza#ParmesanTopping"/>
+        </owl:members>
+    </rdf:Description>
+    <rdf:Description>
+        <rdf:type rdf:resource="http://www.w3.org/2002/07/owl#AllDisjointClasses"/>
+        <owl:members rdf:parseType="Collection">
+            <rdf:Description rdf:about="http://www.ncl.ac.uk/pizza#GreenPepperTopping"/>
+            <rdf:Description rdf:about="http://www.ncl.ac.uk/pizza#JalapenoPepperTopping"/>
+            <rdf:Description rdf:about="http://www.ncl.ac.uk/pizza#PeperonataTopping"/>
+            <rdf:Description rdf:about="http://www.ncl.ac.uk/pizza#SweetPepperTopping"/>
+        </owl:members>
+    </rdf:Description>
+    <rdf:Description>
+        <rdf:type rdf:resource="http://www.w3.org/2002/07/owl#AllDisjointClasses"/>
+        <owl:members rdf:parseType="Collection">
+            <rdf:Description rdf:about="http://www.ncl.ac.uk/pizza#Hot"/>
+            <rdf:Description rdf:about="http://www.ncl.ac.uk/pizza#Medium"/>
+            <rdf:Description rdf:about="http://www.ncl.ac.uk/pizza#Mild"/>
+        </owl:members>
+    </rdf:Description>
+</rdf:RDF>
+
+
+
+<!-- Generated by the OWL API (version 4.5.19.2020-11-07T15:38:34Z) https://github.com/owlcs/owlapi -->
+

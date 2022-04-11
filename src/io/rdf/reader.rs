@@ -1625,7 +1625,7 @@ impl<'a, A: ForIRI, AA:ForIndex<A>> OntologyParser<'a, A, AA> {
                 self.parse_imports().and_then(|_| self.parse_declarations())
             }
             OntologyParserState::Imports => {
-                dbg!(self.backward_compat());
+                self.backward_compat();
 
                 // for t in bnode.values() {
                 //     match t.as_slice()[0] {
