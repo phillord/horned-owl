@@ -64,6 +64,7 @@ fn create_tree_0(o: &mut SetOntology, current: Vec<Class>, remaining: &mut i32) 
     create_tree_0(o, next, remaining);
 }
 
+/*
 fn is_subclass_with_many_direct_subclasses(bench: &mut Bencher) {
     bench.iter(|| {
         let b = Build::default();
@@ -89,12 +90,12 @@ fn is_subclass_with_many_direct_subclasses(bench: &mut Bencher) {
         assert!(o.is_subclass(&c, &d));
     })
 }
-
+*/
 benchmark_group!(
     benches,
     a_thousand_classes,
     big_tree,
-    is_subclass_with_many_direct_subclasses
+    //is_subclass_with_many_direct_subclasses
 );
 
 use std::fs::File;
@@ -111,4 +112,14 @@ fn io_read(bench: &mut Bencher) {
 
 benchmark_group!(iobenches, io_read);
 
-benchmark_main!(benches, iobenches);
+fn bigger_tree(bench: &mut Bencher) {
+    bench.iter(|| {
+        let mut o = SetOntology::new();
+        let mut i = 100_000;
+        create_tree(&mut o, &mut i);
+    })
+}
+
+
+benchmark_group!(bigger, bigger_tree);
+benchmark_main!(benches, iobenches, bigger);

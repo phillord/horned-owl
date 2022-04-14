@@ -99,7 +99,15 @@ use std::fmt::Formatter;
 use std::hash::Hash;
 use std::hash::Hasher;
 use std::ops::Deref;
+use std::sync::Arc;
 use std::rc::Rc;
+
+#[cfg(not(feature="threaded"))]
+pub type RcT<T>=Rc<T>;
+
+#[cfg(feature="threaded")]
+pub type RcT<T>=Arc<T>;
+
 
 /// An
 /// [IRI](https://en.wikipedia.org/wiki/Internationalized_Resource_Identifier)

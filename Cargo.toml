@@ -31,6 +31,7 @@ ureq={version="2.1.1", optional=true}
 
 [features]
 remote = ["ureq"]
+threaded = []
 
 [dev-dependencies]
 horned-owl = {path=".", features = ["remote"]}

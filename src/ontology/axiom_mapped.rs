@@ -52,7 +52,7 @@ macro_rules! onimpl {
 
 #[derive(Debug, Default, Eq, PartialEq)]
 pub struct AxiomMappedIndex {
-    axiom: RefCell<BTreeMap<AxiomKind, BTreeSet<Rc<AnnotatedAxiom>>>>,
+    axiom: RefCell<BTreeMap<AxiomKind, BTreeSet<RcT<AnnotatedAxiom>>>>,
 }
 
 impl AxiomMappedIndex {
@@ -78,7 +78,7 @@ impl AxiomMappedIndex {
     fn axioms_as_ptr(
         &self,
         axk: AxiomKind,
-    ) -> *mut BTreeMap<AxiomKind, BTreeSet<Rc<AnnotatedAxiom>>> {
+    ) -> *mut BTreeMap<AxiomKind, BTreeSet<RcT<AnnotatedAxiom>>> {
         self.axiom
             .borrow_mut()
             .entry(axk)
@@ -87,12 +87,12 @@ impl AxiomMappedIndex {
     }
 
     /// Fetch the axioms for the given kind.
-    fn set_for_kind(&self, axk: AxiomKind) -> Option<&BTreeSet<Rc<AnnotatedAxiom>>> {
+    fn set_for_kind(&self, axk: AxiomKind) -> Option<&BTreeSet<RcT<AnnotatedAxiom>>> {
         unsafe { (*self.axiom.as_ptr()).get(&axk) }
     }
 
     /// Fetch the axioms for given kind as a mutable ref.
-    fn mut_set_for_kind(&mut self, axk: AxiomKind) -> &mut BTreeSet<Rc<AnnotatedAxiom>> {
+    fn mut_set_for_kind(&mut self, axk: AxiomKind) -> &mut BTreeSet<RcT<AnnotatedAxiom>> {
         unsafe { (*self.axioms_as_ptr(axk)).get_mut(&axk).unwrap() }
     }
 
@@ -212,7 +212,7 @@ impl IntoIterator for AxiomMappedIndex {
             .into_iter()
             .map(|(_k, v)| v)
             .flat_map(BTreeSet::into_iter)
-            .map(Rc::try_unwrap)
+            .map(RcT::try_unwrap)
             .map(Result::unwrap)
             .collect();
         v.into_iter()
@@ -223,7 +223,7 @@ impl IntoIterator for AxiomMappedIndex {
 pub struct AxiomMappedIter<'a> {
     ont: &'a AxiomMappedIndex,
     kinds: VecDeque<&'a AxiomKind>,
-    inner: Option<<&'a BTreeSet<Rc<AnnotatedAxiom>> as IntoIterator>::IntoIter>,
+    inner: Option<<&'a BTreeSet<RcT<AnnotatedAxiom>> as IntoIterator>::IntoIter>,
 }
 
 impl<'a> Iterator for AxiomMappedIter<'a> {
@@ -259,7 +259,7 @@ impl<'a> IntoIterator for &'a AxiomMappedIndex {
 }
 
 impl OntologyIndex for AxiomMappedIndex {
-    fn index_insert(&mut self, ax: Rc<AnnotatedAxiom>) -> bool {
+    fn index_insert(&mut self, ax: RcT<AnnotatedAxiom>) -> bool {
         self.mut_set_for_kind(ax.kind()).insert(ax)
     }
 

@@ -1,10 +1,10 @@
 //! An index that provides rapid look up via declaration kind
 
-use crate::model::{AnnotatedAxiom, Axiom, AxiomKind, Kinded, NamedEntityKind, IRI};
+use crate::model::{AnnotatedAxiom, Axiom, AxiomKind, Kinded, NamedEntityKind, IRI, RcT};
 
 use super::indexed::OntologyIndex;
 
-use std::{collections::HashMap, rc::Rc};
+use std::{collections::HashMap};
 
 #[derive(Debug, Default)]
 pub struct DeclarationMappedIndex(HashMap<IRI, NamedEntityKind>);
@@ -72,7 +72,7 @@ macro_rules! some {
 }
 
 impl OntologyIndex for DeclarationMappedIndex {
-    fn index_insert(&mut self, ax: Rc<AnnotatedAxiom>) -> bool {
+    fn index_insert(&mut self, ax: RcT<AnnotatedAxiom>) -> bool {
         let s = some! {
             self.0.insert(self.aa_to_iri(&*ax)?,
                           self.aa_to_ne(&*ax)?)

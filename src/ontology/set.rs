@@ -160,10 +160,10 @@ where
 /// combined with an `IndexedOntology` this should be nearly as
 /// fastest as `SetOntology`.
 #[derive(Debug, Default, Eq, PartialEq)]
-pub struct SetIndex(HashSet<Rc<AnnotatedAxiom>>);
+pub struct SetIndex(HashSet<RcT<AnnotatedAxiom>>);
 
 impl OntologyIndex for SetIndex {
-    fn index_insert(&mut self, ax: Rc<AnnotatedAxiom>) -> bool {
+    fn index_insert(&mut self, ax: RcT<AnnotatedAxiom>) -> bool {
         self.0.insert(ax)
     }
 
@@ -189,7 +189,7 @@ impl IntoIterator for SetIndex {
         let v: Vec<AnnotatedAxiom> = self
             .0
             .into_iter()
-            .map(Rc::try_unwrap)
+            .map(RcT::try_unwrap)
             .map(Result::unwrap)
             .collect();
         v.into_iter()
