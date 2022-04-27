@@ -117,7 +117,7 @@ pub type RcT<T>=Arc<T>;
 /// created through `Build`; this caches the underlying String meaning
 /// that IRIs are light-weight to `clone`.
 #[derive(Clone, Debug, Eq, PartialEq, Hash, PartialOrd, Ord)]
-pub struct IRI(Rc<str>);
+pub struct IRI(RcT<str>);
 
 impl Deref for IRI {
     type Target = str;
@@ -139,8 +139,16 @@ impl Borrow<str> for IRI {
     }
 }
 
+#[cfg(not(feature="threaded"))]
 impl From<&IRI> for Rc<str> {
     fn from(i: &IRI) -> Rc<str> {
+        i.0.clone().into()
+    }
+}
+
+#[cfg(feature="threaded")]
+impl From<&IRI> for Arc<str> {
+    fn from(i: &IRI) -> Arc<str> {
         i.0.clone().into()
     }
 }
@@ -177,11 +185,11 @@ impl Display for IRI {
 // both could be replaced by traits or enums straight-forwardly
 // enough, to enable threading.
 #[derive(Debug, Default)]
-pub struct Build(Rc<RefCell<BTreeSet<IRI>>>);
+pub struct Build(RcT<RefCell<BTreeSet<IRI>>>);
 
 impl Build {
     pub fn new() -> Build {
-        Build(Rc::new(RefCell::new(BTreeSet::new())))
+        Build(RcT::new(RefCell::new(BTreeSet::new())))
     }
 
     /// Constructs a new `IRI`
@@ -202,7 +210,7 @@ impl Build {
         if let Some(iri) = cache.get(s.as_ref()) {
             iri.clone()
         } else {
-            let iri = IRI(Rc::from(s.as_ref()));
+            let iri = IRI(RcT::from(s.as_ref()));
             cache.insert(iri.clone());
             iri
         }
@@ -461,7 +469,7 @@ named! {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash, PartialOrd, Ord)]
-pub struct AnonymousIndividual(pub Rc<str>);
+pub struct AnonymousIndividual(pub RcT<str>);
 
 impl Deref for AnonymousIndividual {
     type Target = str;
@@ -500,8 +508,8 @@ impl From<AnonymousIndividual> for Individual {
     }
 }
 
-impl From<Rc<str>> for AnonymousIndividual {
-    fn from(rc: Rc<str>) -> AnonymousIndividual {
+impl From<RcT<str>> for AnonymousIndividual {
+    fn from(rc: RcT<str>) -> AnonymousIndividual {
         AnonymousIndividual(rc)
     }
 }
@@ -1627,10 +1635,10 @@ mod test {
         assert_eq!(iri1, iri2);
 
         // these are the same object in memory
-        assert!(Rc::ptr_eq(&iri1.0, &iri2.0));
+        assert!(RcT::ptr_eq(&iri1.0, &iri2.0));
 
         // iri1, iri2 and one in the cache == 3
-        assert_eq!(Rc::strong_count(&iri1.0), 3);
+        assert_eq!(RcT::strong_count(&iri1.0), 3);
     }
 
     #[test]

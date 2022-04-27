@@ -57,7 +57,7 @@ macro_rules! some {
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq, Ord, PartialOrd)]
-pub struct BNode(Rc<str>);
+pub struct BNode(RcT<str>);
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub enum Term {
@@ -292,7 +292,7 @@ impl From<RDFOntology> for SetOntology {
     fn from(so: RDFOntology) -> SetOntology {
         let id: OntologyID = so.id().clone();
         let (si, i1, i2) = so.index();
-        // Drop the rest of these so that we can consume the Rc
+        // Drop the rest of these so that we can consume the RcT
         drop(i1);
         drop(i2);
         (id, si.into_iter()).into()
