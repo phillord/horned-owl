@@ -287,12 +287,20 @@ macro_rules! d {
     };
 }
 
-pub type RDFOntology<A, AA> = ThreeIndexedOntology<A, AA, SetIndex<A, AA>, DeclarationMappedIndex<A, AA>, LogicallyEqualIndex<A, AA>>;
+#[derive(Debug)]
+pub struct RDFOntology<A:ForIRI, AA:ForIndex<A>> (
+    ThreeIndexedOntology<A,
+                         AA,
+                         SetIndex<A, AA>,
+                         DeclarationMappedIndex<A, AA>,
+                         LogicallyEqualIndex<A, AA>
+                         >
+);
 
 impl<A: ForIRI, AA: ForIndex<A>> From<RDFOntology<A, AA>> for SetOntology<A> {
     fn from(so: RDFOntology<A, AA>) -> SetOntology<A> {
-        let id: OntologyID<_> = so.id().clone();
-        let (si, i1, i2) = so.index();
+        let id: OntologyID<_> = so.0.id().clone();
+        let (si, i1, i2) = so.0.index();
         // Drop the rest of these so that we can consume the Rc
         drop(i1);
         drop(i2);
@@ -360,11 +368,14 @@ pub struct OntologyParser<'a, A: ForIRI, AA: ForIndex<A>> {
 impl<'a, A: ForIRI, AA:ForIndex<A>> OntologyParser<'a, A, AA> {
     pub fn new(b: &'a Build<A>, triple: Vec<[Term<A>; 3]>) -> OntologyParser<'a, A, AA> {
         OntologyParser {
-            o: ThreeIndexedOntology::new(
-                SetIndex::new(),
-                DeclarationMappedIndex::new(),
-                LogicallyEqualIndex::new(),
-                d!()
+            o:
+            RDFOntology(
+                ThreeIndexedOntology::new(
+                    SetIndex::new(),
+                    DeclarationMappedIndex::new(),
+                    LogicallyEqualIndex::new(),
+                    d!()
+                )
             ),
             b,
 
@@ -514,8 +525,8 @@ impl<'a, A: ForIRI, AA:ForIndex<A>> OntologyParser<'a, A, AA> {
             }
         }
 
-        self.o.mut_id().iri = iri;
-        self.o.mut_id().viri = viri;
+        self.o.0.mut_id().iri = iri;
+        self.o.0.mut_id().viri = viri;
     }
 
     fn backward_compat(&mut self) {
@@ -562,7 +573,7 @@ impl<'a, A: ForIRI, AA:ForIndex<A>> OntologyParser<'a, A, AA> {
 
     fn merge<IAA: Into<AnnotatedAxiom<A>>>(&mut self, ax: IAA) {
         let ax = ax.into();
-        update_or_insert_logically_equal_axiom(&mut self.o, ax);
+        update_or_insert_logically_equal_axiom(&mut self.o.0, ax);
     }
 
     fn axiom_annotations(&mut self) {
@@ -879,7 +890,7 @@ impl<'a, A: ForIRI, AA:ForIndex<A>> OntologyParser<'a, A, AA> {
         [&self.o]
             .iter()
             .chain(ic.iter())
-            .map(|o| o.j().declaration_kind(iri))
+            .map(|o| o.0.j().declaration_kind(iri))
             .find(|d| d.is_some())
             .flatten()
     }
@@ -1476,7 +1487,7 @@ impl<'a, A: ForIRI, AA:ForIndex<A>> OntologyParser<'a, A, AA> {
                         ).into()
                     }
                 }
-                [Term::Iri(s), Term::Iri(_), _] if self.o.id().iri.as_ref() == Some(&s) => some! {
+                [Term::Iri(s), Term::Iri(_), _] if self.o.0.id().iri.as_ref() == Some(&s) => some! {
                     OntologyAnnotation(
                         self.annotation(&triple)
                     ).into()
@@ -1546,7 +1557,7 @@ impl<'a, A: ForIRI, AA:ForIndex<A>> OntologyParser<'a, A, AA> {
                     firi(self, &triple, iri)
                 }
                 [Term::Iri(iri), Term::OWL(VOWL::VersionInfo), _] => firi(self, &triple, iri),
-                [Term::Iri(iri), Term::Iri(ap), _] if (&self.o).j().is_annotation_property(&ap) => {
+                [Term::Iri(iri), Term::Iri(ap), _] if (&self.o.0).j().is_annotation_property(&ap) => {
                     firi(self, &triple, iri)
                 }
                 _ => {
@@ -1576,7 +1587,7 @@ impl<'a, A: ForIRI, AA:ForIndex<A>> OntologyParser<'a, A, AA> {
                     fbnode(self, &triple, ind)
                 }
                 [triple @ [Term::BNode(ind), Term::Iri(ap), _]]
-                    if (&self.o).j().is_annotation_property(&ap) =>
+                    if (&self.o.0).j().is_annotation_property(&ap) =>
                 {
                     fbnode(self, &triple, ind)
                 }

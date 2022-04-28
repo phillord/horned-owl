@@ -17,6 +17,7 @@ use std::{
     cell::RefCell,
     collections::{BTreeMap, BTreeSet, VecDeque},
     rc::Rc,
+    sync::Arc,
 };
 
 use std::marker::PhantomData;
@@ -280,6 +281,7 @@ impl<A: ForIRI, AA:ForIndex<A>> OntologyIndex<A, AA> for AxiomMappedIndex<A, AA>
 pub struct AxiomMappedOntology<A, AA> (OneIndexedOntology<A, AA, AxiomMappedIndex<A, AA>>);
 
 pub type RcAxiomMappedOntology = AxiomMappedOntology<Rc<str>, Rc<AnnotatedAxiom<Rc<str>>>>;
+pub type ArcAxiomMappedOntology = AxiomMappedOntology<Arc<str>, Arc<AnnotatedAxiom<Arc<str>>>>;
 
 impl<A:ForIRI, AA:ForIndex<A>> Ontology<A> for AxiomMappedOntology<A, AA> {
     fn id(&self) -> &OntologyID<A> {
@@ -331,8 +333,14 @@ impl<A: ForIRI, AA:ForIndex<A>> AxiomMappedOntology<A, AA> {
     }
 }
 
-impl AxiomMappedOntology<Rc<str>, Rc<AnnotatedAxiom<Rc<str>>>> {
+impl RcAxiomMappedOntology {
     pub fn new_rc() -> Self {
+        AxiomMappedOntology::new()
+    }
+}
+
+impl ArcAxiomMappedOntology {
+    pub fn new_arc() -> Self {
         AxiomMappedOntology::new()
     }
 }

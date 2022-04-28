@@ -9,8 +9,9 @@ use std::{collections::HashMap, rc::Rc};
 use std::marker::PhantomData;
 
 #[derive(Debug, Default)]
-pub struct DeclarationMappedIndex<A: ForIRI, AA:ForIndex<A>>(HashMap<IRI<A>, NamedEntityKind>,
-                                                             PhantomData<AA>);
+pub struct DeclarationMappedIndex<A, AA>(
+    HashMap<IRI<A>, NamedEntityKind>,
+    PhantomData<AA>);
 
 impl<A: ForIRI, AA:ForIndex<A>> DeclarationMappedIndex<A, AA> {
     pub fn new() -> DeclarationMappedIndex<A, AA> {
