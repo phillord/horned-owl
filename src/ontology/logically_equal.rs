@@ -7,7 +7,7 @@ use std::convert::AsRef;
 use std::rc::Rc;
 
 #[derive(Debug, Default)]
-pub struct LogicallyEqualIndex<A: ForIRI, AA: ForIndex<A>>(HashMap<Axiom<A>, AA>);
+pub struct LogicallyEqualIndex<A, AA>(HashMap<Axiom<A>, AA>);
 
 impl<A: ForIRI, AA: ForIndex<A>> LogicallyEqualIndex<A, AA> {
     pub fn new() -> Self {
