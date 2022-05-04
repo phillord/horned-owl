@@ -26,7 +26,6 @@ rio_api="0.6.1"
 rio_xml="0.6.1"
 pretty_rdf="0.1.2"
 ##pretty_rdf={path="./pretty_rdf"}
-slurp = "1.0.1"
 ureq={version="2.1.1", optional=true}
 
 [features]

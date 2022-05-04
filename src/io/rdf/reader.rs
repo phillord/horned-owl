@@ -297,6 +297,27 @@ pub struct RDFOntology<A:ForIRI, AA:ForIndex<A>> (
                          >
 );
 
+
+pub type RcRDFOntology = RDFOntology<Rc<str>, Rc<AnnotatedAxiom<Rc<str>>>>;
+
+impl<A:ForIRI, AA:ForIndex<A>> Ontology<A> for RDFOntology<A, AA> {
+    fn id(&self) -> &OntologyID<A> {
+        self.0.id()
+    }
+
+    fn mut_id(&mut self) -> &mut OntologyID<A> {
+        self.0.mut_id()
+    }
+
+    fn doc_iri(&self) -> &Option<IRI<A>> {
+        self.0.doc_iri()
+    }
+
+    fn mut_doc_iri(&mut self) -> &mut Option<IRI<A>> {
+        self.0.mut_doc_iri()
+    }
+}
+
 impl<A: ForIRI, AA: ForIndex<A>> From<RDFOntology<A, AA>> for SetOntology<A> {
     fn from(so: RDFOntology<A, AA>) -> SetOntology<A> {
         let id: OntologyID<_> = so.0.id().clone();
@@ -488,10 +509,12 @@ impl<'a, A: ForIRI, AA:ForIndex<A>> OntologyParser<'a, A, AA> {
         }
     }
 
-    fn resolve_imports(&mut self) {
+    fn resolve_imports(&mut self) -> Vec<IRI<A>> {
+        let mut v = vec![];
         for t in std::mem::take(&mut self.simple) {
             match t {
                 [Term::Iri(_), Term::OWL(VOWL::Imports), Term::Iri(imp)] => {
+                    v.push(imp.clone());
                     self.merge(AnnotatedAxiom {
                         axiom: Import(imp).into(),
                         ann: BTreeSet::new(),
@@ -501,6 +524,7 @@ impl<'a, A: ForIRI, AA:ForIndex<A>> OntologyParser<'a, A, AA> {
             }
         }
 
+        v
         // Section 3.1.2/table 4 of RDF Graphs
     }
 
@@ -1605,7 +1629,7 @@ impl<'a, A: ForIRI, AA:ForIndex<A>> OntologyParser<'a, A, AA> {
 
     /// Parse all imports and add to the Ontology.
     /// Return an error is we are in the wrong state
-    pub fn parse_imports(&mut self) -> Result<(), ReadError> {
+    pub fn parse_imports(&mut self) -> Result<Vec<IRI<A>>, ReadError> {
         match self.state {
             OntologyParserState::New => {
                 let triple = std::mem::take(&mut self.triple);
@@ -1620,9 +1644,9 @@ impl<'a, A: ForIRI, AA:ForIndex<A>> OntologyParser<'a, A, AA> {
 
                 // Table 10
                 self.axiom_annotations();
-                self.resolve_imports();
+                let v = self.resolve_imports();
                 self.state = OntologyParserState::Imports;
-                Ok(())
+                Ok(v)
             }
             _ => todo!(),
         }
@@ -1722,7 +1746,9 @@ impl<'a, A: ForIRI, AA:ForIndex<A>> OntologyParser<'a, A, AA> {
 
         match self.state {
             OntologyParserState::New => {
-                self.error = self.parse_imports();
+                // Ditch the vec that this might return as we don't
+                // need it!
+                self.error = self.parse_imports().and(Ok(()));
                 self.parse()
             }
             OntologyParserState::Imports => {
@@ -1739,6 +1765,10 @@ impl<'a, A: ForIRI, AA:ForIndex<A>> OntologyParser<'a, A, AA> {
 
     pub fn ontology_ref(&self) -> &RDFOntology<A, AA> {
         &self.o
+    }
+
+    pub fn mut_ontology_ref(&mut self) -> &mut RDFOntology<A, AA> {
+        &mut self.o
     }
 
     /// Consume the parser and return an Ontology.

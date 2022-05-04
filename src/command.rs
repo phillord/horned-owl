@@ -26,15 +26,23 @@ pub fn path_type(path: &Path) -> Option<ResourceType> {
 
 pub fn parse_path(path: &Path) -> Result<ParserOutput<Rc<str>, Rc<AnnotatedAxiom<Rc<str>>>>, CommandError> {
     let file = File::open(&path).map_err(underlying)?;
-    let mut bufreader = BufReader::new(file);
+    let bufreader = BufReader::new(file);
 
     Ok(match path_type(path) {
-        Some(ResourceType::OWX) => super::io::owx::reader::read(&mut bufreader)
+        Some(ResourceType::OWX) => {
+            let file = File::open(&path).map_err(underlying)?;
+            let mut bufreader = BufReader::new(file);
+            super::io::owx::reader::read(&mut bufreader)
             .map_err(underlying)?
-            .into(),
-        Some(ResourceType::RDF) => super::io::rdf::reader::read(&mut bufreader)
-            .map_err(underlying)?
-            .into(),
+                .into()
+        },
+        Some(ResourceType::RDF) => {
+            let b = Build::new();
+            let iri = super::resolve::pathbuf_to_file_iri(&b,&path.to_path_buf());
+            super::io::rdf::closure_reader::read(&iri)
+                .map_err(underlying)?
+                .into()
+        },
         None => {
             return Err(underlying(ParserError::FormatNotSupported {
                 path: path.into(),

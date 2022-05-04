@@ -21,8 +21,7 @@ use std::{
     sync::Arc,
 };
 
-use super::indexed::{OneIndexedOntology, TwoIndexedOntology,
-                     FourIndexedOntology, OntologyIndex};
+use super::indexed::{FourIndexedOntology, OntologyIndex};
 use super::axiom_mapped::AxiomMappedIndex;
 use super::declaration_mapped::DeclarationMappedIndex;
 use super::set::SetIndex;

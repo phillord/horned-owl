@@ -1,5 +1,7 @@
 use crate::model::{Build, ForIRI, IRI};
 
+use std::path::{Path, PathBuf};
+
 #[cfg(feature = "remote")]
 use ureq;
 
@@ -9,8 +11,75 @@ use ureq;
 //     // Read it!
 // }
 
-// Given an `iri`, return the IRI local to `doc_iri` that this would
-// have.
+/// Return a `PathBuf` for the given IRI
+///
+/// # Examples
+/// ```
+/// # use horned_owl::model::*;
+/// # use horned_owl::resolve::*;
+/// let b = Build::new_rc();
+
+/// let doc_iri = b.iri("file://blah/and.owl");
+
+/// let path_buf = file_iri_to_path(&doc_iri);
+/// assert_eq!(path_buf.to_str().unwrap(), "blah/and.owl");
+/// ```
+pub fn file_iri_to_path<A:ForIRI>(iri: &IRI<A>) -> PathBuf {
+    Path::new(&*iri.split_at(7).1).into()
+}
+
+
+/// Return an `IRI` for the given `PathBuf`
+///
+/// # Examples
+/// ```
+/// # use horned_owl::model::*;
+/// # use horned_owl::resolve::*;
+/// # use std::path::Path;
+/// let b = Build::new_rc();
+
+/// let target_iri = b.iri("file://blah/and.owl");
+
+/// let path_buf = Path::new("blah/and.owl").to_path_buf();
+/// let source_iri = pathbuf_to_file_iri(&b, &path_buf);
+/// assert_eq!(source_iri.as_ref(), "file://blah/and.owl");
+/// ```
+pub fn pathbuf_to_file_iri<A:ForIRI>(b:&Build<A>, pb: &PathBuf) -> IRI<A> {
+    b.iri(format!("file://{}", pb.as_path().to_str().unwrap()))
+}
+
+/// Return true if the iri is a file IRI.
+///
+/// # Examples
+/// ```
+/// # use horned_owl::model::*;
+/// # use horned_owl::resolve::*;
+/// let b = Build::new_rc();
+
+/// let doc_iri = b.iri("file://blah/and.owl");
+
+/// assert!(is_file_iri(&doc_iri))
+/// ```
+pub fn is_file_iri<A:ForIRI>(iri: &IRI<A>) -> bool {
+    (*iri).starts_with("file:/")
+}
+
+/// Assuming that doc_iri is a local file IRI, return a new IRI for
+/// that is the local equivalent of `iri`.
+///
+/// # Examples
+/// ```
+/// # use horned_owl::model::*;
+/// # use horned_owl::resolve::*;
+/// let b = Build::new_rc();
+
+/// let doc_iri = b.iri("file://blah/and.owl");
+/// let iri = b.iri("http://www.example.com/or.owl");
+
+/// let local = b.iri("file://blah/or.owl");
+
+/// assert_eq!(localize_iri(&iri, &doc_iri), local);
+/// ```
 pub fn localize_iri<A: ForIRI>(iri: &IRI<A>, doc_iri: &IRI<A>) -> IRI<A> {
     let b = Build::new();
     let (_, term_iri) = iri.split_at(iri.rfind('/').unwrap() + 1);
@@ -24,8 +93,28 @@ pub fn localize_iri<A: ForIRI>(iri: &IRI<A>, doc_iri: &IRI<A>) -> IRI<A> {
 
 // Return the ontology as Vec<u8> from `iri` unless we think that it
 // is local to doc_iri
-pub fn resolve_iri<A: ForIRI>(iri: &IRI<A>, doc_iri: &IRI<A>) -> String {
-    strict_resolve_iri(&localize_iri(iri, doc_iri))
+pub fn resolve_iri<A: ForIRI>(iri: &IRI<A>, doc_iri: Option<&IRI<A>>) -> (IRI<A>, String) {
+    let local =
+        if let Some(doc_iri) = doc_iri {
+            localize_iri(iri, doc_iri)
+        } else {
+            iri.clone()
+        };
+
+    let mut path = file_iri_to_path(&local);
+    if path.as_path().exists() {
+        return (local, ::std::fs::read_to_string(path).unwrap())
+    }
+
+    if let Some(doc_iri) = doc_iri {
+        let doc_ext = doc_iri.split_once(".").unwrap();
+        path.set_extension(doc_ext.1);
+        if path.exists() {
+            return (local, ::std::fs::read_to_string(path).unwrap())
+        }
+    }
+
+    (local, strict_resolve_iri(iri))
 }
 
 // Return the ontology as Vec<u8> from `iri`.
@@ -42,8 +131,6 @@ pub fn strict_resolve_iri<A: ForIRI>(_iri: &IRI<A>) -> String {
 
 #[cfg(test)]
 mod test {
-    use std::path::PathBuf;
-
     use super::*;
     use crate::model::Build;
 
@@ -67,5 +154,16 @@ mod test {
         let i: IRI<_> = b.iri("http://www.example.com");
 
         strict_resolve_iri(&i);
+    }
+
+    #[test]
+    fn test_resolve_iri() {
+        let b = Build::new_rc();
+        let i: IRI<_> = b.iri("http://www.example.com/bikepath.md");
+        let doc_iri = b.iri("file://cargo.toml");
+
+        let bikepath_str = ::std::fs::read_to_string("bikepath.md").unwrap();
+        let (_, iri_str) = resolve_iri(&i, Some(&doc_iri));
+        assert_eq!(bikepath_str, iri_str);
     }
 }
