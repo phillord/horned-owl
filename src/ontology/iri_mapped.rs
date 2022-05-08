@@ -17,7 +17,7 @@ use std::{
 
 use std::marker::PhantomData;
 
-use super::indexed::{rc_unwrap_or_clone, OneIndexedOntology, TwoIndexedOntology,
+use super::indexed::{OneIndexedOntology, TwoIndexedOntology,
     ThreeIndexedOntology, OntologyIndex};
 use super::axiom_mapped::AxiomMappedIndex;
 use super::declaration_mapped::DeclarationMappedIndex;
@@ -45,9 +45,9 @@ impl<A: ForIRI, AA:ForIndex<A>> IRIMappedIndex<A, AA> {
         }
     }
 
-    fn aa_to_iris(&self, ax: &AnnotatedAxiom) -> HashSet<IRI> {
+    fn aa_to_iris(&self, ax: &AnnotatedAxiom<A>) -> HashSet<IRI<A>> {
 
-        let mut iris:HashSet<IRI> = HashSet::new();
+        let mut iris:HashSet<IRI<A>> = HashSet::new();
         let build = Build::new();
 
         match ax.kind() {
@@ -181,26 +181,26 @@ impl<A: ForIRI, AA:ForIndex<A>> IRIMappedIndex<A, AA> {
 
 }
 
-impl AsRef<IRIMappedIndex<A,AA>> for
-    OneIndexedOntology<IRIMappedIndex<A,AA>> {
-    fn as_ref(&self) -> &IRIMappedIndex {
+impl<A: ForIRI, AA: ForIndex<A>> AsRef<IRIMappedIndex<A,AA>> for
+    OneIndexedOntology<A,AA,IRIMappedIndex<A,AA>> {
+    fn as_ref(&self) -> &IRIMappedIndex<A,AA> {
         self.i()
     }
 }
 
-impl<I: OntologyIndex> AsRef<IRIMappedIndex<A,AA>> for
-    TwoIndexedOntology<I, IRIMappedIndex<A,AA>> {
-    fn as_ref(&self) -> &IRIMappedIndex {
+impl<A: ForIRI, AA: ForIndex<A>, I: OntologyIndex<A,AA>> AsRef<IRIMappedIndex<A,AA>> for
+    TwoIndexedOntology<A, AA, I, IRIMappedIndex<A,AA>> {
+    fn as_ref(&self) -> &IRIMappedIndex<A,AA> {
         self.j()
     }
 }
 
-impl<I, J> AsRef<IRIMappedIndex> for
-    ThreeIndexedOntology<I, J, IRIMappedIndex>
-where I: OntologyIndex,
-      J: OntologyIndex,
+impl<A: ForIRI, AA: ForIndex<A>, I, J> AsRef<IRIMappedIndex<A,AA>> for
+    ThreeIndexedOntology<A, AA, I, J, IRIMappedIndex<A,AA>>
+where I: OntologyIndex<A,AA>,
+      J: OntologyIndex<A,AA>,
 {
-    fn as_ref(&self) -> &IRIMappedIndex {
+    fn as_ref(&self) -> &IRIMappedIndex<A,AA> {
         self.k()
     }
 }
@@ -281,7 +281,7 @@ impl<A: ForIRI, AA:ForIndex<A>> OntologyIndex<A,AA> for IRIMappedIndex<A, AA> {
             if let Some(iri) = iri {
                 self.mut_set_for_iri(iri.clone())
                     .take(ax)
-                    .map(rc_unwrap_or_clone)
+                    .map(|aax| aax.unwrap() )
             } else {
                 None
             }
@@ -305,7 +305,8 @@ impl<A: ForIRI, AA:ForIndex<A>> OntologyIndex<A,AA> for IRIMappedIndex<A, AA> {
 
 
 #[derive(Default, Debug, Eq, PartialEq)]
-pub struct IRIMappedOntology<A,AA>  (ThreeIndexedOntology<A, AA, IRIMappedIndex<A,AA>>);
+pub struct IRIMappedOntology<A,AA>  (ThreeIndexedOntology<A, AA, IRIMappedIndex<A,AA>,
+    AxiomMappedIndex<A,AA>, DeclarationMappedIndex<A,AA>>);
 
 pub type RcIRIMappedOntology = IRIMappedOntology<Rc<str>, Rc<AnnotatedAxiom<Rc<str>>>>;
 pub type ArcIRIMappedOntology = IRIMappedOntology<Arc<str>, Arc<AnnotatedAxiom<Arc<str>>>>;
