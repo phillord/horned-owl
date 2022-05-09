@@ -380,6 +380,8 @@ impl<A: ForIRI, AA: ForIndex<A>> From<AxiomMappedOntology<A, AA>> for SetOntolog
 #[cfg(test)]
 mod test {
     use super::AxiomMappedOntology;
+    use super::RcAxiomMappedOntology;
+    use crate::ontology::set::SetOntology;
     use crate::model::*;
 
     #[test]
@@ -394,6 +396,27 @@ mod test {
         let mut it = AxiomMappedOntology::new_rc().into_iter();
         assert_eq!(it.next(), None);
         assert_eq!(it.next(), None);
+    }
+
+    #[test]
+    fn from_set() {
+        let b = Build::new_rc();
+        let mut so = SetOntology::new();
+        let mut oid = OntologyID {
+            iri: Some(b.iri("http://www.example.com/iri")),
+            viri: Some(b.iri("http://www.example.com/viri")),
+        };
+
+        std::mem::swap(so.mut_id(), &mut oid);
+        assert_eq!(so.id().iri, Some(b.iri("http://www.example.com/iri")));
+        assert_eq!(so.id().viri,  Some(b.iri("http://www.example.com/viri")));
+
+        let amo: RcAxiomMappedOntology = so.into();
+
+        dbg!(&amo);
+
+        assert_eq!(amo.id().iri, Some(b.iri("http://www.example.com/iri")));
+        assert_eq!(amo.id().viri,  Some(b.iri("http://www.example.com/viri")))
     }
 
     #[test]

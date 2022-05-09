@@ -2,23 +2,32 @@
 use std::{collections::HashSet, iter::FromIterator, rc::Rc};
 
 use super::indexed::ForIndex;
-use super::indexed::{OntologyIndex};
+use super::indexed::{OneIndexedOntology, OntologyIndex};
 use crate::model::*;
 use std::marker::PhantomData;
+
 /// An Ontology backed by a set. This should be the fastest and least
 /// overhead implementation of an ontology. It provides rapid testing
 /// of whether an equivalent axiom exists, and is iterable.
-///
-/// It should be more rapid that the using `SetIndex` inside
-/// `OneIndexedOntology`, as it involves no `Rc` overhead.
-#[derive(Clone, Debug, Default, Eq, PartialEq)]
-pub struct SetOntology<A:ForIRI> {
-    id: OntologyID<A>,
-    // The use an BTreeMap keyed on AxiomKind allows efficient
-    // retrieval of axioms. Otherwise, we'd have to iterate through
-    // the lot every time.
-    axiom: HashSet<AnnotatedAxiom<A>>,
-    doc_iri: Option<IRI<A>>,
+#[derive(Debug, Eq, PartialEq)]
+pub struct SetOntology<A:ForIRI> (
+    OneIndexedOntology<A, AnnotatedAxiom<A>, SetIndex<A, AnnotatedAxiom<A>>>
+);
+
+impl<A:ForIRI> Clone for SetOntology<A> {
+    fn clone(&self) -> Self {
+        SetOntology(
+            self.0.clone()
+        )
+    }
+}
+
+impl<A:ForIRI> Default for SetOntology<A> {
+    fn default() -> Self {
+        SetOntology(
+            OneIndexedOntology::new(SetIndex::new())
+        )
+    }
 }
 
 impl SetOntology<Rc<str>> {
@@ -39,34 +48,34 @@ impl<A: ForIRI> SetOntology<A> {
     /// assert_eq!(o, o2);
     /// ```
     pub fn new() -> SetOntology<A> {
-        SetOntology {
-            id: OntologyID::default(),
-            axiom: HashSet::new(),
-            doc_iri: None
-        }
+        SetOntology (
+            OneIndexedOntology::new(
+                SetIndex::new()
+            )
+        )
     }
 
     /// Gets an iterator that visits the annotated axioms of the ontology.
     pub fn iter(&self) -> SetIter<'_, A> {
-        SetIter(self.axiom.iter())
+        SetIter(self.0.i().0.iter())
     }
 }
 
 impl<A: ForIRI> Ontology<A> for SetOntology<A> {
     fn id(&self) -> &OntologyID<A> {
-        &self.id
+        &self.0.id()
     }
 
     fn mut_id(&mut self) -> &mut OntologyID<A> {
-        &mut self.id
+        self.0.mut_id()
     }
 
     fn doc_iri(&self) -> &Option<IRI<A>> {
-        &self.doc_iri
+        &self.0.doc_iri()
     }
 
     fn mut_doc_iri(&mut self) -> &mut Option<IRI<A>> {
-        &mut self.doc_iri
+        self.0.mut_doc_iri()
     }
 }
 
@@ -89,7 +98,7 @@ impl<'a, A: ForIRI> IntoIterator for &'a SetOntology<A> {
 }
 
 /// An owning iterator over the annotated axioms of an `Ontology`.
-pub struct SetIntoIter<A: ForIRI>(std::collections::hash_set::IntoIter<AnnotatedAxiom<A>>);
+pub struct SetIntoIter<A: ForIRI>(std::vec::IntoIter<AnnotatedAxiom<A>>);
 
 impl<A: ForIRI> Iterator for SetIntoIter<A> {
     type Item = AnnotatedAxiom<A>;
@@ -102,7 +111,7 @@ impl<A: ForIRI> IntoIterator for SetOntology<A> {
     type Item = AnnotatedAxiom<A>;
     type IntoIter = SetIntoIter<A>;
     fn into_iter(self) -> Self::IntoIter {
-        SetIntoIter(self.axiom.into_iter())
+        SetIntoIter(self.0.index().into_iter())
     }
 }
 
@@ -124,25 +133,27 @@ impl<A: ForIRI> MutableOntology<A> for SetOntology<A> {
     where
         AA: Into<AnnotatedAxiom<A>>,
     {
-        self.axiom.insert(ax.into())
+        self.0.insert(ax)
     }
 
     fn remove(&mut self, ax: &AnnotatedAxiom<A>) -> bool {
-        self.axiom.remove(ax)
+        self.0.remove(ax)
     }
 
     fn take(&mut self, ax: &AnnotatedAxiom<A>) -> Option<AnnotatedAxiom<A>> {
-        self.axiom.take(ax)
+        self.0.take(ax)
     }
 }
 
 impl<A: ForIRI> FromIterator<AnnotatedAxiom<A>> for SetOntology<A> {
     fn from_iter<I: IntoIterator<Item = AnnotatedAxiom<A>>>(iter: I) -> Self {
-        SetOntology {
-            id: Default::default(),
-            axiom: HashSet::from_iter(iter),
-            doc_iri: None,
-        }
+        SetOntology (
+            OneIndexedOntology::new(
+                SetIndex (
+                    HashSet::from_iter(iter), Default::default(),
+                )
+            )
+        )
     }
 }
 
@@ -172,7 +183,7 @@ where
 /// An `OntologyIndex` implemented over an in-memory HashSet. When
 /// combined with an `IndexedOntology` this should be nearly as
 /// fastest as `SetOntology`.
-#[derive(Debug, Default, Eq, PartialEq)]
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct SetIndex<A:ForIRI, AA:ForIndex<A>>(
     HashSet<AA>,
     PhantomData<A>
@@ -238,6 +249,40 @@ mod test {
         let _ = SetOntology::new_rc();
         assert!(true);
     }
+
+    #[test]
+    fn test_ontology_id() {
+        let mut so = SetOntology::new_rc();
+        let b = Build::new_rc();
+        let mut oid = OntologyID {
+            iri: Some(b.iri("http://www.example.com/iri")),
+            viri: Some(b.iri("http://www.example.com/viri")),
+        };
+
+        std::mem::swap(so.mut_id(), &mut oid);
+
+        assert_eq!(so.id().iri, Some(b.iri("http://www.example.com/iri")));
+        assert_eq!(so.id().viri,  Some(b.iri("http://www.example.com/viri")))
+    }
+
+    #[test]
+    fn test_ontology_clone() {
+        let mut so = SetOntology::new_rc();
+        let b = Build::new_rc();
+        let mut oid = OntologyID {
+            iri: Some(b.iri("http://www.example.com/iri")),
+            viri: Some(b.iri("http://www.example.com/viri")),
+        };
+
+        std::mem::swap(so.mut_id(), &mut oid);
+
+        let cso = so.clone();
+
+        assert_eq!(cso.id().iri, Some(b.iri("http://www.example.com/iri")));
+        assert_eq!(cso.id().viri,  Some(b.iri("http://www.example.com/viri")))
+    }
+
+
 
     #[test]
     fn test_ontology_iter_empty() {

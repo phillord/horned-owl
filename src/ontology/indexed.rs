@@ -20,12 +20,13 @@
 //! be added.
 use crate::model::{AnnotatedAxiom, MutableOntology, Ontology, OntologyID, IRI, ForIRI};
 use std::borrow::Borrow;
+use std::fmt::Debug;
 use std::marker::PhantomData;
 use std::hash::Hash;
 use std::rc::Rc;
 use std::sync::Arc;
 
-pub trait ForIndex<A:ForIRI>: Borrow<AnnotatedAxiom<A>> + Clone + Eq + From<AnnotatedAxiom<A>>
+pub trait ForIndex<A:ForIRI>: Borrow<AnnotatedAxiom<A>> + Clone + Debug + Eq + From<AnnotatedAxiom<A>>
     + Hash + Ord + PartialEq + PartialOrd {
     fn unwrap(&self) -> AnnotatedAxiom<A>
     {
@@ -34,7 +35,7 @@ pub trait ForIndex<A:ForIRI>: Borrow<AnnotatedAxiom<A>> + Clone + Eq + From<Anno
 }
 
 impl<A:ForIRI, T: ?Sized> ForIndex<A> for T
-    where T: Borrow<AnnotatedAxiom<A>> + Clone + Eq + From<AnnotatedAxiom<A>> + Hash + Ord + PartialEq + PartialOrd
+    where T: Borrow<AnnotatedAxiom<A>> + Clone + Debug + Eq + From<AnnotatedAxiom<A>> + Hash + Ord + PartialEq + PartialOrd
 {}
 
 
@@ -101,6 +102,18 @@ impl<A: ForIRI, AA:ForIndex<A>> OntologyIndex<A, AA> for NullIndex {
 /// `OntologyIndex` and an `Ontology`.
 #[derive(Default, Debug, Eq, PartialEq)]
 pub struct OneIndexedOntology<A, AA, I>(I, OntologyID<A>, Option<IRI<A>>, PhantomData<AA>);
+
+
+impl<A:ForIRI, AA:ForIndex<A>, I: Clone> Clone for OneIndexedOntology<A, AA, I> {
+    fn clone(&self) -> Self {
+        OneIndexedOntology (
+            self.0.clone(),
+            self.1.clone(),
+            self.2.clone(),
+            Default::default(),
+        )
+    }
+}
 
 impl<A: ForIRI, AA:ForIndex<A>, I: OntologyIndex<A, AA>> OneIndexedOntology<A, AA, I> {
     pub fn new(i: I) -> Self {
