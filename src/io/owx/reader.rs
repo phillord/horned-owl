@@ -1495,7 +1495,7 @@ pub mod test {
         let ont_s = include_str!("../../ont/owl-xml/suboproperty.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
-        assert_eq!(ont.i().sub_object_property().count(), 1);
+        assert_eq!(ont.i().sub_object_property_of().count(), 1);
     }
 
     #[test]
@@ -1503,7 +1503,7 @@ pub mod test {
         let ont_s = include_str!("../../ont/owl-xml/suboproperty-inverse.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
-        assert_eq!(ont.i().sub_object_property().count(), 1);
+        assert_eq!(ont.i().sub_object_property_of().count(), 1);
     }
 
     #[test]

@@ -179,7 +179,7 @@ onimpl! {SubClassOf, sub_class_of}
 onimpl! {EquivalentClasses, equivalent_class}
 onimpl! {DisjointClasses, disjoint_class}
 onimpl! {DisjointUnion, disjoint_union}
-onimpl! {SubObjectPropertyOf, sub_object_property}
+onimpl! {SubObjectPropertyOf, sub_object_property_of}
 onimpl! {EquivalentObjectProperties, equivalent_object_properties}
 onimpl! {DisjointObjectProperties, disjoint_object_properties}
 onimpl! {InverseObjectProperties, inverse_object_properties}
