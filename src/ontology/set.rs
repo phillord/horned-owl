@@ -55,6 +55,10 @@ impl<A: ForIRI> SetOntology<A> {
         )
     }
 
+    pub fn from_index<AA: ForIndex<A>>(oid: OntologyID<A>, si:SetIndex<A, AA>) -> SetOntology<A>{
+        (oid, si.into_iter().map(|s| s.unwrap())).into()
+    }
+
     /// Gets an iterator that visits the annotated axioms of the ontology.
     pub fn iter(&self) -> SetIter<'_, A> {
         SetIter(self.0.i().0.iter())
