@@ -378,6 +378,12 @@ impl Build<Arc<str>> {
     }
 }
 
+impl Build<String> {
+    pub fn new_string() -> Build<String> {
+        Build::new()
+    }
+}
+
 macro_rules! named {
     ($($(#[$attr:meta])* $name:ident),*)  => {
 
