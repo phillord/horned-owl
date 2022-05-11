@@ -7,7 +7,13 @@
 //!
 use super::set::SetOntology;
 use super::indexed::ForIndex;
-use crate::model::*;
+use crate::{
+    model::*,
+    visitor::{
+        Walk,
+        entity::IRIExtract
+    }
+};
 use std::{
     cell::RefCell,
     collections::{BTreeMap, BTreeSet},
@@ -43,85 +49,13 @@ impl<A: ForIRI, AA:ForIndex<A>> IRIMappedIndex<A, AA> {
     }
 
     fn aa_to_iris(&self, ax: &AnnotatedAxiom<A>) -> HashSet<IRI<A>> {
+        let mut w = Walk::new(IRIExtract::default());
+        w.annotated_axiom(ax);
 
-        let mut iris:HashSet<IRI<A>> = HashSet::new();
-
-        match ax.kind() {
-            AxiomKind::DeclareClass |
-            AxiomKind::DeclareObjectProperty |
-            AxiomKind::DeclareAnnotationProperty |
-            AxiomKind::DeclareDataProperty |
-            AxiomKind::DeclareDatatype |
-            AxiomKind::DeclareNamedIndividual => {
-                match ax.clone().axiom {
-                    Axiom::DeclareClass(dc) => {iris.insert(dc.0.into());},
-                    Axiom::DeclareObjectProperty(op) => {iris.insert(op.0.into());},
-                    Axiom::DeclareAnnotationProperty(ap) => {iris.insert(ap.0.into());},
-                    Axiom::DeclareDataProperty(dp) => {iris.insert(dp.0.into());},
-                    Axiom::DeclareDatatype(dt) => {iris.insert(dt.0.into());},
-                    Axiom::DeclareNamedIndividual(ni) => {iris.insert(ni.0.into());},
-                    _ => ()
-                }
-            },
-            AxiomKind::AnnotationAssertion => {
-                match ax.clone().axiom {
-                    Axiom::AnnotationAssertion(AnnotationAssertion{subject,ann:_}) =>
-                    {
-                        todo!()
-                        //iris.insert(build.iri(subject.deref()));
-                    },
-                    _ => (),
-                }
-            },
-            AxiomKind::SubClassOf => {
-                match ax.clone().axiom {
-                    Axiom::SubClassOf(SubClassOf{sup:_,sub}) => {
-                        match sub {
-                            ClassExpression::Class(c) => {iris.insert(c.0.into());},
-                            _ => (),
-                        }
-                    },
-                    _ => (),
-                }
-            },
-            AxiomKind::EquivalentClasses => {
-                match ax.clone().axiom {
-                    Axiom::EquivalentClasses(EquivalentClasses(eles)) => {
-                        for clsexp in eles {
-                            match clsexp {
-                                ClassExpression::Class(c) => {iris.insert(c.0.clone());},
-                                _ => (),  //to do - generic method to get IRI for any class expression to avoid duplicating this block?
-                            }
-                        }
-                    },
-                    _ => (),
-                }
-            },
-            AxiomKind::DisjointClasses => {
-                match ax.clone().axiom {
-                    Axiom::DisjointClasses(DisjointClasses(eles)) => {
-                        for clsexp in eles {
-                            match clsexp {
-                                ClassExpression::Class(c) => {iris.insert(c.0.clone());},
-                                _ => (),
-                            }
-                        }
-                    },
-                    _ => (),
-                }
-            },
-            AxiomKind::DisjointUnion => {
-                match ax.clone().axiom {
-                    Axiom::DisjointUnion(DisjointUnion(clsexp, _eles)) => {
-                        iris.insert(clsexp.0.clone());
-                    },
-                    _ => (),
-                }
-            },
-            _ => (),
-        };
-
-        iris
+        w.into_visit()
+            .into_vec()
+            .into_iter()
+            .collect()
     }
 
     /// Fetch the iris hashmap as a raw pointer.

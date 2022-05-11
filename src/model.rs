@@ -530,6 +530,12 @@ impl<A: ForIRI> Deref for AnonymousIndividual<A> {
     }
 }
 
+impl<A: ForIRI> AnonymousIndividual<A> {
+    pub fn underlying(&self) -> A {
+        self.0.clone()
+    }
+}
+
 impl<A: ForIRI> AsRef<str> for AnonymousIndividual<A> {
     fn as_ref(&self) -> &str {
         self.0.borrow()
