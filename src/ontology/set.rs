@@ -1,101 +1,125 @@
 //! Rapid, simple, in-memory `Ontology` and `OntologyIndex`
 use std::{collections::HashSet, iter::FromIterator, rc::Rc};
 
-use super::indexed::{rc_unwrap_or_clone, OntologyIndex};
+use super::indexed::ForIndex;
+use super::indexed::{OneIndexedOntology, OntologyIndex};
 use crate::model::*;
+use std::marker::PhantomData;
 
 /// An Ontology backed by a set. This should be the fastest and least
 /// overhead implementation of an ontology. It provides rapid testing
 /// of whether an equivalent axiom exists, and is iterable.
-///
-/// It should be more rapid that the using `SetIndex` inside
-/// `OneIndexedOntology`, as it involves no `Rc` overhead.
-#[derive(Clone, Debug, Default, Eq, PartialEq)]
-pub struct SetOntology {
-    id: OntologyID,
-    // The use an BTreeMap keyed on AxiomKind allows efficient
-    // retrieval of axioms. Otherwise, we'd have to iterate through
-    // the lot every time.
-    axiom: HashSet<AnnotatedAxiom>,
-    doc_iri: Option<IRI>
+#[derive(Debug, Eq, PartialEq)]
+pub struct SetOntology<A:ForIRI> (
+    OneIndexedOntology<A, AnnotatedAxiom<A>, SetIndex<A, AnnotatedAxiom<A>>>
+);
+
+impl<A:ForIRI> Clone for SetOntology<A> {
+    fn clone(&self) -> Self {
+        SetOntology(
+            self.0.clone()
+        )
+    }
 }
 
-impl SetOntology {
+impl<A:ForIRI> Default for SetOntology<A> {
+    fn default() -> Self {
+        SetOntology(
+            OneIndexedOntology::new(SetIndex::new())
+        )
+    }
+}
+
+impl SetOntology<Rc<str>> {
+    pub fn new_rc() -> SetOntology<Rc<str>> {
+        SetOntology::new()
+    }
+}
+
+impl<A: ForIRI> SetOntology<A> {
     /// Create a new ontology.
     ///
     /// # Examples
     /// ```
     /// # use horned_owl::ontology::set::SetOntology;
-    /// let o = SetOntology::new();
+    /// let o = SetOntology::new_rc();
     /// let o2 = SetOntology::new();
     ///
     /// assert_eq!(o, o2);
     /// ```
-    pub fn new() -> SetOntology {
-        SetOntology::default()
+    pub fn new() -> SetOntology<A> {
+        SetOntology (
+            OneIndexedOntology::new(
+                SetIndex::new()
+            )
+        )
+    }
+
+    pub fn from_index<AA: ForIndex<A>>(oid: OntologyID<A>, si:SetIndex<A, AA>) -> SetOntology<A>{
+        (oid, si.into_iter().map(|s| s.unwrap())).into()
     }
 
     /// Gets an iterator that visits the annotated axioms of the ontology.
-    pub fn iter(&self) -> SetIter<'_> {
-        SetIter(self.axiom.iter())
+    pub fn iter(&self) -> SetIter<'_, A> {
+        SetIter(self.0.i().0.iter())
     }
 }
 
-impl Ontology for SetOntology {
-    fn id(&self) -> &OntologyID {
-        &self.id
+impl<A: ForIRI> Ontology<A> for SetOntology<A> {
+    fn id(&self) -> &OntologyID<A> {
+        &self.0.id()
     }
 
-    fn mut_id(&mut self) -> &mut OntologyID {
-        &mut self.id
+    fn mut_id(&mut self) -> &mut OntologyID<A> {
+        self.0.mut_id()
     }
 
-    fn doc_iri(&self) -> &Option<IRI> {
-        &self.doc_iri
+    fn doc_iri(&self) -> &Option<IRI<A>> {
+        &self.0.doc_iri()
     }
 
-    fn mut_doc_iri(&mut self) -> &mut Option<IRI>{
-        &mut self.doc_iri
+    fn mut_doc_iri(&mut self) -> &mut Option<IRI<A>> {
+        self.0.mut_doc_iri()
     }
 }
 
 /// An Interator for `SetOntology`
-pub struct SetIter<'a>(std::collections::hash_set::Iter<'a, AnnotatedAxiom>);
+pub struct SetIter<'a, A: ForIRI>(std::collections::hash_set::Iter<'a, AnnotatedAxiom<A>>);
 
-impl<'a> Iterator for SetIter<'a> {
-    type Item = &'a AnnotatedAxiom;
+impl<'a, A: ForIRI> Iterator for SetIter<'a, A> {
+    type Item = &'a AnnotatedAxiom<A>;
     fn next(&mut self) -> Option<Self::Item> {
         self.0.next()
     }
 }
 
-impl<'a> IntoIterator for &'a SetOntology {
-    type Item = &'a AnnotatedAxiom;
-    type IntoIter = SetIter<'a>;
+impl<'a, A: ForIRI> IntoIterator for &'a SetOntology<A> {
+    type Item = &'a AnnotatedAxiom<A>;
+    type IntoIter = SetIter<'a, A>;
     fn into_iter(self) -> Self::IntoIter {
         self.iter()
     }
 }
 
 /// An owning iterator over the annotated axioms of an `Ontology`.
-pub struct SetIntoIter(std::collections::hash_set::IntoIter<AnnotatedAxiom>);
+pub struct SetIntoIter<A: ForIRI>(std::vec::IntoIter<AnnotatedAxiom<A>>);
 
-impl Iterator for SetIntoIter {
-    type Item = AnnotatedAxiom;
+impl<A: ForIRI> Iterator for SetIntoIter<A> {
+    type Item = AnnotatedAxiom<A>;
     fn next(&mut self) -> Option<Self::Item> {
         self.0.next()
     }
 }
 
-impl IntoIterator for SetOntology {
-    type Item = AnnotatedAxiom;
-    type IntoIter = SetIntoIter;
+impl<A: ForIRI> IntoIterator for SetOntology<A> {
+    type Item = AnnotatedAxiom<A>;
+    type IntoIter = SetIntoIter<A>;
     fn into_iter(self) -> Self::IntoIter {
-        SetIntoIter(self.axiom.into_iter())
+        SetIntoIter(self.0.index().into_iter())
     }
 }
 
-impl MutableOntology for SetOntology {
+impl<A: ForIRI> MutableOntology<A> for SetOntology<A> {
     /// Insert an axiom into the ontology.
     ///
     /// # Examples
@@ -103,103 +127,118 @@ impl MutableOntology for SetOntology {
     /// # use horned_owl::model::*;
     /// # use horned_owl::ontology::set::SetOntology;
     /// let mut o = SetOntology::new();
-    /// let b = Build::new();
+    /// let b = Build::new_rc();
     /// o.insert(DeclareClass(b.class("http://www.example.com/a")));
     /// o.insert(DeclareObjectProperty(b.object_property("http://www.example.com/r")));
     /// ```
     ///
     /// See `declare` for an easier way to declare named entities.
-    fn insert<A>(&mut self, ax: A) -> bool
+    fn insert<AA>(&mut self, ax: AA) -> bool
     where
-        A: Into<AnnotatedAxiom>,
+        AA: Into<AnnotatedAxiom<A>>,
     {
-        self.axiom.insert(ax.into())
+        self.0.insert(ax)
     }
 
-    fn remove(&mut self, ax: &AnnotatedAxiom) -> bool {
-        self.axiom.remove(ax)
+    fn remove(&mut self, ax: &AnnotatedAxiom<A>) -> bool {
+        self.0.remove(ax)
     }
 
-    fn take(&mut self, ax: &AnnotatedAxiom) -> Option<AnnotatedAxiom> {
-        self.axiom.take(ax)
-    }
-}
-
-impl FromIterator<AnnotatedAxiom> for SetOntology {
-    fn from_iter<I: IntoIterator<Item = AnnotatedAxiom>>(iter: I) -> Self {
-        SetOntology {
-            id: Default::default(),
-            axiom: HashSet::from_iter(iter),
-            ..Default::default()
-        }
+    fn take(&mut self, ax: &AnnotatedAxiom<A>) -> Option<AnnotatedAxiom<A>> {
+        self.0.take(ax)
     }
 }
 
-impl<I> From<(OntologyID, I)> for SetOntology
-where I:Iterator<Item=AnnotatedAxiom>
+impl<A: ForIRI> FromIterator<AnnotatedAxiom<A>> for SetOntology<A> {
+    fn from_iter<I: IntoIterator<Item = AnnotatedAxiom<A>>>(iter: I) -> Self {
+        SetOntology (
+            OneIndexedOntology::new(
+                SetIndex (
+                    HashSet::from_iter(iter), Default::default(),
+                )
+            )
+        )
+    }
+}
+
+impl<A: ForIRI, I> From<(OntologyID<A>, I)> for SetOntology<A>
+where
+    I: Iterator<Item = AnnotatedAxiom<A>>,
 {
-    fn from((mut oid,i):(OntologyID, I)) -> SetOntology {
-        let mut so:SetOntology = i.collect();
+    fn from((mut oid, i): (OntologyID<A>, I)) -> SetOntology<A> {
+        let mut so: SetOntology<_> = i.collect();
         std::mem::swap(so.mut_id(), &mut oid);
         so
     }
 }
 
-impl<O, I> From<(O, I)> for SetOntology
-where I:Iterator<Item=AnnotatedAxiom>,
-      O: Ontology
+/*
+impl<A: ForIRI, O, I> From<(O, I)> for SetOntology<A>
+where
+    I: Iterator<Item = AnnotatedAxiom<A>>,
+    O: Ontology<A>,
 {
-    fn from((mut o,i):(O, I)) -> SetOntology {
+    fn from((mut o, i): (O, I)) -> SetOntology<A> {
         (o.mut_id().clone(), i).into()
     }
 }
-
+*/
 
 /// An `OntologyIndex` implemented over an in-memory HashSet. When
 /// combined with an `IndexedOntology` this should be nearly as
 /// fastest as `SetOntology`.
-#[derive(Debug, Default, Eq, PartialEq)]
-pub struct SetIndex(HashSet<Rc<AnnotatedAxiom>>);
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct SetIndex<A:ForIRI, AA:ForIndex<A>>(
+    HashSet<AA>,
+    PhantomData<A>
+);
 
-impl OntologyIndex for SetIndex {
-    fn index_insert(&mut self, ax: Rc<AnnotatedAxiom>) -> bool {
+impl<A: ForIRI, AA: ForIndex<A>> OntologyIndex<A, AA> for SetIndex<A, AA> {
+    fn index_insert(&mut self, ax: AA) -> bool {
         self.0.insert(ax)
     }
 
-    fn index_take(&mut self, ax: &AnnotatedAxiom) -> Option<AnnotatedAxiom> {
-        self.0.take(ax).map(rc_unwrap_or_clone)
-    }
-
-    fn index_remove(&mut self, ax: &AnnotatedAxiom) -> bool {
+    fn index_remove(&mut self, ax: &AnnotatedAxiom<A>) -> bool {
         self.0.remove(ax)
     }
 }
 
-impl SetIndex {
-    pub fn contains(&self, ax:&AnnotatedAxiom) -> bool {
+impl<A:ForIRI, AA:ForIndex<A>> SetIndex<A, AA> {
+    pub fn new() -> SetIndex<A, AA> {
+        SetIndex(Default::default(), Default::default())
+    }
+
+    pub fn contains(&self, ax: &AnnotatedAxiom<A>) -> bool
+    {
         self.0.contains(ax)
     }
 }
 
-impl IntoIterator for SetIndex {
-    type Item = AnnotatedAxiom;
-    type IntoIter = std::vec::IntoIter<AnnotatedAxiom>;
+impl SetIndex<Rc<str>, Rc<AnnotatedAxiom<Rc<str>>>> {
+    pub fn new_rc() -> Self {
+        Self::new()
+    }
+}
+
+impl<A: ForIRI, AA: ForIndex<A>> IntoIterator for SetIndex<A, AA>
+{
+    type Item = AnnotatedAxiom<A>;
+    type IntoIter = std::vec::IntoIter<AnnotatedAxiom<A>>;
     fn into_iter(self) -> Self::IntoIter {
-        let v: Vec<AnnotatedAxiom> = self
+        let v: Vec<AnnotatedAxiom<_>> = self
             .0
             .into_iter()
-            .map(Rc::try_unwrap)
-            .map(Result::unwrap)
+            .map(|fi| fi.unwrap())
             .collect();
         v.into_iter()
     }
 }
 
-impl<'a> IntoIterator for &'a SetIndex {
-    type Item = &'a AnnotatedAxiom;
-    type IntoIter = std::vec::IntoIter<&'a AnnotatedAxiom>;
+impl<'a, A: ForIRI, AA: ForIndex<A>> IntoIterator for &'a SetIndex<A, AA> {
+    type Item = &'a AnnotatedAxiom<A>;
+    type IntoIter = std::vec::IntoIter<&'a AnnotatedAxiom<A>>;
     fn into_iter(self) -> Self::IntoIter {
-        let v: Vec<&'a AnnotatedAxiom> = self.0.iter().map(|rcax| &**rcax).collect();
+        let v: Vec<&'a AnnotatedAxiom<A>> = self.0.iter().map(|fiac| fiac.borrow()).collect();
         v.into_iter()
     }
 }
@@ -211,14 +250,48 @@ mod test {
 
     #[test]
     fn test_ontology_cons() {
-        let _ = SetOntology::new();
+        let _ = SetOntology::new_rc();
         assert!(true);
     }
 
     #[test]
+    fn test_ontology_id() {
+        let mut so = SetOntology::new_rc();
+        let b = Build::new_rc();
+        let mut oid = OntologyID {
+            iri: Some(b.iri("http://www.example.com/iri")),
+            viri: Some(b.iri("http://www.example.com/viri")),
+        };
+
+        std::mem::swap(so.mut_id(), &mut oid);
+
+        assert_eq!(so.id().iri, Some(b.iri("http://www.example.com/iri")));
+        assert_eq!(so.id().viri,  Some(b.iri("http://www.example.com/viri")))
+    }
+
+    #[test]
+    fn test_ontology_clone() {
+        let mut so = SetOntology::new_rc();
+        let b = Build::new_rc();
+        let mut oid = OntologyID {
+            iri: Some(b.iri("http://www.example.com/iri")),
+            viri: Some(b.iri("http://www.example.com/viri")),
+        };
+
+        std::mem::swap(so.mut_id(), &mut oid);
+
+        let cso = so.clone();
+
+        assert_eq!(cso.id().iri, Some(b.iri("http://www.example.com/iri")));
+        assert_eq!(cso.id().viri,  Some(b.iri("http://www.example.com/viri")))
+    }
+
+
+
+    #[test]
     fn test_ontology_iter_empty() {
         // Empty ontologies should stop iteration right away
-        let mut it = SetOntology::new().into_iter();
+        let mut it = SetOntology::new_rc().into_iter();
         assert_eq!(it.next(), None);
         assert_eq!(it.next(), None);
     }
@@ -226,7 +299,7 @@ mod test {
     #[test]
     fn test_ontology_into_iter() {
         // Setup
-        let build = Build::new();
+        let build = Build::new_rc();
         let mut o = SetOntology::new();
         let decl1 = DeclareClass(build.class("http://www.example.com#a"));
         let decl2 = DeclareClass(build.class("http://www.example.com#b"));
@@ -276,7 +349,7 @@ mod test {
     #[test]
     fn test_ontology_into_iter_empty() {
         // Empty ontologies should stop iteration right away
-        let o = SetOntology::new();
+        let o = SetOntology::new_rc();
         let mut it = (&o).into_iter();
         assert_eq!(it.next(), None);
         assert_eq!(it.next(), None);
@@ -285,7 +358,7 @@ mod test {
     #[test]
     fn test_ontology_iter() {
         // Setup
-        let build = Build::new();
+        let build = Build::new_rc();
         let mut o = SetOntology::new();
         let decl1 = DeclareClass(build.class("http://www.example.com#a"));
         let decl2 = DeclareClass(build.class("http://www.example.com#b"));
@@ -335,7 +408,7 @@ mod test {
     #[test]
     fn test_ontology_into() {
         // Setup
-        let build = Build::new();
+        let build = Build::new_rc();
         let mut o = SetOntology::new();
         let decl1 = DeclareClass(build.class("http://www.example.com#a"));
         let decl2 = DeclareClass(build.class("http://www.example.com#b"));
@@ -345,7 +418,7 @@ mod test {
         o.insert(decl2.clone());
         o.insert(decl3.clone());
 
-        let newo: SetOntology = (o.mut_id().clone(), o.into_iter()).into();
+        let newo: SetOntology<_> = (o.mut_id().clone(), o.into_iter()).into();
 
         // Iteration is set based so undefined in order. So, sort first.
         let mut v: Vec<_> = (&newo).into_iter().collect();
@@ -369,14 +442,14 @@ mod test {
 
     #[test]
     fn test_index_cons() {
-        let _ = SetIndex::default();
+        let _ = SetIndex::new_rc();
         assert!(true);
     }
 
     #[test]
     fn test_index_iter_empty() {
         // Empty ontologies should stop iteration right away
-        let mut it = SetIndex::default().into_iter();
+        let mut it = SetIndex::new_rc().into_iter();
         assert_eq!(it.next(), None);
         assert_eq!(it.next(), None);
     }
@@ -384,8 +457,8 @@ mod test {
     #[test]
     fn test_index_into_iter() {
         // Setup
-        let build = Build::new();
-        let mut o = OneIndexedOntology::new(SetIndex::default());
+        let build = Build::new_rc();
+        let mut o = OneIndexedOntology::new(SetIndex::new_rc());
         let decl1 = DeclareClass(build.class("http://www.example.com#a"));
         let decl2 = DeclareClass(build.class("http://www.example.com#b"));
         let decl3 = DeclareClass(build.class("http://www.example.com#c"));
@@ -434,7 +507,7 @@ mod test {
     #[test]
     fn test_index_into_iter_empty() {
         // Empty ontologies should stop iteration right away
-        let o = OneIndexedOntology::new(SetIndex::default());
+        let o = OneIndexedOntology::new(SetIndex::new_rc());
         let mut it = o.i().into_iter();
         assert_eq!(it.next(), None);
         assert_eq!(it.next(), None);
@@ -443,8 +516,8 @@ mod test {
     #[test]
     fn test_index_iter() {
         // Setup
-        let build = Build::new();
-        let mut o = OneIndexedOntology::new(SetIndex::default());
+        let build = Build::new_rc();
+        let mut o = OneIndexedOntology::new(SetIndex::new_rc());
         let decl1 = DeclareClass(build.class("http://www.example.com#a"));
         let decl2 = DeclareClass(build.class("http://www.example.com#b"));
         let decl3 = DeclareClass(build.class("http://www.example.com#c"));

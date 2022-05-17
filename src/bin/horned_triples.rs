@@ -85,7 +85,8 @@ pub(crate) fn matcher(matches: &ArgMatches) -> Result<(), CommandError> {
             pretty_rdf::PrettyRdfXmlFormatter::new(
                 b,
                 pretty_rdf::ChunkedRdfXmlFormatterConfig::all(),
-            ).map_err(underlying)?;
+            )
+            .map_err(underlying)?;
         //let mut f = rio_xml::RdfXmlFormatter::with_indentation(&b, 4)?;
         let file = File::open(input).map_err(underlying)?;
         let bufreader = BufReader::new(file);

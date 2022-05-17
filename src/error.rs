@@ -10,22 +10,21 @@ pub enum CommandError {
     MissingArgument,
 
     #[error("Oops")]
-    Underlying(#[source] Box<dyn std::error::Error>)
+    Underlying(#[source] Box<dyn std::error::Error>),
 }
 
-pub fn underlying<E: std::error::Error +'static>(error:E) -> CommandError{
+pub fn underlying<E: std::error::Error + 'static>(error: E) -> CommandError {
     CommandError::Underlying(Box::new(error))
 }
 
-impl From<RdfXmlError> for CommandError{
+impl From<RdfXmlError> for CommandError {
     fn from(e: RdfXmlError) -> Self {
         Self::Underlying(Box::new(e))
     }
 }
 
-
 #[derive(Debug, Error)]
 pub enum ParserError {
     #[error("Do not know how to parse file with path: {:?}", path)]
-    FormatNotSupported{path:PathBuf}
+    FormatNotSupported { path: PathBuf },
 }

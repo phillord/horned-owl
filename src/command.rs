@@ -1,22 +1,30 @@
 //! Support for Horned command line programmes
 
-use crate::{error::{CommandError, underlying, ParserError}, io::{ParserOutput, ResourceType}, model::{Build, IRI}, ontology::{axiom_mapped::AxiomMappedOntology}, resolve::{localize_iri, strict_resolve_iri}};
+use crate::{
+    error::{underlying, CommandError, ParserError},
+    io::{ParserOutput, ResourceType},
+    model::{AnnotatedAxiom, Build, IRI},
+    ontology::{
+        axiom_mapped::RcAxiomMappedOntology,
+    },
+    resolve::{localize_iri, strict_resolve_iri},
+};
 
-
-use std::{fs::File, io::{BufReader, Write}, path::Path};
-
-
+use std::{
+    fs::File,
+    io::{BufReader, Write},
+    path::Path, rc::Rc,
+};
 
 pub fn path_type(path: &Path) -> Option<ResourceType> {
-   match path.extension().map(|s| s.to_str()).flatten() {
-       Some("owx") => Some(ResourceType::OWX),
-       Some("owl") => Some(ResourceType::RDF),
-       _ => None,
-   }
+    match path.extension().map(|s| s.to_str()).flatten() {
+        Some("owx") => Some(ResourceType::OWX),
+        Some("owl") => Some(ResourceType::RDF),
+        _ => None,
+    }
 }
 
-pub fn parse_path(path: &Path) -> Result<ParserOutput, CommandError>
-{
+pub fn parse_path(path: &Path) -> Result<ParserOutput<Rc<str>, Rc<AnnotatedAxiom<Rc<str>>>>, CommandError> {
     let file = File::open(&path).map_err(underlying)?;
     let mut bufreader = BufReader::new(file);
 
@@ -28,75 +36,72 @@ pub fn parse_path(path: &Path) -> Result<ParserOutput, CommandError>
             .map_err(underlying)?
             .into(),
         None => {
-            return Err(
-                underlying(ParserError::FormatNotSupported{path:path.into()})
-            );
-        },
+            return Err(underlying(ParserError::FormatNotSupported {
+                path: path.into(),
+            }));
+        }
     })
 }
 
 /// Parse but only as far as the imports, if that makes sense.
-pub fn parse_imports(path: &Path) -> Result<ParserOutput, CommandError> {
-    let file = File::open(&path)
-        .map_err(underlying)?;
+pub fn parse_imports(path: &Path) -> Result<ParserOutput<Rc<str>, Rc<AnnotatedAxiom<Rc<str>>>>, CommandError> {
+    let file = File::open(&path).map_err(underlying)?;
     let mut bufreader = BufReader::new(file);
     Ok(match path_type(path) {
         Some(ResourceType::OWX) => super::io::owx::reader::read(&mut bufreader)
-            .map_err(underlying)?.into(),
+            .map_err(underlying)?
+            .into(),
         Some(ResourceType::RDF) => {
             let b = Build::new();
-            let mut p = crate::io::rdf::reader::parser_with_build(&mut bufreader,
-                                                              &b);
+            let mut p = crate::io::rdf::reader::parser_with_build(&mut bufreader, &b);
             p.parse_imports().map_err(underlying)?;
             p.as_ontology_and_incomplete().map_err(underlying)?.into()
         }
         None => {
-            return Err(
-                underlying(ParserError::FormatNotSupported{path:path.into()})
-            );
+            return Err(underlying(ParserError::FormatNotSupported {
+                path: path.into(),
+            }));
         }
     })
 }
 
-pub fn materialize(input: &str) -> Result<Vec<IRI>, CommandError> {
+pub fn materialize(input: &str) -> Result<Vec<IRI<Rc<str>>>, CommandError> {
     let mut v = vec![];
     materialize_1(input, &mut v, true)?;
     Ok(v)
 }
 
-pub fn materialize_1<'a>(input: &str, done: &'a mut Vec<IRI>, recurse: bool)
-                         -> Result<&'a mut Vec<IRI>, CommandError> {
+pub fn materialize_1<'a>(
+    input: &str,
+    done: &'a mut Vec<IRI<Rc<str>>>,
+    recurse: bool,
+) -> Result<&'a mut Vec<IRI<Rc<str>>>, CommandError> {
     println!("Parsing: {}", input);
-    let amont:AxiomMappedOntology = parse_imports(Path::new(input))
-        .map_err(underlying)?.into();
+    let amont: RcAxiomMappedOntology = parse_imports(Path::new(input)).map_err(underlying)?.into();
     let import = amont.i().import();
 
-    let b = Build::new();
+    let b = Build::new_rc();
 
     // Get all the imports
     for i in import {
         if !done.contains(&i.0) {
-
-            let local:String = localize_iri(&i.0, &b.iri(input)).into();
+            let local: String = localize_iri(&i.0, &b.iri(input)).into();
             let local_path = Path::new(&local);
             if !local_path.exists() {
                 println!("Retrieving Ontology: {}", &i.0);
                 let imported_data = strict_resolve_iri(&i.0);
                 done.push(i.0.clone());
                 println!("Saving to {}", local);
-                let mut file = File::create(&local)
-                    .map_err(underlying)?;
+                let mut file = File::create(&local).map_err(underlying)?;
                 file.write_all(&imported_data.as_bytes())
                     .map_err(underlying)?;
-            }
-            else {
+            } else {
                 println!("Already Present: {}", local);
             }
             if recurse {
                 materialize_1(&local, done, true)?;
             }
-        }
-        else {
+        } else {
             println!("Already materialized: {}", &i.0);
         }
     }
@@ -160,7 +165,10 @@ pub mod naming {
 
 pub mod summary {
 
-    use crate::{model::AxiomKind, ontology::axiom_mapped::AxiomMappedOntology};
+    use crate::{
+        model::AxiomKind,
+        ontology::axiom_mapped::RcAxiomMappedOntology,
+    };
     use indexmap::map::IndexMap;
 
     #[derive(Debug)]
@@ -176,11 +184,11 @@ pub mod summary {
         }
     }
 
-    pub fn summarize<O: Into<AxiomMappedOntology>>(ont: O) -> SummaryStatistics
+    pub fn summarize<O: Into<RcAxiomMappedOntology>>(ont: O) -> SummaryStatistics
     where
-        O: ,
+        O:,
     {
-        let ont: AxiomMappedOntology = ont.into();
+        let ont: RcAxiomMappedOntology = ont.into();
         SummaryStatistics {
             logical_axiom: ont.i().iter().count(),
             annotation_axiom: ont
@@ -192,8 +200,8 @@ pub mod summary {
         }
     }
 
-    fn axiom_types<O: Into<AxiomMappedOntology>>(ont: O) -> IndexMap<AxiomKind, usize> {
-        let ont: AxiomMappedOntology = ont.into();
+    fn axiom_types<O: Into<RcAxiomMappedOntology>>(ont: O) -> IndexMap<AxiomKind, usize> {
+        let ont: RcAxiomMappedOntology = ont.into();
         let mut im = IndexMap::new();
         for ax in AxiomKind::all_kinds() {
             im.insert(ax, ont.i().axiom(ax).count());

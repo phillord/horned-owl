@@ -11,14 +11,18 @@
 //! `object_property_domain` which iterate over `SubClassOf` or
 //! `ObjectPropertyDomain` axioms respectively.
 use super::set::SetOntology;
+use super::indexed::ForIndex;
 use crate::model::*;
 use std::{
     cell::RefCell,
     collections::{BTreeMap, BTreeSet, VecDeque},
     rc::Rc,
+    sync::Arc,
 };
 
-use super::indexed::{rc_unwrap_or_clone, OneIndexedOntology, OntologyIndex};
+use std::marker::PhantomData;
+
+use super::indexed::{OneIndexedOntology, OntologyIndex};
 
 /// Return all axioms of a specific `AxiomKind`
 #[allow(unused_macros)]
@@ -39,11 +43,11 @@ macro_rules! onimpl {
         onimpl!($kind, $method, stringify!($kind));
     };
     ($kind:ident, $method:ident, $skind:expr) => {
-        impl AxiomMappedIndex {
+        impl<A: ForIRI, AA: ForIndex<A>> AxiomMappedIndex<A, AA> {
             #[doc = "Return all instances of"]
             #[doc = $skind]
             #[doc = "in the ontology."]
-            pub fn $method(&self) -> impl Iterator<Item = &$kind> {
+            pub fn $method(&self) -> impl Iterator<Item = &$kind<A>> {
                 on!(self, $kind)
             }
         }
@@ -51,24 +55,30 @@ macro_rules! onimpl {
 }
 
 #[derive(Debug, Default, Eq, PartialEq)]
-pub struct AxiomMappedIndex {
-    axiom: RefCell<BTreeMap<AxiomKind, BTreeSet<Rc<AnnotatedAxiom>>>>,
+pub struct AxiomMappedIndex<A, AA> {
+    axiom: RefCell<BTreeMap<AxiomKind, BTreeSet<AA>>>,
+    pd: PhantomData<A>,
 }
 
-impl AxiomMappedIndex {
+impl<A: ForIRI, AA:ForIndex<A>> AxiomMappedIndex<A, AA> {
     /// Create a new ontology.
     ///
     /// # Examples
     /// ```
+    /// # use std::rc::Rc;
     /// # use horned_owl::ontology::axiom_mapped::AxiomMappedOntology;
-    /// let o = AxiomMappedOntology::default();
-    /// let o2 = AxiomMappedOntology::default();
+    /// let o = AxiomMappedOntology::new_rc();
+    /// let o2 = AxiomMappedOntology::new_rc();
     ///
     /// assert_eq!(o, o2);
     /// ```
-    pub fn new() -> AxiomMappedIndex {
-        AxiomMappedIndex::default()
+    pub fn new() -> AxiomMappedIndex<A, AA> {
+        AxiomMappedIndex{
+            axiom: RefCell::new(BTreeMap::new()),
+            pd: Default::default()
+        }
     }
+
     /// Fetch the axioms hashmap as a raw pointer.
     ///
     /// This method also ensures that the BTreeSet for `axk` is
@@ -78,7 +88,7 @@ impl AxiomMappedIndex {
     fn axioms_as_ptr(
         &self,
         axk: AxiomKind,
-    ) -> *mut BTreeMap<AxiomKind, BTreeSet<Rc<AnnotatedAxiom>>> {
+    ) -> *mut BTreeMap<AxiomKind, BTreeSet<AA>> {
         self.axiom
             .borrow_mut()
             .entry(axk)
@@ -87,17 +97,17 @@ impl AxiomMappedIndex {
     }
 
     /// Fetch the axioms for the given kind.
-    fn set_for_kind(&self, axk: AxiomKind) -> Option<&BTreeSet<Rc<AnnotatedAxiom>>> {
+    fn set_for_kind(&self, axk: AxiomKind) -> Option<&BTreeSet<AA>> {
         unsafe { (*self.axiom.as_ptr()).get(&axk) }
     }
 
     /// Fetch the axioms for given kind as a mutable ref.
-    fn mut_set_for_kind(&mut self, axk: AxiomKind) -> &mut BTreeSet<Rc<AnnotatedAxiom>> {
+    fn mut_set_for_kind(&mut self, axk: AxiomKind) -> &mut BTreeSet<AA> {
         unsafe { (*self.axioms_as_ptr(axk)).get_mut(&axk).unwrap() }
     }
 
     /// Gets an iterator that visits the annotated axioms of the ontology.
-    pub fn iter(&self) -> AxiomMappedIter {
+    pub fn iter(&self) -> AxiomMappedIter<A, AA> {
         // TODO -- what can't this just use flat_map?
         AxiomMappedIter {
             ont: self,
@@ -112,8 +122,8 @@ impl AxiomMappedIndex {
     /// ```
     /// # use horned_owl::model::*;
     /// # use horned_owl::ontology::axiom_mapped::AxiomMappedOntology;
-    /// let mut o = AxiomMappedOntology::default();
-    /// let b = Build::new();
+    /// let mut o = AxiomMappedOntology::new_rc();
+    /// let b = Build::new_rc();
     /// o.declare(b.class("http://www.example.com/a"));
     /// o.declare(b.object_property("http://www.example.com/r"));
     ///
@@ -121,13 +131,13 @@ impl AxiomMappedIndex {
     /// ```
     ///
     /// See also `axiom` for access to the `Axiom` without annotations.
-    pub fn annotated_axiom(&self, axk: AxiomKind) -> impl Iterator<Item = &AnnotatedAxiom> {
+    pub fn annotated_axiom(&self, axk: AxiomKind) -> impl Iterator<Item = &AnnotatedAxiom<A>> {
         self.set_for_kind(axk)
             // Iterate over option
             .into_iter()
             // flatten option iterator!
             .flat_map(|hs| hs.iter())
-            .map(|rc| &**rc)
+            .map(|fi| fi.borrow())
     }
 
     /// Fetch the Axiom for a given kind
@@ -136,8 +146,8 @@ impl AxiomMappedIndex {
     /// ```
     /// # use horned_owl::model::*;
     /// # use horned_owl::ontology::axiom_mapped::AxiomMappedOntology;
-    /// let mut o = AxiomMappedOntology::default();
-    /// let b = Build::new();
+    /// let mut o = AxiomMappedOntology::new_rc();
+    /// let b = Build::new_rc();
     /// o.declare(b.class("http://www.example.com/a"));
     /// o.declare(b.object_property("http://www.example.com/r"));
     ///
@@ -146,7 +156,7 @@ impl AxiomMappedIndex {
     ///
     /// See methods such as `declare_class` for access to the Axiom
     /// struct directly.
-    pub fn axiom(&self, axk: AxiomKind) -> impl Iterator<Item = &Axiom> {
+    pub fn axiom(&self, axk: AxiomKind) -> impl Iterator<Item = &Axiom<A>> {
         self.annotated_axiom(axk).map(|ann| &ann.axiom)
     }
 }
@@ -169,7 +179,7 @@ onimpl! {SubClassOf, sub_class_of}
 onimpl! {EquivalentClasses, equivalent_class}
 onimpl! {DisjointClasses, disjoint_class}
 onimpl! {DisjointUnion, disjoint_union}
-onimpl! {SubObjectPropertyOf, sub_object_property}
+onimpl! {SubObjectPropertyOf, sub_object_property_of}
 onimpl! {EquivalentObjectProperties, equivalent_object_properties}
 onimpl! {DisjointObjectProperties, disjoint_object_properties}
 onimpl! {InverseObjectProperties, inverse_object_properties}
@@ -202,39 +212,36 @@ onimpl! {SubAnnotationPropertyOf, sub_annotation_property_of}
 onimpl! {AnnotationPropertyDomain, annotation_property_domain}
 onimpl! {AnnotationPropertyRange, annotation_property_range}
 
-
 /// An owning iterator over the annotated axioms of an `Ontology`.
-impl IntoIterator for AxiomMappedIndex {
-    type Item = AnnotatedAxiom;
-    type IntoIter = std::vec::IntoIter<AnnotatedAxiom>;
+impl<A: ForIRI, AA:ForIndex<A>> IntoIterator for AxiomMappedIndex<A, AA> {
+    type Item = AnnotatedAxiom<A>;
+    type IntoIter = std::vec::IntoIter<AnnotatedAxiom<A>>;
     fn into_iter(self) -> Self::IntoIter {
         let btreemap = self.axiom.into_inner();
-        let v: Vec<AnnotatedAxiom> = btreemap
+        let v: Vec<AnnotatedAxiom<A>> = btreemap
             .into_iter()
             .map(|(_k, v)| v)
             .flat_map(BTreeSet::into_iter)
-            .map(Rc::try_unwrap)
-            .map(Result::unwrap)
+            .map(|fi| fi.unwrap())
             .collect();
         v.into_iter()
     }
 }
 
-
 /// An iterator over the annotated axioms of an `Ontology`.
-pub struct AxiomMappedIter<'a> {
-    ont: &'a AxiomMappedIndex,
+pub struct AxiomMappedIter<'a, A: ForIRI, AA: ForIndex<A>> {
+    ont: &'a AxiomMappedIndex<A, AA>,
     kinds: VecDeque<&'a AxiomKind>,
-    inner: Option<<&'a BTreeSet<Rc<AnnotatedAxiom>> as IntoIterator>::IntoIter>,
+    inner: Option<<&'a BTreeSet<AA> as IntoIterator>::IntoIter>,
 }
 
-impl<'a> Iterator for AxiomMappedIter<'a> {
-    type Item = &'a AnnotatedAxiom;
+impl<'a, A: ForIRI, AA: ForIndex<A>> Iterator for AxiomMappedIter<'a, A, AA> {
+    type Item = &'a AnnotatedAxiom<A>;
     fn next(&mut self) -> Option<Self::Item> {
         // Consume the current iterator if there are items left.
         if let Some(ref mut it) = self.inner {
             if let Some(axiom) = it.next() {
-                return Some(axiom);
+                return Some(axiom.borrow());
             }
         }
         // Attempt to consume the iterator for the next axiom kind
@@ -248,10 +255,9 @@ impl<'a> Iterator for AxiomMappedIter<'a> {
     }
 }
 
-
-impl<'a> IntoIterator for &'a AxiomMappedIndex {
-    type Item = &'a AnnotatedAxiom;
-    type IntoIter = AxiomMappedIter<'a>;
+impl<'a, A: ForIRI, AA: ForIndex<A>> IntoIterator for &'a AxiomMappedIndex<A, AA> {
+    type Item = &'a AnnotatedAxiom<A>;
+    type IntoIter = AxiomMappedIter<'a,A, AA>;
     fn into_iter(self) -> Self::IntoIter {
         AxiomMappedIter {
             ont: self,
@@ -261,37 +267,96 @@ impl<'a> IntoIterator for &'a AxiomMappedIndex {
     }
 }
 
-impl OntologyIndex for AxiomMappedIndex {
-    fn index_insert(&mut self, ax: Rc<AnnotatedAxiom>) -> bool {
-        self.mut_set_for_kind(ax.kind()).insert(ax)
+impl<A: ForIRI, AA:ForIndex<A>> OntologyIndex<A, AA> for AxiomMappedIndex<A, AA> {
+    fn index_insert(&mut self, ax: AA) -> bool {
+        self.mut_set_for_kind(ax.borrow().kind()).insert(ax)
     }
 
-    fn index_take(&mut self, ax: &AnnotatedAxiom) -> Option<AnnotatedAxiom> {
-        self.mut_set_for_kind(ax.kind())
-            .take(ax)
-            .map(rc_unwrap_or_clone)
-    }
-
-    fn index_remove(&mut self, ax: &AnnotatedAxiom) -> bool {
+    fn index_remove(&mut self, ax: &AnnotatedAxiom<A>) -> bool {
         self.mut_set_for_kind(ax.kind()).remove(ax)
     }
 }
 
-pub type AxiomMappedOntology = OneIndexedOntology<AxiomMappedIndex>;
+#[derive(Default, Debug, Eq, PartialEq)]
+pub struct AxiomMappedOntology<A, AA> (OneIndexedOntology<A, AA, AxiomMappedIndex<A, AA>>);
+
+pub type RcAxiomMappedOntology = AxiomMappedOntology<Rc<str>, Rc<AnnotatedAxiom<Rc<str>>>>;
+pub type ArcAxiomMappedOntology = AxiomMappedOntology<Arc<str>, Arc<AnnotatedAxiom<Arc<str>>>>;
+
+impl<A:ForIRI, AA:ForIndex<A>> Ontology<A> for AxiomMappedOntology<A, AA> {
+    fn id(&self) -> &OntologyID<A> {
+        self.0.id()
+    }
+
+    fn mut_id(&mut self) -> &mut OntologyID<A> {
+        self.0.mut_id()
+    }
+
+    fn doc_iri(&self) -> &Option<IRI<A>> {
+        self.0.doc_iri()
+    }
+
+    fn mut_doc_iri(&mut self) -> &mut Option<IRI<A>> {
+        self.0.mut_doc_iri()
+    }
+}
+
+impl<A:ForIRI, AA:ForIndex<A>> MutableOntology<A> for AxiomMappedOntology<A, AA> {
+    fn insert<IAA>(&mut self, ax: IAA) -> bool
+    where
+        IAA: Into<AnnotatedAxiom<A>> {
+        self.0.insert(ax)
+    }
+
+    fn take(&mut self, ax: &AnnotatedAxiom<A>) -> Option<AnnotatedAxiom<A>> {
+        self.0.take(ax)
+    }
+}
+
+
+
+impl<A:ForIRI, AA:ForIndex<A>> AxiomMappedOntology<A, AA> {
+    pub fn index(self) -> AxiomMappedIndex<A, AA> {
+        self.0.index()
+    }
+
+    pub fn i(&self) -> &AxiomMappedIndex<A, AA> {
+        self.0.i()
+    }
+}
+
+impl<A: ForIRI, AA:ForIndex<A>> AxiomMappedOntology<A, AA> {
+    pub fn new() -> AxiomMappedOntology<A, AA> {
+        AxiomMappedOntology(
+            OneIndexedOntology::new(AxiomMappedIndex::new())
+        )
+    }
+}
+
+impl RcAxiomMappedOntology {
+    pub fn new_rc() -> Self {
+        AxiomMappedOntology::new()
+    }
+}
+
+impl ArcAxiomMappedOntology {
+    pub fn new_arc() -> Self {
+        AxiomMappedOntology::new()
+    }
+}
 
 /// An owning iterator over the annotated axioms of an `Ontology`.
-impl IntoIterator for AxiomMappedOntology {
-    type Item = AnnotatedAxiom;
-    type IntoIter = std::vec::IntoIter<AnnotatedAxiom>;
+impl<A: ForIRI, AA: ForIndex<A>> IntoIterator for AxiomMappedOntology<A, AA> {
+    type Item = AnnotatedAxiom<A>;
+    type IntoIter = std::vec::IntoIter<AnnotatedAxiom<A>>;
     fn into_iter(self) -> Self::IntoIter {
         self.index().into_iter()
     }
 }
 
-
-impl From<SetOntology> for AxiomMappedOntology {
-    fn from(mut so: SetOntology) -> AxiomMappedOntology {
-        let mut amo = AxiomMappedOntology::default();
+impl<A: ForIRI, AA: ForIndex<A>> From<SetOntology<A>> for AxiomMappedOntology<A, AA> {
+    fn from(mut so: SetOntology<A>) -> AxiomMappedOntology<A, AA> {
+        let mut amo = AxiomMappedOntology::new();
         std::mem::swap(amo.mut_id(), &mut so.mut_id());
         for ax in so {
             amo.insert(ax);
@@ -300,9 +365,9 @@ impl From<SetOntology> for AxiomMappedOntology {
     }
 }
 
-impl From<AxiomMappedOntology> for SetOntology {
-    fn from(mut amo: AxiomMappedOntology) -> SetOntology {
-        let mut so = SetOntology::default();
+impl<A: ForIRI, AA: ForIndex<A>> From<AxiomMappedOntology<A, AA>> for SetOntology<A> {
+    fn from(mut amo: AxiomMappedOntology<A, AA>) -> SetOntology<A> {
+        let mut so = SetOntology::new();
         std::mem::swap(so.mut_id(), amo.mut_id());
 
         for ax in amo {
@@ -315,27 +380,50 @@ impl From<AxiomMappedOntology> for SetOntology {
 #[cfg(test)]
 mod test {
     use super::AxiomMappedOntology;
+    use super::RcAxiomMappedOntology;
+    use crate::ontology::set::SetOntology;
     use crate::model::*;
 
     #[test]
     fn test_ontology_cons() {
-        let _ = AxiomMappedOntology::default();
+        let _ = AxiomMappedOntology::new_rc();
         assert!(true);
     }
 
     #[test]
     fn test_ontology_iter_empty() {
         // Empty ontologies should stop iteration right away
-        let mut it = AxiomMappedOntology::default().into_iter();
+        let mut it = AxiomMappedOntology::new_rc().into_iter();
         assert_eq!(it.next(), None);
         assert_eq!(it.next(), None);
+    }
+
+    #[test]
+    fn from_set() {
+        let b = Build::new_rc();
+        let mut so = SetOntology::new();
+        let mut oid = OntologyID {
+            iri: Some(b.iri("http://www.example.com/iri")),
+            viri: Some(b.iri("http://www.example.com/viri")),
+        };
+
+        std::mem::swap(so.mut_id(), &mut oid);
+        assert_eq!(so.id().iri, Some(b.iri("http://www.example.com/iri")));
+        assert_eq!(so.id().viri,  Some(b.iri("http://www.example.com/viri")));
+
+        let amo: RcAxiomMappedOntology = so.into();
+
+        dbg!(&amo);
+
+        assert_eq!(amo.id().iri, Some(b.iri("http://www.example.com/iri")));
+        assert_eq!(amo.id().viri,  Some(b.iri("http://www.example.com/viri")))
     }
 
     #[test]
     fn test_ontology_into_iter() {
         // Setup
         let build = Build::new();
-        let mut o = AxiomMappedOntology::default();
+        let mut o = AxiomMappedOntology::new_rc();
         let decl1 = DeclareClass(build.class("http://www.example.com#a"));
         let decl2 = DeclareClass(build.class("http://www.example.com#b"));
         let decl3 = DeclareClass(build.class("http://www.example.com#c"));
@@ -382,7 +470,7 @@ mod test {
     #[test]
     fn test_ontology_into_iter_empty() {
         // Empty ontologies should stop iteration right away
-        let o = AxiomMappedOntology::default();
+        let o = AxiomMappedOntology::new_rc();
         let mut it = o.into_iter();
         assert_eq!(it.next(), None);
         assert_eq!(it.next(), None);
@@ -391,8 +479,8 @@ mod test {
     #[test]
     fn test_ontology_iter() {
         // Setup
-        let build = Build::new();
-        let mut o = AxiomMappedOntology::default();
+        let build = Build::new_rc();
+        let mut o = AxiomMappedOntology::new_rc();
         let decl1 = DeclareClass(build.class("http://www.example.com#a"));
         let decl2 = DeclareClass(build.class("http://www.example.com#b"));
         let decl3 = DeclareClass(build.class("http://www.example.com#c"));

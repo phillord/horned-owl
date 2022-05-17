@@ -36,6 +36,7 @@
 pub mod axiom_mapped;
 pub mod declaration_mapped;
 pub mod indexed;
+pub mod iri_mapped;
 pub mod logically_equal;
 pub mod set;
 
