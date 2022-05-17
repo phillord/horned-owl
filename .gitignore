@@ -5,6 +5,7 @@ Cargo.lock
 /benches/ont/o1000*.owl
 /benches/ont/o5000*.owl
 /notes.org
+/src/bin/horned_temp.rs
 /src/main.rs
 /src/ont/temp.owl
 /src/ont/owl-xml/family-other.owl
