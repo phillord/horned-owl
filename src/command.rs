@@ -25,9 +25,6 @@ pub fn path_type(path: &Path) -> Option<ResourceType> {
 }
 
 pub fn parse_path(path: &Path) -> Result<ParserOutput<Rc<str>, Rc<AnnotatedAxiom<Rc<str>>>>, CommandError> {
-    let file = File::open(&path).map_err(underlying)?;
-    let bufreader = BufReader::new(file);
-
     Ok(match path_type(path) {
         Some(ResourceType::OWX) => {
             let file = File::open(&path).map_err(underlying)?;

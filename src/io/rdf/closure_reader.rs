@@ -25,25 +25,25 @@ impl<'a, A:ForIRI, AA:ForIndex<A>> ClosureOntologyParser<'a, A, AA> {
         ClosureOntologyParser{b, import_map: HashMap::new(), op: HashMap::new().into()}
     }
 
-    pub fn parse_path(pb: &PathBuf) {
+    pub fn parse_path(_pb: &PathBuf) {
         //let file = File::open(&pb)?;brea
         //let reader = io::BufReader::new(file);
         todo!()
     }
 
-    pub fn parse_iri(&mut self, iri: &IRI<A>, doc_iri: Option<&IRI<A>>) -> Vec<IRI<A>> {
+    pub fn parse_iri(&mut self, iri: &IRI<A>, doc_iri: Option<&IRI<A>>) -> Result<Vec<IRI<A>>,ReadError> {
         let mut v = vec![];
-        self.parse_iri_1(iri, doc_iri, &mut v);
+        self.parse_iri_1(iri, doc_iri, &mut v)?;
 
-        v
+        Ok(v)
     }
 
-    fn parse_iri_1(&mut self, iri: &IRI<A>, doc_iri: Option<&IRI<A>>, v:&mut Vec<IRI<A>>) {
+    fn parse_iri_1(&mut self, iri: &IRI<A>, doc_iri: Option<&IRI<A>>, v:&mut Vec<IRI<A>>) -> Result<(), ReadError>{
         let (new_doc_iri, s) = resolve_iri(iri, doc_iri);
         v.push(iri.clone());
         let mut p = parser_with_build(&mut s.as_bytes(), self.b);
         let imports = p.parse_imports().unwrap();
-        p.parse_declarations();
+        p.parse_declarations()?;
         self.import_map.insert(iri.clone(), imports.clone());
 
         let o = p.mut_ontology_ref();
@@ -52,12 +52,13 @@ impl<'a, A:ForIRI, AA:ForIndex<A>> ClosureOntologyParser<'a, A, AA> {
 
         for iri in imports {
             // check we haven't already
-            self.parse_iri_1(&iri, doc_iri.or(Some(&new_doc_iri)), v);
+            self.parse_iri_1(&iri, doc_iri.or(Some(&new_doc_iri)), v)?;
         }
+        Ok(())
     }
 
     // Finish the parse for the ontology at index `i`
-    pub fn finish_parse(&mut self, iri: &IRI<A>) {
+    pub fn finish_parse(&mut self, iri: &IRI<A>) -> Result<(), ReadError>{
 
         let op_pointer: *mut HashMap<_, _> = &mut self.op;
 
@@ -65,17 +66,18 @@ impl<'a, A:ForIRI, AA:ForIndex<A>> ClosureOntologyParser<'a, A, AA> {
         let import_closure:Vec<_> = import_iris.iter()
             .map(|i| self.op.get(i).unwrap().ontology_ref()).collect();
 
-        dbg!(&iri);
-        dbg!(&import_closure);
         // The import closure references ontologies in the op
         // HashMap. We need to modify one of the ontologies in the map
         // while retaining a reference to the others. Hence the unsafe.
         unsafe{
-            (*op_pointer).get_mut(iri).unwrap().finish_parse(&import_closure);
+            (*op_pointer).get_mut(iri).unwrap().finish_parse(&import_closure)?;
         }
+
+        Ok(())
     }
 
-    fn parse_iri_if_needed(&self, iri: &IRI<A>) {
+    fn parse_iri_if_needed(&self, _iri: &IRI<A>) {
+        todo!()
         // Parse an IRI that has been imported unless it's already in Vec
 
         //
@@ -98,11 +100,11 @@ pub fn read<A:ForIRI, AA:ForIndex<A>>(iri: &IRI<A>) -> Result<(RDFOntology<A, AA
     // Do parse, then full parse of first, drop the rest
     let b = Build::new();
     let mut c = ClosureOntologyParser::new(&b);
-    c.parse_iri(iri, None);
+    c.parse_iri(iri, None)?;
 
     let keys:Vec<_> = c.op.keys().map(|k|k.clone()).collect();
     for i in keys.clone() {
-        c.finish_parse(&i);
+        c.finish_parse(&i)?;
     }
 
     let res = c.as_ontology_vec_and_incomplete();
@@ -114,10 +116,10 @@ pub fn read_closure<A:ForIRI, AA:ForIndex<A>>(b: &Build<A>, iri: &IRI<A>)
                                               -> Result<Vec<(RDFOntology<A, AA>, IncompleteParse<A>)>, ReadError> {
     // Do parse, then full parse, then result the results
     let mut c = ClosureOntologyParser::new(b);
-    c.parse_iri(iri, None);
+    c.parse_iri(iri, None)?;
     let keys:Vec<_> = c.op.keys().map(|k|k.clone()).collect();
     for i in keys.clone() {
-        c.finish_parse(&i);
+        c.finish_parse(&i)?;
     }
 
     Ok(c.as_ontology_vec_and_incomplete())

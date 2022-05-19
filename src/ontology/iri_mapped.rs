@@ -306,6 +306,10 @@ impl<A:ForIRI, AA:ForIndex<A>> IRIMappedOntology<A, AA> {
         self.take(ax);
         self.insert(new_ax)
     }
+
+    pub fn iter(&self) ->  std::vec::IntoIter<&AnnotatedAxiom<A>> {
+        self.0.i().into_iter()
+    }
 }
 impl RcIRIMappedOntology {
     pub fn new_rc() -> Self {
@@ -329,6 +333,7 @@ impl<A: ForIRI, AA: ForIndex<A>> IntoIterator for IRIMappedOntology<A,AA> {
     }
 }
 
+
 impl<A: ForIRI, AA: ForIndex<A>> From<SetOntology<A>> for IRIMappedOntology<A,AA> {
     fn from(mut so: SetOntology<A>) -> IRIMappedOntology<A,AA> {
         let mut imo = IRIMappedOntology::new();
@@ -349,125 +354,105 @@ impl<A: ForIRI, AA: ForIndex<A>> From<IRIMappedOntology<A,AA>> for SetOntology<A
 
 #[cfg(test)]
 mod test {
-    //use super::IRIMappedOntology;
+    use super::IRIMappedOntology;
     use crate::model::*;
 
-    // #[test]
-    // fn test_ontology_cons() {
-    //     let _ = IRIMappedOntology::new_arc();
-    //     assert!(true);
-    // }
+    #[test]
+    fn test_ontology_cons() {
+        let _ = IRIMappedOntology::new_arc();
+        assert!(true);
+    }
 
-    // #[test]
-    // fn test_ontology_iter_empty() {
-    //     // Empty ontologies should stop iteration right away
-    //     let mut it = IRIMappedOntology::new_arc().into_iter();
-    //     assert_eq!(it.next(), None);
-    //     assert_eq!(it.next(), None);
-    // }
-//
-//    #[test]
-//    fn test_ontology_into_iter() {
-//        // Setup
-//        let build = Build::new();
-//        let mut o = IRIMappedOntology::default();
-//        let decl1 = DeclareClass(build.class("http://www.example.com#a"));
-//        let decl2 = DeclareClass(build.class("http://www.example.com#b"));
-//        let decl3 = DeclareClass(build.class("http://www.example.com#c"));
-//        let disj1 = DisjointClasses(vec![
-//            ClassExpression::Class(build.class("http://www.example.com#a")),
-//            ClassExpression::Class(build.class("http://www.example.com#b")),
-//        ]);
-//        let disj2 = DisjointClasses(vec![
-//            ClassExpression::Class(build.class("http://www.example.com#b")),
-//            ClassExpression::Class(build.class("http://www.example.com#c")),
-//        ]);
-//        o.insert(disj1.clone());
-//        o.insert(disj2.clone());
-//        o.insert(decl1.clone());
-//        o.insert(decl2.clone());
-//        o.insert(decl3.clone());
-//
-//        // Iteration is based on ascending order of iris
-//        let mut it = o.into_iter();
-//        assert_eq!(
-//            it.next(),
-//            Some(AnnotatedAxiom::from(Axiom::DeclareClass(decl1)))
-//        );
-//        assert_eq!(
-//            it.next(),
-//            Some(AnnotatedAxiom::from(Axiom::DisjointClasses(disj1)))
-//        );
-//        assert_eq!(
-//            it.next(),
-//            Some(AnnotatedAxiom::from(Axiom::DeclareClass(decl2)))
-//        );
-//        assert_eq!(
-//            it.next(),
-//            Some(AnnotatedAxiom::from(Axiom::DisjointClasses(disj2)))
-//        );
-//        assert_eq!(
-//            it.next(),
-//            Some(AnnotatedAxiom::from(Axiom::DeclareClass(decl3)))
-//        );
-//        assert_eq!(it.next(), None);
-//        assert_eq!(it.next(), None);
-//    }
+    #[test]
+    fn test_ontology_iter_empty() {
+        // Empty ontologies should stop iteration right away
+        let mut it = IRIMappedOntology::new_arc().into_iter();
+        assert_eq!(it.next(), None);
+        assert_eq!(it.next(), None);
+    }
 
-    // #[test]
-    // fn test_ontology_into_iter_empty() {
-    //     // Empty ontologies should stop iteration right away
-    //     let o = IRIMappedOntology::new_arc();
-    //     let mut it = o.into_iter();
-    //     assert_eq!(it.next(), None);
-    //     assert_eq!(it.next(), None);
-    // }
+    #[test]
+    fn test_ontology_into_iter() {
+        // Setup
+        let build = Build::new();
+        let mut o = IRIMappedOntology::new_rc();
+        let decl1 = DeclareClass(build.class("http://www.example.com#a"));
+        let decl2 = DeclareClass(build.class("http://www.example.com#b"));
+        let decl3 = DeclareClass(build.class("http://www.example.com#c"));
+        let disj1 = DisjointClasses(vec![
+            ClassExpression::Class(build.class("http://www.example.com#a")),
+            ClassExpression::Class(build.class("http://www.example.com#b")),
+        ]);
+        let disj2 = DisjointClasses(vec![
+            ClassExpression::Class(build.class("http://www.example.com#b")),
+            ClassExpression::Class(build.class("http://www.example.com#c")),
+        ]);
+        o.insert(disj1.clone());
+        o.insert(disj2.clone());
+        o.insert(decl1.clone());
+        o.insert(decl2.clone());
+        o.insert(decl3.clone());
 
-//    #[test]
-//    fn test_ontology_iter() {
-//        // Setup
-//        let build = Build::new();
-//        let mut o = IRIMappedOntology::default();
-//        let decl1 = DeclareClass(build.class("http://www.example.com#a"));
-//        let decl2 = DeclareClass(build.class("http://www.example.com#b"));
-//        let decl3 = DeclareClass(build.class("http://www.example.com#c"));
-//        let disj1 = DisjointClasses(vec![
-//            ClassExpression::Class(build.class("http://www.example.com#a")),
-//            ClassExpression::Class(build.class("http://www.example.com#b")),
-//        ]);
-//        let disj2 = DisjointClasses(vec![
-//            ClassExpression::Class(build.class("http://www.example.com#b")),
-//            ClassExpression::Class(build.class("http://www.example.com#c")),
-//        ]);
-//        o.insert(disj1.clone());
-//        o.insert(disj2.clone());
-//        o.insert(decl1.clone());
-//        o.insert(decl2.clone());
-//        o.insert(decl3.clone());
-//
-//        // Iteration is based on ascending order of axiom kinds.
-//        let mut it = (&o).i().iter();
-//        assert_eq!(
-//            it.next(),
-//            Some(&AnnotatedAxiom::from(Axiom::DeclareClass(decl1)))
-//        );
-//        assert_eq!(
-//            it.next(),
-//            Some(&AnnotatedAxiom::from(Axiom::DeclareClass(decl2)))
-//        );
-//        assert_eq!(
-//            it.next(),
-//            Some(&AnnotatedAxiom::from(Axiom::DeclareClass(decl3)))
-//        );
-//        assert_eq!(
-//            it.next(),
-//            Some(&AnnotatedAxiom::from(Axiom::DisjointClasses(disj1)))
-//        );
-//        assert_eq!(
-//            it.next(),
-//            Some(&AnnotatedAxiom::from(Axiom::DisjointClasses(disj2)))
-//        );
-//        //assert_eq!(it.next(), None);
-//        //assert_eq!(it.next(), None);
-//    }
+        // Iteration order is not guaranteed
+        let mut v:Vec<_> = o.into_iter().collect();
+        v.sort();
+
+        assert_eq!(
+            v,
+            [
+                AnnotatedAxiom::from(Axiom::DeclareClass(decl1)),
+                AnnotatedAxiom::from(Axiom::DeclareClass(decl2)),
+                AnnotatedAxiom::from(Axiom::DeclareClass(decl3)),
+                AnnotatedAxiom::from(Axiom::DisjointClasses(disj1)),
+                AnnotatedAxiom::from(Axiom::DisjointClasses(disj2)),
+            ]
+        );
+    }
+
+    #[test]
+    fn test_ontology_into_iter_empty() {
+        // Empty ontologies should stop iteration right away
+        let o = IRIMappedOntology::new_arc();
+        let mut it = o.into_iter();
+        assert_eq!(it.next(), None);
+        assert_eq!(it.next(), None);
+    }
+
+   #[test]
+   fn test_ontology_iter() {
+       // Setup
+       let build = Build::new();
+       let mut o = IRIMappedOntology::new_rc();
+       let decl1 = DeclareClass(build.class("http://www.example.com#a"));
+       let decl2 = DeclareClass(build.class("http://www.example.com#b"));
+       let decl3 = DeclareClass(build.class("http://www.example.com#c"));
+       let disj1 = DisjointClasses(vec![
+           ClassExpression::Class(build.class("http://www.example.com#a")),
+           ClassExpression::Class(build.class("http://www.example.com#b")),
+       ]);
+       let disj2 = DisjointClasses(vec![
+           ClassExpression::Class(build.class("http://www.example.com#b")),
+           ClassExpression::Class(build.class("http://www.example.com#c")),
+       ]);
+       o.insert(disj1.clone());
+       o.insert(disj2.clone());
+       o.insert(decl1.clone());
+       o.insert(decl2.clone());
+       o.insert(decl3.clone());
+
+       // Iteration order is not guaranteed
+       let mut v:Vec<_> = o.iter().collect();
+       v.sort();
+
+       assert_eq!(
+           v,
+           [
+               &AnnotatedAxiom::from(Axiom::DeclareClass(decl1)),
+               &AnnotatedAxiom::from(Axiom::DeclareClass(decl2)),
+               &AnnotatedAxiom::from(Axiom::DeclareClass(decl3)),
+               &AnnotatedAxiom::from(Axiom::DisjointClasses(disj1)),
+               &AnnotatedAxiom::from(Axiom::DisjointClasses(disj2)),
+           ]
+       );
+   }
 }
