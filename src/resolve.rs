@@ -101,17 +101,21 @@ pub fn resolve_iri<A: ForIRI>(iri: &IRI<A>, doc_iri: Option<&IRI<A>>) -> (IRI<A>
             iri.clone()
         };
 
-    let mut path = file_iri_to_path(&local);
-    if path.as_path().exists() {
-        return (local, ::std::fs::read_to_string(path).unwrap())
-    }
-
-    if let Some(doc_iri) = doc_iri {
-        let doc_ext = doc_iri.split_once(".").unwrap();
-        path.set_extension(doc_ext.1);
-        if path.exists() {
+    if is_file_iri(&local) {
+        let mut path = file_iri_to_path(&local);
+        if path.as_path().exists() {
             return (local, ::std::fs::read_to_string(path).unwrap())
         }
+
+
+        if let Some(doc_iri) = doc_iri {
+            let doc_ext = doc_iri.split_once(".").unwrap();
+            path.set_extension(doc_ext.1);
+            if path.exists() {
+                return (local, ::std::fs::read_to_string(path).unwrap())
+            }
+        }
+        todo!("resolve_iri doesn't have error handlign");
     }
 
     (local, strict_resolve_iri(iri))

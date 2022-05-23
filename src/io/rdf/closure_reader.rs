@@ -8,10 +8,18 @@ use crate::io::RDFOntology;
 use crate::io::IncompleteParse;
 use crate::ontology::indexed::ForIndex;
 use crate::resolve::resolve_iri;
+use crate::resolve::pathbuf_to_file_iri;
 use crate::io::rdf::reader::parser_with_build;
 
 use std::collections::HashMap;
 use std::path::PathBuf;
+
+
+impl From<std::io::Error> for ReadError {
+    fn from (e: std::io::Error) -> Self {
+        ReadError::IOError(e)
+    }
+}
 
 pub struct ClosureOntologyParser<'a, A:ForIRI, AA:ForIndex<A>> {
     op: HashMap<IRI<A>, OntologyParser<'a, A, AA>>,
@@ -25,34 +33,78 @@ impl<'a, A:ForIRI, AA:ForIndex<A>> ClosureOntologyParser<'a, A, AA> {
         ClosureOntologyParser{b, import_map: HashMap::new(), op: HashMap::new().into()}
     }
 
-    pub fn parse_path(_pb: &PathBuf) {
-        //let file = File::open(&pb)?;brea
-        //let reader = io::BufReader::new(file);
-        todo!()
-    }
-
-    pub fn parse_iri(&mut self, iri: &IRI<A>, doc_iri: Option<&IRI<A>>) -> Result<Vec<IRI<A>>,ReadError> {
+    pub fn parse_path(&mut self, pb: &PathBuf) -> Result<Vec<IRI<A>>, ReadError> {
+        let file_iri = pathbuf_to_file_iri(self.b, &pb);
+        let s = ::std::fs::read_to_string(&pb)?;
         let mut v = vec![];
-        self.parse_iri_1(iri, doc_iri, &mut v)?;
+
+        // We use the IRI that we try to parse, but we don't know that
+        // this is the same as file says at this point.
+        self.parse_content_from_iri(s, None, file_iri, &mut v)?;
 
         Ok(v)
     }
 
-    fn parse_iri_1(&mut self, iri: &IRI<A>, doc_iri: Option<&IRI<A>>, v:&mut Vec<IRI<A>>) -> Result<(), ReadError>{
-        let (new_doc_iri, s) = resolve_iri(iri, doc_iri);
-        v.push(iri.clone());
+    /// Parse content from some IRI.
+    ///
+    /// Content will be taken by using
+    /// [resolve_iri](crate::resolve::resolve_iri), meaning that it
+    /// will be loaded from a local resource if possible.
+    ///
+    /// # Arguments
+    ///
+    /// * `source_iri` -- the source IRI from which we should
+    ///    parse. This may be the declared IRI of the ontology, or a
+    ///    local document IRI. This IRI may not be used directly as
+    ///    the source depending on the `relative_doc_iri`.
+    /// * `relative_doc_iri` -- an IRI that `source_iri` should be
+    ///    interpreted as relative to, if any.
+    pub fn parse_iri(&mut self, source_iri: &IRI<A>, relative_doc_iri: Option<&IRI<A>>) -> Result<Vec<IRI<A>>,ReadError> {
+        let mut v = vec![];
+        self.parse_iri_1(source_iri, relative_doc_iri, &mut v)?;
+
+        Ok(v)
+    }
+
+    fn parse_iri_1(&mut self, source_iri: &IRI<A>, relative_doc_iri: Option<&IRI<A>>, v:&mut Vec<IRI<A>>) -> Result<(), ReadError>{
+        let (new_doc_iri, s) = resolve_iri(source_iri, relative_doc_iri);
+        self.parse_content_from_iri(s, relative_doc_iri, new_doc_iri, v)
+    }
+
+    /// Parse content from some IRI
+    ///
+    /// This assumes that we already know the full content (that is we
+    /// do not have to resolve the IRI to content). In addition to the
+    /// content, we also need to supply the IRIs from which the
+    /// ontology claims to be, and from where it actually was.
+    ///
+    /// # Arguments
+    ///
+    /// * `s` -- A string of the ontology to be parsed
+    /// * `relative_doc_iri` -- The document IRI which was used to
+    ///    determine the relative location of `s` if any.
+    /// * `new_doc_iri` -- the IRI that `s` was actually read from
+    /// * `v` -- Vec containing all IRIs in the import closure.
+    fn parse_content_from_iri(&mut self, s: String,
+                              relative_doc_iri: Option<&IRI<A>>,
+                              new_doc_iri:IRI<A>, v:&mut Vec<IRI<A>>) -> Result<(), ReadError>{
         let mut p = parser_with_build(&mut s.as_bytes(), self.b);
         let imports = p.parse_imports().unwrap();
         p.parse_declarations()?;
-        self.import_map.insert(iri.clone(), imports.clone());
-
         let o = p.mut_ontology_ref();
+
         ::std::mem::swap(o.mut_doc_iri(), &mut Some(new_doc_iri.clone()));
-        self.op.insert(iri.clone(), p);
+
+        if let Some(declared_iri) = o.id().iri.clone() {
+            v.push(declared_iri.clone());
+
+            self.import_map.insert(declared_iri.clone(), imports.clone());
+            self.op.insert(declared_iri.clone(), p);
+        }
 
         for iri in imports {
             // check we haven't already
-            self.parse_iri_1(&iri, doc_iri.or(Some(&new_doc_iri)), v)?;
+            self.parse_iri_1(&iri, relative_doc_iri.or(Some(&new_doc_iri)), v)?;
         }
         Ok(())
     }
@@ -131,7 +183,6 @@ mod test {
     use crate::ontology::set::SetOntology;
     use crate::io::rdf::reader::RcRDFOntology;
     use crate::io::rdf::closure_reader::*;
-    use crate::resolve::*;
     use std::path::Path;
 
     #[test]
@@ -140,7 +191,7 @@ mod test {
         let b = Build::new_rc();
         let iri = pathbuf_to_file_iri(&b, &path_buf);
 
-        let (rdfo, ic):(RcRDFOntology, _) = read(&iri).unwrap();
+        let (_, ic):(RcRDFOntology, _) = read(&iri).unwrap();
         assert!(ic.is_complete());
     }
 

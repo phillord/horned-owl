@@ -41,6 +41,9 @@ pub enum ReadError {
 
     #[error("{0}")]
     RdfError(#[source] RdfXmlError),
+
+    #[error("{0}")]
+    IOError(#[source] std::io::Error),
 }
 
 impl From<RdfXmlError> for ReadError {
