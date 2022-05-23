@@ -1,11 +1,9 @@
-Version 0.12.0
+Version 0.13.0
 ==============
 
-Make
+Fix error handling
 
-public struct <A:AsRef<Str>>IRI(A)
-
-to enable the use of horned in a multithreaded environment
+Lots of fixes for the RDF parser based on lots of known files.
 
 
 Version next
@@ -21,12 +19,6 @@ Parser Headbutting.
 
 The RDF parser near miss, add strict/lax mode
 
-
-Version next
-==============
-
-Clean up command line code. Add a multiplexer `horned-owl dump` ->
-`horned-dump`
 
 Version next
 ==============

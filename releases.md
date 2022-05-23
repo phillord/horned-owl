@@ -1,3 +1,21 @@
+Version Next
+==============
+
+The core data model has been updated to make `IRI` generic. This
+resolves a long standing problem that Horned-OWL was a single threaded
+library. This has also meant that `SetOntology` has now been rewritten
+to use `SetIndex`.
+
+A general purpose visitor library has been added. At some point, we
+should use them for rendering, but for now, an IRIMappedIndex has been
+written.
+
+A closure parser has been added for RDF, as it is often necessary to
+parse the whole import closure to make a complete RDF parse.
+
+Updated error handling to use a single unified hierarchy.
+
+
 Version 0.11.0
 ==============
 
