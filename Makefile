@@ -26,6 +26,9 @@ quick-test:
 tmp:
 	mkdir tmp
 
+all-tests: integration-prepare integration-clean ./tmp/ont-with-bfo.owl
+	cargo test integration -- --include-ignored
+
 integration-prepare: tmp
 
 integration-clean:
