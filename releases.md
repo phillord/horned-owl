@@ -1,4 +1,4 @@
-Version Next
+Version 0.12.0
 ==============
 
 The core data model has been updated to make `IRI` generic. This
