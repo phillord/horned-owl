@@ -1,5 +1,6 @@
 use curie::PrefixMapping;
 
+use crate::error::HornedError;
 use crate::model::Kinded;
 use crate::model::*;
 use crate::vocab::Namespace::*;
@@ -16,8 +17,7 @@ use quick_xml::Writer;
 use std::collections::BTreeSet;
 use std::io::Write as StdWrite;
 
-use thiserror::Error;
-
+/*
 #[derive(Debug, Error)]
 pub enum WriteError {
     // Use to replace bail!/format_err from failure crate. Should specialize
@@ -33,6 +33,7 @@ impl From<quick_xml::Error> for WriteError {
         Self::XMLError(e)
     }
 }
+ */
 
 /// Write an Ontology to `write`, using the given PrefixMapping
 ///
@@ -42,7 +43,7 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: StdWrite>(
     write: W,
     ont: &AxiomMappedOntology<A, AA>,
     mapping: Option<&PrefixMapping>,
-) -> Result<(), WriteError> {
+) -> Result<(), HornedError> {
     let mut writer = Writer::new_with_indent(write, b' ', 4);
 
     // Ensure we have a prefix mapping; the default is a no-op and
@@ -94,7 +95,7 @@ fn with_iri<'a, A: ForIRI, I, W>(
     mapping: &'a PrefixMapping,
     tag: &[u8],
     into_iri: I,
-) -> Result<(), WriteError>
+) -> Result<(), HornedError>
 where
     I: Into<IRI<A>>,
     W: StdWrite,
@@ -167,14 +168,14 @@ fn tag_for_kind(axk: AxiomKind) -> &'static [u8] {
 /// does not a `Declaration` tag, just the internal `Class` tag.
 trait Render<'a, W: StdWrite> {
     /// Render a entity to Write
-    fn render(&self, w: &mut Writer<W>, mapping: &'a PrefixMapping) -> Result<(), WriteError>;
+    fn render(&self, w: &mut Writer<W>, mapping: &'a PrefixMapping) -> Result<(), HornedError>;
 
     fn within(
         &self,
         w: &mut Writer<W>,
         m: &'a PrefixMapping,
         tag: &[u8],
-    ) -> Result<(), WriteError> {
+    ) -> Result<(), HornedError> {
         let open = BytesStart::borrowed(tag, tag.len());
         w.write_event(Event::Start(open))?;
 
@@ -190,7 +191,7 @@ trait Render<'a, W: StdWrite> {
         w: &mut Writer<W>,
         m: &'a PrefixMapping,
         open: BytesStart,
-    ) -> Result<(), WriteError> {
+    ) -> Result<(), HornedError> {
         let clone = open.clone();
         w.write_event(Event::Start(clone))?;
 
@@ -209,7 +210,7 @@ macro_rules! render {
 
         impl <'a, A:ForIRI, W:StdWrite> Render<'a, W> for $type<A> {
             fn render(& $self, $write:&mut Writer<W>, $map: &'a PrefixMapping)
-                      -> Result<(),WriteError>
+                      -> Result<(),HornedError>
                 where W: StdWrite
                 $body
         }
@@ -236,7 +237,7 @@ fn render_ont<A: ForIRI, AA:ForIndex<A>, W>(
     o: &AxiomMappedOntology<A, AA>,
     w: &mut Writer<W>,
     m: &PrefixMapping,
-) -> Result<(), WriteError>
+) -> Result<(), HornedError>
 where
     W: StdWrite,
 {
@@ -266,7 +267,7 @@ where
 
 // Render Impl for container and collection types
 impl<'a, T: Render<'a, W>, W: StdWrite> Render<'a, W> for BTreeSet<T> {
-    fn render(&self, w: &mut Writer<W>, m: &'a PrefixMapping) -> Result<(), WriteError> {
+    fn render(&self, w: &mut Writer<W>, m: &'a PrefixMapping) -> Result<(), HornedError> {
         for item in self.iter() {
             item.render(w, m)?;
         }
@@ -276,7 +277,7 @@ impl<'a, T: Render<'a, W>, W: StdWrite> Render<'a, W> for BTreeSet<T> {
 }
 
 impl<'a, O: Render<'a, W>, W: StdWrite> Render<'a, W> for Vec<O> {
-    fn render(&self, w: &mut Writer<W>, m: &'a PrefixMapping) -> Result<(), WriteError>
+    fn render(&self, w: &mut Writer<W>, m: &'a PrefixMapping) -> Result<(), HornedError>
     where
         W: StdWrite,
     {
@@ -289,7 +290,7 @@ impl<'a, O: Render<'a, W>, W: StdWrite> Render<'a, W> for Vec<O> {
 }
 
 impl<'a, T: Render<'a, W>, W: StdWrite> Render<'a, W> for Box<T> {
-    fn render(&self, w: &mut Writer<W>, m: &'a PrefixMapping) -> Result<(), WriteError> {
+    fn render(&self, w: &mut Writer<W>, m: &'a PrefixMapping) -> Result<(), HornedError> {
         (**self).render(w, m)?;
 
         Ok(())
@@ -297,7 +298,7 @@ impl<'a, T: Render<'a, W>, W: StdWrite> Render<'a, W> for Box<T> {
 }
 
 impl<'a, A: Render<'a, W>, W: StdWrite> Render<'a, W> for (&'a A,) {
-    fn render(&self, w: &mut Writer<W>, m: &'a PrefixMapping) -> Result<(), WriteError> {
+    fn render(&self, w: &mut Writer<W>, m: &'a PrefixMapping) -> Result<(), HornedError> {
         (&self.0).render(w, m)?;
 
         Ok(())
@@ -305,7 +306,7 @@ impl<'a, A: Render<'a, W>, W: StdWrite> Render<'a, W> for (&'a A,) {
 }
 
 impl<'a, A: Render<'a, W>, B: Render<'a, W>, W: StdWrite> Render<'a, W> for (&'a A, &'a B) {
-    fn render(&self, w: &mut Writer<W>, m: &'a PrefixMapping) -> Result<(), WriteError> {
+    fn render(&self, w: &mut Writer<W>, m: &'a PrefixMapping) -> Result<(), HornedError> {
         (&self.0).render(w, m)?;
         (&self.1).render(w, m)?;
 
@@ -316,7 +317,7 @@ impl<'a, A: Render<'a, W>, B: Render<'a, W>, W: StdWrite> Render<'a, W> for (&'a
 impl<'a, A: Render<'a, W>, B: Render<'a, W>, C: Render<'a, W>, W: StdWrite> Render<'a, W>
     for (&'a A, &'a B, &'a C)
 {
-    fn render(&self, w: &mut Writer<W>, m: &'a PrefixMapping) -> Result<(), WriteError> {
+    fn render(&self, w: &mut Writer<W>, m: &'a PrefixMapping) -> Result<(), HornedError> {
         (&self.0).render(w, m)?;
         (&self.1).render(w, m)?;
         (&self.2).render(w, m)?;
@@ -326,7 +327,7 @@ impl<'a, A: Render<'a, W>, B: Render<'a, W>, C: Render<'a, W>, W: StdWrite> Rend
 }
 
 impl<'a, W:StdWrite> Render<'a, W> for PrefixMapping {
-    fn render(&self, w:&mut Writer<W>, _: &'a PrefixMapping) -> Result<(), WriteError>
+    fn render(&self, w:&mut Writer<W>, _: &'a PrefixMapping) -> Result<(), HornedError>
     {    for pre in self.mappings() {
             let mut prefix = BytesStart::owned_name("Prefix");
             prefix.push_attribute(("name", &pre.0[..]));
@@ -339,7 +340,7 @@ impl<'a, W:StdWrite> Render<'a, W> for PrefixMapping {
 }
 
 impl<'a, W:StdWrite> Render<'a, W> for String {
-    fn render(&self, w:&mut Writer<W>, _: &'a PrefixMapping) -> Result<(), WriteError>
+    fn render(&self, w:&mut Writer<W>, _: &'a PrefixMapping) -> Result<(), HornedError>
     {
         w.write_event(Event::Text(BytesText::from_plain_str(&self[..])))?;
         Ok(())

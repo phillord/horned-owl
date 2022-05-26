@@ -6,12 +6,12 @@ use clap::Arg;
 use clap::ArgMatches;
 
 use horned_owl::command::parse_path;
-use horned_owl::error::CommandError;
+use horned_owl::error::HornedError;
 
 use std::path::Path;
 
 #[allow(dead_code)]
-fn main() -> Result<(), CommandError> {
+fn main() -> Result<(), HornedError> {
     let matches = app("horned-parse").get_matches();
     matcher(&matches)
 }
@@ -29,10 +29,10 @@ pub(crate) fn app(name: &str) -> App<'static, 'static> {
         )
 }
 
-pub(crate) fn matcher(matches: &ArgMatches) -> Result<(), CommandError> {
+pub(crate) fn matcher(matches: &ArgMatches) -> Result<(), HornedError> {
     let input = matches
         .value_of("INPUT")
-        .ok_or(CommandError::MissingArgument)?;
+        .ok_or(HornedError::CommandError("Command requires an INPUT parameter".to_string()))?;
 
     parse_path(Path::new(input))?;
 

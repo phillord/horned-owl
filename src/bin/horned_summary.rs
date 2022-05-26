@@ -7,12 +7,12 @@ use clap::ArgMatches;
 
 use horned_owl::command::naming::name;
 use horned_owl::command::{parse_path, summary::summarize};
-use horned_owl::error::CommandError;
+use horned_owl::error::{HornedError};
 
 use std::path::Path;
 
 #[allow(dead_code)]
-fn main() -> Result<(), CommandError> {
+fn main() -> Result<(), HornedError> {
     let matches = app("horned-summary").get_matches();
     matcher(&matches)
 }
@@ -30,10 +30,10 @@ pub(crate) fn app(name: &str) -> App<'static, 'static> {
         )
 }
 
-pub(crate) fn matcher(matches: &ArgMatches) -> Result<(), CommandError> {
+pub(crate) fn matcher(matches: &ArgMatches) -> Result<(), HornedError> {
     let input = matches
         .value_of("INPUT")
-        .ok_or(CommandError::MissingArgument)?;
+        .ok_or(HornedError::CommandError("A file name must be specified".to_string()))?;
 
     let (ont, p, i) = parse_path(Path::new(input))?.decompose();
 

@@ -5,6 +5,7 @@ use rio_api::{
 use rio_xml::RdfXmlError;
 use Term::*;
 
+use crate::error::HornedError;
 use crate::model::*;
 use crate::{model::Literal, ontology::axiom_mapped::AxiomMappedOntology};
 
@@ -24,7 +25,6 @@ use crate::{
 };
 
 use enum_meta::Meta;
-use thiserror::Error;
 
 use std::cmp::Ordering;
 use std::collections::BTreeSet;
@@ -33,6 +33,7 @@ use std::io::BufRead;
 use std::io::Cursor;
 use std::rc::Rc;
 
+/*
 #[derive(Debug, Error)]
 pub enum ReadError {
     // Use to replace bail!/format_err from failure crate. Should specialize
@@ -51,6 +52,7 @@ impl From<RdfXmlError> for ReadError {
         ReadError::RdfError(e)
     }
 }
+*/
 
 type RioTerm<'a> = ::rio_api::model::Term<'a>;
 
@@ -170,14 +172,14 @@ impl<A: ForIRI> Convert<A> for rio_api::model::NamedNode<'_> {
 trait TryBuild<A: ForIRI, N: From<IRI<A>>> {
     fn to_some_iri(&self, b: &Build<A>) -> Option<IRI<A>>;
 
-    fn to_iri_maybe(&self, b: &Build<A>) -> Result<IRI<A>, ReadError> {
+    fn to_iri_maybe(&self, b: &Build<A>) -> Result<IRI<A>, HornedError> {
         match self.to_some_iri(b) {
             Some(iri) => Ok(iri),
             None => todo!("Fix this"),
         }
     }
 
-    fn try_build(&self, b: &Build<A>) -> Result<N, ReadError> {
+    fn try_build(&self, b: &Build<A>) -> Result<N, HornedError> {
         Ok(self.to_iri_maybe(b)?.into())
     }
 }
@@ -386,7 +388,7 @@ pub struct OntologyParser<'a, A: ForIRI, AA: ForIndex<A>> {
     data_range: HashMap<BNode<A>, DataRange<A>>,
     ann_map: HashMap<[Term<A>; 3], BTreeSet<Annotation<A>>>,
     state: OntologyParserState,
-    error: Result<(), ReadError>,
+    error: Result<(), HornedError>,
 }
 
 impl<'a, A: ForIRI, AA:ForIndex<A>> OntologyParser<'a, A, AA> {
@@ -425,7 +427,7 @@ impl<'a, A: ForIRI, AA:ForIndex<A>> OntologyParser<'a, A, AA> {
                 to_term(&rio_triple.object, &m, b),
             ])
         });
-        let results: Vec<Result<[Term<A>; 3], ReadError>> = triple_iter.collect();
+        let results: Vec<Result<[Term<A>; 3], HornedError>> = triple_iter.collect();
         let triples: Result<Vec<_>, _> = results.into_iter().collect();
         let triple_v: Vec<[Term<A>; 3]> = triples.unwrap();
         //dbg!(&triple_v);
@@ -1632,7 +1634,7 @@ impl<'a, A: ForIRI, AA:ForIndex<A>> OntologyParser<'a, A, AA> {
 
     /// Parse all imports and add to the Ontology.
     /// Return an error is we are in the wrong state
-    pub fn parse_imports(&mut self) -> Result<Vec<IRI<A>>, ReadError> {
+    pub fn parse_imports(&mut self) -> Result<Vec<IRI<A>>, HornedError> {
         match self.state {
             OntologyParserState::New => {
                 let triple = std::mem::take(&mut self.triple);
@@ -1656,8 +1658,8 @@ impl<'a, A: ForIRI, AA:ForIndex<A>> OntologyParser<'a, A, AA> {
     }
 
     /// Parse all declarations and add to the ontology.
-    /// ReadError if we are not in the right state
-    pub fn parse_declarations(&mut self) -> Result<(), ReadError> {
+    /// HornedError if we are not in the right state
+    pub fn parse_declarations(&mut self) -> Result<(), HornedError> {
         match self.state {
             OntologyParserState::New => {
                 self.parse_imports().and_then(|_| self.parse_declarations())
@@ -1723,7 +1725,7 @@ impl<'a, A: ForIRI, AA:ForIndex<A>> OntologyParser<'a, A, AA> {
     /// ic is a Vec of references to the import closure. These RDF
     /// ontologies do not need to be completely parsed, but will be
     /// relied on to resolve declarations.
-    pub fn finish_parse(&mut self, ic: &[&RDFOntology<A, AA>]) -> Result<(), ReadError> {
+    pub fn finish_parse(&mut self, ic: &[&RDFOntology<A, AA>]) -> Result<(), HornedError> {
         // Table 10
         self.simple_annotations();
 
@@ -1742,7 +1744,7 @@ impl<'a, A: ForIRI, AA:ForIndex<A>> OntologyParser<'a, A, AA> {
         Ok(())
     }
 
-    pub fn parse(mut self) -> Result<(RDFOntology<A, AA>, IncompleteParse<A>), ReadError> {
+    pub fn parse(mut self) -> Result<(RDFOntology<A, AA>, IncompleteParse<A>), HornedError> {
         if self.error.is_err() {
             return Err(self.error.unwrap_err());
         }
@@ -1775,7 +1777,7 @@ impl<'a, A: ForIRI, AA:ForIndex<A>> OntologyParser<'a, A, AA> {
     }
 
     /// Consume the parser and return an Ontology.
-    pub fn as_ontology(self) -> Result<RDFOntology<A, AA>, ReadError> {
+    pub fn as_ontology(self) -> Result<RDFOntology<A, AA>, HornedError> {
         self.error.and(Ok(self.o))
     }
 
@@ -1783,7 +1785,7 @@ impl<'a, A: ForIRI, AA:ForIndex<A>> OntologyParser<'a, A, AA> {
     /// structures that have not been fully parsed
     pub fn as_ontology_and_incomplete(
         mut self,
-    ) -> Result<(RDFOntology<A, AA>, IncompleteParse<A>), ReadError> {
+    ) -> Result<(RDFOntology<A, AA>, IncompleteParse<A>), HornedError> {
         if self.error.is_err() {
             return Err(self.error.unwrap_err());
         }
@@ -1829,12 +1831,12 @@ pub fn parser_with_build<'a, 'b, A: ForIRI, AA:ForIndex<A>, R: BufRead>(
 pub fn read_with_build<A: ForIRI, AA:ForIndex<A>, R: BufRead>(
     bufread: &mut R,
     build: &Build<A>,
-) -> Result<(RDFOntology<A, AA>, IncompleteParse<A>), ReadError> {
+) -> Result<(RDFOntology<A, AA>, IncompleteParse<A>), HornedError> {
     parser_with_build(bufread, build).parse()
 }
 
 pub fn read<R: BufRead>(bufread: &mut R) -> Result<(RDFOntology<Rc<str>, Rc<AnnotatedAxiom<Rc<str>>>>,
-                                                    IncompleteParse<Rc<str>>), ReadError> {
+                                                    IncompleteParse<Rc<str>>), HornedError> {
     let b = Build::new_rc();
     read_with_build(bufread, &b)
 }
@@ -2427,7 +2429,7 @@ mod test {
     }
 
     #[test]
-    fn import_property_in_bits() -> Result<(), ReadError> {
+    fn import_property_in_bits() -> Result<(), HornedError> {
         let b = Build::new_rc();
         let p:OntologyParser<_, Rc<AnnotatedAxiom<Rc<str>>>> = parser_with_build(&mut slurp_rdfont("other-property").as_bytes(), &b);
         let (family_other, incomplete) = p.parse()?;
@@ -2461,7 +2463,7 @@ mod test {
     // }
 
     // #[test]
-    // fn family_import() -> Result<(),ReadError>{
+    // fn family_import() -> Result<(),HornedError>{
     //     let b = Build::new();
     //     let p = parser_with_build(&mut slurp_rdfont("family-other").as_bytes(), &b);
     //     let (family_other, incomplete) = p.parse()?;

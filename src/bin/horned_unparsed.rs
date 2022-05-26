@@ -5,8 +5,7 @@ use clap::App;
 use clap::Arg;
 use clap::ArgMatches;
 
-use horned_owl::error::underlying;
-use horned_owl::error::CommandError;
+use horned_owl::error::HornedError;
 use horned_owl::io::rdf::reader::RDFOntology;
 use horned_owl::model::AnnotatedAxiom;
 
@@ -14,7 +13,7 @@ use std::rc::Rc;
 use std::{fs::File, io::BufReader, path::Path};
 
 #[allow(dead_code)]
-fn main() -> Result<(), CommandError> {
+fn main() -> Result<(), HornedError> {
     let matches = app("horned-unparsed").get_matches();
     matcher(&matches)
 }
@@ -32,16 +31,15 @@ pub(crate) fn app(name: &str) -> App<'static, 'static> {
         )
 }
 
-pub(crate) fn matcher(matches: &ArgMatches) -> Result<(), CommandError> {
+pub(crate) fn matcher(matches: &ArgMatches) -> Result<(), HornedError> {
     let input = matches
         .value_of("INPUT")
-        .ok_or(CommandError::MissingArgument)?;
+        .ok_or(HornedError::CommandError("Command requires an INPUT argument".to_string()))?;
 
     let (_ont, incomplete):(RDFOntology<Rc<str>, Rc<AnnotatedAxiom<Rc<str>>>>,_)
         = horned_owl::io::rdf::reader::read(&mut BufReader::new(
-        File::open(Path::new(input)).map_err(underlying)?,
-    ))
-    .map_err(underlying)?
+        File::open(Path::new(input))?
+    ))?
     .into();
 
     println!("\n\nIncompleted Parsed");

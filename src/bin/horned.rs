@@ -1,6 +1,7 @@
 use clap::App;
 use clap::ArgMatches;
-use horned_owl::error::CommandError;
+
+use horned_owl::error::HornedError;
 
 mod horned_big;
 mod horned_dump;
@@ -11,7 +12,7 @@ mod horned_summary;
 mod horned_triples;
 mod horned_unparsed;
 
-fn main() -> Result<(), CommandError> {
+fn main() -> Result<(), HornedError> {
     let matches = app().get_matches();
     matcher(matches)
 }
@@ -31,7 +32,7 @@ fn app() -> App<'static, 'static> {
         .subcommand(horned_unparsed::app("unparsed"))
 }
 
-fn matcher(matches: ArgMatches) -> Result<(), CommandError> {
+fn matcher(matches: ArgMatches) -> Result<(), HornedError> {
     match matches.subcommand() {
         ("big", Some(submatches)) => horned_big::matcher(submatches),
         ("dump", Some(submatches)) => horned_dump::matcher(submatches),

@@ -2,8 +2,7 @@ use clap::App;
 use clap::Arg;
 use clap::ArgMatches;
 
-use horned_owl::error::underlying;
-use horned_owl::error::CommandError;
+use horned_owl::error::HornedError;
 use horned_owl::io::owx::writer::write;
 use horned_owl::model::Build;
 use horned_owl::model::MutableOntology;
@@ -13,7 +12,7 @@ use horned_owl::ontology::axiom_mapped::RcAxiomMappedOntology;
 use std::io::stdout;
 
 #[allow(dead_code)]
-fn main() -> Result<(), CommandError> {
+fn main() -> Result<(), HornedError> {
     let matches = app("horned-big").get_matches();
     matcher(&matches)
 }
@@ -31,12 +30,12 @@ pub(crate) fn app(name: &str) -> App<'static, 'static> {
         )
 }
 
-pub(crate) fn matcher(matches: &ArgMatches) -> Result<(), CommandError> {
+pub(crate) fn matcher(matches: &ArgMatches) -> Result<(), HornedError> {
     let size: isize = matches
         .value_of("SIZE")
         .unwrap()
         .parse()
-        .map_err(|e| CommandError::Underlying(Box::new(e)))?;
+        .or(Err(HornedError::CommandError(format!("Cannot parse SIZE as an integer"))))?;
 
     let b = Build::new_rc();
     let mut o = SetOntology::new_rc();
@@ -46,5 +45,5 @@ pub(crate) fn matcher(matches: &ArgMatches) -> Result<(), CommandError> {
     }
 
     let amo: RcAxiomMappedOntology = o.into();
-    write(&mut stdout(), &amo, None).map_err(underlying)
+    write(&mut stdout(), &amo, None)
 }

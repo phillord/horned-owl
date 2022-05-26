@@ -5,16 +5,15 @@ use clap::App;
 use clap::Arg;
 use clap::ArgMatches;
 
-use horned_owl::error::CommandError;
+use horned_owl::error::HornedError;
 
-use horned_owl::error::underlying;
 use rio_api::parser::TriplesParser;
 
 use std::io::BufReader;
 use std::{fs::File, io::stdout};
 
 #[allow(dead_code)]
-fn main() -> Result<(), CommandError> {
+fn main() -> Result<(), HornedError> {
     let matches = app("horned-triples").get_matches();
     matcher(&matches)
 }
@@ -38,14 +37,14 @@ pub(crate) fn app(name: &str) -> App<'static, 'static> {
         )
 }
 
-pub(crate) fn matcher(matches: &ArgMatches) -> Result<(), CommandError> {
+pub(crate) fn matcher(matches: &ArgMatches) -> Result<(), HornedError> {
     let input = matches
         .value_of("INPUT")
-        .ok_or(CommandError::MissingArgument)?;
+        .ok_or(HornedError::CommandError("A file name must be specified".to_string()))?;
 
-    let file = File::open(input).map_err(underlying)?;
+    let file = File::open(input)?;
     let bufreader = BufReader::new(file);
-    let v: Vec<Result<String, CommandError>> = rio_xml::RdfXmlParser::new(bufreader, None)
+    let v: Vec<Result<String, HornedError>> = rio_xml::RdfXmlParser::new(bufreader, None)
         .into_iter(|rio_triple| {
             Ok(format!(
                 "{}\n\t{}\n\t{}",
@@ -85,10 +84,9 @@ pub(crate) fn matcher(matches: &ArgMatches) -> Result<(), CommandError> {
             pretty_rdf::PrettyRdfXmlFormatter::new(
                 b,
                 pretty_rdf::ChunkedRdfXmlFormatterConfig::all(),
-            )
-            .map_err(underlying)?;
+            )?;
         //let mut f = rio_xml::RdfXmlFormatter::with_indentation(&b, 4)?;
-        let file = File::open(input).map_err(underlying)?;
+        let file = File::open(input)?;
         let bufreader = BufReader::new(file);
         let _: Vec<Result<_, _>> = rio_xml::RdfXmlParser::new(bufreader, None)
             .into_iter(|rio_triple| {
@@ -96,7 +94,7 @@ pub(crate) fn matcher(matches: &ArgMatches) -> Result<(), CommandError> {
                 f.format(t)
             })
             .collect();
-        f.finish().map_err(underlying)?;
+        f.finish()?;
     }
 
     Ok(())

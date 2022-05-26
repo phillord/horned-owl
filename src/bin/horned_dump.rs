@@ -5,12 +5,12 @@ use clap::App;
 use clap::Arg;
 use clap::ArgMatches;
 
-use horned_owl::{command::parse_path, error::CommandError, ontology::set::SetOntology};
+use horned_owl::{command::parse_path, error::HornedError, ontology::set::SetOntology};
 
 use std::{collections::HashMap, path::Path};
 
 #[allow(dead_code)]
-fn main() -> Result<(), CommandError> {
+fn main() -> Result<(), HornedError> {
     let matches = app("horned-dump").get_matches();
     matcher(&matches)
 }
@@ -29,10 +29,10 @@ pub(crate) fn app(name: &str) -> App<'static, 'static> {
         .arg(Arg::with_name("incomplete").long("incomplete").short("l"))
 }
 
-pub(crate) fn matcher(matches: &ArgMatches) -> Result<(), CommandError> {
+pub(crate) fn matcher(matches: &ArgMatches) -> Result<(), HornedError> {
     let input = matches
         .value_of("INPUT")
-        .ok_or(CommandError::MissingArgument)?;
+        .ok_or(HornedError::CommandError("A file name must be specified".to_string()))?;
 
     let r = parse_path(Path::new(input))?;
 

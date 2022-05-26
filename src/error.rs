@@ -1,30 +1,46 @@
-use std::path::PathBuf;
+//! Errors for the Horned-OWL library
 
 use rio_xml::RdfXmlError;
 use thiserror::Error;
 
-// Errors
+
+/// Error for the Horned library
 #[derive(Debug, Error)]
-pub enum CommandError {
-    #[error("An argument that was expected is missing")]
-    MissingArgument,
+pub enum HornedError {
+    /// An IO Error
+    #[error("IO Error: {0}")]
+    IOError(#[from] std::io::Error),
 
-    #[error("Oops")]
-    Underlying(#[source] Box<dyn std::error::Error>),
+    /// An error found during the parsing of an underlying format
+    #[error("Parsing Error: {0}")]
+    ParserError(#[from] Box<dyn std::error::Error>),
+
+    /// Data has been given that would we cannot make sense or would
+    /// result in invalid OWL
+    #[error("Validity Error: {0}")]
+    ValidityError(String, Option<Box<dyn std::error::Error>>),
+
+    /// A command has been given that is invalid
+    #[error("Command Error: {0}")]
+    CommandError(String),
 }
 
-pub fn underlying<E: std::error::Error + 'static>(error: E) -> CommandError {
-    CommandError::Underlying(Box::new(error))
+macro_rules! invalid {
+    ($($arg:tt)*) => {
+        HornedError::ValidityError(format!($($arg)*), None)
+    }
 }
+pub (crate) use invalid;
 
-impl From<RdfXmlError> for CommandError {
-    fn from(e: RdfXmlError) -> Self {
-        Self::Underlying(Box::new(e))
+impl From<quick_xml::Error> for HornedError {
+    fn from(e: quick_xml::Error) -> Self {
+        Self::ParserError(e.into())
     }
 }
 
-#[derive(Debug, Error)]
-pub enum ParserError {
-    #[error("Do not know how to parse file with path: {:?}", path)]
-    FormatNotSupported { path: PathBuf },
+
+impl From <rio_xml::RdfXmlError> for HornedError {
+    fn from(e: rio_xml::RdfXmlError) -> Self {
+        Self::ParserError(e.into())
+    }
 }

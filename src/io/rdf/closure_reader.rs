@@ -1,9 +1,9 @@
+use crate::error::HornedError;
 use crate::model::Build;
 use crate::model::ForIRI;
 use crate::model::IRI;
 use crate::model::Ontology;
 use crate::io::rdf::reader::OntologyParser;
-use crate::io::rdf::reader::ReadError;
 use crate::io::RDFOntology;
 use crate::io::IncompleteParse;
 use crate::ontology::indexed::ForIndex;
@@ -13,13 +13,6 @@ use crate::io::rdf::reader::parser_with_build;
 
 use std::collections::HashMap;
 use std::path::PathBuf;
-
-
-impl From<std::io::Error> for ReadError {
-    fn from (e: std::io::Error) -> Self {
-        ReadError::IOError(e)
-    }
-}
 
 pub struct ClosureOntologyParser<'a, A:ForIRI, AA:ForIndex<A>> {
     op: HashMap<IRI<A>, OntologyParser<'a, A, AA>>,
@@ -33,7 +26,7 @@ impl<'a, A:ForIRI, AA:ForIndex<A>> ClosureOntologyParser<'a, A, AA> {
         ClosureOntologyParser{b, import_map: HashMap::new(), op: HashMap::new().into()}
     }
 
-    pub fn parse_path(&mut self, pb: &PathBuf) -> Result<Vec<IRI<A>>, ReadError> {
+    pub fn parse_path(&mut self, pb: &PathBuf) -> Result<Vec<IRI<A>>, HornedError> {
         let file_iri = pathbuf_to_file_iri(self.b, &pb);
         let s = ::std::fs::read_to_string(&pb)?;
         let mut v = vec![];
@@ -59,14 +52,14 @@ impl<'a, A:ForIRI, AA:ForIndex<A>> ClosureOntologyParser<'a, A, AA> {
     ///    the source depending on the `relative_doc_iri`.
     /// * `relative_doc_iri` -- an IRI that `source_iri` should be
     ///    interpreted as relative to, if any.
-    pub fn parse_iri(&mut self, source_iri: &IRI<A>, relative_doc_iri: Option<&IRI<A>>) -> Result<Vec<IRI<A>>,ReadError> {
+    pub fn parse_iri(&mut self, source_iri: &IRI<A>, relative_doc_iri: Option<&IRI<A>>) -> Result<Vec<IRI<A>>,HornedError> {
         let mut v = vec![];
         self.parse_iri_1(source_iri, relative_doc_iri, &mut v)?;
 
         Ok(v)
     }
 
-    fn parse_iri_1(&mut self, source_iri: &IRI<A>, relative_doc_iri: Option<&IRI<A>>, v:&mut Vec<IRI<A>>) -> Result<(), ReadError>{
+    fn parse_iri_1(&mut self, source_iri: &IRI<A>, relative_doc_iri: Option<&IRI<A>>, v:&mut Vec<IRI<A>>) -> Result<(), HornedError>{
         let (new_doc_iri, s) = resolve_iri(source_iri, relative_doc_iri);
         self.parse_content_from_iri(s, relative_doc_iri, new_doc_iri, v)
     }
@@ -87,7 +80,7 @@ impl<'a, A:ForIRI, AA:ForIndex<A>> ClosureOntologyParser<'a, A, AA> {
     /// * `v` -- Vec containing all IRIs in the import closure.
     fn parse_content_from_iri(&mut self, s: String,
                               relative_doc_iri: Option<&IRI<A>>,
-                              new_doc_iri:IRI<A>, v:&mut Vec<IRI<A>>) -> Result<(), ReadError>{
+                              new_doc_iri:IRI<A>, v:&mut Vec<IRI<A>>) -> Result<(), HornedError>{
         let mut p = parser_with_build(&mut s.as_bytes(), self.b);
         let imports = p.parse_imports().unwrap();
         p.parse_declarations()?;
@@ -110,7 +103,7 @@ impl<'a, A:ForIRI, AA:ForIndex<A>> ClosureOntologyParser<'a, A, AA> {
     }
 
     // Finish the parse for the ontology at index `i`
-    pub fn finish_parse(&mut self, iri: &IRI<A>) -> Result<(), ReadError>{
+    pub fn finish_parse(&mut self, iri: &IRI<A>) -> Result<(), HornedError>{
 
         let op_pointer: *mut HashMap<_, _> = &mut self.op;
 
@@ -148,7 +141,7 @@ impl<'a, A:ForIRI, AA:ForIndex<A>> ClosureOntologyParser<'a, A, AA> {
 
 
 // Parse the ontology at IRI, resolving any knowledge from imports necessary
-pub fn read<A:ForIRI, AA:ForIndex<A>>(iri: &IRI<A>) -> Result<(RDFOntology<A, AA>, IncompleteParse<A>), ReadError> {
+pub fn read<A:ForIRI, AA:ForIndex<A>>(iri: &IRI<A>) -> Result<(RDFOntology<A, AA>, IncompleteParse<A>), HornedError> {
     // Do parse, then full parse of first, drop the rest
     let b = Build::new();
     let mut c = ClosureOntologyParser::new(&b);
@@ -165,7 +158,7 @@ pub fn read<A:ForIRI, AA:ForIndex<A>>(iri: &IRI<A>) -> Result<(RDFOntology<A, AA
 
 
 pub fn read_closure<A:ForIRI, AA:ForIndex<A>>(b: &Build<A>, iri: &IRI<A>)
-                                              -> Result<Vec<(RDFOntology<A, AA>, IncompleteParse<A>)>, ReadError> {
+                                              -> Result<Vec<(RDFOntology<A, AA>, IncompleteParse<A>)>, HornedError> {
     // Do parse, then full parse, then result the results
     let mut c = ClosureOntologyParser::new(b);
     c.parse_iri(iri, None)?;

@@ -1,7 +1,7 @@
 //! Support for Horned command line programmes
 
 use crate::{
-    error::{underlying, CommandError, ParserError},
+    error::HornedError,
     io::{ParserOutput, ResourceType},
     model::{AnnotatedAxiom, Build, IRI},
     ontology::{
@@ -24,53 +24,49 @@ pub fn path_type(path: &Path) -> Option<ResourceType> {
     }
 }
 
-pub fn parse_path(path: &Path) -> Result<ParserOutput<Rc<str>, Rc<AnnotatedAxiom<Rc<str>>>>, CommandError> {
+pub fn parse_path(path: &Path) -> Result<ParserOutput<Rc<str>, Rc<AnnotatedAxiom<Rc<str>>>>, HornedError> {
     Ok(match path_type(path) {
         Some(ResourceType::OWX) => {
-            let file = File::open(&path).map_err(underlying)?;
+            let file = File::open(&path)?;
             let mut bufreader = BufReader::new(file);
-            super::io::owx::reader::read(&mut bufreader)
-            .map_err(underlying)?
-                .into()
+            super::io::owx::reader::read(&mut bufreader)?.into()
         },
         Some(ResourceType::RDF) => {
             let b = Build::new();
             let iri = super::resolve::pathbuf_to_file_iri(&b,&path.to_path_buf());
-            super::io::rdf::closure_reader::read(&iri)
-                .map_err(underlying)?
+            super::io::rdf::closure_reader::read(&iri)?
                 .into()
         },
         None => {
-            return Err(underlying(ParserError::FormatNotSupported {
-                path: path.into(),
-            }));
+            return Err(
+                HornedError::CommandError(format!("Cannot parse a file of this format: {:?}", path))
+            );
         }
     })
 }
 
 /// Parse but only as far as the imports, if that makes sense.
-pub fn parse_imports(path: &Path) -> Result<ParserOutput<Rc<str>, Rc<AnnotatedAxiom<Rc<str>>>>, CommandError> {
-    let file = File::open(&path).map_err(underlying)?;
+pub fn parse_imports(path: &Path) -> Result<ParserOutput<Rc<str>, Rc<AnnotatedAxiom<Rc<str>>>>, HornedError> {
+    let file = File::open(&path)?;
     let mut bufreader = BufReader::new(file);
     Ok(match path_type(path) {
-        Some(ResourceType::OWX) => super::io::owx::reader::read(&mut bufreader)
-            .map_err(underlying)?
+        Some(ResourceType::OWX) => super::io::owx::reader::read(&mut bufreader)?
             .into(),
         Some(ResourceType::RDF) => {
             let b = Build::new();
             let mut p = crate::io::rdf::reader::parser_with_build(&mut bufreader, &b);
-            p.parse_imports().map_err(underlying)?;
-            p.as_ontology_and_incomplete().map_err(underlying)?.into()
+            p.parse_imports()?;
+            p.as_ontology_and_incomplete()?.into()
         }
         None => {
-            return Err(underlying(ParserError::FormatNotSupported {
-                path: path.into(),
-            }));
+            return Err(
+                HornedError::CommandError(format!("Cannot parse a file of this format: {:?}", path))
+            )
         }
     })
 }
 
-pub fn materialize(input: &str) -> Result<Vec<IRI<Rc<str>>>, CommandError> {
+pub fn materialize(input: &str) -> Result<Vec<IRI<Rc<str>>>, HornedError> {
     let mut v = vec![];
     materialize_1(input, &mut v, true)?;
     Ok(v)
@@ -80,9 +76,9 @@ pub fn materialize_1<'a>(
     input: &str,
     done: &'a mut Vec<IRI<Rc<str>>>,
     recurse: bool,
-) -> Result<&'a mut Vec<IRI<Rc<str>>>, CommandError> {
+) -> Result<&'a mut Vec<IRI<Rc<str>>>, HornedError> {
     println!("Parsing: {}", input);
-    let amont: RcAxiomMappedOntology = parse_imports(Path::new(input)).map_err(underlying)?.into();
+    let amont: RcAxiomMappedOntology = parse_imports(Path::new(input))?.into();
     let import = amont.i().import();
 
     let b = Build::new_rc();
@@ -97,9 +93,8 @@ pub fn materialize_1<'a>(
                 let imported_data = strict_resolve_iri(&i.0);
                 done.push(i.0.clone());
                 println!("Saving to {}", local);
-                let mut file = File::create(&local).map_err(underlying)?;
-                file.write_all(&imported_data.as_bytes())
-                    .map_err(underlying)?;
+                let mut file = File::create(&local)?;
+                file.write_all(&imported_data.as_bytes())?;
             } else {
                 println!("Already Present: {}", local);
             }
