@@ -10,8 +10,8 @@
 //! `Axiom` or `AnnotatedAxiom`, or methods such as `sub_class_of`, or
 //! `object_property_domain` which iterate over `SubClassOf` or
 //! `ObjectPropertyDomain` axioms respectively.
-use super::set::SetOntology;
 use super::indexed::ForIndex;
+use super::set::SetOntology;
 use crate::model::*;
 use std::{
     cell::RefCell,
@@ -60,7 +60,7 @@ pub struct AxiomMappedIndex<A, AA> {
     pd: PhantomData<A>,
 }
 
-impl<A: ForIRI, AA:ForIndex<A>> AxiomMappedIndex<A, AA> {
+impl<A: ForIRI, AA: ForIndex<A>> AxiomMappedIndex<A, AA> {
     /// Create a new ontology.
     ///
     /// # Examples
@@ -73,9 +73,9 @@ impl<A: ForIRI, AA:ForIndex<A>> AxiomMappedIndex<A, AA> {
     /// assert_eq!(o, o2);
     /// ```
     pub fn new() -> AxiomMappedIndex<A, AA> {
-        AxiomMappedIndex{
+        AxiomMappedIndex {
             axiom: RefCell::new(BTreeMap::new()),
-            pd: Default::default()
+            pd: Default::default(),
         }
     }
 
@@ -85,10 +85,7 @@ impl<A: ForIRI, AA:ForIndex<A>> AxiomMappedIndex<A, AA> {
     /// instantiated, which means that it effects equality of the
     /// ontology. It should only be used where the intention is to
     /// update the ontology.
-    fn axioms_as_ptr(
-        &self,
-        axk: AxiomKind,
-    ) -> *mut BTreeMap<AxiomKind, BTreeSet<AA>> {
+    fn axioms_as_ptr(&self, axk: AxiomKind) -> *mut BTreeMap<AxiomKind, BTreeSet<AA>> {
         self.axiom
             .borrow_mut()
             .entry(axk)
@@ -213,7 +210,7 @@ onimpl! {AnnotationPropertyDomain, annotation_property_domain}
 onimpl! {AnnotationPropertyRange, annotation_property_range}
 
 /// An owning iterator over the annotated axioms of an `Ontology`.
-impl<A: ForIRI, AA:ForIndex<A>> IntoIterator for AxiomMappedIndex<A, AA> {
+impl<A: ForIRI, AA: ForIndex<A>> IntoIterator for AxiomMappedIndex<A, AA> {
     type Item = AnnotatedAxiom<A>;
     type IntoIter = std::vec::IntoIter<AnnotatedAxiom<A>>;
     fn into_iter(self) -> Self::IntoIter {
@@ -257,7 +254,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> Iterator for AxiomMappedIter<'a, A, AA> {
 
 impl<'a, A: ForIRI, AA: ForIndex<A>> IntoIterator for &'a AxiomMappedIndex<A, AA> {
     type Item = &'a AnnotatedAxiom<A>;
-    type IntoIter = AxiomMappedIter<'a,A, AA>;
+    type IntoIter = AxiomMappedIter<'a, A, AA>;
     fn into_iter(self) -> Self::IntoIter {
         AxiomMappedIter {
             ont: self,
@@ -267,7 +264,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> IntoIterator for &'a AxiomMappedIndex<A, AA
     }
 }
 
-impl<A: ForIRI, AA:ForIndex<A>> OntologyIndex<A, AA> for AxiomMappedIndex<A, AA> {
+impl<A: ForIRI, AA: ForIndex<A>> OntologyIndex<A, AA> for AxiomMappedIndex<A, AA> {
     fn index_insert(&mut self, ax: AA) -> bool {
         self.mut_set_for_kind(ax.borrow().kind()).insert(ax)
     }
@@ -278,12 +275,12 @@ impl<A: ForIRI, AA:ForIndex<A>> OntologyIndex<A, AA> for AxiomMappedIndex<A, AA>
 }
 
 #[derive(Default, Debug, Eq, PartialEq)]
-pub struct AxiomMappedOntology<A, AA> (OneIndexedOntology<A, AA, AxiomMappedIndex<A, AA>>);
+pub struct AxiomMappedOntology<A, AA>(OneIndexedOntology<A, AA, AxiomMappedIndex<A, AA>>);
 
 pub type RcAxiomMappedOntology = AxiomMappedOntology<Rc<str>, Rc<AnnotatedAxiom<Rc<str>>>>;
 pub type ArcAxiomMappedOntology = AxiomMappedOntology<Arc<str>, Arc<AnnotatedAxiom<Arc<str>>>>;
 
-impl<A:ForIRI, AA:ForIndex<A>> Ontology<A> for AxiomMappedOntology<A, AA> {
+impl<A: ForIRI, AA: ForIndex<A>> Ontology<A> for AxiomMappedOntology<A, AA> {
     fn id(&self) -> &OntologyID<A> {
         self.0.id()
     }
@@ -301,10 +298,11 @@ impl<A:ForIRI, AA:ForIndex<A>> Ontology<A> for AxiomMappedOntology<A, AA> {
     }
 }
 
-impl<A:ForIRI, AA:ForIndex<A>> MutableOntology<A> for AxiomMappedOntology<A, AA> {
+impl<A: ForIRI, AA: ForIndex<A>> MutableOntology<A> for AxiomMappedOntology<A, AA> {
     fn insert<IAA>(&mut self, ax: IAA) -> bool
     where
-        IAA: Into<AnnotatedAxiom<A>> {
+        IAA: Into<AnnotatedAxiom<A>>,
+    {
         self.0.insert(ax)
     }
 
@@ -313,9 +311,7 @@ impl<A:ForIRI, AA:ForIndex<A>> MutableOntology<A> for AxiomMappedOntology<A, AA>
     }
 }
 
-
-
-impl<A:ForIRI, AA:ForIndex<A>> AxiomMappedOntology<A, AA> {
+impl<A: ForIRI, AA: ForIndex<A>> AxiomMappedOntology<A, AA> {
     pub fn index(self) -> AxiomMappedIndex<A, AA> {
         self.0.index()
     }
@@ -325,11 +321,9 @@ impl<A:ForIRI, AA:ForIndex<A>> AxiomMappedOntology<A, AA> {
     }
 }
 
-impl<A: ForIRI, AA:ForIndex<A>> AxiomMappedOntology<A, AA> {
+impl<A: ForIRI, AA: ForIndex<A>> AxiomMappedOntology<A, AA> {
     pub fn new() -> AxiomMappedOntology<A, AA> {
-        AxiomMappedOntology(
-            OneIndexedOntology::new(AxiomMappedIndex::new())
-        )
+        AxiomMappedOntology(OneIndexedOntology::new(AxiomMappedIndex::new()))
     }
 }
 
@@ -381,8 +375,8 @@ impl<A: ForIRI, AA: ForIndex<A>> From<AxiomMappedOntology<A, AA>> for SetOntolog
 mod test {
     use super::AxiomMappedOntology;
     use super::RcAxiomMappedOntology;
-    use crate::ontology::set::SetOntology;
     use crate::model::*;
+    use crate::ontology::set::SetOntology;
 
     #[test]
     fn test_ontology_cons() {
@@ -409,14 +403,14 @@ mod test {
 
         std::mem::swap(so.mut_id(), &mut oid);
         assert_eq!(so.id().iri, Some(b.iri("http://www.example.com/iri")));
-        assert_eq!(so.id().viri,  Some(b.iri("http://www.example.com/viri")));
+        assert_eq!(so.id().viri, Some(b.iri("http://www.example.com/viri")));
 
         let amo: RcAxiomMappedOntology = so.into();
 
         dbg!(&amo);
 
         assert_eq!(amo.id().iri, Some(b.iri("http://www.example.com/iri")));
-        assert_eq!(amo.id().viri,  Some(b.iri("http://www.example.com/viri")))
+        assert_eq!(amo.id().viri, Some(b.iri("http://www.example.com/viri")))
     }
 
     #[test]

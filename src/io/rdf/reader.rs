@@ -2,7 +2,6 @@ use rio_api::{
     model::{BlankNode, NamedNode, Subject},
     parser::TriplesParser,
 };
-use rio_xml::RdfXmlError;
 use Term::*;
 
 use crate::error::HornedError;
@@ -32,27 +31,6 @@ use std::collections::HashMap;
 use std::io::BufRead;
 use std::io::Cursor;
 use std::rc::Rc;
-
-/*
-#[derive(Debug, Error)]
-pub enum ReadError {
-    // Use to replace bail!/format_err from failure crate. Should specialize
-    #[error("{0}")]
-    GeneralError(String),
-
-    #[error("{0}")]
-    RdfError(#[source] RdfXmlError),
-
-    #[error("{0}")]
-    IOError(#[source] std::io::Error),
-}
-
-impl From<RdfXmlError> for ReadError {
-    fn from(e: RdfXmlError) -> Self {
-        ReadError::RdfError(e)
-    }
-}
-*/
 
 type RioTerm<'a> = ::rio_api::model::Term<'a>;
 
@@ -233,7 +211,11 @@ fn vocab_lookup<A: ForIRI>() -> HashMap<&'static str, Term<A>> {
     m
 }
 
-fn to_term_nn<'a, A: ForIRI>(nn: &'a NamedNode, m: &HashMap<&str, Term<A>>, b: &Build<A>) -> Term<A> {
+fn to_term_nn<'a, A: ForIRI>(
+    nn: &'a NamedNode,
+    m: &HashMap<&str, Term<A>>,
+    b: &Build<A>,
+) -> Term<A> {
     if let Some(term) = m.get(&nn.iri) {
         return term.clone();
     }
@@ -269,7 +251,11 @@ fn to_term_lt<'a, A: ForIRI>(lt: &'a rio_api::model::Literal, b: &Build<A>) -> T
     }
 }
 
-fn to_term_nnb<'a, A: ForIRI>(nnb: &'a Subject, m: &HashMap<&str, Term<A>>, b: &Build<A>) -> Term<A> {
+fn to_term_nnb<'a, A: ForIRI>(
+    nnb: &'a Subject,
+    m: &HashMap<&str, Term<A>>,
+    b: &Build<A>,
+) -> Term<A> {
     match nnb {
         Subject::NamedNode(nn) => to_term_nn(nn, m, b),
         Subject::BlankNode(bn) => to_term_bn(bn),
@@ -293,19 +279,19 @@ macro_rules! d {
 }
 
 #[derive(Debug)]
-pub struct RDFOntology<A:ForIRI, AA:ForIndex<A>> (
-    ThreeIndexedOntology<A,
-                         AA,
-                         SetIndex<A, AA>,
-                         DeclarationMappedIndex<A, AA>,
-                         LogicallyEqualIndex<A, AA>
-                         >
+pub struct RDFOntology<A: ForIRI, AA: ForIndex<A>>(
+    ThreeIndexedOntology<
+        A,
+        AA,
+        SetIndex<A, AA>,
+        DeclarationMappedIndex<A, AA>,
+        LogicallyEqualIndex<A, AA>,
+    >,
 );
-
 
 pub type RcRDFOntology = RDFOntology<Rc<str>, Rc<AnnotatedAxiom<Rc<str>>>>;
 
-impl<A:ForIRI, AA:ForIndex<A>> Ontology<A> for RDFOntology<A, AA> {
+impl<A: ForIRI, AA: ForIndex<A>> Ontology<A> for RDFOntology<A, AA> {
     fn id(&self) -> &OntologyID<A> {
         self.0.id()
     }
@@ -391,18 +377,15 @@ pub struct OntologyParser<'a, A: ForIRI, AA: ForIndex<A>> {
     error: Result<(), HornedError>,
 }
 
-impl<'a, A: ForIRI, AA:ForIndex<A>> OntologyParser<'a, A, AA> {
+impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
     pub fn new(b: &'a Build<A>, triple: Vec<[Term<A>; 3]>) -> OntologyParser<'a, A, AA> {
         OntologyParser {
-            o:
-            RDFOntology(
-                ThreeIndexedOntology::new(
-                    SetIndex::new(),
-                    DeclarationMappedIndex::new(),
-                    LogicallyEqualIndex::new(),
-                    d!()
-                )
-            ),
+            o: RDFOntology(ThreeIndexedOntology::new(
+                SetIndex::new(),
+                DeclarationMappedIndex::new(),
+                LogicallyEqualIndex::new(),
+                d!(),
+            )),
             b,
 
             triple,
@@ -418,7 +401,10 @@ impl<'a, A: ForIRI, AA:ForIndex<A>> OntologyParser<'a, A, AA> {
         }
     }
 
-    pub fn from_bufread<'b, R: BufRead>(b: &'a Build<A>, bufread: &'b mut R) -> OntologyParser<'a, A, AA> {
+    pub fn from_bufread<'b, R: BufRead>(
+        b: &'a Build<A>,
+        bufread: &'b mut R,
+    ) -> OntologyParser<'a, A, AA> {
         let m = vocab_lookup();
         let triple_iter = rio_xml::RdfXmlParser::new(bufread, None).into_iter(|rio_triple| {
             Ok([
@@ -795,11 +781,19 @@ impl<'a, A: ForIRI, AA:ForIndex<A>> OntologyParser<'a, A, AA> {
         }
     }
 
-    fn to_sope(&mut self, t: &Term<A>, ic: &[&RDFOntology<A, AA>]) -> Option<SubObjectPropertyExpression<A>> {
+    fn to_sope(
+        &mut self,
+        t: &Term<A>,
+        ic: &[&RDFOntology<A, AA>],
+    ) -> Option<SubObjectPropertyExpression<A>> {
         Some(self.to_ope(t, ic)?.into())
     }
 
-    fn to_ope(&mut self, t: &Term<A>, ic: &[&RDFOntology<A, AA>]) -> Option<ObjectPropertyExpression<A>> {
+    fn to_ope(
+        &mut self,
+        t: &Term<A>,
+        ic: &[&RDFOntology<A, AA>],
+    ) -> Option<ObjectPropertyExpression<A>> {
         match self.find_property_kind(t, ic)? {
             PropertyExpression::ObjectPropertyExpression(ope) => Some(ope),
             _ => None,
@@ -915,7 +909,11 @@ impl<'a, A: ForIRI, AA:ForIndex<A>> OntologyParser<'a, A, AA> {
         }
     }
 
-    fn find_declaration_kind(&mut self, iri: &IRI<A>, ic: &[&RDFOntology<A, AA>]) -> Option<NamedEntityKind> {
+    fn find_declaration_kind(
+        &mut self,
+        iri: &IRI<A>,
+        ic: &[&RDFOntology<A, AA>],
+    ) -> Option<NamedEntityKind> {
         [&self.o]
             .iter()
             .chain(ic.iter())
@@ -1516,11 +1514,13 @@ impl<'a, A: ForIRI, AA:ForIndex<A>> OntologyParser<'a, A, AA> {
                         ).into()
                     }
                 }
-                [Term::Iri(s), Term::Iri(_), _] if self.o.0.id().iri.as_ref() == Some(&s) => some! {
-                    OntologyAnnotation(
-                        self.annotation(&triple)
-                    ).into()
-                },
+                [Term::Iri(s), Term::Iri(_), _] if self.o.0.id().iri.as_ref() == Some(&s) => {
+                    some! {
+                        OntologyAnnotation(
+                            self.annotation(&triple)
+                        ).into()
+                    }
+                }
 
                 [Term::Iri(sub), Term::Iri(pred), t @ Term::Literal(_)] => some! {
                     match (self.find_declaration_kind(sub, ic)?,
@@ -1586,7 +1586,9 @@ impl<'a, A: ForIRI, AA:ForIndex<A>> OntologyParser<'a, A, AA> {
                     firi(self, &triple, iri)
                 }
                 [Term::Iri(iri), Term::OWL(VOWL::VersionInfo), _] => firi(self, &triple, iri),
-                [Term::Iri(iri), Term::Iri(ap), _] if (&self.o.0).j().is_annotation_property(&ap) => {
+                [Term::Iri(iri), Term::Iri(ap), _]
+                    if (&self.o.0).j().is_annotation_property(&ap) =>
+                {
                     firi(self, &triple, iri)
                 }
                 _ => {
@@ -1821,22 +1823,29 @@ impl<'a, A: ForIRI, AA:ForIndex<A>> OntologyParser<'a, A, AA> {
     }
 }
 
-pub fn parser_with_build<'a, 'b, A: ForIRI, AA:ForIndex<A>, R: BufRead>(
+pub fn parser_with_build<'a, 'b, A: ForIRI, AA: ForIndex<A>, R: BufRead>(
     bufread: &'a mut R,
     build: &'b Build<A>,
 ) -> OntologyParser<'b, A, AA> {
     OntologyParser::from_bufread(build, bufread)
 }
 
-pub fn read_with_build<A: ForIRI, AA:ForIndex<A>, R: BufRead>(
+pub fn read_with_build<A: ForIRI, AA: ForIndex<A>, R: BufRead>(
     bufread: &mut R,
     build: &Build<A>,
 ) -> Result<(RDFOntology<A, AA>, IncompleteParse<A>), HornedError> {
     parser_with_build(bufread, build).parse()
 }
 
-pub fn read<R: BufRead>(bufread: &mut R) -> Result<(RDFOntology<Rc<str>, Rc<AnnotatedAxiom<Rc<str>>>>,
-                                                    IncompleteParse<Rc<str>>), HornedError> {
+pub fn read<R: BufRead>(
+    bufread: &mut R,
+) -> Result<
+    (
+        RDFOntology<Rc<str>, Rc<AnnotatedAxiom<Rc<str>>>>,
+        IncompleteParse<Rc<str>>,
+    ),
+    HornedError,
+> {
     let b = Build::new_rc();
     read_with_build(bufread, &b)
 }
@@ -2147,7 +2156,8 @@ mod test {
     #[test]
     fn import_with_partial_parse() {
         let b = Build::new_rc();
-        let mut p:OntologyParser<_, Rc<AnnotatedAxiom<Rc<str>>>> = parser_with_build(&mut slurp_rdfont("import").as_bytes(), &b);
+        let mut p: OntologyParser<_, Rc<AnnotatedAxiom<Rc<str>>>> =
+            parser_with_build(&mut slurp_rdfont("import").as_bytes(), &b);
         let _ = p.parse_imports();
 
         let rdfont = p.as_ontology().unwrap();
@@ -2159,7 +2169,8 @@ mod test {
     #[test]
     fn declaration_with_partial_parse() {
         let b = Build::new_rc();
-        let mut p:OntologyParser<_, Rc<AnnotatedAxiom<Rc<str>>>> = parser_with_build(&mut slurp_rdfont("class").as_bytes(), &b);
+        let mut p: OntologyParser<_, Rc<AnnotatedAxiom<Rc<str>>>> =
+            parser_with_build(&mut slurp_rdfont("class").as_bytes(), &b);
         let _ = p.parse_declarations();
 
         let rdfont = p.as_ontology().unwrap();
@@ -2431,7 +2442,8 @@ mod test {
     #[test]
     fn import_property_in_bits() -> Result<(), HornedError> {
         let b = Build::new_rc();
-        let p:OntologyParser<_, Rc<AnnotatedAxiom<Rc<str>>>> = parser_with_build(&mut slurp_rdfont("other-property").as_bytes(), &b);
+        let p: OntologyParser<_, Rc<AnnotatedAxiom<Rc<str>>>> =
+            parser_with_build(&mut slurp_rdfont("other-property").as_bytes(), &b);
         let (family_other, incomplete) = p.parse()?;
         assert!(incomplete.is_complete());
 

@@ -1,6 +1,6 @@
 use crate::{
-    error::HornedError,
     error::invalid,
+    error::HornedError,
     model::*,
     ontology::axiom_mapped::AxiomMappedOntology,
     vocab::{is_thing, Vocab, WithIRI, OWL, RDF, RDFS, XSD},
@@ -35,7 +35,10 @@ impl From<std::io::Error> for WriteError {
 }
 */
 
-pub fn write<A: ForIRI, AA:ForIndex<A>, W: Write>(write: &mut W, ont: &AxiomMappedOntology<A, AA>) -> Result<(), HornedError> {
+pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
+    write: &mut W,
+    ont: &AxiomMappedOntology<A, AA>,
+) -> Result<(), HornedError> {
     // Entirely unsatisfying to set this randomly here, but we can't
     // access ns our parser yet
     let mut p = indexmap::IndexMap::new();
@@ -47,7 +50,7 @@ pub fn write<A: ForIRI, AA:ForIndex<A>, W: Write>(write: &mut W, ont: &AxiomMapp
         "http://www.w3.org/XML/1998/namespace".to_string(),
         "xml".to_string(),
     );
-    let mut f: PrettyRdfXmlFormatter<_,_> =
+    let mut f: PrettyRdfXmlFormatter<_, _> =
         PrettyRdfXmlFormatter::new(write, ChunkedRdfXmlFormatterConfig::all().prefix(p))?;
     let mut bng = NodeGenerator::default();
     ont.render(&mut f, &mut bng)?;
@@ -60,22 +63,23 @@ pub fn write<A: ForIRI, AA:ForIndex<A>, W: Write>(write: &mut W, ont: &AxiomMapp
     Ok(())
 }
 
-struct NodeGenerator<A:ForIRI> {
+struct NodeGenerator<A: ForIRI> {
     i: u64,
     b: HashSet<A>,
     this_bn: Option<PSubject<A>>,
 }
 
-impl<A:ForIRI> Default for NodeGenerator<A> {
+impl<A: ForIRI> Default for NodeGenerator<A> {
     fn default() -> Self {
-        NodeGenerator{i:0, b:HashSet::new(), this_bn:None}
+        NodeGenerator {
+            i: 0,
+            b: HashSet::new(),
+            this_bn: None,
+        }
     }
 }
 
-
-
-impl<A:ForIRI> NodeGenerator<A> {
-
+impl<A: ForIRI> NodeGenerator<A> {
     /// Generate a NamedNode from a given Vocab element.
     pub fn nn<V: Into<Vocab>>(&mut self, v: V) -> PNamedNode<A> {
         PNamedNode::new(self.cache_rc(v))
@@ -88,7 +92,7 @@ impl<A:ForIRI> NodeGenerator<A> {
             return rc.clone();
         }
 
-        let rc:A = (*voc).to_string().into();
+        let rc: A = (*voc).to_string().into();
         self.b.insert(rc.clone());
         rc
     }
@@ -109,7 +113,7 @@ impl<A:ForIRI> NodeGenerator<A> {
     }
 }
 
-impl<A:ForIRI> From<&IRI<A>> for PTerm<A> {
+impl<A: ForIRI> From<&IRI<A>> for PTerm<A> {
     fn from(iri: &IRI<A>) -> Self {
         PNamedNode::new(iri.underlying()).into()
     }
@@ -184,7 +188,7 @@ impl<A: ForIRI> From<&Individual<A>> for PSubject<A> {
     }
 }
 
-trait Render<A:ForIRI, R> {
+trait Render<A: ForIRI, R> {
     fn render<W: Write>(
         &self,
         f: &mut PrettyRdfXmlFormatter<A, W>,
@@ -198,13 +202,13 @@ enum Annotatable<A: ForIRI> {
     //Blank(PBlankNode<A>)
 }
 
-impl<A:ForIRI> From<PTriple<A>> for Annotatable<A> {
+impl<A: ForIRI> From<PTriple<A>> for Annotatable<A> {
     fn from(t: PTriple<A>) -> Self {
         Self::Main(t)
     }
 }
 
-impl<A:ForIRI> From<Vec<PTriple<A>>> for Annotatable<A> {
+impl<A: ForIRI> From<Vec<PTriple<A>>> for Annotatable<A> {
     fn from(t: Vec<PTriple<A>>) -> Self {
         Self::Multiple(t)
     }
@@ -342,13 +346,11 @@ where
 //     }
 // }
 
-
-fn render_vec_subject<A:ForIRI, T: Render<A, PSubject<A>>, W:Write>(
-    v:&Vec<T>,
+fn render_vec_subject<A: ForIRI, T: Render<A, PSubject<A>>, W: Write>(
+    v: &Vec<T>,
     f: &mut PrettyRdfXmlFormatter<A, W>,
-    ng: &mut NodeGenerator<A>
-)    -> Result<PTerm<A>, HornedError>
-{
+    ng: &mut NodeGenerator<A>,
+) -> Result<PTerm<A>, HornedError> {
     let mut rest: Option<PTerm<A>> = None;
     for i in v.iter().rev() {
         let bn = &ng.bn();
@@ -415,30 +417,15 @@ impl<A: ForIRI, AA: ForIndex<A>> Render<A, ()> for &AxiomMappedOntology<A, AA> {
         ng: &mut NodeGenerator<A>,
     ) -> Result<(), HornedError> {
         if let Some(iri) = &self.id().iri {
-            triples!(
-                f,
-                iri,
-                ng.nn(RDF::Type),
-                ng.nn(OWL::Ontology)
-            );
+            triples!(f, iri, ng.nn(RDF::Type), ng.nn(OWL::Ontology));
 
             if let Some(viri) = &self.id().viri {
-                triples!(
-                    f,
-                    iri,
-                    ng.nn(OWL::VersionIRI),
-                    viri
-                );
+                triples!(f, iri, ng.nn(OWL::VersionIRI), viri);
             }
 
             let imp = self.i().import();
             for i in imp {
-                triples!(
-                    f,
-                    iri,
-                    ng.nn(OWL::Imports),
-                    &i.0
-                );
+                triples!(f, iri, ng.nn(OWL::Imports), &i.0);
             }
             let oa = self.i().ontology_annotation();
             ng.keep_this_bn(iri.into());
@@ -866,7 +853,7 @@ fn members<A: ForIRI, R: Debug + Render<A, PSubject<A>>, W: Write>(
     ng: &mut NodeGenerator<A>,
     ty_two: OWL,
     ty_n: OWL,
-    members: &Vec<R>, 
+    members: &Vec<R>,
 ) -> Result<Vec<PTriple<A>>, HornedError> {
     // DifferentIndividuals( a1 a2 ) T(a1) owl:differentFrom T(a2) .
     // DifferentIndividuals( a1 ... an ), n > 2 _:x rdf:type owl:AllDifferent .
@@ -1565,7 +1552,8 @@ mod test {
     // use std::fs::File;
     use std::{
         fs::File,
-        io::{BufRead, BufReader, BufWriter}, rc::Rc,
+        io::{BufRead, BufReader, BufWriter},
+        rc::Rc,
     };
     // use std::io::BufReader;
     // use std::io::BufWriter;
@@ -1607,7 +1595,8 @@ mod test {
         let file = File::create(&temp_file).ok().unwrap();
         let mut buf_writer = BufWriter::new(&file);
 
-        let amo: AxiomMappedOntology<Rc<str>, Rc<AnnotatedAxiom<Rc<str>>>> = ont_orig.clone().into();
+        let amo: AxiomMappedOntology<Rc<str>, Rc<AnnotatedAxiom<Rc<str>>>> =
+            ont_orig.clone().into();
         write(&mut buf_writer, &amo).ok().unwrap();
         buf_writer.flush().ok();
         let file = File::open(&temp_file).ok().unwrap();

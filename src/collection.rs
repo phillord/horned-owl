@@ -1,4 +1,4 @@
-use crate::model::{Ontology, IRI, ForIRI};
+use crate::model::{ForIRI, Ontology, IRI};
 
 use std::collections::HashMap;
 

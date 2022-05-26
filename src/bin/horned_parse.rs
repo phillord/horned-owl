@@ -30,13 +30,12 @@ pub(crate) fn app(name: &str) -> App<'static, 'static> {
 }
 
 pub(crate) fn matcher(matches: &ArgMatches) -> Result<(), HornedError> {
-    let input = matches
-        .value_of("INPUT")
-        .ok_or(HornedError::CommandError("Command requires an INPUT parameter".to_string()))?;
+    let input = matches.value_of("INPUT").ok_or(HornedError::CommandError(
+        "Command requires an INPUT parameter".to_string(),
+    ))?;
 
     parse_path(Path::new(input))?;
 
     println!("Parse Complete: {:?}", input);
     Ok(())
 }
-

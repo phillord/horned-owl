@@ -24,10 +24,9 @@ use ureq;
 /// let path_buf = file_iri_to_path(&doc_iri);
 /// assert_eq!(path_buf.to_str().unwrap(), "blah/and.owl");
 /// ```
-pub fn file_iri_to_path<A:ForIRI>(iri: &IRI<A>) -> PathBuf {
+pub fn file_iri_to_path<A: ForIRI>(iri: &IRI<A>) -> PathBuf {
     Path::new(&*iri.split_at(7).1).into()
 }
-
 
 /// Return an `IRI` for the given `PathBuf`
 ///
@@ -44,7 +43,7 @@ pub fn file_iri_to_path<A:ForIRI>(iri: &IRI<A>) -> PathBuf {
 /// let source_iri = pathbuf_to_file_iri(&b, &path_buf);
 /// assert_eq!(source_iri.as_ref(), "file://blah/and.owl");
 /// ```
-pub fn pathbuf_to_file_iri<A:ForIRI>(b:&Build<A>, pb: &PathBuf) -> IRI<A> {
+pub fn pathbuf_to_file_iri<A: ForIRI>(b: &Build<A>, pb: &PathBuf) -> IRI<A> {
     b.iri(format!("file://{}", pb.as_path().to_str().unwrap()))
 }
 
@@ -60,7 +59,7 @@ pub fn pathbuf_to_file_iri<A:ForIRI>(b:&Build<A>, pb: &PathBuf) -> IRI<A> {
 
 /// assert!(is_file_iri(&doc_iri))
 /// ```
-pub fn is_file_iri<A:ForIRI>(iri: &IRI<A>) -> bool {
+pub fn is_file_iri<A: ForIRI>(iri: &IRI<A>) -> bool {
     (*iri).starts_with("file:/")
 }
 
@@ -94,25 +93,23 @@ pub fn localize_iri<A: ForIRI>(iri: &IRI<A>, doc_iri: &IRI<A>) -> IRI<A> {
 // Return the ontology as Vec<u8> from `iri` unless we think that it
 // is local to doc_iri
 pub fn resolve_iri<A: ForIRI>(iri: &IRI<A>, doc_iri: Option<&IRI<A>>) -> (IRI<A>, String) {
-    let local =
-        if let Some(doc_iri) = doc_iri {
-            localize_iri(iri, doc_iri)
-        } else {
-            iri.clone()
-        };
+    let local = if let Some(doc_iri) = doc_iri {
+        localize_iri(iri, doc_iri)
+    } else {
+        iri.clone()
+    };
 
     if is_file_iri(&local) {
         let mut path = file_iri_to_path(&local);
         if path.as_path().exists() {
-            return (local, ::std::fs::read_to_string(path).unwrap())
+            return (local, ::std::fs::read_to_string(path).unwrap());
         }
-
 
         if let Some(doc_iri) = doc_iri {
             let doc_ext = doc_iri.split_once(".").unwrap();
             path.set_extension(doc_ext.1);
             if path.exists() {
-                return (local, ::std::fs::read_to_string(path).unwrap())
+                return (local, ::std::fs::read_to_string(path).unwrap());
             }
         }
         todo!("resolve_iri doesn't have error handlign");

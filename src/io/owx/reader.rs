@@ -56,7 +56,7 @@ pub enum ReadError {
 }
 */
 
-struct Read<'a, A:ForIRI, R>
+struct Read<'a, A: ForIRI, R>
 where
     R: BufRead,
 {
@@ -67,7 +67,9 @@ where
     ns_buf: Vec<u8>,
 }
 
-pub fn read<R: BufRead>(bufread: &mut R) -> Result<(SetOntology<Rc<str>>, PrefixMapping), HornedError> {
+pub fn read<R: BufRead>(
+    bufread: &mut R,
+) -> Result<(SetOntology<Rc<str>>, PrefixMapping), HornedError> {
     let b = Build::new();
     read_with_build(bufread, &b)
 }
@@ -150,7 +152,9 @@ pub fn read_with_build<A: ForIRI, R: BufRead>(
 /// non-lexical lifetimes appears, it should be possible to make
 /// this a straight alias for `read_namespaced_event`, and still
 /// have it all work.
-fn read_event<A: ForIRI, R: BufRead>(read: &mut Read<A, R>) -> Result<(Vec<u8>, Event<'static>), HornedError> {
+fn read_event<A: ForIRI, R: BufRead>(
+    read: &mut Read<A, R>,
+) -> Result<(Vec<u8>, Event<'static>), HornedError> {
     let r = read
         .reader
         .read_namespaced_event(&mut read.buf, &mut read.ns_buf);
@@ -260,17 +264,24 @@ fn read_a_iri_attr<'a, A: ForIRI, R: BufRead>(
                     // or a curie
                     x
                 )
-            })
+            }),
     )
 }
 
-fn decode_tag<A: ForIRI, R: BufRead>(tag: &[u8], r: &mut Read<A, R>) -> Result<String, HornedError> {
+fn decode_tag<A: ForIRI, R: BufRead>(
+    tag: &[u8],
+    r: &mut Read<A, R>,
+) -> Result<String, HornedError> {
     Ok(r.reader.decode(tag)?.to_string())
 }
 
-fn error_missing_end_tag<A: ForIRI, R: BufRead>(tag: &[u8], r: &mut Read<A, R>, pos: usize) -> HornedError {
+fn error_missing_end_tag<A: ForIRI, R: BufRead>(
+    tag: &[u8],
+    r: &mut Read<A, R>,
+    pos: usize,
+) -> HornedError {
     match decode_tag(tag, r) {
-        Ok(tag) => invalid!{"Missing End Tag: expected {tag} after {pos}"},
+        Ok(tag) => invalid! {"Missing End Tag: expected {tag} after {pos}"},
         Err(e) => e,
     }
 }
@@ -288,20 +299,18 @@ fn error_missing_attribute<A: ForIRI, AT: Into<String>, R: BufRead>(
 
 fn error_unexpected_tag<A: ForIRI, R: BufRead>(tag: &[u8], r: &mut Read<A, R>) -> HornedError {
     match decode_tag(tag, r) {
-        Ok(tag) =>
-            invalid! {
-                "Unexpected tag: found {tag} at {}", r.reader.buffer_position()
-            },
+        Ok(tag) => invalid! {
+            "Unexpected tag: found {tag} at {}", r.reader.buffer_position()
+        },
         Err(e) => e,
     }
 }
 
 fn error_unexpected_end_tag<A: ForIRI, R: BufRead>(tag: &[u8], r: &mut Read<A, R>) -> HornedError {
     match decode_tag(tag, r) {
-        Ok(tag) =>
-            invalid! {
-                "Unexpected end tag: expected {tag} at {}", r.reader.buffer_position()
-            },
+        Ok(tag) => invalid! {
+            "Unexpected end tag: expected {tag} at {}", r.reader.buffer_position()
+        },
         Err(e) => e,
     }
 }
@@ -312,7 +321,7 @@ fn error_unknown_entity<A: ForIRI, AA: Into<String>, R: BufRead>(
     r: &mut Read<A, R>,
 ) -> HornedError {
     match decode_tag(found, r) {
-        Ok(found) => invalid!{
+        Ok(found) => invalid! {
             "Unknown Entity: expected kind of {}, found {found} at {}",
             kind.into(),
             r.reader.buffer_position()
@@ -323,7 +332,7 @@ fn error_unknown_entity<A: ForIRI, AA: Into<String>, R: BufRead>(
 
 fn error_missing_element<A: ForIRI, R: BufRead>(tag: &[u8], r: &mut Read<A, R>) -> HornedError {
     match decode_tag(tag, r) {
-        Ok(tag) => invalid!{
+        Ok(tag) => invalid! {
             "Missing Element: expected {tag} at {}",
                 r.reader.buffer_position()
         },
@@ -382,7 +391,10 @@ where
     return Err(error_missing_element(b"IRI", r));
 }
 
-fn from_start<A:ForIRI, R: BufRead, T: FromStart<A>>(r: &mut Read<A, R>, e: &BytesStart) -> Result<T, HornedError> {
+fn from_start<A: ForIRI, R: BufRead, T: FromStart<A>>(
+    r: &mut Read<A, R>,
+    e: &BytesStart,
+) -> Result<T, HornedError> {
     T::from_start(r, e)
 }
 
@@ -653,9 +665,9 @@ fn object_cardinality_restriction<A: ForIRI, R: BufRead>(
     let mut vce: Vec<ClassExpression<_>> = till_end(r, end_tag)?;
 
     Ok((
-        n.parse::<u32>().map_err(|s|
-                                 HornedError::ValidityError("Failed to parse int".to_string(), Some(s.into()))
-        )?,
+        n.parse::<u32>().map_err(|s| {
+            HornedError::ValidityError("Failed to parse int".to_string(), Some(s.into()))
+        })?,
         ope,
         Box::new(match vce.len() {
             0 => r.build.class(OWL::Thing.iri_str()).into(),
@@ -677,9 +689,9 @@ fn data_cardinality_restriction<A: ForIRI, R: BufRead>(
     let mut vdr: Vec<DataRange<_>> = till_end(r, end_tag)?;
 
     Ok((
-        n.parse::<u32>().map_err(|s|
-                                 HornedError::ValidityError("Failed to parse int".to_string(), Some(s.into()))
-        )?,
+        n.parse::<u32>().map_err(|s| {
+            HornedError::ValidityError("Failed to parse int".to_string(), Some(s.into()))
+        })?,
         dp,
         match vdr.len() {
             0 => r.build.datatype(OWL2Datatype::RDFSLiteral.iri_str()).into(),
@@ -921,14 +933,10 @@ impl<A: ForIRI> FromStart<A> for AnonymousIndividual<A> {
     fn from_start<R: BufRead>(
         r: &mut Read<A, R>,
         e: &BytesStart,
-    ) -> Result<AnonymousIndividual<A>, HornedError>
-        {
-        let ai:AnonymousIndividual<_> =
-                r.build.anon(
-                    attrib_value(r, e, b"nodeID")?.ok_or(
-                        error_missing_attribute("nodeID Expected", r)
-                    )?
-                );
+    ) -> Result<AnonymousIndividual<A>, HornedError> {
+        let ai: AnonymousIndividual<_> = r.build.anon(
+            attrib_value(r, e, b"nodeID")?.ok_or(error_missing_attribute("nodeID Expected", r))?,
+        );
         Ok(ai)
     }
 }
@@ -1092,13 +1100,19 @@ trait FromXML<A: ForIRI>: Sized {
         s
     }
 
-    fn from_xml_nc<R: BufRead>(newread: &mut Read<A, R>, end_tag: &[u8]) -> Result<Self, HornedError>;
+    fn from_xml_nc<R: BufRead>(
+        newread: &mut Read<A, R>,
+        end_tag: &[u8],
+    ) -> Result<Self, HornedError>;
 }
 
 macro_rules! from_xml {
     ($type:ident, $r:ident, $end:ident, $body:tt) => {
         impl<A: ForIRI> FromXML<A> for $type<A> {
-            fn from_xml_nc<R: BufRead>($r: &mut Read<A, R>, $end: &[u8]) -> Result<$type<A>, HornedError> {
+            fn from_xml_nc<R: BufRead>(
+                $r: &mut Read<A, R>,
+                $end: &[u8],
+            ) -> Result<$type<A>, HornedError> {
                 $body
             }
         }
@@ -1218,10 +1232,12 @@ pub mod test {
     use crate::ontology::axiom_mapped::AxiomMappedOntology;
     use std::{collections::HashMap, rc::Rc};
 
-    pub fn read_ok<R: BufRead>(bufread: &mut R) -> (AxiomMappedOntology
-                                                    <Rc<str>,
-                                                     Rc<AnnotatedAxiom<Rc<str>>>>,
-                                                    PrefixMapping) {
+    pub fn read_ok<R: BufRead>(
+        bufread: &mut R,
+    ) -> (
+        AxiomMappedOntology<Rc<str>, Rc<AnnotatedAxiom<Rc<str>>>>,
+        PrefixMapping,
+    ) {
         let r = read(bufread);
         assert!(r.is_ok(), "Expected ontology, got failure:{:?}", r.err());
         let (o, m) = r.ok().unwrap();

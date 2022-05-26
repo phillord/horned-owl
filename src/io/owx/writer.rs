@@ -3,8 +3,8 @@ use curie::PrefixMapping;
 use crate::error::HornedError;
 use crate::model::Kinded;
 use crate::model::*;
-use crate::vocab::Namespace::*;
 use crate::ontology::indexed::ForIndex;
+use crate::vocab::Namespace::*;
 use crate::{ontology::axiom_mapped::AxiomMappedOntology, vocab::WithIRI};
 
 use quick_xml::events::BytesDecl;
@@ -233,7 +233,7 @@ macro_rules! content0 {
     };
 }
 
-fn render_ont<A: ForIRI, AA:ForIndex<A>, W>(
+fn render_ont<A: ForIRI, AA: ForIndex<A>, W>(
     o: &AxiomMappedOntology<A, AA>,
     w: &mut Writer<W>,
     m: &PrefixMapping,
@@ -326,9 +326,9 @@ impl<'a, A: Render<'a, W>, B: Render<'a, W>, C: Render<'a, W>, W: StdWrite> Rend
     }
 }
 
-impl<'a, W:StdWrite> Render<'a, W> for PrefixMapping {
-    fn render(&self, w:&mut Writer<W>, _: &'a PrefixMapping) -> Result<(), HornedError>
-    {    for pre in self.mappings() {
+impl<'a, W: StdWrite> Render<'a, W> for PrefixMapping {
+    fn render(&self, w: &mut Writer<W>, _: &'a PrefixMapping) -> Result<(), HornedError> {
+        for pre in self.mappings() {
             let mut prefix = BytesStart::owned_name("Prefix");
             prefix.push_attribute(("name", &pre.0[..]));
             prefix.push_attribute(("IRI", &pre.1[..]));
@@ -339,9 +339,8 @@ impl<'a, W:StdWrite> Render<'a, W> for PrefixMapping {
     }
 }
 
-impl<'a, W:StdWrite> Render<'a, W> for String {
-    fn render(&self, w:&mut Writer<W>, _: &'a PrefixMapping) -> Result<(), HornedError>
-    {
+impl<'a, W: StdWrite> Render<'a, W> for String {
+    fn render(&self, w: &mut Writer<W>, _: &'a PrefixMapping) -> Result<(), HornedError> {
         w.write_event(Event::Text(BytesText::from_plain_str(&self[..])))?;
         Ok(())
     }
@@ -880,15 +879,14 @@ mod test {
 
     use std::collections::HashMap;
 
+    use crate::model::Ontology;
+    use crate::ontology::axiom_mapped::RcAxiomMappedOntology;
     use std::fs::File;
     use std::io::BufRead;
     use std::io::BufReader;
     use std::io::BufWriter;
-    use crate::ontology::axiom_mapped::RcAxiomMappedOntology;
-    use crate::model::Ontology;
 
-    fn read_ok<R: BufRead>(bufread: &mut R)
-                           -> (RcAxiomMappedOntology, PrefixMapping) {
+    fn read_ok<R: BufRead>(bufread: &mut R) -> (RcAxiomMappedOntology, PrefixMapping) {
         let r = read(bufread);
         assert!(r.is_ok(), "Expected ontology, got failure:{:?}", r.err());
         let (o, m) = r.ok().unwrap();

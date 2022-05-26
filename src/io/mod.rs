@@ -5,9 +5,12 @@ pub mod rdf;
 
 use curie::PrefixMapping;
 
-use crate::{ontology::{axiom_mapped::AxiomMappedOntology, set::SetOntology}, model::ForIRI};
-use crate::ontology::indexed::ForIndex;
 use self::rdf::reader::{IncompleteParse, RDFOntology};
+use crate::ontology::indexed::ForIndex;
+use crate::{
+    model::ForIRI,
+    ontology::{axiom_mapped::AxiomMappedOntology, set::SetOntology},
+};
 
 pub enum ResourceType {
     OWX,
@@ -20,7 +23,13 @@ pub enum ParserOutput<A: ForIRI, AA: ForIndex<A>> {
 }
 
 impl<A: ForIRI, AA: ForIndex<A>> ParserOutput<A, AA> {
-    pub fn decompose(self) -> (SetOntology<A>, Option<PrefixMapping>, Option<IncompleteParse<A>>) {
+    pub fn decompose(
+        self,
+    ) -> (
+        SetOntology<A>,
+        Option<PrefixMapping>,
+        Option<IncompleteParse<A>>,
+    ) {
         match self {
             ParserOutput::OWXParser(o, m) => (o, Some(m), None),
             ParserOutput::RDFParser(o, i) => (o.into(), None, Some(i)),
@@ -34,7 +43,9 @@ impl<A: ForIRI, AA: ForIndex<A>> From<(SetOntology<A>, PrefixMapping)> for Parse
     }
 }
 
-impl<A: ForIRI, AA: ForIndex<A>> From<(RDFOntology<A, AA>, IncompleteParse<A>)> for ParserOutput<A, AA> {
+impl<A: ForIRI, AA: ForIndex<A>> From<(RDFOntology<A, AA>, IncompleteParse<A>)>
+    for ParserOutput<A, AA>
+{
     fn from(rop: (RDFOntology<A, AA>, IncompleteParse<A>)) -> ParserOutput<A, AA> {
         ParserOutput::RDFParser(rop.0, rop.1)
     }
@@ -49,7 +60,7 @@ impl<A: ForIRI, AA: ForIndex<A>> From<ParserOutput<A, AA>> for SetOntology<A> {
     }
 }
 
-impl<A: ForIRI, AA:ForIndex<A>> From<ParserOutput<A, AA>> for AxiomMappedOntology<A, AA> {
+impl<A: ForIRI, AA: ForIndex<A>> From<ParserOutput<A, AA>> for AxiomMappedOntology<A, AA> {
     fn from(p: ParserOutput<A, AA>) -> AxiomMappedOntology<A, AA> {
         match p {
             ParserOutput::OWXParser(so, _) => so.into(),

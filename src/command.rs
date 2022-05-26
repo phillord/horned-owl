@@ -4,16 +4,15 @@ use crate::{
     error::HornedError,
     io::{ParserOutput, ResourceType},
     model::{AnnotatedAxiom, Build, IRI},
-    ontology::{
-        axiom_mapped::RcAxiomMappedOntology,
-    },
+    ontology::axiom_mapped::RcAxiomMappedOntology,
     resolve::{localize_iri, strict_resolve_iri},
 };
 
 use std::{
     fs::File,
     io::{BufReader, Write},
-    path::Path, rc::Rc,
+    path::Path,
+    rc::Rc,
 };
 
 pub fn path_type(path: &Path) -> Option<ResourceType> {
@@ -24,34 +23,37 @@ pub fn path_type(path: &Path) -> Option<ResourceType> {
     }
 }
 
-pub fn parse_path(path: &Path) -> Result<ParserOutput<Rc<str>, Rc<AnnotatedAxiom<Rc<str>>>>, HornedError> {
+pub fn parse_path(
+    path: &Path,
+) -> Result<ParserOutput<Rc<str>, Rc<AnnotatedAxiom<Rc<str>>>>, HornedError> {
     Ok(match path_type(path) {
         Some(ResourceType::OWX) => {
             let file = File::open(&path)?;
             let mut bufreader = BufReader::new(file);
             super::io::owx::reader::read(&mut bufreader)?.into()
-        },
+        }
         Some(ResourceType::RDF) => {
             let b = Build::new();
-            let iri = super::resolve::pathbuf_to_file_iri(&b,&path.to_path_buf());
-            super::io::rdf::closure_reader::read(&iri)?
-                .into()
-        },
+            let iri = super::resolve::pathbuf_to_file_iri(&b, &path.to_path_buf());
+            super::io::rdf::closure_reader::read(&iri)?.into()
+        }
         None => {
-            return Err(
-                HornedError::CommandError(format!("Cannot parse a file of this format: {:?}", path))
-            );
+            return Err(HornedError::CommandError(format!(
+                "Cannot parse a file of this format: {:?}",
+                path
+            )));
         }
     })
 }
 
 /// Parse but only as far as the imports, if that makes sense.
-pub fn parse_imports(path: &Path) -> Result<ParserOutput<Rc<str>, Rc<AnnotatedAxiom<Rc<str>>>>, HornedError> {
+pub fn parse_imports(
+    path: &Path,
+) -> Result<ParserOutput<Rc<str>, Rc<AnnotatedAxiom<Rc<str>>>>, HornedError> {
     let file = File::open(&path)?;
     let mut bufreader = BufReader::new(file);
     Ok(match path_type(path) {
-        Some(ResourceType::OWX) => super::io::owx::reader::read(&mut bufreader)?
-            .into(),
+        Some(ResourceType::OWX) => super::io::owx::reader::read(&mut bufreader)?.into(),
         Some(ResourceType::RDF) => {
             let b = Build::new();
             let mut p = crate::io::rdf::reader::parser_with_build(&mut bufreader, &b);
@@ -59,9 +61,10 @@ pub fn parse_imports(path: &Path) -> Result<ParserOutput<Rc<str>, Rc<AnnotatedAx
             p.as_ontology_and_incomplete()?.into()
         }
         None => {
-            return Err(
-                HornedError::CommandError(format!("Cannot parse a file of this format: {:?}", path))
-            )
+            return Err(HornedError::CommandError(format!(
+                "Cannot parse a file of this format: {:?}",
+                path
+            )))
         }
     })
 }
@@ -165,10 +168,7 @@ pub mod naming {
 
 pub mod summary {
 
-    use crate::{
-        model::AxiomKind,
-        ontology::axiom_mapped::RcAxiomMappedOntology,
-    };
+    use crate::{model::AxiomKind, ontology::axiom_mapped::RcAxiomMappedOntology};
     use indexmap::map::IndexMap;
 
     #[derive(Debug)]

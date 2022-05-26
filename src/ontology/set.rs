@@ -10,23 +10,19 @@ use std::marker::PhantomData;
 /// overhead implementation of an ontology. It provides rapid testing
 /// of whether an equivalent axiom exists, and is iterable.
 #[derive(Debug, Eq, PartialEq)]
-pub struct SetOntology<A:ForIRI> (
-    OneIndexedOntology<A, AnnotatedAxiom<A>, SetIndex<A, AnnotatedAxiom<A>>>
+pub struct SetOntology<A: ForIRI>(
+    OneIndexedOntology<A, AnnotatedAxiom<A>, SetIndex<A, AnnotatedAxiom<A>>>,
 );
 
-impl<A:ForIRI> Clone for SetOntology<A> {
+impl<A: ForIRI> Clone for SetOntology<A> {
     fn clone(&self) -> Self {
-        SetOntology(
-            self.0.clone()
-        )
+        SetOntology(self.0.clone())
     }
 }
 
-impl<A:ForIRI> Default for SetOntology<A> {
+impl<A: ForIRI> Default for SetOntology<A> {
     fn default() -> Self {
-        SetOntology(
-            OneIndexedOntology::new(SetIndex::new())
-        )
+        SetOntology(OneIndexedOntology::new(SetIndex::new()))
     }
 }
 
@@ -48,14 +44,10 @@ impl<A: ForIRI> SetOntology<A> {
     /// assert_eq!(o, o2);
     /// ```
     pub fn new() -> SetOntology<A> {
-        SetOntology (
-            OneIndexedOntology::new(
-                SetIndex::new()
-            )
-        )
+        SetOntology(OneIndexedOntology::new(SetIndex::new()))
     }
 
-    pub fn from_index<AA: ForIndex<A>>(oid: OntologyID<A>, si:SetIndex<A, AA>) -> SetOntology<A>{
+    pub fn from_index<AA: ForIndex<A>>(oid: OntologyID<A>, si: SetIndex<A, AA>) -> SetOntology<A> {
         (oid, si.into_iter().map(|s| s.unwrap())).into()
     }
 
@@ -151,13 +143,10 @@ impl<A: ForIRI> MutableOntology<A> for SetOntology<A> {
 
 impl<A: ForIRI> FromIterator<AnnotatedAxiom<A>> for SetOntology<A> {
     fn from_iter<I: IntoIterator<Item = AnnotatedAxiom<A>>>(iter: I) -> Self {
-        SetOntology (
-            OneIndexedOntology::new(
-                SetIndex (
-                    HashSet::from_iter(iter), Default::default(),
-                )
-            )
-        )
+        SetOntology(OneIndexedOntology::new(SetIndex(
+            HashSet::from_iter(iter),
+            Default::default(),
+        )))
     }
 }
 
@@ -188,10 +177,7 @@ where
 /// combined with an `IndexedOntology` this should be nearly as
 /// fastest as `SetOntology`.
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
-pub struct SetIndex<A:ForIRI, AA:ForIndex<A>>(
-    HashSet<AA>,
-    PhantomData<A>
-);
+pub struct SetIndex<A: ForIRI, AA: ForIndex<A>>(HashSet<AA>, PhantomData<A>);
 
 impl<A: ForIRI, AA: ForIndex<A>> OntologyIndex<A, AA> for SetIndex<A, AA> {
     fn index_insert(&mut self, ax: AA) -> bool {
@@ -203,13 +189,12 @@ impl<A: ForIRI, AA: ForIndex<A>> OntologyIndex<A, AA> for SetIndex<A, AA> {
     }
 }
 
-impl<A:ForIRI, AA:ForIndex<A>> SetIndex<A, AA> {
+impl<A: ForIRI, AA: ForIndex<A>> SetIndex<A, AA> {
     pub fn new() -> SetIndex<A, AA> {
         SetIndex(Default::default(), Default::default())
     }
 
-    pub fn contains(&self, ax: &AnnotatedAxiom<A>) -> bool
-    {
+    pub fn contains(&self, ax: &AnnotatedAxiom<A>) -> bool {
         self.0.contains(ax)
     }
 }
@@ -220,16 +205,11 @@ impl SetIndex<Rc<str>, Rc<AnnotatedAxiom<Rc<str>>>> {
     }
 }
 
-impl<A: ForIRI, AA: ForIndex<A>> IntoIterator for SetIndex<A, AA>
-{
+impl<A: ForIRI, AA: ForIndex<A>> IntoIterator for SetIndex<A, AA> {
     type Item = AnnotatedAxiom<A>;
     type IntoIter = std::vec::IntoIter<AnnotatedAxiom<A>>;
     fn into_iter(self) -> Self::IntoIter {
-        let v: Vec<AnnotatedAxiom<_>> = self
-            .0
-            .into_iter()
-            .map(|fi| fi.unwrap())
-            .collect();
+        let v: Vec<AnnotatedAxiom<_>> = self.0.into_iter().map(|fi| fi.unwrap()).collect();
         v.into_iter()
     }
 }
@@ -266,7 +246,7 @@ mod test {
         std::mem::swap(so.mut_id(), &mut oid);
 
         assert_eq!(so.id().iri, Some(b.iri("http://www.example.com/iri")));
-        assert_eq!(so.id().viri,  Some(b.iri("http://www.example.com/viri")))
+        assert_eq!(so.id().viri, Some(b.iri("http://www.example.com/viri")))
     }
 
     #[test]
@@ -283,10 +263,8 @@ mod test {
         let cso = so.clone();
 
         assert_eq!(cso.id().iri, Some(b.iri("http://www.example.com/iri")));
-        assert_eq!(cso.id().viri,  Some(b.iri("http://www.example.com/viri")))
+        assert_eq!(cso.id().viri, Some(b.iri("http://www.example.com/viri")))
     }
-
-
 
     #[test]
     fn test_ontology_iter_empty() {

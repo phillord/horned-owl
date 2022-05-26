@@ -1,8 +1,5 @@
 //! Errors for the Horned-OWL library
-
-use rio_xml::RdfXmlError;
 use thiserror::Error;
-
 
 /// Error for the Horned library
 #[derive(Debug, Error)]
@@ -30,7 +27,7 @@ macro_rules! invalid {
         HornedError::ValidityError(format!($($arg)*), None)
     }
 }
-pub (crate) use invalid;
+pub(crate) use invalid;
 
 impl From<quick_xml::Error> for HornedError {
     fn from(e: quick_xml::Error) -> Self {
@@ -38,8 +35,7 @@ impl From<quick_xml::Error> for HornedError {
     }
 }
 
-
-impl From <rio_xml::RdfXmlError> for HornedError {
+impl From<rio_xml::RdfXmlError> for HornedError {
     fn from(e: rio_xml::RdfXmlError) -> Self {
         Self::ParserError(e.into())
     }

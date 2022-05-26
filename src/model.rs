@@ -113,13 +113,23 @@ use std::sync::Arc;
 #[derive(Clone, Debug, Eq, PartialEq, Hash, PartialOrd, Ord)]
 pub struct IRI<A>(A);
 
-pub trait ForIRI: AsRef<str> + Borrow<str> + Clone + Debug + Eq +
-    From<String> + Hash + PartialEq + Ord + PartialOrd {
+pub trait ForIRI:
+    AsRef<str> + Borrow<str> + Clone + Debug + Eq + From<String> + Hash + PartialEq + Ord + PartialOrd
+{
 }
 
 impl<T: ?Sized> ForIRI for T where
-    T: AsRef<str> + Borrow<str> + Clone + Debug + Eq +
-    From<String> + Hash + PartialEq + Ord + PartialOrd {
+    T: AsRef<str>
+        + Borrow<str>
+        + Clone
+        + Debug
+        + Eq
+        + From<String>
+        + Hash
+        + PartialEq
+        + Ord
+        + PartialOrd
+{
 }
 
 impl<A: ForIRI> IRI<A> {
@@ -155,7 +165,7 @@ impl From<&IRI<Rc<str>>> for Rc<str> {
 }
 
 impl From<IRI<Rc<str>>> for Rc<str> {
-    fn from(i:IRI<Rc<str>>) -> Rc<str> {
+    fn from(i: IRI<Rc<str>>) -> Rc<str> {
         i.0
     }
 }
@@ -192,17 +202,14 @@ impl<A: ForIRI> Display for IRI<A> {
 // both could be replaced by traits or enums straight-forwardly
 // enough, to enable threading.
 #[derive(Debug, Default)]
-pub struct Build<A:ForIRI>(
+pub struct Build<A: ForIRI>(
     RefCell<BTreeSet<IRI<A>>>,
-    RefCell<BTreeSet<AnonymousIndividual<A>>>
+    RefCell<BTreeSet<AnonymousIndividual<A>>>,
 );
 
 impl<A: ForIRI> Build<A> {
     pub fn new() -> Build<A> {
-        Build(
-            RefCell::new(BTreeSet::new()),
-            RefCell::new(BTreeSet::new())
-        )
+        Build(RefCell::new(BTreeSet::new()), RefCell::new(BTreeSet::new()))
     }
 
     /// Constructs a new `AnonymousIndividual`
@@ -215,8 +222,7 @@ impl<A: ForIRI> Build<A> {
     /// let anon = b.anon("anon00001");
     /// assert_eq!("anon00001", String::from(anon));
     /// ```
-    pub fn anon<S: Borrow<str>>(&self, s: S) -> AnonymousIndividual<A>
-    {
+    pub fn anon<S: Borrow<str>>(&self, s: S) -> AnonymousIndividual<A> {
         let mut cache = self.1.borrow_mut();
         if let Some(anon) = cache.get(s.borrow()) {
             anon.clone()
@@ -237,8 +243,7 @@ impl<A: ForIRI> Build<A> {
     /// let iri = b.iri("http://www.example.com");
     /// assert_eq!("http://www.example.com", String::from(iri));
     /// ```
-    pub fn iri<S: Borrow<str>>(&self, s: S) -> IRI<A>
-    {
+    pub fn iri<S: Borrow<str>>(&self, s: S) -> IRI<A> {
         let mut cache = self.0.borrow_mut();
         if let Some(iri) = cache.get(s.borrow()) {
             iri.clone()
@@ -303,7 +308,7 @@ impl<A: ForIRI> Build<A> {
     /// ```
     pub fn annotation_property<S>(&self, s: S) -> AnnotationProperty<A>
     where
-        S: Borrow<str>
+        S: Borrow<str>,
     {
         AnnotationProperty(self.iri(s))
     }
@@ -322,7 +327,7 @@ impl<A: ForIRI> Build<A> {
     /// ```
     pub fn data_property<S>(&self, s: S) -> DataProperty<A>
     where
-        S: Borrow<str>
+        S: Borrow<str>,
     {
         DataProperty(self.iri(s))
     }
@@ -554,7 +559,6 @@ impl<A: ForIRI> From<AnonymousIndividual<A>> for String {
     }
 }
 
-
 #[derive(Clone, Debug, Eq, PartialEq, Hash, PartialOrd, Ord)]
 pub enum Individual<A> {
     Anonymous(AnonymousIndividual<A>),
@@ -747,19 +751,19 @@ impl<A: ForIRI> Kinded for AnnotatedAxiom<A> {
 /// Add `Kinded` and `From` for each axiom.
 macro_rules! axiomimpl {
     ($A:ident, $name:ident) => {
-        impl<$A:ForIRI> From<$name<$A>> for Axiom<$A> {
+        impl<$A: ForIRI> From<$name<$A>> for Axiom<$A> {
             fn from(ax: $name<$A>) -> Axiom<$A> {
                 Axiom::$name(ax)
             }
         }
 
-        impl<$A:ForIRI> From<$name<$A>> for AnnotatedAxiom<$A> {
+        impl<$A: ForIRI> From<$name<$A>> for AnnotatedAxiom<$A> {
             fn from(ax: $name<$A>) -> AnnotatedAxiom<$A> {
                 AnnotatedAxiom::from(Axiom::from(ax))
             }
         }
 
-        impl<$A:ForIRI> Kinded for $name<$A> {
+        impl<$A: ForIRI> Kinded for $name<$A> {
             fn kind(&self) -> AxiomKind {
                 AxiomKind::$name
             }
@@ -1276,12 +1280,20 @@ axioms! {
 pub enum Literal<A> {
     // Simple Literals are syntactic sugar for a Datatype with type:
     // http://www.w3.org/2001/XMLSchema#string
-    Simple { literal: String },
+    Simple {
+        literal: String,
+    },
     // Language-tagged literals have a lang tag and must be (or have
     // an implicit) of datatype
     // http://www.w3.org/1999/02/22-rdf-syntax-ns#langString
-    Language { literal: String, lang: String },
-    Datatype { literal: String, datatype_iri: IRI<A> },
+    Language {
+        literal: String,
+        lang: String,
+    },
+    Datatype {
+        literal: String,
+        datatype_iri: IRI<A>,
+    },
 }
 
 impl<A: ForIRI> Literal<A> {
@@ -1549,7 +1561,10 @@ pub enum ClassExpression<A> {
     /// `i` must have this relationship to data constrainted by `dr`.
     ///
     /// See also: [Existential Quantification](https://www.w3.org/TR/owl2-syntax/#Existential_Quantification_2)
-    DataSomeValuesFrom { dp: DataProperty<A>, dr: DataRange<A> },
+    DataSomeValuesFrom {
+        dp: DataProperty<A>,
+        dr: DataRange<A>,
+    },
 
     /// A universal relationship.
     ///
@@ -1558,7 +1573,10 @@ pub enum ClassExpression<A> {
     /// type `dr`.
     ///
     /// See also [Universal Quantification](https://www.w3.org/TR/owl2-syntax/#Universal_Quantification_2)
-    DataAllValuesFrom { dp: DataProperty<A>, dr: DataRange<A> },
+    DataAllValuesFrom {
+        dp: DataProperty<A>,
+        dr: DataRange<A>,
+    },
 
     /// A has-value relationship.
 
@@ -1636,7 +1654,10 @@ pub struct OntologyID<A> {
 
 impl<A> Default for OntologyID<A> {
     fn default() -> OntologyID<A> {
-        OntologyID { iri: None, viri: None }
+        OntologyID {
+            iri: None,
+            viri: None,
+        }
     }
 }
 

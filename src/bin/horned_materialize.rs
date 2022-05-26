@@ -27,9 +27,9 @@ pub(crate) fn app(name: &str) -> App<'static, 'static> {
 }
 
 pub(crate) fn matcher(matches: &ArgMatches) -> Result<(), HornedError> {
-    let input = matches
-        .value_of("INPUT")
-        .ok_or(HornedError::CommandError("Command requires a file argument".to_string()))?;
+    let input = matches.value_of("INPUT").ok_or(HornedError::CommandError(
+        "Command requires a file argument".to_string(),
+    ))?;
 
     let v = materialize(input)?;
     println!("Materialized");

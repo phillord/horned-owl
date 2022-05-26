@@ -6,8 +6,8 @@ use horned_owl::error::HornedError;
 use horned_owl::io::owx::writer::write;
 use horned_owl::model::Build;
 use horned_owl::model::MutableOntology;
-use horned_owl::ontology::set::SetOntology;
 use horned_owl::ontology::axiom_mapped::RcAxiomMappedOntology;
+use horned_owl::ontology::set::SetOntology;
 
 use std::io::stdout;
 
@@ -31,11 +31,14 @@ pub(crate) fn app(name: &str) -> App<'static, 'static> {
 }
 
 pub(crate) fn matcher(matches: &ArgMatches) -> Result<(), HornedError> {
-    let size: isize = matches
-        .value_of("SIZE")
-        .unwrap()
-        .parse()
-        .or(Err(HornedError::CommandError(format!("Cannot parse SIZE as an integer"))))?;
+    let size: isize =
+        matches
+            .value_of("SIZE")
+            .unwrap()
+            .parse()
+            .or(Err(HornedError::CommandError(format!(
+                "Cannot parse SIZE as an integer"
+            ))))?;
 
     let b = Build::new_rc();
     let mut o = SetOntology::new_rc();
