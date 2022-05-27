@@ -317,7 +317,7 @@ impl<
     }
 
     pub fn k(&self) -> &K {
-        &(self.0).j().j()
+        (self.0).j().j()
     }
 
     pub fn index(self) -> (I, J, K) {
@@ -428,11 +428,11 @@ impl<
     }
 
     pub fn k(&self) -> &K {
-        &(self.0).j().j()
+        (self.0).j().j()
     }
 
     pub fn l(&self) -> &L {
-        &(self.0).j().k()
+        (self.0).j().k()
     }
 
     pub fn index(self) -> (I, J, K, L) {

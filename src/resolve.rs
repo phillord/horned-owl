@@ -21,10 +21,10 @@ use ureq;
 
 /// let doc_iri = b.iri("file://blah/and.owl");
 
-/// let path_buf = file_iri_to_path(&doc_iri);
+/// let path_buf = file_iri_to_pathbuf(&doc_iri);
 /// assert_eq!(path_buf.to_str().unwrap(), "blah/and.owl");
 /// ```
-pub fn file_iri_to_path<A: ForIRI>(iri: &IRI<A>) -> PathBuf {
+pub fn file_iri_to_pathbuf<A: ForIRI>(iri: &IRI<A>) -> PathBuf {
     Path::new(&*iri.split_at(7).1).into()
 }
 
@@ -39,12 +39,12 @@ pub fn file_iri_to_path<A: ForIRI>(iri: &IRI<A>) -> PathBuf {
 
 /// let target_iri = b.iri("file://blah/and.owl");
 
-/// let path_buf = Path::new("blah/and.owl").to_path_buf();
-/// let source_iri = pathbuf_to_file_iri(&b, &path_buf);
+/// let path = Path::new("blah/and.owl");
+/// let source_iri = path_to_file_iri(&b, &path);
 /// assert_eq!(source_iri.as_ref(), "file://blah/and.owl");
 /// ```
-pub fn pathbuf_to_file_iri<A: ForIRI>(b: &Build<A>, pb: &PathBuf) -> IRI<A> {
-    b.iri(format!("file://{}", pb.as_path().to_str().unwrap()))
+pub fn path_to_file_iri<A: ForIRI>(b: &Build<A>, pb: &Path) -> IRI<A> {
+    b.iri(format!("file://{}", pb.to_str().unwrap()))
 }
 
 /// Return true if the iri is a file IRI.
@@ -83,7 +83,7 @@ pub fn localize_iri<A: ForIRI>(iri: &IRI<A>, doc_iri: &IRI<A>) -> IRI<A> {
     let b = Build::new();
     let (_, term_iri) = iri.split_at(iri.rfind('/').unwrap() + 1);
 
-    b.iri(if let Some(index) = doc_iri.rfind("/") {
+    b.iri(if let Some(index) = doc_iri.rfind('/') {
         format!("{}/{}", doc_iri.split_at(index).0, term_iri)
     } else {
         format!("./{}", term_iri)
@@ -100,13 +100,13 @@ pub fn resolve_iri<A: ForIRI>(iri: &IRI<A>, doc_iri: Option<&IRI<A>>) -> (IRI<A>
     };
 
     if is_file_iri(&local) {
-        let mut path = file_iri_to_path(&local);
+        let mut path = file_iri_to_pathbuf(&local);
         if path.as_path().exists() {
             return (local, ::std::fs::read_to_string(path).unwrap());
         }
 
         if let Some(doc_iri) = doc_iri {
-            let doc_ext = doc_iri.split_once(".").unwrap();
+            let doc_ext = doc_iri.split_once('.').unwrap();
             path.set_extension(doc_ext.1);
             if path.exists() {
                 return (local, ::std::fs::read_to_string(path).unwrap());

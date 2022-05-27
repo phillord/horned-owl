@@ -17,9 +17,9 @@ impl<A: ForIRI, AA: ForIndex<A>> DeclarationMappedIndex<A, AA> {
     }
 
     pub fn is_annotation_property(&self, iri: &IRI<A>) -> bool {
-        match self.declaration_kind(iri) {
-            Some(NamedEntityKind::AnnotationProperty) => true,
-            _ => false,
+        matches!{
+            self.declaration_kind(iri),
+            Some(NamedEntityKind::AnnotationProperty)
         }
     }
 

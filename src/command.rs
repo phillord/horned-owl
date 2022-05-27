@@ -16,7 +16,7 @@ use std::{
 };
 
 pub fn path_type(path: &Path) -> Option<ResourceType> {
-    match path.extension().map(|s| s.to_str()).flatten() {
+    match path.extension().and_then(|s| s.to_str()) {
         Some("owx") => Some(ResourceType::OWX),
         Some("owl") => Some(ResourceType::RDF),
         _ => None,
@@ -34,7 +34,7 @@ pub fn parse_path(
         }
         Some(ResourceType::RDF) => {
             let b = Build::new();
-            let iri = super::resolve::pathbuf_to_file_iri(&b, &path.to_path_buf());
+            let iri = super::resolve::path_to_file_iri(&b, path);
             super::io::rdf::closure_reader::read(&iri)?.into()
         }
         None => {
@@ -97,7 +97,7 @@ pub fn materialize_1<'a>(
                 done.push(i.0.clone());
                 println!("Saving to {}", local);
                 let mut file = File::create(&local)?;
-                file.write_all(&imported_data.as_bytes())?;
+                file.write_all(imported_data.as_bytes())?;
             } else {
                 println!("Already Present: {}", local);
             }
@@ -194,7 +194,7 @@ pub mod summary {
             annotation_axiom: ont
                 .i()
                 .iter()
-                .map(|aa| aa.ann.iter().count())
+                .map(|aa| aa.ann.len())
                 .sum::<usize>(),
             axiom_type: axiom_types(ont),
         }

@@ -31,7 +31,7 @@ pub(crate) fn app(name: &str) -> App<'static, 'static> {
 }
 
 pub(crate) fn matcher(matches: &ArgMatches) -> Result<(), HornedError> {
-    let input = matches.value_of("INPUT").ok_or(HornedError::CommandError(
+    let input = matches.value_of("INPUT").ok_or_else(|| HornedError::CommandError(
         "A file name must be specified".to_string(),
     ))?;
 

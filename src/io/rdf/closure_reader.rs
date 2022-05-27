@@ -8,7 +8,7 @@ use crate::model::ForIRI;
 use crate::model::Ontology;
 use crate::model::IRI;
 use crate::ontology::indexed::ForIndex;
-use crate::resolve::pathbuf_to_file_iri;
+use crate::resolve::path_to_file_iri;
 use crate::resolve::resolve_iri;
 
 use std::collections::HashMap;
@@ -25,12 +25,12 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> ClosureOntologyParser<'a, A, AA> {
         ClosureOntologyParser {
             b,
             import_map: HashMap::new(),
-            op: HashMap::new().into(),
+            op: HashMap::new(),
         }
     }
 
     pub fn parse_path(&mut self, pb: &PathBuf) -> Result<Vec<IRI<A>>, HornedError> {
-        let file_iri = pathbuf_to_file_iri(self.b, &pb);
+        let file_iri = path_to_file_iri(self.b, pb);
         let s = ::std::fs::read_to_string(&pb)?;
         let mut v = vec![];
 
@@ -109,7 +109,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> ClosureOntologyParser<'a, A, AA> {
 
             self.import_map
                 .insert(declared_iri.clone(), imports.clone());
-            self.op.insert(declared_iri.clone(), p);
+            self.op.insert(declared_iri, p);
         }
 
         for iri in imports {
@@ -165,8 +165,8 @@ pub fn read<A: ForIRI, AA: ForIndex<A>>(
     let mut c = ClosureOntologyParser::new(&b);
     c.parse_iri(iri, None)?;
 
-    let keys: Vec<_> = c.op.keys().map(|k| k.clone()).collect();
-    for i in keys.clone() {
+    let keys: Vec<_> = c.op.keys().cloned().collect();
+    for i in keys {
         c.finish_parse(&i)?;
     }
 
@@ -181,8 +181,8 @@ pub fn read_closure<A: ForIRI, AA: ForIndex<A>>(
     // Do parse, then full parse, then result the results
     let mut c = ClosureOntologyParser::new(b);
     c.parse_iri(iri, None)?;
-    let keys: Vec<_> = c.op.keys().map(|k| k.clone()).collect();
-    for i in keys.clone() {
+    let keys: Vec<_> = c.op.keys().cloned().collect();
+    for i in keys {
         c.finish_parse(&i)?;
     }
 
@@ -198,9 +198,9 @@ mod test {
 
     #[test]
     fn test_read() {
-        let path_buf = Path::new("src/ont/owl-rdf/import-property.owl").to_path_buf();
+        let path = Path::new("src/ont/owl-rdf/import-property.owl");
         let b = Build::new_rc();
-        let iri = pathbuf_to_file_iri(&b, &path_buf);
+        let iri = path_to_file_iri(&b, &path);
 
         let (_, ic): (RcRDFOntology, _) = read(&iri).unwrap();
         assert!(ic.is_complete());
@@ -210,9 +210,9 @@ mod test {
     // is a good test.
     #[test]
     fn test_read_closure() {
-        let path_buf = Path::new("src/ont/owl-rdf/import-property.owl").to_path_buf();
+        let path = Path::new("src/ont/owl-rdf/import-property.owl");
         let b = Build::new_rc();
-        let iri = pathbuf_to_file_iri(&b, &path_buf);
+        let iri = path_to_file_iri(&b, &path);
 
         let v: Vec<(RcRDFOntology, _)> = read_closure(&b, &iri).unwrap();
         let v: Vec<SetOntology<_>> = v

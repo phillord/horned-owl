@@ -159,7 +159,7 @@ impl<A: ForIRI> From<&AnonymousIndividual<A>> for PTerm<A> {
 
 impl<A: ForIRI> From<&AnonymousIndividual<A>> for PBlankNode<A> {
     fn from(ai: &AnonymousIndividual<A>) -> Self {
-        PBlankNode::new(ai.0.clone()).into()
+        PBlankNode::new(ai.0.clone())
     }
 }
 
@@ -320,7 +320,7 @@ macro_rules! triples_to_vec {
     }
 }
 
-fn to_triple<'a, A: ForIRI, NB, NN, T>(subject: NB, predicate: NN, object: T) -> PTriple<A>
+fn to_triple<A: ForIRI, NB, NN, T>(subject: NB, predicate: NN, object: T) -> PTriple<A>
 where
     NB: Into<PSubject<A>>,
     NN: Into<PNamedNode<A>>,
@@ -347,7 +347,7 @@ where
 // }
 
 fn render_vec_subject<A: ForIRI, T: Render<A, PSubject<A>>, W: Write>(
-    v: &Vec<T>,
+    v: &[T],
     f: &mut PrettyRdfXmlFormatter<A, W>,
     ng: &mut NodeGenerator<A>,
 ) -> Result<PTerm<A>, HornedError> {
@@ -448,10 +448,9 @@ impl<A: ForIRI> Render<A, ()> for AnnotatedAxiom<A> {
         ng: &mut NodeGenerator<A>,
     ) -> Result<(), HornedError> {
         let ax: Annotatable<A> = self.axiom.render(f, ng)?;
-        Ok(if self.ann.len() != 0 {
-            match ax {
-                Annotatable::Main(t) => {
-                    let bn = ng.bn();
+        if !self.ann.is_empty() {
+            if let Annotatable::Main(t) = ax {
+                let bn = ng.bn();
                     triples!(
                         f,
                         bn.clone(),
@@ -468,13 +467,12 @@ impl<A: ForIRI> Render<A, ()> for AnnotatedAxiom<A> {
                         t.object // And the rest!
                     );
 
-                    ng.keep_this_bn(bn.clone());
+                    ng.keep_this_bn(bn);
 
-                    let _ = &self.ann.render(f, ng);
-                }
-                _ => (),
+                    let _ = self.ann.render(f, ng);
             }
-        })
+        }
+        Ok(())
     }
 }
 
@@ -818,7 +816,7 @@ render_to_vec! {
                 bn.clone(), ng.nn(RDF::Type), ng.nn(OWL::NegativePropertyAssertion),
                 bn.clone(), ng.nn(OWL::SourceIndividual), node_a,
                 bn.clone(), ng.nn(OWL::AssertionProperty), node_ope,
-                bn.clone(), ng.nn(OWL::TargetIndividual), node_lt
+                bn, ng.nn(OWL::TargetIndividual), node_lt
             )
         )
     }
@@ -842,7 +840,7 @@ render_to_vec! {
                 bn.clone(), ng.nn(RDF::Type), ng.nn(OWL::NegativePropertyAssertion),
                 bn.clone(), ng.nn(OWL::SourceIndividual), node_a,
                 bn.clone(), ng.nn(OWL::AssertionProperty), node_dp,
-                bn.clone(), ng.nn(OWL::TargetValue), node_lt
+                bn, ng.nn(OWL::TargetValue), node_lt
             )
         )
     }
@@ -853,7 +851,7 @@ fn members<A: ForIRI, R: Debug + Render<A, PSubject<A>>, W: Write>(
     ng: &mut NodeGenerator<A>,
     ty_two: OWL,
     ty_n: OWL,
-    members: &Vec<R>,
+    members: &[R],
 ) -> Result<Vec<PTriple<A>>, HornedError> {
     // DifferentIndividuals( a1 a2 ) T(a1) owl:differentFrom T(a2) .
     // DifferentIndividuals( a1 ... an ), n > 2 _:x rdf:type owl:AllDifferent .
@@ -990,7 +988,7 @@ render_to_node! {
                     // _:yn Fn ltn .
                     let bn = ng.bn();
                     let node_dt:PTerm<_> = (&dt.0).into();
-                    let node_vft:PTerm<_> = render_vec_subject(vfr, f, ng)?.into();
+                    let node_vft:PTerm<_> = render_vec_subject(vfr, f, ng)?;
 
                     triples_to_node!(
                         f,
@@ -1087,7 +1085,7 @@ render_to_node! {
 fn obj_cardinality<A: ForIRI, W: Write>(
     n: &u32,
     ope: &ObjectPropertyExpression<A>,
-    bce: &Box<ClassExpression<A>>,
+    ce: &ClassExpression<A>,
     unqual: PNamedNode<A>,
     qual: PNamedNode<A>,
     f: &mut PrettyRdfXmlFormatter<A, W>,
@@ -1114,13 +1112,13 @@ fn obj_cardinality<A: ForIRI, W: Write>(
         node_ope
     );
 
-    if let ClassExpression::Class(ref cl) = **bce {
+    if let ClassExpression::Class(ref cl) = *ce {
         if is_thing(&cl.0) {
             triples!(f, bn.clone(), unqual, node_n);
             return Ok(bn);
         }
     }
-    let node_ce: PTerm<_> = bce.render(f, ng)?.into();
+    let node_ce: PTerm<_> = ce.render(f, ng)?.into();
 
     Ok(triples_to_node!(
         f,
@@ -1184,7 +1182,7 @@ render_to_node! {
                     triples_to_node!(
                          f,
                          bn.clone(), ng.nn(RDF::Type), ng.nn(OWL::Class),
-                         bn.clone(), ng.nn(OWL::IntersectionOf), node_seq
+                         bn, ng.nn(OWL::IntersectionOf), node_seq
                     )
                 }
                 Self::ObjectUnionOf(v) => {
@@ -1194,7 +1192,7 @@ render_to_node! {
                     triples_to_node!(
                         f,
                         bn.clone(), ng.nn(RDF::Type), ng.nn(OWL::Class),
-                        bn.clone(), ng.nn(OWL::UnionOf), node_seq
+                        bn, ng.nn(OWL::UnionOf), node_seq
                     )
                 }
                 Self::ObjectComplementOf(bce) => {
@@ -1227,7 +1225,7 @@ render_to_node! {
                         f,
                         bn.clone(), ng.nn(RDF::Type), ng.nn(OWL::Restriction),
                         bn.clone(), ng.nn(OWL::OnProperty), node_ope,
-                        bn.clone(), ng.nn(OWL::SomeValuesFrom), node_ce
+                        bn, ng.nn(OWL::SomeValuesFrom), node_ce
                     )
                 }
                 Self::ObjectAllValuesFrom{ope, bce} => {
@@ -1239,7 +1237,7 @@ render_to_node! {
                         f,
                         bn.clone(), ng.nn(RDF::Type), ng.nn(OWL::Restriction),
                         bn.clone(), ng.nn(OWL::OnProperty), node_ope,
-                        bn.clone(), ng.nn(OWL::AllValuesFrom), node_ce
+                        bn, ng.nn(OWL::AllValuesFrom), node_ce
                     )
                 }
                 Self::ObjectHasValue{ope, i} => {
@@ -1334,7 +1332,7 @@ render_to_node! {
 fn nary<A: ForIRI, R: Render<A, PSubject<A>>, W: Write>(
     f: &mut PrettyRdfXmlFormatter<A, W>,
     ng: &mut NodeGenerator<A>,
-    entities: &Vec<R>,
+    entities: &[R],
     pred: PNamedNode<A>,
 ) -> Result<Vec<PTriple<A>>, HornedError> {
     let mut i = entities.iter();
@@ -1604,7 +1602,7 @@ mod test {
 
         temp_file.release();
 
-        return (ont_orig, ont_round);
+        (ont_orig, ont_round)
     }
 
     fn assert_round(ont: &str) -> (SetOntology<Rc<str>>, SetOntology<Rc<str>>) {
@@ -1614,7 +1612,7 @@ mod test {
         println!("ont_round\n{:#?}", ont_round);
         assert_eq!(ont_orig, ont_round);
 
-        return (ont_orig, ont_round);
+        (ont_orig, ont_round)
     }
 
     #[test]

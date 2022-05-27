@@ -45,7 +45,7 @@ pub(crate) fn matcher(matches: &ArgMatches) -> Result<(), HornedError> {
         }
     };
     // Finish off nicely
-    println!("");
+    println!();
 
     rtn
 }

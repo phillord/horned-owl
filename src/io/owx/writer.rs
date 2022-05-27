@@ -54,7 +54,7 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: StdWrite>(
         None => &default_mapper,
     };
 
-    render_ont(ont, &mut writer, &mapping)?;
+    render_ont(ont, &mut writer, mapping)?;
 
     Ok(())
 }
@@ -85,7 +85,7 @@ fn iri_or_curie<'a>(mapping: &'a PrefixMapping, elem: &mut BytesStart, iri: &str
             let curie = format!("{}", curie);
             elem.push_attribute(("abbreviatedIRI", &curie[..]));
         }
-        Err(_) => elem.push_attribute(("IRI", &iri[..])),
+        Err(_) => elem.push_attribute(("IRI", iri)),
     }
 }
 
@@ -299,7 +299,7 @@ impl<'a, T: Render<'a, W>, W: StdWrite> Render<'a, W> for Box<T> {
 
 impl<'a, A: Render<'a, W>, W: StdWrite> Render<'a, W> for (&'a A,) {
     fn render(&self, w: &mut Writer<W>, m: &'a PrefixMapping) -> Result<(), HornedError> {
-        (&self.0).render(w, m)?;
+        self.0.render(w, m)?;
 
         Ok(())
     }
@@ -307,8 +307,8 @@ impl<'a, A: Render<'a, W>, W: StdWrite> Render<'a, W> for (&'a A,) {
 
 impl<'a, A: Render<'a, W>, B: Render<'a, W>, W: StdWrite> Render<'a, W> for (&'a A, &'a B) {
     fn render(&self, w: &mut Writer<W>, m: &'a PrefixMapping) -> Result<(), HornedError> {
-        (&self.0).render(w, m)?;
-        (&self.1).render(w, m)?;
+        self.0.render(w, m)?;
+        self.1.render(w, m)?;
 
         Ok(())
     }
@@ -318,9 +318,9 @@ impl<'a, A: Render<'a, W>, B: Render<'a, W>, C: Render<'a, W>, W: StdWrite> Rend
     for (&'a A, &'a B, &'a C)
 {
     fn render(&self, w: &mut Writer<W>, m: &'a PrefixMapping) -> Result<(), HornedError> {
-        (&self.0).render(w, m)?;
-        (&self.1).render(w, m)?;
-        (&self.2).render(w, m)?;
+        self.0.render(w, m)?;
+        self.1.render(w, m)?;
+        self.2.render(w, m)?;
 
         Ok(())
     }
@@ -947,7 +947,7 @@ mod test {
         let (ont_round, prefix_round) = read_ok(&mut BufReader::new(&file));
         temp_file.release();
 
-        return (ont_orig, prefix_orig, ont_round, prefix_round);
+        (ont_orig, prefix_orig, ont_round, prefix_round)
     }
 
     fn assert_round(
@@ -968,7 +968,7 @@ mod test {
 
             assert_eq!(prefix_orig_map, prefix_round_map);
         }
-        return (ont_orig, prefix_orig, ont_round, prefix_round);
+        (ont_orig, prefix_orig, ont_round, prefix_round)
     }
 
     #[test]

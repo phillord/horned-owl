@@ -36,9 +36,7 @@ pub(crate) fn matcher(matches: &ArgMatches) -> Result<(), HornedError> {
             .value_of("SIZE")
             .unwrap()
             .parse()
-            .or(Err(HornedError::CommandError(format!(
-                "Cannot parse SIZE as an integer"
-            ))))?;
+            .map_err(|_| HornedError::CommandError("Cannot parse SIZE as an integer".to_string()))?;
 
     let b = Build::new_rc();
     let mut o = SetOntology::new_rc();

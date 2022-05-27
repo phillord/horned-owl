@@ -25,12 +25,6 @@ use super::set::SetIndex;
 
 use std::collections::HashSet;
 
-macro_rules! some {
-    ($body:expr) => {
-        (|| Some($body))()
-    };
-}
-
 #[derive(Debug, Default, Eq, PartialEq)]
 pub struct IRIMappedIndex<A, AA> {
     irindex: RefCell<BTreeMap<IRI<A>, BTreeSet<AA>>>,
@@ -215,10 +209,7 @@ impl<A: ForIRI, AA: ForIndex<A>> OntologyIndex<A, AA> for IRIMappedIndex<A, AA> 
 
     fn index_remove(&mut self, ax: &AnnotatedAxiom<A>) -> bool {
         if let Some(iri) = self.aa_to_iris(ax).iter().next() {
-            let s = some! {
-                self.mut_set_for_iri(&iri.clone()).remove(ax)
-            };
-            s.is_some()
+            self.mut_set_for_iri(&iri.clone()).remove(ax)
         } else {
             false
         }
@@ -271,7 +262,7 @@ impl<A: ForIRI, AA: ForIndex<A>> MutableOntology<A> for IRIMappedOntology<A, AA>
 }
 
 impl<A: ForIRI, AA: ForIndex<A>> IRIMappedOntology<A, AA> {
-    pub fn new() -> IRIMappedOntology<A, AA> {
+    pub fn default() -> IRIMappedOntology<A, AA> {
         IRIMappedOntology(FourIndexedOntology::new(
             SetIndex::new(),
             IRIMappedIndex::new(),
@@ -298,13 +289,13 @@ impl<A: ForIRI, AA: ForIndex<A>> IRIMappedOntology<A, AA> {
 }
 impl RcIRIMappedOntology {
     pub fn new_rc() -> Self {
-        IRIMappedOntology::new()
+        IRIMappedOntology::default()
     }
 }
 
 impl ArcIRIMappedOntology {
     pub fn new_arc() -> Self {
-        IRIMappedOntology::new()
+        IRIMappedOntology::default()
     }
 }
 
@@ -319,8 +310,8 @@ impl<A: ForIRI, AA: ForIndex<A>> IntoIterator for IRIMappedOntology<A, AA> {
 
 impl<A: ForIRI, AA: ForIndex<A>> From<SetOntology<A>> for IRIMappedOntology<A, AA> {
     fn from(mut so: SetOntology<A>) -> IRIMappedOntology<A, AA> {
-        let mut imo = IRIMappedOntology::new();
-        std::mem::swap(imo.mut_id(), &mut so.mut_id());
+        let mut imo = IRIMappedOntology::default();
+        std::mem::swap(imo.mut_id(), so.mut_id());
         for ax in so {
             imo.insert(ax);
         }

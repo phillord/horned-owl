@@ -103,7 +103,7 @@ impl<A: ForIRI, V: Visit<A>> Walk<A, V> {
     }
 
     pub fn iri(&mut self, e: &IRI<A>) {
-        self.0.visit_iri(&e);
+        self.0.visit_iri(e);
     }
 
     pub fn anonymous_individual(&mut self, e: &AnonymousIndividual<A>) {

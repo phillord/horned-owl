@@ -98,8 +98,8 @@ pub fn read_with_build<A: ForIRI, R: BufRead>(
                 match e.local_name() {
                     b"Ontology" => {
                         let s = attrib_value(&mut r, e, b"ontologyIRI")?;
-                        if s.is_some() {
-                            r.mapping.set_default(&s.unwrap());
+                        if let Some(s) = s {
+                            r.mapping.set_default(&s);
                         }
 
                         ont.mut_id().iri = read_a_iri_attr(&mut r, e, b"ontologyIRI")?;
@@ -197,7 +197,7 @@ fn decode_expand_curie_maybe<'a, A: ForIRI, R: BufRead>(
 
 /// Expand a curie if there is an appropriate prefix
 fn expand_curie_maybe<'a, A: ForIRI, R: BufRead>(r: &mut Read<A, R>, val: &'a str) -> Cow<'a, str> {
-    match r.mapping.expand_curie_string(&val) {
+    match r.mapping.expand_curie_string(val) {
         // If we expand use this
         Ok(n) => Cow::Owned(n),
         // Else assume it's a complete URI
@@ -247,7 +247,7 @@ fn read_iri_attr<A: ForIRI, R: BufRead>(
     })
 }
 
-fn read_a_iri_attr<'a, A: ForIRI, R: BufRead>(
+fn read_a_iri_attr<A: ForIRI, R: BufRead>(
     r: &mut Read<A, R>,
     event: &BytesStart,
     tag: &[u8],
@@ -388,7 +388,7 @@ where
         }
     }
 
-    return Err(error_missing_element(b"IRI", r));
+    Err(error_missing_element(b"IRI", r))
 }
 
 fn from_start<A: ForIRI, R: BufRead, T: FromStart<A>>(
@@ -614,8 +614,9 @@ fn from_start_to_end<A: ForIRI, R: BufRead, T: FromStart<A> + std::fmt::Debug>(
     e: &BytesStart,
     end_tag: &[u8],
 ) -> Result<Vec<T>, HornedError> {
-    let mut v = Vec::new();
-    v.push(from_start(r, e)?);
+    let v = vec![
+        from_start(r, e)?
+    ];
     till_end_with(r, end_tag, v)
 }
 
@@ -672,7 +673,7 @@ fn object_cardinality_restriction<A: ForIRI, R: BufRead>(
         Box::new(match vce.len() {
             0 => r.build.class(OWL::Thing.iri_str()).into(),
             1 => vce.remove(0),
-            _ => Err(error_unexpected_tag(end_tag, r))?,
+            _ => return Err(error_unexpected_tag(end_tag, r)),
         }),
     ))
 }
@@ -696,7 +697,7 @@ fn data_cardinality_restriction<A: ForIRI, R: BufRead>(
         match vdr.len() {
             0 => r.build.datatype(OWL2Datatype::RDFSLiteral.iri_str()).into(),
             1 => vdr.remove(0),
-            _ => Err(error_unexpected_tag(end_tag, r))?,
+            _ => return Err(error_unexpected_tag(end_tag, r)),
         },
     ))
 }
@@ -935,7 +936,7 @@ impl<A: ForIRI> FromStart<A> for AnonymousIndividual<A> {
         e: &BytesStart,
     ) -> Result<AnonymousIndividual<A>, HornedError> {
         let ai: AnonymousIndividual<_> = r.build.anon(
-            attrib_value(r, e, b"nodeID")?.ok_or(error_missing_attribute("nodeID Expected", r))?,
+            attrib_value(r, e, b"nodeID")?.ok_or_else(||error_missing_attribute("nodeID Expected", r))?,
         );
         Ok(ai)
     }

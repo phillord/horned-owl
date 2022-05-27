@@ -91,3 +91,7 @@ triples-round-all:
 	do cargo run --bin horned-triples -- --round $$i;\
 	echo;echo;echo;\
 	done
+
+
+clippy:
+	cargo clippy -- -A clippy::type_complexity -A clippy::wrong_self_convention

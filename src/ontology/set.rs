@@ -59,7 +59,7 @@ impl<A: ForIRI> SetOntology<A> {
 
 impl<A: ForIRI> Ontology<A> for SetOntology<A> {
     fn id(&self) -> &OntologyID<A> {
-        &self.0.id()
+        self.0.id()
     }
 
     fn mut_id(&mut self) -> &mut OntologyID<A> {
@@ -67,7 +67,7 @@ impl<A: ForIRI> Ontology<A> for SetOntology<A> {
     }
 
     fn doc_iri(&self) -> &Option<IRI<A>> {
-        &self.0.doc_iri()
+        self.0.doc_iri()
     }
 
     fn mut_doc_iri(&mut self) -> &mut Option<IRI<A>> {
@@ -209,6 +209,7 @@ impl<A: ForIRI, AA: ForIndex<A>> IntoIterator for SetIndex<A, AA> {
     type Item = AnnotatedAxiom<A>;
     type IntoIter = std::vec::IntoIter<AnnotatedAxiom<A>>;
     fn into_iter(self) -> Self::IntoIter {
+        #[allow(clippy::needless_collect)]
         let v: Vec<AnnotatedAxiom<_>> = self.0.into_iter().map(|fi| fi.unwrap()).collect();
         v.into_iter()
     }
@@ -218,6 +219,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> IntoIterator for &'a SetIndex<A, AA> {
     type Item = &'a AnnotatedAxiom<A>;
     type IntoIter = std::vec::IntoIter<&'a AnnotatedAxiom<A>>;
     fn into_iter(self) -> Self::IntoIter {
+        #[allow(clippy::needless_collect)]
         let v: Vec<&'a AnnotatedAxiom<A>> = self.0.iter().map(|fiac| fiac.borrow()).collect();
         v.into_iter()
     }

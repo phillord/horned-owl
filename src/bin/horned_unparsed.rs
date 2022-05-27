@@ -32,13 +32,12 @@ pub(crate) fn app(name: &str) -> App<'static, 'static> {
 }
 
 pub(crate) fn matcher(matches: &ArgMatches) -> Result<(), HornedError> {
-    let input = matches.value_of("INPUT").ok_or(HornedError::CommandError(
+    let input = matches.value_of("INPUT").ok_or_else(|| HornedError::CommandError(
         "Command requires an INPUT argument".to_string(),
     ))?;
 
     let (_ont, incomplete): (RDFOntology<Rc<str>, Rc<AnnotatedAxiom<Rc<str>>>>, _) =
-        horned_owl::io::rdf::reader::read(&mut BufReader::new(File::open(Path::new(input))?))?
-            .into();
+        horned_owl::io::rdf::reader::read(&mut BufReader::new(File::open(Path::new(input))?))?;
 
     println!("\n\nIncompleted Parsed");
     println!("\tSimple Triples: {:#?}", incomplete.simple);

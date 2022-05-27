@@ -160,7 +160,7 @@ impl<A: ForIRI> Borrow<str> for IRI<A> {
 
 impl From<&IRI<Rc<str>>> for Rc<str> {
     fn from(i: &IRI<Rc<str>>) -> Rc<str> {
-        i.0.clone().into()
+        i.0.clone()
     }
 }
 
@@ -184,7 +184,7 @@ impl<A: ForIRI> From<IRI<A>> for String {
 
 impl<A: ForIRI> Display for IRI<A> {
     fn fmt(&self, f: &mut Formatter<'_>) -> ::std::fmt::Result {
-        f.write_str(&self.0.borrow())
+        f.write_str(self.0.borrow())
     }
 }
 
@@ -728,7 +728,7 @@ impl<A: ForIRI> AnnotatedAxiom<A> {
         self.axiom == other.axiom
     }
 
-    pub fn logical_hash<H: Hasher>(&self, state: &mut H) -> () {
+    pub fn logical_hash<H: Hasher>(&self, state: &mut H) {
         self.axiom.hash(state)
     }
 }

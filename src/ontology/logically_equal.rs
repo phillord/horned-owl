@@ -64,7 +64,7 @@ where
     }
 }
 
-pub fn update_or_insert_logically_equal_axiom<'a, A: ForIRI, AA: ForIndex<A>, O>(
+pub fn update_or_insert_logically_equal_axiom<A: ForIRI, AA: ForIndex<A>, O>(
     o: &mut O,
     axiom: AnnotatedAxiom<A>,
 ) where
@@ -75,7 +75,7 @@ pub fn update_or_insert_logically_equal_axiom<'a, A: ForIRI, AA: ForIndex<A>, O>
     }
 }
 
-pub fn update_logically_equal_axiom<'a, A: ForIRI, AA: ForIndex<A>, O>(
+pub fn update_logically_equal_axiom<A: ForIRI, AA: ForIndex<A>, O>(
     o: &mut O,
     mut axiom: AnnotatedAxiom<A>,
 ) -> Option<AnnotatedAxiom<A>>
@@ -234,7 +234,7 @@ mod test {
 
             let aa = o.i().into_iter().next().unwrap();
 
-            assert_eq!(aa.ann.iter().count(), 2);
+            assert_eq!(aa.ann.len(), 2);
         }
     }
 }

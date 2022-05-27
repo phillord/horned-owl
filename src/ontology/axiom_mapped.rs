@@ -215,12 +215,16 @@ impl<A: ForIRI, AA: ForIndex<A>> IntoIterator for AxiomMappedIndex<A, AA> {
     type IntoIter = std::vec::IntoIter<AnnotatedAxiom<A>>;
     fn into_iter(self) -> Self::IntoIter {
         let btreemap = self.axiom.into_inner();
+
+        // The collect switches the type which shows up in the API. Blegh.
+        #[allow(clippy::needless_collect)]
         let v: Vec<AnnotatedAxiom<A>> = btreemap
             .into_iter()
             .map(|(_k, v)| v)
             .flat_map(BTreeSet::into_iter)
             .map(|fi| fi.unwrap())
             .collect();
+
         v.into_iter()
     }
 }
@@ -351,7 +355,7 @@ impl<A: ForIRI, AA: ForIndex<A>> IntoIterator for AxiomMappedOntology<A, AA> {
 impl<A: ForIRI, AA: ForIndex<A>> From<SetOntology<A>> for AxiomMappedOntology<A, AA> {
     fn from(mut so: SetOntology<A>) -> AxiomMappedOntology<A, AA> {
         let mut amo = AxiomMappedOntology::new();
-        std::mem::swap(amo.mut_id(), &mut so.mut_id());
+        std::mem::swap(amo.mut_id(), so.mut_id());
         for ax in so {
             amo.insert(ax);
         }

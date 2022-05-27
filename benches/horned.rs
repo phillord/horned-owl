@@ -44,10 +44,10 @@ fn create_tree_0<A: ForIRI, O: MutableOntology<A>>(
     for curr in current.into_iter() {
         let i = b.iri(format!("http://example.com/a{}", remaining));
         let c = b.class(i);
-        *remaining = *remaining - 1;
+        *remaining -= 1;
         let i = b.iri(format!("http://example.com/a{}", remaining));
         let d = b.class(i);
-        *remaining = *remaining - 1;
+        *remaining -= 1;
 
         next.push(c.clone());
         next.push(d.clone());

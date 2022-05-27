@@ -28,7 +28,7 @@ pub trait WithIRI<'a>: Meta<&'a IRIString> {
     }
 
     fn iri_b(&self) -> &'a [u8] {
-        &self.meta().0.as_bytes()
+        self.meta().0.as_bytes()
     }
 
     fn iri_str(&self) -> &'a str {
@@ -113,9 +113,9 @@ pub enum RDFS {
 
 impl RDFS {
     pub fn is_builtin(&self) -> bool {
-        match self {
-            RDFS::Label | RDFS::Comment | RDFS::SeeAlso | RDFS::IsDefinedBy => true,
-            _ => false,
+        matches!{
+            self,
+            RDFS::Label | RDFS::Comment | RDFS::SeeAlso | RDFS::IsDefinedBy
         }
     }
 }
@@ -389,7 +389,7 @@ pub fn is_annotation_builtin(iri: &String) -> bool {
             return true;
         }
     }
-    return false;
+    false
 }
 
 #[test]
@@ -433,7 +433,7 @@ fn facet_meta() {
     );
 
     assert_eq!(
-        Facet::var_s(&"http://www.w3.org/2001/XMLSchema#pattern".to_string()).unwrap(),
+        Facet::var_s("http://www.w3.org/2001/XMLSchema#pattern").unwrap(),
         Facet::Pattern
     );
 
