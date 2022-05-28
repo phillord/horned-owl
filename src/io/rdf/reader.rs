@@ -570,7 +570,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
             }
             [_, Iri(p), ob @ Term::Literal(_)] => Annotation {
                 ap: AnnotationProperty(p.clone()),
-                av: self.to_literal(ob).unwrap().into(),
+                av: self.fetch_literal(ob).unwrap().into(),
             },
             [_, Iri(p), Iri(ob)] => {
                 // IRI annotation value
@@ -673,7 +673,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
                 {
                     some! {
                         DataRange::DataIntersectionOf(
-                            self.to_dr_seq(bnodeid)?
+                            self.fetch_dr_seq(bnodeid)?
                         )
                     }
                 }
@@ -682,7 +682,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
                 {
                     some! {
                       DataRange::DataComplementOf(
-                            Box::new(self.to_dr(term)?)
+                            Box::new(self.fetch_dr(term)?)
                         )
                     }
                 }
@@ -691,7 +691,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
                 {
                     some! {
                         DataRange::DataOneOf(
-                            self.to_literal_seq(bnode)?
+                            self.fetch_literal_seq(bnode)?
                         )
                     }
                 }
@@ -709,7 +709,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
                                                               [_, Term::FacetTerm(facet), literal] => Some(
                                                                   FacetRestriction {
                                                                       f: facet,
-                                                                      l: self.to_literal(&literal)?,
+                                                                      l: self.fetch_literal(&literal)?,
                                                                   }
                                                               ),
                                                               _ => None
@@ -773,22 +773,22 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
         }
     }
 
-    fn to_iri(&self, t: &Term<A>) -> Option<IRI<A>> {
+    fn fetch_iri(&self, t: &Term<A>) -> Option<IRI<A>> {
         match t {
             Term::Iri(iri) => Some(iri.clone()),
             _ => None,
         }
     }
 
-    fn to_sope(
+    fn fetch_sope(
         &mut self,
         t: &Term<A>,
         ic: &[&RDFOntology<A, AA>],
     ) -> Option<SubObjectPropertyExpression<A>> {
-        Some(self.to_ope(t, ic)?.into())
+        Some(self.fetch_ope(t, ic)?.into())
     }
 
-    fn to_ope(
+    fn fetch_ope(
         &mut self,
         t: &Term<A>,
         ic: &[&RDFOntology<A, AA>],
@@ -799,21 +799,21 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
         }
     }
 
-    fn to_ap(&mut self, t: &Term<A>, ic: &[&RDFOntology<A, AA>]) -> Option<AnnotationProperty<A>> {
+    fn fetch_ap(&mut self, t: &Term<A>, ic: &[&RDFOntology<A, AA>]) -> Option<AnnotationProperty<A>> {
         match self.find_property_kind(t, ic)? {
             PropertyExpression::AnnotationProperty(ap) => Some(ap),
             _ => None,
         }
     }
 
-    fn to_dp(&mut self, t: &Term<A>, ic: &[&RDFOntology<A, AA>]) -> Option<DataProperty<A>> {
+    fn fetch_dp(&mut self, t: &Term<A>, ic: &[&RDFOntology<A, AA>]) -> Option<DataProperty<A>> {
         match self.find_property_kind(t, ic)? {
             PropertyExpression::DataProperty(dp) => Some(dp),
             _ => None,
         }
     }
 
-    fn to_ce(&mut self, tce: &Term<A>) -> Option<ClassExpression<A>> {
+    fn fetch_ce(&mut self, tce: &Term<A>) -> Option<ClassExpression<A>> {
         match tce {
             Term::Iri(cl) => Some(Class(cl.clone()).into()),
             Term::BNode(id) => self.class_expression.remove(id),
@@ -821,7 +821,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
         }
     }
 
-    fn to_ce_seq(&mut self, bnodeid: &BNode<A>) -> Option<Vec<ClassExpression<A>>> {
+    fn fetch_ce_seq(&mut self, bnodeid: &BNode<A>) -> Option<Vec<ClassExpression<A>>> {
         if !self.bnode_seq.get(bnodeid)?.iter().all(|tce| match tce {
             Term::BNode(id) => self.class_expression.contains_key(id),
             _ => true,
@@ -834,45 +834,45 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
             .remove(bnodeid)
             .as_ref()?
             .iter()
-            .map(|tce| self.to_ce(tce)).collect()
+            .map(|tce| self.fetch_ce(tce)).collect()
 
     }
 
-    fn to_ni_seq(&mut self, bnodeid: &BNode<A>) -> Option<Vec<Individual<A>>> {
+    fn fetch_ni_seq(&mut self, bnodeid: &BNode<A>) -> Option<Vec<Individual<A>>> {
         self
             .bnode_seq
             .remove(bnodeid)
             .as_ref()?
             .iter()
             .map(|t| {
-                self.to_iri(t)
+                self.fetch_iri(t)
                     .map(|iri| NamedIndividual(iri).into())
             })
             .collect()
     }
 
-    fn to_dr_seq(&mut self, bnodeid: &BNode<A>) -> Option<Vec<DataRange<A>>> {
+    fn fetch_dr_seq(&mut self, bnodeid: &BNode<A>) -> Option<Vec<DataRange<A>>> {
         self
             .bnode_seq
             .remove(bnodeid)
             .as_ref()?
             .iter()
-            .map(|t| self.to_dr(t))
+            .map(|t| self.fetch_dr(t))
             .collect()
     }
 
     // TODO Fix code duplication
-    fn to_literal_seq(&mut self, bnodeid: &BNode<A>) -> Option<Vec<Literal<A>>> {
+    fn fetch_literal_seq(&mut self, bnodeid: &BNode<A>) -> Option<Vec<Literal<A>>> {
         self
             .bnode_seq
             .remove(bnodeid)
             .as_ref()?
             .iter()
-            .map(|t| self.to_literal(t))
+            .map(|t| self.fetch_literal(t))
             .collect()
     }
 
-    fn to_dr(&mut self, t: &Term<A>) -> Option<DataRange<A>> {
+    fn fetch_dr(&mut self, t: &Term<A>) -> Option<DataRange<A>> {
         match t {
             Term::Iri(iri) => {
                 let dt: Datatype<_> = iri.into();
@@ -883,14 +883,14 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
         }
     }
 
-    fn to_u32(&self, t: &Term<A>) -> Option<u32> {
+    fn fetch_u32(&self, t: &Term<A>) -> Option<u32> {
         match t {
             Term::Literal(val) => val.literal().parse::<u32>().ok(),
             _ => None,
         }
     }
 
-    fn to_literal(&self, t: &Term<A>) -> Option<Literal<A>> {
+    fn fetch_literal(&self, t: &Term<A>) -> Option<Literal<A>> {
         match t {
             Term::Literal(ob) => Some(ob.clone()),
             _ => None,
@@ -947,13 +947,13 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
                             PropertyExpression::ObjectPropertyExpression(ope) => {
                                 ClassExpression::ObjectSomeValuesFrom {
                                     ope,
-                                    bce: self.to_ce(ce_or_dr)?.into()
+                                    bce: self.fetch_ce(ce_or_dr)?.into()
                                 }
                             },
                             PropertyExpression::DataProperty(dp) => {
                                 ClassExpression::DataSomeValuesFrom {
                                     dp,
-                                    dr: self.to_dr(ce_or_dr)?
+                                    dr: self.fetch_dr(ce_or_dr)?
                                 }
                             },
                             _ => panic!("Unexpected Property Kind")
@@ -968,13 +968,13 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
                             PropertyExpression::ObjectPropertyExpression(ope) => {
                                 ClassExpression::ObjectHasValue {
                                     ope,
-                                    i: NamedIndividual(self.to_iri(val)?).into()
+                                    i: NamedIndividual(self.fetch_iri(val)?).into()
                                 }
                             },
                             PropertyExpression::DataProperty(dp) => {
                                 ClassExpression::DataHasValue {
                                     dp,
-                                    l: self.to_literal(val)?
+                                    l: self.fetch_literal(val)?
                                 }
                             }
                             _ => panic!("Unexpected Property kind"),
@@ -989,13 +989,13 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
                             PropertyExpression::ObjectPropertyExpression(ope) => {
                                 ClassExpression::ObjectAllValuesFrom {
                                     ope,
-                                    bce: self.to_ce(ce_or_dr)?.into()
+                                    bce: self.fetch_ce(ce_or_dr)?.into()
                                 }
                             },
                             PropertyExpression::DataProperty(dp) => {
                                 ClassExpression::DataAllValuesFrom {
                                     dp,
-                                    dr: self.to_dr(ce_or_dr)?
+                                    dr: self.fetch_dr(ce_or_dr)?
                                 }
                             },
                             _ => panic!("Unexpected Property Kind")
@@ -1006,7 +1006,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
                  [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Class)]] => {
                     some!{
                         ClassExpression::ObjectOneOf(
-                            self.to_ni_seq(bnodeid)?
+                            self.fetch_ni_seq(bnodeid)?
                         )
                     }
                 },
@@ -1014,7 +1014,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
                  [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Class)]] => {
                     some!{
                         ClassExpression::ObjectIntersectionOf(
-                            self.to_ce_seq(bnodeid)?
+                            self.fetch_ce_seq(bnodeid)?
                         )
                     }
                 },
@@ -1022,7 +1022,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
                  [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Class)]] => {
                     some!{
                         ClassExpression::ObjectUnionOf(
-                            self.to_ce_seq(
+                            self.fetch_ce_seq(
                                 bnodeid,
                             )?
                         )
@@ -1032,7 +1032,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
                  [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Class)]] => {
                     some!{
                         ClassExpression::ObjectComplementOf(
-                            self.to_ce(tce)?.into()
+                            self.fetch_ce(tce)?.into()
                         )
                     }
                 },
@@ -1044,9 +1044,9 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
                     some!{
                         ClassExpression::DataExactCardinality
                         {
-                            n:self.to_u32(literal)?,
+                            n:self.fetch_u32(literal)?,
                             dp: pr.into(),
-                            dr: self.to_dr(dr)?
+                            dr: self.fetch_dr(dr)?
                         }
                     }
                 }
@@ -1058,9 +1058,9 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
                     some!{
                         ClassExpression::DataMaxCardinality
                         {
-                            n:self.to_u32(literal)?,
+                            n:self.fetch_u32(literal)?,
                             dp: pr.into(),
-                            dr: self.to_dr(dr)?
+                            dr: self.fetch_dr(dr)?
                         }
                     }
                 }
@@ -1072,9 +1072,9 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
                     some!{
                         ClassExpression::DataMinCardinality
                         {
-                            n:self.to_u32(literal)?,
+                            n:self.fetch_u32(literal)?,
                             dp: pr.into(),
-                            dr: self.to_dr(dr)?
+                            dr: self.fetch_dr(dr)?
                         }
                     }
                 }
@@ -1089,7 +1089,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
                     some!{
                         ClassExpression::ObjectExactCardinality
                         {
-                            n:self.to_u32(literal)?,
+                            n:self.fetch_u32(literal)?,
                             ope: pr.into(),
                             bce: self.b.class(VOWL::Thing.iri_str()).into()
                         }
@@ -1103,9 +1103,9 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
                     some!{
                         ClassExpression::ObjectExactCardinality
                         {
-                            n:self.to_u32(literal)?,
+                            n:self.fetch_u32(literal)?,
                             ope: pr.into(),
-                            bce: self.to_ce(tce)?.into()
+                            bce: self.fetch_ce(tce)?.into()
                         }
                     }
                 }
@@ -1116,7 +1116,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
                     some!{
                         ClassExpression::ObjectMinCardinality
                         {
-                            n:self.to_u32(literal)?,
+                            n:self.fetch_u32(literal)?,
                             ope: pr.into(),
                             bce: self.b.class(VOWL::Thing.iri_str()).into()
                         }
@@ -1130,9 +1130,9 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
                     some!{
                         ClassExpression::ObjectMinCardinality
                         {
-                            n:self.to_u32(literal)?,
+                            n:self.fetch_u32(literal)?,
                             ope: pr.into(),
-                            bce: self.to_ce(tce)?.into()
+                            bce: self.fetch_ce(tce)?.into()
                         }
                     }
                 }
@@ -1143,7 +1143,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
                     some!{
                         ClassExpression::ObjectMaxCardinality
                         {
-                            n:self.to_u32(literal)?,
+                            n:self.fetch_u32(literal)?,
                             ope: pr.into(),
                             bce: self.b.class(VOWL::Thing.iri_str()).into()
                         }
@@ -1157,9 +1157,9 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
                     some!{
                         ClassExpression::ObjectMaxCardinality
                         {
-                            n:self.to_u32(literal)?,
+                            n:self.fetch_u32(literal)?,
                             ope: pr.into(),
-                            bce: self.to_ce(tce)?.into()
+                            bce: self.fetch_ce(tce)?.into()
                         }
                     }
                 }
@@ -1190,15 +1190,15 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
                         match target_type {
                             Term::OWL(VOWL::TargetIndividual) =>
                                 NegativeObjectPropertyAssertion {
-                                    ope: self.to_ope(pr, ic)?,
+                                    ope: self.fetch_ope(pr, ic)?,
                                     from: i.into(),
-                                    to: self.to_iri(target)?.into(),
+                                    to: self.fetch_iri(target)?.into(),
                                 }.into(),
                             Term::OWL(VOWL::TargetValue) =>
                                 NegativeDataPropertyAssertion {
-                                    dp: self.to_dp(pr, ic)?,
+                                    dp: self.fetch_dp(pr, ic)?,
                                     from: i.into(),
-                                    to: self.to_literal(target)?,
+                                    to: self.fetch_literal(target)?,
                                 }.into(),
                             _ => todo!()
                         }
@@ -1209,7 +1209,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
                 {
                     some! {
                         DifferentIndividuals (
-                            self.to_ni_seq(bnodeid)?
+                            self.fetch_ni_seq(bnodeid)?
                         ).into()
                     }
                 }
@@ -1218,7 +1218,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
                 {
                     some! {
                         DifferentIndividuals (
-                            self.to_ni_seq(bnodeid)?
+                            self.fetch_ni_seq(bnodeid)?
                         ).into()
                     }
                 }
@@ -1244,7 +1244,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
                 [Term::Iri(sub), Term::RDFS(VRDFS::SubClassOf), tce] => some! {
                     SubClassOf {
                         sub: Class(sub.clone()).into(),
-                        sup: self.to_ce(tce)?,
+                        sup: self.fetch_ce(tce)?,
                     }
                     .into()
                 },
@@ -1259,13 +1259,13 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
                                     EquivalentClasses(
                                         vec![
                                             Class(a.clone()).into(),
-                                            self.to_ce(b)?,
+                                            self.fetch_ce(b)?,
                                         ]).into()
                                 }
                                 NamedEntityKind::Datatype => {
                                     DatatypeDefinition{
                                         kind: a.clone().into(),
-                                        range: self.to_dr(b)?,
+                                        range: self.fetch_dr(b)?,
                                     }.into()
                                 }
                                 _=> todo!()
@@ -1283,7 +1283,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
                                 .collect();
 
                             HasKey{
-                                ce:self.to_ce(class)?,
+                                ce:self.fetch_ce(class)?,
                                 vpe: vpe?
                             }.into()
                         }
@@ -1293,7 +1293,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
                     some! {
                         DisjointUnion(
                             Class(iri.clone()),
-                            self.to_ce_seq(bnodeid)?
+                            self.fetch_ce_seq(bnodeid)?
                         ).into()
                     }
                 }
@@ -1303,7 +1303,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
                 ),
                 [pr, Term::RDF(VRDF::Type), Term::OWL(VOWL::TransitiveProperty)] => {
                     some! {
-                        TransitiveObjectProperty(self.to_ope(pr, ic)?).into()
+                        TransitiveObjectProperty(self.fetch_ope(pr, ic)?).into()
                     }
                 }
                 [pr, Term::RDF(VRDF::Type), Term::OWL(VOWL::FunctionalProperty)] => {
@@ -1377,7 +1377,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
                 [Term::Iri(sub), Term::RDF(VRDF::Type), cls] => some! {
                     {
                         ClassAssertion {
-                            ce: self.to_ce(cls)?,
+                            ce: self.fetch_ce(cls)?,
                             i: NamedIndividual(sub.clone()).into()
                         }.into()
                     }
@@ -1392,17 +1392,17 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
                             PropertyExpression::ObjectPropertyExpression(ope) =>
                                 SubObjectPropertyOf {
                                     sup: ope,
-                                    sub: self.to_sope(pr, ic)?,
+                                    sub: self.fetch_sope(pr, ic)?,
                                 }.into(),
                             PropertyExpression::DataProperty(dp) =>
                                 SubDataPropertyOf {
                                     sup: dp,
-                                    sub: self.to_dp(pr, ic)?
+                                    sub: self.fetch_dp(pr, ic)?
                                 }.into(),
                             PropertyExpression::AnnotationProperty(ap) =>
                                 SubAnnotationPropertyOf {
                                     sup: ap,
-                                    sub: self.to_ap(pr, ic)?
+                                    sub: self.fetch_ap(pr, ic)?
                                 }.into(),
                         }
                     }
@@ -1414,7 +1414,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
                                 self.bnode_seq
                                     .remove(id)?
                                     .iter()
-                                    .map(|t| self.to_ope(t, ic).unwrap())
+                                    .map(|t| self.fetch_ope(t, ic).unwrap())
                                     .collect()
                             ),
                             sup: ObjectProperty(pr.clone()).into(),
@@ -1426,17 +1426,17 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
                         match self.find_property_kind(pr, ic)? {
                             PropertyExpression::ObjectPropertyExpression(ope) => ObjectPropertyDomain {
                                 ope,
-                                ce: self.to_ce(t)?,
+                                ce: self.fetch_ce(t)?,
                             }
                             .into(),
                             PropertyExpression::DataProperty(dp) => DataPropertyDomain {
                                 dp,
-                                ce: self.to_ce(t)?,
+                                ce: self.fetch_ce(t)?,
                             }
                             .into(),
                             PropertyExpression::AnnotationProperty(ap) => AnnotationPropertyDomain {
                                 ap,
-                                iri: self.to_iri(t)?,
+                                iri: self.fetch_iri(t)?,
                             }
                             .into(),
                         }
@@ -1446,17 +1446,17 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
                     match self.find_property_kind(pr, ic)? {
                         PropertyExpression::ObjectPropertyExpression(ope) => ObjectPropertyRange {
                             ope,
-                            ce: self.to_ce(t)?,
+                            ce: self.fetch_ce(t)?,
                         }
                         .into(),
                         PropertyExpression::DataProperty(dp) => DataPropertyRange {
                             dp,
-                            dr: self.to_dr(t)?,
+                            dr: self.fetch_dr(t)?,
                         }
                         .into(),
                         PropertyExpression::AnnotationProperty(ap) => AnnotationPropertyRange {
                             ap,
-                            iri: self.to_iri(t)?,
+                            iri: self.fetch_iri(t)?,
                         }
                         .into(),
                     }
@@ -1464,11 +1464,11 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
                 [r, Term::OWL(VOWL::PropertyDisjointWith), s] => some! {
                     match self.find_property_kind(r, ic)? {
                         PropertyExpression::ObjectPropertyExpression(ope) => DisjointObjectProperties (
-                            vec![ope, self.to_ope(s, ic)?]
+                            vec![ope, self.fetch_ope(s, ic)?]
                         )
                         .into(),
                         PropertyExpression::DataProperty(dp) => DisjointDataProperties (
-                            vec![dp, self.to_dp(s, ic)?]
+                            vec![dp, self.fetch_dp(s, ic)?]
                         )
                             .into(),
                         _ => todo!()
@@ -1477,11 +1477,11 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
                 [r, Term::OWL(VOWL::EquivalentProperty), s] => some! {
                     match self.find_property_kind(r, ic)? {
                         PropertyExpression::ObjectPropertyExpression(ope) => EquivalentObjectProperties (
-                            vec![ope, self.to_ope(s, ic)?]
+                            vec![ope, self.fetch_ope(s, ic)?]
                         )
                         .into(),
                         PropertyExpression::DataProperty(dp) => EquivalentDataProperties (
-                            vec![dp, self.to_dp(s, ic)?]
+                            vec![dp, self.fetch_dp(s, ic)?]
                         )
                         .into(),
                         _ => todo!()
@@ -1505,7 +1505,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
                             DataPropertyAssertion {
                                 dp: pred.clone().into(),
                                 from: sub.into(),
-                                to: self.to_literal(t)?
+                                to: self.fetch_literal(t)?
                             }.into()
                         }
                         _ => todo!()

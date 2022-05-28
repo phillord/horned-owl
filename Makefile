@@ -94,4 +94,4 @@ triples-round-all:
 
 
 clippy:
-	cargo clippy -- -A clippy::type_complexity -A clippy::wrong_self_convention
+	cargo clippy -- -A clippy::type_complexity
