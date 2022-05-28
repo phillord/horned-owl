@@ -1,4 +1,4 @@
-use crate::model::{AnnotatedAxiom, Axiom, ForIRI, MutableOntology};
+use crate::model::{AnnotatedAxiom, Axiom, ForIRI, MutableOntology, RcStr};
 use crate::ontology::indexed::ForIndex;
 
 use super::indexed::{OntologyIndex, ThreeIndexedOntology, TwoIndexedOntology};
@@ -15,7 +15,7 @@ impl<A: ForIRI, AA: ForIndex<A>> LogicallyEqualIndex<A, AA> {
     }
 }
 
-impl LogicallyEqualIndex<Rc<str>, Rc<AnnotatedAxiom<Rc<str>>>> {
+impl LogicallyEqualIndex<RcStr, Rc<AnnotatedAxiom<RcStr>>> {
     pub fn new_rc() -> Self {
         LogicallyEqualIndex::new()
     }

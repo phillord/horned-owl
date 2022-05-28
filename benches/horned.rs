@@ -111,7 +111,7 @@ fn io_read(bench: &mut Bencher) {
         let f = File::open("benches/ont/o100.owl").ok().unwrap();
         let mut f = BufReader::new(f);
 
-        let _: Option<(SetOntology<Rc<str>>, PrefixMapping)> =
+        let _: Option<(SetOntology<RcStr>, PrefixMapping)> =
             horned_owl::io::owx::reader::read(&mut f).ok();
     })
 }
@@ -155,7 +155,7 @@ use std::sync::Arc;
 
 fn bigger_tree_set_index_rc(bench: &mut Bencher) {
     bench.iter(|| {
-        let b: Build<Rc<str>> = Build::new_rc();
+        let b: Build<RcStr> = Build::new_rc();
         let o = OneIndexedOntology::new_rc(SetIndex::new());
         bigger_tree_in_ontology(b, o)
     })
@@ -164,7 +164,7 @@ fn bigger_tree_set_index_rc(bench: &mut Bencher) {
 fn bigger_tree_set_index_annotated_axiom_rc_iri(bench: &mut Bencher) {
     bench.iter(|| {
         let b = Build::new_rc();
-        let o: OneIndexedOntology<Rc<str>, AnnotatedAxiom<Rc<str>>, _> =
+        let o: OneIndexedOntology<RcStr, AnnotatedAxiom<RcStr>, _> =
             OneIndexedOntology::new(SetIndex::new());
         bigger_tree_in_ontology(b, o)
     })
@@ -172,7 +172,7 @@ fn bigger_tree_set_index_annotated_axiom_rc_iri(bench: &mut Bencher) {
 
 fn bigger_tree_set_index_arc(bench: &mut Bencher) {
     bench.iter(|| {
-        let b: Build<Arc<str>> = Build::new_arc();
+        let b: Build<ArcStr> = Build::new_arc();
         let o = OneIndexedOntology::new_arc(SetIndex::new());
         bigger_tree_in_ontology(b, o)
     })
@@ -202,31 +202,31 @@ fn read_vec<A: ForIRI, AA: ForIndex<A>>(v: &Vec<u8>, b: Build<A>) -> RDFOntology
 fn food_rc_index_rc_iri(bench: &mut Bencher) {
     let v = food_to_vec();
     bench.iter(|| {
-        let b: Build<Rc<str>> = Build::new();
-        let _o: RDFOntology<Rc<str>, Rc<AnnotatedAxiom<Rc<str>>>> = read_vec(&v, b);
+        let b: Build<RcStr> = Build::new();
+        let _o: RDFOntology<RcStr, RcAnnotatedAxiom> = read_vec(&v, b);
     })
 }
 
 fn food_direct_index_rc_iri(bench: &mut Bencher) {
     let v = food_to_vec();
     bench.iter(|| {
-        let b: Build<Rc<str>> = Build::new();
-        let _o: RDFOntology<Rc<str>, AnnotatedAxiom<Rc<str>>> = read_vec(&v, b);
+        let b: Build<RcStr> = Build::new();
+        let _o: RDFOntology<RcStr, AnnotatedAxiom<RcStr>> = read_vec(&v, b);
     })
 }
 
 fn food_arc_index_arc_iri(bench: &mut Bencher) {
     let v = food_to_vec();
     bench.iter(|| {
-        let b: Build<Arc<str>> = Build::new();
-        let _o: RDFOntology<Arc<str>, Arc<AnnotatedAxiom<Arc<str>>>> = read_vec(&v, b);
+        let b: Build<ArcStr> = Build::new();
+        let _o: RDFOntology<ArcStr, Arc<AnnotatedAxiom<ArcStr>>> = read_vec(&v, b);
     })
 }
 fn food_direct_index_arc_iri(bench: &mut Bencher) {
     let v = food_to_vec();
     bench.iter(|| {
-        let b: Build<Arc<str>> = Build::new();
-        let _o: RDFOntology<Arc<str>, AnnotatedAxiom<Arc<str>>> = read_vec(&v, b);
+        let b: Build<ArcStr> = Build::new();
+        let _o: RDFOntology<ArcStr, AnnotatedAxiom<ArcStr>> = read_vec(&v, b);
     })
 }
 
@@ -246,8 +246,8 @@ fn pizza_to_vec() -> Vec<u8> {
 fn pizza_rc_index_rc_iri(bench: &mut Bencher) {
     let v = pizza_to_vec();
     bench.iter(|| {
-        let b:Build<Rc<str>> = Build::new();
-        let _o:RDFOntology<Rc<str>, Rc<AnnotatedAxiom<Rc<str>>>> = read_vec(&v, b);
+        let b:Build<RcStr> = Build::new();
+        let _o:RDFOntology<RcStr, RcAnnotatedAxiom> = read_vec(&v, b);
     }
     )
 }
@@ -255,8 +255,8 @@ fn pizza_rc_index_rc_iri(bench: &mut Bencher) {
 fn pizza_direct_index_rc_iri(bench: &mut Bencher) {
     let v = pizza_to_vec();
     bench.iter(|| {
-        let b:Build<Rc<str>> = Build::new();
-        let _o:RDFOntology<Rc<str>, AnnotatedAxiom<Rc<str>>> = read_vec(&v, b);
+        let b:Build<RcStr> = Build::new();
+        let _o:RDFOntology<RcStr, AnnotatedAxiom<RcStr>> = read_vec(&v, b);
     }
     )
 }
@@ -264,16 +264,16 @@ fn pizza_direct_index_rc_iri(bench: &mut Bencher) {
 fn pizza_arc_index_arc_iri(bench: &mut Bencher) {
     let v = pizza_to_vec();
     bench.iter(|| {
-        let b:Build<Arc<str>> = Build::new();
-        let _o:RDFOntology<Arc<str>, Arc<AnnotatedAxiom<Arc<str>>>> = read_vec(&v, b);
+        let b:Build<ArcStr> = Build::new();
+        let _o:RDFOntology<ArcStr, Arc<AnnotatedAxiom<ArcStr>>> = read_vec(&v, b);
     }
     )
 }
 fn pizza_direct_index_arc_iri(bench: &mut Bencher) {
     let v = pizza_to_vec();
     bench.iter(|| {
-        let b:Build<Arc<str>> = Build::new();
-        let _o:RDFOntology<Arc<str>, AnnotatedAxiom<Arc<str>>> = read_vec(&v, b);
+        let b:Build<ArcStr> = Build::new();
+        let _o:RDFOntology<ArcStr, AnnotatedAxiom<ArcStr>> = read_vec(&v, b);
     }
     )
 }

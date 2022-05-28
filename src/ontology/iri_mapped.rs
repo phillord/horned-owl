@@ -216,6 +216,7 @@ impl<A: ForIRI, AA: ForIndex<A>> OntologyIndex<A, AA> for IRIMappedIndex<A, AA> 
     }
 }
 
+#[allow(clippy::type_complexity)]
 pub struct IRIMappedOntology<A: ForIRI, AA: ForIndex<A>>(
     FourIndexedOntology<
         A,
@@ -227,8 +228,8 @@ pub struct IRIMappedOntology<A: ForIRI, AA: ForIndex<A>>(
     >,
 );
 
-pub type RcIRIMappedOntology = IRIMappedOntology<Rc<str>, Rc<AnnotatedAxiom<Rc<str>>>>;
-pub type ArcIRIMappedOntology = IRIMappedOntology<Arc<str>, Arc<AnnotatedAxiom<Arc<str>>>>;
+pub type RcIRIMappedOntology = IRIMappedOntology<RcStr, Rc<AnnotatedAxiom<RcStr>>>;
+pub type ArcIRIMappedOntology = IRIMappedOntology<ArcStr, Arc<AnnotatedAxiom<ArcStr>>>;
 
 impl<A: ForIRI, AA: ForIndex<A>> Ontology<A> for IRIMappedOntology<A, AA> {
     fn id(&self) -> &OntologyID<A> {

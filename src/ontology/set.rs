@@ -26,8 +26,8 @@ impl<A: ForIRI> Default for SetOntology<A> {
     }
 }
 
-impl SetOntology<Rc<str>> {
-    pub fn new_rc() -> SetOntology<Rc<str>> {
+impl SetOntology<RcStr> {
+    pub fn new_rc() -> SetOntology<RcStr> {
         SetOntology::new()
     }
 }
@@ -199,7 +199,7 @@ impl<A: ForIRI, AA: ForIndex<A>> SetIndex<A, AA> {
     }
 }
 
-impl SetIndex<Rc<str>, Rc<AnnotatedAxiom<Rc<str>>>> {
+impl SetIndex<RcStr, Rc<AnnotatedAxiom<RcStr>>> {
     pub fn new_rc() -> Self {
         Self::new()
     }

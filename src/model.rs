@@ -132,6 +132,9 @@ impl<T: ?Sized> ForIRI for T where
 {
 }
 
+pub type RcStr = Rc<str>;
+pub type ArcStr = Arc<str>;
+
 impl<A: ForIRI> IRI<A> {
     pub fn underlying(&self) -> A {
         self.0.clone()
@@ -158,14 +161,14 @@ impl<A: ForIRI> Borrow<str> for IRI<A> {
     }
 }
 
-impl From<&IRI<Rc<str>>> for Rc<str> {
-    fn from(i: &IRI<Rc<str>>) -> Rc<str> {
+impl From<&IRI<RcStr>> for RcStr {
+    fn from(i: &IRI<RcStr>) -> RcStr {
         i.0.clone()
     }
 }
 
-impl From<IRI<Rc<str>>> for Rc<str> {
-    fn from(i: IRI<Rc<str>>) -> Rc<str> {
+impl From<IRI<RcStr>> for RcStr {
+    fn from(i: IRI<RcStr>) -> RcStr {
         i.0
     }
 }
@@ -371,14 +374,14 @@ impl<A: ForIRI> Build<A> {
     }
 }
 
-impl Build<Rc<str>> {
-    pub fn new_rc() -> Build<Rc<str>> {
+impl Build<RcStr> {
+    pub fn new_rc() -> Build<RcStr> {
         Build::new()
     }
 }
 
-impl Build<Arc<str>> {
-    pub fn new_arc() -> Build<Arc<str>> {
+impl Build<ArcStr> {
+    pub fn new_arc() -> Build<ArcStr> {
         Build::new()
     }
 }
@@ -588,14 +591,14 @@ impl<A: ForIRI> From<AnonymousIndividual<A>> for Individual<A> {
     }
 }
 
-impl From<Rc<str>> for AnonymousIndividual<Rc<str>> {
-    fn from(rc: Rc<str>) -> AnonymousIndividual<Rc<str>> {
+impl From<RcStr> for AnonymousIndividual<RcStr> {
+    fn from(rc: RcStr) -> AnonymousIndividual<RcStr> {
         AnonymousIndividual(rc)
     }
 }
 
-impl From<String> for AnonymousIndividual<Rc<str>> {
-    fn from(s: String) -> AnonymousIndividual<Rc<str>> {
+impl From<String> for AnonymousIndividual<RcStr> {
+    fn from(s: String) -> AnonymousIndividual<RcStr> {
         AnonymousIndividual(s.into())
     }
 }
@@ -704,6 +707,10 @@ pub struct AnnotatedAxiom<A> {
     pub axiom: Axiom<A>,
     pub ann: BTreeSet<Annotation<A>>,
 }
+
+pub type RcAnnotatedAxiom=Rc<AnnotatedAxiom<RcStr>>;
+pub type ArcAnnotatedAxiom=Arc<AnnotatedAxiom<ArcStr>>;
+
 
 impl<A: ForIRI> AnnotatedAxiom<A> {
     pub fn new<I>(axiom: I, ann: BTreeSet<Annotation<A>>) -> AnnotatedAxiom<A>

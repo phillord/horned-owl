@@ -7,9 +7,8 @@ use clap::ArgMatches;
 
 use horned_owl::error::HornedError;
 use horned_owl::io::rdf::reader::RDFOntology;
-use horned_owl::model::AnnotatedAxiom;
+use horned_owl::model::{RcAnnotatedAxiom, RcStr};
 
-use std::rc::Rc;
 use std::{fs::File, io::BufReader, path::Path};
 
 #[allow(dead_code)]
@@ -36,7 +35,7 @@ pub(crate) fn matcher(matches: &ArgMatches) -> Result<(), HornedError> {
         "Command requires an INPUT argument".to_string(),
     ))?;
 
-    let (_ont, incomplete): (RDFOntology<Rc<str>, Rc<AnnotatedAxiom<Rc<str>>>>, _) =
+    let (_ont, incomplete): (RDFOntology<RcStr, RcAnnotatedAxiom>, _) =
         horned_owl::io::rdf::reader::read(&mut BufReader::new(File::open(Path::new(input))?))?;
 
     println!("\n\nIncompleted Parsed");

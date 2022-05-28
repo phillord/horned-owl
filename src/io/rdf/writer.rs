@@ -1556,7 +1556,7 @@ mod test {
     // use std::io::BufReader;
     // use std::io::BufWriter;
 
-    fn read_ok<R: BufRead>(bufread: &mut R) -> SetOntology<Rc<str>> {
+    fn read_ok<R: BufRead>(bufread: &mut R) -> SetOntology<RcStr> {
         let r = crate::io::rdf::reader::read(bufread);
         assert!(r.is_ok(), "Expected ontology, got failure:{:?}", r.err());
         let (o, incomplete) = r.ok().unwrap();
@@ -1586,14 +1586,14 @@ mod test {
         assert_eq!(ont.id().iri, ont2.id().iri);
     }
 
-    fn roundtrip(ont: &str) -> (SetOntology<Rc<str>>, SetOntology<Rc<str>>) {
+    fn roundtrip(ont: &str) -> (SetOntology<RcStr>, SetOntology<RcStr>) {
         let ont_orig = read_ok(&mut ont.as_bytes());
         let temp_file = Temp::new_file().unwrap();
 
         let file = File::create(&temp_file).ok().unwrap();
         let mut buf_writer = BufWriter::new(&file);
 
-        let amo: AxiomMappedOntology<Rc<str>, Rc<AnnotatedAxiom<Rc<str>>>> =
+        let amo: AxiomMappedOntology<RcStr, Rc<AnnotatedAxiom<RcStr>>> =
             ont_orig.clone().into();
         write(&mut buf_writer, &amo).ok().unwrap();
         buf_writer.flush().ok();
@@ -1605,7 +1605,7 @@ mod test {
         (ont_orig, ont_round)
     }
 
-    fn assert_round(ont: &str) -> (SetOntology<Rc<str>>, SetOntology<Rc<str>>) {
+    fn assert_round(ont: &str) -> (SetOntology<RcStr>, SetOntology<RcStr>) {
         let (ont_orig, ont_round) = roundtrip(ont);
 
         println!("ont_orig\n{:#?}", ont_orig);

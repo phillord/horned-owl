@@ -157,6 +157,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> ClosureOntologyParser<'a, A, AA> {
 }
 
 // Parse the ontology at IRI, resolving any knowledge from imports necessary
+#[allow(clippy::type_complexity)]
 pub fn read<A: ForIRI, AA: ForIndex<A>>(
     iri: &IRI<A>,
 ) -> Result<(RDFOntology<A, AA>, IncompleteParse<A>), HornedError> {
@@ -174,6 +175,7 @@ pub fn read<A: ForIRI, AA: ForIndex<A>>(
     Ok(res.into_iter().next().unwrap())
 }
 
+#[allow(clippy::type_complexity)]
 pub fn read_closure<A: ForIRI, AA: ForIndex<A>>(
     b: &Build<A>,
     iri: &IRI<A>,

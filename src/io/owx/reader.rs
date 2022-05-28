@@ -10,7 +10,6 @@ use crate::{ontology::set::SetOntology, vocab::OWL};
 use std::borrow::Cow;
 use std::collections::BTreeSet;
 use std::io::BufRead;
-use std::rc::Rc;
 
 use quick_xml::events::BytesEnd;
 use quick_xml::events::BytesStart;
@@ -69,7 +68,7 @@ where
 
 pub fn read<R: BufRead>(
     bufread: &mut R,
-) -> Result<(SetOntology<Rc<str>>, PrefixMapping), HornedError> {
+) -> Result<(SetOntology<RcStr>, PrefixMapping), HornedError> {
     let b = Build::new();
     read_with_build(bufread, &b)
 }
@@ -654,6 +653,7 @@ fn till_end_with<A: ForIRI, R: BufRead, T: FromStart<A> + std::fmt::Debug>(
     }
 }
 
+#[allow(clippy::type_complexity)]
 fn object_cardinality_restriction<A: ForIRI, R: BufRead>(
     r: &mut Read<A, R>,
     e: &BytesStart,
@@ -1236,7 +1236,7 @@ pub mod test {
     pub fn read_ok<R: BufRead>(
         bufread: &mut R,
     ) -> (
-        AxiomMappedOntology<Rc<str>, Rc<AnnotatedAxiom<Rc<str>>>>,
+        AxiomMappedOntology<RcStr, RcAnnotatedAxiom>,
         PrefixMapping,
     ) {
         let r = read(bufread);

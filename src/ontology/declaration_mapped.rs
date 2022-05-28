@@ -1,12 +1,12 @@
 //! An index that provides rapid look up via declaration kind
 
-use crate::model::{AnnotatedAxiom, Axiom, AxiomKind, ForIRI, Kinded, NamedEntityKind, IRI};
+use crate::model::{AnnotatedAxiom, Axiom, AxiomKind, ForIRI, Kinded, NamedEntityKind, IRI, RcAnnotatedAxiom, RcStr};
 
 use super::indexed::ForIndex;
 use super::indexed::OntologyIndex;
 
 use std::marker::PhantomData;
-use std::{collections::HashMap, rc::Rc};
+use std::collections::HashMap;
 
 #[derive(Debug, Default)]
 pub struct DeclarationMappedIndex<A, AA>(HashMap<IRI<A>, NamedEntityKind>, PhantomData<AA>);
@@ -95,7 +95,7 @@ impl<A: ForIRI, AA: ForIndex<A>> OntologyIndex<A, AA> for DeclarationMappedIndex
     }
 }
 
-impl DeclarationMappedIndex<Rc<str>, Rc<AnnotatedAxiom<Rc<str>>>> {
+impl DeclarationMappedIndex<RcStr, RcAnnotatedAxiom> {
     pub fn new_rc() -> Self {
         Self::new()
     }
@@ -103,16 +103,14 @@ impl DeclarationMappedIndex<Rc<str>, Rc<AnnotatedAxiom<Rc<str>>>> {
 
 #[cfg(test)]
 mod test {
-    use std::rc::Rc;
-
     use super::DeclarationMappedIndex;
-    use crate::model::{AnnotatedAxiom, Build, NamedEntity, NamedEntityKind};
+    use crate::model::{AnnotatedAxiom, Build, NamedEntity, NamedEntityKind, RcStr};
     use crate::ontology::indexed::OntologyIndex;
     use crate::vocab::{WithIRI, OWL};
     fn stuff() -> (
-        AnnotatedAxiom<Rc<str>>,
-        AnnotatedAxiom<Rc<str>>,
-        AnnotatedAxiom<Rc<str>>,
+        AnnotatedAxiom<RcStr>,
+        AnnotatedAxiom<RcStr>,
+        AnnotatedAxiom<RcStr>,
     ) {
         let b = Build::new_rc();
         let c: NamedEntity<_> = b.class("http://www.example.com/c").into();

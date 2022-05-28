@@ -18,7 +18,7 @@
 //! and `ThreeIndexedOntology`, each of which operate something like a
 //! named tuple, allowing differently typed `OntologyIndex` objects to
 //! be added.
-use crate::model::{AnnotatedAxiom, ForIRI, MutableOntology, Ontology, OntologyID, IRI};
+use crate::model::{AnnotatedAxiom, ArcStr, ForIRI, MutableOntology, Ontology, OntologyID, IRI, RcStr};
 use std::borrow::Borrow;
 use std::fmt::Debug;
 use std::hash::Hash;
@@ -143,20 +143,20 @@ impl<A: ForIRI, AA: ForIndex<A>, I: OntologyIndex<A, AA>> OneIndexedOntology<A, 
     }
 }
 
-impl<I> OneIndexedOntology<Rc<str>, Rc<AnnotatedAxiom<Rc<str>>>, I>
+impl<I> OneIndexedOntology<RcStr, Rc<AnnotatedAxiom<RcStr>>, I>
 where
-    I: OntologyIndex<Rc<str>, Rc<AnnotatedAxiom<Rc<str>>>>,
+    I: OntologyIndex<RcStr, Rc<AnnotatedAxiom<RcStr>>>,
 {
-    pub fn new_rc(i: I) -> OneIndexedOntology<Rc<str>, Rc<AnnotatedAxiom<Rc<str>>>, I> {
+    pub fn new_rc(i: I) -> OneIndexedOntology<RcStr, Rc<AnnotatedAxiom<RcStr>>, I> {
         Self::new(i)
     }
 }
 
-impl<I> OneIndexedOntology<Arc<str>, Arc<AnnotatedAxiom<Arc<str>>>, I>
+impl<I> OneIndexedOntology<ArcStr, Arc<AnnotatedAxiom<ArcStr>>, I>
 where
-    I: OntologyIndex<Arc<str>, Arc<AnnotatedAxiom<Arc<str>>>>,
+    I: OntologyIndex<ArcStr, Arc<AnnotatedAxiom<ArcStr>>>,
 {
-    pub fn new_arc(i: I) -> OneIndexedOntology<Arc<str>, Arc<AnnotatedAxiom<Arc<str>>>, I> {
+    pub fn new_arc(i: I) -> OneIndexedOntology<ArcStr, Arc<AnnotatedAxiom<ArcStr>>, I> {
         Self::new(i)
     }
 }
@@ -488,21 +488,19 @@ impl<
 #[cfg(test)]
 mod test {
 
-    use std::rc::Rc;
-
     use super::{
         FourIndexedOntology, NullIndex, OneIndexedOntology, ThreeIndexedOntology,
         TwoIndexedOntology,
     };
     use crate::{
-        model::{AnnotatedAxiom, Build, MutableOntology, NamedEntity},
+        model::{AnnotatedAxiom, Build, MutableOntology, NamedEntity, RcStr},
         ontology::set::SetIndex,
     };
 
     fn stuff() -> (
-        AnnotatedAxiom<Rc<str>>,
-        AnnotatedAxiom<Rc<str>>,
-        AnnotatedAxiom<Rc<str>>,
+        AnnotatedAxiom<RcStr>,
+        AnnotatedAxiom<RcStr>,
+        AnnotatedAxiom<RcStr>,
     ) {
         let b = Build::new_rc();
         let c: NamedEntity<_> = b.class("http://www.example.com/c").into();

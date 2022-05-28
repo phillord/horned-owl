@@ -281,8 +281,8 @@ impl<A: ForIRI, AA: ForIndex<A>> OntologyIndex<A, AA> for AxiomMappedIndex<A, AA
 #[derive(Default, Debug, Eq, PartialEq)]
 pub struct AxiomMappedOntology<A, AA>(OneIndexedOntology<A, AA, AxiomMappedIndex<A, AA>>);
 
-pub type RcAxiomMappedOntology = AxiomMappedOntology<Rc<str>, Rc<AnnotatedAxiom<Rc<str>>>>;
-pub type ArcAxiomMappedOntology = AxiomMappedOntology<Arc<str>, Arc<AnnotatedAxiom<Arc<str>>>>;
+pub type RcAxiomMappedOntology = AxiomMappedOntology<RcStr, Rc<AnnotatedAxiom<RcStr>>>;
+pub type ArcAxiomMappedOntology = AxiomMappedOntology<ArcStr, Arc<AnnotatedAxiom<ArcStr>>>;
 
 impl<A: ForIRI, AA: ForIndex<A>> Ontology<A> for AxiomMappedOntology<A, AA> {
     fn id(&self) -> &OntologyID<A> {

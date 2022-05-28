@@ -3,7 +3,7 @@
 use crate::{
     error::HornedError,
     io::{ParserOutput, ResourceType},
-    model::{AnnotatedAxiom, Build, IRI},
+    model::{Build, IRI, RcAnnotatedAxiom, RcStr},
     ontology::axiom_mapped::RcAxiomMappedOntology,
     resolve::{localize_iri, strict_resolve_iri},
 };
@@ -12,7 +12,6 @@ use std::{
     fs::File,
     io::{BufReader, Write},
     path::Path,
-    rc::Rc,
 };
 
 pub fn path_type(path: &Path) -> Option<ResourceType> {
@@ -25,7 +24,7 @@ pub fn path_type(path: &Path) -> Option<ResourceType> {
 
 pub fn parse_path(
     path: &Path,
-) -> Result<ParserOutput<Rc<str>, Rc<AnnotatedAxiom<Rc<str>>>>, HornedError> {
+) -> Result<ParserOutput<RcStr, RcAnnotatedAxiom>, HornedError> {
     Ok(match path_type(path) {
         Some(ResourceType::OWX) => {
             let file = File::open(&path)?;
@@ -49,7 +48,7 @@ pub fn parse_path(
 /// Parse but only as far as the imports, if that makes sense.
 pub fn parse_imports(
     path: &Path,
-) -> Result<ParserOutput<Rc<str>, Rc<AnnotatedAxiom<Rc<str>>>>, HornedError> {
+) -> Result<ParserOutput<RcStr, RcAnnotatedAxiom>, HornedError> {
     let file = File::open(&path)?;
     let mut bufreader = BufReader::new(file);
     Ok(match path_type(path) {
@@ -69,7 +68,7 @@ pub fn parse_imports(
     })
 }
 
-pub fn materialize(input: &str) -> Result<Vec<IRI<Rc<str>>>, HornedError> {
+pub fn materialize(input: &str) -> Result<Vec<IRI<RcStr>>, HornedError> {
     let mut v = vec![];
     materialize_1(input, &mut v, true)?;
     Ok(v)
@@ -77,9 +76,9 @@ pub fn materialize(input: &str) -> Result<Vec<IRI<Rc<str>>>, HornedError> {
 
 pub fn materialize_1<'a>(
     input: &str,
-    done: &'a mut Vec<IRI<Rc<str>>>,
+    done: &'a mut Vec<IRI<RcStr>>,
     recurse: bool,
-) -> Result<&'a mut Vec<IRI<Rc<str>>>, HornedError> {
+) -> Result<&'a mut Vec<IRI<RcStr>>, HornedError> {
     println!("Parsing: {}", input);
     let amont: RcAxiomMappedOntology = parse_imports(Path::new(input))?.into();
     let import = amont.i().import();

@@ -30,7 +30,6 @@ use std::collections::BTreeSet;
 use std::collections::HashMap;
 use std::io::BufRead;
 use std::io::Cursor;
-use std::rc::Rc;
 
 type RioTerm<'a> = ::rio_api::model::Term<'a>;
 
@@ -279,6 +278,7 @@ macro_rules! d {
 }
 
 #[derive(Debug)]
+#[allow(clippy::type_complexity)]
 pub struct RDFOntology<A: ForIRI, AA: ForIndex<A>>(
     ThreeIndexedOntology<
         A,
@@ -289,7 +289,7 @@ pub struct RDFOntology<A: ForIRI, AA: ForIndex<A>>(
     >,
 );
 
-pub type RcRDFOntology = RDFOntology<Rc<str>, Rc<AnnotatedAxiom<Rc<str>>>>;
+pub type RcRDFOntology = RDFOntology<RcStr, RcAnnotatedAxiom>;
 
 impl<A: ForIRI, AA: ForIndex<A>> Ontology<A> for RDFOntology<A, AA> {
     fn id(&self) -> &OntologyID<A> {
@@ -1816,8 +1816,8 @@ pub fn read<R: BufRead>(
     bufread: &mut R,
 ) -> Result<
     (
-        RDFOntology<Rc<str>, Rc<AnnotatedAxiom<Rc<str>>>>,
-        IncompleteParse<Rc<str>>,
+        RDFOntology<RcStr, RcAnnotatedAxiom>,
+        IncompleteParse<RcStr>,
     ),
     HornedError,
 > {
@@ -1843,7 +1843,7 @@ mod test {
             .try_init();
     }
 
-    fn read_ok<R: BufRead>(bufread: &mut R) -> RDFOntology<Rc<str>, Rc<AnnotatedAxiom<Rc<str>>>> {
+    fn read_ok<R: BufRead>(bufread: &mut R) -> RDFOntology<RcStr, Rc<AnnotatedAxiom<RcStr>>> {
         init_log();
 
         let r = read(bufread);
@@ -2131,7 +2131,7 @@ mod test {
     #[test]
     fn import_with_partial_parse() {
         let b = Build::new_rc();
-        let mut p: OntologyParser<_, Rc<AnnotatedAxiom<Rc<str>>>> =
+        let mut p: OntologyParser<_, Rc<AnnotatedAxiom<RcStr>>> =
             parser_with_build(&mut slurp_rdfont("import").as_bytes(), &b);
         let _ = p.parse_imports();
 
@@ -2144,7 +2144,7 @@ mod test {
     #[test]
     fn declaration_with_partial_parse() {
         let b = Build::new_rc();
-        let mut p: OntologyParser<_, Rc<AnnotatedAxiom<Rc<str>>>> =
+        let mut p: OntologyParser<_, Rc<AnnotatedAxiom<RcStr>>> =
             parser_with_build(&mut slurp_rdfont("class").as_bytes(), &b);
         let _ = p.parse_declarations();
 
@@ -2417,7 +2417,7 @@ mod test {
     #[test]
     fn import_property_in_bits() -> Result<(), HornedError> {
         let b = Build::new_rc();
-        let p: OntologyParser<_, Rc<AnnotatedAxiom<Rc<str>>>> =
+        let p: OntologyParser<_, Rc<AnnotatedAxiom<RcStr>>> =
             parser_with_build(&mut slurp_rdfont("other-property").as_bytes(), &b);
         let (family_other, incomplete) = p.parse()?;
         assert!(incomplete.is_complete());
