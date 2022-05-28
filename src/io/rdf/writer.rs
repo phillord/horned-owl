@@ -18,23 +18,6 @@ use std::{
     io::Write,
 };
 
-/*
-#[derive(Debug, Error)]
-pub enum WriteError {
-    // Use to replace bail!/format_err from failure crate. Should specialize
-    #[error("{0}")]
-    GeneralError(String),
-    #[error("Oops")]
-    Underlying(#[source] Box<dyn std::error::Error>),
-}
-
-impl From<std::io::Error> for WriteError {
-    fn from(e: std::io::Error) -> Self {
-        WriteError::Underlying(Box::new(e))
-    }
-}
-*/
-
 pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
     write: &mut W,
     ont: &AxiomMappedOntology<A, AA>,

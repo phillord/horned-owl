@@ -17,24 +17,6 @@ use quick_xml::Writer;
 use std::collections::BTreeSet;
 use std::io::Write as StdWrite;
 
-/*
-#[derive(Debug, Error)]
-pub enum WriteError {
-    // Use to replace bail!/format_err from failure crate. Should specialize
-    #[error("{0}")]
-    GeneralError(String),
-
-    #[error("XML Error:{0}")]
-    XMLError(quick_xml::Error),
-}
-
-impl From<quick_xml::Error> for WriteError {
-    fn from(e: quick_xml::Error) -> Self {
-        Self::XMLError(e)
-    }
-}
- */
-
 /// Write an Ontology to `write`, using the given PrefixMapping
 ///
 /// The ontology is written in OWL

@@ -16,45 +16,6 @@ use quick_xml::events::BytesStart;
 use quick_xml::events::Event;
 use quick_xml::Reader;
 
-/*
-#[derive(Debug, Error)]
-pub enum ReadError {
-    #[error("End Tag Arrived Unexpectedly: {tag} at {pos}")]
-    UnexpectedEndTag { tag: String, pos: usize },
-
-    #[error("Missing End Tag: expected {tag} after {pos}")]
-    MissingEndTag { tag: String, pos: usize },
-
-    #[error("Missing element: Expected {tag} at {pos}")]
-    MissingElement { tag: String, pos: usize },
-
-    #[error("Missing attribute: Expected {attribute} at {pos}")]
-    MissingAttribute { attribute: String, pos: usize },
-
-    #[error("Unknown Entity: Expected Kind of {kind}, found {found} at {pos}")]
-    UnknownEntity {
-        kind: String,
-        found: String,
-        pos: usize,
-    },
-
-    #[error("Unexpected Tag: found {tag} at {pos}")]
-    UnexpectedTag { tag: String, pos: usize },
-
-    #[error("Unexpected End of File: {pos}")]
-    UnexpectedEof { pos: usize },
-
-    #[error("Literal with language tag and incorrect datatype")]
-    BrokenLiteral,
-
-    #[error("Error during XML parsing: {0}")]
-    XMLError(quick_xml::Error),
-
-    #[error("Cannot parse value as integer: {0}")]
-    ParseInt(#[source] ParseIntError),
-}
-*/
-
 struct Read<'a, A: ForIRI, R>
 where
     R: BufRead,

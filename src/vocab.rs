@@ -2,6 +2,8 @@
 use self::Namespace::*;
 use enum_meta::*;
 
+use crate::error::invalid;
+use crate::error::HornedError;
 use crate::model::Build;
 use crate::model::Facet;
 use crate::model::ForIRI;
@@ -9,16 +11,8 @@ use crate::model::NamedEntity;
 use crate::model::NamedEntityKind;
 use crate::model::IRI;
 
-use thiserror::Error;
-
 use std::borrow::Borrow;
 
-#[derive(Debug, Error)]
-pub enum VocabError {
-    // Use to replace bail!/format_err from failure crate. Should specialize
-    #[error("{0}")]
-    GeneralError(String),
-}
 
 pub trait WithIRI<'a>: Meta<&'a IRIString> {
     /// Return a string representation of the IRI associated with this
@@ -302,7 +296,7 @@ pub fn entity_for_iri<A: ForIRI, S: Borrow<str>>(
     type_iri: S,
     entity_iri: S,
     b: &Build<A>,
-) -> Result<NamedEntity<A>, VocabError> {
+) -> Result<NamedEntity<A>, HornedError> {
     // Datatypes are handled here because they are not a
     // "type" but an "RDF schema" element.
     if type_iri.borrow() == "http://www.w3.org/2000/01/rdf-schema#Datatype" {
@@ -310,10 +304,10 @@ pub fn entity_for_iri<A: ForIRI, S: Borrow<str>>(
     }
 
     if type_iri.borrow().len() < 30 {
-        return Err(VocabError::GeneralError(format!(
+        return Err(invalid!(
             "IRI is not for a type of entity:{:?}",
             type_iri.borrow()
-        )));
+        ));
     }
 
     Ok(match &type_iri.borrow()[30..] {
@@ -323,10 +317,10 @@ pub fn entity_for_iri<A: ForIRI, S: Borrow<str>>(
         "AnnotationProperty" => b.annotation_property(entity_iri).into(),
         "NamedIndividual" => b.named_individual(entity_iri).into(),
         _ => {
-            return Err(VocabError::GeneralError(format!(
+            return Err(invalid!(
                 "IRI is not a type of entity:{:?}",
                 type_iri.borrow()
-            )))
+            ));
         }
     })
 }
