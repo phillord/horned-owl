@@ -2027,6 +2027,30 @@ pub mod test {
     }
 
     #[test]
+    fn gci_and_other_class_relations() {
+        let ont_s = include_str!("../../ont/owl-xml/gci_and_other_class_relations.owx");
+        let (ont, _) = read_ok(&mut ont_s.as_bytes());
+
+        assert_eq!(ont.i().sub_class_of().count(), 1);
+        let cl = ont.i().sub_class_of().next().unwrap();
+        assert!{
+            matches! {
+                &cl.sup, ClassExpression::ObjectSomeValuesFrom{ope:_, bce:_}
+            }
+        }
+
+        assert!{
+            matches! {
+                &cl.sub, ClassExpression::ObjectSomeValuesFrom{ope:_, bce:_}
+            }
+        }
+
+
+
+    }
+
+
+    #[test]
     fn family() {
         let ont_s = include_str!("../../ont/owl-xml/family.owx");
         let (_, _) = read_ok(&mut ont_s.as_bytes());

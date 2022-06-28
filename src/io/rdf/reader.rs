@@ -435,6 +435,12 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
         // gather these in a single pass.
         for t in &triple {
             match t {
+                [_, Term::OWL(VOWL::DisjointWith), _] |
+                [_, Term::OWL(VOWL::EquivalentClass), _] |
+                [_, Term::RDFS(VRDFS::SubClassOf), _]
+                    => {
+                    simple.push(t.clone())
+                }
                 [Term::BNode(id), _, _] => {
                     let v = bnode.entry(id.clone()).or_insert_with(Vec::new);
                     v.push(t.clone())
@@ -897,6 +903,18 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
         }
     }
 
+    fn find_term_kind(&mut self, term: &Term<A>, ic: &[&RDFOntology<A, AA>])
+                      -> Option<NamedEntityKind> {
+        match term {
+            Term::Iri(iri) => self.find_declaration_kind(iri, ic),
+            // TODO: this might be too general. At the moment, I am
+            // only using this function to distinguish between a
+            // datatype and an class
+            _ => Some(NamedEntityKind::Class),
+        }
+    }
+
+
     fn find_declaration_kind(
         &mut self,
         iri: &IRI<A>,
@@ -1241,32 +1259,36 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
                 .flat_map(|(_k, v)| v)
         ) {
             let axiom: Option<Axiom<_>> = match &triple {
-                [Term::Iri(sub), Term::RDFS(VRDFS::SubClassOf), tce] => some! {
+                [sub_tce, Term::RDFS(VRDFS::SubClassOf), sup_tce] => some! {
                     SubClassOf {
-                        sub: Class(sub.clone()).into(),
-                        sup: self.fetch_ce(tce)?,
+                        sub: self.fetch_ce(sub_tce)?,
+                        sup: self.fetch_ce(sup_tce)?,
                     }
                     .into()
                 },
                 // TODO: We need to check whether these
                 // EquivalentClasses have any other EquivalentClasses
                 // and add to that axiom
-                [Term::Iri(a), Term::OWL(VOWL::EquivalentClass), b] => {
+                [a, Term::OWL(VOWL::EquivalentClass), b] => {
                     some! {
                         {
-                            match self.find_declaration_kind(a, ic)? {
+                            match self.find_term_kind(a, ic)? {
                                 NamedEntityKind::Class => {
                                     EquivalentClasses(
                                         vec![
-                                            Class(a.clone()).into(),
+                                            self.fetch_ce(a)?,
                                             self.fetch_ce(b)?,
                                         ]).into()
                                 }
                                 NamedEntityKind::Datatype => {
-                                    DatatypeDefinition{
-                                        kind: a.clone().into(),
-                                        range: self.fetch_dr(b)?,
-                                    }.into()
+                                    if let Term::Iri(iri) = a {
+                                        DatatypeDefinition{
+                                            kind: iri.clone().into(),
+                                            range: self.fetch_dr(b)?,
+                                        }.into()
+                                    } else {
+                                        todo!()
+                                    }
                                 }
                                 _=> todo!()
                             }
@@ -1382,10 +1404,12 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
                         }.into()
                     }
                 },
-
-                [Term::Iri(a), Term::OWL(VOWL::DisjointWith), Term::Iri(b)] => Some(
-                    DisjointClasses(vec![Class(a.clone()).into(), Class(b.clone()).into()]).into(),
-                ),
+                [a, Term::OWL(VOWL::DisjointWith), b] => some!{
+                        DisjointClasses(vec![
+                            self.fetch_ce(a)?,
+                            self.fetch_ce(b)?
+                        ]).into()
+                },
                 [pr, Term::RDFS(VRDFS::SubPropertyOf), t] => {
                     some! {
                         match self.find_property_kind(t, ic)? {
@@ -2412,6 +2436,12 @@ mod test {
     #[test]
     fn happy_person() {
         compare("happy_person")
+    }
+
+    #[test]
+    fn gci_and_other_class_relations() {
+        // https://github.com/phillord/horned-owl/issues/43
+        compare("gci_and_other_class_relations")
     }
 
     #[test]

@@ -2044,6 +2044,13 @@ mod test {
         ));
     }
 
+    #[test]
+    fn gci_and_other_class_relations() {
+        assert_round(include_str!(
+            "../../ont/owl-rdf/gci_and_other_class_relations.owl"
+        ));
+    }
+
     // #[test]
     // fn family() {
     //     assert_round(include_str!("../../ont/owl-rdf/family.owl"));
