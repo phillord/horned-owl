@@ -457,7 +457,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
         let mut extended = false;
 
         for (k, v) in std::mem::take(&mut self.bnode) {
-            let _ = match v.as_slice() {
+            match v.as_slice() {
                 [[_, Term::RDF(VRDF::First), val],
                  [_, Term::RDF(VRDF::Rest), Term::BNode(bnode_id)],
                  // Some sequences have a Type List, some do not
@@ -485,7 +485,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
 
     fn stitch_seqs(&mut self) {
         for (k, v) in std::mem::take(&mut self.bnode) {
-            let _ = match v.as_slice() {
+            match v.as_slice() {
                 [[_, Term::RDF(VRDF::First), val],
                  [_, Term::RDF(VRDF::Rest), Term::RDF(VRDF::Nil)],
                  // Lists may or may not have a "list" RDF type

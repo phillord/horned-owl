@@ -15,6 +15,10 @@ parse the whole import closure to make a complete RDF parse.
 
 Updated error handling to use a single unified hierarchy.
 
+Many type aliases are now new types meaning that defaults work better.
+
+Parsing of GCIs has now been fixed for RDF/XML.
+
 
 Version 0.11.0
 ==============

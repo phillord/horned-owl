@@ -1192,7 +1192,7 @@ from_xml! {IRI, r, end,
 pub mod test {
     use super::*;
     use crate::ontology::axiom_mapped::AxiomMappedOntology;
-    use std::{collections::HashMap, rc::Rc};
+    use std::{collections::HashMap};
 
     pub fn read_ok<R: BufRead>(
         bufread: &mut R,
