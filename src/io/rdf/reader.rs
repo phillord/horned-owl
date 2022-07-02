@@ -437,6 +437,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
             match t {
                 [_, Term::OWL(VOWL::DisjointWith), _] |
                 [_, Term::OWL(VOWL::EquivalentClass), _] |
+                [_, Term::OWL(VOWL::InverseOf), _] |
                 [_, Term::RDFS(VRDFS::SubClassOf), _]
                     => {
                     simple.push(t.clone())
@@ -754,27 +755,16 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
     }
 
     fn object_property_expressions(&mut self) {
-        for (this_bnode, v) in std::mem::take(&mut self.bnode) {
-            let mut ope = None;
-            let mut new_triple = vec![];
-            for t in v {
-                match t {
-                    [Term::BNode(_), Term::OWL(VOWL::InverseOf), Term::Iri(iri)] => {
-                        ope = Some(ObjectPropertyExpression::InverseObjectProperty(iri.into()))
+        for t in std::mem::take(&mut self.simple) {
+            match t {
+                    [Term::BNode(bn), Term::OWL(VOWL::InverseOf), Term::Iri(iri)] => {
+                        self.object_property_expression
+                            .insert(bn.clone(),
+                                    ObjectPropertyExpression::InverseObjectProperty(iri.into()));
                     }
-                    _ => {
-                        new_triple.push(t);
-                    }
-                };
-            }
-
-            if let Some(ope) = ope {
-                self.object_property_expression
-                    .insert(this_bnode.clone(), ope);
-            }
-
-            if !new_triple.is_empty() {
-                self.bnode.insert(this_bnode, new_triple);
+                _ => {
+                    self.simple.push(t);
+                }
             }
         }
     }
