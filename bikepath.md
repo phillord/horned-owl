@@ -1,8 +1,6 @@
 Version 0.13.0
 ==============
 
-Fix error handling
-
 Lots of fixes for the RDF parser based on lots of known files.
 
 
