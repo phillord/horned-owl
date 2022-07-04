@@ -242,7 +242,7 @@ where
     m.render(w, m)?;
 
     for axk in AxiomKind::all_kinds() {
-        for ax in o.i().annotated_axiom(axk) {
+        for ax in o.i().axiom_for_kind(axk) {
             ax.render(w, m)?;
         }
     }

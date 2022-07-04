@@ -83,7 +83,7 @@ impl<A: ForIRI, AA: ForIndex<A>> IRIMappedIndex<A, AA> {
     /// Fetch the AnnotatedAxiom for a given IRI
     ///
     /// See also `axiom` for access to the `Axiom` without annotations.
-    pub fn annotated_axiom(&self, iri: &IRI<A>) -> impl Iterator<Item = &AnnotatedAxiom<A>> {
+    pub fn axiom_for_iri(&self, iri: &IRI<A>) -> impl Iterator<Item = &AnnotatedAxiom<A>> {
         self.set_for_iri(iri)
             // Iterate over option
             .into_iter()
@@ -95,7 +95,7 @@ impl<A: ForIRI, AA: ForIndex<A>> IRIMappedIndex<A, AA> {
     /// Fetch the Axiom set iterator for a given iri
     ///
     pub fn axiom(&self, iri: &IRI<A>) -> impl Iterator<Item = &Axiom<A>> {
-        self.annotated_axiom(iri).map(|ann| &ann.axiom)
+        self.axiom_for_iri(iri).map(|ann| &ann.axiom)
     }
 }
 
@@ -274,13 +274,13 @@ impl<A: ForIRI, AA: ForIndex<A>> IRIMappedOntology<A, AA> {
     }
 
     //Utility method gets an iterator over the axioms in the index for a given IRI
-    pub fn get_axs_for_iri(&mut self, iri: &IRI<A>) -> impl Iterator<Item = &AnnotatedAxiom<A>> {
-        self.0.j().annotated_axiom(iri)
+    pub fn axiom_for_iri(&mut self, iri: &IRI<A>) -> impl Iterator<Item = &AnnotatedAxiom<A>> {
+        self.0.j().axiom_for_iri(iri)
     }
-    
-    //Utility method gets an iterator over the axioms in the index for a given axiom kind
-    pub fn get_axs_for_axkind(&mut self, axkind: AxiomKind) -> impl Iterator<Item = &AnnotatedAxiom<A>> {
-        self.0.k().annotated_axiom(axkind)
+
+    //Utility method gets an iterator over the axioms in the index for a given IRI
+    pub fn axiom_for_kind(&mut self, axkind: AxiomKind) -> impl Iterator<Item = &AnnotatedAxiom<A>> {
+        self.0.k().axiom_for_kind(axkind)
     }
 
     //Utility method updates an axiom in the index
