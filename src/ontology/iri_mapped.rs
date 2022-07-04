@@ -277,6 +277,11 @@ impl<A: ForIRI, AA: ForIndex<A>> IRIMappedOntology<A, AA> {
     pub fn get_axs_for_iri(&mut self, iri: &IRI<A>) -> impl Iterator<Item = &AnnotatedAxiom<A>> {
         self.0.j().annotated_axiom(iri)
     }
+    
+    //Utility method gets an iterator over the axioms in the index for a given axiom kind
+    pub fn get_axs_for_axkind(&mut self, axkind: AxiomKind) -> impl Iterator<Item = &AnnotatedAxiom<A>> {
+        self.0.k().annotated_axiom(axkind)
+    }
 
     //Utility method updates an axiom in the index
     pub fn update_axiom(&mut self, ax: &AnnotatedAxiom<A>, new_ax: AnnotatedAxiom<A>) -> bool {
