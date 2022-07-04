@@ -6,7 +6,7 @@
 //! access to all axioms of a given type.
 //!
 //! As well as being iterable, it provides `axiom` and
-//! `annotated_axiom` which iterate over a particular `AxiomKind` of
+//! `axiom_for_kind` which iterate over a particular `AxiomKind` of
 //! `Axiom` or `AnnotatedAxiom`, or methods such as `sub_class_of`, or
 //! `object_property_domain` which iterate over `SubClassOf` or
 //! `ObjectPropertyDomain` axioms respectively.
@@ -124,11 +124,11 @@ impl<A: ForIRI, AA: ForIndex<A>> AxiomMappedIndex<A, AA> {
     /// o.declare(b.class("http://www.example.com/a"));
     /// o.declare(b.object_property("http://www.example.com/r"));
     ///
-    /// assert_eq!(o.i().annotated_axiom(AxiomKind::DeclareClass).count(), 1);
+    /// assert_eq!(o.i().axiom_for_kind(AxiomKind::DeclareClass).count(), 1);
     /// ```
     ///
     /// See also `axiom` for access to the `Axiom` without annotations.
-    pub fn annotated_axiom(&self, axk: AxiomKind) -> impl Iterator<Item = &AnnotatedAxiom<A>> {
+    pub fn axiom_for_kind(&self, axk: AxiomKind) -> impl Iterator<Item = &AnnotatedAxiom<A>> {
         self.set_for_kind(axk)
             // Iterate over option
             .into_iter()
@@ -154,7 +154,7 @@ impl<A: ForIRI, AA: ForIndex<A>> AxiomMappedIndex<A, AA> {
     /// See methods such as `declare_class` for access to the Axiom
     /// struct directly.
     pub fn axiom(&self, axk: AxiomKind) -> impl Iterator<Item = &Axiom<A>> {
-        self.annotated_axiom(axk).map(|ann| &ann.axiom)
+        self.axiom_for_kind(axk).map(|ann| &ann.axiom)
     }
 }
 // In the ideal world, we would have generated these onimpl! calls as
