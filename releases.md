@@ -19,6 +19,10 @@ Many type aliases are now new types meaning that defaults work better.
 
 Parsing of GCIs has now been fixed for RDF/XML.
 
+The methods for retrieving axioms for axiom kinds and for IRIs in the
+`AxiomMappedIndex` and the `IRIMappedIndex` have been renamed to disambiguate
+them - as `axiom_for_kind` and `axiom_for_iri` respectively.
+
 
 Version 0.11.0
 ==============
