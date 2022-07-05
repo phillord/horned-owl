@@ -189,7 +189,6 @@ pub enum OWL {
     TransitiveProperty,
     UnionOf,
     VersionIRI,
-    VersionInfo,
     WithRestrictions,
 }
 
@@ -256,7 +255,6 @@ lazy_meta! {
     TransitiveProperty, extend(OWL, "TransitiveProperty");
     UnionOf, extend(OWL, "unionOf");
     VersionIRI, extend(OWL, "versionIRI");
-    VersionInfo, extend(OWL, "versionInfo");
     WithRestrictions, extend(OWL, "withRestrictions");
 }
 
@@ -358,7 +356,7 @@ pub enum AnnotationBuiltIn {
     SEEALSO,
     ISDEFINEDBY,
     DEPRECATED,
-    VERSIOINFO,
+    VERSIONINFO,
     PRIORVERSION,
     BACKWARDCOMPATIBLEWITH,
     INCOMPATIBLEWITH,
@@ -371,15 +369,15 @@ lazy_meta! {
     SEEALSO, extend(RDFS, "seeAlso");
     ISDEFINEDBY, extend(RDFS, "isDefinedBy");
     DEPRECATED, extend(OWL, "deprecated");
-    VERSIOINFO, extend(OWL, "versionInfo");
+    VERSIONINFO, extend(OWL, "versionInfo");
     PRIORVERSION, extend(OWL, "priorVersion");
     BACKWARDCOMPATIBLEWITH, extend(OWL, "backwardCompatibleWith");
     INCOMPATIBLEWITH, extend(OWL, "incompatibleWith");
 }
 
-pub fn is_annotation_builtin(iri: &String) -> bool {
+pub fn is_annotation_builtin<A:AsRef<str>>(iri: A) -> bool {
     for meta in AnnotationBuiltIn::all() {
-        if meta.iri_s() == iri {
+        if meta.iri_str() == iri.as_ref() {
             return true;
         }
     }

@@ -9,6 +9,7 @@ use crate::model::*;
 use crate::{model::Literal, ontology::axiom_mapped::AxiomMappedOntology};
 
 use crate::ontology::indexed::ForIndex;
+use crate::vocab::is_annotation_builtin;
 use crate::vocab::WithIRI;
 use crate::vocab::OWL as VOWL;
 use crate::vocab::RDF as VRDF;
@@ -1567,31 +1568,33 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
     fn simple_annotations(&mut self) {
         for triple in std::mem::take(&mut self.simple) {
             let firi = |s: &mut OntologyParser<_, _>, t, iri: &IRI<_>| {
-                if s.o.id().iri.as_ref() == Some(iri) {
-                    s.o.insert(
-                        OntologyAnnotation(s.annotation(&triple))
-                    );
-                }
-                else {
-                    let ann = s.ann_map.remove(t).unwrap_or_default();
-                    s.merge(AnnotatedAxiom {
-                        axiom: AnnotationAssertion {
-                            subject: iri.into(),
-                            ann: s.annotation(t),
-                        }
-                        .into(),
-                        ann,
-                    })
-                }
+                let ann = s.ann_map.remove(t).unwrap_or_default();
+                s.merge(AnnotatedAxiom {
+                    axiom: AnnotationAssertion {
+                        subject: iri.into(),
+                        ann: s.annotation(t),
+                    }
+                    .into(),
+                    ann,
+                })
             };
 
             match &triple {
+                // Catch anything about the ontology and assume it is
+                // an annotation. Some versions of the OWL API do not
+                // declare annotation properties for ontology annotations
+                [Term::Iri(iri), _, _]
+                    if self.o.id().iri.as_ref() == Some (iri) =>
+                {
+                    self.o.insert(
+                        OntologyAnnotation(self.annotation(&triple))
+                    );
+                }
                 [Term::Iri(iri), Term::RDFS(rdfs), _] if rdfs.is_builtin() => {
                     firi(self, &triple, iri)
                 }
-                [Term::Iri(iri), Term::OWL(VOWL::VersionInfo), _] => firi(self, &triple, iri),
                 [Term::Iri(iri), Term::Iri(ap), _]
-                    if (&self.o.0).j().is_annotation_property(ap) =>
+                    if (&self.o.0).j().is_annotation_property(ap) || is_annotation_builtin (ap.as_ref ()) =>
                 {
                     firi(self, &triple, iri)
                 }
@@ -1618,11 +1621,8 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
                 [triple @ [Term::BNode(ind), Term::RDFS(rdfs), _]] if rdfs.is_builtin() => {
                     fbnode(self, triple, ind)
                 }
-                [triple @ [Term::BNode(ind), Term::OWL(VOWL::VersionInfo), _]] => {
-                    fbnode(self, triple, ind)
-                }
                 [triple @ [Term::BNode(ind), Term::Iri(ap), _]]
-                    if (&self.o.0).j().is_annotation_property(ap) =>
+                    if (&self.o.0).j().is_annotation_property(ap) || is_annotation_builtin(ap) =>
                 {
                     fbnode(self, triple, ind)
                 }
@@ -2060,6 +2060,16 @@ mod test {
     #[test]
     fn one_ontology_annotation() {
         compare("one-ontology-annotation");
+    }
+
+    #[test]
+    fn broken_ontology_annotation () {
+        // Some verisons of the OWL API do not include an
+        // AnnotationProperty declaration. We should make this work.
+        let ont:SetOntology<_> = read_ok(&mut slurp_rdfont("broken-ontology-annotation").as_bytes()).into();
+        let ont:AxiomMappedOntology<_, RcAnnotatedAxiom> = ont.into();
+        assert_eq!(ont.i().ontology_annotation().count(), 1);
+        assert_eq!(ont.i().declare_annotation_property().count(), 0);
     }
 
     #[test]
