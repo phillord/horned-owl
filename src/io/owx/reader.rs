@@ -1257,7 +1257,7 @@ pub mod test {
 
         let aa = ont
             .i()
-            .annotated_axiom(AxiomKind::DeclareClass)
+            .axiom_for_kind(AxiomKind::DeclareClass)
             .next()
             .unwrap();
 
@@ -1331,7 +1331,7 @@ pub mod test {
 
         let annotated_axiom = ont
             .i()
-            .annotated_axiom(AxiomKind::SubClassOf)
+            .axiom_for_kind(AxiomKind::SubClassOf)
             .next()
             .unwrap();
         assert_eq!(annotated_axiom.ann.len(), 1);
@@ -1527,7 +1527,7 @@ pub mod test {
         let ont_s = include_str!("../../ont/owl-xml/annotation-with-annotation.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
-        let mut ann_i = ont.i().annotated_axiom(AxiomKind::AnnotationAssertion);
+        let mut ann_i = ont.i().axiom_for_kind(AxiomKind::AnnotationAssertion);
         let ann: &AnnotatedAxiom<_> = ann_i.next().unwrap();
         assert_eq!(ann.ann.len(), 1);
     }
@@ -1539,7 +1539,7 @@ pub mod test {
 
         let annotated_axiom = ont
             .i()
-            .annotated_axiom(AxiomKind::TransitiveObjectProperty)
+            .axiom_for_kind(AxiomKind::TransitiveObjectProperty)
             .next()
             .unwrap();
         assert_eq!(annotated_axiom.ann.len(), 1);
@@ -1552,7 +1552,7 @@ pub mod test {
 
         let annotated_axiom = ont
             .i()
-            .annotated_axiom(AxiomKind::TransitiveObjectProperty)
+            .axiom_for_kind(AxiomKind::TransitiveObjectProperty)
             .next()
             .unwrap();
 
