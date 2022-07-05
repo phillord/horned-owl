@@ -92,6 +92,8 @@ triples-round-all:
 	echo;echo;echo;\
 	done
 
-
 clippy:
 	cargo clippy
+
+
+-include makefile-local
