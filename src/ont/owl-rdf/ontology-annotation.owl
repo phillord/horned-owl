@@ -2,15 +2,17 @@
 <rdf:RDF xmlns="http://www.example.com/iri#"
      xml:base="http://www.example.com/iri"
      xmlns:o="http://www.example.com/iri#"
-     xmlns:iri="http://www.example.com/iri/"
      xmlns:owl="http://www.w3.org/2002/07/owl#"
      xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
      xmlns:xml="http://www.w3.org/XML/1998/namespace"
      xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
-     xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#">
+     xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"
+     xmlns:terms="http://purl.org/dc/terms/">
     <owl:Ontology rdf:about="http://www.example.com/iri">
         <owl:versionIRI rdf:resource="http://www.example.com/viri"/>
-        <iri:propformat-version xml:lang="en">1.2</iri:propformat-version>
+        <terms:created xml:lang="en">2021-12-09</terms:created>
+        <terms:description xml:lang="en">Description annotation</terms:description>
+        <rdfs:comment xml:lang="en">A comment</rdfs:comment>
     </owl:Ontology>
     
 
@@ -26,9 +28,15 @@
     
 
 
-    <!-- http://www.example.com/iri/propformat-version -->
+    <!-- http://purl.org/dc/terms/created -->
 
-    <owl:AnnotationProperty rdf:about="http://www.example.com/iri/propformat-version"/>
+    <owl:AnnotationProperty rdf:about="http://purl.org/dc/terms/created"/>
+    
+
+
+    <!-- http://purl.org/dc/terms/description -->
+
+    <owl:AnnotationProperty rdf:about="http://purl.org/dc/terms/description"/>
 </rdf:RDF>
 
 
