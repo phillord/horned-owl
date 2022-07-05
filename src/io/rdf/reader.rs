@@ -309,6 +309,18 @@ impl<A: ForIRI, AA: ForIndex<A>> Ontology<A> for RDFOntology<A, AA> {
     }
 }
 
+impl<A: ForIRI, AA:ForIndex<A>> MutableOntology<A> for RDFOntology<A, AA> {
+    fn insert<IAA>(&mut self, ax: IAA) -> bool
+    where
+        IAA: Into<AnnotatedAxiom<A>> {
+         self.0.insert (ax)
+    }
+
+    fn take (&mut self, ax:&AnnotatedAxiom<A>) -> Option<AnnotatedAxiom<A>> {
+        self.0.take (ax)
+    }
+}
+
 impl<A: ForIRI, AA: ForIndex<A>> From<RDFOntology<A, AA>> for SetOntology<A> {
     fn from(so: RDFOntology<A, AA>) -> SetOntology<A> {
         let id: OntologyID<_> = so.0.id().clone();
@@ -1507,10 +1519,6 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
                 [Term::Iri(i), Term::OWL(VOWL::DifferentFrom), Term::Iri(j)] => {
                     Some(DifferentIndividuals(vec![i.into(), j.into()]).into())
                 }
-                [Term::Iri(s), Term::Iri(_), _] if self.o.0.id().iri.as_ref() == Some(s) => {
-                    Some(OntologyAnnotation(self.annotation(&triple)).into())
-                }
-
                 [Term::Iri(sub), Term::Iri(pred), t @ Term::Literal(_)] => some! {
                     match (self.find_declaration_kind(sub, ic)?,
                            self.find_declaration_kind(pred, ic)?) {
@@ -1559,15 +1567,22 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
     fn simple_annotations(&mut self) {
         for triple in std::mem::take(&mut self.simple) {
             let firi = |s: &mut OntologyParser<_, _>, t, iri: &IRI<_>| {
-                let ann = s.ann_map.remove(t).unwrap_or_default();
-                s.merge(AnnotatedAxiom {
-                    axiom: AnnotationAssertion {
-                        subject: iri.into(),
-                        ann: s.annotation(t),
-                    }
-                    .into(),
-                    ann,
-                })
+                if s.o.id().iri.as_ref() == Some(iri) {
+                    s.o.insert(
+                        OntologyAnnotation(s.annotation(&triple))
+                    );
+                }
+                else {
+                    let ann = s.ann_map.remove(t).unwrap_or_default();
+                    s.merge(AnnotatedAxiom {
+                        axiom: AnnotationAssertion {
+                            subject: iri.into(),
+                            ann: s.annotation(t),
+                        }
+                        .into(),
+                        ann,
+                    })
+                }
             };
 
             match &triple {
@@ -2045,6 +2060,11 @@ mod test {
     #[test]
     fn one_ontology_annotation() {
         compare("one-ontology-annotation");
+    }
+
+    #[test]
+    fn ontology_annotation() {
+        compare("ontology-annotation");
     }
 
     #[test]
