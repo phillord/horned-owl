@@ -53,6 +53,10 @@ name = "horned-big"
 path = "src/bin/horned_big.rs"
 
 [[bin]]
+name = "horned-compare"
+path = "src/bin/horned_compare.rs"
+
+[[bin]]
 name = "horned-dump"
 path = "src/bin/horned_dump.rs"
 
