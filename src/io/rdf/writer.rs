@@ -1591,8 +1591,8 @@ mod test {
     fn assert_round(ont: &str) -> (SetOntology<RcStr>, SetOntology<RcStr>) {
         let (ont_orig, ont_round) = roundtrip(ont);
 
-        println!("ont_orig\n{:#?}", ont_orig);
-        println!("ont_round\n{:#?}", ont_round);
+        //println!("ont_orig\n{:#?}", ont_orig);
+        //println!("ont_round\n{:#?}", ont_round);
         assert_eq!(ont_orig, ont_round);
 
         (ont_orig, ont_round)

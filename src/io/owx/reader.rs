@@ -628,7 +628,7 @@ fn object_cardinality_restriction<A: ForIRI, R: BufRead>(
 
     Ok((
         n.parse::<u32>().map_err(|s| {
-            HornedError::ValidityError("Failed to parse int".to_string(), Some(s.into()))
+            HornedError::invalid_no_loc("Failed to parse int".to_string(), Some(s.into()))
         })?,
         ope,
         Box::new(match vce.len() {
@@ -652,7 +652,7 @@ fn data_cardinality_restriction<A: ForIRI, R: BufRead>(
 
     Ok((
         n.parse::<u32>().map_err(|s| {
-            HornedError::ValidityError("Failed to parse int".to_string(), Some(s.into()))
+            HornedError::invalid_no_loc("Failed to parse int".to_string(), Some(s.into()))
         })?,
         dp,
         match vdr.len() {
