@@ -5,15 +5,18 @@ use crate::model::{AnnotatedAxiom, Axiom, AxiomKind, ForIRI, Kinded, NamedEntity
 use super::indexed::ForIndex;
 use super::indexed::OntologyIndex;
 
+use std::collections::HashSet;
 use std::marker::PhantomData;
 use std::collections::HashMap;
 
 #[derive(Debug, Default)]
-pub struct DeclarationMappedIndex<A, AA>(HashMap<IRI<A>, NamedEntityKind>, PhantomData<AA>);
+pub struct DeclarationMappedIndex<A, AA>(HashMap<IRI<A>, NamedEntityKind>,
+                                         HashSet<IRI<A>>,
+                                         PhantomData<AA>);
 
 impl<A: ForIRI, AA: ForIndex<A>> DeclarationMappedIndex<A, AA> {
     pub fn new() -> DeclarationMappedIndex<A, AA> {
-        DeclarationMappedIndex(HashMap::new(), Default::default())
+        DeclarationMappedIndex(HashMap::new(), HashSet::new(), Default::default())
     }
 
     pub fn is_annotation_property(&self, iri: &IRI<A>) -> bool {
@@ -28,6 +31,10 @@ impl<A: ForIRI, AA: ForIndex<A>> DeclarationMappedIndex<A, AA> {
             .get(iri)
             .cloned()
             .or_else(|| crate::vocab::to_built_in_entity(iri))
+    }
+
+    pub fn puns(&self) -> &HashSet<IRI<A>> {
+        &self.1
     }
 
     fn aa_to_ne(&self, ax: &AnnotatedAxiom<A>) -> Option<NamedEntityKind> {
@@ -79,11 +86,33 @@ macro_rules! some {
 
 impl<A: ForIRI, AA: ForIndex<A>> OntologyIndex<A, AA> for DeclarationMappedIndex<A, AA> {
     fn index_insert(&mut self, ax: AA) -> bool {
-        let s = some! {
-            self.0.insert(self.aa_to_iri(ax.borrow())?,
-                          self.aa_to_ne(ax.borrow())?)
-        };
-        s.is_some()
+        some! {
+            {
+                let ne = self.aa_to_ne(ax.borrow())?;
+                let iri = self.aa_to_iri(ax.borrow())?;
+
+                // If this is a individual and we already have a
+                // class, this is a pun, and we ignore the NI
+                if ne == NamedEntityKind::NamedIndividual &&
+                    self.0.get(&iri) == Some(&NamedEntityKind::Class)
+                {
+                    self.1.insert(iri.clone());
+                    return None;
+                }
+
+                // Save the kind
+                let s = self.0.insert(iri.clone(), ne);
+
+                // If we have replaced an NI with a class, we have a pun
+                if ne == NamedEntityKind::Class &&
+                    s == Some(NamedEntityKind::NamedIndividual)
+                {
+                    self.1.insert(iri);
+                }
+
+                s
+            }
+        }.is_some()
     }
 
     fn index_remove(&mut self, ax: &AnnotatedAxiom<A>) -> bool {
@@ -166,5 +195,35 @@ mod test {
             d.declaration_kind(&b.iri(OWL::TopDataProperty.iri_str())),
             Some(NamedEntityKind::DataProperty)
         );
+    }
+
+
+    #[test]
+    fn test_pun_support() {
+        let mut d = DeclarationMappedIndex::new_rc();
+        let b = Build::new_rc();
+
+        assert_eq!(d.puns().len(), 0);
+
+        let iri = b.iri("http://www.example.com/p");
+        let c: NamedEntity<_> = b.class("http://www.example.com/p").into();
+        let c: AnnotatedAxiom<_> = c.into();
+        let ni: NamedEntity<_> = b.named_individual("http://www.example.com/p").into();
+        let ni: AnnotatedAxiom<_> = ni.into();
+
+        d.index_insert(c.clone().into());
+        d.index_insert(ni.clone().into());
+
+        assert_eq!(d.puns().len(), 1);
+        assert_eq!(d.puns().iter().next(), Some(&iri));
+        assert_eq!(d.declaration_kind(&iri), Some(NamedEntityKind::Class));
+
+        let mut d = DeclarationMappedIndex::new_rc();
+        d.index_insert(ni.clone().into());
+        d.index_insert(c.clone().into());
+
+        assert_eq!(d.puns().len(), 1);
+        assert_eq!(d.puns().iter().next(), Some(&iri));
+        assert_eq!(d.declaration_kind(&iri), Some(NamedEntityKind::Class));
     }
 }

@@ -970,6 +970,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
     fn find_term_kind(&mut self, term: &Term<A>, ic: &[&RDFOntology<A, AA>])
                       -> Option<NamedEntityKind> {
         match term {
+            Term::Iri(iri) if crate::vocab::is_xsd_datatype(iri) => Some(NamedEntityKind::Datatype),
             Term::Iri(iri) => self.find_declaration_kind(iri, ic),
             // TODO: this might be too general. At the moment, I am
             // only using this function to distinguish between a
@@ -1359,13 +1360,15 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
                                     triple.1
                                 ))
                             },
-                        _=> Err(HornedError::invalid_at(
-                            format!(
-                                "Unknown entity in equivalent class statement: {:?}",
-                                triple.0
-                            ),
-                            triple.1
-                        ))
+                        _=> {
+                            Err(HornedError::invalid_at(
+                                format!(
+                                    "Unknown entity in equivalent class statement: {:?}",
+                                    triple.0
+                                ),
+                                triple.1
+                            ))
+                        }
                     }
                 }
                 [class, Term::OWL(VOWL::HasKey), Term::BNode(bnodeid)] => {
