@@ -627,8 +627,8 @@ fn object_cardinality_restriction<A: ForIRI, R: BufRead>(
     let mut vce: Vec<ClassExpression<_>> = till_end(r, end_tag)?;
 
     Ok((
-        n.parse::<u32>().map_err(|s| {
-            HornedError::invalid_no_loc("Failed to parse int".to_string(), Some(s.into()))
+        n.parse::<u32>().map_err(|_s| {
+            HornedError::invalid("Failed to parse int")
         })?,
         ope,
         Box::new(match vce.len() {
@@ -651,8 +651,8 @@ fn data_cardinality_restriction<A: ForIRI, R: BufRead>(
     let mut vdr: Vec<DataRange<_>> = till_end(r, end_tag)?;
 
     Ok((
-        n.parse::<u32>().map_err(|s| {
-            HornedError::invalid_no_loc("Failed to parse int".to_string(), Some(s.into()))
+        n.parse::<u32>().map_err(|_s| {
+            HornedError::invalid("Failed to parse int")
         })?,
         dp,
         match vdr.len() {
