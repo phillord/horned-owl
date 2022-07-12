@@ -15,7 +15,7 @@ fn main() -> Result<(), HornedError> {
     matcher(&matches)
 }
 
-pub(crate) fn app(name: &str) -> App<'static, 'static> {
+pub(crate) fn app(name: &str) -> App<'static> {
     App::new(name)
         .version("0.1")
         .about("Parse an OWL File and dump the data structures")
@@ -26,7 +26,7 @@ pub(crate) fn app(name: &str) -> App<'static, 'static> {
                 .required(true)
                 .index(1),
         )
-        .arg(Arg::with_name("incomplete").long("incomplete").short("l"))
+        .arg(Arg::with_name("incomplete").long("incomplete").short('l'))
 }
 
 pub(crate) fn matcher(matches: &ArgMatches) -> Result<(), HornedError> {
