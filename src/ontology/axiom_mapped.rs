@@ -411,8 +411,6 @@ mod test {
 
         let amo: RcAxiomMappedOntology = so.into();
 
-        dbg!(&amo);
-
         assert_eq!(amo.id().iri, Some(b.iri("http://www.example.com/iri")));
         assert_eq!(amo.id().viri, Some(b.iri("http://www.example.com/viri")))
     }

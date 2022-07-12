@@ -9,6 +9,12 @@ pub enum Location {
     Unknown
 }
 
+impl From<usize> for Location{
+    fn from(u: usize) -> Self {
+        Location::BytePosition(u)
+    }
+}
+
 impl Display for Location {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -31,8 +37,8 @@ pub enum HornedError {
 
     /// Data has been given that would we cannot make sense or would
     /// result in invalid OWL
-    #[error("Validity Error: {0} at {2} caused by {1:?}")]
-    ValidityError(String, Option<Box<dyn std::error::Error>>, Location),
+    #[error("Validity Error: {0} at {1}")]
+    ValidityError(String, Location),
 
     /// A command has been given that is invalid
     #[error("Command Error: {0}")]
@@ -41,20 +47,21 @@ pub enum HornedError {
 
 macro_rules! invalid {
     ($($arg:tt)*) => {
-        HornedError::ValidityError(format!($($arg)*), None, crate::error::Location::Unknown)
+        HornedError::ValidityError(format!($($arg)*), crate::error::Location::Unknown)
     }
 }
 
 pub(crate) use invalid;
 
-impl HornedError {
-    pub fn invalid(s:String, e:Option<Box<dyn std::error::Error>>, l:Location) -> HornedError {
-        HornedError::ValidityError(s, e, l)
-    }
-    pub fn invalid_no_loc(s:String, e:Option<Box<dyn std::error::Error>>) -> HornedError {
-        HornedError::ValidityError(s, e, Location::Unknown)
-    }
 
+
+impl HornedError {
+    pub fn invalid_at<S: Into<String>, L: Into<Location>>(s:S, l:L) -> HornedError {
+        HornedError::ValidityError(s.into(), l.into())
+    }
+    pub fn invalid<S: Into<String>>(s:S) -> HornedError {
+        HornedError::ValidityError(s.into(), Location::Unknown)
+    }
 }
 
 impl From<quick_xml::Error> for HornedError {
