@@ -439,6 +439,12 @@ pub enum XSD {
     NonNegativeInteger,
 }
 
+pub fn is_xsd_datatype<A:AsRef<str>>(iri:A) -> bool {
+    //TODO. This is over-simplistic
+    iri.as_ref().starts_with("http://www.w3.org/2001/XMLSchema")
+}
+
+
 lazy_meta! {
     XSD, IRIString, METAXSD;
     NonNegativeInteger, extend(XSD, "nonNegativeInteger")

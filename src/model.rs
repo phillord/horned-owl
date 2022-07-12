@@ -405,7 +405,7 @@ macro_rules! named {
         /// All variants in this enum are named after the struct
         /// equivalent form. The individual structs for each variant
         /// provide us types for use elsewhere in the library.
-        #[derive(Debug, Eq, PartialEq, Hash)]
+        #[derive(Clone, Debug, Eq, PartialEq, Hash)]
         pub enum NamedEntity<A>{
             $($name($name<A>)),*
         }
