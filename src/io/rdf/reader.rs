@@ -464,35 +464,9 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
     ) -> OntologyParser<'a, A, AA> {
         let m = vocab_lookup();
 
-        // debugging
-        struct LoggingBufRead<R:BufRead>(R, usize, usize);
-        impl<R:BufRead> std::io::Read for LoggingBufRead<R> {
-            fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-                let rd = self.0.read(buf)?;
-                self.1 = self.1 + rd;
-                dbg!(self.1);
-                Ok(rd)
-            }
-        }
-
-
-        impl<R:BufRead> BufRead for LoggingBufRead<R> {
-            fn fill_buf(&mut self) -> std::io::Result<&[u8]> {
-                self.0.fill_buf()
-            }
-
-            fn consume(&mut self, amt: usize) {
-                self.2 = self.2 + amt;
-                //dbg!(self.2);
-                self.0.consume(amt)
-            }
-        }
-        let bufread = LoggingBufRead(bufread, 0, 0);
-
         let mut parser = rio_xml::RdfXmlParser::new(bufread, None);
         let mut triples = vec![];
         let last_pos = std::cell::Cell::new(0);
-        //let mut positions = vec![];
         let mut on_triple = |rio_triple: rio_api::model::Triple| -> Result<_, HornedError> {
             triples.push(
                 PosTriple(
@@ -511,14 +485,6 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
             parser.parse_step(&mut on_triple).unwrap();
             last_pos.set(parser.buffer_position());
         }
-
-       //dbg!(triples.len(), positions.len());
-
-        // let triples:Vec<_> = std::iter::zip(triples, positions).map(
-        //     |(t, p)| PosTriple(t, p)
-        // ).collect();
-
-        //dbg!(&triples);
 
         OntologyParser::new(b, triples)
     }
