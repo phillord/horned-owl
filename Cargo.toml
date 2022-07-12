@@ -15,7 +15,7 @@ edition = "2018"
 
 [dependencies]
 curie = "0.1.1"
-clap = "2.31.2"
+clap = "3.2.2"
 enum_meta = "0.6.0"
 thiserror = "1.0"
 lazy_static="1.4.0"

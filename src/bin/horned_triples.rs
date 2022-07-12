@@ -1,8 +1,11 @@
 extern crate clap;
 extern crate horned_owl;
 
+use clap::arg;
 use clap::App;
 use clap::Arg;
+
+
 use clap::ArgMatches;
 
 use horned_owl::error::HornedError;
@@ -18,7 +21,7 @@ fn main() -> Result<(), HornedError> {
     matcher(&matches)
 }
 
-pub(crate) fn app(name: &str) -> App<'static, 'static> {
+pub(crate) fn app(name: &str) -> App<'static> {
     App::new(name)
         .version("0.1")
         .about("Parse RDF and dump the triples")
@@ -28,6 +31,13 @@ pub(crate) fn app(name: &str) -> App<'static, 'static> {
                 .help("Sets the input file to use")
                 .required(true)
                 .index(1),
+        )
+        .arg(
+            Arg::with_name("filter")
+                .long("filter")
+                .takes_value(true)
+                .help("Only triples which match given string")
+                .required(false),
         )
         .arg(
             Arg::with_name("round")
@@ -42,19 +52,35 @@ pub(crate) fn matcher(matches: &ArgMatches) -> Result<(), HornedError> {
         "A file name must be specified".to_string(),
     ))?;
 
+    let filter = matches.value_of("filter");
+
     let file = File::open(input)?;
     let bufreader = BufReader::new(file);
-    let v: Vec<Result<String, HornedError>> = rio_xml::RdfXmlParser::new(bufreader, None)
+    let v: Vec<String> = rio_xml::RdfXmlParser::new(bufreader, None)
         .into_iter(|rio_triple| {
-            Ok(format!(
-                "{}\n\t{}\n\t{}",
-                rio_triple.subject, rio_triple.predicate, rio_triple.object
-            ))
+            Ok(
+                (
+                    format!("{}", rio_triple.subject),
+                    format!("{}", rio_triple.predicate),
+                    format!("{}", rio_triple.object),
+                )
+            )
         })
+        .map(|t:Result<_, HornedError>| -> (String,String,String) {t.unwrap()})
+        .filter(|t|
+                if let Some(f) = filter {
+                    t.0.contains(f) ||
+                        t.1.contains(f) ||
+                        t.2.contains(f)
+                }
+                else{
+                    true
+                })
+        .map(|t| format!("{}\n\t{}\n\t{}", t.0, t.1, t.2))
         .collect();
 
     for t in v {
-        println!("{}", t.unwrap());
+        println!("{}", t);
     }
 
     if matches.is_present("round") {

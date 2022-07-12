@@ -17,7 +17,7 @@ fn main() -> Result<(), HornedError> {
     matcher(matches)
 }
 
-fn app() -> App<'static, 'static> {
+fn app() -> App<'static> {
     App::new("horned")
         .version("0.1")
         .about("Command Line tools for OWL Ontologies")
@@ -33,15 +33,15 @@ fn app() -> App<'static, 'static> {
 }
 
 fn matcher(matches: ArgMatches) -> Result<(), HornedError> {
-    match matches.subcommand() {
-        ("big", Some(submatches)) => horned_big::matcher(submatches),
-        ("dump", Some(submatches)) => horned_dump::matcher(submatches),
-        ("materialize", Some(submatches)) => horned_materialize::matcher(submatches),
-        ("parse", Some(submatches)) => horned_parse::matcher(submatches),
-        ("round", Some(submatches)) => horned_round::matcher(submatches),
-        ("summary", Some(submatches)) => horned_summary::matcher(submatches),
-        ("triples", Some(submatches)) => horned_triples::matcher(submatches),
-        ("unparsed", Some(submatches)) => horned_unparsed::matcher(submatches),
+    match matches.subcommand().unwrap() {
+        ("big", submatches) => horned_big::matcher(submatches),
+        ("dump", submatches) => horned_dump::matcher(submatches),
+        ("materialize", submatches) => horned_materialize::matcher(submatches),
+        ("parse", submatches) => horned_parse::matcher(submatches),
+        ("round", submatches) => horned_round::matcher(submatches),
+        ("summary", submatches) => horned_summary::matcher(submatches),
+        ("triples", submatches) => horned_triples::matcher(submatches),
+        ("unparsed", submatches) => horned_unparsed::matcher(submatches),
         _ => todo!(),
     }
 }

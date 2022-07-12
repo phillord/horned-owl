@@ -16,7 +16,7 @@ fn main() -> Result<(), HornedError> {
     matcher(&matches)
 }
 
-pub(crate) fn app(name: &str) -> App<'static, 'static> {
+pub(crate) fn app(name: &str) -> App<'static> {
     App::new(name)
         .version("0.1")
         .about("Parse an OWL File")
