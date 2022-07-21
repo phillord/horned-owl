@@ -185,6 +185,7 @@ pub enum OWL {
     TargetIndividual,
     TargetValue,
     TopDataProperty,
+    TopObjectProperty,
     Thing,
     TransitiveProperty,
     UnionOf,
@@ -252,6 +253,7 @@ lazy_meta! {
     TargetValue, extend(OWL, "targetValue");
     Thing, extend(OWL, "Thing");
     TopDataProperty, extend(OWL, "topDataProperty");
+    TopObjectProperty, extend(OWL, "topObjectProperty");
     TransitiveProperty, extend(OWL, "TransitiveProperty");
     UnionOf, extend(OWL, "unionOf");
     VersionIRI, extend(OWL, "versionIRI");
@@ -270,6 +272,7 @@ pub fn to_built_in_entity<A: ForIRI>(iri: &IRI<A>) -> Option<NamedEntityKind> {
     let ir = iri.as_ref();
     match ir {
         _ if ir == OWL::TopDataProperty.iri_s() => Some(NamedEntityKind::DataProperty),
+        _ if ir == OWL::TopObjectProperty.iri_s() => Some(NamedEntityKind::ObjectProperty),
         _ => None,
     }
 }
