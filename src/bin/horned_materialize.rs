@@ -5,7 +5,11 @@ use clap::App;
 use clap::Arg;
 use clap::ArgMatches;
 
-use horned_owl::{command::materialize, error::HornedError};
+use horned_owl::{
+    command::config::{parser_app, parser_config},
+    command::materialize,
+    error::HornedError
+};
 
 #[allow(dead_code)]
 fn main() -> Result<(), HornedError> {
@@ -14,16 +18,18 @@ fn main() -> Result<(), HornedError> {
 }
 
 pub(crate) fn app(name: &str) -> App<'static> {
-    App::new(name)
-        .version("0.1")
-        .about("Parse an OWL file and download all the imports.")
-        .author("Phillip Lord")
-        .arg(
-            Arg::with_name("INPUT")
-                .help("Sets the input file to use")
-                .required(true)
-                .index(1),
-        )
+    parser_app(
+        App::new(name)
+            .version("0.1")
+            .about("Parse an OWL file and download all the imports.")
+            .author("Phillip Lord")
+            .arg(
+                Arg::with_name("INPUT")
+                    .help("Sets the input file to use")
+                    .required(true)
+                    .index(1),
+            )
+    )
 }
 
 pub(crate) fn matcher(matches: &ArgMatches) -> Result<(), HornedError> {
@@ -31,7 +37,11 @@ pub(crate) fn matcher(matches: &ArgMatches) -> Result<(), HornedError> {
         "Command requires a file argument".to_string(),
     ))?;
 
-    let v = materialize(input)?;
+    let v = materialize(
+        input,
+        parser_config(matches)
+    )?;
+
     println!("Materialized");
     for i in v {
         println!("\t{:?}", i);

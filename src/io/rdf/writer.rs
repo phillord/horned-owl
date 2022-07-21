@@ -1540,7 +1540,7 @@ mod test {
     // use std::io::BufWriter;
 
     fn read_ok<R: BufRead>(bufread: &mut R) -> SetOntology<RcStr> {
-        let r = crate::io::rdf::reader::read(bufread);
+        let r = crate::io::rdf::reader::read(bufread, Default::default());
         assert!(r.is_ok(), "Expected ontology, got failure:{:?}", r.err());
         let (o, incomplete) = r.ok().unwrap();
 

@@ -1,6 +1,7 @@
 use curie::PrefixMapping;
 
 use crate::error::*;
+use crate::io::ParserConfiguration;
 use crate::model::*;
 use crate::vocab::Namespace::*;
 use crate::vocab::OWL2Datatype;
@@ -29,6 +30,7 @@ where
 
 pub fn read<R: BufRead>(
     bufread: &mut R,
+    _config: ParserConfiguration
 ) -> Result<(SetOntology<RcStr>, PrefixMapping), HornedError> {
     let b = Build::new();
     read_with_build(bufread, &b)
@@ -1200,7 +1202,7 @@ pub mod test {
         AxiomMappedOntology<RcStr, RcAnnotatedAxiom>,
         PrefixMapping,
     ) {
-        let r = read(bufread);
+        let r = read(bufread, ParserConfiguration::default());
         assert!(r.is_ok(), "Expected ontology, got failure:{:?}", r.err());
         let (o, m) = r.ok().unwrap();
         (o.into(), m)

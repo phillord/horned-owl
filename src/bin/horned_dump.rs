@@ -5,7 +5,12 @@ use clap::App;
 use clap::Arg;
 use clap::ArgMatches;
 
-use horned_owl::{command::parse_path, error::HornedError, ontology::set::SetOntology};
+use horned_owl::{
+    command::config::{parser_app, parser_config},
+    command::parse_path,
+    error::HornedError,
+    ontology::set::SetOntology
+};
 
 use std::{collections::HashMap, path::Path};
 
@@ -16,17 +21,19 @@ fn main() -> Result<(), HornedError> {
 }
 
 pub(crate) fn app(name: &str) -> App<'static> {
-    App::new(name)
-        .version("0.1")
-        .about("Parse an OWL File and dump the data structures")
-        .author("Phillip Lord")
-        .arg(
-            Arg::with_name("INPUT")
-                .help("Sets the input file to use")
-                .required(true)
-                .index(1),
-        )
-        .arg(Arg::with_name("incomplete").long("incomplete").short('l'))
+    parser_app(
+        App::new(name)
+            .version("0.1")
+            .about("Parse an OWL File and dump the data structures")
+            .author("Phillip Lord")
+            .arg(
+                Arg::with_name("INPUT")
+                    .help("Sets the input file to use")
+                    .required(true)
+                    .index(1),
+            )
+            .arg(Arg::with_name("incomplete").long("incomplete").short('l'))
+    )
 }
 
 pub(crate) fn matcher(matches: &ArgMatches) -> Result<(), HornedError> {
@@ -34,7 +41,10 @@ pub(crate) fn matcher(matches: &ArgMatches) -> Result<(), HornedError> {
         "A file name must be specified".to_string(),
     ))?;
 
-    let r = parse_path(Path::new(input))?;
+    let r = parse_path(
+        Path::new(input),
+        parser_config(matches),
+    )?;
 
     match r {
         horned_owl::io::ParserOutput::OWXParser(ont, map) => {

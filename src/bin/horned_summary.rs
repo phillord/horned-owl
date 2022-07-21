@@ -5,7 +5,11 @@ use clap::App;
 use clap::Arg;
 use clap::ArgMatches;
 
-use horned_owl::command::naming::name;
+
+use horned_owl::command::{
+    config::{parser_app, parser_config},
+    naming::name
+};
 use horned_owl::command::{parse_path, summary::summarize};
 use horned_owl::error::HornedError;
 
@@ -18,16 +22,17 @@ fn main() -> Result<(), HornedError> {
 }
 
 pub(crate) fn app(name: &str) -> App<'static> {
-    App::new(name)
-        .version("0.1")
-        .about("Summary Statistics for an OWL file.")
-        .author("Phillip Lord")
-        .arg(
-            Arg::with_name("INPUT")
-                .help("Sets the input file to use")
-                .required(true)
-                .index(1),
-        )
+    parser_app(
+        App::new(name)
+            .version("0.1")
+            .about("Summary Statistics for an OWL file.")
+            .author("Phillip Lord")
+            .arg(
+                Arg::with_name("INPUT")
+                    .help("Sets the input file to use")
+                    .required(true)
+            )
+    )
 }
 
 pub(crate) fn matcher(matches: &ArgMatches) -> Result<(), HornedError> {
@@ -35,7 +40,8 @@ pub(crate) fn matcher(matches: &ArgMatches) -> Result<(), HornedError> {
         "A file name must be specified".to_string(),
     ))?;
 
-    let (ont, p, i) = parse_path(Path::new(input))?.decompose();
+    let config = parser_config(matches);
+    let (ont, p, i) = parse_path(Path::new(input), config)?.decompose();
 
     let summary = summarize(ont);
     println!("Ontology has:");

@@ -4,7 +4,7 @@ use rio_api::{
 };
 use Term::*;
 
-use crate::error::HornedError;
+use crate::{error::HornedError, io::ParserConfiguration};
 use crate::model::*;
 use crate::{model::Literal, ontology::axiom_mapped::AxiomMappedOntology};
 
@@ -420,6 +420,7 @@ impl<A:ForIRI> std::ops::DerefMut for VPosTriple<A>{
 pub struct OntologyParser<'a, A: ForIRI, AA: ForIndex<A>> {
     o: RDFOntology<A, AA>,
     b: &'a Build<A>,
+    config: ParserConfiguration,
 
     triple: Vec<PosTriple<A>>,
     simple: Vec<PosTriple<A>>,
@@ -435,7 +436,7 @@ pub struct OntologyParser<'a, A: ForIRI, AA: ForIndex<A>> {
 }
 
 impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
-    pub fn new(b: &'a Build<A>, triple: Vec<PosTriple<A>>) -> OntologyParser<'a, A, AA> {
+    pub fn new(b: &'a Build<A>, triple: Vec<PosTriple<A>>, config: ParserConfiguration) -> OntologyParser<'a, A, AA> {
         OntologyParser {
             o: RDFOntology(ThreeIndexedOntology::new(
                 SetIndex::new(),
@@ -444,7 +445,8 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
                 d!(),
             )),
             b,
-
+            config,
+            
             triple,
             simple: d!(),
             bnode: d!(),
@@ -461,6 +463,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
     pub fn from_bufread<'b, R: BufRead>(
         b: &'a Build<A>,
         bufread: &'b mut R,
+        config: ParserConfiguration,
     ) -> OntologyParser<'a, A, AA> {
         let m = vocab_lookup();
 
@@ -486,11 +489,11 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
             last_pos.set(parser.buffer_position());
         }
 
-        OntologyParser::new(b, triples)
+        OntologyParser::new(b, triples, config)
     }
 
-    pub fn from_doc_iri(b: &'a Build<A>, iri: &IRI<A>) -> OntologyParser<'a, A, AA> {
-        OntologyParser::from_bufread(b, &mut Cursor::new(strict_resolve_iri(iri)))
+    pub fn from_doc_iri(b: &'a Build<A>, iri: &IRI<A>, config: ParserConfiguration) -> OntologyParser<'a, A, AA> {
+        OntologyParser::from_bufread(b, &mut Cursor::new(strict_resolve_iri(iri)), config)
     }
 
     fn group_triples(
@@ -1604,7 +1607,10 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
                                 to: self.fetch_literal(t)?
                             }.into()
                         }
-                        _ => todo!()
+                        _ => {
+                            return None;
+                            //todo!()
+                        }
                     }
                 },
                 [Term::Iri(sub), Term::Iri(pred), Term::Iri(obj)] => ok_some! {
@@ -1639,7 +1645,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
         Ok(())
     }
 
-    fn simple_annotations(&mut self) {
+    fn simple_annotations(&mut self, parse_all: bool) {
         for triple in std::mem::take(&mut self.simple) {
             let firi = |s: &mut OntologyParser<_, _>, t, iri: &IRI<_>| {
                 let ann = s.ann_map.remove(t).unwrap_or_default();
@@ -1668,7 +1674,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
                     firi(self, &triple.0, iri)
                 }
                 [Term::Iri(iri), Term::Iri(ap), _]
-                    if (&self.o.0).j().is_annotation_property(ap) || is_annotation_builtin (ap.as_ref ()) =>
+                    if parse_all || (&self.o.0).j().is_annotation_property(ap) || is_annotation_builtin (ap.as_ref ()) =>
                 {
                     firi(self, &triple.0, iri)
                 }
@@ -1696,7 +1702,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
                     fbnode(self, triple, ind)
                 }
                 [triple @ [Term::BNode(ind), Term::Iri(ap), _]]
-                    if (&self.o.0).j().is_annotation_property(ap) || is_annotation_builtin(ap) =>
+                    if parse_all || (&self.o.0).j().is_annotation_property(ap) || is_annotation_builtin(ap) =>
                 {
                     fbnode(self, triple, ind)
                 }
@@ -1705,11 +1711,6 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
                 }
             }
         }
-
-        /*
-
-
-        */
     }
 
     /// Parse all imports and add to the Ontology.
@@ -1807,7 +1808,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
     /// relied on to resolve declarations.
     pub fn finish_parse(&mut self, ic: &[&RDFOntology<A, AA>]) -> Result<(), HornedError> {
         // Table 10
-        self.simple_annotations();
+        self.simple_annotations(false);
 
         self.data_ranges()?;
 
@@ -1820,6 +1821,9 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
         // Table 16: Axioms without annotations
         self.axioms(ic)?;
 
+        if self.config.rdf.lax {
+            self.simple_annotations(true);
+        }
         self.state = OntologyParserState::Parse;
         Ok(())
     }
@@ -1904,19 +1908,22 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
 pub fn parser_with_build<'a, 'b, A: ForIRI, AA: ForIndex<A>, R: BufRead>(
     bufread: &'a mut R,
     build: &'b Build<A>,
+    config: ParserConfiguration
 ) -> OntologyParser<'b, A, AA> {
-    OntologyParser::from_bufread(build, bufread)
+    OntologyParser::from_bufread(build, bufread, config)
 }
 
 pub fn read_with_build<A: ForIRI, AA: ForIndex<A>, R: BufRead>(
     bufread: &mut R,
     build: &Build<A>,
+    config: ParserConfiguration
 ) -> Result<(RDFOntology<A, AA>, IncompleteParse<A>), HornedError> {
-    parser_with_build(bufread, build).parse()
+    parser_with_build(bufread, build, config).parse()
 }
 
 pub fn read<R: BufRead>(
     bufread: &mut R,
+    config: ParserConfiguration,
 ) -> Result<
     (
         RDFOntology<RcStr, RcAnnotatedAxiom>,
@@ -1925,7 +1932,7 @@ pub fn read<R: BufRead>(
     HornedError,
 > {
     let b = Build::new_rc();
-    read_with_build(bufread, &b)
+    read_with_build(bufread, &b, config)
 }
 
 #[cfg(test)]
@@ -1936,6 +1943,7 @@ mod test {
     use std::path::PathBuf;
     use std::rc::Rc;
 
+    use crate::io::RDFParserConfiguration;
     use crate::ontology::axiom_mapped::RcAxiomMappedOntology;
     use pretty_assertions::assert_eq;
 
@@ -1949,7 +1957,7 @@ mod test {
     fn read_ok<R: BufRead>(bufread: &mut R) -> RDFOntology<RcStr, Rc<AnnotatedAxiom<RcStr>>> {
         init_log();
 
-        let r = read(bufread);
+        let r = read(bufread, Default::default());
 
         if let Err(e) = r {
             panic!("Expected ontology, get failure: {:?}", e,);
@@ -2108,6 +2116,39 @@ mod test {
     }
 
     #[test]
+    fn annotation_missing_declaration() {
+        let ont_s = slurp_rdfont("manual/annotation_no_declaration");
+
+        let ont_strict = read(&mut ont_s.as_bytes(), Default::default());
+        let ont_lax = read(&mut ont_s.as_bytes(), ParserConfiguration {
+            rdf: RDFParserConfiguration{lax:true},
+            ..Default::default()
+        });
+
+        // Both should parse without error
+        let (ont_strict, incomp_strict) = ont_strict.unwrap();
+        let (ont_lax, incomp_lax) = ont_lax.unwrap();
+
+        // Strict parsing should be incomplete
+        assert!(!incomp_strict.is_complete());
+        assert!(incomp_lax.is_complete());
+
+
+        let ont_strict:AxiomMappedOntology<_, _> = ont_strict.into();
+        let ont_lax:AxiomMappedOntology<_, _> = ont_lax.into();
+
+        // strict mode should have no annotation assertions or
+        // annotation properties
+        assert_eq!(ont_strict.i().annotation_assertion().count(), 0);
+        assert_eq!(ont_strict.i().declare_annotation_property().count(), 0);
+
+        // lax mode should have one annotation but this annotation
+        // should cause the declaration of the annotation property
+        assert_eq!(ont_lax.i().annotation_assertion().count(), 1);
+        assert_eq!(ont_lax.i().declare_annotation_property().count(), 0);
+    }
+
+    #[test]
     fn annotation_domain() {
         compare("annotation-domain");
     }
@@ -2250,7 +2291,7 @@ mod test {
     fn import_with_partial_parse() {
         let b = Build::new_rc();
         let mut p: OntologyParser<_, Rc<AnnotatedAxiom<RcStr>>> =
-            parser_with_build(&mut slurp_rdfont("import").as_bytes(), &b);
+            parser_with_build(&mut slurp_rdfont("import").as_bytes(), &b, Default::default());
         let _ = p.parse_imports();
 
         let rdfont = p.as_ontology().unwrap();
@@ -2263,7 +2304,7 @@ mod test {
     fn declaration_with_partial_parse() {
         let b = Build::new_rc();
         let mut p: OntologyParser<_, Rc<AnnotatedAxiom<RcStr>>> =
-            parser_with_build(&mut slurp_rdfont("class").as_bytes(), &b);
+            parser_with_build(&mut slurp_rdfont("class").as_bytes(), &b, Default::default());
         let _ = p.parse_declarations();
 
         let rdfont = p.as_ontology().unwrap();
@@ -2542,11 +2583,11 @@ mod test {
     fn import_property_in_bits() -> Result<(), HornedError> {
         let b = Build::new_rc();
         let p: OntologyParser<_, Rc<AnnotatedAxiom<RcStr>>> =
-            parser_with_build(&mut slurp_rdfont("other-property").as_bytes(), &b);
+            parser_with_build(&mut slurp_rdfont("other-property").as_bytes(), &b, Default::default());
         let (family_other, incomplete) = p.parse()?;
         assert!(incomplete.is_complete());
 
-        let mut p = parser_with_build(&mut slurp_rdfont("import-property").as_bytes(), &b);
+        let mut p = parser_with_build(&mut slurp_rdfont("import-property").as_bytes(), &b, Default::default());
         p.parse_imports()?;
         p.parse_declarations()?;
         p.finish_parse(vec![&family_other].as_slice())?;

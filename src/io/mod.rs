@@ -22,6 +22,22 @@ pub enum ParserOutput<A: ForIRI, AA: ForIndex<A>> {
     RDFParser(RDFOntology<A, AA>, IncompleteParse<A>),
 }
 
+#[derive(Clone, Copy, Debug, Default)]
+pub struct ParserConfiguration {
+    // Shared Config will go here
+    pub rdf: RDFParserConfiguration,
+    pub owx: OWXParserConfiguration,
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+pub struct RDFParserConfiguration {
+    pub lax: bool
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+pub struct OWXParserConfiguration {
+}
+
 impl<A: ForIRI, AA: ForIndex<A>> ParserOutput<A, AA> {
     pub fn decompose(
         self,

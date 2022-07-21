@@ -7,6 +7,7 @@ use clap::ArgMatches;
 
 use horned_owl::command::parse_path;
 use horned_owl::error::HornedError;
+use horned_owl::command::config::{parser_app, parser_config};
 
 use std::path::Path;
 
@@ -17,16 +18,18 @@ fn main() -> Result<(), HornedError> {
 }
 
 pub(crate) fn app(name: &str) -> App<'static> {
-    App::new(name)
-        .version("0.1")
-        .about("Parse an OWL File")
-        .author("Phillip Lord")
-        .arg(
-            Arg::with_name("INPUT")
-                .help("Sets the input file to use")
-                .required(true)
-                .index(1),
-        )
+    parser_app(
+        App::new(name)
+            .version("0.1")
+            .about("Parse an OWL File")
+            .author("Phillip Lord")
+            .arg(
+                Arg::with_name("INPUT")
+                    .help("Sets the input file to use")
+                    .required(true)
+                    .index(1),
+            )
+    )
 }
 
 pub(crate) fn matcher(matches: &ArgMatches) -> Result<(), HornedError> {
@@ -34,7 +37,10 @@ pub(crate) fn matcher(matches: &ArgMatches) -> Result<(), HornedError> {
         "Command requires an INPUT parameter".to_string(),
     ))?;
 
-    parse_path(Path::new(input))?;
+    parse_path(
+        Path::new(input),
+        parser_config(matches)
+    )?;
 
     println!("Parse Complete: {:?}", input);
     Ok(())

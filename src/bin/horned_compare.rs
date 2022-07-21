@@ -7,36 +7,41 @@ use clap::ArgMatches;
 
 use horned_owl::command::naming::name;
 use horned_owl::command::{parse_path, summary::summarize};
+use horned_owl::command::config::{parser_app, parser_config};
 use horned_owl::error::HornedError;
 
 use std::path::Path;
 
 #[allow(dead_code)]
 fn main() -> Result<(), HornedError> {
-    let matches = app("horned-summary").get_matches();
+    let matches = app("horned-compare").get_matches();
     matcher(&matches)
 }
 
 pub(crate) fn app(name: &str) -> App<'static> {
-    App::new(name)
-        .version("0.1")
-        .about("Compare two OWL files")
-        .author("Phillip Lord")
-        .arg(
-            Arg::with_name("INPUT-A")
-                .help("Sets the input file to use")
-                .required(true)
-                .index(1),
-        )
-        .arg(
-            Arg::with_name("INPUT-B")
-                .help("Sets the input file to use")
-                .required(true)
-                .index(2),
-        )
+    parser_app(
+        App::new(name)
+            .version("0.1")
+            .about("Compare two OWL files")
+            .author("Phillip Lord")
+            .arg(
+                Arg::with_name("INPUT-A")
+                    .help("Sets the input file to use")
+                    .required(true)
+                    .index(1),
+            )
+            .arg(
+                Arg::with_name("INPUT-B")
+                    .help("Sets the input file to use")
+                    .required(true)
+                    .index(2),
+            )
+    )
 }
 
 pub(crate) fn matcher(matches: &ArgMatches) -> Result<(), HornedError> {
+    let config = parser_config(matches);
+
     let input_a = matches.value_of("INPUT-A").ok_or_else(|| HornedError::CommandError(
         "A file name must be specified".to_string(),
     ))?;
@@ -45,8 +50,8 @@ pub(crate) fn matcher(matches: &ArgMatches) -> Result<(), HornedError> {
         "A file name must be specified".to_string(),
     ))?;
 
-    let (ont_a, p_a, i_a) = parse_path(Path::new(input_a))?.decompose();
-    let (ont_b, p_b, i_b) = parse_path(Path::new(input_b))?.decompose();
+    let (ont_a, p_a, i_a) = parse_path(Path::new(input_a), config)?.decompose();
+    let (ont_b, p_b, i_b) = parse_path(Path::new(input_b), config)?.decompose();
 
 
     let summary_a = summarize(ont_a);

@@ -862,6 +862,7 @@ mod test {
 
     use self::mktemp::Temp;
     use super::*;
+    use crate::io::ParserConfiguration;
     use crate::io::owx::reader::*;
 
     use std::collections::HashMap;
@@ -874,7 +875,7 @@ mod test {
     use std::io::BufWriter;
 
     fn read_ok<R: BufRead>(bufread: &mut R) -> (RcAxiomMappedOntology, PrefixMapping) {
-        let r = read(bufread);
+        let r = read(bufread, ParserConfiguration::default());
         assert!(r.is_ok(), "Expected ontology, got failure:{:?}", r.err());
         let (o, m) = r.ok().unwrap();
         (o.into(), m)
