@@ -1002,6 +1002,10 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
         ic: &[&RDFOntology<A, AA>],
     ) -> Option<PropertyExpression<A>> {
         match term {
+            Term::OWL(vowl) => {
+                let iri = self.b.iri(vowl.iri_str());
+                self.find_property_kind(&Term::Iri(iri), ic)
+            }
             Term::Iri(iri) => match self.find_declaration_kind(iri, ic) {
                 Some(NamedEntityKind::AnnotationProperty) => {
                     Some(PropertyExpression::AnnotationProperty(iri.into()))
@@ -2215,6 +2219,11 @@ mod test {
     #[test]
     fn sub_oproperty() {
         compare("suboproperty");
+    }
+
+    #[test]
+    fn sub_oproperty_top() {
+        compare("suboproperty-top")
     }
 
     #[test]
