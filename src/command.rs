@@ -2,7 +2,7 @@
 
 use crate::{
     error::HornedError,
-    io::{ParserOutput, ResourceType},
+    io::{ParserOutput, ResourceType, ParserConfiguration},
     model::{Build, IRI, RcAnnotatedAxiom, RcStr},
     ontology::axiom_mapped::RcAxiomMappedOntology,
     resolve::{localize_iri, strict_resolve_iri},
@@ -24,17 +24,18 @@ pub fn path_type(path: &Path) -> Option<ResourceType> {
 
 pub fn parse_path(
     path: &Path,
+    config: ParserConfiguration
 ) -> Result<ParserOutput<RcStr, RcAnnotatedAxiom>, HornedError> {
     Ok(match path_type(path) {
         Some(ResourceType::OWX) => {
             let file = File::open(&path)?;
             let mut bufreader = BufReader::new(file);
-            super::io::owx::reader::read(&mut bufreader)?.into()
+            super::io::owx::reader::read(&mut bufreader, config)?.into()
         }
         Some(ResourceType::RDF) => {
             let b = Build::new();
             let iri = super::resolve::path_to_file_iri(&b, path);
-            super::io::rdf::closure_reader::read(&iri)?.into()
+            super::io::rdf::closure_reader::read(&iri, config)?.into()
         }
         None => {
             return Err(HornedError::CommandError(format!(
@@ -48,14 +49,15 @@ pub fn parse_path(
 /// Parse but only as far as the imports, if that makes sense.
 pub fn parse_imports(
     path: &Path,
+    config: ParserConfiguration
 ) -> Result<ParserOutput<RcStr, RcAnnotatedAxiom>, HornedError> {
     let file = File::open(&path)?;
     let mut bufreader = BufReader::new(file);
     Ok(match path_type(path) {
-        Some(ResourceType::OWX) => super::io::owx::reader::read(&mut bufreader)?.into(),
+        Some(ResourceType::OWX) => super::io::owx::reader::read(&mut bufreader, config)?.into(),
         Some(ResourceType::RDF) => {
             let b = Build::new();
-            let mut p = crate::io::rdf::reader::parser_with_build(&mut bufreader, &b);
+            let mut p = crate::io::rdf::reader::parser_with_build(&mut bufreader, &b, config);
             p.parse_imports()?;
             p.as_ontology_and_incomplete()?.into()
         }
@@ -68,19 +70,20 @@ pub fn parse_imports(
     })
 }
 
-pub fn materialize(input: &str) -> Result<Vec<IRI<RcStr>>, HornedError> {
+pub fn materialize(input: &str, config: ParserConfiguration) -> Result<Vec<IRI<RcStr>>, HornedError> {
     let mut v = vec![];
-    materialize_1(input, &mut v, true)?;
+    materialize_1(input, config, &mut v, true)?;
     Ok(v)
 }
 
 pub fn materialize_1<'a>(
     input: &str,
+    config: ParserConfiguration,
     done: &'a mut Vec<IRI<RcStr>>,
     recurse: bool,
 ) -> Result<&'a mut Vec<IRI<RcStr>>, HornedError> {
     println!("Parsing: {}", input);
-    let amont: RcAxiomMappedOntology = parse_imports(Path::new(input))?.into();
+    let amont: RcAxiomMappedOntology = parse_imports(Path::new(input), config)?.into();
     let import = amont.i().import();
 
     let b = Build::new_rc();
@@ -101,7 +104,7 @@ pub fn materialize_1<'a>(
                 println!("Already Present: {}", local);
             }
             if recurse {
-                materialize_1(&local, done, true)?;
+                materialize_1(&local, config, done, true)?;
             }
         } else {
             println!("Already materialized: {}", &i.0);
@@ -207,5 +210,31 @@ pub mod summary {
         }
 
         im
+    }
+}
+
+pub mod config {
+    use clap::App;
+    use clap::ArgAction;
+    use clap::ArgMatches;
+    use crate::io::ParserConfiguration;
+    use crate::io::RDFParserConfiguration;
+
+    pub fn parser_app(app: App<'static>) -> App<'static> {
+        app.arg(
+            clap::arg!(--"strict")
+                .required(false)
+                .action(ArgAction::SetTrue)
+                .help("Parse RDF strictly")
+        )
+    }
+
+    pub fn parser_config(matches: &ArgMatches) -> ParserConfiguration {
+        ParserConfiguration{
+            rdf: RDFParserConfiguration {
+                lax: !matches.get_one::<bool>("strict").unwrap_or(&false)
+            },
+            ..Default::default()
+        }
     }
 }

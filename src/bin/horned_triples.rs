@@ -1,7 +1,6 @@
 extern crate clap;
 extern crate horned_owl;
 
-use clap::arg;
 use clap::App;
 use clap::Arg;
 

@@ -5,6 +5,7 @@ use clap::App;
 use clap::Arg;
 use clap::ArgMatches;
 
+use horned_owl::command::config::{parser_app, parser_config};
 use horned_owl::command::parse_path;
 use horned_owl::error::HornedError;
 use horned_owl::ontology::axiom_mapped::RcAxiomMappedOntology;
@@ -18,22 +19,27 @@ fn main() -> Result<(), HornedError> {
 }
 
 pub(crate) fn app(name: &str) -> App<'static> {
-    App::new(name)
-        .version("0.1")
-        .about("Parse and Render an OWL Ontology")
-        .author("Phillip Lord")
-        .arg(
-            Arg::with_name("INPUT")
-                .help("Sets the input file to use")
-                .required(true)
-                .index(1),
-        )
+    parser_app(
+        App::new(name)
+            .version("0.1")
+            .about("Parse and Render an OWL Ontology")
+            .author("Phillip Lord")
+            .arg(
+                Arg::with_name("INPUT")
+                    .help("Sets the input file to use")
+                    .required(true)
+                    .index(1),
+            )
+    )
 }
 
 pub(crate) fn matcher(matches: &ArgMatches) -> Result<(), HornedError> {
     let input = matches.value_of("INPUT").unwrap();
 
-    let res = parse_path(Path::new(input))?;
+    let res = parse_path(
+        Path::new(input),
+        parser_config(matches),
+    )?;
 
     let rtn = match res {
         horned_owl::io::ParserOutput::OWXParser(so, pm) => {

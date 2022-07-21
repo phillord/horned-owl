@@ -5,6 +5,7 @@ use clap::App;
 use clap::Arg;
 use clap::ArgMatches;
 
+use horned_owl::command::config::{parser_app, parser_config};
 use horned_owl::error::HornedError;
 use horned_owl::io::rdf::reader::RDFOntology;
 use horned_owl::model::{RcAnnotatedAxiom, RcStr};
@@ -18,16 +19,18 @@ fn main() -> Result<(), HornedError> {
 }
 
 pub(crate) fn app(name: &str) -> App<'static> {
-    App::new(name)
-        .version("0.1")
-        .about("Show unparsed OWL RDF.")
-        .author("Phillip Lord")
-        .arg(
+    parser_app(
+        App::new(name)
+            .version("0.1")
+            .about("Show unparsed OWL RDF.")
+            .author("Phillip Lord")
+            .arg(
             Arg::with_name("INPUT")
-                .help("Sets the input file to use")
-                .required(true)
-                .index(1),
-        )
+                    .help("Sets the input file to use")
+                    .required(true)
+                    .index(1),
+            )
+    )
 }
 
 pub(crate) fn matcher(matches: &ArgMatches) -> Result<(), HornedError> {
@@ -36,7 +39,10 @@ pub(crate) fn matcher(matches: &ArgMatches) -> Result<(), HornedError> {
     ))?;
 
     let (_ont, incomplete): (RDFOntology<RcStr, RcAnnotatedAxiom>, _) =
-        horned_owl::io::rdf::reader::read(&mut BufReader::new(File::open(Path::new(input))?))?;
+        horned_owl::io::rdf::reader::read(
+            &mut BufReader::new(File::open(Path::new(input))?),
+            parser_config(matches),
+        )?;
 
     println!("\n\nIncompleted Parsed");
     println!("\tSimple Triples: {:#?}", incomplete.simple);
