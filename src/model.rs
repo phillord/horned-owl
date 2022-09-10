@@ -1676,6 +1676,14 @@ pub trait Ontology<A> {
     fn mut_doc_iri(&mut self) -> &mut Option<IRI<A>>;
 }
 
+pub trait IterableOntology<A>: IntoIterator {
+    type Iterator<'collection>: Iterator<Item = &'collection AnnotatedAxiom<A>>
+    where
+        Self: 'collection, A:'collection;
+
+    fn iter<'c>(&'c self) -> Self::Iterator<'c>;
+}
+
 /// Add or remove axioms to an `MutableOntology`
 pub trait MutableOntology<A> {
     /// Insert an axiom into the ontology.

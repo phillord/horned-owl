@@ -32,6 +32,8 @@
 //! implementation of the OWL2 DL specification. It appears to be
 //! highly performant, being between 1 and 2 orders of magnitude
 //! faster than the OWL API for some tasks.
+#![feature(generic_associated_types)]
+
 //extern crate curie;
 //extern crate enum_meta;
 

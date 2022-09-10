@@ -302,6 +302,15 @@ impl<A: ForIRI, AA: ForIndex<A>> Ontology<A> for AxiomMappedOntology<A, AA> {
     }
 }
 
+impl<A: ForIRI, AA: ForIndex<A>> IterableOntology<A> for AxiomMappedOntology<A, AA> {
+    type Iterator<'c> = AxiomMappedIter<'c, A, AA>
+        where A:'c, AA:'c;
+
+    fn iter<'c>(&'c self) -> AxiomMappedIter<'c, A, AA>{
+        self.0.i().iter()
+    }
+}
+
 impl<A: ForIRI, AA: ForIndex<A>> MutableOntology<A> for AxiomMappedOntology<A, AA> {
     fn insert<IAA>(&mut self, ax: IAA) -> bool
     where
