@@ -227,6 +227,13 @@ where
 
     let mut elem = BytesStart::owned_name("Ontology");
     elem.push_attribute((b"xmlns" as &[u8], OWL.iri_b()));
+    iri_maybe(&mut elem, "xml:base", &o.id().iri);
+    // Render XML Namespaces.
+    for pre in m.mappings() {
+        let key =format!("xmlns:{}", pre.0);
+        let name = pre.1.as_bytes();
+        elem.push_attribute((key.as_bytes(),name));
+    }
     iri_maybe(&mut elem, "ontologyIRI", &o.id().iri);
     iri_maybe(&mut elem, "versionIRI", &o.id().viri);
 
