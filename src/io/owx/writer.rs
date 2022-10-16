@@ -230,9 +230,7 @@ where
     iri_maybe(&mut elem, "xml:base", &o.id().iri);
     // Render XML Namespaces.
     for pre in m.mappings() {
-        let key =format!("xmlns:{}", pre.0);
-        let name = pre.1.as_bytes();
-        elem.push_attribute((key.as_bytes(),name));
+        elem.push_attribute((format!("xmlns:{}", pre.0).as_bytes(),pre.1.as_bytes()));
     }
     iri_maybe(&mut elem, "ontologyIRI", &o.id().iri);
     iri_maybe(&mut elem, "versionIRI", &o.id().viri);
