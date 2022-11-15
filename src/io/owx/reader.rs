@@ -24,8 +24,8 @@ where
     build: &'a Build<A>,
     mapping: PrefixMapping,
     reader: Reader<R>,
-    buf: Vec<u8>,
-    ns_buf: Vec<u8>,
+    // buf: Vec<u8>,
+    // ns_buf: Vec<u8>,
 }
 
 pub fn read<R: BufRead>(
@@ -43,17 +43,19 @@ pub fn read_with_build<A: ForIRI, R: BufRead>(
     let reader: Reader<R> = Reader::from_reader(bufread);
     let mut ont = SetOntology::new();
     let mapping = PrefixMapping::default();
+    let mut buf = Vec::new();
+    let mut ns_buf = Vec::new();
 
     let mut r = Read {
         reader,
         build,
         mapping,
-        buf: Vec::new(),
-        ns_buf: Vec::new(),
+        // buf: Vec::new(),
+        // ns_buf: Vec::new(),
     };
 
     loop {
-        match read_event(&mut r)? {
+        match read_event(&mut r, &mut buf, &mut ns_buf)? {
             (ref ns, Event::Start(ref e)) | (ref ns, Event::Empty(ref e))
                 if *ns == b"http://www.w3.org/2002/07/owl#" =>
             {
@@ -116,10 +118,13 @@ pub fn read_with_build<A: ForIRI, R: BufRead>(
 /// have it all work.
 fn read_event<A: ForIRI, R: BufRead>(
     read: &mut Read<A, R>,
+    buf: &mut Vec<u8>,
+    ns_buf: &mut Vec<u8>
 ) -> Result<(Vec<u8>, Event<'static>), HornedError> {
     let r = read
         .reader
-        .read_namespaced_event(&mut read.buf, &mut read.ns_buf);
+        // .read_namespaced_event(&mut read.buf, &mut read.ns_buf);
+        .read_namespaced_event(buf, ns_buf);
 
     match r {
         Ok((_, Event::Eof)) => Err(invalid! {
@@ -606,8 +611,10 @@ fn till_end_with<A: ForIRI, R: BufRead, T: FromStart<A> + std::fmt::Debug>(
     end_tag: &[u8],
     mut operands: Vec<T>,
 ) -> Result<Vec<T>, HornedError> {
+    let mut buf = Vec::new();
+    let mut ns_buf = Vec::new();
     loop {
-        let e = read_event(r)?;
+        let e = read_event(r, &mut buf, &mut ns_buf)?;
         match e {
             (ref ns, Event::Empty(ref e)) if is_owl(ns) => {
                 let op = from_start(r, e)?;
@@ -799,9 +806,11 @@ from_start! {
     {
         let mut annotation: BTreeSet<Annotation<_>> = BTreeSet::new();
         let axiom_kind:&[u8] = e.local_name();
+        let mut buf = Vec::new();
+        let mut ns_buf = Vec::new();
 
         loop {
-            let e = read_event(r)?;
+            let e = read_event(r, &mut buf, &mut ns_buf)?;
             match e {
                 (ref ns, Event::Start(ref e))
                     |
@@ -1068,7 +1077,7 @@ from_start! {
 trait FromXML<A: ForIRI>: Sized {
     fn from_xml<R: BufRead>(newread: &mut Read<A, R>, end_tag: &[u8]) -> Result<Self, HornedError> {
         let s = Self::from_xml_nc(newread, end_tag);
-        newread.buf.clear();
+        // newread.buf.clear();
         s
     }
 
@@ -1097,9 +1106,11 @@ from_xml! {
 
         let mut ap:Option<AnnotationProperty<_>> = None;
         let mut av:Option<AnnotationValue<_>> = None;
+        let mut buf = Vec::new();
+        let mut ns_buf = Vec::new();
 
         loop {
-            let e = read_event(r)?;
+            let e = read_event(r, &mut buf, &mut ns_buf)?;
             match e {
                 (ref ns, Event::Start(ref e))
                 |
@@ -1132,8 +1143,10 @@ from_xml! {
 }
 
 fn from_next<A: ForIRI, R: BufRead, T: FromStart<A>>(r: &mut Read<A, R>) -> Result<T, HornedError> {
+    let mut buf = Vec::new();
+    let mut ns_buf = Vec::new();
     loop {
-        let e = read_event(r)?;
+        let e = read_event(r, &mut buf, &mut ns_buf)?;
         match e {
             (ref ns, Event::Empty(ref e)) | (ref ns, Event::Start(ref e)) if is_owl(ns) => {
                 return from_start(r, e);
@@ -1145,8 +1158,10 @@ fn from_next<A: ForIRI, R: BufRead, T: FromStart<A>>(r: &mut Read<A, R>) -> Resu
 
 fn discard_till<A: ForIRI, R: BufRead>(r: &mut Read<A, R>, end: &[u8]) -> Result<(), HornedError> {
     let pos = r.reader.buffer_position();
+    let mut buf = Vec::new();
+    let mut ns_buf = Vec::new();
     loop {
-        let e = read_event(r)?;
+        let e = read_event(r, &mut buf, &mut ns_buf)?;
 
         match e {
             (ref ns, Event::End(ref e)) if is_owl_name(ns, e, end) => {
@@ -1179,8 +1194,10 @@ from_start! {
 from_xml! {IRI, r, end,
         {
             let mut iri: Option<IRI<_>> = None;
+            let mut buf = Vec::new();
+            let mut ns_buf = Vec::new();
             loop {
-                let e = read_event(r)?;
+                let e = read_event(r, &mut buf, &mut ns_buf)?;
                 match e {
                     (ref _ns,Event::Text(ref e)) => {
                         iri = Some(r.build.iri
