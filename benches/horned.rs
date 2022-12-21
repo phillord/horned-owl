@@ -104,7 +104,6 @@ benchmark_group!(
 use curie::PrefixMapping;
 use std::fs::File;
 use std::io::BufReader;
-use std::rc::Rc;
 
 fn io_read(bench: &mut Bencher) {
     bench.iter(|| {
@@ -112,7 +111,9 @@ fn io_read(bench: &mut Bencher) {
         let mut f = BufReader::new(f);
 
         let _: Option<(SetOntology<RcStr>, PrefixMapping)> =
-            horned_owl::io::owx::reader::read(&mut f).ok();
+            horned_owl::io::owx::reader::read(
+                &mut f, Default::default()
+            ).ok();
     })
 }
 
@@ -194,7 +195,7 @@ fn food_to_vec() -> Vec<u8> {
 
 fn read_vec<A: ForIRI, AA: ForIndex<A>>(v: &Vec<u8>, b: Build<A>) -> RDFOntology<A, AA> {
     let mut c = Cursor::new(v.clone());
-    horned_owl::io::rdf::reader::read_with_build(&mut c, &b)
+    horned_owl::io::rdf::reader::read_with_build(&mut c, &b, Default::default())
         .unwrap()
         .0
 }

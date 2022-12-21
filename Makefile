@@ -10,6 +10,13 @@ all:
 	cargo doc
 	browser-reload.sh horned_owl
 
+pre-commit: quick-test
+pre-push: quick-test
+	cargo bench --no-run
+	cargo test integration
+
+
+
 ## Build the Unit test Ontology code
 just-bubo:
 	$(MAKE) -C src/ont/bubo
