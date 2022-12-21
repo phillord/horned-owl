@@ -75,7 +75,8 @@ fn iri_or_curie<'a>(mapping: &'a PrefixMapping, elem: &mut BytesStart, iri: &str
 fn with_iri<'a, A: ForIRI, I, W>(
     w: &mut Writer<W>,
     mapping: &'a PrefixMapping,
-    tag: &[u8],
+    // tag: &[u8],
+    tag: &str,
     into_iri: I,
 ) -> Result<(), HornedError>
 where
@@ -83,7 +84,8 @@ where
     W: StdWrite,
 {
     let iri: IRI<_> = into_iri.into();
-    let mut bytes_start = BytesStart::borrowed(tag, tag.len());
+    // let mut bytes_start = BytesStart::borrowed(tag, tag.len());
+    let mut bytes_start = BytesStart::from_content(tag, tag.len());
 
     let iri_string: String = iri.into();
     iri_or_curie(mapping, &mut bytes_start, &iri_string[..]);
@@ -93,52 +95,52 @@ where
 }
 
 /// Fetch the name of the tag that is used to render `AxiomKind`
-fn tag_for_kind(axk: AxiomKind) -> &'static [u8] {
+fn tag_for_kind(axk: AxiomKind) -> &'static str {
     match axk {
-        AxiomKind::Import => b"Import",
-        AxiomKind::OntologyAnnotation => b"Annotation",
-        AxiomKind::DeclareClass => b"Declaration",
-        AxiomKind::DeclareObjectProperty => b"Declaration",
-        AxiomKind::DeclareAnnotationProperty => b"Declaration",
-        AxiomKind::DeclareDataProperty => b"Declaration",
-        AxiomKind::DeclareNamedIndividual => b"Declaration",
-        AxiomKind::DeclareDatatype => b"Declaration",
-        AxiomKind::SubClassOf => b"SubClassOf",
-        AxiomKind::EquivalentClasses => b"EquivalentClasses",
-        AxiomKind::DisjointClasses => b"DisjointClasses",
-        AxiomKind::DisjointUnion => b"DisjointUnion",
-        AxiomKind::SubObjectPropertyOf => b"SubObjectPropertyOf",
-        AxiomKind::EquivalentObjectProperties => b"EquivalentObjectProperties",
-        AxiomKind::DisjointObjectProperties => b"DisjointObjectProperties",
-        AxiomKind::InverseObjectProperties => b"InverseObjectProperties",
-        AxiomKind::ObjectPropertyDomain => b"ObjectPropertyDomain",
-        AxiomKind::ObjectPropertyRange => b"ObjectPropertyRange",
-        AxiomKind::FunctionalObjectProperty => b"FunctionalObjectProperty",
-        AxiomKind::InverseFunctionalObjectProperty => b"InverseFunctionalObjectProperty",
-        AxiomKind::ReflexiveObjectProperty => b"ReflexiveObjectProperty",
-        AxiomKind::IrreflexiveObjectProperty => b"IrreflexiveObjectProperty",
-        AxiomKind::SymmetricObjectProperty => b"SymmetricObjectProperty",
-        AxiomKind::AsymmetricObjectProperty => b"AsymmetricObjectProperty",
-        AxiomKind::TransitiveObjectProperty => b"TransitiveObjectProperty",
-        AxiomKind::SubDataPropertyOf => b"SubDataPropertyOf",
-        AxiomKind::EquivalentDataProperties => b"EquivalentDataProperties",
-        AxiomKind::DisjointDataProperties => b"DisjointDataProperties",
-        AxiomKind::DataPropertyDomain => b"DataPropertyDomain",
-        AxiomKind::DataPropertyRange => b"DataPropertyRange",
-        AxiomKind::FunctionalDataProperty => b"FunctionalDataProperty",
-        AxiomKind::DatatypeDefinition => b"DatatypeDefinition",
-        AxiomKind::HasKey => b"HasKey",
-        AxiomKind::SameIndividual => b"SameIndividual",
-        AxiomKind::DifferentIndividuals => b"DifferentIndividuals",
-        AxiomKind::ClassAssertion => b"ClassAssertion",
-        AxiomKind::ObjectPropertyAssertion => b"ObjectPropertyAssertion",
-        AxiomKind::NegativeObjectPropertyAssertion => b"NegativeObjectPropertyAssertion",
-        AxiomKind::DataPropertyAssertion => b"DataPropertyAssertion",
-        AxiomKind::NegativeDataPropertyAssertion => b"NegativeDataPropertyAssertion",
-        AxiomKind::AnnotationAssertion => b"AnnotationAssertion",
-        AxiomKind::SubAnnotationPropertyOf => b"SubAnnotationPropertyOf",
-        AxiomKind::AnnotationPropertyDomain => b"AnnotationPropertyDomain",
-        AxiomKind::AnnotationPropertyRange => b"AnnotationPropertyRange",
+        AxiomKind::Import => "Import",
+        AxiomKind::OntologyAnnotation => "Annotation",
+        AxiomKind::DeclareClass => "Declaration",
+        AxiomKind::DeclareObjectProperty => "Declaration",
+        AxiomKind::DeclareAnnotationProperty => "Declaration",
+        AxiomKind::DeclareDataProperty => "Declaration",
+        AxiomKind::DeclareNamedIndividual => "Declaration",
+        AxiomKind::DeclareDatatype => "Declaration",
+        AxiomKind::SubClassOf => "SubClassOf",
+        AxiomKind::EquivalentClasses => "EquivalentClasses",
+        AxiomKind::DisjointClasses => "DisjointClasses",
+        AxiomKind::DisjointUnion => "DisjointUnion",
+        AxiomKind::SubObjectPropertyOf => "SubObjectPropertyOf",
+        AxiomKind::EquivalentObjectProperties => "EquivalentObjectProperties",
+        AxiomKind::DisjointObjectProperties => "DisjointObjectProperties",
+        AxiomKind::InverseObjectProperties => "InverseObjectProperties",
+        AxiomKind::ObjectPropertyDomain => "ObjectPropertyDomain",
+        AxiomKind::ObjectPropertyRange => "ObjectPropertyRange",
+        AxiomKind::FunctionalObjectProperty => "FunctionalObjectProperty",
+        AxiomKind::InverseFunctionalObjectProperty => "InverseFunctionalObjectProperty",
+        AxiomKind::ReflexiveObjectProperty => "ReflexiveObjectProperty",
+        AxiomKind::IrreflexiveObjectProperty => "IrreflexiveObjectProperty",
+        AxiomKind::SymmetricObjectProperty => "SymmetricObjectProperty",
+        AxiomKind::AsymmetricObjectProperty => "AsymmetricObjectProperty",
+        AxiomKind::TransitiveObjectProperty => "TransitiveObjectProperty",
+        AxiomKind::SubDataPropertyOf => "SubDataPropertyOf",
+        AxiomKind::EquivalentDataProperties => "EquivalentDataProperties",
+        AxiomKind::DisjointDataProperties => "DisjointDataProperties",
+        AxiomKind::DataPropertyDomain => "DataPropertyDomain",
+        AxiomKind::DataPropertyRange => "DataPropertyRange",
+        AxiomKind::FunctionalDataProperty => "FunctionalDataProperty",
+        AxiomKind::DatatypeDefinition => "DatatypeDefinition",
+        AxiomKind::HasKey => "HasKey",
+        AxiomKind::SameIndividual => "SameIndividual",
+        AxiomKind::DifferentIndividuals => "DifferentIndividuals",
+        AxiomKind::ClassAssertion => "ClassAssertion",
+        AxiomKind::ObjectPropertyAssertion => "ObjectPropertyAssertion",
+        AxiomKind::NegativeObjectPropertyAssertion => "NegativeObjectPropertyAssertion",
+        AxiomKind::DataPropertyAssertion => "DataPropertyAssertion",
+        AxiomKind::NegativeDataPropertyAssertion => "NegativeDataPropertyAssertion",
+        AxiomKind::AnnotationAssertion => "AnnotationAssertion",
+        AxiomKind::SubAnnotationPropertyOf => "SubAnnotationPropertyOf",
+        AxiomKind::AnnotationPropertyDomain => "AnnotationPropertyDomain",
+        AxiomKind::AnnotationPropertyRange => "AnnotationPropertyRange",
     }
 }
 
@@ -156,14 +158,17 @@ trait Render<'a, W: StdWrite> {
         &self,
         w: &mut Writer<W>,
         m: &'a PrefixMapping,
-        tag: &[u8],
+        // tag: &[u8],
+        tag: &str,
     ) -> Result<(), HornedError> {
-        let open = BytesStart::borrowed(tag, tag.len());
+        // let open = BytesStart::borrowed(tag, tag.len());
+        let open = BytesStart::from_content(tag, tag.len());
         w.write_event(Event::Start(open))?;
 
         self.render(w, m)?;
 
-        w.write_event(Event::End(BytesEnd::borrowed(tag)))?;
+        // w.write_event(Event::End(BytesEnd::borrowed(tag)))?;
+        w.write_event(Event::End(BytesEnd::new(tag)))?;
 
         Ok(())
     }
@@ -179,7 +184,8 @@ trait Render<'a, W: StdWrite> {
 
         self.render(w, m)?;
 
-        w.write_event(Event::End(BytesEnd::borrowed(open.local_name())))?;
+        // w.write_event(Event::End(BytesEnd::borrowed(open.local_name())))?;
+        w.write_event(Event::End(open.to_end()))?;
 
         Ok(())
     }
@@ -223,16 +229,22 @@ fn render_ont<A: ForIRI, AA: ForIndex<A>, W>(
 where
     W: StdWrite,
 {
-    w.write_event(Event::Decl(BytesDecl::new(&b"1.0"[..], None, None)))?;
+    // w.write_event(Event::Decl(BytesDecl::new(&b"1.0"[..], None, None)))?;
+    w.write_event(Event::Decl(BytesDecl::new(&"1.0"[..], None, None)))?;
 
-    let mut elem = BytesStart::owned_name("Ontology");
+    // let mut elem = BytesStart::owned_name("Ontology");
+    let mut elem = BytesStart::new("Ontology");
     elem.push_attribute((b"xmlns" as &[u8], OWL.iri_b()));
     iri_maybe(&mut elem, "ontologyIRI", &o.id().iri);
     iri_maybe(&mut elem, "versionIRI", &o.id().viri);
 
+    let elem_end = elem.to_end();
+    let ev_end = Event::End(elem_end).into_owned();
+
     w.write_event(Event::Start(elem))?;
 
-    let elem = BytesEnd::owned(b"Ontology".to_vec());
+    // let elem = BytesEnd::owned(b"Ontology".to_vec());
+    
 
     m.render(w, m)?;
 
@@ -242,7 +254,7 @@ where
         }
     }
 
-    w.write_event(Event::End(elem))?;
+    w.write_event(ev_end)?;
 
     Ok(())
 }
@@ -311,7 +323,8 @@ impl<'a, A: Render<'a, W>, B: Render<'a, W>, C: Render<'a, W>, W: StdWrite> Rend
 impl<'a, W: StdWrite> Render<'a, W> for PrefixMapping {
     fn render(&self, w: &mut Writer<W>, _: &'a PrefixMapping) -> Result<(), HornedError> {
         for pre in self.mappings() {
-            let mut prefix = BytesStart::owned_name("Prefix");
+            // let mut prefix = BytesStart::owned_name("Prefix");
+            let mut prefix = BytesStart::new("Prefix");
             prefix.push_attribute(("name", &pre.0[..]));
             prefix.push_attribute(("IRI", &pre.1[..]));
             w.write_event(Event::Empty(prefix))?;
@@ -323,7 +336,8 @@ impl<'a, W: StdWrite> Render<'a, W> for PrefixMapping {
 
 impl<'a, W: StdWrite> Render<'a, W> for String {
     fn render(&self, w: &mut Writer<W>, _: &'a PrefixMapping) -> Result<(), HornedError> {
-        w.write_event(Event::Text(BytesText::from_plain_str(&self[..])))?;
+        // w.write_event(Event::Text(BytesText::from_plain_str(&self[..])))?;
+        w.write_event(Event::Text(BytesText::new(&self[..])))?;
         Ok(())
     }
 }
@@ -334,8 +348,8 @@ render! {
         let iri_st: String = self.into();
 
         match m.shrink_iri(&iri_st[..]) {
-            Ok(curie) => curie.to_string().within(w, m, b"AbbreviatedIRI"),
-            Err(_) => iri_st.within(w, m, b"IRI"),
+            Ok(curie) => curie.to_string().within(w, m, "AbbreviatedIRI"),
+            Err(_) => iri_st.within(w, m, "IRI"),
         }
     }
 }
@@ -368,7 +382,7 @@ render! {
 render! {
     Class, self, w, m,
     {
-        with_iri(w, m, b"Class", self)?;
+        with_iri(w, m, "Class", self)?;
 
         Ok(())
     }
@@ -386,7 +400,7 @@ render! {
 render! {
     ObjectProperty, self, w, m,
     {
-        with_iri(w, m, b"ObjectProperty", self)?;
+        with_iri(w, m, "ObjectProperty", self)?;
 
         Ok(())
     }
@@ -395,7 +409,7 @@ render! {
 render! {
     DataProperty, self, w, m,
     {
-        with_iri(w, m, b"DataProperty", self)?;
+        with_iri(w, m, "DataProperty", self)?;
 
         Ok(())
     }
@@ -404,7 +418,7 @@ render! {
 render! {
     Datatype, self, w, m,
     {
-        with_iri(w, m, b"Datatype", self)?;
+        with_iri(w, m, "Datatype", self)?;
 
         Ok(())
     }
@@ -423,7 +437,8 @@ render! {
 render! {
     AnonymousIndividual, self, w, _m,
     {
-        let mut prefix = BytesStart::owned_name("AnonymousIndividual");
+        // let mut prefix = BytesStart::owned_name("AnonymousIndividual");
+        let mut prefix = BytesStart::new("AnonymousIndividual");
         prefix.push_attribute(("nodeID", &self[..]));
         w.write_event(Event::Empty(prefix))?;
         Ok(())
@@ -433,7 +448,7 @@ render! {
 render! {
     NamedIndividual, self, w, m,
     {
-        with_iri(w, m, b"NamedIndividual", self)?;
+        with_iri(w, m, "NamedIndividual", self)?;
 
         Ok(())
     }
@@ -457,65 +472,71 @@ render! {
                 c.render(w, m)?;
             }
             ClassExpression::ObjectSomeValuesFrom {ref ope, ref bce} => {
-                (ope, bce).within(w, m, b"ObjectSomeValuesFrom")?;
+                (ope, bce).within(w, m, "ObjectSomeValuesFrom")?;
             }
             ClassExpression::ObjectAllValuesFrom {ref ope, ref bce} => {
-                (ope, bce).within(w, m, b"ObjectAllValuesFrom")?;
+                (ope, bce).within(w, m, "ObjectAllValuesFrom")?;
             }
             ClassExpression::ObjectIntersectionOf(ref ope) => {
-                ope.within(w, m, b"ObjectIntersectionOf")?;
+                ope.within(w, m, "ObjectIntersectionOf")?;
             }
             ClassExpression::ObjectUnionOf (ref ope) => {
-                ope.within(w, m, b"ObjectUnionOf")?;
+                ope.within(w, m, "ObjectUnionOf")?;
             }
             ClassExpression::ObjectComplementOf (ref bce) => {
-                bce.within(w, m, b"ObjectComplementOf")?;
+                bce.within(w, m, "ObjectComplementOf")?;
             }
             ClassExpression::ObjectHasValue {ref ope, ref i} => {
-                (ope, i).within(w, m, b"ObjectHasValue")?;
+                (ope, i).within(w, m, "ObjectHasValue")?;
             }
             ClassExpression::ObjectOneOf (ref ope) => {
-                ope.within(w, m, b"ObjectOneOf")?;
+                ope.within(w, m, "ObjectOneOf")?;
             }
             ClassExpression::ObjectHasSelf (ref ope) => {
-                ope.within(w, m, b"ObjectHasSelf")?;
+                ope.within(w, m, "ObjectHasSelf")?;
             }
             ClassExpression::ObjectMinCardinality{n, ref ope, ref bce} => {
-                let mut open = BytesStart::owned_name("ObjectMinCardinality");
+                // let mut open = BytesStart::owned_name("ObjectMinCardinality");
+                let mut open = BytesStart::new("ObjectMinCardinality");
                 open.push_attribute(("cardinality", &n.to_string()[..]));
                 (ope, bce).within_tag(w, m, open)?;
             }
             ClassExpression::ObjectMaxCardinality{n, ref ope, ref bce} => {
-                let mut open = BytesStart::owned_name("ObjectMaxCardinality");
+                // let mut open = BytesStart::owned_name("ObjectMaxCardinality");
+                let mut open = BytesStart::new("ObjectMaxCardinality");
                 open.push_attribute(("cardinality", &n.to_string()[..]));
                 (ope, bce).within_tag(w, m, open)?;
             }
             ClassExpression::ObjectExactCardinality{n, ref ope, ref bce} => {
-                let mut open = BytesStart::owned_name("ObjectExactCardinality");
+                // let mut open = BytesStart::owned_name("ObjectExactCardinality");
+                let mut open = BytesStart::new("ObjectExactCardinality");
                 open.push_attribute(("cardinality", &n.to_string()[..]));
                 (ope, bce).within_tag(w, m, open)?;
             }
             ClassExpression::DataSomeValuesFrom{ref dp, ref dr} => {
-                (dp, dr).within(w, m, b"DataSomeValuesFrom")?;
+                (dp, dr).within(w, m, "DataSomeValuesFrom")?;
             }
             ClassExpression::DataAllValuesFrom{ref dp, ref dr} => {
-                (dp, dr).within(w, m, b"DataAllValuesFrom")?;
+                (dp, dr).within(w, m, "DataAllValuesFrom")?;
             }
             ClassExpression::DataHasValue{ref dp, ref l} => {
-                (dp, l).within(w, m, b"DataHasValue")?;
+                (dp, l).within(w, m, "DataHasValue")?;
             }
             ClassExpression::DataMinCardinality{n, ref dp, ref dr} => {
-                let mut open = BytesStart::owned_name("DataMinCardinality");
+                // let mut open = BytesStart::owned_name("DataMinCardinality");
+                let mut open = BytesStart::new("DataMinCardinality");
                 open.push_attribute(("cardinality", &n.to_string()[..]));
                 (dp, dr).within_tag(w, m, open)?;
             }
             ClassExpression::DataMaxCardinality{n, ref dp, ref dr} => {
-                let mut open = BytesStart::owned_name("DataMaxCardinality");
+                // let mut open = BytesStart::owned_name("DataMaxCardinality");
+                let mut open = BytesStart::new("DataMaxCardinality");
                 open.push_attribute(("cardinality", &n.to_string()[..]));
                 (dp, dr).within_tag(w, m, open)?;
             }
             ClassExpression::DataExactCardinality{n, ref dp, ref dr} => {
-                let mut open = BytesStart::owned_name("DataExactCardinality");
+                // let mut open = BytesStart::owned_name("DataExactCardinality");
+                let mut open = BytesStart::new("DataExactCardinality");
                 open.push_attribute(("cardinality", &n.to_string()[..]));
                 (dp, dr).within_tag(w, m, open)?;
             }
@@ -668,7 +689,8 @@ contents! {
 render! {
     Literal, self, w, m,
     {
-        let mut open = BytesStart::owned_name("Literal");
+        // let mut open = BytesStart::owned_name("Literal");
+        let mut open = BytesStart::new("Literal");
 
         match self {
             Literal::Datatype{literal, datatype_iri} => {
@@ -710,7 +732,7 @@ render! {
 render! {
     AnnotationProperty, self, w, m,
     {
-        with_iri(w, m, b"AnnotationProperty", self)?;
+        with_iri(w, m, "AnnotationProperty", self)?;
 
         Ok(())
     }
@@ -719,7 +741,7 @@ render! {
 render! {
     Annotation, self, w, m,
     {
-        (&self.ap, &self.av).within(w, m, b"Annotation")?;
+        (&self.ap, &self.av).within(w, m, "Annotation")?;
 
         Ok(())
     }
@@ -766,7 +788,7 @@ render! {
                 p.render(w, m)?;
             }
             ObjectPropertyExpression::InverseObjectProperty(p) => {
-                p.within(w, m, b"ObjectInverseOf")?;
+                p.within(w, m, "ObjectInverseOf")?;
             }
         }
 
@@ -779,7 +801,7 @@ render! {
     {
         match self {
             SubObjectPropertyExpression::ObjectPropertyChain(v) => {
-                v.within(w, m, b"ObjectPropertyChain")?;
+                v.within(w, m, "ObjectPropertyChain")?;
             }
             SubObjectPropertyExpression::ObjectPropertyExpression(op) => {
                 op.render(w, m)?;
@@ -812,7 +834,8 @@ contents! {
 render! {
     FacetRestriction, self, w, m,
     {
-        let mut open = BytesStart::owned_name("FacetRestriction");
+        // let mut open = BytesStart::owned_name("FacetRestriction");
+        let mut open = BytesStart::new("FacetRestriction");
         // Got the facet IRI from vocab
         open.push_attribute(("facet",
                              &self.f.iri_s()[..]));
@@ -830,19 +853,19 @@ render! {
                 d.render(w, m)?;
             }
             DataRange::DataIntersectionOf(d) => {
-                d.within(w, m, b"DataIntersectionOf")?;
+                d.within(w, m, "DataIntersectionOf")?;
             }
             DataRange::DataUnionOf(d) => {
-                d.within(w, m, b"DataUnionOf")?;
+                d.within(w, m, "DataUnionOf")?;
             }
             DataRange::DataComplementOf(d) => {
-                d.within(w, m, b"DataComplementOf")?;
+                d.within(w, m, "DataComplementOf")?;
             }
             DataRange::DataOneOf(d) => {
-                d.within(w, m, b"DataOneOf")?;
+                d.within(w, m, "DataOneOf")?;
             }
             DataRange::DatatypeRestriction(dt, fr) => {
-                (dt, fr).within(w,m, b"DatatypeRestriction")?;
+                (dt, fr).within(w,m, "DatatypeRestriction")?;
             }
         }
 

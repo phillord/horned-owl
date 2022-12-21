@@ -20,7 +20,7 @@ enum_meta = "0.6.0"
 thiserror = "1.0"
 lazy_static="1.4.0"
 log = {version="0.4.8"}
-quick-xml={version="0.21.0"}
+quick-xml={version="0.26.0"}
 indexmap="1.0.2"
 rio_api="0.7.1"
 rio_xml="0.7.3"

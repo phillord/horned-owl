@@ -1,4 +1,7 @@
 use curie::PrefixMapping;
+use quick_xml::escape::unescape;
+use quick_xml::name::ResolveResult;
+use quick_xml::name::ResolveResult::Bound;
 
 use crate::error::*;
 use crate::io::ParserConfiguration;
@@ -15,7 +18,7 @@ use std::io::BufRead;
 use quick_xml::events::BytesEnd;
 use quick_xml::events::BytesStart;
 use quick_xml::events::Event;
-use quick_xml::Reader;
+use quick_xml::NsReader;
 
 struct Read<'a, A: ForIRI, R>
 where
@@ -23,14 +26,13 @@ where
 {
     build: &'a Build<A>,
     mapping: PrefixMapping,
-    reader: Reader<R>,
-    buf: Vec<u8>,
-    ns_buf: Vec<u8>,
+    reader: NsReader<R>,
+    // buf: Vec<u8>,
 }
 
 pub fn read<R: BufRead>(
     bufread: &mut R,
-    _config: ParserConfiguration
+    _config: ParserConfiguration,
 ) -> Result<(SetOntology<RcStr>, PrefixMapping), HornedError> {
     let b = Build::new();
     read_with_build(bufread, &b)
@@ -40,36 +42,36 @@ pub fn read_with_build<A: ForIRI, R: BufRead>(
     bufread: R,
     build: &Build<A>,
 ) -> Result<(SetOntology<A>, PrefixMapping), HornedError> {
-    let reader: Reader<R> = Reader::from_reader(bufread);
+    let reader: NsReader<R> = NsReader::from_reader(bufread);
     let mut ont = SetOntology::new();
     let mapping = PrefixMapping::default();
+    let mut buf = Vec::new();
 
     let mut r = Read {
         reader,
         build,
         mapping,
-        buf: Vec::new(),
-        ns_buf: Vec::new(),
+        // buf: Vec::new(),
     };
 
     loop {
-        match read_event(&mut r)? {
+        match r.reader.read_resolved_event_into(&mut buf)? {
             (ref ns, Event::Start(ref e)) | (ref ns, Event::Empty(ref e))
-                if *ns == b"http://www.w3.org/2002/07/owl#" =>
+                if is_owl(ns) =>
             {
-                match e.local_name() {
+                match e.local_name().as_ref() {
                     b"Ontology" => {
-                        let s = attrib_value(&mut r, e, b"ontologyIRI")?;
+                        let s = get_attr_value_str(&mut r.reader, e, b"ontologyIRI")?;
                         if let Some(s) = s {
                             r.mapping.set_default(&s);
                         }
 
-                        ont.mut_id().iri = read_a_iri_attr(&mut r, e, b"ontologyIRI")?;
-                        ont.mut_id().viri = read_a_iri_attr(&mut r, e, b"versionIRI")?;
+                        ont.mut_id().iri = get_iri_value_for(&mut r, e, b"ontologyIRI")?;
+                        ont.mut_id().viri = get_iri_value_for(&mut r, e, b"versionIRI")?;
                     }
                     b"Prefix" => {
-                        let iri = attrib_value(&mut r, e, b"IRI")?;
-                        let prefix = attrib_value(&mut r, e, b"name")?;
+                        let iri = get_attr_value_str(&mut r.reader, e, b"IRI")?;
+                        let prefix = get_attr_value_str(&mut r.reader, e, b"name")?;
                         match (prefix, iri) {
                             (Some(p), Some(i)) => {
                                 r.mapping.add_prefix(&p, &i).ok();
@@ -94,40 +96,17 @@ pub fn read_with_build<A: ForIRI, R: BufRead>(
             (ref ns, Event::End(ref e)) if is_owl_name(ns, e, b"Ontology") => {
                 break;
             }
+            // this initially was in `read_event`.
+            (_, Event::Eof) => {
+                let pos = &r.reader.buffer_position();
+                return Err(invalid! {
+                    "Unexpected EoF at {}", pos
+                });
+            }
             _ => {}
         }
     }
     Ok((ont, r.mapping))
-}
-
-/// Read an event from the reader, which is unowned.
-///
-/// This method is here because it allows me to nest self called,
-/// inside a match on the event; the event otherwise keeps a
-/// mutable borrow out which prevents these calls. This problem
-/// happens because of the design of quick-xml. Nested calls
-/// cannot work because we have to pass `buf` and `ns_buf`.
-///
-/// So, we use this solution instead; the worry is that this will
-/// be inefficient because it removes the zero-copy promise of
-/// quick-xml. I will not worry about this, however, because when
-/// non-lexical lifetimes appears, it should be possible to make
-/// this a straight alias for `read_namespaced_event`, and still
-/// have it all work.
-fn read_event<A: ForIRI, R: BufRead>(
-    read: &mut Read<A, R>,
-) -> Result<(Vec<u8>, Event<'static>), HornedError> {
-    let r = read
-        .reader
-        .read_namespaced_event(&mut read.buf, &mut read.ns_buf);
-
-    match r {
-        Ok((_, Event::Eof)) => Err(invalid! {
-            "Unexpected EoF at {}", read.reader.buffer_position()
-        }),
-        Ok((option_ns, event)) => Ok((option_ns.unwrap_or(b"").to_owned(), event.into_owned())),
-        Err(r) => Err(r.into()),
-    }
 }
 
 fn decode_expand_curie_maybe<'a, A: ForIRI, R: BufRead>(
@@ -151,76 +130,88 @@ fn decode_expand_curie_maybe<'a, A: ForIRI, R: BufRead>(
     }
 
     #[cfg(not(feature = "quick-xml/encoding"))]
-    match r.reader.decode(val) {
-        Ok(curie) => Ok(expand_curie_maybe(r, curie)),
+    match r.reader.decoder().decode(val) {
+        Ok(curie) => {
+            let cur = expand_curie_maybe(r, curie);
+            Ok(cur)
+        },
         Err(e) => Err(HornedError::from(e)),
     }
 }
 
 /// Expand a curie if there is an appropriate prefix
-fn expand_curie_maybe<'a, A: ForIRI, R: BufRead>(r: &mut Read<A, R>, val: &'a str) -> Cow<'a, str> {
-    match r.mapping.expand_curie_string(val) {
+fn expand_curie_maybe<'a, A: ForIRI, R: BufRead>(r: &mut Read<A, R>, val: Cow<'a, str>) -> Cow<'a, str> {
+    match r.mapping.expand_curie_string(&val) {
         // If we expand use this
         Ok(n) => Cow::Owned(n),
         // Else assume it's a complete URI
-        Err(_e) => Cow::Borrowed(val),
+        Err(_e) => val,
     }
 }
 
-fn attrib_value_b<'a>(
+/// Returns, if present, the byte slice corresponding to the value of the given attribute within opening tag.
+///
+/// ## Errors
+///
+/// Errors are generated by `quick-xml` and as such they are converted into a `ParserError`.
+fn get_attr_value_bytes<'a>(
     event: &'a BytesStart,
-    tag: &[u8],
+    attr_key: &[u8],
 ) -> Result<Option<Cow<'a, [u8]>>, HornedError> {
-    for res in event.attributes() {
-        let attrib = res?;
-        if attrib.key == tag {
-            return Ok(Some(attrib.value));
-        }
-    }
-
-    Ok(None)
+    event
+        .try_get_attribute(attr_key)
+        .map_err(|err| HornedError::ParserError(Box::new(err), Location::Unknown))
+        .map(|opt_attr| opt_attr.map(|attr| attr.value))
 }
 
-fn attrib_value<A: ForIRI, R: BufRead>(
-    r: &mut Read<A, R>,
+/// Returns, if present, the string corresponding to the value of the given attribute within opening tag.
+///
+/// ## Errors
+///
+/// Errors are generated by `quick-xml` and as such they are converted into a `ParserError`.
+fn get_attr_value_str<R: BufRead>(
+    reader: &mut NsReader<R>,
     event: &BytesStart,
-    tag: &[u8],
+    attr_key: &[u8],
 ) -> Result<Option<String>, HornedError> {
-    // Get the attrib, handling error
-    let val_opt_cow_u8 = attrib_value_b(event, tag)?;
-    // Decode the attrib
-    let val_opt_res_str = val_opt_cow_u8.as_ref().map(|val| r.reader.decode(val));
-    // Handle error from decode
-    let val_opt_str = val_opt_res_str.transpose()?;
-
-    // Turn into a string and report ok
-    Ok(val_opt_str.map(|s| s.to_string()))
+    // First, get the byte slice containing the attribute value
+    get_attr_value_bytes(event, attr_key)?
+    .as_ref()
+    .map(|val|
+        // Next, decode it to obtain a `str`.
+        reader.decoder().decode(val)
+        .map_err(|err| HornedError::ParserError(Box::new(err), Location::Unknown))
+    )
+    .transpose()
+    .map(|opt| opt.map(|s| s.to_string()))
 }
 
-fn read_iri_attr<A: ForIRI, R: BufRead>(
+/// Returns, if present, the IRI for the given opening tag.
+fn get_iri_value<A: ForIRI, R: BufRead>(
     r: &mut Read<A, R>,
     event: &BytesStart,
 ) -> Result<Option<IRI<A>>, HornedError> {
-    let iri = read_a_iri_attr(r, event, b"IRI")?;
-    Ok(if iri.is_some() {
-        iri
+    let iri = get_iri_value_for(r, event, b"IRI")?;
+    if let None = iri {
+        get_iri_value_for(r, event, b"abbreviatedIRI")
     } else {
-        read_a_iri_attr(r, event, b"abbreviatedIRI")?
-    })
+        Ok(iri)
+    }
 }
 
-fn read_a_iri_attr<A: ForIRI, R: BufRead>(
+/// Returns, if present, the IRI included in the given attribute for the given opening tag.
+fn get_iri_value_for<A: ForIRI, R: BufRead>(
     r: &mut Read<A, R>,
     event: &BytesStart,
-    tag: &[u8],
+    iri_attr: &[u8],
 ) -> Result<Option<IRI<A>>, HornedError> {
     Ok(
         // check for the attrib, if malformed return
-        attrib_value(r, event, tag)?.
+        get_attr_value_str(&mut r.reader, event, iri_attr)?
         // or transform the some String
-            map(|st| {
-                let x = expand_curie_maybe(r, &st[..]);
-
+            .map(|st| {
+                let cow = Cow::Owned(st);
+                let x = expand_curie_maybe(r, cow);
                 // Into an iri
                 r.build.iri(
                     // or a curie
@@ -234,7 +225,7 @@ fn decode_tag<A: ForIRI, R: BufRead>(
     tag: &[u8],
     r: &mut Read<A, R>,
 ) -> Result<String, HornedError> {
-    Ok(r.reader.decode(tag)?.to_string())
+    Ok(r.reader.decoder().decode(tag)?.to_string())
 }
 
 fn error_missing_end_tag<A: ForIRI, R: BufRead>(
@@ -302,12 +293,17 @@ fn error_missing_element<A: ForIRI, R: BufRead>(tag: &[u8], r: &mut Read<A, R>) 
     }
 }
 
-fn is_owl(ns: &[u8]) -> bool {
-    ns == OWL.iri_b()
+fn is_owl(res: &ResolveResult) -> bool {
+    if let Bound(ns) = res {
+        ns.as_ref() == OWL.iri_b()
+    } else {
+        false
+    }
+    
 }
 
-fn is_owl_name(ns: &[u8], e: &BytesEnd, tag: &[u8]) -> bool {
-    is_owl(ns) && e.local_name() == tag
+fn is_owl_name(res: &ResolveResult, e: &BytesEnd, tag: &[u8]) -> bool {
+    is_owl(res) && e.local_name().as_ref() == tag
 }
 
 trait FromStart<A: ForIRI>: Sized {
@@ -338,13 +334,13 @@ where
     R: BufRead,
     T: From<IRI<A>>,
 {
-    if let Some(iri) = read_iri_attr(r, e)? {
-        if e.local_name() == tag {
+    if let Some(iri) = get_iri_value(r, e)? {
+        if e.local_name().as_ref() == tag {
             return Ok(T::from(iri));
         } else {
             return Err(error_unknown_entity(
                 ::std::str::from_utf8(tag).unwrap(),
-                e.local_name(),
+                e.local_name().as_ref(),
                 r,
             ));
         }
@@ -363,10 +359,32 @@ fn from_start<A: ForIRI, R: BufRead, T: FromStart<A>>(
 from_start! {
     Literal, r, e,
     {
-        let datatype_iri = read_a_iri_attr(r, e, b"datatypeIRI")?;
-        let lang = attrib_value(r, e, b"xml:lang")?;
+        let datatype_iri = get_iri_value_for(r, e, b"datatypeIRI")?;
+        let lang = get_attr_value_str(&mut r.reader, e, b"xml:lang")?;
 
-        let literal = r.reader.read_text(b"Literal", &mut Vec::new())?;
+        // quick-xml only offers `r.reader.read_text()` for NsReader<'i &u8> as 
+        // of version 0.26.0.
+        // So, we need to work around it.
+        //
+        // # Assumptions
+        // The first closing `Literal` tag that is encountered is the one that
+        // matches the opening tag we are considering.
+        let mut literal = String::new();
+        let mut buf = Vec::new();
+        loop {
+            if let Event::End(event) = r.reader.read_event_into(&mut buf)? {
+                if let b"Literal" = event.local_name().as_ref() { break; }
+            }
+            
+            // This decoding step is not sufficient on its own.
+            // For instance, "A --> B" would yield "A --&gt; B".
+            let escaped_str = r.reader.decoder().decode(&buf)?;
+            // Hence this next step.
+            let unescaped_str = unescape(&escaped_str)
+                .map_err(|e| HornedError::ParserError(Box::new(e), Location::BytePosition(r.reader.buffer_position())))?;
+            // Finally, we add the unescaped string to the literal we are building.
+            literal.push_str(&unescaped_str);
+        }
         Ok(
             match (datatype_iri, lang, literal) {
                 (None, None, literal) =>
@@ -390,18 +408,18 @@ from_start! {
 from_start! {
     AnnotationValue, r, e, {
         Ok(
-            match e.local_name() {
+            match e.local_name().as_ref() {
                 b"Literal" => {
                     Literal::from_start(r, e)?
                     .into()
                 }
                 b"AbbreviatedIRI"|b"IRI" => {
-                    IRI::from_xml(r, e.local_name())?
+                    IRI::from_xml(r, e.local_name().as_ref())?
                     .into()
                 }
                 _ => {
                     return Err
-                        (error_unexpected_tag(e.local_name(), r));
+                        (error_unexpected_tag(e.local_name().as_ref(), r));
                 }
             }
         )
@@ -576,9 +594,7 @@ fn from_start_to_end<A: ForIRI, R: BufRead, T: FromStart<A> + std::fmt::Debug>(
     e: &BytesStart,
     end_tag: &[u8],
 ) -> Result<Vec<T>, HornedError> {
-    let v = vec![
-        from_start(r, e)?
-    ];
+    let v = vec![from_start(r, e)?];
     till_end_with(r, end_tag, v)
 }
 
@@ -597,8 +613,9 @@ fn till_end_with<A: ForIRI, R: BufRead, T: FromStart<A> + std::fmt::Debug>(
     end_tag: &[u8],
     mut operands: Vec<T>,
 ) -> Result<Vec<T>, HornedError> {
+    let mut buf = Vec::new();
     loop {
-        let e = read_event(r)?;
+        let e = r.reader.read_resolved_event_into(&mut buf)?;
         match e {
             (ref ns, Event::Empty(ref e)) if is_owl(ns) => {
                 let op = from_start(r, e)?;
@@ -622,16 +639,15 @@ fn object_cardinality_restriction<A: ForIRI, R: BufRead>(
     e: &BytesStart,
     end_tag: &[u8],
 ) -> Result<(u32, ObjectPropertyExpression<A>, Box<ClassExpression<A>>), HornedError> {
-    let n = attrib_value(r, e, b"cardinality")?;
+    let n = get_attr_value_str(&mut r.reader, e, b"cardinality")?;
     let n = n.ok_or_else(|| error_missing_attribute("cardinality", r))?;
 
     let ope = from_next(r)?;
     let mut vce: Vec<ClassExpression<_>> = till_end(r, end_tag)?;
 
     Ok((
-        n.parse::<u32>().map_err(|_s| {
-            HornedError::invalid("Failed to parse int")
-        })?,
+        n.parse::<u32>()
+            .map_err(|_s| HornedError::invalid("Failed to parse int"))?,
         ope,
         Box::new(match vce.len() {
             0 => r.build.class(OWL::Thing.iri_str()).into(),
@@ -646,16 +662,15 @@ fn data_cardinality_restriction<A: ForIRI, R: BufRead>(
     e: &BytesStart,
     end_tag: &[u8],
 ) -> Result<(u32, DataProperty<A>, DataRange<A>), HornedError> {
-    let n = attrib_value(r, e, b"cardinality")?;
+    let n = get_attr_value_str(&mut r.reader, e, b"cardinality")?;
     let n = n.ok_or_else(|| (error_missing_attribute("cardinality", r)))?;
 
     let dp = from_next(r)?;
     let mut vdr: Vec<DataRange<_>> = till_end(r, end_tag)?;
 
     Ok((
-        n.parse::<u32>().map_err(|_s| {
-            HornedError::invalid("Failed to parse int")
-        })?,
+        n.parse::<u32>()
+            .map_err(|_s| HornedError::invalid("Failed to parse int"))?,
         dp,
         match vdr.len() {
             0 => r.build.datatype(OWL2Datatype::RDFSLiteral.iri_str()).into(),
@@ -669,7 +684,7 @@ from_start! {
     PropertyExpression, r, e,
     {
         Ok(
-            match e.local_name() {
+            match e.local_name().as_ref() {
                 b"ObjectProperty" |
                 b"ObjectInverseOf" => {
                     PropertyExpression::ObjectPropertyExpression
@@ -682,7 +697,7 @@ from_start! {
                 }
                 _ => {
                     return Err(error_unknown_entity("PropertyExpression",
-                                                    e.local_name(), r))
+                                                    e.local_name().as_ref(), r))
                 }
             })
     }
@@ -691,7 +706,7 @@ from_start! {
 from_start! {
     ClassExpression, r, e, {
         Ok(
-            match e.local_name() {
+            match e.local_name().as_ref() {
                 b"Class" => {
                     Class::from_start(r, e)?.into()
                 }
@@ -780,7 +795,7 @@ from_start! {
                     ClassExpression::DataExactCardinality{n, dp, dr}
                 }
                 _ => {
-                    return Err(error_unexpected_tag(e.local_name(), r));
+                    return Err(error_unexpected_tag(e.local_name().as_ref(), r));
                 }
             }
         )
@@ -791,17 +806,18 @@ from_start! {
     AnnotatedAxiom, r, e,
     {
         let mut annotation: BTreeSet<Annotation<_>> = BTreeSet::new();
-        let axiom_kind:&[u8] = e.local_name();
+        let axiom_kind = e.local_name();
+        let mut buf = Vec::new();
 
         loop {
-            let e = read_event(r)?;
+            let e = r.reader.read_resolved_event_into(&mut buf)?;
             match e {
                 (ref ns, Event::Start(ref e))
                     |
                 (ref ns, Event::Empty(ref e))
                     if is_owl(ns) =>
                 {
-                    match e.local_name() {
+                    match e.local_name().as_ref() {
                         b"Annotation" => {
                             annotation.insert
                                 (Annotation::from_xml(r, b"Annotation")?);
@@ -809,15 +825,15 @@ from_start! {
                         _ => {
                             return Ok(AnnotatedAxiom{
                                 ann:annotation,
-                                axiom:axiom_from_start(r,e,axiom_kind)?
+                                axiom:axiom_from_start(r,e,axiom_kind.as_ref())?
                             });
                         }
                     }
                 }
                 (ref ns, Event::End(ref e))
-                    if is_owl_name(ns, e, axiom_kind) =>
+                    if is_owl_name(ns, e, axiom_kind.as_ref()) =>
                 {
-                    return Err(error_unexpected_end_tag(axiom_kind, r));
+                    return Err(error_unexpected_end_tag(axiom_kind.as_ref(), r));
                 },
                 _=>{
                 }
@@ -850,7 +866,7 @@ from_start! {
 from_start! {
     Individual,r, e,
     {
-        match e.local_name() {
+        match e.local_name().as_ref() {
             b"AnonymousIndividual" =>{
                 eprintln!("About to read anonymous");
                 let ai:AnonymousIndividual<_> = from_start(r, e)?;
@@ -876,7 +892,7 @@ from_start! {
 from_start! {
     AnnotationSubject, r, e,
     {
-        match e.local_name() {
+        match e.local_name().as_ref() {
             b"AnonymousIndividual" =>{
                 let ai:AnonymousIndividual<_> = from_start(r, e)?;
                 Ok(ai.into())
@@ -899,7 +915,8 @@ impl<A: ForIRI> FromStart<A> for AnonymousIndividual<A> {
         e: &BytesStart,
     ) -> Result<AnonymousIndividual<A>, HornedError> {
         let ai: AnonymousIndividual<_> = r.build.anon(
-            attrib_value(r, e, b"nodeID")?.ok_or_else(||error_missing_attribute("nodeID Expected", r))?,
+            get_attr_value_str(&mut r.reader, e, b"nodeID")?
+                .ok_or_else(|| error_missing_attribute("nodeID Expected", r))?,
         );
         Ok(ai)
     }
@@ -923,7 +940,7 @@ from_start! {
     ObjectPropertyExpression, r, e,
     {
         Ok(
-            match e.local_name() {
+            match e.local_name().as_ref() {
                 b"ObjectProperty" => {
                     ObjectPropertyExpression::ObjectProperty
                         (from_start(r, e)?)
@@ -935,7 +952,7 @@ from_start! {
                 _ => {
                     return Err(error_unknown_entity
                                 ("Object Property Expression",
-                                 e.local_name(), r));
+                                 e.local_name().as_ref(), r));
                 }
             }
         )
@@ -946,7 +963,7 @@ from_start! {
     SubObjectPropertyExpression, r, e,
     {
         Ok(
-            match e.local_name() {
+            match e.local_name().as_ref() {
                 b"ObjectPropertyChain" => {
                     let o = till_end(r, b"ObjectPropertyChain")?;
                     SubObjectPropertyExpression::ObjectPropertyChain(o)
@@ -958,7 +975,7 @@ from_start! {
                 }
                 _ => {
                     return Err(error_unknown_entity("Sub Object Property",
-                                                    e.local_name(),
+                                                    e.local_name().as_ref(),
                                                     r));
                 }
             }
@@ -969,7 +986,7 @@ from_start! {
 from_start! {
     FacetRestriction, r, e,
     {
-        let f = attrib_value_b(e, b"facet")?;
+        let f = get_attr_value_bytes(e, b"facet")?;
         let f = f.ok_or_else(
             || error_missing_attribute("facet", r)
         )?;
@@ -989,7 +1006,7 @@ from_start! {
     DataRange, r, e,
     {
         Ok(
-            match e.local_name() {
+            match e.local_name().as_ref() {
                 b"Datatype" => {
                     DataRange::Datatype(
                         from_start(r, e)?
@@ -1018,7 +1035,7 @@ from_start! {
                 }
                 _=> {
                     return Err(error_unknown_entity("DataRange",
-                                                    e.local_name(),r ));
+                                                    e.local_name().as_ref(),r ));
                 }
             }
         )
@@ -1029,7 +1046,7 @@ from_start! {
     NamedEntity, r, e,
     {
         Ok(
-            match e.local_name() {
+            match e.local_name().as_ref() {
                 b"Class" => {
                     Class::from_start(r, e)?.into()
                 },
@@ -1050,7 +1067,7 @@ from_start! {
                 }
                 _=> {
                     return Err(error_unknown_entity("NamedEntity",
-                                                    e.local_name(),r ));
+                                                    e.local_name().as_ref(),r ));
                 }
             }
         )
@@ -1060,7 +1077,7 @@ from_start! {
 trait FromXML<A: ForIRI>: Sized {
     fn from_xml<R: BufRead>(newread: &mut Read<A, R>, end_tag: &[u8]) -> Result<Self, HornedError> {
         let s = Self::from_xml_nc(newread, end_tag);
-        newread.buf.clear();
+        // newread.buf.clear();
         s
     }
 
@@ -1089,16 +1106,17 @@ from_xml! {
 
         let mut ap:Option<AnnotationProperty<_>> = None;
         let mut av:Option<AnnotationValue<_>> = None;
+        let mut buf = Vec::new();
 
         loop {
-            let e = read_event(r)?;
+            let e = r.reader.read_resolved_event_into(&mut buf)?;
             match e {
                 (ref ns, Event::Start(ref e))
                 |
                 (ref ns, Event::Empty(ref e))
                     if is_owl(ns) =>
                 {
-                    match e.local_name() {
+                    match e.local_name().as_ref() {
                         b"AnnotationProperty" =>
                             ap = Some(from_start(r, e)?),
                         _ =>
@@ -1124,8 +1142,9 @@ from_xml! {
 }
 
 fn from_next<A: ForIRI, R: BufRead, T: FromStart<A>>(r: &mut Read<A, R>) -> Result<T, HornedError> {
+    let mut buf = Vec::new();
     loop {
-        let e = read_event(r)?;
+        let e = r.reader.read_resolved_event_into(&mut buf)?;
         match e {
             (ref ns, Event::Empty(ref e)) | (ref ns, Event::Start(ref e)) if is_owl(ns) => {
                 return from_start(r, e);
@@ -1137,8 +1156,9 @@ fn from_next<A: ForIRI, R: BufRead, T: FromStart<A>>(r: &mut Read<A, R>) -> Resu
 
 fn discard_till<A: ForIRI, R: BufRead>(r: &mut Read<A, R>, end: &[u8]) -> Result<(), HornedError> {
     let pos = r.reader.buffer_position();
+    let mut buf = Vec::new();
     loop {
-        let e = read_event(r)?;
+        let e = r.reader.read_resolved_event_into(&mut buf)?;
 
         match e {
             (ref ns, Event::End(ref e)) if is_owl_name(ns, e, end) => {
@@ -1164,15 +1184,16 @@ from_xml! {
 from_start! {
     IRI, r, e,
     {
-        Self::from_xml(r, e.local_name())
+        Self::from_xml(r, e.local_name().as_ref())
     }
 }
 
 from_xml! {IRI, r, end,
         {
             let mut iri: Option<IRI<_>> = None;
+            let mut buf = Vec::new();
             loop {
-                let e = read_event(r)?;
+                let e = r.reader.read_resolved_event_into(&mut buf)?;
                 match e {
                     (ref _ns,Event::Text(ref e)) => {
                         iri = Some(r.build.iri
@@ -1194,14 +1215,11 @@ from_xml! {IRI, r, end,
 pub mod test {
     use super::*;
     use crate::ontology::axiom_mapped::AxiomMappedOntology;
-    use std::{collections::HashMap};
+    use std::collections::HashMap;
 
     pub fn read_ok<R: BufRead>(
         bufread: &mut R,
-    ) -> (
-        AxiomMappedOntology<RcStr, RcAnnotatedAxiom>,
-        PrefixMapping,
-    ) {
+    ) -> (AxiomMappedOntology<RcStr, RcAnnotatedAxiom>, PrefixMapping) {
         let r = read(bufread, ParserConfiguration::default());
         assert!(r.is_ok(), "Expected ontology, got failure:{:?}", r.err());
         let (o, m) = r.ok().unwrap();
@@ -2035,22 +2053,18 @@ pub mod test {
 
         assert_eq!(ont.i().sub_class_of().count(), 1);
         let cl = ont.i().sub_class_of().next().unwrap();
-        assert!{
+        assert! {
             matches! {
                 &cl.sup, ClassExpression::ObjectSomeValuesFrom{ope:_, bce:_}
             }
         }
 
-        assert!{
+        assert! {
             matches! {
                 &cl.sub, ClassExpression::ObjectSomeValuesFrom{ope:_, bce:_}
             }
         }
-
-
-
     }
-
 
     #[test]
     fn family() {
