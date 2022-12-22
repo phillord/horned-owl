@@ -4,6 +4,7 @@ use clap::ArgMatches;
 use horned_owl::error::HornedError;
 
 mod horned_big;
+mod horned_compare;
 mod horned_dump;
 mod horned_materialize;
 mod horned_parse;
@@ -23,6 +24,7 @@ fn app() -> App<'static> {
         .about("Command Line tools for OWL Ontologies")
         .author("Filippo De Bortoli <filippo.de_bortoli@tu-dresden.de>")
         .subcommand(horned_big::app("big"))
+        .subcommand(horned_compare::app("compare"))
         .subcommand(horned_dump::app("dump"))
         .subcommand(horned_materialize::app("materialize"))
         .subcommand(horned_parse::app("parse"))
