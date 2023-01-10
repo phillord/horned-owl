@@ -235,6 +235,11 @@ where
     // let mut elem = BytesStart::owned_name("Ontology");
     let mut elem = BytesStart::new("Ontology");
     elem.push_attribute((b"xmlns" as &[u8], OWL.iri_b()));
+    iri_maybe(&mut elem, "xml:base", &o.id().iri);
+    // Render XML Namespaces.
+    for pre in m.mappings() {
+        elem.push_attribute((format!("xmlns:{}", pre.0).as_bytes(),pre.1.as_bytes()));
+    }
     iri_maybe(&mut elem, "ontologyIRI", &o.id().iri);
     iri_maybe(&mut elem, "versionIRI", &o.id().viri);
 
@@ -244,8 +249,6 @@ where
     w.write_event(Event::Start(elem))?;
 
     // let elem = BytesEnd::owned(b"Ontology".to_vec());
-    
-
     m.render(w, m)?;
 
     for axk in AxiomKind::all_kinds() {
@@ -975,6 +978,13 @@ mod test {
             assert_eq!(prefix_orig_map, prefix_round_map);
         }
         (ont_orig, prefix_orig, ont_round, prefix_round)
+    }
+
+    #[test]
+    fn test_namespaces() {
+        let s = roundtrip_to_string(include_str!("../../ont/owl-xml/ont.owx"));
+
+        assert!(s.contains("xmlns:xsd"));
     }
 
     #[test]
