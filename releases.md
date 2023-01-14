@@ -1,3 +1,11 @@
+Version 0.13.0
+==============
+
+This release includes a lot of clean ups, including many version
+bumps.
+
+RDF parsing now has better location reporting for errors.
+
 Version 0.12.0
 ==============
 
