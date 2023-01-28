@@ -5,9 +5,12 @@ use clap::App;
 use clap::Arg;
 use clap::ArgMatches;
 
-use horned_owl::command::naming::name;
-use horned_owl::command::{parse_path, summary::summarize};
-use horned_owl::command::config::{parser_app, parser_config};
+use horned_bin::{
+    naming::name,
+    config::{parser_app, parser_config},
+    parse_path,
+    summary::summarize,
+};
 use horned_owl::error::HornedError;
 
 use std::path::Path;

@@ -29,7 +29,7 @@ fn integration_file_doesnt_exist_owx() -> Result<(), Box<dyn std::error::Error>>
 fn integration_parse_ontology_rdf() -> Result<(), Box<dyn std::error::Error>> {
     let mut cmd = Command::cargo_bin("horned-parse")?;
 
-    cmd.arg("src/ont/owl-rdf/and.owl");
+    cmd.arg("../src/ont/owl-rdf/and.owl");
     cmd.assert()
         .success()
         .stdout(predicate::str::contains("Parse Complete"));
@@ -41,7 +41,7 @@ fn integration_parse_ontology_rdf() -> Result<(), Box<dyn std::error::Error>> {
 fn integration_parse_ontology_xml() -> Result<(), Box<dyn std::error::Error>> {
     let mut cmd = Command::cargo_bin("horned-parse")?;
 
-    cmd.arg("src/ont/owl-xml/and.owx");
+    cmd.arg("../src/ont/owl-xml/and.owx");
     cmd.assert()
         .success()
         .stdout(predicate::str::contains("Parse Complete"));

@@ -5,7 +5,7 @@ use clap::App;
 use clap::Arg;
 use clap::ArgMatches;
 
-use horned_owl::command::config::{parser_app, parser_config};
+use horned_bin::config::{parser_app, parser_config};
 use horned_owl::error::HornedError;
 use horned_owl::io::rdf::reader::RDFOntology;
 use horned_owl::model::{RcAnnotatedAxiom, RcStr};

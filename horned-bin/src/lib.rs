@@ -1,6 +1,6 @@
 //! Support for Horned command line programmes
 
-use crate::{
+use horned_owl::{
     error::HornedError,
     io::{ParserOutput, ResourceType, ParserConfiguration},
     model::{Build, IRI, RcAnnotatedAxiom, RcStr},
@@ -30,12 +30,12 @@ pub fn parse_path(
         Some(ResourceType::OWX) => {
             let file = File::open(&path)?;
             let mut bufreader = BufReader::new(file);
-            super::io::owx::reader::read(&mut bufreader, config)?.into()
+            horned_owl::io::owx::reader::read(&mut bufreader, config)?.into()
         }
         Some(ResourceType::RDF) => {
             let b = Build::new();
-            let iri = super::resolve::path_to_file_iri(&b, path);
-            super::io::rdf::closure_reader::read(&iri, config)?.into()
+            let iri = horned_owl::resolve::path_to_file_iri(&b, path);
+            horned_owl::io::rdf::closure_reader::read(&iri, config)?.into()
         }
         None => {
             return Err(HornedError::CommandError(format!(
@@ -54,10 +54,10 @@ pub fn parse_imports(
     let file = File::open(&path)?;
     let mut bufreader = BufReader::new(file);
     Ok(match path_type(path) {
-        Some(ResourceType::OWX) => super::io::owx::reader::read(&mut bufreader, config)?.into(),
+        Some(ResourceType::OWX) => horned_owl::io::owx::reader::read(&mut bufreader, config)?.into(),
         Some(ResourceType::RDF) => {
             let b = Build::new();
-            let mut p = crate::io::rdf::reader::parser_with_build(&mut bufreader, &b, config);
+            let mut p = horned_owl::io::rdf::reader::parser_with_build(&mut bufreader, &b, config);
             p.parse_imports()?;
             p.as_ontology_and_incomplete()?.into()
         }
@@ -115,8 +115,8 @@ pub fn materialize_1<'a>(
 }
 
 pub mod naming {
-    use crate::model::AxiomKind;
-    use crate::model::AxiomKind::*;
+    use horned_owl::model::AxiomKind;
+    use horned_owl::model::AxiomKind::*;
 
     pub fn name(axk: &AxiomKind) -> &'static str {
         match axk {
@@ -170,7 +170,7 @@ pub mod naming {
 
 pub mod summary {
 
-    use crate::{model::AxiomKind, ontology::axiom_mapped::RcAxiomMappedOntology};
+    use horned_owl::{model::AxiomKind, ontology::axiom_mapped::RcAxiomMappedOntology};
     use indexmap::map::IndexMap;
 
     #[derive(Debug)]
@@ -217,8 +217,8 @@ pub mod config {
     use clap::App;
     use clap::ArgAction;
     use clap::ArgMatches;
-    use crate::io::ParserConfiguration;
-    use crate::io::RDFParserConfiguration;
+    use horned_owl::io::ParserConfiguration;
+    use horned_owl::io::RDFParserConfiguration;
 
     pub fn parser_app(app: App<'static>) -> App<'static> {
         app.arg(

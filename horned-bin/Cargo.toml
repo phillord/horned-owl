@@ -16,6 +16,15 @@ edition = "2018"
 
 [dependencies]
 clap = "3.2.2"
+horned-owl={path="../"}
+indexmap={workspace=true}
+pretty_rdf={workspace=true}
+rio_api={workspace=true}
+rio_xml={workspace=true}
+
+[dev-dependencies]
+assert_cmd = "2.0.2"
+predicates = "2.1.0"
 
 
 [[bin]]

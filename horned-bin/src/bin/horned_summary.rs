@@ -6,11 +6,13 @@ use clap::Arg;
 use clap::ArgMatches;
 
 
-use horned_owl::command::{
+use horned_bin::{
+    parse_path,
     config::{parser_app, parser_config},
-    naming::name
+    naming::name,
+    summary::summarize
 };
-use horned_owl::command::{parse_path, summary::summarize};
+
 use horned_owl::error::HornedError;
 
 use std::path::Path;

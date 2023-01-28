@@ -5,9 +5,12 @@ use clap::App;
 use clap::Arg;
 use clap::ArgMatches;
 
+use horned_bin::{
+    config::{parser_app, parser_config},
+    parse_path,
+};
+
 use horned_owl::{
-    command::config::{parser_app, parser_config},
-    command::parse_path,
     error::HornedError,
     ontology::set::SetOntology
 };

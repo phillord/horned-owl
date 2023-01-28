@@ -7,7 +7,7 @@ fn integration_round_ontology_xml() -> Result<(), Box<dyn std::error::Error>> {
 
     // and.owx is the output from bubo so will not be the
     // syntactically comparible
-    cmd.arg("./src/ont/owl-xml/and.owx");
+    cmd.arg("../src/ont/owl-xml/and.owx");
     cmd.assert().success();
 
     Ok(())
@@ -18,7 +18,7 @@ fn integration_round_ontology_rdf() -> Result<(), Box<dyn std::error::Error>> {
     let mut cmd = Command::cargo_bin("horned-round")?;
     // and.owx is the output from bubo so will not be the
     // syntactically comparible
-    cmd.arg("./src/ont/owl-rdf/and.owl");
+    cmd.arg("../src/ont/owl-rdf/and.owl");
     cmd.assert().success();
 
     Ok(())
