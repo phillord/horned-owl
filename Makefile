@@ -34,6 +34,7 @@ tmp:
 	mkdir tmp
 
 all-tests: integration-prepare integration-clean ./tmp/ont-with-bfo.owl
+	cargo test -- --include-ignored
 	cargo test --workspace integration -- --include-ignored
 
 integration-prepare: tmp

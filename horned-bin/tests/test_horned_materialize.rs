@@ -21,12 +21,12 @@ fn integration_ont_with_bfo() -> Result<(), Box<dyn std::error::Error>> {
     let mut cmd = Command::cargo_bin("horned-materialize")?;
 
     let predicate_fn = predicate::path::exists();
-    assert!(!predicate_fn.eval(Path::new("./tmp/bfo.owl")));
+    assert!(!predicate_fn.eval(Path::new("../tmp/bfo.owl")));
 
-    cmd.arg("./tmp/ont-with-bfo.owl");
+    cmd.arg("../tmp/ont-with-bfo.owl");
     cmd.assert().success();
 
-    assert!(predicate_fn.eval(Path::new("./tmp/bfo.owl")));
+    assert!(predicate_fn.eval(Path::new("../tmp/bfo.owl")));
 
     Ok(())
 }
