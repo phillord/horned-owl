@@ -11,9 +11,8 @@ all:
 	browser-reload.sh horned_owl
 
 pre-commit: quick-test
-pre-push: quick-test
+pre-push: all-tests
 	cargo bench --no-run
-	cargo test integration
 
 
 
