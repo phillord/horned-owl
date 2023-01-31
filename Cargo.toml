@@ -1,6 +1,6 @@
 [package]
 name = "horned-owl"
-version = "0.14.0"
+version = "0.15.0-alpha"
 authors = ["Phillip Lord <phillip.lord@russet.org.uk>"]
 description = "Library for OWL Ontologies"
 
