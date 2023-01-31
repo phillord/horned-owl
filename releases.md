@@ -1,3 +1,10 @@
+Version 0.14.0
+==============
+
+All commands have now been moved to their own crate. This will all
+library uses to have access to a slighly smaller binary with fewer
+dependencies.
+
 Version 0.13.0
 ==============
 

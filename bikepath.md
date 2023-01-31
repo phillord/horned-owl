@@ -1,4 +1,4 @@
-Version 0.13.0
+Version 0.15.0
 ==============
 
 Lots of fixes for the RDF parser based on lots of known files.
