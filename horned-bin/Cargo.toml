@@ -1,6 +1,6 @@
 [package]
 name = "horned-bin"
-version = "0.13.1-alpha"
+version = "0.14.0"
 
 authors = ["Phillip Lord <phillip.lord@russet.org.uk>"]
 description = "Command Line tools for OWL Ontologies"
@@ -16,7 +16,7 @@ edition = "2018"
 
 [dependencies]
 clap = "3.2.2"
-horned-owl={path="../", version="0.13.1-alpha"}
+horned-owl={path="../", version= "0.14.0" }
 indexmap={workspace=true}
 pretty_rdf={workspace=true}
 rio_api={workspace=true}
