@@ -20,9 +20,11 @@ fn main() -> Result<(), HornedError> {
 
 fn app() -> App<'static> {
     App::new("horned")
-        .version("0.1")
+        .version("0.2")
         .about("Command Line tools for OWL Ontologies")
         .author("Filippo De Bortoli <filippo.de_bortoli@tu-dresden.de>")
+        .subcommand_required(true)
+        .arg_required_else_help(true)
         .subcommand(horned_big::app("big"))
         .subcommand(horned_compare::app("compare"))
         .subcommand(horned_dump::app("dump"))
@@ -35,15 +37,20 @@ fn app() -> App<'static> {
 }
 
 fn matcher(matches: ArgMatches) -> Result<(), HornedError> {
-    match matches.subcommand().unwrap() {
-        ("big", submatches) => horned_big::matcher(submatches),
-        ("dump", submatches) => horned_dump::matcher(submatches),
-        ("materialize", submatches) => horned_materialize::matcher(submatches),
-        ("parse", submatches) => horned_parse::matcher(submatches),
-        ("round", submatches) => horned_round::matcher(submatches),
-        ("summary", submatches) => horned_summary::matcher(submatches),
-        ("triples", submatches) => horned_triples::matcher(submatches),
-        ("unparsed", submatches) => horned_unparsed::matcher(submatches),
-        _ => todo!(),
+    if let Some((name, submatches)) = matches.subcommand() {
+        match name {
+            "big" => horned_big::matcher(submatches),
+            "compare" => horned_compare::matcher(submatches),
+            "dump" => horned_dump::matcher(submatches),
+            "materialize" => horned_materialize::matcher(submatches),
+            "parse" => horned_parse::matcher(submatches),
+            "round" => horned_round::matcher(submatches),
+            "summary" => horned_summary::matcher(submatches),
+            "triples" => horned_triples::matcher(submatches),
+            "unparsed" => horned_unparsed::matcher(submatches),
+            _ => todo!(),
+        }
+    } else {
+        Ok(())
     }
 }
