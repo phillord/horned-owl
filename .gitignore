@@ -1,15 +1,10 @@
 /target/
 **/*.rs.bk
 Cargo.lock
-/src/ont/owl-xml/go-presentation.owl
 /benches/ont/o1000*.owl
 /benches/ont/o5000*.owl
 /notes.org
 /src/bin/horned_temp.rs
-/src/main.rs
-/src/ont/temp.owl
-/src/ont/owl-xml/family-other.owl
 /tmp/
 /big-owl
-/rio
 /makefile-local
