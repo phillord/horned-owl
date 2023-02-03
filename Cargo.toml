@@ -21,6 +21,7 @@ lazy_static="1.4.0"
 log = {version="0.4.8"}
 quick-xml={version="0.26.0"}
 indexmap={workspace=true}
+oxiri={workspace=true}
 pretty_rdf={workspace=true}
 rio_api={workspace=true}
 rio_xml={workspace=true}
@@ -34,7 +35,7 @@ indexmap="1.0.2"
 pretty_rdf="0.2.0"
 rio_api="0.7.1"
 rio_xml="0.7.3"
-
+oxiri = "0.2.2"
 [features]
 remote = ["ureq"]
 

@@ -192,7 +192,7 @@ fn get_iri_value<A: ForIRI, R: BufRead>(
     event: &BytesStart,
 ) -> Result<Option<IRI<A>>, HornedError> {
     let iri = get_iri_value_for(r, event, b"IRI")?;
-    if let None = iri {
+    if iri.is_none() {
         get_iri_value_for(r, event, b"abbreviatedIRI")
     } else {
         Ok(iri)
@@ -205,20 +205,12 @@ fn get_iri_value_for<A: ForIRI, R: BufRead>(
     event: &BytesStart,
     iri_attr: &[u8],
 ) -> Result<Option<IRI<A>>, HornedError> {
-    Ok(
-        // check for the attrib, if malformed return
-        get_attr_value_str(&mut r.reader, event, iri_attr)?
-        // or transform the some String
-            .map(|st| {
-                let cow = Cow::Owned(st);
-                let x = expand_curie_maybe(r, cow);
-                // Into an iri
-                r.build.iri(
-                    // or a curie
-                    x
-                )
-            }),
-    )
+
+    // check for the attrib, if malformed return
+    let attr_iri = get_attr_value_str(&mut r.reader, event, iri_attr)?
+        .map(|st| expand_curie_maybe(r, Cow::Owned(st)));
+
+    attr_iri.map(|string| r.build.iri(string)).transpose()
 }
 
 fn decode_tag<A: ForIRI, R: BufRead>(
@@ -390,12 +382,12 @@ from_start! {
                 (None, None, literal) =>
                     Literal::Simple{literal},
                 (Some(ref datatype_iri), None, literal)
-                    if **datatype_iri == *"http://www.w3.org/2001/XMLSchema#string" =>
+                    if datatype_iri.as_ref() == "http://www.w3.org/2001/XMLSchema#string" =>
                     Literal::Simple{literal},
                 (None, Some(lang), literal) =>
                     Literal::Language{literal, lang},
                 (Some(ref datatype_iri), Some(ref lang), ref literal)
-                    if **datatype_iri == *"http://www.w3.org/1999/02/22-rdf-syntax-ns#PlainLiteral"
+                    if datatype_iri.as_ref() == "http://www.w3.org/1999/02/22-rdf-syntax-ns#PlainLiteral"
                     => Literal::Language{literal:literal.to_string(), lang:lang.to_string()},
                 (Some(_), Some(_), _)
                     => return Err(invalid!("Broken literal at {}", r.reader.buffer_position())),
@@ -650,7 +642,7 @@ fn object_cardinality_restriction<A: ForIRI, R: BufRead>(
             .map_err(|_s| HornedError::invalid("Failed to parse int"))?,
         ope,
         Box::new(match vce.len() {
-            0 => r.build.class(OWL::Thing.iri_str()).into(),
+            0 => r.build.class(OWL::Thing.iri_str()).unwrap().into(),
             1 => vce.remove(0),
             _ => return Err(error_unexpected_tag(end_tag, r)),
         }),
@@ -673,7 +665,7 @@ fn data_cardinality_restriction<A: ForIRI, R: BufRead>(
             .map_err(|_s| HornedError::invalid("Failed to parse int"))?,
         dp,
         match vdr.len() {
-            0 => r.build.datatype(OWL2Datatype::RDFSLiteral.iri_str()).into(),
+            0 => r.build.datatype(OWL2Datatype::RDFSLiteral.iri_str()).unwrap().into(),
             1 => vdr.remove(0),
             _ => return Err(error_unexpected_tag(end_tag, r)),
         },
@@ -1076,9 +1068,8 @@ from_start! {
 
 trait FromXML<A: ForIRI>: Sized {
     fn from_xml<R: BufRead>(newread: &mut Read<A, R>, end_tag: &[u8]) -> Result<Self, HornedError> {
-        let s = Self::from_xml_nc(newread, end_tag);
+        Self::from_xml_nc(newread, end_tag)
         // newread.buf.clear();
-        s
     }
 
     fn from_xml_nc<R: BufRead>(
@@ -1197,7 +1188,7 @@ from_xml! {IRI, r, end,
                 match e {
                     (ref _ns,Event::Text(ref e)) => {
                         iri = Some(r.build.iri
-                                   (decode_expand_curie_maybe(r, e)?));
+                                   (decode_expand_curie_maybe(r, e)?)?);
                     },
                     (ref ns, Event::End(ref e))
                         if is_owl_name(ns, e, end) =>

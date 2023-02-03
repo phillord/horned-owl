@@ -47,7 +47,7 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: StdWrite>(
 fn iri_maybe<A: ForIRI>(elem: &mut BytesStart, key: &str, iri: &Option<IRI<A>>) {
     match iri {
         Some(iri) => {
-            elem.push_attribute((key, &(*iri)[..]));
+            elem.push_attribute((key, iri.as_ref()));
         }
         None => {}
     }
@@ -61,10 +61,10 @@ where
 }
 
 /// Add an IRI or AbbreviatedIRI attribute to elem
-fn iri_or_curie<'a>(mapping: &'a PrefixMapping, elem: &mut BytesStart, iri: &str) {
-    match mapping.shrink_iri(&(*iri)[..]) {
+fn iri_or_curie(mapping: &PrefixMapping, elem: &mut BytesStart, iri: &str) {
+    match mapping.shrink_iri(iri) {
         Ok(curie) => {
-            let curie = format!("{}", curie);
+            let curie = String::from(curie);
             elem.push_attribute(("abbreviatedIRI", &curie[..]));
         }
         Err(_) => elem.push_attribute(("IRI", iri)),
@@ -72,9 +72,9 @@ fn iri_or_curie<'a>(mapping: &'a PrefixMapping, elem: &mut BytesStart, iri: &str
 }
 
 /// Write a tag with an IRI attribute.
-fn with_iri<'a, A: ForIRI, I, W>(
+fn with_iri<A: ForIRI, I, W>(
     w: &mut Writer<W>,
-    mapping: &'a PrefixMapping,
+    mapping: &PrefixMapping,
     // tag: &[u8],
     tag: &str,
     into_iri: I,
@@ -87,7 +87,7 @@ where
     // let mut bytes_start = BytesStart::borrowed(tag, tag.len());
     let mut bytes_start = BytesStart::from_content(tag, tag.len());
 
-    let iri_string: String = iri.into();
+    let iri_string: String = String::from(iri);
     iri_or_curie(mapping, &mut bytes_start, &iri_string[..]);
     w.write_event(Event::Empty(bytes_start))?;
 
@@ -230,7 +230,7 @@ where
     W: StdWrite,
 {
     // w.write_event(Event::Decl(BytesDecl::new(&b"1.0"[..], None, None)))?;
-    w.write_event(Event::Decl(BytesDecl::new(&"1.0"[..], None, None)))?;
+    w.write_event(Event::Decl(BytesDecl::new("1.0", None, None)))?;
 
     // let mut elem = BytesStart::owned_name("Ontology");
     let mut elem = BytesStart::new("Ontology");
@@ -348,7 +348,7 @@ impl<'a, W: StdWrite> Render<'a, W> for String {
 render! {
     IRI, self, w, m,
     {
-        let iri_st: String = self.into();
+        let iri_st: String = String::from(self);
 
         match m.shrink_iri(&iri_st[..]) {
             Ok(curie) => curie.to_string().within(w, m, "AbbreviatedIRI"),
@@ -700,7 +700,7 @@ render! {
                 attribute(
                     &mut open,
                     "datatypeIRI",
-                    datatype_iri,
+                   datatype_iri.as_ref(),
                 );
                 literal
             }
@@ -907,7 +907,7 @@ mod test {
         let mut ont = AxiomMappedOntology::new_rc();
         let build = Build::new();
 
-        let iri = build.iri("http://www.example.com/a".to_string());
+        let iri = build.iri(std::rc::Rc::from("http://www.example.com/a")).unwrap();
         ont.mut_id().iri = Some(iri);
         let temp_file = Temp::new_file().unwrap();
         let file = File::create(&temp_file).ok().unwrap();

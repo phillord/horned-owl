@@ -741,7 +741,7 @@ pub mod entity {
 
     impl<A: ForIRI> Visit<A> for EntityExtract<A> {
         fn visit_iri(&mut self, iri: &IRI<A>) {
-            self.0.push(iri.underlying())
+            self.0.push(String::from(iri).into())
         }
 
         fn visit_anonymous_individual(&mut self, anon: &AnonymousIndividual<A>) {

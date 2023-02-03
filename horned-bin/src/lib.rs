@@ -34,7 +34,7 @@ pub fn parse_path(
         }
         Some(ResourceType::RDF) => {
             let b = Build::new();
-            let iri = horned_owl::resolve::path_to_file_iri(&b, path);
+            let iri = horned_owl::resolve::path_to_file_iri(&b, path)?;
             horned_owl::io::rdf::closure_reader::read(&iri, config)?.into()
         }
         None => {
@@ -91,11 +91,11 @@ pub fn materialize_1<'a>(
     // Get all the imports
     for i in import {
         if !done.contains(&i.0) {
-            let local: String = localize_iri(&i.0, &b.iri(input)).into();
+            let local: String = localize_iri(&i.0, &b.iri(input)?)?.into();
             let local_path = Path::new(&local);
             if !local_path.exists() {
                 println!("Retrieving Ontology: {}", &i.0);
-                let imported_data = strict_resolve_iri(&i.0);
+                let imported_data = strict_resolve_iri(&i.0)?;
                 done.push(i.0.clone());
                 println!("Saving to {}", local);
                 let mut file = File::create(&local)?;

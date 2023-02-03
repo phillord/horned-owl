@@ -118,10 +118,13 @@ impl<A: ForIRI> MutableOntology<A> for SetOntology<A> {
     /// ```
     /// # use horned_owl::model::*;
     /// # use horned_owl::ontology::set::SetOntology;
+    /// # fn doctest_set_insert() -> Result<(), Box<dyn std::error::Error>> {
     /// let mut o = SetOntology::new();
     /// let b = Build::new_rc();
-    /// o.insert(DeclareClass(b.class("http://www.example.com/a")));
-    /// o.insert(DeclareObjectProperty(b.object_property("http://www.example.com/r")));
+    /// o.insert(DeclareClass(b.class("http://www.example.com/a")?));
+    /// o.insert(DeclareObjectProperty(b.object_property("http://www.example.com/r")?));
+    /// # return Ok(());
+    /// # };
     /// ```
     ///
     /// See `declare` for an easier way to declare named entities.
@@ -237,35 +240,39 @@ mod test {
     }
 
     #[test]
-    fn test_ontology_id() {
+    fn test_ontology_id() -> Result<(), Box<dyn std::error::Error>> {
         let mut so = SetOntology::new_rc();
         let b = Build::new_rc();
         let mut oid = OntologyID {
-            iri: Some(b.iri("http://www.example.com/iri")),
-            viri: Some(b.iri("http://www.example.com/viri")),
+            iri: Some(b.iri("http://www.example.com/iri")?),
+            viri: Some(b.iri("http://www.example.com/viri")?),
         };
 
         std::mem::swap(so.mut_id(), &mut oid);
 
-        assert_eq!(so.id().iri, Some(b.iri("http://www.example.com/iri")));
-        assert_eq!(so.id().viri, Some(b.iri("http://www.example.com/viri")))
+        assert_eq!(so.id().iri, Some(b.iri("http://www.example.com/iri")?));
+        assert_eq!(so.id().viri, Some(b.iri("http://www.example.com/viri")?));
+
+        Ok(())
     }
 
     #[test]
-    fn test_ontology_clone() {
+    fn test_ontology_clone() -> Result<(), Box<dyn std::error::Error>> {
         let mut so = SetOntology::new_rc();
         let b = Build::new_rc();
         let mut oid = OntologyID {
-            iri: Some(b.iri("http://www.example.com/iri")),
-            viri: Some(b.iri("http://www.example.com/viri")),
+            iri: Some(b.iri("http://www.example.com/iri")?),
+            viri: Some(b.iri("http://www.example.com/viri")?),
         };
 
         std::mem::swap(so.mut_id(), &mut oid);
 
         let cso = so.clone();
 
-        assert_eq!(cso.id().iri, Some(b.iri("http://www.example.com/iri")));
-        assert_eq!(cso.id().viri, Some(b.iri("http://www.example.com/viri")))
+        assert_eq!(cso.id().iri, Some(b.iri("http://www.example.com/iri")?));
+        assert_eq!(cso.id().viri, Some(b.iri("http://www.example.com/viri")?));
+
+        Ok(())
     }
 
     #[test]
@@ -277,20 +284,20 @@ mod test {
     }
 
     #[test]
-    fn test_ontology_into_iter() {
+    fn test_ontology_into_iter() -> Result<(), Box<dyn std::error::Error>> {
         // Setup
         let build = Build::new_rc();
         let mut o = SetOntology::new();
-        let decl1 = DeclareClass(build.class("http://www.example.com#a"));
-        let decl2 = DeclareClass(build.class("http://www.example.com#b"));
-        let decl3 = DeclareClass(build.class("http://www.example.com#c"));
+        let decl1 = DeclareClass(build.class("http://www.example.com#a")?);
+        let decl2 = DeclareClass(build.class("http://www.example.com#b")?);
+        let decl3 = DeclareClass(build.class("http://www.example.com#c")?);
         let disj1 = DisjointClasses(vec![
-            ClassExpression::Class(build.class("http://www.example.com#a")),
-            ClassExpression::Class(build.class("http://www.example.com#b")),
+            ClassExpression::Class(build.class("http://www.example.com#a")?),
+            ClassExpression::Class(build.class("http://www.example.com#b")?),
         ]);
         let disj2 = DisjointClasses(vec![
-            ClassExpression::Class(build.class("http://www.example.com#b")),
-            ClassExpression::Class(build.class("http://www.example.com#c")),
+            ClassExpression::Class(build.class("http://www.example.com#b")?),
+            ClassExpression::Class(build.class("http://www.example.com#c")?),
         ]);
         o.insert(disj1.clone());
         o.insert(disj2.clone());
@@ -324,6 +331,8 @@ mod test {
         );
         assert_eq!(it.next(), None);
         assert_eq!(it.next(), None);
+
+        Ok(())
     }
 
     #[test]
@@ -336,20 +345,20 @@ mod test {
     }
 
     #[test]
-    fn test_ontology_iter() {
+    fn test_ontology_iter() -> Result<(), Box<dyn std::error::Error>> {
         // Setup
         let build = Build::new_rc();
         let mut o = SetOntology::new();
-        let decl1 = DeclareClass(build.class("http://www.example.com#a"));
-        let decl2 = DeclareClass(build.class("http://www.example.com#b"));
-        let decl3 = DeclareClass(build.class("http://www.example.com#c"));
+        let decl1 = DeclareClass(build.class("http://www.example.com#a")?);
+        let decl2 = DeclareClass(build.class("http://www.example.com#b")?);
+        let decl3 = DeclareClass(build.class("http://www.example.com#c")?);
         let disj1 = DisjointClasses(vec![
-            ClassExpression::Class(build.class("http://www.example.com#a")),
-            ClassExpression::Class(build.class("http://www.example.com#b")),
+            ClassExpression::Class(build.class("http://www.example.com#a")?),
+            ClassExpression::Class(build.class("http://www.example.com#b")?),
         ]);
         let disj2 = DisjointClasses(vec![
-            ClassExpression::Class(build.class("http://www.example.com#b")),
-            ClassExpression::Class(build.class("http://www.example.com#c")),
+            ClassExpression::Class(build.class("http://www.example.com#b")?),
+            ClassExpression::Class(build.class("http://www.example.com#c")?),
         ]);
         o.insert(disj1.clone());
         o.insert(disj2.clone());
@@ -383,16 +392,18 @@ mod test {
         );
         assert_eq!(it.next(), None);
         assert_eq!(it.next(), None);
+
+        Ok(())
     }
 
     #[test]
-    fn test_ontology_into() {
+    fn test_ontology_into() -> Result<(), Box<dyn std::error::Error>> {
         // Setup
         let build = Build::new_rc();
         let mut o = SetOntology::new();
-        let decl1 = DeclareClass(build.class("http://www.example.com#a"));
-        let decl2 = DeclareClass(build.class("http://www.example.com#b"));
-        let decl3 = DeclareClass(build.class("http://www.example.com#c"));
+        let decl1 = DeclareClass(build.class("http://www.example.com#a")?);
+        let decl2 = DeclareClass(build.class("http://www.example.com#b")?);
+        let decl3 = DeclareClass(build.class("http://www.example.com#c")?);
 
         o.insert(decl1.clone());
         o.insert(decl2.clone());
@@ -418,6 +429,8 @@ mod test {
         );
         assert_eq!(it.next(), None);
         assert_eq!(it.next(), None);
+
+        Ok(())
     }
 
     #[test]
@@ -435,20 +448,20 @@ mod test {
     }
 
     #[test]
-    fn test_index_into_iter() {
+    fn test_index_into_iter() -> Result<(), Box<dyn std::error::Error>> {
         // Setup
         let build = Build::new_rc();
         let mut o = OneIndexedOntology::new(SetIndex::new_rc());
-        let decl1 = DeclareClass(build.class("http://www.example.com#a"));
-        let decl2 = DeclareClass(build.class("http://www.example.com#b"));
-        let decl3 = DeclareClass(build.class("http://www.example.com#c"));
+        let decl1 = DeclareClass(build.class("http://www.example.com#a")?);
+        let decl2 = DeclareClass(build.class("http://www.example.com#b")?);
+        let decl3 = DeclareClass(build.class("http://www.example.com#c")?);
         let disj1 = DisjointClasses(vec![
-            ClassExpression::Class(build.class("http://www.example.com#a")),
-            ClassExpression::Class(build.class("http://www.example.com#b")),
+            ClassExpression::Class(build.class("http://www.example.com#a")?),
+            ClassExpression::Class(build.class("http://www.example.com#b")?),
         ]);
         let disj2 = DisjointClasses(vec![
-            ClassExpression::Class(build.class("http://www.example.com#b")),
-            ClassExpression::Class(build.class("http://www.example.com#c")),
+            ClassExpression::Class(build.class("http://www.example.com#b")?),
+            ClassExpression::Class(build.class("http://www.example.com#c")?),
         ]);
         o.insert(disj1.clone());
         o.insert(disj2.clone());
@@ -482,6 +495,8 @@ mod test {
         );
         assert_eq!(it.next(), None);
         assert_eq!(it.next(), None);
+
+        Ok(())
     }
 
     #[test]
@@ -494,20 +509,20 @@ mod test {
     }
 
     #[test]
-    fn test_index_iter() {
+    fn test_index_iter() -> Result<(), Box<dyn std::error::Error>> {
         // Setup
         let build = Build::new_rc();
         let mut o = OneIndexedOntology::new(SetIndex::new_rc());
-        let decl1 = DeclareClass(build.class("http://www.example.com#a"));
-        let decl2 = DeclareClass(build.class("http://www.example.com#b"));
-        let decl3 = DeclareClass(build.class("http://www.example.com#c"));
+        let decl1 = DeclareClass(build.class("http://www.example.com#a")?);
+        let decl2 = DeclareClass(build.class("http://www.example.com#b")?);
+        let decl3 = DeclareClass(build.class("http://www.example.com#c")?);
         let disj1 = DisjointClasses(vec![
-            ClassExpression::Class(build.class("http://www.example.com#a")),
-            ClassExpression::Class(build.class("http://www.example.com#b")),
+            ClassExpression::Class(build.class("http://www.example.com#a")?),
+            ClassExpression::Class(build.class("http://www.example.com#b")?),
         ]);
         let disj2 = DisjointClasses(vec![
-            ClassExpression::Class(build.class("http://www.example.com#b")),
-            ClassExpression::Class(build.class("http://www.example.com#c")),
+            ClassExpression::Class(build.class("http://www.example.com#b")?),
+            ClassExpression::Class(build.class("http://www.example.com#c")?),
         ]);
         o.insert(disj1.clone());
         o.insert(disj2.clone());
@@ -541,5 +556,7 @@ mod test {
         );
         assert_eq!(it.next(), None);
         assert_eq!(it.next(), None);
+
+        Ok(())
     }
 }

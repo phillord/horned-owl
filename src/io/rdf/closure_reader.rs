@@ -34,12 +34,12 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> ClosureOntologyParser<'a, A, AA> {
 
     pub fn parse_path(&mut self, pb: &PathBuf) -> Result<Vec<IRI<A>>, HornedError> {
         let file_iri = path_to_file_iri(self.b, pb);
-        let s = ::std::fs::read_to_string(&pb)?;
+        let s = ::std::fs::read_to_string(pb)?;
         let mut v = vec![];
 
         // We use the IRI that we try to parse, but we don't know that
         // this is the same as file says at this point.
-        self.parse_content_from_iri(s, None, file_iri, &mut v)?;
+        self.parse_content_from_iri(s, None, file_iri?, &mut v)?;
 
         Ok(v)
     }
@@ -75,7 +75,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> ClosureOntologyParser<'a, A, AA> {
         relative_doc_iri: Option<&IRI<A>>,
         v: &mut Vec<IRI<A>>,
     ) -> Result<(), HornedError> {
-        let (new_doc_iri, s) = resolve_iri(source_iri, relative_doc_iri);
+        let (new_doc_iri, s) = resolve_iri(source_iri, relative_doc_iri)?;
         self.parse_content_from_iri(s, relative_doc_iri, new_doc_iri, v)
     }
 
@@ -204,22 +204,24 @@ mod test {
     use std::path::Path;
 
     #[test]
-    fn test_read() {
+    fn test_read() -> Result<(), Box<dyn std::error::Error>> {
         let path = Path::new("src/ont/owl-rdf/import-property.owl");
         let b = Build::new_rc();
-        let iri = path_to_file_iri(&b, &path);
+        let iri = path_to_file_iri(&b, &path)?;
 
         let (_, ic): (RcRDFOntology, _) = read(&iri, Default::default()).unwrap();
         assert!(ic.is_complete());
+
+        Ok(())
     }
 
     // import-property.owl should parse completely with full parse so
     // is a good test.
     #[test]
-    fn test_read_closure() {
+    fn test_read_closure() -> Result<(), Box<dyn std::error::Error>> {
         let path = Path::new("src/ont/owl-rdf/import-property.owl");
         let b = Build::new_rc();
-        let iri = path_to_file_iri(&b, &path);
+        let iri = path_to_file_iri(&b, &path)?;
 
         let v: Vec<(RcRDFOntology, _)> = read_closure(&b, &iri, Default::default()).unwrap();
         let v: Vec<SetOntology<_>> = v
@@ -231,5 +233,7 @@ mod test {
             .collect();
 
         assert_eq!(v.len(), 2);
+
+        Ok(())
     }
 }

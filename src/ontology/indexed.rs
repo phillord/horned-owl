@@ -309,11 +309,11 @@ impl<
     }
 
     pub fn i(&self) -> &I {
-        (&self.0).i()
+        (self.0).i()
     }
 
     pub fn j(&self) -> &J {
-        (&self.0).j().i()
+        (self.0).j().i()
     }
 
     pub fn k(&self) -> &K {
@@ -420,11 +420,11 @@ impl<
     }
 
     pub fn i(&self) -> &I {
-        (&self.0).i()
+        (self.0).i()
     }
 
     pub fn j(&self) -> &J {
-        (&self.0).j().i()
+        (self.0).j().i()
     }
 
     pub fn k(&self) -> &K {
@@ -503,9 +503,9 @@ mod test {
         AnnotatedAxiom<RcStr>,
     ) {
         let b = Build::new_rc();
-        let c: NamedEntity<_> = b.class("http://www.example.com/c").into();
-        let o: NamedEntity<_> = b.object_property("http://www.example.com/p").into();
-        let b: NamedEntity<_> = b.data_property("http://www.example.com/d").into();
+        let c: NamedEntity<_> = b.class("http://www.example.com/c").unwrap().into();
+        let o: NamedEntity<_> = b.object_property("http://www.example.com/p").unwrap().into();
+        let b: NamedEntity<_> = b.data_property("http://www.example.com/d").unwrap().into();
 
         (c.into(), o.into(), b.into())
     }

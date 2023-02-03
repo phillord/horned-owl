@@ -119,13 +119,13 @@ mod test {
     }
 
     #[test]
-    fn equal_retrieve() {
+    fn equal_retrieve() -> Result<(), Box<dyn std::error::Error>> {
         // Setup
         let build = Build::new_rc();
         let mut o = LogicallyEqualIndex::new();
-        let decl1: AnnotatedAxiom<_> = DeclareClass(build.class("http://www.example.com#a")).into();
-        let decl2: AnnotatedAxiom<_> = DeclareClass(build.class("http://www.example.com#b")).into();
-        let decl3: AnnotatedAxiom<_> = DeclareClass(build.class("http://www.example.com#c")).into();
+        let decl1: AnnotatedAxiom<_> = DeclareClass(build.class("http://www.example.com#a")?).into();
+        let decl2: AnnotatedAxiom<_> = DeclareClass(build.class("http://www.example.com#b")?).into();
+        let decl3: AnnotatedAxiom<_> = DeclareClass(build.class("http://www.example.com#c")?).into();
 
         o.index_insert(Rc::new(decl1.clone()));
         o.index_insert(Rc::new(decl2.clone()));
@@ -134,10 +134,12 @@ mod test {
         assert!(o.logical_contains(&decl1));
         assert!(o.logical_contains(&decl2));
         assert!(o.logical_contains(&decl3));
+
+        Ok(())
     }
 
     #[test]
-    fn annotation_not_equal_retrieve() {
+    fn annotation_not_equal_retrieve() -> Result<(), Box<dyn std::error::Error>>  {
         // Setup
         let b = Build::new_rc();
         let mut o = TwoIndexedOntology::new(
@@ -147,13 +149,13 @@ mod test {
         );
 
         let ann = Annotation {
-            ap: b.annotation_property("http://www.example.com/ap"),
-            av: b.iri("http://www.example.com/av").into(),
+            ap: b.annotation_property("http://www.example.com/ap")?,
+            av: b.iri("http://www.example.com/av")?.into(),
         };
 
-        let decl1: AnnotatedAxiom<_> = DeclareClass(b.class("http://www.example.com#a")).into();
-        let decl2: AnnotatedAxiom<_> = DeclareClass(b.class("http://www.example.com#b")).into();
-        let decl3: AnnotatedAxiom<_> = DeclareClass(b.class("http://www.example.com#c")).into();
+        let decl1: AnnotatedAxiom<_> = DeclareClass(b.class("http://www.example.com#a")?).into();
+        let decl2: AnnotatedAxiom<_> = DeclareClass(b.class("http://www.example.com#b")?).into();
+        let decl3: AnnotatedAxiom<_> = DeclareClass(b.class("http://www.example.com#c")?).into();
 
         let mut decl1_a = decl1.clone();
         decl1_a.ann.insert(ann.clone());
@@ -172,10 +174,12 @@ mod test {
         assert!(o.j().logical_contains(&decl1));
         assert!(o.j().logical_contains(&decl2));
         assert!(o.j().logical_contains(&decl3));
+
+        Ok(())
     }
 
     #[test]
-    fn test_update_equal_axiom() {
+    fn test_update_equal_axiom() -> Result<(), Box<dyn std::error::Error>> {
         let b = Build::new_rc();
         {
             let mut o = TwoIndexedOntology::new(
@@ -183,22 +187,22 @@ mod test {
                 LogicallyEqualIndex::new(),
                 OntologyID::default(),
             );
-            let ne: NamedEntity<_> = b.class("http://www.example.com").into();
+            let ne: NamedEntity<_> = b.class("http://www.example.com")?.into();
             let ax: Axiom<_> = ne.into();
             let mut dec: AnnotatedAxiom<_> = ax.into();
 
             dec.ann.insert(Annotation {
-                ap: b.annotation_property("http://www.example.com/p1"),
-                av: b.iri("http://www.example.com/a1").into(),
+                ap: b.annotation_property("http://www.example.com/p1")?,
+                av: b.iri("http://www.example.com/a1")?.into(),
             });
 
-            let ne: NamedEntity<_> = b.class("http://www.example.com").into();
+            let ne: NamedEntity<_> = b.class("http://www.example.com")?.into();
             let ax: Axiom<_> = ne.into();
             let mut dec2: AnnotatedAxiom<_> = ax.into();
 
             dec2.ann.insert(Annotation {
-                ap: b.annotation_property("http://www.example.com/p1"),
-                av: b.iri("http://www.example.com/a2").into(),
+                ap: b.annotation_property("http://www.example.com/p1")?,
+                av: b.iri("http://www.example.com/a2")?.into(),
             });
 
             o.insert(dec);
@@ -212,20 +216,20 @@ mod test {
                 LogicallyEqualIndex::new(),
                 OntologyID::default(),
             );
-            let ne: NamedEntity<_> = b.class("http://www.example.com").into();
+            let ne: NamedEntity<_> = b.class("http://www.example.com")?.into();
             let ax: Axiom<_> = ne.into();
             let mut dec: AnnotatedAxiom<_> = ax.into();
             dec.ann.insert(Annotation {
-                ap: b.annotation_property("http://www.example.com/p1"),
-                av: b.iri("http://www.example.com/a1").into(),
+                ap: b.annotation_property("http://www.example.com/p1")?,
+                av: b.iri("http://www.example.com/a1")?.into(),
             });
 
-            let ne: NamedEntity<_> = b.class("http://www.example.com").into();
+            let ne: NamedEntity<_> = b.class("http://www.example.com")?.into();
             let ax: Axiom<_> = ne.into();
             let mut dec2: AnnotatedAxiom<_> = ax.into();
             dec2.ann.insert(Annotation {
-                ap: b.annotation_property("http://www.example.com/p1"),
-                av: b.iri("http://www.example.com/a2").into(),
+                ap: b.annotation_property("http://www.example.com/p1")?,
+                av: b.iri("http://www.example.com/a2")?.into(),
             });
 
             o.insert(dec);
@@ -236,5 +240,7 @@ mod test {
 
             assert_eq!(aa.ann.len(), 2);
         }
+
+        Ok(())
     }
 }

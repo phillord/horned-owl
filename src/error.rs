@@ -18,7 +18,7 @@ impl From<usize> for Location{
 impl Display for Location {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::BytePosition(u) => write!(f, "Byte Position: {}", u),
+            Self::BytePosition(u) => write!(f, "Byte Position: {u}"),
             Self::Unknown => write!(f, "Unknown")
         }
     }
@@ -64,14 +64,26 @@ impl HornedError {
     }
 }
 
-impl From<quick_xml::Error> for HornedError {
-    fn from(e: quick_xml::Error) -> Self {
+impl From<oxiri::IriParseError> for HornedError {
+    fn from(e: oxiri::IriParseError) -> Self {
         Self::ParserError(e.into(), Location::Unknown)
     }
 }
 
 impl From<rio_xml::RdfXmlError> for HornedError {
     fn from(e: rio_xml::RdfXmlError) -> Self {
+        Self::ParserError(e.into(), Location::Unknown)
+    }
+}
+
+impl From<quick_xml::Error> for HornedError {
+    fn from(e: quick_xml::Error) -> Self {
+        Self::ParserError(e.into(), Location::Unknown)
+    }
+}
+
+impl From<ureq::Error> for HornedError {
+    fn from(e: ureq::Error) -> Self {
         Self::ParserError(e.into(), Location::Unknown)
     }
 }

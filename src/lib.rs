@@ -38,6 +38,7 @@
 //#[macro_use]
 extern crate indexmap;
 extern crate log;
+extern crate oxiri;
 extern crate quick_xml;
 
 pub mod collection;

@@ -42,7 +42,7 @@ pub(crate) fn matcher(matches: &ArgMatches) -> Result<(), HornedError> {
     let mut o = SetOntology::new_rc();
 
     for i in 1..size + 1 {
-        o.declare(b.class(format!("https://www.example.com/o{}", i)));
+        o.declare(b.class(format!("https://www.example.com/o{}", i))?);
     }
 
     let amo: RcAxiomMappedOntology = o.into();

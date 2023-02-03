@@ -98,19 +98,19 @@ impl<A: ForIRI> NodeGenerator<A> {
 
 impl<A: ForIRI> From<&IRI<A>> for PTerm<A> {
     fn from(iri: &IRI<A>) -> Self {
-        PNamedNode::new(iri.underlying()).into()
+        PNamedNode::new(String::from(iri).into()).into()
     }
 }
 
 impl<A: ForIRI> From<&IRI<A>> for PNamedNode<A> {
     fn from(iri: &IRI<A>) -> Self {
-        PNamedNode::new(iri.underlying())
+        PNamedNode::new(String::from(iri).into())
     }
 }
 
 impl<A: ForIRI> From<&IRI<A>> for PSubject<A> {
     fn from(iri: &IRI<A>) -> Self {
-        let nn = PNamedNode::new(iri.underlying());
+        let nn = PNamedNode::new(String::from(iri).into());
         nn.into()
     }
 }
@@ -502,7 +502,7 @@ render! {
 render! {
     AnnotationAssertion, self, f, ng, PTriple,
     {
-        let nbn:PSubject<A> = (&self.subject).render(f, ng)?;
+        let nbn:PSubject<A> = (self.subject).render(f, ng)?;
         ng.keep_this_bn(nbn);
 
         self.ann.render(f, ng)
@@ -1080,7 +1080,7 @@ fn obj_cardinality<A: ForIRI, W: Write>(
     let bn = ng.bn();
     let node_ope: PTerm<_> = ope.render(f, ng)?.into();
     let node_n = PTerm::Literal(PLiteral::Typed {
-        value: format!("{}", n).into(),
+        value: format!("{n}").into(),
         datatype: ng.nn(XSD::NonNegativeInteger),
     });
 
@@ -1129,7 +1129,7 @@ fn data_cardinality<A: ForIRI, W: Write>(
     let bn = ng.bn();
     let node_dp: PTerm<_> = (&dp.0).into();
     let node_n = PTerm::Literal(PLiteral::Typed {
-        value: format!("{}", n).into(),
+        value: format!("{n}").into(),
         datatype: ng.nn(XSD::NonNegativeInteger),
     });
     let node_dr: PTerm<_> = dr.render(f, ng)?.into();
@@ -1432,7 +1432,7 @@ render! {
                 // expression.
                 //
                 // It makes little sense to me.
-                let s:PSubject<_> = (&self.sup).render(f, ng)?;
+                let s:PSubject<_> = (self.sup).render(f, ng)?;
                 let o = render_vec_subject(v, f, ng)?;
                 Ok(
                     triple!{
@@ -1442,7 +1442,7 @@ render! {
             }
             SubObjectPropertyExpression::ObjectPropertyExpression(e) =>{
                 let s:PSubject<_> = e.render(f, ng)?;
-                let o:PTerm<_> = (&self.sup).render(f, ng)?.into();
+                let o:PTerm<_> = (self.sup).render(f, ng)?.into();
                 Ok(
                     triple!{
                         f, s, ng.nn(RDFS::SubPropertyOf), o
@@ -1553,11 +1553,11 @@ mod test {
     }
 
     #[test]
-    fn test_ont_rt() {
+    fn test_ont_rt() -> Result<(), Box<dyn std::error::Error>> {
         let mut ont = AxiomMappedOntology::new_rc();
         let build = Build::new();
 
-        let iri = build.iri("http://www.example.com/a".to_string());
+        let iri = build.iri("http://www.example.com/a".to_string())?;
         ont.mut_id().iri = Some(iri);
         let temp_file = Temp::new_file().unwrap();
         let file = File::create(&temp_file).ok().unwrap();
@@ -1567,6 +1567,8 @@ mod test {
         let ont2 = read_ok(&mut BufReader::new(file));
 
         assert_eq!(ont.id().iri, ont2.id().iri);
+
+        Ok(())
     }
 
     fn roundtrip(ont: &str) -> (SetOntology<RcStr>, SetOntology<RcStr>) {

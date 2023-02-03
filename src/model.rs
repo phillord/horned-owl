@@ -41,38 +41,50 @@
 //! - Rule 1:
 //! ```
 //! # use horned_owl::model::*;
+//! # fn doctest_model_rule_1() -> Result<(), Box<dyn std::error::Error>> {
 //! // TransitiveObjectProperty(ObjectProperty)
 //! let b = Build::new_rc();
 //! let top = TransitiveObjectProperty(ObjectPropertyExpression::ObjectProperty
-//!                          (b.object_property("http://www.example.com/op")));
+//!                          (b.object_property("http://www.example.com/op")?));
+//! # return Ok(());
+//! # }
 //! ```
 //! - Rule 2:
 //! ```
 //! # use horned_owl::model::*;
+//! # fn doctest_model_rule_2() -> Result<(), Box<dyn std::error::Error>> {
 //! // ObjectSomeValuesFrom{ope:PropertyExpression, ce:ClassExpression}
 //! let b = Build::new_rc();
 //! let some = ClassExpression::ObjectSomeValuesFrom{
-//!                 ope: b.object_property("http://www.example.com/p").into(),
-//!                 bce: b.class("http://www.example.com/c").into()
+//!                 ope: b.object_property("http://www.example.com/p")?.into(),
+//!                 bce: b.class("http://www.example.com/c")?.into()
 //! };
+//! # return Ok(());
+//! # }
 //! ```
 //! - Rule 3:
 //! ```
 //! # use horned_owl::model::*;
+//! # fn doctest_model_rule_3() -> Result<(), Box<dyn std::error::Error>> {
 //! // InverseObjectProperty(ObjectProperty, ObjectProperty)
 //! let b = Build::new_rc();
 //! let iop = InverseObjectProperties
-//!             (b.object_property("http://www.example.com/op1"),
-//!              b.object_property("http://www.example.com/op2"));
+//!             (b.object_property("http://www.example.com/op1")?,
+//!              b.object_property("http://www.example.com/op2")?);
+//! # return Ok(());
+//! # }
 //! ```
 //! - Rule 4:
 //! ```
 //! # use horned_owl::model::*;
+//! # fn doctest_model_rule_4() -> Result<(), Box<dyn std::error::Error>> {
 //! // EquivalentClasses(Vec<ClassExpression>)
 //! let b = Build::new_rc();
 //! let ec = EquivalentClasses
-//!           (vec!(b.class("http://www.example.com/op1").into(),
-//!                 b.class("http://www.example.com/op2").into()));
+//!           (vec!(b.class("http://www.example.com/op1")?.into(),
+//!                 b.class("http://www.example.com/op2")?.into()));
+//! # return Ok(());
+//! # }
 //! ```
 //! - Rule 5:
 //! ```
@@ -82,12 +94,16 @@
 //! //to: Individual,
 //! //}
 //! # use horned_owl::model::*;
+//! # fn doctest_model_rule_5() -> Result<(), Box<dyn std::error::Error>> {
+//! 
 //! let b = Build::new_rc();
 //! let opa = ObjectPropertyAssertion {
-//!     ope: b.object_property("http://www.example.com/op").into(),
-//!     from: b.named_individual("http://www.example.com/i1").into(),
-//!     to: b.named_individual("http://www.example.com/i2").into(),
+//!     ope: b.object_property("http://www.example.com/op")?.into(),
+//!     from: b.named_individual("http://www.example.com/i1")?.into(),
+//!     to: b.named_individual("http://www.example.com/i2")?.into(),
 //! };
+//! # return Ok(());
+//! # }
 //! ```
 
 use std::borrow::Borrow;
@@ -103,6 +119,10 @@ use std::ops::Deref;
 use std::rc::Rc;
 use std::sync::Arc;
 
+use oxiri::Iri;
+
+use crate::error::HornedError;
+
 /// An
 /// [IRI](https://en.wikipedia.org/wiki/Internationalized_Resource_Identifier)
 /// is an internationalized version of an URI/URL.
@@ -111,10 +131,10 @@ use std::sync::Arc;
 /// created through `Build`; this caches the underlying String meaning
 /// that IRIs are light-weight to `clone`.
 #[derive(Clone, Debug, Eq, PartialEq, Hash, PartialOrd, Ord)]
-pub struct IRI<A>(A);
+pub struct IRI<A>(Iri<A>);
 
 pub trait ForIRI:
-    AsRef<str> + Borrow<str> + Clone + Debug + Eq + From<String> + Hash + PartialEq + Ord + PartialOrd
+    AsRef<str> + Borrow<str> + Clone + Debug + Deref<Target = str> + Eq + From<String> + Hash + PartialEq + Ord + PartialOrd
 {
 }
 
@@ -123,6 +143,7 @@ impl<T: ?Sized> ForIRI for T where
         + Borrow<str>
         + Clone
         + Debug
+        + Deref<Target = str>
         + Eq
         + From<String>
         + Hash
@@ -135,9 +156,39 @@ impl<T: ?Sized> ForIRI for T where
 pub type RcStr = Rc<str>;
 pub type ArcStr = Arc<str>;
 
+// replace with self.into_inner()
 impl<A: ForIRI> IRI<A> {
-    pub fn underlying(&self) -> A {
-        self.0.clone()
+    pub fn underlying(self) -> A {
+        self.0.into_inner()
+    }
+
+    pub fn scheme(&self) -> &str {
+        self.0.scheme()
+    }
+
+    pub fn path(&self) -> &str {
+        self.0.path()
+    }
+
+    pub fn fragment(&self) -> Option<&str> {
+        self.0.fragment()
+    }
+
+    pub fn resolve(&self, other: &str) -> Result<IRI<A>, HornedError> {
+        let resolved = self.0.resolve(other)?;
+        Iri::parse(A::from(resolved.into_inner()))
+            .map(|iri| iri.into())
+            .map_err(|err| err.into())
+    }
+
+    // pub fn into_inner(&self) -> &Iri<A> {
+    //     &self.0
+    // }
+}
+
+impl<A:ForIRI> From<Iri<A>> for IRI<A> {
+    fn from(value: Iri<A>) -> Self {
+        Self(value)
     }
 }
 
@@ -145,49 +196,49 @@ impl<A: ForIRI> Deref for IRI<A> {
     type Target = str;
 
     fn deref(&self) -> &Self::Target {
-        self.0.borrow()
+        self.0.deref()
     }
 }
 
 impl<A: ForIRI> AsRef<str> for IRI<A> {
     fn as_ref(&self) -> &str {
-        self.0.borrow()
+        &self.0
     }
 }
 
 impl<A: ForIRI> Borrow<str> for IRI<A> {
     fn borrow(&self) -> &str {
-        self.as_ref()
+        self.0.borrow()
     }
 }
 
 impl From<&IRI<RcStr>> for RcStr {
     fn from(i: &IRI<RcStr>) -> RcStr {
-        i.0.clone()
+        i.0.as_str().into()
     }
 }
 
 impl From<IRI<RcStr>> for RcStr {
     fn from(i: IRI<RcStr>) -> RcStr {
-        i.0
+        i.underlying()
     }
 }
 
 impl<A: ForIRI> From<&IRI<A>> for String {
     fn from(i: &IRI<A>) -> String {
-        i.0.borrow().to_string()
+        i.0.as_str().into()
     }
 }
 
 impl<A: ForIRI> From<IRI<A>> for String {
     fn from(i: IRI<A>) -> String {
-        i.0.borrow().to_string()
+        i.underlying().to_string()
     }
 }
 
 impl<A: ForIRI> Display for IRI<A> {
     fn fmt(&self, f: &mut Formatter<'_>) -> ::std::fmt::Result {
-        f.write_str(self.0.borrow())
+        f.write_str(&self.0)
     }
 }
 
@@ -236,24 +287,32 @@ impl<A: ForIRI> Build<A> {
         }
     }
 
-    /// Constructs a new `IRI`
+    /// Builds a new [IRI] from a candidate string.
     ///
     /// # Examples
     ///
     /// ```
     /// # use horned_owl::model::*;
+    /// # fn doctest_iri() -> Result<(), Box<dyn std::error::Error>> {
     /// let b = Build::new_rc();
-    /// let iri = b.iri("http://www.example.com");
+    /// let iri = b.iri("http://www.example.com")?;
     /// assert_eq!("http://www.example.com", String::from(iri));
+    /// # return Ok(());
+    /// # };
     /// ```
-    pub fn iri<S: Borrow<str>>(&self, s: S) -> IRI<A> {
+    /// 
+    /// # Errors
+    /// 
+    /// This method fails whenever the input is not representing a valid IRI.
+    /// 
+    pub fn iri<S: Borrow<str> + Deref<Target=str>>(&self, iri: S) -> Result<IRI<A>, HornedError> {
         let mut cache = self.0.borrow_mut();
-        if let Some(iri) = cache.get(s.borrow()) {
-            iri.clone()
+        if let Some(cached_iri) = cache.get(iri.borrow()) {
+            Ok(cached_iri.clone())
         } else {
-            let iri = IRI(s.borrow().to_string().into());
-            cache.insert(iri.clone());
-            iri
+            let parsed_iri = Iri::parse(iri.borrow().to_string().into())?;
+            cache.insert(parsed_iri.clone().into());
+            Ok(parsed_iri.into())
         }
     }
 
@@ -264,18 +323,23 @@ impl<A: ForIRI> Build<A> {
     ///
     /// ```
     /// # use horned_owl::model::*;
+    /// # fn doctest_class() -> Result<(), Box<dyn std::error::Error>> {
     /// let b = Build::new_rc();
-    /// let c1 = b.class("http://www.example.com".to_string());
-    /// let c2 = b.class("http://www.example.com");
+    /// let c1 = b.class("http://www.example.com".to_string())?;
+    /// let c2 = b.class("http://www.example.com")?;
     ///
     /// assert_eq!(c1, c2);
+    /// # return Ok(());
+    /// # };
     /// ```
+    /// # Errors
+    /// 
+    /// This method fails whenever the input is not representing a valid IRI.
     ///
-    pub fn class<S>(&self, s: S) -> Class<A>
-    where
-        S: Borrow<str>,
+    pub fn class<S: Borrow<str> + Deref<Target=str>>(&self, iri: S) -> Result<Class<A>, HornedError>
     {
-        Class(self.iri(s))
+        self.iri(iri).map(|parsed_iri| Class(parsed_iri))
+        // Class(self.iri(s))
     }
 
     /// Constructs a new `ObjectProperty`.
@@ -284,17 +348,23 @@ impl<A: ForIRI> Build<A> {
     ///
     /// ```
     /// # use horned_owl::model::*;
+    /// # fn doctest_object_property() -> Result<(), Box<dyn std::error::Error>> {
     /// let b = Build::new_rc();
-    /// let obp1 = b.object_property("http://www.example.com".to_string());
-    /// let obp2 = b.object_property("http://www.example.com");
+    /// let obp1 = b.object_property("http://www.example.com".to_string())?;
+    /// let obp2 = b.object_property("http://www.example.com")?;
     ///
     /// assert_eq!(obp1, obp2);
+    /// # return Ok(());
+    /// # };
     /// ```
-    pub fn object_property<S>(&self, s: S) -> ObjectProperty<A>
-    where
-        S: Borrow<str>,
+    /// 
+    /// # Errors
+    /// 
+    /// This method fails whenever the input is not representing a valid IRI.
+    ///
+    pub fn object_property<S: Borrow<str> + Deref<Target=str>>(&self, iri: S) -> Result<ObjectProperty<A>, HornedError>
     {
-        ObjectProperty(self.iri(s))
+        self.iri(iri).map(|parsed_iri| ObjectProperty(parsed_iri))
     }
 
     /// Constructs a new `AnnotationProperty`.
@@ -303,17 +373,23 @@ impl<A: ForIRI> Build<A> {
     ///
     /// ```
     /// # use horned_owl::model::*;
+    /// # fn doctest_annotation_property() -> Result<(), Box<dyn std::error::Error>> {
     /// let b = Build::new_rc();
-    /// let anp1 = b.annotation_property("http://www.example.com".to_string());
-    /// let anp2 = b.annotation_property("http://www.example.com");
+    /// let anp1 = b.annotation_property("http://www.example.com".to_string())?;
+    /// let anp2 = b.annotation_property("http://www.example.com")?;
     ///
     /// assert_eq!(anp1, anp2);
+    /// # return Ok(());
+    /// # };
     /// ```
-    pub fn annotation_property<S>(&self, s: S) -> AnnotationProperty<A>
-    where
-        S: Borrow<str>,
+    ///
+    /// # Errors
+    /// 
+    /// This method fails whenever the input is not representing a valid IRI.
+    ///
+    pub fn annotation_property<S: Borrow<str> + Deref<Target=str>>(&self, iri: S) -> Result<AnnotationProperty<A>, HornedError>
     {
-        AnnotationProperty(self.iri(s))
+        self.iri(iri).map(|parsed_iri| AnnotationProperty(parsed_iri))
     }
 
     /// Constructs a new `DataProperty`.
@@ -322,17 +398,23 @@ impl<A: ForIRI> Build<A> {
     ///
     /// ```
     /// # use horned_owl::model::*;
+    /// # fn doctest_data_property() -> Result<(), Box<dyn std::error::Error>> {
     /// let b = Build::new_rc();
-    /// let dp1 = b.data_property("http://www.example.com".to_string());
-    /// let dp2 = b.data_property("http://www.example.com");
+    /// let dp1 = b.data_property("http://www.example.com".to_string())?;
+    /// let dp2 = b.data_property("http://www.example.com")?;
     ///
     /// assert_eq!(dp1, dp2);
+    /// # return Ok(());
+    /// # };
     /// ```
-    pub fn data_property<S>(&self, s: S) -> DataProperty<A>
-    where
-        S: Borrow<str>,
+    ///
+    /// # Errors
+    /// 
+    /// This method fails whenever the input is not representing a valid IRI.
+    ///
+    pub fn data_property<S: Borrow<str> + Deref<Target=str>>(&self, iri: S) -> Result<DataProperty<A>, HornedError>
     {
-        DataProperty(self.iri(s))
+        self.iri(iri).map(|parsed_iri| DataProperty(parsed_iri))
     }
 
     /// Constructs a new `NamedIndividual`.
@@ -341,17 +423,23 @@ impl<A: ForIRI> Build<A> {
     ///
     /// ```
     /// # use horned_owl::model::*;
+    /// # fn doctest_named_individual() -> Result<(), Box<dyn std::error::Error>> {
     /// let b = Build::new_rc();
-    /// let ni1 = b.named_individual("http://www.example.com".to_string());
-    /// let ni2 = b.named_individual("http://www.example.com");
+    /// let ni1 = b.named_individual("http://www.example.com".to_string())?;
+    /// let ni2 = b.named_individual("http://www.example.com")?;
     ///
     /// assert_eq!(ni1, ni2);
+    /// # return Ok(());
+    /// # };
     /// ```
-    pub fn named_individual<S>(&self, s: S) -> NamedIndividual<A>
-    where
-        S: Borrow<str>,
+    ///
+    /// # Errors
+    /// 
+    /// This method fails whenever the input is not representing a valid IRI.
+    ///
+    pub fn named_individual<S: Borrow<str> + Deref<Target=str>>(&self, iri: S) -> Result<NamedIndividual<A>, HornedError>
     {
-        NamedIndividual(self.iri(s))
+        self.iri(iri).map(|parsed_iri| NamedIndividual(parsed_iri))
     }
 
     /// Constructs a new `Datatype`.
@@ -360,17 +448,23 @@ impl<A: ForIRI> Build<A> {
     ///
     /// ```
     /// # use horned_owl::model::*;
+    /// # fn doctest_datatype() -> Result<(), Box<dyn std::error::Error>> {
     /// let b = Build::new_rc();
-    /// let ni1 = b.datatype("http://www.example.com".to_string());
-    /// let ni2 = b.datatype("http://www.example.com");
+    /// let ni1 = b.datatype("http://www.example.com".to_string())?;
+    /// let ni2 = b.datatype("http://www.example.com")?;
     ///
     /// assert_eq!(ni1, ni2);
+    /// # return Ok(());
+    /// # };
     /// ```
-    pub fn datatype<S>(&self, s: S) -> Datatype<A>
-    where
-        S: Borrow<str>,
+    ///
+    /// # Errors
+    /// 
+    /// This method fails whenever the input is not representing a valid IRI.
+    ///
+    pub fn datatype<S: Borrow<str> + Deref<Target=str>>(&self, iri: S) -> Result<Datatype<A>, HornedError>
     {
-        Datatype(self.iri(s))
+        self.iri(iri).map(|parsed_iri| Datatype(parsed_iri))
     }
 }
 
@@ -421,6 +515,12 @@ macro_rules! named {
                 }
             }
 
+            impl<A: ForIRI> $name<A> {
+                pub fn get_iri(&self) -> &IRI<A> {
+                    &self.0
+                }
+            }
+
             impl<'a, A: ForIRI> From<&'a IRI<A>> for $name<A> {
                  fn from(iri: &IRI<A>) -> $name<A> {
                      $name(iri.clone())
@@ -429,13 +529,13 @@ macro_rules! named {
 
             impl<A: ForIRI> From<$name<A>> for String {
                 fn from(n: $name<A>) -> String {
-                    n.0.0.borrow().to_string()
+                    n.0.0.to_string()
                 }
             }
 
             impl<'a, A: ForIRI> From<&'a $name<A>> for String {
                 fn from(n: &$name<A>) -> String {
-                    n.0.0.borrow().to_string()
+                    n.0.0.to_string()
                 }
             }
 
@@ -573,8 +673,8 @@ impl<A: ForIRI> Deref for Individual<A> {
 
     fn deref(&self) -> &Self::Target {
         match self {
-            Individual::Named(ni) => &*ni.0,
-            Individual::Anonymous(ai) => &*ai,
+            Individual::Named(ni) => ni.get_iri(),
+            Individual::Anonymous(ai) => ai,
         }
     }
 }
@@ -626,8 +726,8 @@ impl<A: ForIRI> Deref for AnnotationSubject<A> {
 
     fn deref(&self) -> &Self::Target {
         match self {
-            Self::IRI(iri) => &*iri,
-            Self::AnonymousIndividual(ai) => &*ai,
+            Self::IRI(iri) => iri,
+            Self::AnonymousIndividual(ai) => ai,
         }
     }
 }
@@ -1684,10 +1784,13 @@ pub trait MutableOntology<A> {
     /// ```
     /// # use horned_owl::model::*;
     /// # use horned_owl::ontology::set::SetOntology;
+    /// # fn doctest_model_insert() -> Result<(), Box<dyn std::error::Error>> {
     /// let mut o = SetOntology::new_rc();
     /// let b = Build::new();
-    /// o.insert(DeclareClass(b.class("http://www.example.com/a")));
-    /// o.insert(DeclareObjectProperty(b.object_property("http://www.example.com/r")));
+    /// o.insert(DeclareClass(b.class("http://www.example.com/a")?));
+    /// o.insert(DeclareObjectProperty(b.object_property("http://www.example.com/r")?));
+    /// # return Ok(());
+    /// # };
     /// ```
     ///
     /// See `declare` for an easier way to declare named entities.
@@ -1707,10 +1810,13 @@ pub trait MutableOntology<A> {
     /// ```
     /// # use horned_owl::model::*;
     /// # use horned_owl::ontology::set::SetOntology;
+    /// # fn doctest_model_declare() -> Result<(), Box<dyn std::error::Error>> {
     /// let mut o = SetOntology::new_rc();
     /// let b = Build::new();
-    /// o.declare(b.class("http://www.example.com/a"));
-    /// o.declare(b.object_property("http://www.example.com/r"));
+    /// o.declare(b.class("http://www.example.com/a")?);
+    /// o.declare(b.object_property("http://www.example.com/r")?);
+    /// # return Ok(());
+    /// # };
     /// ```
     fn declare<N>(&mut self, ne: N) -> bool
     where

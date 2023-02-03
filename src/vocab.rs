@@ -11,8 +11,6 @@ use crate::model::NamedEntity;
 use crate::model::NamedEntityKind;
 use crate::model::IRI;
 
-use std::borrow::Borrow;
-
 
 pub trait WithIRI<'a>: Meta<&'a IRIString> {
     /// Return a string representation of the IRI associated with this
@@ -34,12 +32,7 @@ pub trait WithIRI<'a>: Meta<&'a IRIString> {
     }
 
     fn var_b(tag: &'a [u8]) -> Option<Self> {
-        for v in Self::all() {
-            if tag == v.iri_b() {
-                return Some(v);
-            }
-        }
-        None
+        Self::all().into_iter().find(|v| tag == v.iri_b())
     }
 }
 
@@ -261,18 +254,18 @@ lazy_meta! {
 }
 
 pub fn is_thing<A: ForIRI>(iri: &IRI<A>) -> bool {
-    iri.as_ref() == OWL::Thing.iri_s()
+    iri.as_ref() == OWL::Thing.iri_str()
 }
 
 pub fn is_nothing<A: ForIRI>(iri: &IRI<A>) -> bool {
-    iri.as_ref() == OWL::Nothing.iri_s()
+    iri.as_ref() == OWL::Nothing.iri_str()
 }
 
 pub fn to_built_in_entity<A: ForIRI>(iri: &IRI<A>) -> Option<NamedEntityKind> {
     let ir = iri.as_ref();
     match ir {
-        _ if ir == OWL::TopDataProperty.iri_s() => Some(NamedEntityKind::DataProperty),
-        _ if ir == OWL::TopObjectProperty.iri_s() => Some(NamedEntityKind::ObjectProperty),
+        _ if ir == OWL::TopDataProperty.iri_str() => Some(NamedEntityKind::DataProperty),
+        _ if ir == OWL::TopObjectProperty.iri_str() => Some(NamedEntityKind::ObjectProperty),
         _ => None,
     }
 }
@@ -283,25 +276,25 @@ fn meta_testing() {
     assert_eq!(b"http://www.w3.org/2002/07/owl#", OWL.iri_b());
 
     assert_eq!(
-        Namespace::var_s("http://www.w3.org/2002/07/owl#").unwrap(),
-        OWL
+        Namespace::var_s("http://www.w3.org/2002/07/owl#"),
+        Some(OWL)
     );
 
     assert_eq!(
-        Namespace::var_b(b"http://www.w3.org/2002/07/owl#").unwrap(),
-        OWL
+        Namespace::var_b(b"http://www.w3.org/2002/07/owl#"),
+        Some(OWL)
     );
 }
 
-pub fn entity_for_iri<A: ForIRI, S: Borrow<str>>(
-    type_iri: S,
-    entity_iri: S,
+pub fn entity_for_iri<A: ForIRI>(
+    type_iri: A,
+    entity_iri: A,
     b: &Build<A>,
 ) -> Result<NamedEntity<A>, HornedError> {
     // Datatypes are handled here because they are not a
     // "type" but an "RDF schema" element.
     if type_iri.borrow() == "http://www.w3.org/2000/01/rdf-schema#Datatype" {
-        return Ok(b.datatype(entity_iri).into());
+        return Ok(b.datatype(entity_iri)?.into());
     }
 
     if type_iri.borrow().len() < 30 {
@@ -312,11 +305,11 @@ pub fn entity_for_iri<A: ForIRI, S: Borrow<str>>(
     }
 
     Ok(match &type_iri.borrow()[30..] {
-        "Class" => b.class(entity_iri).into(),
-        "ObjectProperty" => b.object_property(entity_iri).into(),
-        "DatatypeProperty" => b.data_property(entity_iri).into(),
-        "AnnotationProperty" => b.annotation_property(entity_iri).into(),
-        "NamedIndividual" => b.named_individual(entity_iri).into(),
+        "Class" => b.class(entity_iri)?.into(),
+        "ObjectProperty" => b.object_property(entity_iri)?.into(),
+        "DatatypeProperty" => b.data_property(entity_iri)?.into(),
+        "AnnotationProperty" => b.annotation_property(entity_iri)?.into(),
+        "NamedIndividual" => b.named_individual(entity_iri)?.into(),
         _ => {
             return Err(invalid!(
                 "IRI is not a type of entity:{:?}",
@@ -331,14 +324,14 @@ pub fn test_entity_for_iri() {
     let b = Build::new_rc();
 
     assert!(entity_for_iri(
-        "http://www.w3.org/2002/07/owl#Class",
-        "http://www.example.com",
+        std::rc::Rc::from("http://www.w3.org/2002/07/owl#Class"),
+        std::rc::Rc::from("http://www.example.com"),
         &b
     )
     .is_ok());
     assert!(entity_for_iri(
-        "http://www.w3.org/2002/07/owl#Fred",
-        "http://www.example.com",
+        std::rc::Rc::from("http://www.w3.org/2002/07/owl#Fred"),
+        std::rc::Rc::from("http://www.example.com"),
         &b
     )
     .is_err());
@@ -428,13 +421,13 @@ fn facet_meta() {
     );
 
     assert_eq!(
-        Facet::var_s("http://www.w3.org/2001/XMLSchema#pattern").unwrap(),
-        Facet::Pattern
+        Facet::var_s("http://www.w3.org/2001/XMLSchema#pattern"),
+        Some(Facet::Pattern)
     );
 
     assert_eq!(
-        Facet::var_b(b"http://www.w3.org/2001/XMLSchema#minExclusive").unwrap(),
-        Facet::MinExclusive
+        Facet::var_b(b"http://www.w3.org/2001/XMLSchema#minExclusive"),
+        Some(Facet::MinExclusive)
     );
 }
 

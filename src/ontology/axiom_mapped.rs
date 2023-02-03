@@ -119,12 +119,15 @@ impl<A: ForIRI, AA: ForIndex<A>> AxiomMappedIndex<A, AA> {
     /// ```
     /// # use horned_owl::model::*;
     /// # use horned_owl::ontology::axiom_mapped::AxiomMappedOntology;
+    /// # fn doctest_axiom_for_kind() -> Result<(), Box<dyn std::error::Error>> {
     /// let mut o = AxiomMappedOntology::new_rc();
     /// let b = Build::new_rc();
-    /// o.declare(b.class("http://www.example.com/a"));
-    /// o.declare(b.object_property("http://www.example.com/r"));
+    /// o.declare(b.class("http://www.example.com/a")?);
+    /// o.declare(b.object_property("http://www.example.com/r")?);
     ///
     /// assert_eq!(o.i().axiom_for_kind(AxiomKind::DeclareClass).count(), 1);
+    /// # return Ok(());
+    /// # };
     /// ```
     ///
     /// See also `axiom` for access to the `Axiom` without annotations.
@@ -143,12 +146,15 @@ impl<A: ForIRI, AA: ForIndex<A>> AxiomMappedIndex<A, AA> {
     /// ```
     /// # use horned_owl::model::*;
     /// # use horned_owl::ontology::axiom_mapped::AxiomMappedOntology;
+    /// # fn doctest_axiom() -> Result<(), Box<dyn std::error::Error>> {
     /// let mut o = AxiomMappedOntology::new_rc();
     /// let b = Build::new_rc();
-    /// o.declare(b.class("http://www.example.com/a"));
-    /// o.declare(b.object_property("http://www.example.com/r"));
+    /// o.declare(b.class("http://www.example.com/a")?);
+    /// o.declare(b.object_property("http://www.example.com/r")?);
     ///
     /// assert_eq!(o.i().axiom(AxiomKind::DeclareClass).count(), 1);
+    /// # return Ok(());
+    /// # };
     /// ```
     ///
     /// See methods such as `declare_class` for access to the Axiom
@@ -219,8 +225,9 @@ impl<A: ForIRI, AA: ForIndex<A>> IntoIterator for AxiomMappedIndex<A, AA> {
         // The collect switches the type which shows up in the API. Blegh.
         #[allow(clippy::needless_collect)]
         let v: Vec<AnnotatedAxiom<A>> = btreemap
-            .into_iter()
-            .map(|(_k, v)| v)
+            // .into_iter()
+            // .map(|(_k, v)| v)
+            .into_values()
             .flat_map(BTreeSet::into_iter)
             .map(|fi| fi.unwrap())
             .collect();
@@ -249,7 +256,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> Iterator for AxiomMappedIter<'a, A, AA> {
         if !self.kinds.is_empty() {
             let kind = self.kinds.pop_front().unwrap();
             self.inner = self.ont.set_for_kind(*kind).map(BTreeSet::iter);
-            self.next().map(|rc| &*rc)
+            self.next().map(|rc| rc)
         } else {
             None
         }
@@ -397,39 +404,41 @@ mod test {
     }
 
     #[test]
-    fn from_set() {
+    fn from_set() -> Result<(), Box<dyn std::error::Error>> {
         let b = Build::new_rc();
         let mut so = SetOntology::new();
         let mut oid = OntologyID {
-            iri: Some(b.iri("http://www.example.com/iri")),
-            viri: Some(b.iri("http://www.example.com/viri")),
+            iri: Some(b.iri("http://www.example.com/iri")?),
+            viri: Some(b.iri("http://www.example.com/viri")?),
         };
 
         std::mem::swap(so.mut_id(), &mut oid);
-        assert_eq!(so.id().iri, Some(b.iri("http://www.example.com/iri")));
-        assert_eq!(so.id().viri, Some(b.iri("http://www.example.com/viri")));
+        assert_eq!(so.id().iri, Some(b.iri("http://www.example.com/iri")?));
+        assert_eq!(so.id().viri, Some(b.iri("http://www.example.com/viri")?));
 
         let amo: RcAxiomMappedOntology = so.into();
 
-        assert_eq!(amo.id().iri, Some(b.iri("http://www.example.com/iri")));
-        assert_eq!(amo.id().viri, Some(b.iri("http://www.example.com/viri")))
+        assert_eq!(amo.id().iri, Some(b.iri("http://www.example.com/iri")?));
+        assert_eq!(amo.id().viri, Some(b.iri("http://www.example.com/viri")?));
+
+        Ok(())
     }
 
     #[test]
-    fn test_ontology_into_iter() {
+    fn test_ontology_into_iter() -> Result<(), Box<dyn std::error::Error>> {
         // Setup
         let build = Build::new();
         let mut o = AxiomMappedOntology::new_rc();
-        let decl1 = DeclareClass(build.class("http://www.example.com#a"));
-        let decl2 = DeclareClass(build.class("http://www.example.com#b"));
-        let decl3 = DeclareClass(build.class("http://www.example.com#c"));
+        let decl1 = DeclareClass(build.class("http://www.example.com#a")?);
+        let decl2 = DeclareClass(build.class("http://www.example.com#b")?);
+        let decl3 = DeclareClass(build.class("http://www.example.com#c")?);
         let disj1 = DisjointClasses(vec![
-            ClassExpression::Class(build.class("http://www.example.com#a")),
-            ClassExpression::Class(build.class("http://www.example.com#b")),
+            ClassExpression::Class(build.class("http://www.example.com#a")?),
+            ClassExpression::Class(build.class("http://www.example.com#b")?),
         ]);
         let disj2 = DisjointClasses(vec![
-            ClassExpression::Class(build.class("http://www.example.com#b")),
-            ClassExpression::Class(build.class("http://www.example.com#c")),
+            ClassExpression::Class(build.class("http://www.example.com#b")?),
+            ClassExpression::Class(build.class("http://www.example.com#c")?),
         ]);
         o.insert(disj1.clone());
         o.insert(disj2.clone());
@@ -461,6 +470,8 @@ mod test {
         );
         assert_eq!(it.next(), None);
         assert_eq!(it.next(), None);
+
+        Ok(())
     }
 
     #[test]
@@ -473,20 +484,20 @@ mod test {
     }
 
     #[test]
-    fn test_ontology_iter() {
+    fn test_ontology_iter() -> Result<(), Box<dyn std::error::Error>> {
         // Setup
         let build = Build::new_rc();
         let mut o = AxiomMappedOntology::new_rc();
-        let decl1 = DeclareClass(build.class("http://www.example.com#a"));
-        let decl2 = DeclareClass(build.class("http://www.example.com#b"));
-        let decl3 = DeclareClass(build.class("http://www.example.com#c"));
+        let decl1 = DeclareClass(build.class("http://www.example.com#a")?);
+        let decl2 = DeclareClass(build.class("http://www.example.com#b")?);
+        let decl3 = DeclareClass(build.class("http://www.example.com#c")?);
         let disj1 = DisjointClasses(vec![
-            ClassExpression::Class(build.class("http://www.example.com#a")),
-            ClassExpression::Class(build.class("http://www.example.com#b")),
+            ClassExpression::Class(build.class("http://www.example.com#a")?),
+            ClassExpression::Class(build.class("http://www.example.com#b")?),
         ]);
         let disj2 = DisjointClasses(vec![
-            ClassExpression::Class(build.class("http://www.example.com#b")),
-            ClassExpression::Class(build.class("http://www.example.com#c")),
+            ClassExpression::Class(build.class("http://www.example.com#b")?),
+            ClassExpression::Class(build.class("http://www.example.com#c")?),
         ]);
         o.insert(disj1.clone());
         o.insert(disj2.clone());
@@ -518,5 +529,7 @@ mod test {
         );
         assert_eq!(it.next(), None);
         assert_eq!(it.next(), None);
+
+        Ok(())
     }
 }

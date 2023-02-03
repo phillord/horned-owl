@@ -96,7 +96,7 @@ impl<A: ForIRI, AA: ForIndex<A>> OntologyIndex<A, AA> for DeclarationMappedIndex
                 if ne == NamedEntityKind::NamedIndividual &&
                     self.0.get(&iri) == Some(&NamedEntityKind::Class)
                 {
-                    self.1.insert(iri.clone());
+                    self.1.insert(iri);
                     return None;
                 }
 
@@ -117,7 +117,7 @@ impl<A: ForIRI, AA: ForIndex<A>> OntologyIndex<A, AA> for DeclarationMappedIndex
 
     fn index_remove(&mut self, ax: &AnnotatedAxiom<A>) -> bool {
         let s = some! {
-            self.0.remove(&self.aa_to_iri(&*ax)?)
+            self.0.remove(&self.aa_to_iri(ax)?)
         };
 
         s.is_some()
@@ -142,9 +142,9 @@ mod test {
         AnnotatedAxiom<RcStr>,
     ) {
         let b = Build::new_rc();
-        let c: NamedEntity<_> = b.class("http://www.example.com/c").into();
-        let o: NamedEntity<_> = b.object_property("http://www.example.com/p").into();
-        let b: NamedEntity<_> = b.data_property("http://www.example.com/d").into();
+        let c: NamedEntity<_> = b.class("http://www.example.com/c").unwrap().into();
+        let o: NamedEntity<_> = b.object_property("http://www.example.com/p").unwrap().into();
+        let b: NamedEntity<_> = b.data_property("http://www.example.com/d").unwrap().into();
 
         (c.into(), o.into(), b.into())
     }
@@ -165,7 +165,7 @@ mod test {
     }
 
     #[test]
-    fn test_declaration() {
+    fn test_declaration() -> Result<(), Box<dyn std::error::Error>> {
         let mut d = DeclarationMappedIndex::new_rc();
         let s = stuff();
         assert!(d.index_insert(s.0.into()));
@@ -174,41 +174,44 @@ mod test {
 
         let b = Build::new();
         assert_eq!(
-            d.declaration_kind(&b.iri("http://www.example.com/c")),
+            d.declaration_kind(&b.iri("http://www.example.com/c")?),
             Some(NamedEntityKind::Class)
         );
         assert_eq!(
-            d.declaration_kind(&b.iri("http://www.example.com/p")),
+            d.declaration_kind(&b.iri("http://www.example.com/p")?),
             Some(NamedEntityKind::ObjectProperty)
         );
         assert_eq!(
-            d.declaration_kind(&b.iri("http://www.example.com/d")),
+            d.declaration_kind(&b.iri("http://www.example.com/d")?),
             Some(NamedEntityKind::DataProperty)
         );
+
+        Ok(())
     }
 
     #[test]
-    fn test_declaration_builtin() {
+    fn test_declaration_builtin() -> Result<(), Box<dyn std::error::Error>> {
         let d = DeclarationMappedIndex::new_rc();
         let b = Build::new_rc();
         assert_eq!(
-            d.declaration_kind(&b.iri(OWL::TopDataProperty.iri_str())),
+            d.declaration_kind(&b.iri(OWL::TopDataProperty.iri_str())?),
             Some(NamedEntityKind::DataProperty)
         );
+        Ok(())
     }
 
 
     #[test]
-    fn test_pun_support() {
+    fn test_pun_support() -> Result<(), Box<dyn std::error::Error>> {
         let mut d = DeclarationMappedIndex::new_rc();
         let b = Build::new_rc();
 
         assert_eq!(d.puns().len(), 0);
 
-        let iri = b.iri("http://www.example.com/p");
-        let c: NamedEntity<_> = b.class("http://www.example.com/p").into();
+        let iri = b.iri("http://www.example.com/p")?;
+        let c: NamedEntity<_> = b.class("http://www.example.com/p")?.into();
         let c: AnnotatedAxiom<_> = c.into();
-        let ni: NamedEntity<_> = b.named_individual("http://www.example.com/p").into();
+        let ni: NamedEntity<_> = b.named_individual("http://www.example.com/p")?.into();
         let ni: AnnotatedAxiom<_> = ni.into();
 
         d.index_insert(c.clone().into());
@@ -225,5 +228,7 @@ mod test {
         assert_eq!(d.puns().len(), 1);
         assert_eq!(d.puns().iter().next(), Some(&iri));
         assert_eq!(d.declaration_kind(&iri), Some(NamedEntityKind::Class));
+
+        Ok(())
     }
 }

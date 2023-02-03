@@ -262,9 +262,9 @@ impl<A: ForIRI, AA: ForIndex<A>> MutableOntology<A> for IRIMappedOntology<A, AA>
     }
 }
 
-impl<A: ForIRI, AA: ForIndex<A>> IRIMappedOntology<A, AA> {
-    pub fn default() -> IRIMappedOntology<A, AA> {
-        IRIMappedOntology(FourIndexedOntology::new(
+impl<A: ForIRI, AA: ForIndex<A>> Default for IRIMappedOntology<A, AA> {
+    fn default() -> Self {
+        Self(FourIndexedOntology::new(
             SetIndex::new(),
             IRIMappedIndex::new(),
             AxiomMappedIndex::new(),
@@ -272,18 +272,22 @@ impl<A: ForIRI, AA: ForIndex<A>> IRIMappedOntology<A, AA> {
             Default::default(),
         ))
     }
+}
 
-    //Utility method gets an iterator over the axioms in the index for a given IRI
+impl<A: ForIRI, AA: ForIndex<A>> IRIMappedOntology<A, AA> {
+
+
+    // Utility method gets an iterator over the axioms in the index for a given IRI
     pub fn axiom_for_iri(&mut self, iri: &IRI<A>) -> impl Iterator<Item = &AnnotatedAxiom<A>> {
         self.0.j().axiom_for_iri(iri)
     }
 
-    //Utility method gets an iterator over the axioms in the index for a given IRI
+    // Utility method gets an iterator over the axioms in the index for a given IRI
     pub fn axiom_for_kind(&mut self, axkind: AxiomKind) -> impl Iterator<Item = &AnnotatedAxiom<A>> {
         self.0.k().axiom_for_kind(axkind)
     }
 
-    //Utility method updates an axiom in the index
+    // Utility method updates an axiom in the index
     pub fn update_axiom(&mut self, ax: &AnnotatedAxiom<A>, new_ax: AnnotatedAxiom<A>) -> bool {
         self.take(ax);
         self.insert(new_ax)
@@ -351,20 +355,20 @@ mod test {
     }
 
     #[test]
-    fn test_ontology_into_iter() {
+    fn test_ontology_into_iter() -> Result<(), Box<dyn std::error::Error>> {
         // Setup
         let build = Build::new();
         let mut o = IRIMappedOntology::new_rc();
-        let decl1 = DeclareClass(build.class("http://www.example.com#a"));
-        let decl2 = DeclareClass(build.class("http://www.example.com#b"));
-        let decl3 = DeclareClass(build.class("http://www.example.com#c"));
+        let decl1 = DeclareClass(build.class("http://www.example.com#a")?);
+        let decl2 = DeclareClass(build.class("http://www.example.com#b")?);
+        let decl3 = DeclareClass(build.class("http://www.example.com#c")?);
         let disj1 = DisjointClasses(vec![
-            ClassExpression::Class(build.class("http://www.example.com#a")),
-            ClassExpression::Class(build.class("http://www.example.com#b")),
+            ClassExpression::Class(build.class("http://www.example.com#a")?),
+            ClassExpression::Class(build.class("http://www.example.com#b")?),
         ]);
         let disj2 = DisjointClasses(vec![
-            ClassExpression::Class(build.class("http://www.example.com#b")),
-            ClassExpression::Class(build.class("http://www.example.com#c")),
+            ClassExpression::Class(build.class("http://www.example.com#b")?),
+            ClassExpression::Class(build.class("http://www.example.com#c")?),
         ]);
         o.insert(disj1.clone());
         o.insert(disj2.clone());
@@ -386,6 +390,8 @@ mod test {
                 AnnotatedAxiom::from(Axiom::DisjointClasses(disj2)),
             ]
         );
+
+        Ok(())
     }
 
     #[test]
@@ -398,20 +404,20 @@ mod test {
     }
 
     #[test]
-    fn test_ontology_iter() {
+    fn test_ontology_iter() -> Result<(), Box<dyn std::error::Error>> {
         // Setup
         let build = Build::new();
         let mut o = IRIMappedOntology::new_rc();
-        let decl1 = DeclareClass(build.class("http://www.example.com#a"));
-        let decl2 = DeclareClass(build.class("http://www.example.com#b"));
-        let decl3 = DeclareClass(build.class("http://www.example.com#c"));
+        let decl1 = DeclareClass(build.class("http://www.example.com#a")?);
+        let decl2 = DeclareClass(build.class("http://www.example.com#b")?);
+        let decl3 = DeclareClass(build.class("http://www.example.com#c")?);
         let disj1 = DisjointClasses(vec![
-            ClassExpression::Class(build.class("http://www.example.com#a")),
-            ClassExpression::Class(build.class("http://www.example.com#b")),
+            ClassExpression::Class(build.class("http://www.example.com#a")?),
+            ClassExpression::Class(build.class("http://www.example.com#b")?),
         ]);
         let disj2 = DisjointClasses(vec![
-            ClassExpression::Class(build.class("http://www.example.com#b")),
-            ClassExpression::Class(build.class("http://www.example.com#c")),
+            ClassExpression::Class(build.class("http://www.example.com#b")?),
+            ClassExpression::Class(build.class("http://www.example.com#c")?),
         ]);
         o.insert(disj1.clone());
         o.insert(disj2.clone());
@@ -433,5 +439,7 @@ mod test {
                 &AnnotatedAxiom::from(Axiom::DisjointClasses(disj2)),
             ]
         );
+
+        Ok(())
     }
 }
