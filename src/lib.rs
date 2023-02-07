@@ -30,7 +30,7 @@
 //!
 //! The core data model of the library now provides a complete
 //! implementation of the OWL2 DL specification. It appears to be
-//! highly performant, being between 1 and 2 orders of magnitude
+//! highly perfostd::ops::Deref;rmant, being between 1 and 2 orders of magnitude
 //! faster than the OWL API for some tasks.
 //extern crate curie;
 //extern crate enum_meta;
@@ -40,6 +40,7 @@ extern crate indexmap;
 extern crate log;
 extern crate quick_xml;
 
+pub mod adaptor;
 pub mod collection;
 pub mod error;
 pub mod io;
