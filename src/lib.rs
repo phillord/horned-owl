@@ -40,6 +40,7 @@ extern crate indexmap;
 extern crate log;
 extern crate quick_xml;
 
+pub mod adaptor;
 pub mod collection;
 pub mod error;
 pub mod io;
