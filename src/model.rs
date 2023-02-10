@@ -89,7 +89,6 @@
 //!     to: b.named_individual("http://www.example.com/i2").into(),
 //! };
 //! ```
-
 use std::borrow::Borrow;
 use std::cell::RefCell;
 use std::cmp::Ordering;
@@ -138,6 +137,10 @@ pub type ArcStr = Arc<str>;
 impl<A: ForIRI> IRI<A> {
     pub fn underlying(&self) -> A {
         self.0.clone()
+    }
+
+    pub fn as_oxiri(&self) -> Result<oxiri::Iri<&str>, oxiri::IriParseError>{
+        oxiri::Iri::parse(&self.0.borrow())
     }
 }
 
@@ -1722,11 +1725,10 @@ pub trait MutableOntology<A> {
         self.insert(ax)
     }
 }
-/*
+
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::ontology::axiom_mapped::AxiomMappedOntology;
 
     #[test]
     fn test_iri_from_string() {
@@ -1771,24 +1773,6 @@ mod test {
         assert_eq!(iri_from_iri, iri_str);
     }
 
-    #[test]
-    fn test_class() {
-        let mut o = AxiomMappedOntology::new_rc();
-        let c = Build::new().class("http://www.example.com");
-        o.insert(DeclareClass(c));
-
-        assert_eq!(o.i().declare_class().count(), 1);
-    }
-
-    #[test]
-    fn test_class_declare() {
-        let c = Build::new_rc().class("http://www.example.com");
-
-        let mut o = AxiomMappedOntology::new_rc();
-        o.declare(c);
-
-        assert_eq!(o.i().declare_class().count(), 1);
-    }
 
     #[test]
     fn test_class_convertors() {
@@ -1859,6 +1843,14 @@ mod test {
         decl1.ann.insert(ann);
         assert!(!(decl1 == decl2));
     }
-}
 
-*/
+    #[test]
+    fn test_oxiri() {
+        let b = Build::new_rc();
+
+        let iri = b.iri("http://www.example.com");
+
+        let oxiri = iri.as_oxiri().unwrap();
+        assert_eq!(oxiri.authority(), Some("www.example.com"));
+    }
+}
