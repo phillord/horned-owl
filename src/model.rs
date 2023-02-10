@@ -89,7 +89,6 @@
 //!     to: b.named_individual("http://www.example.com/i2").into(),
 //! };
 //! ```
-
 use std::borrow::Borrow;
 use std::cell::RefCell;
 use std::cmp::Ordering;
@@ -107,11 +106,16 @@ use std::sync::Arc;
 /// [IRI](https://en.wikipedia.org/wiki/Internationalized_Resource_Identifier)
 /// is an internationalized version of an URI/URL.
 ///
-/// Here, we represent it as a simple string. In Horned-OWL IRIs are
-/// created through `Build`; this caches the underlying String meaning
-/// that IRIs are light-weight to `clone`.
+/// Here, we represent it as a simple `Borrow<str>`. IRIs are produced
+/// using a `Build` instance, which allows for caching of the
+/// underlying data.
+///
+/// No attempt is made to ensure that the IRI is valid with respect to
+/// the specification. This can be achieved through
+/// [`as_oxiri`](IRI::as_oxiri) method which both validates and also
+/// provides access to the constituent parts.
 #[derive(Clone, Debug, Eq, PartialEq, Hash, PartialOrd, Ord)]
-pub struct IRI<A>(A);
+pub struct IRI<A>(pub (crate) A);
 
 pub trait ForIRI:
     AsRef<str> + Borrow<str> + Clone + Debug + Eq + From<String> + Hash + PartialEq + Ord + PartialOrd
@@ -1722,11 +1726,10 @@ pub trait MutableOntology<A> {
         self.insert(ax)
     }
 }
-/*
+
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::ontology::axiom_mapped::AxiomMappedOntology;
 
     #[test]
     fn test_iri_from_string() {
@@ -1771,24 +1774,6 @@ mod test {
         assert_eq!(iri_from_iri, iri_str);
     }
 
-    #[test]
-    fn test_class() {
-        let mut o = AxiomMappedOntology::new_rc();
-        let c = Build::new().class("http://www.example.com");
-        o.insert(DeclareClass(c));
-
-        assert_eq!(o.i().declare_class().count(), 1);
-    }
-
-    #[test]
-    fn test_class_declare() {
-        let c = Build::new_rc().class("http://www.example.com");
-
-        let mut o = AxiomMappedOntology::new_rc();
-        o.declare(c);
-
-        assert_eq!(o.i().declare_class().count(), 1);
-    }
 
     #[test]
     fn test_class_convertors() {
@@ -1859,6 +1844,14 @@ mod test {
         decl1.ann.insert(ann);
         assert!(!(decl1 == decl2));
     }
-}
 
-*/
+    #[test]
+    fn test_oxiri() {
+        let b = Build::new_rc();
+
+        let iri = b.iri("http://www.example.com");
+
+        let oxiri = iri.as_oxiri().unwrap();
+        assert_eq!(oxiri.authority(), Some("www.example.com"));
+    }
+}
