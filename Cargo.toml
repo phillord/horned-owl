@@ -19,6 +19,7 @@ enum_meta = "0.6.0"
 thiserror = "1.0"
 lazy_static="1.4.0"
 log = {version="0.4.8"}
+oxiri="0.2.2"
 quick-xml={version="0.26.0"}
 indexmap={workspace=true}
 pretty_rdf={workspace=true}
