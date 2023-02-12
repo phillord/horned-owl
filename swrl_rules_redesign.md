@@ -20,13 +20,13 @@ will expect them to be supported.
 
 ## Related Problem
 
-The data model of Horned-OWL means that we cannot represent an
+The data model of Horned-OWL means, that we cannot represent an
 Ontology as a iterator. This is because we have followed the spec
 literally, meaning an ontology is a set of Axioms and an Ontology ID.
 
 This means we have to write From/Into conversion methods which do most
 of the work with an iterator and transfer the Ontology ID independently.
-
+,
 # Still Unclear
 
 I haven't read the SWRL spec yet. While it is not as complicated as
@@ -51,7 +51,7 @@ bit of the class (i.e. the ability to produce an
 an `Iterator<Item=SWRLRule>`.
 
 ## Pro
-
+,
 Fits with the spec.
 
 ## Cons
@@ -135,3 +135,10 @@ support both the `SWRLRule` and `OntologyID`, as with Solution 3
 An ontology would become a `Iterator<Item=Component>` which means
 accessing the `Axiom` would require a separate (potentially failing)
 step to unpack `Component` to `Axiom`.
+
+
+
+# Current Situation
+
+I am inclined toward Solution 3 and which would include pulling
+`OntologyID` in as an axiom at the same time.
