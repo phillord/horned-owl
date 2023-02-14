@@ -9,8 +9,8 @@
 //! `HashSet` but using a trait. No methods are provided to search or
 //! access the contents of an `Ontology` which are instead provided by
 //! [implementations](../ontology/index.html). Each `Ontology` is a set of
-//! `AnnotatedAxiom` instances, which consists of an `Axiom` and a set
-//! of `Annotation`. The `Axiom` itself is a large enum representing
+//! `AnnotatedComponent` instances, which consists of an `Component` and a set
+//! of `Annotation`. The `Component` itself is a large enum representing
 //! the different axioms that OWL2 supports.
 
 //! Efficiency is gained from the use of an IRI which is a newtype
@@ -660,28 +660,28 @@ impl<A: ForIRI> From<&AnonymousIndividual<A>> for AnnotationSubject<A> {
     }
 }
 
-impl<A: ForIRI> From<NamedEntity<A>> for Axiom<A> {
-    fn from(ne: NamedEntity<A>) -> Axiom<A> {
+impl<A: ForIRI> From<NamedEntity<A>> for Component<A> {
+    fn from(ne: NamedEntity<A>) -> Component<A> {
         match ne {
-            NamedEntity::Class(c) => Axiom::DeclareClass(DeclareClass(c)),
+            NamedEntity::Class(c) => Component::DeclareClass(DeclareClass(c)),
             NamedEntity::ObjectProperty(obp) => {
-                Axiom::DeclareObjectProperty(DeclareObjectProperty(obp))
+                Component::DeclareObjectProperty(DeclareObjectProperty(obp))
             }
             NamedEntity::AnnotationProperty(anp) => {
-                Axiom::DeclareAnnotationProperty(DeclareAnnotationProperty(anp))
+                Component::DeclareAnnotationProperty(DeclareAnnotationProperty(anp))
             }
-            NamedEntity::DataProperty(dp) => Axiom::DeclareDataProperty(DeclareDataProperty(dp)),
+            NamedEntity::DataProperty(dp) => Component::DeclareDataProperty(DeclareDataProperty(dp)),
             NamedEntity::NamedIndividual(ni) => {
-                Axiom::DeclareNamedIndividual(DeclareNamedIndividual(ni))
+                Component::DeclareNamedIndividual(DeclareNamedIndividual(ni))
             }
-            NamedEntity::Datatype(dt) => Axiom::DeclareDatatype(DeclareDatatype(dt)),
+            NamedEntity::Datatype(dt) => Component::DeclareDatatype(DeclareDatatype(dt)),
         }
     }
 }
 
-impl<A: ForIRI> From<NamedEntity<A>> for AnnotatedAxiom<A> {
-    fn from(ne: NamedEntity<A>) -> AnnotatedAxiom<A> {
-        let ax: Axiom<_> = ne.into();
+impl<A: ForIRI> From<NamedEntity<A>> for AnnotatedComponent<A> {
+    fn from(ne: NamedEntity<A>) -> AnnotatedComponent<A> {
+        let ax: Component<_> = ne.into();
         ax.into()
     }
 }
@@ -695,47 +695,47 @@ trait Annotated<A> {
     fn annotation(&self) -> &BTreeSet<Annotation<A>>;
 }
 
-/// An interface providing access to the `AxiomKind`
+/// An interface providing access to the `ComponentKind`
 ///
 /// An OWL ontology consists of a set of axioms of one of many
 /// different kinds. These axioms all return an variant instance of
-/// the `AxiomKind` enum. This is used in the API mostly to retrieve
+/// the `ComponentKind` enum. This is used in the API mostly to retrieve
 /// instances of a certain kind.
 pub trait Kinded {
-    fn kind(&self) -> AxiomKind;
+    fn kind(&self) -> ComponentKind;
 }
 
-/// An `AnnotatedAxiom` is an `Axiom` with one or more `Annotation`.
+/// An `AnnotatedComponent` is an `Component` with one orpmore `Annotation`.
 #[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
-pub struct AnnotatedAxiom<A> {
-    pub axiom: Axiom<A>,
+pub struct AnnotatedComponent<A> {
+    pub axiom: Component<A>,
     pub ann: BTreeSet<Annotation<A>>,
 }
 
-pub type RcAnnotatedAxiom=Rc<AnnotatedAxiom<RcStr>>;
-pub type ArcAnnotatedAxiom=Arc<AnnotatedAxiom<ArcStr>>;
+pub type RcAnnotatedComponent=Rc<AnnotatedComponent<RcStr>>;
+pub type ArcAnnotatedComponent=Arc<AnnotatedComponent<ArcStr>>;
 
 
-impl<A: ForIRI> AnnotatedAxiom<A> {
-    pub fn new<I>(axiom: I, ann: BTreeSet<Annotation<A>>) -> AnnotatedAxiom<A>
+impl<A: ForIRI> AnnotatedComponent<A> {
+    pub fn new<I>(axiom: I, ann: BTreeSet<Annotation<A>>) -> AnnotatedComponent<A>
     where
-        I: Into<Axiom<A>>,
+        I: Into<Component<A>>,
     {
-        AnnotatedAxiom {
+        AnnotatedComponent {
             axiom: axiom.into(),
             ann,
         }
     }
 
-    pub fn logical_cmp(&self, other: &AnnotatedAxiom<A>) -> Ordering {
+    pub fn logical_cmp(&self, other: &AnnotatedComponent<A>) -> Ordering {
         self.axiom.cmp(&other.axiom)
     }
 
-    pub fn logical_partial_cmp(&self, other: &AnnotatedAxiom<A>) -> Option<Ordering> {
+    pub fn logical_partial_cmp(&self, other: &AnnotatedComponent<A>) -> Option<Ordering> {
         Some(self.cmp(other))
     }
 
-    pub fn logical_eq(&self, other: &AnnotatedAxiom<A>) -> bool {
+    pub fn logical_eq(&self, other: &AnnotatedComponent<A>) -> bool {
         self.axiom == other.axiom
     }
 
@@ -744,17 +744,17 @@ impl<A: ForIRI> AnnotatedAxiom<A> {
     }
 }
 
-impl<A: ForIRI> From<Axiom<A>> for AnnotatedAxiom<A> {
-    fn from(axiom: Axiom<A>) -> AnnotatedAxiom<A> {
-        AnnotatedAxiom {
+impl<A: ForIRI> From<Component<A>> for AnnotatedComponent<A> {
+    fn from(axiom: Component<A>) -> AnnotatedComponent<A> {
+        AnnotatedComponent {
             axiom,
             ann: BTreeSet::new(),
         }
     }
 }
 
-impl<A: ForIRI> Kinded for AnnotatedAxiom<A> {
-    fn kind(&self) -> AxiomKind {
+impl<A: ForIRI> Kinded for AnnotatedComponent<A> {
+    fn kind(&self) -> ComponentKind {
         self.axiom.kind()
     }
 }
@@ -762,21 +762,21 @@ impl<A: ForIRI> Kinded for AnnotatedAxiom<A> {
 /// Add `Kinded` and `From` for each axiom.
 macro_rules! axiomimpl {
     ($A:ident, $name:ident) => {
-        impl<$A: ForIRI> From<$name<$A>> for Axiom<$A> {
-            fn from(ax: $name<$A>) -> Axiom<$A> {
-                Axiom::$name(ax)
+        impl<$A: ForIRI> From<$name<$A>> for Component<$A> {
+            fn from(ax: $name<$A>) -> Component<$A> {
+                Component::$name(ax)
             }
         }
 
-        impl<$A: ForIRI> From<$name<$A>> for AnnotatedAxiom<$A> {
-            fn from(ax: $name<$A>) -> AnnotatedAxiom<$A> {
-                AnnotatedAxiom::from(Axiom::from(ax))
+        impl<$A: ForIRI> From<$name<$A>> for AnnotatedComponent<$A> {
+            fn from(ax: $name<$A>) -> AnnotatedComponent<$A> {
+                AnnotatedComponent::from(Component::from(ax))
             }
         }
 
         impl<$A: ForIRI> Kinded for $name<$A> {
-            fn kind(&self) -> AxiomKind {
-                AxiomKind::$name
+            fn kind(&self) -> ComponentKind {
+                ComponentKind::$name
             }
         }
     };
@@ -784,7 +784,7 @@ macro_rules! axiomimpl {
 
 /// Define a new axiom
 ///
-/// Axioms can be either a tuple-like or normal struct. Documentation
+/// Components can be either a tuple-like or normal struct. Documentation
 /// is attached as a doc attribute after.
 //
 // I tried extensively to pass the attribute in the more normal
@@ -830,7 +830,7 @@ macro_rules! axiom {
 // This macro generates all of the axioms at once (delegated to the
 // axiom macro). We have to do this in one go, although it makes
 // the pattern matching a pain, because we need to know all the axiom
-// names at once so we can generate the AxiomKind and Axiom
+// names at once so we can generate the ComponentKind and Component
 // enums.
 macro_rules! axioms {
     ($A:ident,
@@ -841,27 +841,27 @@ macro_rules! axioms {
         ///
         /// Variants of this C-style enum represent all of the
         /// different axioms that can exist in the ontology. Instances
-        /// of this enum are returned by all `Axiom` and other
+        /// of this enum are returned by all `Component` and other
         /// entities as part of the `Kinded` trait.
-        /// See also `Axiom` which is a Enum whose variants take
-        /// instances of the `Axiom`
+        /// See also `Component` which is a Enum whose variants take
+        /// instances of the `Component`
         #[derive(Clone, Copy, Eq, Hash, PartialEq, PartialOrd, Ord)]
-        pub enum AxiomKind {
+        pub enum ComponentKind {
             $($name),*
         }
 
-        impl AxiomKind {
-            pub fn all_kinds() -> Vec<AxiomKind> {
-                vec![$(AxiomKind::$name),*]
+        impl ComponentKind {
+            pub fn all_kinds() -> Vec<ComponentKind> {
+                vec![$(ComponentKind::$name),*]
             }
         }
 
-        impl std::fmt::Debug for AxiomKind {
+        impl std::fmt::Debug for ComponentKind {
             fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                write!(f, "AxiomKind::{}",
+                write!(f, "ComponentKind::{}",
                        match self {
                            $(
-                               AxiomKind::$name => stringify!($name)
+                               ComponentKind::$name => stringify!($name)
                            ),*
 
                        })
@@ -871,35 +871,35 @@ macro_rules! axioms {
         /// An axiom
         ///
         /// This enum has variants representing the various kinds of
-        /// Axiom that can be found in an OWL Ontology. An OWL axiom
+        /// Component that can be found in an OWL Ontology. An OWL axiom
         /// maps to three different entities in Horned-OWL. First is a
         /// struct (for example, `SubClassOf`) which contains the data
         /// which defines the axiom (i.e. super and sub class for
-        /// `SubClassOf`). Second, is a variant of the `AxiomKind`,
+        /// `SubClassOf`). Second, is a variant of the `ComponentKind`,
         /// which is used to identify all instances of a particular
         /// kind of axiom (i.e. any `SubClassOf` axiom will return an
-        /// instance of AxiomKind::SubClassOf). Finally, we have a
+        /// instance of ComponentKind::SubClassOf). Finally, we have a
         /// variant of this enum, which contains one of the structs
-        /// (i.e. Axiom::SubClassOf(SubClassOf)), which is used as a union
+        /// (i.e. Component::SubClassOf(SubClassOf)), which is used as a union
         /// type for all structs. The struct and enum variants all
         /// share identical names.
         #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-        pub enum Axiom<$A>{
+        pub enum Component<$A>{
             $($name($name<$A>)),*
         }
 
-        // impl<$A:ForIRI> std::fmt::Debug for Axiom<$A> {
+        // impl<$A:ForIRI> std::fmt::Debug for Component<$A> {
         //     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        //         write!(f, "Axiom::{}({})",
+        //         write!(f, "Component::{}({})",
         //                match self {
         //                    $(
-        //                        Axiom::$name(_) =>
+        //                        Component::$name(_) =>
         //                            stringify!($name)
         //                    ),*
         //                },
         //                match self {
         //                    $(
-        //                        Axiom::$name(ax) =>
+        //                        Component::$name(ax) =>
         //                            format!("{:?}", ax)
         //                    ),*
         //                },
@@ -907,14 +907,14 @@ macro_rules! axioms {
         //     }
         // }
 
-        impl<$A:ForIRI> Kinded for Axiom<$A>
+        impl<$A:ForIRI> Kinded for Component<$A>
         {
-            fn kind(&self) -> AxiomKind
+            fn kind(&self) -> ComponentKind
             {
                 match self
                 {
                     $(
-                        Axiom::$name(n) => n.kind()
+                        Component::$name(n) => n.kind()
                     ),*
 
                 }
@@ -937,7 +937,7 @@ axioms! {
     /// Declares that an IRI is an import of this ontology
     Import(IRI<A>),
 
-    // Declaration Axioms
+    // Declaration Components
 
     /// Declares that an IRI represents a Class in the Ontology
     ///
@@ -975,7 +975,7 @@ axioms! {
     ///
     DeclareDatatype(Datatype<A>),
 
-    // Class Axioms
+    // Class Components
 
     /// A subclass relationship between two `ClassExpression`.
     ///
@@ -1253,7 +1253,7 @@ axioms! {
         to: Literal<A>
     },
 
-    // Annotation Axioms
+    // Annotation Components
     /// An annotation assertion axiom
     ///
     /// States that `annotation` applies to the
@@ -1697,13 +1697,13 @@ pub trait MutableOntology<A> {
     /// See `declare` for an easier way to declare named entities.
     fn insert<AA>(&mut self, ax: AA) -> bool
     where
-        AA: Into<AnnotatedAxiom<A>>;
+        AA: Into<AnnotatedComponent<A>>;
 
-    fn remove(&mut self, ax: &AnnotatedAxiom<A>) -> bool {
+    fn remove(&mut self, ax: &AnnotatedComponent<A>) -> bool {
         self.take(ax).is_some()
     }
 
-    fn take(&mut self, ax: &AnnotatedAxiom<A>) -> Option<AnnotatedAxiom<A>>;
+    fn take(&mut self, ax: &AnnotatedComponent<A>) -> Option<AnnotatedComponent<A>>;
 
     /// Declare an NamedEntity for the ontology.
     ///
@@ -1722,7 +1722,7 @@ pub trait MutableOntology<A> {
         N: Into<NamedEntity<A>>,
     {
         let ne: NamedEntity<_> = ne.into();
-        let ax: Axiom<_> = ne.into();
+        let ax: Component<_> = ne.into();
         self.insert(ax)
     }
 }
@@ -1730,6 +1730,7 @@ pub trait MutableOntology<A> {
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::ontology::component_mapped::ComponentMappedOntology;
 
     #[test]
     fn test_iri_from_string() {
@@ -1774,6 +1775,24 @@ mod test {
         assert_eq!(iri_from_iri, iri_str);
     }
 
+    #[test]
+    fn test_class() {
+        let mut o = ComponentMappedOntology::new_rc();
+        let c = Build::new().class("http://www.example.com");
+        o.insert(DeclareClass(c));
+
+        assert_eq!(o.i().declare_class().count(), 1);
+    }
+
+    #[test]
+    fn test_class_declare() {
+        let c = Build::new_rc().class("http://www.example.com");
+
+        let mut o = ComponentMappedOntology::new_rc();
+        o.declare(c);
+
+        assert_eq!(o.i().declare_class().count(), 1);
+    }
 
     #[test]
     fn test_class_convertors() {
@@ -1814,7 +1833,7 @@ mod test {
         let c = Build::new_rc().class("http://www.example.com");
 
         let dc = DisjointClasses(vec![c.clone().into(), c.clone().into()]);
-        let _aa: Axiom<_> = dc.into();
+        let _aa: Component<_> = dc.into();
     }
 
     #[test]
@@ -1836,7 +1855,7 @@ mod test {
             av: b.iri("http://www.example.com/av").into(),
         };
 
-        let mut decl1: AnnotatedAxiom<_> = DeclareClass(b.class("http://www.example.com#a")).into();
+        let mut decl1: AnnotatedComponent<_> = DeclareClass(b.class("http://www.example.com#a")).into();
         let decl2 = decl1.clone();
 
         assert_eq!(decl1, decl2);

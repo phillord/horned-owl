@@ -6,7 +6,7 @@ use Term::*;
 
 use crate::{error::HornedError, io::ParserConfiguration};
 use crate::model::*;
-use crate::{model::Literal, ontology::axiom_mapped::AxiomMappedOntology};
+use crate::{model::Literal, ontology::component_mapped::ComponentMappedOntology};
 
 use crate::ontology::indexed::ForIndex;
 use crate::vocab::is_annotation_builtin;
@@ -313,7 +313,7 @@ pub struct RDFOntology<A: ForIRI, AA: ForIndex<A>>(
     >,
 );
 
-pub type RcRDFOntology = RDFOntology<RcStr, RcAnnotatedAxiom>;
+pub type RcRDFOntology = RDFOntology<RcStr, RcAnnotatedComponent>;
 
 impl<A: ForIRI, AA: ForIndex<A>> Ontology<A> for RDFOntology<A, AA> {
     fn id(&self) -> &OntologyID<A> {
@@ -336,11 +336,11 @@ impl<A: ForIRI, AA: ForIndex<A>> Ontology<A> for RDFOntology<A, AA> {
 impl<A: ForIRI, AA:ForIndex<A>> MutableOntology<A> for RDFOntology<A, AA> {
     fn insert<IAA>(&mut self, ax: IAA) -> bool
     where
-        IAA: Into<AnnotatedAxiom<A>> {
+        IAA: Into<AnnotatedComponent<A>> {
          self.0.insert (ax)
     }
 
-    fn take (&mut self, ax:&AnnotatedAxiom<A>) -> Option<AnnotatedAxiom<A>> {
+    fn take (&mut self, ax:&AnnotatedComponent<A>) -> Option<AnnotatedComponent<A>> {
         self.0.take (ax)
     }
 }
@@ -356,8 +356,8 @@ impl<A: ForIRI, AA: ForIndex<A>> From<RDFOntology<A, AA>> for SetOntology<A> {
     }
 }
 
-impl<A: ForIRI, AA: ForIndex<A>> From<RDFOntology<A, AA>> for AxiomMappedOntology<A, AA> {
-    fn from(rdfo: RDFOntology<A, AA>) -> AxiomMappedOntology<A, AA> {
+impl<A: ForIRI, AA: ForIndex<A>> From<RDFOntology<A, AA>> for ComponentMappedOntology<A, AA> {
+    fn from(rdfo: RDFOntology<A, AA>) -> ComponentMappedOntology<A, AA> {
         let so: SetOntology<_> = rdfo.into();
         so.into()
     }
@@ -602,7 +602,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
             match t.0 {
                 [Term::Iri(_), Term::OWL(VOWL::Imports), Term::Iri(imp)] => {
                     v.push(imp.clone());
-                    self.merge(AnnotatedAxiom {
+                    self.merge(AnnotatedComponent {
                         axiom: Import(imp).into(),
                         ann: BTreeSet::new(),
                     });
@@ -682,7 +682,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
         }
     }
 
-    fn merge<IAA: Into<AnnotatedAxiom<A>>>(&mut self, ax: IAA) {
+    fn merge<IAA: Into<AnnotatedComponent<A>>>(&mut self, ax: IAA) {
         let ax = ax.into();
         update_or_insert_logically_equal_axiom(&mut self.o.0, ax);
     }
@@ -737,7 +737,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
                     .remove(&triple.0)
                     .unwrap_or_default();
                 let ne: NamedEntity<_> = entity;
-                self.merge(AnnotatedAxiom {
+                self.merge(AnnotatedComponent {
                     axiom: ne.into(),
                     ann,
                 });
@@ -1334,7 +1334,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
             };
 
             if let Some(axiom) = axiom? {
-                self.merge(AnnotatedAxiom {
+                self.merge(AnnotatedComponent {
                     axiom,
                     ann: BTreeSet::new(),
                 })
@@ -1657,7 +1657,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
                     .ann_map
                     .remove(&triple.0)
                     .unwrap_or_default();
-                self.merge(AnnotatedAxiom { axiom, ann })
+                self.merge(AnnotatedComponent { axiom, ann })
             } else {
                 self.simple.push(triple)
             }
@@ -1669,7 +1669,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
         for triple in std::mem::take(&mut self.simple) {
             let firi = |s: &mut OntologyParser<_, _>, t, iri: &IRI<_>| {
                 let ann = s.ann_map.remove(t).unwrap_or_default();
-                s.merge(AnnotatedAxiom {
+                s.merge(AnnotatedComponent {
                     axiom: AnnotationAssertion {
                         subject: iri.into(),
                         ann: s.annotation(t),
@@ -1707,7 +1707,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
             let fbnode = |s: &mut OntologyParser<_, _>, t, ind: &BNode<A>| {
                 let ann = s.ann_map.remove(t).unwrap_or_default();
                 let ind: AnonymousIndividual<A> = s.b.anon(ind.0.clone());
-                s.merge(AnnotatedAxiom {
+                s.merge(AnnotatedComponent {
                     axiom: AnnotationAssertion {
                         subject: ind.into(),
                         ann: s.annotation(t),
@@ -1946,7 +1946,7 @@ pub fn read<R: BufRead>(
     config: ParserConfiguration,
 ) -> Result<
     (
-        RDFOntology<RcStr, RcAnnotatedAxiom>,
+        RDFOntology<RcStr, RcAnnotatedComponent>,
         IncompleteParse<RcStr>,
     ),
     HornedError,
@@ -1964,7 +1964,7 @@ mod test {
     use std::rc::Rc;
 
     use crate::io::RDFParserConfiguration;
-    use crate::ontology::axiom_mapped::RcAxiomMappedOntology;
+    use crate::ontology::component_mapped::RcComponentMappedOntology;
     use pretty_assertions::assert_eq;
 
     fn init_log() {
@@ -1974,7 +1974,7 @@ mod test {
             .try_init();
     }
 
-    fn read_ok<R: BufRead>(bufread: &mut R) -> RDFOntology<RcStr, Rc<AnnotatedAxiom<RcStr>>> {
+    fn read_ok<R: BufRead>(bufread: &mut R) -> RDFOntology<RcStr, Rc<AnnotatedComponent<RcStr>>> {
         init_log();
 
         let r = read(bufread, Default::default());
@@ -2154,8 +2154,8 @@ mod test {
         assert!(incomp_lax.is_complete());
 
 
-        let ont_strict:AxiomMappedOntology<_, _> = ont_strict.into();
-        let ont_lax:AxiomMappedOntology<_, _> = ont_lax.into();
+        let ont_strict:ComponentMappedOntology<_, _> = ont_strict.into();
+        let ont_lax:ComponentMappedOntology<_, _> = ont_lax.into();
 
         // strict mode should have no annotation assertions or
         // annotation properties
@@ -2202,7 +2202,7 @@ mod test {
         // Some verisons of the OWL API do not include an
         // AnnotationProperty declaration. We should make this work.
         let ont:SetOntology<_> = read_ok(&mut slurp_rdfont("broken-ontology-annotation").as_bytes()).into();
-        let ont:AxiomMappedOntology<_, RcAnnotatedAxiom> = ont.into();
+        let ont:ComponentMappedOntology<_, RcAnnotatedComponent> = ont.into();
         assert_eq!(ont.i().ontology_annotation().count(), 1);
         assert_eq!(ont.i().declare_annotation_property().count(), 0);
     }
@@ -2315,26 +2315,26 @@ mod test {
     #[test]
     fn import_with_partial_parse() {
         let b = Build::new_rc();
-        let mut p: OntologyParser<_, Rc<AnnotatedAxiom<RcStr>>> =
+        let mut p: OntologyParser<_, Rc<AnnotatedComponent<RcStr>>> =
             parser_with_build(&mut slurp_rdfont("import").as_bytes(), &b, Default::default());
         let _ = p.parse_imports();
 
         let rdfont = p.as_ontology().unwrap();
         let so: SetOntology<_> = rdfont.into();
-        let amont: RcAxiomMappedOntology = so.into();
+        let amont: RcComponentMappedOntology = so.into();
         assert_eq!(amont.i().import().count(), 1);
     }
 
     #[test]
     fn declaration_with_partial_parse() {
         let b = Build::new_rc();
-        let mut p: OntologyParser<_, Rc<AnnotatedAxiom<RcStr>>> =
+        let mut p: OntologyParser<_, Rc<AnnotatedComponent<RcStr>>> =
             parser_with_build(&mut slurp_rdfont("class").as_bytes(), &b, Default::default());
         let _ = p.parse_declarations();
 
         let rdfont = p.as_ontology().unwrap();
         let so: SetOntology<_> = rdfont.into();
-        let amont: RcAxiomMappedOntology = so.into();
+        let amont: RcComponentMappedOntology = so.into();
         assert_eq!(amont.i().declare_class().count(), 1);
     }
 
@@ -2607,7 +2607,7 @@ mod test {
     #[test]
     fn import_property_in_bits() -> Result<(), HornedError> {
         let b = Build::new_rc();
-        let p: OntologyParser<_, Rc<AnnotatedAxiom<RcStr>>> =
+        let p: OntologyParser<_, Rc<AnnotatedComponent<RcStr>>> =
             parser_with_build(&mut slurp_rdfont("other-property").as_bytes(), &b, Default::default());
         let (family_other, incomplete) = p.parse()?;
         assert!(incomplete.is_complete());
@@ -2625,7 +2625,7 @@ mod test {
     #[test]
     fn annotation_with_anonymous() {
         let s = slurp_rdfont("annotation-with-anonymous");
-        let ont: AxiomMappedOntology<_, _> = read_ok(&mut s.as_bytes()).into();
+        let ont: ComponentMappedOntology<_, _> = read_ok(&mut s.as_bytes()).into();
 
         // We cannot do the usual "compare" because the anonymous
         // individuals break a direct comparision

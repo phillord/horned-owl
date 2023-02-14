@@ -88,7 +88,7 @@ pub fn read_with_build<A: ForIRI, R: BufRead>(
                         ont.insert(Import(IRI::from_xml(&mut r, b"Import")?));
                     }
                     _ => {
-                        let aa = AnnotatedAxiom::from_start(&mut r, e)?;
+                        let aa = AnnotatedComponent::from_start(&mut r, e)?;
                         ont.insert(aa);
                     }
                 }
@@ -437,7 +437,7 @@ fn axiom_from_start<A: ForIRI, R: BufRead>(
     r: &mut Read<A, R>,
     e: &BytesStart,
     axiom_kind: &[u8],
-) -> Result<Axiom<A>, HornedError> {
+) -> Result<Component<A>, HornedError> {
     Ok(match axiom_kind {
         b"Annotation" => OntologyAnnotation(Annotation {
             ap: from_start(r, e)?,
@@ -803,7 +803,7 @@ from_start! {
 }
 
 from_start! {
-    AnnotatedAxiom, r, e,
+    AnnotatedComponent, r, e,
     {
         let mut annotation: BTreeSet<Annotation<_>> = BTreeSet::new();
         let axiom_kind = e.local_name();
@@ -823,7 +823,7 @@ from_start! {
                                 (Annotation::from_xml(r, b"Annotation")?);
                         }
                         _ => {
-                            return Ok(AnnotatedAxiom{
+                            return Ok(AnnotatedComponent{
                                 ann:annotation,
                                 axiom:axiom_from_start(r,e,axiom_kind.as_ref())?
                             });
@@ -1214,12 +1214,12 @@ from_xml! {IRI, r, end,
 #[cfg(test)]
 pub mod test {
     use super::*;
-    use crate::ontology::axiom_mapped::AxiomMappedOntology;
+    use crate::ontology::component_mapped::ComponentMappedOntology;
     use std::collections::HashMap;
 
     pub fn read_ok<R: BufRead>(
         bufread: &mut R,
-    ) -> (AxiomMappedOntology<RcStr, RcAnnotatedAxiom>, PrefixMapping) {
+    ) -> (ComponentMappedOntology<RcStr, RcAnnotatedComponent>, PrefixMapping) {
         let r = read(bufread, ParserConfiguration::default());
         assert!(r.is_ok(), "Expected ontology, got failure:{:?}", r.err());
         let (o, m) = r.ok().unwrap();
@@ -1277,7 +1277,7 @@ pub mod test {
 
         let aa = ont
             .i()
-            .axiom_for_kind(AxiomKind::DeclareClass)
+            .axiom_for_kind(ComponentKind::DeclareClass)
             .next()
             .unwrap();
 
@@ -1351,7 +1351,7 @@ pub mod test {
 
         let annotated_axiom = ont
             .i()
-            .axiom_for_kind(AxiomKind::SubClassOf)
+            .axiom_for_kind(ComponentKind::SubClassOf)
             .next()
             .unwrap();
         assert_eq!(annotated_axiom.ann.len(), 1);
@@ -1547,8 +1547,8 @@ pub mod test {
         let ont_s = include_str!("../../ont/owl-xml/annotation-with-annotation.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
-        let mut ann_i = ont.i().axiom_for_kind(AxiomKind::AnnotationAssertion);
-        let ann: &AnnotatedAxiom<_> = ann_i.next().unwrap();
+        let mut ann_i = ont.i().axiom_for_kind(ComponentKind::AnnotationAssertion);
+        let ann: &AnnotatedComponent<_> = ann_i.next().unwrap();
         assert_eq!(ann.ann.len(), 1);
     }
 
@@ -1559,7 +1559,7 @@ pub mod test {
 
         let annotated_axiom = ont
             .i()
-            .axiom_for_kind(AxiomKind::TransitiveObjectProperty)
+            .axiom_for_kind(ComponentKind::TransitiveObjectProperty)
             .next()
             .unwrap();
         assert_eq!(annotated_axiom.ann.len(), 1);
@@ -1572,7 +1572,7 @@ pub mod test {
 
         let annotated_axiom = ont
             .i()
-            .axiom_for_kind(AxiomKind::TransitiveObjectProperty)
+            .axiom_for_kind(ComponentKind::TransitiveObjectProperty)
             .next()
             .unwrap();
 

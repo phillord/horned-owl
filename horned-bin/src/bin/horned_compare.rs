@@ -61,8 +61,8 @@ pub(crate) fn matcher(matches: &ArgMatches) -> Result<(), HornedError> {
     let summary_b = summarize(ont_b);
 
     println!("Ontology\t\t\t\t\tA\t\tB");
-    println!("\tLogical Axioms:\t\t\t\t{}\t\t{}", summary_a.logical_axiom, summary_b.logical_axiom);
-    println!("\tAnnotation Axioms:\t\t\t{}\t\t{}", summary_a.annotation_axiom, summary_b.annotation_axiom);
+    println!("\tLogical Components:\t\t\t\t{}\t\t{}", summary_a.logical_axiom, summary_b.logical_axiom);
+    println!("\tAnnotation Components:\t\t\t{}\t\t{}", summary_a.annotation_axiom, summary_b.annotation_axiom);
     println!();
     println!("Detailed");
 
