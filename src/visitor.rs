@@ -165,6 +165,7 @@ impl<A: ForIRI, V: Visit<A>> Walk<A, V> {
     pub fn component(&mut self, e: &Component<A>) {
         self.0.visit_component(e);
         match e {
+            Component::OntologyIDComponent(_) => todo!(),
             Component::Import(ax) => self.import(ax),
             Component::OntologyAnnotation(ax) => self.ontology_annotation(ax),
             Component::DeclareClass(ax) => self.declare_class(ax),
