@@ -703,6 +703,18 @@ trait Annotated<A> {
 /// instances of a certain kind.
 pub trait Kinded {
     fn kind(&self) -> ComponentKind;
+
+    fn is_axiom(&self) -> bool {
+        match self.kind() {
+            _ => true
+        }
+    }
+
+    fn is_id(&self) -> bool {
+        match self.kind() {
+            _ => false
+        }
+    }
 }
 
 /// An `AnnotatedComponent` is an `Component` with one orpmore `Annotation`.
@@ -760,7 +772,7 @@ impl<A: ForIRI> Kinded for AnnotatedComponent<A> {
 }
 
 /// Add `Kinded` and `From` for each axiom.
-macro_rules! axiomimpl {
+macro_rules! componentimpl {
     ($A:ident, $name:ident) => {
         impl<$A: ForIRI> From<$name<$A>> for Component<$A> {
             fn from(ax: $name<$A>) -> Component<$A> {
@@ -791,13 +803,13 @@ macro_rules! axiomimpl {
 // location in front of the entity, but couldn't get it too match. I
 // noticed that the quick_error crate passes afterwards and it's easy
 // to get to work this way. As it's an internal macro, I think this is fine.
-macro_rules! axiom {
+macro_rules! component {
     ($A:ident $name:ident ($($tt:ty),*) $(#[$attr:meta])*) =>
     {
         $(#[$attr]) *
         #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
         pub struct $name<$A>($(pub $tt),*);
-        axiomimpl!($A, $name);
+        componentimpl!($A, $name);
     };
     ($A:ident $name:ident {
         $($field_name:ident: $field_type:ty),*
@@ -821,7 +833,7 @@ macro_rules! axiom {
             }
 
         }
-        axiomimpl!($A, $name);
+        componentimpl!($A, $name);
     }
 }
 
@@ -832,7 +844,7 @@ macro_rules! axiom {
 // the pattern matching a pain, because we need to know all the axiom
 // names at once so we can generate the ComponentKind and Component
 // enums.
-macro_rules! axioms {
+macro_rules! components {
     ($A:ident,
      $($(#[$attr:meta])* $name:ident $tt:tt),*)
         =>
@@ -922,15 +934,19 @@ macro_rules! axioms {
         }
 
         $(
-            axiom!(
+            component!(
                 $A $name $tt $(#[$attr]) *
             );
         ) *
     }
 }
 
-axioms! {
+components! {
     A,
+
+    // Temporary to avoid nameclash with existing OntologyID
+    OntologyIDComponent{iri: Option<IRI<A>>, viri: Option<IRI<A>>},
+
     /// An annotation associated with this Ontology
     OntologyAnnotation (Annotation<A>),
 

@@ -97,6 +97,7 @@ where
 /// Fetch the name of the tag that is used to render `ComponentKind`
 fn tag_for_kind(axk: ComponentKind) -> &'static str {
     match axk {
+        ComponentKind::OntologyIDComponent => todo!(),
         ComponentKind::Import => "Import",
         ComponentKind::OntologyAnnotation => "Annotation",
         ComponentKind::DeclareClass => "Declaration",
@@ -552,6 +553,7 @@ render! {
     Component, self, w, m,
     {
         match self {
+            Component::OntologyIDComponent(_) => todo!(),
             Component::Import(ax) => ax.render(w, m)?,
             Component::OntologyAnnotation(ax) => ax.render(w, m)?,
             Component::DeclareClass(ax) => ax.render(w, m)?,

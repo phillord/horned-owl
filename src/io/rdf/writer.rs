@@ -535,6 +535,7 @@ impl<A: ForIRI> Render<A, Annotatable<A>> for Component<A> {
     ) -> Result<Annotatable<A>, HornedError> {
         Ok(match self {
             // We render imports and ontology annotations earlier
+            Component::OntologyIDComponent(_) => todo!(),
             Component::Import(_ax) => vec![].into(),
             Component::OntologyAnnotation(_ax) => vec![].into(),
             Component::DeclareClass(ax) => ax.render(f, ng)?.into(),
