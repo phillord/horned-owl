@@ -6,7 +6,7 @@ use horned_owl::error::HornedError;
 use horned_owl::io::owx::writer::write;
 use horned_owl::model::Build;
 use horned_owl::model::MutableOntology;
-use horned_owl::ontology::axiom_mapped::RcAxiomMappedOntology;
+use horned_owl::ontology::axiom_mapped::RcComponentMappedOntology;
 use horned_owl::ontology::set::SetOntology;
 
 use std::io::stdout;
@@ -45,6 +45,6 @@ pub(crate) fn matcher(matches: &ArgMatches) -> Result<(), HornedError> {
         o.declare(b.class(format!("https://www.example.com/o{}", i)));
     }
 
-    let amo: RcAxiomMappedOntology = o.into();
+    let amo: RcComponentMappedOntology = o.into();
     write(&mut stdout(), &amo, None)
 }

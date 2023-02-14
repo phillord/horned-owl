@@ -10,7 +10,7 @@ use self::rdf::reader::{IncompleteParse, RDFOntology};
 use crate::ontology::indexed::ForIndex;
 use crate::{
     model::ForIRI,
-    ontology::{axiom_mapped::AxiomMappedOntology, set::SetOntology},
+    ontology::{component_mapped::ComponentMappedOntology, set::SetOntology},
 };
 
 pub enum ResourceType {
@@ -77,8 +77,8 @@ impl<A: ForIRI, AA: ForIndex<A>> From<ParserOutput<A, AA>> for SetOntology<A> {
     }
 }
 
-impl<A: ForIRI, AA: ForIndex<A>> From<ParserOutput<A, AA>> for AxiomMappedOntology<A, AA> {
-    fn from(p: ParserOutput<A, AA>) -> AxiomMappedOntology<A, AA> {
+impl<A: ForIRI, AA: ForIndex<A>> From<ParserOutput<A, AA>> for ComponentMappedOntology<A, AA> {
+    fn from(p: ParserOutput<A, AA>) -> ComponentMappedOntology<A, AA> {
         match p {
             ParserOutput::OWXParser(so, _) => so.into(),
             ParserOutput::RDFParser(rdfo, _) => rdfo.into(),

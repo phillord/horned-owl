@@ -14,3 +14,9 @@ RFC branch.
 
 
 
+* Rename Axiom to Component [/]
+
+ - [ ] Change enum Axiom, struct AnnotatedAxiom
+ - [ ] check instances of `axiom` as variable
+
+ 

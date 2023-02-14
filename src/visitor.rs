@@ -16,8 +16,8 @@ pub trait Visit<A: ForIRI> {
     fn visit_data_property(&mut self, _: &DataProperty<A>) {}
     fn visit_annotation_property(&mut self, _: &AnnotationProperty<A>) {}
     fn visit_named_individual(&mut self, _: &NamedIndividual<A>) {}
-    fn visit_annotated_axiom(&mut self, _: &AnnotatedAxiom<A>) {}
-    fn visit_axiom(&mut self, _: &Axiom<A>) {}
+    fn visit_annotated_component(&mut self, _: &AnnotatedComponent<A>) {}
+    fn visit_component(&mut self, _: &Component<A>) {}
     fn visit_import(&mut self, _: &Import<A>) {}
     fn visit_ontology_annotation(&mut self, _: &OntologyAnnotation<A>) {}
     fn visit_declare_class(&mut self, _: &DeclareClass<A>) {}
@@ -156,63 +156,63 @@ impl<A: ForIRI, V: Visit<A>> Walk<A, V> {
         self.iri(&e.0);
     }
 
-    pub fn annotated_axiom(&mut self, e: &AnnotatedAxiom<A>) {
-        self.0.visit_annotated_axiom(e);
-        self.axiom(&e.axiom);
+    pub fn annotated_component(&mut self, e: &AnnotatedComponent<A>) {
+        self.0.visit_annotated_component(e);
+        self.component(&e.axiom);
         self.annotation_set(&e.ann);
     }
 
-    pub fn axiom(&mut self, e: &Axiom<A>) {
-        self.0.visit_axiom(e);
+    pub fn component(&mut self, e: &Component<A>) {
+        self.0.visit_component(e);
         match e {
-            Axiom::Import(ax) => self.import(ax),
-            Axiom::OntologyAnnotation(ax) => self.ontology_annotation(ax),
-            Axiom::DeclareClass(ax) => self.declare_class(ax),
-            Axiom::DeclareObjectProperty(ax) => self.declare_object_property(ax),
-            Axiom::DeclareAnnotationProperty(ax) => self.declare_annotation_property(ax),
-            Axiom::DeclareDataProperty(ax) => self.declare_data_property(ax),
-            Axiom::DeclareNamedIndividual(ax) => self.declare_named_individual(ax),
-            Axiom::DeclareDatatype(ax) => self.declare_datatype(ax),
-            Axiom::SubClassOf(ax) => self.sub_class_of(ax),
-            Axiom::EquivalentClasses(ax) => self.equivalent_classes(ax),
-            Axiom::DisjointClasses(ax) => self.disjoint_classes(ax),
-            Axiom::DisjointUnion(ax) => self.disjoint_union(ax),
-            Axiom::SubObjectPropertyOf(ax) => self.sub_object_property_of(ax),
-            Axiom::EquivalentObjectProperties(ax) => self.equivalent_object_properties(ax),
-            Axiom::DisjointObjectProperties(ax) => self.disjoint_object_properties(ax),
-            Axiom::InverseObjectProperties(ax) => self.inverse_object_properties(ax),
-            Axiom::ObjectPropertyDomain(ax) => self.object_property_domain(ax),
-            Axiom::ObjectPropertyRange(ax) => self.object_property_range(ax),
-            Axiom::FunctionalObjectProperty(ax) => self.functional_object_property(ax),
-            Axiom::InverseFunctionalObjectProperty(ax) => {
+            Component::Import(ax) => self.import(ax),
+            Component::OntologyAnnotation(ax) => self.ontology_annotation(ax),
+            Component::DeclareClass(ax) => self.declare_class(ax),
+            Component::DeclareObjectProperty(ax) => self.declare_object_property(ax),
+            Component::DeclareAnnotationProperty(ax) => self.declare_annotation_property(ax),
+            Component::DeclareDataProperty(ax) => self.declare_data_property(ax),
+            Component::DeclareNamedIndividual(ax) => self.declare_named_individual(ax),
+            Component::DeclareDatatype(ax) => self.declare_datatype(ax),
+            Component::SubClassOf(ax) => self.sub_class_of(ax),
+            Component::EquivalentClasses(ax) => self.equivalent_classes(ax),
+            Component::DisjointClasses(ax) => self.disjoint_classes(ax),
+            Component::DisjointUnion(ax) => self.disjoint_union(ax),
+            Component::SubObjectPropertyOf(ax) => self.sub_object_property_of(ax),
+            Component::EquivalentObjectProperties(ax) => self.equivalent_object_properties(ax),
+            Component::DisjointObjectProperties(ax) => self.disjoint_object_properties(ax),
+            Component::InverseObjectProperties(ax) => self.inverse_object_properties(ax),
+            Component::ObjectPropertyDomain(ax) => self.object_property_domain(ax),
+            Component::ObjectPropertyRange(ax) => self.object_property_range(ax),
+            Component::FunctionalObjectProperty(ax) => self.functional_object_property(ax),
+            Component::InverseFunctionalObjectProperty(ax) => {
                 self.inverse_functional_object_property(ax)
             }
-            Axiom::ReflexiveObjectProperty(ax) => self.reflexive_object_property(ax),
-            Axiom::IrreflexiveObjectProperty(ax) => self.irreflexive_object_property(ax),
-            Axiom::SymmetricObjectProperty(ax) => self.symmetric_object_property(ax),
-            Axiom::AsymmetricObjectProperty(ax) => self.asymmetric_object_property(ax),
-            Axiom::TransitiveObjectProperty(ax) => self.transitive_object_property(ax),
-            Axiom::SubDataPropertyOf(ax) => self.sub_data_property_of(ax),
-            Axiom::EquivalentDataProperties(ax) => self.equivalent_data_properties(ax),
-            Axiom::DisjointDataProperties(ax) => self.disjoint_data_properties(ax),
-            Axiom::DataPropertyDomain(ax) => self.data_property_domain(ax),
-            Axiom::DataPropertyRange(ax) => self.data_property_range(ax),
-            Axiom::FunctionalDataProperty(ax) => self.functional_data_property(ax),
-            Axiom::DatatypeDefinition(ax) => self.datatype_definition(ax),
-            Axiom::HasKey(ax) => self.has_key(ax),
-            Axiom::SameIndividual(ax) => self.same_individual(ax),
-            Axiom::DifferentIndividuals(ax) => self.different_individuals(ax),
-            Axiom::ClassAssertion(ax) => self.class_assertion(ax),
-            Axiom::ObjectPropertyAssertion(ax) => self.object_property_assertion(ax),
-            Axiom::NegativeObjectPropertyAssertion(ax) => {
+            Component::ReflexiveObjectProperty(ax) => self.reflexive_object_property(ax),
+            Component::IrreflexiveObjectProperty(ax) => self.irreflexive_object_property(ax),
+            Component::SymmetricObjectProperty(ax) => self.symmetric_object_property(ax),
+            Component::AsymmetricObjectProperty(ax) => self.asymmetric_object_property(ax),
+            Component::TransitiveObjectProperty(ax) => self.transitive_object_property(ax),
+            Component::SubDataPropertyOf(ax) => self.sub_data_property_of(ax),
+            Component::EquivalentDataProperties(ax) => self.equivalent_data_properties(ax),
+            Component::DisjointDataProperties(ax) => self.disjoint_data_properties(ax),
+            Component::DataPropertyDomain(ax) => self.data_property_domain(ax),
+            Component::DataPropertyRange(ax) => self.data_property_range(ax),
+            Component::FunctionalDataProperty(ax) => self.functional_data_property(ax),
+            Component::DatatypeDefinition(ax) => self.datatype_definition(ax),
+            Component::HasKey(ax) => self.has_key(ax),
+            Component::SameIndividual(ax) => self.same_individual(ax),
+            Component::DifferentIndividuals(ax) => self.different_individuals(ax),
+            Component::ClassAssertion(ax) => self.class_assertion(ax),
+            Component::ObjectPropertyAssertion(ax) => self.object_property_assertion(ax),
+            Component::NegativeObjectPropertyAssertion(ax) => {
                 self.negative_object_property_assertion(ax)
             }
-            Axiom::DataPropertyAssertion(ax) => self.data_property_assertion(ax),
-            Axiom::NegativeDataPropertyAssertion(ax) => self.negative_data_property_assertion(ax),
-            Axiom::AnnotationAssertion(ax) => self.annotation_assertion(ax),
-            Axiom::SubAnnotationPropertyOf(ax) => self.sub_annotation_property_of(ax),
-            Axiom::AnnotationPropertyDomain(ax) => self.annotation_property_domain(ax),
-            Axiom::AnnotationPropertyRange(ax) => self.annotation_property_range(ax),
+            Component::DataPropertyAssertion(ax) => self.data_property_assertion(ax),
+            Component::NegativeDataPropertyAssertion(ax) => self.negative_data_property_assertion(ax),
+            Component::AnnotationAssertion(ax) => self.annotation_assertion(ax),
+            Component::SubAnnotationPropertyOf(ax) => self.sub_annotation_property_of(ax),
+            Component::AnnotationPropertyDomain(ax) => self.annotation_property_domain(ax),
+            Component::AnnotationPropertyRange(ax) => self.annotation_property_range(ax),
         }
     }
 
@@ -621,7 +621,7 @@ impl<A: ForIRI, V: Visit<A>> Walk<A, V> {
         self.0.visit_set_ontology(e);
         self.ontology_id(e.id());
         for i in e.iter() {
-            self.annotated_axiom(i);
+            self.annotated_component(i);
         }
     }
 
