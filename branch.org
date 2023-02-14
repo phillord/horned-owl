@@ -1,12 +1,13 @@
 
-* Support SWRL rules [0/7]
+* Support SWRL rules [2/7]
 
 This branch is design to support SWRL rules, using Solution 3 from the
 RFC branch.
 
- - [ ] Rename Axiom to Component
- - [ ] Rename AnnotatedAxiom to AnnotatedComponent
+ - [X] Rename Axiom to Component
+ - [X] Rename AnnotatedAxiom to AnnotatedComponent
  - [ ] Move OntologyID to be AnnotatedComponent
+ - [ ] What about doc_iri
  - [ ] Add is_axiom, is_id methods, macro'd out
  - [ ] Add SwrlRule (or SwrlComponent or equivalent)
  - [ ] Implement SwrlRule model
@@ -14,9 +15,14 @@ RFC branch.
 
 
 
-* Rename Axiom to Component [/]
+* Rename Axiom to Component [1/2]
 
- - [ ] Change enum Axiom, struct AnnotatedAxiom
+ - [X] Change enum Axiom, struct AnnotatedAxiom
  - [ ] check instances of `axiom` as variable
 
+* doc_iri
+
+As far as I can see, I don't use the doc_iri support anywhere, and
+certainly don't pass it between iterators. So, if we move them to
+Component this will actually work
  
