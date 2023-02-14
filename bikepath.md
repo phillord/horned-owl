@@ -38,10 +38,10 @@ Other Changes that I'd like to makes
 ====================================
 
 
-Removing a layer of complexity in Axiom
+Removing a layer of complexity in Component
 ---------------------------------------
 
-`Axiom` is currently complicated because it has an extra layer on
+`Component` is currently complicated because it has an extra layer on
 indirection. Each variant of the enum is takes a different struct,
 rather than using struct like variants in the Enum. This was done
 to support typing in methods and means, for example, that the

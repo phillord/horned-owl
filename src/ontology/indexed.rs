@@ -18,7 +18,7 @@
 //! and `ThreeIndexedOntology`, each of which operate something like a
 //! named tuple, allowing differently typed `OntologyIndex` objects to
 //! be added.
-use crate::model::{AnnotatedAxiom, ArcStr, ForIRI, MutableOntology, Ontology, OntologyID, IRI, RcStr};
+use crate::model::{AnnotatedComponent, ArcStr, ForIRI, MutableOntology, Ontology, OntologyID, IRI, RcStr};
 use std::borrow::Borrow;
 use std::fmt::Debug;
 use std::hash::Hash;
@@ -27,27 +27,27 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 pub trait ForIndex<A: ForIRI>:
-    Borrow<AnnotatedAxiom<A>>
+    Borrow<AnnotatedComponent<A>>
     + Clone
     + Debug
     + Eq
-    + From<AnnotatedAxiom<A>>
+    + From<AnnotatedComponent<A>>
     + Hash
     + Ord
     + PartialEq
     + PartialOrd
 {
-    fn unwrap(&self) -> AnnotatedAxiom<A> {
+    fn unwrap(&self) -> AnnotatedComponent<A> {
         (*self.borrow()).clone()
     }
 }
 
 impl<A: ForIRI, T: ?Sized> ForIndex<A> for T where
-    T: Borrow<AnnotatedAxiom<A>>
+    T: Borrow<AnnotatedComponent<A>>
         + Clone
         + Debug
         + Eq
-        + From<AnnotatedAxiom<A>>
+        + From<AnnotatedComponent<A>>
         + Hash
         + Ord
         + PartialEq
@@ -57,7 +57,7 @@ impl<A: ForIRI, T: ?Sized> ForIndex<A> for T where
 
 /// An `OntologyIndex` object.
 ///
-/// The `OntologyIndex` stores references to an `AnnotatedAxiom` and
+/// The `OntologyIndex` stores references to an `AnnotatedComponent` and
 /// as they are added (or removed) from an `IndexedObject`. Objects
 /// implementing this can provide search facilities over the
 /// ``Ontology`; they should, in general, only provide search
@@ -65,26 +65,26 @@ impl<A: ForIRI, T: ?Sized> ForIndex<A> for T where
 /// or log time, not linear).
 ///
 /// A given `OntologyIndex` object is not bound to keep references to
-/// all `Rc<AnnotatedAxiom>` that are inserted into it, although at
+/// all `Rc<AnnotatedComponent>` that are inserted into it, although at
 /// least one `OntologyIndex` object for an `IndexedOntology` should
 /// do, or the it will be dropped entirely. The `SetIndex` is a simple
 /// way to achieving this.
 pub trait OntologyIndex<A: ForIRI, AA: ForIndex<A>> {
-    /// Potentially insert an AnnotatedAxiom to the index.
+    /// Potentially insert an AnnotatedComponent to the index.
     ///
     /// If the index did not have this value present, true is returned.
     ///
     /// If the index did have this value present, false is returned.
     fn index_insert(&mut self, ax: AA) -> bool;
 
-    /// Remove an AnnotatedAxiom from the index.
+    /// Remove an AnnotatedComponent from the index.
     ///
     /// If the index did have this value present, true is returned.
     ///
     /// If the index did not have this value present, false is returned.
-    fn index_remove(&mut self, ax: &AnnotatedAxiom<A>) -> bool;
+    fn index_remove(&mut self, ax: &AnnotatedComponent<A>) -> bool;
 
-    fn index_take(&mut self, ax: &AnnotatedAxiom<A>) -> Option<AnnotatedAxiom<A>> {
+    fn index_take(&mut self, ax: &AnnotatedComponent<A>) -> Option<AnnotatedComponent<A>> {
         if self.index_remove(ax) {
             Some(ax.clone())
         } else {
@@ -103,7 +103,7 @@ impl<A: ForIRI, AA: ForIndex<A>> OntologyIndex<A, AA> for NullIndex {
     }
 
     /// Remove an item, always returns false
-    fn index_remove(&mut self, _ax: &AnnotatedAxiom<A>) -> bool {
+    fn index_remove(&mut self, _ax: &AnnotatedComponent<A>) -> bool {
         false
     }
 }
@@ -143,20 +143,20 @@ impl<A: ForIRI, AA: ForIndex<A>, I: OntologyIndex<A, AA>> OneIndexedOntology<A, 
     }
 }
 
-impl<I> OneIndexedOntology<RcStr, Rc<AnnotatedAxiom<RcStr>>, I>
+impl<I> OneIndexedOntology<RcStr, Rc<AnnotatedComponent<RcStr>>, I>
 where
-    I: OntologyIndex<RcStr, Rc<AnnotatedAxiom<RcStr>>>,
+    I: OntologyIndex<RcStr, Rc<AnnotatedComponent<RcStr>>>,
 {
-    pub fn new_rc(i: I) -> OneIndexedOntology<RcStr, Rc<AnnotatedAxiom<RcStr>>, I> {
+    pub fn new_rc(i: I) -> OneIndexedOntology<RcStr, Rc<AnnotatedComponent<RcStr>>, I> {
         Self::new(i)
     }
 }
 
-impl<I> OneIndexedOntology<ArcStr, Arc<AnnotatedAxiom<ArcStr>>, I>
+impl<I> OneIndexedOntology<ArcStr, Arc<AnnotatedComponent<ArcStr>>, I>
 where
-    I: OntologyIndex<ArcStr, Arc<AnnotatedAxiom<ArcStr>>>,
+    I: OntologyIndex<ArcStr, Arc<AnnotatedComponent<ArcStr>>>,
 {
-    pub fn new_arc(i: I) -> OneIndexedOntology<ArcStr, Arc<AnnotatedAxiom<ArcStr>>, I> {
+    pub fn new_arc(i: I) -> OneIndexedOntology<ArcStr, Arc<AnnotatedComponent<ArcStr>>, I> {
         Self::new(i)
     }
 }
@@ -184,12 +184,12 @@ impl<A: ForIRI, AA: ForIndex<A>, I: OntologyIndex<A, AA>> Ontology<A>
 impl<A: ForIRI, AA: ForIndex<A>, I: OntologyIndex<A, AA>> MutableOntology<A>
     for OneIndexedOntology<A, AA, I>
 {
-    fn insert<IAA: Into<AnnotatedAxiom<A>>>(&mut self, ax: IAA) -> bool {
+    fn insert<IAA: Into<AnnotatedComponent<A>>>(&mut self, ax: IAA) -> bool {
         let ax = ax.into();
         self.0.index_insert(ax.into())
     }
 
-    fn take(&mut self, ax: &AnnotatedAxiom<A>) -> Option<AnnotatedAxiom<A>> {
+    fn take(&mut self, ax: &AnnotatedComponent<A>) -> Option<AnnotatedComponent<A>> {
         self.0.index_take(ax)
     }
 }
@@ -248,12 +248,12 @@ impl<A: ForIRI, AA: ForIndex<A>, I: OntologyIndex<A, AA>, J: OntologyIndex<A, AA
 impl<A: ForIRI, AA: ForIndex<A>, I: OntologyIndex<A, AA>, J: OntologyIndex<A, AA>>
     MutableOntology<A> for TwoIndexedOntology<A, AA, I, J>
 {
-    fn insert<IAA: Into<AnnotatedAxiom<A>>>(&mut self, ax: IAA) -> bool {
+    fn insert<IAA: Into<AnnotatedComponent<A>>>(&mut self, ax: IAA) -> bool {
         let ax = ax.into();
         self.index_insert(ax.into())
     }
 
-    fn take(&mut self, ax: &AnnotatedAxiom<A>) -> Option<AnnotatedAxiom<A>> {
+    fn take(&mut self, ax: &AnnotatedComponent<A>) -> Option<AnnotatedComponent<A>> {
         self.index_take(ax)
     }
 }
@@ -267,7 +267,7 @@ impl<A: ForIRI, AA: ForIndex<A>, I: OntologyIndex<A, AA>, J: OntologyIndex<A, AA
         self.1.index_insert(ax) || rtn
     }
 
-    fn index_remove(&mut self, ax: &AnnotatedAxiom<A>) -> bool {
+    fn index_remove(&mut self, ax: &AnnotatedComponent<A>) -> bool {
         let rtn = self.0.index_remove(ax);
         // Don't short circuit
         self.1.index_remove(ax) || rtn
@@ -359,11 +359,11 @@ impl<
         K: OntologyIndex<A, AA>,
     > MutableOntology<A> for ThreeIndexedOntology<A, AA, I, J, K>
 {
-    fn insert<IAA: Into<AnnotatedAxiom<A>>>(&mut self, ax: IAA) -> bool {
+    fn insert<IAA: Into<AnnotatedComponent<A>>>(&mut self, ax: IAA) -> bool {
         self.0.insert(ax)
     }
 
-    fn take(&mut self, ax: &AnnotatedAxiom<A>) -> Option<AnnotatedAxiom<A>> {
+    fn take(&mut self, ax: &AnnotatedComponent<A>) -> Option<AnnotatedComponent<A>> {
         self.0.take(ax)
     }
 }
@@ -382,7 +382,7 @@ impl<
         (self.0).1.index_insert(ax) || rtn
     }
 
-    fn index_remove(&mut self, ax: &AnnotatedAxiom<A>) -> bool {
+    fn index_remove(&mut self, ax: &AnnotatedComponent<A>) -> bool {
         let rtn = self.0.index_remove(ax);
         // Don't short circuit
         (self.0).1.index_remove(ax) || rtn
@@ -476,11 +476,11 @@ impl<
         L: OntologyIndex<A, AA>,
     > MutableOntology<A> for FourIndexedOntology<A, AA, I, J, K, L>
 {
-    fn insert<IAA: Into<AnnotatedAxiom<A>>>(&mut self, ax: IAA) -> bool {
+    fn insert<IAA: Into<AnnotatedComponent<A>>>(&mut self, ax: IAA) -> bool {
         self.0.insert(ax)
     }
 
-    fn take(&mut self, ax: &AnnotatedAxiom<A>) -> Option<AnnotatedAxiom<A>> {
+    fn take(&mut self, ax: &AnnotatedComponent<A>) -> Option<AnnotatedComponent<A>> {
         self.0.take(ax)
     }
 }
@@ -493,14 +493,14 @@ mod test {
         TwoIndexedOntology,
     };
     use crate::{
-        model::{AnnotatedAxiom, Build, MutableOntology, NamedEntity, RcStr},
+        model::{AnnotatedComponent, Build, MutableOntology, NamedEntity, RcStr},
         ontology::set::SetIndex,
     };
 
     fn stuff() -> (
-        AnnotatedAxiom<RcStr>,
-        AnnotatedAxiom<RcStr>,
-        AnnotatedAxiom<RcStr>,
+        AnnotatedComponent<RcStr>,
+        AnnotatedComponent<RcStr>,
+        AnnotatedComponent<RcStr>,
     ) {
         let b = Build::new_rc();
         let c: NamedEntity<_> = b.class("http://www.example.com/c").into();

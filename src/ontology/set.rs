@@ -11,7 +11,7 @@ use std::marker::PhantomData;
 /// of whether an equivalent axiom exists, and is iterable.
 #[derive(Debug, Eq, PartialEq)]
 pub struct SetOntology<A: ForIRI>(
-    OneIndexedOntology<A, AnnotatedAxiom<A>, SetIndex<A, AnnotatedAxiom<A>>>,
+    OneIndexedOntology<A, AnnotatedComponent<A>, SetIndex<A, AnnotatedComponent<A>>>,
 );
 
 impl<A: ForIRI> Clone for SetOntology<A> {
@@ -76,17 +76,17 @@ impl<A: ForIRI> Ontology<A> for SetOntology<A> {
 }
 
 /// An Interator for `SetOntology`
-pub struct SetIter<'a, A: ForIRI>(std::collections::hash_set::Iter<'a, AnnotatedAxiom<A>>);
+pub struct SetIter<'a, A: ForIRI>(std::collections::hash_set::Iter<'a, AnnotatedComponent<A>>);
 
 impl<'a, A: ForIRI> Iterator for SetIter<'a, A> {
-    type Item = &'a AnnotatedAxiom<A>;
+    type Item = &'a AnnotatedComponent<A>;
     fn next(&mut self) -> Option<Self::Item> {
         self.0.next()
     }
 }
 
 impl<'a, A: ForIRI> IntoIterator for &'a SetOntology<A> {
-    type Item = &'a AnnotatedAxiom<A>;
+    type Item = &'a AnnotatedComponent<A>;
     type IntoIter = SetIter<'a, A>;
     fn into_iter(self) -> Self::IntoIter {
         self.iter()
@@ -94,17 +94,17 @@ impl<'a, A: ForIRI> IntoIterator for &'a SetOntology<A> {
 }
 
 /// An owning iterator over the annotated axioms of an `Ontology`.
-pub struct SetIntoIter<A: ForIRI>(std::vec::IntoIter<AnnotatedAxiom<A>>);
+pub struct SetIntoIter<A: ForIRI>(std::vec::IntoIter<AnnotatedComponent<A>>);
 
 impl<A: ForIRI> Iterator for SetIntoIter<A> {
-    type Item = AnnotatedAxiom<A>;
+    type Item = AnnotatedComponent<A>;
     fn next(&mut self) -> Option<Self::Item> {
         self.0.next()
     }
 }
 
 impl<A: ForIRI> IntoIterator for SetOntology<A> {
-    type Item = AnnotatedAxiom<A>;
+    type Item = AnnotatedComponent<A>;
     type IntoIter = SetIntoIter<A>;
     fn into_iter(self) -> Self::IntoIter {
         SetIntoIter(self.0.index().into_iter())
@@ -127,22 +127,22 @@ impl<A: ForIRI> MutableOntology<A> for SetOntology<A> {
     /// See `declare` for an easier way to declare named entities.
     fn insert<AA>(&mut self, ax: AA) -> bool
     where
-        AA: Into<AnnotatedAxiom<A>>,
+        AA: Into<AnnotatedComponent<A>>,
     {
         self.0.insert(ax)
     }
 
-    fn remove(&mut self, ax: &AnnotatedAxiom<A>) -> bool {
+    fn remove(&mut self, ax: &AnnotatedComponent<A>) -> bool {
         self.0.remove(ax)
     }
 
-    fn take(&mut self, ax: &AnnotatedAxiom<A>) -> Option<AnnotatedAxiom<A>> {
+    fn take(&mut self, ax: &AnnotatedComponent<A>) -> Option<AnnotatedComponent<A>> {
         self.0.take(ax)
     }
 }
 
-impl<A: ForIRI> FromIterator<AnnotatedAxiom<A>> for SetOntology<A> {
-    fn from_iter<I: IntoIterator<Item = AnnotatedAxiom<A>>>(iter: I) -> Self {
+impl<A: ForIRI> FromIterator<AnnotatedComponent<A>> for SetOntology<A> {
+    fn from_iter<I: IntoIterator<Item = AnnotatedComponent<A>>>(iter: I) -> Self {
         SetOntology(OneIndexedOntology::new(SetIndex(
             HashSet::from_iter(iter),
             Default::default(),
@@ -152,7 +152,7 @@ impl<A: ForIRI> FromIterator<AnnotatedAxiom<A>> for SetOntology<A> {
 
 impl<A: ForIRI, I> From<(OntologyID<A>, I)> for SetOntology<A>
 where
-    I: Iterator<Item = AnnotatedAxiom<A>>,
+    I: Iterator<Item = AnnotatedComponent<A>>,
 {
     fn from((mut oid, i): (OntologyID<A>, I)) -> SetOntology<A> {
         let mut so: SetOntology<_> = i.collect();
@@ -164,7 +164,7 @@ where
 /*
 impl<A: ForIRI, O, I> From<(O, I)> for SetOntology<A>
 where
-    I: Iterator<Item = AnnotatedAxiom<A>>,
+    I: Iterator<Item = AnnotatedComponent<A>>,
     O: Ontology<A>,
 {
     fn from((mut o, i): (O, I)) -> SetOntology<A> {
@@ -184,7 +184,7 @@ impl<A: ForIRI, AA: ForIndex<A>> OntologyIndex<A, AA> for SetIndex<A, AA> {
         self.0.insert(ax)
     }
 
-    fn index_remove(&mut self, ax: &AnnotatedAxiom<A>) -> bool {
+    fn index_remove(&mut self, ax: &AnnotatedComponent<A>) -> bool {
         self.0.remove(ax)
     }
 }
@@ -194,33 +194,33 @@ impl<A: ForIRI, AA: ForIndex<A>> SetIndex<A, AA> {
         SetIndex(Default::default(), Default::default())
     }
 
-    pub fn contains(&self, ax: &AnnotatedAxiom<A>) -> bool {
+    pub fn contains(&self, ax: &AnnotatedComponent<A>) -> bool {
         self.0.contains(ax)
     }
 }
 
-impl SetIndex<RcStr, Rc<AnnotatedAxiom<RcStr>>> {
+impl SetIndex<RcStr, Rc<AnnotatedComponent<RcStr>>> {
     pub fn new_rc() -> Self {
         Self::new()
     }
 }
 
 impl<A: ForIRI, AA: ForIndex<A>> IntoIterator for SetIndex<A, AA> {
-    type Item = AnnotatedAxiom<A>;
-    type IntoIter = std::vec::IntoIter<AnnotatedAxiom<A>>;
+    type Item = AnnotatedComponent<A>;
+    type IntoIter = std::vec::IntoIter<AnnotatedComponent<A>>;
     fn into_iter(self) -> Self::IntoIter {
         #[allow(clippy::needless_collect)]
-        let v: Vec<AnnotatedAxiom<_>> = self.0.into_iter().map(|fi| fi.unwrap()).collect();
+        let v: Vec<AnnotatedComponent<_>> = self.0.into_iter().map(|fi| fi.unwrap()).collect();
         v.into_iter()
     }
 }
 
 impl<'a, A: ForIRI, AA: ForIndex<A>> IntoIterator for &'a SetIndex<A, AA> {
-    type Item = &'a AnnotatedAxiom<A>;
-    type IntoIter = std::vec::IntoIter<&'a AnnotatedAxiom<A>>;
+    type Item = &'a AnnotatedComponent<A>;
+    type IntoIter = std::vec::IntoIter<&'a AnnotatedComponent<A>>;
     fn into_iter(self) -> Self::IntoIter {
         #[allow(clippy::needless_collect)]
-        let v: Vec<&'a AnnotatedAxiom<A>> = self.0.iter().map(|fiac| fiac.borrow()).collect();
+        let v: Vec<&'a AnnotatedComponent<A>> = self.0.iter().map(|fiac| fiac.borrow()).collect();
         v.into_iter()
     }
 }
@@ -304,23 +304,23 @@ mod test {
         let mut it = v.into_iter();
         assert_eq!(
             it.next(),
-            Some(AnnotatedAxiom::from(Axiom::DeclareClass(decl1)))
+            Some(AnnotatedComponent::from(Component::DeclareClass(decl1)))
         );
         assert_eq!(
             it.next(),
-            Some(AnnotatedAxiom::from(Axiom::DeclareClass(decl2)))
+            Some(AnnotatedComponent::from(Component::DeclareClass(decl2)))
         );
         assert_eq!(
             it.next(),
-            Some(AnnotatedAxiom::from(Axiom::DeclareClass(decl3)))
+            Some(AnnotatedComponent::from(Component::DeclareClass(decl3)))
         );
         assert_eq!(
             it.next(),
-            Some(AnnotatedAxiom::from(Axiom::DisjointClasses(disj1)))
+            Some(AnnotatedComponent::from(Component::DisjointClasses(disj1)))
         );
         assert_eq!(
             it.next(),
-            Some(AnnotatedAxiom::from(Axiom::DisjointClasses(disj2)))
+            Some(AnnotatedComponent::from(Component::DisjointClasses(disj2)))
         );
         assert_eq!(it.next(), None);
         assert_eq!(it.next(), None);
@@ -363,23 +363,23 @@ mod test {
         let mut it = v.into_iter();
         assert_eq!(
             it.next(),
-            Some(&AnnotatedAxiom::from(Axiom::DeclareClass(decl1)))
+            Some(&AnnotatedComponent::from(Component::DeclareClass(decl1)))
         );
         assert_eq!(
             it.next(),
-            Some(&AnnotatedAxiom::from(Axiom::DeclareClass(decl2)))
+            Some(&AnnotatedComponent::from(Component::DeclareClass(decl2)))
         );
         assert_eq!(
             it.next(),
-            Some(&AnnotatedAxiom::from(Axiom::DeclareClass(decl3)))
+            Some(&AnnotatedComponent::from(Component::DeclareClass(decl3)))
         );
         assert_eq!(
             it.next(),
-            Some(&AnnotatedAxiom::from(Axiom::DisjointClasses(disj1)))
+            Some(&AnnotatedComponent::from(Component::DisjointClasses(disj1)))
         );
         assert_eq!(
             it.next(),
-            Some(&AnnotatedAxiom::from(Axiom::DisjointClasses(disj2)))
+            Some(&AnnotatedComponent::from(Component::DisjointClasses(disj2)))
         );
         assert_eq!(it.next(), None);
         assert_eq!(it.next(), None);
@@ -406,15 +406,15 @@ mod test {
         let mut it = v.into_iter();
         assert_eq!(
             it.next(),
-            Some(&AnnotatedAxiom::from(Axiom::DeclareClass(decl1)))
+            Some(&AnnotatedComponent::from(Component::DeclareClass(decl1)))
         );
         assert_eq!(
             it.next(),
-            Some(&AnnotatedAxiom::from(Axiom::DeclareClass(decl2)))
+            Some(&AnnotatedComponent::from(Component::DeclareClass(decl2)))
         );
         assert_eq!(
             it.next(),
-            Some(&AnnotatedAxiom::from(Axiom::DeclareClass(decl3)))
+            Some(&AnnotatedComponent::from(Component::DeclareClass(decl3)))
         );
         assert_eq!(it.next(), None);
         assert_eq!(it.next(), None);
@@ -462,23 +462,23 @@ mod test {
         let mut it = v.into_iter();
         assert_eq!(
             it.next(),
-            Some(AnnotatedAxiom::from(Axiom::DeclareClass(decl1)))
+            Some(AnnotatedComponent::from(Component::DeclareClass(decl1)))
         );
         assert_eq!(
             it.next(),
-            Some(AnnotatedAxiom::from(Axiom::DeclareClass(decl2)))
+            Some(AnnotatedComponent::from(Component::DeclareClass(decl2)))
         );
         assert_eq!(
             it.next(),
-            Some(AnnotatedAxiom::from(Axiom::DeclareClass(decl3)))
+            Some(AnnotatedComponent::from(Component::DeclareClass(decl3)))
         );
         assert_eq!(
             it.next(),
-            Some(AnnotatedAxiom::from(Axiom::DisjointClasses(disj1)))
+            Some(AnnotatedComponent::from(Component::DisjointClasses(disj1)))
         );
         assert_eq!(
             it.next(),
-            Some(AnnotatedAxiom::from(Axiom::DisjointClasses(disj2)))
+            Some(AnnotatedComponent::from(Component::DisjointClasses(disj2)))
         );
         assert_eq!(it.next(), None);
         assert_eq!(it.next(), None);
@@ -521,23 +521,23 @@ mod test {
         let mut it = v.into_iter();
         assert_eq!(
             it.next(),
-            Some(&AnnotatedAxiom::from(Axiom::DeclareClass(decl1)))
+            Some(&AnnotatedComponent::from(Component::DeclareClass(decl1)))
         );
         assert_eq!(
             it.next(),
-            Some(&AnnotatedAxiom::from(Axiom::DeclareClass(decl2)))
+            Some(&AnnotatedComponent::from(Component::DeclareClass(decl2)))
         );
         assert_eq!(
             it.next(),
-            Some(&AnnotatedAxiom::from(Axiom::DeclareClass(decl3)))
+            Some(&AnnotatedComponent::from(Component::DeclareClass(decl3)))
         );
         assert_eq!(
             it.next(),
-            Some(&AnnotatedAxiom::from(Axiom::DisjointClasses(disj1)))
+            Some(&AnnotatedComponent::from(Component::DisjointClasses(disj1)))
         );
         assert_eq!(
             it.next(),
-            Some(&AnnotatedAxiom::from(Axiom::DisjointClasses(disj2)))
+            Some(&AnnotatedComponent::from(Component::DisjointClasses(disj2)))
         );
         assert_eq!(it.next(), None);
         assert_eq!(it.next(), None);

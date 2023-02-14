@@ -2,7 +2,7 @@ use crate::{
     error::invalid,
     error::HornedError,
     model::*,
-    ontology::axiom_mapped::AxiomMappedOntology,
+    ontology::component_mapped::ComponentMappedOntology,
     vocab::{is_thing, Vocab, WithIRI, OWL, RDF, RDFS, XSD},
 };
 
@@ -20,7 +20,7 @@ use std::{
 
 pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
     write: &mut W,
-    ont: &AxiomMappedOntology<A, AA>,
+    ont: &ComponentMappedOntology<A, AA>,
 ) -> Result<(), HornedError> {
     // Entirely unsatisfying to set this randomly here, but we can't
     // access ns our parser yet
@@ -393,7 +393,7 @@ impl<A: ForIRI> Render<A, ()> for BTreeSet<Annotation<A>> {
     }
 }
 
-impl<A: ForIRI, AA: ForIndex<A>> Render<A, ()> for &AxiomMappedOntology<A, AA> {
+impl<A: ForIRI, AA: ForIndex<A>> Render<A, ()> for &ComponentMappedOntology<A, AA> {
     fn render<W: Write>(
         &self,
         f: &mut PrettyRdfXmlFormatter<A, W>,
@@ -424,7 +424,7 @@ impl<A: ForIRI, AA: ForIndex<A>> Render<A, ()> for &AxiomMappedOntology<A, AA> {
     }
 }
 
-impl<A: ForIRI> Render<A, ()> for AnnotatedAxiom<A> {
+impl<A: ForIRI> Render<A, ()> for AnnotatedComponent<A> {
     fn render<W: Write>(
         &self,
         f: &mut PrettyRdfXmlFormatter<A, W>,
@@ -527,7 +527,7 @@ render! {
     }
 }
 
-impl<A: ForIRI> Render<A, Annotatable<A>> for Axiom<A> {
+impl<A: ForIRI> Render<A, Annotatable<A>> for Component<A> {
     fn render<W: Write>(
         &self,
         f: &mut PrettyRdfXmlFormatter<A, W>,
@@ -535,50 +535,50 @@ impl<A: ForIRI> Render<A, Annotatable<A>> for Axiom<A> {
     ) -> Result<Annotatable<A>, HornedError> {
         Ok(match self {
             // We render imports and ontology annotations earlier
-            Axiom::Import(_ax) => vec![].into(),
-            Axiom::OntologyAnnotation(_ax) => vec![].into(),
-            Axiom::DeclareClass(ax) => ax.render(f, ng)?.into(),
-            Axiom::DeclareObjectProperty(ax) => ax.render(f, ng)?.into(),
-            Axiom::DeclareAnnotationProperty(ax) => ax.render(f, ng)?.into(),
-            Axiom::DeclareDataProperty(ax) => ax.render(f, ng)?.into(),
-            Axiom::DeclareNamedIndividual(ax) => ax.render(f, ng)?.into(),
-            Axiom::DeclareDatatype(ax) => ax.render(f, ng)?.into(),
-            Axiom::SubClassOf(ax) => ax.render(f, ng)?.into(),
-            Axiom::EquivalentClasses(ax) => ax.render(f, ng)?.into(),
-            Axiom::DisjointClasses(ax) => ax.render(f, ng)?.into(),
-            Axiom::DisjointUnion(ax) => ax.render(f, ng)?.into(),
-            Axiom::SubObjectPropertyOf(ax) => ax.render(f, ng)?.into(),
-            Axiom::EquivalentObjectProperties(ax) => ax.render(f, ng)?.into(),
-            Axiom::DisjointObjectProperties(ax) => ax.render(f, ng)?.into(),
-            Axiom::InverseObjectProperties(ax) => ax.render(f, ng)?.into(),
-            Axiom::ObjectPropertyDomain(ax) => ax.render(f, ng)?.into(),
-            Axiom::ObjectPropertyRange(ax) => ax.render(f, ng)?.into(),
-            Axiom::FunctionalObjectProperty(ax) => ax.render(f, ng)?.into(),
-            Axiom::InverseFunctionalObjectProperty(ax) => ax.render(f, ng)?.into(),
-            Axiom::ReflexiveObjectProperty(ax) => ax.render(f, ng)?.into(),
-            Axiom::IrreflexiveObjectProperty(ax) => ax.render(f, ng)?.into(),
-            Axiom::SymmetricObjectProperty(ax) => ax.render(f, ng)?.into(),
-            Axiom::AsymmetricObjectProperty(ax) => ax.render(f, ng)?.into(),
-            Axiom::TransitiveObjectProperty(ax) => ax.render(f, ng)?.into(),
-            Axiom::SubDataPropertyOf(ax) => ax.render(f, ng)?.into(),
-            Axiom::EquivalentDataProperties(ax) => ax.render(f, ng)?.into(),
-            Axiom::DisjointDataProperties(ax) => ax.render(f, ng)?.into(),
-            Axiom::DataPropertyDomain(ax) => ax.render(f, ng)?.into(),
-            Axiom::DataPropertyRange(ax) => ax.render(f, ng)?.into(),
-            Axiom::FunctionalDataProperty(ax) => ax.render(f, ng)?.into(),
-            Axiom::DatatypeDefinition(ax) => ax.render(f, ng)?.into(),
-            Axiom::HasKey(ax) => ax.render(f, ng)?.into(),
-            Axiom::SameIndividual(ax) => ax.render(f, ng)?.into(),
-            Axiom::DifferentIndividuals(ax) => ax.render(f, ng)?.into(),
-            Axiom::ObjectPropertyAssertion(ax) => ax.render(f, ng)?.into(),
-            Axiom::NegativeObjectPropertyAssertion(ax) => ax.render(f, ng)?.into(),
-            Axiom::DataPropertyAssertion(ax) => ax.render(f, ng)?.into(),
-            Axiom::NegativeDataPropertyAssertion(ax) => ax.render(f, ng)?.into(),
-            Axiom::AnnotationAssertion(ax) => ax.render(f, ng)?.into(),
-            Axiom::SubAnnotationPropertyOf(ax) => ax.render(f, ng)?.into(),
-            Axiom::AnnotationPropertyDomain(ax) => ax.render(f, ng)?.into(),
-            Axiom::AnnotationPropertyRange(ax) => ax.render(f, ng)?.into(),
-            Axiom::ClassAssertion(ax) => ax.render(f, ng)?.into(),
+            Component::Import(_ax) => vec![].into(),
+            Component::OntologyAnnotation(_ax) => vec![].into(),
+            Component::DeclareClass(ax) => ax.render(f, ng)?.into(),
+            Component::DeclareObjectProperty(ax) => ax.render(f, ng)?.into(),
+            Component::DeclareAnnotationProperty(ax) => ax.render(f, ng)?.into(),
+            Component::DeclareDataProperty(ax) => ax.render(f, ng)?.into(),
+            Component::DeclareNamedIndividual(ax) => ax.render(f, ng)?.into(),
+            Component::DeclareDatatype(ax) => ax.render(f, ng)?.into(),
+            Component::SubClassOf(ax) => ax.render(f, ng)?.into(),
+            Component::EquivalentClasses(ax) => ax.render(f, ng)?.into(),
+            Component::DisjointClasses(ax) => ax.render(f, ng)?.into(),
+            Component::DisjointUnion(ax) => ax.render(f, ng)?.into(),
+            Component::SubObjectPropertyOf(ax) => ax.render(f, ng)?.into(),
+            Component::EquivalentObjectProperties(ax) => ax.render(f, ng)?.into(),
+            Component::DisjointObjectProperties(ax) => ax.render(f, ng)?.into(),
+            Component::InverseObjectProperties(ax) => ax.render(f, ng)?.into(),
+            Component::ObjectPropertyDomain(ax) => ax.render(f, ng)?.into(),
+            Component::ObjectPropertyRange(ax) => ax.render(f, ng)?.into(),
+            Component::FunctionalObjectProperty(ax) => ax.render(f, ng)?.into(),
+            Component::InverseFunctionalObjectProperty(ax) => ax.render(f, ng)?.into(),
+            Component::ReflexiveObjectProperty(ax) => ax.render(f, ng)?.into(),
+            Component::IrreflexiveObjectProperty(ax) => ax.render(f, ng)?.into(),
+            Component::SymmetricObjectProperty(ax) => ax.render(f, ng)?.into(),
+            Component::AsymmetricObjectProperty(ax) => ax.render(f, ng)?.into(),
+            Component::TransitiveObjectProperty(ax) => ax.render(f, ng)?.into(),
+            Component::SubDataPropertyOf(ax) => ax.render(f, ng)?.into(),
+            Component::EquivalentDataProperties(ax) => ax.render(f, ng)?.into(),
+            Component::DisjointDataProperties(ax) => ax.render(f, ng)?.into(),
+            Component::DataPropertyDomain(ax) => ax.render(f, ng)?.into(),
+            Component::DataPropertyRange(ax) => ax.render(f, ng)?.into(),
+            Component::FunctionalDataProperty(ax) => ax.render(f, ng)?.into(),
+            Component::DatatypeDefinition(ax) => ax.render(f, ng)?.into(),
+            Component::HasKey(ax) => ax.render(f, ng)?.into(),
+            Component::SameIndividual(ax) => ax.render(f, ng)?.into(),
+            Component::DifferentIndividuals(ax) => ax.render(f, ng)?.into(),
+            Component::ObjectPropertyAssertion(ax) => ax.render(f, ng)?.into(),
+            Component::NegativeObjectPropertyAssertion(ax) => ax.render(f, ng)?.into(),
+            Component::DataPropertyAssertion(ax) => ax.render(f, ng)?.into(),
+            Component::NegativeDataPropertyAssertion(ax) => ax.render(f, ng)?.into(),
+            Component::AnnotationAssertion(ax) => ax.render(f, ng)?.into(),
+            Component::SubAnnotationPropertyOf(ax) => ax.render(f, ng)?.into(),
+            Component::AnnotationPropertyDomain(ax) => ax.render(f, ng)?.into(),
+            Component::AnnotationPropertyRange(ax) => ax.render(f, ng)?.into(),
+            Component::ClassAssertion(ax) => ax.render(f, ng)?.into(),
         })
     }
 }
@@ -1554,7 +1554,7 @@ mod test {
 
     #[test]
     fn test_ont_rt() {
-        let mut ont = AxiomMappedOntology::new_rc();
+        let mut ont = ComponentMappedOntology::new_rc();
         let build = Build::new();
 
         let iri = build.iri("http://www.example.com/a".to_string());
@@ -1576,7 +1576,7 @@ mod test {
         let file = File::create(&temp_file).ok().unwrap();
         let mut buf_writer = BufWriter::new(&file);
 
-        let amo: AxiomMappedOntology<RcStr, Rc<AnnotatedAxiom<RcStr>>> =
+        let amo: ComponentMappedOntology<RcStr, Rc<AnnotatedComponent<RcStr>>> =
             ont_orig.clone().into();
         write(&mut buf_writer, &amo).ok().unwrap();
         buf_writer.flush().ok();
