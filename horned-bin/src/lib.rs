@@ -172,14 +172,13 @@ pub mod naming {
 
 pub mod summary {
 
-    use horned_owl::{model::{ComponentKind, HigherKinded}, ontology::component_mapped::RcComponentMappedOntology};
+    use horned_owl::{model::ComponentKind, ontology::axiom_mapped::RcComponentMappedOntology};
     use indexmap::map::IndexMap;
 
     #[derive(Debug)]
     pub struct SummaryStatistics {
         pub logical_axiom: usize,
         pub annotation_axiom: usize,
-        pub meta_comp: usize,
         pub axiom_type: IndexMap<ComponentKind, usize>,
     }
 
