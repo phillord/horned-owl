@@ -62,6 +62,14 @@ impl<A: ForIRI> SetOntology<A> {
 }
 
 impl<A: ForIRI> Ontology<A> for SetOntology<A> {
+
+    fn doc_iri(&self) -> &Option<IRI<A>> {
+        self.0.doc_iri()
+    }
+
+    fn mut_doc_iri(&mut self) -> &mut Option<IRI<A>> {
+        self.0.mut_doc_iri()
+    }
 }
 
 impl<A:ForIRI, AA:ForIndex<A>> From<SetIndex<A, AA>> for SetOntology<A> {
@@ -75,13 +83,6 @@ impl<A:ForIRI, AA:ForIndex<A>> From<SetIndex<A, AA>> for SetOntology<A> {
         so
     }
 }
-
-/*
-impl<A:ForIRI> From<SetIndex<A, AnnotatedComponent<A>>> for SetOntology<A> {
-    fn from(value: SetIndex<A, AnnotatedComponent<A>>) -> Self {
-        SetOntology(OneIndexedOntology::new(value))
-    }
-}*/
 
 /// An Interator for `SetOntology`
 pub struct SetIter<'a, A: ForIRI>(std::collections::hash_set::Iter<'a, AnnotatedComponent<A>>);
@@ -171,7 +172,6 @@ where
     }
 }
 
-
 /// An `OntologyIndex` implemented over an in-memory HashSet. When
 /// combined with an `IndexedOntology` this should be nearly as
 /// fastest as `SetOntology`.
@@ -197,18 +197,20 @@ impl<A: ForIRI, AA: ForIndex<A>> SetIndex<A, AA> {
         self.0.contains(cmp)
     }
 
-    pub fn the_ontology_id(&self) -> Option<OntologyID<A>> {
+
+    pub fn the_ontology_id(&self) -> Option<OntologyIDComponent<A>> {
         self.0.iter().filter_map(|item| {
-            match &item.borrow().component {
-                Component::OntologyID(id) => Some(id),
+            match &item.borrow().axiom {
+                Component::OntologyIDComponent(id) => Some(id),
                 _ => None,
             }
         }).next().cloned()
     }
 
-    pub fn the_ontology_id_or_default(&self) -> OntologyID<A> {
+    pub fn the_ontology_id_or_default(&self) -> OntologyIDComponent<A> {
         self.the_ontology_id().unwrap_or_default()
     }
+
 }
 
 impl SetIndex<RcStr, Rc<AnnotatedComponent<RcStr>>> {
@@ -252,7 +254,7 @@ mod test {
     fn test_ontology_id() {
         let mut so = SetOntology::new_rc();
         let b = Build::new_rc();
-        let oid = OntologyID {
+        let oid = OntologyIDComponent {
             iri: Some(b.iri("http://www.example.com/iri")),
             viri: Some(b.iri("http://www.example.com/viri")),
         };
@@ -269,7 +271,7 @@ mod test {
     fn test_ontology_clone() {
         let mut so = SetOntology::new_rc();
         let b = Build::new_rc();
-        let oid = OntologyID {
+        let oid = OntologyIDComponent {
             iri: Some(b.iri("http://www.example.com/iri")),
             viri: Some(b.iri("http://www.example.com/viri")),
         };

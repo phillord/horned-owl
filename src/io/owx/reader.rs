@@ -67,7 +67,7 @@ pub fn read_with_build<A: ForIRI, R: BufRead>(
                         }
 
                         ont.insert(
-                            OntologyID{
+                            OntologyIDComponent{
                                 iri: get_iri_value_for(&mut r, e, b"ontologyIRI")?,
                                 viri: get_iri_value_for(&mut r, e, b"versionIRI")?,
                             }

@@ -336,6 +336,16 @@ impl<A: ForIRI, AA: ForIndex<A>> RDFOntology<A, AA> {
 }
 
 impl<A: ForIRI, AA: ForIndex<A>> Ontology<A> for RDFOntology<A, AA> {
+    fn doc_iri(&self) -> &Option<IRI<A>> {
+        self.0.doc_iri()
+    }
+
+    pub fn index(self) -> (SetIndex<A, AA>, DeclarationMappedIndex<A, AA>, LogicallyEqualIndex<A, AA>) {
+        self.0.index()
+    }
+}
+
+impl<A: ForIRI, AA: ForIndex<A>> Ontology<A> for RDFOntology<A, AA> {
 }
 
 impl<A: ForIRI, AA:ForIndex<A>> MutableOntology<A> for RDFOntology<A, AA> {
@@ -636,7 +646,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
         }
 
         self.o.insert(
-            OntologyID {iri, viri}
+            OntologyIDComponent {iri, viri}
         );
     }
 

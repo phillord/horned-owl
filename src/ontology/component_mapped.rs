@@ -157,15 +157,21 @@ impl<A: ForIRI, AA: ForIndex<A>> ComponentMappedIndex<A, AA> {
         self.component_for_kind(cmk).map(|ann| &ann.component)
     }
 
-    pub fn the_ontology_id(&self) -> Option<OntologyID<A>> {
+    pub fn the_ontology_id(&self) -> Option<OntologyIDComponent<A>> {
         self.ontology_id().next().cloned()
     }
-    pub fn the_ontology_id_or_default(&self) -> OntologyID<A> {
+    pub fn the_ontology_id_or_default(&self) -> OntologyIDComponent<A> {
         self.the_ontology_id().unwrap_or_default()
     }
 }
-
-onimpl! {OntologyID, ontology_id}
+// In the ideal world, we would have generated these onimpl! calls as
+// part of the axiom macro. This should be possible, as their is a
+// fixed relationship between the struct name and the method name.
+// But rust won't let us generate new identifiers or make string like
+// manipulations on the them. So we can't.
+//
+// "Whoever does not understand LISP is doomed to reinvent it" (badly)
+onimpl! {OntologyIDComponent, ontology_id}
 onimpl! {OntologyAnnotation, ontology_annotation}
 onimpl! {Import, import}
 onimpl! {DeclareClass, declare_class}
@@ -287,6 +293,13 @@ pub type RcComponentMappedOntology = ComponentMappedOntology<RcStr, Rc<Annotated
 pub type ArcComponentMappedOntology = ComponentMappedOntology<ArcStr, Arc<AnnotatedComponent<ArcStr>>>;
 
 impl<A: ForIRI, AA: ForIndex<A>> Ontology<A> for ComponentMappedOntology<A, AA> {
+    fn doc_iri(&self) -> &Option<IRI<A>> {
+        self.0.doc_iri()
+    }
+
+    fn mut_doc_iri(&mut self) -> &mut Option<IRI<A>> {
+        self.0.mut_doc_iri()
+    }
 }
 
 impl<A: ForIRI, AA: ForIndex<A>> MutableOntology<A> for ComponentMappedOntology<A, AA> {
@@ -385,7 +398,7 @@ mod test {
     fn from_set() {
         let b = Build::new_rc();
         let mut so = SetOntology::new();
-        let oid = OntologyID {
+        let oid = OntologyIDComponent {
             iri: Some(b.iri("http://www.example.com/iri")),
             viri: Some(b.iri("http://www.example.com/viri")),
         };

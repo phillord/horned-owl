@@ -717,15 +717,17 @@ pub trait HigherKinded {
     fn higher_kind(&self) -> HigherKind;
 
     fn is_axiom(&self) -> bool {
-        self.higher_kind() == HigherKind::Axiom
+        match self.kind() {
+            ComponentKind::OntologyIDComponent => false,
+            _ => true,
+        }
     }
 
-    fn is_meta(&self)  -> bool {
-        self.higher_kind() == HigherKind::Meta
-    }
-
-    fn is_swrl(&self) -> bool {
-        self.higher_kind() == HigherKind::SWRL
+    fn is_id(&self) -> bool {
+        match self.kind() {
+            ComponentKind::OntologyIDComponent => true,
+            _ => false,
+        }
     }
 }
 
@@ -1346,9 +1348,8 @@ components! {
     }
 }
 
-
 // TODO
-impl<A:ForIRI> Default for OntologyID<A> {
+impl<A:ForIRI> Default for OntologyIDComponent<A> {
     fn default() -> Self {
         Self{iri: None, viri: None}
     }
@@ -1723,6 +1724,8 @@ impl<A: ForIRI> From<Class<A>> for Box<ClassExpression<A>> {
 
 /// Access or change the `OntologyID` of an `Ontology`
 pub trait Ontology<A> {
+    fn doc_iri(&self) -> &Option<IRI<A>>;
+    fn mut_doc_iri(&mut self) -> &mut Option<IRI<A>>;
 }
 
 /// Add or remove axioms to an `MutableOntology`

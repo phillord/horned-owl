@@ -97,11 +97,8 @@ where
 /// Fetch the name of the tag that is used to render `ComponentKind`
 fn tag_for_kind(axk: ComponentKind) -> &'static str {
     match axk {
-        ComponentKind::OntologyID =>{
-            panic!("OntologyID found where only axioms were expected.")
-        },
-        ComponentKind:: DocIRI => {
-            panic!("DocIRI found where only axioms were expected.")
+        ComponentKind::OntologyIDComponent =>{
+            panic!("This should be called")
         },
         ComponentKind::Import => "Import",
         ComponentKind::OntologyAnnotation => "Annotation",
@@ -383,7 +380,7 @@ render! {
         if self.is_axiom() {
             (
                 (&self.ann),
-                (&self.component)
+                (&self.axiom)
             ).within(w, m,
                      tag_for_kind(self.kind()))?;
         }
@@ -919,7 +916,7 @@ mod test {
         let build = Build::new();
 
         let iri = build.iri("http://www.example.com/a".to_string());
-        ont.insert(OntologyID{iri:Some(iri.clone()), viri:None});
+        ont.insert(OntologyIDComponent{iri:Some(iri.clone()), viri:None});
         let temp_file = Temp::new_file().unwrap();
         let file = File::create(&temp_file).ok().unwrap();
         write(&mut BufWriter::new(file), &ont, None).ok().unwrap();

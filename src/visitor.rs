@@ -75,7 +75,7 @@ pub trait Visit<A: ForIRI> {
     fn visit_facet(&mut self, _: &Facet) {}
     fn visit_data_range(&mut self, _: &DataRange<A>) {}
     fn visit_class_expression(&mut self, _: &ClassExpression<A>) {}
-    fn visit_ontology_id(&mut self, _: &OntologyID<A>) {}
+    fn visit_ontology_id(&mut self, _: &OntologyIDComponent<A>) {}
     fn visit_set_ontology(&mut self, _: &SetOntology<A>) {}
     fn visit_option_iri(&mut self, _: &Option<IRI<A>>) {}
     fn visit_annotation_set(&mut self, _: &BTreeSet<Annotation<A>>) {}
@@ -171,8 +171,7 @@ impl<A: ForIRI, V: Visit<A>> Walk<A, V> {
     pub fn component(&mut self, e: &Component<A>) {
         self.0.visit_component(e);
         match e {
-            Component::OntologyID(ax) => self.ontology_id(ax),
-            Component::DocIRI(ax) => self.dociri(ax),
+            Component::OntologyIDComponent(ax) => self.ontology_id(ax),
             Component::Import(ax) => self.import(ax),
             Component::OntologyAnnotation(ax) => self.ontology_annotation(ax),
             Component::DeclareClass(ax) => self.declare_class(ax),
@@ -619,7 +618,7 @@ impl<A: ForIRI, V: Visit<A>> Walk<A, V> {
         }
     }
 
-    pub fn ontology_id(&mut self, e:&OntologyID<A>) {
+    pub fn ontology_id(&mut self, e:&OntologyIDComponent<A>) {
         self.0.visit_ontology_id(e);
         self.option_iri(&e.iri);
         self.option_iri(&e.viri);
