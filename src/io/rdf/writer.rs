@@ -399,10 +399,11 @@ impl<A: ForIRI, AA: ForIndex<A>> Render<A, ()> for &ComponentMappedOntology<A, A
         f: &mut PrettyRdfXmlFormatter<A, W>,
         ng: &mut NodeGenerator<A>,
     ) -> Result<(), HornedError> {
-        if let Some(iri) = &self.id().iri {
+        let ont_id = self.i().the_ontology_id_or_default();
+        if let Some(iri) = &ont_id.iri {
             triples!(f, iri, ng.nn(RDF::Type), ng.nn(OWL::Ontology));
 
-            if let Some(viri) = &self.id().viri {
+            if let Some(viri) = &ont_id.viri {
                 triples!(f, iri, ng.nn(OWL::VersionIRI), viri);
             }
 
@@ -430,6 +431,9 @@ impl<A: ForIRI> Render<A, ()> for AnnotatedComponent<A> {
         f: &mut PrettyRdfXmlFormatter<A, W>,
         ng: &mut NodeGenerator<A>,
     ) -> Result<(), HornedError> {
+        if self.axiom.is_id() {
+            return Ok(())
+        }
         let ax: Annotatable<A> = self.axiom.render(f, ng)?;
         if !self.ann.is_empty() {
             if let Annotatable::Main(t) = ax {
@@ -535,7 +539,7 @@ impl<A: ForIRI> Render<A, Annotatable<A>> for Component<A> {
     ) -> Result<Annotatable<A>, HornedError> {
         Ok(match self {
             // We render imports and ontology annotations earlier
-            Component::OntologyIDComponent(_) => todo!(),
+            Component::OntologyIDComponent(_) => panic!(),
             Component::Import(_ax) => vec![].into(),
             Component::OntologyAnnotation(_ax) => vec![].into(),
             Component::DeclareClass(ax) => ax.render(f, ng)?.into(),
@@ -1559,7 +1563,11 @@ mod test {
         let build = Build::new();
 
         let iri = build.iri("http://www.example.com/a".to_string());
-        ont.mut_id().iri = Some(iri);
+        ont.insert(OntologyIDComponent {
+            iri: Some(iri),
+            viri: None
+        });
+
         let temp_file = Temp::new_file().unwrap();
         let file = File::create(&temp_file).ok().unwrap();
         write(&mut BufWriter::new(file), &ont).ok().unwrap();
@@ -1567,7 +1575,7 @@ mod test {
         let file = File::open(&temp_file).ok().unwrap();
         let ont2 = read_ok(&mut BufReader::new(file));
 
-        assert_eq!(ont.id().iri, ont2.id().iri);
+        assert_eq!(ont.i().the_ontology_id(), ont2.i().the_ontology_id());
     }
 
     fn roundtrip(ont: &str) -> (SetOntology<RcStr>, SetOntology<RcStr>) {

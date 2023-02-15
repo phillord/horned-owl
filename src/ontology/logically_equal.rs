@@ -143,7 +143,6 @@ mod test {
         let mut o = TwoIndexedOntology::new(
             SetIndex::new_rc(),
             LogicallyEqualIndex::new(),
-            OntologyID::default(),
         );
 
         let ann = Annotation {
@@ -181,7 +180,6 @@ mod test {
             let mut o = TwoIndexedOntology::new(
                 SetIndex::new_rc(),
                 LogicallyEqualIndex::new(),
-                OntologyID::default(),
             );
             let ne: NamedEntity<_> = b.class("http://www.example.com").into();
             let ax: Component<_> = ne.into();
@@ -210,7 +208,6 @@ mod test {
             let mut o = TwoIndexedOntology::new(
                 SetIndex::new_rc(),
                 LogicallyEqualIndex::new(),
-                OntologyID::default(),
             );
             let ne: NamedEntity<_> = b.class("http://www.example.com").into();
             let ax: Component<_> = ne.into();

@@ -1,14 +1,16 @@
 
-* Support SWRL rules [2/7]
+* Support SWRL rules [3/8]
 
 This branch is design to support SWRL rules, using Solution 3 from the
 RFC branch.
 
  - [X] Rename Axiom to Component
  - [X] Rename AnnotatedAxiom to AnnotatedComponent
- - [ ] Move OntologyID to be AnnotatedComponent
+ - [X] Move OntologyID to be AnnotatedComponent
  - [ ] What about doc_iri
  - [ ] Add is_axiom, is_id methods, macro'd out
+ - [ ] How do we add "axiom_iter" convience methods? Give that
+       Ontology has no interface per se.
  - [ ] Add SwrlRule (or SwrlComponent or equivalent)
  - [ ] Implement SwrlRule model
  - [ ] Update parsers
@@ -19,6 +21,7 @@ RFC branch.
 
  - [X] Change enum Axiom, struct AnnotatedAxiom
  - [ ] check instances of `axiom` as variable
+
 
 * doc_iri
 
