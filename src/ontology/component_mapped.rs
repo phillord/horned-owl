@@ -157,10 +157,10 @@ impl<A: ForIRI, AA: ForIndex<A>> ComponentMappedIndex<A, AA> {
         self.axiom_for_kind(axk).map(|ann| &ann.axiom)
     }
 
-    pub fn the_ontology_id(&self) -> Option<OntologyIDComponent<A>> {
+    pub fn the_ontology_id(&self) -> Option<OntologyID<A>> {
         self.ontology_id().next().cloned()
     }
-    pub fn the_ontology_id_or_default(&self) -> OntologyIDComponent<A> {
+    pub fn the_ontology_id_or_default(&self) -> OntologyID<A> {
         self.the_ontology_id().unwrap_or_default()
     }
 }
@@ -171,7 +171,7 @@ impl<A: ForIRI, AA: ForIndex<A>> ComponentMappedIndex<A, AA> {
 // manipulations on the them. So we can't.
 //
 // "Whoever does not understand LISP is doomed to reinvent it" (badly)
-onimpl! {OntologyIDComponent, ontology_id}
+onimpl! {OntologyID, ontology_id}
 onimpl! {OntologyAnnotation, ontology_annotation}
 onimpl! {Import, import}
 onimpl! {DeclareClass, declare_class}
@@ -398,7 +398,7 @@ mod test {
     fn from_set() {
         let b = Build::new_rc();
         let mut so = SetOntology::new();
-        let oid = OntologyIDComponent {
+        let oid = OntologyID {
             iri: Some(b.iri("http://www.example.com/iri")),
             viri: Some(b.iri("http://www.example.com/viri")),
         };

@@ -627,7 +627,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
         }
 
         self.o.insert(
-            OntologyIDComponent {iri, viri}
+            OntologyID {iri, viri}
         );
     }
 
