@@ -315,15 +315,27 @@ pub struct RDFOntology<A: ForIRI, AA: ForIndex<A>>(
 
 pub type RcRDFOntology = RDFOntology<RcStr, RcAnnotatedComponent>;
 
+
+impl<A: ForIRI, AA: ForIndex<A>> RDFOntology<A, AA> {
+    pub fn i(&self) -> &SetIndex<A, AA> {
+        self.0.i()
+    }
+
+    pub fn j(&self) -> &DeclarationMappedIndex<A, AA> {
+        self.0.j()
+    }
+        
+
+    pub fn k(&self) -> &LogicallyEqualIndex<A, AA> {
+        self.0.k()
+    }
+
+    pub fn index(self) -> (SetIndex<A, AA>, DeclarationMappedIndex<A, AA>, LogicallyEqualIndex<A, AA>) {
+        self.0.index()
+    }
+}
+
 impl<A: ForIRI, AA: ForIndex<A>> Ontology<A> for RDFOntology<A, AA> {
-    fn id(&self) -> &OntologyID<A> {
-        self.0.id()
-    }
-
-    fn mut_id(&mut self) -> &mut OntologyID<A> {
-        self.0.mut_id()
-    }
-
     fn doc_iri(&self) -> &Option<IRI<A>> {
         self.0.doc_iri()
     }
@@ -346,13 +358,8 @@ impl<A: ForIRI, AA:ForIndex<A>> MutableOntology<A> for RDFOntology<A, AA> {
 }
 
 impl<A: ForIRI, AA: ForIndex<A>> From<RDFOntology<A, AA>> for SetOntology<A> {
-    fn from(so: RDFOntology<A, AA>) -> SetOntology<A> {
-        let id: OntologyID<_> = so.0.id().clone();
-        let (si, i1, i2) = so.0.index();
-        // Drop the rest of these so that we can consume the Rc
-        drop(i1);
-        drop(i2);
-        (id, si.into_iter()).into()
+    fn from(rdfo: RDFOntology<A, AA>) -> SetOntology<A> {
+        rdfo.index().0.into()
     }
 }
 
@@ -458,7 +465,6 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
                 SetIndex::new(),
                 DeclarationMappedIndex::new(),
                 LogicallyEqualIndex::new(),
-                d!(),
             )),
             b,
             config,
@@ -636,8 +642,9 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
             }
         }
 
-        self.o.0.mut_id().iri = iri;
-        self.o.0.mut_id().viri = viri;
+        self.o.insert(
+            OntologyIDComponent {iri, viri}
+        );
     }
 
     fn backward_compat(&mut self) {
@@ -1666,6 +1673,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
     }
 
     fn simple_annotations(&mut self, parse_all: bool) {
+        let ont_id = self.o.i().the_ontology_id_or_default();
         for triple in std::mem::take(&mut self.simple) {
             let firi = |s: &mut OntologyParser<_, _>, t, iri: &IRI<_>| {
                 let ann = s.ann_map.remove(t).unwrap_or_default();
@@ -1684,7 +1692,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
                 // an annotation. Some versions of the OWL API do not
                 // declare annotation properties for ontology annotations
                 [Term::Iri(iri), _, _]
-                    if self.o.id().iri.as_ref() == Some (iri) =>
+                    if ont_id.iri.as_ref() == Some (iri) =>
                 {
                     self.o.insert(
                         OntologyAnnotation(self.annotation(&triple.0))

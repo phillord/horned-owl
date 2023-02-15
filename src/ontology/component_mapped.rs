@@ -156,6 +156,13 @@ impl<A: ForIRI, AA: ForIndex<A>> ComponentMappedIndex<A, AA> {
     pub fn axiom(&self, axk: ComponentKind) -> impl Iterator<Item = &Component<A>> {
         self.axiom_for_kind(axk).map(|ann| &ann.axiom)
     }
+
+    pub fn the_ontology_id(&self) -> Option<OntologyIDComponent<A>> {
+        self.ontology_id().next().cloned()
+    }
+    pub fn the_ontology_id_or_default(&self) -> OntologyIDComponent<A> {
+        self.the_ontology_id().unwrap_or_default()
+    }
 }
 // In the ideal world, we would have generated these onimpl! calls as
 // part of the axiom macro. This should be possible, as their is a
@@ -164,8 +171,9 @@ impl<A: ForIRI, AA: ForIndex<A>> ComponentMappedIndex<A, AA> {
 // manipulations on the them. So we can't.
 //
 // "Whoever does not understand LISP is doomed to reinvent it" (badly)
-onimpl! {Import, import}
+onimpl! {OntologyIDComponent, ontology_id}
 onimpl! {OntologyAnnotation, ontology_annotation}
+onimpl! {Import, import}
 onimpl! {DeclareClass, declare_class}
 onimpl! {DeclareObjectProperty, declare_object_property}
 onimpl! {DeclareAnnotationProperty, declare_annotation_property}
@@ -285,14 +293,6 @@ pub type RcComponentMappedOntology = ComponentMappedOntology<RcStr, Rc<Annotated
 pub type ArcComponentMappedOntology = ComponentMappedOntology<ArcStr, Arc<AnnotatedComponent<ArcStr>>>;
 
 impl<A: ForIRI, AA: ForIndex<A>> Ontology<A> for ComponentMappedOntology<A, AA> {
-    fn id(&self) -> &OntologyID<A> {
-        self.0.id()
-    }
-
-    fn mut_id(&mut self) -> &mut OntologyID<A> {
-        self.0.mut_id()
-    }
-
     fn doc_iri(&self) -> &Option<IRI<A>> {
         self.0.doc_iri()
     }
@@ -353,9 +353,8 @@ impl<A: ForIRI, AA: ForIndex<A>> IntoIterator for ComponentMappedOntology<A, AA>
 }
 
 impl<A: ForIRI, AA: ForIndex<A>> From<SetOntology<A>> for ComponentMappedOntology<A, AA> {
-    fn from(mut so: SetOntology<A>) -> ComponentMappedOntology<A, AA> {
+    fn from(so: SetOntology<A>) -> ComponentMappedOntology<A, AA> {
         let mut amo = ComponentMappedOntology::new();
-        std::mem::swap(amo.mut_id(), so.mut_id());
         for ax in so {
             amo.insert(ax);
         }
@@ -364,9 +363,8 @@ impl<A: ForIRI, AA: ForIndex<A>> From<SetOntology<A>> for ComponentMappedOntolog
 }
 
 impl<A: ForIRI, AA: ForIndex<A>> From<ComponentMappedOntology<A, AA>> for SetOntology<A> {
-    fn from(mut amo: ComponentMappedOntology<A, AA>) -> SetOntology<A> {
+    fn from(amo: ComponentMappedOntology<A, AA>) -> SetOntology<A> {
         let mut so = SetOntology::new();
-        std::mem::swap(so.mut_id(), amo.mut_id());
 
         for ax in amo {
             so.insert(ax);
@@ -400,19 +398,19 @@ mod test {
     fn from_set() {
         let b = Build::new_rc();
         let mut so = SetOntology::new();
-        let mut oid = OntologyID {
+        let oid = OntologyIDComponent {
             iri: Some(b.iri("http://www.example.com/iri")),
             viri: Some(b.iri("http://www.example.com/viri")),
         };
 
-        std::mem::swap(so.mut_id(), &mut oid);
-        assert_eq!(so.id().iri, Some(b.iri("http://www.example.com/iri")));
-        assert_eq!(so.id().viri, Some(b.iri("http://www.example.com/viri")));
+        so.insert(oid);
+        assert_eq!(so.i().the_ontology_id_or_default().viri, Some(b.iri("http://www.example.com/viri")));
 
         let amo: RcComponentMappedOntology = so.into();
 
-        assert_eq!(amo.id().iri, Some(b.iri("http://www.example.com/iri")));
-        assert_eq!(amo.id().viri, Some(b.iri("http://www.example.com/viri")))
+        let amo_id = amo.i().the_ontology_id_or_default();
+        assert_eq!(amo_id.iri, Some(b.iri("http://www.example.com/iri")));
+        assert_eq!(amo_id.viri, Some(b.iri("http://www.example.com/viri")))
     }
 
     #[test]

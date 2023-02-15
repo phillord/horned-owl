@@ -97,7 +97,9 @@ where
 /// Fetch the name of the tag that is used to render `ComponentKind`
 fn tag_for_kind(axk: ComponentKind) -> &'static str {
     match axk {
-        ComponentKind::OntologyIDComponent => todo!(),
+        ComponentKind::OntologyIDComponent =>{
+            panic!("This should be called")
+        },
         ComponentKind::Import => "Import",
         ComponentKind::OntologyAnnotation => "Annotation",
         ComponentKind::DeclareClass => "Declaration",
@@ -235,14 +237,16 @@ where
 
     // let mut elem = BytesStart::owned_name("Ontology");
     let mut elem = BytesStart::new("Ontology");
-    elem.push_attribute((b"xmlns" as &[u8], OWL.as_iri_bytes()));
-    iri_maybe(&mut elem, "xml:base", &o.id().iri);
+    elem.push_attribute((b"xmlns" as &[u8], OWL.iri_b()));
+
+    let id = o.i().the_ontology_id_or_default();
+    iri_maybe(&mut elem, "xml:base", &id.iri);
     // Render XML Namespaces.
     for pre in m.mappings() {
         elem.push_attribute((format!("xmlns:{}", pre.0).as_bytes(),pre.1.as_bytes()));
     }
-    iri_maybe(&mut elem, "ontologyIRI", &o.id().iri);
-    iri_maybe(&mut elem, "versionIRI", &o.id().viri);
+    iri_maybe(&mut elem, "ontologyIRI", &id.iri);
+    iri_maybe(&mut elem, "versionIRI", &id.viri);
 
     let elem_end = elem.to_end();
     let ev_end = Event::End(elem_end).into_owned();
@@ -373,11 +377,13 @@ content0! {DeclareDatatype}
 render! {
     AnnotatedComponent, self, w, m,
     {
-        (
-            (&self.ann),
-            (&self.axiom)
-        ).within(w, m,
-                 tag_for_kind(self.kind()))?;
+        if self.is_axiom() {
+            (
+                (&self.ann),
+                (&self.axiom)
+            ).within(w, m,
+                     tag_for_kind(self.kind()))?;
+        }
 
         Ok(())
     }
@@ -890,7 +896,6 @@ mod test {
 
     use std::collections::HashMap;
 
-    use crate::model::Ontology;
     use crate::ontology::component_mapped::RcComponentMappedOntology;
     use std::fs::File;
     use std::io::BufRead;
@@ -910,7 +915,7 @@ mod test {
         let build = Build::new();
 
         let iri = build.iri("http://www.example.com/a".to_string());
-        ont.mut_id().iri = Some(iri);
+        ont.insert(OntologyIDComponent{iri:Some(iri.clone()), viri:None});
         let temp_file = Temp::new_file().unwrap();
         let file = File::create(&temp_file).ok().unwrap();
         write(&mut BufWriter::new(file), &ont, None).ok().unwrap();
@@ -918,7 +923,14 @@ mod test {
         let file = File::open(&temp_file).ok().unwrap();
         let (ont2, _) = read_ok(&mut BufReader::new(file));
 
-        assert_eq!(ont.id().iri, ont2.id().iri);
+        // Check ID is present and not default
+        assert!(
+            ont.i().the_ontology_id().is_some()
+        );
+
+        // Check IDs are identical
+        assert_eq!(ont.i().the_ontology_id_or_default().iri,
+                   ont2.i().the_ontology_id_or_default().iri);
     }
 
     fn roundtrip_1(ont: &str) -> (RcComponentMappedOntology, PrefixMapping, Temp) {
@@ -994,7 +1006,8 @@ mod test {
         let (ont_orig, _prefix_orig, ont_round, _prefix_round) =
             roundtrip(include_str!("../../ont/owl-xml/ont.owx"));
 
-        assert_eq!(ont_orig.id().iri, ont_round.id().iri);
+        assert_eq!(ont_orig.i().the_ontology_id(),
+                   ont_round.i().the_ontology_id());
     }
 
     #[test]
