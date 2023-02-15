@@ -1,4 +1,4 @@
-//! Standard Vocabularies for OWL
+//! Core RDF vocabularies used in the OWL2 RDF format.
 use self::Namespace::*;
 use enum_meta::*;
 
@@ -13,7 +13,8 @@ use crate::model::IRI;
 
 use std::borrow::Borrow;
 
-
+// TODO: refactor to be included in model, or refactor into new `iri` module 
+// together with IRI and ForIRI.
 pub trait WithIRI<'a>: Meta<&'a IRIString> {
     /// Return a string representation of the IRI associated with this
     /// entity.
@@ -43,6 +44,7 @@ pub trait WithIRI<'a>: Meta<&'a IRIString> {
     }
 }
 
+// TODO: exchange with IRI<A: ForIRI>.
 pub struct IRIString(String);
 
 impl<'a, T> WithIRI<'a> for T where T: Meta<&'a IRIString> {}
@@ -58,11 +60,17 @@ where
     to_meta(&format!("{}{}", i.iri_s(), s))
 }
 
+/// [Namespaces](https://www.w3.org/TR/2004/REC-owl-guide-20040210/#Namespaces)
+/// that are typically used within an OWL document.
 #[derive(Debug, Eq, PartialEq)]
 pub enum Namespace {
+    /// Ontology Web Language
     OWL,
+    /// Resource Description Framework
     RDF,
+    /// RDF Schema
     RDFS,
+    /// XML Schema datatype
     XSD,
 }
 
@@ -293,6 +301,21 @@ fn meta_testing() {
     );
 }
 
+#[test]
+fn test_to_built_in_entity() {
+    let builder = Build::new_rc();
+    let iri_top_dp = builder.iri(OWL::TopDataProperty.iri_str());
+    let iri_top_op = builder.iri(OWL::TopObjectProperty.iri_str());
+    let iri_thing = builder.iri(OWL::Thing.iri_str());
+    let iri_nothing = builder.iri(OWL::Nothing.iri_str());
+    assert_eq!(to_built_in_entity(&iri_top_dp), Some(NamedEntityKind::DataProperty));
+    assert_eq!(to_built_in_entity(&iri_top_op), Some(NamedEntityKind::ObjectProperty));
+    assert_eq!(to_built_in_entity(&iri_thing), Some(NamedEntityKind::Class));
+    assert_eq!(to_built_in_entity(&iri_nothing), Some(NamedEntityKind::Class));
+    todo!("Correct to_built_in_entity method to correctly identify owl:Thing and owl:Nothing as Class entities.");
+}
+
+
 pub fn entity_for_iri<A: ForIRI, S: Borrow<str>>(
     type_iri: S,
     entity_iri: S,
@@ -344,6 +367,25 @@ pub fn test_entity_for_iri() {
     .is_err());
 }
 
+#[test]
+pub fn test_namespace_in_entity_for_iri() {
+    let b = Build::new_rc();
+
+    assert!(entity_for_iri(
+        "http://www.w3.org/2002/07/low#Class",
+        "http://www.example.com",
+        &b
+    )
+    .is_err());
+    assert!(entity_for_iri(
+        "abcdefghijklmnopqrstuvwxyz123#Class",
+        "http://www.example.com",
+        &b
+    )
+    .is_err());
+    todo!("Correct entity_for_iri method to incorporate proper namespace checking and make this test pass.");
+}
+
 pub enum OWL2Datatype {
     RDFSLiteral,
 }
@@ -378,20 +420,18 @@ lazy_meta! {
     INCOMPATIBLEWITH, extend(OWL, "incompatibleWith");
 }
 
+#[inline]
 pub fn is_annotation_builtin<A:AsRef<str>>(iri: A) -> bool {
-    for meta in AnnotationBuiltIn::all() {
-        if meta.iri_str() == iri.as_ref() {
-            return true;
-        }
-    }
-    false
+    AnnotationBuiltIn::all()
+        .iter()
+        .any(|meta| meta.iri_str() == iri.as_ref())
 }
 
 #[test]
 fn annotation_builtin() {
-    assert!(is_annotation_builtin(
-        &"http://www.w3.org/2002/07/owl#deprecated".to_string()
-    ));
+    // Method can accept `str`ings...
+    assert!(is_annotation_builtin("http://www.w3.org/2002/07/owl#deprecated"));
+    // ...and `String`s.
     assert!(is_annotation_builtin(
         &"http://www.w3.org/2000/01/rdf-schema#comment".to_string()
     ));
@@ -451,6 +491,14 @@ pub fn is_xsd_datatype<A:AsRef<str>>(iri:A) -> bool {
 lazy_meta! {
     XSD, IRIString, METAXSD;
     NonNegativeInteger, extend(XSD, "nonNegativeInteger")
+}
+
+#[test]
+fn test_is_xsd_datatype() {
+    assert!(is_xsd_datatype("http://www.w3.org/2001/XMLSchema#nonNegativeInteger"));
+    assert!(!is_xsd_datatype("http://www.w3.org/2001/XMLSchemaaa#nonNegativeInteger"));
+    assert!(!is_xsd_datatype("http://www.w3.org/2001/XMLSchema.pdf"));
+    todo!("Correct is_xsd_datatype method to incorporate IRI validation and make this test pass.");
 }
 
 pub enum Vocab {
