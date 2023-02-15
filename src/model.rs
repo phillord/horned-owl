@@ -718,14 +718,14 @@ pub trait HigherKinded {
 
     fn is_axiom(&self) -> bool {
         match self.kind() {
-            ComponentKind::OntologyIDComponent => false,
+            ComponentKind::OntologyID => false,
             _ => true,
         }
     }
 
     fn is_id(&self) -> bool {
         match self.kind() {
-            ComponentKind::OntologyIDComponent => true,
+            ComponentKind::OntologyID => true,
             _ => false,
         }
     }
@@ -1349,7 +1349,7 @@ components! {
 }
 
 // TODO
-impl<A:ForIRI> Default for OntologyIDComponent<A> {
+impl<A:ForIRI> Default for OntologyID<A> {
     fn default() -> Self {
         Self{iri: None, viri: None}
     }

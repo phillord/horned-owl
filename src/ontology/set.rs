@@ -197,17 +197,16 @@ impl<A: ForIRI, AA: ForIndex<A>> SetIndex<A, AA> {
         self.0.contains(cmp)
     }
 
-
     pub fn the_ontology_id(&self) -> Option<OntologyIDComponent<A>> {
         self.0.iter().filter_map(|item| {
             match &item.borrow().axiom {
-                Component::OntologyIDComponent(id) => Some(id),
+                Component::OntologyID(id) => Some(id),
                 _ => None,
             }
         }).next().cloned()
     }
 
-    pub fn the_ontology_id_or_default(&self) -> OntologyIDComponent<A> {
+    pub fn the_ontology_id_or_default(&self) -> OntologyID<A> {
         self.the_ontology_id().unwrap_or_default()
     }
 
@@ -254,7 +253,7 @@ mod test {
     fn test_ontology_id() {
         let mut so = SetOntology::new_rc();
         let b = Build::new_rc();
-        let oid = OntologyIDComponent {
+        let oid = OntologyID {
             iri: Some(b.iri("http://www.example.com/iri")),
             viri: Some(b.iri("http://www.example.com/viri")),
         };
@@ -271,7 +270,7 @@ mod test {
     fn test_ontology_clone() {
         let mut so = SetOntology::new_rc();
         let b = Build::new_rc();
-        let oid = OntologyIDComponent {
+        let oid = OntologyID {
             iri: Some(b.iri("http://www.example.com/iri")),
             viri: Some(b.iri("http://www.example.com/viri")),
         };
