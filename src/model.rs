@@ -702,13 +702,15 @@ pub trait Kinded {
 
     fn is_axiom(&self) -> bool {
         match self.kind() {
-            _ => true
+            ComponentKind::OntologyIDComponent => false,
+            _ => true,
         }
     }
 
     fn is_id(&self) -> bool {
         match self.kind() {
-            _ => false
+            ComponentKind::OntologyIDComponent => true,
+            _ => false,
         }
     }
 }
@@ -1298,6 +1300,14 @@ components! {
     }
 }
 
+// TODO
+impl<A:ForIRI> Default for OntologyIDComponent<A> {
+    fn default() -> Self {
+        Self{iri: None, viri: None}
+    }
+}
+
+
 // Non-axiom data structures associated with OWL
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum Literal<A> {
@@ -1664,30 +1674,8 @@ impl<A: ForIRI> From<Class<A>> for Box<ClassExpression<A>> {
     }
 }
 
-/// An ontology identifier
-///
-/// An ontology is identified by an IRI which is expected to remain
-/// stable over the lifetime of the ontology, and a version IRI which
-/// is expected to change between versions.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct OntologyID<A> {
-    pub iri: Option<IRI<A>>,
-    pub viri: Option<IRI<A>>,
-}
-
-impl<A> Default for OntologyID<A> {
-    fn default() -> OntologyID<A> {
-        OntologyID {
-            iri: None,
-            viri: None,
-        }
-    }
-}
-
 /// Access or change the `OntologyID` of an `Ontology`
 pub trait Ontology<A> {
-    fn id(&self) -> &OntologyID<A>;
-    fn mut_id(&mut self) -> &mut OntologyID<A>;
     fn doc_iri(&self) -> &Option<IRI<A>>;
     fn mut_doc_iri(&mut self) -> &mut Option<IRI<A>>;
 }

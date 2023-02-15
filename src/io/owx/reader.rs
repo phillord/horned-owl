@@ -66,8 +66,12 @@ pub fn read_with_build<A: ForIRI, R: BufRead>(
                             r.mapping.set_default(&s);
                         }
 
-                        ont.mut_id().iri = get_iri_value_for(&mut r, e, b"ontologyIRI")?;
-                        ont.mut_id().viri = get_iri_value_for(&mut r, e, b"versionIRI")?;
+                        ont.insert(
+                            OntologyIDComponent{
+                                iri: get_iri_value_for(&mut r, e, b"ontologyIRI")?,
+                                viri: get_iri_value_for(&mut r, e, b"versionIRI")?,
+                            }
+                        );
                     }
                     b"Prefix" => {
                         let iri = get_attr_value_str(&mut r.reader, e, b"IRI")?;
@@ -1240,7 +1244,7 @@ pub mod test {
         let ont_s = include_str!("../../ont/owl-xml/ont.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
         assert_eq!(
-            ont.id().iri.as_ref().unwrap().as_ref(),
+            ont.i().the_ontology_id_or_default().iri.as_ref().unwrap().as_ref(),
             "http://www.example.com/iri"
         );
     }
@@ -1251,7 +1255,7 @@ pub mod test {
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
         assert_eq!(
-            ont.id().iri.as_ref().unwrap().as_ref(),
+            ont.i().the_ontology_id_or_default().iri.as_ref().unwrap().as_ref(),
             "http://example.com/iri"
         );
     }

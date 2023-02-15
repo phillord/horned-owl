@@ -107,7 +107,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> ClosureOntologyParser<'a, A, AA> {
 
         ::std::mem::swap(o.mut_doc_iri(), &mut Some(new_doc_iri.clone()));
 
-        if let Some(declared_iri) = o.id().iri.clone() {
+        if let Some(declared_iri) = o.i().the_ontology_id_or_default().iri.clone() {
             v.push(declared_iri.clone());
 
             self.import_map

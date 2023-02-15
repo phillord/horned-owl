@@ -18,7 +18,7 @@
 //! and `ThreeIndexedOntology`, each of which operate something like a
 //! named tuple, allowing differently typed `OntologyIndex` objects to
 //! be added.
-use crate::model::{AnnotatedComponent, ArcStr, ForIRI, MutableOntology, Ontology, OntologyID, IRI, RcStr};
+use crate::model::{AnnotatedComponent, ArcStr, ForIRI, MutableOntology, Ontology, IRI, RcStr};
 use std::borrow::Borrow;
 use std::fmt::Debug;
 use std::hash::Hash;
@@ -111,14 +111,13 @@ impl<A: ForIRI, AA: ForIndex<A>> OntologyIndex<A, AA> for NullIndex {
 /// A `OneIndexedOntology` operates as a simple adaptor betweeen any
 /// `OntologyIndex` and an `Ontology`.
 #[derive(Default, Debug, Eq, PartialEq)]
-pub struct OneIndexedOntology<A, AA, I>(I, OntologyID<A>, Option<IRI<A>>, PhantomData<AA>);
+pub struct OneIndexedOntology<A, AA, I>(I, Option<IRI<A>>, PhantomData<AA>);
 
 impl<A: ForIRI, AA: ForIndex<A>, I: Clone> Clone for OneIndexedOntology<A, AA, I> {
     fn clone(&self) -> Self {
         OneIndexedOntology(
             self.0.clone(),
             self.1.clone(),
-            self.2.clone(),
             Default::default(),
         )
     }
@@ -128,7 +127,6 @@ impl<A: ForIRI, AA: ForIndex<A>, I: OntologyIndex<A, AA>> OneIndexedOntology<A, 
     pub fn new(i: I) -> Self {
         OneIndexedOntology(
             i,
-            Default::default(),
             Default::default(),
             Default::default(),
         )
@@ -164,20 +162,12 @@ where
 impl<A: ForIRI, AA: ForIndex<A>, I: OntologyIndex<A, AA>> Ontology<A>
     for OneIndexedOntology<A, AA, I>
 {
-    fn id(&self) -> &OntologyID<A> {
+    fn doc_iri(&self) -> &Option<IRI<A>> {
         &self.1
     }
 
-    fn mut_id(&mut self) -> &mut OntologyID<A> {
-        &mut self.1
-    }
-
-    fn doc_iri(&self) -> &Option<IRI<A>> {
-        &self.2
-    }
-
     fn mut_doc_iri(&mut self) -> &mut Option<IRI<A>> {
-        &mut self.2
+        &mut self.1
     }
 }
 
@@ -203,13 +193,13 @@ pub struct TwoIndexedOntology<
     AA: ForIndex<A>,
     I: OntologyIndex<A, AA>,
     J: OntologyIndex<A, AA>,
->(I, J, OntologyID<A>, Option<IRI<A>>, PhantomData<AA>);
+>(I, J, Option<IRI<A>>, PhantomData<AA>);
 
 impl<A: ForIRI, AA: ForIndex<A>, I: OntologyIndex<A, AA>, J: OntologyIndex<A, AA>>
     TwoIndexedOntology<A, AA, I, J>
 {
-    pub fn new(i: I, j: J, id: OntologyID<A>) -> Self {
-        TwoIndexedOntology(i, j, id, Default::default(), Default::default())
+    pub fn new(i: I, j: J) -> Self {
+        TwoIndexedOntology(i, j, Default::default(), Default::default())
     }
 
     pub fn i(&self) -> &I {
@@ -228,20 +218,12 @@ impl<A: ForIRI, AA: ForIndex<A>, I: OntologyIndex<A, AA>, J: OntologyIndex<A, AA
 impl<A: ForIRI, AA: ForIndex<A>, I: OntologyIndex<A, AA>, J: OntologyIndex<A, AA>> Ontology<A>
     for TwoIndexedOntology<A, AA, I, J>
 {
-    fn id(&self) -> &OntologyID<A> {
+    fn doc_iri(&self) -> &Option<IRI<A>> {
         &self.2
     }
 
-    fn mut_id(&mut self) -> &mut OntologyID<A> {
-        &mut self.2
-    }
-
-    fn doc_iri(&self) -> &Option<IRI<A>> {
-        &self.3
-    }
-
     fn mut_doc_iri(&mut self) -> &mut Option<IRI<A>> {
-        &mut self.3
+        &mut self.2
     }
 }
 
@@ -292,7 +274,7 @@ impl<
         K: OntologyIndex<A, AA>,
     > ThreeIndexedOntology<A, AA, I, J, K>
 {
-    pub fn new(i: I, j: J, k: K, id: OntologyID<A>) -> Self {
+    pub fn new(i: I, j: J, k: K) -> Self {
         ThreeIndexedOntology(TwoIndexedOntology(
             i,
             TwoIndexedOntology(
@@ -300,9 +282,7 @@ impl<
                 k,
                 Default::default(),
                 Default::default(),
-                Default::default(),
             ),
-            id,
             Default::default(),
             Default::default(),
         ))
@@ -334,14 +314,6 @@ impl<
         K: OntologyIndex<A, AA>,
     > Ontology<A> for ThreeIndexedOntology<A, AA, I, J, K>
 {
-    fn id(&self) -> &OntologyID<A> {
-        self.0.id()
-    }
-
-    fn mut_id(&mut self) -> &mut OntologyID<A> {
-        self.0.mut_id()
-    }
-
     fn doc_iri(&self) -> &Option<IRI<A>> {
         self.0.doc_iri()
     }
@@ -409,11 +381,10 @@ impl<
         L: OntologyIndex<A, AA>,
     > FourIndexedOntology<A, AA, I, J, K, L>
 {
-    pub fn new(i: I, j: J, k: K, l: L, id: OntologyID<A>) -> Self {
+    pub fn new(i: I, j: J, k: K, l: L) -> Self {
         FourIndexedOntology(TwoIndexedOntology(
             i,
-            ThreeIndexedOntology::new(j, k, l, Default::default()),
-            id,
+            ThreeIndexedOntology::new(j, k, l),
             Default::default(),
             Default::default(),
         ))
@@ -450,14 +421,6 @@ impl<
         L: OntologyIndex<A, AA>,
     > Ontology<A> for FourIndexedOntology<A, AA, I, J, K, L>
 {
-    fn id(&self) -> &OntologyID<A> {
-        self.0.id()
-    }
-
-    fn mut_id(&mut self) -> &mut OntologyID<A> {
-        self.0.mut_id()
-    }
-
     fn doc_iri(&self) -> &Option<IRI<A>> {
         self.0.doc_iri()
     }
@@ -548,18 +511,18 @@ mod test {
 
     #[test]
     fn two_cons() {
-        let _o = TwoIndexedOntology::new(SetIndex::new_rc(), SetIndex::new(), Default::default());
+        let _o = TwoIndexedOntology::new(SetIndex::new_rc(), SetIndex::new());
         assert!(true);
 
         let _o =
-            TwoIndexedOntology::new(SetIndex::new_rc(), NullIndex::default(), Default::default());
+            TwoIndexedOntology::new(SetIndex::new_rc(), NullIndex::default());
         assert!(true);
     }
 
     #[test]
     fn two_insert() {
         let mut o =
-            TwoIndexedOntology::new(SetIndex::new_rc(), SetIndex::new(), Default::default());
+            TwoIndexedOntology::new(SetIndex::new_rc(), SetIndex::new());
         let e = stuff();
         o.insert(e.0);
         o.insert(e.1);
@@ -573,7 +536,7 @@ mod test {
     #[test]
     fn two_remove() {
         let mut o =
-            TwoIndexedOntology::new(SetIndex::new_rc(), SetIndex::new(), Default::default());
+            TwoIndexedOntology::new(SetIndex::new_rc(), SetIndex::new());
 
         let e = stuff();
         o.insert(e.0.clone());
@@ -598,7 +561,6 @@ mod test {
             SetIndex::new_rc(),
             SetIndex::new(),
             SetIndex::new(),
-            Default::default(),
         );
 
         let e = stuff();
@@ -627,7 +589,6 @@ mod test {
             SetIndex::new(),
             SetIndex::new(),
             SetIndex::new(),
-            Default::default(),
         );
 
         let e = stuff();

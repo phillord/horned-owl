@@ -232,14 +232,6 @@ pub type RcIRIMappedOntology = IRIMappedOntology<RcStr, Rc<AnnotatedComponent<Rc
 pub type ArcIRIMappedOntology = IRIMappedOntology<ArcStr, Arc<AnnotatedComponent<ArcStr>>>;
 
 impl<A: ForIRI, AA: ForIndex<A>> Ontology<A> for IRIMappedOntology<A, AA> {
-    fn id(&self) -> &OntologyID<A> {
-        self.0.id()
-    }
-
-    fn mut_id(&mut self) -> &mut OntologyID<A> {
-        self.0.mut_id()
-    }
-
     fn doc_iri(&self) -> &Option<IRI<A>> {
         self.0.doc_iri()
     }
@@ -269,7 +261,6 @@ impl<A: ForIRI, AA: ForIndex<A>> IRIMappedOntology<A, AA> {
             IRIMappedIndex::new(),
             ComponentMappedIndex::new(),
             DeclarationMappedIndex::new(),
-            Default::default(),
         ))
     }
 
@@ -315,9 +306,8 @@ impl<A: ForIRI, AA: ForIndex<A>> IntoIterator for IRIMappedOntology<A, AA> {
 }
 
 impl<A: ForIRI, AA: ForIndex<A>> From<SetOntology<A>> for IRIMappedOntology<A, AA> {
-    fn from(mut so: SetOntology<A>) -> IRIMappedOntology<A, AA> {
+    fn from(so: SetOntology<A>) -> IRIMappedOntology<A, AA> {
         let mut imo = IRIMappedOntology::default();
-        std::mem::swap(imo.mut_id(), so.mut_id());
         for ax in so {
             imo.insert(ax);
         }
@@ -326,8 +316,8 @@ impl<A: ForIRI, AA: ForIndex<A>> From<SetOntology<A>> for IRIMappedOntology<A, A
 }
 
 impl<A: ForIRI, AA: ForIndex<A>> From<IRIMappedOntology<A, AA>> for SetOntology<A> {
-    fn from(mut imo: IRIMappedOntology<A, AA>) -> SetOntology<A> {
-        SetOntology::from_index(imo.mut_id().clone(), imo.0.index().0)
+    fn from(imo: IRIMappedOntology<A, AA>) -> SetOntology<A> {
+        imo.0.index().0.into()
     }
 }
 

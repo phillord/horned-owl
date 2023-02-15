@@ -47,8 +47,12 @@ impl<A: ForIRI> SetOntology<A> {
         SetOntology(OneIndexedOntology::new(SetIndex::new()))
     }
 
-    pub fn from_index<AA: ForIndex<A>>(oid: OntologyID<A>, si: SetIndex<A, AA>) -> SetOntology<A> {
-        (oid, si.into_iter().map(|s| s.unwrap())).into()
+    pub fn from_index(index:SetIndex<A, AnnotatedComponent<A>>) -> Self {
+        SetOntology(OneIndexedOntology::new(index))
+    }
+
+    pub fn i(&self) -> &SetIndex<A, AnnotatedComponent<A>> {
+        self.0.i()
     }
 
     /// Gets an iterator that visits the annotated axioms of the ontology.
@@ -58,14 +62,6 @@ impl<A: ForIRI> SetOntology<A> {
 }
 
 impl<A: ForIRI> Ontology<A> for SetOntology<A> {
-    fn id(&self) -> &OntologyID<A> {
-        self.0.id()
-    }
-
-    fn mut_id(&mut self) -> &mut OntologyID<A> {
-        self.0.mut_id()
-    }
-
     fn doc_iri(&self) -> &Option<IRI<A>> {
         self.0.doc_iri()
     }
@@ -74,6 +70,25 @@ impl<A: ForIRI> Ontology<A> for SetOntology<A> {
         self.0.mut_doc_iri()
     }
 }
+
+impl<A:ForIRI, AA:ForIndex<A>> From<SetIndex<A, AA>> for SetOntology<A> {
+    fn from(index: SetIndex<A, AA>) -> Self {
+        // Unpack ForIndex'd entities by unwrapping and turn them into
+        // direct references for SetOntology.
+        let mut so = SetOntology::new();
+        for c in index.into_iter() {
+            so.insert(c.unwrap());
+        }
+        so
+    }
+}
+
+/*
+impl<A:ForIRI> From<SetIndex<A, AnnotatedComponent<A>>> for SetOntology<A> {
+    fn from(value: SetIndex<A, AnnotatedComponent<A>>) -> Self {
+        SetOntology(OneIndexedOntology::new(value))
+    }
+}*/
 
 /// An Interator for `SetOntology`
 pub struct SetIter<'a, A: ForIRI>(std::collections::hash_set::Iter<'a, AnnotatedComponent<A>>);
@@ -150,28 +165,19 @@ impl<A: ForIRI> FromIterator<AnnotatedComponent<A>> for SetOntology<A> {
     }
 }
 
-impl<A: ForIRI, I> From<(OntologyID<A>, I)> for SetOntology<A>
+impl<A: ForIRI, I> From<I> for SetOntology<A>
 where
     I: Iterator<Item = AnnotatedComponent<A>>,
 {
-    fn from((mut oid, i): (OntologyID<A>, I)) -> SetOntology<A> {
-        let mut so: SetOntology<_> = i.collect();
-        std::mem::swap(so.mut_id(), &mut oid);
+    fn from(i: I) -> SetOntology<A> {
+        let mut so = SetOntology::new();
+        for c in i {
+            so.insert(c);
+        }
         so
     }
 }
 
-/*
-impl<A: ForIRI, O, I> From<(O, I)> for SetOntology<A>
-where
-    I: Iterator<Item = AnnotatedComponent<A>>,
-    O: Ontology<A>,
-{
-    fn from((mut o, i): (O, I)) -> SetOntology<A> {
-        (o.mut_id().clone(), i).into()
-    }
-}
-*/
 
 /// An `OntologyIndex` implemented over an in-memory HashSet. When
 /// combined with an `IndexedOntology` this should be nearly as
@@ -197,6 +203,20 @@ impl<A: ForIRI, AA: ForIndex<A>> SetIndex<A, AA> {
     pub fn contains(&self, ax: &AnnotatedComponent<A>) -> bool {
         self.0.contains(ax)
     }
+
+    pub fn the_ontology_id(&self) -> Option<OntologyIDComponent<A>> {
+        self.0.iter().filter_map(|item| {
+            match &item.borrow().axiom {
+                Component::OntologyIDComponent(id) => Some(id),
+                _ => None,
+            }
+        }).next().cloned()
+    }
+
+    pub fn the_ontology_id_or_default(&self) -> OntologyIDComponent<A> {
+        self.the_ontology_id().unwrap_or_default()
+    }
+
 }
 
 impl SetIndex<RcStr, Rc<AnnotatedComponent<RcStr>>> {
@@ -240,32 +260,32 @@ mod test {
     fn test_ontology_id() {
         let mut so = SetOntology::new_rc();
         let b = Build::new_rc();
-        let mut oid = OntologyID {
+        let oid = OntologyIDComponent {
             iri: Some(b.iri("http://www.example.com/iri")),
             viri: Some(b.iri("http://www.example.com/viri")),
         };
 
-        std::mem::swap(so.mut_id(), &mut oid);
+        so.insert(oid.clone());
 
-        assert_eq!(so.id().iri, Some(b.iri("http://www.example.com/iri")));
-        assert_eq!(so.id().viri, Some(b.iri("http://www.example.com/viri")))
+        let so_id = so.i().the_ontology_id_or_default();
+        assert_eq!(so_id.iri, Some(b.iri("http://www.example.com/iri")));
+        assert_eq!(so_id.viri, Some(b.iri("http://www.example.com/viri")));
     }
+
 
     #[test]
     fn test_ontology_clone() {
         let mut so = SetOntology::new_rc();
         let b = Build::new_rc();
-        let mut oid = OntologyID {
+        let oid = OntologyIDComponent {
             iri: Some(b.iri("http://www.example.com/iri")),
             viri: Some(b.iri("http://www.example.com/viri")),
         };
 
-        std::mem::swap(so.mut_id(), &mut oid);
+        so.insert(oid.clone());
 
         let cso = so.clone();
-
-        assert_eq!(cso.id().iri, Some(b.iri("http://www.example.com/iri")));
-        assert_eq!(cso.id().viri, Some(b.iri("http://www.example.com/viri")))
+        assert_eq!(cso.i().the_ontology_id_or_default(), oid);
     }
 
     #[test]
@@ -398,7 +418,8 @@ mod test {
         o.insert(decl2.clone());
         o.insert(decl3.clone());
 
-        let newo: SetOntology<_> = (o.mut_id().clone(), o.into_iter()).into();
+        let newo: SetOntology<_> = o.into_iter().into();
+
 
         // Iteration is set based so undefined in order. So, sort first.
         let mut v: Vec<_> = (&newo).into_iter().collect();
