@@ -97,7 +97,7 @@ where
 /// Fetch the name of the tag that is used to render `ComponentKind`
 fn tag_for_kind(axk: ComponentKind) -> &'static str {
     match axk {
-        ComponentKind::OntologyIDComponent =>{
+        ComponentKind::OntologyID =>{
             panic!("This should be called")
         },
         ComponentKind::Import => "Import",
@@ -559,7 +559,7 @@ render! {
     Component, self, w, m,
     {
         match self {
-            Component::OntologyIDComponent(_) => todo!(),
+            Component::OntologyID(_) => todo!(),
             Component::Import(ax) => ax.render(w, m)?,
             Component::OntologyAnnotation(ax) => ax.render(w, m)?,
             Component::DeclareClass(ax) => ax.render(w, m)?,
@@ -915,7 +915,7 @@ mod test {
         let build = Build::new();
 
         let iri = build.iri("http://www.example.com/a".to_string());
-        ont.insert(OntologyIDComponent{iri:Some(iri.clone()), viri:None});
+        ont.insert(OntologyID{iri:Some(iri.clone()), viri:None});
         let temp_file = Temp::new_file().unwrap();
         let file = File::create(&temp_file).ok().unwrap();
         write(&mut BufWriter::new(file), &ont, None).ok().unwrap();

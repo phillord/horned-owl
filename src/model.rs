@@ -702,14 +702,14 @@ pub trait Kinded {
 
     fn is_axiom(&self) -> bool {
         match self.kind() {
-            ComponentKind::OntologyIDComponent => false,
+            ComponentKind::OntologyID => false,
             _ => true,
         }
     }
 
     fn is_id(&self) -> bool {
         match self.kind() {
-            ComponentKind::OntologyIDComponent => true,
+            ComponentKind::OntologyID => true,
             _ => false,
         }
     }
@@ -943,7 +943,7 @@ components! {
     A,
 
     // Temporary to avoid nameclash with existing OntologyID
-    OntologyIDComponent{iri: Option<IRI<A>>, viri: Option<IRI<A>>},
+    OntologyID{iri: Option<IRI<A>>, viri: Option<IRI<A>>},
 
     /// An annotation associated with this Ontology
     OntologyAnnotation (Annotation<A>),
@@ -1301,7 +1301,7 @@ components! {
 }
 
 // TODO
-impl<A:ForIRI> Default for OntologyIDComponent<A> {
+impl<A:ForIRI> Default for OntologyID<A> {
     fn default() -> Self {
         Self{iri: None, viri: None}
     }
