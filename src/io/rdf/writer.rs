@@ -539,7 +539,7 @@ impl<A: ForIRI> Render<A, Annotatable<A>> for Component<A> {
     ) -> Result<Annotatable<A>, HornedError> {
         Ok(match self {
             // We render imports and ontology annotations earlier
-            Component::OntologyIDComponent(_) => panic!(),
+            Component::OntologyID(_) => panic!(),
             Component::Import(_ax) => vec![].into(),
             Component::OntologyAnnotation(_ax) => vec![].into(),
             Component::DeclareClass(ax) => ax.render(f, ng)?.into(),
@@ -1563,7 +1563,7 @@ mod test {
         let build = Build::new();
 
         let iri = build.iri("http://www.example.com/a".to_string());
-        ont.insert(OntologyIDComponent {
+        ont.insert(OntologyID {
             iri: Some(iri),
             viri: None
         });
