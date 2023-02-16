@@ -529,7 +529,20 @@ impl<'a> Meta<&'a IRIString> for Vocab {
     }
 
     fn all() -> Vec<Self> {
-        todo!()
+        let facet_all = Facet::all().into_iter().map(|variant| Self::Facet(variant));
+        let rdf_all = RDF::all().into_iter().map(|variant| Self::RDF(variant));
+        let rdfs_all = RDFS::all().into_iter().map(|variant| Self::RDFS(variant));
+        let owl_all = OWL::all().into_iter().map(|variant| Self::OWL(variant));
+        let xsd_all = XSD::all().into_iter().map(|variant| Self::XSD(variant));
+        let ns_all = Namespace::all().into_iter().map(|variant| Self::Namespace(variant));
+
+        facet_all
+            .chain(rdf_all)
+            .chain(rdfs_all)
+            .chain(owl_all)
+            .chain(xsd_all)
+            .chain(ns_all)
+            .collect()
     }
 }
 
