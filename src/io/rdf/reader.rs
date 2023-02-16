@@ -193,29 +193,45 @@ impl<A: ForIRI> From<Term<A>> for OrTerm<A> {
     }
 }
 
+/// Creates a lookup [HashMap] for OWL, RDF, RDFS and Facet vocabularies.
 fn vocab_lookup<A: ForIRI>() -> HashMap<&'static str, Term<A>> {
-    let mut m = HashMap::default();
+    // Preallocate capacity, as we know at compile-time how many elements will
+    // be stored in the hashmaps. 
+    // 87 = #OWL variants - 1 + #RDF variants + #RDFS variants + #Facet variants
+    let mut lookup_map = HashMap::with_capacity(87);
 
-    for v in VOWL::all() {
-        match v {
-            // Skip the builtin properties or we have to treat them separately
-            VOWL::TopDataProperty => None,
-            _ => m.insert(v.as_iri_str(), Term::OWL(v)),
-        };
-    }
+    lookup_map.extend(
+        VOWL::all()
+            .into_iter()
+            .filter_map(|variant| match variant {
+                // Skip the builtin properties or we have to treat them separately
+                VOWL::TopDataProperty => None, // |
+                // VOWL::TopObjectProperty |
+                // VOWL::Thing |
+                // VOWL::Nothing => None,
+                _ => Some((variant.as_iri_str(), Term::OWL(variant)))
+            })
+        );
 
-    for v in VRDFS::all() {
-        m.insert(v.as_iri_str(), Term::RDFS(v));
-    }
+    lookup_map.extend(
+        VRDFS::all()
+            .into_iter()
+            .map(|variant| (variant.as_iri_str(), Term::RDFS(variant)))
+        );
 
-    for v in VRDF::all() {
-        m.insert(v.as_iri_str(), Term::RDF(v));
-    }
+    lookup_map.extend(
+        VRDF::all()
+            .into_iter()
+            .map(|variant| (variant.as_iri_str(), Term::RDF(variant)))
+        );
 
-    for v in Facet::all() {
-        m.insert(v.as_iri_str(), Term::FacetTerm(v));
-    }
-    m
+    lookup_map.extend(
+        Facet::all()
+            .into_iter()
+            .map(|variant| (variant.as_iri_str(), Term::FacetTerm(variant)))
+        );
+
+    lookup_map
 }
 
 fn to_term_nn<'a, A: ForIRI>(
