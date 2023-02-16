@@ -200,20 +200,20 @@ fn vocab_lookup<A: ForIRI>() -> HashMap<&'static str, Term<A>> {
         match v {
             // Skip the builtin properties or we have to treat them separately
             VOWL::TopDataProperty => None,
-            _ => m.insert(v.iri_s().as_str(), Term::OWL(v)),
+            _ => m.insert(v.as_iri_str(), Term::OWL(v)),
         };
     }
 
     for v in VRDFS::all() {
-        m.insert(v.iri_s().as_str(), Term::RDFS(v));
+        m.insert(v.as_iri_str(), Term::RDFS(v));
     }
 
     for v in VRDF::all() {
-        m.insert(v.iri_s().as_str(), Term::RDF(v));
+        m.insert(v.as_iri_str(), Term::RDF(v));
     }
 
     for v in Facet::all() {
-        m.insert(v.iri_s().as_str(), Term::FacetTerm(v));
+        m.insert(v.as_iri_str(), Term::FacetTerm(v));
     }
     m
 }
@@ -641,11 +641,11 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
             // We assume that anything passed to here is an
             // annotation built in type
             [s, RDFS(rdfs), b] => {
-                let iri = self.b.iri(rdfs.iri_str());
+                let iri = self.b.iri(rdfs.as_iri_str());
                 self.annotation(&[s.clone(), Term::Iri(iri), b.clone()])
             }
             [s, OWL(owl), b] => {
-                let iri = self.b.iri(owl.iri_str());
+                let iri = self.b.iri(owl.as_iri_str());
                 self.annotation(&[s.clone(), Term::Iri(iri), b.clone()])
             }
             [_, Iri(p), ob @ Term::Literal(_)] => Annotation {
@@ -1009,7 +1009,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
     ) -> Option<PropertyExpression<A>> {
         match term {
             Term::OWL(vowl) => {
-                let iri = self.b.iri(vowl.iri_str());
+                let iri = self.b.iri(vowl.as_iri_str());
                 self.find_property_kind(&Term::Iri(iri), ic)
             }
             Term::Iri(iri) => match self.find_declaration_kind(iri, ic) {
@@ -1187,7 +1187,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
                         {
                             n:self.fetch_u32(literal)?,
                             ope: pr.into(),
-                            bce: self.b.class(VOWL::Thing.iri_str()).into()
+                            bce: self.b.class(VOWL::Thing.as_iri_str()).into()
                         }
                     }
                 }
@@ -1214,7 +1214,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
                         {
                             n:self.fetch_u32(literal)?,
                             ope: pr.into(),
-                            bce: self.b.class(VOWL::Thing.iri_str()).into()
+                            bce: self.b.class(VOWL::Thing.as_iri_str()).into()
                         }
                     }
                 }
@@ -1241,7 +1241,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
                         {
                             n:self.fetch_u32(literal)?,
                             ope: pr.into(),
-                            bce: self.b.class(VOWL::Thing.iri_str()).into()
+                            bce: self.b.class(VOWL::Thing.as_iri_str()).into()
                         }
                     }
                 }

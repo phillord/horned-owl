@@ -240,10 +240,11 @@ where
 
     // let mut elem = BytesStart::owned_name("Ontology");
     let mut elem = BytesStart::new("Ontology");
-    elem.push_attribute((b"xmlns" as &[u8], OWL.iri_b()));
+    elem.push_attribute((b"xmlns" as &[u8], OWL.as_iri_bytes()));
 
     let id = o.i().the_ontology_id_or_default();
     iri_maybe(&mut elem, "xml:base", &id.iri);
+    
     // Render XML Namespaces.
     for pre in m.mappings() {
         elem.push_attribute((format!("xmlns:{}", pre.0).as_bytes(),pre.1.as_bytes()));
@@ -856,7 +857,7 @@ render! {
         let mut open = BytesStart::new("FacetRestriction");
         // Got the facet IRI from vocab
         open.push_attribute(("facet",
-                             &self.f.iri_s()[..]));
+                             self.f.as_iri_str()));
         self.l.within_tag(w, m, open)?;
 
         Ok(())
