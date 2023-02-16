@@ -70,7 +70,7 @@ impl<A: ForIRI> NodeGenerator<A> {
 
     /// Return an cached version of PNamedNode value.
     fn cache_rc<V: Into<Vocab>>(&mut self, v: V) -> A {
-        let voc: &str = v.into().iri_s();
+        let voc: &str = v.into().as_iri_str();
         if let Some(rc) = self.b.get(voc) {
             return rc.clone();
         }

@@ -299,7 +299,7 @@ fn error_missing_element<A: ForIRI, R: BufRead>(tag: &[u8], r: &mut Read<A, R>) 
 
 fn is_owl(res: &ResolveResult) -> bool {
     if let Bound(ns) = res {
-        ns.as_ref() == OWL.iri_b()
+        ns.as_ref() == OWL.as_iri_bytes()
     } else {
         false
     }
@@ -658,7 +658,7 @@ fn object_cardinality_restriction<A: ForIRI, R: BufRead>(
             .map_err(|_s| HornedError::invalid("Failed to parse int"))?,
         ope,
         Box::new(match vce.len() {
-            0 => r.build.class(OWL::Thing.iri_str()).into(),
+            0 => r.build.class(OWL::Thing.as_iri_str()).into(),
             1 => vce.remove(0),
             _ => return Err(error_unexpected_tag(end_tag, r)),
         }),
@@ -681,7 +681,7 @@ fn data_cardinality_restriction<A: ForIRI, R: BufRead>(
             .map_err(|_s| HornedError::invalid("Failed to parse int"))?,
         dp,
         match vdr.len() {
-            0 => r.build.datatype(OWL2Datatype::RDFSLiteral.iri_str()).into(),
+            0 => r.build.datatype(OWL2Datatype::RDFSLiteral.as_iri_str()).into(),
             1 => vdr.remove(0),
             _ => return Err(error_unexpected_tag(end_tag, r)),
         },
@@ -1001,7 +1001,7 @@ from_start! {
 
         Ok(
             FacetRestriction {
-                f: Facet::var_b(&f)
+                f: Facet::variant_from_bytes(&f)
                     .ok_or_else(
                         || error_unknown_entity("facet", &f, r))?,
                 l: from_next(r)?
@@ -1936,7 +1936,7 @@ pub mod test {
         } = cl
         {
             assert!(match dr {
-                DataRange::Datatype(dt) => dt.is_s(&OWL2Datatype::RDFSLiteral.iri_s()[..]),
+                DataRange::Datatype(dt) => dt.is_s(OWL2Datatype::RDFSLiteral.as_iri_str()),
                 _ => false,
             });
         } else {

@@ -15,49 +15,51 @@ use std::borrow::Borrow;
 
 // TODO: refactor to be included in model, or refactor into new `iri` module 
 // together with IRI and ForIRI.
+/// Provides methods to access the [IRI]s associated to a meta-enum.
 pub trait WithIRI<'a>: Meta<&'a IRIString> {
-    /// Return a string representation of the IRI associated with this
+
+    /// Returns a byte slice containing the IRI associated with this entity.
+    fn as_iri_bytes(&self) -> &'a [u8] {
+        self.meta().as_bytes()
+    }
+
+    /// Returns a string representation of the IRI associated with this
     /// entity.
-    fn iri_s(&self) -> &'a String {
-        &self.meta().0
+    fn as_iri_str(&self) -> &'a str {
+        self.meta().as_ref()
     }
 
-    fn iri_b(&self) -> &'a [u8] {
-        self.meta().0.as_bytes()
+    /// The string is checked against all the variants of the meta-enum.
+    /// Returns [Some(variant)] if a match is found with the metadata of a
+    /// variant, otherwise [None] is returned.
+    fn variant_from_str(tag: &'a str) -> Option<Self> {
+        Self::variant_from_bytes(tag.as_bytes())
     }
 
-    fn iri_str(&self) -> &'a str {
-        &self.meta().0[..]
-    }
-
-    fn var_s(tag: &'a str) -> Option<Self> {
-        Self::var_b(tag.as_bytes())
-    }
-
-    fn var_b(tag: &'a [u8]) -> Option<Self> {
-        for v in Self::all() {
-            if tag == v.iri_b() {
-                return Some(v);
-            }
-        }
-        None
+    /// The byte slice is checked against all the variants of the meta-enum.
+    /// Returns [Some(variant)] if a match is found with the metadata of a
+    /// variant, otherwise [None] is returned.
+    fn variant_from_bytes(tag: &'a [u8]) -> Option<Self> {
+        Self::all()
+            .into_iter()
+            .find(|item| item.as_iri_bytes() == tag)
     }
 }
 
-// TODO: exchange with IRI<A: ForIRI>.
-pub struct IRIString(String);
+pub type IRIString = IRI<String>;
 
 impl<'a, T> WithIRI<'a> for T where T: Meta<&'a IRIString> {}
 
 fn to_meta(s: &str) -> IRIString {
-    IRIString(s.to_string())
+    let builder = Build::new_string();
+    builder.iri(s)
 }
 
-fn extend<'a, I>(i: I, s: &'a str) -> IRIString
+fn extend<'a, I>(i: I, suffix: &'a str) -> IRIString
 where
     I: WithIRI<'a>,
 {
-    to_meta(&format!("{}{}", i.iri_s(), s))
+    to_meta(&format!("{}{}", i.as_iri_str(), suffix))
 }
 
 /// [Namespaces](https://www.w3.org/TR/2004/REC-owl-guide-20040210/#Namespaces)
@@ -268,35 +270,39 @@ lazy_meta! {
     WithRestrictions, extend(OWL, "withRestrictions");
 }
 
+// TODO: change parameter from `IRI<A>` to `Class<A>`.
+//       Only Classes can be owl:Thing?
 pub fn is_thing<A: ForIRI>(iri: &IRI<A>) -> bool {
-    iri.as_ref() == OWL::Thing.iri_s()
+    iri.as_ref() == OWL::Thing.as_iri_str()
 }
 
+// TODO: change parameter from `IRI<A>` to `Class<A>`.
+//       Only Classes can be owl:Nothing?
 pub fn is_nothing<A: ForIRI>(iri: &IRI<A>) -> bool {
-    iri.as_ref() == OWL::Nothing.iri_s()
+    iri.as_ref() == OWL::Nothing.as_iri_str()
 }
 
 pub fn to_built_in_entity<A: ForIRI>(iri: &IRI<A>) -> Option<NamedEntityKind> {
     let ir = iri.as_ref();
     match ir {
-        _ if ir == OWL::TopDataProperty.iri_s() => Some(NamedEntityKind::DataProperty),
-        _ if ir == OWL::TopObjectProperty.iri_s() => Some(NamedEntityKind::ObjectProperty),
+        _ if ir == OWL::TopDataProperty.as_iri_str() => Some(NamedEntityKind::DataProperty),
+        _ if ir == OWL::TopObjectProperty.as_iri_str() => Some(NamedEntityKind::ObjectProperty),
         _ => None,
     }
 }
 
 #[test]
 fn meta_testing() {
-    assert_eq!("http://www.w3.org/2002/07/owl#", OWL.iri_s());
-    assert_eq!(b"http://www.w3.org/2002/07/owl#", OWL.iri_b());
+    assert_eq!("http://www.w3.org/2002/07/owl#", OWL.as_iri_str());
+    assert_eq!(b"http://www.w3.org/2002/07/owl#", OWL.as_iri_bytes());
 
     assert_eq!(
-        Namespace::var_s("http://www.w3.org/2002/07/owl#").unwrap(),
+        Namespace::variant_from_str("http://www.w3.org/2002/07/owl#").unwrap(),
         OWL
     );
 
     assert_eq!(
-        Namespace::var_b(b"http://www.w3.org/2002/07/owl#").unwrap(),
+        Namespace::variant_from_bytes(b"http://www.w3.org/2002/07/owl#").unwrap(),
         OWL
     );
 }
@@ -304,10 +310,10 @@ fn meta_testing() {
 #[test]
 fn test_to_built_in_entity() {
     let builder = Build::new_rc();
-    let iri_top_dp = builder.iri(OWL::TopDataProperty.iri_str());
-    let iri_top_op = builder.iri(OWL::TopObjectProperty.iri_str());
-    let iri_thing = builder.iri(OWL::Thing.iri_str());
-    let iri_nothing = builder.iri(OWL::Nothing.iri_str());
+    let iri_top_dp = builder.iri(OWL::TopDataProperty.as_iri_str());
+    let iri_top_op = builder.iri(OWL::TopObjectProperty.as_iri_str());
+    let iri_thing = builder.iri(OWL::Thing.as_iri_str());
+    let iri_nothing = builder.iri(OWL::Nothing.as_iri_str());
     assert_eq!(to_built_in_entity(&iri_top_dp), Some(NamedEntityKind::DataProperty));
     assert_eq!(to_built_in_entity(&iri_top_op), Some(NamedEntityKind::ObjectProperty));
     assert_eq!(to_built_in_entity(&iri_thing), Some(NamedEntityKind::Class));
@@ -424,7 +430,7 @@ lazy_meta! {
 pub fn is_annotation_builtin<A:AsRef<str>>(iri: A) -> bool {
     AnnotationBuiltIn::all()
         .iter()
-        .any(|meta| meta.iri_str() == iri.as_ref())
+        .any(|meta| meta.as_iri_str() == iri.as_ref())
 }
 
 #[test]
@@ -458,22 +464,22 @@ lazy_meta! {
 #[test]
 fn facet_meta() {
     assert_eq!(
-        Facet::MinLength.iri_s(),
+        Facet::MinLength.as_iri_str(),
         "http://www.w3.org/2001/XMLSchema#minLength"
     );
 
     assert_eq!(
-        Facet::Pattern.iri_s(),
+        Facet::Pattern.as_iri_str(),
         "http://www.w3.org/2001/XMLSchema#pattern"
     );
 
     assert_eq!(
-        Facet::var_s("http://www.w3.org/2001/XMLSchema#pattern").unwrap(),
+        Facet::variant_from_str("http://www.w3.org/2001/XMLSchema#pattern").unwrap(),
         Facet::Pattern
     );
 
     assert_eq!(
-        Facet::var_b(b"http://www.w3.org/2001/XMLSchema#minExclusive").unwrap(),
+        Facet::variant_from_bytes(b"http://www.w3.org/2001/XMLSchema#minExclusive").unwrap(),
         Facet::MinExclusive
     );
 }
