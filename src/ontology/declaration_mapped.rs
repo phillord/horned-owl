@@ -192,7 +192,7 @@ mod test {
         let d = DeclarationMappedIndex::new_rc();
         let b = Build::new_rc();
         assert_eq!(
-            d.declaration_kind(&b.iri(OWL::TopDataProperty.iri_str())),
+            d.declaration_kind(&b.iri(OWL::TopDataProperty.as_iri_str())),
             Some(NamedEntityKind::DataProperty)
         );
     }
