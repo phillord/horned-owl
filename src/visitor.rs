@@ -10,6 +10,7 @@ pub trait Visit<A: ForIRI> {
     fn visit_anonymous_individual(&mut self, _: &AnonymousIndividual<A>) {}
     fn visit_individual(&mut self, _: &Individual<A>) {}
     fn visit_annotation_subject(&mut self, _: &AnnotationSubject<A>) {}
+    fn visit_dociri(&mut self, _: &DocIRI<A>) {}
     fn visit_class(&mut self, _: &Class<A>) {}
     fn visit_datatype(&mut self, _: &Datatype<A>) {}
     fn visit_object_property(&mut self, _: &ObjectProperty<A>) {}
@@ -126,6 +127,11 @@ impl<A: ForIRI, V: Visit<A>> Walk<A, V> {
         }
     }
 
+    pub fn dociri(&mut self, e:&DocIRI<A>) {
+        self.0.visit_dociri(e);
+        self.iri(&e.0);
+    }
+    
     pub fn class(&mut self, e: &Class<A>) {
         self.0.visit_class(e);
         self.iri(&e.0);
@@ -166,6 +172,7 @@ impl<A: ForIRI, V: Visit<A>> Walk<A, V> {
         self.0.visit_component(e);
         match e {
             Component::OntologyID(ax) => self.ontology_id(ax),
+            Component::DocIRI(ax) => self.dociri(ax),
             Component::Import(ax) => self.import(ax),
             Component::OntologyAnnotation(ax) => self.ontology_annotation(ax),
             Component::DeclareClass(ax) => self.declare_class(ax),

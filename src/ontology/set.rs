@@ -62,13 +62,6 @@ impl<A: ForIRI> SetOntology<A> {
 }
 
 impl<A: ForIRI> Ontology<A> for SetOntology<A> {
-    fn doc_iri(&self) -> &Option<IRI<A>> {
-        self.0.doc_iri()
-    }
-
-    fn mut_doc_iri(&mut self) -> &mut Option<IRI<A>> {
-        self.0.mut_doc_iri()
-    }
 }
 
 impl<A:ForIRI, AA:ForIndex<A>> From<SetIndex<A, AA>> for SetOntology<A> {
@@ -216,7 +209,6 @@ impl<A: ForIRI, AA: ForIndex<A>> SetIndex<A, AA> {
     pub fn the_ontology_id_or_default(&self) -> OntologyID<A> {
         self.the_ontology_id().unwrap_or_default()
     }
-
 }
 
 impl SetIndex<RcStr, Rc<AnnotatedComponent<RcStr>>> {
