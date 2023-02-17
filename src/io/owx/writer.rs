@@ -98,7 +98,10 @@ where
 fn tag_for_kind(axk: ComponentKind) -> &'static str {
     match axk {
         ComponentKind::OntologyID =>{
-            panic!("This should be called")
+            panic!("OntologyID found where only axioms were expected.")
+        },
+        ComponentKind:: DocIRI => {
+            panic!("DocIRI found where only axioms were expected.")
         },
         ComponentKind::Import => "Import",
         ComponentKind::OntologyAnnotation => "Annotation",

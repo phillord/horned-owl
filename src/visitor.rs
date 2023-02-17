@@ -172,6 +172,7 @@ impl<A: ForIRI, V: Visit<A>> Walk<A, V> {
         self.0.visit_component(e);
         match e {
             Component::OntologyID(ax) => self.ontology_id(ax),
+            Component::DocIRI(ax) => self.dociri(ax),
             Component::Import(ax) => self.import(ax),
             Component::OntologyAnnotation(ax) => self.ontology_annotation(ax),
             Component::DeclareClass(ax) => self.declare_class(ax),

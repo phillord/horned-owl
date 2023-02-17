@@ -209,7 +209,6 @@ impl<A: ForIRI, AA: ForIndex<A>> SetIndex<A, AA> {
     pub fn the_ontology_id_or_default(&self) -> OntologyID<A> {
         self.the_ontology_id().unwrap_or_default()
     }
-
 }
 
 impl SetIndex<RcStr, Rc<AnnotatedComponent<RcStr>>> {

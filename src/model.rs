@@ -719,6 +719,7 @@ pub trait HigherKinded {
     fn is_axiom(&self) -> bool {
         match self.kind() {
             ComponentKind::OntologyID => false,
+            ComponentKind::DocIRI => false,
             _ => true,
         }
     }
@@ -730,7 +731,6 @@ pub trait HigherKinded {
         }
     }
 }
-
 
 /// An `AnnotatedComponent` is an `Component` with one orpmore `Annotation`.
 #[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
@@ -1724,8 +1724,6 @@ impl<A: ForIRI> From<Class<A>> for Box<ClassExpression<A>> {
 
 /// Access or change the `OntologyID` of an `Ontology`
 pub trait Ontology<A> {
-    fn doc_iri(&self) -> &Option<IRI<A>>;
-    fn mut_doc_iri(&mut self) -> &mut Option<IRI<A>>;
 }
 
 /// Add or remove axioms to an `MutableOntology`
