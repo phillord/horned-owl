@@ -138,10 +138,6 @@ impl<A: ForIRI> IRI<A> {
     pub fn underlying(&self) -> A {
         self.0.clone()
     }
-
-    pub fn as_oxiri(&self) -> Result<oxiri::Iri<&str>, oxiri::IriParseError>{
-        oxiri::Iri::parse(&self.0.borrow())
-    }
 }
 
 impl<A: ForIRI> Deref for IRI<A> {

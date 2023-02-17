@@ -4,11 +4,10 @@ use std::convert::TryInto;
 
 
 impl<A: ForIRI> crate::model::IRI<A> {
-    pub fn as_oxiri_v2(&self) -> Result<oxiri::Iri<&str>, oxiri::IriParseError> {
+    pub fn as_oxiri(&self) -> Result<oxiri::Iri<&str>, oxiri::IriParseError> {
         oxiri::Iri::parse(&self.0.borrow())
     }
 }
-
 
 impl<'a, A: ForIRI> TryInto<oxiri::Iri<&'a str>> for &'a crate::model::IRI<A> {
     type Error=oxiri::IriParseError;
