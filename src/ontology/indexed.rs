@@ -160,15 +160,7 @@ where
 }
 
 impl<A: ForIRI, AA: ForIndex<A>, I: OntologyIndex<A, AA>> Ontology<A>
-    for OneIndexedOntology<A, AA, I>
-{
-    fn doc_iri(&self) -> &Option<IRI<A>> {
-        &self.1
-    }
-
-    fn mut_doc_iri(&mut self) -> &mut Option<IRI<A>> {
-        &mut self.1
-    }
+    for OneIndexedOntology<A, AA, I>{
 }
 
 impl<A: ForIRI, AA: ForIndex<A>, I: OntologyIndex<A, AA>> MutableOntology<A>
@@ -216,15 +208,7 @@ impl<A: ForIRI, AA: ForIndex<A>, I: OntologyIndex<A, AA>, J: OntologyIndex<A, AA
 }
 
 impl<A: ForIRI, AA: ForIndex<A>, I: OntologyIndex<A, AA>, J: OntologyIndex<A, AA>> Ontology<A>
-    for TwoIndexedOntology<A, AA, I, J>
-{
-    fn doc_iri(&self) -> &Option<IRI<A>> {
-        &self.2
-    }
-
-    fn mut_doc_iri(&mut self) -> &mut Option<IRI<A>> {
-        &mut self.2
-    }
+    for TwoIndexedOntology<A, AA, I, J> {
 }
 
 impl<A: ForIRI, AA: ForIndex<A>, I: OntologyIndex<A, AA>, J: OntologyIndex<A, AA>>
@@ -314,13 +298,6 @@ impl<
         K: OntologyIndex<A, AA>,
     > Ontology<A> for ThreeIndexedOntology<A, AA, I, J, K>
 {
-    fn doc_iri(&self) -> &Option<IRI<A>> {
-        self.0.doc_iri()
-    }
-
-    fn mut_doc_iri(&mut self) -> &mut Option<IRI<A>> {
-        self.0.mut_doc_iri()
-    }
 }
 
 impl<
@@ -421,13 +398,6 @@ impl<
         L: OntologyIndex<A, AA>,
     > Ontology<A> for FourIndexedOntology<A, AA, I, J, K, L>
 {
-    fn doc_iri(&self) -> &Option<IRI<A>> {
-        self.0.doc_iri()
-    }
-
-    fn mut_doc_iri(&mut self) -> &mut Option<IRI<A>> {
-        self.0.mut_doc_iri()
-    }
 }
 
 impl<

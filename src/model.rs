@@ -707,6 +707,7 @@ pub trait Kinded {
     fn is_axiom(&self) -> bool {
         match self.kind() {
             ComponentKind::OntologyID => false,
+            ComponentKind::DocIRI => false,
             _ => true,
         }
     }
@@ -714,6 +715,13 @@ pub trait Kinded {
     fn is_id(&self) -> bool {
         match self.kind() {
             ComponentKind::OntologyID => true,
+            _ => false,
+        }
+    }
+
+    fn is_meta(&self) -> bool {
+        match self.kind() {
+            ComponentKind::DocIRI => true,
             _ => false,
         }
     }
@@ -946,8 +954,12 @@ macro_rules! components {
 components! {
     A,
 
-    // Temporary to avoid nameclash with existing OntologyID
+    /// The Ontology ID. There should be only one OntologyID per
+    /// ontology. 
     OntologyID{iri: Option<IRI<A>>, viri: Option<IRI<A>>},
+
+    /// The IRI from which the ontology was actually loaded.
+    DocIRI(IRI<A>),
 
     /// An annotation associated with this Ontology
     OntologyAnnotation (Annotation<A>),
@@ -1680,8 +1692,6 @@ impl<A: ForIRI> From<Class<A>> for Box<ClassExpression<A>> {
 
 /// Access or change the `OntologyID` of an `Ontology`
 pub trait Ontology<A> {
-    fn doc_iri(&self) -> &Option<IRI<A>>;
-    fn mut_doc_iri(&mut self) -> &mut Option<IRI<A>>;
 }
 
 /// Add or remove axioms to an `MutableOntology`

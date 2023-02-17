@@ -320,13 +320,6 @@ impl<A: ForIRI, AA: ForIndex<A>> RDFOntology<A, AA> {
 }
 
 impl<A: ForIRI, AA: ForIndex<A>> Ontology<A> for RDFOntology<A, AA> {
-    fn doc_iri(&self) -> &Option<IRI<A>> {
-        self.0.doc_iri()
-    }
-
-    fn mut_doc_iri(&mut self) -> &mut Option<IRI<A>> {
-        self.0.mut_doc_iri()
-    }
 }
 
 impl<A: ForIRI, AA:ForIndex<A>> MutableOntology<A> for RDFOntology<A, AA> {
