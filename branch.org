@@ -1,3 +1,27 @@
+* Intro
+
+This branch now lays the ground work for supporting Option 3 as
+described in the RFC.
+
+https://github.com/phillord/horned-owl/blob/rfc/swrl_rules_redesign.md
+
+I have now created a new enum called Component instead of Axiom. Both
+OntologyID and DocIRI are now Components. This greatly simplifies the
+creation of iterators and so forth and new forms of indexed
+ontology. Indeed, doc IRIs (if I created them routinely!) are now
+passed around these transformations where they were not previously.
+
+The disadvantage is it makes some manipulations harder, particularly
+those that only care about Axioms. Removing the non-axiom components
+is not too hard (a single filter). I should be able to improve this
+when and if I get the a interface for ontology working which was
+blocked on GATSs, but now seems possible.
+
+https://github.com/phillord/horned-owl/tree/feature/collection-ontology-interface
+
+Additionally, it makes the rules on exhaustive matching against
+Component less useful.
+
 
 * Support SWRL rules [4/11]
 
