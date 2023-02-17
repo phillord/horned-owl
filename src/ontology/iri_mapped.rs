@@ -232,13 +232,6 @@ pub type RcIRIMappedOntology = IRIMappedOntology<RcStr, Rc<AnnotatedComponent<Rc
 pub type ArcIRIMappedOntology = IRIMappedOntology<ArcStr, Arc<AnnotatedComponent<ArcStr>>>;
 
 impl<A: ForIRI, AA: ForIndex<A>> Ontology<A> for IRIMappedOntology<A, AA> {
-    fn doc_iri(&self) -> &Option<IRI<A>> {
-        self.0.doc_iri()
-    }
-
-    fn mut_doc_iri(&mut self) -> &mut Option<IRI<A>> {
-        self.0.mut_doc_iri()
-    }
 }
 
 impl<A: ForIRI, AA: ForIndex<A>> MutableOntology<A> for IRIMappedOntology<A, AA> {

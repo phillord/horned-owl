@@ -539,7 +539,8 @@ impl<A: ForIRI> Render<A, Annotatable<A>> for Component<A> {
     ) -> Result<Annotatable<A>, HornedError> {
         Ok(match self {
             // We render imports and ontology annotations earlier
-            Component::OntologyID(_) => panic!(),
+            Component::OntologyID(_) => panic!("OntologyID found where only axioms were expected"),
+            Component::DocIRI(_) => panic!("DocIRI found where only axioms were expected"),
             Component::Import(_ax) => vec![].into(),
             Component::OntologyAnnotation(_ax) => vec![].into(),
             Component::DeclareClass(ax) => ax.render(f, ng)?.into(),

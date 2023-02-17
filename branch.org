@@ -1,5 +1,5 @@
 
-* Support SWRL rules [3/8]
+* Support SWRL rules [4/11]
 
 This branch is design to support SWRL rules, using Solution 3 from the
 RFC branch.
@@ -8,9 +8,12 @@ RFC branch.
  - [X] Rename AnnotatedAxiom to AnnotatedComponent
  - [X] Move OntologyID to be AnnotatedComponent
  - [ ] What about doc_iri
- - [ ] Add is_axiom, is_id methods, macro'd out
+ - [X] Add is_axiom, is_id methods, macro'd out
  - [ ] How do we add "axiom_iter" convience methods? Give that
        Ontology has no interface per se.
+ - [ ] Check all iterator examples to make sure they are using the
+       right thing and should not use something else instead
+ - [ ] Update `axiom` local variable names
  - [ ] Add SwrlRule (or SwrlComponent or equivalent)
  - [ ] Implement SwrlRule model
  - [ ] Update parsers
@@ -28,4 +31,27 @@ RFC branch.
 As far as I can see, I don't use the doc_iri support anywhere, and
 certainly don't pass it between iterators. So, if we move them to
 Component this will actually work
- 
+
+
+* Do we still need Axiom emun
+
+In creating, Component it means I no longer have a representation of
+Axiom. That means I am starting to write code like this:
+
+        Ok(match self {
+            // We render imports and ontology annotations earlier
+            Component::OntologyID(_) => panic!("OntologyID found where only axioms were expected"),
+            Component::DocIRI(_) => panic!("DocIRI found where only axioms were expected"),
+            Component::Import(_ax) => vec![].into(),
+            Component::OntologyAnnotation(_ax) => vec![].into(),
+            Component::DeclareClass(ax) => ax.render(f, ng)?.into(),
+            Component::DeclareObjectProperty(ax) => ax.render(f, ng)?.into(),
+
+ which is a big ugly. But also, once I add SWRL rules will make the
+ exhaustive matching capabilities of Rust a bit pointless
+
+One solution would be to add back an Axiom enum which just takes the
+Axiom components. Then I would have a SWRLEnum as well with into
+convertors. Then I would add some convertor for filtermap
+
+pub fn as_axiom(c: Component) -> Some(&
