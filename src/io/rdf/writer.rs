@@ -431,7 +431,7 @@ impl<A: ForIRI> Render<A, ()> for AnnotatedComponent<A> {
         f: &mut PrettyRdfXmlFormatter<A, W>,
         ng: &mut NodeGenerator<A>,
     ) -> Result<(), HornedError> {
-        if self.axiom.is_id() {
+        if !self.axiom.is_axiom() {
             return Ok(())
         }
         let ax: Annotatable<A> = self.axiom.render(f, ng)?;
