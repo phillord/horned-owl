@@ -691,6 +691,7 @@ trait Annotated<A> {
     fn annotation(&self) -> &BTreeSet<Annotation<A>>;
 }
 
+
 /// An interface providing access to the `ComponentKind`
 ///
 /// An OWL ontology consists of a set of axioms of one of many
@@ -699,29 +700,31 @@ trait Annotated<A> {
 /// instances of a certain kind.
 pub trait Kinded {
     fn kind(&self) -> ComponentKind;
+}
+
+#[derive(Eq, PartialEq)]
+pub enum HigherKind {
+    Axiom,
+    Meta,
+    SWRL,
+}
+
+pub trait HigherKinded {
+    fn higher_kind(&self) -> HigherKind;
 
     fn is_axiom(&self) -> bool {
-        match self.kind() {
-            ComponentKind::OntologyID => false,
-            ComponentKind::DocIRI => false,
-            _ => true,
-        }
+        self.higher_kind() == HigherKind::Axiom
     }
 
-    fn is_id(&self) -> bool {
-        match self.kind() {
-            ComponentKind::OntologyID => true,
-            _ => false,
-        }
+    fn is_meta(&self)  -> bool {
+        self.higher_kind() == HigherKind::Meta
     }
 
-    fn is_meta(&self) -> bool {
-        match self.kind() {
-            ComponentKind::DocIRI => true,
-            _ => false,
-        }
+    fn is_swrl(&self) -> bool {
+        self.higher_kind() == HigherKind::SWRL
     }
 }
+
 
 /// An `AnnotatedComponent` is an `Component` with one orpmore `Annotation`.
 #[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
@@ -777,9 +780,16 @@ impl<A: ForIRI> Kinded for AnnotatedComponent<A> {
     }
 }
 
+
+impl<A: ForIRI> HigherKinded for AnnotatedComponent<A> {
+    fn higher_kind(&self) -> HigherKind {
+        self.axiom.higher_kind()
+    }
+}
+
 /// Add `Kinded` and `From` for each axiom.
 macro_rules! componentimpl {
-    ($A:ident, $name:ident) => {
+    ($A:ident, $higher:ident, $name:ident) => {
         impl<$A: ForIRI> From<$name<$A>> for Component<$A> {
             fn from(ax: $name<$A>) -> Component<$A> {
                 Component::$name(ax)
@@ -797,6 +807,12 @@ macro_rules! componentimpl {
                 ComponentKind::$name
             }
         }
+
+        impl<$A: ForIRI> HigherKinded for $name<$A> {
+            fn higher_kind(&self) -> HigherKind {
+                HigherKind::$higher
+            }
+        }
     };
 }
 
@@ -810,14 +826,14 @@ macro_rules! componentimpl {
 // noticed that the quick_error crate passes afterwards and it's easy
 // to get to work this way. As it's an internal macro, I think this is fine.
 macro_rules! component {
-    ($A:ident $name:ident ($($tt:ty),*) $(#[$attr:meta])*) =>
+    ($A:ident $higher:ident $name:ident ($($tt:ty),*) $(#[$attr:meta])*) =>
     {
         $(#[$attr]) *
         #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
         pub struct $name<$A>($(pub $tt),*);
-        componentimpl!($A, $name);
+        componentimpl!($A, $higher, $name);
     };
-    ($A:ident $name:ident {
+    ($A:ident $higher:ident $name:ident {
         $($field_name:ident: $field_type:ty),*
      }
      $(#[$attr:meta])*
@@ -839,7 +855,7 @@ macro_rules! component {
             }
 
         }
-        componentimpl!($A, $name);
+        componentimpl!($A, $higher, $name);
     }
 }
 
@@ -852,7 +868,7 @@ macro_rules! component {
 // enums.
 macro_rules! components {
     ($A:ident,
-     $($(#[$attr:meta])* $name:ident $tt:tt),*)
+     $($(#[$attr:meta])* $higher:ident $name:ident $tt:tt),*)
         =>
     {
         /// Contains all different kinds of axiom
@@ -939,9 +955,23 @@ macro_rules! components {
             }
         }
 
+        impl<$A:ForIRI> HigherKinded for Component<$A>
+        {
+            fn higher_kind(&self) -> HigherKind
+            {
+                match self
+                {
+                    $(
+                        Component::$name(n) => n.higher_kind()
+                    ),*
+
+                }
+            }
+        }
+
         $(
             component!(
-                $A $name $tt $(#[$attr]) *
+                $A $higher $name $tt $(#[$attr]) *
             );
         ) *
     }
@@ -951,17 +981,17 @@ components! {
     A,
 
     /// The Ontology ID. There should be only one OntologyID per
-    /// ontology. 
-    OntologyID{iri: Option<IRI<A>>, viri: Option<IRI<A>>},
+    /// ontology.
+    Meta OntologyID{iri: Option<IRI<A>>, viri: Option<IRI<A>>},
 
     /// The IRI from which the ontology was actually loaded.
-    DocIRI(IRI<A>),
+    Meta DocIRI(IRI<A>),
 
     /// An annotation associated with this Ontology
-    OntologyAnnotation (Annotation<A>),
+    Axiom OntologyAnnotation (Annotation<A>),
 
     /// Declares that an IRI is an import of this ontology
-    Import(IRI<A>),
+    Axiom Import(IRI<A>),
 
     // Declaration Components
 
@@ -972,34 +1002,34 @@ components! {
     /// an ontology where there is no declaration, the end ontology
     /// will change profile to OWL Full.  See also the [OWL
     /// Primer](https://www.w3.org/TR/2012/REC-owl2-primer-20121211/#Entity_Declarations)
-    DeclareClass(Class<A>),
+    Axiom DeclareClass(Class<A>),
 
     /// Declares that an IRI represents an ObjectProperty in the
     /// Ontology.
     ///
     /// See also [`DeclareClass`](struct.DeclareClass.html)
-    DeclareObjectProperty(ObjectProperty<A>),
+    Axiom DeclareObjectProperty(ObjectProperty<A>),
 
     /// Declares that an IRI represents an AnnotationProperty in the
     /// Ontology.
     ///
     /// See also [`DeclareClass`](struct.DeclareClass.html)
-    DeclareAnnotationProperty (AnnotationProperty<A>),
+    Axiom DeclareAnnotationProperty (AnnotationProperty<A>),
     /// Declares that an IRI represents a DataProperty in the
     /// ontology.
     ///
     /// See also [`DeclareClass`](struct.DeclareClass.html)
-    DeclareDataProperty (DataProperty<A>),
+    Axiom DeclareDataProperty (DataProperty<A>),
 
     /// Declare that an IRI represents a NamedIndividual in the
     /// ontology.
     ///
     /// See also [`DeclareClass`](struct.DeclareClass.html)
-    DeclareNamedIndividual (NamedIndividual<A>),
+    Axiom DeclareNamedIndividual (NamedIndividual<A>),
 
     /// Declare that an IRI represents a Datatype in the ontology.
     ///
-    DeclareDatatype(Datatype<A>),
+    Axiom DeclareDatatype(Datatype<A>),
 
     // Class Components
 
@@ -1007,7 +1037,7 @@ components! {
     ///
     /// All instances of `sub_class` are also instances of
     /// `super_class`.
-    SubClassOf{
+    Axiom SubClassOf{
         sup: ClassExpression<A>,
         sub: ClassExpression<A>
     },
@@ -1016,19 +1046,19 @@ components! {
     ///
     /// All instances of `ClassExpression` are also instances
     /// of other other.
-    EquivalentClasses(Vec<ClassExpression<A>>),
+    Axiom EquivalentClasses(Vec<ClassExpression<A>>),
 
     /// A disjoint relationship between two `ClassExpression`
     ///
     /// No instance of one `ClassExpression` can also be an instance
     /// of any of the others.
-    DisjointClasses(Vec<ClassExpression<A>>),
+    Axiom DisjointClasses(Vec<ClassExpression<A>>),
 
     /// A disjoint union expression between one `ClassExpression` and
     /// a set of others.
     ///
     /// See also: https://www.w3.org/TR/owl2-syntax/#Disjoint_Union_of_Class_Expressions
-    DisjointUnion(Class<A>, Vec<ClassExpression<A>>),
+    Axiom DisjointUnion(Class<A>, Vec<ClassExpression<A>>),
 
     // ObjectProperty axioms
 
@@ -1042,7 +1072,7 @@ components! {
     ///
     /// See also: [Property Hierarchies](https://www.w3.org/TR/2012/REC-owl2-primer-20121211/#Property_Hierarchies)
     /// See also: [Property Chains](https://www.w3.org/TR/2012/REC-owl2-primer-20121211/#Property_Chains)
-    SubObjectPropertyOf{
+    Axiom SubObjectPropertyOf{
         sup: ObjectPropertyExpression<A>,
         sub: SubObjectPropertyExpression<A>
     },
@@ -1051,13 +1081,13 @@ components! {
     ///
     /// States that two object properties are semantically identical
     /// to each other.
-    EquivalentObjectProperties(Vec<ObjectPropertyExpression<A>>),
+    Axiom EquivalentObjectProperties(Vec<ObjectPropertyExpression<A>>),
 
     /// A disjoint object property relationship.
     ///
     /// This states that is an individual is connected by one of these
     /// object properties, it cannot be connected by any of the others.
-    DisjointObjectProperties(Vec<ObjectPropertyExpression<A>>),
+    Axiom DisjointObjectProperties(Vec<ObjectPropertyExpression<A>>),
 
     /// An inverse relationship between two object properties.
     ///
@@ -1066,7 +1096,7 @@ components! {
     /// `s` are transitive, then `a r b` implies `b r a`.
     ///
     /// See also: [Property Characteristics](https://www.w3.org/TR/2012/REC-owl2-primer-20121211/#Property_Characteristics)
-    InverseObjectProperties(ObjectProperty<A>,ObjectProperty<A>),
+    Axiom InverseObjectProperties(ObjectProperty<A>,ObjectProperty<A>),
 
     /// The domain of the object property.
     ///
@@ -1075,7 +1105,7 @@ components! {
     /// instances of `ce`
     ///
     /// See also: [Domain](https://www.w3.org/TR/owl2-syntax/#Object_Property_Domain)
-    ObjectPropertyDomain{ope:ObjectPropertyExpression<A>, ce:ClassExpression<A>},
+    Axiom ObjectPropertyDomain{ope:ObjectPropertyExpression<A>, ce:ClassExpression<A>},
 
     /// The range of the object property.
     ///
@@ -1083,7 +1113,7 @@ components! {
     /// relationship `ope`, then it is an individual of `ce`.1
     ///
     /// See also: [Domain](https://www.w3.org/TR/owl2-syntax/#Object_Property_Range)
-    ObjectPropertyRange{ope:ObjectPropertyExpression<A>, ce:ClassExpression<A>},
+    Axiom ObjectPropertyRange{ope:ObjectPropertyExpression<A>, ce:ClassExpression<A>},
 
     /// The functional characteristic.
     ///
@@ -1092,7 +1122,7 @@ components! {
     /// property expression.
     ///
     /// See also: [Functional](https://www.w3.org/TR/owl2-syntax/#Functional_Object_Properties)
-    FunctionalObjectProperty(ObjectPropertyExpression<A>),
+    Axiom FunctionalObjectProperty(ObjectPropertyExpression<A>),
 
     /// The inverse functional characteristic
     ///
@@ -1101,7 +1131,7 @@ components! {
     /// expression.
     ///
     /// See also: [Inverse Functional](https://www.w3.org/TR/owl2-syntax/#Inverse-Functional_Object_Properties)
-    InverseFunctionalObjectProperty(ObjectPropertyExpression<A>),
+    Axiom InverseFunctionalObjectProperty(ObjectPropertyExpression<A>),
 
     /// The reflexive characteristic
     ///
@@ -1109,21 +1139,21 @@ components! {
     /// ObjectPropertyExpression is connected to itself.
     ///
     /// See also: [Reflexive](https://www.w3.org/TR/owl2-syntax/#Reflexive_Object_Properties)
-    ReflexiveObjectProperty(ObjectPropertyExpression<A>),
+    Axiom ReflexiveObjectProperty(ObjectPropertyExpression<A>),
 
     /// The irreflexive characteristic
     ///
     /// No individual can be connected to itself by this property.
     ///
     /// See also: [Irreflexive](https://www.w3.org/TR/owl2-syntax/#Irreflexive_Object_Properties)
-    IrreflexiveObjectProperty(ObjectPropertyExpression<A>),
+    Axiom IrreflexiveObjectProperty(ObjectPropertyExpression<A>),
 
     /// The symmetric characteristic
     ///
     /// If an individual `i` is connected to `j` by this
     /// ObjectPropertyExpression, then `j` is also connected by `i`
     /// See also: [Symmetric](https://www.w3.org/TR/owl2-syntax/#Symmetric_Object_Properties)
-    SymmetricObjectProperty(ObjectPropertyExpression<A>),
+    Axiom SymmetricObjectProperty(ObjectPropertyExpression<A>),
 
     /// The asymmetric characteristic.
     ///
@@ -1132,7 +1162,7 @@ components! {
     /// by the ObjectPropertyExpression.
     ///
     /// See also: [Asymmetric](https://www.w3.org/TR/owl2-syntax/#Asymmetric_Object_Properties)
-    AsymmetricObjectProperty(ObjectPropertyExpression<A>),
+    Axiom AsymmetricObjectProperty(ObjectPropertyExpression<A>),
 
     /// A transitive relationship between two object properties.
     ///
@@ -1140,7 +1170,7 @@ components! {
     /// c` also.
     ///
     /// See also: [TransitiveObjectProperty](https://www.w3.org/TR/owl2-syntax/#Transitive_Object_Properties)
-    TransitiveObjectProperty(ObjectPropertyExpression<A>),
+    Axiom TransitiveObjectProperty(ObjectPropertyExpression<A>),
 
     /// A sub data property relationship.
     ///
@@ -1148,7 +1178,7 @@ components! {
     /// the existence of the `super_property`.
     ///
     /// See also: [Data Subproperties](https://www.w3.org/TR/owl2-syntax/#Data_Subproperties)
-    SubDataPropertyOf {
+    Axiom SubDataPropertyOf {
         sup:DataProperty<A>,
         sub:DataProperty<A>
     },
@@ -1158,7 +1188,7 @@ components! {
     /// All these DataProperties are semantically identical.
     ///
     /// See also: [EquivalentDataproperties](https://www.w3.org/TR/owl2-syntax/#Equivalent_Data_Properties)
-    EquivalentDataProperties(Vec<DataProperty<A>>),
+    Axiom EquivalentDataProperties(Vec<DataProperty<A>>),
 
     /// A disjoint data property relationship.
     ///
@@ -1166,7 +1196,7 @@ components! {
     /// by more than one of these DataProperty relations.
     ///
     /// See also: [DisjointDataProperties](https://www.w3.org/TR/owl2-syntax/#Disjoint_Data_Properties)
-    DisjointDataProperties(Vec<DataProperty<A>>),
+    Axiom DisjointDataProperties(Vec<DataProperty<A>>),
 
     /// The domain of a DataProperty.
     ///
@@ -1174,7 +1204,7 @@ components! {
     /// of type `ce`.
     ///
     /// See also: [Data Property Domain](https://www.w3.org/TR/owl2-syntax/#Disjoint_Data_Properties)
-    DataPropertyDomain{dp:DataProperty<A>,ce:ClassExpression<A>},
+    Axiom DataPropertyDomain{dp:DataProperty<A>,ce:ClassExpression<A>},
 
     /// The range of a DataProperty.
     ///
@@ -1182,7 +1212,7 @@ components! {
     /// `l`, then `l` must by in `dr`.
     ///
     /// See also: [Data Property Range](https://www.w3.org/TR/owl2-syntax/#Data_Property_Range)
-    DataPropertyRange{dp:DataProperty<A>,dr:DataRange<A>},
+    Axiom DataPropertyRange{dp:DataProperty<A>,dr:DataRange<A>},
 
     /// The functional DataProperty characteristic.
     ///
@@ -1190,12 +1220,12 @@ components! {
     /// by this DataProperty.
     ///
     /// See also: [Functional Data Property]:(https://www.w3.org/TR/owl2-syntax/#Functional_Data_Properties)
-    FunctionalDataProperty(DataProperty<A>),
+    Axiom FunctionalDataProperty(DataProperty<A>),
 
     /// Defintion of a datatype.
     ///
     /// See also: [Datatype Definitions](https://www.w3.org/TR/owl2-syntax/#Datatype_Definitions)
-    DatatypeDefinition {
+    Axiom DatatypeDefinition {
         kind: Datatype<A>,
         range: DataRange<A>
     },
@@ -1208,20 +1238,20 @@ components! {
     /// inferred.
     ///
     /// See also: [Keys](https://www.w3.org/TR/owl2-syntax/#Keys)
-    HasKey{ce:ClassExpression<A>, vpe:Vec<PropertyExpression<A>>},
+    Axiom HasKey{ce:ClassExpression<A>, vpe:Vec<PropertyExpression<A>>},
 
     // Assertions
     /// A same individual expression.
     ///
     /// See also: [Individual Equality](https://www.w3.org/TR/owl2-syntax/#Individual_Equality)
-    SameIndividual (
+    Axiom SameIndividual (
         Vec<Individual<A>>
     ),
 
     /// A different individuals expression.
     ///
-    /// See also: [Individual Inequality](https://www.w3.org/TR/owl2-syntax/#Individual_Inequality)
-    DifferentIndividuals (
+    /// See also: [Individual Inequality](https://www.w3.org/TR/owl2-syntax/#Individual_Inequality
+    Axiom DifferentIndividuals (
         Vec<Individual<A>>
     ),
 
@@ -1230,7 +1260,7 @@ components! {
     /// States that `i` is in class `ce`.
     ///
     /// See also: [Class Assertions](https://www.w3.org/TR/owl2-syntax/#Class_Assertions)
-    ClassAssertion {
+    Axiom ClassAssertion {
         ce: ClassExpression<A>,
         i: Individual<A>
     },
@@ -1240,7 +1270,7 @@ components! {
     /// Individual `from` is connected `to` by `ope`.
     ///
     /// See also: [Positive Object Property Assertions](https://www.w3.org/TR/owl2-syntax/#Positive_Object_Property_Assertions)
-    ObjectPropertyAssertion {
+    Axiom ObjectPropertyAssertion {
         ope: ObjectPropertyExpression<A>,
         from: Individual<A>,
         to: Individual<A>
@@ -1251,7 +1281,7 @@ components! {
     /// Individual `from` is not connected `to` by `ope`
     ///
     /// See also: [Negative Object Property Assertions](https://www.w3.org/TR/owl2-syntax/#Negative_Object_Property_Assertions)
-    NegativeObjectPropertyAssertion {
+    Axiom NegativeObjectPropertyAssertion {
         ope: ObjectPropertyExpression<A>,
         from: Individual<A>,
         to: Individual<A>
@@ -1262,7 +1292,7 @@ components! {
     /// Individual `from` is connected `to`` literal by `dp`.
     ///
     /// See also: [Data Property Assertion](https://www.w3.org/TR/owl2-syntax/#Positive_Data_Property_Assertions)
-    DataPropertyAssertion {
+    Axiom DataPropertyAssertion {
         dp: DataProperty<A>,
         from: Individual<A>,
         to: Literal<A>
@@ -1273,7 +1303,7 @@ components! {
     /// Individual `from` is not connected `to` literal by `dp`.
     ///
     /// See also [Negative Data Property Assertions](https://www.w3.org/TR/owl2-syntax/#Negative_Data_Property_Assertions)
-    NegativeDataPropertyAssertion {
+    Axiom NegativeDataPropertyAssertion {
         dp: DataProperty<A>,
         from: Individual<A>,
         to: Literal<A>
@@ -1285,7 +1315,7 @@ components! {
     /// States that `annotation` applies to the
     /// `annotation_subject`. Annotations refer to an `IRI` rather
     /// than the `NamedEntity` identified by that `IRI`.
-    AnnotationAssertion {
+    Axiom AnnotationAssertion {
         subject: AnnotationSubject<A>,
         ann: Annotation<A>
     },
@@ -1294,23 +1324,24 @@ components! {
     ///
     /// Implies that any annotation of the type `sub_property` is also
     /// an annotation of the type `super_property`.
-    SubAnnotationPropertyOf {
+    Axiom SubAnnotationPropertyOf {
         sup: AnnotationProperty<A>,
         sub: AnnotationProperty<A>
     },
 
     /// Assert the domain of an `AnnotationProperty`
-    AnnotationPropertyDomain {
+    Axiom AnnotationPropertyDomain {
         ap: AnnotationProperty<A>,
         iri: IRI<A>
     },
 
     /// Assert the range of an `AnnotationProperty`
-    AnnotationPropertyRange {
+    Axiom AnnotationPropertyRange {
         ap: AnnotationProperty<A>,
         iri: IRI<A>
     }
 }
+
 
 // TODO
 impl<A:ForIRI> Default for OntologyID<A> {
