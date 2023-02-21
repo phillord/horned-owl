@@ -715,22 +715,21 @@ pub enum HigherKind {
 
 pub trait HigherKinded {
     fn higher_kind(&self) -> HigherKind;
+}
 
     fn is_axiom(&self) -> bool {
-        match self.kind() {
-            ComponentKind::OntologyID => false,
-            ComponentKind::DocIRI => false,
-            _ => true,
-        }
+        self.higher_kind() == HigherKind::Axiom
     }
 
-    fn is_id(&self) -> bool {
-        match self.kind() {
-            ComponentKind::OntologyID => true,
-            _ => false,
-        }
+    fn is_meta(&self)  -> bool {
+        self.higher_kind() == HigherKind::Meta
+    }
+
+    fn is_swrl(&self) -> bool {
+        self.higher_kind() == HigherKind::SWRL
     }
 }
+
 
 /// An `AnnotatedComponent` is an `Component` with one orpmore `Annotation`.
 #[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
@@ -1347,6 +1346,7 @@ components! {
         iri: IRI<A>
     }
 }
+
 
 // TODO
 impl<A:ForIRI> Default for OntologyID<A> {
