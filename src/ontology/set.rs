@@ -50,11 +50,6 @@ impl<A: ForIRI> SetOntology<A> {
     pub fn from_index<AA: ForIndex<A>>(oid: OntologyID<A>, si: SetIndex<A, AA>) -> SetOntology<A> {
         (oid, si.into_iter().map(|s| s.unwrap())).into()
     }
-
-    /// Gets an iterator that visits the annotated axioms of the ontology.
-    pub fn iter(&self) -> SetIter<'_, A> {
-        SetIter(self.0.i().0.iter())
-    }
 }
 
 impl<A: ForIRI> Ontology<A> for SetOntology<A> {
@@ -72,6 +67,16 @@ impl<A: ForIRI> Ontology<A> for SetOntology<A> {
 
     fn mut_doc_iri(&mut self) -> &mut Option<IRI<A>> {
         self.0.mut_doc_iri()
+    }
+}
+
+impl<A: ForIRI> IterableOntology<A> for SetOntology<A> {
+    type Iterator<'c> = SetIter<'c, A>
+        where A:'c;
+
+    /// Gets an iterator that visits the annotated axioms of the ontology.
+    fn iter<'c>(&'c self) -> SetIter<'c, A> {
+        SetIter(self.0.i().0.iter())
     }
 }
 

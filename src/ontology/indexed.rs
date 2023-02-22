@@ -70,6 +70,7 @@ impl<A: ForIRI, T: ?Sized> ForIndex<A> for T where
 /// do, or the it will be dropped entirely. The `SetIndex` is a simple
 /// way to achieving this.
 pub trait OntologyIndex<A: ForIRI, AA: ForIndex<A>> {
+
     /// Potentially insert an AnnotatedAxiom to the index.
     ///
     /// If the index did not have this value present, true is returned.
@@ -179,6 +180,7 @@ impl<A: ForIRI, AA: ForIndex<A>, I: OntologyIndex<A, AA>> Ontology<A>
     fn mut_doc_iri(&mut self) -> &mut Option<IRI<A>> {
         &mut self.2
     }
+
 }
 
 impl<A: ForIRI, AA: ForIndex<A>, I: OntologyIndex<A, AA>> MutableOntology<A>

@@ -446,7 +446,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
             )),
             b,
             config,
-            
+
             triple,
             simple: d!(),
             bnode: d!(),
