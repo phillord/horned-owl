@@ -1,18 +1,11 @@
 Horned-Bin
 ==========
 
-
-Horned-Bin is a set of command line tools for mainpulating OWL
-ontologies.
-
-
-Command Line tools
----------
-In addition to the Rust library, the project includes the implementations of several command line utilities that exemplify the usage of APIs offered by the `horned-owl` crate and provide ready-to-use tools.
+This is a set of command line tools built using the `horned` crate and provide core services for the manipulation of OWL ontologies.
 
 ### Building
 
-The tool suite is available as a single binary `horned`:
+The tool suite is available as a single binary `horned`, collecting all tools as subcommands:
 
 ```bash
 cargo build --release --bin horned
@@ -23,6 +16,8 @@ or as a collection of standalone binaries, each can be built using:
 ```bash
 cargo build --release --bin horned-[TOOLNAME]
 ```
+
+using the tools listed below.
 
 ### Running
 
@@ -42,7 +37,7 @@ using the requested arguments.
 
 ### Description
 
-| Tool | Arguments | Summary | Source file |
+| `TOOLNAME` | Arguments | Summary | Source file |
 | ---  | ---       | ---     | ---         |
 | *big*  | `n`: unsigned integer | Generates an OWL file containing `n` class declarations.     | [source](src/bin/horned_big.rs) |
 | *compare*  | `ont-1`, `ont-2`: paths     | Compares the statistics of ontologies specified in `ont-1` and `ont-2`. | [source](src/bin/horned_compare.rs) |
