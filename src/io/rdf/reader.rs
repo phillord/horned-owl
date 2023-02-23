@@ -17,7 +17,7 @@ use crate::{
     ontology::{
         declaration_mapped::DeclarationMappedIndex,
         indexed::ThreeIndexedOntology,
-        logically_equal::{update_or_insert_logically_equal_axiom, LogicallyEqualIndex},
+        logically_equal::{update_or_insert_logically_equal_component, LogicallyEqualIndex},
         set::{SetIndex, SetOntology},
     },
     resolve::strict_resolve_iri,
@@ -339,14 +339,14 @@ impl<A: ForIRI, AA: ForIndex<A>> Ontology<A> for RDFOntology<A, AA> {
 }
 
 impl<A: ForIRI, AA:ForIndex<A>> MutableOntology<A> for RDFOntology<A, AA> {
-    fn insert<IAA>(&mut self, ax: IAA) -> bool
+    fn insert<IAA>(&mut self, cmp: IAA) -> bool
     where
         IAA: Into<AnnotatedComponent<A>> {
-         self.0.insert (ax)
+         self.0.insert (cmp)
     }
 
-    fn take (&mut self, ax:&AnnotatedComponent<A>) -> Option<AnnotatedComponent<A>> {
-        self.0.take (ax)
+    fn take (&mut self, cmp:&AnnotatedComponent<A>) -> Option<AnnotatedComponent<A>> {
+        self.0.take (cmp)
     }
 }
 
@@ -602,7 +602,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
                 [Term::Iri(_), Term::OWL(VOWL::Imports), Term::Iri(imp)] => {
                     v.push(imp.clone());
                     self.merge(AnnotatedComponent {
-                        axiom: Import(imp).into(),
+                        component: Import(imp).into(),
                         ann: BTreeSet::new(),
                     });
                 }
@@ -682,9 +682,9 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
         }
     }
 
-    fn merge<IAA: Into<AnnotatedComponent<A>>>(&mut self, ax: IAA) {
-        let ax = ax.into();
-        update_or_insert_logically_equal_axiom(&mut self.o.0, ax);
+    fn merge<IAA: Into<AnnotatedComponent<A>>>(&mut self, cmp: IAA) {
+        let cmp = cmp.into();
+        update_or_insert_logically_equal_component(&mut self.o.0, cmp);
     }
 
     fn axiom_annotations(&mut self) {
@@ -738,7 +738,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
                     .unwrap_or_default();
                 let ne: NamedEntity<_> = entity;
                 self.merge(AnnotatedComponent {
-                    axiom: ne.into(),
+                    component: ne.into(),
                     ann,
                 });
             } else {
@@ -1335,7 +1335,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
 
             if let Some(axiom) = axiom? {
                 self.merge(AnnotatedComponent {
-                    axiom,
+                    component:axiom,
                     ann: BTreeSet::new(),
                 })
             } else {
@@ -1657,7 +1657,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
                     .ann_map
                     .remove(&triple.0)
                     .unwrap_or_default();
-                self.merge(AnnotatedComponent { axiom, ann })
+                self.merge(AnnotatedComponent { component: axiom, ann })
             } else {
                 self.simple.push(triple)
             }
@@ -1671,7 +1671,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
             let firi = |s: &mut OntologyParser<_, _>, t, iri: &IRI<_>| {
                 let ann = s.ann_map.remove(t).unwrap_or_default();
                 s.merge(AnnotatedComponent {
-                    axiom: AnnotationAssertion {
+                    component: AnnotationAssertion {
                         subject: iri.into(),
                         ann: s.annotation(t),
                     }
@@ -1709,7 +1709,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
                 let ann = s.ann_map.remove(t).unwrap_or_default();
                 let ind: AnonymousIndividual<A> = s.b.anon(ind.0.clone());
                 s.merge(AnnotatedComponent {
-                    axiom: AnnotationAssertion {
+                    component: AnnotationAssertion {
                         subject: ind.into(),
                         ann: s.annotation(t),
                     }

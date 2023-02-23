@@ -44,7 +44,7 @@ impl<A: ForIRI, AA: ForIndex<A>> DeclarationMappedIndex<A, AA> {
             | ComponentKind::DeclareAnnotationProperty
             | ComponentKind::DeclareDataProperty
             | ComponentKind::DeclareDatatype
-            | ComponentKind::DeclareNamedIndividual => match ax.clone().axiom {
+            | ComponentKind::DeclareNamedIndividual => match ax.clone().component {
                 Component::DeclareClass(dc) => Some(dc.0.into()),
                 Component::DeclareObjectProperty(op) => Some(op.0.into()),
                 Component::DeclareAnnotationProperty(ap) => Some(ap.0.into()),
@@ -64,7 +64,7 @@ impl<A: ForIRI, AA: ForIndex<A>> DeclarationMappedIndex<A, AA> {
             | ComponentKind::DeclareAnnotationProperty
             | ComponentKind::DeclareDataProperty
             | ComponentKind::DeclareDatatype
-            | ComponentKind::DeclareNamedIndividual => match ax.clone().axiom {
+            | ComponentKind::DeclareNamedIndividual => match ax.clone().component {
                 Component::DeclareClass(dc) => Some(dc.0.into()),
                 Component::DeclareObjectProperty(op) => Some(op.0.into()),
                 Component::DeclareAnnotationProperty(ap) => Some(ap.0.into()),

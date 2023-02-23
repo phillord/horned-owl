@@ -66,8 +66,8 @@ pub(crate) fn matcher(matches: &ArgMatches) -> Result<(), HornedError> {
     println!();
     println!("Detailed");
 
-    for ((axk, size_a), (_, size_b)) in summary_a.with_axiom_types().zip(summary_b.with_axiom_types()) {
-        println!("\t{0:<40}{1:<5}\t{2:<5}", name(axk), size_a, size_b);
+    for ((cmpk, size_a), (_, size_b)) in summary_a.with_axiom_types().zip(summary_b.with_axiom_types()) {
+        println!("\t{0:<40}{1:<5}\t{2:<5}", name(cmpk), size_a, size_b);
     }
 
     if let Some(p_a) = p_a {
