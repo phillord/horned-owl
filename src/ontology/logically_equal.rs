@@ -22,26 +22,26 @@ impl LogicallyEqualIndex<RcStr, Rc<AnnotatedComponent<RcStr>>> {
 }
 
 impl<A: ForIRI, AA: ForIndex<A>> OntologyIndex<A, AA> for LogicallyEqualIndex<A, AA> {
-    fn index_insert(&mut self, ax: AA) -> bool {
-        self.0.insert(ax.borrow().axiom.clone(), ax).is_some()
+    fn index_insert(&mut self, cmp: AA) -> bool {
+        self.0.insert(cmp.borrow().component.clone(), cmp).is_some()
     }
 
-    fn index_remove(&mut self, ax: &AnnotatedComponent<A>) -> bool {
-        self.0.remove(&ax.axiom).is_some()
+    fn index_remove(&mut self, cmp: &AnnotatedComponent<A>) -> bool {
+        self.0.remove(&cmp.component).is_some()
     }
 }
 
 impl<A: ForIRI, AA: ForIndex<A>> LogicallyEqualIndex<A, AA> {
-    pub fn logical_contains(&self, ax: &AnnotatedComponent<A>) -> bool {
-        self.0.contains_key(&ax.axiom)
+    pub fn logical_contains(&self, cmp: &AnnotatedComponent<A>) -> bool {
+        self.0.contains_key(&cmp.component)
     }
 
-    pub fn logical_get(&self, ax: &AnnotatedComponent<A>) -> Option<&AnnotatedComponent<A>> {
-        self.0.get(&ax.axiom).map(|fi| fi.borrow())
+    pub fn logical_get(&self, cmp: &AnnotatedComponent<A>) -> Option<&AnnotatedComponent<A>> {
+        self.0.get(&cmp.component).map(|fi| fi.borrow())
     }
 
-    pub fn logical_get_rc(&self, ax: &AnnotatedComponent<A>) -> Option<AA> {
-        self.0.get(&ax.axiom).cloned()
+    pub fn logical_get_rc(&self, cmp: &AnnotatedComponent<A>) -> Option<AA> {
+        self.0.get(&cmp.component).cloned()
     }
 }
 
@@ -64,26 +64,26 @@ where
     }
 }
 
-pub fn update_or_insert_logically_equal_axiom<A: ForIRI, AA: ForIndex<A>, O>(
+pub fn update_or_insert_logically_equal_component<A: ForIRI, AA: ForIndex<A>, O>(
     o: &mut O,
-    axiom: AnnotatedComponent<A>,
+    cmp: AnnotatedComponent<A>,
 ) where
     O: MutableOntology<A> + AsRef<LogicallyEqualIndex<A, AA>>,
 {
-    if let Some(axiom) = update_logically_equal_axiom(o, axiom) {
-        o.insert(axiom);
+    if let Some(cmp) = update_logically_equal_axiom(o, cmp) {
+        o.insert(cmp);
     }
 }
 
 pub fn update_logically_equal_axiom<A: ForIRI, AA: ForIndex<A>, O>(
     o: &mut O,
-    mut axiom: AnnotatedComponent<A>,
+    mut cmp: AnnotatedComponent<A>,
 ) -> Option<AnnotatedComponent<A>>
 where
     O: MutableOntology<A> + AsRef<LogicallyEqualIndex<A, AA>>,
 {
     let lei: &LogicallyEqualIndex<_, _> = o.as_ref();
-    let src = lei.logical_get_rc(&axiom);
+    let src = lei.logical_get_rc(&cmp);
     // Does the logically equal axiom exist
     if let Some(fi) = src {
         // Remove the rc from everywhere
@@ -94,13 +94,13 @@ where
         // Un-rc
         let mut logical_axiom = fi.unwrap();
         // Extend it
-        logical_axiom.ann.append(&mut axiom.ann);
+        logical_axiom.ann.append(&mut cmp.ann);
         // Insert it
         o.insert(logical_axiom);
         None
     } else {
         // Otherwise put the one we have in
-        Some(axiom)
+        Some(cmp)
     }
 }
 

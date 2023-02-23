@@ -829,7 +829,7 @@ from_start! {
                         _ => {
                             return Ok(AnnotatedComponent{
                                 ann:annotation,
-                                axiom:axiom_from_start(r,e,axiom_kind.as_ref())?
+                                component:axiom_from_start(r,e,axiom_kind.as_ref())?
                             });
                         }
                     }
@@ -1281,7 +1281,7 @@ pub mod test {
 
         let aa = ont
             .i()
-            .axiom_for_kind(ComponentKind::DeclareClass)
+            .component_for_kind(ComponentKind::DeclareClass)
             .next()
             .unwrap();
 
@@ -1353,12 +1353,12 @@ pub mod test {
         let ont_s = include_str!("../../ont/owl-xml/annotation-on-subclass.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
-        let annotated_axiom = ont
+        let annotated_component = ont
             .i()
-            .axiom_for_kind(ComponentKind::SubClassOf)
+            .component_for_kind(ComponentKind::SubClassOf)
             .next()
             .unwrap();
-        assert_eq!(annotated_axiom.ann.len(), 1);
+        assert_eq!(annotated_component.ann.len(), 1);
     }
 
     #[test]
@@ -1551,7 +1551,7 @@ pub mod test {
         let ont_s = include_str!("../../ont/owl-xml/annotation-with-annotation.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
-        let mut ann_i = ont.i().axiom_for_kind(ComponentKind::AnnotationAssertion);
+        let mut ann_i = ont.i().component_for_kind(ComponentKind::AnnotationAssertion);
         let ann: &AnnotatedComponent<_> = ann_i.next().unwrap();
         assert_eq!(ann.ann.len(), 1);
     }
@@ -1561,12 +1561,12 @@ pub mod test {
         let ont_s = include_str!("../../ont/owl-xml/annotation-on-transitive.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
-        let annotated_axiom = ont
+        let annotated_component = ont
             .i()
-            .axiom_for_kind(ComponentKind::TransitiveObjectProperty)
+            .component_for_kind(ComponentKind::TransitiveObjectProperty)
             .next()
             .unwrap();
-        assert_eq!(annotated_axiom.ann.len(), 1);
+        assert_eq!(annotated_component.ann.len(), 1);
     }
 
     #[test]
@@ -1574,13 +1574,13 @@ pub mod test {
         let ont_s = include_str!("../../ont/owl-xml/two-annotation-on-transitive.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
-        let annotated_axiom = ont
+        let annotated_component = ont
             .i()
-            .axiom_for_kind(ComponentKind::TransitiveObjectProperty)
+            .component_for_kind(ComponentKind::TransitiveObjectProperty)
             .next()
             .unwrap();
 
-        assert_eq!(annotated_axiom.ann.len(), 2);
+        assert_eq!(annotated_component.ann.len(), 2);
     }
     #[test]
     fn test_sub_annotation() {

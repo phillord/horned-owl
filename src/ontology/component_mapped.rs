@@ -1,13 +1,13 @@
-//! Access `AnnotatedAxiom` by their kind.
+//! Access `AnnotatedComponent` by their kind.
 
 //! # Overview
 //!
-//! This module provides an `AxiomMappedIndex` which provides rapid
-//! access to all axioms of a given type.
+//! This module provides an `ComponentMappedIndex` which provides rapid
+//! access to all component of a given type.
 //!
-//! As well as being iterable, it provides `axiom` and
-//! `axiom_for_kind` which iterate over a particular `AxiomKind` of
-//! `Axiom` or `AnnotatedAxiom`, or methods such as `sub_class_of`, or
+//! As well as being iterable, it provides `component` and
+//! `component_for_kind` which iterate over a particular `ComponentKind` of
+//! `Component` or `AnnotatedComponent`, or methods such as `sub_class_of`, or
 //! `object_property_domain` which iterate over `SubClassOf` or
 //! `ObjectPropertyDomain` axioms respectively.
 use super::indexed::ForIndex;
@@ -28,14 +28,14 @@ use super::indexed::{OneIndexedOntology, OntologyIndex};
 #[allow(unused_macros)]
 macro_rules! on {
     ($ont:ident, $kind:ident) => {
-        $ont.axiom(ComponentKind::$kind).map(|ax| match ax {
+        $ont.component(ComponentKind::$kind).map(|cmp| match cmp {
             Component::$kind(n) => n,
             _ => panic!(),
         })
     };
 }
 
-/// Add a method to `Ontology` which returns axioms of a specific
+/// Add a method to `Ontology` which returns components of a specific
 /// `ComponentKind`.
 #[allow(unused_macros)]
 macro_rules! onimpl {
@@ -56,7 +56,7 @@ macro_rules! onimpl {
 
 #[derive(Debug, Default, Eq, PartialEq)]
 pub struct ComponentMappedIndex<A, AA> {
-    axiom: RefCell<BTreeMap<ComponentKind, BTreeSet<AA>>>,
+    component: RefCell<BTreeMap<ComponentKind, BTreeSet<AA>>>,
     pd: PhantomData<A>,
 }
 
@@ -74,42 +74,42 @@ impl<A: ForIRI, AA: ForIndex<A>> ComponentMappedIndex<A, AA> {
     /// ```
     pub fn new() -> ComponentMappedIndex<A, AA> {
         ComponentMappedIndex {
-            axiom: RefCell::new(BTreeMap::new()),
+            component: RefCell::new(BTreeMap::new()),
             pd: Default::default(),
         }
     }
 
-    /// Fetch the axioms hashmap as a raw pointer.
+    /// Fetch the component hashmap as a raw pointer.
     ///
-    /// This method also ensures that the BTreeSet for `axk` is
+    /// This method also ensures that the BTreeSet for `cmk` is
     /// instantiated, which means that it effects equality of the
     /// ontology. It should only be used where the intention is to
     /// update the ontology.
-    fn axioms_as_ptr(&self, axk: ComponentKind) -> *mut BTreeMap<ComponentKind, BTreeSet<AA>> {
-        self.axiom
+    fn component_as_ptr(&self, cmk: ComponentKind) -> *mut BTreeMap<ComponentKind, BTreeSet<AA>> {
+        self.component
             .borrow_mut()
-            .entry(axk)
+            .entry(cmk)
             .or_insert_with(BTreeSet::new);
-        self.axiom.as_ptr()
+        self.component.as_ptr()
     }
 
-    /// Fetch the axioms for the given kind.
-    fn set_for_kind(&self, axk: ComponentKind) -> Option<&BTreeSet<AA>> {
-        unsafe { (*self.axiom.as_ptr()).get(&axk) }
+    /// Fetch the components for the given kind.
+    fn set_for_kind(&self, cmk: ComponentKind) -> Option<&BTreeSet<AA>> {
+        unsafe { (*self.component.as_ptr()).get(&cmk) }
     }
 
-    /// Fetch the axioms for given kind as a mutable ref.
-    fn mut_set_for_kind(&mut self, axk: ComponentKind) -> &mut BTreeSet<AA> {
-        unsafe { (*self.axioms_as_ptr(axk)).get_mut(&axk).unwrap() }
+    /// Fetch the components for given kind as a mutable ref.
+    fn mut_set_for_kind(&mut self, cmk: ComponentKind) -> &mut BTreeSet<AA> {
+        unsafe { (*self.component_as_ptr(cmk)).get_mut(&cmk).unwrap() }
     }
 
-    /// Gets an iterator that visits the annotated axioms of the ontology.
+    /// Gets an iterator that visits the annotated components of the ontology.
     pub fn iter(&self) -> ComponentMappedIter<A, AA> {
         // TODO -- what can't this just use flat_map?
         ComponentMappedIter {
             ont: self,
             inner: None,
-            kinds: unsafe { (*self.axiom.as_ptr()).keys().collect() },
+            kinds: unsafe { (*self.component.as_ptr()).keys().collect() },
         }
     }
 
@@ -124,12 +124,12 @@ impl<A: ForIRI, AA: ForIndex<A>> ComponentMappedIndex<A, AA> {
     /// o.declare(b.class("http://www.example.com/a"));
     /// o.declare(b.object_property("http://www.example.com/r"));
     ///
-    /// assert_eq!(o.i().axiom_for_kind(ComponentKind::DeclareClass).count(), 1);
+    /// assert_eq!(o.i().component_for_kind(ComponentKind::DeclareClass).count(), 1);
     /// ```
     ///
-    /// See also `axiom` for access to the `Component` without annotations.
-    pub fn axiom_for_kind(&self, axk: ComponentKind) -> impl Iterator<Item = &AnnotatedComponent<A>> {
-        self.set_for_kind(axk)
+    /// See also `component` for access to the `Component` without annotations.
+    pub fn component_for_kind(&self, cmk: ComponentKind) -> impl Iterator<Item = &AnnotatedComponent<A>> {
+        self.set_for_kind(cmk)
             // Iterate over option
             .into_iter()
             // flatten option iterator!
@@ -148,13 +148,13 @@ impl<A: ForIRI, AA: ForIndex<A>> ComponentMappedIndex<A, AA> {
     /// o.declare(b.class("http://www.example.com/a"));
     /// o.declare(b.object_property("http://www.example.com/r"));
     ///
-    /// assert_eq!(o.i().axiom(ComponentKind::DeclareClass).count(), 1);
+    /// assert_eq!(o.i().component(ComponentKind::DeclareClass).count(), 1);
     /// ```
     ///
     /// See methods such as `declare_class` for access to the Component
     /// struct directly.
-    pub fn axiom(&self, axk: ComponentKind) -> impl Iterator<Item = &Component<A>> {
-        self.axiom_for_kind(axk).map(|ann| &ann.axiom)
+    pub fn component(&self, cmk: ComponentKind) -> impl Iterator<Item = &Component<A>> {
+        self.component_for_kind(cmk).map(|ann| &ann.component)
     }
 
     pub fn the_ontology_id(&self) -> Option<OntologyID<A>> {
@@ -164,13 +164,7 @@ impl<A: ForIRI, AA: ForIndex<A>> ComponentMappedIndex<A, AA> {
         self.the_ontology_id().unwrap_or_default()
     }
 }
-// In the ideal world, we would have generated these onimpl! calls as
-// part of the axiom macro. This should be possible, as their is a
-// fixed relationship between the struct name and the method name.
-// But rust won't let us generate new identifiers or make string like
-// manipulations on the them. So we can't.
-//
-// "Whoever does not understand LISP is doomed to reinvent it" (badly)
+
 onimpl! {OntologyID, ontology_id}
 onimpl! {OntologyAnnotation, ontology_annotation}
 onimpl! {Import, import}
@@ -217,12 +211,12 @@ onimpl! {SubAnnotationPropertyOf, sub_annotation_property_of}
 onimpl! {AnnotationPropertyDomain, annotation_property_domain}
 onimpl! {AnnotationPropertyRange, annotation_property_range}
 
-/// An owning iterator over the annotated axioms of an `Ontology`.
+/// An owning iterator over the annotated components of an `Ontology`.
 impl<A: ForIRI, AA: ForIndex<A>> IntoIterator for ComponentMappedIndex<A, AA> {
     type Item = AnnotatedComponent<A>;
     type IntoIter = std::vec::IntoIter<AnnotatedComponent<A>>;
     fn into_iter(self) -> Self::IntoIter {
-        let btreemap = self.axiom.into_inner();
+        let btreemap = self.component.into_inner();
 
         // The collect switches the type which shows up in the API. Blegh.
         #[allow(clippy::needless_collect)]
@@ -237,7 +231,7 @@ impl<A: ForIRI, AA: ForIndex<A>> IntoIterator for ComponentMappedIndex<A, AA> {
     }
 }
 
-/// An iterator over the annotated axioms of an `Ontology`.
+/// An iterator over the annotated components of an `Ontology`.
 pub struct ComponentMappedIter<'a, A: ForIRI, AA: ForIndex<A>> {
     ont: &'a ComponentMappedIndex<A, AA>,
     kinds: VecDeque<&'a ComponentKind>,
@@ -249,11 +243,11 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> Iterator for ComponentMappedIter<'a, A, AA>
     fn next(&mut self) -> Option<Self::Item> {
         // Consume the current iterator if there are items left.
         if let Some(ref mut it) = self.inner {
-            if let Some(axiom) = it.next() {
-                return Some(axiom.borrow());
+            if let Some(component) = it.next() {
+                return Some(component.borrow());
             }
         }
-        // Attempt to consume the iterator for the next axiom kind
+        // Attempt to consume the iterator for the next component kind
         if !self.kinds.is_empty() {
             let kind = self.kinds.pop_front().unwrap();
             self.inner = self.ont.set_for_kind(*kind).map(BTreeSet::iter);
@@ -271,18 +265,18 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> IntoIterator for &'a ComponentMappedIndex<A
         ComponentMappedIter {
             ont: self,
             inner: None,
-            kinds: unsafe { (*self.axiom.as_ptr()).keys().collect() },
+            kinds: unsafe { (*self.component.as_ptr()).keys().collect() },
         }
     }
 }
 
 impl<A: ForIRI, AA: ForIndex<A>> OntologyIndex<A, AA> for ComponentMappedIndex<A, AA> {
-    fn index_insert(&mut self, ax: AA) -> bool {
-        self.mut_set_for_kind(ax.borrow().kind()).insert(ax)
+    fn index_insert(&mut self, cmp: AA) -> bool {
+        self.mut_set_for_kind(cmp.borrow().kind()).insert(cmp)
     }
 
-    fn index_remove(&mut self, ax: &AnnotatedComponent<A>) -> bool {
-        self.mut_set_for_kind(ax.kind()).remove(ax)
+    fn index_remove(&mut self, cmp: &AnnotatedComponent<A>) -> bool {
+        self.mut_set_for_kind(cmp.kind()).remove(cmp)
     }
 }
 
@@ -296,15 +290,15 @@ impl<A: ForIRI, AA: ForIndex<A>> Ontology<A> for ComponentMappedOntology<A, AA> 
 }
 
 impl<A: ForIRI, AA: ForIndex<A>> MutableOntology<A> for ComponentMappedOntology<A, AA> {
-    fn insert<IAA>(&mut self, ax: IAA) -> bool
+    fn insert<IAA>(&mut self, cmp: IAA) -> bool
     where
         IAA: Into<AnnotatedComponent<A>>,
     {
-        self.0.insert(ax)
+        self.0.insert(cmp)
     }
 
-    fn take(&mut self, ax: &AnnotatedComponent<A>) -> Option<AnnotatedComponent<A>> {
-        self.0.take(ax)
+    fn take(&mut self, cmp: &AnnotatedComponent<A>) -> Option<AnnotatedComponent<A>> {
+        self.0.take(cmp)
     }
 }
 
@@ -348,8 +342,8 @@ impl<A: ForIRI, AA: ForIndex<A>> IntoIterator for ComponentMappedOntology<A, AA>
 impl<A: ForIRI, AA: ForIndex<A>> From<SetOntology<A>> for ComponentMappedOntology<A, AA> {
     fn from(so: SetOntology<A>) -> ComponentMappedOntology<A, AA> {
         let mut amo = ComponentMappedOntology::new();
-        for ax in so {
-            amo.insert(ax);
+        for cmp in so {
+            amo.insert(cmp);
         }
         amo
     }
@@ -359,8 +353,8 @@ impl<A: ForIRI, AA: ForIndex<A>> From<ComponentMappedOntology<A, AA>> for SetOnt
     fn from(amo: ComponentMappedOntology<A, AA>) -> SetOntology<A> {
         let mut so = SetOntology::new();
 
-        for ax in amo {
-            so.insert(ax);
+        for cmp in amo {
+            so.insert(cmp);
         }
         so
     }

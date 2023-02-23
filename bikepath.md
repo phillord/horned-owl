@@ -1,5 +1,19 @@
-Version 0.15.0
-==============
+Version next
+============
+
+Update ontology interfaces.
+
+Currently, all ontologies should implement `From<SetOntology>` and
+`Into<SetOntology>`, but this is not performant, because it requires
+unpacking the `Component` from the `Rc` or what ever it is wrapped
+in. If the `SetOntology` is then converted into another ontology using
+indexes, then everything needs to be packed up again.
+
+So, we should use `SetIndex` as the central point for packing and
+unpacking.
+
+Version next
+============
 
 Lots of fixes for the RDF parser based on lots of known files.
 

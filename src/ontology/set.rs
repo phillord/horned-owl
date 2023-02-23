@@ -8,7 +8,7 @@ use std::marker::PhantomData;
 
 /// An Ontology backed by a set. This should be the fastest and least
 /// overhead implementation of an ontology. It provides rapid testing
-/// of whether an equivalent axiom exists, and is iterable.
+/// of whether an equivalent component exists, and is iterable.
 #[derive(Debug, Eq, PartialEq)]
 pub struct SetOntology<A: ForIRI>(
     OneIndexedOntology<A, AnnotatedComponent<A>, SetIndex<A, AnnotatedComponent<A>>>,
@@ -55,7 +55,7 @@ impl<A: ForIRI> SetOntology<A> {
         self.0.i()
     }
 
-    /// Gets an iterator that visits the annotated axioms of the ontology.
+    /// Gets an iterator that visits the annotated components of the ontology.
     pub fn iter(&self) -> SetIter<'_, A> {
         SetIter(self.0.i().0.iter())
     }
@@ -101,7 +101,7 @@ impl<'a, A: ForIRI> IntoIterator for &'a SetOntology<A> {
     }
 }
 
-/// An owning iterator over the annotated axioms of an `Ontology`.
+/// An owning iterator over the annotated components of an `Ontology`.
 pub struct SetIntoIter<A: ForIRI>(std::vec::IntoIter<AnnotatedComponent<A>>);
 
 impl<A: ForIRI> Iterator for SetIntoIter<A> {
@@ -133,19 +133,19 @@ impl<A: ForIRI> MutableOntology<A> for SetOntology<A> {
     /// ```
     ///
     /// See `declare` for an easier way to declare named entities.
-    fn insert<AA>(&mut self, ax: AA) -> bool
+    fn insert<AA>(&mut self, cmp: AA) -> bool
     where
         AA: Into<AnnotatedComponent<A>>,
     {
-        self.0.insert(ax)
+        self.0.insert(cmp)
     }
 
-    fn remove(&mut self, ax: &AnnotatedComponent<A>) -> bool {
-        self.0.remove(ax)
+    fn remove(&mut self, cmp: &AnnotatedComponent<A>) -> bool {
+        self.0.remove(cmp)
     }
 
-    fn take(&mut self, ax: &AnnotatedComponent<A>) -> Option<AnnotatedComponent<A>> {
-        self.0.take(ax)
+    fn take(&mut self, cmp: &AnnotatedComponent<A>) -> Option<AnnotatedComponent<A>> {
+        self.0.take(cmp)
     }
 }
 
@@ -179,12 +179,12 @@ where
 pub struct SetIndex<A: ForIRI, AA: ForIndex<A>>(HashSet<AA>, PhantomData<A>);
 
 impl<A: ForIRI, AA: ForIndex<A>> OntologyIndex<A, AA> for SetIndex<A, AA> {
-    fn index_insert(&mut self, ax: AA) -> bool {
-        self.0.insert(ax)
+    fn index_insert(&mut self, cmp: AA) -> bool {
+        self.0.insert(cmp)
     }
 
-    fn index_remove(&mut self, ax: &AnnotatedComponent<A>) -> bool {
-        self.0.remove(ax)
+    fn index_remove(&mut self, cmp: &AnnotatedComponent<A>) -> bool {
+        self.0.remove(cmp)
     }
 }
 
@@ -193,13 +193,13 @@ impl<A: ForIRI, AA: ForIndex<A>> SetIndex<A, AA> {
         SetIndex(Default::default(), Default::default())
     }
 
-    pub fn contains(&self, ax: &AnnotatedComponent<A>) -> bool {
-        self.0.contains(ax)
+    pub fn contains(&self, cmp: &AnnotatedComponent<A>) -> bool {
+        self.0.contains(cmp)
     }
 
     pub fn the_ontology_id(&self) -> Option<OntologyID<A>> {
         self.0.iter().filter_map(|item| {
-            match &item.borrow().axiom {
+            match &item.borrow().component {
                 Component::OntologyID(id) => Some(id),
                 _ => None,
             }

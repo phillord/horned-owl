@@ -1,3 +1,13 @@
+Version 0.15.0
+==============
+
+This release adds nothing but breaks all the interfaces!
+
+Ontologies are not an iterator of Components, rather than axioms. This
+regularizes the way that OntologyID and DocIRIs are treated -- this
+has the subsidary advantage that DocIRIs should work better now. The
+main purpose, though, it to pave the way for support of SWRL rules.
+
 Version 0.14.0
 ==============
 

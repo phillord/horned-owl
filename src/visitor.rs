@@ -164,7 +164,7 @@ impl<A: ForIRI, V: Visit<A>> Walk<A, V> {
 
     pub fn annotated_component(&mut self, e: &AnnotatedComponent<A>) {
         self.0.visit_annotated_component(e);
-        self.component(&e.axiom);
+        self.component(&e.component);
         self.annotation_set(&e.ann);
     }
 

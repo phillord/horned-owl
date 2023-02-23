@@ -4,7 +4,7 @@ use horned_owl::{
     error::HornedError,
     io::{ParserOutput, ResourceType, ParserConfiguration},
     model::{Build, IRI, RcAnnotatedComponent, RcStr},
-    ontology::axiom_mapped::RcComponentMappedOntology,
+    ontology::component_mapped::RcComponentMappedOntology,
     resolve::{localize_iri, strict_resolve_iri},
 };
 
@@ -120,6 +120,8 @@ pub mod naming {
 
     pub fn name(axk: &ComponentKind) -> &'static str {
         match axk {
+            OntologyID => "Ontology ID",
+            DocIRI => "Doc IRI",
             OntologyAnnotation => "Ontology Annotation",
             Import => "Import",
             DeclareClass => "Declare Class",
@@ -170,7 +172,7 @@ pub mod naming {
 
 pub mod summary {
 
-    use horned_owl::{model::ComponentKind, ontology::axiom_mapped::RcComponentMappedOntology};
+    use horned_owl::{model::ComponentKind, ontology::component_mapped::RcComponentMappedOntology};
     use indexmap::map::IndexMap;
 
     #[derive(Debug)]
@@ -206,7 +208,7 @@ pub mod summary {
         let ont: RcComponentMappedOntology = ont.into();
         let mut im = IndexMap::new();
         for ax in ComponentKind::all_kinds() {
-            im.insert(ax, ont.i().axiom(ax).count());
+            im.insert(ax, ont.i().component(ax).count());
         }
 
         im
