@@ -63,6 +63,7 @@ pub(crate) fn matcher(matches: &ArgMatches) -> Result<(), HornedError> {
     println!("Ontology\t\t\t\t\tA\t\tB");
     println!("\tLogical Components:\t\t\t\t{}\t\t{}", summary_a.logical_axiom, summary_b.logical_axiom);
     println!("\tAnnotation Components:\t\t\t{}\t\t{}", summary_a.annotation_axiom, summary_b.annotation_axiom);
+    println!("\tMeta Components:\t\t\t{}\t\t{}", summary_a.meta_comp, summary_b.meta_comp);
     println!();
     println!("Detailed");
 
