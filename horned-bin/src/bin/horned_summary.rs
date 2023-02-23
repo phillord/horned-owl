@@ -49,6 +49,7 @@ pub(crate) fn matcher(matches: &ArgMatches) -> Result<(), HornedError> {
     println!("Ontology has:");
     println!("\tLogical Components: {}", summary.logical_axiom);
     println!("\tAnnotation Components: {}", summary.annotation_axiom);
+    println!("\tMeta Components: {}", summary.meta_comp);
     println!();
     println!("Detailed");
 

@@ -63,39 +63,39 @@ big-owl:
 ## Use a release build because we mostly save more time parsing go,
 ## than we loose do the release
 summary-go: ./tmp/go.owl
-	cargo run --bin horned-summary --release -- $^
+	cargo run -p horned-bin --bin horned-summary --release -- $^
 
 summary-go-plus: ./tmp/go-plus.owl
-	cargo run --bin horned-summary --release -- $^
+	cargo run -p horned-bin --bin horned-summary --release -- $^
 
 materialize-with-bfo: ./tmp/ont-with-bfo.owl
-	cargo run --bin horned-materialize -- $^
+	cargo run -p horned-bin  --bin horned-materialize -- $^
 
 parse-go-snippet:
-	cargo run --bin horned-parse -- ./dev/go-short.owl
+	cargo run -p horned-bin  --bin horned-parse -- ./dev/go-short.owl
 
 materialize-dto:
 	$(MAKE) -C ./big-owl/dto dto_complete.owl
-	cargo run --bin horned-materialize -- ./big-owl/dto/dto_complete.owl
+	cargo run -p horned-bin  --bin horned-materialize -- ./big-owl/dto/dto_complete.owl
 
 parse_dto_gpcr:
-	cargo run --bin horned-parse -- ./big-owl/dto/dto_vocabulary_gpcr_gene.owl
+	cargo run -p horned-bin  --bin horned-parse -- ./big-owl/dto/dto_vocabulary_gpcr_gene.owl
 
 triples-round-ont:
-	cargo run --bin horned-triples -- --round ./src/ont/owl-rdf/ont.owl
+	cargo run -p horned-bin  --bin horned-triples -- --round ./src/ont/owl-rdf/ont.owl
 
 triples-round-class:
-	cargo run --bin horned-triples -- --round ./src/ont/owl-rdf/class.owl
+	cargo run -p horned-bin  --bin horned-triples -- --round ./src/ont/owl-rdf/class.owl
 
 triples-round-and:
-	cargo run --bin horned-triples -- --round ./src/ont/owl-rdf/and.owl
+	cargo run -p horned-bin  --bin horned-triples -- --round ./src/ont/owl-rdf/and.owl
 
 triples-round-family:
-	cargo run --bin horned-triples -- --round ./src/ont/owl-rdf/family.owl
+	cargo run -p horned-bin  --bin horned-triples -- --round ./src/ont/owl-rdf/family.owl
 
 triples-round-all:
 	set -e; for i in ./src/ont/owl-rdf/*owl;\
-	do cargo run --bin horned-triples -- --round $$i;\
+	do cargo run -p horned-bin  --bin horned-triples -- --round $$i;\
 	echo;echo;echo;\
 	done
 
