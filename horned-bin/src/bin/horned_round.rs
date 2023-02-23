@@ -11,7 +11,7 @@ use horned_bin::{
 };
 
 use horned_owl::error::HornedError;
-use horned_owl::ontology::axiom_mapped::RcComponentMappedOntology;
+use horned_owl::ontology::component_mapped::RcComponentMappedOntology;
 
 use std::{io::stdout, path::Path};
 

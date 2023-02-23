@@ -6,7 +6,7 @@ use horned_owl::error::HornedError;
 use horned_owl::io::owx::writer::write;
 use horned_owl::model::Build;
 use horned_owl::model::MutableOntology;
-use horned_owl::ontology::axiom_mapped::RcComponentMappedOntology;
+use horned_owl::ontology::component_mapped::RcComponentMappedOntology;
 use horned_owl::ontology::set::SetOntology;
 
 use std::io::stdout;

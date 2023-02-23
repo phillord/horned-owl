@@ -23,7 +23,7 @@ Additionally, it makes the rules on exhaustive matching against
 Component less useful.
 
 
-* Support SWRL rules [4/11]
+* Support SWRL rules [6/11]
 
 This branch is design to support SWRL rules, using Solution 3 from the
 RFC branch.
@@ -31,9 +31,9 @@ RFC branch.
  - [X] Rename Axiom to Component
  - [X] Rename AnnotatedAxiom to AnnotatedComponent
  - [X] Move OntologyID to be AnnotatedComponent
- - [ ] What about doc_iri
+ - [X] What about doc_iri
  - [X] Add is_axiom, is_id methods, macro'd out
- - [ ] How do we add "axiom_iter" convience methods? Give that
+ - [X] How do we add "axiom_iter" convience methods? Give that
        Ontology has no interface per se.
  - [ ] Check all iterator examples to make sure they are using the
        right thing and should not use something else instead
@@ -50,11 +50,11 @@ RFC branch.
  - [ ] check instances of `axiom` as variable
 
 
-* doc_iri
+** instaces of axiom as a variable
 
-As far as I can see, I don't use the doc_iri support anywhere, and
-certainly don't pass it between iterators. So, if we move them to
-Component this will actually work
+Also need to check all instance of `ax` which I have used a lot.
+
+Update horned-compare/-summary etc
 
 
 * Do we still need Axiom emun

@@ -260,7 +260,7 @@ where
     m.render(w, m)?;
 
     for axk in ComponentKind::all_kinds() {
-        for ax in o.i().axiom_for_kind(axk) {
+        for ax in o.i().component_for_kind(axk) {
             ax.render(w, m)?;
         }
     }
@@ -383,7 +383,7 @@ render! {
         if self.is_axiom() {
             (
                 (&self.ann),
-                (&self.axiom)
+                (&self.component)
             ).within(w, m,
                      tag_for_kind(self.kind()))?;
         }

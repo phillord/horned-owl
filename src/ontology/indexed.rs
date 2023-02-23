@@ -75,18 +75,18 @@ pub trait OntologyIndex<A: ForIRI, AA: ForIndex<A>> {
     /// If the index did not have this value present, true is returned.
     ///
     /// If the index did have this value present, false is returned.
-    fn index_insert(&mut self, ax: AA) -> bool;
+    fn index_insert(&mut self, cmp: AA) -> bool;
 
     /// Remove an AnnotatedComponent from the index.
     ///
     /// If the index did have this value present, true is returned.
     ///
     /// If the index did not have this value present, false is returned.
-    fn index_remove(&mut self, ax: &AnnotatedComponent<A>) -> bool;
+    fn index_remove(&mut self, cmp: &AnnotatedComponent<A>) -> bool;
 
-    fn index_take(&mut self, ax: &AnnotatedComponent<A>) -> Option<AnnotatedComponent<A>> {
-        if self.index_remove(ax) {
-            Some(ax.clone())
+    fn index_take(&mut self, cmp: &AnnotatedComponent<A>) -> Option<AnnotatedComponent<A>> {
+        if self.index_remove(cmp) {
+            Some(cmp.clone())
         } else {
             None
         }
@@ -98,12 +98,12 @@ pub trait OntologyIndex<A: ForIRI, AA: ForIndex<A>> {
 pub struct NullIndex();
 impl<A: ForIRI, AA: ForIndex<A>> OntologyIndex<A, AA> for NullIndex {
     /// Insert an item, always returns false
-    fn index_insert(&mut self, _ax: AA) -> bool {
+    fn index_insert(&mut self, _cmp: AA) -> bool {
         false
     }
 
     /// Remove an item, always returns false
-    fn index_remove(&mut self, _ax: &AnnotatedComponent<A>) -> bool {
+    fn index_remove(&mut self, _cmp: &AnnotatedComponent<A>) -> bool {
         false
     }
 }
@@ -166,13 +166,13 @@ impl<A: ForIRI, AA: ForIndex<A>, I: OntologyIndex<A, AA>> Ontology<A>
 impl<A: ForIRI, AA: ForIndex<A>, I: OntologyIndex<A, AA>> MutableOntology<A>
     for OneIndexedOntology<A, AA, I>
 {
-    fn insert<IAA: Into<AnnotatedComponent<A>>>(&mut self, ax: IAA) -> bool {
-        let ax = ax.into();
-        self.0.index_insert(ax.into())
+    fn insert<IAA: Into<AnnotatedComponent<A>>>(&mut self, cmp: IAA) -> bool {
+        let cmp = cmp.into();
+        self.0.index_insert(cmp.into())
     }
 
-    fn take(&mut self, ax: &AnnotatedComponent<A>) -> Option<AnnotatedComponent<A>> {
-        self.0.index_take(ax)
+    fn take(&mut self, cmp: &AnnotatedComponent<A>) -> Option<AnnotatedComponent<A>> {
+        self.0.index_take(cmp)
     }
 }
 
@@ -214,29 +214,29 @@ impl<A: ForIRI, AA: ForIndex<A>, I: OntologyIndex<A, AA>, J: OntologyIndex<A, AA
 impl<A: ForIRI, AA: ForIndex<A>, I: OntologyIndex<A, AA>, J: OntologyIndex<A, AA>>
     MutableOntology<A> for TwoIndexedOntology<A, AA, I, J>
 {
-    fn insert<IAA: Into<AnnotatedComponent<A>>>(&mut self, ax: IAA) -> bool {
-        let ax = ax.into();
-        self.index_insert(ax.into())
+    fn insert<IAA: Into<AnnotatedComponent<A>>>(&mut self, cmp: IAA) -> bool {
+        let cmp = cmp.into();
+        self.index_insert(cmp.into())
     }
 
-    fn take(&mut self, ax: &AnnotatedComponent<A>) -> Option<AnnotatedComponent<A>> {
-        self.index_take(ax)
+    fn take(&mut self, cmp: &AnnotatedComponent<A>) -> Option<AnnotatedComponent<A>> {
+        self.index_take(cmp)
     }
 }
 
 impl<A: ForIRI, AA: ForIndex<A>, I: OntologyIndex<A, AA>, J: OntologyIndex<A, AA>>
     OntologyIndex<A, AA> for TwoIndexedOntology<A, AA, I, J>
 {
-    fn index_insert(&mut self, ax: AA) -> bool {
-        let rtn = self.0.index_insert(ax.clone());
+    fn index_insert(&mut self, cmp: AA) -> bool {
+        let rtn = self.0.index_insert(cmp.clone());
         // Don't short circuit
-        self.1.index_insert(ax) || rtn
+        self.1.index_insert(cmp) || rtn
     }
 
-    fn index_remove(&mut self, ax: &AnnotatedComponent<A>) -> bool {
-        let rtn = self.0.index_remove(ax);
+    fn index_remove(&mut self, cmp: &AnnotatedComponent<A>) -> bool {
+        let rtn = self.0.index_remove(cmp);
         // Don't short circuit
-        self.1.index_remove(ax) || rtn
+        self.1.index_remove(cmp) || rtn
     }
 }
 
@@ -308,12 +308,12 @@ impl<
         K: OntologyIndex<A, AA>,
     > MutableOntology<A> for ThreeIndexedOntology<A, AA, I, J, K>
 {
-    fn insert<IAA: Into<AnnotatedComponent<A>>>(&mut self, ax: IAA) -> bool {
-        self.0.insert(ax)
+    fn insert<IAA: Into<AnnotatedComponent<A>>>(&mut self, cmp: IAA) -> bool {
+        self.0.insert(cmp)
     }
 
-    fn take(&mut self, ax: &AnnotatedComponent<A>) -> Option<AnnotatedComponent<A>> {
-        self.0.take(ax)
+    fn take(&mut self, cmp: &AnnotatedComponent<A>) -> Option<AnnotatedComponent<A>> {
+        self.0.take(cmp)
     }
 }
 
@@ -325,16 +325,16 @@ impl<
         K: OntologyIndex<A, AA>,
     > OntologyIndex<A, AA> for ThreeIndexedOntology<A, AA, I, J, K>
 {
-    fn index_insert(&mut self, ax: AA) -> bool {
-        let rtn = (self.0).0.index_insert(ax.clone());
+    fn index_insert(&mut self, cmp: AA) -> bool {
+        let rtn = (self.0).0.index_insert(cmp.clone());
         // Don't short cirtuit
-        (self.0).1.index_insert(ax) || rtn
+        (self.0).1.index_insert(cmp) || rtn
     }
 
-    fn index_remove(&mut self, ax: &AnnotatedComponent<A>) -> bool {
-        let rtn = self.0.index_remove(ax);
+    fn index_remove(&mut self, cmp: &AnnotatedComponent<A>) -> bool {
+        let rtn = self.0.index_remove(cmp);
         // Don't short circuit
-        (self.0).1.index_remove(ax) || rtn
+        (self.0).1.index_remove(cmp) || rtn
     }
 }
 
@@ -409,12 +409,12 @@ impl<
         L: OntologyIndex<A, AA>,
     > MutableOntology<A> for FourIndexedOntology<A, AA, I, J, K, L>
 {
-    fn insert<IAA: Into<AnnotatedComponent<A>>>(&mut self, ax: IAA) -> bool {
-        self.0.insert(ax)
+    fn insert<IAA: Into<AnnotatedComponent<A>>>(&mut self, cmp: IAA) -> bool {
+        self.0.insert(cmp)
     }
 
-    fn take(&mut self, ax: &AnnotatedComponent<A>) -> Option<AnnotatedComponent<A>> {
-        self.0.take(ax)
+    fn take(&mut self, cmp: &AnnotatedComponent<A>) -> Option<AnnotatedComponent<A>> {
+        self.0.take(cmp)
     }
 }
 

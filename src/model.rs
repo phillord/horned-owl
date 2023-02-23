@@ -729,7 +729,7 @@ pub trait HigherKinded {
 /// An `AnnotatedComponent` is an `Component` with one orpmore `Annotation`.
 #[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
 pub struct AnnotatedComponent<A> {
-    pub axiom: Component<A>,
+    pub component: Component<A>,
     pub ann: BTreeSet<Annotation<A>>,
 }
 
@@ -738,18 +738,18 @@ pub type ArcAnnotatedComponent=Arc<AnnotatedComponent<ArcStr>>;
 
 
 impl<A: ForIRI> AnnotatedComponent<A> {
-    pub fn new<I>(axiom: I, ann: BTreeSet<Annotation<A>>) -> AnnotatedComponent<A>
+    pub fn new<I>(component: I, ann: BTreeSet<Annotation<A>>) -> AnnotatedComponent<A>
     where
         I: Into<Component<A>>,
     {
         AnnotatedComponent {
-            axiom: axiom.into(),
+            component: component.into(),
             ann,
         }
     }
 
     pub fn logical_cmp(&self, other: &AnnotatedComponent<A>) -> Ordering {
-        self.axiom.cmp(&other.axiom)
+        self.component.cmp(&other.component)
     }
 
     pub fn logical_partial_cmp(&self, other: &AnnotatedComponent<A>) -> Option<Ordering> {
@@ -757,18 +757,18 @@ impl<A: ForIRI> AnnotatedComponent<A> {
     }
 
     pub fn logical_eq(&self, other: &AnnotatedComponent<A>) -> bool {
-        self.axiom == other.axiom
+        self.component == other.component
     }
 
     pub fn logical_hash<H: Hasher>(&self, state: &mut H) {
-        self.axiom.hash(state)
+        self.component.hash(state)
     }
 }
 
 impl<A: ForIRI> From<Component<A>> for AnnotatedComponent<A> {
-    fn from(axiom: Component<A>) -> AnnotatedComponent<A> {
+    fn from(component: Component<A>) -> AnnotatedComponent<A> {
         AnnotatedComponent {
-            axiom,
+            component,
             ann: BTreeSet::new(),
         }
     }
@@ -776,14 +776,14 @@ impl<A: ForIRI> From<Component<A>> for AnnotatedComponent<A> {
 
 impl<A: ForIRI> Kinded for AnnotatedComponent<A> {
     fn kind(&self) -> ComponentKind {
-        self.axiom.kind()
+        self.component.kind()
     }
 }
 
 
 impl<A: ForIRI> HigherKinded for AnnotatedComponent<A> {
     fn higher_kind(&self) -> HigherKind {
-        self.axiom.higher_kind()
+        self.component.higher_kind()
     }
 }
 
