@@ -199,7 +199,7 @@ impl<A: ForIRI, AA: ForIndex<A>> SetIndex<A, AA> {
 
     pub fn the_ontology_id(&self) -> Option<OntologyIDComponent<A>> {
         self.0.iter().filter_map(|item| {
-            match &item.borrow().axiom {
+            match &item.borrow().component {
                 Component::OntologyID(id) => Some(id),
                 _ => None,
             }

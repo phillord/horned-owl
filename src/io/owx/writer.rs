@@ -383,7 +383,7 @@ render! {
         if self.is_axiom() {
             (
                 (&self.ann),
-                (&self.axiom)
+                (&self.component)
             ).within(w, m,
                      tag_for_kind(self.kind()))?;
         }

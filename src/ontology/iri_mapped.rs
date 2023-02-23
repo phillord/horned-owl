@@ -302,8 +302,8 @@ impl<A: ForIRI, AA: ForIndex<A>> From<SetOntology<A>> for IRIMappedOntology<A, A
     fn from(so: SetOntology<A>) -> IRIMappedOntology<A, AA> {
     fn from(so: SetOntology<A>) -> IRIMappedOntology<A, AA> {
         let mut imo = IRIMappedOntology::default();
-        for ax in so {
-            imo.insert(ax);
+        for cmp in so {
+            imo.insert(cmp);
         }
         imo
     }

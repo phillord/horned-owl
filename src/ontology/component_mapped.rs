@@ -164,13 +164,7 @@ impl<A: ForIRI, AA: ForIndex<A>> ComponentMappedIndex<A, AA> {
         self.the_ontology_id().unwrap_or_default()
     }
 }
-// In the ideal world, we would have generated these onimpl! calls as
-// part of the axiom macro. This should be possible, as their is a
-// fixed relationship between the struct name and the method name.
-// But rust won't let us generate new identifiers or make string like
-// manipulations on the them. So we can't.
-//
-// "Whoever does not understand LISP is doomed to reinvent it" (badly)
+
 onimpl! {OntologyID, ontology_id}
 onimpl! {OntologyAnnotation, ontology_annotation}
 onimpl! {Import, import}

@@ -172,7 +172,7 @@ pub mod naming {
 
 pub mod summary {
 
-    use horned_owl::{model::ComponentKind, ontology::axiom_mapped::RcComponentMappedOntology};
+    use horned_owl::{model::ComponentKind, ontology::component_mapped::RcComponentMappedOntology};
     use indexmap::map::IndexMap;
 
     #[derive(Debug)]
