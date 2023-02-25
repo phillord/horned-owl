@@ -1,7 +1,7 @@
 Horned OWL
 ==========
 
-![Crates.io](https://img.shields.io/crates/v/horned-owl?style=flat-square) ![docs.rs](https://img.shields.io/docsrs/horned-owl?style=flat-square)
+[![Crates.io](https://img.shields.io/crates/v/horned-owl?style=flat-square)](https://crates.io/crates/horned-owl) [![docs.rs](https://img.shields.io/docsrs/horned-owl?style=flat-square)](https://docs.rs/horned-owl/latest/horned_owl/)
 
 Horned-OWL is a library for manipulating data written using the [Web Ontology Language (OWL)](https://en.wikipedia.org/wiki/Web_Ontology_Language).
 While there are a number of libraries that manipulate this form
