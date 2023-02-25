@@ -2,7 +2,7 @@ use crate::{
     error::invalid,
     error::HornedError,
     model::*,
-    ontology::axiom_mapped::AxiomMappedOntology,
+    ontology::component_mapped::ComponentMappedOntology,
     vocab::{is_thing, Vocab, WithIRI, OWL, RDF, RDFS, XSD},
 };
 
@@ -20,7 +20,7 @@ use std::{
 
 pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
     write: &mut W,
-    ont: &AxiomMappedOntology<A, AA>,
+    ont: &ComponentMappedOntology<A, AA>,
 ) -> Result<(), HornedError> {
     // Entirely unsatisfying to set this randomly here, but we can't
     // access ns our parser yet
@@ -393,16 +393,17 @@ impl<A: ForIRI> Render<A, ()> for BTreeSet<Annotation<A>> {
     }
 }
 
-impl<A: ForIRI, AA: ForIndex<A>> Render<A, ()> for &AxiomMappedOntology<A, AA> {
+impl<A: ForIRI, AA: ForIndex<A>> Render<A, ()> for &ComponentMappedOntology<A, AA> {
     fn render<W: Write>(
         &self,
         f: &mut PrettyRdfXmlFormatter<A, W>,
         ng: &mut NodeGenerator<A>,
     ) -> Result<(), HornedError> {
-        if let Some(iri) = &self.id().iri {
+        let ont_id = self.i().the_ontology_id_or_default();
+        if let Some(iri) = &ont_id.iri {
             triples!(f, iri, ng.nn(RDF::Type), ng.nn(OWL::Ontology));
 
-            if let Some(viri) = &self.id().viri {
+            if let Some(viri) = &ont_id.viri {
                 triples!(f, iri, ng.nn(OWL::VersionIRI), viri);
             }
 
@@ -416,23 +417,26 @@ impl<A: ForIRI, AA: ForIndex<A>> Render<A, ()> for &AxiomMappedOntology<A, AA> {
                 a.0.render(f, ng)?;
             }
 
-            for ax in self.i().iter() {
-                ax.render(f, ng)?;
+            for cmp in self.i().iter() {
+                cmp.render(f, ng)?;
             }
         }
         Ok(())
     }
 }
 
-impl<A: ForIRI> Render<A, ()> for AnnotatedAxiom<A> {
+impl<A: ForIRI> Render<A, ()> for AnnotatedComponent<A> {
     fn render<W: Write>(
         &self,
         f: &mut PrettyRdfXmlFormatter<A, W>,
         ng: &mut NodeGenerator<A>,
     ) -> Result<(), HornedError> {
-        let ax: Annotatable<A> = self.axiom.render(f, ng)?;
+        if !self.component.is_axiom() {
+            return Ok(())
+        }
+        let cmp: Annotatable<A> = self.component.render(f, ng)?;
         if !self.ann.is_empty() {
-            if let Annotatable::Main(t) = ax {
+            if let Annotatable::Main(t) = cmp {
                 let bn = ng.bn();
                     triples!(
                         f,
@@ -527,7 +531,7 @@ render! {
     }
 }
 
-impl<A: ForIRI> Render<A, Annotatable<A>> for Axiom<A> {
+impl<A: ForIRI> Render<A, Annotatable<A>> for Component<A> {
     fn render<W: Write>(
         &self,
         f: &mut PrettyRdfXmlFormatter<A, W>,
@@ -535,50 +539,52 @@ impl<A: ForIRI> Render<A, Annotatable<A>> for Axiom<A> {
     ) -> Result<Annotatable<A>, HornedError> {
         Ok(match self {
             // We render imports and ontology annotations earlier
-            Axiom::Import(_ax) => vec![].into(),
-            Axiom::OntologyAnnotation(_ax) => vec![].into(),
-            Axiom::DeclareClass(ax) => ax.render(f, ng)?.into(),
-            Axiom::DeclareObjectProperty(ax) => ax.render(f, ng)?.into(),
-            Axiom::DeclareAnnotationProperty(ax) => ax.render(f, ng)?.into(),
-            Axiom::DeclareDataProperty(ax) => ax.render(f, ng)?.into(),
-            Axiom::DeclareNamedIndividual(ax) => ax.render(f, ng)?.into(),
-            Axiom::DeclareDatatype(ax) => ax.render(f, ng)?.into(),
-            Axiom::SubClassOf(ax) => ax.render(f, ng)?.into(),
-            Axiom::EquivalentClasses(ax) => ax.render(f, ng)?.into(),
-            Axiom::DisjointClasses(ax) => ax.render(f, ng)?.into(),
-            Axiom::DisjointUnion(ax) => ax.render(f, ng)?.into(),
-            Axiom::SubObjectPropertyOf(ax) => ax.render(f, ng)?.into(),
-            Axiom::EquivalentObjectProperties(ax) => ax.render(f, ng)?.into(),
-            Axiom::DisjointObjectProperties(ax) => ax.render(f, ng)?.into(),
-            Axiom::InverseObjectProperties(ax) => ax.render(f, ng)?.into(),
-            Axiom::ObjectPropertyDomain(ax) => ax.render(f, ng)?.into(),
-            Axiom::ObjectPropertyRange(ax) => ax.render(f, ng)?.into(),
-            Axiom::FunctionalObjectProperty(ax) => ax.render(f, ng)?.into(),
-            Axiom::InverseFunctionalObjectProperty(ax) => ax.render(f, ng)?.into(),
-            Axiom::ReflexiveObjectProperty(ax) => ax.render(f, ng)?.into(),
-            Axiom::IrreflexiveObjectProperty(ax) => ax.render(f, ng)?.into(),
-            Axiom::SymmetricObjectProperty(ax) => ax.render(f, ng)?.into(),
-            Axiom::AsymmetricObjectProperty(ax) => ax.render(f, ng)?.into(),
-            Axiom::TransitiveObjectProperty(ax) => ax.render(f, ng)?.into(),
-            Axiom::SubDataPropertyOf(ax) => ax.render(f, ng)?.into(),
-            Axiom::EquivalentDataProperties(ax) => ax.render(f, ng)?.into(),
-            Axiom::DisjointDataProperties(ax) => ax.render(f, ng)?.into(),
-            Axiom::DataPropertyDomain(ax) => ax.render(f, ng)?.into(),
-            Axiom::DataPropertyRange(ax) => ax.render(f, ng)?.into(),
-            Axiom::FunctionalDataProperty(ax) => ax.render(f, ng)?.into(),
-            Axiom::DatatypeDefinition(ax) => ax.render(f, ng)?.into(),
-            Axiom::HasKey(ax) => ax.render(f, ng)?.into(),
-            Axiom::SameIndividual(ax) => ax.render(f, ng)?.into(),
-            Axiom::DifferentIndividuals(ax) => ax.render(f, ng)?.into(),
-            Axiom::ObjectPropertyAssertion(ax) => ax.render(f, ng)?.into(),
-            Axiom::NegativeObjectPropertyAssertion(ax) => ax.render(f, ng)?.into(),
-            Axiom::DataPropertyAssertion(ax) => ax.render(f, ng)?.into(),
-            Axiom::NegativeDataPropertyAssertion(ax) => ax.render(f, ng)?.into(),
-            Axiom::AnnotationAssertion(ax) => ax.render(f, ng)?.into(),
-            Axiom::SubAnnotationPropertyOf(ax) => ax.render(f, ng)?.into(),
-            Axiom::AnnotationPropertyDomain(ax) => ax.render(f, ng)?.into(),
-            Axiom::AnnotationPropertyRange(ax) => ax.render(f, ng)?.into(),
-            Axiom::ClassAssertion(ax) => ax.render(f, ng)?.into(),
+            Component::OntologyID(_) => panic!("OntologyID found where only axioms were expected"),
+            Component::DocIRI(_) => panic!("DocIRI found where only axioms were expected"),
+            Component::Import(_cmp) => vec![].into(),
+            Component::OntologyAnnotation(_cmp) => vec![].into(),
+            Component::DeclareClass(cmp) => cmp.render(f, ng)?.into(),
+            Component::DeclareObjectProperty(cmp) => cmp.render(f, ng)?.into(),
+            Component::DeclareAnnotationProperty(cmp) => cmp.render(f, ng)?.into(),
+            Component::DeclareDataProperty(cmp) => cmp.render(f, ng)?.into(),
+            Component::DeclareNamedIndividual(cmp) => cmp.render(f, ng)?.into(),
+            Component::DeclareDatatype(cmp) => cmp.render(f, ng)?.into(),
+            Component::SubClassOf(cmp) => cmp.render(f, ng)?.into(),
+            Component::EquivalentClasses(cmp) => cmp.render(f, ng)?.into(),
+            Component::DisjointClasses(cmp) => cmp.render(f, ng)?.into(),
+            Component::DisjointUnion(cmp) => cmp.render(f, ng)?.into(),
+            Component::SubObjectPropertyOf(cmp) => cmp.render(f, ng)?.into(),
+            Component::EquivalentObjectProperties(cmp) => cmp.render(f, ng)?.into(),
+            Component::DisjointObjectProperties(cmp) => cmp.render(f, ng)?.into(),
+            Component::InverseObjectProperties(cmp) => cmp.render(f, ng)?.into(),
+            Component::ObjectPropertyDomain(cmp) => cmp.render(f, ng)?.into(),
+            Component::ObjectPropertyRange(cmp) => cmp.render(f, ng)?.into(),
+            Component::FunctionalObjectProperty(cmp) => cmp.render(f, ng)?.into(),
+            Component::InverseFunctionalObjectProperty(cmp) => cmp.render(f, ng)?.into(),
+            Component::ReflexiveObjectProperty(cmp) => cmp.render(f, ng)?.into(),
+            Component::IrreflexiveObjectProperty(cmp) => cmp.render(f, ng)?.into(),
+            Component::SymmetricObjectProperty(cmp) => cmp.render(f, ng)?.into(),
+            Component::AsymmetricObjectProperty(cmp) => cmp.render(f, ng)?.into(),
+            Component::TransitiveObjectProperty(cmp) => cmp.render(f, ng)?.into(),
+            Component::SubDataPropertyOf(cmp) => cmp.render(f, ng)?.into(),
+            Component::EquivalentDataProperties(cmp) => cmp.render(f, ng)?.into(),
+            Component::DisjointDataProperties(cmp) => cmp.render(f, ng)?.into(),
+            Component::DataPropertyDomain(cmp) => cmp.render(f, ng)?.into(),
+            Component::DataPropertyRange(cmp) => cmp.render(f, ng)?.into(),
+            Component::FunctionalDataProperty(cmp) => cmp.render(f, ng)?.into(),
+            Component::DatatypeDefinition(cmp) => cmp.render(f, ng)?.into(),
+            Component::HasKey(cmp) => cmp.render(f, ng)?.into(),
+            Component::SameIndividual(cmp) => cmp.render(f, ng)?.into(),
+            Component::DifferentIndividuals(cmp) => cmp.render(f, ng)?.into(),
+            Component::ObjectPropertyAssertion(cmp) => cmp.render(f, ng)?.into(),
+            Component::NegativeObjectPropertyAssertion(cmp) => cmp.render(f, ng)?.into(),
+            Component::DataPropertyAssertion(cmp) => cmp.render(f, ng)?.into(),
+            Component::NegativeDataPropertyAssertion(cmp) => cmp.render(f, ng)?.into(),
+            Component::AnnotationAssertion(cmp) => cmp.render(f, ng)?.into(),
+            Component::SubAnnotationPropertyOf(cmp) => cmp.render(f, ng)?.into(),
+            Component::AnnotationPropertyDomain(cmp) => cmp.render(f, ng)?.into(),
+            Component::AnnotationPropertyRange(cmp) => cmp.render(f, ng)?.into(),
+            Component::ClassAssertion(cmp) => cmp.render(f, ng)?.into(),
         })
     }
 }
@@ -1554,11 +1560,15 @@ mod test {
 
     #[test]
     fn test_ont_rt() {
-        let mut ont = AxiomMappedOntology::new_rc();
+        let mut ont = ComponentMappedOntology::new_rc();
         let build = Build::new();
 
         let iri = build.iri("http://www.example.com/a".to_string());
-        ont.mut_id().iri = Some(iri);
+        ont.insert(OntologyID {
+            iri: Some(iri),
+            viri: None
+        });
+
         let temp_file = Temp::new_file().unwrap();
         let file = File::create(&temp_file).ok().unwrap();
         write(&mut BufWriter::new(file), &ont).ok().unwrap();
@@ -1566,7 +1576,7 @@ mod test {
         let file = File::open(&temp_file).ok().unwrap();
         let ont2 = read_ok(&mut BufReader::new(file));
 
-        assert_eq!(ont.id().iri, ont2.id().iri);
+        assert_eq!(ont.i().the_ontology_id(), ont2.i().the_ontology_id());
     }
 
     fn roundtrip(ont: &str) -> (SetOntology<RcStr>, SetOntology<RcStr>) {
@@ -1576,7 +1586,7 @@ mod test {
         let file = File::create(&temp_file).ok().unwrap();
         let mut buf_writer = BufWriter::new(&file);
 
-        let amo: AxiomMappedOntology<RcStr, Rc<AnnotatedAxiom<RcStr>>> =
+        let amo: ComponentMappedOntology<RcStr, Rc<AnnotatedComponent<RcStr>>> =
             ont_orig.clone().into();
         write(&mut buf_writer, &amo).ok().unwrap();
         buf_writer.flush().ok();

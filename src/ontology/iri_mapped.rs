@@ -1,9 +1,9 @@
-//! Access `AnnotatedAxiom` by iri.
+//! Access `AnnotatedComponent` by iri.
 
 //! # Overview
 //!
 //! This module provides an `IRIMappedIndex` which provides rapid
-//! access to all axioms associated with a given IRI.
+//! access to all components associated with a given IRI.
 //!
 use super::indexed::ForIndex;
 use super::set::SetOntology;
@@ -18,7 +18,7 @@ use std::{
     sync::Arc,
 };
 
-use super::axiom_mapped::AxiomMappedIndex;
+use super::component_mapped::ComponentMappedIndex;
 use super::declaration_mapped::DeclarationMappedIndex;
 use super::indexed::{FourIndexedOntology, OntologyIndex};
 use super::set::SetIndex;
@@ -38,9 +38,9 @@ impl<A: ForIRI, AA: ForIndex<A>> IRIMappedIndex<A, AA> {
         }
     }
 
-    fn aa_to_iris(&self, ax: &AnnotatedAxiom<A>) -> HashSet<IRI<A>> {
+    fn aa_to_iris(&self, cmp: &AnnotatedComponent<A>) -> HashSet<IRI<A>> {
         let mut w = Walk::new(IRIExtract::default());
-        w.annotated_axiom(ax);
+        w.annotated_component(cmp);
 
         w.into_visit().into_vec().into_iter().collect()
     }
@@ -51,7 +51,7 @@ impl<A: ForIRI, AA: ForIndex<A>> IRIMappedIndex<A, AA> {
     /// instantiated, which means that it effects equality of the
     /// ontology. It should only be used where the intention is to
     /// update the ontology.
-    fn axioms_as_ptr(&self, iri: &IRI<A>) -> *mut BTreeMap<IRI<A>, BTreeSet<AA>> {
+    fn components_as_ptr(&self, iri: &IRI<A>) -> *mut BTreeMap<IRI<A>, BTreeSet<AA>> {
         self.irindex
             .borrow_mut()
             .entry(iri.clone())
@@ -66,11 +66,11 @@ impl<A: ForIRI, AA: ForIndex<A>> IRIMappedIndex<A, AA> {
 
     /// Fetch the axioms for given iri as a mutable ref.
     fn mut_set_for_iri(&mut self, iri: &IRI<A>) -> &mut BTreeSet<AA> {
-        unsafe { (*self.axioms_as_ptr(iri)).get_mut(iri).unwrap() }
+        unsafe { (*self.components_as_ptr(iri)).get_mut(iri).unwrap() }
     }
 
     /*
-    /// Gets an iterator that visits the annotated axioms of the ontology.
+    /// Gets an iterator that visits the annotated components of the ontology.
     pub fn iter(&self) -> IRIMappedIter<A, AA> {
         IRIMappedIter {
             ont: self,
@@ -80,10 +80,10 @@ impl<A: ForIRI, AA: ForIndex<A>> IRIMappedIndex<A, AA> {
     }
      */
 
-    /// Fetch the AnnotatedAxiom for a given IRI
+    /// Fetch the AnnotatedComponent for a given IRI
     ///
-    /// See also `axiom` for access to the `Axiom` without annotations.
-    pub fn axiom_for_iri(&self, iri: &IRI<A>) -> impl Iterator<Item = &AnnotatedAxiom<A>> {
+    /// See also `component` for access to the `Component` without annotations.
+    pub fn component_for_iri(&self, iri: &IRI<A>) -> impl Iterator<Item = &AnnotatedComponent<A>> {
         self.set_for_iri(iri)
             // Iterate over option
             .into_iter()
@@ -92,10 +92,10 @@ impl<A: ForIRI, AA: ForIndex<A>> IRIMappedIndex<A, AA> {
             .map(|rc| rc.borrow())
     }
 
-    /// Fetch the Axiom set iterator for a given iri
+    /// Fetch the Component set iterator for a given iri
     ///
-    pub fn axiom(&self, iri: &IRI<A>) -> impl Iterator<Item = &Axiom<A>> {
-        self.axiom_for_iri(iri).map(|ann| &ann.axiom)
+    pub fn component(&self, iri: &IRI<A>) -> impl Iterator<Item = &Component<A>> {
+        self.component_for_iri(iri).map(|ann| &ann.component)
     }
 }
 
@@ -126,11 +126,11 @@ where I: OntologyIndex<A,AA>,
 
 /// An owning iterator over the annotated axioms of an `Ontology`.
 impl<A: ForIRI, AA:ForIndex<A>> IntoIterator for IRIMappedIndex<A, AA> {
-    type Item = AnnotatedAxiom<A>;
-    type IntoIter = std::vec::IntoIter<AnnotatedAxiom<A>>;
+    type Item = AnnotatedComponent<A>;
+    type IntoIter = std::vec::IntoIter<AnnotatedComponent<A>>;
     fn into_iter(self) -> Self::IntoIter {
         let btreemap = self.irindex.into_inner();
-        let v: Vec<AnnotatedAxiom<A>> = btreemap
+        let v: Vec<AnnotatedComponent<A>> = btreemap
             .into_iter()
             .map(|(_k, v)| v)
             .flat_map(BTreeSet::into_iter)
@@ -148,7 +148,7 @@ pub struct IRIMappedIter<'a, A: ForIRI, AA: ForIndex<A>> {
 }
 
 impl<'a, A: ForIRI, AA: ForIndex<A>> Iterator for IRIMappedIter<'a, A, AA> {
-    type Item = &'a AnnotatedAxiom<A>;
+    type Item = &'a AnnotatedComponent<A>;
     fn next(&mut self) -> Option<Self::Item> {
         // Consume the current iterator if there are items left.
         if let Some(ref mut it) = self.inner {
@@ -168,7 +168,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> Iterator for IRIMappedIter<'a, A, AA> {
 }
 
 impl<'a, A: ForIRI, AA: ForIndex<A>> IntoIterator for &'a IRIMappedIndex<A,AA> {
-    type Item = &'a AnnotatedAxiom<A>;
+    type Item = &'a AnnotatedComponent<A>;
     type IntoIter = IRIMappedIter<'a,A,AA>;
     fn into_iter(self) -> Self::IntoIter {
         IRIMappedIter {
@@ -181,11 +181,11 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> IntoIterator for &'a IRIMappedIndex<A,AA> {
 */
 
 impl<A: ForIRI, AA: ForIndex<A>> OntologyIndex<A, AA> for IRIMappedIndex<A, AA> {
-    fn index_insert(&mut self, ax: AA) -> bool {
-        let iris = self.aa_to_iris(ax.borrow());
+    fn index_insert(&mut self, cmp: AA) -> bool {
+        let iris = self.aa_to_iris(cmp.borrow());
         if !iris.is_empty() {
             for iri in iris.iter() {
-                self.mut_set_for_iri(iri).insert(ax.clone());
+                self.mut_set_for_iri(iri).insert(cmp.clone());
             }
             true
         } else {
@@ -193,12 +193,12 @@ impl<A: ForIRI, AA: ForIndex<A>> OntologyIndex<A, AA> for IRIMappedIndex<A, AA> 
         }
     }
 
-    fn index_take(&mut self, ax: &AnnotatedAxiom<A>) -> Option<AnnotatedAxiom<A>> {
-        let iris = self.aa_to_iris(ax);
+    fn index_take(&mut self, cmp: &AnnotatedComponent<A>) -> Option<AnnotatedComponent<A>> {
+        let iris = self.aa_to_iris(cmp);
         if !iris.is_empty() {
             let iri = iris.iter().next();
             if let Some(iri) = iri {
-                self.mut_set_for_iri(iri).take(ax).map(|aax| aax.unwrap())
+                self.mut_set_for_iri(iri).take(cmp).map(|aax| aax.unwrap())
             } else {
                 None
             }
@@ -207,9 +207,9 @@ impl<A: ForIRI, AA: ForIndex<A>> OntologyIndex<A, AA> for IRIMappedIndex<A, AA> 
         }
     }
 
-    fn index_remove(&mut self, ax: &AnnotatedAxiom<A>) -> bool {
-        if let Some(iri) = self.aa_to_iris(ax).iter().next() {
-            self.mut_set_for_iri(&iri.clone()).remove(ax)
+    fn index_remove(&mut self, cmp: &AnnotatedComponent<A>) -> bool {
+        if let Some(iri) = self.aa_to_iris(cmp).iter().next() {
+            self.mut_set_for_iri(&iri.clone()).remove(cmp)
         } else {
             false
         }
@@ -223,42 +223,27 @@ pub struct IRIMappedOntology<A: ForIRI, AA: ForIndex<A>>(
         AA,
         SetIndex<A, AA>,
         IRIMappedIndex<A, AA>,
-        AxiomMappedIndex<A, AA>,
+        ComponentMappedIndex<A, AA>,
         DeclarationMappedIndex<A, AA>,
     >,
 );
 
-pub type RcIRIMappedOntology = IRIMappedOntology<RcStr, Rc<AnnotatedAxiom<RcStr>>>;
-pub type ArcIRIMappedOntology = IRIMappedOntology<ArcStr, Arc<AnnotatedAxiom<ArcStr>>>;
+pub type RcIRIMappedOntology = IRIMappedOntology<RcStr, Rc<AnnotatedComponent<RcStr>>>;
+pub type ArcIRIMappedOntology = IRIMappedOntology<ArcStr, Arc<AnnotatedComponent<ArcStr>>>;
 
 impl<A: ForIRI, AA: ForIndex<A>> Ontology<A> for IRIMappedOntology<A, AA> {
-    fn id(&self) -> &OntologyID<A> {
-        self.0.id()
-    }
-
-    fn mut_id(&mut self) -> &mut OntologyID<A> {
-        self.0.mut_id()
-    }
-
-    fn doc_iri(&self) -> &Option<IRI<A>> {
-        self.0.doc_iri()
-    }
-
-    fn mut_doc_iri(&mut self) -> &mut Option<IRI<A>> {
-        self.0.mut_doc_iri()
-    }
 }
 
 impl<A: ForIRI, AA: ForIndex<A>> MutableOntology<A> for IRIMappedOntology<A, AA> {
-    fn insert<IAA>(&mut self, ax: IAA) -> bool
+    fn insert<IAA>(&mut self, cmp: IAA) -> bool
     where
-        IAA: Into<AnnotatedAxiom<A>>,
+        IAA: Into<AnnotatedComponent<A>>,
     {
-        self.0.insert(ax)
+        self.0.insert(cmp)
     }
 
-    fn take(&mut self, ax: &AnnotatedAxiom<A>) -> Option<AnnotatedAxiom<A>> {
-        self.0.take(ax)
+    fn take(&mut self, cmp: &AnnotatedComponent<A>) -> Option<AnnotatedComponent<A>> {
+        self.0.take(cmp)
     }
 }
 
@@ -267,29 +252,28 @@ impl<A: ForIRI, AA: ForIndex<A>> IRIMappedOntology<A, AA> {
         IRIMappedOntology(FourIndexedOntology::new(
             SetIndex::new(),
             IRIMappedIndex::new(),
-            AxiomMappedIndex::new(),
+            ComponentMappedIndex::new(),
             DeclarationMappedIndex::new(),
-            Default::default(),
         ))
     }
 
-    //Utility method gets an iterator over the axioms in the index for a given IRI
-    pub fn axiom_for_iri(&mut self, iri: &IRI<A>) -> impl Iterator<Item = &AnnotatedAxiom<A>> {
-        self.0.j().axiom_for_iri(iri)
+    //Utility method gets an iterator over the components in the index for a given IRI
+    pub fn components_for_iri(&mut self, iri: &IRI<A>) -> impl Iterator<Item = &AnnotatedComponent<A>> {
+        self.0.j().component_for_iri(iri)
     }
 
     //Utility method gets an iterator over the axioms in the index for a given IRI
-    pub fn axiom_for_kind(&mut self, axkind: AxiomKind) -> impl Iterator<Item = &AnnotatedAxiom<A>> {
-        self.0.k().axiom_for_kind(axkind)
+    pub fn component_for_kind(&mut self, cmk: ComponentKind) -> impl Iterator<Item = &AnnotatedComponent<A>> {
+        self.0.k().component_for_kind(cmk)
     }
 
     //Utility method updates an axiom in the index
-    pub fn update_axiom(&mut self, ax: &AnnotatedAxiom<A>, new_ax: AnnotatedAxiom<A>) -> bool {
-        self.take(ax);
-        self.insert(new_ax)
+    pub fn update_axiom(&mut self, cmp: &AnnotatedComponent<A>, new_cmp: AnnotatedComponent<A>) -> bool {
+        self.take(cmp);
+        self.insert(new_cmp)
     }
 
-    pub fn iter(&self) -> std::vec::IntoIter<&AnnotatedAxiom<A>> {
+    pub fn iter(&self) -> std::vec::IntoIter<&AnnotatedComponent<A>> {
         self.0.i().into_iter()
     }
 }
@@ -307,27 +291,26 @@ impl ArcIRIMappedOntology {
 
 /// An owning iterator over the annotated axioms of an `Ontology`.
 impl<A: ForIRI, AA: ForIndex<A>> IntoIterator for IRIMappedOntology<A, AA> {
-    type Item = AnnotatedAxiom<A>;
-    type IntoIter = std::vec::IntoIter<AnnotatedAxiom<A>>;
+    type Item = AnnotatedComponent<A>;
+    type IntoIter = std::vec::IntoIter<AnnotatedComponent<A>>;
     fn into_iter(self) -> Self::IntoIter {
         self.0.index().0.into_iter()
     }
 }
 
 impl<A: ForIRI, AA: ForIndex<A>> From<SetOntology<A>> for IRIMappedOntology<A, AA> {
-    fn from(mut so: SetOntology<A>) -> IRIMappedOntology<A, AA> {
+    fn from(so: SetOntology<A>) -> IRIMappedOntology<A, AA> {
         let mut imo = IRIMappedOntology::default();
-        std::mem::swap(imo.mut_id(), so.mut_id());
-        for ax in so {
-            imo.insert(ax);
+        for cmp in so {
+            imo.insert(cmp);
         }
         imo
     }
 }
 
 impl<A: ForIRI, AA: ForIndex<A>> From<IRIMappedOntology<A, AA>> for SetOntology<A> {
-    fn from(mut imo: IRIMappedOntology<A, AA>) -> SetOntology<A> {
-        SetOntology::from_index(imo.mut_id().clone(), imo.0.index().0)
+    fn from(imo: IRIMappedOntology<A, AA>) -> SetOntology<A> {
+        imo.0.index().0.into()
     }
 }
 
@@ -379,11 +362,11 @@ mod test {
         assert_eq!(
             v,
             [
-                AnnotatedAxiom::from(Axiom::DeclareClass(decl1)),
-                AnnotatedAxiom::from(Axiom::DeclareClass(decl2)),
-                AnnotatedAxiom::from(Axiom::DeclareClass(decl3)),
-                AnnotatedAxiom::from(Axiom::DisjointClasses(disj1)),
-                AnnotatedAxiom::from(Axiom::DisjointClasses(disj2)),
+                AnnotatedComponent::from(Component::DeclareClass(decl1)),
+                AnnotatedComponent::from(Component::DeclareClass(decl2)),
+                AnnotatedComponent::from(Component::DeclareClass(decl3)),
+                AnnotatedComponent::from(Component::DisjointClasses(disj1)),
+                AnnotatedComponent::from(Component::DisjointClasses(disj2)),
             ]
         );
     }
@@ -426,11 +409,11 @@ mod test {
         assert_eq!(
             v,
             [
-                &AnnotatedAxiom::from(Axiom::DeclareClass(decl1)),
-                &AnnotatedAxiom::from(Axiom::DeclareClass(decl2)),
-                &AnnotatedAxiom::from(Axiom::DeclareClass(decl3)),
-                &AnnotatedAxiom::from(Axiom::DisjointClasses(disj1)),
-                &AnnotatedAxiom::from(Axiom::DisjointClasses(disj2)),
+                &AnnotatedComponent::from(Component::DeclareClass(decl1)),
+                &AnnotatedComponent::from(Component::DeclareClass(decl2)),
+                &AnnotatedComponent::from(Component::DeclareClass(decl3)),
+                &AnnotatedComponent::from(Component::DisjointClasses(disj1)),
+                &AnnotatedComponent::from(Component::DisjointClasses(disj2)),
             ]
         );
     }

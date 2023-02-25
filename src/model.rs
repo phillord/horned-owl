@@ -9,8 +9,8 @@
 //! `HashSet` but using a trait. No methods are provided to search or
 //! access the contents of an `Ontology` which are instead provided by
 //! [implementations](../ontology/index.html). Each `Ontology` is a set of
-//! `AnnotatedAxiom` instances, which consists of an `Axiom` and a set
-//! of `Annotation`. The `Axiom` itself is a large enum representing
+//! `AnnotatedComponent` instances, which consists of an `Component` and a set
+//! of `Annotation`. The `Component` itself is a large enum representing
 //! the different axioms that OWL2 supports.
 
 //! Efficiency is gained from the use of an IRI which is a newtype
@@ -660,28 +660,28 @@ impl<A: ForIRI> From<&AnonymousIndividual<A>> for AnnotationSubject<A> {
     }
 }
 
-impl<A: ForIRI> From<NamedEntity<A>> for Axiom<A> {
-    fn from(ne: NamedEntity<A>) -> Axiom<A> {
+impl<A: ForIRI> From<NamedEntity<A>> for Component<A> {
+    fn from(ne: NamedEntity<A>) -> Component<A> {
         match ne {
-            NamedEntity::Class(c) => Axiom::DeclareClass(DeclareClass(c)),
+            NamedEntity::Class(c) => Component::DeclareClass(DeclareClass(c)),
             NamedEntity::ObjectProperty(obp) => {
-                Axiom::DeclareObjectProperty(DeclareObjectProperty(obp))
+                Component::DeclareObjectProperty(DeclareObjectProperty(obp))
             }
             NamedEntity::AnnotationProperty(anp) => {
-                Axiom::DeclareAnnotationProperty(DeclareAnnotationProperty(anp))
+                Component::DeclareAnnotationProperty(DeclareAnnotationProperty(anp))
             }
-            NamedEntity::DataProperty(dp) => Axiom::DeclareDataProperty(DeclareDataProperty(dp)),
+            NamedEntity::DataProperty(dp) => Component::DeclareDataProperty(DeclareDataProperty(dp)),
             NamedEntity::NamedIndividual(ni) => {
-                Axiom::DeclareNamedIndividual(DeclareNamedIndividual(ni))
+                Component::DeclareNamedIndividual(DeclareNamedIndividual(ni))
             }
-            NamedEntity::Datatype(dt) => Axiom::DeclareDatatype(DeclareDatatype(dt)),
+            NamedEntity::Datatype(dt) => Component::DeclareDatatype(DeclareDatatype(dt)),
         }
     }
 }
 
-impl<A: ForIRI> From<NamedEntity<A>> for AnnotatedAxiom<A> {
-    fn from(ne: NamedEntity<A>) -> AnnotatedAxiom<A> {
-        let ax: Axiom<_> = ne.into();
+impl<A: ForIRI> From<NamedEntity<A>> for AnnotatedComponent<A> {
+    fn from(ne: NamedEntity<A>) -> AnnotatedComponent<A> {
+        let ax: Component<_> = ne.into();
         ax.into()
     }
 }
@@ -695,88 +695,126 @@ trait Annotated<A> {
     fn annotation(&self) -> &BTreeSet<Annotation<A>>;
 }
 
-/// An interface providing access to the `AxiomKind`
+
+/// An interface providing access to the `ComponentKind`
 ///
 /// An OWL ontology consists of a set of axioms of one of many
 /// different kinds. These axioms all return an variant instance of
-/// the `AxiomKind` enum. This is used in the API mostly to retrieve
+/// the `ComponentKind` enum. This is used in the API mostly to retrieve
 /// instances of a certain kind.
 pub trait Kinded {
-    fn kind(&self) -> AxiomKind;
+    fn kind(&self) -> ComponentKind;
 }
 
-/// An `AnnotatedAxiom` is an `Axiom` with one orpmore `Annotation`.
+#[derive(Eq, PartialEq)]
+pub enum HigherKind {
+    Axiom,
+    Meta,
+    SWRL,
+}
+
+pub trait HigherKinded {
+    fn higher_kind(&self) -> HigherKind;
+
+    fn is_axiom(&self) -> bool {
+        self.higher_kind() == HigherKind::Axiom
+    }
+
+    fn is_meta(&self)  -> bool {
+        self.higher_kind() == HigherKind::Meta
+    }
+
+    fn is_swrl(&self) -> bool {
+        self.higher_kind() == HigherKind::SWRL
+    }
+}
+
+
+/// An `AnnotatedComponent` is an `Component` with one orpmore `Annotation`.
 #[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
-pub struct AnnotatedAxiom<A> {
-    pub axiom: Axiom<A>,
+pub struct AnnotatedComponent<A> {
+    pub component: Component<A>,
     pub ann: BTreeSet<Annotation<A>>,
 }
 
-pub type RcAnnotatedAxiom=Rc<AnnotatedAxiom<RcStr>>;
-pub type ArcAnnotatedAxiom=Arc<AnnotatedAxiom<ArcStr>>;
+pub type RcAnnotatedComponent=Rc<AnnotatedComponent<RcStr>>;
+pub type ArcAnnotatedComponent=Arc<AnnotatedComponent<ArcStr>>;
 
 
-impl<A: ForIRI> AnnotatedAxiom<A> {
-    pub fn new<I>(axiom: I, ann: BTreeSet<Annotation<A>>) -> AnnotatedAxiom<A>
+impl<A: ForIRI> AnnotatedComponent<A> {
+    pub fn new<I>(component: I, ann: BTreeSet<Annotation<A>>) -> AnnotatedComponent<A>
     where
-        I: Into<Axiom<A>>,
+        I: Into<Component<A>>,
     {
-        AnnotatedAxiom {
-            axiom: axiom.into(),
+        AnnotatedComponent {
+            component: component.into(),
             ann,
         }
     }
 
-    pub fn logical_cmp(&self, other: &AnnotatedAxiom<A>) -> Ordering {
-        self.axiom.cmp(&other.axiom)
+    pub fn logical_cmp(&self, other: &AnnotatedComponent<A>) -> Ordering {
+        self.component.cmp(&other.component)
     }
 
-    pub fn logical_partial_cmp(&self, other: &AnnotatedAxiom<A>) -> Option<Ordering> {
+    pub fn logical_partial_cmp(&self, other: &AnnotatedComponent<A>) -> Option<Ordering> {
         Some(self.cmp(other))
     }
 
-    pub fn logical_eq(&self, other: &AnnotatedAxiom<A>) -> bool {
-        self.axiom == other.axiom
+    pub fn logical_eq(&self, other: &AnnotatedComponent<A>) -> bool {
+        self.component == other.component
     }
 
     pub fn logical_hash<H: Hasher>(&self, state: &mut H) {
-        self.axiom.hash(state)
+        self.component.hash(state)
     }
 }
 
-impl<A: ForIRI> From<Axiom<A>> for AnnotatedAxiom<A> {
-    fn from(axiom: Axiom<A>) -> AnnotatedAxiom<A> {
-        AnnotatedAxiom {
-            axiom,
+impl<A: ForIRI> From<Component<A>> for AnnotatedComponent<A> {
+    fn from(component: Component<A>) -> AnnotatedComponent<A> {
+        AnnotatedComponent {
+            component,
             ann: BTreeSet::new(),
         }
     }
 }
 
-impl<A: ForIRI> Kinded for AnnotatedAxiom<A> {
-    fn kind(&self) -> AxiomKind {
-        self.axiom.kind()
+impl<A: ForIRI> Kinded for AnnotatedComponent<A> {
+    fn kind(&self) -> ComponentKind {
+        self.component.kind()
+    }
+}
+
+
+impl<A: ForIRI> HigherKinded for AnnotatedComponent<A> {
+    fn higher_kind(&self) -> HigherKind {
+        self.component.higher_kind()
     }
 }
 
 /// Add `Kinded` and `From` for each axiom.
-macro_rules! axiomimpl {
-    ($A:ident, $name:ident) => {
-        impl<$A: ForIRI> From<$name<$A>> for Axiom<$A> {
-            fn from(ax: $name<$A>) -> Axiom<$A> {
-                Axiom::$name(ax)
+macro_rules! componentimpl {
+    ($A:ident, $higher:ident, $name:ident) => {
+        impl<$A: ForIRI> From<$name<$A>> for Component<$A> {
+            fn from(ax: $name<$A>) -> Component<$A> {
+                Component::$name(ax)
             }
         }
 
-        impl<$A: ForIRI> From<$name<$A>> for AnnotatedAxiom<$A> {
-            fn from(ax: $name<$A>) -> AnnotatedAxiom<$A> {
-                AnnotatedAxiom::from(Axiom::from(ax))
+        impl<$A: ForIRI> From<$name<$A>> for AnnotatedComponent<$A> {
+            fn from(ax: $name<$A>) -> AnnotatedComponent<$A> {
+                AnnotatedComponent::from(Component::from(ax))
             }
         }
 
         impl<$A: ForIRI> Kinded for $name<$A> {
-            fn kind(&self) -> AxiomKind {
-                AxiomKind::$name
+            fn kind(&self) -> ComponentKind {
+                ComponentKind::$name
+            }
+        }
+
+        impl<$A: ForIRI> HigherKinded for $name<$A> {
+            fn higher_kind(&self) -> HigherKind {
+                HigherKind::$higher
             }
         }
     };
@@ -784,22 +822,22 @@ macro_rules! axiomimpl {
 
 /// Define a new axiom
 ///
-/// Axioms can be either a tuple-like or normal struct. Documentation
+/// Components can be either a tuple-like or normal struct. Documentation
 /// is attached as a doc attribute after.
 //
 // I tried extensively to pass the attribute in the more normal
 // location in front of the entity, but couldn't get it too match. I
 // noticed that the quick_error crate passes afterwards and it's easy
 // to get to work this way. As it's an internal macro, I think this is fine.
-macro_rules! axiom {
-    ($A:ident $name:ident ($($tt:ty),*) $(#[$attr:meta])*) =>
+macro_rules! component {
+    ($A:ident $higher:ident $name:ident ($($tt:ty),*) $(#[$attr:meta])*) =>
     {
         $(#[$attr]) *
         #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
         pub struct $name<$A>($(pub $tt),*);
-        axiomimpl!($A, $name);
+        componentimpl!($A, $higher, $name);
     };
-    ($A:ident $name:ident {
+    ($A:ident $higher:ident $name:ident {
         $($field_name:ident: $field_type:ty),*
      }
      $(#[$attr:meta])*
@@ -821,7 +859,7 @@ macro_rules! axiom {
             }
 
         }
-        axiomimpl!($A, $name);
+        componentimpl!($A, $higher, $name);
     }
 }
 
@@ -830,38 +868,38 @@ macro_rules! axiom {
 // This macro generates all of the axioms at once (delegated to the
 // axiom macro). We have to do this in one go, although it makes
 // the pattern matching a pain, because we need to know all the axiom
-// names at once so we can generate the AxiomKind and Axiom
+// names at once so we can generate the ComponentKind and Component
 // enums.
-macro_rules! axioms {
+macro_rules! components {
     ($A:ident,
-     $($(#[$attr:meta])* $name:ident $tt:tt),*)
+     $($(#[$attr:meta])* $higher:ident $name:ident $tt:tt),*)
         =>
     {
         /// Contains all different kinds of axiom
         ///
         /// Variants of this C-style enum represent all of the
         /// different axioms that can exist in the ontology. Instances
-        /// of this enum are returned by all `Axiom` and other
+        /// of this enum are returned by all `Component` and other
         /// entities as part of the `Kinded` trait.
-        /// See also `Axiom` which is a Enum whose variants take
-        /// instances of the `Axiom`
+        /// See also `Component` which is a Enum whose variants take
+        /// instances of the `Component`
         #[derive(Clone, Copy, Eq, Hash, PartialEq, PartialOrd, Ord)]
-        pub enum AxiomKind {
+        pub enum ComponentKind {
             $($name),*
         }
 
-        impl AxiomKind {
-            pub fn all_kinds() -> Vec<AxiomKind> {
-                vec![$(AxiomKind::$name),*]
+        impl ComponentKind {
+            pub fn all_kinds() -> Vec<ComponentKind> {
+                vec![$(ComponentKind::$name),*]
             }
         }
 
-        impl std::fmt::Debug for AxiomKind {
+        impl std::fmt::Debug for ComponentKind {
             fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                write!(f, "AxiomKind::{}",
+                write!(f, "ComponentKind::{}",
                        match self {
                            $(
-                               AxiomKind::$name => stringify!($name)
+                               ComponentKind::$name => stringify!($name)
                            ),*
 
                        })
@@ -871,35 +909,35 @@ macro_rules! axioms {
         /// An axiom
         ///
         /// This enum has variants representing the various kinds of
-        /// Axiom that can be found in an OWL Ontology. An OWL axiom
+        /// Component that can be found in an OWL Ontology. An OWL axiom
         /// maps to three different entities in Horned-OWL. First is a
         /// struct (for example, `SubClassOf`) which contains the data
         /// which defines the axiom (i.e. super and sub class for
-        /// `SubClassOf`). Second, is a variant of the `AxiomKind`,
+        /// `SubClassOf`). Second, is a variant of the `ComponentKind`,
         /// which is used to identify all instances of a particular
         /// kind of axiom (i.e. any `SubClassOf` axiom will return an
-        /// instance of AxiomKind::SubClassOf). Finally, we have a
+        /// instance of ComponentKind::SubClassOf). Finally, we have a
         /// variant of this enum, which contains one of the structs
-        /// (i.e. Axiom::SubClassOf(SubClassOf)), which is used as a union
+        /// (i.e. Component::SubClassOf(SubClassOf)), which is used as a union
         /// type for all structs. The struct and enum variants all
         /// share identical names.
         #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-        pub enum Axiom<$A>{
+        pub enum Component<$A>{
             $($name($name<$A>)),*
         }
 
-        // impl<$A:ForIRI> std::fmt::Debug for Axiom<$A> {
+        // impl<$A:ForIRI> std::fmt::Debug for Component<$A> {
         //     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        //         write!(f, "Axiom::{}({})",
+        //         write!(f, "Component::{}({})",
         //                match self {
         //                    $(
-        //                        Axiom::$name(_) =>
+        //                        Component::$name(_) =>
         //                            stringify!($name)
         //                    ),*
         //                },
         //                match self {
         //                    $(
-        //                        Axiom::$name(ax) =>
+        //                        Component::$name(ax) =>
         //                            format!("{:?}", ax)
         //                    ),*
         //                },
@@ -907,14 +945,28 @@ macro_rules! axioms {
         //     }
         // }
 
-        impl<$A:ForIRI> Kinded for Axiom<$A>
+        impl<$A:ForIRI> Kinded for Component<$A>
         {
-            fn kind(&self) -> AxiomKind
+            fn kind(&self) -> ComponentKind
             {
                 match self
                 {
                     $(
-                        Axiom::$name(n) => n.kind()
+                        Component::$name(n) => n.kind()
+                    ),*
+
+                }
+            }
+        }
+
+        impl<$A:ForIRI> HigherKinded for Component<$A>
+        {
+            fn higher_kind(&self) -> HigherKind
+            {
+                match self
+                {
+                    $(
+                        Component::$name(n) => n.higher_kind()
                     ),*
 
                 }
@@ -922,22 +974,30 @@ macro_rules! axioms {
         }
 
         $(
-            axiom!(
-                $A $name $tt $(#[$attr]) *
+            component!(
+                $A $higher $name $tt $(#[$attr]) *
             );
         ) *
     }
 }
 
-axioms! {
+components! {
     A,
+
+    /// The Ontology ID. There should be only one OntologyID per
+    /// ontology.
+    Meta OntologyID{iri: Option<IRI<A>>, viri: Option<IRI<A>>},
+
+    /// The IRI from which the ontology was actually loaded.
+    Meta DocIRI(IRI<A>),
+
     /// An annotation associated with this Ontology
-    OntologyAnnotation (Annotation<A>),
+    Axiom OntologyAnnotation (Annotation<A>),
 
     /// Declares that an IRI is an import of this ontology
-    Import(IRI<A>),
+    Axiom Import(IRI<A>),
 
-    // Declaration Axioms
+    // Declaration Components
 
     /// Declares that an IRI represents a Class in the Ontology
     ///
@@ -946,42 +1006,42 @@ axioms! {
     /// an ontology where there is no declaration, the end ontology
     /// will change profile to OWL Full.  See also the [OWL
     /// Primer](https://www.w3.org/TR/2012/REC-owl2-primer-20121211/#Entity_Declarations)
-    DeclareClass(Class<A>),
+    Axiom DeclareClass(Class<A>),
 
     /// Declares that an IRI represents an ObjectProperty in the
     /// Ontology.
     ///
     /// See also [`DeclareClass`](struct.DeclareClass.html)
-    DeclareObjectProperty(ObjectProperty<A>),
+    Axiom DeclareObjectProperty(ObjectProperty<A>),
 
     /// Declares that an IRI represents an AnnotationProperty in the
     /// Ontology.
     ///
     /// See also [`DeclareClass`](struct.DeclareClass.html)
-    DeclareAnnotationProperty (AnnotationProperty<A>),
+    Axiom DeclareAnnotationProperty (AnnotationProperty<A>),
     /// Declares that an IRI represents a DataProperty in the
     /// ontology.
     ///
     /// See also [`DeclareClass`](struct.DeclareClass.html)
-    DeclareDataProperty (DataProperty<A>),
+    Axiom DeclareDataProperty (DataProperty<A>),
 
     /// Declare that an IRI represents a NamedIndividual in the
     /// ontology.
     ///
     /// See also [`DeclareClass`](struct.DeclareClass.html)
-    DeclareNamedIndividual (NamedIndividual<A>),
+    Axiom DeclareNamedIndividual (NamedIndividual<A>),
 
     /// Declare that an IRI represents a Datatype in the ontology.
     ///
-    DeclareDatatype(Datatype<A>),
+    Axiom DeclareDatatype(Datatype<A>),
 
-    // Class Axioms
+    // Class Components
 
     /// A subclass relationship between two `ClassExpression`.
     ///
     /// All instances of `sub_class` are also instances of
     /// `super_class`.
-    SubClassOf{
+    Axiom SubClassOf{
         sup: ClassExpression<A>,
         sub: ClassExpression<A>
     },
@@ -990,19 +1050,19 @@ axioms! {
     ///
     /// All instances of `ClassExpression` are also instances
     /// of other other.
-    EquivalentClasses(Vec<ClassExpression<A>>),
+    Axiom EquivalentClasses(Vec<ClassExpression<A>>),
 
     /// A disjoint relationship between two `ClassExpression`
     ///
     /// No instance of one `ClassExpression` can also be an instance
     /// of any of the others.
-    DisjointClasses(Vec<ClassExpression<A>>),
+    Axiom DisjointClasses(Vec<ClassExpression<A>>),
 
     /// A disjoint union expression between one `ClassExpression` and
     /// a set of others.
     ///
     /// See also: https://www.w3.org/TR/owl2-syntax/#Disjoint_Union_of_Class_Expressions
-    DisjointUnion(Class<A>, Vec<ClassExpression<A>>),
+    Axiom DisjointUnion(Class<A>, Vec<ClassExpression<A>>),
 
     // ObjectProperty axioms
 
@@ -1016,7 +1076,7 @@ axioms! {
     ///
     /// See also: [Property Hierarchies](https://www.w3.org/TR/2012/REC-owl2-primer-20121211/#Property_Hierarchies)
     /// See also: [Property Chains](https://www.w3.org/TR/2012/REC-owl2-primer-20121211/#Property_Chains)
-    SubObjectPropertyOf{
+    Axiom SubObjectPropertyOf{
         sup: ObjectPropertyExpression<A>,
         sub: SubObjectPropertyExpression<A>
     },
@@ -1025,13 +1085,13 @@ axioms! {
     ///
     /// States that two object properties are semantically identical
     /// to each other.
-    EquivalentObjectProperties(Vec<ObjectPropertyExpression<A>>),
+    Axiom EquivalentObjectProperties(Vec<ObjectPropertyExpression<A>>),
 
     /// A disjoint object property relationship.
     ///
     /// This states that is an individual is connected by one of these
     /// object properties, it cannot be connected by any of the others.
-    DisjointObjectProperties(Vec<ObjectPropertyExpression<A>>),
+    Axiom DisjointObjectProperties(Vec<ObjectPropertyExpression<A>>),
 
     /// An inverse relationship between two object properties.
     ///
@@ -1040,7 +1100,7 @@ axioms! {
     /// `s` are transitive, then `a r b` implies `b r a`.
     ///
     /// See also: [Property Characteristics](https://www.w3.org/TR/2012/REC-owl2-primer-20121211/#Property_Characteristics)
-    InverseObjectProperties(ObjectProperty<A>,ObjectProperty<A>),
+    Axiom InverseObjectProperties(ObjectProperty<A>,ObjectProperty<A>),
 
     /// The domain of the object property.
     ///
@@ -1049,7 +1109,7 @@ axioms! {
     /// instances of `ce`
     ///
     /// See also: [Domain](https://www.w3.org/TR/owl2-syntax/#Object_Property_Domain)
-    ObjectPropertyDomain{ope:ObjectPropertyExpression<A>, ce:ClassExpression<A>},
+    Axiom ObjectPropertyDomain{ope:ObjectPropertyExpression<A>, ce:ClassExpression<A>},
 
     /// The range of the object property.
     ///
@@ -1057,7 +1117,7 @@ axioms! {
     /// relationship `ope`, then it is an individual of `ce`.1
     ///
     /// See also: [Domain](https://www.w3.org/TR/owl2-syntax/#Object_Property_Range)
-    ObjectPropertyRange{ope:ObjectPropertyExpression<A>, ce:ClassExpression<A>},
+    Axiom ObjectPropertyRange{ope:ObjectPropertyExpression<A>, ce:ClassExpression<A>},
 
     /// The functional characteristic.
     ///
@@ -1066,7 +1126,7 @@ axioms! {
     /// property expression.
     ///
     /// See also: [Functional](https://www.w3.org/TR/owl2-syntax/#Functional_Object_Properties)
-    FunctionalObjectProperty(ObjectPropertyExpression<A>),
+    Axiom FunctionalObjectProperty(ObjectPropertyExpression<A>),
 
     /// The inverse functional characteristic
     ///
@@ -1075,7 +1135,7 @@ axioms! {
     /// expression.
     ///
     /// See also: [Inverse Functional](https://www.w3.org/TR/owl2-syntax/#Inverse-Functional_Object_Properties)
-    InverseFunctionalObjectProperty(ObjectPropertyExpression<A>),
+    Axiom InverseFunctionalObjectProperty(ObjectPropertyExpression<A>),
 
     /// The reflexive characteristic
     ///
@@ -1083,21 +1143,21 @@ axioms! {
     /// ObjectPropertyExpression is connected to itself.
     ///
     /// See also: [Reflexive](https://www.w3.org/TR/owl2-syntax/#Reflexive_Object_Properties)
-    ReflexiveObjectProperty(ObjectPropertyExpression<A>),
+    Axiom ReflexiveObjectProperty(ObjectPropertyExpression<A>),
 
     /// The irreflexive characteristic
     ///
     /// No individual can be connected to itself by this property.
     ///
     /// See also: [Irreflexive](https://www.w3.org/TR/owl2-syntax/#Irreflexive_Object_Properties)
-    IrreflexiveObjectProperty(ObjectPropertyExpression<A>),
+    Axiom IrreflexiveObjectProperty(ObjectPropertyExpression<A>),
 
     /// The symmetric characteristic
     ///
     /// If an individual `i` is connected to `j` by this
     /// ObjectPropertyExpression, then `j` is also connected by `i`
     /// See also: [Symmetric](https://www.w3.org/TR/owl2-syntax/#Symmetric_Object_Properties)
-    SymmetricObjectProperty(ObjectPropertyExpression<A>),
+    Axiom SymmetricObjectProperty(ObjectPropertyExpression<A>),
 
     /// The asymmetric characteristic.
     ///
@@ -1106,7 +1166,7 @@ axioms! {
     /// by the ObjectPropertyExpression.
     ///
     /// See also: [Asymmetric](https://www.w3.org/TR/owl2-syntax/#Asymmetric_Object_Properties)
-    AsymmetricObjectProperty(ObjectPropertyExpression<A>),
+    Axiom AsymmetricObjectProperty(ObjectPropertyExpression<A>),
 
     /// A transitive relationship between two object properties.
     ///
@@ -1114,7 +1174,7 @@ axioms! {
     /// c` also.
     ///
     /// See also: [TransitiveObjectProperty](https://www.w3.org/TR/owl2-syntax/#Transitive_Object_Properties)
-    TransitiveObjectProperty(ObjectPropertyExpression<A>),
+    Axiom TransitiveObjectProperty(ObjectPropertyExpression<A>),
 
     /// A sub data property relationship.
     ///
@@ -1122,7 +1182,7 @@ axioms! {
     /// the existence of the `super_property`.
     ///
     /// See also: [Data Subproperties](https://www.w3.org/TR/owl2-syntax/#Data_Subproperties)
-    SubDataPropertyOf {
+    Axiom SubDataPropertyOf {
         sup:DataProperty<A>,
         sub:DataProperty<A>
     },
@@ -1132,7 +1192,7 @@ axioms! {
     /// All these DataProperties are semantically identical.
     ///
     /// See also: [EquivalentDataproperties](https://www.w3.org/TR/owl2-syntax/#Equivalent_Data_Properties)
-    EquivalentDataProperties(Vec<DataProperty<A>>),
+    Axiom EquivalentDataProperties(Vec<DataProperty<A>>),
 
     /// A disjoint data property relationship.
     ///
@@ -1140,7 +1200,7 @@ axioms! {
     /// by more than one of these DataProperty relations.
     ///
     /// See also: [DisjointDataProperties](https://www.w3.org/TR/owl2-syntax/#Disjoint_Data_Properties)
-    DisjointDataProperties(Vec<DataProperty<A>>),
+    Axiom DisjointDataProperties(Vec<DataProperty<A>>),
 
     /// The domain of a DataProperty.
     ///
@@ -1148,7 +1208,7 @@ axioms! {
     /// of type `ce`.
     ///
     /// See also: [Data Property Domain](https://www.w3.org/TR/owl2-syntax/#Disjoint_Data_Properties)
-    DataPropertyDomain{dp:DataProperty<A>,ce:ClassExpression<A>},
+    Axiom DataPropertyDomain{dp:DataProperty<A>,ce:ClassExpression<A>},
 
     /// The range of a DataProperty.
     ///
@@ -1156,7 +1216,7 @@ axioms! {
     /// `l`, then `l` must by in `dr`.
     ///
     /// See also: [Data Property Range](https://www.w3.org/TR/owl2-syntax/#Data_Property_Range)
-    DataPropertyRange{dp:DataProperty<A>,dr:DataRange<A>},
+    Axiom DataPropertyRange{dp:DataProperty<A>,dr:DataRange<A>},
 
     /// The functional DataProperty characteristic.
     ///
@@ -1164,12 +1224,12 @@ axioms! {
     /// by this DataProperty.
     ///
     /// See also: [Functional Data Property]:(https://www.w3.org/TR/owl2-syntax/#Functional_Data_Properties)
-    FunctionalDataProperty(DataProperty<A>),
+    Axiom FunctionalDataProperty(DataProperty<A>),
 
     /// Defintion of a datatype.
     ///
     /// See also: [Datatype Definitions](https://www.w3.org/TR/owl2-syntax/#Datatype_Definitions)
-    DatatypeDefinition {
+    Axiom DatatypeDefinition {
         kind: Datatype<A>,
         range: DataRange<A>
     },
@@ -1182,20 +1242,20 @@ axioms! {
     /// inferred.
     ///
     /// See also: [Keys](https://www.w3.org/TR/owl2-syntax/#Keys)
-    HasKey{ce:ClassExpression<A>, vpe:Vec<PropertyExpression<A>>},
+    Axiom HasKey{ce:ClassExpression<A>, vpe:Vec<PropertyExpression<A>>},
 
     // Assertions
     /// A same individual expression.
     ///
     /// See also: [Individual Equality](https://www.w3.org/TR/owl2-syntax/#Individual_Equality)
-    SameIndividual (
+    Axiom SameIndividual (
         Vec<Individual<A>>
     ),
 
     /// A different individuals expression.
     ///
-    /// See also: [Individual Inequality](https://www.w3.org/TR/owl2-syntax/#Individual_Inequality)
-    DifferentIndividuals (
+    /// See also: [Individual Inequality](https://www.w3.org/TR/owl2-syntax/#Individual_Inequality
+    Axiom DifferentIndividuals (
         Vec<Individual<A>>
     ),
 
@@ -1204,7 +1264,7 @@ axioms! {
     /// States that `i` is in class `ce`.
     ///
     /// See also: [Class Assertions](https://www.w3.org/TR/owl2-syntax/#Class_Assertions)
-    ClassAssertion {
+    Axiom ClassAssertion {
         ce: ClassExpression<A>,
         i: Individual<A>
     },
@@ -1214,7 +1274,7 @@ axioms! {
     /// Individual `from` is connected `to` by `ope`.
     ///
     /// See also: [Positive Object Property Assertions](https://www.w3.org/TR/owl2-syntax/#Positive_Object_Property_Assertions)
-    ObjectPropertyAssertion {
+    Axiom ObjectPropertyAssertion {
         ope: ObjectPropertyExpression<A>,
         from: Individual<A>,
         to: Individual<A>
@@ -1225,7 +1285,7 @@ axioms! {
     /// Individual `from` is not connected `to` by `ope`
     ///
     /// See also: [Negative Object Property Assertions](https://www.w3.org/TR/owl2-syntax/#Negative_Object_Property_Assertions)
-    NegativeObjectPropertyAssertion {
+    Axiom NegativeObjectPropertyAssertion {
         ope: ObjectPropertyExpression<A>,
         from: Individual<A>,
         to: Individual<A>
@@ -1236,7 +1296,7 @@ axioms! {
     /// Individual `from` is connected `to`` literal by `dp`.
     ///
     /// See also: [Data Property Assertion](https://www.w3.org/TR/owl2-syntax/#Positive_Data_Property_Assertions)
-    DataPropertyAssertion {
+    Axiom DataPropertyAssertion {
         dp: DataProperty<A>,
         from: Individual<A>,
         to: Literal<A>
@@ -1247,19 +1307,19 @@ axioms! {
     /// Individual `from` is not connected `to` literal by `dp`.
     ///
     /// See also [Negative Data Property Assertions](https://www.w3.org/TR/owl2-syntax/#Negative_Data_Property_Assertions)
-    NegativeDataPropertyAssertion {
+    Axiom NegativeDataPropertyAssertion {
         dp: DataProperty<A>,
         from: Individual<A>,
         to: Literal<A>
     },
 
-    // Annotation Axioms
+    // Annotation Components
     /// An annotation assertion axiom
     ///
     /// States that `annotation` applies to the
     /// `annotation_subject`. Annotations refer to an `IRI` rather
     /// than the `NamedEntity` identified by that `IRI`.
-    AnnotationAssertion {
+    Axiom AnnotationAssertion {
         subject: AnnotationSubject<A>,
         ann: Annotation<A>
     },
@@ -1268,23 +1328,32 @@ axioms! {
     ///
     /// Implies that any annotation of the type `sub_property` is also
     /// an annotation of the type `super_property`.
-    SubAnnotationPropertyOf {
+    Axiom SubAnnotationPropertyOf {
         sup: AnnotationProperty<A>,
         sub: AnnotationProperty<A>
     },
 
     /// Assert the domain of an `AnnotationProperty`
-    AnnotationPropertyDomain {
+    Axiom AnnotationPropertyDomain {
         ap: AnnotationProperty<A>,
         iri: IRI<A>
     },
 
     /// Assert the range of an `AnnotationProperty`
-    AnnotationPropertyRange {
+    Axiom AnnotationPropertyRange {
         ap: AnnotationProperty<A>,
         iri: IRI<A>
     }
 }
+
+
+// TODO
+impl<A:ForIRI> Default for OntologyID<A> {
+    fn default() -> Self {
+        Self{iri: None, viri: None}
+    }
+}
+
 
 // Non-axiom data structures associated with OWL
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
@@ -1652,32 +1721,8 @@ impl<A: ForIRI> From<Class<A>> for Box<ClassExpression<A>> {
     }
 }
 
-/// An ontology identifier
-///
-/// An ontology is identified by an IRI which is expected to remain
-/// stable over the lifetime of the ontology, and a version IRI which
-/// is expected to change between versions.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct OntologyID<A> {
-    pub iri: Option<IRI<A>>,
-    pub viri: Option<IRI<A>>,
-}
-
-impl<A> Default for OntologyID<A> {
-    fn default() -> OntologyID<A> {
-        OntologyID {
-            iri: None,
-            viri: None,
-        }
-    }
-}
-
 /// Access or change the `OntologyID` of an `Ontology`
 pub trait Ontology<A> {
-    fn id(&self) -> &OntologyID<A>;
-    fn mut_id(&mut self) -> &mut OntologyID<A>;
-    fn doc_iri(&self) -> &Option<IRI<A>>;
-    fn mut_doc_iri(&mut self) -> &mut Option<IRI<A>>;
 }
 
 /// Add or remove axioms to an `MutableOntology`
@@ -1697,13 +1742,13 @@ pub trait MutableOntology<A> {
     /// See `declare` for an easier way to declare named entities.
     fn insert<AA>(&mut self, ax: AA) -> bool
     where
-        AA: Into<AnnotatedAxiom<A>>;
+        AA: Into<AnnotatedComponent<A>>;
 
-    fn remove(&mut self, ax: &AnnotatedAxiom<A>) -> bool {
+    fn remove(&mut self, ax: &AnnotatedComponent<A>) -> bool {
         self.take(ax).is_some()
     }
 
-    fn take(&mut self, ax: &AnnotatedAxiom<A>) -> Option<AnnotatedAxiom<A>>;
+    fn take(&mut self, ax: &AnnotatedComponent<A>) -> Option<AnnotatedComponent<A>>;
 
     /// Declare an NamedEntity for the ontology.
     ///
@@ -1722,13 +1767,15 @@ pub trait MutableOntology<A> {
         N: Into<NamedEntity<A>>,
     {
         let ne: NamedEntity<_> = ne.into();
-        let ax: Axiom<_> = ne.into();
+        let ax: Component<_> = ne.into();
         self.insert(ax)
     }
 }
 
 #[cfg(test)]
 mod test {
+    use crate::ontology::component_mapped::ComponentMappedOntology;
+
     use super::*;
 
     #[test]
@@ -1774,6 +1821,24 @@ mod test {
         assert_eq!(iri_from_iri, iri_str);
     }
 
+    #[test]
+    fn test_class() {
+        let mut o = ComponentMappedOntology::new_rc();
+        let c = Build::new().class("http://www.example.com");
+        o.insert(DeclareClass(c));
+
+        assert_eq!(o.i().declare_class().count(), 1);
+    }
+
+    #[test]
+    fn test_class_declare() {
+        let c = Build::new_rc().class("http://www.example.com");
+
+        let mut o = ComponentMappedOntology::new_rc();
+        o.declare(c);
+
+        assert_eq!(o.i().declare_class().count(), 1);
+    }
 
     #[test]
     fn test_class_convertors() {
@@ -1814,7 +1879,7 @@ mod test {
         let c = Build::new_rc().class("http://www.example.com");
 
         let dc = DisjointClasses(vec![c.clone().into(), c.clone().into()]);
-        let _aa: Axiom<_> = dc.into();
+        let _aa: Component<_> = dc.into();
     }
 
     #[test]
@@ -1836,7 +1901,7 @@ mod test {
             av: b.iri("http://www.example.com/av").into(),
         };
 
-        let mut decl1: AnnotatedAxiom<_> = DeclareClass(b.class("http://www.example.com#a")).into();
+        let mut decl1: AnnotatedComponent<_> = DeclareClass(b.class("http://www.example.com#a")).into();
         let decl2 = decl1.clone();
 
         assert_eq!(decl1, decl2);

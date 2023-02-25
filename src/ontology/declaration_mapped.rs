@@ -1,6 +1,6 @@
 //! An index that provides rapid look up via declaration kind
 
-use crate::model::{AnnotatedAxiom, Axiom, AxiomKind, ForIRI, Kinded, NamedEntityKind, IRI, RcAnnotatedAxiom, RcStr};
+use crate::model::{AnnotatedComponent, Component, ComponentKind, ForIRI, Kinded, NamedEntityKind, IRI, RcAnnotatedComponent, RcStr};
 
 use super::indexed::ForIndex;
 use super::indexed::OntologyIndex;
@@ -37,40 +37,40 @@ impl<A: ForIRI, AA: ForIndex<A>> DeclarationMappedIndex<A, AA> {
         &self.1
     }
 
-    fn aa_to_ne(&self, ax: &AnnotatedAxiom<A>) -> Option<NamedEntityKind> {
+    fn aa_to_ne(&self, ax: &AnnotatedComponent<A>) -> Option<NamedEntityKind> {
         match ax.kind() {
-            AxiomKind::DeclareClass
-            | AxiomKind::DeclareObjectProperty
-            | AxiomKind::DeclareAnnotationProperty
-            | AxiomKind::DeclareDataProperty
-            | AxiomKind::DeclareDatatype
-            | AxiomKind::DeclareNamedIndividual => match ax.clone().axiom {
-                Axiom::DeclareClass(dc) => Some(dc.0.into()),
-                Axiom::DeclareObjectProperty(op) => Some(op.0.into()),
-                Axiom::DeclareAnnotationProperty(ap) => Some(ap.0.into()),
-                Axiom::DeclareDataProperty(dp) => Some(dp.0.into()),
-                Axiom::DeclareDatatype(dt) => Some(dt.0.into()),
-                Axiom::DeclareNamedIndividual(ni) => Some(ni.0.into()),
+            ComponentKind::DeclareClass
+            | ComponentKind::DeclareObjectProperty
+            | ComponentKind::DeclareAnnotationProperty
+            | ComponentKind::DeclareDataProperty
+            | ComponentKind::DeclareDatatype
+            | ComponentKind::DeclareNamedIndividual => match ax.clone().component {
+                Component::DeclareClass(dc) => Some(dc.0.into()),
+                Component::DeclareObjectProperty(op) => Some(op.0.into()),
+                Component::DeclareAnnotationProperty(ap) => Some(ap.0.into()),
+                Component::DeclareDataProperty(dp) => Some(dp.0.into()),
+                Component::DeclareDatatype(dt) => Some(dt.0.into()),
+                Component::DeclareNamedIndividual(ni) => Some(ni.0.into()),
                 _ => None,
             },
             _ => None,
         }
     }
 
-    fn aa_to_iri(&self, ax: &AnnotatedAxiom<A>) -> Option<IRI<A>> {
+    fn aa_to_iri(&self, ax: &AnnotatedComponent<A>) -> Option<IRI<A>> {
         match ax.kind() {
-            AxiomKind::DeclareClass
-            | AxiomKind::DeclareObjectProperty
-            | AxiomKind::DeclareAnnotationProperty
-            | AxiomKind::DeclareDataProperty
-            | AxiomKind::DeclareDatatype
-            | AxiomKind::DeclareNamedIndividual => match ax.clone().axiom {
-                Axiom::DeclareClass(dc) => Some(dc.0.into()),
-                Axiom::DeclareObjectProperty(op) => Some(op.0.into()),
-                Axiom::DeclareAnnotationProperty(ap) => Some(ap.0.into()),
-                Axiom::DeclareDataProperty(dp) => Some(dp.0.into()),
-                Axiom::DeclareDatatype(dt) => Some(dt.0.into()),
-                Axiom::DeclareNamedIndividual(ni) => Some(ni.0.into()),
+            ComponentKind::DeclareClass
+            | ComponentKind::DeclareObjectProperty
+            | ComponentKind::DeclareAnnotationProperty
+            | ComponentKind::DeclareDataProperty
+            | ComponentKind::DeclareDatatype
+            | ComponentKind::DeclareNamedIndividual => match ax.clone().component {
+                Component::DeclareClass(dc) => Some(dc.0.into()),
+                Component::DeclareObjectProperty(op) => Some(op.0.into()),
+                Component::DeclareAnnotationProperty(ap) => Some(ap.0.into()),
+                Component::DeclareDataProperty(dp) => Some(dp.0.into()),
+                Component::DeclareDatatype(dt) => Some(dt.0.into()),
+                Component::DeclareNamedIndividual(ni) => Some(ni.0.into()),
                 _ => None,
             },
             _ => None,
@@ -115,7 +115,7 @@ impl<A: ForIRI, AA: ForIndex<A>> OntologyIndex<A, AA> for DeclarationMappedIndex
         }.is_some()
     }
 
-    fn index_remove(&mut self, ax: &AnnotatedAxiom<A>) -> bool {
+    fn index_remove(&mut self, ax: &AnnotatedComponent<A>) -> bool {
         let s = some! {
             self.0.remove(&self.aa_to_iri(&*ax)?)
         };
@@ -124,7 +124,7 @@ impl<A: ForIRI, AA: ForIndex<A>> OntologyIndex<A, AA> for DeclarationMappedIndex
     }
 }
 
-impl DeclarationMappedIndex<RcStr, RcAnnotatedAxiom> {
+impl DeclarationMappedIndex<RcStr, RcAnnotatedComponent> {
     pub fn new_rc() -> Self {
         Self::new()
     }
@@ -133,13 +133,13 @@ impl DeclarationMappedIndex<RcStr, RcAnnotatedAxiom> {
 #[cfg(test)]
 mod test {
     use super::DeclarationMappedIndex;
-    use crate::model::{AnnotatedAxiom, Build, NamedEntity, NamedEntityKind, RcStr};
+    use crate::model::{AnnotatedComponent, Build, NamedEntity, NamedEntityKind, RcStr};
     use crate::ontology::indexed::OntologyIndex;
     use crate::vocab::{WithIRI, OWL};
     fn stuff() -> (
-        AnnotatedAxiom<RcStr>,
-        AnnotatedAxiom<RcStr>,
-        AnnotatedAxiom<RcStr>,
+        AnnotatedComponent<RcStr>,
+        AnnotatedComponent<RcStr>,
+        AnnotatedComponent<RcStr>,
     ) {
         let b = Build::new_rc();
         let c: NamedEntity<_> = b.class("http://www.example.com/c").into();
@@ -207,9 +207,9 @@ mod test {
 
         let iri = b.iri("http://www.example.com/p");
         let c: NamedEntity<_> = b.class("http://www.example.com/p").into();
-        let c: AnnotatedAxiom<_> = c.into();
+        let c: AnnotatedComponent<_> = c.into();
         let ni: NamedEntity<_> = b.named_individual("http://www.example.com/p").into();
-        let ni: AnnotatedAxiom<_> = ni.into();
+        let ni: AnnotatedComponent<_> = ni.into();
 
         d.index_insert(c.clone().into());
         d.index_insert(ni.clone().into());

@@ -5,7 +5,7 @@ use crate::model::Kinded;
 use crate::model::*;
 use crate::ontology::indexed::ForIndex;
 use crate::vocab::Namespace::*;
-use crate::{ontology::axiom_mapped::AxiomMappedOntology, vocab::WithIRI};
+use crate::{ontology::component_mapped::ComponentMappedOntology, vocab::WithIRI};
 
 use quick_xml::events::BytesDecl;
 use quick_xml::events::BytesEnd;
@@ -23,7 +23,7 @@ use std::io::Write as StdWrite;
 /// [XML](https://www.w3.org/TR/owl2-xml-serialization/) syntax.
 pub fn write<A: ForIRI, AA: ForIndex<A>, W: StdWrite>(
     write: W,
-    ont: &AxiomMappedOntology<A, AA>,
+    ont: &ComponentMappedOntology<A, AA>,
     mapping: Option<&PrefixMapping>,
 ) -> Result<(), HornedError> {
     let mut writer = Writer::new_with_indent(write, b' ', 4);
@@ -94,53 +94,59 @@ where
     Ok(())
 }
 
-/// Fetch the name of the tag that is used to render `AxiomKind`
-fn tag_for_kind(axk: AxiomKind) -> &'static str {
+/// Fetch the name of the tag that is used to render `ComponentKind`
+fn tag_for_kind(axk: ComponentKind) -> &'static str {
     match axk {
-        AxiomKind::Import => "Import",
-        AxiomKind::OntologyAnnotation => "Annotation",
-        AxiomKind::DeclareClass => "Declaration",
-        AxiomKind::DeclareObjectProperty => "Declaration",
-        AxiomKind::DeclareAnnotationProperty => "Declaration",
-        AxiomKind::DeclareDataProperty => "Declaration",
-        AxiomKind::DeclareNamedIndividual => "Declaration",
-        AxiomKind::DeclareDatatype => "Declaration",
-        AxiomKind::SubClassOf => "SubClassOf",
-        AxiomKind::EquivalentClasses => "EquivalentClasses",
-        AxiomKind::DisjointClasses => "DisjointClasses",
-        AxiomKind::DisjointUnion => "DisjointUnion",
-        AxiomKind::SubObjectPropertyOf => "SubObjectPropertyOf",
-        AxiomKind::EquivalentObjectProperties => "EquivalentObjectProperties",
-        AxiomKind::DisjointObjectProperties => "DisjointObjectProperties",
-        AxiomKind::InverseObjectProperties => "InverseObjectProperties",
-        AxiomKind::ObjectPropertyDomain => "ObjectPropertyDomain",
-        AxiomKind::ObjectPropertyRange => "ObjectPropertyRange",
-        AxiomKind::FunctionalObjectProperty => "FunctionalObjectProperty",
-        AxiomKind::InverseFunctionalObjectProperty => "InverseFunctionalObjectProperty",
-        AxiomKind::ReflexiveObjectProperty => "ReflexiveObjectProperty",
-        AxiomKind::IrreflexiveObjectProperty => "IrreflexiveObjectProperty",
-        AxiomKind::SymmetricObjectProperty => "SymmetricObjectProperty",
-        AxiomKind::AsymmetricObjectProperty => "AsymmetricObjectProperty",
-        AxiomKind::TransitiveObjectProperty => "TransitiveObjectProperty",
-        AxiomKind::SubDataPropertyOf => "SubDataPropertyOf",
-        AxiomKind::EquivalentDataProperties => "EquivalentDataProperties",
-        AxiomKind::DisjointDataProperties => "DisjointDataProperties",
-        AxiomKind::DataPropertyDomain => "DataPropertyDomain",
-        AxiomKind::DataPropertyRange => "DataPropertyRange",
-        AxiomKind::FunctionalDataProperty => "FunctionalDataProperty",
-        AxiomKind::DatatypeDefinition => "DatatypeDefinition",
-        AxiomKind::HasKey => "HasKey",
-        AxiomKind::SameIndividual => "SameIndividual",
-        AxiomKind::DifferentIndividuals => "DifferentIndividuals",
-        AxiomKind::ClassAssertion => "ClassAssertion",
-        AxiomKind::ObjectPropertyAssertion => "ObjectPropertyAssertion",
-        AxiomKind::NegativeObjectPropertyAssertion => "NegativeObjectPropertyAssertion",
-        AxiomKind::DataPropertyAssertion => "DataPropertyAssertion",
-        AxiomKind::NegativeDataPropertyAssertion => "NegativeDataPropertyAssertion",
-        AxiomKind::AnnotationAssertion => "AnnotationAssertion",
-        AxiomKind::SubAnnotationPropertyOf => "SubAnnotationPropertyOf",
-        AxiomKind::AnnotationPropertyDomain => "AnnotationPropertyDomain",
-        AxiomKind::AnnotationPropertyRange => "AnnotationPropertyRange",
+        ComponentKind::OntologyID =>{
+            panic!("OntologyID found where only axioms were expected.")
+        },
+        ComponentKind:: DocIRI => {
+            panic!("DocIRI found where only axioms were expected.")
+        },
+        ComponentKind::Import => "Import",
+        ComponentKind::OntologyAnnotation => "Annotation",
+        ComponentKind::DeclareClass => "Declaration",
+        ComponentKind::DeclareObjectProperty => "Declaration",
+        ComponentKind::DeclareAnnotationProperty => "Declaration",
+        ComponentKind::DeclareDataProperty => "Declaration",
+        ComponentKind::DeclareNamedIndividual => "Declaration",
+        ComponentKind::DeclareDatatype => "Declaration",
+        ComponentKind::SubClassOf => "SubClassOf",
+        ComponentKind::EquivalentClasses => "EquivalentClasses",
+        ComponentKind::DisjointClasses => "DisjointClasses",
+        ComponentKind::DisjointUnion => "DisjointUnion",
+        ComponentKind::SubObjectPropertyOf => "SubObjectPropertyOf",
+        ComponentKind::EquivalentObjectProperties => "EquivalentObjectProperties",
+        ComponentKind::DisjointObjectProperties => "DisjointObjectProperties",
+        ComponentKind::InverseObjectProperties => "InverseObjectProperties",
+        ComponentKind::ObjectPropertyDomain => "ObjectPropertyDomain",
+        ComponentKind::ObjectPropertyRange => "ObjectPropertyRange",
+        ComponentKind::FunctionalObjectProperty => "FunctionalObjectProperty",
+        ComponentKind::InverseFunctionalObjectProperty => "InverseFunctionalObjectProperty",
+        ComponentKind::ReflexiveObjectProperty => "ReflexiveObjectProperty",
+        ComponentKind::IrreflexiveObjectProperty => "IrreflexiveObjectProperty",
+        ComponentKind::SymmetricObjectProperty => "SymmetricObjectProperty",
+        ComponentKind::AsymmetricObjectProperty => "AsymmetricObjectProperty",
+        ComponentKind::TransitiveObjectProperty => "TransitiveObjectProperty",
+        ComponentKind::SubDataPropertyOf => "SubDataPropertyOf",
+        ComponentKind::EquivalentDataProperties => "EquivalentDataProperties",
+        ComponentKind::DisjointDataProperties => "DisjointDataProperties",
+        ComponentKind::DataPropertyDomain => "DataPropertyDomain",
+        ComponentKind::DataPropertyRange => "DataPropertyRange",
+        ComponentKind::FunctionalDataProperty => "FunctionalDataProperty",
+        ComponentKind::DatatypeDefinition => "DatatypeDefinition",
+        ComponentKind::HasKey => "HasKey",
+        ComponentKind::SameIndividual => "SameIndividual",
+        ComponentKind::DifferentIndividuals => "DifferentIndividuals",
+        ComponentKind::ClassAssertion => "ClassAssertion",
+        ComponentKind::ObjectPropertyAssertion => "ObjectPropertyAssertion",
+        ComponentKind::NegativeObjectPropertyAssertion => "NegativeObjectPropertyAssertion",
+        ComponentKind::DataPropertyAssertion => "DataPropertyAssertion",
+        ComponentKind::NegativeDataPropertyAssertion => "NegativeDataPropertyAssertion",
+        ComponentKind::AnnotationAssertion => "AnnotationAssertion",
+        ComponentKind::SubAnnotationPropertyOf => "SubAnnotationPropertyOf",
+        ComponentKind::AnnotationPropertyDomain => "AnnotationPropertyDomain",
+        ComponentKind::AnnotationPropertyRange => "AnnotationPropertyRange",
     }
 }
 
@@ -222,7 +228,7 @@ macro_rules! content0 {
 }
 
 fn render_ont<A: ForIRI, AA: ForIndex<A>, W>(
-    o: &AxiomMappedOntology<A, AA>,
+    o: &ComponentMappedOntology<A, AA>,
     w: &mut Writer<W>,
     m: &PrefixMapping,
 ) -> Result<(), HornedError>
@@ -235,13 +241,15 @@ where
     // let mut elem = BytesStart::owned_name("Ontology");
     let mut elem = BytesStart::new("Ontology");
     elem.push_attribute((b"xmlns" as &[u8], OWL.iri_b()));
-    iri_maybe(&mut elem, "xml:base", &o.id().iri);
+
+    let id = o.i().the_ontology_id_or_default();
+    iri_maybe(&mut elem, "xml:base", &id.iri);
     // Render XML Namespaces.
     for pre in m.mappings() {
         elem.push_attribute((format!("xmlns:{}", pre.0).as_bytes(),pre.1.as_bytes()));
     }
-    iri_maybe(&mut elem, "ontologyIRI", &o.id().iri);
-    iri_maybe(&mut elem, "versionIRI", &o.id().viri);
+    iri_maybe(&mut elem, "ontologyIRI", &id.iri);
+    iri_maybe(&mut elem, "versionIRI", &id.viri);
 
     let elem_end = elem.to_end();
     let ev_end = Event::End(elem_end).into_owned();
@@ -251,8 +259,8 @@ where
     // let elem = BytesEnd::owned(b"Ontology".to_vec());
     m.render(w, m)?;
 
-    for axk in AxiomKind::all_kinds() {
-        for ax in o.i().axiom_for_kind(axk) {
+    for axk in ComponentKind::all_kinds() {
+        for ax in o.i().component_for_kind(axk) {
             ax.render(w, m)?;
         }
     }
@@ -370,13 +378,15 @@ content0! {DeclareNamedIndividual}
 content0! {DeclareDatatype}
 
 render! {
-    AnnotatedAxiom, self, w, m,
+    AnnotatedComponent, self, w, m,
     {
-        (
-            (&self.ann),
-            (&self.axiom)
-        ).within(w, m,
-                 tag_for_kind(self.kind()))?;
+        if self.is_axiom() {
+            (
+                (&self.ann),
+                (&self.component)
+            ).within(w, m,
+                     tag_for_kind(self.kind()))?;
+        }
 
         Ok(())
     }
@@ -549,53 +559,55 @@ render! {
 }
 
 render! {
-    Axiom, self, w, m,
+    Component, self, w, m,
     {
         match self {
-            Axiom::Import(ax) => ax.render(w, m)?,
-            Axiom::OntologyAnnotation(ax) => ax.render(w, m)?,
-            Axiom::DeclareClass(ax) => ax.render(w, m)?,
-            Axiom::DeclareObjectProperty(ax) => ax.render(w, m)?,
-            Axiom::DeclareAnnotationProperty(ax) => ax.render(w, m)?,
-            Axiom::DeclareDataProperty(ax) => ax.render(w, m)?,
-            Axiom::DeclareNamedIndividual(ax) => ax.render(w, m)?,
-            Axiom::DeclareDatatype(ax) => ax.render(w, m)?,
-            Axiom::SubClassOf(ax) => ax.render(w, m)?,
-            Axiom::EquivalentClasses(ax) => ax.render(w, m)?,
-            Axiom::DisjointClasses(ax) => ax.render(w, m)?,
-            Axiom::DisjointUnion(ax) => ax.render(w, m)?,
-            Axiom::SubObjectPropertyOf(ax) => ax.render(w, m)?,
-            Axiom::EquivalentObjectProperties(ax) => ax.render(w, m)?,
-            Axiom::DisjointObjectProperties(ax) => ax.render(w, m)?,
-            Axiom::InverseObjectProperties(ax) => ax.render(w, m)?,
-            Axiom::ObjectPropertyDomain(ax) => ax.render(w, m)?,
-            Axiom::ObjectPropertyRange(ax) => ax.render(w, m)?,
-            Axiom::FunctionalObjectProperty(ax) => ax.render(w, m)?,
-            Axiom::InverseFunctionalObjectProperty(ax) => ax.render(w, m)?,
-            Axiom::ReflexiveObjectProperty(ax) => ax.render(w, m)?,
-            Axiom::IrreflexiveObjectProperty(ax) => ax.render(w, m)?,
-            Axiom::SymmetricObjectProperty(ax) => ax.render(w, m)?,
-            Axiom::AsymmetricObjectProperty(ax) => ax.render(w, m)?,
-            Axiom::TransitiveObjectProperty(ax) => ax.render(w, m)?,
-            Axiom::SubDataPropertyOf(ax) => ax.render(w, m)?,
-            Axiom::EquivalentDataProperties(ax) => ax.render(w, m)?,
-            Axiom::DisjointDataProperties(ax) => ax.render(w, m)?,
-            Axiom::DataPropertyDomain(ax) => ax.render(w, m)?,
-            Axiom::DataPropertyRange(ax) => ax.render(w, m)?,
-            Axiom::FunctionalDataProperty(ax) => ax.render(w, m)?,
-            Axiom::DatatypeDefinition(ax) => ax.render(w, m)?,
-            Axiom::HasKey(ax) => ax.render(w, m)?,
-            Axiom::SameIndividual(ax) => ax.render(w, m)?,
-            Axiom::DifferentIndividuals(ax) => ax.render(w, m)?,
-            Axiom::ClassAssertion(ax) => ax.render(w, m)?,
-            Axiom::ObjectPropertyAssertion(ax) => ax.render(w, m)?,
-            Axiom::NegativeObjectPropertyAssertion(ax) => ax.render(w, m)?,
-            Axiom::DataPropertyAssertion(ax) => ax.render(w, m)?,
-            Axiom::NegativeDataPropertyAssertion(ax) => ax.render(w, m)?,
-            Axiom::AnnotationAssertion(ax) => ax.render(w, m)?,
-            Axiom::SubAnnotationPropertyOf(ax) => ax.render(w, m)?,
-            Axiom::AnnotationPropertyDomain(ax) => ax.render(w, m)?,
-            Axiom::AnnotationPropertyRange(ax) => ax.render(w, m)?
+            Component::OntologyID(_) => panic!("OntologyID found where only axioms were expected"),
+            Component::DocIRI(_) => panic!("DocIRI found where only axioms were expected."),
+            Component::Import(ax) => ax.render(w, m)?,
+            Component::OntologyAnnotation(ax) => ax.render(w, m)?,
+            Component::DeclareClass(ax) => ax.render(w, m)?,
+            Component::DeclareObjectProperty(ax) => ax.render(w, m)?,
+            Component::DeclareAnnotationProperty(ax) => ax.render(w, m)?,
+            Component::DeclareDataProperty(ax) => ax.render(w, m)?,
+            Component::DeclareNamedIndividual(ax) => ax.render(w, m)?,
+            Component::DeclareDatatype(ax) => ax.render(w, m)?,
+            Component::SubClassOf(ax) => ax.render(w, m)?,
+            Component::EquivalentClasses(ax) => ax.render(w, m)?,
+            Component::DisjointClasses(ax) => ax.render(w, m)?,
+            Component::DisjointUnion(ax) => ax.render(w, m)?,
+            Component::SubObjectPropertyOf(ax) => ax.render(w, m)?,
+            Component::EquivalentObjectProperties(ax) => ax.render(w, m)?,
+            Component::DisjointObjectProperties(ax) => ax.render(w, m)?,
+            Component::InverseObjectProperties(ax) => ax.render(w, m)?,
+            Component::ObjectPropertyDomain(ax) => ax.render(w, m)?,
+            Component::ObjectPropertyRange(ax) => ax.render(w, m)?,
+            Component::FunctionalObjectProperty(ax) => ax.render(w, m)?,
+            Component::InverseFunctionalObjectProperty(ax) => ax.render(w, m)?,
+            Component::ReflexiveObjectProperty(ax) => ax.render(w, m)?,
+            Component::IrreflexiveObjectProperty(ax) => ax.render(w, m)?,
+            Component::SymmetricObjectProperty(ax) => ax.render(w, m)?,
+            Component::AsymmetricObjectProperty(ax) => ax.render(w, m)?,
+            Component::TransitiveObjectProperty(ax) => ax.render(w, m)?,
+            Component::SubDataPropertyOf(ax) => ax.render(w, m)?,
+            Component::EquivalentDataProperties(ax) => ax.render(w, m)?,
+            Component::DisjointDataProperties(ax) => ax.render(w, m)?,
+            Component::DataPropertyDomain(ax) => ax.render(w, m)?,
+            Component::DataPropertyRange(ax) => ax.render(w, m)?,
+            Component::FunctionalDataProperty(ax) => ax.render(w, m)?,
+            Component::DatatypeDefinition(ax) => ax.render(w, m)?,
+            Component::HasKey(ax) => ax.render(w, m)?,
+            Component::SameIndividual(ax) => ax.render(w, m)?,
+            Component::DifferentIndividuals(ax) => ax.render(w, m)?,
+            Component::ClassAssertion(ax) => ax.render(w, m)?,
+            Component::ObjectPropertyAssertion(ax) => ax.render(w, m)?,
+            Component::NegativeObjectPropertyAssertion(ax) => ax.render(w, m)?,
+            Component::DataPropertyAssertion(ax) => ax.render(w, m)?,
+            Component::NegativeDataPropertyAssertion(ax) => ax.render(w, m)?,
+            Component::AnnotationAssertion(ax) => ax.render(w, m)?,
+            Component::SubAnnotationPropertyOf(ax) => ax.render(w, m)?,
+            Component::AnnotationPropertyDomain(ax) => ax.render(w, m)?,
+            Component::AnnotationPropertyRange(ax) => ax.render(w, m)?
         }
         Ok(())
     }
@@ -888,14 +900,13 @@ mod test {
 
     use std::collections::HashMap;
 
-    use crate::model::Ontology;
-    use crate::ontology::axiom_mapped::RcAxiomMappedOntology;
+    use crate::ontology::component_mapped::RcComponentMappedOntology;
     use std::fs::File;
     use std::io::BufRead;
     use std::io::BufReader;
     use std::io::BufWriter;
 
-    fn read_ok<R: BufRead>(bufread: &mut R) -> (RcAxiomMappedOntology, PrefixMapping) {
+    fn read_ok<R: BufRead>(bufread: &mut R) -> (RcComponentMappedOntology, PrefixMapping) {
         let r = read(bufread, ParserConfiguration::default());
         assert!(r.is_ok(), "Expected ontology, got failure:{:?}", r.err());
         let (o, m) = r.ok().unwrap();
@@ -904,11 +915,11 @@ mod test {
 
     #[test]
     fn test_ont_rt() {
-        let mut ont = AxiomMappedOntology::new_rc();
+        let mut ont = ComponentMappedOntology::new_rc();
         let build = Build::new();
 
         let iri = build.iri("http://www.example.com/a".to_string());
-        ont.mut_id().iri = Some(iri);
+        ont.insert(OntologyID{iri:Some(iri.clone()), viri:None});
         let temp_file = Temp::new_file().unwrap();
         let file = File::create(&temp_file).ok().unwrap();
         write(&mut BufWriter::new(file), &ont, None).ok().unwrap();
@@ -916,10 +927,17 @@ mod test {
         let file = File::open(&temp_file).ok().unwrap();
         let (ont2, _) = read_ok(&mut BufReader::new(file));
 
-        assert_eq!(ont.id().iri, ont2.id().iri);
+        // Check ID is present and not default
+        assert!(
+            ont.i().the_ontology_id().is_some()
+        );
+
+        // Check IDs are identical
+        assert_eq!(ont.i().the_ontology_id_or_default().iri,
+                   ont2.i().the_ontology_id_or_default().iri);
     }
 
-    fn roundtrip_1(ont: &str) -> (RcAxiomMappedOntology, PrefixMapping, Temp) {
+    fn roundtrip_1(ont: &str) -> (RcComponentMappedOntology, PrefixMapping, Temp) {
         let (ont_orig, prefix_orig) = read_ok(&mut ont.as_bytes());
         let temp_file = Temp::new_file().unwrap();
 
@@ -944,9 +962,9 @@ mod test {
     fn roundtrip(
         ont: &str,
     ) -> (
-        RcAxiomMappedOntology,
+        RcComponentMappedOntology,
         PrefixMapping,
-        RcAxiomMappedOntology,
+        RcComponentMappedOntology,
         PrefixMapping,
     ) {
         let (ont_orig, prefix_orig, temp_file) = roundtrip_1(ont);
@@ -962,9 +980,9 @@ mod test {
     fn assert_round(
         ont: &str,
     ) -> (
-        RcAxiomMappedOntology,
+        RcComponentMappedOntology,
         PrefixMapping,
-        RcAxiomMappedOntology,
+        RcComponentMappedOntology,
         PrefixMapping,
     ) {
         let (ont_orig, prefix_orig, ont_round, prefix_round) = roundtrip(ont);
@@ -992,7 +1010,8 @@ mod test {
         let (ont_orig, _prefix_orig, ont_round, _prefix_round) =
             roundtrip(include_str!("../../ont/owl-xml/ont.owx"));
 
-        assert_eq!(ont_orig.id().iri, ont_round.id().iri);
+        assert_eq!(ont_orig.i().the_ontology_id(),
+                   ont_round.i().the_ontology_id());
     }
 
     #[test]

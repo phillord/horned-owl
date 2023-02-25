@@ -5,9 +5,10 @@ use crate::io::ParserConfiguration;
 use crate::io::IncompleteParse;
 use crate::io::RDFOntology;
 use crate::model::Build;
+use crate::model::DocIRI;
 use crate::model::ForIRI;
-use crate::model::Ontology;
 use crate::model::IRI;
+use crate::model::MutableOntology;
 use crate::ontology::indexed::ForIndex;
 use crate::resolve::path_to_file_iri;
 use crate::resolve::resolve_iri;
@@ -105,9 +106,11 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> ClosureOntologyParser<'a, A, AA> {
         p.parse_declarations()?;
         let o = p.mut_ontology_ref();
 
-        ::std::mem::swap(o.mut_doc_iri(), &mut Some(new_doc_iri.clone()));
+        o.insert(
+            DocIRI(new_doc_iri.clone())
+        );
 
-        if let Some(declared_iri) = o.id().iri.clone() {
+        if let Some(declared_iri) = o.i().the_ontology_id_or_default().iri.clone() {
             v.push(declared_iri.clone());
 
             self.import_map

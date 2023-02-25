@@ -61,13 +61,14 @@ pub(crate) fn matcher(matches: &ArgMatches) -> Result<(), HornedError> {
     let summary_b = summarize(ont_b);
 
     println!("Ontology\t\t\t\t\tA\t\tB");
-    println!("\tLogical Axioms:\t\t\t\t{}\t\t{}", summary_a.logical_axiom, summary_b.logical_axiom);
-    println!("\tAnnotation Axioms:\t\t\t{}\t\t{}", summary_a.annotation_axiom, summary_b.annotation_axiom);
+    println!("\tLogical Components:\t\t\t\t{}\t\t{}", summary_a.logical_axiom, summary_b.logical_axiom);
+    println!("\tAnnotation Components:\t\t\t{}\t\t{}", summary_a.annotation_axiom, summary_b.annotation_axiom);
+    println!("\tMeta Components:\t\t\t{}\t\t{}", summary_a.meta_comp, summary_b.meta_comp);
     println!();
     println!("Detailed");
 
-    for ((axk, size_a), (_, size_b)) in summary_a.with_axiom_types().zip(summary_b.with_axiom_types()) {
-        println!("\t{0:<40}{1:<5}\t{2:<5}", name(axk), size_a, size_b);
+    for ((cmpk, size_a), (_, size_b)) in summary_a.with_axiom_types().zip(summary_b.with_axiom_types()) {
+        println!("\t{0:<40}{1:<5}\t{2:<5}", name(cmpk), size_a, size_b);
     }
 
     if let Some(p_a) = p_a {

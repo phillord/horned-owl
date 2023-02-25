@@ -10,7 +10,7 @@
 //! [`SetOntology`](set/struct.SetOntology.html). This provides the
 //! simplest, and probably least overhead implementation of
 //! [`MutableOntology`](../model/trait.MutableOntology.html) storing
-//! all [`AnnotatedAxiom`](../model/enum.AnnotatedAxiom.html)
+//! all [`AnnotatedComponent`](../model/enum.AnnotatedComponent.html)
 //! instances as using an in-memory `HashSet`. While this should be
 //! fast to add to, any searches are likely to run in linear time.
 
@@ -23,9 +23,9 @@
 //! implementations. A [`SetIndex`](set/struct.SetIndex.html) is also
 //! provided that mirrors the functionality of `SetOntology`.
 
-//! The [`axiom_mapped`](axiom_mapped.html) package provides an
+//! The [`component_mapped`](component_mapped.html) package provides an
 //! `OntologyIndex` that allows rapid retrieval of all
-//! `AnnotatedAxiom` instances of a given kind.
+//! `AnnotatedComponent` instances of a given kind.
 
 //! Other indexes are less general purpose. The
 //! [`declaration_mapped`](declaration_mapped.html) indexes only
@@ -33,7 +33,7 @@
 //! of an IRI. As it ignores most axioms passed to it, it does not
 //! provide iteration.
 
-pub mod axiom_mapped;
+pub mod component_mapped;
 pub mod declaration_mapped;
 pub mod indexed;
 pub mod iri_mapped;

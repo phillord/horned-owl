@@ -3,8 +3,8 @@
 use horned_owl::{
     error::HornedError,
     io::{ParserOutput, ResourceType, ParserConfiguration},
-    model::{Build, IRI, RcAnnotatedAxiom, RcStr},
-    ontology::axiom_mapped::RcAxiomMappedOntology,
+    model::{Build, IRI, RcAnnotatedComponent, RcStr},
+    ontology::component_mapped::RcComponentMappedOntology,
     resolve::{localize_iri, strict_resolve_iri},
 };
 
@@ -25,7 +25,7 @@ pub fn path_type(path: &Path) -> Option<ResourceType> {
 pub fn parse_path(
     path: &Path,
     config: ParserConfiguration
-) -> Result<ParserOutput<RcStr, RcAnnotatedAxiom>, HornedError> {
+) -> Result<ParserOutput<RcStr, RcAnnotatedComponent>, HornedError> {
     Ok(match path_type(path) {
         Some(ResourceType::OWX) => {
             let file = File::open(&path)?;
@@ -50,7 +50,7 @@ pub fn parse_path(
 pub fn parse_imports(
     path: &Path,
     config: ParserConfiguration
-) -> Result<ParserOutput<RcStr, RcAnnotatedAxiom>, HornedError> {
+) -> Result<ParserOutput<RcStr, RcAnnotatedComponent>, HornedError> {
     let file = File::open(&path)?;
     let mut bufreader = BufReader::new(file);
     Ok(match path_type(path) {
@@ -83,7 +83,7 @@ pub fn materialize_1<'a>(
     recurse: bool,
 ) -> Result<&'a mut Vec<IRI<RcStr>>, HornedError> {
     println!("Parsing: {}", input);
-    let amont: RcAxiomMappedOntology = parse_imports(Path::new(input), config)?.into();
+    let amont: RcComponentMappedOntology = parse_imports(Path::new(input), config)?.into();
     let import = amont.i().import();
 
     let b = Build::new_rc();
@@ -115,11 +115,13 @@ pub fn materialize_1<'a>(
 }
 
 pub mod naming {
-    use horned_owl::model::AxiomKind;
-    use horned_owl::model::AxiomKind::*;
+    use horned_owl::model::ComponentKind;
+    use horned_owl::model::ComponentKind::*;
 
-    pub fn name(axk: &AxiomKind) -> &'static str {
+    pub fn name(axk: &ComponentKind) -> &'static str {
         match axk {
+            OntologyID => "Ontology ID",
+            DocIRI => "Doc IRI",
             OntologyAnnotation => "Ontology Annotation",
             Import => "Import",
             DeclareClass => "Declare Class",
@@ -170,43 +172,45 @@ pub mod naming {
 
 pub mod summary {
 
-    use horned_owl::{model::AxiomKind, ontology::axiom_mapped::RcAxiomMappedOntology};
+    use horned_owl::{model::{ComponentKind, HigherKinded}, ontology::component_mapped::RcComponentMappedOntology};
     use indexmap::map::IndexMap;
 
     #[derive(Debug)]
     pub struct SummaryStatistics {
         pub logical_axiom: usize,
         pub annotation_axiom: usize,
-        pub axiom_type: IndexMap<AxiomKind, usize>,
+        pub meta_comp: usize,
+        pub axiom_type: IndexMap<ComponentKind, usize>,
     }
 
     impl SummaryStatistics {
-        pub fn with_axiom_types(&self) -> impl Iterator<Item = (&AxiomKind, &usize)> + '_ {
+        pub fn with_axiom_types(&self) -> impl Iterator<Item = (&ComponentKind, &usize)> + '_ {
             self.axiom_type.iter().filter(|&(_, v)| v > &0)
         }
     }
 
-    pub fn summarize<O: Into<RcAxiomMappedOntology>>(ont: O) -> SummaryStatistics
+    pub fn summarize<O: Into<RcComponentMappedOntology>>(ont: O) -> SummaryStatistics
     where
         O:,
     {
-        let ont: RcAxiomMappedOntology = ont.into();
+        let ont: RcComponentMappedOntology = ont.into();
         SummaryStatistics {
-            logical_axiom: ont.i().iter().count(),
+            logical_axiom: ont.i().iter().filter(|c|c.is_axiom()).count(),
             annotation_axiom: ont
                 .i()
                 .iter()
                 .map(|aa| aa.ann.len())
                 .sum::<usize>(),
+            meta_comp: ont.i().iter().filter(|c|c.is_meta()).count(),
             axiom_type: axiom_types(ont),
         }
     }
 
-    fn axiom_types<O: Into<RcAxiomMappedOntology>>(ont: O) -> IndexMap<AxiomKind, usize> {
-        let ont: RcAxiomMappedOntology = ont.into();
+    fn axiom_types<O: Into<RcComponentMappedOntology>>(ont: O) -> IndexMap<ComponentKind, usize> {
+        let ont: RcComponentMappedOntology = ont.into();
         let mut im = IndexMap::new();
-        for ax in AxiomKind::all_kinds() {
-            im.insert(ax, ont.i().axiom(ax).count());
+        for ax in ComponentKind::all_kinds() {
+            im.insert(ax, ont.i().component(ax).count());
         }
 
         im

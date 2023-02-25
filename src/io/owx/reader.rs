@@ -66,8 +66,12 @@ pub fn read_with_build<A: ForIRI, R: BufRead>(
                             r.mapping.set_default(&s);
                         }
 
-                        ont.mut_id().iri = get_iri_value_for(&mut r, e, b"ontologyIRI")?;
-                        ont.mut_id().viri = get_iri_value_for(&mut r, e, b"versionIRI")?;
+                        ont.insert(
+                            OntologyID{
+                                iri: get_iri_value_for(&mut r, e, b"ontologyIRI")?,
+                                viri: get_iri_value_for(&mut r, e, b"versionIRI")?,
+                            }
+                        );
                     }
                     b"Prefix" => {
                         let iri = get_attr_value_str(&mut r.reader, e, b"IRI")?;
@@ -88,7 +92,7 @@ pub fn read_with_build<A: ForIRI, R: BufRead>(
                         ont.insert(Import(IRI::from_xml(&mut r, b"Import")?));
                     }
                     _ => {
-                        let aa = AnnotatedAxiom::from_start(&mut r, e)?;
+                        let aa = AnnotatedComponent::from_start(&mut r, e)?;
                         ont.insert(aa);
                     }
                 }
@@ -437,7 +441,7 @@ fn axiom_from_start<A: ForIRI, R: BufRead>(
     r: &mut Read<A, R>,
     e: &BytesStart,
     axiom_kind: &[u8],
-) -> Result<Axiom<A>, HornedError> {
+) -> Result<Component<A>, HornedError> {
     Ok(match axiom_kind {
         b"Annotation" => OntologyAnnotation(Annotation {
             ap: from_start(r, e)?,
@@ -803,7 +807,7 @@ from_start! {
 }
 
 from_start! {
-    AnnotatedAxiom, r, e,
+    AnnotatedComponent, r, e,
     {
         let mut annotation: BTreeSet<Annotation<_>> = BTreeSet::new();
         let axiom_kind = e.local_name();
@@ -823,9 +827,9 @@ from_start! {
                                 (Annotation::from_xml(r, b"Annotation")?);
                         }
                         _ => {
-                            return Ok(AnnotatedAxiom{
+                            return Ok(AnnotatedComponent{
                                 ann:annotation,
-                                axiom:axiom_from_start(r,e,axiom_kind.as_ref())?
+                                component:axiom_from_start(r,e,axiom_kind.as_ref())?
                             });
                         }
                     }
@@ -1214,12 +1218,12 @@ from_xml! {IRI, r, end,
 #[cfg(test)]
 pub mod test {
     use super::*;
-    use crate::ontology::axiom_mapped::AxiomMappedOntology;
+    use crate::ontology::component_mapped::ComponentMappedOntology;
     use std::collections::HashMap;
 
     pub fn read_ok<R: BufRead>(
         bufread: &mut R,
-    ) -> (AxiomMappedOntology<RcStr, RcAnnotatedAxiom>, PrefixMapping) {
+    ) -> (ComponentMappedOntology<RcStr, RcAnnotatedComponent>, PrefixMapping) {
         let r = read(bufread, ParserConfiguration::default());
         assert!(r.is_ok(), "Expected ontology, got failure:{:?}", r.err());
         let (o, m) = r.ok().unwrap();
@@ -1240,7 +1244,7 @@ pub mod test {
         let ont_s = include_str!("../../ont/owl-xml/ont.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
         assert_eq!(
-            ont.id().iri.as_ref().unwrap().as_ref(),
+            ont.i().the_ontology_id_or_default().iri.as_ref().unwrap().as_ref(),
             "http://www.example.com/iri"
         );
     }
@@ -1251,7 +1255,7 @@ pub mod test {
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
         assert_eq!(
-            ont.id().iri.as_ref().unwrap().as_ref(),
+            ont.i().the_ontology_id_or_default().iri.as_ref().unwrap().as_ref(),
             "http://example.com/iri"
         );
     }
@@ -1277,7 +1281,7 @@ pub mod test {
 
         let aa = ont
             .i()
-            .axiom_for_kind(AxiomKind::DeclareClass)
+            .component_for_kind(ComponentKind::DeclareClass)
             .next()
             .unwrap();
 
@@ -1349,12 +1353,12 @@ pub mod test {
         let ont_s = include_str!("../../ont/owl-xml/annotation-on-subclass.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
-        let annotated_axiom = ont
+        let annotated_component = ont
             .i()
-            .axiom_for_kind(AxiomKind::SubClassOf)
+            .component_for_kind(ComponentKind::SubClassOf)
             .next()
             .unwrap();
-        assert_eq!(annotated_axiom.ann.len(), 1);
+        assert_eq!(annotated_component.ann.len(), 1);
     }
 
     #[test]
@@ -1547,8 +1551,8 @@ pub mod test {
         let ont_s = include_str!("../../ont/owl-xml/annotation-with-annotation.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
-        let mut ann_i = ont.i().axiom_for_kind(AxiomKind::AnnotationAssertion);
-        let ann: &AnnotatedAxiom<_> = ann_i.next().unwrap();
+        let mut ann_i = ont.i().component_for_kind(ComponentKind::AnnotationAssertion);
+        let ann: &AnnotatedComponent<_> = ann_i.next().unwrap();
         assert_eq!(ann.ann.len(), 1);
     }
 
@@ -1557,12 +1561,12 @@ pub mod test {
         let ont_s = include_str!("../../ont/owl-xml/annotation-on-transitive.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
-        let annotated_axiom = ont
+        let annotated_component = ont
             .i()
-            .axiom_for_kind(AxiomKind::TransitiveObjectProperty)
+            .component_for_kind(ComponentKind::TransitiveObjectProperty)
             .next()
             .unwrap();
-        assert_eq!(annotated_axiom.ann.len(), 1);
+        assert_eq!(annotated_component.ann.len(), 1);
     }
 
     #[test]
@@ -1570,13 +1574,13 @@ pub mod test {
         let ont_s = include_str!("../../ont/owl-xml/two-annotation-on-transitive.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
-        let annotated_axiom = ont
+        let annotated_component = ont
             .i()
-            .axiom_for_kind(AxiomKind::TransitiveObjectProperty)
+            .component_for_kind(ComponentKind::TransitiveObjectProperty)
             .next()
             .unwrap();
 
-        assert_eq!(annotated_axiom.ann.len(), 2);
+        assert_eq!(annotated_component.ann.len(), 2);
     }
     #[test]
     fn test_sub_annotation() {
