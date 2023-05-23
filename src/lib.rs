@@ -1,6 +1,6 @@
 //! # Horned-OWL
 //!
-//! Horned-OWL is a library for the reading, manipulation and blah
+//! Horned-OWL is a library for the reading, manipulation and
 //! generation of
 //! [OWL](https://www.w3.org/TR/2012/REC-owl2-primer-20121211/)
 //! ontologies.
