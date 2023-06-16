@@ -145,7 +145,7 @@ pub mod naming {
             ReflexiveObjectProperty => "Reflexive Object Property",
             IrreflexiveObjectProperty => "Irreflexive Object Property",
             SymmetricObjectProperty => "Symmetric Object Property",
-            AsymmetricObjectProperty => "Assymmetric Object Property",
+            AsymmetricObjectProperty => "Asymmetric Object Property",
             TransitiveObjectProperty => "Transitive Object Property",
             SubDataPropertyOf => "Sub Data Property Of",
             EquivalentDataProperties => "Equivalent Data Properties",

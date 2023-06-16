@@ -1,26 +1,19 @@
 //! # Horned-OWL
 //!
-//! Horned-OWL is a library for the reading, manipulation and
-//! generation of
-//! [OWL](https://www.w3.org/TR/2012/REC-owl2-primer-20121211/)
-//! ontologies.
+//! Horned-OWL provides an interface to parse, generate and handle ontologies
+//! written using the [Web Ontology Language (OWL)](https://www.w3.org/TR/2012/REC-owl2-primer-20121211/).
 
-//!
-//! The W3C Ontology Web Language (OWL) is a mechanism for
-//! representing complex knowledge in the form an Ontology; describing
-//! entities and the relationship between. Unlike a simple
-//! classification taxonomy, OWL is highly expressive and maps to a
-//! formal semantics which makes the ontology open to computational
+//! Unlike a simple classification taxonomy, OWL is highly expressive and maps 
+//! to a formal semantics which makes the ontology open to computational
 //! reasoning.
 //!
 //! The aim of the library is to provide a representation of OWL that
-//! can be used to mainpulate OWL ontologies. As well as a library,
-//! it offers a number of command-line tools for performing the same.
+//! can be used to manipulate OWL ontologies.
 //!
 //! The focus of this library is on performance, compared to the [OWL
 //! API](https://github.com/owlcs/owlapi), thereby allowing large
 //! scale, bulk manipulation of ontologies that currently requires
-//! specialized machinary.
+//! specialized machinery.
 //!
 //! # Author
 //!
