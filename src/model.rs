@@ -1776,9 +1776,6 @@ pub trait MutableOntology<A> {
 mod test {
     use crate::ontology::component_mapped::ComponentMappedOntology;
 
-    use super::*;
-    use crate::ontology::component_mapped::ComponentMappedOntology;
-
     #[test]
     fn test_iri_from_string() {
         let build = Build::new_rc();
