@@ -1774,6 +1774,7 @@ pub trait MutableOntology<A> {
 
 #[cfg(test)]
 mod test {
+    use super::*;
     use crate::ontology::component_mapped::ComponentMappedOntology;
 
     #[test]
