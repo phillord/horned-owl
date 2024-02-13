@@ -719,7 +719,7 @@ pub trait Kinded {
     fn kind(&self) -> ComponentKind;
 }
 
-#[derive(Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq)]
 pub enum HigherKind {
     Axiom,
     Meta,
@@ -1356,9 +1356,13 @@ components! {
     Axiom AnnotationPropertyRange {
         ap: AnnotationProperty<A>,
         iri: IRI<A>
+    },
+
+    SWRL Rule {
+        head: Vec<Atom<A>>,
+        body: Vec<Atom<A>>
     }
 }
-
 
 // TODO
 impl<A:ForIRI> Default for OntologyID<A> {
@@ -1726,6 +1730,23 @@ impl<A: ForIRI> From<Class<A>> for Box<ClassExpression<A>> {
     }
 }
 
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub enum Atom<A>{
+    DescriptionAtom(IObject<A>),
+    DataRangeAtom(DObject<A>),
+    IndividualValuedPropertyID(IObject<A>, IObject<A>),
+    DataValuedPropertyID(IObject<A>, DObject<A>),
+    SameAsAtom(IObject<A>, IObject<A>),
+    DifferentFromAtom(IObject<A>, IObject<A>),
+    BuiltInAtom(IRI<A>, DObject<A>),
+}
+
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct IObject<A>(IRI<A>);
+
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct DObject<A>(IRI<A>);
+
 /// Access or change the `OntologyID` of an `Ontology`
 pub trait Ontology<A> {
 }
@@ -1923,4 +1944,19 @@ mod test {
         let oxiri = iri.as_oxiri().unwrap();
         assert_eq!(oxiri.authority(), Some("www.example.com"));
     }
+
+
+    #[test]
+    fn test_axiom_kinded() {
+        let b = Build::new_rc();
+
+        let iri = b.iri("http://www.example.com");
+        let r = Rule{
+            head: vec![Atom::DescriptionAtom(IObject(iri))],
+            body: vec![Atom::DescriptionAtom(IObject(iri))],
+        };
+
+        assert_eq!(r.higher_kind(), HigherKind::SWRL);
+    }
+
 }
