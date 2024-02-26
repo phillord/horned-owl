@@ -9,7 +9,7 @@ use std::collections::HashSet;
 use std::marker::PhantomData;
 use std::collections::HashMap;
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct DeclarationMappedIndex<A, AA>(HashMap<IRI<A>, NamedEntityKind>,
                                          HashSet<IRI<A>>,
                                          PhantomData<AA>);
@@ -84,9 +84,15 @@ macro_rules! some {
     };
 }
 
+impl<A, AA> Default for DeclarationMappedIndex<A, AA> {
+    fn default() -> Self {
+        DeclarationMappedIndex(Default::default(), Default::default(), Default::default())
+    }
+}
+
 impl<A: ForIRI, AA: ForIndex<A>> OntologyIndex<A, AA> for DeclarationMappedIndex<A, AA> {
     fn index_insert(&mut self, ax: AA) -> bool {
-        some! {
+        some!{
             {
                 let ne = self.aa_to_ne(ax.borrow())?;
                 let iri = self.aa_to_iri(ax.borrow())?;

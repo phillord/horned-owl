@@ -1,5 +1,5 @@
 //! Rapid, simple, in-memory `Ontology` and `OntologyIndex`
-use std::{collections::HashSet, iter::FromIterator, rc::Rc};
+use std::{hash::Hash, collections::HashSet, iter::FromIterator, rc::Rc};
 
 use super::indexed::ForIndex;
 use super::indexed::{OneIndexedOntology, OntologyIndex};
@@ -175,8 +175,8 @@ where
 /// An `OntologyIndex` implemented over an in-memory HashSet. When
 /// combined with an `IndexedOntology` this should be nearly as
 /// fastest as `SetOntology`.
-#[derive(Clone, Debug, Default, Eq, PartialEq)]
-pub struct SetIndex<A: ForIRI, AA: ForIndex<A>>(HashSet<AA>, PhantomData<A>);
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SetIndex<A, AA: Hash + Eq>(HashSet<AA>, PhantomData<A>);
 
 impl<A: ForIRI, AA: ForIndex<A>> OntologyIndex<A, AA> for SetIndex<A, AA> {
     fn index_insert(&mut self, cmp: AA) -> bool {
@@ -185,6 +185,12 @@ impl<A: ForIRI, AA: ForIndex<A>> OntologyIndex<A, AA> for SetIndex<A, AA> {
 
     fn index_remove(&mut self, cmp: &AnnotatedComponent<A>) -> bool {
         self.0.remove(cmp)
+    }
+}
+
+impl<A, AA: Hash + Eq> Default for SetIndex<A, AA> {
+    fn default() -> Self {
+        SetIndex(Default::default(), Default::default())
     }
 }
 
