@@ -1475,6 +1475,13 @@ mod test {
     }
 
     #[test]
+    fn anonymous_annotation_value() {
+        assert_round(include_str!(
+            "../../ont/owl-xml/anonymous-annotation-value.owx"
+        ));
+    }
+
+    #[test]
     fn family() {
         assert_round(include_str!("../../ont/owl-xml/family.owx"));
     }
