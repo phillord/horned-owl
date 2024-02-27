@@ -1425,6 +1425,12 @@ impl<A: ForIRI> From<IRI<A>> for AnnotationValue<A> {
     }
 }
 
+impl<A: ForIRI> From<AnonymousIndividual<A>> for AnnotationValue<A> {
+    fn from(ai: AnonymousIndividual<A>) -> Self {
+        AnnotationValue::AnonymousIndividual(ai)
+    }
+}
+
 /// A object property expression
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum ObjectPropertyExpression<A> {
