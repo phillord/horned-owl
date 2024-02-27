@@ -1410,6 +1410,7 @@ pub struct Annotation<A> {
 pub enum AnnotationValue<A> {
     Literal(Literal<A>),
     IRI(IRI<A>),
+    AnonymousIndividual(AnonymousIndividual<A>),
 }
 
 impl<A: ForIRI> From<Literal<A>> for AnnotationValue<A> {

@@ -738,6 +738,9 @@ render! {
             AnnotationValue::Literal(l) => {
                 l.render(w, m)?;
             }
+            AnnotationValue::AnonymousIndividual(a) => {
+                a.render(w, m)?;
+            }
         }
 
         Ok(())
