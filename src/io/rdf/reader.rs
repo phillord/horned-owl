@@ -659,6 +659,12 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
                     av: ob.clone().into(),
                 }
             }
+            [s, Iri(p), Term::BNode(bnodeid)] => {
+                Annotation {
+                    ap: AnnotationProperty(p.clone()),
+                    av: AnonymousIndividual(bnodeid.0.clone()).into(),
+                }
+            }
             _ => {
                 dbg!(t);
                 todo!()
@@ -2610,6 +2616,18 @@ mod test {
     #[test]
     fn annotation_with_anonymous() {
         let s = slurp_rdfont("annotation-with-anonymous");
+        let ont: ComponentMappedOntology<_, _> = read_ok(&mut s.as_bytes()).into();
+
+        // We cannot do the usual "compare" because the anonymous
+        // individuals break a direct comparision
+        assert_eq!(ont.i().annotation_assertion().count(), 1);
+
+        let _aa = ont.i().annotation_assertion().next();
+    }
+
+    #[test]
+    fn anonymous_annotation_value() {
+        let s = slurp_rdfont("anonymous-annotation-value");
         let ont: ComponentMappedOntology<_, _> = read_ok(&mut s.as_bytes()).into();
 
         // We cannot do the usual "compare" because the anonymous
