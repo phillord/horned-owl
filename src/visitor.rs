@@ -496,6 +496,7 @@ impl<A: ForIRI, V: Visit<A>> Walk<A, V> {
         match e {
             AnnotationValue::Literal(e) => self.literal(e),
             AnnotationValue::IRI(e) => self.iri(e),
+            AnnotationValue::AnonymousIndividual(a) => self.anonymous_individual(a),
         }
     }
 

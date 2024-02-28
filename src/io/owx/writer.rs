@@ -738,6 +738,9 @@ render! {
             AnnotationValue::Literal(l) => {
                 l.render(w, m)?;
             }
+            AnnotationValue::AnonymousIndividual(a) => {
+                a.render(w, m)?;
+            }
         }
 
         Ok(())
@@ -1468,6 +1471,13 @@ mod test {
     fn annotation_with_anonymous() {
         assert_round(include_str!(
             "../../ont/owl-xml/annotation-with-anonymous.owx"
+        ));
+    }
+
+    #[test]
+    fn anonymous_annotation_value() {
+        assert_round(include_str!(
+            "../../ont/owl-xml/anonymous-annotation-value.owx"
         ));
     }
 

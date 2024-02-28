@@ -421,6 +421,10 @@ from_start! {
                     IRI::from_xml(r, e.local_name().as_ref())?
                     .into()
                 }
+                b"AnonymousIndividual" => {
+                    AnonymousIndividual::from_start(r, e)?
+                    .into()
+                }
                 _ => {
                     return Err
                         (error_unexpected_tag(e.local_name().as_ref(), r));
