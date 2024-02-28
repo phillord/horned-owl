@@ -1410,6 +1410,7 @@ pub struct Annotation<A> {
 pub enum AnnotationValue<A> {
     Literal(Literal<A>),
     IRI(IRI<A>),
+    AnonymousIndividual(AnonymousIndividual<A>),
 }
 
 impl<A: ForIRI> From<Literal<A>> for AnnotationValue<A> {
@@ -1421,6 +1422,12 @@ impl<A: ForIRI> From<Literal<A>> for AnnotationValue<A> {
 impl<A: ForIRI> From<IRI<A>> for AnnotationValue<A> {
     fn from(iri: IRI<A>) -> AnnotationValue<A> {
         AnnotationValue::IRI(iri)
+    }
+}
+
+impl<A: ForIRI> From<AnonymousIndividual<A>> for AnnotationValue<A> {
+    fn from(ai: AnonymousIndividual<A>) -> Self {
+        AnnotationValue::AnonymousIndividual(ai)
     }
 }
 
