@@ -715,7 +715,6 @@ pub enum HigherKind {
 
 pub trait HigherKinded {
     fn higher_kind(&self) -> HigherKind;
-}
 
     fn is_axiom(&self) -> bool {
         self.higher_kind() == HigherKind::Axiom

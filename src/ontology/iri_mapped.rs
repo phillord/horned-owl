@@ -308,7 +308,6 @@ impl<A: ForIRI, AA: ForIndex<A>> IntoIterator for IRIMappedOntology<A, AA> {
 
 impl<A: ForIRI, AA: ForIndex<A>> From<SetOntology<A>> for IRIMappedOntology<A, AA> {
     fn from(so: SetOntology<A>) -> IRIMappedOntology<A, AA> {
-    fn from(so: SetOntology<A>) -> IRIMappedOntology<A, AA> {
         let mut imo = IRIMappedOntology::default();
         for cmp in so {
             imo.insert(cmp);
