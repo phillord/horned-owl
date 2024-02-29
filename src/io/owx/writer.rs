@@ -240,7 +240,7 @@ where
 
     // let mut elem = BytesStart::owned_name("Ontology");
     let mut elem = BytesStart::new("Ontology");
-    elem.push_attribute((b"xmlns" as &[u8], OWL.iri_b()));
+    elem.push_attribute((b"xmlns" as &[u8], OWL.as_iri_bytes()));
 
     let id = o.i().the_ontology_id_or_default();
     iri_maybe(&mut elem, "xml:base", &id.iri);
