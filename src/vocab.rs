@@ -16,7 +16,7 @@ use std::borrow::Borrow;
 // TODO: refactor to be included in model, or refactor into new `iri` module 
 // together with IRI and ForIRI.
 /// Provides methods to access the [IRI]s associated to a meta-enum.
-pub trait WithIRI<'a>: Meta<&'a IRIString> {
+pub trait WithIRI<'a>: Meta<&'a IRI<String>> {
 
     /// Returns a byte slice containing the IRI associated with this entity.
     fn as_iri_bytes(&self) -> &'a [u8] {
@@ -46,16 +46,17 @@ pub trait WithIRI<'a>: Meta<&'a IRIString> {
     }
 }
 
+#[deprecated(since = "0.15.0", note = "Use `IRI<String>` instead.")]
 pub type IRIString = IRI<String>;
 
-impl<'a, T> WithIRI<'a> for T where T: Meta<&'a IRIString> {}
+impl<'a, T> WithIRI<'a> for T where T: Meta<&'a IRI<String>> {}
 
-fn to_meta(s: &str) -> IRIString {
+fn to_meta(s: &str) -> IRI<String> {
     let builder = Build::new_string();
     builder.iri(s)
 }
 
-fn extend<'a, I>(i: I, suffix: &'a str) -> IRIString
+fn extend<'a, I>(i: I, suffix: &'a str) -> IRI<String>
 where
     I: WithIRI<'a>,
 {
@@ -77,7 +78,7 @@ pub enum Namespace {
 }
 
 lazy_meta! {
-    Namespace, IRIString, METANS;
+    Namespace, IRI<String>, METANS;
     OWL, to_meta("http://www.w3.org/2002/07/owl#");
     RDF, to_meta("http://www.w3.org/1999/02/22-rdf-syntax-ns#");
     RDFS, to_meta("http://www.w3.org/2000/01/rdf-schema#");
@@ -94,7 +95,7 @@ pub enum RDF {
 }
 
 lazy_meta! {
-    RDF, IRIString, METARDF;
+    RDF, IRI<String>, METARDF;
     First, extend(RDF, "first");
     List, extend(RDF, "List");
     Nil, extend(RDF, "nil");
@@ -125,7 +126,7 @@ impl RDFS {
 }
 
 lazy_meta! {
-    RDFS, IRIString, METARDFS;
+    RDFS, IRI<String>, METARDFS;
     Comment, extend(RDFS, "comment");
     Datatype, extend(RDFS, "Datatype");
     Domain, extend(RDFS, "domain");
@@ -204,7 +205,7 @@ pub enum OWL {
 }
 
 lazy_meta! {
-    OWL, IRIString, METAOWL;
+    OWL, IRI<String>, METAOWL;
 
     AllDifferent, extend(OWL, "AllDifferent");
     AllDisjointProperties, extend(OWL, "AllDisjointProperties");
@@ -397,7 +398,7 @@ pub enum OWL2Datatype {
 }
 
 lazy_meta! {
-    OWL2Datatype, IRIString, METAOWL2DATATYPE;
+    OWL2Datatype, IRI<String>, METAOWL2DATATYPE;
     RDFSLiteral, extend(RDFS, "Literal")
 }
 
@@ -414,7 +415,7 @@ pub enum AnnotationBuiltIn {
 }
 
 lazy_meta! {
-    AnnotationBuiltIn, IRIString, METAANNOTATIONBUILTIN;
+    AnnotationBuiltIn, IRI<String>, METAANNOTATIONBUILTIN;
     LABEL, extend(RDFS, "label");
     COMMENT, extend(RDFS, "comment");
     SEEALSO, extend(RDFS, "seeAlso");
@@ -447,7 +448,7 @@ fn annotation_builtin() {
 }
 
 lazy_meta! {
-    Facet, IRIString, METAFACET;
+    Facet, IRI<String>, METAFACET;
     Length, extend(XSD, "length");
     MinLength, extend(XSD, "minLength");
     MaxLength, extend(XSD, "maxLength");
@@ -495,7 +496,7 @@ pub fn is_xsd_datatype<A:AsRef<str>>(iri:A) -> bool {
 
 
 lazy_meta! {
-    XSD, IRIString, METAXSD;
+    XSD, IRI<String>, METAXSD;
     NonNegativeInteger, extend(XSD, "nonNegativeInteger")
 }
 
@@ -516,8 +517,8 @@ pub enum Vocab {
     Namespace(Namespace),
 }
 
-impl<'a> Meta<&'a IRIString> for Vocab {
-    fn meta(&self) -> &'a IRIString {
+impl<'a> Meta<&'a IRI<String>> for Vocab {
+    fn meta(&self) -> &'a IRI<String> {
         match self {
             Self::Facet(facet) => facet.meta(),
             Self::RDF(rdf) => rdf.meta(),
