@@ -336,26 +336,17 @@ pub fn entity_for_iri<A: ForIRI, S: Borrow<str>>(
         return Ok(b.datatype(entity_iri).into());
     }
 
-    if type_iri.borrow().len() < 30 {
-        return Err(invalid!(
-            "IRI is not for a type of entity:{:?}",
+    match &type_iri.borrow().strip_prefix(Namespace::OWL.as_iri_str()) {
+        Some("Class") => Ok(b.class(entity_iri).into()),
+        Some("ObjectProperty") => Ok(b.object_property(entity_iri).into()),
+        Some("DatatypeProperty") => Ok(b.data_property(entity_iri).into()),
+        Some("AnnotationProperty") => Ok(b.annotation_property(entity_iri).into()),
+        Some("NamedIndividual") => Ok(b.named_individual(entity_iri).into()),
+        _ => Err(invalid!(
+            "IRI is not a type of entity:{:?}",
             type_iri.borrow()
-        ));
+        ))
     }
-
-    Ok(match &type_iri.borrow()[30..] {
-        "Class" => b.class(entity_iri).into(),
-        "ObjectProperty" => b.object_property(entity_iri).into(),
-        "DatatypeProperty" => b.data_property(entity_iri).into(),
-        "AnnotationProperty" => b.annotation_property(entity_iri).into(),
-        "NamedIndividual" => b.named_individual(entity_iri).into(),
-        _ => {
-            return Err(invalid!(
-                "IRI is not a type of entity:{:?}",
-                type_iri.borrow()
-            ));
-        }
-    })
 }
 
 #[test]
@@ -392,7 +383,6 @@ pub fn test_namespace_in_entity_for_iri() {
         &b
     )
     .is_err());
-    todo!("Correct entity_for_iri method to incorporate proper namespace checking and make this test pass.");
 }
 
 pub enum OWL2Datatype {
