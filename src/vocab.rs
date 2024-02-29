@@ -322,7 +322,6 @@ fn test_to_built_in_entity() {
     assert_eq!(to_built_in_entity(&iri_top_op), Some(NamedEntityKind::ObjectProperty));
     assert_eq!(to_built_in_entity(&iri_thing), Some(NamedEntityKind::Class));
     assert_eq!(to_built_in_entity(&iri_nothing), Some(NamedEntityKind::Class));
-    // todo!("Correct to_built_in_entity method to correctly identify owl:Thing and owl:Nothing as Class entities.");
 }
 
 
@@ -493,8 +492,8 @@ pub enum XSD {
 }
 
 pub fn is_xsd_datatype<A:AsRef<str>>(iri:A) -> bool {
-    //TODO. This is over-simplistic
-    iri.as_ref().starts_with("http://www.w3.org/2001/XMLSchema")
+    // This only checks that the IRI starts with the XSD namespace.
+    iri.as_ref().starts_with(Namespace::XSD.as_iri_str())
 }
 
 
@@ -508,7 +507,6 @@ fn test_is_xsd_datatype() {
     assert!(is_xsd_datatype("http://www.w3.org/2001/XMLSchema#nonNegativeInteger"));
     assert!(!is_xsd_datatype("http://www.w3.org/2001/XMLSchemaaa#nonNegativeInteger"));
     assert!(!is_xsd_datatype("http://www.w3.org/2001/XMLSchema.pdf"));
-    todo!("Correct is_xsd_datatype method to incorporate IRI validation and make this test pass.");
 }
 
 pub enum Vocab {
