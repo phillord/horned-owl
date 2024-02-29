@@ -283,11 +283,14 @@ pub fn is_nothing<A: ForIRI>(iri: &IRI<A>) -> bool {
     iri.as_ref() == OWL::Nothing.as_iri_str()
 }
 
+/// Returns a [NamedEntityKind] if the IRI points to a built-in entity, otherwise [None].
 pub fn to_built_in_entity<A: ForIRI>(iri: &IRI<A>) -> Option<NamedEntityKind> {
     let ir = iri.as_ref();
     match ir {
         _ if ir == OWL::TopDataProperty.as_iri_str() => Some(NamedEntityKind::DataProperty),
         _ if ir == OWL::TopObjectProperty.as_iri_str() => Some(NamedEntityKind::ObjectProperty),
+        _ if ir == OWL::Thing.as_iri_str() => Some(NamedEntityKind::Class),
+        _ if ir == OWL::Nothing.as_iri_str() => Some(NamedEntityKind::Class),
         _ => None,
     }
 }
@@ -319,7 +322,7 @@ fn test_to_built_in_entity() {
     assert_eq!(to_built_in_entity(&iri_top_op), Some(NamedEntityKind::ObjectProperty));
     assert_eq!(to_built_in_entity(&iri_thing), Some(NamedEntityKind::Class));
     assert_eq!(to_built_in_entity(&iri_nothing), Some(NamedEntityKind::Class));
-    todo!("Correct to_built_in_entity method to correctly identify owl:Thing and owl:Nothing as Class entities.");
+    // todo!("Correct to_built_in_entity method to correctly identify owl:Thing and owl:Nothing as Class entities.");
 }
 
 
