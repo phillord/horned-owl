@@ -141,7 +141,7 @@ mod test {
     use super::DeclarationMappedIndex;
     use crate::model::{AnnotatedComponent, Build, NamedEntity, NamedEntityKind, RcStr};
     use crate::ontology::indexed::OntologyIndex;
-    use crate::vocab::{WithIRI, OWL};
+    use crate::vocab::OWL;
     fn stuff() -> (
         AnnotatedComponent<RcStr>,
         AnnotatedComponent<RcStr>,
@@ -198,7 +198,7 @@ mod test {
         let d = DeclarationMappedIndex::new_rc();
         let b = Build::new_rc();
         assert_eq!(
-            d.declaration_kind(&b.iri(OWL::TopDataProperty.as_iri_str())),
+            d.declaration_kind(&b.iri(OWL::TopDataProperty.as_ref())),
             Some(NamedEntityKind::DataProperty)
         );
     }

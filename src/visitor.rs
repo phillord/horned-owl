@@ -1,5 +1,6 @@
 use crate::model::*;
 use crate::ontology::set::SetOntology;
+use crate::vocab::Facet;
 use std::collections::BTreeSet;
 use std::marker::PhantomData;
 
