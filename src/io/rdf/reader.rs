@@ -4,7 +4,7 @@ use rio_api::{
 };
 use Term::*;
 
-use crate::{error::HornedError, io::ParserConfiguration};
+use crate::{error::HornedError, io::ParserConfiguration, vocab::Facet};
 use crate::model::*;
 use crate::{model::Literal, ontology::component_mapped::ComponentMappedOntology};
 
@@ -657,11 +657,11 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
             // We assume that anything passed to here is an
             // annotation built in type
             [s, RDFS(rdfs), b] => {
-                let iri = self.b.iri(rdfs.as_iri_str());
+                let iri = self.b.iri(rdfs.as_ref());
                 self.annotation(&[s.clone(), Term::Iri(iri), b.clone()])
             }
             [s, OWL(owl), b] => {
-                let iri = self.b.iri(owl.as_iri_str());
+                let iri = self.b.iri(owl.as_ref());
                 self.annotation(&[s.clone(), Term::Iri(iri), b.clone()])
             }
             [_, Iri(p), ob @ Term::Literal(_)] => Annotation {
@@ -675,7 +675,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
                     av: ob.clone().into(),
                 }
             }
-            [s, Iri(p), Term::BNode(bnodeid)] => {
+            [_, Iri(p), Term::BNode(bnodeid)] => {
                 Annotation {
                     ap: AnnotationProperty(p.clone()),
                     av: AnonymousIndividual(bnodeid.0.clone()).into(),
@@ -1025,7 +1025,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
     ) -> Option<PropertyExpression<A>> {
         match term {
             Term::OWL(vowl) => {
-                let iri = self.b.iri(vowl.as_iri_str());
+                let iri = self.b.iri(vowl.as_ref());
                 self.find_property_kind(&Term::Iri(iri), ic)
             }
             Term::Iri(iri) => match self.find_declaration_kind(iri, ic) {
@@ -1203,7 +1203,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
                         {
                             n:self.fetch_u32(literal)?,
                             ope: pr.into(),
-                            bce: self.b.class(VOWL::Thing.as_iri_str()).into()
+                            bce: self.b.class(VOWL::Thing).into()
                         }
                     }
                 }
@@ -1230,7 +1230,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
                         {
                             n:self.fetch_u32(literal)?,
                             ope: pr.into(),
-                            bce: self.b.class(VOWL::Thing.as_iri_str()).into()
+                            bce: self.b.class(VOWL::Thing).into()
                         }
                     }
                 }
@@ -1257,7 +1257,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
                         {
                             n:self.fetch_u32(literal)?,
                             ope: pr.into(),
-                            bce: self.b.class(VOWL::Thing.as_iri_str()).into()
+                            bce: self.b.class(VOWL::Thing).into()
                         }
                     }
                 }
