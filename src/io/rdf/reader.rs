@@ -10,7 +10,6 @@ use crate::{model::Literal, ontology::component_mapped::ComponentMappedOntology}
 
 use crate::ontology::indexed::ForIndex;
 use crate::vocab::is_annotation_builtin;
-use crate::vocab::WithIRI;
 use crate::vocab::OWL as VOWL;
 use crate::vocab::RDF as VRDF;
 use crate::{
@@ -194,7 +193,7 @@ impl<A: ForIRI> From<Term<A>> for OrTerm<A> {
 }
 
 /// Creates a lookup [HashMap] for OWL, RDF, RDFS and Facet vocabularies.
-fn vocab_lookup<A: ForIRI>() -> HashMap<&'static str, Term<A>> {
+fn vocab_lookup<A: ForIRI>() -> HashMap<String, Term<A>> {
     // Preallocate capacity, as we know at compile-time how many elements will
     // be stored in the hashmaps. 
     // 87 = #OWL variants - 1 + #RDF variants + #RDFS variants + #Facet variants
@@ -209,26 +208,26 @@ fn vocab_lookup<A: ForIRI>() -> HashMap<&'static str, Term<A>> {
                 // VOWL::TopObjectProperty |
                 // VOWL::Thing |
                 // VOWL::Nothing => None,
-                _ => Some((variant.as_iri_str(), Term::OWL(variant)))
+                _ => Some((variant.underlying(), Term::OWL(variant)))
             })
         );
 
     lookup_map.extend(
         VRDFS::all()
             .into_iter()
-            .map(|variant| (variant.as_iri_str(), Term::RDFS(variant)))
+            .map(|variant| (variant.underlying(), Term::RDFS(variant)))
         );
 
     lookup_map.extend(
         VRDF::all()
             .into_iter()
-            .map(|variant| (variant.as_iri_str(), Term::RDF(variant)))
+            .map(|variant| (variant.underlying(), Term::RDF(variant)))
         );
 
     lookup_map.extend(
         Facet::all()
             .into_iter()
-            .map(|variant| (variant.as_iri_str(), Term::FacetTerm(variant)))
+            .map(|variant| (variant.underlying(), Term::FacetTerm(variant)))
         );
 
     lookup_map
@@ -236,10 +235,10 @@ fn vocab_lookup<A: ForIRI>() -> HashMap<&'static str, Term<A>> {
 
 fn to_term_nn<'a, A: ForIRI>(
     nn: &'a NamedNode,
-    m: &HashMap<&str, Term<A>>,
+    m: &HashMap<String, Term<A>>,
     b: &Build<A>,
 ) -> Term<A> {
-    if let Some(term) = m.get(&nn.iri) {
+    if let Some(term) = m.get(nn.iri) {
         return term.clone();
     }
     Term::Iri(b.iri(nn.iri))
@@ -276,7 +275,7 @@ fn to_term_lt<'a, A: ForIRI>(lt: &'a rio_api::model::Literal, b: &Build<A>) -> T
 
 fn to_term_nnb<'a, A: ForIRI>(
     nnb: &'a Subject,
-    m: &HashMap<&str, Term<A>>,
+    m: &HashMap<String, Term<A>>,
     b: &Build<A>,
 ) -> Term<A> {
     match nnb {
@@ -286,7 +285,7 @@ fn to_term_nnb<'a, A: ForIRI>(
     }
 }
 
-fn to_term<'a, A: ForIRI>(t: &'a RioTerm, m: &HashMap<&str, Term<A>>, b: &Build<A>) -> Term<A> {
+fn to_term<'a, A: ForIRI>(t: &'a RioTerm, m: &HashMap<String, Term<A>>, b: &Build<A>) -> Term<A> {
     match t {
         rio_api::model::Term::NamedNode(iri) => to_term_nn(iri, m, b),
         rio_api::model::Term::BlankNode(id) => to_term_bn(id),

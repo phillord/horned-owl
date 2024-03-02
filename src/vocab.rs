@@ -16,16 +16,18 @@ use std::convert::TryFrom;
 // TODO: refactor to be included in model, or refactor into new `iri` module
 // together with IRI and ForIRI.
 /// Provides methods to access the [IRI]s associated to a meta-enum.
+#[deprecated(since = "0.15.0", note = "Deprecated trait, consider using [std::ops::Deref] and [std::convert::TryFrom] instead.")]
 pub trait WithIRI<'a>: Meta<&'a IRI<String>> {
 
     /// Returns a byte slice containing the IRI associated with this entity.
-    #[deprecated(since = "0.15.0", note = "Enumerations associated to vocabulary terms now implement [std::ops::Deref].")]
+    #[deprecated(since = "0.15.0", note = "Enumerations associated to vocabulary terms now implement [std::ops::Deref<Target = IRI<String>>].")]
     fn as_iri_bytes(&self) -> &'a [u8] {
         self.meta().as_bytes()
     }
 
     /// Returns a string representation of the IRI associated with this
     /// entity.
+    #[deprecated(since = "0.15.0", note = "Enumerations associated to vocabulary terms now implement [std::ops::Deref<Target = IRI<String>>].")]
     fn as_iri_str(&self) -> &'a str {
         self.meta().as_ref()
     }
@@ -53,8 +55,6 @@ pub trait WithIRI<'a>: Meta<&'a IRI<String>> {
 
 #[deprecated(since = "0.15.0", note = "Use `IRI<String>` instead.")]
 pub type IRIString = IRI<String>;
-
-impl<'a, T> WithIRI<'a> for T where T: Meta<&'a IRI<String>> {}
 
 fn set_iri(s: &str) -> IRI<String> {
     let builder = Build::new_string();
@@ -711,14 +711,6 @@ pub enum Facet {
     LangRange,
 }
 
-impl std::ops::Deref for Facet {
-    type Target = IRI<String>;
-
-    fn deref(&self) -> &Self::Target {
-        self.meta()
-    }
-}
-
 impl TryFrom<&str> for Facet {
     type Error = HornedError;
 
@@ -748,6 +740,14 @@ impl TryFrom<&[u8]> for Facet {
                     None
                 }
         }).ok_or_else(|| invalid!("Unknown facet: {:?}", value))
+    }
+}
+
+impl std::ops::Deref for Facet {
+    type Target = IRI<String>;
+
+    fn deref(&self) -> &Self::Target {
+        self.meta()
     }
 }
 
