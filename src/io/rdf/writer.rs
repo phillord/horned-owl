@@ -3,7 +3,7 @@ use crate::{
     error::HornedError,
     model::*,
     ontology::component_mapped::ComponentMappedOntology,
-    vocab::{is_thing, Vocab, WithIRI, OWL, RDF, RDFS, XSD},
+    vocab::{is_thing, Vocab, OWL, RDF, RDFS, XSD},
 };
 
 use crate::ontology::indexed::ForIndex;
@@ -70,7 +70,7 @@ impl<A: ForIRI> NodeGenerator<A> {
 
     /// Return an cached version of PNamedNode value.
     fn cache_rc<V: Into<Vocab>>(&mut self, v: V) -> A {
-        let voc: &str = v.into().as_iri_str();
+        let voc: &str = &v.into();
         if let Some(rc) = self.b.get(voc) {
             return rc.clone();
         }
