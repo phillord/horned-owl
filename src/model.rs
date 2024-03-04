@@ -533,6 +533,17 @@ named! {
     NamedIndividual
 }
 
+impl<A: ForIRI> Class<A> {
+
+    pub fn is_thing(&self) -> bool {
+        self.0.as_ref() == crate::vocab::OWL::Thing.as_ref()
+    }
+
+    pub fn is_nothing(&self) -> bool {
+        self.0.as_ref() == crate::vocab::OWL::Nothing.as_ref()
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq, Hash, PartialOrd, Ord)]
 pub struct AnonymousIndividual<A>(pub A);
 
