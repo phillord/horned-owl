@@ -3,7 +3,7 @@ use crate::{
     error::HornedError,
     model::*,
     ontology::component_mapped::ComponentMappedOntology,
-    vocab::{is_thing, Vocab, OWL, RDF, RDFS, XSD},
+    vocab::{Vocab, OWL, RDF, RDFS, XSD},
 };
 
 use crate::ontology::indexed::ForIndex;
@@ -1105,7 +1105,7 @@ fn obj_cardinality<A: ForIRI, W: Write>(
     );
 
     if let ClassExpression::Class(ref cl) = *ce {
-        if is_thing(&cl.0) {
+        if cl.is_thing() {
             triples!(f, bn.clone(), unqual, node_n);
             return Ok(bn);
         }

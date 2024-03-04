@@ -1,5 +1,4 @@
 //! Core RDF vocabularies used in the OWL2 RDF format.
-use self::Namespace::*;
 use enum_meta::*;
 
 use crate::error::invalid;
@@ -12,9 +11,8 @@ use crate::model::IRI;
 
 use std::borrow::Borrow;
 use std::convert::TryFrom;
+use std::str::FromStr;
 
-// TODO: refactor to be included in model, or refactor into new `iri` module
-// together with IRI and ForIRI.
 /// Provides methods to access the [IRI]s associated to a meta-enum.
 #[deprecated(since = "0.15.0", note = "Deprecated trait, consider using [std::ops::Deref] and [std::convert::TryFrom] instead.")]
 pub trait WithIRI<'a>: Meta<&'a IRI<String>> {
@@ -56,14 +54,112 @@ pub trait WithIRI<'a>: Meta<&'a IRI<String>> {
 #[deprecated(since = "0.15.0", note = "Use `IRI<String>` instead.")]
 pub type IRIString = IRI<String>;
 
+#[deprecated(since = "0.15.0", note = "Use `get_iri` instead.")]
 fn set_iri(s: &str) -> IRI<String> {
     let builder = Build::new_string();
     builder.iri(s)
 }
 
+#[deprecated(since = "0.15.0", note = "Use `get_iri` instead.")]
 fn append_to_ns<'a>(ns: Namespace, suffix: &'a str) -> IRI<String>
 {
     set_iri(&format!("{}{}", ns.as_ref(), suffix))
+}
+
+macro_rules! vocabulary_traits {
+    ($($enum_type:ident),+; $return_type:ty
+    ) => {
+
+        $(
+            impl TryFrom<&[u8]> for $enum_type {
+            type Error = HornedError;
+        
+            fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
+                $enum_type::all()
+                    .into_iter()
+                    .find_map(|variant| {
+                        if variant.as_bytes() == value {
+                            Some(variant)
+                        } else {
+                            None
+                        }
+                }).ok_or_else(|| invalid!("Unknown {} variant: {:?}", stringify!{$enum_type}, value))
+            }
+            }
+
+            impl std::str::FromStr for $enum_type {
+                type Err = HornedError;
+            
+                fn from_str(s: &str) -> Result<Self, Self::Err> {
+                    $enum_type::try_from(s.as_bytes())
+                }
+            }
+
+            impl TryFrom<&str> for $enum_type {
+                type Error = HornedError;
+            
+                fn try_from(value: &str) -> Result<Self, Self::Error> {
+                    $enum_type::from_str(value)
+                }
+            }
+
+            impl std::ops::Deref for $enum_type {
+                type Target = $return_type;
+            
+                fn deref(&self) -> &Self::Target {
+                    self.meta()
+                }
+            }
+        )+
+    };
+}
+
+macro_rules! vocabulary_type {
+    ($enum_type:ident, $return_type:ty, $storage:ident, [$(($ns:ident, $variant:ident, $first_lowercase:expr)),*]) => {
+
+        #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+        pub enum $enum_type {
+            $(
+                $variant,
+            )*
+        }
+
+        impl $enum_type {
+            fn get_iri(self) -> IRI<String> {
+
+                let mut iri_str = String::new();
+                $(
+                    iri_str.push_str(Namespace::$ns.as_ref());
+                )?
+
+                match self {
+                    $(
+                        $enum_type::$variant => {
+                            let mut iri_str = String::from(Namespace::$ns.as_ref());
+                            let mut variant_str = String::from(stringify!($variant));
+                            if $first_lowercase {
+                                let tail = variant_str.split_off(1);
+                                variant_str.make_ascii_lowercase();
+                                variant_str.push_str(&tail);
+                            }
+                            iri_str.push_str(&variant_str);
+                            IRI(iri_str)
+                        }
+                    )*,
+                }
+            }
+        }
+
+        lazy_meta! {
+            $enum_type, IRI<String>, $storage;
+            $(
+                $variant, $enum_type::get_iri($enum_type::$variant);
+            )*
+        
+        }
+
+        vocabulary_traits! { $enum_type; $return_type }
+    }
 }
 
 /// [Namespaces](https://www.w3.org/TR/2004/REC-owl-guide-20040210/#Namespaces)
@@ -80,123 +176,63 @@ pub enum Namespace {
     XSD,
 }
 
-impl TryFrom<&str> for Namespace {
-    type Error = HornedError;
-
-    fn try_from(value: &str) -> Result<Self, Self::Error> {
-        Namespace::all()
-        .into_iter()
-        .find_map(|ns| {
-            if ns.as_ref() == value {
-                Some(ns)
-            } else {
-                None
-            }
-        }).ok_or_else(|| invalid!("Unknown namespace: {}", value))
-    }
-}
-
-impl TryFrom<&[u8]> for Namespace {
-    type Error = HornedError;
-
-    fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
-        Namespace::all()
-            .into_iter()
-            .find_map(|ns| {
-                if ns.as_bytes() == value {
-                    Some(ns)
-                } else {
-                    None
-                }
-        }).ok_or_else(|| invalid!("Unknown namespace: {:?}", value))
-    }
-}
-
-impl std::ops::Deref for Namespace {
-    type Target = IRI<String>;
-
-    fn deref(&self) -> &Self::Target {
-        self.meta()
-    }
+vocabulary_traits! {
+    Namespace;
+    IRI<String>
 }
 
 lazy_meta! {
     Namespace, IRI<String>, METANS;
-    OWL, set_iri("http://www.w3.org/2002/07/owl#");
-    RDF, set_iri("http://www.w3.org/1999/02/22-rdf-syntax-ns#");
-    RDFS, set_iri("http://www.w3.org/2000/01/rdf-schema#");
-    XSD, set_iri("http://www.w3.org/2001/XMLSchema#");
+    OWL, IRI(String::from("http://www.w3.org/2002/07/owl#"));
+    RDF, IRI(String::from("http://www.w3.org/1999/02/22-rdf-syntax-ns#"));
+    RDFS, IRI(String::from("http://www.w3.org/2000/01/rdf-schema#"));
+    XSD, IRI(String::from("http://www.w3.org/2001/XMLSchema#"));
 }
 
-#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub enum RDF {
-    First,
-    List,
-    Nil,
-    Rest,
-    Type,
+vocabulary_type! {
+    RDF, IRI<String>, METARDF, [
+        (RDF, List, false),
+        (RDF, First, true),
+        (RDF, Nil, true),
+        (RDF, Rest, true),
+        (RDF, Type, true)
+    ]
 }
 
-impl TryFrom<&str> for RDF {
-    type Error = HornedError;
-
-    fn try_from(value: &str) -> Result<Self, Self::Error> {
-        RDF::all()
-        .into_iter()
-        .find_map(|ns| {
-            if ns.as_ref() == value {
-                Some(ns)
-            } else {
-                None
-            }
-        }).ok_or_else(|| invalid!("Unknown RDF attribute: {}", value))
-    }
+#[test]
+fn test_meta_rdf() {
+    assert_eq!(RDF::First.as_ref(), "http://www.w3.org/1999/02/22-rdf-syntax-ns#first");
+    assert_eq!(RDF::List.as_ref(), "http://www.w3.org/1999/02/22-rdf-syntax-ns#List");
+    assert_eq!(RDF::Nil.as_ref(), "http://www.w3.org/1999/02/22-rdf-syntax-ns#nil");
+    assert_eq!(RDF::Rest.as_ref(), "http://www.w3.org/1999/02/22-rdf-syntax-ns#rest");
+    assert_eq!(RDF::Type.as_ref(), "http://www.w3.org/1999/02/22-rdf-syntax-ns#type");
 }
 
-impl TryFrom<&[u8]> for RDF {
-    type Error = HornedError;
-
-    fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
-        RDF::all()
-            .into_iter()
-            .find_map(|ns| {
-                if ns.as_bytes() == value {
-                    Some(ns)
-                } else {
-                    None
-                }
-        }).ok_or_else(|| invalid!("Unknown RDF attribute: {:?}", value))
-    }
+vocabulary_type! {
+    RDFS, IRI<String>, METARDFS, [
+        (RDFS, Comment, true),
+        (RDFS, Datatype, false),
+        (RDFS, Domain, true),
+        (RDFS, IsDefinedBy, true),
+        (RDFS, Label, true),
+        (RDFS, Range, true),
+        (RDFS, SeeAlso, true),
+        (RDFS, SubClassOf, true),
+        (RDFS, SubPropertyOf, true)
+    ]
 }
 
-impl std::ops::Deref for RDF {
-    type Target = IRI<String>;
-
-    fn deref(&self) -> &Self::Target {
-        self.meta()
-    }
-}
-
-lazy_meta! {
-    RDF, IRI<String>, METARDF;
-    First, append_to_ns(RDF,"first");
-    List, append_to_ns(RDF,"List");
-    Nil, append_to_ns(RDF,"nil");
-    Rest, append_to_ns(RDF,"rest");
-    Type, append_to_ns(RDF,"type");
-}
-
-#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub enum RDFS {
-    Comment,
-    Datatype,
-    Domain,
-    IsDefinedBy,
-    Label,
-    Range,
-    SeeAlso,
-    SubClassOf,
-    SubPropertyOf,
+#[test]
+fn test_meta_rdfs() {
+    assert_eq!(RDFS::Comment.as_ref(), "http://www.w3.org/2000/01/rdf-schema#comment");
+    assert_eq!(RDFS::Datatype.as_ref(), "http://www.w3.org/2000/01/rdf-schema#Datatype");
+    assert_eq!(RDFS::Domain.as_ref(), "http://www.w3.org/2000/01/rdf-schema#domain");
+    assert_eq!(RDFS::IsDefinedBy.as_ref(), "http://www.w3.org/2000/01/rdf-schema#isDefinedBy");
+    assert_eq!(RDFS::Label.as_ref(), "http://www.w3.org/2000/01/rdf-schema#label");
+    assert_eq!(RDFS::Range.as_ref(), "http://www.w3.org/2000/01/rdf-schema#range");
+    assert_eq!(RDFS::SeeAlso.as_ref(), "http://www.w3.org/2000/01/rdf-schema#seeAlso");
+    assert_eq!(RDFS::SubClassOf.as_ref(), "http://www.w3.org/2000/01/rdf-schema#subClassOf");
+    assert_eq!(RDFS::SubPropertyOf.as_ref(), "http://www.w3.org/2000/01/rdf-schema#subPropertyOf");
 }
 
 impl RDFS {
@@ -208,164 +244,71 @@ impl RDFS {
     }
 }
 
-impl TryFrom<&str> for RDFS {
-    type Error = HornedError;
-
-    fn try_from(value: &str) -> Result<Self, Self::Error> {
-        RDFS::all()
-        .into_iter()
-        .find_map(|ns| {
-            if ns.as_ref() == value {
-                Some(ns)
-            } else {
-                None
-            }
-        }).ok_or_else(|| invalid!("Unknown RDFS attribute: {}", value))
-    }
-}
-
-impl TryFrom<&[u8]> for RDFS {
-    type Error = HornedError;
-
-    fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
-        RDFS::all()
-            .into_iter()
-            .find_map(|ns| {
-                if ns.as_bytes() == value {
-                    Some(ns)
-                } else {
-                    None
-                }
-        }).ok_or_else(|| invalid!("Unknown RDFS attribute: {:?}", value))
-    }
-}
-
-impl std::ops::Deref for RDFS {
-    type Target = IRI<String>;
-
-    fn deref(&self) -> &Self::Target {
-        self.meta()
-    }
-}
-
-
-lazy_meta! {
-    RDFS, IRI<String>, METARDFS;
-    Comment, append_to_ns(RDFS,"comment");
-    Datatype, append_to_ns(RDFS,"Datatype");
-    Domain, append_to_ns(RDFS,"domain");
-    IsDefinedBy, append_to_ns(RDFS,"isDefinedBy");
-    Label, append_to_ns(RDFS,"label");
-    Range, append_to_ns(RDFS,"range");
-    SeeAlso, append_to_ns(RDFS,"seeAlso");
-    SubClassOf, append_to_ns(RDFS,"subClassOf");
-    SubPropertyOf, append_to_ns(RDFS,"subPropertyOf");
-}
-
-#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub enum OWL {
-    AllDifferent,
-    AllDisjointProperties,
-    AllValuesFrom,
-    AnnotatedProperty,
-    AnnotatedSource,
-    AnnotatedTarget,
-    AnnotationProperty,
-    AssertionProperty,
-    AsymmetricProperty,
-    Axiom,
-    Cardinality,
-    Class,
-    ComplementOf,
-    DatatypeComplementOf,
-    DatatypeProperty,
-    DifferentFrom,
-    DisjointUnionOf,
-    DisjointWith,
-    DistinctMembers,
-    EquivalentClass,
-    EquivalentProperty,
-    FunctionalProperty,
-    HasKey,
-    HasValue,
-    Imports,
-    IntersectionOf,
-    InverseFunctionalProperty,
-    InverseOf,
-    IrreflexiveProperty,
-    MaxCardinality,
-    MaxQualifiedCardinality,
-    Members,
-    MinCardinality,
-    MinQualifiedCardinality,
-    NamedIndividual,
-    NegativePropertyAssertion,
-    Nothing,
-    ObjectProperty,
-    OnClass,
-    OnDataRange,
-    OnDatatype,
-    OneOf,
-    OnProperty,
-    Ontology,
-    QualifiedCardinality,
-    PropertyChainAxiom,
-    PropertyDisjointWith,
-    ReflexiveProperty,
-    Restriction,
-    SameAs,
-    SourceIndividual,
-    SomeValuesFrom,
-    SymmetricProperty,
-    TargetIndividual,
-    TargetValue,
-    TopDataProperty,
-    TopObjectProperty,
-    Thing,
-    TransitiveProperty,
-    UnionOf,
-    VersionIRI,
-    WithRestrictions,
-}
-
-impl TryFrom<&str> for OWL {
-    type Error = HornedError;
-
-    fn try_from(value: &str) -> Result<Self, Self::Error> {
-        OWL::all()
-        .into_iter()
-        .find_map(|ns| {
-            if ns.as_ref() == value {
-                Some(ns)
-            } else {
-                None
-            }
-        }).ok_or_else(|| invalid!("Unknown OWL entity: {}", value))
-    }
-}
-
-impl TryFrom<&[u8]> for OWL {
-    type Error = HornedError;
-
-    fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
-        OWL::all()
-            .into_iter()
-            .find_map(|ns| {
-                if ns.as_bytes() == value {
-                    Some(ns)
-                } else {
-                    None
-                }
-        }).ok_or_else(|| invalid!("Unknown OWL entity: {:?}", value))
-    }
-}
-
-impl std::ops::Deref for OWL {
-    type Target = IRI<String>;
-
-    fn deref(&self) -> &Self::Target {
-        self.meta()
-    }
+vocabulary_type! {
+    OWL, IRI<String>, METAOWL, [
+        (OWL, AllDifferent, false),
+        (OWL, AllDisjointProperties, false),
+        (OWL, AllValuesFrom, true),
+        (OWL, AnnotatedProperty, true),
+        (OWL, AnnotatedSource, true),
+        (OWL, AnnotatedTarget, true),
+        (OWL, AnnotationProperty, false),
+        (OWL, AssertionProperty, true),
+        (OWL, AsymmetricProperty, false),
+        (OWL, Axiom, false),
+        (OWL, Cardinality, true),
+        (OWL, Class, false),
+        (OWL, ComplementOf, true),
+        (OWL, DatatypeComplementOf, true),
+        (OWL, DatatypeProperty, false),
+        (OWL, DifferentFrom, true),
+        (OWL, DisjointUnionOf, true),
+        (OWL, DisjointWith, true),
+        (OWL, DistinctMembers, true),
+        (OWL, EquivalentClass, true),
+        (OWL, EquivalentProperty, true),
+        (OWL, FunctionalProperty, false),
+        (OWL, HasKey, true),
+        (OWL, HasValue, true),
+        (OWL, Imports, true),
+        (OWL, IntersectionOf, true),
+        (OWL, InverseFunctionalProperty, false),
+        (OWL, InverseOf, true),
+        (OWL, IrreflexiveProperty, false),
+        (OWL, MaxCardinality, true),
+        (OWL, MaxQualifiedCardinality, true),
+        (OWL, Members, true),
+        (OWL, MinCardinality, true),
+        (OWL, MinQualifiedCardinality, true),
+        (OWL, NamedIndividual, false),
+        (OWL, NegativePropertyAssertion, false),
+        (OWL, Nothing, false),
+        (OWL, ObjectProperty, false),
+        (OWL, OnClass, true),
+        (OWL, OnDataRange, true),
+        (OWL, OnDatatype, true),
+        (OWL, OneOf, true),
+        (OWL, OnProperty, true),
+        (OWL, Ontology, false),
+        (OWL, QualifiedCardinality, true),
+        (OWL, PropertyChainAxiom, true),
+        (OWL, PropertyDisjointWith, true),
+        (OWL, ReflexiveProperty, false),
+        (OWL, Restriction, false),
+        (OWL, SameAs, true),
+        (OWL, SourceIndividual, true),
+        (OWL, SomeValuesFrom, true),
+        (OWL, SymmetricProperty, false),
+        (OWL, TargetIndividual, true),
+        (OWL, TargetValue, true),
+        (OWL, TopDataProperty, true),
+        (OWL, TopObjectProperty, true),
+        (OWL, Thing, false),
+        (OWL, TransitiveProperty, false),
+        (OWL, UnionOf, true),
+        (OWL, VersionIRI, true),
+        (OWL, WithRestrictions, true)
+    ]
 }
 
 impl Borrow<str> for OWL {
@@ -374,83 +317,70 @@ impl Borrow<str> for OWL {
     }
 }
 
-lazy_meta! {
-    OWL, IRI<String>, METAOWL;
-
-    AllDifferent, append_to_ns(OWL,"AllDifferent");
-    AllDisjointProperties, append_to_ns(OWL,"AllDisjointProperties");
-    AllValuesFrom, append_to_ns(OWL,"allValuesFrom");
-    AnnotatedProperty, append_to_ns(OWL,"annotatedProperty");
-    AnnotatedSource, append_to_ns(OWL,"annotatedSource");
-    AnnotatedTarget, append_to_ns(OWL,"annotatedTarget");
-    AnnotationProperty, append_to_ns(OWL,"AnnotationProperty");
-    AssertionProperty, append_to_ns(OWL,"assertionProperty");
-    AsymmetricProperty, append_to_ns(OWL,"AsymmetricProperty");
-    Axiom, append_to_ns(OWL,"Axiom");
-    Class, append_to_ns(OWL,"Class");
-    ComplementOf, append_to_ns(OWL,"complementOf");
-    DatatypeComplementOf, append_to_ns(OWL,"datatypeComplementOf");
-    DatatypeProperty, append_to_ns(OWL,"DatatypeProperty");
-    DifferentFrom, append_to_ns(OWL,"differentFrom");
-    DisjointUnionOf, append_to_ns(OWL,"disjointUnionOf");
-    DisjointWith, append_to_ns(OWL,"disjointWith");
-    DistinctMembers, append_to_ns(OWL,"distinctMembers");
-    Cardinality, append_to_ns(OWL,"cardinality");
-    EquivalentClass, append_to_ns(OWL,"equivalentClass");
-    EquivalentProperty, append_to_ns(OWL,"equivalentProperty");
-    FunctionalProperty, append_to_ns(OWL,"FunctionalProperty");
-    Imports, append_to_ns(OWL,"imports");
-    IntersectionOf, append_to_ns(OWL,"intersectionOf");
-    InverseFunctionalProperty, append_to_ns(OWL,"InverseFunctionalProperty");
-    InverseOf, append_to_ns(OWL,"inverseOf");
-    IrreflexiveProperty, append_to_ns(OWL,"IrreflexiveProperty");
-    HasKey, append_to_ns(OWL,"hasKey");
-    HasValue, append_to_ns(OWL,"hasValue");
-    MaxCardinality, append_to_ns(OWL,"maxCardinality");
-    MaxQualifiedCardinality, append_to_ns(OWL,"maxQualifiedCardinality");
-    Members, append_to_ns(OWL,"members");
-    MinCardinality, append_to_ns(OWL,"minCardinality");
-    MinQualifiedCardinality, append_to_ns(OWL,"minQualifiedCardinality");
-    NamedIndividual, append_to_ns(OWL,"NamedIndividual");
-    NegativePropertyAssertion, append_to_ns(OWL,"NegativePropertyAssertion");
-    Nothing, append_to_ns(OWL,"Nothing");
-    ObjectProperty, append_to_ns(OWL,"ObjectProperty");
-    OnClass, append_to_ns(OWL,"onClass");
-    OnDataRange, append_to_ns(OWL,"onDataRange");
-    OnDatatype, append_to_ns(OWL,"onDatatype");
-    OneOf, append_to_ns(OWL,"oneOf");
-    OnProperty, append_to_ns(OWL,"onProperty");
-    Ontology, append_to_ns(OWL,"Ontology");
-    PropertyChainAxiom, append_to_ns(OWL,"propertyChainAxiom");
-    PropertyDisjointWith, append_to_ns(OWL,"propertyDisjointWith");
-    QualifiedCardinality, append_to_ns(OWL,"qualifiedCardinality");
-    ReflexiveProperty, append_to_ns(OWL,"ReflexiveProperty");
-    Restriction, append_to_ns(OWL,"Restriction");
-    SameAs, append_to_ns(OWL,"sameAs");
-    SourceIndividual, append_to_ns(OWL,"sourceIndividual");
-    SomeValuesFrom, append_to_ns(OWL,"someValuesFrom");
-    SymmetricProperty, append_to_ns(OWL,"SymmetricProperty");
-    TargetIndividual, append_to_ns(OWL,"targetIndividual");
-    TargetValue, append_to_ns(OWL,"targetValue");
-    Thing, append_to_ns(OWL,"Thing");
-    TopDataProperty, append_to_ns(OWL,"topDataProperty");
-    TopObjectProperty, append_to_ns(OWL,"topObjectProperty");
-    TransitiveProperty, append_to_ns(OWL,"TransitiveProperty");
-    UnionOf, append_to_ns(OWL,"unionOf");
-    VersionIRI, append_to_ns(OWL,"versionIRI");
-    WithRestrictions, append_to_ns(OWL,"withRestrictions");
-}
-
-// TODO: change parameter from `IRI<A>` to `Class<A>`.
-//       Only Classes can be owl:Thing?
-pub fn is_thing<A: ForIRI>(iri: &IRI<A>) -> bool {
-    iri.as_ref() == OWL::Thing.as_ref()
-}
-
-// TODO: change parameter from `IRI<A>` to `Class<A>`.
-//       Only Classes can be owl:Nothing?
-pub fn is_nothing<A: ForIRI>(iri: &IRI<A>) -> bool {
-    iri.as_ref() == OWL::Nothing.as_ref()
+#[test]
+fn test_meta_owl() {
+    assert_eq!(OWL::AllDifferent.as_ref(), "http://www.w3.org/2002/07/owl#AllDifferent");
+    assert_eq!(OWL::AllDisjointProperties.as_ref(), "http://www.w3.org/2002/07/owl#AllDisjointProperties");
+    assert_eq!(OWL::AllValuesFrom.as_ref(), "http://www.w3.org/2002/07/owl#allValuesFrom");
+    assert_eq!(OWL::AnnotatedProperty.as_ref(), "http://www.w3.org/2002/07/owl#annotatedProperty");
+    assert_eq!(OWL::AnnotatedSource.as_ref(), "http://www.w3.org/2002/07/owl#annotatedSource");
+    assert_eq!(OWL::AnnotatedTarget.as_ref(), "http://www.w3.org/2002/07/owl#annotatedTarget");
+    assert_eq!(OWL::AnnotationProperty.as_ref(), "http://www.w3.org/2002/07/owl#AnnotationProperty");
+    assert_eq!(OWL::AssertionProperty.as_ref(), "http://www.w3.org/2002/07/owl#assertionProperty");
+    assert_eq!(OWL::AsymmetricProperty.as_ref(), "http://www.w3.org/2002/07/owl#AsymmetricProperty");
+    assert_eq!(OWL::Axiom.as_ref(), "http://www.w3.org/2002/07/owl#Axiom");
+    assert_eq!(OWL::Cardinality.as_ref(), "http://www.w3.org/2002/07/owl#cardinality");
+    assert_eq!(OWL::Class.as_ref(), "http://www.w3.org/2002/07/owl#Class");
+    assert_eq!(OWL::ComplementOf.as_ref(), "http://www.w3.org/2002/07/owl#complementOf");
+    assert_eq!(OWL::DatatypeComplementOf.as_ref(), "http://www.w3.org/2002/07/owl#datatypeComplementOf");
+    assert_eq!(OWL::DatatypeProperty.as_ref(), "http://www.w3.org/2002/07/owl#DatatypeProperty");
+    assert_eq!(OWL::DifferentFrom.as_ref(), "http://www.w3.org/2002/07/owl#differentFrom");
+    assert_eq!(OWL::DisjointUnionOf.as_ref(), "http://www.w3.org/2002/07/owl#disjointUnionOf");
+    assert_eq!(OWL::DisjointWith.as_ref(), "http://www.w3.org/2002/07/owl#disjointWith");
+    assert_eq!(OWL::DistinctMembers.as_ref(), "http://www.w3.org/2002/07/owl#distinctMembers");
+    assert_eq!(OWL::EquivalentClass.as_ref(), "http://www.w3.org/2002/07/owl#equivalentClass");
+    assert_eq!(OWL::EquivalentProperty.as_ref(), "http://www.w3.org/2002/07/owl#equivalentProperty");
+    assert_eq!(OWL::FunctionalProperty.as_ref(), "http://www.w3.org/2002/07/owl#FunctionalProperty");
+    assert_eq!(OWL::HasKey.as_ref(), "http://www.w3.org/2002/07/owl#hasKey");
+    assert_eq!(OWL::HasValue.as_ref(), "http://www.w3.org/2002/07/owl#hasValue");
+    assert_eq!(OWL::Imports.as_ref(), "http://www.w3.org/2002/07/owl#imports");
+    assert_eq!(OWL::IntersectionOf.as_ref(), "http://www.w3.org/2002/07/owl#intersectionOf");
+    assert_eq!(OWL::InverseFunctionalProperty.as_ref(), "http://www.w3.org/2002/07/owl#InverseFunctionalProperty");
+    assert_eq!(OWL::InverseOf.as_ref(), "http://www.w3.org/2002/07/owl#inverseOf");
+    assert_eq!(OWL::IrreflexiveProperty.as_ref(), "http://www.w3.org/2002/07/owl#IrreflexiveProperty");
+    assert_eq!(OWL::MaxCardinality.as_ref(), "http://www.w3.org/2002/07/owl#maxCardinality");
+    assert_eq!(OWL::MaxQualifiedCardinality.as_ref(), "http://www.w3.org/2002/07/owl#maxQualifiedCardinality");
+    assert_eq!(OWL::Members.as_ref(), "http://www.w3.org/2002/07/owl#members");
+    assert_eq!(OWL::MinCardinality.as_ref(), "http://www.w3.org/2002/07/owl#minCardinality");
+    assert_eq!(OWL::MinQualifiedCardinality.as_ref(), "http://www.w3.org/2002/07/owl#minQualifiedCardinality");
+    assert_eq!(OWL::NamedIndividual.as_ref(), "http://www.w3.org/2002/07/owl#NamedIndividual");
+    assert_eq!(OWL::NegativePropertyAssertion.as_ref(), "http://www.w3.org/2002/07/owl#NegativePropertyAssertion");
+    assert_eq!(OWL::Nothing.as_ref(), "http://www.w3.org/2002/07/owl#Nothing");
+    assert_eq!(OWL::ObjectProperty.as_ref(), "http://www.w3.org/2002/07/owl#ObjectProperty");
+    assert_eq!(OWL::OnClass.as_ref(), "http://www.w3.org/2002/07/owl#onClass");
+    assert_eq!(OWL::OnDataRange.as_ref(), "http://www.w3.org/2002/07/owl#onDataRange");
+    assert_eq!(OWL::OnDatatype.as_ref(), "http://www.w3.org/2002/07/owl#onDatatype");
+    assert_eq!(OWL::OneOf.as_ref(), "http://www.w3.org/2002/07/owl#oneOf");
+    assert_eq!(OWL::OnProperty.as_ref(), "http://www.w3.org/2002/07/owl#onProperty");
+    assert_eq!(OWL::Ontology.as_ref(), "http://www.w3.org/2002/07/owl#Ontology");
+    assert_eq!(OWL::QualifiedCardinality.as_ref(), "http://www.w3.org/2002/07/owl#qualifiedCardinality");
+    assert_eq!(OWL::PropertyChainAxiom.as_ref(), "http://www.w3.org/2002/07/owl#propertyChainAxiom");
+    assert_eq!(OWL::PropertyDisjointWith.as_ref(), "http://www.w3.org/2002/07/owl#propertyDisjointWith");
+    assert_eq!(OWL::ReflexiveProperty.as_ref(), "http://www.w3.org/2002/07/owl#ReflexiveProperty");
+    assert_eq!(OWL::Restriction.as_ref(), "http://www.w3.org/2002/07/owl#Restriction");
+    assert_eq!(OWL::SameAs.as_ref(), "http://www.w3.org/2002/07/owl#sameAs");
+    assert_eq!(OWL::SourceIndividual.as_ref(), "http://www.w3.org/2002/07/owl#sourceIndividual");
+    assert_eq!(OWL::SomeValuesFrom.as_ref(), "http://www.w3.org/2002/07/owl#someValuesFrom");
+    assert_eq!(OWL::SymmetricProperty.as_ref(), "http://www.w3.org/2002/07/owl#SymmetricProperty");
+    assert_eq!(OWL::TargetIndividual.as_ref(), "http://www.w3.org/2002/07/owl#targetIndividual");
+    assert_eq!(OWL::TargetValue.as_ref(), "http://www.w3.org/2002/07/owl#targetValue");
+    assert_eq!(OWL::TopDataProperty.as_ref(), "http://www.w3.org/2002/07/owl#topDataProperty");
+    assert_eq!(OWL::TopObjectProperty.as_ref(), "http://www.w3.org/2002/07/owl#topObjectProperty");
+    assert_eq!(OWL::Thing.as_ref(), "http://www.w3.org/2002/07/owl#Thing");
+    assert_eq!(OWL::TransitiveProperty.as_ref(), "http://www.w3.org/2002/07/owl#TransitiveProperty");
+    assert_eq!(OWL::UnionOf.as_ref(), "http://www.w3.org/2002/07/owl#unionOf");
+    assert_eq!(OWL::VersionIRI.as_ref(), "http://www.w3.org/2002/07/owl#versionIRI");
+    assert_eq!(OWL::WithRestrictions.as_ref(), "http://www.w3.org/2002/07/owl#withRestrictions");
 }
 
 /// Returns a [NamedEntityKind] if the IRI points to a built-in entity, otherwise [None].
@@ -467,11 +397,11 @@ pub fn to_built_in_entity<A: ForIRI>(iri: &IRI<A>) -> Option<NamedEntityKind> {
 
 #[test]
 fn test_namespace_try_from() {
-    assert_eq!("http://www.w3.org/2002/07/owl#", OWL.as_ref());
-    assert_eq!(b"http://www.w3.org/2002/07/owl#", OWL.as_bytes());
+    assert_eq!("http://www.w3.org/2002/07/owl#", Namespace::OWL.as_ref());
+    assert_eq!(b"http://www.w3.org/2002/07/owl#", Namespace::OWL.as_bytes());
 
-    assert!(Namespace::try_from("http://www.w3.org/2002/07/owl#").is_ok());
-    assert!(Namespace::try_from("http://www.example.org/2002/07/owl#").is_err());
+    assert!(Namespace::from_str("http://www.w3.org/2002/07/owl#").is_ok());
+    assert!(Namespace::from_str("http://www.example.org/2002/07/owl#").is_err());
 
     assert!(Namespace::try_from(b"http://www.w3.org/2002/07/owl#".as_ref()).is_ok());
     assert!(Namespace::try_from(b"http://www.example.org/2002/07/owl#".as_ref()).is_err());
@@ -559,130 +489,37 @@ pub fn test_namespace_in_entity_for_iri() {
     .is_err());
 }
 
-pub enum OWL2Datatype {
-    RDFSLiteral,
+vocabulary_type!{
+    OWL2Datatype,
+    IRI<String>,
+    METAOWL2DATATYPE,
+    [(RDFS, Literal, false)]
 }
 
-impl TryFrom<&str> for OWL2Datatype {
-    type Error = HornedError;
-
-    fn try_from(value: &str) -> Result<Self, Self::Error> {
-        OWL2Datatype::all()
-        .into_iter()
-        .find_map(|ns| {
-            if ns.as_ref() == value {
-                Some(ns)
-            } else {
-                None
-            }
-        }).ok_or_else(|| invalid!("Unknown OWL2 datatype: {}", value))
-    }
-}
-
-impl TryFrom<&[u8]> for OWL2Datatype {
-    type Error = HornedError;
-
-    fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
-        OWL2Datatype::all()
-            .into_iter()
-            .find_map(|ns| {
-                if ns.as_bytes() == value {
-                    Some(ns)
-                } else {
-                    None
-                }
-        }).ok_or_else(|| invalid!("Unknown OWL2 datatype: {:?}", value))
-    }
-}
-
-impl std::ops::Deref for OWL2Datatype {
-    type Target = IRI<String>;
-
-    fn deref(&self) -> &Self::Target {
-        self.meta()
-    }
-}
-
-lazy_meta! {
-    OWL2Datatype, IRI<String>, METAOWL2DATATYPE;
-    RDFSLiteral, append_to_ns(RDFS, "Literal")
-}
-
-pub enum AnnotationBuiltIn {
-    LABEL,
-    COMMENT,
-    SEEALSO,
-    ISDEFINEDBY,
-    DEPRECATED,
-    VERSIONINFO,
-    PRIORVERSION,
-    BACKWARDCOMPATIBLEWITH,
-    INCOMPATIBLEWITH,
-}
-
-impl TryFrom<&str> for AnnotationBuiltIn {
-    type Error = HornedError;
-
-    fn try_from(value: &str) -> Result<Self, Self::Error> {
-        AnnotationBuiltIn::all()
-        .into_iter()
-        .find_map(|ns| {
-            if ns.as_ref() == value {
-                Some(ns)
-            } else {
-                None
-            }
-        }).ok_or_else(|| invalid!("Unknown annotation keyword: {}", value))
-    }
-}
-
-impl TryFrom<&[u8]> for AnnotationBuiltIn {
-    type Error = HornedError;
-
-    fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
-        AnnotationBuiltIn::all()
-            .into_iter()
-            .find_map(|ns| {
-                if ns.as_bytes() == value {
-                    Some(ns)
-                } else {
-                    None
-                }
-        }).ok_or_else(|| invalid!("Unknown annotation keyword: {:?}", value))
-    }
-}
-
-impl std::ops::Deref for AnnotationBuiltIn {
-    type Target = IRI<String>;
-
-    fn deref(&self) -> &Self::Target {
-        self.meta()
-    }
-}
-
-lazy_meta! {
-    AnnotationBuiltIn, IRI<String>, METAANNOTATIONBUILTIN;
-    LABEL, append_to_ns(RDFS, "label");
-    COMMENT, append_to_ns(RDFS, "comment");
-    SEEALSO, append_to_ns(RDFS, "seeAlso");
-    ISDEFINEDBY, append_to_ns(RDFS, "isDefinedBy");
-    DEPRECATED, append_to_ns(OWL, "deprecated");
-    VERSIONINFO, append_to_ns(OWL, "versionInfo");
-    PRIORVERSION, append_to_ns(OWL, "priorVersion");
-    BACKWARDCOMPATIBLEWITH, append_to_ns(OWL, "backwardCompatibleWith");
-    INCOMPATIBLEWITH, append_to_ns(OWL, "incompatibleWith");
+vocabulary_type! {
+    AnnotationBuiltIn, IRI<String>, METAANNOTATIONBUILTIN, [
+        (RDFS, Label, true),
+        (RDFS, Comment, true),
+        (RDFS, SeeAlso, true),
+        (RDFS, IsDefinedBy, true),
+        (OWL, Deprecated, true),
+        (OWL, VersionInfo, true),
+        (OWL, PriorVersion, true),
+        (OWL, BackwardCompatibleWith, true),
+        (OWL, IncompatibleWith, true)
+    ]
 }
 
 #[inline]
 pub fn is_annotation_builtin<A: AsRef<str>>(iri: A) -> bool {
-    AnnotationBuiltIn::try_from(iri.as_ref()).is_ok()
+    AnnotationBuiltIn::from_str(iri.as_ref()).is_ok()
     // AnnotationBuiltIn::all()
     //     .iter()
     //     .any(|item| item.as_ref() == iri.as_ref())
 }
 
 #[test]
-fn test_is_annotation_builtin() {
+fn test_meta_annotation_builtin() {
     // Method can accept `str`ings...
     assert!(is_annotation_builtin(
         "http://www.w3.org/2002/07/owl#deprecated"
@@ -694,80 +531,28 @@ fn test_is_annotation_builtin() {
     assert!(!is_annotation_builtin(
         &"http://www.w3.org/2002/07/owl#fred".to_string()
     ));
+
+
 }
 
-#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub enum Facet {
-    Length,
-    MinLength,
-    MaxLength,
-    Pattern,
-    MinInclusive,
-    MinExclusive,
-    MaxInclusive,
-    MaxExclusive,
-    TotalDigits,
-    FractionDigits,
-    LangRange,
-}
-
-impl TryFrom<&str> for Facet {
-    type Error = HornedError;
-
-    fn try_from(value: &str) -> Result<Self, Self::Error> {
-        Facet::all()
-        .into_iter()
-        .find_map(|ns| {
-            if ns.as_ref() == value {
-                Some(ns)
-            } else {
-                None
-            }
-        }).ok_or_else(|| invalid!("Unknown facet: {}", value))
-    }
-}
-
-impl TryFrom<&[u8]> for Facet {
-    type Error = HornedError;
-
-    fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
-        Facet::all()
-            .into_iter()
-            .find_map(|ns| {
-                if ns.as_bytes() == value {
-                    Some(ns)
-                } else {
-                    None
-                }
-        }).ok_or_else(|| invalid!("Unknown facet: {:?}", value))
-    }
-}
-
-impl std::ops::Deref for Facet {
-    type Target = IRI<String>;
-
-    fn deref(&self) -> &Self::Target {
-        self.meta()
-    }
-}
-
-lazy_meta! {
-    Facet, IRI<String>, METAFACET;
-    Length, append_to_ns(XSD, "length");
-    MinLength, append_to_ns(XSD, "minLength");
-    MaxLength, append_to_ns(XSD, "maxLength");
-    Pattern, append_to_ns(XSD, "pattern");
-    MinInclusive, append_to_ns(XSD, "minInclusive");
-    MinExclusive, append_to_ns(XSD, "minExclusive");
-    MaxInclusive, append_to_ns(XSD, "maxInclusive");
-    MaxExclusive, append_to_ns(XSD, "maxExclusive");
-    TotalDigits, append_to_ns(XSD, "totalDigits");
-    FractionDigits, append_to_ns(XSD, "fractionDigits");
-    LangRange, append_to_ns(RDF, "langRange");
+vocabulary_type!{
+    Facet, IRI<String>, METAFACET, [
+        (XSD, Length, true),
+        (XSD, MinLength, true),
+        (XSD, MaxLength, true),
+        (XSD, Pattern, true),
+        (XSD, MinInclusive, true),
+        (XSD, MinExclusive, true),
+        (XSD, MaxInclusive, true),
+        (XSD, MaxExclusive, true),
+        (XSD, TotalDigits, true),
+        (XSD, FractionDigits, true),
+        (RDF, LangRange, true)
+    ]
 }
 
 #[test]
-fn test_facet_meta() {
+fn test_meta_facet() {
     assert_eq!(
         Facet::MinLength.as_ref(),
         "http://www.w3.org/2001/XMLSchema#minLength"
@@ -789,8 +574,10 @@ fn test_facet_meta() {
     );
 }
 
-pub enum XSD {
-    NonNegativeInteger,
+vocabulary_type! {
+    XSD, IRI<String>, METAXSD, [
+        (XSD, NonNegativeInteger, true)
+    ]
 }
 
 pub fn is_xsd_datatype<A: AsRef<str>>(iri: A) -> bool {
@@ -798,50 +585,6 @@ pub fn is_xsd_datatype<A: AsRef<str>>(iri: A) -> bool {
     iri.as_ref().starts_with(Namespace::XSD.as_ref())
 }
 
-impl TryFrom<&str> for XSD {
-    type Error = HornedError;
-
-    fn try_from(value: &str) -> Result<Self, Self::Error> {
-        XSD::all()
-        .into_iter()
-        .find_map(|ns| {
-            if ns.as_ref() == value {
-                Some(ns)
-            } else {
-                None
-            }
-        }).ok_or_else(|| invalid!("Unknown XSD datatype: {}", value))
-    }
-}
-
-impl TryFrom<&[u8]> for XSD {
-    type Error = HornedError;
-
-    fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
-        XSD::all()
-            .into_iter()
-            .find_map(|ns| {
-                if ns.as_bytes() == value {
-                    Some(ns)
-                } else {
-                    None
-                }
-        }).ok_or_else(|| invalid!("Unknown XSD datatype: {:?}", value))
-    }
-}
-
-impl std::ops::Deref for XSD {
-    type Target = IRI<String>;
-
-    fn deref(&self) -> &Self::Target {
-        self.meta()
-    }
-}
-
-lazy_meta! {
-    XSD, IRI<String>, METAXSD;
-    NonNegativeInteger, append_to_ns(XSD, "nonNegativeInteger")
-}
 
 #[test]
 fn test_is_xsd_datatype() {
@@ -861,6 +604,11 @@ pub enum Vocab {
     OWL(OWL),
     XSD(XSD),
     Namespace(Namespace),
+}
+
+vocabulary_traits! {
+    Vocab;
+    IRI<String>
 }
 
 impl<'a> Meta<&'a IRI<String>> for Vocab {
@@ -892,14 +640,6 @@ impl<'a> Meta<&'a IRI<String>> for Vocab {
             .chain(xsd_all)
             .chain(ns_all)
             .collect()
-    }
-}
-
-impl std::ops::Deref for Vocab {
-    type Target = IRI<String>;
-
-    fn deref(&self) -> &Self::Target {
-        self.meta()
     }
 }
 

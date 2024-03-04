@@ -682,7 +682,7 @@ fn data_cardinality_restriction<A: ForIRI, R: BufRead>(
             .map_err(|_s| HornedError::invalid("Failed to parse int"))?,
         dp,
         match vdr.len() {
-            0 => r.build.datatype(OWL2Datatype::RDFSLiteral.as_ref()).into(),
+            0 => r.build.datatype(OWL2Datatype::Literal.as_ref()).into(),
             1 => vdr.remove(0),
             _ => return Err(error_unexpected_tag(end_tag, r)),
         },
@@ -1936,7 +1936,7 @@ pub mod test {
         } = cl
         {
             assert!(match dr {
-                DataRange::Datatype(dt) => dt.is_s(OWL2Datatype::RDFSLiteral.as_ref()),
+                DataRange::Datatype(dt) => dt.is_s(OWL2Datatype::Literal.as_ref()),
                 _ => false,
             });
         } else {
