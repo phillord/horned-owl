@@ -115,8 +115,9 @@ macro_rules! vocabulary_traits {
 }
 
 macro_rules! vocabulary_type {
-    ($enum_type:ident, $return_type:ty, $storage:ident, [$(($ns:ident, $variant:ident, $first_lowercase:expr)),*]) => {
+    ($(#[$attr:meta])* $enum_type:ident, $return_type:ty, $storage:ident, [$(($ns:ident, $variant:ident, $first_lowercase:expr)),*]) => {
 
+        $(#[$attr]) *
         #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
         pub enum $enum_type {
             $(
@@ -190,6 +191,7 @@ lazy_meta! {
 }
 
 vocabulary_type! {
+    /// RDF Collections vocabulary.
     RDF, IRI<String>, METARDF, [
         (RDF, List, false),
         (RDF, First, true),
