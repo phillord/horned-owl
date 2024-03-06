@@ -13,59 +13,6 @@ use std::borrow::Borrow;
 use std::convert::TryFrom;
 use std::str::FromStr;
 
-/// Provides methods to access the [IRI]s associated to a meta-enum.
-#[deprecated(since = "0.15.0", note = "Deprecated trait, consider using [std::ops::Deref] and [std::convert::TryFrom] instead.")]
-pub trait WithIRI<'a>: Meta<&'a IRI<String>> {
-
-    /// Returns a byte slice containing the IRI associated with this entity.
-    #[deprecated(since = "0.15.0", note = "Enumerations associated to vocabulary terms now implement [std::ops::Deref<Target = IRI<String>>].")]
-    fn as_iri_bytes(&self) -> &'a [u8] {
-        self.meta().as_bytes()
-    }
-
-    /// Returns a string representation of the IRI associated with this
-    /// entity.
-    #[deprecated(since = "0.15.0", note = "Enumerations associated to vocabulary terms now implement [std::ops::Deref<Target = IRI<String>>].")]
-    fn as_iri_str(&self) -> &'a str {
-        self.meta().as_ref()
-    }
-
-    /// The string is checked against all the variants of the meta-enum.
-    /// Returns [Some(variant)] if a match is found with the metadata of a
-    /// variant, otherwise [None] is returned.
-    #[deprecated(since = "0.15.0", note = "Enumerations associated to vocabulary terms now implement [std::convert::TryFrom<str>].")]
-    fn variant_from_str(tag: &'a str) -> Option<Self> {
-        Self::all()
-            .into_iter()
-            .find(|item| item.meta().as_ref() == tag)
-    }
-
-    /// The byte slice is checked against all the variants of the meta-enum.
-    /// Returns [Some(variant)] if a match is found with the metadata of a
-    /// variant, otherwise [None] is returned.
-    #[deprecated(since = "0.15.0", note = "Enumerations associated to vocabulary terms now implement [std::convert::TryFrom<&[u8]>].")]
-    fn variant_from_bytes(tag: &'a [u8]) -> Option<Self> {
-        Self::all()
-            .into_iter()
-            .find(|item| item.meta().as_bytes() == tag)
-    }
-}
-
-#[deprecated(since = "0.15.0", note = "Use `IRI<String>` instead.")]
-pub type IRIString = IRI<String>;
-
-#[deprecated(since = "0.15.0", note = "Use `get_iri` instead.")]
-fn set_iri(s: &str) -> IRI<String> {
-    let builder = Build::new_string();
-    builder.iri(s)
-}
-
-#[deprecated(since = "0.15.0", note = "Use `get_iri` instead.")]
-fn append_to_ns<'a>(ns: Namespace, suffix: &'a str) -> IRI<String>
-{
-    set_iri(&format!("{}{}", ns.as_ref(), suffix))
-}
-
 macro_rules! vocabulary_traits {
     ($($enum_type:ident),+; $return_type:ty
     ) => {
