@@ -763,6 +763,15 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
                         )
                     }
                 }
+                [[_, Term::OWL(VOWL::UnionOf), Term::BNode(bnodeid)],//: rustfmt hard line!
+                [_, Term::RDF(VRDF::Type), Term::RDFS(VRDFS::Datatype)]] =>
+                {
+                   ok_some! {
+                       DataRange::DataUnionOf(
+                           self.fetch_dr_seq(bnodeid)?
+                       )
+                   }
+                }
                 [[_, Term::OWL(VOWL::DatatypeComplementOf), term],//:
                  [_, Term::RDF(VRDF::Type), Term::RDFS(VRDFS::Datatype)]] =>
                 {
@@ -2330,11 +2339,6 @@ mod test {
     }
 
     #[test]
-    fn datatype() {
-        compare("datatype");
-    }
-
-    #[test]
     fn object_has_value() {
         compare("object-has-value");
     }
@@ -2367,6 +2371,11 @@ mod test {
     #[test]
     fn object_exact_cardinality() {
         compare("object-exact-cardinality");
+    }
+
+    #[test]
+    fn datatype() {
+        compare("datatype");
     }
 
     #[test]
