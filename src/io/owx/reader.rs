@@ -1025,6 +1025,11 @@ from_start! {
                         till_end(r, b"DataIntersectionOf")?
                     )
                 }
+                b"DataUnionOf" => {
+                    DataRange::DataUnionOf(
+                        till_end(r, b"DataUnionOf")?
+                    )
+                }
                 b"DataComplementOf" => {
                     DataRange::DataComplementOf(
                         Box::new(from_next(r)?)
