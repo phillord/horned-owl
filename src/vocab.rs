@@ -57,6 +57,12 @@ macro_rules! vocabulary_traits {
                     self.meta()
                 }
             }
+
+            impl Borrow<str> for $enum_type {
+                fn borrow(&self) -> &str {
+                    self.meta().as_ref()
+                }
+            }
         )+
     };
 }
@@ -236,12 +242,6 @@ vocabulary_type! {
         (OWL, VersionIRI, true),
         (OWL, WithRestrictions, true)
     ]
-}
-
-impl Borrow<str> for OWL {
-    fn borrow(&self) -> &str {
-        self.meta().as_ref()
-    }
 }
 
 /// Returns a [NamedEntityKind] if the IRI points to a built-in entity, otherwise [None].
