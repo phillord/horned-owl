@@ -1,0 +1,27 @@
+Prefix(:=<o>)
+Prefix(owl:=<http://www.w3.org/2002/07/owl#>)
+Prefix(rdf:=<http://www.w3.org/1999/02/22-rdf-syntax-ns#>)
+Prefix(xml:=<http://www.w3.org/XML/1998/namespace>)
+Prefix(xsd:=<http://www.w3.org/2001/XMLSchema#>)
+Prefix(rdfs:=<http://www.w3.org/2000/01/rdf-schema#>)
+
+
+Ontology(<http://www.example.com/iri>
+<http://www.example.com/viri>
+
+Declaration(Class(<http://www.example.com/iri#A>))
+Declaration(Class(<http://www.example.com/iri#B>))
+Declaration(Class(<http://www.example.com/iri#C>))
+Declaration(Class(<http://www.example.com/iri#D>))
+Declaration(ObjectProperty(<http://www.example.com/iri#r>))
+
+############################
+#   Classes
+############################
+
+# Class: <http://www.example.com/iri#A> (<http://www.example.com/iri#A>)
+
+SubClassOf(<http://www.example.com/iri#A> ObjectIntersectionOf(<http://www.example.com/iri#D> ObjectSomeValuesFrom(<http://www.example.com/iri#r> <http://www.example.com/iri#B>) ObjectAllValuesFrom(<http://www.example.com/iri#r> <http://www.example.com/iri#C>)))
+
+
+)

@@ -1117,7 +1117,7 @@ mod test {
 
     #[test]
     fn round_one_comment() {
-        assert_round(include_str!("../../ont/owl-xml/one-comment.owx"));
+        assert_round(include_str!("../../ont/owl-xml/comment.owx"));
     }
 
     #[test]
@@ -1473,6 +1473,6 @@ mod test {
 
     #[test]
     fn family() {
-        assert_round(include_str!("../../ont/owl-xml/family.owx"));
+        assert_round(include_str!("../../ont/owl-xml/manual/family.owx"));
     }
 }
