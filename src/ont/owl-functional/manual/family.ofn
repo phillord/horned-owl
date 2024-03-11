@@ -1,0 +1,270 @@
+Prefix(:=<family>)
+Prefix(owl:=<http://www.w3.org/2002/07/owl#>)
+Prefix(rdf:=<http://www.w3.org/1999/02/22-rdf-syntax-ns#>)
+Prefix(xml:=<http://www.w3.org/XML/1998/namespace>)
+Prefix(xsd:=<http://www.w3.org/2001/XMLSchema#>)
+Prefix(rdfs:=<http://www.w3.org/2000/01/rdf-schema#>)
+
+
+Ontology(<http://example.com/owl/families/>
+Import(<http://homepages.cs.ncl.ac.uk/phillip.lord/scratch/family-other.owl#>)
+
+Declaration(Class(<http://example.com/owl/families/Adult>))
+Declaration(Class(<http://example.com/owl/families/ChildlessPerson>))
+Declaration(Class(<http://example.com/owl/families/Dead>))
+Declaration(Class(<http://example.com/owl/families/Father>))
+Declaration(Class(<http://example.com/owl/families/Female>))
+Declaration(Class(<http://example.com/owl/families/Grandfather>))
+Declaration(Class(<http://example.com/owl/families/HappyPerson>))
+Declaration(Class(<http://example.com/owl/families/Human>))
+Declaration(Class(<http://example.com/owl/families/JohnsChildren>))
+Declaration(Class(<http://example.com/owl/families/Man>))
+Declaration(Class(<http://example.com/owl/families/Mother>))
+Declaration(Class(<http://example.com/owl/families/MyBirthdayGuests>))
+Declaration(Class(<http://example.com/owl/families/NarcisticPerson>))
+Declaration(Class(<http://example.com/owl/families/Orphan>))
+Declaration(Class(<http://example.com/owl/families/Parent>))
+Declaration(Class(<http://example.com/owl/families/Person>))
+Declaration(Class(<http://example.com/owl/families/SocialRole>))
+Declaration(Class(<http://example.com/owl/families/Teenager>))
+Declaration(Class(<http://example.com/owl/families/Woman>))
+Declaration(Class(<http://example.com/owl/families/YoungChild>))
+Declaration(ObjectProperty(<http://example.com/owl/families/hasAncestor>))
+Declaration(ObjectProperty(<http://example.com/owl/families/hasBrother>))
+Declaration(ObjectProperty(<http://example.com/owl/families/hasChild>))
+Declaration(ObjectProperty(<http://example.com/owl/families/hasDaughter>))
+Declaration(ObjectProperty(<http://example.com/owl/families/hasFather>))
+Declaration(ObjectProperty(<http://example.com/owl/families/hasGrandparent>))
+Declaration(ObjectProperty(<http://example.com/owl/families/hasHusband>))
+Declaration(ObjectProperty(<http://example.com/owl/families/hasParent>))
+Declaration(ObjectProperty(<http://example.com/owl/families/hasRelative>))
+Declaration(ObjectProperty(<http://example.com/owl/families/hasSon>))
+Declaration(ObjectProperty(<http://example.com/owl/families/hasSpouse>))
+Declaration(ObjectProperty(<http://example.com/owl/families/hasUncle>))
+Declaration(ObjectProperty(<http://example.com/owl/families/hasWife>))
+Declaration(ObjectProperty(<http://example.com/owl/families/loves>))
+Declaration(ObjectProperty(<http://example.com/owl/families/parentOf>))
+Declaration(DataProperty(<http://example.com/owl/families/hasAge>))
+Declaration(DataProperty(<http://example.com/owl/families/hasSSN>))
+Declaration(NamedIndividual(<http://example.com/owl/families/Bill>))
+Declaration(NamedIndividual(<http://example.com/owl/families/Father>))
+Declaration(NamedIndividual(<http://example.com/owl/families/Jack>))
+Declaration(NamedIndividual(<http://example.com/owl/families/James>))
+Declaration(NamedIndividual(<http://example.com/owl/families/Jim>))
+Declaration(NamedIndividual(<http://example.com/owl/families/John>))
+Declaration(NamedIndividual(<http://example.com/owl/families/Mary>))
+Declaration(NamedIndividual(<http://example.com/owl/families/Meg>))
+Declaration(NamedIndividual(<http://example.com/owl/families/Susan>))
+Declaration(Datatype(<http://example.com/owl/families/majorAge>))
+Declaration(Datatype(<http://example.com/owl/families/minorAge>))
+Declaration(Datatype(<http://example.com/owl/families/personAge>))
+Declaration(Datatype(<http://example.com/owl/families/toddlerAge>))
+
+############################
+#   Object Properties
+############################
+
+# Object Property: <http://example.com/owl/families/hasAncestor> (<http://example.com/owl/families/hasAncestor>)
+
+TransitiveObjectProperty(<http://example.com/owl/families/hasAncestor>)
+
+# Object Property: <http://example.com/owl/families/hasChild> (<http://example.com/owl/families/hasChild>)
+
+EquivalentObjectProperties(<http://example.com/owl/families/hasChild> <http://homepages.cs.ncl.ac.uk/phillip.lord/scratch/family-other.owl#child>)
+InverseObjectProperties(<http://example.com/owl/families/hasChild> <http://example.com/owl/families/hasParent>)
+AsymmetricObjectProperty(<http://example.com/owl/families/hasChild>)
+
+# Object Property: <http://example.com/owl/families/hasDaughter> (<http://example.com/owl/families/hasDaughter>)
+
+DisjointObjectProperties(<http://example.com/owl/families/hasDaughter> <http://example.com/owl/families/hasSon>)
+
+# Object Property: <http://example.com/owl/families/hasFather> (<http://example.com/owl/families/hasFather>)
+
+SubObjectPropertyOf(<http://example.com/owl/families/hasFather> <http://example.com/owl/families/hasParent>)
+
+# Object Property: <http://example.com/owl/families/hasHusband> (<http://example.com/owl/families/hasHusband>)
+
+FunctionalObjectProperty(<http://example.com/owl/families/hasHusband>)
+InverseFunctionalObjectProperty(<http://example.com/owl/families/hasHusband>)
+
+# Object Property: <http://example.com/owl/families/hasParent> (<http://example.com/owl/families/hasParent>)
+
+DisjointObjectProperties(<http://example.com/owl/families/hasParent> <http://example.com/owl/families/hasSpouse>)
+
+# Object Property: <http://example.com/owl/families/hasRelative> (<http://example.com/owl/families/hasRelative>)
+
+ReflexiveObjectProperty(<http://example.com/owl/families/hasRelative>)
+
+# Object Property: <http://example.com/owl/families/hasSpouse> (<http://example.com/owl/families/hasSpouse>)
+
+SymmetricObjectProperty(<http://example.com/owl/families/hasSpouse>)
+
+# Object Property: <http://example.com/owl/families/hasWife> (<http://example.com/owl/families/hasWife>)
+
+SubObjectPropertyOf(<http://example.com/owl/families/hasWife> <http://example.com/owl/families/hasSpouse>)
+ObjectPropertyDomain(<http://example.com/owl/families/hasWife> <http://example.com/owl/families/Man>)
+ObjectPropertyRange(<http://example.com/owl/families/hasWife> <http://example.com/owl/families/Woman>)
+
+# Object Property: <http://example.com/owl/families/parentOf> (<http://example.com/owl/families/parentOf>)
+
+IrreflexiveObjectProperty(<http://example.com/owl/families/parentOf>)
+
+
+############################
+#   Data Properties
+############################
+
+# Data Property: <http://example.com/owl/families/hasAge> (<http://example.com/owl/families/hasAge>)
+
+EquivalentDataProperties(<http://example.com/owl/families/hasAge> <http://homepages.cs.ncl.ac.uk/phillip.lord/scratch/family-other.owl#age>)
+FunctionalDataProperty(<http://example.com/owl/families/hasAge>)
+DataPropertyDomain(<http://example.com/owl/families/hasAge> <http://example.com/owl/families/Person>)
+DataPropertyRange(<http://example.com/owl/families/hasAge> xsd:nonNegativeInteger)
+
+
+############################
+#   Datatypes
+############################
+
+# Datatype: <http://example.com/owl/families/majorAge> (<http://example.com/owl/families/majorAge>)
+
+DatatypeDefinition(<http://example.com/owl/families/majorAge> DataIntersectionOf(<http://example.com/owl/families/personAge> DataComplementOf(<http://example.com/owl/families/minorAge>)))
+
+# Datatype: <http://example.com/owl/families/minorAge> (<http://example.com/owl/families/minorAge>)
+
+DatatypeDefinition(<http://example.com/owl/families/minorAge> DatatypeRestriction(xsd:integer xsd:minInclusive "0"^^xsd:integer xsd:maxInclusive "18"^^xsd:integer))
+
+# Datatype: <http://example.com/owl/families/personAge> (<http://example.com/owl/families/personAge>)
+
+DatatypeDefinition(<http://example.com/owl/families/personAge> DatatypeRestriction(xsd:integer xsd:minInclusive "0"^^xsd:integer xsd:maxInclusive "150"^^xsd:integer))
+
+# Datatype: <http://example.com/owl/families/toddlerAge> (<http://example.com/owl/families/toddlerAge>)
+
+DatatypeDefinition(<http://example.com/owl/families/toddlerAge> DataOneOf("1"^^xsd:integer "2"^^xsd:integer))
+
+
+############################
+#   Classes
+############################
+
+# Class: <http://example.com/owl/families/Adult> (<http://example.com/owl/families/Adult>)
+
+EquivalentClasses(<http://example.com/owl/families/Adult> <http://homepages.cs.ncl.ac.uk/phillip.lord/scratch/family-other.owl#Grownup>)
+
+# Class: <http://example.com/owl/families/ChildlessPerson> (<http://example.com/owl/families/ChildlessPerson>)
+
+EquivalentClasses(<http://example.com/owl/families/ChildlessPerson> ObjectIntersectionOf(<http://example.com/owl/families/Person> ObjectComplementOf(<http://example.com/owl/families/Parent>)))
+SubClassOf(<http://example.com/owl/families/ChildlessPerson> ObjectIntersectionOf(<http://example.com/owl/families/Person> ObjectComplementOf(ObjectSomeValuesFrom(ObjectInverseOf(<http://example.com/owl/families/hasParent>) owl:Thing))))
+
+# Class: <http://example.com/owl/families/Father> (<http://example.com/owl/families/Father>)
+
+SubClassOf(<http://example.com/owl/families/Father> ObjectIntersectionOf(<http://example.com/owl/families/Man> <http://example.com/owl/families/Parent>))
+
+# Class: <http://example.com/owl/families/Grandfather> (<http://example.com/owl/families/Grandfather>)
+
+SubClassOf(<http://example.com/owl/families/Grandfather> ObjectIntersectionOf(<http://example.com/owl/families/Man> <http://example.com/owl/families/Parent>))
+
+# Class: <http://example.com/owl/families/HappyPerson> (<http://example.com/owl/families/HappyPerson>)
+
+EquivalentClasses(<http://example.com/owl/families/HappyPerson> ObjectIntersectionOf(ObjectSomeValuesFrom(<http://example.com/owl/families/hasChild> <http://example.com/owl/families/HappyPerson>) ObjectAllValuesFrom(<http://example.com/owl/families/hasChild> <http://example.com/owl/families/HappyPerson>)))
+
+# Class: <http://example.com/owl/families/Human> (<http://example.com/owl/families/Human>)
+
+EquivalentClasses(<http://example.com/owl/families/Human> <http://example.com/owl/families/Person>)
+
+# Class: <http://example.com/owl/families/JohnsChildren> (<http://example.com/owl/families/JohnsChildren>)
+
+EquivalentClasses(<http://example.com/owl/families/JohnsChildren> ObjectHasValue(<http://example.com/owl/families/hasParent> <http://example.com/owl/families/John>))
+
+# Class: <http://example.com/owl/families/Man> (<http://example.com/owl/families/Man>)
+
+SubClassOf(Annotation(rdfs:comment "States that every man is a person"@en) <http://example.com/owl/families/Man> <http://example.com/owl/families/Person>)
+DisjointClasses(<http://example.com/owl/families/Man> <http://example.com/owl/families/Woman>)
+
+# Class: <http://example.com/owl/families/Mother> (<http://example.com/owl/families/Mother>)
+
+EquivalentClasses(<http://example.com/owl/families/Mother> ObjectIntersectionOf(<http://example.com/owl/families/Parent> <http://example.com/owl/families/Woman>))
+SubClassOf(<http://example.com/owl/families/Mother> <http://example.com/owl/families/Woman>)
+
+# Class: <http://example.com/owl/families/MyBirthdayGuests> (<http://example.com/owl/families/MyBirthdayGuests>)
+
+EquivalentClasses(<http://example.com/owl/families/MyBirthdayGuests> ObjectOneOf(<http://example.com/owl/families/Bill> <http://example.com/owl/families/John> <http://example.com/owl/families/Mary>))
+
+# Class: <http://example.com/owl/families/NarcisticPerson> (<http://example.com/owl/families/NarcisticPerson>)
+
+EquivalentClasses(<http://example.com/owl/families/NarcisticPerson> ObjectHasSelf(<http://example.com/owl/families/loves>))
+
+# Class: <http://example.com/owl/families/Orphan> (<http://example.com/owl/families/Orphan>)
+
+EquivalentClasses(<http://example.com/owl/families/Orphan> ObjectAllValuesFrom(ObjectInverseOf(<http://example.com/owl/families/hasChild>) <http://example.com/owl/families/Dead>))
+
+# Class: <http://example.com/owl/families/Parent> (<http://example.com/owl/families/Parent>)
+
+EquivalentClasses(<http://example.com/owl/families/Parent> ObjectUnionOf(<http://example.com/owl/families/Father> <http://example.com/owl/families/Mother>))
+EquivalentClasses(<http://example.com/owl/families/Parent> ObjectSomeValuesFrom(<http://example.com/owl/families/hasChild> <http://example.com/owl/families/Person>))
+
+# Class: <http://example.com/owl/families/Person> (<http://example.com/owl/families/Person>)
+
+AnnotationAssertion(rdfs:comment <http://example.com/owl/families/Person> "Represents the set of all people."@en)
+
+# Class: <http://example.com/owl/families/Teenager> (<http://example.com/owl/families/Teenager>)
+
+SubClassOf(<http://example.com/owl/families/Teenager> DataSomeValuesFrom(<http://example.com/owl/families/hasAge> DatatypeRestriction(xsd:integer xsd:minExclusive "12"^^xsd:integer xsd:maxExclusive "19"^^xsd:integer)))
+
+# Class: <http://example.com/owl/families/Woman> (<http://example.com/owl/families/Woman>)
+
+SubClassOf(<http://example.com/owl/families/Woman> <http://example.com/owl/families/Person>)
+SubClassOf(Annotation(rdfs:comment "States that every woman in a person"@en) <http://example.com/owl/families/Woman> <http://example.com/owl/families/Person>)
+
+# Class: <http://example.com/owl/families/YoungChild> (<http://example.com/owl/families/YoungChild>)
+
+
+
+############################
+#   Named Individuals
+############################
+
+# Individual: <http://example.com/owl/families/Bill> (<http://example.com/owl/families/Bill>)
+
+NegativeObjectPropertyAssertion(<http://example.com/owl/families/hasDaughter> <http://example.com/owl/families/Bill> <http://example.com/owl/families/Susan>)
+NegativeObjectPropertyAssertion(<http://example.com/owl/families/hasWife> <http://example.com/owl/families/Bill> <http://example.com/owl/families/Mary>)
+
+# Individual: <http://example.com/owl/families/Father> (<http://example.com/owl/families/Father>)
+
+ClassAssertion(<http://example.com/owl/families/SocialRole> <http://example.com/owl/families/Father>)
+
+# Individual: <http://example.com/owl/families/Jack> (<http://example.com/owl/families/Jack>)
+
+ClassAssertion(<http://example.com/owl/families/Person> <http://example.com/owl/families/Jack>)
+ClassAssertion(ObjectComplementOf(<http://example.com/owl/families/Parent>) <http://example.com/owl/families/Jack>)
+NegativeDataPropertyAssertion(<http://example.com/owl/families/hasAge> <http://example.com/owl/families/Jack> "53"^^xsd:integer)
+
+# Individual: <http://example.com/owl/families/James> (<http://example.com/owl/families/James>)
+
+SameIndividual(<http://example.com/owl/families/James> <http://example.com/owl/families/Jim>)
+
+# Individual: <http://example.com/owl/families/John> (<http://example.com/owl/families/John>)
+
+ClassAssertion(<http://example.com/owl/families/Father> <http://example.com/owl/families/John>)
+ClassAssertion(ObjectMinCardinality(2 <http://example.com/owl/families/hasChild> <http://example.com/owl/families/Parent>) <http://example.com/owl/families/John>)
+ClassAssertion(ObjectExactCardinality(3 <http://example.com/owl/families/hasChild> <http://example.com/owl/families/Parent>) <http://example.com/owl/families/John>)
+ClassAssertion(ObjectExactCardinality(5 <http://example.com/owl/families/hasChild>) <http://example.com/owl/families/John>)
+ClassAssertion(ObjectMaxCardinality(4 <http://example.com/owl/families/hasChild> <http://example.com/owl/families/Parent>) <http://example.com/owl/families/John>)
+SameIndividual(<http://example.com/owl/families/John> <http://homepages.cs.ncl.ac.uk/phillip.lord/scratch/family-other.owl#JohnBrown>)
+ObjectPropertyAssertion(<http://example.com/owl/families/hasWife> <http://example.com/owl/families/John> <http://example.com/owl/families/Mary>)
+DataPropertyAssertion(<http://example.com/owl/families/hasAge> <http://example.com/owl/families/John> "51"^^xsd:integer)
+
+# Individual: <http://example.com/owl/families/Mary> (<http://example.com/owl/families/Mary>)
+
+ClassAssertion(<http://example.com/owl/families/Person> <http://example.com/owl/families/Mary>)
+ClassAssertion(<http://example.com/owl/families/Woman> <http://example.com/owl/families/Mary>)
+SameIndividual(<http://example.com/owl/families/Mary> <http://homepages.cs.ncl.ac.uk/phillip.lord/scratch/family-other.owl#MaryBrown>)
+
+
+SubClassOf(ObjectIntersectionOf(<http://example.com/owl/families/Female> ObjectOneOf(<http://example.com/owl/families/Bill> <http://example.com/owl/families/Mary> <http://example.com/owl/families/Meg>)) ObjectIntersectionOf(<http://example.com/owl/families/Parent> ObjectAllValuesFrom(<http://example.com/owl/families/hasChild> <http://example.com/owl/families/Female>) ObjectMaxCardinality(1 <http://example.com/owl/families/hasChild>)))
+DisjointClasses(<http://example.com/owl/families/Father> <http://example.com/owl/families/Mother> <http://example.com/owl/families/YoungChild>)
+DifferentIndividuals(<http://example.com/owl/families/Bill> <http://example.com/owl/families/John>)
+SubObjectPropertyOf(ObjectPropertyChain(<http://example.com/owl/families/hasFather> <http://example.com/owl/families/hasBrother>) <http://example.com/owl/families/hasUncle>)
+SubObjectPropertyOf(ObjectPropertyChain(<http://example.com/owl/families/hasParent> <http://example.com/owl/families/hasParent>) <http://example.com/owl/families/hasGrandparent>)
+HasKey(<http://example.com/owl/families/Person> () (<http://example.com/owl/families/hasSSN>))
+)

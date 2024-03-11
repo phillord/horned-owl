@@ -764,13 +764,13 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
                     }
                 }
                 [[_, Term::OWL(VOWL::UnionOf), Term::BNode(bnodeid)],//: rustfmt hard line!
-                [_, Term::RDF(VRDF::Type), Term::RDFS(VRDFS::Datatype)]] =>
+                 [_, Term::RDF(VRDF::Type), Term::RDFS(VRDFS::Datatype)]] =>
                 {
-                   ok_some! {
-                       DataRange::DataUnionOf(
-                           self.fetch_dr_seq(bnodeid)?
-                       )
-                   }
+                    ok_some! {
+                        DataRange::DataUnionOf(
+                            self.fetch_dr_seq(bnodeid)?
+                        )
+                    }
                 }
                 [[_, Term::OWL(VOWL::DatatypeComplementOf), term],//:
                  [_, Term::RDF(VRDF::Type), Term::RDFS(VRDFS::Datatype)]] =>
@@ -2071,8 +2071,8 @@ mod test {
     }
 
     #[test]
-    fn one_subclass() {
-        compare("one-subclass");
+    fn subclass() {
+        compare("subclass");
     }
 
     #[test]
@@ -2189,7 +2189,7 @@ mod test {
         // comment a language and a datatype ("PlainLiteral") while
         // the RDF one gives it just the language, as literals can't
         // be both. Which is correct?
-        compare("one-comment");
+        compare("comment");
     }
 
     #[test]
@@ -2201,7 +2201,7 @@ mod test {
     fn broken_ontology_annotation () {
         // Some verisons of the OWL API do not include an
         // AnnotationProperty declaration. We should make this work.
-        let ont:SetOntology<_> = read_ok(&mut slurp_rdfont("broken-ontology-annotation").as_bytes()).into();
+        let ont:SetOntology<_> = read_ok(&mut slurp_rdfont("manual/broken-ontology-annotation").as_bytes()).into();
         let ont:ComponentMappedOntology<_, RcAnnotatedComponent> = ont.into();
         assert_eq!(ont.i().ontology_annotation().count(), 1);
         assert_eq!(ont.i().declare_annotation_property().count(), 0);
@@ -2570,7 +2570,7 @@ mod test {
 
     #[test]
     fn family_other() {
-        compare("family-other")
+        compare("manual/family-other")
     }
 
     #[test]

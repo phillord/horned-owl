@@ -1259,17 +1259,6 @@ pub mod test {
     }
 
     #[test]
-    fn test_simple_ontology_rendered_by_horned() {
-        let ont_s = include_str!("../../ont/owl-xml/one-ont-from-horned.owx");
-        let (ont, _) = read_ok(&mut ont_s.as_bytes());
-
-        assert_eq!(
-            ont.i().the_ontology_id_or_default().iri.as_ref().unwrap().as_ref(),
-            "http://example.com/iri"
-        );
-    }
-
-    #[test]
     fn test_class() {
         let ont_s = include_str!("../../ont/owl-xml/class.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
@@ -1323,7 +1312,7 @@ pub mod test {
 
     #[test]
     fn test_one_class_fqn() {
-        let ont_s = include_str!("../../ont/owl-xml/one-class-fully-qualified.owx");
+        let ont_s = include_str!("../../ont/owl-xml/manual/one-class-fully-qualified.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
         assert_eq!(ont.i().declare_class().count(), 1);
@@ -1690,7 +1679,7 @@ pub mod test {
         let ss = ont.i().sub_class_of().next().unwrap();
         match ss.sup {
             ClassExpression::ObjectHasSelf(ObjectPropertyExpression::ObjectProperty(ref op)) => {
-                assert_eq!(String::from(op), "http://example.com/iri#o")
+                assert_eq!(String::from(op), "http://www.example.com/iri#op")
             }
             _ => {
                 panic!("Expecting ObjectProperty");
@@ -1717,7 +1706,7 @@ pub mod test {
                 } => String::from(op),
                 _ => "It didn't match".to_string(),
             },
-            "http://www.example.com#r"
+            "http://www.example.com/iri#r"
         );
     }
 
@@ -1835,7 +1824,7 @@ pub mod test {
 
         match dd {
             DatatypeDefinition { kind, range } => {
-                assert_eq!(String::from(kind), "http://www.example.com/D");
+                assert_eq!(String::from(kind), "http://www.example.com/iri#D");
 
                 match range {
                     DataRange::Datatype(real) => {
@@ -2081,7 +2070,7 @@ pub mod test {
 
     #[test]
     fn family() {
-        let ont_s = include_str!("../../ont/owl-xml/family.owx");
+        let ont_s = include_str!("../../ont/owl-xml/manual/family.owx");
         let (_, _) = read_ok(&mut ont_s.as_bytes());
     }
 }
