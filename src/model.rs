@@ -1046,7 +1046,7 @@ components! {
         sub: ClassExpression<A>
     },
 
-    /// An equivalance relationship between two `ClassExpression`.
+    /// An equivalence relationship between two `ClassExpression`.
     ///
     /// All instances of `ClassExpression` are also instances
     /// of other other.
@@ -1068,7 +1068,7 @@ components! {
 
     /// A sub property relationship between two object properties.
     ///
-    /// The existance of the sub property relationship between two
+    /// The existence of the sub property relationship between two
     /// individuals also implies the super property relationship
     /// also. The super property can also be a property chain.
     /// So, if `s` is a super property of `r` then `a r b` implies `a
@@ -1226,7 +1226,7 @@ components! {
     /// See also: [Functional Data Property]:(https://www.w3.org/TR/owl2-syntax/#Functional_Data_Properties)
     Axiom FunctionalDataProperty(DataProperty<A>),
 
-    /// Defintion of a datatype.
+    /// Definition of a datatype.
     ///
     /// See also: [Datatype Definitions](https://www.w3.org/TR/owl2-syntax/#Datatype_Definitions)
     Axiom DatatypeDefinition {
@@ -1410,6 +1410,7 @@ pub struct Annotation<A> {
 pub enum AnnotationValue<A> {
     Literal(Literal<A>),
     IRI(IRI<A>),
+    AnonymousIndividual(AnonymousIndividual<A>),
 }
 
 impl<A: ForIRI> From<Literal<A>> for AnnotationValue<A> {
@@ -1421,6 +1422,12 @@ impl<A: ForIRI> From<Literal<A>> for AnnotationValue<A> {
 impl<A: ForIRI> From<IRI<A>> for AnnotationValue<A> {
     fn from(iri: IRI<A>) -> AnnotationValue<A> {
         AnnotationValue::IRI(iri)
+    }
+}
+
+impl<A: ForIRI> From<AnonymousIndividual<A>> for AnnotationValue<A> {
+    fn from(ai: AnonymousIndividual<A>) -> Self {
+        AnnotationValue::AnonymousIndividual(ai)
     }
 }
 
@@ -1634,11 +1641,11 @@ pub enum ClassExpression<A> {
         bce: Box<ClassExpression<A>>,
     },
 
-    /// An exististential relationship.
+    /// An existential relationship.
     ///
     /// This is the anonymous class of individuals `i` which have the
     /// relationship `dp` to the data range, `dr`. Every individual
-    /// `i` must have this relationship to data constrainted by `dr`.
+    /// `i` must have this relationship to data constrained by `dr`.
     ///
     /// See also: [Existential Quantification](https://www.w3.org/TR/owl2-syntax/#Existential_Quantification_2)
     DataSomeValuesFrom {
@@ -1774,9 +1781,8 @@ pub trait MutableOntology<A> {
 
 #[cfg(test)]
 mod test {
-    use crate::ontology::component_mapped::ComponentMappedOntology;
-
     use super::*;
+    use crate::ontology::component_mapped::ComponentMappedOntology;
 
     #[test]
     fn test_iri_from_string() {

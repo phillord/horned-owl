@@ -25,7 +25,7 @@ use super::set::SetIndex;
 
 use std::collections::HashSet;
 
-#[derive(Debug, Default, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq)]
 pub struct IRIMappedIndex<A, AA> {
     irindex: RefCell<BTreeMap<IRI<A>, BTreeSet<AA>>>,
 }
@@ -96,6 +96,14 @@ impl<A: ForIRI, AA: ForIndex<A>> IRIMappedIndex<A, AA> {
     ///
     pub fn component(&self, iri: &IRI<A>) -> impl Iterator<Item = &Component<A>> {
         self.component_for_iri(iri).map(|ann| &ann.component)
+    }
+}
+
+impl<A, AA> Default for IRIMappedIndex<A, AA> {
+    fn default() -> Self {
+        Self {
+            irindex: Default::default(),
+        }
     }
 }
 

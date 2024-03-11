@@ -659,6 +659,12 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
                     av: ob.clone().into(),
                 }
             }
+            [s, Iri(p), Term::BNode(bnodeid)] => {
+                Annotation {
+                    ap: AnnotationProperty(p.clone()),
+                    av: AnonymousIndividual(bnodeid.0.clone()).into(),
+                }
+            }
             _ => {
                 dbg!(t);
                 todo!()
@@ -1794,10 +1800,10 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
                 self.headers();
 
                 // Can we pull out annotations at this point and handle them
-                // as we do in reader2? Tranform them into a triple which we
+                // as we do in reader2? Transform them into a triple which we
                 // handle normally, then bung the annotation on later?
 
-                // Table 5: Backward compability -- skip this for now (maybe
+                // Table 5: Backward compatibility -- skip this for now (maybe
                 // for ever)
 
                 // Table 6: Don't understand this
@@ -2333,11 +2339,6 @@ mod test {
     }
 
     #[test]
-    fn datatype() {
-        compare("datatype");
-    }
-
-    #[test]
     fn object_has_value() {
         compare("object-has-value");
     }
@@ -2370,6 +2371,11 @@ mod test {
     #[test]
     fn object_exact_cardinality() {
         compare("object-exact-cardinality");
+    }
+
+    #[test]
+    fn datatype() {
+        compare("datatype");
     }
 
     #[test]
@@ -2619,6 +2625,18 @@ mod test {
     #[test]
     fn annotation_with_anonymous() {
         let s = slurp_rdfont("annotation-with-anonymous");
+        let ont: ComponentMappedOntology<_, _> = read_ok(&mut s.as_bytes()).into();
+
+        // We cannot do the usual "compare" because the anonymous
+        // individuals break a direct comparision
+        assert_eq!(ont.i().annotation_assertion().count(), 1);
+
+        let _aa = ont.i().annotation_assertion().next();
+    }
+
+    #[test]
+    fn anonymous_annotation_value() {
+        let s = slurp_rdfont("anonymous-annotation-value");
         let ont: ComponentMappedOntology<_, _> = read_ok(&mut s.as_bytes()).into();
 
         // We cannot do the usual "compare" because the anonymous

@@ -498,6 +498,9 @@ render! {
                         f, bn, &self.ap.0, iri
                     )
                 }
+                AnnotationValue::AnonymousIndividual(an) => {
+                    triple!(f, bn, &self.ap.0, an)
+                }
             }
         )
     }

@@ -54,7 +54,7 @@ macro_rules! onimpl {
     };
 }
 
-#[derive(Debug, Default, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq)]
 pub struct ComponentMappedIndex<A, AA> {
     component: RefCell<BTreeMap<ComponentKind, BTreeSet<AA>>>,
     pd: PhantomData<A>,
@@ -189,7 +189,7 @@ onimpl! {InverseFunctionalObjectProperty, inverse_functional_object_property}
 onimpl! {ReflexiveObjectProperty, reflexive_object_property}
 onimpl! {IrreflexiveObjectProperty, irreflexive_object_property}
 onimpl! {SymmetricObjectProperty, symmetric_object_property}
-onimpl! {AsymmetricObjectProperty, assymmetric_object_property}
+onimpl! {AsymmetricObjectProperty, asymmetric_object_property}
 onimpl! {TransitiveObjectProperty, transitive_object_property}
 onimpl! {SubDataPropertyOf, sub_data_property_of}
 onimpl! {EquivalentDataProperties, equivalent_data_properties}
@@ -210,6 +210,15 @@ onimpl! {AnnotationAssertion, annotation_assertion}
 onimpl! {SubAnnotationPropertyOf, sub_annotation_property_of}
 onimpl! {AnnotationPropertyDomain, annotation_property_domain}
 onimpl! {AnnotationPropertyRange, annotation_property_range}
+
+impl<A, AA> Default for ComponentMappedIndex<A, AA> {
+    fn default() -> Self {
+        Self {
+            component: Default::default(),
+            pd: Default::default(),
+        }
+    }
+}
 
 /// An owning iterator over the annotated components of an `Ontology`.
 impl<A: ForIRI, AA: ForIndex<A>> IntoIterator for ComponentMappedIndex<A, AA> {

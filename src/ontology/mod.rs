@@ -29,7 +29,7 @@
 
 //! Other indexes are less general purpose. The
 //! [`declaration_mapped`](declaration_mapped.html) indexes only
-//! declaration axioms, allowing rapid look up of the declarated type
+//! declaration axioms, allowing rapid look up of the declared type
 //! of an IRI. As it ignores most axioms passed to it, it does not
 //! provide iteration.
 
