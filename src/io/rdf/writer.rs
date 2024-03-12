@@ -585,6 +585,7 @@ impl<A: ForIRI> Render<A, Annotatable<A>> for Component<A> {
             Component::AnnotationPropertyDomain(cmp) => cmp.render(f, ng)?.into(),
             Component::AnnotationPropertyRange(cmp) => cmp.render(f, ng)?.into(),
             Component::ClassAssertion(cmp) => cmp.render(f, ng)?.into(),
+            Component::Rule(_) => todo!("SWRL todo"),
         })
     }
 }

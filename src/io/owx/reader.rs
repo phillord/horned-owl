@@ -303,7 +303,6 @@ fn is_owl(res: &ResolveResult) -> bool {
     } else {
         false
     }
-    
 }
 
 fn is_owl_name(res: &ResolveResult, e: &BytesEnd, tag: &[u8]) -> bool {
@@ -366,7 +365,7 @@ from_start! {
         let datatype_iri = get_iri_value_for(r, e, b"datatypeIRI")?;
         let lang = get_attr_value_str(&mut r.reader, e, b"xml:lang")?;
 
-        // quick-xml only offers `r.reader.read_text()` for NsReader<'i &u8> as 
+        // quick-xml only offers `r.reader.read_text()` for NsReader<'i &u8> as
         // of version 0.26.0.
         // So, we need to work around it.
         //
@@ -379,7 +378,7 @@ from_start! {
             if let Event::End(event) = r.reader.read_event_into(&mut buf)? {
                 if let b"Literal" = event.local_name().as_ref() { break; }
             }
-            
+
             // This decoding step is not sufficient on its own.
             // For instance, "A --> B" would yield "A --&gt; B".
             let escaped_str = r.reader.decoder().decode(&buf)?;
@@ -587,6 +586,15 @@ fn axiom_from_start<A: ForIRI, R: BufRead>(
             iri: from_next(r)?,
         }
         .into(),
+        b"DLSafeRule" => {
+            discard_till(r, b"Body")?;
+            let body = till_end(r, b"Body")?;
+            discard_till(r, b"Head")?;
+            Rule {
+                body,
+                head: till_end(r, b"Head")?
+            }
+        }.into(),
         _ => {
             return Err(error_unexpected_tag(axiom_kind, r));
         }
@@ -2068,6 +2076,13 @@ pub mod test {
                 &cl.sub, ClassExpression::ObjectSomeValuesFrom{ope:_, bce:_}
             }
         }
+    }
+
+    #[test]
+    fn swrl_rule_basic() {
+        let ont_s = include_str!("../../ont/owl-xml/swrl_rule_basic.owx");
+
+        let (_, _) = read_ok(&mut ont_s.as_bytes());
     }
 
     #[test]
