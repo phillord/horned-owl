@@ -1689,8 +1689,8 @@ mod test {
     }
 
     #[test]
-    fn round_one_comment() {
-        assert_round(include_str!("../../ont/owl-rdf/one-comment.owl"));
+    fn round_comment() {
+        assert_round(include_str!("../../ont/owl-rdf/comment.owl"));
     }
 
     #[test]

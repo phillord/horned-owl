@@ -1,0 +1,30 @@
+Prefix(:=<o>)
+Prefix(owl:=<http://www.w3.org/2002/07/owl#>)
+Prefix(rdf:=<http://www.w3.org/1999/02/22-rdf-syntax-ns#>)
+Prefix(xml:=<http://www.w3.org/XML/1998/namespace>)
+Prefix(xsd:=<http://www.w3.org/2001/XMLSchema#>)
+Prefix(rdfs:=<http://www.w3.org/2000/01/rdf-schema#>)
+
+
+Ontology(<http://www.example.com/iri>
+<http://www.example.com/viri>
+
+Declaration(NamedIndividual(<http://www.example.com/iri#I>))
+Declaration(NamedIndividual(<http://www.example.com/iri#J>))
+Declaration(NamedIndividual(<http://www.example.com/iri#K>))
+############################
+#   Named Individuals
+############################
+
+# Individual: <http://www.example.com/iri#I> (<http://www.example.com/iri#I>)
+
+
+# Individual: <http://www.example.com/iri#J> (<http://www.example.com/iri#J>)
+
+
+# Individual: <http://www.example.com/iri#K> (<http://www.example.com/iri#K>)
+
+
+
+DifferentIndividuals(<http://www.example.com/iri#I> <http://www.example.com/iri#J> <http://www.example.com/iri#K>)
+)

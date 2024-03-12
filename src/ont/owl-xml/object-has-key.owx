@@ -19,9 +19,6 @@
     <Declaration>
         <ObjectProperty IRI="#r"/>
     </Declaration>
-    <Declaration>
-        <DataProperty IRI="#A"/>
-    </Declaration>
     <HasKey>
         <Class IRI="#C"/>
         <ObjectProperty IRI="#r"/>

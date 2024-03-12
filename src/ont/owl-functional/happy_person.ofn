@@ -1,0 +1,33 @@
+Prefix(:=<o>)
+Prefix(owl:=<http://www.w3.org/2002/07/owl#>)
+Prefix(rdf:=<http://www.w3.org/1999/02/22-rdf-syntax-ns#>)
+Prefix(xml:=<http://www.w3.org/XML/1998/namespace>)
+Prefix(xsd:=<http://www.w3.org/2001/XMLSchema#>)
+Prefix(rdfs:=<http://www.w3.org/2000/01/rdf-schema#>)
+
+
+Ontology(<http://www.example.com/iri>
+<http://www.example.com/viri>
+Import(<http://homepages.cs.ncl.ac.uk/phillip.lord/scratch/family-other.owl#>)
+
+Declaration(Class(<http://www.example.com/iri#HappyPerson>))
+Declaration(ObjectProperty(<http://www.example.com/iri#hasChild>))
+############################
+#   Object Properties
+############################
+
+# Object Property: <http://www.example.com/iri#hasChild> (<http://www.example.com/iri#hasChild>)
+
+AsymmetricObjectProperty(<http://www.example.com/iri#hasChild>)
+
+
+############################
+#   Classes
+############################
+
+# Class: <http://www.example.com/iri#HappyPerson> (<http://www.example.com/iri#HappyPerson>)
+
+EquivalentClasses(<http://www.example.com/iri#HappyPerson> ObjectIntersectionOf(ObjectSomeValuesFrom(<http://www.example.com/iri#hasChild> <http://www.example.com/iri#HappyPerson>) ObjectAllValuesFrom(<http://www.example.com/iri#hasChild> <http://www.example.com/iri#HappyPerson>)))
+
+
+)

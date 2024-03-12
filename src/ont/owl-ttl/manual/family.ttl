@@ -1,0 +1,500 @@
+@prefix : <http://example.com/owl/families/> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix xml: <http://www.w3.org/XML/1998/namespace> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix family: <http://example.com/owl/families/> .
+@prefix family-other: <http://homepages.cs.ncl.ac.uk/phillip.lord/scratch/family-other.owl##> .
+@base <http://example.com/owl/families/> .
+
+<http://example.com/owl/families/> rdf:type owl:Ontology ;
+                                    owl:imports <http://homepages.cs.ncl.ac.uk/phillip.lord/scratch/family-other.owl#> .
+
+#################################################################
+#    Datatypes
+#################################################################
+
+###  http://example.com/owl/families/majorAge
+family:majorAge rdf:type rdfs:Datatype ;
+                owl:equivalentClass [ rdf:type rdfs:Datatype ;
+                                      owl:intersectionOf ( family:personAge
+                                                           [ rdf:type rdfs:Datatype ;
+                                                             owl:datatypeComplementOf family:minorAge
+                                                           ]
+                                                         )
+                                    ] .
+
+
+###  http://example.com/owl/families/minorAge
+family:minorAge rdf:type rdfs:Datatype ;
+                owl:equivalentClass [ rdf:type rdfs:Datatype ;
+                                      owl:onDatatype xsd:integer ;
+                                      owl:withRestrictions ( [ xsd:minInclusive 0
+                                                             ]
+                                                             [ xsd:maxInclusive 18
+                                                             ]
+                                                           )
+                                    ] .
+
+
+###  http://example.com/owl/families/personAge
+family:personAge rdf:type rdfs:Datatype ;
+                 owl:equivalentClass [ rdf:type rdfs:Datatype ;
+                                       owl:onDatatype xsd:integer ;
+                                       owl:withRestrictions ( [ xsd:minInclusive 0
+                                                              ]
+                                                              [ xsd:maxInclusive 150
+                                                              ]
+                                                            )
+                                     ] .
+
+
+###  http://example.com/owl/families/toddlerAge
+family:toddlerAge rdf:type rdfs:Datatype ;
+                  owl:equivalentClass [ rdf:type rdfs:Datatype ;
+                                        owl:oneOf [ rdf:type rdf:List ;
+                                                    rdf:first 1 ;
+                                                    rdf:rest [ rdf:type rdf:List ;
+                                                               rdf:first 2 ;
+                                                               rdf:rest rdf:nil
+                                                             ]
+                                                  ]
+                                      ] .
+
+
+#################################################################
+#    Object Properties
+#################################################################
+
+###  http://example.com/owl/families/hasAncestor
+family:hasAncestor rdf:type owl:ObjectProperty ,
+                            owl:TransitiveProperty .
+
+
+###  http://example.com/owl/families/hasBrother
+family:hasBrother rdf:type owl:ObjectProperty .
+
+
+###  http://example.com/owl/families/hasChild
+family:hasChild rdf:type owl:ObjectProperty ;
+                owl:equivalentProperty <http://homepages.cs.ncl.ac.uk/phillip.lord/scratch/family-other.owl#child> ;
+                owl:inverseOf family:hasParent ;
+                rdf:type owl:AsymmetricProperty .
+
+
+###  http://example.com/owl/families/hasDaughter
+family:hasDaughter rdf:type owl:ObjectProperty ;
+                   owl:propertyDisjointWith family:hasSon .
+
+
+###  http://example.com/owl/families/hasFather
+family:hasFather rdf:type owl:ObjectProperty ;
+                 rdfs:subPropertyOf family:hasParent .
+
+
+###  http://example.com/owl/families/hasGrandparent
+family:hasGrandparent rdf:type owl:ObjectProperty ;
+                      owl:propertyChainAxiom ( family:hasParent
+                                               family:hasParent
+                                             ) .
+
+
+###  http://example.com/owl/families/hasHusband
+family:hasHusband rdf:type owl:ObjectProperty ,
+                           owl:FunctionalProperty ,
+                           owl:InverseFunctionalProperty .
+
+
+###  http://example.com/owl/families/hasParent
+family:hasParent rdf:type owl:ObjectProperty ;
+                 owl:propertyDisjointWith family:hasSpouse .
+
+
+###  http://example.com/owl/families/hasRelative
+family:hasRelative rdf:type owl:ObjectProperty ,
+                            owl:ReflexiveProperty .
+
+
+###  http://example.com/owl/families/hasSon
+family:hasSon rdf:type owl:ObjectProperty .
+
+
+###  http://example.com/owl/families/hasSpouse
+family:hasSpouse rdf:type owl:ObjectProperty ,
+                          owl:SymmetricProperty .
+
+
+###  http://example.com/owl/families/hasUncle
+family:hasUncle rdf:type owl:ObjectProperty ;
+                owl:propertyChainAxiom ( family:hasFather
+                                         family:hasBrother
+                                       ) .
+
+
+###  http://example.com/owl/families/hasWife
+family:hasWife rdf:type owl:ObjectProperty ;
+               rdfs:subPropertyOf family:hasSpouse ;
+               rdfs:domain family:Man ;
+               rdfs:range family:Woman .
+
+
+###  http://example.com/owl/families/loves
+family:loves rdf:type owl:ObjectProperty .
+
+
+###  http://example.com/owl/families/parentOf
+family:parentOf rdf:type owl:ObjectProperty ,
+                         owl:IrreflexiveProperty .
+
+
+###  http://homepages.cs.ncl.ac.uk/phillip.lord/scratch/family-other.owl#child
+
+#################################################################
+#    Data properties
+#################################################################
+
+###  http://example.com/owl/families/hasAge
+family:hasAge rdf:type owl:DatatypeProperty ;
+              owl:equivalentProperty <http://homepages.cs.ncl.ac.uk/phillip.lord/scratch/family-other.owl#age> ;
+              rdf:type owl:FunctionalProperty ;
+              rdfs:domain family:Person ;
+              rdfs:range xsd:nonNegativeInteger .
+
+
+###  http://example.com/owl/families/hasSSN
+family:hasSSN rdf:type owl:DatatypeProperty .
+
+
+###  http://homepages.cs.ncl.ac.uk/phillip.lord/scratch/family-other.owl#age
+
+#################################################################
+#    Classes
+#################################################################
+
+###  http://example.com/owl/families/Adult
+family:Adult rdf:type owl:Class ;
+             owl:equivalentClass <http://homepages.cs.ncl.ac.uk/phillip.lord/scratch/family-other.owl#Grownup> .
+
+
+###  http://example.com/owl/families/ChildlessPerson
+family:ChildlessPerson rdf:type owl:Class ;
+                       owl:equivalentClass [ owl:intersectionOf ( family:Person
+                                                                  [ rdf:type owl:Class ;
+                                                                    owl:complementOf family:Parent
+                                                                  ]
+                                                                ) ;
+                                             rdf:type owl:Class
+                                           ] ;
+                       rdfs:subClassOf [ owl:intersectionOf ( family:Person
+                                                              [ rdf:type owl:Class ;
+                                                                owl:complementOf [ rdf:type owl:Restriction ;
+                                                                                   owl:onProperty [ owl:inverseOf family:hasParent
+                                                                                                  ] ;
+                                                                                   owl:someValuesFrom owl:Thing
+                                                                                 ]
+                                                              ]
+                                                            ) ;
+                                         rdf:type owl:Class
+                                       ] .
+
+
+###  http://example.com/owl/families/Dead
+family:Dead rdf:type owl:Class .
+
+
+###  http://example.com/owl/families/Father
+family:Father rdf:type owl:Class ;
+              rdfs:subClassOf [ owl:intersectionOf ( family:Man
+                                                     family:Parent
+                                                   ) ;
+                                rdf:type owl:Class
+                              ] .
+
+
+###  http://example.com/owl/families/Female
+family:Female rdf:type owl:Class .
+
+
+###  http://example.com/owl/families/Grandfather
+family:Grandfather rdf:type owl:Class ;
+                   rdfs:subClassOf [ owl:intersectionOf ( family:Man
+                                                          family:Parent
+                                                        ) ;
+                                     rdf:type owl:Class
+                                   ] .
+
+
+###  http://example.com/owl/families/HappyPerson
+family:HappyPerson rdf:type owl:Class ;
+                   owl:equivalentClass [ owl:intersectionOf ( [ rdf:type owl:Restriction ;
+                                                                owl:onProperty family:hasChild ;
+                                                                owl:someValuesFrom family:HappyPerson
+                                                              ]
+                                                              [ rdf:type owl:Restriction ;
+                                                                owl:onProperty family:hasChild ;
+                                                                owl:allValuesFrom family:HappyPerson
+                                                              ]
+                                                            ) ;
+                                         rdf:type owl:Class
+                                       ] .
+
+
+###  http://example.com/owl/families/Human
+family:Human rdf:type owl:Class ;
+             owl:equivalentClass family:Person .
+
+
+###  http://example.com/owl/families/JohnsChildren
+family:JohnsChildren rdf:type owl:Class ;
+                     owl:equivalentClass [ rdf:type owl:Restriction ;
+                                           owl:onProperty family:hasParent ;
+                                           owl:hasValue family:John
+                                         ] .
+
+
+###  http://example.com/owl/families/Man
+family:Man rdf:type owl:Class ;
+           rdfs:subClassOf family:Person ;
+           owl:disjointWith family:Woman .
+
+[ rdf:type owl:Axiom ;
+   owl:annotatedSource family:Man ;
+   owl:annotatedProperty rdfs:subClassOf ;
+   owl:annotatedTarget family:Person ;
+   rdfs:comment "States that every man is a person"@en
+ ] .
+
+
+###  http://example.com/owl/families/Mother
+family:Mother rdf:type owl:Class ;
+              owl:equivalentClass [ owl:intersectionOf ( family:Parent
+                                                         family:Woman
+                                                       ) ;
+                                    rdf:type owl:Class
+                                  ] ;
+              rdfs:subClassOf family:Woman .
+
+
+###  http://example.com/owl/families/MyBirthdayGuests
+family:MyBirthdayGuests rdf:type owl:Class ;
+                        owl:equivalentClass [ rdf:type owl:Class ;
+                                              owl:oneOf ( family:Bill
+                                                          family:John
+                                                          family:Mary
+                                                        )
+                                            ] .
+
+
+###  http://example.com/owl/families/NarcisticPerson
+family:NarcisticPerson rdf:type owl:Class ;
+                       owl:equivalentClass [ rdf:type owl:Restriction ;
+                                             owl:onProperty family:loves ;
+                                             owl:hasSelf "true"^^xsd:boolean
+                                           ] .
+
+
+###  http://example.com/owl/families/Orphan
+family:Orphan rdf:type owl:Class ;
+              owl:equivalentClass [ rdf:type owl:Restriction ;
+                                    owl:onProperty [ owl:inverseOf family:hasChild
+                                                   ] ;
+                                    owl:allValuesFrom family:Dead
+                                  ] .
+
+
+###  http://example.com/owl/families/Parent
+family:Parent rdf:type owl:Class ;
+              owl:equivalentClass [ rdf:type owl:Class ;
+                                    owl:unionOf ( family:Father
+                                                  family:Mother
+                                                )
+                                  ] ,
+                                  [ rdf:type owl:Restriction ;
+                                    owl:onProperty family:hasChild ;
+                                    owl:someValuesFrom family:Person
+                                  ] .
+
+
+###  http://example.com/owl/families/Person
+family:Person rdf:type owl:Class ;
+              owl:hasKey ( family:hasSSN
+                         ) ;
+              rdfs:comment "Represents the set of all people."@en .
+
+
+###  http://example.com/owl/families/SocialRole
+family:SocialRole rdf:type owl:Class .
+
+
+###  http://example.com/owl/families/Teenager
+family:Teenager rdf:type owl:Class ;
+                rdfs:subClassOf [ rdf:type owl:Restriction ;
+                                  owl:onProperty family:hasAge ;
+                                  owl:someValuesFrom [ rdf:type rdfs:Datatype ;
+                                                       owl:onDatatype xsd:integer ;
+                                                       owl:withRestrictions ( [ xsd:minExclusive 12
+                                                                              ]
+                                                                              [ xsd:maxExclusive 19
+                                                                              ]
+                                                                            )
+                                                     ]
+                                ] .
+
+
+###  http://example.com/owl/families/Woman
+family:Woman rdf:type owl:Class ;
+             rdfs:subClassOf family:Person .
+
+[ rdf:type owl:Axiom ;
+   owl:annotatedSource family:Woman ;
+   owl:annotatedProperty rdfs:subClassOf ;
+   owl:annotatedTarget family:Person ;
+   rdfs:comment "States that every woman in a person"@en
+ ] .
+
+
+###  http://example.com/owl/families/YoungChild
+family:YoungChild rdf:type owl:Class .
+
+
+###  http://homepages.cs.ncl.ac.uk/phillip.lord/scratch/family-other.owl#Grownup
+
+#################################################################
+#    Individuals
+#################################################################
+
+###  http://example.com/owl/families/Bill
+family:Bill rdf:type owl:NamedIndividual .
+
+[ rdf:type owl:NegativePropertyAssertion ;
+   owl:sourceIndividual family:Bill ;
+   owl:assertionProperty family:hasDaughter ;
+   owl:targetIndividual family:Susan
+ ] .
+
+[ rdf:type owl:NegativePropertyAssertion ;
+   owl:sourceIndividual family:Bill ;
+   owl:assertionProperty family:hasWife ;
+   owl:targetIndividual family:Mary
+ ] .
+
+
+###  http://example.com/owl/families/Father
+family:Father rdf:type owl:NamedIndividual ,
+                       family:SocialRole .
+
+
+###  http://example.com/owl/families/Jack
+family:Jack rdf:type owl:NamedIndividual ,
+                     family:Person ,
+                     [ rdf:type owl:Class ;
+                       owl:complementOf family:Parent
+                     ] .
+
+[ rdf:type owl:NegativePropertyAssertion ;
+   owl:sourceIndividual family:Jack ;
+   owl:assertionProperty family:hasAge ;
+   owl:targetValue 53
+ ] .
+
+
+###  http://example.com/owl/families/James
+family:James rdf:type owl:NamedIndividual ;
+             owl:sameAs family:Jim .
+
+
+###  http://example.com/owl/families/Jim
+family:Jim rdf:type owl:NamedIndividual .
+
+
+###  http://example.com/owl/families/John
+family:John rdf:type owl:NamedIndividual ,
+                     family:Father ,
+                     [ rdf:type owl:Restriction ;
+                       owl:onProperty family:hasChild ;
+                       owl:minQualifiedCardinality "2"^^xsd:nonNegativeInteger ;
+                       owl:onClass family:Parent
+                     ] ,
+                     [ rdf:type owl:Restriction ;
+                       owl:onProperty family:hasChild ;
+                       owl:qualifiedCardinality "3"^^xsd:nonNegativeInteger ;
+                       owl:onClass family:Parent
+                     ] ,
+                     [ rdf:type owl:Restriction ;
+                       owl:onProperty family:hasChild ;
+                       owl:cardinality "5"^^xsd:nonNegativeInteger
+                     ] ,
+                     [ rdf:type owl:Restriction ;
+                       owl:onProperty family:hasChild ;
+                       owl:maxQualifiedCardinality "4"^^xsd:nonNegativeInteger ;
+                       owl:onClass family:Parent
+                     ] ;
+            owl:sameAs <http://homepages.cs.ncl.ac.uk/phillip.lord/scratch/family-other.owl#JohnBrown> ;
+            family:hasWife family:Mary ;
+            family:hasAge 51 .
+
+
+###  http://example.com/owl/families/Mary
+family:Mary rdf:type owl:NamedIndividual ,
+                     family:Person ,
+                     family:Woman ;
+            owl:sameAs <http://homepages.cs.ncl.ac.uk/phillip.lord/scratch/family-other.owl#MaryBrown> .
+
+
+###  http://example.com/owl/families/Meg
+family:Meg rdf:type owl:NamedIndividual .
+
+
+###  http://example.com/owl/families/Susan
+family:Susan rdf:type owl:NamedIndividual .
+
+
+###  http://homepages.cs.ncl.ac.uk/phillip.lord/scratch/family-other.owl#JohnBrown
+
+###  http://homepages.cs.ncl.ac.uk/phillip.lord/scratch/family-other.owl#MaryBrown
+
+#################################################################
+#    General axioms
+#################################################################
+
+[ owl:intersectionOf ( family:Female
+                       [ rdf:type owl:Class ;
+                         owl:oneOf ( family:Bill
+                                     family:Mary
+                                     family:Meg
+                                   )
+                       ]
+                     ) ;
+  rdf:type owl:Class ;
+  rdfs:subClassOf [ owl:intersectionOf ( family:Parent
+                                         [ rdf:type owl:Restriction ;
+                                           owl:onProperty family:hasChild ;
+                                           owl:allValuesFrom family:Female
+                                         ]
+                                         [ rdf:type owl:Restriction ;
+                                           owl:onProperty family:hasChild ;
+                                           owl:maxCardinality "1"^^xsd:nonNegativeInteger
+                                         ]
+                                       ) ;
+                    rdf:type owl:Class
+                  ]
+] .
+
+
+[ rdf:type owl:AllDisjointClasses ;
+  owl:members ( family:Father
+                family:Mother
+                family:YoungChild
+              )
+] .
+
+
+[ rdf:type owl:AllDifferent ;
+  owl:distinctMembers ( family:Bill
+                        family:John
+                      )
+] .
+
+
+###  Generated by the OWL API (version 4.2.8.20170104-2310) https://github.com/owlcs/owlapi
