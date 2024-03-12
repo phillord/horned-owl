@@ -601,6 +601,7 @@ impl<A: ForIRI, F: RdfXmlFormatter<A, W>, W:Write> Render<A, F, Annotatable<A>, 
             Component::AnnotationPropertyDomain(cmp) => cmp.render(f, ng)?.into(),
             Component::AnnotationPropertyRange(cmp) => cmp.render(f, ng)?.into(),
             Component::ClassAssertion(cmp) => cmp.render(f, ng)?.into(),
+            Component::Rule(_) => todo!("SWRL todo"),
         })
     }
 }

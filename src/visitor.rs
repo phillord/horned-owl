@@ -66,6 +66,7 @@ pub trait Visit<A: ForIRI> {
     fn visit_sub_annotation_property_of(&mut self, _: &SubAnnotationPropertyOf<A>) {}
     fn visit_annotation_property_domain(&mut self, _: &AnnotationPropertyDomain<A>) {}
     fn visit_annotation_property_range(&mut self, _: &AnnotationPropertyRange<A>) {}
+    fn visit_rule(&mut self, _: &Rule<A>){}
     fn visit_literal(&mut self, _: &Literal<A>) {}
     fn visit_annotation(&mut self, _: &Annotation<A>) {}
     fn visit_annotation_value(&mut self, _: &AnnotationValue<A>) {}
@@ -222,6 +223,7 @@ impl<A: ForIRI, V: Visit<A>> Walk<A, V> {
             Component::SubAnnotationPropertyOf(ax) => self.sub_annotation_property_of(ax),
             Component::AnnotationPropertyDomain(ax) => self.annotation_property_domain(ax),
             Component::AnnotationPropertyRange(ax) => self.annotation_property_range(ax),
+            Component::Rule(sr) => self.rule(sr),
         }
     }
 
@@ -469,6 +471,10 @@ impl<A: ForIRI, V: Visit<A>> Walk<A, V> {
         self.0.visit_annotation_property_range(e);
         self.annotation_property(&e.ap);
         self.iri(&e.iri);
+    }
+
+    pub fn rule(&mut self, _: &Rule<A>) {
+        todo!()
     }
 
     pub fn literal(&mut self, e: &Literal<A>) {

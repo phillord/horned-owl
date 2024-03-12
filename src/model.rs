@@ -1732,20 +1732,21 @@ impl<A: ForIRI> From<Class<A>> for Box<ClassExpression<A>> {
 
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum Atom<A>{
-    DescriptionAtom(IObject<A>),
-    DataRangeAtom(DObject<A>),
-    IndividualValuedPropertyID(IObject<A>, IObject<A>),
-    DataValuedPropertyID(IObject<A>, DObject<A>),
-    SameAsAtom(IObject<A>, IObject<A>),
-    DifferentFromAtom(IObject<A>, IObject<A>),
-    BuiltInAtom(IRI<A>, DObject<A>),
+    BuiltInAtom{pred: IRI<A>, arg: DArgument<A>},
+    ClassAtom{pred:ClassExpression<A>, arg: IArgument<A>},
+    DataPropertyAtom{pred: DataProperty<A>, args:(DArgument<A>, DArgument<A>)},
+    DataRangeAtom{pred: DataRange<A>, arg:DArgument<A>},
+    DifferentIndividualsAtom{pred:A, args:(IArgument<A>, IArgument<A>)},
+    ObjectPropertyAtom{pred:ObjectPropertyExpression<A>,args:(IArgument<A>,IArgument<A>)},
+    SameIndividualAtom{pred: A, args:(IArgument<A>, IArgument<A>)}
 }
 
-#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub struct IObject<A>(IRI<A>);
 
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub struct DObject<A>(IRI<A>);
+pub struct IArgument<A>(IRI<A>);
+
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct DArgument<A>(IRI<A>);
 
 /// Access or change the `OntologyID` of an `Ontology`
 pub trait Ontology<A> {
@@ -1952,7 +1953,7 @@ mod test {
 
         let iri = b.iri("http://www.example.com");
         let r = Rule{
-            head: vec![Atom::DescriptionAtom(IObject(iri))],
+            head: vec![Atom::DescriptionAtom(IObject(iri.clone()))],
             body: vec![Atom::DescriptionAtom(IObject(iri))],
         };
 

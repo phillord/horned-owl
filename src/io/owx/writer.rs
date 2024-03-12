@@ -147,6 +147,7 @@ fn tag_for_kind(axk: ComponentKind) -> &'static str {
         ComponentKind::SubAnnotationPropertyOf => "SubAnnotationPropertyOf",
         ComponentKind::AnnotationPropertyDomain => "AnnotationPropertyDomain",
         ComponentKind::AnnotationPropertyRange => "AnnotationPropertyRange",
+        ComponentKind::Rule => todo!("SWRL"),
     }
 }
 
@@ -608,7 +609,8 @@ render! {
             Component::AnnotationAssertion(ax) => ax.render(w, m)?,
             Component::SubAnnotationPropertyOf(ax) => ax.render(w, m)?,
             Component::AnnotationPropertyDomain(ax) => ax.render(w, m)?,
-            Component::AnnotationPropertyRange(ax) => ax.render(w, m)?
+            Component::AnnotationPropertyRange(ax) => ax.render(w, m)?,
+            Component::Rule(_) => todo!("SWRL"),
         }
         Ok(())
     }
