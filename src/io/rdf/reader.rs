@@ -1966,6 +1966,7 @@ mod test {
     use crate::io::RDFParserConfiguration;
     use crate::ontology::component_mapped::RcComponentMappedOntology;
     use pretty_assertions::assert_eq;
+    use test_generator::test_resources;
 
     fn init_log() {
         let _ = env_logger::builder()
@@ -1989,7 +1990,11 @@ mod test {
     }
 
     fn compare(test: &str) {
-        compare_two(test, test);
+        let dot = test.rfind(".").unwrap();
+        let slash = test.rfind("/").unwrap();
+        let stem = &test[(slash + 1)..dot];
+
+        compare_two(stem, stem);
     }
 
     fn compare_two(testrdf: &str, testowl: &str) {
@@ -2018,14 +2023,7 @@ mod test {
             .0
             .into();
 
-        //dbg!(&rdfont); if true {panic!()};
-
         assert_eq!(rdfont, xmlont);
-
-        //let rdfmapping: &HashMap<&String, &String> = &rdfmapping.mappings().collect();
-        //let xmlmapping: &HashMap<&String, &String> = &xmlmapping.mappings().collect();
-
-        //assert_eq!(rdfmapping, xmlmapping);
     }
 
     // #[test]
@@ -2045,54 +2043,9 @@ mod test {
     //     assert!(true);
     // }
 
-    #[test]
-    fn class() {
-        compare("class");
-    }
-
-    #[test]
-    fn declaration_with_annotation() {
-        compare("declaration-with-annotation");
-    }
-
-    #[test]
-    fn declaration_with_two_annotation() {
-        compare("declaration-with-two-annotation");
-    }
-
-    #[test]
-    fn class_with_two_annotations() {
-        compare("class_with_two_annotations");
-    }
-
-    #[test]
-    fn ont() {
-        compare("ont");
-    }
-
-    #[test]
-    fn subclass() {
-        compare("subclass");
-    }
-
-    #[test]
-    fn subclass_with_annotation() {
-        compare("annotation-on-subclass");
-    }
-
-    #[test]
-    fn oproperty() {
-        compare("oproperty");
-    }
-
-    #[test]
-    fn some() {
-        compare("some");
-    }
-
-    #[test]
-    fn some_not() {
-        compare("some-not");
+    #[test_resources("src/ont/owl-rdf/*.owl")]
+    fn compare_to_xml(resource:&str) {
+        compare(resource)
     }
 
     #[test]
@@ -2103,36 +2056,6 @@ mod test {
     #[test]
     fn one_some_property_filler_reversed() {
         compare_two("manual/one-some-property-filler-reversed", "some");
-    }
-
-    #[test]
-    fn only() {
-        compare("only");
-    }
-
-    #[test]
-    fn and() {
-        compare("and");
-    }
-
-    #[test]
-    fn or() {
-        compare("or");
-    }
-
-    #[test]
-    fn not() {
-        compare("not");
-    }
-
-    #[test]
-    fn annotation_property() {
-        compare("annotation-property");
-    }
-
-    #[test]
-    fn annotation() {
-        compare("annotation");
     }
 
     #[test]
@@ -2169,35 +2092,6 @@ mod test {
     }
 
     #[test]
-    fn annotation_domain() {
-        compare("annotation-domain");
-    }
-
-    #[test]
-    fn annotation_range() {
-        compare("annotation-range");
-    }
-
-    #[test]
-    fn label() {
-        compare("label");
-    }
-
-    #[test]
-    fn one_comment() {
-        // This is currently failing because the XML parser gives the
-        // comment a language and a datatype ("PlainLiteral") while
-        // the RDF one gives it just the language, as literals can't
-        // be both. Which is correct?
-        compare("comment");
-    }
-
-    #[test]
-    fn one_ontology_annotation() {
-        compare("one-ontology-annotation");
-    }
-
-    #[test]
     fn broken_ontology_annotation () {
         // Some verisons of the OWL API do not include an
         // AnnotationProperty declaration. We should make this work.
@@ -2205,111 +2099,6 @@ mod test {
         let ont:ComponentMappedOntology<_, RcAnnotatedComponent> = ont.into();
         assert_eq!(ont.i().ontology_annotation().count(), 1);
         assert_eq!(ont.i().declare_annotation_property().count(), 0);
-    }
-
-    #[test]
-    fn ontology_annotation() {
-        compare("ontology-annotation");
-    }
-
-    #[test]
-    fn equivalent_class() {
-        compare("equivalent-class");
-    }
-
-    #[test]
-    fn equivalent_classes() {
-        compare("equivalent_classes");
-    }
-
-    #[test]
-    fn disjoint_class() {
-        compare("disjoint-class");
-    }
-
-    #[test]
-    fn disjoint_union() {
-        compare("disjoint-union");
-    }
-
-    #[test]
-    fn sub_oproperty() {
-        compare("suboproperty");
-    }
-
-    #[test]
-    fn sub_oproperty_top() {
-        compare("suboproperty-top")
-    }
-
-    #[test]
-    fn sub_oproperty_inverse() {
-        compare("suboproperty-inverse");
-    }
-
-    #[test]
-    fn one_inverse() {
-        compare("inverse-properties");
-    }
-
-    #[test]
-    fn one_transitive() {
-        compare("transitive-properties");
-    }
-
-    #[test]
-    fn inverse_transitive() {
-        compare("inverse-transitive")
-    }
-
-    #[test]
-    fn one_annotated_transitive() {
-        compare("annotation-on-transitive");
-    }
-
-    #[test]
-    fn subproperty_chain() {
-        compare("subproperty-chain");
-    }
-
-    #[test]
-    fn one_subproperty_chain_with_inverse() {
-        compare("subproperty-chain-with-inverse");
-    }
-
-    #[test]
-    fn annotation_on_annotation() {
-        compare("annotation-with-annotation");
-    }
-
-    #[test]
-    fn non_built_in_annotation_on_annotation() {
-        compare("annotation-with-non-builtin-annotation");
-    }
-
-    #[test]
-    fn sub_annotation() {
-        compare("sub-annotation");
-    }
-
-    #[test]
-    fn data_property() {
-        compare("data-property");
-    }
-
-    // #[test]
-    // fn literal_escaped() {
-    //     compare("literal-escaped");
-    // }
-
-    #[test]
-    fn named_individual() {
-        compare("named-individual");
-    }
-
-    #[test]
-    fn import() {
-        compare("import");
     }
 
     #[test]
@@ -2336,272 +2125,6 @@ mod test {
         let so: SetOntology<_> = rdfont.into();
         let amont: RcComponentMappedOntology = so.into();
         assert_eq!(amont.i().declare_class().count(), 1);
-    }
-
-    #[test]
-    fn object_has_value() {
-        compare("object-has-value");
-    }
-
-    #[test]
-    fn object_one_of() {
-        compare("object-one-of");
-    }
-
-    #[test]
-    fn inverse() {
-        compare("some-inverse");
-    }
-
-    #[test]
-    fn object_unqualified_cardinality() {
-        compare("object-unqualified-max-cardinality");
-    }
-
-    #[test]
-    fn object_min_cardinality() {
-        compare("object-min-cardinality");
-    }
-
-    #[test]
-    fn object_max_cardinality() {
-        compare("object-max-cardinality");
-    }
-
-    #[test]
-    fn object_exact_cardinality() {
-        compare("object-exact-cardinality");
-    }
-
-    #[test]
-    fn datatype() {
-        compare("datatype");
-    }
-
-    #[test]
-    fn datatype_alias() {
-        compare("datatype-alias");
-    }
-
-    #[test]
-    fn datatype_intersection() {
-        compare("datatype-intersection");
-    }
-
-    #[test]
-    fn datatype_union() {
-        compare("datatype-union");
-    }
-
-    #[test]
-    fn datatype_complement() {
-        compare("datatype-complement");
-    }
-
-    #[test]
-    fn datatype_oneof() {
-        compare("datatype-oneof");
-    }
-
-    #[test]
-    fn datatype_some() {
-        compare("data-some");
-    }
-
-    #[test]
-    fn facet_restriction() {
-        compare("facet-restriction");
-    }
-
-    #[test]
-    fn facet_restriction_complex() {
-        compare("facet-restriction-complex");
-    }
-
-    #[test]
-    fn data_only() {
-        compare("data-only");
-    }
-
-    #[test]
-    fn data_exact_cardinality() {
-        compare("data-exact-cardinality");
-    }
-
-    #[test]
-    fn data_has_value() {
-        compare("data-has-value");
-    }
-
-    #[test]
-    fn data_max_cardinality() {
-        compare("data-max-cardinality");
-    }
-
-    #[test]
-    fn data_min_cardinality() {
-        compare("data-min-cardinality");
-    }
-
-    #[test]
-    fn class_assertion() {
-        compare("class-assertion");
-    }
-
-    #[test]
-    fn data_property_assertion() {
-        compare("data-property-assertion");
-    }
-
-    #[test]
-    fn same_individual() {
-        compare("same-individual");
-    }
-
-    #[test]
-    fn different_individuals() {
-        compare("different-individual");
-    }
-
-    #[test]
-    fn negative_data_property_assertion() {
-        compare("negative-data-property-assertion");
-    }
-
-    #[test]
-    fn negative_object_property_assertion() {
-        compare("negative-object-property-assertion");
-    }
-
-    #[test]
-    fn object_property_assertion() {
-        compare("object-property-assertion");
-    }
-
-    #[test]
-    fn data_has_key() {
-        compare("data-has-key");
-    }
-
-    #[test]
-    fn data_property_disjoint() {
-        compare("data-property-disjoint");
-    }
-
-    #[test]
-    fn data_property_domain() {
-        compare("data-property-domain");
-    }
-
-    #[test]
-    fn data_property_equivalent() {
-        compare("data-property-equivalent");
-    }
-
-    #[test]
-    fn data_property_functional() {
-        compare("data-property-functional");
-    }
-
-    #[test]
-    fn data_property_range() {
-        compare("data-property-range");
-    }
-
-    #[test]
-    fn data_property_sub() {
-        compare("data-property-sub");
-    }
-
-    #[test]
-    fn disjoint_object_properties() {
-        compare("disjoint-object-properties");
-    }
-
-    #[test]
-    fn equivalent_object_properties() {
-        compare("equivalent-object-properties");
-    }
-
-    #[test]
-    fn object_has_key() {
-        compare("object-has-key");
-    }
-
-    #[test]
-    fn object_property_asymmetric() {
-        compare("object-property-asymmetric");
-    }
-
-    #[test]
-    fn object_property_domain() {
-        compare("object-property-domain");
-    }
-
-    #[test]
-    fn object_property_functional() {
-        compare("object-property-functional");
-    }
-
-    #[test]
-    fn object_property_inverse_functional() {
-        compare("object-property-inverse-functional");
-    }
-
-    #[test]
-    fn object_property_irreflexive() {
-        compare("object-property-irreflexive");
-    }
-
-    #[test]
-    fn object_property_range() {
-        compare("object-property-range");
-    }
-
-    #[test]
-    fn object_property_reflexive() {
-        compare("object-property-reflexive");
-    }
-
-    #[test]
-    fn object_property_symmetric() {
-        compare("object-property-symmetric");
-    }
-
-    #[test]
-    fn family_other() {
-        compare("manual/family-other")
-    }
-
-    #[test]
-    fn type_complex() {
-        compare("type-complex")
-    }
-
-    #[test]
-    fn type_individual_datatype() {
-        compare("type-individual-datatype")
-    }
-
-    #[test]
-    fn type_individual_datatype_unqualified() {
-        compare("type-individual-datatype-unqualified")
-    }
-
-    #[test]
-    fn intersection() {
-        compare("intersection")
-    }
-
-    #[test]
-    fn happy_person() {
-        compare("happy_person")
-    }
-
-    #[test]
-    fn gci_and_other_class_relations() {
-        // https://github.com/phillord/horned-owl/issues/43
-        compare("gci_and_other_class_relations")
     }
 
     #[test]
