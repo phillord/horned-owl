@@ -1114,7 +1114,16 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
                             self.fetch_ni_seq(bnodeid)?
                         )
                     }
-                },
+                 },
+                 [[_, Term::OWL(VOWL::HasSelf), _],//:
+                  [_, Term::OWL(VOWL::OnProperty), pr],
+                  [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Restriction)]] => {
+                    ok_some!{
+                        ClassExpression::ObjectHasSelf(
+                            self.fetch_ope(pr, ic)?
+                        )
+                    }
+                }
                 [[_, Term::OWL(VOWL::IntersectionOf), Term::BNode(bnodeid)],//:
                  [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Class)]] => {
                     ok_some!{

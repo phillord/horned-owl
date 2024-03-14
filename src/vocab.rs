@@ -152,6 +152,7 @@ pub enum OWL {
     EquivalentProperty,
     FunctionalProperty,
     HasKey,
+    HasSelf,
     HasValue,
     Imports,
     IntersectionOf,
@@ -224,6 +225,7 @@ lazy_meta! {
     InverseOf, extend(OWL, "inverseOf");
     IrreflexiveProperty, extend(OWL, "IrreflexiveProperty");
     HasKey, extend(OWL, "hasKey");
+    HasSelf, extend(OWL, "hasSelf");
     HasValue, extend(OWL, "hasValue");
     MaxCardinality, extend(OWL, "maxCardinality");
     MaxQualifiedCardinality, extend(OWL, "maxQualifiedCardinality");
