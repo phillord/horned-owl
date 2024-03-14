@@ -977,7 +977,7 @@ from_start! {
                     SubObjectPropertyExpression::ObjectPropertyChain(o)
 
                 }
-                b"ObjectProperty" => {
+                b"ObjectProperty" | b"ObjectInverseOf" => {
                     SubObjectPropertyExpression::
                     ObjectPropertyExpression(from_start(r, e)?)
                 }
@@ -1580,12 +1580,21 @@ pub mod test {
 
         assert_eq!(annotated_component.ann.len(), 2);
     }
+
     #[test]
     fn test_sub_annotation() {
         let ont_s = include_str!("../../ont/owl-xml/sub-annotation.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
         assert_eq!(ont.i().sub_annotation_property_of().count(), 1);
+    }
+
+    #[test]
+    fn test_anon_subobjectproperty() {
+        let ont_s = include_str!("../../ont/owl-xml/anon-subobjectproperty.owx");
+        let (ont, _) = read_ok(&mut ont_s.as_bytes());
+
+        assert_eq!(ont.i().sub_object_property_of().count(), 1);
     }
 
     #[test]
