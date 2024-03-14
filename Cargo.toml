@@ -29,6 +29,7 @@ ureq={version="2.1.1", optional=true}
 
 [workspace]
 members=["horned-bin"]
+default-members=[".", "horned-bin"]
 
 [workspace.dependencies]
 indexmap="1.0.2"
