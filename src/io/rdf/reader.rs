@@ -659,7 +659,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
                     av: ob.clone().into(),
                 }
             }
-            [s, Iri(p), Term::BNode(bnodeid)] => {
+            [_, Iri(p), Term::BNode(bnodeid)] => {
                 Annotation {
                     ap: AnnotationProperty(p.clone()),
                     av: AnonymousIndividual(bnodeid.0.clone()).into(),
