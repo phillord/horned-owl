@@ -35,6 +35,7 @@ extern crate quick_xml;
 
 pub mod adaptor;
 pub mod collection;
+pub mod curie;
 pub mod error;
 pub mod io;
 pub mod model;
