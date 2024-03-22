@@ -208,7 +208,7 @@ mod test {
 
     #[test]
     fn test_read() {
-        let path = Path::new("src/ont/owl-rdf/import-property.owl");
+        let path = Path::new("src/ont/owl-rdf/nonround/import-property.owl");
         let b = Build::new_rc();
         let iri = path_to_file_iri(&b, &path);
 
@@ -220,7 +220,7 @@ mod test {
     // is a good test.
     #[test]
     fn test_read_closure() {
-        let path = Path::new("src/ont/owl-rdf/import-property.owl");
+        let path = Path::new("src/ont/owl-rdf/nonround/import-property.owl");
         let b = Build::new_rc();
         let iri = path_to_file_iri(&b, &path);
 

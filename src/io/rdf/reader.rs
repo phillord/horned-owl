@@ -2150,11 +2150,11 @@ mod test {
     fn import_property_in_bits() -> Result<(), HornedError> {
         let b = Build::new_rc();
         let p: OntologyParser<_, Rc<AnnotatedComponent<RcStr>>> =
-            parser_with_build(&mut slurp_rdfont("other-property").as_bytes(), &b, Default::default());
+            parser_with_build(&mut slurp_rdfont("nonround/other-property").as_bytes(), &b, Default::default());
         let (family_other, incomplete) = p.parse()?;
         assert!(incomplete.is_complete());
 
-        let mut p = parser_with_build(&mut slurp_rdfont("import-property").as_bytes(), &b, Default::default());
+        let mut p = parser_with_build(&mut slurp_rdfont("nonround/import-property").as_bytes(), &b, Default::default());
         p.parse_imports()?;
         p.parse_declarations()?;
         p.finish_parse(vec![&family_other].as_slice())?;

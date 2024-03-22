@@ -17,16 +17,16 @@ define build_template
   $(2)+=../owl-rdf/$(1).owl ../owl-xml/$(1).owx ../owl-ttl/$(1).ttl
 endef
 
-#$(foreach p,$(PREQ_STEM),$(info $(call build_template,$(p),TARGETS,)))
-$(foreach p,$(PREQ_STEM),$(eval $(call build_template,$(p),TARGETS,)))
+#$(foreach p,$(PREQ_STEM),$(info $(call build_template,$(p),TARGETS)))
+$(foreach p,$(PREQ_STEM),$(eval $(call build_template,$(p),TARGETS)))
 
 NONROUND=
 NONROUND_PREQ=$(wildcard nonround/*.clj)
 NONROUND_STEM=$(subst .clj,,$(NONROUND_PREQ))
 
 
-##$(foreach p,$(NONROUND_STEM),$(info $(call build_template,$(p),NONROUND,nonround)))
-$(foreach p,$(NONROUND_STEM),$(eval $(call build_template,$(p),NONROUND,nonround)))
+##$(foreach p,$(NONROUND_STEM),$(info $(call build_template,$(p),NONROUND)))
+$(foreach p,$(NONROUND_STEM),$(eval $(call build_template,$(p),NONROUND)))
 
 nonround: $(NONROUND)
 
