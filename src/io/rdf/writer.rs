@@ -1917,7 +1917,7 @@ mod test {
     #[test]
     fn multi_same_individuals() {
         assert_round(include_str!(
-            "../../ont/owl-rdf/nonround/multi-same-individual.owl"
+            "../../ont/owl-rdf/ambiguous/multi-same-individual.owl"
         ));
     }
 

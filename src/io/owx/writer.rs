@@ -1043,7 +1043,7 @@ mod test {
         assert_eq!(ont_orig, ont_round);
     }
 
-    #[test_resources("src/ont/owl-xml/nonround/*.owx")]
+    #[test_resources("src/ont/owl-xml/ambiguous/*.owx")]
     fn roundtrip_nonround_resource(resource: &str) {
         let resource = &slurp::read_all_to_string(
             resource

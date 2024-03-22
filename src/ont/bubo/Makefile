@@ -1,3 +1,12 @@
+## Use "&" to indicate a grouping target which is only available in
+## make 4.3. It causes warnings in lower versions.
+define build_template
+  ../owl-rdf/$(1).owl ../owl-xml/$(1).owx ../owl-ttl/$1.ttl &: $1.clj
+	bubo $1.clj
+
+  $(2)+=../owl-rdf/$(1).owl ../owl-xml/$(1).owx ../owl-ttl/$(1).ttl
+endef
+
 ## Exclude these because they are support files
 EXCLUDE=ontology.clj save.clj
 
@@ -8,33 +17,32 @@ TARGETS=
 
 PREQ_STEM=$(subst .clj,,$(PREQ_EXC))
 
-## Use "&" to indicate a grouping target which is only available in
-## make 4.3. It causes warnings in lower versions.
-define build_template
-  ../owl-rdf/$(1).owl ../owl-xml/$(1).owx ../owl-ttl/$1.ttl &: $1.clj
-	bubo $1.clj
-
-  $(2)+=../owl-rdf/$(1).owl ../owl-xml/$(1).owx ../owl-ttl/$(1).ttl
-endef
-
 #$(foreach p,$(PREQ_STEM),$(info $(call build_template,$(p),TARGETS)))
 $(foreach p,$(PREQ_STEM),$(eval $(call build_template,$(p),TARGETS)))
 
-NONROUND=
-NONROUND_PREQ=$(wildcard nonround/*.clj)
-NONROUND_STEM=$(subst .clj,,$(NONROUND_PREQ))
+AMBIG=
+AMBIG_PREQ=$(wildcard ambiguous/*.clj)
+AMBIG_STEM=$(subst .clj,,$(AMBIG_PREQ))
 
+##$(foreach p,$(AMBIG_STEM),$(info $(call build_template,$(p),AMBIG)))
+$(foreach p,$(AMBIG_STEM),$(eval $(call build_template,$(p),AMBIG)))
 
-##$(foreach p,$(NONROUND_STEM),$(info $(call build_template,$(p),NONROUND)))
-$(foreach p,$(NONROUND_STEM),$(eval $(call build_template,$(p),NONROUND)))
+ambig: $(AMBIG)
 
-nonround: $(NONROUND)
+WITHIMPORT=
+WITHIMPORT_PREQ=$(wildcard withimport/*.clj)
+WITHIMPORT_STEM=$(subst .clj,,$(WITHIMPORT_PREQ))
 
-all: $(TARGETS) nonround
+##$(foreach p,$(WITHIMPORT_STEM),$(info $(call build_template,$(p),WITHIMPORT)))
+$(foreach p,$(WITHIMPORT_STEM),$(eval $(call build_template,$(p),WITHIMPORT)))
+
+withimport:$(WITHIMPORT)
+
+all: $(TARGETS) ambig withimport
 
 .DEFAULT_GOAL=all
 
 clean:
-	-rm $(TARGETS) $(NONROUND)
+	-rm $(TARGETS) $(AMBIG) $(WITHIMPORT)
 
 .PHONY: all clean
