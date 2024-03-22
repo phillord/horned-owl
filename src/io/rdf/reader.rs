@@ -2057,6 +2057,16 @@ mod test {
         compare(resource)
     }
 
+    #[test_resources("src/ont/owl-rdf/nonround/*.owl")]
+    fn test_read_ok(resource:&str) {
+        let resource = &slurp::read_all_to_string(resource)
+            .unwrap();
+
+        read_ok(
+            &mut resource.as_bytes()
+        );
+    }
+
     #[test]
     fn one_some_reversed() {
         compare_two("manual/one-some-reversed-triples", "some");
@@ -2157,18 +2167,6 @@ mod test {
     #[test]
     fn annotation_with_anonymous() {
         let s = slurp_rdfont("annotation-with-anonymous");
-        let ont: ComponentMappedOntology<_, _> = read_ok(&mut s.as_bytes()).into();
-
-        // We cannot do the usual "compare" because the anonymous
-        // individuals break a direct comparision
-        assert_eq!(ont.i().annotation_assertion().count(), 1);
-
-        let _aa = ont.i().annotation_assertion().next();
-    }
-
-    #[test]
-    fn anonymous_annotation_value() {
-        let s = slurp_rdfont("anonymous-annotation-value");
         let ont: ComponentMappedOntology<_, _> = read_ok(&mut s.as_bytes()).into();
 
         // We cannot do the usual "compare" because the anonymous

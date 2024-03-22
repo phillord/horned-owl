@@ -5,10 +5,7 @@
         "../" dir "/"
         (cc/first
          (clojure.string/split
-          (cc/last
-           (clojure.string/split
-            cc/*file*
-            #"[/]"))
+          (cc/first tawny.bubo.cli/cmd-args)
           #"[.]"))
         ext)]
       (cc/println "\tSaving:" file)
@@ -20,5 +17,4 @@
   (save-one "owl-rdf" ".owl" :rdf)
   (save-one "owl-xml" ".owx" :owl)
   (save-one "owl-ttl" ".ttl" :ttl)
-  (save-one "owl-functional" ".ofn" (FunctionalSyntaxDocumentFormat.))
-  )
+  (save-one "owl-functional" ".ofn" (FunctionalSyntaxDocumentFormat.)))

@@ -1,4 +1,5 @@
-Prefix(:=<o>)
+Prefix(:=<http://www.example.com/iri#>)
+Prefix(o:=<http://www.example.com/iri#>)
 Prefix(owl:=<http://www.w3.org/2002/07/owl#>)
 Prefix(rdf:=<http://www.w3.org/1999/02/22-rdf-syntax-ns#>)
 Prefix(xml:=<http://www.w3.org/XML/1998/namespace>)
@@ -9,13 +10,13 @@ Prefix(rdfs:=<http://www.w3.org/2000/01/rdf-schema#>)
 Ontology(<http://www.example.com/iri>
 <http://www.example.com/viri>
 
-Declaration(Class(<http://www.example.com/iri#mononucleate>))
-Declaration(Class(<http://www.example.com/iri#nucleus>))
-Declaration(ObjectProperty(<http://www.example.com/iri#bearer_of>))
-Declaration(ObjectProperty(<http://www.example.com/iri#has_part>))
+Declaration(Class(o:mononucleate))
+Declaration(Class(o:nucleus))
+Declaration(ObjectProperty(o:bearer_of))
+Declaration(ObjectProperty(o:has_part))
 
 
-EquivalentClasses(ObjectSomeValuesFrom(<http://www.example.com/iri#bearer_of> <http://www.example.com/iri#mononucleate>) ObjectSomeValuesFrom(<http://www.example.com/iri#has_part> <http://www.example.com/iri#nucleus>))
-SubClassOf(ObjectSomeValuesFrom(<http://www.example.com/iri#has_part> <http://www.example.com/iri#nucleus>) ObjectSomeValuesFrom(<http://www.example.com/iri#bearer_of> <http://www.example.com/iri#mononucleate>))
-DisjointClasses(ObjectSomeValuesFrom(<http://www.example.com/iri#bearer_of> <http://www.example.com/iri#mononucleate>) ObjectSomeValuesFrom(<http://www.example.com/iri#has_part> <http://www.example.com/iri#nucleus>))
+EquivalentClasses(ObjectSomeValuesFrom(o:bearer_of o:mononucleate) ObjectSomeValuesFrom(o:has_part o:nucleus))
+SubClassOf(ObjectSomeValuesFrom(o:has_part o:nucleus) ObjectSomeValuesFrom(o:bearer_of o:mononucleate))
+DisjointClasses(ObjectSomeValuesFrom(o:bearer_of o:mononucleate) ObjectSomeValuesFrom(o:has_part o:nucleus))
 )

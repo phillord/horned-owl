@@ -1,4 +1,5 @@
-Prefix(:=<o>)
+Prefix(:=<http://www.example.com/iri#>)
+Prefix(o:=<http://www.example.com/iri#>)
 Prefix(owl:=<http://www.w3.org/2002/07/owl#>)
 Prefix(rdf:=<http://www.w3.org/1999/02/22-rdf-syntax-ns#>)
 Prefix(xml:=<http://www.w3.org/XML/1998/namespace>)
@@ -9,7 +10,7 @@ Prefix(rdfs:=<http://www.w3.org/2000/01/rdf-schema#>)
 Ontology(<http://www.example.com/iri>
 <http://www.example.com/viri>
 
-Declaration(Annotation(rdfs:comment "Comment on Declaration"@en) Annotation(rdfs:label "Label on Declaration"@en) Class(<http://www.example.com/iri#C>))
+Declaration(Annotation(rdfs:comment "Comment on Declaration"@en) Annotation(rdfs:label "Label on Declaration"@en) Class(o:C))
 
 
 

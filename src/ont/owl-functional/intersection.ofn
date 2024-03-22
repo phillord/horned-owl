@@ -1,4 +1,5 @@
-Prefix(:=<o>)
+Prefix(:=<http://www.example.com/iri#>)
+Prefix(o:=<http://www.example.com/iri#>)
 Prefix(owl:=<http://www.w3.org/2002/07/owl#>)
 Prefix(rdf:=<http://www.w3.org/1999/02/22-rdf-syntax-ns#>)
 Prefix(xml:=<http://www.w3.org/XML/1998/namespace>)
@@ -9,17 +10,17 @@ Prefix(rdfs:=<http://www.w3.org/2000/01/rdf-schema#>)
 Ontology(<http://www.example.com/iri>
 <http://www.example.com/viri>
 
-Declaration(Class(<http://www.example.com/iri#A>))
-Declaration(Class(<http://www.example.com/iri#X>))
-Declaration(ObjectProperty(<http://www.example.com/iri#r>))
+Declaration(Class(o:A))
+Declaration(Class(o:X))
+Declaration(ObjectProperty(o:r))
 
 ############################
 #   Classes
 ############################
 
-# Class: <http://www.example.com/iri#X> (<http://www.example.com/iri#X>)
+# Class: o:X (o:X)
 
-EquivalentClasses(<http://www.example.com/iri#X> ObjectIntersectionOf(ObjectSomeValuesFrom(<http://www.example.com/iri#r> <http://www.example.com/iri#X>) ObjectAllValuesFrom(<http://www.example.com/iri#r> <http://www.example.com/iri#X>)))
+EquivalentClasses(o:X ObjectIntersectionOf(ObjectSomeValuesFrom(o:r o:X) ObjectAllValuesFrom(o:r o:X)))
 
 
 )

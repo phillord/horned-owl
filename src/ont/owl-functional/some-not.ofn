@@ -1,4 +1,5 @@
-Prefix(:=<o>)
+Prefix(:=<http://www.example.com/iri#>)
+Prefix(o:=<http://www.example.com/iri#>)
 Prefix(owl:=<http://www.w3.org/2002/07/owl#>)
 Prefix(rdf:=<http://www.w3.org/1999/02/22-rdf-syntax-ns#>)
 Prefix(xml:=<http://www.w3.org/XML/1998/namespace>)
@@ -9,17 +10,17 @@ Prefix(rdfs:=<http://www.w3.org/2000/01/rdf-schema#>)
 Ontology(<http://www.example.com/iri>
 <http://www.example.com/viri>
 
-Declaration(Class(<http://www.example.com/iri#A>))
-Declaration(Class(<http://www.example.com/iri#B>))
-Declaration(ObjectProperty(<http://www.example.com/iri#r>))
+Declaration(Class(o:A))
+Declaration(Class(o:B))
+Declaration(ObjectProperty(o:r))
 
 ############################
 #   Classes
 ############################
 
-# Class: <http://www.example.com/iri#B> (<http://www.example.com/iri#B>)
+# Class: o:B (o:B)
 
-SubClassOf(<http://www.example.com/iri#B> ObjectSomeValuesFrom(<http://www.example.com/iri#r> ObjectComplementOf(<http://www.example.com/iri#A>)))
+SubClassOf(o:B ObjectSomeValuesFrom(o:r ObjectComplementOf(o:A)))
 
 
 )

@@ -1915,6 +1915,13 @@ mod test {
     }
 
     #[test]
+    fn multi_same_individuals() {
+        assert_round(include_str!(
+            "../../ont/owl-rdf/nonround/multi-same-individual.owl"
+        ));
+    }
+
+    #[test]
     fn negative_data_property_assertion() {
         assert_round(include_str!(
             "../../ont/owl-rdf/negative-data-property-assertion.owl"

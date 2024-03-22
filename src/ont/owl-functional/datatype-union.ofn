@@ -1,4 +1,5 @@
-Prefix(:=<o>)
+Prefix(:=<http://www.example.com/iri#>)
+Prefix(o:=<http://www.example.com/iri#>)
 Prefix(owl:=<http://www.w3.org/2002/07/owl#>)
 Prefix(rdf:=<http://www.w3.org/1999/02/22-rdf-syntax-ns#>)
 Prefix(xml:=<http://www.w3.org/XML/1998/namespace>)
@@ -9,14 +10,14 @@ Prefix(rdfs:=<http://www.w3.org/2000/01/rdf-schema#>)
 Ontology(<http://www.example.com/iri>
 <http://www.example.com/viri>
 
-Declaration(Datatype(<http://www.example.com/iri#D>))
+Declaration(Datatype(o:D))
 ############################
 #   Datatypes
 ############################
 
-# Datatype: <http://www.example.com/iri#D> (<http://www.example.com/iri#D>)
+# Datatype: o:D (o:D)
 
-DatatypeDefinition(<http://www.example.com/iri#D> DataUnionOf(owl:rational owl:real))
+DatatypeDefinition(o:D DataUnionOf(owl:rational owl:real))
 
 
 )
