@@ -666,7 +666,6 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
                 }
             }
             _ => {
-                dbg!(t);
                 todo!()
             }
         }
@@ -689,7 +688,6 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
                         [sb.clone(), p.clone(), ob.clone()],
                         self.parse_annotations(ann),
                     );
-                    self.simple.push([sb.clone(), p.clone(), ob.clone()].into())
                 }
 
                 _ => {
@@ -1761,6 +1759,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
                 self.axiom_annotations();
                 let v = self.resolve_imports();
                 self.state = OntologyParserState::Imports;
+
                 Ok(v)
             }
             _ => todo!(),
@@ -2022,7 +2021,7 @@ mod test {
         let dir_path_buf = PathBuf::from(file!());
         let dir = dir_path_buf.parent().unwrap().to_string_lossy();
 
-        slurp::read_all_to_string(dbg!(format!("{}/../../ont/owl-rdf/{}.owl", dir, testrdf)))
+        slurp::read_all_to_string(format!("{}/../../ont/owl-rdf/{}.owl", dir, testrdf))
             .unwrap()
     }
 

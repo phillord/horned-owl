@@ -6,4 +6,4 @@
 (defclass B :super (some r A))
 
 (save-all)
-(save :omn)
+
