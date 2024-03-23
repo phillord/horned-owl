@@ -2181,7 +2181,7 @@ mod test {
 
     #[test]
     fn annotation_with_anonymous() {
-        let s = slurp_rdfont("annotation-with-anonymous");
+        let s = slurp_rdfont("ambiguous/annotation-with-anonymous");
         let ont: ComponentMappedOntology<_, _> = read_ok(&mut s.as_bytes()).into();
 
         // We cannot do the usual "compare" because the anonymous

@@ -2060,7 +2060,7 @@ mod test {
     #[test]
     fn annotation_with_anonymous() {
         assert_round(include_str!(
-            "../../ont/owl-rdf/annotation-with-anonymous.owl"
+            "../../ont/owl-rdf/ambiguous/annotation-with-anonymous.owl"
         ));
     }
 

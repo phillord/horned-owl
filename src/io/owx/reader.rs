@@ -2020,7 +2020,7 @@ pub mod test {
 
     #[test]
     fn annotation_with_anonymous() {
-        let ont_s = include_str!("../../ont/owl-xml/annotation-with-anonymous.owx");
+        let ont_s = include_str!("../../ont/owl-xml/ambiguous/annotation-with-anonymous.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
         assert_eq!(ont.i().annotation_assertion().count(), 1);
