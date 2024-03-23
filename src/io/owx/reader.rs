@@ -1458,7 +1458,7 @@ pub mod test {
 
     #[test]
     fn test_one_ontology_annotation() {
-        let ont_s = include_str!("../../ont/owl-xml/one-ontology-annotation.owx");
+        let ont_s = include_str!("../../ont/owl-xml/ontology-annotation.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
         assert_eq!(ont.i().ontology_annotation().count(), 1);

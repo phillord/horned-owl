@@ -14,11 +14,22 @@
     <Prefix name="xsd" IRI="http://www.w3.org/2001/XMLSchema#"/>
     <Prefix name="rdfs" IRI="http://www.w3.org/2000/01/rdf-schema#"/>
     <Annotation>
-        <AnnotationProperty IRI="/propformat-version"/>
-        <Literal xml:lang="en">1.2</Literal>
+        <AnnotationProperty IRI="http://purl.org/dc/terms/created"/>
+        <Literal xml:lang="en">2021-12-09</Literal>
+    </Annotation>
+    <Annotation>
+        <AnnotationProperty IRI="http://purl.org/dc/terms/description"/>
+        <Literal xml:lang="en">Description annotation</Literal>
+    </Annotation>
+    <Annotation>
+        <AnnotationProperty abbreviatedIRI="rdfs:comment"/>
+        <Literal xml:lang="en">A comment</Literal>
     </Annotation>
     <Declaration>
-        <AnnotationProperty IRI="/propformat-version"/>
+        <AnnotationProperty IRI="http://purl.org/dc/terms/description"/>
+    </Declaration>
+    <Declaration>
+        <AnnotationProperty IRI="http://purl.org/dc/terms/created"/>
     </Declaration>
 </Ontology>
 
