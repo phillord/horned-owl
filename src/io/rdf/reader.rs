@@ -12,6 +12,7 @@ use crate::ontology::indexed::ForIndex;
 use crate::vocab::is_annotation_builtin;
 use crate::vocab::WithIRI;
 use crate::vocab::OWL as VOWL;
+use crate::vocab::OWL2Datatype;
 use crate::vocab::RDF as VRDF;
 use crate::{
     ontology::{
@@ -1195,15 +1196,30 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
                 //_:x owl:onProperty y .
                 //{ OPE(y) ≠ ε }
                 [[_, Term::OWL(VOWL::Cardinality), literal],//:
-                 [_, Term::OWL(VOWL::OnProperty), Term::Iri(pr)],//:
+                 [_, Term::OWL(VOWL::OnProperty), pr],//:
                  [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Restriction)]
                 ] => {
                     ok_some!{
-                        ClassExpression::ObjectExactCardinality
-                        {
-                            n:self.fetch_u32(literal)?,
-                            ope: pr.into(),
-                            bce: self.b.class(VOWL::Thing.iri_str()).into()
+                        match self.find_property_kind(pr, ic)? {
+                            PropertyExpression::ObjectPropertyExpression(ope) => {
+                                ClassExpression::ObjectExactCardinality
+                                {
+                                    n:self.fetch_u32(literal)?,
+                                    ope: ope,
+                                    bce: self.b.class(VOWL::Thing.iri_str()).into()
+                                }
+                            },
+                            PropertyExpression::DataProperty(dp) => {
+                                ClassExpression::DataExactCardinality
+                                {
+                                    n:self.fetch_u32(literal)?,
+                                    dp: dp,
+                                    dr: self.b.datatype(OWL2Datatype::RDFSLiteral.iri_str()).into(),
+                                }
+                            }
+                            _ => {
+                                todo!("Unexpected property kind")
+                            }
                         }
                     }
                 }
