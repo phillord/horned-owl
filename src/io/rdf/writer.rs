@@ -1249,7 +1249,24 @@ render_to_node! {
                         bn, ng.nn(OWL::HasValue), ind
                     )
                 }
-                Self::ObjectHasSelf(_ope) =>todo!(),
+                Self::ObjectHasSelf(ope) => {
+                    //_:x rdf:type owl:Restriction .
+                    //_:x owl:onProperty T(OPE) .
+                    //_:x owl:hasSelf "true"^^xsd:boolean .
+                    let bn = ng.bn();
+                    let node_ope:PTerm<_> = ope.render(f, ng)?.into();
+                    let node_true = PTerm::Literal(PLiteral::Typed {
+                        value: "true".to_string().into(),
+                        datatype: ng.nn(XSD::Boolean),
+                    });
+
+                    triples_to_node!(
+                        f,
+                        bn.clone(), ng.nn(RDF::Type), ng.nn(OWL::Restriction),
+                        bn.clone(), ng.nn(OWL::OnProperty), node_ope,
+                        bn, ng.nn(OWL::HasSelf), node_true
+                    )
+                },
                 Self::ObjectMinCardinality{n, ope, bce} => {
                     obj_cardinality(n, ope, bce,
                                     ng.nn(OWL::MinCardinality),

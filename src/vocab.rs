@@ -441,6 +441,7 @@ fn facet_meta() {
 }
 
 pub enum XSD {
+    Boolean,
     NonNegativeInteger,
 }
 
