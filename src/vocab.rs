@@ -453,6 +453,7 @@ pub fn is_xsd_datatype<A:AsRef<str>>(iri:A) -> bool {
 
 lazy_meta! {
     XSD, IRIString, METAXSD;
+    Boolean, extend(XSD, "boolean");
     NonNegativeInteger, extend(XSD, "nonNegativeInteger")
 }
 

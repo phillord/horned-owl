@@ -10,7 +10,7 @@ use crate::ontology::indexed::ForIndex;
 
 use pretty_rdf::{
     ChunkedRdfXmlFormatterConfig, PBlankNode, PLiteral, PNamedNode, PSubject, PTerm, PTriple,
-    PrettyRdfXmlFormatter,
+    RdfXmlFormatter, NonPrettyRdfXmlFormatter, PrettyRdfXmlFormatter,
 };
 use std::{
     collections::{BTreeSet, HashSet},
@@ -33,16 +33,27 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
         "http://www.w3.org/XML/1998/namespace".to_string(),
         "xml".to_string(),
     );
-    let mut f: PrettyRdfXmlFormatter<_, _> =
-        PrettyRdfXmlFormatter::new(write, ChunkedRdfXmlFormatterConfig::all().prefix(p))?;
+
+
     let mut bng = NodeGenerator::default();
-    ont.render(&mut f, &mut bng)?;
+
+    if !true {
+        let mut f = NonPrettyRdfXmlFormatter::new(write, ChunkedRdfXmlFormatterConfig::all().prefix(p))?;
+        ont.render(&mut f, &mut bng)?;
+        f.finish()?;
+    }
+    else {
+        let mut f = PrettyRdfXmlFormatter::new(write, ChunkedRdfXmlFormatterConfig::all().prefix(p))?;
+        ont.render(&mut f, &mut bng)?;
+        f.finish()?;
+    }
+
+
 
     // for i in f.triples() {
     //     println!("{}", i.printable());
     // }
 
-    f.finish()?;
     Ok(())
 }
 
@@ -171,10 +182,10 @@ impl<A: ForIRI> From<&Individual<A>> for PSubject<A> {
     }
 }
 
-trait Render<A: ForIRI, R> {
-    fn render<W: Write>(
+trait Render<A: ForIRI, F: RdfXmlFormatter<A, W>, R, W:Write> {
+    fn render(
         &self,
-        f: &mut PrettyRdfXmlFormatter<A, W>,
+        f: &mut F,
         ng: &mut NodeGenerator<A>,
     ) -> Result<R, HornedError>;
 }
@@ -201,10 +212,11 @@ impl<A: ForIRI> From<Vec<PTriple<A>>> for Annotatable<A> {
 macro_rules! render {
     ($type:ident, $self:ident, $f:ident, $ng:ident, $return:ident,
      $body:tt) => {
-        impl<A: ForIRI> Render<A, $return<A>> for $type<A> {
-            fn render<W:Write>(& $self, $f:&mut PrettyRdfXmlFormatter<A, W>,
-                               $ng: &mut NodeGenerator<A>)
-                               -> Result<$return<A>, HornedError>
+         impl<A: ForIRI, F: RdfXmlFormatter<A, W>, W:Write> Render<A, F, $return<A>, W> for $type<A> {
+             fn render(& $self,
+                 $f:&mut F,
+                 $ng: &mut NodeGenerator<A>)
+             -> Result<$return<A>, HornedError>
                 $body
         }
     }
@@ -220,8 +232,8 @@ macro_rules! render_to_node {
 macro_rules! render_to_vec {
     ($type:ident, $self:ident, $f:ident, $ng:ident,
      $body:tt) => {
-        impl<A: ForIRI> Render<A, Vec<PTriple<A>>> for $type<A> {
-            fn render<W:Write>(& $self, $f:&mut PrettyRdfXmlFormatter<A, W>,
+         impl<A: ForIRI, F:RdfXmlFormatter<A, W>, W:Write> Render<A, F, Vec<PTriple<A>>, W> for $type<A> {
+            fn render(& $self, $f:&mut F,
                                $ng: &mut NodeGenerator<A>)
                                -> Result<Vec<PTriple<A>>, HornedError>
                 $body
@@ -253,7 +265,7 @@ macro_rules! triples {
     ($f:ident, $sub:expr, $pred:expr, $ob:expr) => {
         $f.format(to_triple(
                  $sub, $pred, $ob
-                ))?;
+        ))?;
      };
     ($f:ident, $sub:expr, $pred:expr, $ob:expr, $($rest:expr),+) => {
         triples!($f, $sub, $pred, $ob);
@@ -329,9 +341,9 @@ where
 //     }
 // }
 
-fn render_vec_subject<A: ForIRI, T: Render<A, PSubject<A>>, W: Write>(
+fn render_vec_subject<A: ForIRI, F: RdfXmlFormatter<A, W>, T: Render<A, F, PSubject<A>, W>, W: Write>(
     v: &[T],
-    f: &mut PrettyRdfXmlFormatter<A, W>,
+    f: &mut F,
     ng: &mut NodeGenerator<A>,
 ) -> Result<PTerm<A>, HornedError> {
     let mut rest: Option<PTerm<A>> = None;
@@ -352,13 +364,13 @@ fn render_vec_subject<A: ForIRI, T: Render<A, PSubject<A>>, W: Write>(
     Ok(rest.unwrap())
 }
 
-impl<A: ForIRI, T> Render<A, PTerm<A>> for &Vec<T>
+impl<A: ForIRI, F: RdfXmlFormatter<A, W>, T, W:Write> Render<A, F, PTerm<A>, W> for &Vec<T>
 where
-    T: Debug + Render<A, PTerm<A>>,
+    T: Debug + Render<A, F, PTerm<A>, W>,
 {
-    fn render<W: Write>(
+    fn render(
         &self,
-        f: &mut PrettyRdfXmlFormatter<A, W>,
+        f: &mut F,
         ng: &mut NodeGenerator<A>,
     ) -> Result<PTerm<A>, HornedError> {
         let mut rest: Option<PTerm<A>> = None;
@@ -380,10 +392,10 @@ where
     }
 }
 
-impl<A: ForIRI> Render<A, ()> for BTreeSet<Annotation<A>> {
-    fn render<W: Write>(
+impl<A: ForIRI, F:RdfXmlFormatter<A, W>, W:Write> Render<A, F, (), W> for BTreeSet<Annotation<A>> {
+    fn render(
         &self,
-        f: &mut PrettyRdfXmlFormatter<A, W>,
+        f: &mut F,
         ng: &mut NodeGenerator<A>,
     ) -> Result<(), HornedError> {
         for r in self.iter() {
@@ -393,10 +405,10 @@ impl<A: ForIRI> Render<A, ()> for BTreeSet<Annotation<A>> {
     }
 }
 
-impl<A: ForIRI, AA: ForIndex<A>> Render<A, ()> for &ComponentMappedOntology<A, AA> {
-    fn render<W: Write>(
+impl<A: ForIRI, AA: ForIndex<A>, F:RdfXmlFormatter<A, W>, W:Write> Render<A, F, (), W> for &ComponentMappedOntology<A, AA> {
+    fn render(
         &self,
-        f: &mut PrettyRdfXmlFormatter<A, W>,
+        f: &mut F,
         ng: &mut NodeGenerator<A>,
     ) -> Result<(), HornedError> {
         let ont_id = self.i().the_ontology_id_or_default();
@@ -425,10 +437,10 @@ impl<A: ForIRI, AA: ForIndex<A>> Render<A, ()> for &ComponentMappedOntology<A, A
     }
 }
 
-impl<A: ForIRI> Render<A, ()> for AnnotatedComponent<A> {
-    fn render<W: Write>(
+impl<A: ForIRI, F: RdfXmlFormatter<A, W>, W:Write> Render<A, F, (), W> for AnnotatedComponent<A> {
+    fn render(
         &self,
-        f: &mut PrettyRdfXmlFormatter<A, W>,
+        f: &mut F,
         ng: &mut NodeGenerator<A>,
     ) -> Result<(), HornedError> {
         if !self.component.is_axiom() {
@@ -535,10 +547,10 @@ render! {
     }
 }
 
-impl<A: ForIRI> Render<A, Annotatable<A>> for Component<A> {
-    fn render<W: Write>(
+impl<A: ForIRI, F: RdfXmlFormatter<A, W>, W:Write> Render<A, F, Annotatable<A>, W> for Component<A> {
+    fn render(
         &self,
-        f: &mut PrettyRdfXmlFormatter<A, W>,
+        f: &mut F,
         ng: &mut NodeGenerator<A>,
     ) -> Result<Annotatable<A>, HornedError> {
         Ok(match self {
@@ -839,8 +851,8 @@ render_to_vec! {
     }
 }
 
-fn members<A: ForIRI, R: Debug + Render<A, PSubject<A>>, W: Write>(
-    f: &mut PrettyRdfXmlFormatter<A, W>,
+fn members<A: ForIRI, F:RdfXmlFormatter<A, W>, R: Debug + Render<A, F, PSubject<A>, W>, W: Write>(
+    f: &mut F,
     ng: &mut NodeGenerator<A>,
     ty_two: OWL,
     ty_n: OWL,
@@ -1075,13 +1087,13 @@ render_to_node! {
     }
 }
 
-fn obj_cardinality<A: ForIRI, W: Write>(
+fn obj_cardinality<A: ForIRI, F:RdfXmlFormatter<A, W>, W: Write>(
     n: &u32,
     ope: &ObjectPropertyExpression<A>,
     ce: &ClassExpression<A>,
     unqual: PNamedNode<A>,
     qual: PNamedNode<A>,
-    f: &mut PrettyRdfXmlFormatter<A, W>,
+    f: &mut F,
     ng: &mut NodeGenerator<A>,
 ) -> Result<PSubject<A>, HornedError> {
     //_:x rdf:type owl:Restriction .
@@ -1124,12 +1136,12 @@ fn obj_cardinality<A: ForIRI, W: Write>(
     ))
 }
 
-fn data_cardinality<A: ForIRI, W: Write>(
+fn data_cardinality<A: ForIRI, F:RdfXmlFormatter<A, W>, W: Write>(
     n: &u32,
     dp: &DataProperty<A>,
     dr: &DataRange<A>,
     qual: PNamedNode<A>,
-    f: &mut PrettyRdfXmlFormatter<A, W>,
+    f: &mut F,
     ng: &mut NodeGenerator<A>,
 ) -> Result<PSubject<A>, HornedError> {
     // _:x rdf:type owl:Restriction .
@@ -1339,8 +1351,8 @@ render_to_node! {
     }
 }
 
-fn nary<A: ForIRI, R: Render<A, PSubject<A>>, W: Write>(
-    f: &mut PrettyRdfXmlFormatter<A, W>,
+fn nary<A: ForIRI, F: RdfXmlFormatter<A, W>, R: Render<A, F, PSubject<A>, W>, W: Write>(
+    f: &mut F,
     ng: &mut NodeGenerator<A>,
     entities: &[R],
     pred: PNamedNode<A>,
@@ -1480,9 +1492,9 @@ render! {
     }
 }
 
-fn obj_prop_char<A: ForIRI, W: Write>(
+fn obj_prop_char<A: ForIRI, F:RdfXmlFormatter<A, W>, W: Write>(
     ob: &ObjectPropertyExpression<A>,
-    f: &mut PrettyRdfXmlFormatter<A, W>,
+    f: &mut F,
     ng: &mut NodeGenerator<A>,
     chr: OWL,
 ) -> Result<PTriple<A>, HornedError> {
