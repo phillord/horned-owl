@@ -6,13 +6,14 @@ use quick_xml::name::ResolveResult::Bound;
 use crate::error::*;
 use crate::io::ParserConfiguration;
 use crate::model::*;
+use crate::vocab::Facet;
 use crate::vocab::Namespace::*;
 use crate::vocab::OWL2Datatype;
-use crate::vocab::WithIRI;
 use crate::{ontology::set::SetOntology, vocab::OWL};
 
 use std::borrow::Cow;
 use std::collections::BTreeSet;
+use std::convert::TryFrom;
 use std::io::BufRead;
 
 use quick_xml::events::BytesEnd;
@@ -299,7 +300,7 @@ fn error_missing_element<A: ForIRI, R: BufRead>(tag: &[u8], r: &mut Read<A, R>) 
 
 fn is_owl(res: &ResolveResult) -> bool {
     if let Bound(ns) = res {
-        ns.as_ref() == OWL.iri_b()
+        ns.as_ref() == OWL.as_bytes()
     } else {
         false
     }
@@ -658,7 +659,7 @@ fn object_cardinality_restriction<A: ForIRI, R: BufRead>(
             .map_err(|_s| HornedError::invalid("Failed to parse int"))?,
         ope,
         Box::new(match vce.len() {
-            0 => r.build.class(OWL::Thing.iri_str()).into(),
+            0 => r.build.class(OWL::Thing.as_ref()).into(),
             1 => vce.remove(0),
             _ => return Err(error_unexpected_tag(end_tag, r)),
         }),
@@ -681,7 +682,7 @@ fn data_cardinality_restriction<A: ForIRI, R: BufRead>(
             .map_err(|_s| HornedError::invalid("Failed to parse int"))?,
         dp,
         match vdr.len() {
-            0 => r.build.datatype(OWL2Datatype::RDFSLiteral.iri_str()).into(),
+            0 => r.build.datatype(OWL2Datatype::Literal.as_ref()).into(),
             1 => vdr.remove(0),
             _ => return Err(error_unexpected_tag(end_tag, r)),
         },
@@ -994,16 +995,15 @@ from_start! {
 from_start! {
     FacetRestriction, r, e,
     {
-        let f = get_attr_value_bytes(e, b"facet")?;
-        let f = f.ok_or_else(
-            || error_missing_attribute("facet", r)
-        )?;
+        let f = get_attr_value_bytes(e, b"facet")?
+            .ok_or_else(|| error_missing_attribute("facet", r))?;
 
         Ok(
             FacetRestriction {
-                f: Facet::var_b(&f)
-                    .ok_or_else(
-                        || error_unknown_entity("facet", &f, r))?,
+                f: Facet::try_from(f.as_ref())
+                    .map_err(|_| error_unknown_entity("facet", &f, r))?,
+                    // .ok_or_else(
+                    //     || error_unknown_entity("facet", &f, r))?,
                 l: from_next(r)?
             }
         )
@@ -1945,7 +1945,7 @@ pub mod test {
         } = cl
         {
             assert!(match dr {
-                DataRange::Datatype(dt) => dt.is_s(&OWL2Datatype::RDFSLiteral.iri_s()[..]),
+                DataRange::Datatype(dt) => dt.is_s(OWL2Datatype::Literal.as_ref()),
                 _ => false,
             });
         } else {

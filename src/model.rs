@@ -102,6 +102,8 @@ use std::ops::Deref;
 use std::rc::Rc;
 use std::sync::Arc;
 
+use crate::vocab::Facet;
+
 /// An
 /// [IRI](https://en.wikipedia.org/wiki/Internationalized_Resource_Identifier)
 /// is an internationalized version of an URI/URL.
@@ -529,6 +531,17 @@ named! {
     /// is an individual in the ontology which is specifically known
     /// about and can be identified by name.
     NamedIndividual
+}
+
+impl<A: ForIRI> Class<A> {
+
+    pub fn is_thing(&self) -> bool {
+        self.0.as_ref() == crate::vocab::OWL::Thing.as_ref()
+    }
+
+    pub fn is_nothing(&self) -> bool {
+        self.0.as_ref() == crate::vocab::OWL::Nothing.as_ref()
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash, PartialOrd, Ord)]
@@ -1505,21 +1518,6 @@ impl<A: ForIRI> From<DataProperty<A>> for PropertyExpression<A> {
 pub struct FacetRestriction<A> {
     pub f: Facet,
     pub l: Literal<A>,
-}
-
-#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub enum Facet {
-    Length,
-    MinLength,
-    MaxLength,
-    Pattern,
-    MinInclusive,
-    MinExclusive,
-    MaxInclusive,
-    MaxExclusive,
-    TotalDigits,
-    FractionDigits,
-    LangRange,
 }
 
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]

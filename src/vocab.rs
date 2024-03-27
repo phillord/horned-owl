@@ -1,298 +1,260 @@
-//! Standard Vocabularies for OWL
-use self::Namespace::*;
+//! Core RDF vocabularies used in the OWL2 RDF format.
 use enum_meta::*;
 
 use crate::error::invalid;
 use crate::error::HornedError;
 use crate::model::Build;
-use crate::model::Facet;
 use crate::model::ForIRI;
 use crate::model::NamedEntity;
 use crate::model::NamedEntityKind;
 use crate::model::IRI;
 
 use std::borrow::Borrow;
+use std::convert::TryFrom;
+use std::str::FromStr;
 
+macro_rules! vocabulary_traits {
+    ($($enum_type:ident),+; $return_type:ty
+    ) => {
 
-pub trait WithIRI<'a>: Meta<&'a IRIString> {
-    /// Return a string representation of the IRI associated with this
-    /// entity.
-    fn iri_s(&self) -> &'a String {
-        &self.meta().0
-    }
+        $(
+            impl TryFrom<&[u8]> for $enum_type {
+            type Error = HornedError;
 
-    fn iri_b(&self) -> &'a [u8] {
-        self.meta().0.as_bytes()
-    }
+            fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
+                $enum_type::all()
+                    .into_iter()
+                    .find_map(|variant| {
+                        if variant.as_bytes() == value {
+                            Some(variant)
+                        } else {
+                            None
+                        }
+                }).ok_or_else(|| invalid!("Unknown {} variant: {:?}", stringify!{$enum_type}, value))
+            }
+            }
 
-    fn iri_str(&self) -> &'a str {
-        &self.meta().0[..]
-    }
+            impl std::str::FromStr for $enum_type {
+                type Err = HornedError;
 
-    fn var_s(tag: &'a str) -> Option<Self> {
-        Self::var_b(tag.as_bytes())
-    }
+                fn from_str(s: &str) -> Result<Self, Self::Err> {
+                    $enum_type::try_from(s.as_bytes())
+                }
+            }
 
-    fn var_b(tag: &'a [u8]) -> Option<Self> {
-        for v in Self::all() {
-            if tag == v.iri_b() {
-                return Some(v);
+            impl TryFrom<&str> for $enum_type {
+                type Error = HornedError;
+
+                fn try_from(value: &str) -> Result<Self, Self::Error> {
+                    $enum_type::from_str(value)
+                }
+            }
+
+            impl std::ops::Deref for $enum_type {
+                type Target = $return_type;
+
+                fn deref(&self) -> &Self::Target {
+                    self.meta()
+                }
+            }
+
+            impl Borrow<str> for $enum_type {
+                fn borrow(&self) -> &str {
+                    self.meta().as_ref()
+                }
+            }
+        )+
+    };
+}
+
+macro_rules! vocabulary_type {
+    ($(#[$attr:meta])* $enum_type:ident, $return_type:ty, $storage:ident, [$(($ns:ident, $variant:ident, $first_lowercase:expr)),*]) => {
+
+        $(#[$attr]) *
+        #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+        pub enum $enum_type {
+            $(
+                $variant,
+            )*
+        }
+
+        impl $enum_type {
+            fn get_iri(self) -> IRI<String> {
+
+                let mut iri_str = String::new();
+                $(
+                    iri_str.push_str(Namespace::$ns.as_ref());
+                )?
+
+                match self {
+                    $(
+                        $enum_type::$variant => {
+                            let mut iri_str = String::from(Namespace::$ns.as_ref());
+                            let mut variant_str = String::from(stringify!($variant));
+                            if $first_lowercase {
+                                let tail = variant_str.split_off(1);
+                                variant_str.make_ascii_lowercase();
+                                variant_str.push_str(&tail);
+                            }
+                            iri_str.push_str(&variant_str);
+                            IRI(iri_str)
+                        }
+                    )*,
+                }
             }
         }
-        None
+
+        lazy_meta! {
+            $enum_type, IRI<String>, $storage;
+            $(
+                $variant, $enum_type::get_iri($enum_type::$variant);
+            )*
+
+        }
+
+        vocabulary_traits! { $enum_type; $return_type }
     }
 }
 
-pub struct IRIString(String);
-
-impl<'a, T> WithIRI<'a> for T where T: Meta<&'a IRIString> {}
-
-fn to_meta(s: &str) -> IRIString {
-    IRIString(s.to_string())
-}
-
-fn extend<'a, I>(i: I, s: &'a str) -> IRIString
-where
-    I: WithIRI<'a>,
-{
-    to_meta(&format!("{}{}", i.iri_s(), s))
-}
-
+/// [Namespaces](https://www.w3.org/TR/2004/REC-owl-guide-20040210/#Namespaces)
+/// that are typically used within an OWL document.
 #[derive(Debug, Eq, PartialEq)]
 pub enum Namespace {
+    /// Ontology Web Language
     OWL,
+    /// Resource Description Framework
     RDF,
+    /// RDF Schema
     RDFS,
+    /// XML Schema datatype
     XSD,
 }
 
-lazy_meta! {
-    Namespace, IRIString, METANS;
-    OWL, to_meta("http://www.w3.org/2002/07/owl#");
-    RDF, to_meta("http://www.w3.org/1999/02/22-rdf-syntax-ns#");
-    RDFS, to_meta("http://www.w3.org/2000/01/rdf-schema#");
-    XSD, to_meta("http://www.w3.org/2001/XMLSchema#");
-}
-
-#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub enum RDF {
-    First,
-    List,
-    Nil,
-    Rest,
-    Type,
+vocabulary_traits! {
+    Namespace;
+    IRI<String>
 }
 
 lazy_meta! {
-    RDF, IRIString, METARDF;
-    First, extend(RDF, "first");
-    List, extend(RDF, "List");
-    Nil, extend(RDF, "nil");
-    Rest, extend(RDF, "rest");
-    Type, extend(RDF, "type");
+    Namespace, IRI<String>, METANS;
+    OWL, IRI(String::from("http://www.w3.org/2002/07/owl#"));
+    RDF, IRI(String::from("http://www.w3.org/1999/02/22-rdf-syntax-ns#"));
+    RDFS, IRI(String::from("http://www.w3.org/2000/01/rdf-schema#"));
+    XSD, IRI(String::from("http://www.w3.org/2001/XMLSchema#"));
 }
 
-#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub enum RDFS {
-    Comment,
-    Datatype,
-    Domain,
-    IsDefinedBy,
-    Label,
-    Range,
-    SeeAlso,
-    SubClassOf,
-    SubPropertyOf,
+vocabulary_type! {
+    /// RDF Collections vocabulary.
+    RDF, IRI<String>, METARDF, [
+        (RDF, List, false),
+        (RDF, First, true),
+        (RDF, Nil, true),
+        (RDF, Rest, true),
+        (RDF, Type, true)
+    ]
+}
+
+vocabulary_type! {
+    RDFS, IRI<String>, METARDFS, [
+        (RDFS, Comment, true),
+        (RDFS, Datatype, false),
+        (RDFS, Domain, true),
+        (RDFS, IsDefinedBy, true),
+        (RDFS, Label, true),
+        (RDFS, Range, true),
+        (RDFS, SeeAlso, true),
+        (RDFS, SubClassOf, true),
+        (RDFS, SubPropertyOf, true)
+    ]
 }
 
 impl RDFS {
     pub fn is_builtin(&self) -> bool {
-        matches!{
-            self,
-            RDFS::Label | RDFS::Comment | RDFS::SeeAlso | RDFS::IsDefinedBy
+        match &self {
+            RDFS::Label | RDFS::Comment | RDFS::SeeAlso | RDFS::IsDefinedBy => true,
+            _ => false,
         }
     }
 }
 
-lazy_meta! {
-    RDFS, IRIString, METARDFS;
-    Comment, extend(RDFS, "comment");
-    Datatype, extend(RDFS, "Datatype");
-    Domain, extend(RDFS, "domain");
-    IsDefinedBy, extend(RDFS, "isDefinedBy");
-    Label, extend(RDFS, "label");
-    Range, extend(RDFS, "range");
-    SeeAlso, extend(RDFS, "seeAlso");
-    SubClassOf, extend(RDFS, "subClassOf");
-    SubPropertyOf, extend(RDFS, "subPropertyOf");
+vocabulary_type! {
+    OWL, IRI<String>, METAOWL, [
+        (OWL, AllDifferent, false),
+        (OWL, AllDisjointProperties, false),
+        (OWL, AllValuesFrom, true),
+        (OWL, AnnotatedProperty, true),
+        (OWL, AnnotatedSource, true),
+        (OWL, AnnotatedTarget, true),
+        (OWL, AnnotationProperty, false),
+        (OWL, AssertionProperty, true),
+        (OWL, AsymmetricProperty, false),
+        (OWL, Axiom, false),
+        (OWL, Cardinality, true),
+        (OWL, Class, false),
+        (OWL, ComplementOf, true),
+        (OWL, DatatypeComplementOf, true),
+        (OWL, DatatypeProperty, false),
+        (OWL, DifferentFrom, true),
+        (OWL, DisjointUnionOf, true),
+        (OWL, DisjointWith, true),
+        (OWL, DistinctMembers, true),
+        (OWL, EquivalentClass, true),
+        (OWL, EquivalentProperty, true),
+        (OWL, FunctionalProperty, false),
+        (OWL, HasKey, true),
+        (OWL, HasSelf, true),
+        (OWL, HasValue, true),
+        (OWL, Imports, true),
+        (OWL, IntersectionOf, true),
+        (OWL, InverseFunctionalProperty, false),
+        (OWL, InverseOf, true),
+        (OWL, IrreflexiveProperty, false),
+        (OWL, MaxCardinality, true),
+        (OWL, MaxQualifiedCardinality, true),
+        (OWL, Members, true),
+        (OWL, MinCardinality, true),
+        (OWL, MinQualifiedCardinality, true),
+        (OWL, NamedIndividual, false),
+        (OWL, NegativePropertyAssertion, false),
+        (OWL, Nothing, false),
+        (OWL, ObjectProperty, false),
+        (OWL, OnClass, true),
+        (OWL, OnDataRange, true),
+        (OWL, OnDatatype, true),
+        (OWL, OneOf, true),
+        (OWL, OnProperty, true),
+        (OWL, Ontology, false),
+        (OWL, QualifiedCardinality, true),
+        (OWL, PropertyChainAxiom, true),
+        (OWL, PropertyDisjointWith, true),
+        (OWL, ReflexiveProperty, false),
+        (OWL, Restriction, false),
+        (OWL, SameAs, true),
+        (OWL, SourceIndividual, true),
+        (OWL, SomeValuesFrom, true),
+        (OWL, SymmetricProperty, false),
+        (OWL, TargetIndividual, true),
+        (OWL, TargetValue, true),
+        (OWL, TopDataProperty, true),
+        (OWL, TopObjectProperty, true),
+        (OWL, Thing, false),
+        (OWL, TransitiveProperty, false),
+        (OWL, UnionOf, true),
+        (OWL, VersionIRI, true),
+        (OWL, WithRestrictions, true)
+    ]
 }
 
-#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub enum OWL {
-    AllDifferent,
-    AllDisjointProperties,
-    AllValuesFrom,
-    AnnotatedProperty,
-    AnnotatedSource,
-    AnnotatedTarget,
-    AnnotationProperty,
-    AssertionProperty,
-    AsymmetricProperty,
-    Axiom,
-    Cardinality,
-    Class,
-    ComplementOf,
-    DatatypeComplementOf,
-    DatatypeProperty,
-    DifferentFrom,
-    DisjointUnionOf,
-    DisjointWith,
-    DistinctMembers,
-    EquivalentClass,
-    EquivalentProperty,
-    FunctionalProperty,
-    HasKey,
-    HasSelf,
-    HasValue,
-    Imports,
-    IntersectionOf,
-    InverseFunctionalProperty,
-    InverseOf,
-    IrreflexiveProperty,
-    MaxCardinality,
-    MaxQualifiedCardinality,
-    Members,
-    MinCardinality,
-    MinQualifiedCardinality,
-    NamedIndividual,
-    NegativePropertyAssertion,
-    Nothing,
-    ObjectProperty,
-    OnClass,
-    OnDataRange,
-    OnDatatype,
-    OneOf,
-    OnProperty,
-    Ontology,
-    QualifiedCardinality,
-    PropertyChainAxiom,
-    PropertyDisjointWith,
-    ReflexiveProperty,
-    Restriction,
-    SameAs,
-    SourceIndividual,
-    SomeValuesFrom,
-    SymmetricProperty,
-    TargetIndividual,
-    TargetValue,
-    TopDataProperty,
-    TopObjectProperty,
-    Thing,
-    TransitiveProperty,
-    UnionOf,
-    VersionIRI,
-    WithRestrictions,
-}
-
-lazy_meta! {
-    OWL, IRIString, METAOWL;
-
-    AllDifferent, extend(OWL, "AllDifferent");
-    AllDisjointProperties, extend(OWL, "AllDisjointProperties");
-    AllValuesFrom, extend(OWL, "allValuesFrom");
-    AnnotatedProperty, extend(OWL, "annotatedProperty");
-    AnnotatedSource, extend(OWL, "annotatedSource");
-    AnnotatedTarget, extend(OWL, "annotatedTarget");
-    AnnotationProperty, extend(OWL, "AnnotationProperty");
-    AssertionProperty, extend(OWL, "assertionProperty");
-    AsymmetricProperty, extend(OWL, "AsymmetricProperty");
-    Axiom, extend(OWL, "Axiom");
-    Class, extend(OWL, "Class");
-    ComplementOf, extend(OWL, "complementOf");
-    DatatypeComplementOf, extend(OWL, "datatypeComplementOf");
-    DatatypeProperty, extend(OWL, "DatatypeProperty");
-    DifferentFrom, extend(OWL, "differentFrom");
-    DisjointUnionOf, extend(OWL, "disjointUnionOf");
-    DisjointWith, extend(OWL, "disjointWith");
-    DistinctMembers, extend(OWL, "distinctMembers");
-    Cardinality, extend(OWL, "cardinality");
-    EquivalentClass, extend(OWL, "equivalentClass");
-    EquivalentProperty, extend(OWL, "equivalentProperty");
-    FunctionalProperty, extend(OWL, "FunctionalProperty");
-    Imports, extend(OWL, "imports");
-    IntersectionOf, extend(OWL, "intersectionOf");
-    InverseFunctionalProperty, extend(OWL, "InverseFunctionalProperty");
-    InverseOf, extend(OWL, "inverseOf");
-    IrreflexiveProperty, extend(OWL, "IrreflexiveProperty");
-    HasKey, extend(OWL, "hasKey");
-    HasSelf, extend(OWL, "hasSelf");
-    HasValue, extend(OWL, "hasValue");
-    MaxCardinality, extend(OWL, "maxCardinality");
-    MaxQualifiedCardinality, extend(OWL, "maxQualifiedCardinality");
-    Members, extend(OWL, "members");
-    MinCardinality, extend(OWL, "minCardinality");
-    MinQualifiedCardinality, extend(OWL, "minQualifiedCardinality");
-    NamedIndividual, extend(OWL, "NamedIndividual");
-    NegativePropertyAssertion, extend(OWL, "NegativePropertyAssertion");
-    Nothing, extend(OWL, "Nothing");
-    ObjectProperty, extend(OWL, "ObjectProperty");
-    OnClass, extend(OWL, "onClass");
-    OnDataRange, extend(OWL, "onDataRange");
-    OnDatatype, extend(OWL, "onDatatype");
-    OneOf, extend(OWL, "oneOf");
-    OnProperty, extend(OWL, "onProperty");
-    Ontology, extend(OWL, "Ontology");
-    PropertyChainAxiom, extend(OWL, "propertyChainAxiom");
-    PropertyDisjointWith, extend(OWL, "propertyDisjointWith");
-    QualifiedCardinality, extend(OWL, "qualifiedCardinality");
-    ReflexiveProperty, extend(OWL, "ReflexiveProperty");
-    Restriction, extend(OWL, "Restriction");
-    SameAs, extend(OWL, "sameAs");
-    SourceIndividual, extend(OWL, "sourceIndividual");
-    SomeValuesFrom, extend(OWL, "someValuesFrom");
-    SymmetricProperty, extend(OWL, "SymmetricProperty");
-    TargetIndividual, extend(OWL, "targetIndividual");
-    TargetValue, extend(OWL, "targetValue");
-    Thing, extend(OWL, "Thing");
-    TopDataProperty, extend(OWL, "topDataProperty");
-    TopObjectProperty, extend(OWL, "topObjectProperty");
-    TransitiveProperty, extend(OWL, "TransitiveProperty");
-    UnionOf, extend(OWL, "unionOf");
-    VersionIRI, extend(OWL, "versionIRI");
-    WithRestrictions, extend(OWL, "withRestrictions");
-}
-
-pub fn is_thing<A: ForIRI>(iri: &IRI<A>) -> bool {
-    iri.as_ref() == OWL::Thing.iri_s()
-}
-
-pub fn is_nothing<A: ForIRI>(iri: &IRI<A>) -> bool {
-    iri.as_ref() == OWL::Nothing.iri_s()
-}
-
+/// Returns a [NamedEntityKind] if the IRI points to a built-in entity, otherwise [None].
 pub fn to_built_in_entity<A: ForIRI>(iri: &IRI<A>) -> Option<NamedEntityKind> {
     let ir = iri.as_ref();
     match ir {
-        _ if ir == OWL::TopDataProperty.iri_s() => Some(NamedEntityKind::DataProperty),
-        _ if ir == OWL::TopObjectProperty.iri_s() => Some(NamedEntityKind::ObjectProperty),
+        _ if ir == OWL::TopDataProperty.as_ref() => Some(NamedEntityKind::DataProperty),
+        _ if ir == OWL::TopObjectProperty.as_ref() => Some(NamedEntityKind::ObjectProperty),
+        _ if ir == OWL::Thing.as_ref() => Some(NamedEntityKind::Class),
+        _ if ir == OWL::Nothing.as_ref() => Some(NamedEntityKind::Class),
         _ => None,
     }
-}
-
-#[test]
-fn meta_testing() {
-    assert_eq!("http://www.w3.org/2002/07/owl#", OWL.iri_s());
-    assert_eq!(b"http://www.w3.org/2002/07/owl#", OWL.iri_b());
-
-    assert_eq!(
-        Namespace::var_s("http://www.w3.org/2002/07/owl#").unwrap(),
-        OWL
-    );
-
-    assert_eq!(
-        Namespace::var_b(b"http://www.w3.org/2002/07/owl#").unwrap(),
-        OWL
-    );
 }
 
 pub fn entity_for_iri<A: ForIRI, S: Borrow<str>>(
@@ -306,155 +268,74 @@ pub fn entity_for_iri<A: ForIRI, S: Borrow<str>>(
         return Ok(b.datatype(entity_iri).into());
     }
 
-    if type_iri.borrow().len() < 30 {
-        return Err(invalid!(
-            "IRI is not for a type of entity:{:?}",
+    match &type_iri.borrow().strip_prefix(Namespace::OWL.as_ref()) {
+        Some("Class") => Ok(b.class(entity_iri).into()),
+        Some("ObjectProperty") => Ok(b.object_property(entity_iri).into()),
+        Some("DatatypeProperty") => Ok(b.data_property(entity_iri).into()),
+        Some("AnnotationProperty") => Ok(b.annotation_property(entity_iri).into()),
+        Some("NamedIndividual") => Ok(b.named_individual(entity_iri).into()),
+        _ => Err(invalid!(
+            "IRI is not a type of entity:{:?}",
             type_iri.borrow()
-        ));
+        )),
     }
-
-    Ok(match &type_iri.borrow()[30..] {
-        "Class" => b.class(entity_iri).into(),
-        "ObjectProperty" => b.object_property(entity_iri).into(),
-        "DatatypeProperty" => b.data_property(entity_iri).into(),
-        "AnnotationProperty" => b.annotation_property(entity_iri).into(),
-        "NamedIndividual" => b.named_individual(entity_iri).into(),
-        _ => {
-            return Err(invalid!(
-                "IRI is not a type of entity:{:?}",
-                type_iri.borrow()
-            ));
-        }
-    })
 }
 
-#[test]
-pub fn test_entity_for_iri() {
-    let b = Build::new_rc();
-
-    assert!(entity_for_iri(
-        "http://www.w3.org/2002/07/owl#Class",
-        "http://www.example.com",
-        &b
-    )
-    .is_ok());
-    assert!(entity_for_iri(
-        "http://www.w3.org/2002/07/owl#Fred",
-        "http://www.example.com",
-        &b
-    )
-    .is_err());
+vocabulary_type! {
+    OWL2Datatype,
+    IRI<String>,
+    METAOWL2DATATYPE,
+    [(RDFS, Literal, false)]
 }
 
-pub enum OWL2Datatype {
-    RDFSLiteral,
+vocabulary_type! {
+    AnnotationBuiltIn, IRI<String>, METAANNOTATIONBUILTIN, [
+        (RDFS, Label, true),
+        (RDFS, Comment, true),
+        (RDFS, SeeAlso, true),
+        (RDFS, IsDefinedBy, true),
+        (OWL, Deprecated, true),
+        (OWL, VersionInfo, true),
+        (OWL, PriorVersion, true),
+        (OWL, BackwardCompatibleWith, true),
+        (OWL, IncompatibleWith, true)
+    ]
 }
 
-lazy_meta! {
-    OWL2Datatype, IRIString, METAOWL2DATATYPE;
-    RDFSLiteral, extend(RDFS, "Literal")
+#[inline]
+pub fn is_annotation_builtin<A: AsRef<str>>(iri: A) -> bool {
+    AnnotationBuiltIn::from_str(iri.as_ref()).is_ok()
+    // AnnotationBuiltIn::all()
+    //     .iter()
+    //     .any(|item| item.as_ref() == iri.as_ref())
 }
 
-pub enum AnnotationBuiltIn {
-    LABEL,
-    COMMENT,
-    SEEALSO,
-    ISDEFINEDBY,
-    DEPRECATED,
-    VERSIONINFO,
-    PRIORVERSION,
-    BACKWARDCOMPATIBLEWITH,
-    INCOMPATIBLEWITH,
+vocabulary_type! {
+    Facet, IRI<String>, METAFACET, [
+        (XSD, Length, true),
+        (XSD, MinLength, true),
+        (XSD, MaxLength, true),
+        (XSD, Pattern, true),
+        (XSD, MinInclusive, true),
+        (XSD, MinExclusive, true),
+        (XSD, MaxInclusive, true),
+        (XSD, MaxExclusive, true),
+        (XSD, TotalDigits, true),
+        (XSD, FractionDigits, true),
+        (RDF, LangRange, true)
+    ]
 }
 
-lazy_meta! {
-    AnnotationBuiltIn, IRIString, METAANNOTATIONBUILTIN;
-    LABEL, extend(RDFS, "label");
-    COMMENT, extend(RDFS, "comment");
-    SEEALSO, extend(RDFS, "seeAlso");
-    ISDEFINEDBY, extend(RDFS, "isDefinedBy");
-    DEPRECATED, extend(OWL, "deprecated");
-    VERSIONINFO, extend(OWL, "versionInfo");
-    PRIORVERSION, extend(OWL, "priorVersion");
-    BACKWARDCOMPATIBLEWITH, extend(OWL, "backwardCompatibleWith");
-    INCOMPATIBLEWITH, extend(OWL, "incompatibleWith");
+vocabulary_type! {
+    XSD, IRI<String>, METAXSD, [
+        (XSD, Boolean, true),
+        (XSD, NonNegativeInteger, true)
+    ]
 }
 
-pub fn is_annotation_builtin<A:AsRef<str>>(iri: A) -> bool {
-    for meta in AnnotationBuiltIn::all() {
-        if meta.iri_str() == iri.as_ref() {
-            return true;
-        }
-    }
-    false
-}
-
-#[test]
-fn annotation_builtin() {
-    assert!(is_annotation_builtin(
-        &"http://www.w3.org/2002/07/owl#deprecated".to_string()
-    ));
-    assert!(is_annotation_builtin(
-        &"http://www.w3.org/2000/01/rdf-schema#comment".to_string()
-    ));
-    assert!(!is_annotation_builtin(
-        &"http://www.w3.org/2002/07/owl#fred".to_string()
-    ));
-}
-
-lazy_meta! {
-    Facet, IRIString, METAFACET;
-    Length, extend(XSD, "length");
-    MinLength, extend(XSD, "minLength");
-    MaxLength, extend(XSD, "maxLength");
-    Pattern, extend(XSD, "pattern");
-    MinInclusive, extend(XSD, "minInclusive");
-    MinExclusive, extend(XSD, "minExclusive");
-    MaxInclusive, extend(XSD, "maxInclusive");
-    MaxExclusive, extend(XSD, "maxExclusive");
-    TotalDigits, extend(XSD, "totalDigits");
-    FractionDigits, extend(XSD, "fractionDigits");
-    LangRange, extend(RDF, "langRange");
-}
-
-#[test]
-fn facet_meta() {
-    assert_eq!(
-        Facet::MinLength.iri_s(),
-        "http://www.w3.org/2001/XMLSchema#minLength"
-    );
-
-    assert_eq!(
-        Facet::Pattern.iri_s(),
-        "http://www.w3.org/2001/XMLSchema#pattern"
-    );
-
-    assert_eq!(
-        Facet::var_s("http://www.w3.org/2001/XMLSchema#pattern").unwrap(),
-        Facet::Pattern
-    );
-
-    assert_eq!(
-        Facet::var_b(b"http://www.w3.org/2001/XMLSchema#minExclusive").unwrap(),
-        Facet::MinExclusive
-    );
-}
-
-pub enum XSD {
-    Boolean,
-    NonNegativeInteger,
-}
-
-pub fn is_xsd_datatype<A:AsRef<str>>(iri:A) -> bool {
-    //TODO. This is over-simplistic
-    iri.as_ref().starts_with("http://www.w3.org/2001/XMLSchema")
-}
-
-
-lazy_meta! {
-    XSD, IRIString, METAXSD;
-    Boolean, extend(XSD, "boolean");
-    NonNegativeInteger, extend(XSD, "nonNegativeInteger")
+pub fn is_xsd_datatype<A: AsRef<str>>(iri: A) -> bool {
+    // This only checks that the IRI starts with the XSD namespace.
+    iri.as_ref().starts_with(Namespace::XSD.as_ref())
 }
 
 pub enum Vocab {
@@ -466,8 +347,13 @@ pub enum Vocab {
     Namespace(Namespace),
 }
 
-impl<'a> Meta<&'a IRIString> for Vocab {
-    fn meta(&self) -> &'a IRIString {
+vocabulary_traits! {
+    Vocab;
+    IRI<String>
+}
+
+impl<'a> Meta<&'a IRI<String>> for Vocab {
+    fn meta(&self) -> &'a IRI<String> {
         match self {
             Self::Facet(facet) => facet.meta(),
             Self::RDF(rdf) => rdf.meta(),
@@ -479,7 +365,22 @@ impl<'a> Meta<&'a IRIString> for Vocab {
     }
 
     fn all() -> Vec<Self> {
-        todo!()
+        let facet_all = Facet::all().into_iter().map(|variant| Self::Facet(variant));
+        let rdf_all = RDF::all().into_iter().map(|variant| Self::RDF(variant));
+        let rdfs_all = RDFS::all().into_iter().map(|variant| Self::RDFS(variant));
+        let owl_all = OWL::all().into_iter().map(|variant| Self::OWL(variant));
+        let xsd_all = XSD::all().into_iter().map(|variant| Self::XSD(variant));
+        let ns_all = Namespace::all()
+            .into_iter()
+            .map(|variant| Self::Namespace(variant));
+
+        facet_all
+            .chain(rdf_all)
+            .chain(rdfs_all)
+            .chain(owl_all)
+            .chain(xsd_all)
+            .chain(ns_all)
+            .collect()
     }
 }
 
@@ -516,5 +417,427 @@ impl From<OWL> for Vocab {
 impl From<XSD> for Vocab {
     fn from(xsd: XSD) -> Self {
         Self::XSD(xsd)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_meta_rdf() {
+        assert_eq!(
+            RDF::First.as_ref(),
+            "http://www.w3.org/1999/02/22-rdf-syntax-ns#first"
+        );
+        assert_eq!(
+            RDF::List.as_ref(),
+            "http://www.w3.org/1999/02/22-rdf-syntax-ns#List"
+        );
+        assert_eq!(
+            RDF::Nil.as_ref(),
+            "http://www.w3.org/1999/02/22-rdf-syntax-ns#nil"
+        );
+        assert_eq!(
+            RDF::Rest.as_ref(),
+            "http://www.w3.org/1999/02/22-rdf-syntax-ns#rest"
+        );
+        assert_eq!(
+            RDF::Type.as_ref(),
+            "http://www.w3.org/1999/02/22-rdf-syntax-ns#type"
+        );
+    }
+
+    #[test]
+    fn test_meta_rdfs() {
+        assert_eq!(
+            RDFS::Comment.as_ref(),
+            "http://www.w3.org/2000/01/rdf-schema#comment"
+        );
+        assert_eq!(
+            RDFS::Datatype.as_ref(),
+            "http://www.w3.org/2000/01/rdf-schema#Datatype"
+        );
+        assert_eq!(
+            RDFS::Domain.as_ref(),
+            "http://www.w3.org/2000/01/rdf-schema#domain"
+        );
+        assert_eq!(
+            RDFS::IsDefinedBy.as_ref(),
+            "http://www.w3.org/2000/01/rdf-schema#isDefinedBy"
+        );
+        assert_eq!(
+            RDFS::Label.as_ref(),
+            "http://www.w3.org/2000/01/rdf-schema#label"
+        );
+        assert_eq!(
+            RDFS::Range.as_ref(),
+            "http://www.w3.org/2000/01/rdf-schema#range"
+        );
+        assert_eq!(
+            RDFS::SeeAlso.as_ref(),
+            "http://www.w3.org/2000/01/rdf-schema#seeAlso"
+        );
+        assert_eq!(
+            RDFS::SubClassOf.as_ref(),
+            "http://www.w3.org/2000/01/rdf-schema#subClassOf"
+        );
+        assert_eq!(
+            RDFS::SubPropertyOf.as_ref(),
+            "http://www.w3.org/2000/01/rdf-schema#subPropertyOf"
+        );
+    }
+
+    #[test]
+    fn test_meta_owl() {
+        assert_eq!(
+            OWL::AllDifferent.as_ref(),
+            "http://www.w3.org/2002/07/owl#AllDifferent"
+        );
+        assert_eq!(
+            OWL::AllDisjointProperties.as_ref(),
+            "http://www.w3.org/2002/07/owl#AllDisjointProperties"
+        );
+        assert_eq!(
+            OWL::AllValuesFrom.as_ref(),
+            "http://www.w3.org/2002/07/owl#allValuesFrom"
+        );
+        assert_eq!(
+            OWL::AnnotatedProperty.as_ref(),
+            "http://www.w3.org/2002/07/owl#annotatedProperty"
+        );
+        assert_eq!(
+            OWL::AnnotatedSource.as_ref(),
+            "http://www.w3.org/2002/07/owl#annotatedSource"
+        );
+        assert_eq!(
+            OWL::AnnotatedTarget.as_ref(),
+            "http://www.w3.org/2002/07/owl#annotatedTarget"
+        );
+        assert_eq!(
+            OWL::AnnotationProperty.as_ref(),
+            "http://www.w3.org/2002/07/owl#AnnotationProperty"
+        );
+        assert_eq!(
+            OWL::AssertionProperty.as_ref(),
+            "http://www.w3.org/2002/07/owl#assertionProperty"
+        );
+        assert_eq!(
+            OWL::AsymmetricProperty.as_ref(),
+            "http://www.w3.org/2002/07/owl#AsymmetricProperty"
+        );
+        assert_eq!(OWL::Axiom.as_ref(), "http://www.w3.org/2002/07/owl#Axiom");
+        assert_eq!(
+            OWL::Cardinality.as_ref(),
+            "http://www.w3.org/2002/07/owl#cardinality"
+        );
+        assert_eq!(OWL::Class.as_ref(), "http://www.w3.org/2002/07/owl#Class");
+        assert_eq!(
+            OWL::ComplementOf.as_ref(),
+            "http://www.w3.org/2002/07/owl#complementOf"
+        );
+        assert_eq!(
+            OWL::DatatypeComplementOf.as_ref(),
+            "http://www.w3.org/2002/07/owl#datatypeComplementOf"
+        );
+        assert_eq!(
+            OWL::DatatypeProperty.as_ref(),
+            "http://www.w3.org/2002/07/owl#DatatypeProperty"
+        );
+        assert_eq!(
+            OWL::DifferentFrom.as_ref(),
+            "http://www.w3.org/2002/07/owl#differentFrom"
+        );
+        assert_eq!(
+            OWL::DisjointUnionOf.as_ref(),
+            "http://www.w3.org/2002/07/owl#disjointUnionOf"
+        );
+        assert_eq!(
+            OWL::DisjointWith.as_ref(),
+            "http://www.w3.org/2002/07/owl#disjointWith"
+        );
+        assert_eq!(
+            OWL::DistinctMembers.as_ref(),
+            "http://www.w3.org/2002/07/owl#distinctMembers"
+        );
+        assert_eq!(
+            OWL::EquivalentClass.as_ref(),
+            "http://www.w3.org/2002/07/owl#equivalentClass"
+        );
+        assert_eq!(
+            OWL::EquivalentProperty.as_ref(),
+            "http://www.w3.org/2002/07/owl#equivalentProperty"
+        );
+        assert_eq!(
+            OWL::FunctionalProperty.as_ref(),
+            "http://www.w3.org/2002/07/owl#FunctionalProperty"
+        );
+        assert_eq!(OWL::HasKey.as_ref(), "http://www.w3.org/2002/07/owl#hasKey");
+        assert_eq!(
+            OWL::HasValue.as_ref(),
+            "http://www.w3.org/2002/07/owl#hasValue"
+        );
+        assert_eq!(
+            OWL::Imports.as_ref(),
+            "http://www.w3.org/2002/07/owl#imports"
+        );
+        assert_eq!(
+            OWL::IntersectionOf.as_ref(),
+            "http://www.w3.org/2002/07/owl#intersectionOf"
+        );
+        assert_eq!(
+            OWL::InverseFunctionalProperty.as_ref(),
+            "http://www.w3.org/2002/07/owl#InverseFunctionalProperty"
+        );
+        assert_eq!(
+            OWL::InverseOf.as_ref(),
+            "http://www.w3.org/2002/07/owl#inverseOf"
+        );
+        assert_eq!(
+            OWL::IrreflexiveProperty.as_ref(),
+            "http://www.w3.org/2002/07/owl#IrreflexiveProperty"
+        );
+        assert_eq!(
+            OWL::MaxCardinality.as_ref(),
+            "http://www.w3.org/2002/07/owl#maxCardinality"
+        );
+        assert_eq!(
+            OWL::MaxQualifiedCardinality.as_ref(),
+            "http://www.w3.org/2002/07/owl#maxQualifiedCardinality"
+        );
+        assert_eq!(
+            OWL::Members.as_ref(),
+            "http://www.w3.org/2002/07/owl#members"
+        );
+        assert_eq!(
+            OWL::MinCardinality.as_ref(),
+            "http://www.w3.org/2002/07/owl#minCardinality"
+        );
+        assert_eq!(
+            OWL::MinQualifiedCardinality.as_ref(),
+            "http://www.w3.org/2002/07/owl#minQualifiedCardinality"
+        );
+        assert_eq!(
+            OWL::NamedIndividual.as_ref(),
+            "http://www.w3.org/2002/07/owl#NamedIndividual"
+        );
+        assert_eq!(
+            OWL::NegativePropertyAssertion.as_ref(),
+            "http://www.w3.org/2002/07/owl#NegativePropertyAssertion"
+        );
+        assert_eq!(
+            OWL::Nothing.as_ref(),
+            "http://www.w3.org/2002/07/owl#Nothing"
+        );
+        assert_eq!(
+            OWL::ObjectProperty.as_ref(),
+            "http://www.w3.org/2002/07/owl#ObjectProperty"
+        );
+        assert_eq!(
+            OWL::OnClass.as_ref(),
+            "http://www.w3.org/2002/07/owl#onClass"
+        );
+        assert_eq!(
+            OWL::OnDataRange.as_ref(),
+            "http://www.w3.org/2002/07/owl#onDataRange"
+        );
+        assert_eq!(
+            OWL::OnDatatype.as_ref(),
+            "http://www.w3.org/2002/07/owl#onDatatype"
+        );
+        assert_eq!(OWL::OneOf.as_ref(), "http://www.w3.org/2002/07/owl#oneOf");
+        assert_eq!(
+            OWL::OnProperty.as_ref(),
+            "http://www.w3.org/2002/07/owl#onProperty"
+        );
+        assert_eq!(
+            OWL::Ontology.as_ref(),
+            "http://www.w3.org/2002/07/owl#Ontology"
+        );
+        assert_eq!(
+            OWL::QualifiedCardinality.as_ref(),
+            "http://www.w3.org/2002/07/owl#qualifiedCardinality"
+        );
+        assert_eq!(
+            OWL::PropertyChainAxiom.as_ref(),
+            "http://www.w3.org/2002/07/owl#propertyChainAxiom"
+        );
+        assert_eq!(
+            OWL::PropertyDisjointWith.as_ref(),
+            "http://www.w3.org/2002/07/owl#propertyDisjointWith"
+        );
+        assert_eq!(
+            OWL::ReflexiveProperty.as_ref(),
+            "http://www.w3.org/2002/07/owl#ReflexiveProperty"
+        );
+        assert_eq!(
+            OWL::Restriction.as_ref(),
+            "http://www.w3.org/2002/07/owl#Restriction"
+        );
+        assert_eq!(OWL::SameAs.as_ref(), "http://www.w3.org/2002/07/owl#sameAs");
+        assert_eq!(
+            OWL::SourceIndividual.as_ref(),
+            "http://www.w3.org/2002/07/owl#sourceIndividual"
+        );
+        assert_eq!(
+            OWL::SomeValuesFrom.as_ref(),
+            "http://www.w3.org/2002/07/owl#someValuesFrom"
+        );
+        assert_eq!(
+            OWL::SymmetricProperty.as_ref(),
+            "http://www.w3.org/2002/07/owl#SymmetricProperty"
+        );
+        assert_eq!(
+            OWL::TargetIndividual.as_ref(),
+            "http://www.w3.org/2002/07/owl#targetIndividual"
+        );
+        assert_eq!(
+            OWL::TargetValue.as_ref(),
+            "http://www.w3.org/2002/07/owl#targetValue"
+        );
+        assert_eq!(
+            OWL::TopDataProperty.as_ref(),
+            "http://www.w3.org/2002/07/owl#topDataProperty"
+        );
+        assert_eq!(
+            OWL::TopObjectProperty.as_ref(),
+            "http://www.w3.org/2002/07/owl#topObjectProperty"
+        );
+        assert_eq!(OWL::Thing.as_ref(), "http://www.w3.org/2002/07/owl#Thing");
+        assert_eq!(
+            OWL::TransitiveProperty.as_ref(),
+            "http://www.w3.org/2002/07/owl#TransitiveProperty"
+        );
+        assert_eq!(
+            OWL::UnionOf.as_ref(),
+            "http://www.w3.org/2002/07/owl#unionOf"
+        );
+        assert_eq!(
+            OWL::VersionIRI.as_ref(),
+            "http://www.w3.org/2002/07/owl#versionIRI"
+        );
+        assert_eq!(
+            OWL::WithRestrictions.as_ref(),
+            "http://www.w3.org/2002/07/owl#withRestrictions"
+        );
+    }
+
+    #[test]
+    fn test_namespace_try_from() {
+        assert_eq!("http://www.w3.org/2002/07/owl#", Namespace::OWL.as_ref());
+        assert_eq!(b"http://www.w3.org/2002/07/owl#", Namespace::OWL.as_bytes());
+
+        assert!(Namespace::from_str("http://www.w3.org/2002/07/owl#").is_ok());
+        assert!(Namespace::from_str("http://www.example.org/2002/07/owl#").is_err());
+
+        assert!(Namespace::try_from(b"http://www.w3.org/2002/07/owl#".as_ref()).is_ok());
+        assert!(Namespace::try_from(b"http://www.example.org/2002/07/owl#".as_ref()).is_err());
+    }
+
+    #[test]
+    fn test_to_built_in_entity() {
+        let builder = Build::new_rc();
+        let iri_top_dp = builder.iri(OWL::TopDataProperty.as_ref());
+        let iri_top_op = builder.iri(OWL::TopObjectProperty.as_ref());
+        let iri_thing = builder.iri(OWL::Thing.as_ref());
+        let iri_nothing = builder.iri(OWL::Nothing.as_ref());
+        assert_eq!(
+            to_built_in_entity(&iri_top_dp),
+            Some(NamedEntityKind::DataProperty)
+        );
+        assert_eq!(
+            to_built_in_entity(&iri_top_op),
+            Some(NamedEntityKind::ObjectProperty)
+        );
+        assert_eq!(to_built_in_entity(&iri_thing), Some(NamedEntityKind::Class));
+        assert_eq!(
+            to_built_in_entity(&iri_nothing),
+            Some(NamedEntityKind::Class)
+        );
+    }
+
+    #[test]
+    pub fn test_entity_for_iri() {
+        let b = Build::new_rc();
+
+        assert!(entity_for_iri(
+            "http://www.w3.org/2002/07/owl#Class",
+            "http://www.example.com",
+            &b
+        )
+        .is_ok());
+        assert!(entity_for_iri(
+            "http://www.w3.org/2002/07/owl#Fred",
+            "http://www.example.com",
+            &b
+        )
+        .is_err());
+    }
+
+    #[test]
+    pub fn test_namespace_in_entity_for_iri() {
+        let b = Build::new_rc();
+
+        assert!(entity_for_iri(
+            "http://www.w3.org/2002/07/low#Class",
+            "http://www.example.com",
+            &b
+        )
+        .is_err());
+        assert!(entity_for_iri(
+            "abcdefghijklmnopqrstuvwxyz123#Class",
+            "http://www.example.com",
+            &b
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn test_meta_annotation_builtin() {
+        // Method can accept `str`ings...
+        assert!(is_annotation_builtin(
+            "http://www.w3.org/2002/07/owl#deprecated"
+        ));
+        // ...and `String`s.
+        assert!(is_annotation_builtin(
+            &"http://www.w3.org/2000/01/rdf-schema#comment".to_string()
+        ));
+        assert!(!is_annotation_builtin(
+            &"http://www.w3.org/2002/07/owl#fred".to_string()
+        ));
+    }
+
+    #[test]
+    fn test_meta_facet() {
+        assert_eq!(
+            Facet::MinLength.as_ref(),
+            "http://www.w3.org/2001/XMLSchema#minLength"
+        );
+
+        assert_eq!(
+            Facet::Pattern.as_ref(),
+            "http://www.w3.org/2001/XMLSchema#pattern"
+        );
+
+        assert_eq!(
+            Facet::try_from("http://www.w3.org/2001/XMLSchema#pattern").unwrap(),
+            Facet::Pattern
+        );
+
+        assert_eq!(
+            Facet::try_from(b"http://www.w3.org/2001/XMLSchema#minExclusive".as_ref()).unwrap(),
+            Facet::MinExclusive
+        );
+    }
+
+    #[test]
+    fn test_is_xsd_datatype() {
+        assert!(is_xsd_datatype(
+            "http://www.w3.org/2001/XMLSchema#nonNegativeInteger"
+        ));
+        assert!(!is_xsd_datatype(
+            "http://www.w3.org/2001/XMLSchemaaa#nonNegativeInteger"
+        ));
+        assert!(!is_xsd_datatype("http://www.w3.org/2001/XMLSchema.pdf"));
     }
 }
