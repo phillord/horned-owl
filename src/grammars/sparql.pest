@@ -1,0 +1,27 @@
+// Annex I: SPARQL 1.0 Grammar Subset
+// (source: https://www.w3.org/TR/2008/REC-rdf-sparql-query-20080115/)
+
+SPARQL_BlankNodeLabel = ${ "_:" ~ SPARQL_PnLocal }
+SPARQL_PnameNs        = ${ SPARQL_PnPrefix? ~ ":" }
+SPARQL_PnameLn        = ${ SPARQL_PnameNs ~ SPARQL_PnLocal }
+
+SPARQL_PnLocal  = @{ (SPARQL_PnCharsU | ASCII_DIGIT) ~ (("." ~ SPARQL_PnChars) | SPARQL_PnChars)* }
+SPARQL_PnPrefix = @{ SPARQL_PnCharsBase ~ (("." ~ SPARQL_PnChars) | SPARQL_PnChars)* }
+
+SPARQL_PnChars     = @{ SPARQL_PnCharsU | "-" | ASCII_DIGIT | "\u{00B7}" | '\u{0300}'..'\u{036F}' | '\u{203F}'..'\u{2040}' }
+SPARQL_PnCharsU    = @{ SPARQL_PnCharsBase | "_" }
+SPARQL_PnCharsBase = @{
+    ASCII_ALPHA
+  | '\u{00C0}'..'\u{00D6}'
+  | '\u{00D8}'..'\u{00F6}'
+  | '\u{00F8}'..'\u{02FF}'
+  | '\u{0370}'..'\u{037D}'
+  | '\u{037F}'..'\u{1FFF}'
+  | '\u{200C}'..'\u{200D}'
+  | '\u{2070}'..'\u{218F}'
+  | '\u{2C00}'..'\u{2FEF}'
+  | '\u{3001}'..'\u{D7FF}'
+  | '\u{F900}'..'\u{FDCF}'
+  | '\u{FDF0}'..'\u{FFFD}'
+  | '\u{10000}'..'\u{EFFFF}'
+}

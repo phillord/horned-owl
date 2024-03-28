@@ -1,6 +1,7 @@
 //! Parsers and renderers for several of the ontology formats listed in the
 //! [W3C recommendation](https://www.w3.org/TR/owl2-overview/#Syntaxes).
 
+pub mod ofn;
 pub mod owx;
 pub mod rdf;
 

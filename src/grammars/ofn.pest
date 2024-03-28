@@ -1,0 +1,369 @@
+WHITESPACE = _{ " " | "\t" | "\n" | "\r" }
+COMMENT    = _{ "#" ~ (!"\n" ~ !"\r" ~ ANY)* }
+
+LIT_PREFIX                             = _{ "Prefix" }
+LIT_ONTOLOGY                           = _{ "Ontology" }
+LIT_IMPORT                             = _{ "Import" }
+LIT_DECLARATION                        = _{ "Declaration" }
+LIT_CLASS                              = _{ "Class" }
+LIT_DATATYPE                           = _{ "Datatype" }
+LIT_OBJECT_PROPERTY                    = _{ "ObjectProperty" }
+LIT_DATA_PROPERTY                      = _{ "DataProperty" }
+LIT_ANNOTATION_PROPERTY                = _{ "AnnotationProperty" }
+LIT_NAMED_INDIVIDUAL                   = _{ "NamedIndividual" }
+LIT_ANNOTATION                         = _{ "Annotation" }
+LIT_ANNOTATION_ASSERTION               = _{ "AnnotationAssertion" }
+LIT_SUBANNOTATION_PROPERTY_OF          = _{ "SubAnnotationPropertyOf" }
+LIT_ANNOTATION_PROPERTY_DOMAIN         = _{ "AnnotationPropertyDomain" }
+LIT_ANNOTATION_PROPERTY_RANGE          = _{ "AnnotationPropertyRange" }
+LIT_OBJECT_ONE_OF                      = _{ "ObjectOneOf" }
+LIT_OBJECT_ALL_VALUES_FROM             = _{ "ObjectAllValuesFrom" }
+LIT_OBJECT_SOME_VALUES_FROM            = _{ "ObjectSomeValuesFrom" }
+LIT_OBJECT_INVERSE_OF                  = _{ "ObjectInverseOf" }
+LIT_DATA_INTERSECTION_OF               = _{ "DataIntersectionOf" }
+LIT_DATA_UNION_OF                      = _{ "DataUnionOf" }
+LIT_DATA_COMPLEMENT_OF                 = _{ "DataComplementOf" }
+LIT_DATA_ONE_OF                        = _{ "DataOneOf" }
+LIT_DATATYPE_RESTRICTION               = _{ "DatatypeRestriction" }
+LIT_OBJECT_INTERSECTION_OF             = _{ "ObjectIntersectionOf" }
+LIT_OBJECT_UNION_OF                    = _{ "ObjectUnionOf" }
+LIT_OBJECT_COMPLEMENT_OF               = _{ "ObjectComplementOf" }
+LIT_OBJECT_MIN_CARDINALITY             = _{ "ObjectMinCardinality" }
+LIT_OBJECT_MAX_CARDINALITY             = _{ "ObjectMaxCardinality" }
+LIT_OBJECT_HAS_SELF                    = _{ "ObjectHasSelf" }
+LIT_OBJECT_HAS_VALUE                   = _{ "ObjectHasValue" }
+LIT_OBJECT_EXACT_CARDINALITY           = _{ "ObjectExactCardinality" }
+LIT_CLASS_ASSERTION                    = _{ "ClassAssertion" }
+LIT_DATA_SOME_VALUES_FROM              = _{ "DataSomeValuesFrom" }
+LIT_DATA_ALL_VALUES_FROM               = _{ "DataAllValuesFrom" }
+LIT_DATA_HAS_VALUE                     = _{ "DataHasValue" }
+LIT_DATA_MIN_CARDINALITY               = _{ "DataMinCardinality" }
+LIT_DATA_MAX_CARDINALITY               = _{ "DataMaxCardinality" }
+LIT_DATA_EXACT_CARDINALITY             = _{ "DataExactCardinality" }
+LIT_SUB_CLASS_OF                       = _{ "SubClassOf" }
+LIT_EQUIVALENT_CLASSES                 = _{ "EquivalentClasses" }
+LIT_DISJOINT_CLASSES                   = _{ "DisjointClasses" }
+LIT_DISJOINT_UNION                     = _{ "DisjointUnion" }
+LIT_SUB_OBJECT_PROPERTY_OF             = _{ "SubObjectPropertyOf" }
+LIT_OBJECT_PROPERTY_CHAIN              = _{ "ObjectPropertyChain" }
+LIT_EQUIVALENT_OBJECT_PROPERTIES       = _{ "EquivalentObjectProperties" }
+LIT_DISJOINT_OBJECT_PROPERTIES         = _{ "DisjointObjectProperties" }
+LIT_OBJECT_PROPERTY_DOMAIN             = _{ "ObjectPropertyDomain" }
+LIT_OBJECT_PROPERTY_RANGE              = _{ "ObjectPropertyRange" }
+LIT_INVERSE_OBJECT_PROPERTIES          = _{ "InverseObjectProperties" }
+LIT_FUNCTIONAL_OBJECT_PROPERTY         = _{ "FunctionalObjectProperty" }
+LIT_INVERSE_FUNCTIONAL_OBJECT_PROPERTY = _{ "InverseFunctionalObjectProperty" }
+LIT_REFLEXIVE_OBJECT_PROPERTY          = _{ "ReflexiveObjectProperty" }
+LIT_IRREFLEXIVE_OBJECT_PROPERTY        = _{ "IrreflexiveObjectProperty" }
+LIT_SYMMETRIC_OBJECT_PROPERTY          = _{ "SymmetricObjectProperty" }
+LIT_ASYMMETRIC_OBJECT_PROPERTY         = _{ "AsymmetricObjectProperty" }
+LIT_TRANSITIVE_OBJECT_PROPERTY         = _{ "TransitiveObjectProperty" }
+LIT_SUB_DATA_PROPERTY_OF               = _{ "SubDataPropertyOf" }
+LIT_EQUIVALENT_DATA_PROPERTIES         = _{ "EquivalentDataProperties" }
+LIT_DISJOINT_DATA_PROPERTIES           = _{ "DisjointDataProperties" }
+LIT_DATA_PROPERTY_DOMAIN               = _{ "DataPropertyDomain" }
+LIT_DATA_PROPERTY_RANGE                = _{ "DataPropertyRange" }
+LIT_FUNCTIONAL_DATA_PROPERTY           = _{ "FunctionalDataProperty" }
+LIT_DATATYPE_DEFINITION                = _{ "DatatypeDefinition" }
+LIT_HAS_KEY                            = _{ "HasKey" }
+LIT_DIFFERENT_INDIVIDUALS              = _{ "DifferentIndividuals" }
+LIT_SAME_INDIVIDUAL                    = _{ "SameIndividual" }
+LIT_OBJECT_PROPERTY_ASSERTION          = _{ "ObjectPropertyAssertion" }
+LIT_NEGATIVE_OBJECT_PROPERTY_ASSERTION = _{ "NegativeObjectPropertyAssertion" }
+LIT_DATA_PROPERTY_ASSERTION            = _{ "DataPropertyAssertion" }
+LIT_NEGATIVE_DATA_PROPERTY_ASSERTION   = _{ "NegativeDataPropertyAssertion" }
+
+LBRACKET = _{ "(" }
+RBRACKET = _{ ")" }
+LCHEVRON = _{ "<" }
+RCHEVRON = _{ ">" }
+EQ       = _{ "=" }
+CARET    = _{ "^" }
+
+//
+NonNegativeInteger = @{ ASCII_DIGIT+ }
+LanguageTag        = ${ "@" ~ BCP47_LanguageTag }
+QuotedString       = ${ "\"" ~ (!"\"" ~ ("\\\\" | "\\\"" | ANY))* ~ "\"" }
+NodeID             = _{ SPARQL_BlankNodeLabel }
+
+//
+
+FullIRI        = ${ LCHEVRON ~ RFC3987_Iri ~ RCHEVRON }
+PrefixName     =  { SPARQL_PnameNs }
+AbbreviatedIRI =  { SPARQL_PnameLn }
+IRI            =  { FullIRI | AbbreviatedIRI }
+
+//
+
+OntologyDocument = { SOI ~ PrefixDeclarations ~ Ontology ~ EOI }
+
+PrefixDeclarations = { PrefixDeclaration* }
+PrefixDeclaration  = { LIT_PREFIX ~ LBRACKET ~ PrefixName ~ EQ ~ FullIRI ~ RBRACKET }
+
+Ontology = {
+    LIT_ONTOLOGY ~ LBRACKET ~ (OntologyIRI ~ VersionIRI?)? ~ DirectlyImportsDocuments ~ OntologyAnnotations ~ OntologyAxioms ~ RBRACKET
+}
+
+OntologyIRI = { IRI }
+VersionIRI  = { IRI }
+
+Import                   = { LIT_IMPORT ~ LBRACKET ~ IRI ~ RBRACKET }
+DirectlyImportsDocuments = { Import* }
+OntologyAnnotations      = { Annotation* }
+OntologyAxiom            = { Axiom | Rule | DGAxiom }
+OntologyAxioms           = { OntologyAxiom* }
+Axioms                   = { Axiom* }
+
+Annotations = { Annotation* }
+
+Declaration = { LIT_DECLARATION ~ LBRACKET ~ AxiomAnnotations ~ Entity ~ RBRACKET }
+
+Entity = {
+    ClassDeclaration
+  | DatatypeDeclaration
+  | ObjectPropertyDeclaration
+  | DataPropertyDeclaration
+  | AnnotationPropertyDeclaration
+  | NamedIndividualDeclaration
+}
+
+ClassDeclaration              = { LIT_CLASS ~ LBRACKET ~ Class ~ RBRACKET }
+DatatypeDeclaration           = { LIT_DATATYPE ~ LBRACKET ~ Datatype ~ RBRACKET }
+ObjectPropertyDeclaration     = { LIT_OBJECT_PROPERTY ~ LBRACKET ~ ObjectProperty ~ RBRACKET }
+DataPropertyDeclaration       = { LIT_DATA_PROPERTY ~ LBRACKET ~ DataProperty ~ RBRACKET }
+AnnotationPropertyDeclaration = { LIT_ANNOTATION_PROPERTY ~ LBRACKET ~ AnnotationProperty ~ RBRACKET }
+NamedIndividualDeclaration    = { LIT_NAMED_INDIVIDUAL ~ LBRACKET ~ NamedIndividual ~ RBRACKET }
+
+AnnotationSubject =  { IRI | AnonymousIndividual }
+AnnotationValue   =  { AnonymousIndividual | IRI | Literal }
+AxiomAnnotations  = _{ Annotations }
+
+Annotation            =  { LIT_ANNOTATION ~ LBRACKET ~ AnnotationAnnotations ~ AnnotationProperty ~ AnnotationValue ~ RBRACKET }
+AnnotationAnnotations = _{ Annotations }
+
+AnnotationAxiom     = _{ AnnotationAssertion | SubAnnotationPropertyOf | AnnotationPropertyDomain | AnnotationPropertyRange }
+AnnotationAssertion =  { LIT_ANNOTATION_ASSERTION ~ LBRACKET ~ AxiomAnnotations ~ AnnotationProperty ~ AnnotationSubject ~ AnnotationValue ~ RBRACKET }
+
+SubAnnotationPropertyOf = { LIT_SUBANNOTATION_PROPERTY_OF ~ LBRACKET ~ AxiomAnnotations ~ SubAnnotationProperty ~ SuperAnnotationProperty ~ RBRACKET }
+SubAnnotationProperty   = { AnnotationProperty }
+SuperAnnotationProperty = { AnnotationProperty }
+
+AnnotationPropertyDomain = { LIT_ANNOTATION_PROPERTY_DOMAIN ~ LBRACKET ~ AxiomAnnotations ~ AnnotationProperty ~ IRI ~ RBRACKET }
+AnnotationPropertyRange  = { LIT_ANNOTATION_PROPERTY_RANGE ~ LBRACKET ~ AxiomAnnotations ~ AnnotationProperty ~ IRI ~ RBRACKET }
+
+// --- Definition of OWL 2 Constructs ----------------------------------------
+
+Class               = { IRI }
+Datatype            = { IRI }
+ObjectProperty      = { IRI }
+DataProperty        = { IRI }
+AnnotationProperty  = { IRI }
+Individual          = { NamedIndividual | AnonymousIndividual }
+NamedIndividual     = { IRI }
+AnonymousIndividual = { NodeID }
+
+Literal                   = { TypedLiteral | StringLiteralWithLanguage | StringLiteralNoLanguage }
+TypedLiteral              = { QuotedString ~ CARET{2} ~ Datatype }
+StringLiteralNoLanguage   = { QuotedString }
+StringLiteralWithLanguage = { QuotedString ~ LanguageTag }
+
+ObjectPropertyExpression = { ObjectProperty | InverseObjectProperty }
+InverseObjectProperty    = { LIT_OBJECT_INVERSE_OF ~ LBRACKET ~ ObjectProperty ~ RBRACKET }
+
+DataRange           = {
+    Datatype
+  | DataIntersectionOf
+  | DataUnionOf
+  | DataComplementOf
+  | DataOneOf
+  | DatatypeRestriction
+}
+DataIntersectionOf  = { LIT_DATA_INTERSECTION_OF ~ LBRACKET ~ DataRange{2, } ~ RBRACKET }
+DataUnionOf         = { LIT_DATA_UNION_OF ~ LBRACKET ~ DataRange{2, } ~ RBRACKET }
+DataComplementOf    = { LIT_DATA_COMPLEMENT_OF ~ LBRACKET ~ DataRange ~ RBRACKET }
+DataOneOf           = { LIT_DATA_ONE_OF ~ LBRACKET ~ Literal+ ~ RBRACKET }
+DatatypeRestriction = { LIT_DATATYPE_RESTRICTION ~ LBRACKET ~ Datatype ~ FacetRestriction+ ~ RBRACKET }
+FacetRestriction    = { ConstrainingFacet ~ Literal }
+ConstrainingFacet   = { IRI }
+
+ClassExpression = {
+    Class
+  | ObjectIntersectionOf
+  | ObjectUnionOf
+  | ObjectComplementOf
+  | ObjectOneOf
+  | ObjectSomeValuesFrom
+  | ObjectAllValuesFrom
+  | ObjectHasValue
+  | ObjectHasSelf
+  | ObjectMinCardinality
+  | ObjectMaxCardinality
+  | ObjectExactCardinality
+  | DataSomeValuesFrom
+  | DataAllValuesFrom
+  | DataHasValue
+  | DataMinCardinality
+  | DataMaxCardinality
+  | DataExactCardinality
+}
+
+ObjectIntersectionOf   = { LIT_OBJECT_INTERSECTION_OF ~ LBRACKET ~ ClassExpression{2, } ~ RBRACKET }
+ObjectUnionOf          = { LIT_OBJECT_UNION_OF ~ LBRACKET ~ ClassExpression{2, } ~ RBRACKET }
+ObjectComplementOf     = { LIT_OBJECT_COMPLEMENT_OF ~ LBRACKET ~ ClassExpression ~ RBRACKET }
+ObjectOneOf            = { LIT_OBJECT_ONE_OF ~ LBRACKET ~ Individual+ ~ RBRACKET }
+ObjectSomeValuesFrom   = { LIT_OBJECT_SOME_VALUES_FROM ~ LBRACKET ~ ObjectPropertyExpression ~ ClassExpression ~ RBRACKET }
+ObjectAllValuesFrom    = { LIT_OBJECT_ALL_VALUES_FROM ~ LBRACKET ~ ObjectPropertyExpression ~ ClassExpression ~ RBRACKET }
+ObjectHasValue         = { LIT_OBJECT_HAS_VALUE ~ LBRACKET ~ ObjectPropertyExpression ~ Individual ~ RBRACKET }
+ObjectHasSelf          = { LIT_OBJECT_HAS_SELF ~ LBRACKET ~ ObjectPropertyExpression ~ RBRACKET }
+ObjectMinCardinality   = { LIT_OBJECT_MIN_CARDINALITY ~ LBRACKET ~ NonNegativeInteger ~ ObjectPropertyExpression ~ ClassExpression? ~ RBRACKET }
+ObjectMaxCardinality   = { LIT_OBJECT_MAX_CARDINALITY ~ LBRACKET ~ NonNegativeInteger ~ ObjectPropertyExpression ~ ClassExpression? ~ RBRACKET }
+ObjectExactCardinality = { LIT_OBJECT_EXACT_CARDINALITY ~ LBRACKET ~ NonNegativeInteger ~ ObjectPropertyExpression ~ ClassExpression? ~ RBRACKET }
+// WORKAROUND(@althonos): Because the PEG is greedy and DataRange can be an IRI, in the case where the DataRange is
+// an IRI it can actually match the DataProperty being repeated and fail the parser. To avoid this,
+// we check that the DataProperty is never at the end of the list, and force the parser to move
+// to the DataRange rule.
+DataSomeValuesFrom   = { LIT_DATA_SOME_VALUES_FROM ~ LBRACKET ~ (DataProperty ~ !RBRACKET)+ ~ DataRange ~ RBRACKET }
+DataAllValuesFrom    = { LIT_DATA_ALL_VALUES_FROM ~ LBRACKET ~ (DataProperty ~ !RBRACKET)+ ~ DataRange ~ RBRACKET }
+DataHasValue         = { LIT_DATA_HAS_VALUE ~ LBRACKET ~ DataProperty ~ Literal ~ RBRACKET }
+DataMinCardinality   = { LIT_DATA_MIN_CARDINALITY ~ LBRACKET ~ NonNegativeInteger ~ DataProperty ~ DataRange? ~ RBRACKET }
+DataMaxCardinality   = { LIT_DATA_MAX_CARDINALITY ~ LBRACKET ~ NonNegativeInteger ~ DataProperty ~ DataRange? ~ RBRACKET }
+DataExactCardinality = { LIT_DATA_EXACT_CARDINALITY ~ LBRACKET ~ NonNegativeInteger ~ DataProperty ~ DataRange? ~ RBRACKET }
+
+Axiom = { Declaration | ClassAxiom | ObjectPropertyAxiom | DataPropertyAxiom | DatatypeDefinition | HasKey | Assertion | AnnotationAxiom }
+
+ClassAxiom           = _{ SubClassOf | EquivalentClasses | DisjointClasses | DisjointUnion }
+SubClassOf           =  { LIT_SUB_CLASS_OF ~ LBRACKET ~ AxiomAnnotations ~ SubClassExpression ~ SuperClassExpression ~ RBRACKET }
+SubClassExpression   = _{ ClassExpression }
+SuperClassExpression = _{ ClassExpression }
+
+EquivalentClasses = { LIT_EQUIVALENT_CLASSES ~ LBRACKET ~ AxiomAnnotations ~ ClassExpression{2, } ~ RBRACKET }
+DisjointClasses   = { LIT_DISJOINT_CLASSES ~ LBRACKET ~ AxiomAnnotations ~ ClassExpression{2, } ~ RBRACKET }
+DisjointUnion     = { LIT_DISJOINT_UNION ~ LBRACKET ~ AxiomAnnotations ~ Class ~ ClassExpression{2, } ~ RBRACKET }
+
+ObjectPropertyAxiom = _{
+    SubObjectPropertyOf
+  | EquivalentObjectProperties
+  | DisjointObjectProperties
+  | InverseObjectProperties
+  | ObjectPropertyDomain
+  | ObjectPropertyRange
+  | FunctionalObjectProperty
+  | InverseFunctionalObjectProperty
+  | ReflexiveObjectProperty
+  | IrreflexiveObjectProperty
+  | SymmetricObjectProperty
+  | AsymmetricObjectProperty
+  | TransitiveObjectProperty
+}
+
+SubObjectPropertyOf           = { LIT_SUB_OBJECT_PROPERTY_OF ~ LBRACKET ~ AxiomAnnotations ~ SubObjectPropertyExpression ~ SuperObjectPropertyExpression ~ RBRACKET }
+SubObjectPropertyExpression   = { ObjectPropertyExpression | PropertyExpressionChain }
+PropertyExpressionChain       = { LIT_OBJECT_PROPERTY_CHAIN ~ LBRACKET ~ ObjectPropertyExpression{2, } ~ RBRACKET }
+SuperObjectPropertyExpression = { ObjectPropertyExpression }
+
+EquivalentObjectProperties      = { LIT_EQUIVALENT_OBJECT_PROPERTIES ~ LBRACKET ~ AxiomAnnotations ~ ObjectPropertyExpression{2, } ~ RBRACKET }
+DisjointObjectProperties        = { LIT_DISJOINT_OBJECT_PROPERTIES ~ LBRACKET ~ AxiomAnnotations ~ ObjectPropertyExpression{2, } ~ RBRACKET }
+ObjectPropertyDomain            = { LIT_OBJECT_PROPERTY_DOMAIN ~ LBRACKET ~ AxiomAnnotations ~ ObjectPropertyExpression ~ ClassExpression ~ RBRACKET }
+ObjectPropertyRange             = { LIT_OBJECT_PROPERTY_RANGE ~ LBRACKET ~ AxiomAnnotations ~ ObjectPropertyExpression ~ ClassExpression ~ RBRACKET }
+FunctionalObjectProperty        = { LIT_FUNCTIONAL_OBJECT_PROPERTY ~ LBRACKET ~ AxiomAnnotations ~ ObjectPropertyExpression ~ RBRACKET }
+InverseFunctionalObjectProperty = { LIT_INVERSE_FUNCTIONAL_OBJECT_PROPERTY ~ LBRACKET ~ AxiomAnnotations ~ ObjectPropertyExpression ~ RBRACKET }
+ReflexiveObjectProperty         = { LIT_REFLEXIVE_OBJECT_PROPERTY ~ LBRACKET ~ AxiomAnnotations ~ ObjectPropertyExpression ~ RBRACKET }
+IrreflexiveObjectProperty       = { LIT_IRREFLEXIVE_OBJECT_PROPERTY ~ LBRACKET ~ AxiomAnnotations ~ ObjectPropertyExpression ~ RBRACKET }
+SymmetricObjectProperty         = { LIT_SYMMETRIC_OBJECT_PROPERTY ~ LBRACKET ~ AxiomAnnotations ~ ObjectPropertyExpression ~ RBRACKET }
+AsymmetricObjectProperty        = { LIT_ASYMMETRIC_OBJECT_PROPERTY ~ LBRACKET ~ AxiomAnnotations ~ ObjectPropertyExpression ~ RBRACKET }
+TransitiveObjectProperty        = { LIT_TRANSITIVE_OBJECT_PROPERTY ~ LBRACKET ~ AxiomAnnotations ~ ObjectPropertyExpression ~ RBRACKET }
+InverseObjectProperties         = { LIT_INVERSE_OBJECT_PROPERTIES ~ LBRACKET ~ AxiomAnnotations ~ ObjectProperty{2} ~ RBRACKET }
+
+DataPropertyAxiom = _{ SubDataPropertyOf | EquivalentDataProperties | DisjointDataProperties | DataPropertyDomain | DataPropertyRange | FunctionalDataProperty }
+
+SubDataPropertyOf =  { LIT_SUB_DATA_PROPERTY_OF ~ LBRACKET ~ AxiomAnnotations ~ SubDataProperty ~ SuperDataProperty ~ RBRACKET }
+SubDataProperty   = _{ DataProperty }
+SuperDataProperty = _{ DataProperty }
+
+EquivalentDataProperties = { LIT_EQUIVALENT_DATA_PROPERTIES ~ LBRACKET ~ AxiomAnnotations ~ DataProperty{2, } ~ RBRACKET }
+DisjointDataProperties   = { LIT_DISJOINT_DATA_PROPERTIES ~ LBRACKET ~ AxiomAnnotations ~ DataProperty{2, } ~ RBRACKET }
+
+DataPropertyDomain     = { LIT_DATA_PROPERTY_DOMAIN ~ LBRACKET ~ AxiomAnnotations ~ DataProperty ~ ClassExpression ~ RBRACKET }
+DataPropertyRange      = { LIT_DATA_PROPERTY_RANGE ~ LBRACKET ~ AxiomAnnotations ~ DataProperty ~ DataRange ~ RBRACKET }
+FunctionalDataProperty = { LIT_FUNCTIONAL_DATA_PROPERTY ~ LBRACKET ~ AxiomAnnotations ~ DataProperty ~ RBRACKET }
+
+DatatypeDefinition = { LIT_DATATYPE_DEFINITION ~ LBRACKET ~ AxiomAnnotations ~ Datatype ~ DataRange ~ RBRACKET }
+
+HasKey = { LIT_HAS_KEY ~ LBRACKET ~ AxiomAnnotations ~ ClassExpression ~ LBRACKET ~ ObjectPropertyExpression* ~ RBRACKET ~ LBRACKET ~ DataProperty* ~ RBRACKET ~ RBRACKET }
+
+Assertion = _{ SameIndividual | DifferentIndividuals | ClassAssertion | ObjectPropertyAssertion | NegativeObjectPropertyAssertion | DataPropertyAssertion | NegativeDataPropertyAssertion }
+
+SourceIndividual = _{ Individual }
+TargetIndividual = _{ Individual }
+
+SameIndividual                  = { LIT_SAME_INDIVIDUAL ~ LBRACKET ~ AxiomAnnotations ~ Individual{2, } ~ RBRACKET }
+DifferentIndividuals            = { LIT_DIFFERENT_INDIVIDUALS ~ LBRACKET ~ AxiomAnnotations ~ Individual{2, } ~ RBRACKET }
+ClassAssertion                  = { LIT_CLASS_ASSERTION ~ LBRACKET ~ AxiomAnnotations ~ ClassExpression ~ Individual ~ RBRACKET }
+ObjectPropertyAssertion         = { LIT_OBJECT_PROPERTY_ASSERTION ~ LBRACKET ~ AxiomAnnotations ~ ObjectPropertyExpression ~ SourceIndividual ~ TargetIndividual ~ RBRACKET }
+NegativeObjectPropertyAssertion = { LIT_NEGATIVE_OBJECT_PROPERTY_ASSERTION ~ LBRACKET ~ AxiomAnnotations ~ ObjectPropertyExpression ~ SourceIndividual ~ TargetIndividual ~ RBRACKET }
+DataPropertyAssertion           = { LIT_DATA_PROPERTY_ASSERTION ~ LBRACKET ~ AxiomAnnotations ~ DataProperty ~ SourceIndividual ~ Literal ~ RBRACKET }
+NegativeDataPropertyAssertion   = { LIT_NEGATIVE_DATA_PROPERTY_ASSERTION ~ LBRACKET ~ AxiomAnnotations ~ DataProperty ~ SourceIndividual ~ Literal ~ RBRACKET }
+
+// --- Annex: SWRL Rules -----------------------------------------------------
+
+// This is a definiton of an OWL2 Functional Syntax extension for the
+// serialization of SWRL rules. While SWRL rules are not supported by `horned-owl`
+// yet, this shouldn't prevent parsing of ontologies containing them.
+// source: http://webont.org/owled/2009/papers/owled2009_submission_16.pdf
+
+LIT_DL_SAFE_RULE               = _{ "DLSafeRule" }
+LIT_BODY                       = _{ "Body" }
+LIT_HEAD                       = _{ "Head" }
+LIT_CLASS_ATOM                 = _{ "ClassAtom" }
+LIT_DATA_RANGE_ATOM            = _{ "DataRangeAtom" }
+LIT_OBJECT_PROPERTY_ATOM       = _{ "ObjectPropertyAtom" }
+LIT_DATA_PROPERTY_ATOM         = _{ "DataPropertyAtom" }
+LIT_BUILT_IN_ATOM              = _{ "BuiltInAtom" }
+LIT_SAME_INDIVIDUAL_ATOM       = _{ "SameIndividualAtom" }
+LIT_DIFFERENT_INDIVIDUALS_ATOM = _{ "DifferentIndividualsAtom" }
+LIT_VARIABLE                   = _{ "Variable" }
+LIT_GRAPH_RULE                 = _{ "GraphRule" }
+LIT_DESCRIPTION_GRAPH          = _{ "DescriptionGraph" }
+LIT_NODES                      = _{ "Nodes" }
+LIT_EDGES                      = _{ "Edges" }
+LIT_NODE_ASSERTION             = _{ "NodeAssertion" }
+LIT_EDGE_ASSERTION             = _{ "EdgeAssertion" }
+LIT_DESCRIPTION_GRAPH_RULE     = _{ "DescriptionGraphRule" }
+LIT_MAIN_CLASSES               = _{ "MainClasses" }
+
+// Axioms = { Axiom | Rule | DGAxiom }
+Rule = { DLSafeRule | DGRule }
+
+DLSafeRule = { LIT_DL_SAFE_RULE ~ LBRACKET ~ Annotations ~ DLBody ~ DLHead ~ RBRACKET }
+DLBody     = { LIT_BODY ~ LBRACKET ~ Atom* ~ RBRACKET }
+DLHead     = { LIT_HEAD ~ LBRACKET ~ Atom* ~ RBRACKET }
+
+Atom = {
+    (LIT_CLASS_ATOM ~ LBRACKET ~ ClassExpression ~ IArg ~ RBRACKET)
+  | (LIT_DATA_RANGE_ATOM ~ LBRACKET ~ DataRange ~ DArg ~ RBRACKET)
+  | (LIT_OBJECT_PROPERTY_ATOM ~ LBRACKET ~ ObjectPropertyExpression ~ IArg ~ IArg ~ RBRACKET)
+  | (LIT_DATA_PROPERTY_ATOM ~ LBRACKET ~ DataProperty ~ IArg ~ DArg ~ RBRACKET)
+  | (LIT_BUILT_IN_ATOM ~ LBRACKET ~ IRI ~ DArg+ ~ RBRACKET)
+  | (LIT_SAME_INDIVIDUAL_ATOM ~ LBRACKET ~ IArg ~ IArg ~ RBRACKET)
+  | (LIT_DIFFERENT_INDIVIDUALS_ATOM ~ LBRACKET ~ IArg ~ IArg ~ RBRACKET)
+}
+
+IArg = { (LIT_VARIABLE ~ LBRACKET ~ IRI ~ RBRACKET) | Individual }
+DArg = { (LIT_VARIABLE ~ LBRACKET ~ IRI ~ RBRACKET) | Individual }
+
+DGRule = { LIT_DESCRIPTION_GRAPH_RULE ~ LBRACKET ~ Annotations ~ DGBody ~ DGHead ~ RBRACKET }
+DGBody = { LIT_BODY ~ LBRACKET ~ DGAtom* ~ RBRACKET }
+DGHead = { LIT_HEAD ~ LBRACKET ~ DGAtom* ~ RBRACKET }
+
+DGAtom  = {
+    (LIT_CLASS_ATOM ~ LBRACKET ~ ClassExpression ~ IArg ~ RBRACKET)
+  | (LIT_OBJECT_PROPERTY_ATOM ~ LBRACKET ~ ObjectPropertyExpression ~ IArg ~ IArg ~ RBRACKET)
+}
+DGAxiom = { (LIT_DESCRIPTION_GRAPH ~ LBRACKET ~ Annotations ~ DGNodes ~ DGEdges ~ MainClasses ~ RBRACKET) }
+
+DGNodes       = { LIT_NODES ~ LBRACKET ~ NodeAssertion+ ~ RBRACKET }
+NodeAssertion = { LIT_NODE_ASSERTION ~ LBRACKET ~ Class ~ DGNode ~ RBRACKET }
+DGNode        = { IRI }
+DGEdges       = { LIT_EDGES ~ LBRACKET ~ EdgeAssertion+ ~ RBRACKET }
+EdgeAssertion = { LIT_EDGE_ASSERTION ~ LBRACKET ~ ObjectProperty ~ DGNode ~ DGNode ~ RBRACKET }
+MainClasses   = { LIT_MAIN_CLASSES ~ LBRACKET ~ Class+ ~ RBRACKET }

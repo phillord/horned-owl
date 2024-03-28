@@ -22,6 +22,8 @@ log = {version="0.4.8"}
 oxiri="0.2.2"
 quick-xml={version="0.26.0"}
 indexmap={workspace=true}
+pest = "2.7.8"
+pest_derive = "2.7.8"
 pretty_rdf={workspace=true}
 rio_api={workspace=true}
 rio_xml={workspace=true}
