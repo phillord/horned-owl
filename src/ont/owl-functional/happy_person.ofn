@@ -1,4 +1,5 @@
-Prefix(:=<o>)
+Prefix(:=<http://www.example.com/iri#>)
+Prefix(o:=<http://www.example.com/iri#>)
 Prefix(owl:=<http://www.w3.org/2002/07/owl#>)
 Prefix(rdf:=<http://www.w3.org/1999/02/22-rdf-syntax-ns#>)
 Prefix(xml:=<http://www.w3.org/XML/1998/namespace>)
@@ -10,24 +11,24 @@ Ontology(<http://www.example.com/iri>
 <http://www.example.com/viri>
 Import(<http://homepages.cs.ncl.ac.uk/phillip.lord/scratch/family-other.owl#>)
 
-Declaration(Class(<http://www.example.com/iri#HappyPerson>))
-Declaration(ObjectProperty(<http://www.example.com/iri#hasChild>))
+Declaration(Class(o:HappyPerson))
+Declaration(ObjectProperty(o:hasChild))
 ############################
 #   Object Properties
 ############################
 
-# Object Property: <http://www.example.com/iri#hasChild> (<http://www.example.com/iri#hasChild>)
+# Object Property: o:hasChild (o:hasChild)
 
-AsymmetricObjectProperty(<http://www.example.com/iri#hasChild>)
+AsymmetricObjectProperty(o:hasChild)
 
 
 ############################
 #   Classes
 ############################
 
-# Class: <http://www.example.com/iri#HappyPerson> (<http://www.example.com/iri#HappyPerson>)
+# Class: o:HappyPerson (o:HappyPerson)
 
-EquivalentClasses(<http://www.example.com/iri#HappyPerson> ObjectIntersectionOf(ObjectSomeValuesFrom(<http://www.example.com/iri#hasChild> <http://www.example.com/iri#HappyPerson>) ObjectAllValuesFrom(<http://www.example.com/iri#hasChild> <http://www.example.com/iri#HappyPerson>)))
+EquivalentClasses(o:HappyPerson ObjectIntersectionOf(ObjectSomeValuesFrom(o:hasChild o:HappyPerson) ObjectAllValuesFrom(o:hasChild o:HappyPerson)))
 
 
 )

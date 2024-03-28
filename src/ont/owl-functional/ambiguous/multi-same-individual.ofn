@@ -1,4 +1,5 @@
-Prefix(:=<o>)
+Prefix(:=<http://www.example.com/iri#>)
+Prefix(o:=<http://www.example.com/iri#>)
 Prefix(owl:=<http://www.w3.org/2002/07/owl#>)
 Prefix(rdf:=<http://www.w3.org/1999/02/22-rdf-syntax-ns#>)
 Prefix(xml:=<http://www.w3.org/XML/1998/namespace>)
@@ -8,18 +9,18 @@ Prefix(rdfs:=<http://www.w3.org/2000/01/rdf-schema#>)
 
 Ontology(<http://www.example.com/iri>
 <http://www.example.com/viri>
-Import(<http://www.example.com/other-property>)
 
-Declaration(Class(<http://www.example.com/iri#A>))
-Declaration(Class(<http://www.example.com/iri#B>))
-
+Declaration(NamedIndividual(o:p))
+Declaration(NamedIndividual(o:q))
+Declaration(NamedIndividual(o:r))
+Declaration(NamedIndividual(o:s))
 ############################
-#   Classes
+#   Named Individuals
 ############################
 
-# Class: <http://www.example.com/iri#B> (<http://www.example.com/iri#B>)
+# Individual: o:p (o:p)
 
-SubClassOf(<http://www.example.com/iri#B> ObjectSomeValuesFrom(<http://www.example.com/other-property#other-o> <http://www.example.com/iri#A>))
+SameIndividual(o:p o:q o:r o:s)
 
 
 )

@@ -978,7 +978,7 @@ from_start! {
                     SubObjectPropertyExpression::ObjectPropertyChain(o)
 
                 }
-                b"ObjectProperty" => {
+                b"ObjectProperty" | b"ObjectInverseOf" => {
                     SubObjectPropertyExpression::
                     ObjectPropertyExpression(from_start(r, e)?)
                 }
@@ -1458,7 +1458,7 @@ pub mod test {
 
     #[test]
     fn test_one_ontology_annotation() {
-        let ont_s = include_str!("../../ont/owl-xml/one-ontology-annotation.owx");
+        let ont_s = include_str!("../../ont/owl-xml/ontology-annotation.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
         assert_eq!(ont.i().ontology_annotation().count(), 1);
@@ -1580,12 +1580,21 @@ pub mod test {
 
         assert_eq!(annotated_component.ann.len(), 2);
     }
+
     #[test]
     fn test_sub_annotation() {
         let ont_s = include_str!("../../ont/owl-xml/sub-annotation.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
         assert_eq!(ont.i().sub_annotation_property_of().count(), 1);
+    }
+
+    #[test]
+    fn test_anon_subobjectproperty() {
+        let ont_s = include_str!("../../ont/owl-xml/anon-subobjectproperty.owx");
+        let (ont, _) = read_ok(&mut ont_s.as_bytes());
+
+        assert_eq!(ont.i().sub_object_property_of().count(), 1);
     }
 
     #[test]
@@ -2011,7 +2020,7 @@ pub mod test {
 
     #[test]
     fn annotation_with_anonymous() {
-        let ont_s = include_str!("../../ont/owl-xml/annotation-with-anonymous.owx");
+        let ont_s = include_str!("../../ont/owl-xml/ambiguous/annotation-with-anonymous.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
         assert_eq!(ont.i().annotation_assertion().count(), 1);

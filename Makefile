@@ -5,8 +5,7 @@
 
 BIG_OWL=./big-owl
 
-all:
-	cargo test
+all: bubo
 	cargo doc
 	browser-reload.sh horned_owl
 

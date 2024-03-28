@@ -112,7 +112,7 @@ pub fn resolve_iri<A: ForIRI>(iri: &IRI<A>, doc_iri: Option<&IRI<A>>) -> (IRI<A>
                 return (local, ::std::fs::read_to_string(path).unwrap());
             }
         }
-        todo!("resolve_iri doesn't have error handlign");
+        todo!("resolve_iri doesn't have error handling: {:?} {:?}", iri, doc_iri);
     }
 
     (local, strict_resolve_iri(iri))

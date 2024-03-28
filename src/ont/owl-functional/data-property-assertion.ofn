@@ -1,4 +1,5 @@
-Prefix(:=<o>)
+Prefix(:=<http://www.example.com/iri#>)
+Prefix(o:=<http://www.example.com/iri#>)
 Prefix(owl:=<http://www.w3.org/2002/07/owl#>)
 Prefix(rdf:=<http://www.w3.org/1999/02/22-rdf-syntax-ns#>)
 Prefix(xml:=<http://www.w3.org/XML/1998/namespace>)
@@ -9,17 +10,17 @@ Prefix(rdfs:=<http://www.w3.org/2000/01/rdf-schema#>)
 Ontology(<http://www.example.com/iri>
 <http://www.example.com/viri>
 
-Declaration(DataProperty(<http://www.example.com/iri#dp>))
-Declaration(NamedIndividual(<http://www.example.com/iri#I>))
+Declaration(DataProperty(o:dp))
+Declaration(NamedIndividual(o:I))
 
 
 ############################
 #   Named Individuals
 ############################
 
-# Individual: <http://www.example.com/iri#I> (<http://www.example.com/iri#I>)
+# Individual: o:I (o:I)
 
-DataPropertyAssertion(<http://www.example.com/iri#dp> <http://www.example.com/iri#I> "A literal"^^xsd:string)
+DataPropertyAssertion(o:dp o:I "A literal")
 
 
 )

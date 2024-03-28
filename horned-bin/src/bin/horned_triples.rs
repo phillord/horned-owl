@@ -9,6 +9,8 @@ use clap::ArgMatches;
 
 use horned_owl::error::HornedError;
 
+use pretty_rdf::RdfXmlFormatter;
+
 use rio_api::parser::TriplesParser;
 
 use std::io::BufReader;
@@ -107,9 +109,9 @@ pub(crate) fn matcher(matches: &ArgMatches) -> Result<(), HornedError> {
 
         let mut f: pretty_rdf::PrettyRdfXmlFormatter<String, _> =
             pretty_rdf::PrettyRdfXmlFormatter::new(
-                b,
-                pretty_rdf::ChunkedRdfXmlFormatterConfig::all(),
-            )?;
+                 b,
+                 pretty_rdf::ChunkedRdfXmlFormatterConfig::all(),
+             )?;
         //let mut f = rio_xml::RdfXmlFormatter::with_indentation(&b, 4)?;
         let file = File::open(input)?;
         let bufreader = BufReader::new(file);

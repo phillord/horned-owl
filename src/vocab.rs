@@ -202,6 +202,7 @@ vocabulary_type! {
         (OWL, EquivalentProperty, true),
         (OWL, FunctionalProperty, false),
         (OWL, HasKey, true),
+        (OWL, HasSelf, true),
         (OWL, HasValue, true),
         (OWL, Imports, true),
         (OWL, IntersectionOf, true),
@@ -327,6 +328,7 @@ vocabulary_type! {
 
 vocabulary_type! {
     XSD, IRI<String>, METAXSD, [
+        (XSD, Boolean, true),
         (XSD, NonNegativeInteger, true)
     ]
 }

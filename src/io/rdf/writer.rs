@@ -10,7 +10,7 @@ use crate::ontology::indexed::ForIndex;
 
 use pretty_rdf::{
     ChunkedRdfXmlFormatterConfig, PBlankNode, PLiteral, PNamedNode, PSubject, PTerm, PTriple,
-    PrettyRdfXmlFormatter,
+    RdfXmlFormatter, NonPrettyRdfXmlFormatter, PrettyRdfXmlFormatter,
 };
 use std::{
     collections::{BTreeSet, HashSet},
@@ -33,16 +33,27 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
         "http://www.w3.org/XML/1998/namespace".to_string(),
         "xml".to_string(),
     );
-    let mut f: PrettyRdfXmlFormatter<_, _> =
-        PrettyRdfXmlFormatter::new(write, ChunkedRdfXmlFormatterConfig::all().prefix(p))?;
+
+
     let mut bng = NodeGenerator::default();
-    ont.render(&mut f, &mut bng)?;
+
+    if !true {
+        let mut f = NonPrettyRdfXmlFormatter::new(write, ChunkedRdfXmlFormatterConfig::all().prefix(p))?;
+        ont.render(&mut f, &mut bng)?;
+        f.finish()?;
+    }
+    else {
+        let mut f = PrettyRdfXmlFormatter::new(write, ChunkedRdfXmlFormatterConfig::all().prefix(p))?;
+        ont.render(&mut f, &mut bng)?;
+        f.finish()?;
+    }
+
+
 
     // for i in f.triples() {
     //     println!("{}", i.printable());
     // }
 
-    f.finish()?;
     Ok(())
 }
 
@@ -171,10 +182,10 @@ impl<A: ForIRI> From<&Individual<A>> for PSubject<A> {
     }
 }
 
-trait Render<A: ForIRI, R> {
-    fn render<W: Write>(
+trait Render<A: ForIRI, F: RdfXmlFormatter<A, W>, R, W:Write> {
+    fn render(
         &self,
-        f: &mut PrettyRdfXmlFormatter<A, W>,
+        f: &mut F,
         ng: &mut NodeGenerator<A>,
     ) -> Result<R, HornedError>;
 }
@@ -201,10 +212,11 @@ impl<A: ForIRI> From<Vec<PTriple<A>>> for Annotatable<A> {
 macro_rules! render {
     ($type:ident, $self:ident, $f:ident, $ng:ident, $return:ident,
      $body:tt) => {
-        impl<A: ForIRI> Render<A, $return<A>> for $type<A> {
-            fn render<W:Write>(& $self, $f:&mut PrettyRdfXmlFormatter<A, W>,
-                               $ng: &mut NodeGenerator<A>)
-                               -> Result<$return<A>, HornedError>
+         impl<A: ForIRI, F: RdfXmlFormatter<A, W>, W:Write> Render<A, F, $return<A>, W> for $type<A> {
+             fn render(& $self,
+                 $f:&mut F,
+                 $ng: &mut NodeGenerator<A>)
+             -> Result<$return<A>, HornedError>
                 $body
         }
     }
@@ -220,8 +232,8 @@ macro_rules! render_to_node {
 macro_rules! render_to_vec {
     ($type:ident, $self:ident, $f:ident, $ng:ident,
      $body:tt) => {
-        impl<A: ForIRI> Render<A, Vec<PTriple<A>>> for $type<A> {
-            fn render<W:Write>(& $self, $f:&mut PrettyRdfXmlFormatter<A, W>,
+         impl<A: ForIRI, F:RdfXmlFormatter<A, W>, W:Write> Render<A, F, Vec<PTriple<A>>, W> for $type<A> {
+            fn render(& $self, $f:&mut F,
                                $ng: &mut NodeGenerator<A>)
                                -> Result<Vec<PTriple<A>>, HornedError>
                 $body
@@ -253,7 +265,7 @@ macro_rules! triples {
     ($f:ident, $sub:expr, $pred:expr, $ob:expr) => {
         $f.format(to_triple(
                  $sub, $pred, $ob
-                ))?;
+        ))?;
      };
     ($f:ident, $sub:expr, $pred:expr, $ob:expr, $($rest:expr),+) => {
         triples!($f, $sub, $pred, $ob);
@@ -329,9 +341,9 @@ where
 //     }
 // }
 
-fn render_vec_subject<A: ForIRI, T: Render<A, PSubject<A>>, W: Write>(
+fn render_vec_subject<A: ForIRI, F: RdfXmlFormatter<A, W>, T: Render<A, F, PSubject<A>, W>, W: Write>(
     v: &[T],
-    f: &mut PrettyRdfXmlFormatter<A, W>,
+    f: &mut F,
     ng: &mut NodeGenerator<A>,
 ) -> Result<PTerm<A>, HornedError> {
     let mut rest: Option<PTerm<A>> = None;
@@ -352,13 +364,13 @@ fn render_vec_subject<A: ForIRI, T: Render<A, PSubject<A>>, W: Write>(
     Ok(rest.unwrap())
 }
 
-impl<A: ForIRI, T> Render<A, PTerm<A>> for &Vec<T>
+impl<A: ForIRI, F: RdfXmlFormatter<A, W>, T, W:Write> Render<A, F, PTerm<A>, W> for &Vec<T>
 where
-    T: Debug + Render<A, PTerm<A>>,
+    T: Debug + Render<A, F, PTerm<A>, W>,
 {
-    fn render<W: Write>(
+    fn render(
         &self,
-        f: &mut PrettyRdfXmlFormatter<A, W>,
+        f: &mut F,
         ng: &mut NodeGenerator<A>,
     ) -> Result<PTerm<A>, HornedError> {
         let mut rest: Option<PTerm<A>> = None;
@@ -380,10 +392,10 @@ where
     }
 }
 
-impl<A: ForIRI> Render<A, ()> for BTreeSet<Annotation<A>> {
-    fn render<W: Write>(
+impl<A: ForIRI, F:RdfXmlFormatter<A, W>, W:Write> Render<A, F, (), W> for BTreeSet<Annotation<A>> {
+    fn render(
         &self,
-        f: &mut PrettyRdfXmlFormatter<A, W>,
+        f: &mut F,
         ng: &mut NodeGenerator<A>,
     ) -> Result<(), HornedError> {
         for r in self.iter() {
@@ -393,10 +405,10 @@ impl<A: ForIRI> Render<A, ()> for BTreeSet<Annotation<A>> {
     }
 }
 
-impl<A: ForIRI, AA: ForIndex<A>> Render<A, ()> for &ComponentMappedOntology<A, AA> {
-    fn render<W: Write>(
+impl<A: ForIRI, AA: ForIndex<A>, F:RdfXmlFormatter<A, W>, W:Write> Render<A, F, (), W> for &ComponentMappedOntology<A, AA> {
+    fn render(
         &self,
-        f: &mut PrettyRdfXmlFormatter<A, W>,
+        f: &mut F,
         ng: &mut NodeGenerator<A>,
     ) -> Result<(), HornedError> {
         let ont_id = self.i().the_ontology_id_or_default();
@@ -425,10 +437,10 @@ impl<A: ForIRI, AA: ForIndex<A>> Render<A, ()> for &ComponentMappedOntology<A, A
     }
 }
 
-impl<A: ForIRI> Render<A, ()> for AnnotatedComponent<A> {
-    fn render<W: Write>(
+impl<A: ForIRI, F: RdfXmlFormatter<A, W>, W:Write> Render<A, F, (), W> for AnnotatedComponent<A> {
+    fn render(
         &self,
-        f: &mut PrettyRdfXmlFormatter<A, W>,
+        f: &mut F,
         ng: &mut NodeGenerator<A>,
     ) -> Result<(), HornedError> {
         if !self.component.is_axiom() {
@@ -485,6 +497,7 @@ render! {
     Annotation, self, f, ng, PTriple,
     {
         let bn = ng.this_bn().ok_or_else(|| invalid!("{}", "No bnode available"))?;
+        ng.keep_this_bn(bn.clone());
 
         Ok(
             match &self.av {
@@ -534,10 +547,10 @@ render! {
     }
 }
 
-impl<A: ForIRI> Render<A, Annotatable<A>> for Component<A> {
-    fn render<W: Write>(
+impl<A: ForIRI, F: RdfXmlFormatter<A, W>, W:Write> Render<A, F, Annotatable<A>, W> for Component<A> {
+    fn render(
         &self,
-        f: &mut PrettyRdfXmlFormatter<A, W>,
+        f: &mut F,
         ng: &mut NodeGenerator<A>,
     ) -> Result<Annotatable<A>, HornedError> {
         Ok(match self {
@@ -838,8 +851,8 @@ render_to_vec! {
     }
 }
 
-fn members<A: ForIRI, R: Debug + Render<A, PSubject<A>>, W: Write>(
-    f: &mut PrettyRdfXmlFormatter<A, W>,
+fn members<A: ForIRI, F:RdfXmlFormatter<A, W>, R: Debug + Render<A, F, PSubject<A>, W>, W: Write>(
+    f: &mut F,
     ng: &mut NodeGenerator<A>,
     ty_two: OWL,
     ty_n: OWL,
@@ -1074,13 +1087,13 @@ render_to_node! {
     }
 }
 
-fn obj_cardinality<A: ForIRI, W: Write>(
+fn obj_cardinality<A: ForIRI, F:RdfXmlFormatter<A, W>, W: Write>(
     n: &u32,
     ope: &ObjectPropertyExpression<A>,
     ce: &ClassExpression<A>,
     unqual: PNamedNode<A>,
     qual: PNamedNode<A>,
-    f: &mut PrettyRdfXmlFormatter<A, W>,
+    f: &mut F,
     ng: &mut NodeGenerator<A>,
 ) -> Result<PSubject<A>, HornedError> {
     //_:x rdf:type owl:Restriction .
@@ -1123,12 +1136,12 @@ fn obj_cardinality<A: ForIRI, W: Write>(
     ))
 }
 
-fn data_cardinality<A: ForIRI, W: Write>(
+fn data_cardinality<A: ForIRI, F:RdfXmlFormatter<A, W>, W: Write>(
     n: &u32,
     dp: &DataProperty<A>,
     dr: &DataRange<A>,
     qual: PNamedNode<A>,
-    f: &mut PrettyRdfXmlFormatter<A, W>,
+    f: &mut F,
     ng: &mut NodeGenerator<A>,
 ) -> Result<PSubject<A>, HornedError> {
     // _:x rdf:type owl:Restriction .
@@ -1248,7 +1261,24 @@ render_to_node! {
                         bn, ng.nn(OWL::HasValue), ind
                     )
                 }
-                Self::ObjectHasSelf(_ope) =>todo!(),
+                Self::ObjectHasSelf(ope) => {
+                    //_:x rdf:type owl:Restriction .
+                    //_:x owl:onProperty T(OPE) .
+                    //_:x owl:hasSelf "true"^^xsd:boolean .
+                    let bn = ng.bn();
+                    let node_ope:PTerm<_> = ope.render(f, ng)?.into();
+                    let node_true = PTerm::Literal(PLiteral::Typed {
+                        value: "true".to_string().into(),
+                        datatype: ng.nn(XSD::Boolean),
+                    });
+
+                    triples_to_node!(
+                        f,
+                        bn.clone(), ng.nn(RDF::Type), ng.nn(OWL::Restriction),
+                        bn.clone(), ng.nn(OWL::OnProperty), node_ope,
+                        bn, ng.nn(OWL::HasSelf), node_true
+                    )
+                },
                 Self::ObjectMinCardinality{n, ope, bce} => {
                     obj_cardinality(n, ope, bce,
                                     ng.nn(OWL::MinCardinality),
@@ -1321,8 +1351,8 @@ render_to_node! {
     }
 }
 
-fn nary<A: ForIRI, R: Render<A, PSubject<A>>, W: Write>(
-    f: &mut PrettyRdfXmlFormatter<A, W>,
+fn nary<A: ForIRI, F: RdfXmlFormatter<A, W>, R: Render<A, F, PSubject<A>, W>, W: Write>(
+    f: &mut F,
     ng: &mut NodeGenerator<A>,
     entities: &[R],
     pred: PNamedNode<A>,
@@ -1462,9 +1492,9 @@ render! {
     }
 }
 
-fn obj_prop_char<A: ForIRI, W: Write>(
+fn obj_prop_char<A: ForIRI, F:RdfXmlFormatter<A, W>, W: Write>(
     ob: &ObjectPropertyExpression<A>,
-    f: &mut PrettyRdfXmlFormatter<A, W>,
+    f: &mut F,
     ng: &mut NodeGenerator<A>,
     chr: OWL,
 ) -> Result<PTriple<A>, HornedError> {
@@ -1537,6 +1567,7 @@ mod test {
     use super::*;
     use crate::{model::Build, ontology::set::SetOntology};
 
+    use test_generator::test_resources;
     // use std::collections::HashMap;
 
     // use std::fs::File;
@@ -1611,461 +1642,17 @@ mod test {
         (ont_orig, ont_round)
     }
 
-    #[test]
-    fn round_ont() {
-        assert_round(include_str!("../../ont/owl-rdf/ont.owl"));
-    }
-
-    #[test]
-    fn round_class() {
-        assert_round(include_str!("../../ont/owl-rdf/class.owl"));
-    }
-
-    #[test]
-    fn round_class_with_annotation() {
-        assert_round(include_str!(
-            "../../ont/owl-rdf/declaration-with-annotation.owl"
-        ));
-    }
-
-    #[test]
-    fn round_subclass() {
-        assert_round(include_str!("../../ont/owl-rdf/subclass.owl"));
-    }
-
-    #[test]
-    fn round_oproperty() {
-        assert_round(include_str!("../../ont/owl-rdf/oproperty.owl"));
-    }
-
-    #[test]
-    fn round_some() {
-        assert_round(include_str!("../../ont/owl-rdf/some.owl"));
-    }
-
-    #[test]
-    fn round_only() {
-        assert_round(include_str!("../../ont/owl-rdf/only.owl"));
-    }
-
-    #[test]
-    fn round_and() {
-        assert_round(include_str!("../../ont/owl-rdf/and.owl"));
-    }
-
-    #[test]
-    fn round_or() {
-        assert_round(include_str!("../../ont/owl-rdf/or.owl"));
-    }
-
-    #[test]
-    fn round_not() {
-        assert_round(include_str!("../../ont/owl-rdf/not.owl"));
-    }
-
-    #[test]
-    fn round_annotation_property() {
-        assert_round(include_str!("../../ont/owl-rdf/annotation-property.owl"));
-    }
-
-    #[test]
-    fn round_annotation() {
-        assert_round(include_str!("../../ont/owl-rdf/annotation.owl"));
-    }
-
-    #[test]
-    fn round_annotation_domain() {
-        assert_round(include_str!("../../ont/owl-rdf/annotation-domain.owl"));
-    }
-
-    #[test]
-    fn round_annotation_range() {
-        assert_round(include_str!("../../ont/owl-rdf/annotation-range.owl"));
-    }
-
-    #[test]
-    fn round_label() {
-        assert_round(include_str!("../../ont/owl-rdf/label.owl"));
-    }
-
-    #[test]
-    fn round_comment() {
-        assert_round(include_str!("../../ont/owl-rdf/comment.owl"));
-    }
-
-    #[test]
-    fn round_one_ontology_annotation() {
-        assert_round(include_str!(
-            "../../ont/owl-rdf/one-ontology-annotation.owl"
-        ));
-    }
-
-    #[test]
-    fn round_equivalent_class() {
-        assert_round(include_str!("../../ont/owl-rdf/equivalent-class.owl"));
-    }
-
-    #[test]
-    fn round_disjoint_class() {
-        assert_round(include_str!("../../ont/owl-rdf/disjoint-class.owl"));
-    }
-
-    #[test]
-    fn round_disjoint_union() {
-        assert_round(include_str!("../../ont/owl-rdf/disjoint-union.owl"));
-    }
-
-    #[test]
-    fn round_one_sub_property() {
-        assert_round(include_str!("../../ont/owl-rdf/suboproperty.owl"));
-    }
-
-    #[test]
-    fn round_one_inverse() {
-        assert_round(include_str!("../../ont/owl-rdf/inverse-properties.owl"));
-    }
-
-    #[test]
-    fn round_one_transitive() {
-        assert_round(include_str!("../../ont/owl-rdf/transitive-properties.owl"));
-    }
-
-    #[test]
-    fn round_one_annotated_transitive() {
-        assert_round(include_str!(
-            "../../ont/owl-rdf/annotation-on-transitive.owl"
-        ));
-    }
-
-    #[test]
-    fn round_subproperty_chain() {
-        assert_round(include_str!("../../ont/owl-rdf/subproperty-chain.owl"));
-    }
-
-    #[test]
-    fn round_one_subproperty_chain_with_inverse() {
-        assert_round(include_str!(
-            "../../ont/owl-rdf/subproperty-chain-with-inverse.owl"
-        ));
-    }
-
-    #[test]
-    fn round_annotation_on_annotation() {
-        assert_round(include_str!(
-            "../../ont/owl-rdf/annotation-with-annotation.owl"
-        ));
-    }
-
-    #[test]
-    fn round_sub_annotation() {
-        assert_round(include_str!("../../ont/owl-rdf/sub-annotation.owl"));
-    }
-
-    #[test]
-    fn round_data_property() {
-        assert_round(include_str!("../../ont/owl-rdf/data-property.owl"));
-    }
-
-    // #[test]
-    // fn round_literal_escaped() {
-    //     assert_round(include_str!("../../ont/owl-rdf/literal-escaped.owl"));
-    // }
-
-    #[test]
-    fn round_named_individual() {
-        assert_round(include_str!("../../ont/owl-rdf/named-individual.owl"));
-    }
-
-    #[test]
-    fn round_import() {
-        assert_round(include_str!("../../ont/owl-rdf/import.owl"));
-    }
-
-    #[test]
-    fn datatype() {
-        assert_round(include_str!("../../ont/owl-rdf/datatype.owl"));
-    }
-
-    #[test]
-    fn object_has_value() {
-        assert_round(include_str!("../../ont/owl-rdf/object-has-value.owl"));
-    }
-
-    #[test]
-    fn object_one_of() {
-        assert_round(include_str!("../../ont/owl-rdf/object-one-of.owl"));
-    }
-
-    #[test]
-    fn inverse() {
-        assert_round(include_str!("../../ont/owl-rdf/some-inverse.owl"));
-    }
-
-    #[test]
-    fn object_unqualified_cardinality() {
-        assert_round(include_str!(
-            "../../ont/owl-rdf/object-unqualified-max-cardinality.owl"
-        ));
-    }
-
-    #[test]
-    fn object_min_cardinality() {
-        assert_round(include_str!("../../ont/owl-rdf/object-min-cardinality.owl"));
-    }
-
-    #[test]
-    fn object_max_cardinality() {
-        assert_round(include_str!("../../ont/owl-rdf/object-max-cardinality.owl"));
-    }
-
-    #[test]
-    fn object_exact_cardinality() {
-        assert_round(include_str!(
-            "../../ont/owl-rdf/object-exact-cardinality.owl"
-        ));
-    }
-
-    #[test]
-    fn datatype_alias() {
-        assert_round(include_str!("../../ont/owl-rdf/datatype-alias.owl"));
-    }
-
-    #[test]
-    fn datatype_intersection() {
-        assert_round(include_str!("../../ont/owl-rdf/datatype-intersection.owl"));
-    }
-
-    #[test]
-    fn datatype_union() {
-        assert_round(include_str!("../../ont/owl-rdf/datatype-union.owl"));
-    }
-
-    #[test]
-    fn datatype_complement() {
-        assert_round(include_str!("../../ont/owl-rdf/datatype-complement.owl"));
-    }
-
-    #[test]
-    fn datatype_oneof() {
-        assert_round(include_str!("../../ont/owl-rdf/datatype-oneof.owl"));
-    }
-
-    #[test]
-    fn datatype_some() {
-        assert_round(include_str!("../../ont/owl-rdf/data-some.owl"));
-    }
-
-    #[test]
-    fn facet_restriction() {
-        assert_round(include_str!("../../ont/owl-rdf/facet-restriction.owl"));
-    }
-
-    #[test]
-    fn data_only() {
-        assert_round(include_str!("../../ont/owl-rdf/data-only.owl"));
-    }
-
-    #[test]
-    fn data_exact_cardinality() {
-        assert_round(include_str!("../../ont/owl-rdf/data-exact-cardinality.owl"));
-    }
-
-    #[test]
-    fn data_has_value() {
-        assert_round(include_str!("../../ont/owl-rdf/data-has-value.owl"));
-    }
-
-    #[test]
-    fn data_max_cardinality() {
-        assert_round(include_str!("../../ont/owl-rdf/data-max-cardinality.owl"));
-    }
-
-    #[test]
-    fn data_min_cardinality() {
-        assert_round(include_str!("../../ont/owl-rdf/data-min-cardinality.owl"));
-    }
-
-    #[test]
-    fn class_assertion() {
-        assert_round(include_str!("../../ont/owl-rdf/class-assertion.owl"));
-    }
-
-    #[test]
-    fn data_property_assertion() {
-        assert_round(include_str!(
-            "../../ont/owl-rdf/data-property-assertion.owl"
-        ));
-    }
-
-    #[test]
-    fn same_individual() {
-        assert_round(include_str!("../../ont/owl-rdf/same-individual.owl"));
-    }
-
-    #[test]
-    fn different_individuals() {
-        assert_round(include_str!("../../ont/owl-rdf/different-individual.owl"));
-    }
-
-    #[test]
-    fn multi_different_individuals() {
-        assert_round(include_str!(
-            "../../ont/owl-rdf/multi-different-individual.owl"
-        ));
-    }
-
-    #[test]
-    fn negative_data_property_assertion() {
-        assert_round(include_str!(
-            "../../ont/owl-rdf/negative-data-property-assertion.owl"
-        ));
-    }
-
-    #[test]
-    fn negative_object_property_assertion() {
-        assert_round(include_str!(
-            "../../ont/owl-rdf/negative-object-property-assertion.owl"
-        ));
-    }
-
-    #[test]
-    fn object_property_assertion() {
-        assert_round(include_str!(
-            "../../ont/owl-rdf/object-property-assertion.owl"
-        ));
-    }
-
-    #[test]
-    fn data_has_key() {
-        assert_round(include_str!("../../ont/owl-rdf/data-has-key.owl"));
-    }
-
-    #[test]
-    fn data_property_disjoint() {
-        assert_round(include_str!("../../ont/owl-rdf/data-property-disjoint.owl"));
-    }
-
-    #[test]
-    fn data_property_domain() {
-        assert_round(include_str!("../../ont/owl-rdf/data-property-domain.owl"));
-    }
-
-    #[test]
-    fn data_property_equivalent() {
-        assert_round(include_str!(
-            "../../ont/owl-rdf/data-property-equivalent.owl"
-        ));
-    }
-
-    #[test]
-    fn data_property_functional() {
-        assert_round(include_str!(
-            "../../ont/owl-rdf/data-property-functional.owl"
-        ));
-    }
-
-    #[test]
-    fn data_property_range() {
-        assert_round(include_str!("../../ont/owl-rdf/data-property-range.owl"));
-    }
-
-    #[test]
-    fn data_property_sub() {
-        assert_round(include_str!("../../ont/owl-rdf/data-property-sub.owl"));
-    }
-
-    #[test]
-    fn disjoint_object_properties() {
-        assert_round(include_str!(
-            "../../ont/owl-rdf/disjoint-object-properties.owl"
-        ));
-    }
-
-    #[test]
-    fn equivalent_object_properties() {
-        assert_round(include_str!(
-            "../../ont/owl-rdf/equivalent-object-properties.owl"
-        ));
-    }
-
-    #[test]
-    fn object_has_key() {
-        assert_round(include_str!("../../ont/owl-rdf/object-has-key.owl"));
-    }
-
-    #[test]
-    fn object_has_key_complicated() {
-        assert_round(include_str!("../../ont/owl-rdf/multi-has-key.owl"));
-    }
-
-    #[test]
-    fn object_property_asymmetric() {
-        assert_round(include_str!(
-            "../../ont/owl-rdf/object-property-asymmetric.owl"
-        ));
-    }
-
-    #[test]
-    fn object_property_domain() {
-        assert_round(include_str!("../../ont/owl-rdf/object-property-domain.owl"));
-    }
-
-    #[test]
-    fn object_property_functional() {
-        assert_round(include_str!(
-            "../../ont/owl-rdf/object-property-functional.owl"
-        ));
-    }
-
-    #[test]
-    fn object_property_inverse_functional() {
-        assert_round(include_str!(
-            "../../ont/owl-rdf/object-property-inverse-functional.owl"
-        ));
-    }
-
-    #[test]
-    fn object_property_irreflexive() {
-        assert_round(include_str!(
-            "../../ont/owl-rdf/object-property-irreflexive.owl"
-        ));
-    }
-
-    #[test]
-    fn object_property_range() {
-        assert_round(include_str!("../../ont/owl-rdf/object-property-range.owl"));
-    }
-
-    #[test]
-    fn object_property_reflexive() {
-        assert_round(include_str!(
-            "../../ont/owl-rdf/object-property-reflexive.owl"
-        ));
-    }
-
-    #[test]
-    fn object_property_symmetric() {
-        assert_round(include_str!(
-            "../../ont/owl-rdf/object-property-symmetric.owl"
-        ));
+    #[test_resources("src/ont/owl-rdf/*owl")]
+    #[test_resources("src/ont/owl-rdf/ambiguous/*.owl")]
+    fn roundtrip_rdf(resource:&str) {
+        let resource = &slurp::read_all_to_string(resource).unwrap();
+        assert_round(&resource);
     }
 
     #[test]
     fn annotation_with_anonymous() {
         assert_round(include_str!(
-            "../../ont/owl-rdf/annotation-with-anonymous.owl"
+            "../../ont/owl-rdf/ambiguous/annotation-with-anonymous.owl"
         ));
     }
-
-    #[test]
-    fn gci_and_other_class_relations() {
-        assert_round(include_str!(
-            "../../ont/owl-rdf/gci_and_other_class_relations.owl"
-        ));
-    }
-
-    // #[test]
-    // fn family() {
-    //     assert_round(include_str!("../../ont/owl-rdf/family.owl"));
-    // }
 }
