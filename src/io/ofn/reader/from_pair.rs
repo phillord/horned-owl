@@ -908,7 +908,7 @@ impl<A: ForIRI> FromPair<A> for OntologyAnnotation<A> {
 
 impl<A: ForIRI> FromPair<A> for PrefixMapping {
     const RULE: Rule = Rule::PrefixDeclarations;
-    fn from_pair_unchecked(pair: Pair<Rule>, ctx: &Context<'_, A>) -> Result<Self> {
+    fn from_pair_unchecked(pair: Pair<Rule>, _ctx: &Context<'_, A>) -> Result<Self> {
         // Build the prefix mapping and use it to build the ontology
         let mut prefixes = Self::default();
         for inner in pair.into_inner() {

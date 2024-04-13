@@ -28,7 +28,7 @@ impl<'a, A: ForIRI> Context<'a, A> {
 }
 
 pub fn read<R: BufRead>(
-    mut bufread: R,
+    bufread: R,
     _config: ParserConfiguration,
 ) -> Result<(SetOntology<RcStr>, PrefixMapping), HornedError> {
     let b = Build::new();
@@ -44,7 +44,7 @@ pub fn read_with_build<A: ForIRI, R: BufRead>(
 
     // FIXME: implement iterative parser (this is possible in )
     let mut doc = String::new();
-    bufread.read_to_string(&mut doc);
+    bufread.read_to_string(&mut doc)?;
     let pair = OwlFunctionalLexer::lex(Rule::OntologyDocument, doc.trim())?
         .next()
         .unwrap();

@@ -1,4 +1,3 @@
-use std::borrow::Borrow;
 use std::collections::BTreeSet;
 use std::fmt::Display;
 use std::fmt::Error;
@@ -9,8 +8,6 @@ use enum_meta::Meta;
 
 use crate::model::*;
 use crate::vocab::Facet;
-use crate::ontology::component_mapped::ComponentMappedOntology;
-use crate::ontology::indexed::ForIndex;
 
 /// Write a string literal while escaping `"` and `\` characters.
 fn quote(mut s: &str, f: &mut Formatter<'_>) -> Result<(), Error> {

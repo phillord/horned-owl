@@ -1,4 +1,3 @@
-use std::fmt::Display;
 use std::io::Write;
 
 use curie::PrefixMapping;
@@ -6,7 +5,6 @@ use curie::PrefixMapping;
 use crate::error::HornedError;
 use crate::model::ForIRI;
 use crate::model::Component;
-use crate::model::Kinded;
 use crate::model::ComponentKind;
 use crate::ontology::component_mapped::ComponentMappedOntology;
 use crate::ontology::indexed::ForIndex;
