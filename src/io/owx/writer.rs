@@ -147,7 +147,7 @@ fn tag_for_kind(axk: ComponentKind) -> &'static str {
         ComponentKind::SubAnnotationPropertyOf => "SubAnnotationPropertyOf",
         ComponentKind::AnnotationPropertyDomain => "AnnotationPropertyDomain",
         ComponentKind::AnnotationPropertyRange => "AnnotationPropertyRange",
-        ComponentKind::Rule => todo!("SWRL"),
+        ComponentKind::Rule => "DLSafeRule",
     }
 }
 
@@ -245,7 +245,7 @@ where
 
     let id = o.i().the_ontology_id_or_default();
     iri_maybe(&mut elem, "xml:base", &id.iri);
-    
+
     // Render XML Namespaces.
     for pre in m.mappings() {
         elem.push_attribute((format!("xmlns:{}", pre.0).as_bytes(),pre.1.as_bytes()));
@@ -382,7 +382,7 @@ content0! {DeclareDatatype}
 render! {
     AnnotatedComponent, self, w, m,
     {
-        if self.is_axiom() {
+        if !self.is_meta() {
             (
                 (&self.ann),
                 (&self.component)
@@ -610,7 +610,7 @@ render! {
             Component::SubAnnotationPropertyOf(ax) => ax.render(w, m)?,
             Component::AnnotationPropertyDomain(ax) => ax.render(w, m)?,
             Component::AnnotationPropertyRange(ax) => ax.render(w, m)?,
-            Component::Rule(_) => todo!("SWRL"),
+            Component::Rule(ax) => ax.render(w, m)?,
         }
         Ok(())
     }
@@ -702,6 +702,49 @@ contents! {
     (&self.ann.ap,
      &self.subject,
      &self.ann.av)
+}
+
+render! {
+    Rule, self, w, m,
+    {
+        let body = BytesStart::new("Body");
+        let head = BytesStart::new("Head");
+
+        self.body.within_tag(w, m, body)?;
+        self.head.within_tag(w, m, head)
+    }
+}
+
+render! {
+    Atom, self, w, m,
+    {
+        match self {
+            Atom::ClassAtom{pred, arg} => {
+                (pred, arg).within(w, m, "ClassAtom")?;
+            }
+            _ => todo!("Can't render that kind of atom")
+        }
+        Ok(())
+    }
+}
+
+render! {
+    IArgument, self, w, m,
+    {
+        match self {
+            Self::Individual(i) => i.render(w, m)?,
+            Self::Literal(l) => l.render(w, m)?,
+            Self::Variable(v) => v.render(w, m)?
+        }
+        Ok(())
+    }
+}
+
+render! {
+    Variable, self, w, m,
+    {
+        with_iri(w, m, "Variable", self)
+    }
 }
 
 render! {
@@ -1043,6 +1086,8 @@ mod test {
         let (ont_orig, _prefix_orig, ont_round, _prefix_round) =
             roundtrip(resource);
 
+        dbg!(&ont_orig);
+        dbg!(&ont_round);
         assert_eq!(ont_orig, ont_round);
     }
 

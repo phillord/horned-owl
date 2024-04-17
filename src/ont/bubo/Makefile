@@ -7,8 +7,8 @@ define build_template
   $(2)+=../owl-rdf/$(1).owl ../owl-xml/$(1).owx ../owl-ttl/$(1).ttl
 endef
 
-## Exclude these because they are support files
-EXCLUDE=ontology.clj save.clj
+## Exclude these because they will be generated when something else imports them
+EXCLUDE=ontology.clj other.clj other-property.clj swrl_rule_support.clj
 
 PREQ=$(wildcard *.clj)
 PREQ_EXC=$(filter-out $(EXCLUDE),$(PREQ))

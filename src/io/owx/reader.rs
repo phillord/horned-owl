@@ -485,7 +485,7 @@ fn axiom_from_start<A: ForIRI, R: BufRead>(
             ope: from_start(r, e)?,
             ce: from_next(r)?,
         }
-        .into(),
+       .into(),
         b"ObjectPropertyRange" => ObjectPropertyRange {
             ope: from_start(r, e)?,
             ce: from_next(r)?,
@@ -592,12 +592,13 @@ fn axiom_from_start<A: ForIRI, R: BufRead>(
         }
         .into(),
         b"DLSafeRule" => {
-            discard_till(r, b"Body")?;
             let body = till_end(r, b"Body")?;
-            discard_till(r, b"Head")?;
+            discard_till_start(r, b"Head")?;
+            let head = till_end(r, b"Head")?;
+            discard_till(r, b"DLSafeRule")?;
             Rule {
                 body,
-                head: till_end(r, b"Head")?
+                head,
             }
         }.into(),
         _ => {
@@ -1131,6 +1132,7 @@ from_xml! {
 
         loop {
             let e = r.reader.read_resolved_event_into(&mut buf)?;
+            eprintln!("annotation: {:?}", e);
             match e {
                 (ref ns, Event::Start(ref e))
                 |
@@ -1175,12 +1177,30 @@ fn from_next<A: ForIRI, R: BufRead, T: FromStart<A>>(r: &mut Read<A, R>) -> Resu
     }
 }
 
-fn discard_till<A: ForIRI, R: BufRead>(r: &mut Read<A, R>, end: &[u8]) -> Result<(), HornedError> {
+fn discard_till_start<A: ForIRI, R: BufRead>(r: &mut Read<A, R>, start: &[u8]) -> Result<(), HornedError> {
     let pos = r.reader.buffer_position();
     let mut buf = Vec::new();
     loop {
         let e = r.reader.read_resolved_event_into(&mut buf)?;
 
+        match e {
+            (ref ns, Event::Start(ref e)) if is_owl(ns) && e.local_name().as_ref() == start => {
+                return Ok(());
+            }
+            (_, Event::Eof) => {
+                return Err(error_missing_end_tag(start, r, pos));
+            }
+            _ => {}
+        }
+    }
+}
+
+
+fn discard_till<A: ForIRI, R: BufRead>(r: &mut Read<A, R>, end: &[u8]) -> Result<(), HornedError> {
+    let pos = r.reader.buffer_position();
+    let mut buf = Vec::new();
+    loop {
+        let e = r.reader.read_resolved_event_into(&mut buf)?;
         match e {
             (ref ns, Event::End(ref e)) if is_owl_name(ns, e, end) => {
                 return Ok(());
@@ -1203,6 +1223,51 @@ from_xml! {
 }
 
 from_start! {
+    Atom, r, e,
+    {
+        Ok(
+            match e.local_name().as_ref() {
+                b"ClassAtom" => {
+                    let pred = from_next(r)?;
+                    let arg = from_next(r)?;
+                    Atom::ClassAtom {
+                        pred,
+                        arg
+                    }
+                },
+                _=> {
+                    return Err(error_unknown_entity("Atom",
+                                                    e.local_name().as_ref(),r ));
+                }
+            }
+          )
+    }
+}
+
+from_start! {
+    Variable, r, e,
+    {
+        named_entity_from_start(r, e, b"Variable")
+    }
+}
+
+from_start! {
+    IArgument, r, e,
+    {
+        Ok(
+            match e.local_name().as_ref() {
+                b"Variable" => {
+                    IArgument::Variable(Variable::from_start(r, e)?)
+                }
+                _ => {
+                    todo!("Unknown Iargument type")
+                }
+            }
+        )
+    }
+}
+
+from_start! {
     IRI, r, e,
     {
         Self::from_xml(r, e.local_name().as_ref())
@@ -1215,6 +1280,7 @@ from_xml! {IRI, r, end,
             let mut buf = Vec::new();
             loop {
                 let e = r.reader.read_resolved_event_into(&mut buf)?;
+                eprintln!("from_xml iri:{:?}", e);
                 match e {
                     (ref _ns,Event::Text(ref e)) => {
                         iri = Some(r.build.iri
@@ -1231,6 +1297,9 @@ from_xml! {IRI, r, end,
             }
         }
 }
+
+
+
 
 #[cfg(test)]
 pub mod test {
@@ -2089,7 +2158,50 @@ pub mod test {
     fn swrl_rule_basic() {
         let ont_s = include_str!("../../ont/owl-xml/swrl_rule_basic.owx");
 
-        let (_, _) = read_ok(&mut ont_s.as_bytes());
+        let (ont, _) = read_ok(&mut ont_s.as_bytes());
+
+        dbg!(&ont);
+        assert_eq!(ont.i().rule().count(), 1);
+
+        let rule = ont.i().rule().next().unwrap();
+        let b = Build::new_rc();
+        assert_eq! {
+            rule,
+            &Rule{
+                head:vec![Atom::ClassAtom {
+                    pred: ClassExpression::Class(b.class("http://www.example.com/iri#B")),
+                    arg: IArgument::Variable(b.iri("http://www.example.com/iri#x").into())
+                }],
+                body:vec![
+                    Atom::ClassAtom {
+                        pred: ClassExpression::Class(b.class("http://www.example.com/iri#A")),
+                        arg: IArgument::Variable(b.iri("http://www.example.com/iri#x").into())
+                    }]
+            }
+        }
+    }
+
+    #[test]
+    fn swrl_rule_two_variables() {
+        let ont_s = include_str!("../../ont/owl-xml/swrl_rule_two_variables.owx");
+        let (ont,_) = read_ok(&mut ont_s.as_bytes());
+
+        let rule = ont.i().rule().next().unwrap();
+        assert_eq!(2, rule.head.len());
+    }
+
+    #[test]
+    fn swrl_rule_class_expression() {
+        let ont_s = include_str!("../../ont/owl-xml/swrl_rule_class_expression.owx");
+        let (ont,_) = read_ok(&mut ont_s.as_bytes());
+
+        let rule = ont.i().rule().next().unwrap();
+        assert!{
+            matches!{
+                rule.head[0],
+                Atom::ClassAtom{pred:ClassExpression::ObjectIntersectionOf(_), arg:_}
+            }
+        };
     }
 
     #[test]

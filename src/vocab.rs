@@ -126,6 +126,8 @@ pub enum Namespace {
     RDF,
     /// RDF Schema
     RDFS,
+    /// SWRL
+    SWRL,
     /// XML Schema datatype
     XSD,
 }
@@ -140,6 +142,7 @@ lazy_meta! {
     OWL, IRI(String::from("http://www.w3.org/2002/07/owl#"));
     RDF, IRI(String::from("http://www.w3.org/1999/02/22-rdf-syntax-ns#"));
     RDFS, IRI(String::from("http://www.w3.org/2000/01/rdf-schema#"));
+    SWRL, IRI(String::from("http://www.w3.org/2003/11/swrl#"));
     XSD, IRI(String::from("http://www.w3.org/2001/XMLSchema#"));
 }
 
@@ -338,11 +341,28 @@ pub fn is_xsd_datatype<A: AsRef<str>>(iri: A) -> bool {
     iri.as_ref().starts_with(Namespace::XSD.as_ref())
 }
 
+vocabulary_type! {
+    SWRL, IRI<String>, METASWRL, [
+        (SWRL, Argument1, true),
+        (SWRL, Argument2, true),
+        (SWRL, AtomList, false),
+        (SWRL, Body, true),
+        (SWRL, ClassAtom, false),
+        (SWRL, ClassPredicate, true),
+        (SWRL, Head, true),
+        (SWRL, Imp, false),
+        (SWRL, Variable, false)
+    ]
+}
+
+
+
 pub enum Vocab {
     Facet(Facet),
     RDF(RDF),
     RDFS(RDFS),
     OWL(OWL),
+    SWRL(SWRL),
     XSD(XSD),
     Namespace(Namespace),
 }
@@ -359,6 +379,7 @@ impl<'a> Meta<&'a IRI<String>> for Vocab {
             Self::RDF(rdf) => rdf.meta(),
             Self::RDFS(rdfs) => rdfs.meta(),
             Self::OWL(owl) => owl.meta(),
+            Self::SWRL(swrl) => swrl.meta(),
             Self::XSD(xsd) => xsd.meta(),
             Self::Namespace(ns) => ns.meta(),
         }
@@ -369,6 +390,7 @@ impl<'a> Meta<&'a IRI<String>> for Vocab {
         let rdf_all = RDF::all().into_iter().map(|variant| Self::RDF(variant));
         let rdfs_all = RDFS::all().into_iter().map(|variant| Self::RDFS(variant));
         let owl_all = OWL::all().into_iter().map(|variant| Self::OWL(variant));
+        let swrl_all = SWRL::all().into_iter().map(|variant| Self::SWRL(variant));
         let xsd_all = XSD::all().into_iter().map(|variant| Self::XSD(variant));
         let ns_all = Namespace::all()
             .into_iter()
@@ -378,6 +400,7 @@ impl<'a> Meta<&'a IRI<String>> for Vocab {
             .chain(rdf_all)
             .chain(rdfs_all)
             .chain(owl_all)
+            .chain(swrl_all)
             .chain(xsd_all)
             .chain(ns_all)
             .collect()
@@ -411,6 +434,12 @@ impl From<RDFS> for Vocab {
 impl From<OWL> for Vocab {
     fn from(owl: OWL) -> Self {
         Self::OWL(owl)
+    }
+}
+
+impl From<SWRL> for Vocab {
+    fn from(owl: SWRL) -> Self {
+        Self::SWRL(owl)
     }
 }
 

@@ -34,9 +34,9 @@ default-members=[".", "horned-bin"]
 [workspace.dependencies]
 indexmap="1.0.2"
 ##pretty_rdf={path="./pretty_rdf"}
-pretty_rdf="0.5.0"
-rio_api="0.7.1"
-rio_xml="0.7.3"
+pretty_rdf="0.6.0"
+rio_api="0.8.3"
+rio_xml="0.8.3"
 
 [features]
 remote = ["ureq"]
@@ -45,7 +45,7 @@ remote = ["ureq"]
 horned-owl = {path=".", features = ["remote"]}
 bencher = "0.1.4"
 env_logger = "0.9.0"
-mktemp = "0.4.1"
+mktemp = "0.5.1"
 pretty_assertions = "1.0.0"
 slurp = "1.0.1"
 test-generator =  { version = "^0.3" }

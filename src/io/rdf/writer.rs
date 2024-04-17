@@ -3,10 +3,12 @@ use crate::{
     error::HornedError,
     model::*,
     ontology::component_mapped::ComponentMappedOntology,
-    vocab::{Vocab, OWL, RDF, RDFS, XSD},
+    vocab::{Vocab, OWL, RDF, RDFS, SWRL, XSD},
 };
 
 use crate::ontology::indexed::ForIndex;
+
+use indexmap::indexmap;
 
 use pretty_rdf::{
     ChunkedRdfXmlFormatterConfig, PBlankNode, PLiteral, PNamedNode, PSubject, PTerm, PTriple,
@@ -18,21 +20,20 @@ use std::{
     io::Write,
 };
 
+/// Write a component mapped ontology into RDF
 pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
     write: &mut W,
     ont: &ComponentMappedOntology<A, AA>,
 ) -> Result<(), HornedError> {
     // Entirely unsatisfying to set this randomly here, but we can't
     // access ns our parser yet
-    let mut p = indexmap::IndexMap::new();
-    p.insert(
-        "http://www.w3.org/2002/07/owl#".to_string(),
-        "owl".to_string(),
-    );
-    p.insert(
-        "http://www.w3.org/XML/1998/namespace".to_string(),
-        "xml".to_string(),
-    );
+    let p = indexmap![
+                    "http://www.w3.org/1999/02/22-rdf-syntax-ns#" => "rdf",
+                    "http://www.w3.org/2002/07/owl#" => "owl",
+                    "http://www.w3.org/2003/11/swrl#" => "swrl"
+    ];
+    let p = p.into_iter().map(|(k, v)|(k.into(), v.into())).collect();
+
 
 
     let mut bng = NodeGenerator::default();
@@ -45,18 +46,16 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
     else {
         let mut f = PrettyRdfXmlFormatter::new(write, ChunkedRdfXmlFormatterConfig::all().prefix(p))?;
         ont.render(&mut f, &mut bng)?;
+        // for i in f.triples() {
+        //     eprintln!("{}", i.printable());
+        // }
         f.finish()?;
     }
-
-
-
-    // for i in f.triples() {
-    //     println!("{}", i.printable());
-    // }
 
     Ok(())
 }
 
+/// Generates Nodes for RDF output
 struct NodeGenerator<A: ForIRI> {
     i: u64,
     b: HashSet<A>,
@@ -107,6 +106,7 @@ impl<A: ForIRI> NodeGenerator<A> {
     }
 }
 
+/// Convertors from Pretty RDF components and equivalent Horned-OWL model
 impl<A: ForIRI> From<&IRI<A>> for PTerm<A> {
     fn from(iri: &IRI<A>) -> Self {
         PNamedNode::new(iri.underlying()).into()
@@ -182,6 +182,8 @@ impl<A: ForIRI> From<&Individual<A>> for PSubject<A> {
     }
 }
 
+/// Trait enabling things to render themselves as RDF.
+/// The return type is some node that the entity was rendered onto.
 trait Render<A: ForIRI, F: RdfXmlFormatter<A, W>, R, W:Write> {
     fn render(
         &self,
@@ -208,7 +210,7 @@ impl<A: ForIRI> From<Vec<PTriple<A>>> for Annotatable<A> {
     }
 }
 
-/// The types in `Render` are too long to type.
+/// Implement the `Render` trait over a type, as the types are too long to type!
 macro_rules! render {
     ($type:ident, $self:ident, $f:ident, $ng:ident, $return:ident,
      $body:tt) => {
@@ -222,6 +224,7 @@ macro_rules! render {
     }
 }
 
+/// Render entity to a single `PSubject` node.
 macro_rules! render_to_node {
     ($type:ident, $self:ident, $f:ident, $ng:ident,
      $body:tt) => {
@@ -229,6 +232,7 @@ macro_rules! render_to_node {
     };
 }
 
+/// Render entity to a vector of `PTriple` nodes.
 macro_rules! render_to_vec {
     ($type:ident, $self:ident, $f:ident, $ng:ident,
      $body:tt) => {
@@ -241,6 +245,7 @@ macro_rules! render_to_vec {
     };
 }
 
+/// Render to a single triple
 macro_rules! render_triple {
     ($type:ident, $self:ident, $ng:ident, $sub:expr, $pred:expr, $ob:expr) => {
         render! {
@@ -252,6 +257,7 @@ macro_rules! render_triple {
     };
 }
 
+/// Generate and write a triple
 macro_rules! triple {
     ($f:ident, $sub:expr, $pred:expr, $ob:expr) => {{
         let t = to_triple($sub, $pred, $ob);
@@ -260,6 +266,7 @@ macro_rules! triple {
     }};
 }
 
+/// Generate many triples
 macro_rules! triples {
     ($f:ident) => {};
     ($f:ident, $sub:expr, $pred:expr, $ob:expr) => {
@@ -273,6 +280,7 @@ macro_rules! triples {
     }
 }
 
+/// Generate and write many triples and return the first
 macro_rules! triples_to_node {
     ($f:ident) => {};
     ($f:ident, $sub:expr, $pred:expr, $ob:expr) => {
@@ -296,6 +304,7 @@ macro_rules! triples_to_node {
     }
 }
 
+/// Generate and write many triples and return all as a vec
 macro_rules! triples_to_vec {
     ($f:ident) => {};
     ($f:ident, $sub:expr, $pred:expr, $ob:expr) => {
@@ -341,12 +350,14 @@ where
 //     }
 // }
 
+
+/// Render a vector slice
 fn render_vec_subject<A: ForIRI, F: RdfXmlFormatter<A, W>, T: Render<A, F, PSubject<A>, W>, W: Write>(
     v: &[T],
     f: &mut F,
     ng: &mut NodeGenerator<A>,
-) -> Result<PTerm<A>, HornedError> {
-    let mut rest: Option<PTerm<A>> = None;
+) -> Result<PSubject<A>, HornedError> {
+    let mut rest: Option<PSubject<A>> = None;
     for i in v.iter().rev() {
         let bn = &ng.bn();
         let item = i.render(f, ng)?;
@@ -358,12 +369,13 @@ fn render_vec_subject<A: ForIRI, F: RdfXmlFormatter<A, W>, T: Render<A, F, PSubj
         } else {
             triples!(f, bn.clone(), ng.nn(RDF::Rest), ng.nn(RDF::Nil));
         }
-        rest = Some(bn.clone().into())
+        rest = Some(bn.clone())
     }
     // Panic if Vec is zero length!
     Ok(rest.unwrap())
 }
 
+// TODO This code is an almost exact duplicate of render_vec_slice. Why do I need both?
 impl<A: ForIRI, F: RdfXmlFormatter<A, W>, T, W:Write> Render<A, F, PTerm<A>, W> for &Vec<T>
 where
     T: Debug + Render<A, F, PTerm<A>, W>,
@@ -392,6 +404,7 @@ where
     }
 }
 
+// Written long hand rather than using `render` because the rules don't quite fit
 impl<A: ForIRI, F:RdfXmlFormatter<A, W>, W:Write> Render<A, F, (), W> for BTreeSet<Annotation<A>> {
     fn render(
         &self,
@@ -443,7 +456,7 @@ impl<A: ForIRI, F: RdfXmlFormatter<A, W>, W:Write> Render<A, F, (), W> for Annot
         f: &mut F,
         ng: &mut NodeGenerator<A>,
     ) -> Result<(), HornedError> {
-        if !self.component.is_axiom() {
+        if self.component.is_meta() {
             return Ok(())
         }
         let cmp: Annotatable<A> = self.component.render(f, ng)?;
@@ -601,7 +614,7 @@ impl<A: ForIRI, F: RdfXmlFormatter<A, W>, W:Write> Render<A, F, Annotatable<A>, 
             Component::AnnotationPropertyDomain(cmp) => cmp.render(f, ng)?.into(),
             Component::AnnotationPropertyRange(cmp) => cmp.render(f, ng)?.into(),
             Component::ClassAssertion(cmp) => cmp.render(f, ng)?.into(),
-            Component::Rule(_) => todo!("SWRL todo"),
+            Component::Rule(cmp) => cmp.render(f, ng)?.into(),
         })
     }
 }
@@ -873,7 +886,7 @@ fn members<A: ForIRI, F:RdfXmlFormatter<A, W>, R: Debug + Render<A, F, PSubject<
         }
         _ => {
             let bn = ng.bn();
-            let node_v: PTerm<_> = render_vec_subject(members, f, ng)?;
+            let node_v = render_vec_subject(members, f, ng)?;
 
             Ok(triples_to_vec!(
                 f,
@@ -994,7 +1007,7 @@ render_to_node! {
                     // _:yn Fn ltn .
                     let bn = ng.bn();
                     let node_dt:PTerm<_> = (&dt.0).into();
-                    let node_vft:PTerm<_> = render_vec_subject(vfr, f, ng)?;
+                    let node_vft = render_vec_subject(vfr, f, ng)?;
 
                     triples_to_node!(
                         f,
@@ -1376,7 +1389,7 @@ render_to_vec! {
     {
         //T(CE) owl:hasKey T(SEQ OPE1 ... OPEm DPE1 ... DPEn ) .
         let node_ce:PSubject<_> = self.ce.render(f, ng)?;
-        let node_vpe:PTerm<_> = render_vec_subject(&self.vpe, f, ng)?;
+        let node_vpe = render_vec_subject(&self.vpe, f, ng)?;
         // let g:String = &self.vpe[0];
         // let node_vpe:PTerm<_> = g.render(f, ng)?;
 
@@ -1513,6 +1526,78 @@ render! {
     }
 }
 
+render_to_node! {
+    Variable, self, f, ng,
+    {
+        // We need to declare the variable here because there is no
+        // DeclareVariable axiom which OWL Named types have.
+        triple!{f, &self.0, ng.nn(RDF::Type), ng.nn(SWRL::Variable)};
+        Ok(
+            (&self.0).into()
+        )
+    }
+}
+
+
+render_to_node! {
+    IArgument, self, f, ng,
+    {
+        match self{
+            Self::Individual(i) => i.render(f, ng),
+            Self::Literal(_l) => todo!(),
+            Self::Variable(v) => v.render(f, ng),
+        }
+    }
+}
+
+render_to_node! {
+    Atom, self, f, ng,
+    {
+        match self {
+            Self::ClassAtom{pred, arg} => {
+                let bn = ng.bn();
+                let class_node = pred.render(f, ng)?;
+                let arg_node = arg.render(f, ng)?;
+
+                triples!(
+                    f,
+                    bn.clone(), ng.nn(RDF::Type), ng.nn(SWRL::ClassAtom),
+                    bn.clone(), ng.nn(SWRL::ClassPredicate), class_node,
+                    bn.clone(), ng.nn(SWRL::Argument1), arg_node
+                );
+
+                Ok(bn)
+
+            }
+            _=> todo!("other types of atom")
+        }
+
+    }
+}
+
+render! {
+    Rule, self, f, ng, PTriple,
+    {
+        let bn = ng.bn();
+        let body_bn = render_vec_subject(&self.body, f, ng)?;
+        let head_bn = render_vec_subject(&self.head, f, ng)?;
+
+        let r = triple!(f, bn.clone(), ng.nn(RDF::Type), ng.nn(SWRL::Imp));
+
+
+        triples_to_node!(
+            f,
+            bn.clone(), ng.nn(SWRL::Body), body_bn.clone(),
+            body_bn, ng.nn(RDF::Type), ng.nn(SWRL::AtomList),
+            bn.clone(), ng.nn(SWRL::Head), head_bn.clone(),
+            head_bn, ng.nn(RDF::Type), ng.nn(SWRL::AtomList)
+        );
+
+        Ok(r)
+    }
+}
+
+
 render_triple! {
     DeclareClass, self, ng,
     &self.0.0, ng.nn(RDF::Type), ng.nn(OWL::Class)
@@ -1625,10 +1710,12 @@ mod test {
             ont_orig.clone().into();
         write(&mut buf_writer, &amo).ok().unwrap();
         buf_writer.flush().ok();
+
+        write(&mut BufWriter::new(&File::create("/tmp/last_roundtripped_file.rdf").ok().unwrap()),
+            &amo).unwrap();
+
         let file = File::open(&temp_file).ok().unwrap();
         let ont_round = read_ok(&mut BufReader::new(&file));
-
-        temp_file.release();
 
         (ont_orig, ont_round)
     }
@@ -1636,8 +1723,8 @@ mod test {
     fn assert_round(ont: &str) -> (SetOntology<RcStr>, SetOntology<RcStr>) {
         let (ont_orig, ont_round) = roundtrip(ont);
 
-        //println!("ont_orig\n{:#?}", ont_orig);
-        //println!("ont_round\n{:#?}", ont_round);
+        println!("ont_orig\n{:#?}", ont_orig);
+        println!("ont_round\n{:#?}", ont_round);
         assert_eq!(ont_orig, ont_round);
 
         (ont_orig, ont_round)

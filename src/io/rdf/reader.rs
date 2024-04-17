@@ -13,6 +13,7 @@ use crate::vocab::is_annotation_builtin;
 use crate::vocab::OWL as VOWL;
 use crate::vocab::OWL2Datatype;
 use crate::vocab::RDF as VRDF;
+use crate::vocab::SWRL as VSWRL;
 use crate::{
     ontology::{
         declaration_mapped::DeclarationMappedIndex,
@@ -58,6 +59,7 @@ pub enum Term<A: ForIRI> {
     OWL(VOWL),
     RDF(VRDF),
     RDFS(VRDFS),
+    SWRL(VSWRL),
     FacetTerm(Facet),
 }
 
@@ -67,10 +69,11 @@ impl<A: ForIRI> Term<A> {
             OWL(_) => 1,
             RDF(_) => 2,
             RDFS(_) => 3,
-            FacetTerm(_) => 4,
-            Iri(_) => 5,
-            Term::BNode(_) => 6,
-            Literal(_) => 7,
+            SWRL(_) => 4,
+            FacetTerm(_) => 5,
+            Iri(_) => 6,
+            Term::BNode(_) => 7,
+            Literal(_) => 8,
         }
     }
 }
@@ -87,6 +90,7 @@ impl<A: ForIRI> Ord for Term<A> {
             (OWL(s), OWL(o)) => s.cmp(o),
             (RDF(s), RDF(o)) => s.cmp(o),
             (RDFS(s), RDFS(o)) => s.cmp(o),
+            (SWRL(s), SWRL(o)) => s.cmp(o),
             (FacetTerm(s), FacetTerm(o)) => s.cmp(o),
             (Iri(s), Iri(o)) => s.to_string().cmp(&o.to_string()),
             (Term::BNode(s), Term::BNode(o)) => (*s).cmp(&(*o)),
@@ -196,7 +200,7 @@ impl<A: ForIRI> From<Term<A>> for OrTerm<A> {
 /// Creates a lookup [HashMap] for OWL, RDF, RDFS and Facet vocabularies.
 fn vocab_lookup<A: ForIRI>() -> HashMap<String, Term<A>> {
     // Preallocate capacity, as we know at compile-time how many elements will
-    // be stored in the hashmaps. 
+    // be stored in the hashmaps.
     // 87 = #OWL variants - 1 + #RDF variants + #RDFS variants + #Facet variants
     let mut lookup_map = HashMap::with_capacity(87);
 
@@ -224,6 +228,12 @@ fn vocab_lookup<A: ForIRI>() -> HashMap<String, Term<A>> {
             .into_iter()
             .map(|variant| (variant.underlying(), Term::RDF(variant)))
         );
+
+    lookup_map.extend(
+        VSWRL::all()
+            .into_iter()
+            .map(|variant| (variant.underlying(), Term::SWRL(variant)))
+    );
 
     lookup_map.extend(
         Facet::all()
@@ -324,7 +334,6 @@ impl<A: ForIRI, AA: ForIndex<A>> RDFOntology<A, AA> {
     pub fn j(&self) -> &DeclarationMappedIndex<A, AA> {
         self.0.j()
     }
-        
 
     pub fn k(&self) -> &LogicallyEqualIndex<A, AA> {
         self.0.k()
@@ -378,7 +387,7 @@ pub struct IncompleteParse<A: ForIRI> {
     pub bnode_seq: Vec<Vec<Term<A>>>,
 
     pub class_expression: Vec<ClassExpression<A>>,
-    pub object_property_expression: Vec<ObjectPropertyExpression<A>>,
+   pub object_property_expression: Vec<ObjectPropertyExpression<A>>,
     pub data_range: Vec<DataRange<A>>,
     pub ann_map: HashMap<[Term<A>; 3], BTreeSet<Annotation<A>>>,
 }
@@ -447,6 +456,9 @@ pub struct OntologyParser<'a, A: ForIRI, AA: ForIndex<A>> {
     object_property_expression: HashMap<BNode<A>, ObjectPropertyExpression<A>>,
     data_range: HashMap<BNode<A>, DataRange<A>>,
     ann_map: HashMap<[Term<A>; 3], BTreeSet<Annotation<A>>>,
+    atom: HashMap<Term<A>, Atom<A>>,
+    variables: Vec<Variable<A>>,
+
     state: OntologyParserState,
     error: Result<(), HornedError>,
 }
@@ -461,7 +473,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
             )),
             b,
             config,
-            
+
             triple,
             simple: d!(),
             bnode: d!(),
@@ -470,6 +482,8 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
             object_property_expression: d!(),
             data_range: d!(),
             ann_map: d!(),
+            atom: d!(),
+            variables: d!(),
             state: OntologyParserState::New,
             error: Ok(()),
         }
@@ -974,6 +988,17 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
             .collect()
     }
 
+    // TODO Really, really fix code duplication
+    fn fetch_atom_seq(&mut self, bnodeid: &BNode<A>) -> Option<Vec<Atom<A>>> {
+        self
+            .bnode_seq
+            .remove(bnodeid)
+            .as_ref()?
+            .iter()
+            .map(|t| self.atom.remove(t))
+            .collect()
+    }
+
     fn fetch_dr(&mut self, t: &Term<A>) -> Option<DataRange<A>> {
         match t {
             Term::Iri(iri) => {
@@ -1324,6 +1349,8 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
     }
 
     fn axioms(&mut self, ic: &[&RDFOntology<A, AA>]) -> Result<(), HornedError>{
+        let mut single_bnodes = vec![];
+
         for (this_bnode, v) in std::mem::take(&mut self.bnode) {
             let axiom:Result<_, HornedError> = match v.as_slice() {
                 [[_, Term::OWL(VOWL::AssertionProperty), pr],//:
@@ -1376,16 +1403,20 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
                     ann: BTreeSet::new(),
                 })
             } else {
-                self.bnode.insert(this_bnode, v);
+                if v.len() == 1 {
+                    single_bnodes.push(v[0].clone());
+                }
+                else {
+                    self.bnode.insert(this_bnode, v);
+                }
             }
         }
 
-        for triple in std::mem::take(&mut self.simple).into_iter().chain(
-            std::mem::take(&mut self.bnode)
-                .into_iter()
-                .flat_map(|(_k, v)| v)
-                .map(|t| t.into())
-        ) {
+        for triple in std::mem::take(&mut self.simple).into_iter()
+            .chain(
+                single_bnodes.into_iter().map(|t| t.into())
+            )
+        {
             let axiom:Result<_,HornedError> = match &triple.0 {
                 [sub_tce, Term::RDFS(VRDFS::SubClassOf), sup_tce] => ok_some! {
                     SubClassOf {
@@ -1699,6 +1730,83 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
                 self.simple.push(triple)
             }
         }
+
+        Ok(())
+    }
+
+    fn swrl(&mut self, _: &[&RDFOntology<A,AA>]) -> Result<(), HornedError>{
+        // identify variables first
+        for triple in std::mem::take(&mut self.simple) {
+            match &triple.0 {
+                [Term::Iri(ref s), Term::RDF(VRDF::Type), Term::SWRL(VSWRL::Variable)] => {
+                    self.variables.push(Variable(s.clone()));
+                }
+                _ => {
+                    self.simple.push(triple);
+                }
+            }
+        }
+
+
+        // Next identify the atoms with a big pattern matcher over bnodes
+        for (bnode,triple) in std::mem::take(&mut self.bnode) {
+            let atom:Result<_,HornedError> =
+                match triple.as_slice() {
+                    [[_, Term::RDF(VRDF::Type), Term::SWRL(VSWRL::ClassAtom)],
+                     [_, Term::SWRL(VSWRL::Argument1), Term::Iri(arg)],
+                     [_, Term::SWRL(VSWRL::ClassPredicate), pred]] => {
+                         ok_some!{
+                             Atom::ClassAtom{
+                                 pred: self.fetch_ce(pred)?,
+                                 // This is not general enough.
+                                 arg: IArgument::Variable(Variable(arg.clone()))
+                             }
+                         }
+                     }
+                    _ => {
+                        Ok(None)
+                    }
+                };
+
+            if let Some(atom) = atom? {
+                self.atom.insert(Term::BNode(bnode), atom);
+            }
+            else {
+                self.bnode.insert(bnode, triple);
+            }
+        }
+
+        // now identfy the rules using "imp" over the bnodes, we
+        // should have everything else in place by then to build the
+        // entire rule
+        for (bnode,triple) in std::mem::take(&mut self.bnode) {
+
+            let rule: Result<_,HornedError> = match triple.as_slice() {
+                [[_, Term::RDF(VRDF::Type), Term::SWRL(VSWRL::Imp)],
+                 [_, Term::SWRL(VSWRL::Body), Term::BNode(body_bn)],
+                 [_, Term::SWRL(VSWRL::Head), Term::BNode(head_bn)]] => {
+                     ok_some!{
+                        Rule {
+                            head: self.fetch_atom_seq(head_bn)?,
+                            body: self.fetch_atom_seq(body_bn)?,
+                        }
+                    }
+                 }
+                _ => {
+                    Ok(None)
+                }
+            };
+
+            if let Some(rule) = rule? {
+                self.merge(rule);
+            }
+            else {
+                self.bnode.insert(bnode, triple);
+            }
+        }
+
+
+
         Ok(())
     }
 
@@ -1879,6 +1987,9 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
 
         // Table 16: Axioms without annotations
         self.axioms(ic)?;
+
+        // SWRL rules
+        self.swrl(ic)?;
 
         if self.config.rdf.lax {
             self.simple_annotations(true);

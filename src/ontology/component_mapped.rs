@@ -210,6 +210,7 @@ onimpl! {AnnotationAssertion, annotation_assertion}
 onimpl! {SubAnnotationPropertyOf, sub_annotation_property_of}
 onimpl! {AnnotationPropertyDomain, annotation_property_domain}
 onimpl! {AnnotationPropertyRange, annotation_property_range}
+onimpl! {Rule, rule}
 
 impl<A, AA> Default for ComponentMappedIndex<A, AA> {
     fn default() -> Self {

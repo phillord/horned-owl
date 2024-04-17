@@ -166,6 +166,7 @@ pub mod naming {
             SubAnnotationPropertyOf => "Sub Annotation Property Of",
             AnnotationPropertyDomain => "Annotation Property Domain",
             AnnotationPropertyRange => "Annotation Property Range",
+            Rule => "Rule",
         }
     }
 }

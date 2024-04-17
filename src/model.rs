@@ -378,6 +378,14 @@ impl<A: ForIRI> Build<A> {
     {
         Datatype(self.iri(s))
     }
+
+
+    pub fn variable<S>(&self, s: S) -> Variable<A>
+    where
+        S: Borrow<str>,
+    {
+        Variable(self.iri(s))
+    }
 }
 
 impl Build<RcStr> {
@@ -1743,10 +1751,35 @@ pub enum Atom<A>{
 
 
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub struct IArgument<A>(IRI<A>);
+pub enum IArgument<A> {
+    Individual(Individual<A>),
+    Literal(Literal<A>),
+    Variable(Variable<A>),
+}
 
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub struct DArgument<A>(IRI<A>);
+pub enum DArgument<A> {
+    Literal(Literal<A>),
+    Variable(Variable<A>),
+}
+
+// Variable looks like named entity, but there is no associated
+// "DeclareVariable" axiom, so it can be hidden in there
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct Variable<A>(pub IRI<A>);
+
+impl<A: ForIRI> From<IRI<A>> for Variable<A> {
+    fn from(iri: IRI<A>) -> Variable<A> {
+        Variable(iri)
+    }
+}
+
+impl<A: ForIRI> From<&Variable<A>> for IRI<A> {
+    fn from(v: &Variable<A>) -> IRI<A> {
+        v.0.clone()
+    }
+}
+
 
 /// Access or change the `OntologyID` of an `Ontology`
 pub trait Ontology<A> {
@@ -1952,9 +1985,14 @@ mod test {
         let b = Build::new_rc();
 
         let iri = b.iri("http://www.example.com");
+        let ca = Atom::ClassAtom{
+            pred: ClassExpression::Class(b.class(iri.clone())),
+            arg: IArgument::Variable(iri.clone().into())
+        };
+
         let r = Rule{
-            head: vec![Atom::DescriptionAtom(IObject(iri.clone()))],
-            body: vec![Atom::DescriptionAtom(IObject(iri))],
+            head: vec![ca.clone()],
+            body: vec![ca.clone()],
         };
 
         assert_eq!(r.higher_kind(), HigherKind::SWRL);
