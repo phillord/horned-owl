@@ -67,14 +67,15 @@ pub(crate) fn matcher(matches: &ArgMatches) -> Result<(), HornedError> {
     if let Some(i) = i {
         println!("\n\nIncompleted Parsed");
         println!("\tSimple Triples: {}", i.simple.len());
-        println!("\tbnode: {}", i.bnode.len());
-        println!("\tsequences: {}", i.bnode_seq.len());
+        println!("\tBnode: {}", i.bnode.len());
+        println!("\tSequences: {}", i.bnode_seq.len());
         println!("\tClass Expressions: {}", i.class_expression.len());
         println!(
             "\tObject Property Expressions: {}",
             i.object_property_expression.len()
         );
         println!("\tData Range: {}", i.data_range.len());
+        println!("\tAtom: {}", i.atom.len());
         println!("\tAnnotations: {}", i.ann_map.len())
     }
 

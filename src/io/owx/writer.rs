@@ -722,6 +722,9 @@ render! {
             Atom::ClassAtom{pred, arg} => {
                 (pred, arg).within(w, m, "ClassAtom")?;
             }
+            Atom::ObjectPropertyAtom{pred, args} => {
+                (pred, &args.0, &args.1).within(w, m, "ObjectPropertyAtom")?;
+            }
             _ => todo!("Can't render that kind of atom")
         }
         Ok(())

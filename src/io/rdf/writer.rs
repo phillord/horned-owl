@@ -1569,6 +1569,23 @@ render_to_node! {
                 Ok(bn)
 
             }
+            Self::ObjectPropertyAtom{pred, args} => {
+                let bn = ng.bn();
+
+                let class_node = pred.render(f, ng)?;
+                let arg0_node = args.0.render(f, ng)?;
+                let arg1_node = args.1.render(f, ng)?;
+
+                triples!(
+                    f,
+                    bn.clone(), ng.nn(RDF::Type), ng.nn(SWRL::IndividualPropertyAtom),
+                    bn.clone(), ng.nn(SWRL::PropertyPredicate), class_node,
+                    bn.clone(), ng.nn(SWRL::Argument1), arg0_node,
+                    bn.clone(), ng.nn(SWRL::Argument2), arg1_node
+                );
+
+                Ok(bn)
+            }
             _=> todo!("other types of atom")
         }
 

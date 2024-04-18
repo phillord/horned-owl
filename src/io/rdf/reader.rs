@@ -387,8 +387,10 @@ pub struct IncompleteParse<A: ForIRI> {
     pub bnode_seq: Vec<Vec<Term<A>>>,
 
     pub class_expression: Vec<ClassExpression<A>>,
-   pub object_property_expression: Vec<ObjectPropertyExpression<A>>,
+    pub object_property_expression: Vec<ObjectPropertyExpression<A>>,
     pub data_range: Vec<DataRange<A>>,
+    pub atom: HashMap<Term<A>, Atom<A>>,
+
     pub ann_map: HashMap<[Term<A>; 3], BTreeSet<Annotation<A>>>,
 }
 
@@ -401,6 +403,7 @@ impl<A: ForIRI> IncompleteParse<A> {
             && self.object_property_expression.is_empty()
             && self.data_range.is_empty()
             && self.ann_map.is_empty()
+            && self.atom.is_empty()
     }
 }
 
@@ -1734,7 +1737,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
         Ok(())
     }
 
-    fn swrl(&mut self, _: &[&RDFOntology<A,AA>]) -> Result<(), HornedError>{
+    fn swrl(&mut self, ic: &[&RDFOntology<A,AA>]) -> Result<(), HornedError>{
         // identify variables first
         for triple in std::mem::take(&mut self.simple) {
             match &triple.0 {
@@ -1760,6 +1763,27 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
                                  pred: self.fetch_ce(pred)?,
                                  // This is not general enough.
                                  arg: IArgument::Variable(Variable(arg.clone()))
+                             }
+                         }
+                     }
+                    [[_, Term::RDF(VRDF::Type), Term::SWRL(VSWRL::IndividualPropertyAtom)],
+                     [_, Term::SWRL(VSWRL::Argument1), Term::Iri(arg1)],
+                     [_, Term::SWRL(VSWRL::Argument2), Term::Iri(arg2)],
+                     [_, Term::SWRL(VSWRL::PropertyPredicate), pred],
+                    ] => {
+                        ok_some!{
+                            match self.find_property_kind(pred, ic)? {
+                                PropertyExpression::ObjectPropertyExpression(pred) => {
+                                    Atom::ObjectPropertyAtom{
+                                        pred,
+                                        // This is not general enough.
+                                        args: (
+                                            IArgument::Variable(Variable(arg1.clone())),
+                                            IArgument::Variable(Variable(arg2.clone()))
+                                        )
+                                    }
+                                }
+                                _=> todo!()
                              }
                          }
                      }
@@ -1804,8 +1828,6 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
                 self.bnode.insert(bnode, triple);
             }
         }
-
-
 
         Ok(())
     }
@@ -2046,11 +2068,10 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
 
         // Regroup so that they print out nicer
         let mut simple = vec![];
-        let mut bnode = HashMap::default();
 
-        Self::group_triples(std::mem::take(&mut self.simple), &mut simple, &mut bnode);
+        Self::group_triples(std::mem::take(&mut self.simple), &mut simple, &mut self.bnode);
 
-        let bnode: Vec<_> = bnode.into_iter().map(|kv| kv.1).collect();
+        let bnode: Vec<_> = self.bnode.into_iter().map(|kv| kv.1).collect();
         let bnode_seq: Vec<_> = self.bnode_seq.into_iter().map(|kv| kv.1).collect();
         let class_expression: Vec<_> = self.class_expression.into_iter().map(|kv| kv.1).collect();
         let object_property_expression: Vec<_> = self
@@ -2070,6 +2091,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
                 object_property_expression,
                 data_range,
                 ann_map: self.ann_map,
+                atom: self.atom
             },
         ))
     }
@@ -2277,6 +2299,7 @@ mod test {
     #[test]
     fn declaration_with_partial_parse() {
         let b = Build::new_rc();
+
         let mut p: OntologyParser<_, Rc<AnnotatedComponent<RcStr>>> =
             parser_with_build(&mut slurp_rdfont("class").as_bytes(), &b, Default::default());
         let _ = p.parse_declarations();

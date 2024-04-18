@@ -1235,6 +1235,15 @@ from_start! {
                         arg
                     }
                 },
+                b"ObjectPropertyAtom" => {
+                    let pred = from_next(r)?;
+                    let args = (
+                        from_next(r)?, from_next(r)?
+                    );
+                    Atom::ObjectPropertyAtom {
+                        pred, args
+                    }
+                }
                 _=> {
                     return Err(error_unknown_entity("Atom",
                                                     e.local_name().as_ref(),r ));
@@ -2200,6 +2209,20 @@ pub mod test {
             matches!{
                 rule.head[0],
                 Atom::ClassAtom{pred:ClassExpression::ObjectIntersectionOf(_), arg:_}
+            }
+        };
+    }
+
+    #[test]
+    fn swrl_rule_object_property() {
+        let ont_s = include_str!("../../ont/owl-xml/swrl_object_property_atom.owx");
+        let (ont,_) = read_ok(&mut ont_s.as_bytes());
+
+        let rule = ont.i().rule().next().unwrap();
+        assert! {
+            matches!{
+                rule.head[0],
+                Atom::ObjectPropertyAtom{..}
             }
         };
     }
