@@ -996,7 +996,8 @@ impl<A: ForIRI> FromPair<A> for u32 {
 
 #[cfg(test)]
 mod tests {
-
+    use std::io::Cursor;
+    use std::rc::Rc;
     use std::collections::HashSet;
 
     use super::*;
@@ -1148,9 +1149,16 @@ mod tests {
             }
         };
 
-        let build = Build::default();
+        let build = Build::new();
         let prefixes = PrefixMapping::default();
         let ctx = Context::new(&build, &prefixes);
-        let item: (SetOntology<String>, _) = FromPair::from_pair(pair, &ctx).unwrap();
+        let item: (SetOntology<Rc<str>>, _) = FromPair::from_pair(pair, &ctx).unwrap();
+
+        let path = resource.replace("owl-functional", "owl-xml").replace(".ofn", ".owx");
+        let owx = &slurp::read_all_to_string(path).unwrap(); 
+        let expected = crate::io::owx::reader::read(&mut Cursor::new(&owx), Default::default())
+            .unwrap();
+        // assert_eq!(item.1, expected.1);
+        assert_eq!(item.0, expected.0);
     }
 }
