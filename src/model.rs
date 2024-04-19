@@ -1753,7 +1753,6 @@ pub enum Atom<A>{
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum IArgument<A> {
     Individual(Individual<A>),
-    Literal(Literal<A>),
     Variable(Variable<A>),
 }
 

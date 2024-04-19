@@ -1544,7 +1544,6 @@ render_to_node! {
     {
         match self{
             Self::Individual(i) => i.render(f, ng),
-            Self::Literal(_l) => todo!(),
             Self::Variable(v) => v.render(f, ng),
         }
     }

@@ -1,5 +1,5 @@
 (clojure.core/load-file "ontology.clj")
-
+(clojure.core/load-file "swrl_rule_support.clj")
 
 (defclass A)
 (defclass A1)
@@ -11,7 +11,7 @@
                      var (.getSWRLVariable
                           %
                           (iri-for-name o "x"))]
-    (swrl_rule_set
+    (swrl-rule-set
      #{(.getSWRLClassAtom % A var)(.getSWRLClassAtom % A1 var)}
      #{(.getSWRLClassAtom % B var)(.getSWRLClassAtom % B1 var)})))
 

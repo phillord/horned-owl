@@ -1268,8 +1268,11 @@ from_start! {
                 b"Variable" => {
                     IArgument::Variable(Variable::from_start(r, e)?)
                 }
+                b"NamedIndividual" => {
+                    IArgument::Individual(NamedIndividual::from_start(r, e)?.into())
+                }
                 _ => {
-                    todo!("Unknown Iargument type")
+                    todo!()
                 }
             }
         )
@@ -2164,8 +2167,8 @@ pub mod test {
     }
 
     #[test]
-    fn swrl_rule_basic() {
-        let ont_s = include_str!("../../ont/owl-xml/swrl_rule_basic.owx");
+    fn swrl_basic() {
+        let ont_s = include_str!("../../ont/owl-xml/swrl_basic.owx");
 
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
@@ -2191,8 +2194,8 @@ pub mod test {
     }
 
     #[test]
-    fn swrl_rule_two_variables() {
-        let ont_s = include_str!("../../ont/owl-xml/swrl_rule_two_variables.owx");
+    fn swrl_two_variables() {
+        let ont_s = include_str!("../../ont/owl-xml/swrl_two_variables.owx");
         let (ont,_) = read_ok(&mut ont_s.as_bytes());
 
         let rule = ont.i().rule().next().unwrap();
@@ -2200,8 +2203,8 @@ pub mod test {
     }
 
     #[test]
-    fn swrl_rule_class_expression() {
-        let ont_s = include_str!("../../ont/owl-xml/swrl_rule_class_expression.owx");
+    fn swrl_class_expression() {
+        let ont_s = include_str!("../../ont/owl-xml/swrl_class_expression.owx");
         let (ont,_) = read_ok(&mut ont_s.as_bytes());
 
         let rule = ont.i().rule().next().unwrap();

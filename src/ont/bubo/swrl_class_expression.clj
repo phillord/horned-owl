@@ -1,5 +1,5 @@
 (clojure.core/load-file "ontology.clj")
-
+(clojure.core/load-file "swrl_rule_support.clj")
 
 (defclass A)
 (defclass B)

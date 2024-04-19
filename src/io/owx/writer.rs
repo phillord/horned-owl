@@ -736,7 +736,6 @@ render! {
     {
         match self {
             Self::Individual(i) => i.render(w, m)?,
-            Self::Literal(l) => l.render(w, m)?,
             Self::Variable(v) => v.render(w, m)?
         }
         Ok(())

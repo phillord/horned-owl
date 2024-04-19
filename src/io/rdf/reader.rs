@@ -1759,10 +1759,25 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
                      [_, Term::SWRL(VSWRL::Argument1), Term::Iri(arg)],
                      [_, Term::SWRL(VSWRL::ClassPredicate), pred]] => {
                          ok_some!{
-                             Atom::ClassAtom{
-                                 pred: self.fetch_ce(pred)?,
-                                 // This is not general enough.
-                                 arg: IArgument::Variable(Variable(arg.clone()))
+                             {
+                                 match self.find_declaration_kind(arg, ic) {
+                                     Some(NamedEntityKind::NamedIndividual) => {
+                                         Atom::ClassAtom{
+                                             pred: self.fetch_ce(pred)?,
+                                             // TODO Support anonymous individual as well!
+                                             // This presents as BNode
+                                             arg: IArgument::Individual(NamedIndividual(arg.clone()).into())
+                                         }
+                                     }
+                                     Some(_) => todo!(),
+                                     None => {
+                                         Atom::ClassAtom{
+                                             pred: self.fetch_ce(pred)?,
+                                             arg: IArgument::Variable(Variable(arg.clone()))
+                                         }
+                                     }
+                                 }
+
                              }
                          }
                      }
