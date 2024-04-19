@@ -93,6 +93,7 @@ use std::borrow::Borrow;
 use std::cell::RefCell;
 use std::cmp::Ordering;
 use std::collections::BTreeSet;
+use std::convert::{TryFrom, TryInto};
 use std::fmt::Debug;
 use std::fmt::Display;
 use std::fmt::Formatter;
@@ -406,6 +407,22 @@ impl Build<String> {
     }
 }
 
+macro_rules! namedenumimpl {
+  ($name:ident, $enum:ident, $kindenum:ident) => {
+      impl<A: ForIRI> From<$name<A>> for $enum<A> {
+          fn from(n:$name<A>) -> $enum<A> {
+              Self::$name(n)
+          }
+      }
+
+      impl<A: ForIRI> From<$name<A>> for $kindenum {
+          fn from(_n:$name<A>) -> $kindenum {
+              Self::$name
+          }
+      }
+  }
+}
+
 macro_rules! named {
     ($($(#[$attr:meta])* $name:ident),*)  => {
 
@@ -414,11 +431,6 @@ macro_rules! named {
             $($name),*
         }
 
-        /// An OWL entity that is directly resolvable to an IRI
-        ///
-        /// All variants in this enum are named after the struct
-        /// equivalent form. The individual structs for each variant
-        /// provide us types for use elsewhere in the library.
         #[derive(Clone, Debug, Eq, PartialEq, Hash)]
         pub enum NamedEntity<A>{
             $($name($name<A>)),*
@@ -465,20 +477,10 @@ macro_rules! named {
                 }
             }
 
-            impl<A: ForIRI> From<$name<A>> for NamedEntity<A> {
-                fn from(n:$name<A>) -> NamedEntity<A> {
-                    NamedEntity::$name(n)
-                }
-            }
-
-            impl<A: ForIRI> From<$name<A>> for NamedEntityKind {
-                fn from(_n:$name<A>) -> NamedEntityKind {
-                    NamedEntityKind::$name
-                }
-            }
+            namedenumimpl!($name, NamedEntity, NamedEntityKind);
 
             impl<A:ForIRI> $name<A> {
-                pub fn is<I>(&self, iri: I) -> bool
+                 pub fn is<I>(&self, iri: I) -> bool
                     where I:Into<IRI<A>>
                 {
                     self.0 == iri.into()
@@ -538,8 +540,80 @@ named! {
     /// [NamedIndividual](https://www.w3.org/TR/2012/REC-owl2-primer-20121211/#Classes_and_Instances)
     /// is an individual in the ontology which is specifically known
     /// about and can be identified by name.
-    NamedIndividual
+    NamedIndividual,
+
+
+    /// A SWRL Variable
+    Variable
 }
+
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
+pub enum NamedOWLEntityKind {
+    Class,
+    Datatype,
+    ObjectProperty,
+    DataProperty,
+    AnnotationProperty,
+    NamedIndividual,
+}
+
+/// An OWL entity that is directly resolvable to an IRI
+///
+/// All variants in this enum are named after the struct
+/// equivalent form. The individual structs for each variant
+/// provide us types for use elsewhere in the library.
+#[derive(Clone, Debug, Eq, PartialEq, Hash)]
+pub enum NamedOWLEntity<A>{
+    Class(Class<A>),
+    Datatype(Datatype<A>),
+    ObjectProperty(ObjectProperty<A>),
+    DataProperty(DataProperty<A>),
+    AnnotationProperty(AnnotationProperty<A>),
+    NamedIndividual(NamedIndividual<A>),
+}
+
+namedenumimpl!(Class, NamedOWLEntity, NamedOWLEntityKind);
+namedenumimpl!(Datatype, NamedOWLEntity, NamedOWLEntityKind);
+namedenumimpl!(ObjectProperty, NamedOWLEntity, NamedOWLEntityKind);
+namedenumimpl!(DataProperty, NamedOWLEntity, NamedOWLEntityKind);
+namedenumimpl!(AnnotationProperty, NamedOWLEntity, NamedOWLEntityKind);
+namedenumimpl!(NamedIndividual, NamedOWLEntity, NamedOWLEntityKind);
+
+impl TryFrom<NamedEntityKind> for NamedOWLEntityKind {
+    type Error = &'static str;
+
+    fn try_from(value: NamedEntityKind) -> Result<Self, Self::Error> {
+        match value {
+            NamedEntityKind::Class => Ok(NamedOWLEntityKind::Class),
+            NamedEntityKind::Datatype => Ok(NamedOWLEntityKind::Datatype),
+            NamedEntityKind::ObjectProperty => Ok(NamedOWLEntityKind::ObjectProperty),
+            NamedEntityKind::DataProperty => Ok(NamedOWLEntityKind::DataProperty),
+            NamedEntityKind::AnnotationProperty => Ok(NamedOWLEntityKind::AnnotationProperty),
+            NamedEntityKind::NamedIndividual => Ok(NamedOWLEntityKind::NamedIndividual),
+            NamedEntityKind::Variable => Err("Cannot convert Variable to OWL NamedEntity")
+        }
+    }
+}
+
+impl From<NamedOWLEntityKind> for NamedEntityKind {
+    fn from(value: NamedOWLEntityKind) -> NamedEntityKind {
+        match value {
+            NamedOWLEntityKind::Class => NamedEntityKind::Class,
+            NamedOWLEntityKind::Datatype => NamedEntityKind::Datatype,
+            NamedOWLEntityKind::ObjectProperty => NamedEntityKind::ObjectProperty,
+            NamedOWLEntityKind::DataProperty => NamedEntityKind::DataProperty,
+            NamedOWLEntityKind::AnnotationProperty => NamedEntityKind::AnnotationProperty,
+            NamedOWLEntityKind::NamedIndividual => NamedEntityKind::NamedIndividual,
+        }
+    }
+}
+
+impl NamedEntityKind {
+    pub fn as_owl(self) -> Option<NamedOWLEntityKind> {
+        self.try_into().ok()
+    }
+}
+
 
 impl<A: ForIRI> Class<A> {
 
@@ -681,27 +755,27 @@ impl<A: ForIRI> From<&AnonymousIndividual<A>> for AnnotationSubject<A> {
     }
 }
 
-impl<A: ForIRI> From<NamedEntity<A>> for Component<A> {
-    fn from(ne: NamedEntity<A>) -> Component<A> {
+impl<A: ForIRI> From<NamedOWLEntity<A>> for Component<A> {
+    fn from(ne: NamedOWLEntity<A>) -> Component<A> {
         match ne {
-            NamedEntity::Class(c) => Component::DeclareClass(DeclareClass(c)),
-            NamedEntity::ObjectProperty(obp) => {
+            NamedOWLEntity::Class(c) => Component::DeclareClass(DeclareClass(c)),
+            NamedOWLEntity::ObjectProperty(obp) => {
                 Component::DeclareObjectProperty(DeclareObjectProperty(obp))
             }
-            NamedEntity::AnnotationProperty(anp) => {
+            NamedOWLEntity::AnnotationProperty(anp) => {
                 Component::DeclareAnnotationProperty(DeclareAnnotationProperty(anp))
             }
-            NamedEntity::DataProperty(dp) => Component::DeclareDataProperty(DeclareDataProperty(dp)),
-            NamedEntity::NamedIndividual(ni) => {
+            NamedOWLEntity::DataProperty(dp) => Component::DeclareDataProperty(DeclareDataProperty(dp)),
+            NamedOWLEntity::NamedIndividual(ni) => {
                 Component::DeclareNamedIndividual(DeclareNamedIndividual(ni))
             }
-            NamedEntity::Datatype(dt) => Component::DeclareDatatype(DeclareDatatype(dt)),
+            NamedOWLEntity::Datatype(dt) => Component::DeclareDatatype(DeclareDatatype(dt)),
         }
     }
 }
 
-impl<A: ForIRI> From<NamedEntity<A>> for AnnotatedComponent<A> {
-    fn from(ne: NamedEntity<A>) -> AnnotatedComponent<A> {
+impl<A: ForIRI> From<NamedOWLEntity<A>> for AnnotatedComponent<A> {
+    fn from(ne: NamedOWLEntity<A>) -> AnnotatedComponent<A> {
         let ax: Component<_> = ne.into();
         ax.into()
     }
@@ -1339,7 +1413,7 @@ components! {
     ///
     /// States that `annotation` applies to the
     /// `annotation_subject`. Annotations refer to an `IRI` rather
-    /// than the `NamedEntity` identified by that `IRI`.
+    /// than the `NamedOWLEntity` identified by that `IRI`.
     Axiom AnnotationAssertion {
         subject: AnnotationSubject<A>,
         ann: Annotation<A>
@@ -1762,24 +1836,6 @@ pub enum DArgument<A> {
     Variable(Variable<A>),
 }
 
-// Variable looks like named entity, but there is no associated
-// "DeclareVariable" axiom, so it can be hidden in there
-#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub struct Variable<A>(pub IRI<A>);
-
-impl<A: ForIRI> From<IRI<A>> for Variable<A> {
-    fn from(iri: IRI<A>) -> Variable<A> {
-        Variable(iri)
-    }
-}
-
-impl<A: ForIRI> From<&Variable<A>> for IRI<A> {
-    fn from(v: &Variable<A>) -> IRI<A> {
-        v.0.clone()
-    }
-}
-
-
 /// Access or change the `OntologyID` of an `Ontology`
 pub trait Ontology<A> {
 }
@@ -1809,7 +1865,7 @@ pub trait MutableOntology<A> {
 
     fn take(&mut self, ax: &AnnotatedComponent<A>) -> Option<AnnotatedComponent<A>>;
 
-    /// Declare an NamedEntity for the ontology.
+    /// Declare an NamedOWLEntity for the ontology.
     ///
     /// # Examples
     /// ```
@@ -1823,9 +1879,9 @@ pub trait MutableOntology<A> {
     fn declare<N>(&mut self, ne: N) -> bool
     where
         A: ForIRI,
-        N: Into<NamedEntity<A>>,
+        N: Into<NamedOWLEntity<A>>,
     {
-        let ne: NamedEntity<_> = ne.into();
+        let ne: NamedOWLEntity<_> = ne.into();
         let ax: Component<_> = ne.into();
         self.insert(ax)
     }
@@ -1909,8 +1965,8 @@ mod test {
         let c1: Class<_> = Class::from(i);
         assert_eq!(c, c1);
 
-        let ne: NamedEntity<_> = c.clone().into();
-        assert_eq!(ne, NamedEntity::Class(c));
+        let ne: NamedOWLEntity<_> = c.clone().into();
+        assert_eq!(ne, NamedOWLEntity::Class(c));
     }
 
     #[test]

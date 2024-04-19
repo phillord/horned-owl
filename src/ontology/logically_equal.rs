@@ -181,7 +181,7 @@ mod test {
                 SetIndex::new_rc(),
                 LogicallyEqualIndex::new(),
             );
-            let ne: NamedEntity<_> = b.class("http://www.example.com").into();
+            let ne: NamedOWLEntity<_> = b.class("http://www.example.com").into();
             let ax: Component<_> = ne.into();
             let mut dec: AnnotatedComponent<_> = ax.into();
 
@@ -190,7 +190,7 @@ mod test {
                 av: b.iri("http://www.example.com/a1").into(),
             });
 
-            let ne: NamedEntity<_> = b.class("http://www.example.com").into();
+            let ne: NamedOWLEntity<_> = b.class("http://www.example.com").into();
             let ax: Component<_> = ne.into();
             let mut dec2: AnnotatedComponent<_> = ax.into();
 
@@ -209,7 +209,7 @@ mod test {
                 SetIndex::new_rc(),
                 LogicallyEqualIndex::new(),
             );
-            let ne: NamedEntity<_> = b.class("http://www.example.com").into();
+            let ne: NamedOWLEntity<_> = b.class("http://www.example.com").into();
             let ax: Component<_> = ne.into();
             let mut dec: AnnotatedComponent<_> = ax.into();
             dec.ann.insert(Annotation {
@@ -217,7 +217,7 @@ mod test {
                 av: b.iri("http://www.example.com/a1").into(),
             });
 
-            let ne: NamedEntity<_> = b.class("http://www.example.com").into();
+            let ne: NamedOWLEntity<_> = b.class("http://www.example.com").into();
             let ax: Component<_> = ne.into();
             let mut dec2: AnnotatedComponent<_> = ax.into();
             dec2.ann.insert(Annotation {

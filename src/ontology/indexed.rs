@@ -433,7 +433,7 @@ mod test {
         TwoIndexedOntology,
     };
     use crate::{
-        model::{AnnotatedComponent, Build, MutableOntology, NamedEntity, RcStr},
+        model::{AnnotatedComponent, Build, MutableOntology, NamedOWLEntity, RcStr},
         ontology::set::SetIndex,
     };
 
@@ -443,9 +443,9 @@ mod test {
         AnnotatedComponent<RcStr>,
     ) {
         let b = Build::new_rc();
-        let c: NamedEntity<_> = b.class("http://www.example.com/c").into();
-        let o: NamedEntity<_> = b.object_property("http://www.example.com/p").into();
-        let b: NamedEntity<_> = b.data_property("http://www.example.com/d").into();
+        let c: NamedOWLEntity<_> = b.class("http://www.example.com/c").into();
+        let o: NamedOWLEntity<_> = b.object_property("http://www.example.com/p").into();
+        let b: NamedOWLEntity<_> = b.data_property("http://www.example.com/d").into();
 
         (c.into(), o.into(), b.into())
     }

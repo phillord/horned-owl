@@ -5,8 +5,9 @@ use crate::error::invalid;
 use crate::error::HornedError;
 use crate::model::Build;
 use crate::model::ForIRI;
-use crate::model::NamedEntity;
-use crate::model::NamedEntityKind;
+use crate::model::{
+    NamedOWLEntity,NamedOWLEntityKind
+};
 use crate::model::IRI;
 
 use std::borrow::Borrow;
@@ -248,14 +249,14 @@ vocabulary_type! {
     ]
 }
 
-/// Returns a [NamedEntityKind] if the IRI points to a built-in entity, otherwise [None].
-pub fn to_built_in_entity<A: ForIRI>(iri: &IRI<A>) -> Option<NamedEntityKind> {
+/// Returns a [NamedOWLEntityKind] if the IRI points to a built-in entity, otherwise [None].
+pub fn to_built_in_entity<A: ForIRI>(iri: &IRI<A>) -> Option<NamedOWLEntityKind> {
     let ir = iri.as_ref();
     match ir {
-        _ if ir == OWL::TopDataProperty.as_ref() => Some(NamedEntityKind::DataProperty),
-        _ if ir == OWL::TopObjectProperty.as_ref() => Some(NamedEntityKind::ObjectProperty),
-        _ if ir == OWL::Thing.as_ref() => Some(NamedEntityKind::Class),
-        _ if ir == OWL::Nothing.as_ref() => Some(NamedEntityKind::Class),
+        _ if ir == OWL::TopDataProperty.as_ref() => Some(NamedOWLEntityKind::DataProperty),
+        _ if ir == OWL::TopObjectProperty.as_ref() => Some(NamedOWLEntityKind::ObjectProperty),
+        _ if ir == OWL::Thing.as_ref() => Some(NamedOWLEntityKind::Class),
+        _ if ir == OWL::Nothing.as_ref() => Some(NamedOWLEntityKind::Class),
         _ => None,
     }
 }
@@ -264,7 +265,7 @@ pub fn entity_for_iri<A: ForIRI, S: Borrow<str>>(
     type_iri: S,
     entity_iri: S,
     b: &Build<A>,
-) -> Result<NamedEntity<A>, HornedError> {
+) -> Result<NamedOWLEntity<A>, HornedError> {
     // Datatypes are handled here because they are not a
     // "type" but an "RDF schema" element.
     if type_iri.borrow() == "http://www.w3.org/2000/01/rdf-schema#Datatype" {
@@ -774,16 +775,16 @@ mod tests {
         let iri_nothing = builder.iri(OWL::Nothing.as_ref());
         assert_eq!(
             to_built_in_entity(&iri_top_dp),
-            Some(NamedEntityKind::DataProperty)
+            Some(NamedOWLEntityKind::DataProperty)
         );
         assert_eq!(
             to_built_in_entity(&iri_top_op),
-            Some(NamedEntityKind::ObjectProperty)
+            Some(NamedOWLEntityKind::ObjectProperty)
         );
-        assert_eq!(to_built_in_entity(&iri_thing), Some(NamedEntityKind::Class));
+        assert_eq!(to_built_in_entity(&iri_thing), Some(NamedOWLEntityKind::Class));
         assert_eq!(
             to_built_in_entity(&iri_nothing),
-            Some(NamedEntityKind::Class)
+            Some(NamedOWLEntityKind::Class)
         );
     }
 

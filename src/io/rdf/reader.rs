@@ -757,7 +757,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
                     .ann_map
                     .remove(&triple.0)
                     .unwrap_or_default();
-                let ne: NamedEntity<_> = entity;
+                let ne: NamedOWLEntity<_> = entity;
                 self.merge(AnnotatedComponent {
                     component: ne.into(),
                     ann,
@@ -1028,14 +1028,14 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
     }
 
     fn find_term_kind(&mut self, term: &Term<A>, ic: &[&RDFOntology<A, AA>])
-                      -> Option<NamedEntityKind> {
+                      -> Option<NamedOWLEntityKind> {
         match term {
-            Term::Iri(iri) if crate::vocab::is_xsd_datatype(iri) => Some(NamedEntityKind::Datatype),
+            Term::Iri(iri) if crate::vocab::is_xsd_datatype(iri) => Some(NamedOWLEntityKind::Datatype),
             Term::Iri(iri) => self.find_declaration_kind(iri, ic),
             // TODO: this might be too general. At the moment, I am
             // only using this function to distinguish between a
             // datatype and an class
-            _ => Some(NamedEntityKind::Class),
+            _ => Some(NamedOWLEntityKind::Class),
         }
     }
 
@@ -1044,7 +1044,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
         &mut self,
         iri: &IRI<A>,
         ic: &[&RDFOntology<A, AA>],
-    ) -> Option<NamedEntityKind> {
+    ) -> Option<NamedOWLEntityKind> {
         [&self.o]
             .iter()
             .chain(ic.iter())
@@ -1064,13 +1064,13 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
                 self.find_property_kind(&Term::Iri(iri), ic)
             }
             Term::Iri(iri) => match self.find_declaration_kind(iri, ic) {
-                Some(NamedEntityKind::AnnotationProperty) => {
+                Some(NamedOWLEntityKind::AnnotationProperty) => {
                     Some(PropertyExpression::AnnotationProperty(iri.into()))
                 }
-                Some(NamedEntityKind::DataProperty) => {
+                Some(NamedOWLEntityKind::DataProperty) => {
                     Some(PropertyExpression::DataProperty(iri.into()))
                 }
-                Some(NamedEntityKind::ObjectProperty) => {
+                Some(NamedOWLEntityKind::ObjectProperty) => {
                     Some(PropertyExpression::ObjectPropertyExpression(iri.into()))
                 }
                 _ => None,
@@ -1433,14 +1433,14 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
                 // and add to that axiom
                 [a, Term::OWL(VOWL::EquivalentClass), b] => {
                     match self.find_term_kind(a, ic) {
-                        Some(NamedEntityKind::Class) => ok_some!{
+                        Some(NamedOWLEntityKind::Class) => ok_some!{
                             EquivalentClasses(
                                 vec![
                                     self.fetch_ce(a)?,
                                     self.fetch_ce(b)?,
                                 ]).into()
                         },
-                        Some(NamedEntityKind::Datatype) =>
+                        Some(NamedOWLEntityKind::Datatype) =>
                             if let Term::Iri(iri) = a {
                                 ok_some! {
                                     DatatypeDefinition{
@@ -1690,8 +1690,8 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
                 [Term::Iri(sub), Term::Iri(pred), t @ Term::Literal(_)] => ok_some! {
                     match (self.find_declaration_kind(sub, ic)?,
                            self.find_declaration_kind(pred, ic)?) {
-                        (NamedEntityKind::NamedIndividual,
-                         NamedEntityKind::DataProperty) => {
+                        (NamedOWLEntityKind::NamedIndividual,
+                         NamedOWLEntityKind::DataProperty) => {
                             DataPropertyAssertion {
                                 dp: pred.clone().into(),
                                 from: sub.into(),
@@ -1708,9 +1708,9 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
                     match (self.find_declaration_kind(sub, ic)?,
                            self.find_declaration_kind(pred, ic)?,
                            self.find_declaration_kind(obj, ic)?) {
-                        (NamedEntityKind::NamedIndividual,
-                         NamedEntityKind::ObjectProperty,
-                         NamedEntityKind::NamedIndividual) => {
+                        (NamedOWLEntityKind::NamedIndividual,
+                         NamedOWLEntityKind::ObjectProperty,
+                         NamedOWLEntityKind::NamedIndividual) => {
                             ObjectPropertyAssertion {
                                 ope: ObjectProperty(pred.clone()).into(),
                                 from: sub.into(),
@@ -1761,7 +1761,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
                          ok_some!{
                              {
                                  match self.find_declaration_kind(arg, ic) {
-                                     Some(NamedEntityKind::NamedIndividual) => {
+                                     Some(NamedOWLEntityKind::NamedIndividual) => {
                                          Atom::ClassAtom{
                                              pred: self.fetch_ce(pred)?,
                                              // TODO Support anonymous individual as well!

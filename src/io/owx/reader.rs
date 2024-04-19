@@ -453,7 +453,7 @@ fn axiom_from_start<A: ForIRI, R: BufRead>(
         })
         .into(),
         b"Declaration" => {
-            let ne: NamedEntity<_> = from_start(r, e)?;
+            let ne: NamedOWLEntity<_> = from_start(r, e)?;
             ne.into()
         }
         b"SubClassOf" => SubClassOf {
@@ -1065,7 +1065,7 @@ from_start! {
 }
 
 from_start! {
-    NamedEntity, r, e,
+    NamedOWLEntity, r, e,
     {
         Ok(
             match e.local_name().as_ref() {
@@ -1088,7 +1088,7 @@ from_start! {
                     Datatype::from_start(r, e)?.into()
                 }
                 _=> {
-                    return Err(error_unknown_entity("NamedEntity",
+                    return Err(error_unknown_entity("NamedOWLEntity",
                                                     e.local_name().as_ref(),r ));
                 }
             }
@@ -1214,7 +1214,7 @@ fn discard_till<A: ForIRI, R: BufRead>(r: &mut Read<A, R>, end: &[u8]) -> Result
 }
 
 from_xml! {
-    NamedEntity,r, end,
+    NamedOWLEntity,r, end,
     {
         let ne = from_next(r);
         discard_till(r, end)?;

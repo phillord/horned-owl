@@ -1,6 +1,6 @@
 //! An index that provides rapid look up via declaration kind
 
-use crate::model::{AnnotatedComponent, Component, ComponentKind, ForIRI, Kinded, NamedEntityKind, IRI, RcAnnotatedComponent, RcStr};
+use crate::model::{AnnotatedComponent, Component, ComponentKind, ForIRI, Kinded, NamedEntityKind, NamedOWLEntityKind, IRI, RcAnnotatedComponent, RcStr};
 
 use super::indexed::ForIndex;
 use super::indexed::OntologyIndex;
@@ -22,15 +22,19 @@ impl<A: ForIRI, AA: ForIndex<A>> DeclarationMappedIndex<A, AA> {
     pub fn is_annotation_property(&self, iri: &IRI<A>) -> bool {
         matches!{
             self.declaration_kind(iri),
-            Some(NamedEntityKind::AnnotationProperty)
+            Some(NamedOWLEntityKind::AnnotationProperty)
         }
     }
 
-    pub fn declaration_kind(&self, iri: &IRI<A>) -> Option<NamedEntityKind> {
+    pub fn declaration_kind(&self, iri: &IRI<A>) -> Option<NamedOWLEntityKind> {
+        self.kind(iri).map(|e| e.as_owl()).flatten()
+    }
+
+    pub fn kind(&self, iri: &IRI<A>) -> Option<NamedEntityKind> {
         self.0
             .get(iri)
             .cloned()
-            .or_else(|| crate::vocab::to_built_in_entity(iri))
+            .or_else(|| crate::vocab::to_built_in_entity(iri).map(|e| e.into()))
     }
 
     pub fn puns(&self) -> &HashSet<IRI<A>> {
@@ -139,7 +143,7 @@ impl DeclarationMappedIndex<RcStr, RcAnnotatedComponent> {
 #[cfg(test)]
 mod test {
     use super::DeclarationMappedIndex;
-    use crate::model::{AnnotatedComponent, Build, NamedEntity, NamedEntityKind, RcStr};
+    use crate::model::{AnnotatedComponent, Build, NamedOWLEntity, NamedOWLEntityKind, RcStr};
     use crate::ontology::indexed::OntologyIndex;
     use crate::vocab::OWL;
     fn stuff() -> (
@@ -148,9 +152,9 @@ mod test {
         AnnotatedComponent<RcStr>,
     ) {
         let b = Build::new_rc();
-        let c: NamedEntity<_> = b.class("http://www.example.com/c").into();
-        let o: NamedEntity<_> = b.object_property("http://www.example.com/p").into();
-        let b: NamedEntity<_> = b.data_property("http://www.example.com/d").into();
+        let c: NamedOWLEntity<_> = b.class("http://www.example.com/c").into();
+        let o: NamedOWLEntity<_> = b.object_property("http://www.example.com/p").into();
+        let b: NamedOWLEntity<_> = b.data_property("http://www.example.com/d").into();
 
         (c.into(), o.into(), b.into())
     }
@@ -181,15 +185,15 @@ mod test {
         let b = Build::new();
         assert_eq!(
             d.declaration_kind(&b.iri("http://www.example.com/c")),
-            Some(NamedEntityKind::Class)
+            Some(NamedOWLEntityKind::Class)
         );
         assert_eq!(
             d.declaration_kind(&b.iri("http://www.example.com/p")),
-            Some(NamedEntityKind::ObjectProperty)
+            Some(NamedOWLEntityKind::ObjectProperty)
         );
         assert_eq!(
             d.declaration_kind(&b.iri("http://www.example.com/d")),
-            Some(NamedEntityKind::DataProperty)
+            Some(NamedOWLEntityKind::DataProperty)
         );
     }
 
@@ -199,7 +203,7 @@ mod test {
         let b = Build::new_rc();
         assert_eq!(
             d.declaration_kind(&b.iri(OWL::TopDataProperty.as_ref())),
-            Some(NamedEntityKind::DataProperty)
+            Some(NamedOWLEntityKind::DataProperty)
         );
     }
 
@@ -212,9 +216,9 @@ mod test {
         assert_eq!(d.puns().len(), 0);
 
         let iri = b.iri("http://www.example.com/p");
-        let c: NamedEntity<_> = b.class("http://www.example.com/p").into();
+        let c: NamedOWLEntity<_> = b.class("http://www.example.com/p").into();
         let c: AnnotatedComponent<_> = c.into();
-        let ni: NamedEntity<_> = b.named_individual("http://www.example.com/p").into();
+        let ni: NamedOWLEntity<_> = b.named_individual("http://www.example.com/p").into();
         let ni: AnnotatedComponent<_> = ni.into();
 
         d.index_insert(c.clone().into());
@@ -222,7 +226,7 @@ mod test {
 
         assert_eq!(d.puns().len(), 1);
         assert_eq!(d.puns().iter().next(), Some(&iri));
-        assert_eq!(d.declaration_kind(&iri), Some(NamedEntityKind::Class));
+        assert_eq!(d.declaration_kind(&iri), Some(NamedOWLEntityKind::Class));
 
         let mut d = DeclarationMappedIndex::new_rc();
         d.index_insert(ni.clone().into());
@@ -230,6 +234,6 @@ mod test {
 
         assert_eq!(d.puns().len(), 1);
         assert_eq!(d.puns().iter().next(), Some(&iri));
-        assert_eq!(d.declaration_kind(&iri), Some(NamedEntityKind::Class));
+        assert_eq!(d.declaration_kind(&iri), Some(NamedOWLEntityKind::Class));
     }
 }
