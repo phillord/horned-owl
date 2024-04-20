@@ -1901,7 +1901,7 @@ mod test {
     }
 
     #[test]
-    fn test_iri_creation() {
+    fn test_iri_creaadtion() {
         let build = Build::new();
 
         let iri1 = build.iri("http://example.com".to_string());

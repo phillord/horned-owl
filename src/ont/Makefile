@@ -5,7 +5,8 @@ all-and-test:
 	$(MAKE) -C bubo
 	cargo test
 
-clean: $(MAKE) -C bubo clean
+clean:
+	$(MAKE) -C bubo clean
 
 force-clean:
 	-rm owl-xml/*owx

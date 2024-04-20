@@ -1538,6 +1538,15 @@ render_to_node! {
     }
 }
 
+render! {
+    DArgument, self, f, ng, PTerm,
+    {
+        match self{
+            Self::Literal(l) => l.render(f, ng),
+            Self::Variable(v) => v.render(f, ng).map(|v| v.into()),
+        }
+    }
+}
 
 render_to_node! {
     IArgument, self, f, ng,
@@ -1579,6 +1588,23 @@ render_to_node! {
                     f,
                     bn.clone(), ng.nn(RDF::Type), ng.nn(SWRL::IndividualPropertyAtom),
                     bn.clone(), ng.nn(SWRL::PropertyPredicate), class_node,
+                    bn.clone(), ng.nn(SWRL::Argument1), arg0_node,
+                    bn.clone(), ng.nn(SWRL::Argument2), arg1_node
+                );
+
+                Ok(bn)
+            }
+            Self::DataPropertyAtom{pred, args} => {
+                let bn = ng.bn();
+
+                let dp_node = pred.render(f, ng)?;
+                let arg0_node = args.0.render(f, ng)?;
+                let arg1_node = args.1.render(f, ng)?;
+
+                triples!(
+                    f,
+                    bn.clone(), ng.nn(RDF::Type), ng.nn(SWRL::DatavaluedPropertyAtom),
+                    bn.clone(), ng.nn(SWRL::PropertyPredicate), dp_node,
                     bn.clone(), ng.nn(SWRL::Argument1), arg0_node,
                     bn.clone(), ng.nn(SWRL::Argument2), arg1_node
                 );

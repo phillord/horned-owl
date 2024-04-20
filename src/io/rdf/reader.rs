@@ -460,7 +460,7 @@ pub struct OntologyParser<'a, A: ForIRI, AA: ForIndex<A>> {
     data_range: HashMap<BNode<A>, DataRange<A>>,
     ann_map: HashMap<[Term<A>; 3], BTreeSet<Annotation<A>>>,
     atom: HashMap<Term<A>, Atom<A>>,
-    variables: Vec<Variable<A>>,
+    variable: HashMap<IRI<A>, Variable<A>>,
 
     state: OntologyParserState,
     error: Result<(), HornedError>,
@@ -486,7 +486,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
             data_range: d!(),
             ann_map: d!(),
             atom: d!(),
-            variables: d!(),
+            variable: d!(),
             state: OntologyParserState::New,
             error: Ok(()),
         }
@@ -1024,6 +1024,16 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
         match t {
             Term::Literal(ob) => Some(ob.clone()),
             _ => None,
+        }
+    }
+
+    fn to_dargument(&self, t: &Term<A>) -> Option<DArgument<A>> {
+        match t {
+            Term::Literal(l) => Some(DArgument::Literal(l.clone())),
+            Term::Iri(i) => {
+                self.variable.get(i).map(|v| DArgument::Variable(v.clone()))
+            }
+            _ => None
         }
     }
 
@@ -1741,8 +1751,8 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
         // identify variables first
         for triple in std::mem::take(&mut self.simple) {
             match &triple.0 {
-                [Term::Iri(ref s), Term::RDF(VRDF::Type), Term::SWRL(VSWRL::Variable)] => {
-                    self.variables.push(Variable(s.clone()));
+                [Term::Iri(s), Term::RDF(VRDF::Type), Term::SWRL(VSWRL::Variable)] => {
+                    self.variable.insert(s.clone(), Variable(s.clone()));
                 }
                 _ => {
                     self.simple.push(triple);
@@ -1799,9 +1809,24 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
                                     }
                                 }
                                 _=> todo!()
-                             }
-                         }
-                     }
+                            }
+                        }
+                    }
+                    [[_, Term::RDF(VRDF::Type), Term::SWRL(VSWRL::DatavaluedPropertyAtom)],
+                       [_, Term::SWRL(VSWRL::Argument1), arg1],
+                       [_, Term::SWRL(VSWRL::Argument2), arg2],
+                       [_, Term::SWRL(VSWRL::PropertyPredicate), pred]
+                    ] => {
+                        ok_some!{
+                            Atom::DataPropertyAtom {
+                                pred: self.fetch_dp(pred, ic)?,
+                                args: (
+                                    self.to_dargument(arg1)?,
+                                    self.to_dargument(arg2)?,
+                                )
+                            }
+                        }
+                    }
                     _ => {
                         Ok(None)
                     }

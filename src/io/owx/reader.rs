@@ -1244,6 +1244,15 @@ from_start! {
                         pred, args
                     }
                 }
+                b"DataPropertyAtom" => {
+                    let pred = from_next(r)?;
+                    let args = (
+                        from_next(r)?, from_next(r)?
+                    );
+                    Atom::DataPropertyAtom {
+                        pred, args
+                    }
+                }
                 _=> {
                     return Err(error_unknown_entity("Atom",
                                                     e.local_name().as_ref(),r ));
@@ -1257,6 +1266,25 @@ from_start! {
     Variable, r, e,
     {
         named_entity_from_start(r, e, b"Variable")
+    }
+}
+
+from_start! {
+    DArgument, r, e,
+    {
+        Ok(
+            match e.local_name().as_ref() {
+                b"Variable" => {
+                    DArgument::Variable(Variable::from_start(r, e)?)
+                }
+                b"Literal" => {
+                    DArgument::Literal(Literal::from_start(r, e)?)
+                }
+                _ => {
+                    todo!()
+                }
+            }
+        )
     }
 }
 
@@ -2217,7 +2245,7 @@ pub mod test {
     }
 
     #[test]
-    fn swrl_rule_object_property() {
+    fn swrl_object_property() {
         let ont_s = include_str!("../../ont/owl-xml/swrl_object_property_atom.owx");
         let (ont,_) = read_ok(&mut ont_s.as_bytes());
 
@@ -2228,6 +2256,26 @@ pub mod test {
                 Atom::ObjectPropertyAtom{..}
             }
         };
+    }
+
+    #[test]
+    fn swrl_literal() {
+        let ont_s = include_str!("../../ont/owl-xml/swrl_literal.owx");
+        let (ont, _) = read_ok(&mut ont_s.as_bytes());
+
+        let rule = ont.i().rule().next().unwrap();
+        if let Atom::DataPropertyAtom{args:(_,ref darg),..} = rule.head[0] {
+            assert! {
+                matches!{
+                    darg,
+                    DArgument::Literal(Literal::Simple{literal:s}) if s == "Literal String"
+
+                }
+            }
+        }
+        else {
+            assert!(false);
+        }
     }
 
     #[test]

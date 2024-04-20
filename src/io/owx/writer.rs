@@ -725,7 +725,21 @@ render! {
             Atom::ObjectPropertyAtom{pred, args} => {
                 (pred, &args.0, &args.1).within(w, m, "ObjectPropertyAtom")?;
             }
+            Atom::DataPropertyAtom{pred, args} => {
+                (pred, &args.0, &args.1).within(w, m, "DataPropertyAtom")?;
+            }
             _ => todo!("Can't render that kind of atom")
+        }
+        Ok(())
+    }
+}
+
+render! {
+    DArgument, self, w, m,
+    {
+        match self {
+            Self::Literal(l) => l.render(w, m)?,
+            Self::Variable(v) => v.render(w, m)?
         }
         Ok(())
     }
