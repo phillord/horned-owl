@@ -9,7 +9,7 @@ use super::indexed::ForIndex;
 use super::set::SetOntology;
 use crate::{
     model::*,
-    visitor::{entity::IRIExtract, Walk},
+    visitor::immutable::{entity::IRIExtract, Walk},
 };
 use std::{
     cell::RefCell,

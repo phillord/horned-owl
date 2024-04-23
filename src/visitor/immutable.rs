@@ -133,7 +133,7 @@ impl<A: ForIRI, V: Visit<A>> Walk<A, V> {
         self.0.visit_dociri(e);
         self.iri(&e.0);
     }
-    
+
     pub fn class(&mut self, e: &Class<A>) {
         self.0.visit_class(e);
         self.iri(&e.0);
@@ -710,7 +710,7 @@ pub mod entity {
     use super::Visit;
     use crate::model::ForIRI;
     use crate::model::IRI;
-    use crate::visitor::AnonymousIndividual;
+    use crate::model::AnonymousIndividual;
 
     pub struct IRIExtract<A>(Vec<IRI<A>>);
 
@@ -789,7 +789,7 @@ mod test {
 
     #[test]
     fn single_class() {
-        let ont_s = include_str!("./ont/owl-xml/class.owx");
+        let ont_s = include_str!("../ont/owl-xml/class.owx");
         let ont = read_ok(&mut ont_s.as_bytes());
 
         let mut walk = Walk::new(super::entity::EntityExtract::default());
