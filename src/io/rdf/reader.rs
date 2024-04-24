@@ -1027,6 +1027,26 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
         }
     }
 
+    fn to_iargument(&mut self, t: &Term<A>, ic:&[&RDFOntology<A, AA>]) -> Option<IArgument<A>> {
+        match t {
+            Term::BNode(bn) => Some(IArgument::Individual(AnonymousIndividual(bn.0.clone()).into())),
+            Term::Iri(iri) => {
+                self.variable
+                    .get(iri)
+                    .map(|var| var.clone().into())
+                    .or_else(
+                        || if self.find_declaration_kind(iri, ic) == Some(NamedOWLEntityKind::NamedIndividual) {
+                            Some(NamedIndividual(iri.clone()).into())
+                        }
+                           else {
+                               None
+                           }
+                    )
+            }
+            _ => None
+        }
+    }
+
     fn to_dargument(&self, t: &Term<A>) -> Option<DArgument<A>> {
         match t {
             Term::Literal(l) => Some(DArgument::Literal(l.clone())),
@@ -1766,34 +1786,20 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
             let atom:Result<_,HornedError> =
                 match triple.as_slice() {
                     [[_, Term::RDF(VRDF::Type), Term::SWRL(VSWRL::ClassAtom)],
-                     [_, Term::SWRL(VSWRL::Argument1), Term::Iri(arg)],
+                     [_, Term::SWRL(VSWRL::Argument1), arg],
                      [_, Term::SWRL(VSWRL::ClassPredicate), pred]] => {
                          ok_some!{
                              {
-                                 match self.find_declaration_kind(arg, ic) {
-                                     Some(NamedOWLEntityKind::NamedIndividual) => {
-                                         Atom::ClassAtom{
-                                             pred: self.fetch_ce(pred)?,
-                                             // TODO Support anonymous individual as well!
-                                             // This presents as BNode
-                                             arg: IArgument::Individual(NamedIndividual(arg.clone()).into())
-                                         }
-                                     }
-                                     Some(_) => todo!(),
-                                     None => {
-                                         Atom::ClassAtom{
-                                             pred: self.fetch_ce(pred)?,
-                                             arg: IArgument::Variable(Variable(arg.clone()))
-                                         }
-                                     }
+                                 Atom::ClassAtom{
+                                     pred: self.fetch_ce(pred)?,
+                                     arg: self.to_iargument(arg, ic)?
                                  }
-
                              }
                          }
                      }
                     [[_, Term::RDF(VRDF::Type), Term::SWRL(VSWRL::IndividualPropertyAtom)],
-                     [_, Term::SWRL(VSWRL::Argument1), Term::Iri(arg1)],
-                     [_, Term::SWRL(VSWRL::Argument2), Term::Iri(arg2)],
+                     [_, Term::SWRL(VSWRL::Argument1), arg1],
+                     [_, Term::SWRL(VSWRL::Argument2), arg2],
                      [_, Term::SWRL(VSWRL::PropertyPredicate), pred],
                     ] => {
                         ok_some!{
@@ -1801,10 +1807,9 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
                                 PropertyExpression::ObjectPropertyExpression(pred) => {
                                     Atom::ObjectPropertyAtom{
                                         pred,
-                                        // This is not general enough.
                                         args: (
-                                            IArgument::Variable(Variable(arg1.clone())),
-                                            IArgument::Variable(Variable(arg2.clone()))
+                                            self.to_iargument(arg1, ic)?,
+                                            self.to_iargument(arg2, ic)?,
                                         )
                                     }
                                 }
@@ -2176,6 +2181,7 @@ mod test {
     use std::rc::Rc;
 
     use crate::io::RDFParserConfiguration;
+    use crate::normalize::normalize;
     use crate::ontology::component_mapped::RcComponentMappedOntology;
     use pretty_assertions::assert_eq;
     use test_generator::test_resources;
@@ -2235,6 +2241,10 @@ mod test {
             .0
             .into();
 
+        let rdfont = normalize(rdfont.into_iter().collect());
+        let xmlont = normalize(xmlont.into_iter().collect());
+        dbg!(&xmlont);
+        dbg!(&rdfont);
         assert_eq!(rdfont, xmlont);
     }
 

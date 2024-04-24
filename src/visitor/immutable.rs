@@ -67,10 +67,10 @@ pub trait Visit<A: ForIRI> {
     fn visit_annotation_property_domain(&mut self, _: &AnnotationPropertyDomain<A>) {}
     fn visit_annotation_property_range(&mut self, _: &AnnotationPropertyRange<A>) {}
     fn visit_rule(&mut self, _: &Rule<A>){}
-    fn visit_atom(&mut self, _: &mut Atom<A>){}
-    fn visit_variable(&mut self, _: &mut Variable<A>){}
-    fn visit_iarg(&mut self, _: &mut IArgument<A>){}
-    fn visit_darg(&mut self, _: &mut DArgument<A>){}
+    fn visit_atom(&mut self, _: &Atom<A>){}
+    fn visit_variable(&mut self, _: &Variable<A>){}
+    fn visit_iarg(&mut self, _: &IArgument<A>){}
+    fn visit_darg(&mut self, _: &DArgument<A>){}
     fn visit_literal(&mut self, _: &Literal<A>) {}
     fn visit_annotation(&mut self, _: &Annotation<A>) {}
     fn visit_annotation_value(&mut self, _: &AnnotationValue<A>) {}
@@ -92,6 +92,7 @@ pub trait Visit<A: ForIRI> {
     fn visit_individual_vec(&mut self, _: &Vec<Individual<A>>) {}
     fn visit_literal_vec(&mut self, _: &Vec<Literal<A>>) {}
     fn visit_facet_restriction_vec(&mut self, _: &Vec<FacetRestriction<A>>) {}
+    fn visit_atom_vec(&mut self, _:&Vec<Atom<A>>) {}
 }
 
 pub struct Walk<A, V>(V, PhantomData<A>);
@@ -519,11 +520,11 @@ impl<A: ForIRI, V: Visit<A>> Walk<A, V> {
         }
     }
 
-    pub fn variable(&mut self, v: &mut Variable<A>) {
+    pub fn variable(&mut self, v: &Variable<A>) {
         self.0.visit_variable(v);
     }
 
-    pub fn darg(&mut self, d: &mut DArgument<A>) {
+    pub fn darg(&mut self, d: &DArgument<A>) {
         self.0.visit_darg(d);
         match d {
             DArgument::Literal(l) => self.literal(l),
@@ -531,7 +532,7 @@ impl<A: ForIRI, V: Visit<A>> Walk<A, V> {
         }
     }
 
-    pub fn iarg(&mut self, i: &mut IArgument<A>) {
+    pub fn iarg(&mut self, i: &IArgument<A>) {
         self.0.visit_iarg(i);
         match i {
             IArgument::Individual(i) => self.individual(i),
@@ -764,6 +765,13 @@ impl<A: ForIRI, V: Visit<A>> Walk<A, V> {
         self.0.visit_data_range_vec(e);
         for i in e.iter() {
             self.data_range(i);
+        }
+    }
+
+    pub fn atom_vec(&mut self, v:&Vec<Atom<A>>) {
+        self.0.visit_atom_vec(v);
+        for i in v.iter() {
+            self.atom(i);
         }
     }
 }

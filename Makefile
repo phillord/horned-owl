@@ -19,7 +19,10 @@ pre-push: all-tests
 just-bubo:
 	$(MAKE) -C src/ont/bubo
 
-bubo: just-bubo test
+bubo: just-bubo clean test
+
+clean:
+	cargo clean
 
 ## Saves a bit of typing when switching back and forth
 test:

@@ -886,9 +886,7 @@ from_start! {
     {
         match e.local_name().as_ref() {
             b"AnonymousIndividual" =>{
-                eprintln!("About to read anonymous");
                 let ai:AnonymousIndividual<_> = from_start(r, e)?;
-                eprintln!("Read anonymous");
                 Ok(ai.into())
             }
             b"NamedIndividual" =>{
@@ -1132,7 +1130,6 @@ from_xml! {
 
         loop {
             let e = r.reader.read_resolved_event_into(&mut buf)?;
-            eprintln!("annotation: {:?}", e);
             match e {
                 (ref ns, Event::Start(ref e))
                 |
@@ -1299,8 +1296,12 @@ from_start! {
                 b"NamedIndividual" => {
                     IArgument::Individual(NamedIndividual::from_start(r, e)?.into())
                 }
-                _ => {
-                    todo!()
+                b"AnonymousIndividual" => {
+                    IArgument::Individual(AnonymousIndividual::from_start(r, e)?.into())
+                }
+                a => {
+                    eprintln!("{:?}", std::str::from_utf8(a));
+                    todo!();
                 }
             }
         )
@@ -1320,7 +1321,6 @@ from_xml! {IRI, r, end,
             let mut buf = Vec::new();
             loop {
                 let e = r.reader.read_resolved_event_into(&mut buf)?;
-                eprintln!("from_xml iri:{:?}", e);
                 match e {
                     (ref _ns,Event::Text(ref e)) => {
                         iri = Some(r.build.iri
@@ -2269,6 +2269,40 @@ pub mod test {
                 matches!{
                     darg,
                     DArgument::Literal(Literal::Simple{literal:s}) if s == "Literal String"
+
+                }
+            }
+        }
+        else {
+            assert!(false);
+        }
+    }
+
+    #[test]
+    fn swrl_individual() {
+        let ont_s = include_str!("../../ont/owl-xml/swrl_individual.owx");
+        let (ont, _) = read_ok(&mut ont_s.as_bytes());
+
+        let rule = ont.i().rule().next().unwrap();
+        dbg!(rule);
+        if let Atom::ClassAtom{ref arg,..} = rule.head[0] {
+            assert! {
+                matches!{
+                    arg,
+                    IArgument::Individual(Individual::Named(_))
+
+                }
+            }
+        }
+        else {
+            assert!(false);
+        }
+
+        if let Atom::ClassAtom{ref arg,..} = rule.body[0] {
+            assert! {
+                matches!{
+                    arg,
+                    IArgument::Individual(Individual::Anonymous(_))
 
                 }
             }
