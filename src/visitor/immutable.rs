@@ -67,6 +67,10 @@ pub trait Visit<A: ForIRI> {
     fn visit_annotation_property_domain(&mut self, _: &AnnotationPropertyDomain<A>) {}
     fn visit_annotation_property_range(&mut self, _: &AnnotationPropertyRange<A>) {}
     fn visit_rule(&mut self, _: &Rule<A>){}
+    fn visit_atom(&mut self, _: &mut Atom<A>){}
+    fn visit_variable(&mut self, _: &mut Variable<A>){}
+    fn visit_iarg(&mut self, _: &mut IArgument<A>){}
+    fn visit_darg(&mut self, _: &mut DArgument<A>){}
     fn visit_literal(&mut self, _: &Literal<A>) {}
     fn visit_annotation(&mut self, _: &Annotation<A>) {}
     fn visit_annotation_value(&mut self, _: &AnnotationValue<A>) {}
@@ -473,8 +477,66 @@ impl<A: ForIRI, V: Visit<A>> Walk<A, V> {
         self.iri(&e.iri);
     }
 
-    pub fn rule(&mut self, _: &Rule<A>) {
-        todo!()
+    pub fn rule(&mut self, r: &Rule<A>) {
+        self.0.visit_rule(r);
+        self.atom_vec(&r.head);
+        self.atom_vec(&r.body);
+    }
+
+    pub fn atom(&mut self, a: &Atom<A>) {
+        self.0.visit_atom(a);
+        match a {
+            Atom::BuiltInAtom{pred, arg} => {
+                self.iri(pred);
+                self.darg(arg);
+            },
+            Atom::ClassAtom{pred, arg} => {
+                self.class_expression(pred);
+                self.iarg(arg);
+            },
+            Atom::DataPropertyAtom{pred, args} => {
+                self.data_property(pred);
+                self.darg(&args.0);
+                self.darg(&args.1);
+            },
+            Atom::DataRangeAtom{pred, arg} => {
+                self.data_range(pred);
+                self.darg(arg);
+            }
+            Atom::DifferentIndividualsAtom(arg1, arg2) => {
+                self.iarg(arg1);
+                self.iarg(arg2);
+            },
+            Atom::ObjectPropertyAtom {pred, args} => {
+                self.object_property_expression(pred);
+                self.iarg(&args.0);
+                self.iarg(&args.1);
+            },
+            Atom::SameIndividualAtom (arg1, arg2) =>{
+                self.iarg(arg1);
+                self.iarg(arg2);
+            },
+        }
+    }
+
+    pub fn variable(&mut self, v: &mut Variable<A>) {
+        self.0.visit_variable(v);
+    }
+
+    pub fn darg(&mut self, d: &mut DArgument<A>) {
+        self.0.visit_darg(d);
+        match d {
+            DArgument::Literal(l) => self.literal(l),
+            DArgument::Variable(v) => self.variable(v),
+        }
+    }
+
+    pub fn iarg(&mut self, i: &mut IArgument<A>) {
+        self.0.visit_iarg(i);
+        match i {
+            IArgument::Individual(i) => self.individual(i),
+            IArgument::Variable(v) => self.variable(v),
+        }
     }
 
     pub fn literal(&mut self, e: &Literal<A>) {

@@ -1818,9 +1818,9 @@ pub enum Atom<A>{
     ClassAtom{pred:ClassExpression<A>, arg: IArgument<A>},
     DataPropertyAtom{pred: DataProperty<A>, args:(DArgument<A>, DArgument<A>)},
     DataRangeAtom{pred: DataRange<A>, arg:DArgument<A>},
-    DifferentIndividualsAtom{pred:A, args:(IArgument<A>, IArgument<A>)},
+    DifferentIndividualsAtom(IArgument<A>, IArgument<A>),
     ObjectPropertyAtom{pred:ObjectPropertyExpression<A>,args:(IArgument<A>,IArgument<A>)},
-    SameIndividualAtom{pred: A, args:(IArgument<A>, IArgument<A>)}
+    SameIndividualAtom(IArgument<A>, IArgument<A>)
 }
 
 
@@ -1828,6 +1828,24 @@ pub enum Atom<A>{
 pub enum IArgument<A> {
     Individual(Individual<A>),
     Variable(Variable<A>),
+}
+
+impl<A:ForIRI> From<Variable<A>> for IArgument<A> {
+    fn from(var: Variable<A>) -> IArgument<A> {
+        Self::Variable(var)
+    }
+}
+
+impl<A:ForIRI> From<Individual<A>> for IArgument<A> {
+    fn from(i: Individual<A>) -> IArgument<A> {
+        Self::Individual(i)
+    }
+}
+
+impl<A:ForIRI> From<NamedIndividual<A>> for IArgument<A> {
+    fn from(i: NamedIndividual<A>) -> IArgument<A> {
+        Self::Individual(i.into())
+    }
 }
 
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]

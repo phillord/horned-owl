@@ -65,6 +65,10 @@ pub trait VisitMut<A: ForIRI> {
     fn visit_annotation_property_domain(&mut self, _: &mut AnnotationPropertyDomain<A>) {}
     fn visit_annotation_property_range(&mut self, _: &mut AnnotationPropertyRange<A>) {}
     fn visit_rule(&mut self, _: &mut Rule<A>){}
+    fn visit_atom(&mut self, _: &mut Atom<A>){}
+    fn visit_variable(&mut self, _: &mut Variable<A>){}
+    fn visit_iarg(&mut self, _: &mut IArgument<A>){}
+    fn visit_darg(&mut self, _: &mut DArgument<A>){}
     fn visit_literal(&mut self, _: &mut Literal<A>) {}
     fn visit_annotation(&mut self, _: &mut Annotation<A>) {}
     fn visit_annotation_value(&mut self, _: &mut AnnotationValue<A>) {}
@@ -86,6 +90,7 @@ pub trait VisitMut<A: ForIRI> {
     fn visit_individual_vec(&mut self, _: &mut Vec<Individual<A>>) {}
     fn visit_literal_vec(&mut self, _: &mut Vec<Literal<A>>) {}
     fn visit_facet_restriction_vec(&mut self, _: &Vec<FacetRestriction<A>>) {}
+    fn visit_atom_vec(&mut self, _:&Vec<Atom<A>>){}
 }
 
 pub struct WalkMut<A, V>(V, PhantomData<A>);
@@ -475,8 +480,66 @@ impl<A: ForIRI, V: VisitMut<A>> WalkMut<A, V> {
         self.iri(&mut e.iri);
     }
 
-    pub fn rule(&mut self, _: &mut Rule<A>) {
-        todo!()
+    pub fn rule(&mut self, r: &mut Rule<A>) {
+        self.0.visit_rule(r);
+        self.atom_vec(&mut r.head);
+        self.atom_vec(&mut r.body);
+    }
+
+    pub fn atom(&mut self, a: &mut Atom<A>) {
+        self.0.visit_atom(a);
+        match a {
+            Atom::BuiltInAtom{pred, arg} => {
+                self.iri(pred);
+                self.darg(arg);
+            },
+            Atom::ClassAtom{pred, arg} => {
+                self.class_expression(pred);
+                self.iarg(arg);
+            },
+            Atom::DataPropertyAtom{pred, args} => {
+                self.data_property(pred);
+                self.darg(&mut args.0);
+                self.darg(&mut args.1);
+            },
+            Atom::DataRangeAtom{pred, arg} => {
+                self.data_range(pred);
+                self.darg(arg);
+            }
+            Atom::DifferentIndividualsAtom(arg1, arg2) => {
+                self.iarg(arg1);
+                self.iarg(arg2);
+            },
+            Atom::ObjectPropertyAtom {pred, args} => {
+                self.object_property_expression(pred);
+                self.iarg(&mut args.0);
+                self.iarg(&mut args.1);
+            },
+            Atom::SameIndividualAtom (arg1, arg2) =>{
+                self.iarg(arg1);
+                self.iarg(arg2);
+            },
+        }
+    }
+
+    pub fn variable(&mut self, v: &mut Variable<A>) {
+        self.0.visit_variable(v);
+    }
+
+    pub fn darg(&mut self, d: &mut DArgument<A>) {
+        self.0.visit_darg(d);
+        match d {
+            DArgument::Literal(l) => self.literal(l),
+            DArgument::Variable(v) => self.variable(v),
+        }
+    }
+
+    pub fn iarg(&mut self, i: &mut IArgument<A>) {
+        self.0.visit_iarg(i);
+        match i {
+            IArgument::Individual(i) => self.individual(i),
+            IArgument::Variable(v) => self.variable(v),
+        }
     }
 
     pub fn literal(&mut self, e: &mut Literal<A>) {
@@ -706,6 +769,13 @@ impl<A: ForIRI, V: VisitMut<A>> WalkMut<A, V> {
             self.data_range(i);
         }
     }
+
+    pub fn atom_vec(&mut self, v:&mut Vec<Atom<A>>) {
+        self.0.visit_atom_vec(v);
+        for i in v.iter_mut() {
+            self.atom(i);
+        }
+    }
 }
 
 
@@ -718,7 +788,6 @@ mod test {
     use crate::io::ParserConfiguration;
     use crate::io::owx::reader::read;
     use curie::PrefixMapping;
-    use std::borrow::Borrow;
     use std::io::BufRead;
     use super::*;
 
