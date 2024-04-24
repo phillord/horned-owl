@@ -49,7 +49,7 @@ pub fn reanonymize<A:ForIRI>(mut o:Vec<AnnotatedComponent<A>>) -> Vec<AnnotatedC
 
 #[cfg(test)]
 mod test {
-    use crate::{model::{AnnotatedComponent, AnonymousIndividual, Build, DeclareClass, DeclareObjectProperty, DocIRI, SameIndividual}, normalize::{normalize_and_assert_eq, reanonymize, simplify}};
+    use crate::{model::{AnnotatedComponent, Build, DeclareClass, DeclareObjectProperty, DocIRI, SameIndividual}, normalize::{normalize_and_assert_eq, reanonymize, simplify}};
 
     #[test]
     fn reorder() {

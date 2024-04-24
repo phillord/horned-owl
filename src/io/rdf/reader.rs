@@ -1832,6 +1832,17 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
                             }
                         }
                     }
+                    [[_, Term::RDF(VRDF::Type), Term::SWRL(VSWRL::DifferentIndividualsAtom)],
+                     [_, Term::SWRL(VSWRL::Argument1), arg1],
+                       [_, Term::SWRL(VSWRL::Argument2), arg2],
+                    ] => {
+                        ok_some!{
+                            Atom::DifferentIndividualsAtom(
+                                self.to_iargument(arg1, ic)?,
+                                self.to_iargument(arg2, ic)?,
+                            )
+                        }
+                    }
                     _ => {
                         Ok(None)
                     }

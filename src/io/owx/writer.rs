@@ -728,6 +728,9 @@ render! {
             Atom::DataPropertyAtom{pred, args} => {
                 (pred, &args.0, &args.1).within(w, m, "DataPropertyAtom")?;
             }
+            Atom::DifferentIndividualsAtom(arg1, arg2) => {
+                (arg1, arg2).within(w, m, "DifferentIndividualsAtom")?;
+            }
             _ => todo!("Can't render that kind of atom")
         }
         Ok(())

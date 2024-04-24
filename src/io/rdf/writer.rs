@@ -1611,6 +1611,20 @@ render_to_node! {
 
                 Ok(bn)
             }
+            Self::DifferentIndividualsAtom(arg1, arg2) => {
+                let bn = ng.bn();
+                let arg1_node = arg1.render(f, ng)?;
+                let arg2_node = arg2.render(f, ng)?;
+
+                triples!(
+                    f,
+                    bn.clone(), ng.nn(RDF::Type), ng.nn(SWRL::DifferentIndividualsAtom),
+                    bn.clone(), ng.nn(SWRL::Argument1), arg1_node,
+                    bn.clone(), ng.nn(SWRL::Argument2), arg2_node
+                );
+
+                Ok(bn)
+            }
             _=> todo!("other types of atom")
         }
 
