@@ -1253,6 +1253,9 @@ from_start! {
                 b"DifferentIndividualsAtom" => {
                     Atom::DifferentIndividualsAtom(from_next(r)?, from_next(r)?)
                 }
+                b"SameIndividualAtom" => {
+                    Atom::SameIndividualAtom(from_next(r)?, from_next(r)?)
+                }
                 _=> {
                     return Err(error_unknown_entity("Atom",
                                                     e.local_name().as_ref(),r ));
@@ -2320,6 +2323,17 @@ pub mod test {
         let ont_s = include_str!("../../ont/owl-xml/swrl_different_individuals.owx");
 
         let(_ont, _) = read_ok(&mut ont_s.as_bytes());
+
+        assert!(true);
+    }
+
+    #[test]
+    fn swrl_same_individual() {
+        let ont_s = include_str!("../../ont/owl-xml/swrl_same_individual.owx");
+
+        let(_ont, _) = read_ok(&mut ont_s.as_bytes());
+
+        assert!(true);
     }
 
     #[test]

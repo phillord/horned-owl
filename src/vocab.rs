@@ -356,6 +356,7 @@ vocabulary_type! {
         (SWRL, Imp, false),
         (SWRL, IndividualPropertyAtom, false),
         (SWRL, PropertyPredicate, true),
+        (SWRL, SameIndividualAtom, false),
         (SWRL, Variable, false)
     ]
 }

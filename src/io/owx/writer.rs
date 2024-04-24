@@ -731,6 +731,9 @@ render! {
             Atom::DifferentIndividualsAtom(arg1, arg2) => {
                 (arg1, arg2).within(w, m, "DifferentIndividualsAtom")?;
             }
+            Atom::SameIndividualAtom(arg1, arg2) => {
+                (arg1, arg2).within(w, m, "SameIndividualAtom")?;
+            }
             _ => todo!("Can't render that kind of atom")
         }
         Ok(())
