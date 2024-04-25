@@ -1808,6 +1808,18 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
                              }
                          }
                      }
+                    [[_, Term::RDF(VRDF::Type), Term::SWRL(VSWRL::DataRangeAtom)],
+                     [_, Term::SWRL(VSWRL::Argument1), arg],
+                     [_, Term::SWRL(VSWRL::DataRange), pred]] => {
+                         ok_some!{
+                             {
+                                 Atom::DataRangeAtom{
+                                     pred: self.fetch_dr(pred)?,
+                                     arg: self.to_dargument(arg)?
+                                 }
+                             }
+                         }
+                     }
                     [[_, Term::RDF(VRDF::Type), Term::SWRL(VSWRL::IndividualPropertyAtom)],
                      [_, Term::SWRL(VSWRL::Argument1), arg1],
                      [_, Term::SWRL(VSWRL::Argument2), arg2],

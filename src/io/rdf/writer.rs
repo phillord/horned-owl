@@ -1590,6 +1590,22 @@ render_to_node! {
                 Ok(bn)
 
             }
+            Self::DataRangeAtom{pred, arg} => {
+                let bn = ng.bn();
+
+                let pred = pred.render(f, ng)?;
+                let arg = arg.render(f, ng)?;
+
+                triples!(
+                    f,
+                    bn.clone(), ng.nn(RDF::Type), ng.nn(SWRL::DataRangeAtom),
+                    bn.clone(), ng.nn(SWRL::DataRange), pred,
+                    bn.clone(), ng.nn(SWRL::Argument1), arg
+                );
+
+                Ok(bn)
+
+            }
             Self::DataPropertyAtom{pred, args} => {
                 let bn = ng.bn();
 

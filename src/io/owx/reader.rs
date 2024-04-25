@@ -1224,6 +1224,12 @@ from_start! {
     {
         Ok(
             match e.local_name().as_ref() {
+                b"BuiltInAtom" => {
+                    Atom::BuiltInAtom{
+                        pred:named_entity_from_start(r, e, b"BuiltInAtom")?,
+                        args:till_end(r, b"BuiltInAtom")?
+                    }
+                }
                 b"ClassAtom" => {
                     let pred = from_next(r)?;
                     let arg = from_next(r)?;
@@ -1232,15 +1238,6 @@ from_start! {
                         arg
                     }
                 },
-                b"ObjectPropertyAtom" => {
-                    let pred = from_next(r)?;
-                    let args = (
-                        from_next(r)?, from_next(r)?
-                    );
-                    Atom::ObjectPropertyAtom {
-                        pred, args
-                    }
-                }
                 b"DataPropertyAtom" => {
                     let pred = from_next(r)?;
                     let args = (
@@ -1250,17 +1247,26 @@ from_start! {
                         pred, args
                     }
                 }
+                b"DataRangeAtom" => {
+                    Atom::DataRangeAtom{
+                        pred: from_next(r)?,
+                        arg: from_next(r)?
+                    }
+                }
                 b"DifferentIndividualsAtom" => {
                     Atom::DifferentIndividualsAtom(from_next(r)?, from_next(r)?)
                 }
+                b"ObjectPropertyAtom" => {
+                    let pred = from_next(r)?;
+                    let args = (
+                        from_next(r)?, from_next(r)?
+                    );
+                    Atom::ObjectPropertyAtom {
+                        pred, args
+                    }
+                }
                 b"SameIndividualAtom" => {
                     Atom::SameIndividualAtom(from_next(r)?, from_next(r)?)
-                }
-                b"BuiltInAtom" => {
-                    Atom::BuiltInAtom{
-                        pred:named_entity_from_start(r, e, b"BuiltInAtom")?,
-                        args:till_end(r, b"BuiltInAtom")?
-                    }
                 }
                 _=> {
                     return Err(error_unknown_entity("Atom",
@@ -2345,6 +2351,15 @@ pub mod test {
     #[test]
     fn swrl_built_in() {
         let ont_s = include_str!("../../ont/owl-xml/swrl_built_in.owx");
+
+        let(_ont, _) = read_ok(&mut ont_s.as_bytes());
+
+        assert!(true);
+    }
+
+    #[test]
+    fn swrl_data_range() {
+        let ont_s = include_str!("../../ont/owl-xml/swrl_data_range.owx");
 
         let(_ont, _) = read_ok(&mut ont_s.as_bytes());
 

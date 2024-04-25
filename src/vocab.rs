@@ -353,6 +353,8 @@ vocabulary_type! {
         (SWRL, Body, true),
         (SWRL, ClassAtom, false),
         (SWRL, ClassPredicate, true),
+        (SWRL, DataRange, true),
+        (SWRL, DataRangeAtom, false),
         (SWRL, DatavaluedPropertyAtom, false),
         (SWRL, DifferentIndividualsAtom, false),
         (SWRL, Head, true),

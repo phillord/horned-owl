@@ -719,27 +719,29 @@ render! {
     Atom, self, w, m,
     {
         match self {
-            Atom::ClassAtom{pred, arg} => {
-                (pred, arg).within(w, m, "ClassAtom")?;
-            }
-            Atom::ObjectPropertyAtom{pred, args} => {
-                (pred, &args.0, &args.1).within(w, m, "ObjectPropertyAtom")?;
-            }
-            Atom::DataPropertyAtom{pred, args} => {
-                (pred, &args.0, &args.1).within(w, m, "DataPropertyAtom")?;
-            }
-            Atom::DifferentIndividualsAtom(arg1, arg2) => {
-                (arg1, arg2).within(w, m, "DifferentIndividualsAtom")?;
-            }
-            Atom::SameIndividualAtom(arg1, arg2) => {
-                (arg1, arg2).within(w, m, "SameIndividualAtom")?;
-            }
             Atom::BuiltInAtom{pred, args} => {
                 let mut open = BytesStart::new("BuiltInAtom");
                 open.push_attribute(("IRI", &pred.0.borrow()[..]));
                 args.within_tag(w, m, open)?;
             }
-            _ => todo!("Can't render that kind of atom")
+            Atom::ClassAtom{pred, arg} => {
+                (pred, arg).within(w, m, "ClassAtom")?;
+            }
+            Atom::DataPropertyAtom{pred, args} => {
+                (pred, &args.0, &args.1).within(w, m, "DataPropertyAtom")?;
+            }
+            Atom::DataRangeAtom{pred, arg} => {
+                (pred, arg).within(w, m, "DataRangeAtom")?;
+            }
+            Atom::DifferentIndividualsAtom(arg1, arg2) => {
+                (arg1, arg2).within(w, m, "DifferentIndividualsAtom")?;
+            }
+            Atom::ObjectPropertyAtom{pred, args} => {
+                (pred, &args.0, &args.1).within(w, m, "ObjectPropertyAtom")?;
+            }
+            Atom::SameIndividualAtom(arg1, arg2) => {
+                (arg1, arg2).within(w, m, "SameIndividualAtom")?;
+            }
         }
         Ok(())
     }
