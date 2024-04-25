@@ -93,6 +93,7 @@ pub trait Visit<A: ForIRI> {
     fn visit_literal_vec(&mut self, _: &Vec<Literal<A>>) {}
     fn visit_facet_restriction_vec(&mut self, _: &Vec<FacetRestriction<A>>) {}
     fn visit_atom_vec(&mut self, _:&Vec<Atom<A>>) {}
+    fn visit_darg_vec(&mut self, _:&Vec<DArgument<A>>){}
 }
 
 pub struct Walk<A, V>(V, PhantomData<A>);
@@ -487,9 +488,9 @@ impl<A: ForIRI, V: Visit<A>> Walk<A, V> {
     pub fn atom(&mut self, a: &Atom<A>) {
         self.0.visit_atom(a);
         match a {
-            Atom::BuiltInAtom{pred, arg} => {
+            Atom::BuiltInAtom{pred, args} => {
                 self.iri(pred);
-                self.darg(arg);
+                self.darg_vec(args);
             },
             Atom::ClassAtom{pred, arg} => {
                 self.class_expression(pred);
@@ -772,6 +773,13 @@ impl<A: ForIRI, V: Visit<A>> Walk<A, V> {
         self.0.visit_atom_vec(v);
         for i in v.iter() {
             self.atom(i);
+        }
+    }
+
+    pub fn darg_vec(&mut self, v:&Vec<DArgument<A>>) {
+        self.0.visit_darg_vec(v);
+        for i in v.iter() {
+            self.darg(i);
         }
     }
 }

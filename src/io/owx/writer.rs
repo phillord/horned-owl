@@ -734,6 +734,11 @@ render! {
             Atom::SameIndividualAtom(arg1, arg2) => {
                 (arg1, arg2).within(w, m, "SameIndividualAtom")?;
             }
+            Atom::BuiltInAtom{pred, args} => {
+                let mut open = BytesStart::new("BuiltInAtom");
+                open.push_attribute(("IRI", &pred.0.borrow()[..]));
+                args.within_tag(w, m, open)?;
+            }
             _ => todo!("Can't render that kind of atom")
         }
         Ok(())

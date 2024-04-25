@@ -90,7 +90,8 @@ pub trait VisitMut<A: ForIRI> {
     fn visit_individual_vec(&mut self, _: &mut Vec<Individual<A>>) {}
     fn visit_literal_vec(&mut self, _: &mut Vec<Literal<A>>) {}
     fn visit_facet_restriction_vec(&mut self, _: &Vec<FacetRestriction<A>>) {}
-    fn visit_atom_vec(&mut self, _:&Vec<Atom<A>>){}
+    fn visit_atom_vec(&mut self, _:&mut Vec<Atom<A>>){}
+    fn visit_darg_vec(&mut self, _:&mut Vec<DArgument<A>>){}
 }
 
 pub struct WalkMut<A, V>(V, PhantomData<A>);
@@ -489,9 +490,9 @@ impl<A: ForIRI, V: VisitMut<A>> WalkMut<A, V> {
     pub fn atom(&mut self, a: &mut Atom<A>) {
         self.0.visit_atom(a);
         match a {
-            Atom::BuiltInAtom{pred, arg} => {
+            Atom::BuiltInAtom{pred, args} => {
                 self.iri(pred);
-                self.darg(arg);
+                self.darg_vec(args);
             },
             Atom::ClassAtom{pred, arg} => {
                 self.class_expression(pred);
@@ -776,6 +777,15 @@ impl<A: ForIRI, V: VisitMut<A>> WalkMut<A, V> {
             self.atom(i);
         }
     }
+
+    pub fn darg_vec(&mut self, v:&mut Vec<DArgument<A>>) {
+        self.0.visit_darg_vec(v);
+        for i in v.iter_mut() {
+            self.darg(i);
+        }
+    }
+
+
 }
 
 
@@ -815,8 +825,6 @@ mod test {
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
         assert_eq!(ont.i().annotation_assertion().count(), 1);
-
-        dbg!(&ont);
 
         let mut walk = super::WalkMut::new(LabeltoFred);
         let mut vec = ont.into_iter().collect();

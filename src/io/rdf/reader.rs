@@ -1002,6 +1002,17 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
             .collect()
     }
 
+    // TODO Really, really fix code duplication
+    fn fetch_dargument_seq(&mut self, bnodeid: &BNode<A>) -> Option<Vec<DArgument<A>>> {
+        self
+            .bnode_seq
+            .remove(bnodeid)
+            .as_ref()?
+            .iter()
+            .map(|t| self.to_dargument(t))
+            .collect()
+    }
+
     fn fetch_dr(&mut self, t: &Term<A>) -> Option<DataRange<A>> {
         match t {
             Term::Iri(iri) => {
@@ -1852,6 +1863,17 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
                                 self.to_iargument(arg1, ic)?,
                                 self.to_iargument(arg2, ic)?,
                             )
+                        }
+                    }
+                    [[_, Term::RDF(VRDF::Type), Term::SWRL(VSWRL::BuiltinAtom)],
+                     [_, Term::SWRL(VSWRL::Arguments), Term::BNode(args)],
+                     [_, Term::SWRL(VSWRL::Builtin), Term::Iri(iri)],
+                    ] => {
+                        ok_some!{
+                            Atom::BuiltInAtom{
+                                pred: iri.clone(),
+                                args: self.fetch_dargument_seq(args)?
+                            }
                         }
                     }
                     _ => {

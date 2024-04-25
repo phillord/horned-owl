@@ -346,7 +346,10 @@ vocabulary_type! {
     SWRL, IRI<String>, METASWRL, [
         (SWRL, Argument1, true),
         (SWRL, Argument2, true),
+        (SWRL, Arguments, true),
         (SWRL, AtomList, false),
+        (SWRL, Builtin, true),
+        (SWRL, BuiltinAtom, false),
         (SWRL, Body, true),
         (SWRL, ClassAtom, false),
         (SWRL, ClassPredicate, true),

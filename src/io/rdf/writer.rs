@@ -1562,6 +1562,19 @@ render_to_node! {
     Atom, self, f, ng,
     {
         match self {
+            Self::BuiltInAtom{pred, args} => {
+                let bn = ng.bn();
+                let args_node = args.render(f, ng)?;
+
+                triples!(
+                    f,
+                    bn.clone(), ng.nn(RDF::Type), ng.nn(SWRL::BuiltinAtom),
+                    bn.clone(), ng.nn(SWRL::Builtin), pred,
+                    bn.clone(), ng.nn(SWRL::Arguments), args_node
+                );
+
+                Ok(bn)
+            }
             Self::ClassAtom{pred, arg} => {
                 let bn = ng.bn();
                 let class_node = pred.render(f, ng)?;
@@ -1576,23 +1589,6 @@ render_to_node! {
 
                 Ok(bn)
 
-            }
-            Self::ObjectPropertyAtom{pred, args} => {
-                let bn = ng.bn();
-
-                let class_node = pred.render(f, ng)?;
-                let arg0_node = args.0.render(f, ng)?;
-                let arg1_node = args.1.render(f, ng)?;
-
-                triples!(
-                    f,
-                    bn.clone(), ng.nn(RDF::Type), ng.nn(SWRL::IndividualPropertyAtom),
-                    bn.clone(), ng.nn(SWRL::PropertyPredicate), class_node,
-                    bn.clone(), ng.nn(SWRL::Argument1), arg0_node,
-                    bn.clone(), ng.nn(SWRL::Argument2), arg1_node
-                );
-
-                Ok(bn)
             }
             Self::DataPropertyAtom{pred, args} => {
                 let bn = ng.bn();
@@ -1621,6 +1617,23 @@ render_to_node! {
                     bn.clone(), ng.nn(RDF::Type), ng.nn(SWRL::DifferentIndividualsAtom),
                     bn.clone(), ng.nn(SWRL::Argument1), arg1_node,
                     bn.clone(), ng.nn(SWRL::Argument2), arg2_node
+                );
+
+                Ok(bn)
+            }
+            Self::ObjectPropertyAtom{pred, args} => {
+                let bn = ng.bn();
+
+                let class_node = pred.render(f, ng)?;
+                let arg0_node = args.0.render(f, ng)?;
+                let arg1_node = args.1.render(f, ng)?;
+
+                triples!(
+                    f,
+                    bn.clone(), ng.nn(RDF::Type), ng.nn(SWRL::IndividualPropertyAtom),
+                    bn.clone(), ng.nn(SWRL::PropertyPredicate), class_node,
+                    bn.clone(), ng.nn(SWRL::Argument1), arg0_node,
+                    bn.clone(), ng.nn(SWRL::Argument2), arg1_node
                 );
 
                 Ok(bn)

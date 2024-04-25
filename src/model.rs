@@ -1814,7 +1814,7 @@ impl<A: ForIRI> From<Class<A>> for Box<ClassExpression<A>> {
 
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum Atom<A>{
-    BuiltInAtom{pred: IRI<A>, arg: DArgument<A>},
+    BuiltInAtom{pred: IRI<A>, args: Vec<DArgument<A>>},
     ClassAtom{pred:ClassExpression<A>, arg: IArgument<A>},
     DataPropertyAtom{pred: DataProperty<A>, args:(DArgument<A>, DArgument<A>)},
     DataRangeAtom{pred: DataRange<A>, arg:DArgument<A>},

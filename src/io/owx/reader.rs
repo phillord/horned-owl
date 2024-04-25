@@ -1256,6 +1256,12 @@ from_start! {
                 b"SameIndividualAtom" => {
                     Atom::SameIndividualAtom(from_next(r)?, from_next(r)?)
                 }
+                b"BuiltInAtom" => {
+                    Atom::BuiltInAtom{
+                        pred:named_entity_from_start(r, e, b"BuiltInAtom")?,
+                        args:till_end(r, b"BuiltInAtom")?
+                    }
+                }
                 _=> {
                     return Err(error_unknown_entity("Atom",
                                                     e.local_name().as_ref(),r ));
@@ -2330,6 +2336,15 @@ pub mod test {
     #[test]
     fn swrl_same_individual() {
         let ont_s = include_str!("../../ont/owl-xml/swrl_same_individual.owx");
+
+        let(_ont, _) = read_ok(&mut ont_s.as_bytes());
+
+        assert!(true);
+    }
+
+    #[test]
+    fn swrl_built_in() {
+        let ont_s = include_str!("../../ont/owl-xml/swrl_built_in.owx");
 
         let(_ont, _) = read_ok(&mut ont_s.as_bytes());
 
