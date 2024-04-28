@@ -321,9 +321,8 @@ macro_rules! from_start {
             fn from_start<R: BufRead>(
                 $r: &mut Read<A, R>,
                 $e: &BytesStart,
-            ) -> Result<$type<A>, HornedError> {
+            ) -> Result<$type<A>, HornedError>
                 $body
-            }
         }
     };
 }
@@ -367,7 +366,7 @@ from_start! {
         let datatype_iri = get_iri_value_for(r, e, b"datatypeIRI")?;
         let lang = get_attr_value_str(&mut r.reader, e, b"xml:lang")?;
 
-        // quick-xml only offers `r.reader.read_text()` for NsReader<'i &u8> as 
+        // quick-xml only offers `r.reader.read_text()` for NsReader<'i &u8> as
         // of version 0.26.0.
         // So, we need to work around it.
         //
@@ -380,7 +379,7 @@ from_start! {
             if let Event::End(event) = r.reader.read_event_into(&mut buf)? {
                 if let b"Literal" = event.local_name().as_ref() { break; }
             }
-            
+
             // This decoding step is not sufficient on its own.
             // For instance, "A --> B" would yield "A --&gt; B".
             let escaped_str = r.reader.decoder().decode(&buf)?;
