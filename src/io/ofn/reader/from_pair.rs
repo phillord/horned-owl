@@ -426,14 +426,12 @@ impl<A: ForIRI> FromPair<A> for AnnotatedComponent<A> {
             Rule::DLSafeRule => {
                 let mut inner = pair.into_inner();
                 let annotations = FromPair::from_pair(inner.next().unwrap(), ctx)?;
-                let mut head = Vec::new();
-                for pair in inner.next().unwrap().into_inner() {
-                    head.push(FromPair::from_pair(pair, ctx)?);
-                }
-                let body = Vec::new();
-                for pair in inner.next().unwrap().into_inner() {
-                    head.push(FromPair::from_pair(pair, ctx)?);
-                }
+                let body = inner.next().unwrap().into_inner()
+                    .map(|pair| FromPair::from_pair(pair, ctx))
+                    .collect::<Result<Vec<_>>>()?;
+                let head = inner.next().unwrap().into_inner()
+                    .map(|pair| FromPair::from_pair(pair, ctx))
+                    .collect::<Result<Vec<_>>>()?;
                 Ok(Self::new(
                     crate::model::Rule::new(head, body),
                     annotations
