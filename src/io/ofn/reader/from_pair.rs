@@ -426,10 +426,13 @@ impl<A: ForIRI> FromPair<A> for AnnotatedComponent<A> {
             Rule::DLSafeRule => {
                 let mut inner = pair.into_inner();
                 let annotations = FromPair::from_pair(inner.next().unwrap(), ctx)?;
-                let body = inner.next().unwrap().into_inner()
+                let body = inner.next().unwrap()
+                    .into_inner()
+                    .rev()
                     .map(|pair| FromPair::from_pair(pair, ctx))
                     .collect::<Result<Vec<_>>>()?;
                 let head = inner.next().unwrap().into_inner()
+                    .rev()
                     .map(|pair| FromPair::from_pair(pair, ctx))
                     .collect::<Result<Vec<_>>>()?;
                 Ok(Self::new(
@@ -1274,7 +1277,8 @@ mod tests {
         let owx = &slurp::read_all_to_string(path).unwrap(); 
         let expected = crate::io::owx::reader::read(&mut Cursor::new(&owx), Default::default())
             .unwrap();
-        // assert_eq!(item.1, expected.1);
+
+        // pretty_assertions::assert_eq!(item.1, expected.1);
         pretty_assertions::assert_eq!(item.0, expected.0);
     }
 }
