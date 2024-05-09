@@ -422,6 +422,24 @@ impl<A: ForIRI> FromPair<A> for AnnotatedComponent<A> {
                 ))
             }
 
+            // Rule
+            Rule::DLSafeRule => {
+                let mut inner = pair.into_inner();
+                let annotations = FromPair::from_pair(inner.next().unwrap(), ctx)?;
+                let mut head = Vec::new();
+                for pair in inner.next().unwrap().into_inner() {
+                    head.push(FromPair::from_pair(pair, ctx)?);
+                }
+                let body = Vec::new();
+                for pair in inner.next().unwrap().into_inner() {
+                    head.push(FromPair::from_pair(pair, ctx)?);
+                }
+                Ok(Self::new(
+                    crate::model::Rule::new(head, body),
+                    annotations
+                ))
+            }
+
             _ => unreachable!("unexpected rule in AnnotatedAxiom::from_pair"),
         }
     }
@@ -491,6 +509,67 @@ impl<A: ForIRI> FromPair<A> for AnonymousIndividual<A> {
         let inner = nodeid.into_inner().next().unwrap();
         let iri = ctx.build.iri(inner.as_str());
         Ok(AnonymousIndividual(iri.underlying()))
+    }
+}
+
+// ---------------------------------------------------------------------------
+
+impl<A: ForIRI> FromPair<A> for Atom<A> {
+    const RULE: Rule = Rule::Atom;
+    fn from_pair_unchecked(pair: Pair<Rule>, ctx: &Context<'_, A>) -> Result<Self> {
+        let inner = pair.into_inner().next().unwrap();
+        match inner.as_rule() {
+            Rule::AtomClass => {
+                let mut pairs = inner.into_inner();
+                let pred = FromPair::from_pair(pairs.next().unwrap(), ctx)?;
+                let arg =  FromPair::from_pair(pairs.next().unwrap(), ctx)?;
+                Ok(Atom::ClassAtom { pred, arg })
+            }
+            Rule::AtomDataRange => {
+                let mut pairs = inner.into_inner();
+                let pred = FromPair::from_pair(pairs.next().unwrap(), ctx)?;
+                let arg =  FromPair::from_pair(pairs.next().unwrap(), ctx)?;
+                Ok(Atom::DataRangeAtom { pred, arg })
+            }
+            Rule::AtomObjectProperty => {
+                let mut pairs = inner.into_inner();
+                let pred = FromPair::from_pair(pairs.next().unwrap(), ctx)?;
+                let i1 =  FromPair::from_pair(pairs.next().unwrap(), ctx)?;
+                let i2 =  FromPair::from_pair(pairs.next().unwrap(), ctx)?;
+                let args = (i1, i2);
+                Ok(Atom::ObjectPropertyAtom { pred, args })
+            }
+            Rule::AtomDataProperty => {
+                let mut pairs = inner.into_inner();
+                let pred = FromPair::from_pair(pairs.next().unwrap(), ctx)?;
+                let i1 =  FromPair::from_pair(pairs.next().unwrap(), ctx)?;
+                let i2 =  FromPair::from_pair(pairs.next().unwrap(), ctx)?;
+                let args = (i1, i2);
+                Ok(Atom::DataPropertyAtom { pred, args })
+            }
+            Rule::AtomBuiltIn => {
+                let mut pairs = inner.into_inner();
+                let pred = FromPair::from_pair(pairs.next().unwrap(), ctx)?;
+                let mut args = Vec::with_capacity(pairs.len());
+                for pair in pairs {
+                    args.push(FromPair::from_pair(pair, ctx)?);
+                }
+                Ok(Atom::BuiltInAtom { pred, args })
+            }
+            Rule::AtomSameIndividual => {
+                let mut pairs = inner.into_inner();
+                let i1 = FromPair::from_pair(pairs.next().unwrap(), ctx)?;
+                let i2 = FromPair::from_pair(pairs.next().unwrap(), ctx)?;
+                Ok(Atom::SameIndividualAtom(i1, i2))
+            }
+            Rule::AtomDifferentIndividuals => {
+                let mut pairs = inner.into_inner();
+                let i1 = FromPair::from_pair(pairs.next().unwrap(), ctx)?;
+                let i2 = FromPair::from_pair(pairs.next().unwrap(), ctx)?;
+                Ok(Atom::DifferentIndividualsAtom(i1, i2))
+            }
+            _ => unreachable!(),
+        }
     }
 }
 
@@ -656,6 +735,20 @@ impl<A: ForIRI> FromPair<A> for ClassExpression<A> {
 
 // ---------------------------------------------------------------------------
 
+impl<A: ForIRI> FromPair<A> for DArgument<A> {
+    const RULE: Rule = Rule::DArg;
+    fn from_pair_unchecked(pair: Pair<Rule>, context: &Context<'_, A>) -> Result<Self> {
+        let inner = pair.into_inner().next().unwrap();
+        match inner.as_rule() {
+            Rule::Literal => FromPair::from_pair(inner, context).map(DArgument::Literal),
+            Rule::Variable => FromPair::from_pair(inner, context).map(DArgument::Variable),
+            _ => unreachable!()
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+
 impl<A: ForIRI> FromPair<A> for DataRange<A> {
     const RULE: Rule = Rule::DataRange;
     fn from_pair_unchecked(pair: Pair<Rule>, ctx: &Context<'_, A>) -> Result<Self> {
@@ -718,6 +811,20 @@ impl<A: ForIRI> FromPair<A> for FacetRestriction<A> {
         let f = Facet::from_pair(inner.next().unwrap(), ctx)?;
         let l = Literal::from_pair(inner.next().unwrap(), ctx)?;
         Ok(FacetRestriction { f, l })
+    }
+}
+
+// ---------------------------------------------------------------------------
+
+impl<A: ForIRI> FromPair<A> for IArgument<A> {
+    const RULE: Rule = Rule::IArg;
+    fn from_pair_unchecked(pair: Pair<Rule>, context: &Context<'_, A>) -> Result<Self> {
+        let inner = pair.into_inner().next().unwrap();
+        match inner.as_rule() {
+            Rule::Individual => FromPair::from_pair(inner, context).map(IArgument::Individual),
+            Rule::Variable => FromPair::from_pair(inner, context).map(IArgument::Variable),
+            _ => unreachable!()
+        }
     }
 }
 
@@ -876,7 +983,8 @@ macro_rules! impl_ontology {
                     let inner = pair.into_inner().next().unwrap();
                     match inner.as_rule() {
                         // FIXME: SWRL rules are not supported for now
-                        Rule::Rule | Rule::DGAxiom => (),
+                        // Rule::DGAxiom => unimplemented!(),
+                        // Rule::Rule => unimplemented!(),
                         Rule::Axiom => {
                             ontology.insert(AnnotatedComponent::from_pair(inner, ctx)?);
                         }
@@ -989,6 +1097,16 @@ impl<A: ForIRI> FromPair<A> for u32 {
     const RULE: Rule = Rule::NonNegativeInteger;
     fn from_pair_unchecked(pair: Pair<Rule>, _ctx: &Context<'_, A>) -> Result<Self> {
         Ok(Self::from_str(pair.as_str()).expect("cannot fail with the right rule"))
+    }
+}
+
+// ---------------------------------------------------------------------------
+
+impl<A: ForIRI> FromPair<A> for Variable<A> {
+    const RULE: Rule = Rule::Variable;
+    fn from_pair_unchecked(pair: Pair<Rule>, ctx: &Context<'_, A>) -> Result<Self> {
+        let inner = pair.into_inner().next().unwrap();
+        FromPair::from_pair(inner, ctx).map(Variable)
     }
 }
 
