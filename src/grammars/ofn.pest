@@ -349,7 +349,7 @@ Atom = {
 }
 
 IArg = { (LIT_VARIABLE ~ LBRACKET ~ IRI ~ RBRACKET) | Individual }
-DArg = { (LIT_VARIABLE ~ LBRACKET ~ IRI ~ RBRACKET) | Individual }
+DArg = { (LIT_VARIABLE ~ LBRACKET ~ IRI ~ RBRACKET) | Literal }
 
 DGRule = { LIT_DESCRIPTION_GRAPH_RULE ~ LBRACKET ~ Annotations ~ DGBody ~ DGHead ~ RBRACKET }
 DGBody = { LIT_BODY ~ LBRACKET ~ DGAtom* ~ RBRACKET }
