@@ -450,6 +450,7 @@ impl<'a, A: ForIRI> Display for Functional<'a, Component<A>, A> {
                     $(Component::$variant(axiom) => {
                         Functional(&axiom, self.1, self.2).fmt(f)
                     }),*
+                    Component::Rule(axiom) => unimplemented!("SWRL rendering"),
                 }
             }
         }
