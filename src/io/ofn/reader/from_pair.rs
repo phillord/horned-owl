@@ -504,7 +504,7 @@ impl<A: ForIRI> FromPair<A> for AnonymousIndividual<A> {
     const RULE: Rule = Rule::AnonymousIndividual;
     fn from_pair_unchecked(pair: Pair<Rule>, ctx: &Context<'_, A>) -> Result<Self> {
         let nodeid = pair.into_inner().next().unwrap();
-        let inner = nodeid.into_inner().next().unwrap();
+        let inner = nodeid;
         let iri = ctx.build.iri(inner.as_str());
         Ok(AnonymousIndividual(iri.underlying()))
     }
@@ -1275,6 +1275,6 @@ mod tests {
         let expected = crate::io::owx::reader::read(&mut Cursor::new(&owx), Default::default())
             .unwrap();
         // assert_eq!(item.1, expected.1);
-        assert_eq!(item.0, expected.0);
+        pretty_assertions::assert_eq!(item.0, expected.0);
     }
 }
