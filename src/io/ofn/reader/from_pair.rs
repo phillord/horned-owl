@@ -18,6 +18,8 @@ use super::Rule;
 
 // ---------------------------------------------------------------------------
 
+
+
 type Result<T> = std::result::Result<T, HornedError>;
 
 /// A trait for OWL elements that can be obtained from OWL Functional tokens.
@@ -689,11 +691,10 @@ impl<A: ForIRI> FromPair<A> for ClassExpression<A> {
                 let dp = DataProperty::from_pair(pair.next().unwrap(), ctx)?;
                 let next = pair.next().unwrap();
                 if next.as_rule() == Rule::DataProperty {
-                    unimplemented!() // FIXME!!!
-                                     // Err(Error::custom(
-                                     //     "cannot use data property chaining in `DataSomeValuesFrom`",
-                                     //     next.as_span(),
-                                     // ))
+                    Err(HornedError::invalid_at(
+                        "horned-owl does not support data property chaining in `DataSomeValuesFrom`",
+                        next.as_span(),
+                    ))
                 } else {
                     let dr = DataRange::from_pair(next, ctx)?;
                     Ok(ClassExpression::DataSomeValuesFrom { dp, dr })
@@ -704,11 +705,10 @@ impl<A: ForIRI> FromPair<A> for ClassExpression<A> {
                 let dp = DataProperty::from_pair(pair.next().unwrap(), ctx)?;
                 let next = pair.next().unwrap();
                 if next.as_rule() == Rule::DataProperty {
-                    unimplemented!() // FIXME!!!
-                                     // Err(Error::custom(
-                                     //     "cannot use data property chaining in `DataAllValuesFrom`",
-                                     //     next.as_span(),
-                                     // ))
+                    Err(HornedError::invalid_at(
+                        "horned-owl does not support data property chaining in `DataAllValuesFrom`",
+                        next.as_span(),
+                    ))
                 } else {
                     let dr = DataRange::from_pair(next, ctx)?;
                     Ok(ClassExpression::DataAllValuesFrom { dp, dr })
@@ -983,9 +983,6 @@ macro_rules! impl_ontology {
                 for pair in pairs.next().unwrap().into_inner() {
                     let inner = pair.into_inner().next().unwrap();
                     match inner.as_rule() {
-                        // FIXME: SWRL rules are not supported for now
-                        // Rule::DGAxiom => unimplemented!(),
-                        // Rule::Rule => unimplemented!(),
                         Rule::Axiom => {
                             ontology.insert(AnnotatedComponent::from_pair(inner, ctx)?);
                         }
