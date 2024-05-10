@@ -2,6 +2,7 @@ use std::collections::BTreeSet;
 use std::fmt::Display;
 use std::fmt::Error;
 use std::fmt::Formatter;
+use std::fmt::Write;
 
 use curie::PrefixMapping;
 use enum_meta::Meta;
@@ -97,6 +98,9 @@ derive_vec!(A, ObjectPropertyExpression<A>);
 derive_vec!(A, FacetRestriction<A>);
 derive_vec!(A, Literal<A>);
 derive_vec!(A, DataProperty<A>);
+derive_vec!(A, Atom<A>);
+derive_vec!(A, DArgument<A>);
+derive_vec!(A, IArgument<A>);
 
 // ---------------------------------------------------------------------------
 
@@ -134,6 +138,8 @@ macro_rules! derive_tuple2 {
 }
 
 derive_tuple2!(A, IRI<A>, IRI<A>);
+derive_tuple2!(A, IArgument<A>, IArgument<A>);
+derive_tuple2!(A, DArgument<A>, DArgument<A>);
 derive_tuple2!(A, Class<A>, Vec<ClassExpression<A>>);
 derive_tuple2!(A, Datatype<A>, DataRange<A>);
 derive_tuple2!(A, ClassExpression<A>, Individual<A>);
@@ -434,11 +440,79 @@ impl<A: ForIRI> AsFunctional<A> for AnnotationValue<A> {}
 
 impl<'a, A: ForIRI> Display for Functional<'a, AnonymousIndividual<A>, A> {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
-        write!(f, "_:{}", self.0.0.borrow())
+        write!(f, "{}", self.0.0.borrow())
     }
 }
 
 impl<A: ForIRI> AsFunctional<A> for AnonymousIndividual<A> {}
+
+// ---------------------------------------------------------------------------
+
+impl<'a, A: ForIRI> Display for Functional<'a, Atom<A>, A> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
+        use Atom::*;
+        match self.0 {
+            BuiltInAtom { pred, args } => {
+                write!(
+                    f,
+                    "BuiltInAtom({} {})",
+                    Functional(&pred, self.1, None),
+                    Functional(&args, self.1, None),
+                )
+            }
+            ClassAtom { pred, arg } => {
+                write!(
+                    f,
+                    "ClassAtom({} {})",
+                    Functional(&pred, self.1, None),
+                    Functional(&arg, self.1, None),
+                )
+            }
+            DataPropertyAtom { pred, args } => {
+                write!(
+                    f,
+                    "DataPropertyAtom({} {})",
+                    Functional(&pred, self.1, None),
+                    Functional(&(&args.0, &args.1), self.1, None),
+                )
+            }
+            DataRangeAtom { pred, arg } => {
+                write!(
+                    f,
+                    "DataRangeAtom({} {})",
+                    Functional(&pred, self.1, None),
+                    Functional(&arg, self.1, None),
+                )
+            }
+            DifferentIndividualsAtom(i1, i2) => {
+                write!(
+                    f,
+                    "DifferentIndividualsAtom({} {})",
+                    Functional(&i1, self.1, None),
+                    Functional(&i2, self.1, None),
+                )
+            }
+            ObjectPropertyAtom { pred, args } => {
+                write!(
+                    f,
+                    "ObjectPropertyAtom({} {})",
+                    Functional(&pred, self.1, None),
+                    Functional(&(&args.0, &args.1), self.1, None),
+                )
+            } 
+            SameIndividualAtom(i1, i2) => {
+                write!(
+                    f,
+                    "SameIndividualAtom({} {})",
+                    Functional(&i1, self.1, None),
+                    Functional(&i2, self.1, None),
+                )
+            }
+        }
+    }
+}
+
+impl<A: ForIRI> AsFunctional<A> for Atom<A> {}
 
 // ---------------------------------------------------------------------------
 
@@ -450,7 +524,6 @@ impl<'a, A: ForIRI> Display for Functional<'a, Component<A>, A> {
                     $(Component::$variant(axiom) => {
                         Functional(&axiom, self.1, self.2).fmt(f)
                     }),*
-                    Component::Rule(axiom) => unimplemented!("SWRL rendering"),
                 }
             }
         }
@@ -501,6 +574,7 @@ impl<'a, A: ForIRI> Display for Functional<'a, Component<A>, A> {
             SubAnnotationPropertyOf,
             AnnotationPropertyDomain,
             AnnotationPropertyRange,
+            Rule,
         )
     }
 }
@@ -694,6 +768,20 @@ impl<A: ForIRI> AsFunctional<A> for DataRange<A> {}
 
 // ---------------------------------------------------------------------------
 
+impl<'a, A: ForIRI> Display for Functional<'a, DArgument<A>, A> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
+        use DArgument::*;
+        match self.0 {
+            Literal(l) => Functional(l, self.1, None).fmt(f),
+            Variable(v) => Functional(v, self.1, None).fmt(f),
+        }
+    }
+}
+
+impl<A: ForIRI> AsFunctional<A> for DArgument<A> {}
+
+// ---------------------------------------------------------------------------
+
 impl<'a, A: ForIRI> Display for Functional<'a, Facet, A> {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
         let iri = self.0.meta();
@@ -753,6 +841,20 @@ impl<'a, A: ForIRI> Display for Functional<'a, HasKey<A>, A> {
 }
 
 impl<A: ForIRI> AsFunctional<A> for HasKey<A> {}
+
+// ---------------------------------------------------------------------------
+
+impl<'a, A: ForIRI> Display for Functional<'a, IArgument<A>, A> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
+        use IArgument::*;
+        match self.0 {
+            Individual(i) => Functional(i, self.1, None).fmt(f),
+            Variable(v) => Functional(v, self.1, None).fmt(f),
+        }
+    }
+}
+
+impl<A: ForIRI> AsFunctional<A> for IArgument<A> {}
 
 // ---------------------------------------------------------------------------
 
@@ -843,6 +945,34 @@ impl<A: ForIRI> AsFunctional<A> for ObjectPropertyExpression<A> {}
 
 // ---------------------------------------------------------------------------
 
+impl<'a, A: ForIRI> Display for Functional<'a, Rule<A>, A> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
+        if let Some(annotations) = self.2 {
+            write!(f, "DLSafeRule({}", Functional(annotations, self.1, None))?;
+        } else {
+            write!(f, "DLSafeRule(")?;
+        }
+
+        f.write_str("Body(")?;
+        for atom in self.0.body.iter().rev() {
+            Functional(&atom, self.1, None).fmt(f)?;
+        }
+        f.write_char(')')?;
+
+        f.write_str("Head(")?;
+        for atom in self.0.head.iter().rev() {
+            Functional(&atom, self.1, None).fmt(f)?;
+        }
+        f.write_char(')')?;
+        
+        f.write_char(')')
+    }
+}
+
+impl<A: ForIRI> AsFunctional<A> for Rule<A> {}
+
+// ---------------------------------------------------------------------------
+
 impl<'a, A: ForIRI> Display for Functional<'a, SubObjectPropertyExpression<A>, A> {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
         use SubObjectPropertyExpression::*;
@@ -860,6 +990,16 @@ impl<'a, A: ForIRI> Display for Functional<'a, SubObjectPropertyExpression<A>, A
 }
 
 impl<A: ForIRI> AsFunctional<A> for SubObjectPropertyExpression<A> {}
+
+// ---------------------------------------------------------------------------
+
+impl<'a, A: ForIRI> Display for Functional<'a, Variable<A>, A> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
+        write!(f, "Variable({})", Functional(&self.0.0, self.1, None))
+    }
+}
+
+impl<A: ForIRI> AsFunctional<A> for Variable<A> {}
 
 // ---------------------------------------------------------------------------
 
