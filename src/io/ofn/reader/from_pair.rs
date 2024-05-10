@@ -543,9 +543,9 @@ impl<A: ForIRI> FromPair<A> for Atom<A> {
             Rule::AtomDataProperty => {
                 let mut pairs = inner.into_inner();
                 let pred = FromPair::from_pair(pairs.next().unwrap(), ctx)?;
-                let i1 =  FromPair::from_pair(pairs.next().unwrap(), ctx)?;
-                let i2 =  FromPair::from_pair(pairs.next().unwrap(), ctx)?;
-                let args = (i1, i2);
+                let d1 = DArgument::from_pair(pairs.next().unwrap(), ctx)?;
+                let d2 = DArgument::from_pair(pairs.next().unwrap(), ctx)?;
+                let args = (d1, d2);
                 Ok(Atom::DataPropertyAtom { pred, args })
             }
             Rule::AtomBuiltIn => {
@@ -1256,6 +1256,29 @@ mod tests {
         );
     }
 
+    #[test]
+    fn data_property_atom() {
+        let build = Build::<String>::new();
+        let mut mapping = PrefixMapping::default();
+        mapping.add_prefix("o", "https://example.com/").unwrap();
+        let txt = "DataPropertyAtom(o:d Variable(o:x) \"Literal String\")";
+
+        let expected = Atom::DataPropertyAtom {
+            pred: build.data_property("https://example.com/d"),
+            args: (
+                DArgument::Variable(build.variable("https://example.com/x")),
+                DArgument::Literal(Literal::Simple { literal: String::from("Literal String") }),
+            )
+        };
+        let pair = OwlFunctionalLexer::lex(Rule::Atom, txt)
+            .unwrap()
+            .next()
+            .unwrap();
+        let actual = Atom::from_pair(pair, &Context::new(&build, &mapping))
+            .unwrap();
+        pretty_assertions::assert_eq!(actual, expected);
+    }
+
     #[test_resources("src/ont/owl-functional/*.ofn")]
     fn from_pair_resource(resource: &str) {
         let text = &slurp::read_all_to_string(resource).unwrap();
@@ -1274,7 +1297,7 @@ mod tests {
         let item: (SetOntology<Rc<str>>, _) = FromPair::from_pair(pair, &ctx).unwrap();
 
         let path = resource.replace("owl-functional", "owl-xml").replace(".ofn", ".owx");
-        let owx = &slurp::read_all_to_string(path).unwrap(); 
+        let owx = &slurp::read_all_to_string(path).unwrap();
         let expected = crate::io::owx::reader::read(&mut Cursor::new(&owx), Default::default())
             .unwrap();
 
