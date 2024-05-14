@@ -459,29 +459,42 @@ impl<A: ForIRI, F: RdfXmlFormatter<A, W>, W:Write> Render<A, F, (), W> for Annot
         if self.component.is_meta() {
             return Ok(())
         }
+
         let cmp: Annotatable<A> = self.component.render(f, ng)?;
+
+        let mut r = |t: PTriple<A>| -> Result<(), HornedError>{
+            let bn = ng.bn();
+            triples!(
+                f,
+                bn.clone(),
+                ng.nn(RDF::Type),
+                ng.nn(OWL::Axiom),
+                bn.clone(),
+                ng.nn(OWL::AnnotatedSource),
+                t.subject,
+                bn.clone(),
+                ng.nn(OWL::AnnotatedProperty),
+                t.predicate,
+                bn.clone(),
+                ng.nn(OWL::AnnotatedTarget),                t.object // And the rest!
+            );
+
+            ng.keep_this_bn(bn);
+
+            let _ = self.ann.render(f, ng);
+            Ok(())
+        };
+
         if !self.ann.is_empty() {
-            if let Annotatable::Main(t) = cmp {
-                let bn = ng.bn();
-                    triples!(
-                        f,
-                        bn.clone(),
-                        ng.nn(RDF::Type),
-                        ng.nn(OWL::Axiom),
-                        bn.clone(),
-                        ng.nn(OWL::AnnotatedSource),
-                        t.subject,
-                        bn.clone(),
-                        ng.nn(OWL::AnnotatedProperty),
-                        t.predicate,
-                        bn.clone(),
-                        ng.nn(OWL::AnnotatedTarget),
-                        t.object // And the rest!
-                    );
-
-                    ng.keep_this_bn(bn);
-
-                    let _ = self.ann.render(f, ng);
+            match cmp {
+                Annotatable::Main(t) => {
+                    r(t)?;
+                }
+                Annotatable::Multiple(v) => {
+                    for t in v {
+                        r(t)?;
+                    }
+                }
             }
         }
         Ok(())

@@ -1,0 +1,36 @@
+Prefix(:=<http://www.example.com/iri#>)
+Prefix(o:=<http://www.example.com/iri#>)
+Prefix(owl:=<http://www.w3.org/2002/07/owl#>)
+Prefix(rdf:=<http://www.w3.org/1999/02/22-rdf-syntax-ns#>)
+Prefix(xml:=<http://www.w3.org/XML/1998/namespace>)
+Prefix(xsd:=<http://www.w3.org/2001/XMLSchema#>)
+Prefix(rdfs:=<http://www.w3.org/2000/01/rdf-schema#>)
+
+
+Ontology(<http://www.example.com/iri>
+<http://www.example.com/viri>
+
+Declaration(Class(o:A))
+Declaration(Class(o:B))
+Declaration(Class(o:C))
+Declaration(Class(o:D))
+
+
+############################
+#   Classes
+############################
+
+# Class: o:A (o:A)
+
+EquivalentClasses(Annotation(rdfs:comment "This is an annotation on an axiom"@en) o:A o:D)
+
+# Class: o:B (o:B)
+
+EquivalentClasses(Annotation(rdfs:comment "This is an annotation on an axiom"@en) o:B o:D)
+
+# Class: o:C (o:C)
+
+EquivalentClasses(Annotation(rdfs:comment "This is an annotation on an axiom"@en) o:C o:D)
+
+
+)
