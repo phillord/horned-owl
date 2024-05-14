@@ -320,9 +320,8 @@ macro_rules! from_start {
             fn from_start<R: BufRead>(
                 $r: &mut Read<A, R>,
                 $e: &BytesStart,
-            ) -> Result<$type<A>, HornedError> {
+            ) -> Result<$type<A>, HornedError>
                 $body
-            }
         }
     };
 }
