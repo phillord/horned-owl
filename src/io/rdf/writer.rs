@@ -1668,7 +1668,6 @@ render_to_node! {
 
                 Ok(bn)
             }
-            _=> todo!("other types of atom")
         }
 
     }
