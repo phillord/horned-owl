@@ -92,38 +92,13 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
 #[cfg(test)]
 mod test {
     use super::*;
-    
+
     use crate::model::AnnotatedComponent;
     use crate::model::RcStr;
 
     use pretty_assertions::assert_eq;
     use test_generator::test_resources;
 
-    macro_rules! test_roundtrip {
-        ($name:ident, $file:literal) => {
-            #[test]
-            fn $name() {
-                let ont_s = include_str!(concat!("../../../ont/owl-functional/", $file));
-
-                let reader = std::io::Cursor::new(&ont_s);
-                let (ont, prefixes) =
-                    crate::io::ofn::reader::read(reader, Default::default()).unwrap();
-
-                let component_mapped: ComponentMappedOntology<RcStr, AnnotatedComponent<RcStr>> =
-                    ont.clone().into();
-                let mut writer = Vec::new();
-                crate::io::ofn::writer::write(&mut writer, &component_mapped, Some(&prefixes))
-                    .unwrap();
-
-                let (ont2, prefixes2) = crate::io::ofn::reader::read(std::io::Cursor::new(&writer), Default::default())
-                    .unwrap();
-
-                assert_eq!(prefixes, prefixes2, "prefix mapping differ");
-                assert_eq!(ont, ont2, "ontologies differ");
-            }
-        };
-    }
-    
     #[test_resources("src/ont/owl-functional/*.ofn")]
     fn roundtrip_resource(resource: &str) {
         let reader = std::fs::File::open(&resource)
