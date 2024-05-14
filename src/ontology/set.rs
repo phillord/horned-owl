@@ -1,5 +1,6 @@
 //! Rapid, simple, in-memory `Ontology` and `OntologyIndex`
-use std::{hash::Hash, collections::HashSet, iter::FromIterator, rc::Rc};
+use std::borrow::Borrow;
+use std::{collections::HashSet, hash::Hash, iter::FromIterator, rc::Rc};
 
 use super::indexed::ForIndex;
 use super::indexed::{OneIndexedOntology, OntologyIndex};
@@ -61,16 +62,15 @@ impl<A: ForIRI> SetOntology<A> {
     }
 }
 
-impl<A: ForIRI> Ontology<A> for SetOntology<A> {
-}
+impl<A: ForIRI> Ontology<A> for SetOntology<A> {}
 
-impl<A:ForIRI, AA:ForIndex<A>> From<SetIndex<A, AA>> for SetOntology<A> {
+impl<A: ForIRI, AA: ForIndex<A>> From<SetIndex<A, AA>> for SetOntology<A> {
     fn from(index: SetIndex<A, AA>) -> Self {
         // Unpack ForIndex'd entities by unwrapping and turn them into
         // direct references for SetOntology.
         let mut so = SetOntology::new();
         for c in index.into_iter() {
-            so.insert(c.unwrap());
+            so.insert(c.borrow().clone());
         }
         so
     }
@@ -171,26 +171,21 @@ where
     }
 }
 
-
 /// An `OntologyIndex` implemented over an in-memory HashSet. When
 /// combined with an `IndexedOntology` this should be nearly as
 /// fastest as `SetOntology`.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct SetIndex<A, AA: Hash + Eq>(HashSet<AA>, PhantomData<A>);
 
-impl<A: ForIRI, AA: ForIndex<A>> OntologyIndex<A, AA> for SetIndex<A, AA> {
+impl<A: Hash + Eq, AA: Borrow<AnnotatedComponent<A>> + Hash + Eq> OntologyIndex<A, AA>
+    for SetIndex<A, AA>
+{
     fn index_insert(&mut self, cmp: AA) -> bool {
         self.0.insert(cmp)
     }
 
     fn index_remove(&mut self, cmp: &AnnotatedComponent<A>) -> bool {
         self.0.remove(cmp)
-    }
-}
-
-impl<A, AA: Hash + Eq> Default for SetIndex<A, AA> {
-    fn default() -> Self {
-        SetIndex(Default::default(), Default::default())
     }
 }
 
@@ -204,12 +199,14 @@ impl<A: ForIRI, AA: ForIndex<A>> SetIndex<A, AA> {
     }
 
     pub fn the_ontology_id(&self) -> Option<OntologyID<A>> {
-        self.0.iter().filter_map(|item| {
-            match &item.borrow().component {
+        self.0
+            .iter()
+            .filter_map(|item| match &item.borrow().component {
                 Component::OntologyID(id) => Some(id),
                 _ => None,
-            }
-        }).next().cloned()
+            })
+            .next()
+            .cloned()
     }
 
     pub fn the_ontology_id_or_default(&self) -> OntologyID<A> {
@@ -228,7 +225,8 @@ impl<A: ForIRI, AA: ForIndex<A>> IntoIterator for SetIndex<A, AA> {
     type IntoIter = std::vec::IntoIter<AnnotatedComponent<A>>;
     fn into_iter(self) -> Self::IntoIter {
         #[allow(clippy::needless_collect)]
-        let v: Vec<AnnotatedComponent<_>> = self.0.into_iter().map(|fi| fi.unwrap()).collect();
+        let v: Vec<AnnotatedComponent<_>> =
+            self.0.into_iter().map(|fi| fi.borrow().clone()).collect();
         v.into_iter()
     }
 }
@@ -251,7 +249,6 @@ mod test {
     #[test]
     fn test_ontology_cons() {
         let _ = SetOntology::new_rc();
-        assert!(true);
     }
 
     #[test]
@@ -263,13 +260,12 @@ mod test {
             viri: Some(b.iri("http://www.example.com/viri")),
         };
 
-        so.insert(oid.clone());
+        so.insert(oid);
 
         let so_id = so.i().the_ontology_id_or_default();
         assert_eq!(so_id.iri, Some(b.iri("http://www.example.com/iri")));
         assert_eq!(so_id.viri, Some(b.iri("http://www.example.com/viri")));
     }
-
 
     #[test]
     fn test_ontology_clone() {
@@ -418,7 +414,6 @@ mod test {
 
         let newo: SetOntology<_> = o.into_iter().into();
 
-
         // Iteration is set based so undefined in order. So, sort first.
         let mut v: Vec<_> = (&newo).into_iter().collect();
         v.sort();
@@ -442,7 +437,6 @@ mod test {
     #[test]
     fn test_index_cons() {
         let _ = SetIndex::new_rc();
-        assert!(true);
     }
 
     #[test]
@@ -506,7 +500,7 @@ mod test {
     #[test]
     fn test_index_into_iter_empty() {
         // Empty ontologies should stop iteration right away
-        let o = OneIndexedOntology::new(SetIndex::new_rc());
+        let o = OneIndexedOntology::from(SetIndex::new_rc());
         let mut it = o.i().into_iter();
         assert_eq!(it.next(), None);
         assert_eq!(it.next(), None);

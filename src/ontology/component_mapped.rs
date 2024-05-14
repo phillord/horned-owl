@@ -14,6 +14,7 @@ use super::indexed::ForIndex;
 use super::set::SetOntology;
 use crate::model::*;
 use std::{
+    borrow::Borrow,
     cell::RefCell,
     collections::{BTreeMap, BTreeSet, VecDeque},
     rc::Rc,
@@ -43,7 +44,7 @@ macro_rules! onimpl {
         onimpl!($kind, $method, stringify!($kind));
     };
     ($kind:ident, $method:ident, $skind:expr) => {
-        impl<A: ForIRI, AA: ForIndex<A>> ComponentMappedIndex<A, AA> {
+        impl<A, AA: Borrow<AnnotatedComponent<A>>> ComponentMappedIndex<A, AA> {
             #[doc = "Return all instances of"]
             #[doc = $skind]
             #[doc = "in the ontology."]
@@ -54,13 +55,13 @@ macro_rules! onimpl {
     };
 }
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Default, Eq, PartialEq)]
 pub struct ComponentMappedIndex<A, AA> {
     component: RefCell<BTreeMap<ComponentKind, BTreeSet<AA>>>,
     pd: PhantomData<A>,
 }
 
-impl<A: ForIRI, AA: ForIndex<A>> ComponentMappedIndex<A, AA> {
+impl<A, AA> ComponentMappedIndex<A, AA> {
     /// Create a new ontology.
     ///
     /// # Examples
@@ -86,10 +87,7 @@ impl<A: ForIRI, AA: ForIndex<A>> ComponentMappedIndex<A, AA> {
     /// ontology. It should only be used where the intention is to
     /// update the ontology.
     fn component_as_ptr(&self, cmk: ComponentKind) -> *mut BTreeMap<ComponentKind, BTreeSet<AA>> {
-        self.component
-            .borrow_mut()
-            .entry(cmk)
-            .or_insert_with(BTreeSet::new);
+        self.component.borrow_mut().entry(cmk).or_default();
         self.component.as_ptr()
     }
 
@@ -102,17 +100,9 @@ impl<A: ForIRI, AA: ForIndex<A>> ComponentMappedIndex<A, AA> {
     fn mut_set_for_kind(&mut self, cmk: ComponentKind) -> &mut BTreeSet<AA> {
         unsafe { (*self.component_as_ptr(cmk)).get_mut(&cmk).unwrap() }
     }
+}
 
-    /// Gets an iterator that visits the annotated components of the ontology.
-    pub fn iter(&self) -> ComponentMappedIter<A, AA> {
-        // TODO -- what can't this just use flat_map?
-        ComponentMappedIter {
-            ont: self,
-            inner: None,
-            kinds: unsafe { (*self.component.as_ptr()).keys().collect() },
-        }
-    }
-
+impl<A, AA: Borrow<AnnotatedComponent<A>>> ComponentMappedIndex<A, AA> {
     /// Fetch the AnnotatedComponent for a given kind
     ///
     /// # Examples
@@ -128,7 +118,10 @@ impl<A: ForIRI, AA: ForIndex<A>> ComponentMappedIndex<A, AA> {
     /// ```
     ///
     /// See also `component` for access to the `Component` without annotations.
-    pub fn component_for_kind(&self, cmk: ComponentKind) -> impl Iterator<Item = &AnnotatedComponent<A>> {
+    pub fn component_for_kind(
+        &self,
+        cmk: ComponentKind,
+    ) -> impl Iterator<Item = &AnnotatedComponent<A>> {
         self.set_for_kind(cmk)
             // Iterate over option
             .into_iter()
@@ -155,6 +148,27 @@ impl<A: ForIRI, AA: ForIndex<A>> ComponentMappedIndex<A, AA> {
     /// struct directly.
     pub fn component(&self, cmk: ComponentKind) -> impl Iterator<Item = &Component<A>> {
         self.component_for_kind(cmk).map(|ann| &ann.component)
+    }
+}
+
+impl<A: Clone, AA: Borrow<AnnotatedComponent<A>>> ComponentMappedIndex<A, AA> {
+    // pub fn the_ontology_id(&self) -> Option<OntologyID<A>> {
+    //     self.ontology_id().next().cloned()
+    // }
+    // pub fn the_ontology_id_or_default(&self) -> OntologyID<A> {
+    //     self.the_ontology_id().unwrap_or_default()
+    // }
+}
+
+impl<A: ForIRI, AA: ForIndex<A>> ComponentMappedIndex<A, AA> {
+    /// Gets an iterator that visits the annotated components of the ontology.
+    pub fn iter(&self) -> ComponentMappedIter<A, AA> {
+        // TODO -- what can't this just use flat_map?
+        ComponentMappedIter {
+            ont: self,
+            inner: None,
+            kinds: unsafe { (*self.component.as_ptr()).keys().collect() },
+        }
     }
 
     pub fn the_ontology_id(&self) -> Option<OntologyID<A>> {
@@ -212,32 +226,22 @@ onimpl! {AnnotationPropertyDomain, annotation_property_domain}
 onimpl! {AnnotationPropertyRange, annotation_property_range}
 onimpl! {Rule, rule}
 
-impl<A, AA> Default for ComponentMappedIndex<A, AA> {
-    fn default() -> Self {
-        Self {
-            component: Default::default(),
-            pd: Default::default(),
-        }
-    }
-}
-
 /// An owning iterator over the annotated components of an `Ontology`.
 impl<A: ForIRI, AA: ForIndex<A>> IntoIterator for ComponentMappedIndex<A, AA> {
     type Item = AnnotatedComponent<A>;
-    type IntoIter = std::vec::IntoIter<AnnotatedComponent<A>>;
+    type IntoIter = std::collections::btree_set::IntoIter<AnnotatedComponent<A>>;
     fn into_iter(self) -> Self::IntoIter {
         let btreemap = self.component.into_inner();
 
         // The collect switches the type which shows up in the API. Blegh.
         #[allow(clippy::needless_collect)]
-        let v: Vec<AnnotatedComponent<A>> = btreemap
-            .into_iter()
-            .map(|(_k, v)| v)
+        btreemap
+            .into_values()
+            // .map(|(_k, v)| v)
             .flat_map(BTreeSet::into_iter)
-            .map(|fi| fi.unwrap())
-            .collect();
-
-        v.into_iter()
+            .map(|fi| fi.borrow().clone())
+            .collect::<BTreeSet<AnnotatedComponent<A>>>()
+            .into_iter()
     }
 }
 
@@ -261,7 +265,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> Iterator for ComponentMappedIter<'a, A, AA>
         if !self.kinds.is_empty() {
             let kind = self.kinds.pop_front().unwrap();
             self.inner = self.ont.set_for_kind(*kind).map(BTreeSet::iter);
-            self.next().map(|rc| &*rc)
+            self.next()
         } else {
             None
         }
@@ -294,10 +298,10 @@ impl<A: ForIRI, AA: ForIndex<A>> OntologyIndex<A, AA> for ComponentMappedIndex<A
 pub struct ComponentMappedOntology<A, AA>(OneIndexedOntology<A, AA, ComponentMappedIndex<A, AA>>);
 
 pub type RcComponentMappedOntology = ComponentMappedOntology<RcStr, Rc<AnnotatedComponent<RcStr>>>;
-pub type ArcComponentMappedOntology = ComponentMappedOntology<ArcStr, Arc<AnnotatedComponent<ArcStr>>>;
+pub type ArcComponentMappedOntology =
+    ComponentMappedOntology<ArcStr, Arc<AnnotatedComponent<ArcStr>>>;
 
-impl<A: ForIRI, AA: ForIndex<A>> Ontology<A> for ComponentMappedOntology<A, AA> {
-}
+impl<A: ForIRI, AA: ForIndex<A>> Ontology<A> for ComponentMappedOntology<A, AA> {}
 
 impl<A: ForIRI, AA: ForIndex<A>> MutableOntology<A> for ComponentMappedOntology<A, AA> {
     fn insert<IAA>(&mut self, cmp: IAA) -> bool
@@ -343,7 +347,7 @@ impl ArcComponentMappedOntology {
 /// An owning iterator over the annotated axioms of an `Ontology`.
 impl<A: ForIRI, AA: ForIndex<A>> IntoIterator for ComponentMappedOntology<A, AA> {
     type Item = AnnotatedComponent<A>;
-    type IntoIter = std::vec::IntoIter<AnnotatedComponent<A>>;
+    type IntoIter = std::collections::btree_set::IntoIter<AnnotatedComponent<A>>;
     fn into_iter(self) -> Self::IntoIter {
         self.index().into_iter()
     }
@@ -380,7 +384,6 @@ mod test {
     #[test]
     fn test_ontology_cons() {
         let _ = ComponentMappedOntology::new_rc();
-        assert!(true);
     }
 
     #[test]
@@ -490,7 +493,7 @@ mod test {
         o.insert(decl3.clone());
 
         // Iteration is based on ascending order of axiom kinds.
-        let mut it = (&o).i().iter();
+        let mut it = o.i().iter();
         assert_eq!(
             it.next(),
             Some(&AnnotatedComponent::from(Component::DeclareClass(decl1)))

@@ -118,10 +118,20 @@ use crate::vocab::Facet;
 /// [`as_oxiri`](IRI::as_oxiri) method which both validates and also
 /// provides access to the constituent parts.
 #[derive(Clone, Debug, Eq, PartialEq, Hash, PartialOrd, Ord)]
-pub struct IRI<A>(pub (crate) A);
+pub struct IRI<A>(pub(crate) A);
 
 pub trait ForIRI:
-    AsRef<str> + Borrow<str> + Clone + Debug + Eq + From<String> + Hash + PartialEq + Ord + PartialOrd
+    AsRef<str>
+    + Borrow<str>
+    + Clone
+    + Debug
+    + Deref<Target = str>
+    + Eq
+    + From<String>
+    + Hash
+    + PartialEq
+    + Ord
+    + PartialOrd
 {
 }
 
@@ -130,6 +140,7 @@ impl<T: ?Sized> ForIRI for T where
         + Borrow<str>
         + Clone
         + Debug
+        + Deref<Target = str>
         + Eq
         + From<String>
         + Hash
@@ -148,23 +159,23 @@ impl<A: ForIRI> IRI<A> {
     }
 }
 
-impl<A: ForIRI> Deref for IRI<A> {
+impl<A: Deref<Target = str>> Deref for IRI<A> {
     type Target = str;
 
     fn deref(&self) -> &Self::Target {
-        self.0.borrow()
+        self.0.deref()
     }
 }
 
-impl<A: ForIRI> AsRef<str> for IRI<A> {
+impl<A: AsRef<str>> AsRef<str> for IRI<A> {
     fn as_ref(&self) -> &str {
-        self.0.borrow()
+        self.0.as_ref()
     }
 }
 
-impl<A: ForIRI> Borrow<str> for IRI<A> {
+impl<A: Borrow<str>> Borrow<str> for IRI<A> {
     fn borrow(&self) -> &str {
-        self.as_ref()
+        self.0.borrow()
     }
 }
 
@@ -212,16 +223,18 @@ impl<A: ForIRI> Display for IRI<A> {
 // both could be replaced by traits or enums straight-forwardly
 // enough, to enable threading.
 #[derive(Debug, Default)]
-pub struct Build<A: ForIRI>(
+pub struct Build<A>(
     RefCell<BTreeSet<IRI<A>>>,
     RefCell<BTreeSet<AnonymousIndividual<A>>>,
 );
 
-impl<A: ForIRI> Build<A> {
+impl<A> Build<A> {
     pub fn new() -> Build<A> {
         Build(RefCell::new(BTreeSet::new()), RefCell::new(BTreeSet::new()))
     }
+}
 
+impl<A: ForIRI> Build<A> {
     /// Constructs a new `AnonymousIndividual`
     ///
     /// # Examples
@@ -379,7 +392,6 @@ impl<A: ForIRI> Build<A> {
     {
         Datatype(self.iri(s))
     }
-
 
     pub fn variable<S>(&self, s: S) -> Variable<A>
     where
@@ -614,9 +626,7 @@ impl NamedEntityKind {
     }
 }
 
-
 impl<A: ForIRI> Class<A> {
-
     pub fn is_thing(&self) -> bool {
         self.0.as_ref() == crate::vocab::OWL::Thing.as_ref()
     }
@@ -629,11 +639,11 @@ impl<A: ForIRI> Class<A> {
 #[derive(Clone, Debug, Eq, PartialEq, Hash, PartialOrd, Ord)]
 pub struct AnonymousIndividual<A>(pub A);
 
-impl<A: ForIRI> Deref for AnonymousIndividual<A> {
+impl<A: Deref<Target = str>> Deref for AnonymousIndividual<A> {
     type Target = str;
 
     fn deref(&self) -> &Self::Target {
-        self.0.borrow()
+        self.0.deref()
     }
 }
 
@@ -667,13 +677,13 @@ pub enum Individual<A> {
     Named(NamedIndividual<A>),
 }
 
-impl<A: ForIRI> Deref for Individual<A> {
+impl<A: Deref<Target = str>> Deref for Individual<A> {
     type Target = str;
 
     fn deref(&self) -> &Self::Target {
         match self {
-            Individual::Named(ni) => &*ni.0,
-            Individual::Anonymous(ai) => &*ai,
+            Individual::Named(ni) => &ni.0,
+            Individual::Anonymous(ai) => ai,
         }
     }
 }
@@ -720,13 +730,13 @@ pub enum AnnotationSubject<A> {
     AnonymousIndividual(AnonymousIndividual<A>),
 }
 
-impl<A: ForIRI> Deref for AnnotationSubject<A> {
+impl<A: Deref<Target = str>> Deref for AnnotationSubject<A> {
     type Target = str;
 
     fn deref(&self) -> &Self::Target {
         match self {
-            Self::IRI(iri) => &*iri,
-            Self::AnonymousIndividual(ai) => &*ai,
+            Self::IRI(iri) => iri,
+            Self::AnonymousIndividual(ai) => ai,
         }
     }
 }
@@ -805,7 +815,7 @@ pub trait HigherKinded {
         self.higher_kind() == HigherKind::Axiom
     }
 
-    fn is_meta(&self)  -> bool {
+    fn is_meta(&self) -> bool {
         self.higher_kind() == HigherKind::Meta
     }
 
@@ -813,7 +823,6 @@ pub trait HigherKinded {
         self.higher_kind() == HigherKind::SWRL
     }
 }
-
 
 /// An `AnnotatedComponent` is an `Component` with one orpmore `Annotation`.
 #[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
@@ -868,7 +877,6 @@ impl<A: ForIRI> Kinded for AnnotatedComponent<A> {
         self.component.kind()
     }
 }
-
 
 impl<A: ForIRI> HigherKinded for AnnotatedComponent<A> {
     fn higher_kind(&self) -> HigherKind {
@@ -1935,7 +1943,7 @@ mod test {
         let iri_from_iri = build.iri(iri_static.clone());
 
         let s = "http://www.example.com";
-        let iri_str = build.iri(&s[..]);
+        let iri_str = build.iri(s);
 
         assert_eq!(iri_string, iri_static);
         assert_eq!(iri_string, iri_str);
@@ -2023,13 +2031,14 @@ mod test {
             av: b.iri("http://www.example.com/av").into(),
         };
 
-        let mut decl1: AnnotatedComponent<_> = DeclareClass(b.class("http://www.example.com#a")).into();
+        let mut decl1: AnnotatedComponent<_> =
+            DeclareClass(b.class("http://www.example.com#a")).into();
         let decl2 = decl1.clone();
 
         assert_eq!(decl1, decl2);
 
         decl1.ann.insert(ann);
-        assert!(!(decl1 == decl2));
+        assert_ne!(decl1, decl2);
     }
 
     #[test]

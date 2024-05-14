@@ -37,9 +37,9 @@ pub trait ForIndex<A: ForIRI>:
     + PartialEq
     + PartialOrd
 {
-    fn unwrap(&self) -> AnnotatedComponent<A> {
-        (*self.borrow()).clone()
-    }
+    // fn unwrap(&self) -> AnnotatedComponent<A> {
+    //     (*self.borrow()).clone()
+    // }
 }
 
 impl<A: ForIRI, T: ?Sized> ForIndex<A> for T where
@@ -69,7 +69,7 @@ impl<A: ForIRI, T: ?Sized> ForIndex<A> for T where
 /// least one `OntologyIndex` object for an `IndexedOntology` should
 /// do, or the it will be dropped entirely. The `SetIndex` is a simple
 /// way to achieving this.
-pub trait OntologyIndex<A: ForIRI, AA: ForIndex<A>> {
+pub trait OntologyIndex<A, AA> {
     /// Potentially insert an AnnotatedComponent to the index.
     ///
     /// If the index did not have this value present, true is returned.
@@ -84,7 +84,10 @@ pub trait OntologyIndex<A: ForIRI, AA: ForIndex<A>> {
     /// If the index did not have this value present, false is returned.
     fn index_remove(&mut self, cmp: &AnnotatedComponent<A>) -> bool;
 
-    fn index_take(&mut self, cmp: &AnnotatedComponent<A>) -> Option<AnnotatedComponent<A>> {
+    fn index_take(&mut self, cmp: &AnnotatedComponent<A>) -> Option<AnnotatedComponent<A>>
+    where
+        A: Clone,
+    {
         if self.index_remove(cmp) {
             Some(cmp.clone())
         } else {
@@ -96,7 +99,7 @@ pub trait OntologyIndex<A: ForIRI, AA: ForIndex<A>> {
 /// A NullOntologyIndex which does nothing.
 #[derive(Default)]
 pub struct NullIndex();
-impl<A: ForIRI, AA: ForIndex<A>> OntologyIndex<A, AA> for NullIndex {
+impl<A, AA> OntologyIndex<A, AA> for NullIndex {
     /// Insert an item, always returns false
     fn index_insert(&mut self, _cmp: AA) -> bool {
         false
@@ -109,17 +112,19 @@ impl<A: ForIRI, AA: ForIndex<A>> OntologyIndex<A, AA> for NullIndex {
 }
 
 /// A `OneIndexedOntology` operates as a simple adaptor between any
-/// `OntologyIndex` and an `Ontology`.
-#[derive(Debug, Eq, PartialEq)]
+/// [ontology index](OntologyIndex) and an [ontology](Ontology).
+#[derive(Debug, Default, Eq, PartialEq)]
 pub struct OneIndexedOntology<A, AA, I>(I, Option<IRI<A>>, PhantomData<AA>);
 
-impl<A: ForIRI, AA: ForIndex<A>, I: OntologyIndex<A, AA>> OneIndexedOntology<A, AA, I> {
+impl<A, AA, I: OntologyIndex<A, AA>> From<I> for OneIndexedOntology<A, AA, I> {
+    fn from(value: I) -> Self {
+        OneIndexedOntology(value, Default::default(), Default::default())
+    }
+}
+
+impl<A, AA, I> OneIndexedOntology<A, AA, I> {
     pub fn new(i: I) -> Self {
-        OneIndexedOntology(
-            i,
-            Default::default(),
-            Default::default(),
-        )
+        OneIndexedOntology(i, Default::default(), Default::default())
     }
 
     pub fn i(&self) -> &I {
@@ -149,27 +154,15 @@ where
     }
 }
 
-impl<A, AA, I: Default> Default for OneIndexedOntology<A, AA, I> {
-    fn default() -> Self {
-        OneIndexedOntology(Default::default(), Default::default(), Default::default())
-    }
-}
-
-impl<A: ForIRI, AA: ForIndex<A>, I: Clone> Clone for OneIndexedOntology<A, AA, I> {
+impl<A: Clone, AA, I: Clone> Clone for OneIndexedOntology<A, AA, I> {
     fn clone(&self) -> Self {
-        OneIndexedOntology(
-            self.0.clone(),
-            self.1.clone(),
-            Default::default(),
-        )
+        OneIndexedOntology(self.0.clone(), self.1.clone(), Default::default())
     }
 }
 
-impl<A: ForIRI, AA: ForIndex<A>, I: OntologyIndex<A, AA>> Ontology<A>
-    for OneIndexedOntology<A, AA, I>{
-}
+impl<A, AA, I: OntologyIndex<A, AA>> Ontology<A> for OneIndexedOntology<A, AA, I> {}
 
-impl<A: ForIRI, AA: ForIndex<A>, I: OntologyIndex<A, AA>> MutableOntology<A>
+impl<A: Clone, AA: From<AnnotatedComponent<A>>, I: OntologyIndex<A, AA>> MutableOntology<A>
     for OneIndexedOntology<A, AA, I>
 {
     fn insert<IAA: Into<AnnotatedComponent<A>>>(&mut self, cmp: IAA) -> bool {
@@ -185,12 +178,18 @@ impl<A: ForIRI, AA: ForIndex<A>, I: OntologyIndex<A, AA>> MutableOntology<A>
 /// A `TwoIndexOntology` implements `Ontology` and supports two
 /// `OntologyIndex`. It itself implements `OntologyIndex` so that it
 /// can be composed.
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Default, Eq, PartialEq)]
 pub struct TwoIndexedOntology<A, AA, I, J>(I, J, Option<IRI<A>>, PhantomData<AA>);
 
-impl<A: ForIRI, AA: ForIndex<A>, I: OntologyIndex<A, AA>, J: OntologyIndex<A, AA>>
-    TwoIndexedOntology<A, AA, I, J>
+impl<A, AA, I: OntologyIndex<A, AA>, J: OntologyIndex<A, AA>> From<(I, J)>
+    for TwoIndexedOntology<A, AA, I, J>
 {
+    fn from(value: (I, J)) -> Self {
+        TwoIndexedOntology(value.0, value.1, Default::default(), Default::default())
+    }
+}
+
+impl<A, AA, I, J> TwoIndexedOntology<A, AA, I, J> {
     pub fn new(i: I, j: J) -> Self {
         TwoIndexedOntology(i, j, Default::default(), Default::default())
     }
@@ -208,18 +207,17 @@ impl<A: ForIRI, AA: ForIndex<A>, I: OntologyIndex<A, AA>, J: OntologyIndex<A, AA
     }
 }
 
-impl<A, AA, I: Default, J: Default> Default for TwoIndexedOntology<A, AA, I, J> {
-    fn default() -> Self {
-        TwoIndexedOntology(Default::default(), Default::default(), Default::default(), Default::default())
-    }
+impl<A, AA, I: OntologyIndex<A, AA>, J: OntologyIndex<A, AA>> Ontology<A>
+    for TwoIndexedOntology<A, AA, I, J>
+{
 }
 
-impl<A: ForIRI, AA: ForIndex<A>, I: OntologyIndex<A, AA>, J: OntologyIndex<A, AA>> Ontology<A>
-    for TwoIndexedOntology<A, AA, I, J> {
-}
-
-impl<A: ForIRI, AA: ForIndex<A>, I: OntologyIndex<A, AA>, J: OntologyIndex<A, AA>>
-    MutableOntology<A> for TwoIndexedOntology<A, AA, I, J>
+impl<
+        A: Clone,
+        AA: From<AnnotatedComponent<A>> + Clone,
+        I: OntologyIndex<A, AA>,
+        J: OntologyIndex<A, AA>,
+    > MutableOntology<A> for TwoIndexedOntology<A, AA, I, J>
 {
     fn insert<IAA: Into<AnnotatedComponent<A>>>(&mut self, cmp: IAA) -> bool {
         let cmp = cmp.into();
@@ -231,8 +229,8 @@ impl<A: ForIRI, AA: ForIndex<A>, I: OntologyIndex<A, AA>, J: OntologyIndex<A, AA
     }
 }
 
-impl<A: ForIRI, AA: ForIndex<A>, I: OntologyIndex<A, AA>, J: OntologyIndex<A, AA>>
-    OntologyIndex<A, AA> for TwoIndexedOntology<A, AA, I, J>
+impl<A: Clone, AA: Clone, I: OntologyIndex<A, AA>, J: OntologyIndex<A, AA>> OntologyIndex<A, AA>
+    for TwoIndexedOntology<A, AA, I, J>
 {
     fn index_insert(&mut self, cmp: AA) -> bool {
         let rtn = self.0.index_insert(cmp.clone());
@@ -248,41 +246,33 @@ impl<A: ForIRI, AA: ForIndex<A>, I: OntologyIndex<A, AA>, J: OntologyIndex<A, AA
 }
 
 /// ThreeIndexedOntology supports three indexes.
-#[derive(Debug)]
-pub struct ThreeIndexedOntology<A, AA, I, J, K>(TwoIndexedOntology<A, AA, I, TwoIndexedOntology<A, AA, J, K>>);
+#[derive(Debug, Default)]
+pub struct ThreeIndexedOntology<A, AA, I, J, K>(
+    TwoIndexedOntology<A, AA, I, TwoIndexedOntology<A, AA, J, K>>,
+);
 
-impl<
-        A: ForIRI,
-        AA: ForIndex<A>,
-        I: OntologyIndex<A, AA>,
-        J: OntologyIndex<A, AA>,
-        K: OntologyIndex<A, AA>,
-    > ThreeIndexedOntology<A, AA, I, J, K>
+impl<A, AA, I: OntologyIndex<A, AA>, J: OntologyIndex<A, AA>, K: OntologyIndex<A, AA>>
+    ThreeIndexedOntology<A, AA, I, J, K>
 {
     pub fn new(i: I, j: J, k: K) -> Self {
         ThreeIndexedOntology(TwoIndexedOntology(
             i,
-            TwoIndexedOntology(
-                j,
-                k,
-                Default::default(),
-                Default::default(),
-            ),
+            TwoIndexedOntology(j, k, Default::default(), Default::default()),
             Default::default(),
             Default::default(),
         ))
     }
 
     pub fn i(&self) -> &I {
-        (&self.0).i()
+        self.0.i()
     }
 
     pub fn j(&self) -> &J {
-        (&self.0).j().i()
+        self.0.j().i()
     }
 
     pub fn k(&self) -> &K {
-        (self.0).j().j()
+        self.0.j().j()
     }
 
     pub fn index(self) -> (I, J, K) {
@@ -291,25 +281,14 @@ impl<
     }
 }
 
-impl<A, AA, I: Default, J: Default, K: Default> Default for ThreeIndexedOntology<A, AA, I, J, K> {
-    fn default() -> Self {
-        ThreeIndexedOntology(Default::default())
-    }
-}
-
-impl<
-        A: ForIRI,
-        AA: ForIndex<A>,
-        I: OntologyIndex<A, AA>,
-        J: OntologyIndex<A, AA>,
-        K: OntologyIndex<A, AA>,
-    > Ontology<A> for ThreeIndexedOntology<A, AA, I, J, K>
+impl<A, AA, I: OntologyIndex<A, AA>, J: OntologyIndex<A, AA>, K: OntologyIndex<A, AA>> Ontology<A>
+    for ThreeIndexedOntology<A, AA, I, J, K>
 {
 }
 
 impl<
-        A: ForIRI,
-        AA: ForIndex<A>,
+        A: Clone,
+        AA: From<AnnotatedComponent<A>> + Clone,
         I: OntologyIndex<A, AA>,
         J: OntologyIndex<A, AA>,
         K: OntologyIndex<A, AA>,
@@ -325,8 +304,8 @@ impl<
 }
 
 impl<
-        A: ForIRI,
-        AA: ForIndex<A>,
+        A: Clone,
+        AA: Clone,
         I: OntologyIndex<A, AA>,
         J: OntologyIndex<A, AA>,
         K: OntologyIndex<A, AA>,
@@ -346,12 +325,14 @@ impl<
 }
 
 /// FourIndexedOntology supports three indexes.
-#[derive(Debug)]
-pub struct FourIndexedOntology<A, AA, I, J, K, L>(TwoIndexedOntology<A, AA, I, ThreeIndexedOntology<A, AA, J, K, L>>);
+#[derive(Debug, Default)]
+pub struct FourIndexedOntology<A, AA, I, J, K, L>(
+    TwoIndexedOntology<A, AA, I, ThreeIndexedOntology<A, AA, J, K, L>>,
+);
 
 impl<
-        A: ForIRI,
-        AA: ForIndex<A>,
+        A,
+        AA,
         I: OntologyIndex<A, AA>,
         J: OntologyIndex<A, AA>,
         K: OntologyIndex<A, AA>,
@@ -368,15 +349,15 @@ impl<
     }
 
     pub fn i(&self) -> &I {
-        (&self.0).i()
+        self.0.i()
     }
 
     pub fn j(&self) -> &J {
-        (&self.0).j().i()
+        self.0.j().i()
     }
 
     pub fn k(&self) -> &K {
-        (self.0).j().j()
+        self.0.j().j()
     }
 
     pub fn l(&self) -> &L {
@@ -389,16 +370,9 @@ impl<
     }
 }
 
-impl<A, AA, I: Default, J: Default, K: Default, L: Default> Default for FourIndexedOntology<A, AA, I, J, K, L>
-{
-    fn default() -> Self {
-        FourIndexedOntology(Default::default())
-    }
-}
-
 impl<
-        A: ForIRI,
-        AA: ForIndex<A>,
+        A,
+        AA,
         I: OntologyIndex<A, AA>,
         J: OntologyIndex<A, AA>,
         K: OntologyIndex<A, AA>,
@@ -408,8 +382,8 @@ impl<
 }
 
 impl<
-        A: ForIRI,
-        AA: ForIndex<A>,
+        A: Clone,
+        AA: From<AnnotatedComponent<A>> + Clone,
         I: OntologyIndex<A, AA>,
         J: OntologyIndex<A, AA>,
         K: OntologyIndex<A, AA>,
@@ -453,7 +427,6 @@ mod test {
     #[test]
     fn one_cons() {
         let _o = OneIndexedOntology::new_rc(SetIndex::new());
-        assert!(true);
     }
 
     #[test]
@@ -488,18 +461,14 @@ mod test {
 
     #[test]
     fn two_cons() {
-        let _o = TwoIndexedOntology::new(SetIndex::new_rc(), SetIndex::new());
-        assert!(true);
+        let _o = TwoIndexedOntology::from((SetIndex::new_rc(), SetIndex::new()));
 
-        let _o =
-            TwoIndexedOntology::new(SetIndex::new_rc(), NullIndex::default());
-        assert!(true);
+        let _o = TwoIndexedOntology::from((SetIndex::new_rc(), NullIndex::default()));
     }
 
     #[test]
     fn two_insert() {
-        let mut o =
-            TwoIndexedOntology::new(SetIndex::new_rc(), SetIndex::new());
+        let mut o = TwoIndexedOntology::new(SetIndex::new_rc(), SetIndex::new());
         let e = stuff();
         o.insert(e.0);
         o.insert(e.1);
@@ -512,8 +481,7 @@ mod test {
 
     #[test]
     fn two_remove() {
-        let mut o =
-            TwoIndexedOntology::new(SetIndex::new_rc(), SetIndex::new());
+        let mut o = TwoIndexedOntology::new(SetIndex::new_rc(), SetIndex::new());
 
         let e = stuff();
         o.insert(e.0.clone());
@@ -534,11 +502,7 @@ mod test {
 
     #[test]
     fn three_remove() {
-        let mut o = ThreeIndexedOntology::new(
-            SetIndex::new_rc(),
-            SetIndex::new(),
-            SetIndex::new(),
-        );
+        let mut o = ThreeIndexedOntology::new(SetIndex::new_rc(), SetIndex::new(), SetIndex::new());
 
         let e = stuff();
         o.insert(e.0.clone());

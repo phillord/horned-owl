@@ -92,7 +92,7 @@ where
         //dbg!(Rc::strong_count(&rc));
 
         // Un-rc
-        let mut logical_axiom = fi.unwrap();
+        let mut logical_axiom = fi.borrow().clone();
         // Extend it
         logical_axiom.ann.append(&mut cmp.ann);
         // Insert it
@@ -115,7 +115,6 @@ mod test {
     #[test]
     fn cons() {
         let _lei = LogicallyEqualIndex::new_rc();
-        assert!(true);
     }
 
     #[test]

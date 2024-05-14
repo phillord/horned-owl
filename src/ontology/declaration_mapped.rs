@@ -1,18 +1,23 @@
 //! An index that provides rapid look up via declaration kind
 
-use crate::model::{AnnotatedComponent, Component, ComponentKind, ForIRI, Kinded, NamedEntityKind, NamedOWLEntityKind, IRI, RcAnnotatedComponent, RcStr};
+use crate::model::{
+    AnnotatedComponent, Component, ComponentKind, ForIRI, Kinded, NamedEntityKind,
+    NamedOWLEntityKind, RcAnnotatedComponent, RcStr, IRI,
+};
 
 use super::indexed::ForIndex;
 use super::indexed::OntologyIndex;
 
+use std::collections::HashMap;
 use std::collections::HashSet;
 use std::marker::PhantomData;
-use std::collections::HashMap;
 
-#[derive(Debug)]
-pub struct DeclarationMappedIndex<A, AA>(HashMap<IRI<A>, NamedEntityKind>,
-                                         HashSet<IRI<A>>,
-                                         PhantomData<AA>);
+#[derive(Debug, Default)]
+pub struct DeclarationMappedIndex<A, AA>(
+    HashMap<IRI<A>, NamedEntityKind>,
+    HashSet<IRI<A>>,
+    PhantomData<AA>,
+);
 
 impl<A: ForIRI, AA: ForIndex<A>> DeclarationMappedIndex<A, AA> {
     pub fn new() -> DeclarationMappedIndex<A, AA> {
@@ -20,14 +25,14 @@ impl<A: ForIRI, AA: ForIndex<A>> DeclarationMappedIndex<A, AA> {
     }
 
     pub fn is_annotation_property(&self, iri: &IRI<A>) -> bool {
-        matches!{
+        matches! {
             self.declaration_kind(iri),
             Some(NamedOWLEntityKind::AnnotationProperty)
         }
     }
 
     pub fn declaration_kind(&self, iri: &IRI<A>) -> Option<NamedOWLEntityKind> {
-        self.kind(iri).map(|e| e.as_owl()).flatten()
+        self.kind(iri).and_then(|e| e.as_owl())
     }
 
     pub fn kind(&self, iri: &IRI<A>) -> Option<NamedEntityKind> {
@@ -88,15 +93,9 @@ macro_rules! some {
     };
 }
 
-impl<A, AA> Default for DeclarationMappedIndex<A, AA> {
-    fn default() -> Self {
-        DeclarationMappedIndex(Default::default(), Default::default(), Default::default())
-    }
-}
-
 impl<A: ForIRI, AA: ForIndex<A>> OntologyIndex<A, AA> for DeclarationMappedIndex<A, AA> {
     fn index_insert(&mut self, ax: AA) -> bool {
-        some!{
+        some! {
             {
                 let ne = self.aa_to_ne(ax.borrow())?;
                 let iri = self.aa_to_iri(ax.borrow())?;
@@ -106,7 +105,7 @@ impl<A: ForIRI, AA: ForIndex<A>> OntologyIndex<A, AA> for DeclarationMappedIndex
                 if ne == NamedEntityKind::NamedIndividual &&
                     self.0.get(&iri) == Some(&NamedEntityKind::Class)
                 {
-                    self.1.insert(iri.clone());
+                    self.1.insert(iri);
                     return None;
                 }
 
@@ -122,12 +121,13 @@ impl<A: ForIRI, AA: ForIndex<A>> OntologyIndex<A, AA> for DeclarationMappedIndex
 
                 s
             }
-        }.is_some()
+        }
+        .is_some()
     }
 
     fn index_remove(&mut self, ax: &AnnotatedComponent<A>) -> bool {
         let s = some! {
-            self.0.remove(&self.aa_to_iri(&*ax)?)
+            self.0.remove(&self.aa_to_iri(ax)?)
         };
 
         s.is_some()
@@ -162,7 +162,6 @@ mod test {
     #[test]
     fn test_cons() {
         let _d = DeclarationMappedIndex::new_rc();
-        assert!(true);
     }
 
     #[test]
@@ -207,7 +206,6 @@ mod test {
         );
     }
 
-
     #[test]
     fn test_pun_support() {
         let mut d = DeclarationMappedIndex::new_rc();
@@ -229,8 +227,8 @@ mod test {
         assert_eq!(d.declaration_kind(&iri), Some(NamedOWLEntityKind::Class));
 
         let mut d = DeclarationMappedIndex::new_rc();
-        d.index_insert(ni.clone().into());
-        d.index_insert(c.clone().into());
+        d.index_insert(ni.into());
+        d.index_insert(c.into());
 
         assert_eq!(d.puns().len(), 1);
         assert_eq!(d.puns().iter().next(), Some(&iri));
