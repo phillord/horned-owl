@@ -781,16 +781,6 @@ impl<A: ForIRI> From<NamedOWLEntity<A>> for AnnotatedComponent<A> {
     }
 }
 
-/// An interface providing access to any `Annotation` attached to an
-/// entity.
-trait Annotated<A> {
-    /// Return the annotation
-    ///
-    /// The returned `BTreeSet` may be empty.
-    fn annotation(&self) -> &BTreeSet<Annotation<A>>;
-}
-
-
 /// An interface providing access to the `ComponentKind`
 ///
 /// An OWL ontology consists of a set of axioms of one of many
