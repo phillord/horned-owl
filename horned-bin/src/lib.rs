@@ -16,6 +16,7 @@ use std::{
 
 pub fn path_type(path: &Path) -> Option<ResourceType> {
     match path.extension().and_then(|s| s.to_str()) {
+        Some("ofn") => Some(ResourceType::OFN),
         Some("owx") => Some(ResourceType::OWX),
         Some("owl") => Some(ResourceType::RDF),
         _ => None,
@@ -27,15 +28,20 @@ pub fn parse_path(
     config: ParserConfiguration
 ) -> Result<ParserOutput<RcStr, RcAnnotatedComponent>, HornedError> {
     Ok(match path_type(path) {
+        Some(ResourceType::OFN) => {
+            let file = File::open(&path)?;
+            let mut bufreader = BufReader::new(file);
+            ParserOutput::ofn(horned_owl::io::ofn::reader::read(&mut bufreader, config)?)
+        }
         Some(ResourceType::OWX) => {
             let file = File::open(&path)?;
             let mut bufreader = BufReader::new(file);
-            horned_owl::io::owx::reader::read(&mut bufreader, config)?.into()
+            ParserOutput::owx(horned_owl::io::owx::reader::read(&mut bufreader, config)?)
         }
         Some(ResourceType::RDF) => {
             let b = Build::new();
             let iri = horned_owl::resolve::path_to_file_iri(&b, path);
-            horned_owl::io::rdf::closure_reader::read(&iri, config)?.into()
+            ParserOutput::rdf(horned_owl::io::rdf::closure_reader::read(&iri, config)?)
         }
         None => {
             return Err(HornedError::CommandError(format!(
@@ -54,12 +60,15 @@ pub fn parse_imports(
     let file = File::open(&path)?;
     let mut bufreader = BufReader::new(file);
     Ok(match path_type(path) {
-        Some(ResourceType::OWX) => horned_owl::io::owx::reader::read(&mut bufreader, config)?.into(),
+        Some(ResourceType::OFN) => ParserOutput::ofn(horned_owl::io::owx::reader::read(&mut bufreader, config)?),
+        Some(ResourceType::OWX) => ParserOutput::owx(horned_owl::io::owx::reader::read(&mut bufreader, config)?),
         Some(ResourceType::RDF) => {
             let b = Build::new();
             let mut p = horned_owl::io::rdf::reader::parser_with_build(&mut bufreader, &b, config);
             p.parse_imports()?;
-            p.as_ontology_and_incomplete()?.into()
+            ParserOutput::rdf(
+                p.as_ontology_and_incomplete()?
+            )
         }
         None => {
             return Err(HornedError::CommandError(format!(

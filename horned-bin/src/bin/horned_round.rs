@@ -45,6 +45,10 @@ pub(crate) fn matcher(matches: &ArgMatches) -> Result<(), HornedError> {
     )?;
 
     let rtn = match res {
+        horned_owl::io::ParserOutput::OFNParser(so, pm) => {
+            let amo: RcComponentMappedOntology = so.into();
+            horned_owl::io::owx::writer::write(&mut stdout(), &amo, Some(&pm))
+        }
         horned_owl::io::ParserOutput::OWXParser(so, pm) => {
             let amo: RcComponentMappedOntology = so.into();
             horned_owl::io::owx::writer::write(&mut stdout(), &amo, Some(&pm))

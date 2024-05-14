@@ -50,6 +50,11 @@ pub(crate) fn matcher(matches: &ArgMatches) -> Result<(), HornedError> {
     )?;
 
     match r {
+        horned_owl::io::ParserOutput::OFNParser(ont, map) => {
+            let hash_map: HashMap<&String, &String> = map.mappings().collect();
+            println!("Ontology:\n{:#?}\n\nMapping:\n{:#?}", ont, hash_map);
+            Ok(())
+        }
         horned_owl::io::ParserOutput::OWXParser(ont, map) => {
             let hash_map: HashMap<&String, &String> = map.mappings().collect();
             println!("Ontology:\n{:#?}\n\nMapping:\n{:#?}", ont, hash_map);
