@@ -120,6 +120,10 @@ use crate::vocab::Facet;
 #[derive(Clone, Debug, Eq, PartialEq, Hash, PartialOrd, Ord)]
 pub struct IRI<A>(pub(crate) A);
 
+/// A trait for representing IRIs.
+/// 
+/// It collects a list of trait bounds necessary to handle IRIs using [String]-like 
+/// types as the underlying data structure.
 pub trait ForIRI:
     AsRef<str>
     + Borrow<str>
@@ -209,14 +213,35 @@ impl<A: Borrow<str>> Display for IRI<A> {
     }
 }
 
-/// `Build` creates new `IRI` and `NamedEntity` instances.
+/// A builder for [IRIs](IRI), [named entities](NamedEntity) and 
+/// [anonymous individuals](AnonymousIndividual).
 ///
-/// There is caching for performance. An `IRI` or `NamedEntity` with a
-/// given IRI will use the same string in memory, if they have been
-/// created with the same builder. Equality, ordering and hashing is
-/// conserved across different `Build` instances, so entities from
-/// different instances can be combined within a single ontology
-/// without consequences except for increased memory use.
+/// # Examples
+/// 
+/// ```
+/// # use horned_owl::model::*;
+/// # use std::rc::Rc;
+/// let builder: Build<Rc<str>> = Build::new();
+/// 
+/// let anon = builder.anon("_000000001");
+/// 
+/// let iri_string = "http://www.example.com/#A";
+/// let iri = builder.iri(iri_string);
+/// 
+/// let cl  = builder.class(iri_string);
+/// let cl_iri = IRI::from(cl);
+/// 
+/// assert_eq!(iri, cl_iri);
+/// ```
+/// # Implementation details
+/// 
+/// Using an internal cache, we ensure that if we use the same builder to create
+/// two instances using the same IRI, they will use the same object in memory.
+/// Equality, ordering and hashing are conserved across different builders,
+/// which allows for the combination of different instances without consequences
+/// (save for increased memory use).
+/// 
+/// [Interior mutability](RefCell) is used to dispatch new objects from an immutable builder.
 
 // Currently `Build` uses Rc/RefCell, as does IRI which limits this
 // library to a single thread, as does the use of Rc in IRI. One or
