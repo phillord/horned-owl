@@ -18,7 +18,7 @@
 //! and `ThreeIndexedOntology`, each of which operate something like a
 //! named tuple, allowing differently typed `OntologyIndex` objects to
 //! be added.
-use crate::model::{AnnotatedComponent, ArcStr, ForIRI, MutableOntology, Ontology, IRI, RcStr};
+use crate::model::{AnnotatedComponent, ArcStr, ForIRI, MutableOntology, Ontology, RcStr, IRI};
 use std::borrow::Borrow;
 use std::fmt::Debug;
 use std::hash::Hash;

@@ -404,7 +404,10 @@ mod test {
         };
 
         so.insert(oid);
-        assert_eq!(so.i().the_ontology_id_or_default().viri, Some(b.iri("http://www.example.com/viri")));
+        assert_eq!(
+            so.i().the_ontology_id_or_default().viri,
+            Some(b.iri("http://www.example.com/viri"))
+        );
 
         let amo: RcComponentMappedOntology = so.into();
 

@@ -48,7 +48,7 @@ impl<A: ForIRI> SetOntology<A> {
         SetOntology(OneIndexedOntology::new(SetIndex::new()))
     }
 
-    pub fn from_index(index:SetIndex<A, AnnotatedComponent<A>>) -> Self {
+    pub fn from_index(index: SetIndex<A, AnnotatedComponent<A>>) -> Self {
         SetOntology(OneIndexedOntology::new(index))
     }
 
