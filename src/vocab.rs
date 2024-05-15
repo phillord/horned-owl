@@ -4,10 +4,6 @@ use enum_meta::*;
 use crate::error::invalid;
 use crate::error::HornedError;
 use crate::model::Build;
-use crate::model::{
-    NamedOWLEntity,NamedOWLEntityKind
-};
-
 use crate::model::IRI;
 use crate::model::{NamedOWLEntity, NamedOWLEntityKind};
 
