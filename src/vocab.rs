@@ -4,7 +4,6 @@ use enum_meta::*;
 use crate::error::invalid;
 use crate::error::HornedError;
 use crate::model::Build;
-use crate::model::ForIRI;
 use crate::model::{
     NamedOWLEntity,NamedOWLEntityKind
 };
@@ -250,7 +249,7 @@ vocabulary_type! {
 }
 
 /// Returns a [NamedOWLEntityKind] if the IRI points to a built-in entity, otherwise [None].
-pub fn to_built_in_entity<A: ForIRI>(iri: &IRI<A>) -> Option<NamedOWLEntityKind> {
+pub fn to_built_in_entity<A: AsRef<str>>(iri: &IRI<A>) -> Option<NamedOWLEntityKind> {
     let ir = iri.as_ref();
     match ir {
         _ if ir == OWL::TopDataProperty.as_ref() => Some(NamedOWLEntityKind::DataProperty),
@@ -261,11 +260,13 @@ pub fn to_built_in_entity<A: ForIRI>(iri: &IRI<A>) -> Option<NamedOWLEntityKind>
     }
 }
 
-pub fn entity_for_iri<A: ForIRI, S: Borrow<str>>(
+pub fn entity_for_iri<A, S: Borrow<str>>(
     type_iri: S,
     entity_iri: S,
     b: &Build<A>,
-) -> Result<NamedOWLEntity<A>, HornedError> {
+) -> Result<NamedOWLEntity<A>, HornedError>
+    where
+        A: Borrow<str> + Clone + From<String> + Ord {
     // Datatypes are handled here because they are not a
     // "type" but an "RDF schema" element.
     if type_iri.borrow() == "http://www.w3.org/2000/01/rdf-schema#Datatype" {
