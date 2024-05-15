@@ -153,7 +153,7 @@ impl<T: ?Sized> ForIRI for T where
 pub type RcStr = Rc<str>;
 pub type ArcStr = Arc<str>;
 
-impl<A: ForIRI> IRI<A> {
+impl<A: Clone> IRI<A> {
     pub fn underlying(&self) -> A {
         self.0.clone()
     }
@@ -191,19 +191,19 @@ impl From<IRI<RcStr>> for RcStr {
     }
 }
 
-impl<A: ForIRI> From<&IRI<A>> for String {
+impl<A: Borrow<str>> From<&IRI<A>> for String {
     fn from(i: &IRI<A>) -> String {
         i.0.borrow().to_string()
     }
 }
 
-impl<A: ForIRI> From<IRI<A>> for String {
+impl<A: Borrow<str>> From<IRI<A>> for String {
     fn from(i: IRI<A>) -> String {
         i.0.borrow().to_string()
     }
 }
 
-impl<A: ForIRI> Display for IRI<A> {
+impl<A: Borrow<str>> Display for IRI<A> {
     fn fmt(&self, f: &mut Formatter<'_>) -> ::std::fmt::Result {
         f.write_str(self.0.borrow())
     }
@@ -234,7 +234,7 @@ impl<A> Build<A> {
     }
 }
 
-impl<A: ForIRI> Build<A> {
+impl<A: Borrow<str> + Clone + From<String> + Ord> Build<A> {
     /// Constructs a new `AnonymousIndividual`
     ///
     /// # Examples
@@ -421,13 +421,13 @@ impl Build<String> {
 
 macro_rules! namedenumimpl {
     ($name:ident, $enum:ident, $kindenum:ident) => {
-        impl<A: ForIRI> From<$name<A>> for $enum<A> {
+        impl<A> From<$name<A>> for $enum<A> {
             fn from(n: $name<A>) -> $enum<A> {
                 Self::$name(n)
             }
         }
 
-        impl<A: ForIRI> From<$name<A>> for $kindenum {
+        impl<A> From<$name<A>> for $kindenum {
             fn from(_n: $name<A>) -> $kindenum {
                 Self::$name
             }
@@ -453,37 +453,37 @@ macro_rules! named {
             #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
             pub struct $name<A>(pub IRI<A>);
 
-            impl<A: ForIRI> From<IRI<A>> for $name<A> {
+            impl<A> From<IRI<A>> for $name<A> {
                 fn from(iri: IRI<A>) -> $name<A> {
                     $name(iri)
                 }
             }
 
-            impl<'a, A: ForIRI> From<&'a IRI<A>> for $name<A> {
+            impl<'a, A: Clone> From<&'a IRI<A>> for $name<A> {
                  fn from(iri: &IRI<A>) -> $name<A> {
                      $name(iri.clone())
                  }
             }
 
-            impl<A: ForIRI> From<$name<A>> for String {
+            impl<A: Borrow<str>> From<$name<A>> for String {
                 fn from(n: $name<A>) -> String {
                     n.0.0.borrow().to_string()
                 }
             }
 
-            impl<'a, A: ForIRI> From<&'a $name<A>> for String {
+            impl<'a, A: Borrow<str>> From<&'a $name<A>> for String {
                 fn from(n: &$name<A>) -> String {
                     n.0.0.borrow().to_string()
                 }
             }
 
-            impl<A: ForIRI> From<$name<A>> for IRI<A> {
+            impl<A> From<$name<A>> for IRI<A> {
                 fn from(n: $name<A>) -> IRI<A> {
                     n.0
                 }
             }
 
-            impl<'a, A: ForIRI> From<&'a $name<A>> for IRI<A> {
+            impl<'a, A: Clone> From<&'a $name<A>> for IRI<A> {
                 fn from(n: &$name<A>) -> IRI<A> {
                     (n.0).clone()
                 }
@@ -491,7 +491,7 @@ macro_rules! named {
 
             namedenumimpl!($name, NamedEntity, NamedEntityKind);
 
-            impl<A:ForIRI> $name<A> {
+            impl<A: Borrow<str> + PartialEq> $name<A> {
                  pub fn is<I>(&self, iri: I) -> bool
                     where I:Into<IRI<A>>
                 {
@@ -626,7 +626,7 @@ impl NamedEntityKind {
     }
 }
 
-impl<A: ForIRI> Class<A> {
+impl<A: AsRef<str>> Class<A> {
     pub fn is_thing(&self) -> bool {
         self.0.as_ref() == crate::vocab::OWL::Thing.as_ref()
     }
@@ -647,25 +647,25 @@ impl<A: Deref<Target = str>> Deref for AnonymousIndividual<A> {
     }
 }
 
-impl<A: ForIRI> AnonymousIndividual<A> {
+impl<A: Clone> AnonymousIndividual<A> {
     pub fn underlying(&self) -> A {
         self.0.clone()
     }
 }
 
-impl<A: ForIRI> AsRef<str> for AnonymousIndividual<A> {
+impl<A: AsRef<str>> AsRef<str> for AnonymousIndividual<A> {
     fn as_ref(&self) -> &str {
+        self.0.as_ref()
+    }
+}
+
+impl<A: Borrow<str>> Borrow<str> for AnonymousIndividual<A> {
+    fn borrow(&self) -> &str {
         self.0.borrow()
     }
 }
 
-impl<A: ForIRI> Borrow<str> for AnonymousIndividual<A> {
-    fn borrow(&self) -> &str {
-        self.as_ref()
-    }
-}
-
-impl<A: ForIRI> From<AnonymousIndividual<A>> for String {
+impl<A: Borrow<str>> From<AnonymousIndividual<A>> for String {
     fn from(i: AnonymousIndividual<A>) -> String {
         i.0.borrow().to_string()
     }
@@ -688,13 +688,13 @@ impl<A: Deref<Target = str>> Deref for Individual<A> {
     }
 }
 
-impl<A: ForIRI> From<NamedIndividual<A>> for Individual<A> {
+impl<A> From<NamedIndividual<A>> for Individual<A> {
     fn from(ni: NamedIndividual<A>) -> Individual<A> {
         Self::Named(ni)
     }
 }
 
-impl<A: ForIRI> From<AnonymousIndividual<A>> for Individual<A> {
+impl<A> From<AnonymousIndividual<A>> for Individual<A> {
     fn from(ai: AnonymousIndividual<A>) -> Individual<A> {
         Self::Anonymous(ai)
     }
@@ -711,16 +711,16 @@ impl From<String> for AnonymousIndividual<RcStr> {
         AnonymousIndividual(s.into())
     }
 }
-impl<A: ForIRI> From<&IRI<A>> for Individual<A> {
+
+impl<A: Clone> From<&IRI<A>> for Individual<A> {
     fn from(iri: &IRI<A>) -> Individual<A> {
-        let ni: NamedIndividual<_> = iri.into();
-        ni.into()
+        NamedIndividual::from(iri).into()
     }
 }
 
-impl<A: ForIRI> From<IRI<A>> for Individual<A> {
+impl<A> From<IRI<A>> for Individual<A> {
     fn from(iri: IRI<A>) -> Individual<A> {
-        Individual::from(&iri)
+        NamedIndividual::from(iri).into()
     }
 }
 
@@ -741,31 +741,31 @@ impl<A: Deref<Target = str>> Deref for AnnotationSubject<A> {
     }
 }
 
-impl<A: ForIRI> From<IRI<A>> for AnnotationSubject<A> {
+impl<A> From<IRI<A>> for AnnotationSubject<A> {
     fn from(iri: IRI<A>) -> AnnotationSubject<A> {
         AnnotationSubject::IRI(iri)
     }
 }
 
-impl<A: ForIRI> From<AnonymousIndividual<A>> for AnnotationSubject<A> {
+impl<A> From<AnonymousIndividual<A>> for AnnotationSubject<A> {
     fn from(anon: AnonymousIndividual<A>) -> AnnotationSubject<A> {
         AnnotationSubject::AnonymousIndividual(anon)
     }
 }
 
-impl<A: ForIRI> From<&IRI<A>> for AnnotationSubject<A> {
+impl<A: Clone> From<&IRI<A>> for AnnotationSubject<A> {
     fn from(iri: &IRI<A>) -> AnnotationSubject<A> {
         AnnotationSubject::IRI(iri.clone())
     }
 }
 
-impl<A: ForIRI> From<&AnonymousIndividual<A>> for AnnotationSubject<A> {
+impl<A: Clone> From<&AnonymousIndividual<A>> for AnnotationSubject<A> {
     fn from(anon: &AnonymousIndividual<A>) -> AnnotationSubject<A> {
         AnnotationSubject::AnonymousIndividual(anon.clone())
     }
 }
 
-impl<A: ForIRI> From<NamedOWLEntity<A>> for Component<A> {
+impl<A> From<NamedOWLEntity<A>> for Component<A> {
     fn from(ne: NamedOWLEntity<A>) -> Component<A> {
         match ne {
             NamedOWLEntity::Class(c) => Component::DeclareClass(DeclareClass(c)),
@@ -786,10 +786,9 @@ impl<A: ForIRI> From<NamedOWLEntity<A>> for Component<A> {
     }
 }
 
-impl<A: ForIRI> From<NamedOWLEntity<A>> for AnnotatedComponent<A> {
+impl<A> From<NamedOWLEntity<A>> for AnnotatedComponent<A> {
     fn from(ne: NamedOWLEntity<A>) -> AnnotatedComponent<A> {
-        let ax: Component<_> = ne.into();
-        ax.into()
+        Component::from(ne).into()
     }
 }
 
@@ -836,7 +835,7 @@ pub struct AnnotatedComponent<A> {
 pub type RcAnnotatedComponent = Rc<AnnotatedComponent<RcStr>>;
 pub type ArcAnnotatedComponent = Arc<AnnotatedComponent<ArcStr>>;
 
-impl<A: ForIRI> AnnotatedComponent<A> {
+impl<A: Hash + Ord> AnnotatedComponent<A> {
     pub fn new<I>(component: I, ann: BTreeSet<Annotation<A>>) -> AnnotatedComponent<A>
     where
         I: Into<Component<A>>,
@@ -864,7 +863,7 @@ impl<A: ForIRI> AnnotatedComponent<A> {
     }
 }
 
-impl<A: ForIRI> From<Component<A>> for AnnotatedComponent<A> {
+impl<A> From<Component<A>> for AnnotatedComponent<A> {
     fn from(component: Component<A>) -> AnnotatedComponent<A> {
         AnnotatedComponent {
             component,
@@ -873,13 +872,13 @@ impl<A: ForIRI> From<Component<A>> for AnnotatedComponent<A> {
     }
 }
 
-impl<A: ForIRI> Kinded for AnnotatedComponent<A> {
+impl<A> Kinded for AnnotatedComponent<A> {
     fn kind(&self) -> ComponentKind {
         self.component.kind()
     }
 }
 
-impl<A: ForIRI> HigherKinded for AnnotatedComponent<A> {
+impl<A> HigherKinded for AnnotatedComponent<A> {
     fn higher_kind(&self) -> HigherKind {
         self.component.higher_kind()
     }
@@ -888,25 +887,25 @@ impl<A: ForIRI> HigherKinded for AnnotatedComponent<A> {
 /// Add `Kinded` and `From` for each axiom.
 macro_rules! componentimpl {
     ($A:ident, $higher:ident, $name:ident) => {
-        impl<$A: ForIRI> From<$name<$A>> for Component<$A> {
+        impl<$A> From<$name<$A>> for Component<$A> {
             fn from(ax: $name<$A>) -> Component<$A> {
                 Component::$name(ax)
             }
         }
 
-        impl<$A: ForIRI> From<$name<$A>> for AnnotatedComponent<$A> {
+        impl<$A> From<$name<$A>> for AnnotatedComponent<$A> {
             fn from(ax: $name<$A>) -> AnnotatedComponent<$A> {
                 AnnotatedComponent::from(Component::from(ax))
             }
         }
 
-        impl<$A: ForIRI> Kinded for $name<$A> {
+        impl<$A> Kinded for $name<$A> {
             fn kind(&self) -> ComponentKind {
                 ComponentKind::$name
             }
         }
 
-        impl<$A: ForIRI> HigherKinded for $name<$A> {
+        impl<$A> HigherKinded for $name<$A> {
             fn higher_kind(&self) -> HigherKind {
                 HigherKind::$higher
             }
@@ -943,7 +942,7 @@ macro_rules! component {
             $(pub $field_name: $field_type),*,
         }
 
-        impl<$A:ForIRI> $name<$A> {
+        impl<$A> $name<$A> {
             pub fn new($($field_name: $field_type),*)
                 -> $name<$A>
             {
@@ -1039,7 +1038,7 @@ macro_rules! components {
         //     }
         // }
 
-        impl<$A:ForIRI> Kinded for Component<$A>
+        impl<$A> Kinded for Component<$A>
         {
             fn kind(&self) -> ComponentKind
             {
@@ -1053,7 +1052,7 @@ macro_rules! components {
             }
         }
 
-        impl<$A:ForIRI> HigherKinded for Component<$A>
+        impl<$A> HigherKinded for Component<$A>
         {
             fn higher_kind(&self) -> HigherKind
             {
@@ -1445,8 +1444,8 @@ components! {
     }
 }
 
-// TODO
-impl<A: ForIRI> Default for OntologyID<A> {
+// TODO: It should be possible to derive Default for OntologyID<_>.
+impl<A> Default for OntologyID<A> {
     fn default() -> Self {
         Self {
             iri: None,
@@ -1476,8 +1475,8 @@ pub enum Literal<A> {
     },
 }
 
-impl<A: ForIRI> Literal<A> {
-    pub fn literal(&self) -> &String {
+impl<A> Literal<A> {
+    pub fn literal(&self) -> &str {
         match self {
             Literal::Simple { literal } => literal,
             Literal::Language { literal, .. } => literal,
@@ -1485,13 +1484,6 @@ impl<A: ForIRI> Literal<A> {
         }
     }
 }
-
-// #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-// pub struct Literal {
-//     pub datatype_iri: Option<IRI>,
-//     pub lang: Option<String>,
-//     pub literal: Option<String>,
-// }
 
 /// Data associated with a part of the ontology.
 ///
@@ -1513,19 +1505,19 @@ pub enum AnnotationValue<A> {
     AnonymousIndividual(AnonymousIndividual<A>),
 }
 
-impl<A: ForIRI> From<Literal<A>> for AnnotationValue<A> {
+impl<A> From<Literal<A>> for AnnotationValue<A> {
     fn from(literal: Literal<A>) -> AnnotationValue<A> {
         AnnotationValue::Literal(literal)
     }
 }
 
-impl<A: ForIRI> From<IRI<A>> for AnnotationValue<A> {
+impl<A> From<IRI<A>> for AnnotationValue<A> {
     fn from(iri: IRI<A>) -> AnnotationValue<A> {
         AnnotationValue::IRI(iri)
     }
 }
 
-impl<A: ForIRI> From<AnonymousIndividual<A>> for AnnotationValue<A> {
+impl<A> From<AnonymousIndividual<A>> for AnnotationValue<A> {
     fn from(ai: AnonymousIndividual<A>) -> Self {
         AnnotationValue::AnonymousIndividual(ai)
     }
@@ -1538,26 +1530,26 @@ pub enum ObjectPropertyExpression<A> {
     InverseObjectProperty(ObjectProperty<A>),
 }
 
-impl<A: ForIRI> From<ObjectProperty<A>> for ObjectPropertyExpression<A> {
+impl<A> From<ObjectProperty<A>> for ObjectPropertyExpression<A> {
     fn from(op: ObjectProperty<A>) -> ObjectPropertyExpression<A> {
         ObjectPropertyExpression::ObjectProperty(op)
     }
 }
 
-impl<A: ForIRI> From<IRI<A>> for ObjectPropertyExpression<A> {
+impl<A> From<IRI<A>> for ObjectPropertyExpression<A> {
     fn from(iri: IRI<A>) -> ObjectPropertyExpression<A> {
         let op: ObjectProperty<_> = iri.into();
         op.into()
     }
 }
 
-impl<A: ForIRI> From<&IRI<A>> for ObjectPropertyExpression<A> {
+impl<A: Clone> From<&IRI<A>> for ObjectPropertyExpression<A> {
     fn from(iri: &IRI<A>) -> ObjectPropertyExpression<A> {
         iri.clone().into()
     }
 }
 
-impl<A: ForIRI> ObjectPropertyExpression<A> {
+impl<A> ObjectPropertyExpression<A> {
     pub fn as_property(&self) -> Option<&ObjectProperty<A>> {
         match self {
             ObjectPropertyExpression::ObjectProperty(op) => Some(op),
@@ -1575,7 +1567,7 @@ pub enum SubObjectPropertyExpression<A> {
     ObjectPropertyExpression(ObjectPropertyExpression<A>),
 }
 
-impl<A: ForIRI> From<ObjectPropertyExpression<A>> for SubObjectPropertyExpression<A> {
+impl<A> From<ObjectPropertyExpression<A>> for SubObjectPropertyExpression<A> {
     fn from(ope: ObjectPropertyExpression<A>) -> SubObjectPropertyExpression<A> {
         SubObjectPropertyExpression::ObjectPropertyExpression(ope)
     }
@@ -1589,12 +1581,12 @@ pub enum PropertyExpression<A> {
     AnnotationProperty(AnnotationProperty<A>),
 }
 
-impl<A: ForIRI> From<ObjectPropertyExpression<A>> for PropertyExpression<A> {
+impl<A> From<ObjectPropertyExpression<A>> for PropertyExpression<A> {
     fn from(ope: ObjectPropertyExpression<A>) -> PropertyExpression<A> {
         PropertyExpression::ObjectPropertyExpression(ope)
     }
 }
-impl<A: ForIRI> From<DataProperty<A>> for PropertyExpression<A> {
+impl<A> From<DataProperty<A>> for PropertyExpression<A> {
     fn from(dp: DataProperty<A>) -> PropertyExpression<A> {
         PropertyExpression::DataProperty(dp)
     }
@@ -1617,7 +1609,7 @@ pub enum DataRange<A> {
     DatatypeRestriction(Datatype<A>, Vec<FacetRestriction<A>>),
 }
 
-impl<A: ForIRI> From<Datatype<A>> for DataRange<A> {
+impl<A> From<Datatype<A>> for DataRange<A> {
     fn from(dr: Datatype<A>) -> DataRange<A> {
         DataRange::Datatype(dr)
     }
@@ -1795,19 +1787,19 @@ pub enum ClassExpression<A> {
     },
 }
 
-impl<A: ForIRI> From<Class<A>> for ClassExpression<A> {
+impl<A> From<Class<A>> for ClassExpression<A> {
     fn from(c: Class<A>) -> ClassExpression<A> {
         ClassExpression::Class(c)
     }
 }
 
-impl<'a, A: ForIRI> From<&'a Class<A>> for ClassExpression<A> {
+impl<'a, A: Clone> From<&'a Class<A>> for ClassExpression<A> {
     fn from(c: &'a Class<A>) -> ClassExpression<A> {
         ClassExpression::Class(c.clone())
     }
 }
 
-impl<A: ForIRI> From<Class<A>> for Box<ClassExpression<A>> {
+impl<A> From<Class<A>> for Box<ClassExpression<A>> {
     fn from(c: Class<A>) -> Box<ClassExpression<A>> {
         Box::new(c.into())
     }
@@ -1845,19 +1837,19 @@ pub enum IArgument<A> {
     Variable(Variable<A>),
 }
 
-impl<A: ForIRI> From<Variable<A>> for IArgument<A> {
+impl<A> From<Variable<A>> for IArgument<A> {
     fn from(var: Variable<A>) -> IArgument<A> {
         Self::Variable(var)
     }
 }
 
-impl<A: ForIRI> From<Individual<A>> for IArgument<A> {
+impl<A> From<Individual<A>> for IArgument<A> {
     fn from(i: Individual<A>) -> IArgument<A> {
         Self::Individual(i)
     }
 }
 
-impl<A: ForIRI> From<NamedIndividual<A>> for IArgument<A> {
+impl<A> From<NamedIndividual<A>> for IArgument<A> {
     fn from(i: NamedIndividual<A>) -> IArgument<A> {
         Self::Individual(i.into())
     }
