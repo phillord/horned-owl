@@ -448,10 +448,6 @@ impl Build<String> {
 macro_rules! namedenumimpl {
     ($name:ident, $enum:ident, $kindenum:ident) => {
         impl<A> From<$name<A>> for $enum<A> {
-<<<<<<< HEAD
-
-=======
->>>>>>> 7a863f4 (Begins tightening of trait bounds regarding `ForIRI` and `ForIndex`.)
             fn from(n: $name<A>) -> $enum<A> {
                 Self::$name(n)
             }
