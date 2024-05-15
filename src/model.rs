@@ -1985,6 +1985,26 @@ mod test {
     }
 
     #[test]
+    fn test_builder_with_string_iri() {
+        let builder: Build<Rc<str>> = Build::new();
+
+        let iri_string = String::from("http://www.example.com/#A");
+        // The way we need to dereference looks a bit unnatural.
+        let iri = builder.iri(&*iri_string);
+        let cl  = builder.class(&*iri_string);
+        let cl_iri = IRI::from(cl);
+
+        // The two IRIs look the same.
+        assert_eq!(iri, cl_iri);
+
+        // The two IRIs are the same object in memory...
+        assert!(Rc::ptr_eq(&iri.0, &cl_iri.0));
+
+        // ...and so now there are three pointers to it, including the one in the builder's cache.
+        assert_eq!(Rc::strong_count(&iri.0), 3);
+    }
+
+    #[test]
     fn test_class() {
         let mut o = ComponentMappedOntology::new_rc();
         let c = Build::new().class("http://www.example.com");
