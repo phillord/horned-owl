@@ -151,10 +151,13 @@ impl<A: ForIRI> MutableOntology<A> for SetOntology<A> {
 
 impl<A: ForIRI> FromIterator<AnnotatedComponent<A>> for SetOntology<A> {
     fn from_iter<I: IntoIterator<Item = AnnotatedComponent<A>>>(iter: I) -> Self {
-        SetOntology(OneIndexedOntology::new(SetIndex(
-            HashSet::from_iter(iter),
-            Default::default(),
-        )))
+        iter.into_iter().collect::<MutableOntologyWrapper<SetOntology<_>>>().0
+    }
+}
+
+impl<A: ForIRI> Extend<AnnotatedComponent<A>> for SetOntology<A> {
+    fn extend<T: IntoIterator<Item = AnnotatedComponent<A>>>(&mut self, iter: T) {
+        MutableOntologyWrapper(self).extend(iter.into_iter());
     }
 }
 
@@ -163,6 +166,7 @@ where
     I: Iterator<Item = AnnotatedComponent<A>>,
 {
     fn from(i: I) -> SetOntology<A> {
+
         let mut so = SetOntology::new();
         for c in i {
             so.insert(c);
@@ -170,7 +174,6 @@ where
         so
     }
 }
-
 
 /// An `OntologyIndex` implemented over an in-memory HashSet. When
 /// combined with an `IndexedOntology` this should be nearly as
@@ -255,7 +258,8 @@ mod test {
     }
 
     #[test]
-    fn test_ontology_id() {
+    fn
+        test_ontology_id() {
         let mut so = SetOntology::new_rc();
         let b = Build::new_rc();
         let oid = OntologyID {

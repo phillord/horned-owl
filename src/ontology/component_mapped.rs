@@ -14,10 +14,7 @@ use super::indexed::ForIndex;
 use super::set::SetOntology;
 use crate::model::*;
 use std::{
-    cell::RefCell,
-    collections::{BTreeMap, BTreeSet, VecDeque},
-    rc::Rc,
-    sync::Arc,
+    cell::RefCell, collections::{BTreeMap, BTreeSet, VecDeque}, iter::FromIterator, rc::Rc, sync::Arc
 };
 
 use std::marker::PhantomData;
@@ -54,7 +51,7 @@ macro_rules! onimpl {
     };
 }
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ComponentMappedIndex<A, AA> {
     component: RefCell<BTreeMap<ComponentKind, BTreeSet<AA>>>,
     pd: PhantomData<A>,
@@ -280,6 +277,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> IntoIterator for &'a ComponentMappedIndex<A
     }
 }
 
+
 impl<A: ForIRI, AA: ForIndex<A>> OntologyIndex<A, AA> for ComponentMappedIndex<A, AA> {
     fn index_insert(&mut self, cmp: AA) -> bool {
         self.mut_set_for_kind(cmp.borrow().kind()).insert(cmp)
@@ -290,11 +288,17 @@ impl<A: ForIRI, AA: ForIndex<A>> OntologyIndex<A, AA> for ComponentMappedIndex<A
     }
 }
 
-#[derive(Default, Debug, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq)]
 pub struct ComponentMappedOntology<A, AA>(OneIndexedOntology<A, AA, ComponentMappedIndex<A, AA>>);
 
 pub type RcComponentMappedOntology = ComponentMappedOntology<RcStr, Rc<AnnotatedComponent<RcStr>>>;
 pub type ArcComponentMappedOntology = ComponentMappedOntology<ArcStr, Arc<AnnotatedComponent<ArcStr>>>;
+
+impl<A: ForIRI, AA:ForIndex<A>> Default for ComponentMappedOntology<A, AA> {
+    fn default() -> Self {
+        Self(Default::default())
+    }
+}
 
 impl<A: ForIRI, AA: ForIndex<A>> Ontology<A> for ComponentMappedOntology<A, AA> {
 }
@@ -370,8 +374,25 @@ impl<A: ForIRI, AA: ForIndex<A>> From<ComponentMappedOntology<A, AA>> for SetOnt
     }
 }
 
+impl<A: ForIRI, AA: ForIndex<A>> FromIterator<AnnotatedComponent<A>> for ComponentMappedOntology<A, AA> {
+    fn from_iter<I: IntoIterator<Item = AnnotatedComponent<A>>>(iter: I) -> Self {
+        iter.into_iter().collect::<MutableOntologyWrapper<ComponentMappedOntology<_, _>>>().0
+    }
+}
+
+impl<A: ForIRI, AA: ForIndex<A>> Extend<AnnotatedComponent<A>> for ComponentMappedOntology<A, AA> {
+    fn extend<T: IntoIterator<Item = AnnotatedComponent<A>>>(&mut self, iter: T) {
+        MutableOntologyWrapper(self).extend(iter.into_iter());
+    }
+}
+
+
+
+
 #[cfg(test)]
 mod test {
+    use std::rc::Rc;
+
     use super::ComponentMappedOntology;
     use super::RcComponentMappedOntology;
     use crate::model::*;
@@ -514,4 +535,38 @@ mod test {
         assert_eq!(it.next(), None);
         assert_eq!(it.next(), None);
     }
+
+
+    #[test]
+    fn test_from_iterator() {
+        let mut ont = SetOntology::new_rc();
+        let b = Build::new_rc();
+        let oid = OntologyID {
+            iri: Some(b.iri("http://www.example.com/iri")),
+            viri: Some(b.iri("http://www.example.com/viri")),
+        };
+
+        ont.insert(oid.clone());
+
+        let newont: ComponentMappedOntology<RcStr, Rc<AnnotatedComponent<RcStr>>> = ont.clone().into_iter().collect();
+        assert_eq!(ont, newont.into());
+    }
+
+    #[test]
+    fn test_extend() {
+        let mut ont = SetOntology::new_rc();
+        let b = Build::new_rc();
+        let oid = OntologyID {
+            iri: Some(b.iri("http://www.example.com/iri")),
+            viri: Some(b.iri("http://www.example.com/viri")),
+        };
+
+        ont.insert(oid.clone());
+
+        let mut newont = ComponentMappedOntology::new_rc();
+        newont.extend(ont.clone());
+
+        assert_eq!(ont, newont.into());
+    }
+
 }
