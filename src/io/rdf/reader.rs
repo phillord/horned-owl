@@ -452,7 +452,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
     }
 
     pub fn from_doc_iri(b: &'a Build<A>, iri: &IRI<A>, config: ParserConfiguration) -> OntologyParser<'a, A, AA> {
-        OntologyParser::from_bufread(b, &mut Cursor::new(strict_resolve_iri(iri)), config)
+        OntologyParser::from_bufread(b, &mut Cursor::new(strict_resolve_iri(iri).expect("the IRI should resolve successfully")), config)
     }
 
     fn group_triples(
