@@ -19,14 +19,14 @@ use ureq;
 /// # use horned_owl::resolve::*;
 /// let b = Build::new_rc();
 
-/// let doc_iri = b.iri("file://blah/and.owl");
+/// let doc_iri = b.iri("file://base_dir/and.owl");
 
 /// let path_buf = file_iri_to_pathbuf(&doc_iri);
-/// assert_eq!(path_buf.to_str().unwrap(), "blah/and.owl");
+/// assert_eq!(path_buf.to_str().unwrap(), "base_dir/and.owl");
 /// ```
 #[deprecated(since="1.0.0", note="please use `as_local_path_buffer` instead")]
 pub fn file_iri_to_pathbuf<A: ForIRI>(iri: &IRI<A>) -> PathBuf {
-    Path::new(&*iri.split_at(7).1).into()
+    Path::new(iri.split_at(7).1).into()
 }
 
 /// Return an `IRI` for the given `PathBuf`
@@ -38,11 +38,11 @@ pub fn file_iri_to_pathbuf<A: ForIRI>(iri: &IRI<A>) -> PathBuf {
 /// # use std::path::Path;
 /// let b = Build::new_rc();
 
-/// let target_iri = b.iri("file://blah/and.owl");
+/// let target_iri = b.iri("file://base_dir/and.owl");
 
-/// let path = Path::new("blah/and.owl");
+/// let path = Path::new("base_dir/and.owl");
 /// let source_iri = path_to_file_iri(&b, &path);
-/// assert_eq!(source_iri.as_ref(), "file://blah/and.owl");
+/// assert_eq!(source_iri.as_ref(), "file://base_dir/and.owl");
 /// ```
 pub fn path_to_file_iri<A: ForIRI>(b: &Build<A>, pb: &Path) -> IRI<A> {
     pb.to_str()
@@ -58,11 +58,11 @@ pub fn path_to_file_iri<A: ForIRI>(b: &Build<A>, pb: &Path) -> IRI<A> {
 /// # use horned_owl::resolve::*;
 /// let b = Build::new_rc();
 
-/// let doc_iri = b.iri("file://blah/and.owl");
+/// let doc_iri = b.iri("file://base_dir/and.owl");
 /// let path_buf = as_local_path_buffer(&doc_iri);
 
 /// assert!(path_buf.is_some());
-/// assert_eq!(path_buf.unwrap().to_str().unwrap(), "blah/and.owl");
+/// assert_eq!(path_buf.unwrap().to_str().unwrap(), "base_dir/and.owl");
 /// ```
 pub fn as_local_path_buffer<A: ForIRI>(iri: &IRI<A>) -> Option<PathBuf> {
     iri.strip_prefix("file://")
@@ -78,10 +78,10 @@ pub fn as_local_path_buffer<A: ForIRI>(iri: &IRI<A>) -> Option<PathBuf> {
 /// # use horned_owl::resolve::*;
 /// let b = Build::new_rc();
 
-/// let doc_iri = b.iri("file://blah/and.owl");
+/// let doc_iri = b.iri("file://base_dir/and.owl");
 /// let iri = b.iri("http://www.example.com/or.owl");
 
-/// let local = b.iri("file://blah/or.owl");
+/// let local = b.iri("file://base_dir/or.owl");
 
 /// assert_eq!(localize_iri(&iri, &doc_iri), local);
 /// ```
@@ -182,7 +182,6 @@ pub fn strict_resolve_iri<A: ForIRI>(_iri: &IRI<A>) -> String {
 
 #[cfg(test)]
 mod test {
-    use std::rc::Rc;
 
     use super::*;
     use crate::model::Build;
@@ -191,11 +190,11 @@ mod test {
     fn localize() {
         let b = Build::new_rc();
 
-        let doc_iri = b.iri("file://blah/and.owl");
+        let doc_iri = b.iri("file://base_dir/and.owl");
 
         let iri = b.iri("http://www.example.com/or.owl");
 
-        let local = b.iri("file://blah/or.owl");
+        let local = b.iri("file://base_dir/or.owl");
 
         assert_eq!(localize_iri(&iri, &doc_iri), local);
     }
