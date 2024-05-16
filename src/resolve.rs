@@ -24,7 +24,7 @@ use ureq;
 /// let path_buf = file_iri_to_pathbuf(&doc_iri);
 /// assert_eq!(path_buf.to_str().unwrap(), "blah/and.owl");
 /// ```
-// #[deprecated]
+#[deprecated(since="1.0.0", note="please use `as_local_path_buffer` instead")]
 pub fn file_iri_to_pathbuf<A: ForIRI>(iri: &IRI<A>) -> PathBuf {
     Path::new(&*iri.split_at(7).1).into()
 }
