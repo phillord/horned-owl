@@ -1,4 +1,5 @@
 //! Rapid, simple, in-memory `Ontology` and `OntologyIndex`
+use std::iter::FusedIterator;
 use std::{hash::Hash, collections::HashSet, iter::FromIterator, rc::Rc};
 
 use super::indexed::ForIndex;
@@ -93,6 +94,15 @@ impl<'a, A: ForIRI> Iterator for SetIter<'a, A> {
     }
 }
 
+impl<'a, A: ForIRI> FusedIterator for SetIter<'a, A> {
+}
+
+impl<'a, A: ForIRI> ExactSizeIterator for SetIter<'a, A> {
+    fn len(&self) -> usize {
+        self.0.len()
+    }
+}
+
 impl<'a, A: ForIRI> IntoIterator for &'a SetOntology<A> {
     type Item = &'a AnnotatedComponent<A>;
     type IntoIter = SetIter<'a, A>;
@@ -108,6 +118,15 @@ impl<A: ForIRI> Iterator for SetIntoIter<A> {
     type Item = AnnotatedComponent<A>;
     fn next(&mut self) -> Option<Self::Item> {
         self.0.next()
+    }
+}
+
+impl<A: ForIRI> FusedIterator for SetIntoIter<A> {
+}
+
+impl<A: ForIRI> ExactSizeIterator for SetIntoIter<A> {
+    fn len(&self) -> usize {
+        self.0.len()
     }
 }
 
