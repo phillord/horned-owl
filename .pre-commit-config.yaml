@@ -7,25 +7,18 @@ repos:
        name: Untracked Files
        language: system
        entry: ./dev/untracked-files.sh
-       files: NONE
-       always_run: true
-       stages: [pre-commit, pre-push]
-    -  id: not-rfc
-       name: Not RFC
-       language: system
-       entry: ./dev/not-rfc.sh
-       files: NONE
-       always_run: true
+       pass_filenames: false
        stages: [pre-commit, pre-push]
     -  id: run-tests
        name: Running Test
        language: system
        entry: make pre-commit
-       files: NONE
-       always_run: true
+       pass_filenames: false
        stages: [pre-commit, pre-push]
 -   repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v3.2.0
     hooks:
     -   id: check-added-large-files
+    -   id: no-commit-to-branch
+        args: [--branch, rfc]
 
