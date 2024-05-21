@@ -6,8 +6,8 @@ use clap::Arg;
 use clap::ArgMatches;
 
 use horned_bin::{
+    config::{parser_app, parser_config},
     parse_path,
-    config::{parser_app, parser_config}
 };
 
 use horned_owl::error::HornedError;
@@ -31,19 +31,16 @@ pub(crate) fn app(name: &str) -> App<'static> {
                     .help("Sets the input file to use")
                     .required(true)
                     .index(1),
-            )
+            ),
     )
 }
 
 pub(crate) fn matcher(matches: &ArgMatches) -> Result<(), HornedError> {
-    let input = matches.value_of("INPUT").ok_or_else(|| HornedError::CommandError(
-        "Command requires an INPUT parameter".to_string(),
-    ))?;
+    let input = matches.value_of("INPUT").ok_or_else(|| {
+        HornedError::CommandError("Command requires an INPUT parameter".to_string())
+    })?;
 
-    parse_path(
-        Path::new(input),
-        parser_config(matches)
-    )?;
+    parse_path(Path::new(input), parser_config(matches))?;
 
     println!("Parse Complete: {:?}", input);
     Ok(())

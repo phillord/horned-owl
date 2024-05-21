@@ -66,11 +66,11 @@ pub trait Visit<A: ForIRI> {
     fn visit_sub_annotation_property_of(&mut self, _: &SubAnnotationPropertyOf<A>) {}
     fn visit_annotation_property_domain(&mut self, _: &AnnotationPropertyDomain<A>) {}
     fn visit_annotation_property_range(&mut self, _: &AnnotationPropertyRange<A>) {}
-    fn visit_rule(&mut self, _: &Rule<A>){}
-    fn visit_atom(&mut self, _: &Atom<A>){}
-    fn visit_variable(&mut self, _: &Variable<A>){}
-    fn visit_iarg(&mut self, _: &IArgument<A>){}
-    fn visit_darg(&mut self, _: &DArgument<A>){}
+    fn visit_rule(&mut self, _: &Rule<A>) {}
+    fn visit_atom(&mut self, _: &Atom<A>) {}
+    fn visit_variable(&mut self, _: &Variable<A>) {}
+    fn visit_iarg(&mut self, _: &IArgument<A>) {}
+    fn visit_darg(&mut self, _: &DArgument<A>) {}
     fn visit_literal(&mut self, _: &Literal<A>) {}
     fn visit_annotation(&mut self, _: &Annotation<A>) {}
     fn visit_annotation_value(&mut self, _: &AnnotationValue<A>) {}
@@ -92,8 +92,8 @@ pub trait Visit<A: ForIRI> {
     fn visit_individual_vec(&mut self, _: &Vec<Individual<A>>) {}
     fn visit_literal_vec(&mut self, _: &Vec<Literal<A>>) {}
     fn visit_facet_restriction_vec(&mut self, _: &Vec<FacetRestriction<A>>) {}
-    fn visit_atom_vec(&mut self, _:&Vec<Atom<A>>) {}
-    fn visit_darg_vec(&mut self, _:&Vec<DArgument<A>>){}
+    fn visit_atom_vec(&mut self, _: &Vec<Atom<A>>) {}
+    fn visit_darg_vec(&mut self, _: &Vec<DArgument<A>>) {}
 }
 
 pub struct Walk<A, V>(V, PhantomData<A>);
@@ -135,7 +135,7 @@ impl<A: ForIRI, V: Visit<A>> Walk<A, V> {
         }
     }
 
-    pub fn dociri(&mut self, e:&DocIRI<A>) {
+    pub fn dociri(&mut self, e: &DocIRI<A>) {
         self.0.visit_dociri(e);
         self.iri(&e.0);
     }
@@ -224,7 +224,9 @@ impl<A: ForIRI, V: Visit<A>> Walk<A, V> {
                 self.negative_object_property_assertion(ax)
             }
             Component::DataPropertyAssertion(ax) => self.data_property_assertion(ax),
-            Component::NegativeDataPropertyAssertion(ax) => self.negative_data_property_assertion(ax),
+            Component::NegativeDataPropertyAssertion(ax) => {
+                self.negative_data_property_assertion(ax)
+            }
             Component::AnnotationAssertion(ax) => self.annotation_assertion(ax),
             Component::SubAnnotationPropertyOf(ax) => self.sub_annotation_property_of(ax),
             Component::AnnotationPropertyDomain(ax) => self.annotation_property_domain(ax),
@@ -488,36 +490,36 @@ impl<A: ForIRI, V: Visit<A>> Walk<A, V> {
     pub fn atom(&mut self, a: &Atom<A>) {
         self.0.visit_atom(a);
         match a {
-            Atom::BuiltInAtom{pred, args} => {
+            Atom::BuiltInAtom { pred, args } => {
                 self.iri(pred);
                 self.darg_vec(args);
-            },
-            Atom::ClassAtom{pred, arg} => {
+            }
+            Atom::ClassAtom { pred, arg } => {
                 self.class_expression(pred);
                 self.iarg(arg);
-            },
-            Atom::DataPropertyAtom{pred, args} => {
+            }
+            Atom::DataPropertyAtom { pred, args } => {
                 self.data_property(pred);
                 self.darg(&args.0);
                 self.darg(&args.1);
-            },
-            Atom::DataRangeAtom{pred, arg} => {
+            }
+            Atom::DataRangeAtom { pred, arg } => {
                 self.data_range(pred);
                 self.darg(arg);
             }
             Atom::DifferentIndividualsAtom(arg1, arg2) => {
                 self.iarg(arg1);
                 self.iarg(arg2);
-            },
-            Atom::ObjectPropertyAtom {pred, args} => {
+            }
+            Atom::ObjectPropertyAtom { pred, args } => {
                 self.object_property_expression(pred);
                 self.iarg(&args.0);
                 self.iarg(&args.1);
-            },
-            Atom::SameIndividualAtom (arg1, arg2) =>{
+            }
+            Atom::SameIndividualAtom(arg1, arg2) => {
                 self.iarg(arg1);
                 self.iarg(arg2);
-            },
+            }
         }
     }
 
@@ -691,7 +693,7 @@ impl<A: ForIRI, V: Visit<A>> Walk<A, V> {
         }
     }
 
-    pub fn ontology_id(&mut self, e:&OntologyID<A>) {
+    pub fn ontology_id(&mut self, e: &OntologyID<A>) {
         self.0.visit_ontology_id(e);
         self.option_iri(&e.iri);
         self.option_iri(&e.viri);
@@ -769,14 +771,14 @@ impl<A: ForIRI, V: Visit<A>> Walk<A, V> {
         }
     }
 
-    pub fn atom_vec(&mut self, v:&Vec<Atom<A>>) {
+    pub fn atom_vec(&mut self, v: &Vec<Atom<A>>) {
         self.0.visit_atom_vec(v);
         for i in v.iter() {
             self.atom(i);
         }
     }
 
-    pub fn darg_vec(&mut self, v:&Vec<DArgument<A>>) {
+    pub fn darg_vec(&mut self, v: &Vec<DArgument<A>>) {
         self.0.visit_darg_vec(v);
         for i in v.iter() {
             self.darg(i);
@@ -786,9 +788,9 @@ impl<A: ForIRI, V: Visit<A>> Walk<A, V> {
 
 pub mod entity {
     use super::Visit;
+    use crate::model::AnonymousIndividual;
     use crate::model::ForIRI;
     use crate::model::IRI;
-    use crate::model::AnonymousIndividual;
 
     pub struct IRIExtract<A>(Vec<IRI<A>>);
 

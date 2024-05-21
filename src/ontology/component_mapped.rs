@@ -125,7 +125,10 @@ impl<A: ForIRI, AA: ForIndex<A>> ComponentMappedIndex<A, AA> {
     /// ```
     ///
     /// See also `component` for access to the `Component` without annotations.
-    pub fn component_for_kind(&self, cmk: ComponentKind) -> impl Iterator<Item = &AnnotatedComponent<A>> {
+    pub fn component_for_kind(
+        &self,
+        cmk: ComponentKind,
+    ) -> impl Iterator<Item = &AnnotatedComponent<A>> {
         self.set_for_kind(cmk)
             // Iterate over option
             .into_iter()
@@ -292,8 +295,10 @@ impl<A: ForIRI, AA: ForIndex<A>> OntologyIndex<A, AA> for ComponentMappedIndex<A
 pub struct ComponentMappedOntology<A, AA>(OneIndexedOntology<A, AA, ComponentMappedIndex<A, AA>>);
 
 pub type RcComponentMappedOntology = ComponentMappedOntology<RcStr, Rc<AnnotatedComponent<RcStr>>>;
-pub type ArcComponentMappedOntology = ComponentMappedOntology<ArcStr, Arc<AnnotatedComponent<ArcStr>>>;
+pub type ArcComponentMappedOntology =
+    ComponentMappedOntology<ArcStr, Arc<AnnotatedComponent<ArcStr>>>;
 
+<<<<<<< HEAD
 impl<A: ForIRI, AA:ForIndex<A>> Default for ComponentMappedOntology<A, AA> {
     fn default() -> Self {
         Self(Default::default())
@@ -302,6 +307,9 @@ impl<A: ForIRI, AA:ForIndex<A>> Default for ComponentMappedOntology<A, AA> {
 
 impl<A: ForIRI, AA: ForIndex<A>> Ontology<A> for ComponentMappedOntology<A, AA> {
 }
+=======
+impl<A: ForIRI, AA: ForIndex<A>> Ontology<A> for ComponentMappedOntology<A, AA> {}
+>>>>>>> 5175f81 (Apply rustfmt to whole code base)
 
 impl<A: ForIRI, AA: ForIndex<A>> MutableOntology<A> for ComponentMappedOntology<A, AA> {
     fn insert<IAA>(&mut self, cmp: IAA) -> bool
@@ -422,7 +430,10 @@ mod test {
         };
 
         so.insert(oid);
-        assert_eq!(so.i().the_ontology_id_or_default().viri, Some(b.iri("http://www.example.com/viri")));
+        assert_eq!(
+            so.i().the_ontology_id_or_default().viri,
+            Some(b.iri("http://www.example.com/viri"))
+        );
 
         let amo: RcComponentMappedOntology = so.into();
 

@@ -1,14 +1,14 @@
 use crate::error::HornedError;
 use crate::io::rdf::reader::parser_with_build;
 use crate::io::rdf::reader::OntologyParser;
-use crate::io::ParserConfiguration;
 use crate::io::IncompleteParse;
+use crate::io::ParserConfiguration;
 use crate::io::RDFOntology;
 use crate::model::Build;
 use crate::model::DocIRI;
 use crate::model::ForIRI;
-use crate::model::IRI;
 use crate::model::MutableOntology;
+use crate::model::IRI;
 use crate::ontology::indexed::ForIndex;
 use crate::resolve::path_to_file_iri;
 use crate::resolve::resolve_iri;
@@ -29,7 +29,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> ClosureOntologyParser<'a, A, AA> {
             b,
             import_map: HashMap::new(),
             op: HashMap::new(),
-            config
+            config,
         }
     }
 
@@ -106,9 +106,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> ClosureOntologyParser<'a, A, AA> {
         p.parse_declarations()?;
         let o = p.mut_ontology_ref();
 
-        o.insert(
-            DocIRI(new_doc_iri.clone())
-        );
+        o.insert(DocIRI(new_doc_iri.clone()));
 
         if let Some(declared_iri) = o.i().the_ontology_id_or_default().iri.clone() {
             v.push(declared_iri.clone());
@@ -166,7 +164,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> ClosureOntologyParser<'a, A, AA> {
 #[allow(clippy::type_complexity)]
 pub fn read<A: ForIRI, AA: ForIndex<A>>(
     iri: &IRI<A>,
-    config: ParserConfiguration
+    config: ParserConfiguration,
 ) -> Result<(RDFOntology<A, AA>, IncompleteParse<A>), HornedError> {
     // Do parse, then full parse of first, drop the rest
     let b = Build::new();
@@ -186,7 +184,7 @@ pub fn read<A: ForIRI, AA: ForIndex<A>>(
 pub fn read_closure<A: ForIRI, AA: ForIndex<A>>(
     b: &Build<A>,
     iri: &IRI<A>,
-    config: ParserConfiguration
+    config: ParserConfiguration,
 ) -> Result<Vec<(RDFOntology<A, AA>, IncompleteParse<A>)>, HornedError> {
     // Do parse, then full parse, then result the results
     let mut c = ClosureOntologyParser::new(b, config);

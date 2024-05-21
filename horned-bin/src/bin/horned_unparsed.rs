@@ -25,18 +25,18 @@ pub(crate) fn app(name: &str) -> App<'static> {
             .about("Show unparsed OWL RDF.")
             .author("Phillip Lord")
             .arg(
-            Arg::with_name("INPUT")
+                Arg::with_name("INPUT")
                     .help("Sets the input file to use")
                     .required(true)
                     .index(1),
-            )
+            ),
     )
 }
 
 pub(crate) fn matcher(matches: &ArgMatches) -> Result<(), HornedError> {
-    let input = matches.value_of("INPUT").ok_or_else(|| HornedError::CommandError(
-        "Command requires an INPUT argument".to_string(),
-    ))?;
+    let input = matches.value_of("INPUT").ok_or_else(|| {
+        HornedError::CommandError("Command requires an INPUT argument".to_string())
+    })?;
 
     let (_ont, incomplete): (RDFOntology<RcStr, RcAnnotatedComponent>, _) =
         horned_owl::io::rdf::reader::read(

@@ -26,7 +26,7 @@ pub enum ParserOutput<A: ForIRI, AA: ForIndex<A>> {
     RDFParser(RDFOntology<A, AA>, IncompleteParse<A>),
 }
 
-impl<A:ForIRI, AA: ForIndex<A>> ParserOutput<A, AA> {
+impl<A: ForIRI, AA: ForIndex<A>> ParserOutput<A, AA> {
     pub fn ofn(sop: (SetOntology<A>, PrefixMapping)) -> ParserOutput<A, AA> {
         ParserOutput::OFNParser(sop.0, sop.1)
     }
@@ -48,12 +48,11 @@ pub struct ParserConfiguration {
 }
 
 #[derive(Clone, Copy, Debug, Default)]
-pub struct OWXParserConfiguration {
-}
+pub struct OWXParserConfiguration {}
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct RDFParserConfiguration {
-    pub lax: bool
+    pub lax: bool,
 }
 
 impl<A: ForIRI, AA: ForIndex<A>> ParserOutput<A, AA> {
@@ -71,7 +70,6 @@ impl<A: ForIRI, AA: ForIndex<A>> ParserOutput<A, AA> {
         }
     }
 }
-
 
 impl<A: ForIRI, AA: ForIndex<A>> From<ParserOutput<A, AA>> for SetOntology<A> {
     fn from(p: ParserOutput<A, AA>) -> SetOntology<A> {

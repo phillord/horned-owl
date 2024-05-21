@@ -3,9 +3,9 @@ use std::io::Write;
 use curie::PrefixMapping;
 
 use crate::error::HornedError;
-use crate::model::ForIRI;
 use crate::model::Component;
 use crate::model::ComponentKind;
+use crate::model::ForIRI;
 use crate::ontology::component_mapped::ComponentMappedOntology;
 use crate::ontology::indexed::ForIndex;
 
@@ -35,17 +35,17 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
     // Ensure we have a single OntologyID in the ontology.
     let optional_id = {
         let mut components = ont.i().component_for_kind(ComponentKind::OntologyID);
-        let component = components.next(); 
+        let component = components.next();
         if components.next().is_some() {
             return Err(HornedError::invalid("multiple ontology IDs found"));
         }
-        component.map(|c| 
+        component.map(|c| {
             if let Component::OntologyID(ontology_id) = &c.component {
                 ontology_id
             } else {
                 unreachable!()
             }
-        )
+        })
     };
 
     // Write prefixes
@@ -59,7 +59,7 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
     write!(write, "Ontology(")?;
 
     // Write the IRI and Version IRI if any
-    if let Some(ontology_id) = optional_id { 
+    if let Some(ontology_id) = optional_id {
         if let Some(iri) = &ontology_id.iri {
             write!(write, "{}", iri.as_functional_with_prefixes(mapping))?;
             if let Some(viri) = &ontology_id.viri {
@@ -104,20 +104,18 @@ mod test {
         let reader = std::fs::File::open(&resource)
             .map(std::io::BufReader::new)
             .unwrap();
-        let (ont, prefixes) =
-            crate::io::ofn::reader::read(reader, Default::default()).unwrap();
+        let (ont, prefixes) = crate::io::ofn::reader::read(reader, Default::default()).unwrap();
 
         let component_mapped: ComponentMappedOntology<RcStr, AnnotatedComponent<RcStr>> =
             ont.clone().into();
         let mut writer = Vec::new();
-        crate::io::ofn::writer::write(&mut writer, &component_mapped, Some(&prefixes))
-            .unwrap();
+        crate::io::ofn::writer::write(&mut writer, &component_mapped, Some(&prefixes)).unwrap();
 
-        let (ont2, prefixes2) = crate::io::ofn::reader::read(std::io::Cursor::new(&writer), Default::default())
-            .unwrap();
+        let (ont2, prefixes2) =
+            crate::io::ofn::reader::read(std::io::Cursor::new(&writer), Default::default())
+                .unwrap();
 
         assert_eq!(prefixes, prefixes2, "prefix mapping differ");
         assert_eq!(ont, ont2, "ontologies differ");
     }
-
 }

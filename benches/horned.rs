@@ -111,9 +111,7 @@ fn io_read(bench: &mut Bencher) {
         let mut f = BufReader::new(f);
 
         let _: Option<(SetOntology<RcStr>, PrefixMapping)> =
-            horned_owl::io::owx::reader::read(
-                &mut f, Default::default()
-            ).ok();
+            horned_owl::io::owx::reader::read(&mut f, Default::default()).ok();
     })
 }
 

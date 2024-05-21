@@ -57,9 +57,7 @@ pub fn read_with_build<A: ForIRI, R: BufRead>(
 
     loop {
         match r.reader.read_resolved_event_into(&mut buf)? {
-            (ref ns, Event::Start(ref e)) | (ref ns, Event::Empty(ref e))
-                if is_owl(ns) =>
-            {
+            (ref ns, Event::Start(ref e)) | (ref ns, Event::Empty(ref e)) if is_owl(ns) => {
                 match e.local_name().as_ref() {
                     b"Ontology" => {
                         let s = get_attr_value_str(&mut r.reader, e, b"ontologyIRI")?;
@@ -67,12 +65,10 @@ pub fn read_with_build<A: ForIRI, R: BufRead>(
                             r.mapping.set_default(&s);
                         }
 
-                        ont.insert(
-                            OntologyID{
-                                iri: get_iri_value_for(&mut r, e, b"ontologyIRI")?,
-                                viri: get_iri_value_for(&mut r, e, b"versionIRI")?,
-                            }
-                        );
+                        ont.insert(OntologyID {
+                            iri: get_iri_value_for(&mut r, e, b"ontologyIRI")?,
+                            viri: get_iri_value_for(&mut r, e, b"versionIRI")?,
+                        });
                     }
                     b"Prefix" => {
                         let iri = get_attr_value_str(&mut r.reader, e, b"IRI")?;
@@ -139,13 +135,16 @@ fn decode_expand_curie_maybe<'a, A: ForIRI, R: BufRead>(
         Ok(curie) => {
             let cur = expand_curie_maybe(r, curie);
             Ok(cur)
-        },
+        }
         Err(e) => Err(HornedError::from(e)),
     }
 }
 
 /// Expand a curie if there is an appropriate prefix
-fn expand_curie_maybe<'a, A: ForIRI, R: BufRead>(r: &mut Read<A, R>, val: Cow<'a, str>) -> Cow<'a, str> {
+fn expand_curie_maybe<'a, A: ForIRI, R: BufRead>(
+    r: &mut Read<A, R>,
+    val: Cow<'a, str>,
+) -> Cow<'a, str> {
     match r.mapping.expand_curie_string(&val) {
         // If we expand use this
         Ok(n) => Cow::Owned(n),
@@ -181,14 +180,13 @@ fn get_attr_value_str<R: BufRead>(
 ) -> Result<Option<String>, HornedError> {
     // First, get the byte slice containing the attribute value
     get_attr_value_bytes(event, attr_key)?
-    .as_ref()
-    .map(|val|
+        .as_ref()
+        .map(|val|
         // Next, decode it to obtain a `str`.
         reader.decoder().decode(val)
-        .map_err(|err| HornedError::ParserError(Box::new(err), Location::Unknown))
-    )
-    .transpose()
-    .map(|opt| opt.map(|s| s.to_string()))
+        .map_err(|err| HornedError::ParserError(Box::new(err), Location::Unknown)))
+        .transpose()
+        .map(|opt| opt.map(|s| s.to_string()))
 }
 
 /// Returns, if present, the IRI for the given opening tag.
@@ -213,14 +211,14 @@ fn get_iri_value_for<A: ForIRI, R: BufRead>(
     Ok(
         // check for the attrib, if malformed return
         get_attr_value_str(&mut r.reader, event, iri_attr)?
-        // or transform the some String
+            // or transform the some String
             .map(|st| {
                 let cow = Cow::Owned(st);
                 let x = expand_curie_maybe(r, cow);
                 // Into an iri
                 r.build.iri(
                     // or a curie
-                    x
+                    x,
                 )
             }),
     )
@@ -484,7 +482,7 @@ fn axiom_from_start<A: ForIRI, R: BufRead>(
             ope: from_start(r, e)?,
             ce: from_next(r)?,
         }
-       .into(),
+        .into(),
         b"ObjectPropertyRange" => ObjectPropertyRange {
             ope: from_start(r, e)?,
             ce: from_next(r)?,
@@ -595,11 +593,9 @@ fn axiom_from_start<A: ForIRI, R: BufRead>(
             discard_till_start(r, b"Head")?;
             let head = till_end(r, b"Head")?;
             discard_till(r, b"DLSafeRule")?;
-            Rule {
-                body,
-                head,
-            }
-        }.into(),
+            Rule { body, head }
+        }
+        .into(),
         _ => {
             return Err(error_unexpected_tag(axiom_kind, r));
         }
@@ -1173,7 +1169,10 @@ fn from_next<A: ForIRI, R: BufRead, T: FromStart<A>>(r: &mut Read<A, R>) -> Resu
     }
 }
 
-fn discard_till_start<A: ForIRI, R: BufRead>(r: &mut Read<A, R>, start: &[u8]) -> Result<(), HornedError> {
+fn discard_till_start<A: ForIRI, R: BufRead>(
+    r: &mut Read<A, R>,
+    start: &[u8],
+) -> Result<(), HornedError> {
     let pos = r.reader.buffer_position();
     let mut buf = Vec::new();
     loop {
@@ -1190,7 +1189,6 @@ fn discard_till_start<A: ForIRI, R: BufRead>(r: &mut Read<A, R>, start: &[u8]) -
         }
     }
 }
-
 
 fn discard_till<A: ForIRI, R: BufRead>(r: &mut Read<A, R>, end: &[u8]) -> Result<(), HornedError> {
     let pos = r.reader.buffer_position();
@@ -1355,9 +1353,6 @@ from_xml! {IRI, r, end,
         }
 }
 
-
-
-
 #[cfg(test)]
 pub mod test {
     use super::*;
@@ -1366,7 +1361,10 @@ pub mod test {
 
     pub fn read_ok<R: BufRead>(
         bufread: &mut R,
-    ) -> (ComponentMappedOntology<RcStr, RcAnnotatedComponent>, PrefixMapping) {
+    ) -> (
+        ComponentMappedOntology<RcStr, RcAnnotatedComponent>,
+        PrefixMapping,
+    ) {
         let r = read(bufread, ParserConfiguration::default());
         assert!(r.is_ok(), "Expected ontology, got failure:{:?}", r.err());
         let (o, m) = r.ok().unwrap();
@@ -1387,7 +1385,12 @@ pub mod test {
         let ont_s = include_str!("../../ont/owl-xml/ont.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
         assert_eq!(
-            ont.i().the_ontology_id_or_default().iri.as_ref().unwrap().as_ref(),
+            ont.i()
+                .the_ontology_id_or_default()
+                .iri
+                .as_ref()
+                .unwrap()
+                .as_ref(),
             "http://www.example.com/iri"
         );
     }
@@ -1683,7 +1686,9 @@ pub mod test {
         let ont_s = include_str!("../../ont/owl-xml/annotation-with-annotation.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
-        let mut ann_i = ont.i().component_for_kind(ComponentKind::AnnotationAssertion);
+        let mut ann_i = ont
+            .i()
+            .component_for_kind(ComponentKind::AnnotationAssertion);
         let ann: &AnnotatedComponent<_> = ann_i.next().unwrap();
         assert_eq!(ann.ann.len(), 1);
     }
@@ -2241,7 +2246,7 @@ pub mod test {
     #[test]
     fn swrl_two_variables() {
         let ont_s = include_str!("../../ont/owl-xml/swrl_two_variables.owx");
-        let (ont,_) = read_ok(&mut ont_s.as_bytes());
+        let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
         let rule = ont.i().rule().next().unwrap();
         assert_eq!(2, rule.head.len());
@@ -2250,10 +2255,10 @@ pub mod test {
     #[test]
     fn swrl_class_expression() {
         let ont_s = include_str!("../../ont/owl-xml/swrl_class_expression.owx");
-        let (ont,_) = read_ok(&mut ont_s.as_bytes());
+        let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
         let rule = ont.i().rule().next().unwrap();
-        assert!{
+        assert! {
             matches!{
                 rule.head[0],
                 Atom::ClassAtom{pred:ClassExpression::ObjectIntersectionOf(_), arg:_}
@@ -2264,7 +2269,7 @@ pub mod test {
     #[test]
     fn swrl_object_property() {
         let ont_s = include_str!("../../ont/owl-xml/swrl_object_property_atom.owx");
-        let (ont,_) = read_ok(&mut ont_s.as_bytes());
+        let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
         let rule = ont.i().rule().next().unwrap();
         assert! {
@@ -2281,7 +2286,11 @@ pub mod test {
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
         let rule = ont.i().rule().next().unwrap();
-        if let Atom::DataPropertyAtom{args:(_,ref darg),..} = rule.head[0] {
+        if let Atom::DataPropertyAtom {
+            args: (_, ref darg),
+            ..
+        } = rule.head[0]
+        {
             assert! {
                 matches!{
                     darg,
@@ -2289,8 +2298,7 @@ pub mod test {
 
                 }
             }
-        }
-        else {
+        } else {
             assert!(false);
         }
     }
@@ -2302,7 +2310,7 @@ pub mod test {
 
         let rule = ont.i().rule().next().unwrap();
         dbg!(rule);
-        if let Atom::ClassAtom{ref arg,..} = rule.head[0] {
+        if let Atom::ClassAtom { ref arg, .. } = rule.head[0] {
             assert! {
                 matches!{
                     arg,
@@ -2310,12 +2318,11 @@ pub mod test {
 
                 }
             }
-        }
-        else {
+        } else {
             assert!(false);
         }
 
-        if let Atom::ClassAtom{ref arg,..} = rule.body[0] {
+        if let Atom::ClassAtom { ref arg, .. } = rule.body[0] {
             assert! {
                 matches!{
                     arg,
@@ -2323,8 +2330,7 @@ pub mod test {
 
                 }
             }
-        }
-        else {
+        } else {
             assert!(false);
         }
     }
@@ -2333,7 +2339,7 @@ pub mod test {
     fn swrl_different_individual() {
         let ont_s = include_str!("../../ont/owl-xml/swrl_different_individuals.owx");
 
-        let(_ont, _) = read_ok(&mut ont_s.as_bytes());
+        let (_ont, _) = read_ok(&mut ont_s.as_bytes());
 
         assert!(true);
     }
@@ -2342,7 +2348,7 @@ pub mod test {
     fn swrl_same_individual() {
         let ont_s = include_str!("../../ont/owl-xml/swrl_same_individual.owx");
 
-        let(_ont, _) = read_ok(&mut ont_s.as_bytes());
+        let (_ont, _) = read_ok(&mut ont_s.as_bytes());
 
         assert!(true);
     }
@@ -2351,7 +2357,7 @@ pub mod test {
     fn swrl_built_in() {
         let ont_s = include_str!("../../ont/owl-xml/swrl_built_in.owx");
 
-        let(_ont, _) = read_ok(&mut ont_s.as_bytes());
+        let (_ont, _) = read_ok(&mut ont_s.as_bytes());
 
         assert!(true);
     }
@@ -2360,7 +2366,7 @@ pub mod test {
     fn swrl_data_range() {
         let ont_s = include_str!("../../ont/owl-xml/swrl_data_range.owx");
 
-        let(_ont, _) = read_ok(&mut ont_s.as_bytes());
+        let (_ont, _) = read_ok(&mut ont_s.as_bytes());
 
         assert!(true);
     }

@@ -123,9 +123,12 @@ mod test {
         // Setup
         let build = Build::new_rc();
         let mut o = LogicallyEqualIndex::new();
-        let decl1: AnnotatedComponent<_> = DeclareClass(build.class("http://www.example.com#a")).into();
-        let decl2: AnnotatedComponent<_> = DeclareClass(build.class("http://www.example.com#b")).into();
-        let decl3: AnnotatedComponent<_> = DeclareClass(build.class("http://www.example.com#c")).into();
+        let decl1: AnnotatedComponent<_> =
+            DeclareClass(build.class("http://www.example.com#a")).into();
+        let decl2: AnnotatedComponent<_> =
+            DeclareClass(build.class("http://www.example.com#b")).into();
+        let decl3: AnnotatedComponent<_> =
+            DeclareClass(build.class("http://www.example.com#c")).into();
 
         o.index_insert(Rc::new(decl1.clone()));
         o.index_insert(Rc::new(decl2.clone()));
@@ -140,10 +143,7 @@ mod test {
     fn annotation_not_equal_retrieve() {
         // Setup
         let b = Build::new_rc();
-        let mut o = TwoIndexedOntology::new(
-            SetIndex::new_rc(),
-            LogicallyEqualIndex::new(),
-        );
+        let mut o = TwoIndexedOntology::new(SetIndex::new_rc(), LogicallyEqualIndex::new());
 
         let ann = Annotation {
             ap: b.annotation_property("http://www.example.com/ap"),
@@ -177,10 +177,7 @@ mod test {
     fn test_update_equal_axiom() {
         let b = Build::new_rc();
         {
-            let mut o = TwoIndexedOntology::new(
-                SetIndex::new_rc(),
-                LogicallyEqualIndex::new(),
-            );
+            let mut o = TwoIndexedOntology::new(SetIndex::new_rc(), LogicallyEqualIndex::new());
             let ne: NamedOWLEntity<_> = b.class("http://www.example.com").into();
             let ax: Component<_> = ne.into();
             let mut dec: AnnotatedComponent<_> = ax.into();
@@ -205,10 +202,7 @@ mod test {
         }
 
         {
-            let mut o = TwoIndexedOntology::new(
-                SetIndex::new_rc(),
-                LogicallyEqualIndex::new(),
-            );
+            let mut o = TwoIndexedOntology::new(SetIndex::new_rc(), LogicallyEqualIndex::new());
             let ne: NamedOWLEntity<_> = b.class("http://www.example.com").into();
             let ax: Component<_> = ne.into();
             let mut dec: AnnotatedComponent<_> = ax.into();

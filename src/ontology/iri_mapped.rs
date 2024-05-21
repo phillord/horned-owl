@@ -239,8 +239,7 @@ pub struct IRIMappedOntology<A: ForIRI, AA: ForIndex<A>>(
 pub type RcIRIMappedOntology = IRIMappedOntology<RcStr, Rc<AnnotatedComponent<RcStr>>>;
 pub type ArcIRIMappedOntology = IRIMappedOntology<ArcStr, Arc<AnnotatedComponent<ArcStr>>>;
 
-impl<A: ForIRI, AA: ForIndex<A>> Ontology<A> for IRIMappedOntology<A, AA> {
-}
+impl<A: ForIRI, AA: ForIndex<A>> Ontology<A> for IRIMappedOntology<A, AA> {}
 
 impl<A: ForIRI, AA: ForIndex<A>> MutableOntology<A> for IRIMappedOntology<A, AA> {
     fn insert<IAA>(&mut self, cmp: IAA) -> bool
@@ -266,17 +265,27 @@ impl<A: ForIRI, AA: ForIndex<A>> IRIMappedOntology<A, AA> {
     }
 
     //Utility method gets an iterator over the components in the index for a given IRI
-    pub fn components_for_iri(&mut self, iri: &IRI<A>) -> impl Iterator<Item = &AnnotatedComponent<A>> {
+    pub fn components_for_iri(
+        &mut self,
+        iri: &IRI<A>,
+    ) -> impl Iterator<Item = &AnnotatedComponent<A>> {
         self.0.j().component_for_iri(iri)
     }
 
     //Utility method gets an iterator over the axioms in the index for a given IRI
-    pub fn component_for_kind(&mut self, cmk: ComponentKind) -> impl Iterator<Item = &AnnotatedComponent<A>> {
+    pub fn component_for_kind(
+        &mut self,
+        cmk: ComponentKind,
+    ) -> impl Iterator<Item = &AnnotatedComponent<A>> {
         self.0.k().component_for_kind(cmk)
     }
 
     //Utility method updates an axiom in the index
-    pub fn update_axiom(&mut self, cmp: &AnnotatedComponent<A>, new_cmp: AnnotatedComponent<A>) -> bool {
+    pub fn update_axiom(
+        &mut self,
+        cmp: &AnnotatedComponent<A>,
+        new_cmp: AnnotatedComponent<A>,
+    ) -> bool {
         self.take(cmp);
         self.insert(new_cmp)
     }

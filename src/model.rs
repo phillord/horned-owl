@@ -119,7 +119,7 @@ use crate::vocab::Facet;
 /// [`as_oxiri`](IRI::as_oxiri) method which both validates and also
 /// provides access to the constituent parts.
 #[derive(Clone, Debug, Eq, PartialEq, Hash, PartialOrd, Ord)]
-pub struct IRI<A>(pub (crate) A);
+pub struct IRI<A>(pub(crate) A);
 
 pub trait ForIRI:
     AsRef<str> + Borrow<str> + Clone + Debug + Eq + From<String> + Hash + PartialEq + Ord + PartialOrd
@@ -381,7 +381,6 @@ impl<A: ForIRI> Build<A> {
         Datatype(self.iri(s))
     }
 
-
     pub fn variable<S>(&self, s: S) -> Variable<A>
     where
         S: Borrow<str>,
@@ -409,19 +408,19 @@ impl Build<String> {
 }
 
 macro_rules! namedenumimpl {
-  ($name:ident, $enum:ident, $kindenum:ident) => {
-      impl<A: ForIRI> From<$name<A>> for $enum<A> {
-          fn from(n:$name<A>) -> $enum<A> {
-              Self::$name(n)
-          }
-      }
+    ($name:ident, $enum:ident, $kindenum:ident) => {
+        impl<A: ForIRI> From<$name<A>> for $enum<A> {
+            fn from(n: $name<A>) -> $enum<A> {
+                Self::$name(n)
+            }
+        }
 
-      impl<A: ForIRI> From<$name<A>> for $kindenum {
-          fn from(_n:$name<A>) -> $kindenum {
-              Self::$name
-          }
-      }
-  }
+        impl<A: ForIRI> From<$name<A>> for $kindenum {
+            fn from(_n: $name<A>) -> $kindenum {
+                Self::$name
+            }
+        }
+    };
 }
 
 macro_rules! named {
@@ -564,7 +563,7 @@ pub enum NamedOWLEntityKind {
 /// equivalent form. The individual structs for each variant
 /// provide us types for use elsewhere in the library.
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
-pub enum NamedOWLEntity<A>{
+pub enum NamedOWLEntity<A> {
     Class(Class<A>),
     Datatype(Datatype<A>),
     ObjectProperty(ObjectProperty<A>),
@@ -591,7 +590,7 @@ impl TryFrom<NamedEntityKind> for NamedOWLEntityKind {
             NamedEntityKind::DataProperty => Ok(NamedOWLEntityKind::DataProperty),
             NamedEntityKind::AnnotationProperty => Ok(NamedOWLEntityKind::AnnotationProperty),
             NamedEntityKind::NamedIndividual => Ok(NamedOWLEntityKind::NamedIndividual),
-            NamedEntityKind::Variable => Err("Cannot convert Variable to OWL NamedEntity")
+            NamedEntityKind::Variable => Err("Cannot convert Variable to OWL NamedEntity"),
         }
     }
 }
@@ -615,9 +614,7 @@ impl NamedEntityKind {
     }
 }
 
-
 impl<A: ForIRI> Class<A> {
-
     pub fn is_thing(&self) -> bool {
         self.0.as_ref() == crate::vocab::OWL::Thing.as_ref()
     }
@@ -766,7 +763,9 @@ impl<A: ForIRI> From<NamedOWLEntity<A>> for Component<A> {
             NamedOWLEntity::AnnotationProperty(anp) => {
                 Component::DeclareAnnotationProperty(DeclareAnnotationProperty(anp))
             }
-            NamedOWLEntity::DataProperty(dp) => Component::DeclareDataProperty(DeclareDataProperty(dp)),
+            NamedOWLEntity::DataProperty(dp) => {
+                Component::DeclareDataProperty(DeclareDataProperty(dp))
+            }
             NamedOWLEntity::NamedIndividual(ni) => {
                 Component::DeclareNamedIndividual(DeclareNamedIndividual(ni))
             }
@@ -806,7 +805,7 @@ pub trait HigherKinded {
         self.higher_kind() == HigherKind::Axiom
     }
 
-    fn is_meta(&self)  -> bool {
+    fn is_meta(&self) -> bool {
         self.higher_kind() == HigherKind::Meta
     }
 
@@ -815,7 +814,6 @@ pub trait HigherKinded {
     }
 }
 
-
 /// An `AnnotatedComponent` is an `Component` with one orpmore `Annotation`.
 #[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
 pub struct AnnotatedComponent<A> {
@@ -823,9 +821,8 @@ pub struct AnnotatedComponent<A> {
     pub ann: BTreeSet<Annotation<A>>,
 }
 
-pub type RcAnnotatedComponent=Rc<AnnotatedComponent<RcStr>>;
-pub type ArcAnnotatedComponent=Arc<AnnotatedComponent<ArcStr>>;
-
+pub type RcAnnotatedComponent = Rc<AnnotatedComponent<RcStr>>;
+pub type ArcAnnotatedComponent = Arc<AnnotatedComponent<ArcStr>>;
 
 impl<A: ForIRI> AnnotatedComponent<A> {
     pub fn new<I>(component: I, ann: BTreeSet<Annotation<A>>) -> AnnotatedComponent<A>
@@ -869,7 +866,6 @@ impl<A: ForIRI> Kinded for AnnotatedComponent<A> {
         self.component.kind()
     }
 }
-
 
 impl<A: ForIRI> HigherKinded for AnnotatedComponent<A> {
     fn higher_kind(&self) -> HigherKind {
@@ -1438,12 +1434,14 @@ components! {
 }
 
 // TODO
-impl<A:ForIRI> Default for OntologyID<A> {
+impl<A: ForIRI> Default for OntologyID<A> {
     fn default() -> Self {
-        Self{iri: None, viri: None}
+        Self {
+            iri: None,
+            viri: None,
+        }
     }
 }
-
 
 // Non-axiom data structures associated with OWL
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
@@ -1804,16 +1802,30 @@ impl<A: ForIRI> From<Class<A>> for Box<ClassExpression<A>> {
 }
 
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub enum Atom<A>{
-    BuiltInAtom{pred: IRI<A>, args: Vec<DArgument<A>>},
-    ClassAtom{pred:ClassExpression<A>, arg: IArgument<A>},
-    DataPropertyAtom{pred: DataProperty<A>, args:(DArgument<A>, DArgument<A>)},
-    DataRangeAtom{pred: DataRange<A>, arg:DArgument<A>},
+pub enum Atom<A> {
+    BuiltInAtom {
+        pred: IRI<A>,
+        args: Vec<DArgument<A>>,
+    },
+    ClassAtom {
+        pred: ClassExpression<A>,
+        arg: IArgument<A>,
+    },
+    DataPropertyAtom {
+        pred: DataProperty<A>,
+        args: (DArgument<A>, DArgument<A>),
+    },
+    DataRangeAtom {
+        pred: DataRange<A>,
+        arg: DArgument<A>,
+    },
     DifferentIndividualsAtom(IArgument<A>, IArgument<A>),
-    ObjectPropertyAtom{pred:ObjectPropertyExpression<A>,args:(IArgument<A>,IArgument<A>)},
-    SameIndividualAtom(IArgument<A>, IArgument<A>)
+    ObjectPropertyAtom {
+        pred: ObjectPropertyExpression<A>,
+        args: (IArgument<A>, IArgument<A>),
+    },
+    SameIndividualAtom(IArgument<A>, IArgument<A>),
 }
-
 
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum IArgument<A> {
@@ -1821,19 +1833,19 @@ pub enum IArgument<A> {
     Variable(Variable<A>),
 }
 
-impl<A:ForIRI> From<Variable<A>> for IArgument<A> {
+impl<A: ForIRI> From<Variable<A>> for IArgument<A> {
     fn from(var: Variable<A>) -> IArgument<A> {
         Self::Variable(var)
     }
 }
 
-impl<A:ForIRI> From<Individual<A>> for IArgument<A> {
+impl<A: ForIRI> From<Individual<A>> for IArgument<A> {
     fn from(i: Individual<A>) -> IArgument<A> {
         Self::Individual(i)
     }
 }
 
-impl<A:ForIRI> From<NamedIndividual<A>> for IArgument<A> {
+impl<A: ForIRI> From<NamedIndividual<A>> for IArgument<A> {
     fn from(i: NamedIndividual<A>) -> IArgument<A> {
         Self::Individual(i.into())
     }
@@ -1846,8 +1858,7 @@ pub enum DArgument<A> {
 }
 
 /// Access or change the `OntologyID` of an `Ontology`
-pub trait Ontology<A> {
-}
+pub trait Ontology<A> {}
 
 /// Add or remove axioms to an `MutableOntology`
 pub trait MutableOntology<A> {
@@ -2057,7 +2068,8 @@ mod test {
             av: b.iri("http://www.example.com/av").into(),
         };
 
-        let mut decl1: AnnotatedComponent<_> = DeclareClass(b.class("http://www.example.com#a")).into();
+        let mut decl1: AnnotatedComponent<_> =
+            DeclareClass(b.class("http://www.example.com#a")).into();
         let decl2 = decl1.clone();
 
         assert_eq!(decl1, decl2);
@@ -2076,18 +2088,17 @@ mod test {
         assert_eq!(oxiri.authority(), Some("www.example.com"));
     }
 
-
     #[test]
     fn test_axiom_kinded() {
         let b = Build::new_rc();
 
         let iri = b.iri("http://www.example.com");
-        let ca = Atom::ClassAtom{
+        let ca = Atom::ClassAtom {
             pred: ClassExpression::Class(b.class(iri.clone())),
-            arg: IArgument::Variable(iri.clone().into())
+            arg: IArgument::Variable(iri.clone().into()),
         };
 
-        let r = Rule{
+        let r = Rule {
             head: vec![ca.clone()],
             body: vec![ca.clone()],
         };

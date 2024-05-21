@@ -6,8 +6,8 @@ use clap::Arg;
 use clap::ArgMatches;
 
 use horned_bin::{
-    naming::name,
     config::{parser_app, parser_config},
+    naming::name,
     parse_path,
     summary::summarize,
 };
@@ -38,36 +38,47 @@ pub(crate) fn app(name: &str) -> App<'static> {
                     .help("Sets the input file to use")
                     .required(true)
                     .index(2),
-            )
+            ),
     )
 }
 
 pub(crate) fn matcher(matches: &ArgMatches) -> Result<(), HornedError> {
     let config = parser_config(matches);
 
-    let input_a = matches.value_of("INPUT-A").ok_or_else(|| HornedError::CommandError(
-        "A file name must be specified".to_string(),
-    ))?;
+    let input_a = matches
+        .value_of("INPUT-A")
+        .ok_or_else(|| HornedError::CommandError("A file name must be specified".to_string()))?;
 
-    let input_b = matches.value_of("INPUT-B").ok_or_else(|| HornedError::CommandError(
-        "A file name must be specified".to_string(),
-    ))?;
+    let input_b = matches
+        .value_of("INPUT-B")
+        .ok_or_else(|| HornedError::CommandError("A file name must be specified".to_string()))?;
 
     let (ont_a, p_a, i_a) = parse_path(Path::new(input_a), config)?.decompose();
     let (ont_b, p_b, i_b) = parse_path(Path::new(input_b), config)?.decompose();
-
 
     let summary_a = summarize(ont_a);
     let summary_b = summarize(ont_b);
 
     println!("Ontology\t\t\t\t\tA\t\tB");
-    println!("\tLogical Components:\t\t\t\t{}\t\t{}", summary_a.logical_axiom, summary_b.logical_axiom);
-    println!("\tAnnotation Components:\t\t\t{}\t\t{}", summary_a.annotation_axiom, summary_b.annotation_axiom);
-    println!("\tMeta Components:\t\t\t{}\t\t{}", summary_a.meta_comp, summary_b.meta_comp);
+    println!(
+        "\tLogical Components:\t\t\t\t{}\t\t{}",
+        summary_a.logical_axiom, summary_b.logical_axiom
+    );
+    println!(
+        "\tAnnotation Components:\t\t\t{}\t\t{}",
+        summary_a.annotation_axiom, summary_b.annotation_axiom
+    );
+    println!(
+        "\tMeta Components:\t\t\t{}\t\t{}",
+        summary_a.meta_comp, summary_b.meta_comp
+    );
     println!();
     println!("Detailed");
 
-    for ((cmpk, size_a), (_, size_b)) in summary_a.with_axiom_types().zip(summary_b.with_axiom_types()) {
+    for ((cmpk, size_a), (_, size_b)) in summary_a
+        .with_axiom_types()
+        .zip(summary_b.with_axiom_types())
+    {
         println!("\t{0:<40}{1:<5}\t{2:<5}", name(cmpk), size_a, size_b);
     }
 

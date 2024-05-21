@@ -1,18 +1,23 @@
 //! An index that provides rapid look up via declaration kind
 
-use crate::model::{AnnotatedComponent, Component, ComponentKind, ForIRI, Kinded, NamedEntityKind, NamedOWLEntityKind, IRI, RcAnnotatedComponent, RcStr};
+use crate::model::{
+    AnnotatedComponent, Component, ComponentKind, ForIRI, Kinded, NamedEntityKind,
+    NamedOWLEntityKind, RcAnnotatedComponent, RcStr, IRI,
+};
 
 use super::indexed::ForIndex;
 use super::indexed::OntologyIndex;
 
+use std::collections::HashMap;
 use std::collections::HashSet;
 use std::marker::PhantomData;
-use std::collections::HashMap;
 
 #[derive(Debug)]
-pub struct DeclarationMappedIndex<A, AA>(HashMap<IRI<A>, NamedEntityKind>,
-                                         HashSet<IRI<A>>,
-                                         PhantomData<AA>);
+pub struct DeclarationMappedIndex<A, AA>(
+    HashMap<IRI<A>, NamedEntityKind>,
+    HashSet<IRI<A>>,
+    PhantomData<AA>,
+);
 
 impl<A: ForIRI, AA: ForIndex<A>> DeclarationMappedIndex<A, AA> {
     pub fn new() -> DeclarationMappedIndex<A, AA> {
@@ -20,7 +25,7 @@ impl<A: ForIRI, AA: ForIndex<A>> DeclarationMappedIndex<A, AA> {
     }
 
     pub fn is_annotation_property(&self, iri: &IRI<A>) -> bool {
-        matches!{
+        matches! {
             self.declaration_kind(iri),
             Some(NamedOWLEntityKind::AnnotationProperty)
         }
@@ -96,7 +101,7 @@ impl<A, AA> Default for DeclarationMappedIndex<A, AA> {
 
 impl<A: ForIRI, AA: ForIndex<A>> OntologyIndex<A, AA> for DeclarationMappedIndex<A, AA> {
     fn index_insert(&mut self, ax: AA) -> bool {
-        some!{
+        some! {
             {
                 let ne = self.aa_to_ne(ax.borrow())?;
                 let iri = self.aa_to_iri(ax.borrow())?;
@@ -122,7 +127,8 @@ impl<A: ForIRI, AA: ForIndex<A>> OntologyIndex<A, AA> for DeclarationMappedIndex
 
                 s
             }
-        }.is_some()
+        }
+        .is_some()
     }
 
     fn index_remove(&mut self, ax: &AnnotatedComponent<A>) -> bool {
@@ -206,7 +212,6 @@ mod test {
             Some(NamedOWLEntityKind::DataProperty)
         );
     }
-
 
     #[test]
     fn test_pun_support() {

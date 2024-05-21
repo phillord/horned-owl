@@ -202,13 +202,13 @@ macro_rules! derive_declaration {
                         f,
                         concat!("Declaration({} ", stringify!($name), "({}))"),
                         Functional(annotations, self.1, None),
-                        Functional(&self.0.0, self.1, None)
+                        Functional(&self.0 .0, self.1, None)
                     )
                 } else {
                     write!(
                         f,
                         concat!("Declaration(", stringify!($name), "({}))"),
-                        Functional(&self.0.0, self.1, None)
+                        Functional(&self.0 .0, self.1, None)
                     )
                 }
             }
@@ -440,7 +440,7 @@ impl<A: ForIRI> AsFunctional<A> for AnnotationValue<A> {}
 
 impl<'a, A: ForIRI> Display for Functional<'a, AnonymousIndividual<A>, A> {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
-        write!(f, "{}", self.0.0.borrow())
+        write!(f, "{}", self.0 .0.borrow())
     }
 }
 
@@ -499,7 +499,7 @@ impl<'a, A: ForIRI> Display for Functional<'a, Atom<A>, A> {
                     Functional(&pred, self.1, None),
                     Functional(&(&args.0, &args.1), self.1, None),
                 )
-            } 
+            }
             SameIndividualAtom(i1, i2) => {
                 write!(
                     f,
@@ -589,7 +589,9 @@ impl<'a, A: ForIRI> Display for Functional<'a, ClassExpression<A>, A> {
         macro_rules! object_cardinality {
             ($name:literal, $n:ident, $ope:ident, $bce:ident, $self:ident, $f:ident) => {
                 match $bce.as_ref() {
-                    ClassExpression::Class(cls) if cls.0.as_ref() == crate::vocab::OWL::Thing.as_ref() => {
+                    ClassExpression::Class(cls)
+                        if cls.0.as_ref() == crate::vocab::OWL::Thing.as_ref() =>
+                    {
                         write!(
                             f,
                             concat!($name, "({} {})"),
@@ -607,12 +609,14 @@ impl<'a, A: ForIRI> Display for Functional<'a, ClassExpression<A>, A> {
                         )
                     }
                 }
-            }
+            };
         }
         macro_rules! data_cardinality {
             ($name:literal, $n:ident, $dp:ident, $dr:ident, $self:ident, $f:ident) => {
                 match $dr {
-                    DataRange::Datatype(dt) if dt.0.as_ref() == crate::vocab::OWL2Datatype::Literal.as_ref() => {
+                    DataRange::Datatype(dt)
+                        if dt.0.as_ref() == crate::vocab::OWL2Datatype::Literal.as_ref() =>
+                    {
                         write!(
                             f,
                             concat!($name, "({} {})"),
@@ -630,7 +634,7 @@ impl<'a, A: ForIRI> Display for Functional<'a, ClassExpression<A>, A> {
                         )
                     }
                 }
-            }
+            };
         }
         match self.0 {
             Class(exp) => Functional(exp, self.1, None).fmt(f),
@@ -964,7 +968,6 @@ impl<'a, A: ForIRI> Display for Functional<'a, Rule<A>, A> {
             Functional(&atom, self.1, None).fmt(f)?;
         }
         f.write_char(')')?;
-        
         f.write_char(')')
     }
 }
@@ -995,7 +998,7 @@ impl<A: ForIRI> AsFunctional<A> for SubObjectPropertyExpression<A> {}
 
 impl<'a, A: ForIRI> Display for Functional<'a, Variable<A>, A> {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
-        write!(f, "Variable({})", Functional(&self.0.0, self.1, None))
+        write!(f, "Variable({})", Functional(&self.0 .0, self.1, None))
     }
 }
 

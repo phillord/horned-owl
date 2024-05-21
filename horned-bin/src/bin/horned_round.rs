@@ -7,7 +7,7 @@ use clap::ArgMatches;
 
 use horned_bin::{
     config::{parser_app, parser_config},
-    parse_path
+    parse_path,
 };
 
 use horned_owl::error::HornedError;
@@ -32,17 +32,14 @@ pub(crate) fn app(name: &str) -> App<'static> {
                     .help("Sets the input file to use")
                     .required(true)
                     .index(1),
-            )
+            ),
     )
 }
 
 pub(crate) fn matcher(matches: &ArgMatches) -> Result<(), HornedError> {
     let input = matches.value_of("INPUT").unwrap();
 
-    let res = parse_path(
-        Path::new(input),
-        parser_config(matches),
-    )?;
+    let res = parse_path(Path::new(input), parser_config(matches))?;
 
     let rtn = match res {
         horned_owl::io::ParserOutput::OFNParser(so, pm) => {

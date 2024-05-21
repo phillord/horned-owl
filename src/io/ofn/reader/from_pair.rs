@@ -9,16 +9,12 @@ use pest::iterators::Pair;
 use crate::error::HornedError;
 use crate::model::*;
 use crate::ontology::set::SetOntology;
-use crate::vocab::OWL2Datatype;
-use crate::vocab::OWL;
-use crate::vocab::Facet;
+use crate::vocab::{Facet, OWL2Datatype, OWL};
 
 use super::Context;
 use super::Rule;
 
 // ---------------------------------------------------------------------------
-
-
 
 type Result<T> = std::result::Result<T, HornedError>;
 
@@ -428,19 +424,21 @@ impl<A: ForIRI> FromPair<A> for AnnotatedComponent<A> {
             Rule::DLSafeRule => {
                 let mut inner = pair.into_inner();
                 let annotations = FromPair::from_pair(inner.next().unwrap(), ctx)?;
-                let body = inner.next().unwrap()
+                let body = inner
+                    .next()
+                    .unwrap()
                     .into_inner()
                     .rev()
                     .map(|pair| FromPair::from_pair(pair, ctx))
                     .collect::<Result<Vec<_>>>()?;
-                let head = inner.next().unwrap().into_inner()
+                let head = inner
+                    .next()
+                    .unwrap()
+                    .into_inner()
                     .rev()
                     .map(|pair| FromPair::from_pair(pair, ctx))
                     .collect::<Result<Vec<_>>>()?;
-                Ok(Self::new(
-                    crate::model::Rule::new(head, body),
-                    annotations
-                ))
+                Ok(Self::new(crate::model::Rule::new(head, body), annotations))
             }
 
             _ => unreachable!("unexpected rule in AnnotatedAxiom::from_pair"),
@@ -525,20 +523,20 @@ impl<A: ForIRI> FromPair<A> for Atom<A> {
             Rule::AtomClass => {
                 let mut pairs = inner.into_inner();
                 let pred = FromPair::from_pair(pairs.next().unwrap(), ctx)?;
-                let arg =  FromPair::from_pair(pairs.next().unwrap(), ctx)?;
+                let arg = FromPair::from_pair(pairs.next().unwrap(), ctx)?;
                 Ok(Atom::ClassAtom { pred, arg })
             }
             Rule::AtomDataRange => {
                 let mut pairs = inner.into_inner();
                 let pred = FromPair::from_pair(pairs.next().unwrap(), ctx)?;
-                let arg =  FromPair::from_pair(pairs.next().unwrap(), ctx)?;
+                let arg = FromPair::from_pair(pairs.next().unwrap(), ctx)?;
                 Ok(Atom::DataRangeAtom { pred, arg })
             }
             Rule::AtomObjectProperty => {
                 let mut pairs = inner.into_inner();
                 let pred = FromPair::from_pair(pairs.next().unwrap(), ctx)?;
-                let i1 =  FromPair::from_pair(pairs.next().unwrap(), ctx)?;
-                let i2 =  FromPair::from_pair(pairs.next().unwrap(), ctx)?;
+                let i1 = FromPair::from_pair(pairs.next().unwrap(), ctx)?;
+                let i2 = FromPair::from_pair(pairs.next().unwrap(), ctx)?;
                 let args = (i1, i2);
                 Ok(Atom::ObjectPropertyAtom { pred, args })
             }
@@ -622,9 +620,7 @@ macro_rules! impl_ce_obj_cardinality {
             Some(x) => Self::from_pair(x, $ctx).map(Box::new)?,
             // Missing class expression is equivalent to `owl:Thing` as class expression.
             // see https://www.w3.org/TR/owl2-syntax/#Object_Property_Cardinality_Restrictions
-            None => Box::new(ClassExpression::Class(Class(
-                $ctx.build.iri(OWL::Thing),
-            ))),
+            None => Box::new(ClassExpression::Class(Class($ctx.build.iri(OWL::Thing)))),
         };
         Ok(ClassExpression::$card { n, ope, bce })
     }};
@@ -743,7 +739,7 @@ impl<A: ForIRI> FromPair<A> for DArgument<A> {
         match inner.as_rule() {
             Rule::Literal => FromPair::from_pair(inner, context).map(DArgument::Literal),
             Rule::Variable => FromPair::from_pair(inner, context).map(DArgument::Variable),
-            _ => unreachable!()
+            _ => unreachable!(),
         }
     }
 }
@@ -824,7 +820,7 @@ impl<A: ForIRI> FromPair<A> for IArgument<A> {
         match inner.as_rule() {
             Rule::Individual => FromPair::from_pair(inner, context).map(IArgument::Individual),
             Rule::Variable => FromPair::from_pair(inner, context).map(IArgument::Variable),
-            _ => unreachable!()
+            _ => unreachable!(),
         }
     }
 }
@@ -857,7 +853,10 @@ impl<A: ForIRI> FromPair<A> for IRI<A> {
                 let mut pname = inner.into_inner().next().unwrap().into_inner();
                 let prefix = pname.next().unwrap().into_inner().next();
                 let local = pname.next().unwrap();
-                let curie = Curie::new(Some(prefix.map(|p| p.as_str()).unwrap_or_default()), local.as_str());
+                let curie = Curie::new(
+                    Some(prefix.map(|p| p.as_str()).unwrap_or_default()),
+                    local.as_str(),
+                );
                 match ctx.mapping.expand_curie(&curie) {
                     Ok(s) => Ok(ctx.build.iri(s)),
                     Err(curie::ExpansionError::Invalid) => {
@@ -968,7 +967,6 @@ macro_rules! impl_ontology {
                 }
                 ontology.insert(ontology_id);
 
-
                 // Process imports
                 for p in pair.into_inner() {
                     ontology.insert(Import::from_pair(p, ctx)?);
@@ -1026,7 +1024,8 @@ impl<A: ForIRI> FromPair<A> for PrefixMapping {
                     .add_prefix(prefix.as_str(), iri.as_str())
                     .expect("grammar does not allow invalid prefixes");
             } else {
-                prefixes.add_prefix("", iri.as_str())
+                prefixes
+                    .add_prefix("", iri.as_str())
                     .expect("empty prefix shouldn't fail")
             }
         }
@@ -1112,9 +1111,9 @@ impl<A: ForIRI> FromPair<A> for Variable<A> {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashSet;
     use std::io::Cursor;
     use std::rc::Rc;
-    use std::collections::HashSet;
 
     use super::*;
     use crate::io::ofn::reader::lexer::OwlFunctionalLexer;
@@ -1264,15 +1263,16 @@ mod tests {
             pred: build.data_property("https://example.com/d"),
             args: (
                 DArgument::Variable(build.variable("https://example.com/x")),
-                DArgument::Literal(Literal::Simple { literal: String::from("Literal String") }),
-            )
+                DArgument::Literal(Literal::Simple {
+                    literal: String::from("Literal String"),
+                }),
+            ),
         };
         let pair = OwlFunctionalLexer::lex(Rule::Atom, txt)
             .unwrap()
             .next()
             .unwrap();
-        let actual = Atom::from_pair(pair, &Context::new(&build, &mapping))
-            .unwrap();
+        let actual = Atom::from_pair(pair, &Context::new(&build, &mapping)).unwrap();
         pretty_assertions::assert_eq!(actual, expected);
     }
 
@@ -1293,10 +1293,12 @@ mod tests {
         let ctx = Context::new(&build, &prefixes);
         let item: (SetOntology<Rc<str>>, _) = FromPair::from_pair(pair, &ctx).unwrap();
 
-        let path = resource.replace("owl-functional", "owl-xml").replace(".ofn", ".owx");
+        let path = resource
+            .replace("owl-functional", "owl-xml")
+            .replace(".ofn", ".owx");
         let owx = &slurp::read_all_to_string(path).unwrap();
-        let expected = crate::io::owx::reader::read(&mut Cursor::new(&owx), Default::default())
-            .unwrap();
+        let expected =
+            crate::io::owx::reader::read(&mut Cursor::new(&owx), Default::default()).unwrap();
 
         // pretty_assertions::assert_eq!(item.1, expected.1);
         pretty_assertions::assert_eq!(item.0, expected.0);

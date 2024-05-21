@@ -10,10 +10,7 @@ use horned_bin::{
     parse_path,
 };
 
-use horned_owl::{
-    error::HornedError,
-    ontology::set::SetOntology
-};
+use horned_owl::{error::HornedError, ontology::set::SetOntology};
 
 use std::{collections::HashMap, path::Path};
 
@@ -35,19 +32,16 @@ pub(crate) fn app(name: &str) -> App<'static> {
                     .required(true)
                     .index(1),
             )
-            .arg(Arg::with_name("incomplete").long("incomplete").short('l'))
+            .arg(Arg::with_name("incomplete").long("incomplete").short('l')),
     )
 }
 
 pub(crate) fn matcher(matches: &ArgMatches) -> Result<(), HornedError> {
-    let input = matches.value_of("INPUT").ok_or_else(|| HornedError::CommandError(
-        "A file name must be specified".to_string(),
-    ))?;
+    let input = matches
+        .value_of("INPUT")
+        .ok_or_else(|| HornedError::CommandError("A file name must be specified".to_string()))?;
 
-    let r = parse_path(
-        Path::new(input),
-        parser_config(matches),
-    )?;
+    let r = parse_path(Path::new(input), parser_config(matches))?;
 
     match r {
         horned_owl::io::ParserOutput::OFNParser(ont, map) => {

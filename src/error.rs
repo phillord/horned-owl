@@ -9,10 +9,10 @@ use thiserror::Error;
 pub enum Location {
     BytePosition(usize),
     ByteSpan(Range<usize>),
-    Unknown
+    Unknown,
 }
 
-impl From<usize> for Location{
+impl From<usize> for Location {
     fn from(u: usize) -> Self {
         Location::BytePosition(u)
     }
@@ -44,7 +44,7 @@ impl Display for Location {
         match self {
             Self::BytePosition(u) => write!(f, "Byte Position: {}", u),
             Self::ByteSpan(r) => write!(f, "Byte Span: {} to {}", r.start, r.end),
-            Self::Unknown => write!(f, "Unknown")
+            Self::Unknown => write!(f, "Unknown"),
         }
     }
 }
@@ -78,13 +78,11 @@ macro_rules! invalid {
 
 pub(crate) use invalid;
 
-
-
 impl HornedError {
-    pub fn invalid_at<S: Into<String>, L: Into<Location>>(s:S, l:L) -> HornedError {
+    pub fn invalid_at<S: Into<String>, L: Into<Location>>(s: S, l: L) -> HornedError {
         HornedError::ValidityError(s.into(), l.into())
     }
-    pub fn invalid<S: Into<String>>(s:S) -> HornedError {
+    pub fn invalid<S: Into<String>>(s: S) -> HornedError {
         HornedError::ValidityError(s.into(), Location::Unknown)
     }
 }

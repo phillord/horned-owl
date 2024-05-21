@@ -21,4 +21,10 @@ repos:
     -   id: check-added-large-files
     -   id: no-commit-to-branch
         args: [--branch, rfc]
+-   repo: https://github.com/doublify/pre-commit-rust
+    rev: master
+    hooks:
+    -   id: fmt
+        args: ["--check", "--"]
+        pass_filenames: false
 

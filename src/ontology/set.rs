@@ -1,6 +1,5 @@
 //! Rapid, simple, in-memory `Ontology` and `OntologyIndex`
-use std::iter::FusedIterator;
-use std::{hash::Hash, collections::HashSet, iter::FromIterator, rc::Rc};
+use std::{collections::HashSet, hash::Hash, iter::FromIterator, rc::Rc};
 
 use super::indexed::ForIndex;
 use super::indexed::{OneIndexedOntology, OntologyIndex};
@@ -48,7 +47,7 @@ impl<A: ForIRI> SetOntology<A> {
         SetOntology(OneIndexedOntology::new(SetIndex::new()))
     }
 
-    pub fn from_index(index:SetIndex<A, AnnotatedComponent<A>>) -> Self {
+    pub fn from_index(index: SetIndex<A, AnnotatedComponent<A>>) -> Self {
         SetOntology(OneIndexedOntology::new(index))
     }
 
@@ -62,10 +61,9 @@ impl<A: ForIRI> SetOntology<A> {
     }
 }
 
-impl<A: ForIRI> Ontology<A> for SetOntology<A> {
-}
+impl<A: ForIRI> Ontology<A> for SetOntology<A> {}
 
-impl<A:ForIRI, AA:ForIndex<A>> From<SetIndex<A, AA>> for SetOntology<A> {
+impl<A: ForIRI, AA: ForIndex<A>> From<SetIndex<A, AA>> for SetOntology<A> {
     fn from(index: SetIndex<A, AA>) -> Self {
         // Unpack ForIndex'd entities by unwrapping and turn them into
         // direct references for SetOntology.
@@ -226,12 +224,14 @@ impl<A: ForIRI, AA: ForIndex<A>> SetIndex<A, AA> {
     }
 
     pub fn the_ontology_id(&self) -> Option<OntologyID<A>> {
-        self.0.iter().filter_map(|item| {
-            match &item.borrow().component {
+        self.0
+            .iter()
+            .filter_map(|item| match &item.borrow().component {
                 Component::OntologyID(id) => Some(id),
                 _ => None,
-            }
-        }).next().cloned()
+            })
+            .next()
+            .cloned()
     }
 
     pub fn the_ontology_id_or_default(&self) -> OntologyID<A> {
@@ -292,7 +292,6 @@ mod test {
         assert_eq!(so_id.iri, Some(b.iri("http://www.example.com/iri")));
         assert_eq!(so_id.viri, Some(b.iri("http://www.example.com/viri")));
     }
-
 
     #[test]
     fn test_ontology_clone() {
@@ -440,7 +439,6 @@ mod test {
         o.insert(decl3.clone());
 
         let newo: SetOntology<_> = o.into_iter().into();
-
 
         // Iteration is set based so undefined in order. So, sort first.
         let mut v: Vec<_> = (&newo).into_iter().collect();

@@ -5,10 +5,8 @@ use crate::error::invalid;
 use crate::error::HornedError;
 use crate::model::Build;
 use crate::model::ForIRI;
-use crate::model::{
-    NamedOWLEntity,NamedOWLEntityKind
-};
 use crate::model::IRI;
+use crate::model::{NamedOWLEntity, NamedOWLEntityKind};
 
 use std::borrow::Borrow;
 use std::convert::TryFrom;
@@ -365,8 +363,6 @@ vocabulary_type! {
         (SWRL, Variable, false)
     ]
 }
-
-
 
 pub enum Vocab {
     Facet(Facet),
@@ -789,7 +785,10 @@ mod tests {
             to_built_in_entity(&iri_top_op),
             Some(NamedOWLEntityKind::ObjectProperty)
         );
-        assert_eq!(to_built_in_entity(&iri_thing), Some(NamedOWLEntityKind::Class));
+        assert_eq!(
+            to_built_in_entity(&iri_thing),
+            Some(NamedOWLEntityKind::Class)
+        );
         assert_eq!(
             to_built_in_entity(&iri_nothing),
             Some(NamedOWLEntityKind::Class)

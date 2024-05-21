@@ -15,16 +15,15 @@ impl<A: ForIRI> crate::model::IRI<A> {
 }
 
 impl<'a, A: ForIRI> TryInto<oxiri::Iri<&'a str>> for &'a crate::model::IRI<A> {
-    type Error=oxiri::IriParseError;
+    type Error = oxiri::IriParseError;
 
-    fn try_into(self) -> Result<oxiri::Iri<&'a str>, oxiri::IriParseError>{
+    fn try_into(self) -> Result<oxiri::Iri<&'a str>, oxiri::IriParseError> {
         oxiri::Iri::parse(&self.0.borrow())
     }
 }
 
-
 #[cfg(test)]
-mod test{
+mod test {
     use crate::model::Build;
 
     use std::convert::TryInto;
@@ -44,7 +43,7 @@ mod test{
         let b = Build::new_rc();
         let iri = b.iri("http://www.example.com");
 
-        let oxiri:oxiri::Iri<&str> = (&iri).try_into().unwrap();
+        let oxiri: oxiri::Iri<&str> = (&iri).try_into().unwrap();
         assert_eq!(oxiri.authority(), Some("www.example.com"))
     }
 }

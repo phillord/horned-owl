@@ -32,11 +32,9 @@ pub(crate) fn app(name: &str) -> App<'static> {
 
 pub(crate) fn matcher(matches: &ArgMatches) -> Result<(), HornedError> {
     let size: isize =
-        matches
-            .value_of("SIZE")
-            .unwrap()
-            .parse()
-            .map_err(|_| HornedError::CommandError("Cannot parse SIZE as an integer".to_string()))?;
+        matches.value_of("SIZE").unwrap().parse().map_err(|_| {
+            HornedError::CommandError("Cannot parse SIZE as an integer".to_string())
+        })?;
 
     let b = Build::new_rc();
     let mut o = SetOntology::new_rc();
