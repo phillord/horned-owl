@@ -1,5 +1,10 @@
 //! Rapid, simple, in-memory `Ontology` and `OntologyIndex`
-use std::{collections::HashSet, hash::Hash, iter::FromIterator, rc::Rc};
+use std::{
+    collections::HashSet,
+    hash::Hash,
+    iter::{FromIterator, FusedIterator},
+    rc::Rc,
+};
 
 use super::indexed::ForIndex;
 use super::indexed::{OneIndexedOntology, OntologyIndex};
@@ -92,8 +97,7 @@ impl<'a, A: ForIRI> Iterator for SetIter<'a, A> {
     }
 }
 
-impl<'a, A: ForIRI> FusedIterator for SetIter<'a, A> {
-}
+impl<'a, A: ForIRI> FusedIterator for SetIter<'a, A> {}
 
 impl<'a, A: ForIRI> ExactSizeIterator for SetIter<'a, A> {
     fn len(&self) -> usize {
@@ -119,8 +123,7 @@ impl<A: ForIRI> Iterator for SetIntoIter<A> {
     }
 }
 
-impl<A: ForIRI> FusedIterator for SetIntoIter<A> {
-}
+impl<A: ForIRI> FusedIterator for SetIntoIter<A> {}
 
 impl<A: ForIRI> ExactSizeIterator for SetIntoIter<A> {
     fn len(&self) -> usize {
@@ -168,13 +171,15 @@ impl<A: ForIRI> MutableOntology<A> for SetOntology<A> {
 
 impl<A: ForIRI> FromIterator<AnnotatedComponent<A>> for SetOntology<A> {
     fn from_iter<I: IntoIterator<Item = AnnotatedComponent<A>>>(iter: I) -> Self {
-        iter.into_iter().collect::<MutableOntologyWrapper<SetOntology<_>>>().0
+        iter.into_iter()
+            .collect::<MutableOntologyWrapper<SetOntology<_>>>()
+            .0
     }
 }
 
 impl<A: ForIRI> Extend<AnnotatedComponent<A>> for SetOntology<A> {
     fn extend<T: IntoIterator<Item = AnnotatedComponent<A>>>(&mut self, iter: T) {
-        MutableOntologyWrapper(self).extend(iter.into_iter());
+        MutableOntologyWrapper(self).extend(iter);
     }
 }
 
@@ -183,7 +188,6 @@ where
     I: Iterator<Item = AnnotatedComponent<A>>,
 {
     fn from(i: I) -> SetOntology<A> {
-
         let mut so = SetOntology::new();
         for c in i {
             so.insert(c);
@@ -277,8 +281,7 @@ mod test {
     }
 
     #[test]
-    fn
-        test_ontology_id() {
+    fn test_ontology_id() {
         let mut so = SetOntology::new_rc();
         let b = Build::new_rc();
         let oid = OntologyID {

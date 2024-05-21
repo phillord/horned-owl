@@ -32,7 +32,7 @@ impl<A: ForIRI, AA: ForIndex<A>> DeclarationMappedIndex<A, AA> {
     }
 
     pub fn declaration_kind(&self, iri: &IRI<A>) -> Option<NamedOWLEntityKind> {
-        self.kind(iri).map(|e| e.as_owl()).flatten()
+        self.kind(iri).and_then(|e| e.as_owl())
     }
 
     pub fn kind(&self, iri: &IRI<A>) -> Option<NamedEntityKind> {
@@ -133,7 +133,7 @@ impl<A: ForIRI, AA: ForIndex<A>> OntologyIndex<A, AA> for DeclarationMappedIndex
 
     fn index_remove(&mut self, ax: &AnnotatedComponent<A>) -> bool {
         let s = some! {
-            self.0.remove(&self.aa_to_iri(&*ax)?)
+            self.0.remove(&self.aa_to_iri(ax)?)
         };
 
         s.is_some()

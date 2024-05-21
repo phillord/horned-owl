@@ -35,7 +35,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> ClosureOntologyParser<'a, A, AA> {
 
     pub fn parse_path(&mut self, pb: &PathBuf) -> Result<Vec<IRI<A>>, HornedError> {
         let file_iri = path_to_file_iri(self.b, pb);
-        let s = ::std::fs::read_to_string(&pb)?;
+        let s = ::std::fs::read_to_string(pb)?;
         let mut v = vec![];
 
         // We use the IRI that we try to parse, but we don't know that

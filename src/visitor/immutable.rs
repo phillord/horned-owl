@@ -100,7 +100,7 @@ pub struct Walk<A, V>(V, PhantomData<A>);
 
 impl<A: ForIRI, V: Visit<A>> Walk<A, V> {
     pub fn new(v: V) -> Self {
-        Walk(v, PhantomData::default())
+        Walk(v, PhantomData)
     }
 
     pub fn as_mut_visit(&mut self) -> &mut V {

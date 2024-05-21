@@ -105,7 +105,7 @@ pub struct WalkMut<A, V>(V, PhantomData<A>);
 
 impl<A: ForIRI, V: VisitMut<A>> WalkMut<A, V> {
     pub fn new(v: V) -> Self {
-        WalkMut(v, PhantomData::default())
+        WalkMut(v, PhantomData)
     }
 
     pub fn as_mut_visit(&mut self) -> &mut V {

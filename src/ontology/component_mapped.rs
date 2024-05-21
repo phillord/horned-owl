@@ -14,7 +14,11 @@ use super::indexed::ForIndex;
 use super::set::SetOntology;
 use crate::model::*;
 use std::{
-    cell::RefCell, collections::{BTreeMap, BTreeSet, VecDeque}, iter::FromIterator, rc::Rc, sync::Arc
+    cell::RefCell,
+    collections::{BTreeMap, BTreeSet, VecDeque},
+    iter::FromIterator,
+    rc::Rc,
+    sync::Arc,
 };
 
 use std::marker::PhantomData;
@@ -83,10 +87,7 @@ impl<A: ForIRI, AA: ForIndex<A>> ComponentMappedIndex<A, AA> {
     /// ontology. It should only be used where the intention is to
     /// update the ontology.
     fn component_as_ptr(&self, cmk: ComponentKind) -> *mut BTreeMap<ComponentKind, BTreeSet<AA>> {
-        self.component
-            .borrow_mut()
-            .entry(cmk)
-            .or_insert_with(BTreeSet::new);
+        self.component.borrow_mut().entry(cmk).or_default();
         self.component.as_ptr()
     }
 
@@ -229,10 +230,8 @@ impl<A: ForIRI, AA: ForIndex<A>> IntoIterator for ComponentMappedIndex<A, AA> {
         let btreemap = self.component.into_inner();
 
         // The collect switches the type which shows up in the API. Blegh.
-        #[allow(clippy::needless_collect)]
         let v: Vec<AnnotatedComponent<A>> = btreemap
-            .into_iter()
-            .map(|(_k, v)| v)
+            .into_values()
             .flat_map(BTreeSet::into_iter)
             .map(|fi| fi.unwrap())
             .collect();
@@ -261,7 +260,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> Iterator for ComponentMappedIter<'a, A, AA>
         if !self.kinds.is_empty() {
             let kind = self.kinds.pop_front().unwrap();
             self.inner = self.ont.set_for_kind(*kind).map(BTreeSet::iter);
-            self.next().map(|rc| &*rc)
+            self.next()
         } else {
             None
         }
@@ -280,7 +279,6 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> IntoIterator for &'a ComponentMappedIndex<A
     }
 }
 
-
 impl<A: ForIRI, AA: ForIndex<A>> OntologyIndex<A, AA> for ComponentMappedIndex<A, AA> {
     fn index_insert(&mut self, cmp: AA) -> bool {
         self.mut_set_for_kind(cmp.borrow().kind()).insert(cmp)
@@ -298,18 +296,11 @@ pub type RcComponentMappedOntology = ComponentMappedOntology<RcStr, Rc<Annotated
 pub type ArcComponentMappedOntology =
     ComponentMappedOntology<ArcStr, Arc<AnnotatedComponent<ArcStr>>>;
 
-<<<<<<< HEAD
-impl<A: ForIRI, AA:ForIndex<A>> Default for ComponentMappedOntology<A, AA> {
+impl<A: ForIRI, AA: ForIndex<A>> Default for ComponentMappedOntology<A, AA> {
     fn default() -> Self {
         Self(Default::default())
     }
 }
-
-impl<A: ForIRI, AA: ForIndex<A>> Ontology<A> for ComponentMappedOntology<A, AA> {
-}
-=======
-impl<A: ForIRI, AA: ForIndex<A>> Ontology<A> for ComponentMappedOntology<A, AA> {}
->>>>>>> 5175f81 (Apply rustfmt to whole code base)
 
 impl<A: ForIRI, AA: ForIndex<A>> MutableOntology<A> for ComponentMappedOntology<A, AA> {
     fn insert<IAA>(&mut self, cmp: IAA) -> bool
@@ -382,20 +373,21 @@ impl<A: ForIRI, AA: ForIndex<A>> From<ComponentMappedOntology<A, AA>> for SetOnt
     }
 }
 
-impl<A: ForIRI, AA: ForIndex<A>> FromIterator<AnnotatedComponent<A>> for ComponentMappedOntology<A, AA> {
+impl<A: ForIRI, AA: ForIndex<A>> FromIterator<AnnotatedComponent<A>>
+    for ComponentMappedOntology<A, AA>
+{
     fn from_iter<I: IntoIterator<Item = AnnotatedComponent<A>>>(iter: I) -> Self {
-        iter.into_iter().collect::<MutableOntologyWrapper<ComponentMappedOntology<_, _>>>().0
+        iter.into_iter()
+            .collect::<MutableOntologyWrapper<ComponentMappedOntology<_, _>>>()
+            .0
     }
 }
 
 impl<A: ForIRI, AA: ForIndex<A>> Extend<AnnotatedComponent<A>> for ComponentMappedOntology<A, AA> {
     fn extend<T: IntoIterator<Item = AnnotatedComponent<A>>>(&mut self, iter: T) {
-        MutableOntologyWrapper(self).extend(iter.into_iter());
+        MutableOntologyWrapper(self).extend(iter);
     }
 }
-
-
-
 
 #[cfg(test)]
 mod test {
@@ -547,7 +539,6 @@ mod test {
         assert_eq!(it.next(), None);
     }
 
-
     #[test]
     fn test_from_iterator() {
         let mut ont = SetOntology::new_rc();
@@ -559,7 +550,8 @@ mod test {
 
         ont.insert(oid.clone());
 
-        let newont: ComponentMappedOntology<RcStr, Rc<AnnotatedComponent<RcStr>>> = ont.clone().into_iter().collect();
+        let newont: ComponentMappedOntology<RcStr, Rc<AnnotatedComponent<RcStr>>> =
+            ont.clone().into_iter().collect();
         assert_eq!(ont, newont.into());
     }
 
@@ -579,5 +571,4 @@ mod test {
 
         assert_eq!(ont, newont.into());
     }
-
 }

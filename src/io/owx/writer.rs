@@ -61,7 +61,7 @@ where
 }
 
 /// Add an IRI or AbbreviatedIRI attribute to elem
-fn iri_or_curie<'a>(mapping: &'a PrefixMapping, elem: &mut BytesStart, iri: &str) {
+fn iri_or_curie(mapping: &PrefixMapping, elem: &mut BytesStart, iri: &str) {
     match mapping.shrink_iri(&(*iri)[..]) {
         Ok(curie) => {
             let curie = format!("{}", curie);
@@ -72,9 +72,9 @@ fn iri_or_curie<'a>(mapping: &'a PrefixMapping, elem: &mut BytesStart, iri: &str
 }
 
 /// Write a tag with an IRI attribute.
-fn with_iri<'a, A: ForIRI, I, W>(
+fn with_iri<A: ForIRI, I, W>(
     w: &mut Writer<W>,
-    mapping: &'a PrefixMapping,
+    mapping: &PrefixMapping,
     // tag: &[u8],
     tag: &str,
     into_iri: I,
@@ -237,7 +237,7 @@ where
     W: StdWrite,
 {
     // w.write_event(Event::Decl(BytesDecl::new(&b"1.0"[..], None, None)))?;
-    w.write_event(Event::Decl(BytesDecl::new(&"1.0"[..], None, None)))?;
+    w.write_event(Event::Decl(BytesDecl::new("1.0", None, None)))?;
 
     // let mut elem = BytesStart::owned_name("Ontology");
     let mut elem = BytesStart::new("Ontology");
@@ -721,7 +721,7 @@ render! {
         match self {
             Atom::BuiltInAtom{pred, args} => {
                 let mut open = BytesStart::new("BuiltInAtom");
-                open.push_attribute(("IRI", &pred.0.borrow()[..]));
+                open.push_attribute(("IRI", pred.0.borrow()));
                 args.within_tag(w, m, open)?;
             }
             Atom::ClassAtom{pred, arg} => {

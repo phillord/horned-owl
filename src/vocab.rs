@@ -172,9 +172,8 @@ vocabulary_type! {
 
 impl RDFS {
     pub fn is_builtin(&self) -> bool {
-        match &self {
-            RDFS::Label | RDFS::Comment | RDFS::SeeAlso | RDFS::IsDefinedBy => true,
-            _ => false,
+        matches! {&self,
+            RDFS::Label | RDFS::Comment | RDFS::SeeAlso | RDFS::IsDefinedBy
         }
     }
 }
@@ -393,15 +392,13 @@ impl<'a> Meta<&'a IRI<String>> for Vocab {
     }
 
     fn all() -> Vec<Self> {
-        let facet_all = Facet::all().into_iter().map(|variant| Self::Facet(variant));
-        let rdf_all = RDF::all().into_iter().map(|variant| Self::RDF(variant));
-        let rdfs_all = RDFS::all().into_iter().map(|variant| Self::RDFS(variant));
-        let owl_all = OWL::all().into_iter().map(|variant| Self::OWL(variant));
-        let swrl_all = SWRL::all().into_iter().map(|variant| Self::SWRL(variant));
-        let xsd_all = XSD::all().into_iter().map(|variant| Self::XSD(variant));
-        let ns_all = Namespace::all()
-            .into_iter()
-            .map(|variant| Self::Namespace(variant));
+        let facet_all = Facet::all().into_iter().map(Self::Facet);
+        let rdf_all = RDF::all().into_iter().map(Self::RDF);
+        let rdfs_all = RDFS::all().into_iter().map(Self::RDFS);
+        let owl_all = OWL::all().into_iter().map(Self::OWL);
+        let swrl_all = SWRL::all().into_iter().map(Self::SWRL);
+        let xsd_all = XSD::all().into_iter().map(Self::XSD);
+        let ns_all = Namespace::all().into_iter().map(Self::Namespace);
 
         facet_all
             .chain(rdf_all)

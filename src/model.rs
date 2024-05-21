@@ -670,8 +670,8 @@ impl<A: ForIRI> Deref for Individual<A> {
 
     fn deref(&self) -> &Self::Target {
         match self {
-            Individual::Named(ni) => &*ni.0,
-            Individual::Anonymous(ai) => &*ai,
+            Individual::Named(ni) => &ni.0,
+            Individual::Anonymous(ai) => ai,
         }
     }
 }
@@ -723,8 +723,8 @@ impl<A: ForIRI> Deref for AnnotationSubject<A> {
 
     fn deref(&self) -> &Self::Target {
         match self {
-            Self::IRI(iri) => &*iri,
-            Self::AnonymousIndividual(ai) => &*ai,
+            Self::IRI(iri) => iri,
+            Self::AnonymousIndividual(ai) => ai,
         }
     }
 }
@@ -1917,9 +1917,9 @@ pub struct MutableOntologyWrapper<O>(pub O);
 impl<A, O> FromIterator<AnnotatedComponent<A>> for MutableOntologyWrapper<O>
 where
     A: ForIRI,
-    O: Default + MutableOntology<A>
+    O: Default + MutableOntology<A>,
 {
-    fn from_iter<T: IntoIterator<Item=AnnotatedComponent<A>>>(iter: T) -> Self {
+    fn from_iter<T: IntoIterator<Item = AnnotatedComponent<A>>>(iter: T) -> Self {
         let mut mow = Self(O::default());
         for c in iter {
             mow.0.insert(c);
@@ -1933,7 +1933,7 @@ where
     A: ForIRI,
     O: MutableOntology<A>,
 {
-    fn extend<T: IntoIterator<Item=AnnotatedComponent<A>>>(&mut self, iter: T) {
+    fn extend<T: IntoIterator<Item = AnnotatedComponent<A>>>(&mut self, iter: T) {
         for c in iter {
             self.0.insert(c);
         }
@@ -2117,8 +2117,8 @@ mod test {
 
         so.insert(oid.clone());
 
-        let newso:MutableOntologyWrapper<SetOntology<_>> = so.clone().into_iter().collect();
-        let newso:SetOntology<_> = newso.0;
+        let newso: MutableOntologyWrapper<SetOntology<_>> = so.clone().into_iter().collect();
+        let newso: SetOntology<_> = newso.0;
 
         assert_eq!(so, newso);
     }
@@ -2133,7 +2133,6 @@ mod test {
         };
 
         so.insert(oid.clone());
-
 
         let mut so2 = SetOntology::new_rc();
         let mut mow = MutableOntologyWrapper(&mut so2);

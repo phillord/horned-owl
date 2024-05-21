@@ -29,7 +29,7 @@ pub trait FromPair<A: ForIRI>: Sized {
     /// Create a new instance from a `Pair`.
     #[inline]
     fn from_pair(pair: Pair<Rule>, context: &Context<'_, A>) -> Result<Self> {
-        if cfg!(debug_assertions) && &pair.as_rule() != &Self::RULE {
+        if cfg!(debug_assertions) && pair.as_rule() != Self::RULE {
             return Err(HornedError::from(pest::error::Error::new_from_span(
                 pest::error::ErrorVariant::ParsingError {
                     positives: vec![pair.as_rule()],
@@ -348,7 +348,7 @@ impl<A: ForIRI> FromPair<A> for AnnotatedComponent<A> {
                 let mut inner = pair.into_inner();
                 let annotations = FromPair::from_pair(inner.next().unwrap(), ctx)?;
                 let ope = ObjectPropertyExpression::from_pair(inner.next().unwrap(), ctx)?;
-                let from = Individual::from_pair(inner.next().unwrap(), ctx)?.into();
+                let from = Individual::from_pair(inner.next().unwrap(), ctx)?;
                 let to = Individual::from_pair(inner.next().unwrap(), ctx)?;
                 Ok(Self::new(
                     NegativeObjectPropertyAssertion::new(ope, from, to),
@@ -794,7 +794,7 @@ impl<A: ForIRI> FromPair<A> for Facet {
         let iri = IRI::from_pair(pair, ctx)?;
         Facet::all()
             .into_iter()
-            .find(|facet| &iri.to_string() == facet.as_ref())
+            .find(|facet| iri.to_string() == facet.as_ref())
             .ok_or_else(|| HornedError::invalid_at("invalid facet", span))
     }
 }
@@ -1043,7 +1043,7 @@ where
     const RULE: Rule = Rule::OntologyDocument;
     fn from_pair_unchecked(pair: Pair<Rule>, ctx: &Context<'_, A>) -> Result<Self> {
         let mut pairs = pair.into_inner();
-        let prefixes = PrefixMapping::from_pair(pairs.next().unwrap(), &ctx)?;
+        let prefixes = PrefixMapping::from_pair(pairs.next().unwrap(), ctx)?;
         let context = Context::new(ctx.build, &prefixes);
         O::from_pair(pairs.next().unwrap(), &context).map(|ont| (ont, prefixes))
     }

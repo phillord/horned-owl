@@ -52,7 +52,7 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
     write!(
         &mut write,
         "{}",
-        <PrefixMapping as AsFunctional<A>>::as_functional(&mapping)
+        <PrefixMapping as AsFunctional<A>>::as_functional(mapping)
     )?;
 
     // Start the ontology element

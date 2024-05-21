@@ -35,8 +35,8 @@ pub trait AsFunctional<A: ForIRI> {
     /// having to build a fully-serialized string first, or to just get a string
     /// with the `ToString` implementation.
     ///
-    fn as_functional<'t>(&'t self) -> Functional<'t, Self, A> {
-        Functional(&self, None, None)
+    fn as_functional(&self) -> Functional<'_, Self, A> {
+        Functional(self, None, None)
     }
 
     /// Get a handle for displaying the element, using the given context.
@@ -48,7 +48,7 @@ pub trait AsFunctional<A: ForIRI> {
         &'t self,
         prefix: &'t PrefixMapping,
     ) -> Functional<'t, Self, A> {
-        Functional(&self, Some(prefix), None)
+        Functional(self, Some(prefix), None)
     }
 }
 
@@ -370,7 +370,7 @@ derive_axiom!(A, TransitiveObjectProperty<A>, TransitiveObjectProperty(0));
 
 impl<'a, A: ForIRI> Display for Functional<'a, AnnotatedComponent<A>, A> {
     fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
-        if self.0.ann.len() > 0 {
+        if !self.0.ann.is_empty() {
             Functional(&self.0.component, self.1, Some(&self.0.ann)).fmt(f)
         } else {
             Functional(&self.0.component, self.1, None).fmt(f)
@@ -913,16 +913,16 @@ impl<A: ForIRI> AsFunctional<A> for Individual<A> {}
 impl<'a, A: ForIRI> Display for Functional<'a, Literal<A>, A> {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
         match self.0 {
-            Literal::Simple { literal } => quote(&literal, f),
+            Literal::Simple { literal } => quote(literal, f),
             Literal::Language { literal, lang } => {
-                quote(&literal, f)?;
+                quote(literal, f)?;
                 write!(f, "@{}", lang)
             }
             Literal::Datatype {
                 literal,
                 datatype_iri,
             } => {
-                quote(&literal, f)?;
+                quote(literal, f)?;
                 write!(f, "^^{}", Functional(datatype_iri, self.1, None))
             }
         }

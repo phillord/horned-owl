@@ -195,7 +195,7 @@ fn get_iri_value<A: ForIRI, R: BufRead>(
     event: &BytesStart,
 ) -> Result<Option<IRI<A>>, HornedError> {
     let iri = get_iri_value_for(r, event, b"IRI")?;
-    if let None = iri {
+    if iri.is_none() {
         get_iri_value_for(r, event, b"abbreviatedIRI")
     } else {
         Ok(iri)
@@ -1091,9 +1091,7 @@ from_start! {
 
 trait FromXML<A: ForIRI>: Sized {
     fn from_xml<R: BufRead>(newread: &mut Read<A, R>, end_tag: &[u8]) -> Result<Self, HornedError> {
-        let s = Self::from_xml_nc(newread, end_tag);
-        // newread.buf.clear();
-        s
+        Self::from_xml_nc(newread, end_tag)
     }
 
     fn from_xml_nc<R: BufRead>(

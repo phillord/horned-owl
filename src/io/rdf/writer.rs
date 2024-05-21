@@ -11,8 +11,8 @@ use crate::ontology::indexed::ForIndex;
 use indexmap::indexmap;
 
 use pretty_rdf::{
-    ChunkedRdfXmlFormatterConfig, NonPrettyRdfXmlFormatter, PBlankNode, PLiteral, PNamedNode,
-    PSubject, PTerm, PTriple, PrettyRdfXmlFormatter, RdfXmlFormatter,
+    ChunkedRdfXmlFormatterConfig, PBlankNode, PLiteral, PNamedNode, PSubject, PTerm, PTriple,
+    PrettyRdfXmlFormatter, RdfXmlFormatter,
 };
 use std::{
     collections::{BTreeSet, HashSet},
@@ -36,20 +36,17 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
 
     let mut bng = NodeGenerator::default();
 
-    if !true {
-        let mut f =
-            NonPrettyRdfXmlFormatter::new(write, ChunkedRdfXmlFormatterConfig::all().prefix(p))?;
-        ont.render(&mut f, &mut bng)?;
-        f.finish()?;
-    } else {
-        let mut f =
-            PrettyRdfXmlFormatter::new(write, ChunkedRdfXmlFormatterConfig::all().prefix(p))?;
-        ont.render(&mut f, &mut bng)?;
-        // for i in f.triples() {
-        //     eprintln!("{}", i.printable());
-        // }
-        f.finish()?;
-    }
+    // let mut f =
+    //     pretty_rdf::NonPrettyRdfXmlFormatter::new(write, ChunkedRdfXmlFormatterConfig::all().prefix(p))?;
+    // ont.render(&mut f, &mut bng)?;
+    // f.finish()?;
+
+    let mut f = PrettyRdfXmlFormatter::new(write, ChunkedRdfXmlFormatterConfig::all().prefix(p))?;
+    ont.render(&mut f, &mut bng)?;
+    // for i in f.triples() {
+    //     eprintln!("{}", i.printable());
+    // }
+    f.finish()?;
 
     Ok(())
 }
@@ -536,7 +533,7 @@ render! {
 render! {
     AnnotationAssertion, self, f, ng, PTriple,
     {
-        let nbn:PSubject<A> = (&self.subject).render(f, ng)?;
+        let nbn:PSubject<A> = self.subject.render(f, ng)?;
         ng.keep_this_bn(nbn);
 
         self.ann.render(f, ng)
@@ -1489,7 +1486,7 @@ render! {
                 // expression.
                 //
                 // It makes little sense to me.
-                let s:PSubject<_> = (&self.sup).render(f, ng)?;
+                let s:PSubject<_> = self.sup.render(f, ng)?;
                 let o = render_vec_subject(v, f, ng)?;
                 Ok(
                     triple!{
@@ -1499,7 +1496,7 @@ render! {
             }
             SubObjectPropertyExpression::ObjectPropertyExpression(e) =>{
                 let s:PSubject<_> = e.render(f, ng)?;
-                let o:PTerm<_> = (&self.sup).render(f, ng)?.into();
+                let o:PTerm<_> = self.sup.render(f, ng)?.into();
                 Ok(
                     triple!{
                         f, s, ng.nn(RDFS::SubPropertyOf), o

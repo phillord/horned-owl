@@ -90,7 +90,7 @@ impl<A: ForIRI> Ord for Term<A> {
             (SWRL(s), SWRL(o)) => s.cmp(o),
             (FacetTerm(s), FacetTerm(o)) => s.cmp(o),
             (Iri(s), Iri(o)) => s.to_string().cmp(&o.to_string()),
-            (Term::BNode(s), Term::BNode(o)) => (*s).cmp(&(*o)),
+            (Term::BNode(s), Term::BNode(o)) => (*s).cmp(o),
             (Literal(s), Literal(o)) => (s.literal()).cmp(o.literal()),
             _ => self.ord().cmp(&other.ord()),
         }
@@ -164,22 +164,18 @@ fn vocab_lookup<A: ForIRI>() -> HashMap<String, Term<A>> {
     lookup_map
 }
 
-fn to_term_nn<'a, A: ForIRI>(
-    nn: &'a NamedNode,
-    m: &HashMap<String, Term<A>>,
-    b: &Build<A>,
-) -> Term<A> {
+fn to_term_nn<A: ForIRI>(nn: &NamedNode, m: &HashMap<String, Term<A>>, b: &Build<A>) -> Term<A> {
     if let Some(term) = m.get(nn.iri) {
         return term.clone();
     }
     Term::Iri(b.iri(nn.iri))
 }
 
-fn to_term_bn<A: ForIRI>(nn: &'_ BlankNode) -> Term<A> {
+fn to_term_bn<A: ForIRI>(nn: &BlankNode) -> Term<A> {
     Term::BNode(BNode(nn.id.to_string().into()))
 }
 
-fn to_term_lt<'a, A: ForIRI>(lt: &'a rio_api::model::Literal, b: &Build<A>) -> Term<A> {
+fn to_term_lt<A: ForIRI>(lt: &rio_api::model::Literal, b: &Build<A>) -> Term<A> {
     match lt {
         rio_api::model::Literal::Simple { value } => Term::Literal(Literal::Simple {
             literal: value.to_string(),
@@ -204,11 +200,7 @@ fn to_term_lt<'a, A: ForIRI>(lt: &'a rio_api::model::Literal, b: &Build<A>) -> T
     }
 }
 
-fn to_term_nnb<'a, A: ForIRI>(
-    nnb: &'a Subject,
-    m: &HashMap<String, Term<A>>,
-    b: &Build<A>,
-) -> Term<A> {
+fn to_term_nnb<A: ForIRI>(nnb: &Subject, m: &HashMap<String, Term<A>>, b: &Build<A>) -> Term<A> {
     match nnb {
         Subject::NamedNode(nn) => to_term_nn(nn, m, b),
         Subject::BlankNode(bn) => to_term_bn(bn),
@@ -216,7 +208,7 @@ fn to_term_nnb<'a, A: ForIRI>(
     }
 }
 
-fn to_term<'a, A: ForIRI>(t: &'a RioTerm, m: &HashMap<String, Term<A>>, b: &Build<A>) -> Term<A> {
+fn to_term<A: ForIRI>(t: &RioTerm, m: &HashMap<String, Term<A>>, b: &Build<A>) -> Term<A> {
     match t {
         rio_api::model::Term::NamedNode(iri) => to_term_nn(iri, m, b),
         rio_api::model::Term::BlankNode(id) => to_term_bn(id),
@@ -955,6 +947,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
         }
     }
 
+    #[allow(clippy::wrong_self_convention)]
     fn to_iargument(&mut self, t: &Term<A>, ic: &[&RDFOntology<A, AA>]) -> Option<IArgument<A>> {
         match t {
             Term::BNode(bn) => Some(IArgument::Individual(
@@ -1210,7 +1203,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
                                 ClassExpression::ObjectExactCardinality
                                 {
                                     n:self.fetch_u32(literal)?,
-                                    ope: ope,
+                                    ope,
                                     bce: self.b.class(VOWL::Thing).into()
                                 }
                             },
@@ -1218,7 +1211,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
                                 ClassExpression::DataExactCardinality
                                 {
                                     n:self.fetch_u32(literal)?,
-                                    dp: dp,
+                                    dp,
                                     dr: self.b.datatype(OWL2Datatype::Literal).into(),
                                 }
                             }
@@ -1367,12 +1360,10 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
                     component: axiom,
                     ann: BTreeSet::new(),
                 })
+            } else if v.len() == 1 {
+                single_bnodes.push(v[0].clone());
             } else {
-                if v.len() == 1 {
-                    single_bnodes.push(v[0].clone());
-                } else {
-                    self.bnode.insert(this_bnode, v);
-                }
+                self.bnode.insert(this_bnode, v);
             }
         }
 
@@ -1853,7 +1844,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
                 }
                 [Term::Iri(iri), Term::Iri(ap), _]
                     if parse_all
-                        || (&self.o.0).j().is_annotation_property(ap)
+                        || (self.o.0).j().is_annotation_property(ap)
                         || is_annotation_builtin(ap.as_ref()) =>
                 {
                     firi(self, &triple.0, iri)
@@ -1883,7 +1874,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
                 }
                 [triple @ [Term::BNode(ind), Term::Iri(ap), _]]
                     if parse_all
-                        || (&self.o.0).j().is_annotation_property(ap)
+                        || (self.o.0).j().is_annotation_property(ap)
                         || is_annotation_builtin(ap) =>
                 {
                     fbnode(self, triple, ind)
@@ -2095,8 +2086,8 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
     }
 }
 
-pub fn parser_with_build<'a, 'b, A: ForIRI, AA: ForIndex<A>, R: BufRead>(
-    bufread: &'a mut R,
+pub fn parser_with_build<'b, A: ForIRI, AA: ForIndex<A>, R: BufRead>(
+    bufread: &mut R,
     build: &'b Build<A>,
     config: ParserConfiguration,
 ) -> OntologyParser<'b, A, AA> {

@@ -52,10 +52,7 @@ impl<A: ForIRI, AA: ForIndex<A>> IRIMappedIndex<A, AA> {
     /// ontology. It should only be used where the intention is to
     /// update the ontology.
     fn components_as_ptr(&self, iri: &IRI<A>) -> *mut BTreeMap<IRI<A>, BTreeSet<AA>> {
-        self.irindex
-            .borrow_mut()
-            .entry(iri.clone())
-            .or_insert_with(BTreeSet::new);
+        self.irindex.borrow_mut().entry(iri.clone()).or_default();
         self.irindex.as_ptr()
     }
 
@@ -254,8 +251,8 @@ impl<A: ForIRI, AA: ForIndex<A>> MutableOntology<A> for IRIMappedOntology<A, AA>
     }
 }
 
-impl<A: ForIRI, AA: ForIndex<A>> IRIMappedOntology<A, AA> {
-    pub fn default() -> IRIMappedOntology<A, AA> {
+impl<A: ForIRI, AA: ForIndex<A>> Default for IRIMappedOntology<A, AA> {
+    fn default() -> IRIMappedOntology<A, AA> {
         IRIMappedOntology(FourIndexedOntology::new(
             SetIndex::new(),
             IRIMappedIndex::new(),
@@ -263,7 +260,9 @@ impl<A: ForIRI, AA: ForIndex<A>> IRIMappedOntology<A, AA> {
             DeclarationMappedIndex::new(),
         ))
     }
+}
 
+impl<A: ForIRI, AA: ForIndex<A>> IRIMappedOntology<A, AA> {
     //Utility method gets an iterator over the components in the index for a given IRI
     pub fn components_for_iri(
         &mut self,

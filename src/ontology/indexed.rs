@@ -270,15 +270,15 @@ impl<
     }
 
     pub fn i(&self) -> &I {
-        (&self.0).i()
+        self.0.i()
     }
 
     pub fn j(&self) -> &J {
-        (&self.0).j().i()
+        self.0.j().i()
     }
 
     pub fn k(&self) -> &K {
-        (self.0).j().j()
+        self.0.j().j()
     }
 
     pub fn index(self) -> (I, J, K) {
@@ -366,19 +366,19 @@ impl<
     }
 
     pub fn i(&self) -> &I {
-        (&self.0).i()
+        self.0.i()
     }
 
     pub fn j(&self) -> &J {
-        (&self.0).j().i()
+        self.0.j().i()
     }
 
     pub fn k(&self) -> &K {
-        (self.0).j().j()
+        self.0.j().j()
     }
 
     pub fn l(&self) -> &L {
-        (self.0).j().k()
+        self.0.j().k()
     }
 
     pub fn index(self) -> (I, J, K, L) {

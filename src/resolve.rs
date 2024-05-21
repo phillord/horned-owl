@@ -25,7 +25,7 @@ use ureq;
 /// assert_eq!(path_buf.to_str().unwrap(), "blah/and.owl");
 /// ```
 pub fn file_iri_to_pathbuf<A: ForIRI>(iri: &IRI<A>) -> PathBuf {
-    Path::new(&*iri.split_at(7).1).into()
+    Path::new(iri.split_at(7).1).into()
 }
 
 /// Return an `IRI` for the given `PathBuf`

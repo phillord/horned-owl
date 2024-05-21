@@ -22,9 +22,9 @@ repos:
     -   id: no-commit-to-branch
         args: [--branch, rfc]
 -   repo: https://github.com/doublify/pre-commit-rust
-    rev: master
+    rev: eeee35a
     hooks:
     -   id: fmt
         args: ["--check", "--"]
         pass_filenames: false
-
+    -   id: clippy

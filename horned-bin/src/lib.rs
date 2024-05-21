@@ -29,12 +29,12 @@ pub fn parse_path(
 ) -> Result<ParserOutput<RcStr, RcAnnotatedComponent>, HornedError> {
     Ok(match path_type(path) {
         Some(ResourceType::OFN) => {
-            let file = File::open(&path)?;
+            let file = File::open(path)?;
             let mut bufreader = BufReader::new(file);
             ParserOutput::ofn(horned_owl::io::ofn::reader::read(&mut bufreader, config)?)
         }
         Some(ResourceType::OWX) => {
-            let file = File::open(&path)?;
+            let file = File::open(path)?;
             let mut bufreader = BufReader::new(file);
             ParserOutput::owx(horned_owl::io::owx::reader::read(&mut bufreader, config)?)
         }
@@ -57,7 +57,7 @@ pub fn parse_imports(
     path: &Path,
     config: ParserConfiguration,
 ) -> Result<ParserOutput<RcStr, RcAnnotatedComponent>, HornedError> {
-    let file = File::open(&path)?;
+    let file = File::open(path)?;
     let mut bufreader = BufReader::new(file);
     Ok(match path_type(path) {
         Some(ResourceType::OFN) => {
