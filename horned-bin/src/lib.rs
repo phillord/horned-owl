@@ -109,7 +109,7 @@ pub fn materialize_1<'a>(
             let local_path = Path::new(&local);
             if !local_path.exists() {
                 println!("Retrieving Ontology: {}", &i.0);
-                let imported_data = strict_resolve_iri(&i.0);
+                let imported_data = strict_resolve_iri(&i.0)?;
                 done.push(i.0.clone());
                 println!("Saving to {}", local);
                 let mut file = File::create(&local)?;

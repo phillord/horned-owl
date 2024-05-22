@@ -76,7 +76,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> ClosureOntologyParser<'a, A, AA> {
         relative_doc_iri: Option<&IRI<A>>,
         v: &mut Vec<IRI<A>>,
     ) -> Result<(), HornedError> {
-        let (new_doc_iri, s) = resolve_iri(source_iri, relative_doc_iri);
+        let (new_doc_iri, s) = resolve_iri(source_iri, relative_doc_iri)?;
         self.parse_content_from_iri(s, relative_doc_iri, new_doc_iri, v)
     }
 
