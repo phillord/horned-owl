@@ -172,14 +172,14 @@ impl<A: ForIRI> MutableOntology<A> for SetOntology<A> {
 impl<A: ForIRI> FromIterator<AnnotatedComponent<A>> for SetOntology<A> {
     fn from_iter<I: IntoIterator<Item = AnnotatedComponent<A>>>(iter: I) -> Self {
         iter.into_iter()
-            .collect::<MutableOntologyWrapper<SetOntology<_>>>()
+            .collect::<MutableOntologyAdaptor<SetOntology<_>>>()
             .0
     }
 }
 
 impl<A: ForIRI> Extend<AnnotatedComponent<A>> for SetOntology<A> {
     fn extend<T: IntoIterator<Item = AnnotatedComponent<A>>>(&mut self, iter: T) {
-        MutableOntologyWrapper(self).extend(iter);
+        MutableOntologyAdaptor(self).extend(iter);
     }
 }
 

@@ -121,11 +121,15 @@ use crate::vocab::Facet;
 #[derive(Clone, Debug, Eq, PartialEq, Hash, PartialOrd, Ord)]
 pub struct IRI<A>(pub(crate) A);
 
+/// The `ForIRI` is a trait that that provides the bounds for the
+/// majority of methods in Horned_OWL.
 pub trait ForIRI:
     AsRef<str> + Borrow<str> + Clone + Debug + Eq + From<String> + Hash + PartialEq + Ord + PartialOrd
 {
 }
 
+/// Blanket implementation of `ForIRI` for any type taht implements
+/// all the bounds.
 impl<T: ?Sized> ForIRI for T where
     T: AsRef<str>
         + Borrow<str>
@@ -140,10 +144,12 @@ impl<T: ?Sized> ForIRI for T where
 {
 }
 
+/// Shortcut types to reduce the number of angle brackets in code.
 pub type RcStr = Rc<str>;
 pub type ArcStr = Arc<str>;
 
 impl<A: ForIRI> IRI<A> {
+    /// Return a clone of the underlying entity for this `IRI`
     pub fn underlying(&self) -> A {
         self.0.clone()
     }
@@ -165,7 +171,7 @@ impl<A: ForIRI> AsRef<str> for IRI<A> {
 
 impl<A: ForIRI> Borrow<str> for IRI<A> {
     fn borrow(&self) -> &str {
-        self.as_ref()
+        self.0.borrow()
     }
 }
 
@@ -207,11 +213,6 @@ impl<A: ForIRI> Display for IRI<A> {
 /// conserved across different `Build` instances, so entities from
 /// different instances can be combined within a single ontology
 /// without consequences except for increased memory use.
-
-// Currently `Build` uses Rc/RefCell, as does IRI which limits this
-// library to a single thread, as does the use of Rc in IRI. One or
-// both could be replaced by traits or enums straight-forwardly
-// enough, to enable threading.
 #[derive(Debug, Default)]
 pub struct Build<A: ForIRI>(
     RefCell<BTreeSet<IRI<A>>>,
@@ -381,6 +382,18 @@ impl<A: ForIRI> Build<A> {
         Datatype(self.iri(s))
     }
 
+    /// Constructs a new `Variable`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use horned_owl::model::*;
+    /// let b = Build::new_rc();
+    /// let ni1 = b.variable("http://www.example.com".to_string());
+    /// let ni2 = b.variable("http://www.example.com");
+    ///
+    /// assert_eq!(ni1, ni2);
+    /// ```
     pub fn variable<S>(&self, s: S) -> Variable<A>
     where
         S: Borrow<str>,
@@ -390,18 +403,66 @@ impl<A: ForIRI> Build<A> {
 }
 
 impl Build<RcStr> {
+    /// Return a new `Build` object using `Rc` to cache and share<
+    /// strings.
+    ///
+    /// This is probably the most general purpose implementation. Use
+    /// `new_arc` for entities that can be used across threads.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use horned_owl::model::*;
+    /// # use std::borrow::Borrow;
+    /// # use std::rc::Rc;
+    /// let b = Build::new_rc();
+    /// let iri = b.iri("http://www.example.com");
+    /// let iri2 = b.iri("http://www.example.com");
+    /// assert!(Rc::ptr_eq(&iri.underlying(), &iri2.underlying()));
+    /// ```
     pub fn new_rc() -> Build<RcStr> {
         Build::new()
     }
 }
 
 impl Build<ArcStr> {
+    /// Return a new `Build` object using `Arc` to cache and share
+    /// strings.
+    ///
+    /// Use `new_rc` where threading is not required, for additional performance.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use horned_owl::model::*;
+    /// # use std::borrow::Borrow;
+    /// # use std::sync::Arc;
+    /// let b = Build::new_arc();
+    /// let iri = b.iri("http://www.example.com");
+    /// let iri2 = b.iri("http://www.example.com");
+    /// assert!(Arc::ptr_eq(&iri.underlying(), &iri2.underlying()));
+    /// ```
     pub fn new_arc() -> Build<ArcStr> {
         Build::new()
     }
 }
 
 impl Build<String> {
+    /// Return a new `Build` object using no sharing or caching
+    ///
+    /// This should be most efficient to construct entities but only
+    /// where each IRI is only used once. In practice, this is likely
+    /// limited to testing.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use horned_owl::model::*;
+    /// let b = Build::new_string();
+    /// let iri = b.iri("http://www.example.com");
+    /// let iri2 = b.iri("http://www.example.com");
+    /// assert_eq!(&iri, &iri2);
+    /// ```
     pub fn new_string() -> Build<String> {
         Build::new()
     }
@@ -426,11 +487,15 @@ macro_rules! namedenumimpl {
 macro_rules! named {
     ($($(#[$attr:meta])* $name:ident),*)  => {
 
+        /// Unit tuple for the kind of a named entity in OWL2 and SWRL.
+        ///
+        /// See also [`NamedOWLEntityKind`] for only those entities in OWL2
         #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
         pub enum NamedEntityKind {
             $($name),*
         }
 
+        /// Enum of all OWL2 and SWRL `NamedEntity`
         #[derive(Clone, Debug, Eq, PartialEq, Hash)]
         pub enum NamedEntity<A>{
             $($name($name<A>)),*
@@ -547,6 +612,7 @@ named! {
     Variable
 }
 
+/// Unit tuple for all named entnties in OWL2, not including SWRL.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
 pub enum NamedOWLEntityKind {
     Class,
@@ -615,15 +681,18 @@ impl NamedEntityKind {
 }
 
 impl<A: ForIRI> Class<A> {
+    /// Return true if Class is OWL:Thing
     pub fn is_thing(&self) -> bool {
         self.0.as_ref() == crate::vocab::OWL::Thing.as_ref()
     }
 
+    /// Return true if Class is OWL::Nothing
     pub fn is_nothing(&self) -> bool {
         self.0.as_ref() == crate::vocab::OWL::Nothing.as_ref()
     }
 }
 
+/// An OWL2 Anonymous Individual
 #[derive(Clone, Debug, Eq, PartialEq, Hash, PartialOrd, Ord)]
 pub struct AnonymousIndividual<A>(pub A);
 
@@ -659,6 +728,7 @@ impl<A: ForIRI> From<AnonymousIndividual<A>> for String {
     }
 }
 
+/// An OWL2 Individual is either Named or Anonymous
 #[derive(Clone, Debug, Eq, PartialEq, Hash, PartialOrd, Ord)]
 pub enum Individual<A> {
     Anonymous(AnonymousIndividual<A>),
@@ -712,6 +782,7 @@ impl<A: ForIRI> From<IRI<A>> for Individual<A> {
     }
 }
 
+/// An OWL2 annotation subjection can either an IRI or anonymous individual
 #[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
 pub enum AnnotationSubject<A> {
     IRI(IRI<A>),
@@ -791,6 +862,9 @@ pub trait Kinded {
     fn kind(&self) -> ComponentKind;
 }
 
+/// An ontology in Horned-OWL consists of a set of components which
+/// can be either an OWL Axiom, metadata about the ontology or a SWRL
+/// rule. These unit tuple distinguishes between the two.
 #[derive(Debug, Eq, PartialEq)]
 pub enum HigherKind {
     Axiom,
@@ -814,14 +888,17 @@ pub trait HigherKinded {
     }
 }
 
-/// An `AnnotatedComponent` is an `Component` with one orpmore `Annotation`.
+/// An `AnnotatedComponent` is an `Component` with one or more `Annotation`.
 #[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
 pub struct AnnotatedComponent<A> {
     pub component: Component<A>,
     pub ann: BTreeSet<Annotation<A>>,
 }
 
+/// An convienience alias to reducing angle brackets
 pub type RcAnnotatedComponent = Rc<AnnotatedComponent<RcStr>>;
+
+/// An convienience alias to reducing angle brackets
 pub type ArcAnnotatedComponent = Arc<AnnotatedComponent<ArcStr>>;
 
 impl<A: ForIRI> AnnotatedComponent<A> {
@@ -902,11 +979,6 @@ macro_rules! componentimpl {
     };
 }
 
-/// Define a new axiom
-///
-/// Components can be either a tuple-like or normal struct. Documentation
-/// is attached as a doc attribute after.
-//
 // I tried extensively to pass the attribute in the more normal
 // location in front of the entity, but couldn't get it too match. I
 // noticed that the quick_error crate passes afterwards and it's easy
@@ -988,7 +1060,7 @@ macro_rules! components {
             }
         }
 
-        /// An axiom
+        /// An ontology component: OWL axiom, metadata or SWRL rule
         ///
         /// This enum has variants representing the various kinds of
         /// Component that can be found in an OWL Ontology. An OWL axiom
@@ -1003,6 +1075,10 @@ macro_rules! components {
         /// (i.e. Component::SubClassOf(SubClassOf)), which is used as a union
         /// type for all structs. The struct and enum variants all
         /// share identical names.
+        ///
+        /// In OWL2 an ontology is a set of Axioms. In Horned-OWL, it
+        /// is a set of components which also includes SWRL rules and
+        /// ontology metadata.
         #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
         pub enum Component<$A>{
             $($name($name<$A>)),*
@@ -1427,13 +1503,13 @@ components! {
         iri: IRI<A>
     },
 
+    /// A SWRL Rule
     SWRL Rule {
         head: Vec<Atom<A>>,
         body: Vec<Atom<A>>
     }
 }
 
-// TODO
 impl<A: ForIRI> Default for OntologyID<A> {
     fn default() -> Self {
         Self {
@@ -1443,21 +1519,17 @@ impl<A: ForIRI> Default for OntologyID<A> {
     }
 }
 
-// Non-axiom data structures associated with OWL
+/// Non-axiom data structures associated with OWL
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum Literal<A> {
-    // Simple Literals are syntactic sugar for a Datatype with type:
-    // http://www.w3.org/2001/XMLSchema#string
-    Simple {
-        literal: String,
-    },
-    // Language-tagged literals have a lang tag and must be (or have
-    // an implicit) of datatype
-    // http://www.w3.org/1999/02/22-rdf-syntax-ns#langString
-    Language {
-        literal: String,
-        lang: String,
-    },
+    /// Simple Literals are syntactic sugar for a Datatype with type:
+    /// http://www.w3.org/2001/XMLSchema#string
+    Simple { literal: String },
+
+    /// Language-tagged literals have a lang tag and must be (or have
+    /// an implicit) of datatype
+    /// http://www.w3.org/1999/02/22-rdf-syntax-ns#langString
+    Language { literal: String, lang: String },
     Datatype {
         literal: String,
         datatype_iri: IRI<A>,
@@ -1492,8 +1564,6 @@ pub struct Annotation<A> {
 }
 
 /// The value of an annotation
-///
-/// This Enum is currently not complete.
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum AnnotationValue<A> {
     Literal(Literal<A>),
@@ -1588,13 +1658,14 @@ impl<A: ForIRI> From<DataProperty<A>> for PropertyExpression<A> {
     }
 }
 
-// Data!!!
+/// An OWL2 FacetRestriction
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct FacetRestriction<A> {
     pub f: Facet,
     pub l: Literal<A>,
 }
 
+/// An OWL2 Data Range
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum DataRange<A> {
     Datatype(Datatype<A>),
@@ -1801,6 +1872,7 @@ impl<A: ForIRI> From<Class<A>> for Box<ClassExpression<A>> {
     }
 }
 
+/// A SWRL Atom
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum Atom<A> {
     BuiltInAtom {
@@ -1827,6 +1899,7 @@ pub enum Atom<A> {
     SameIndividualAtom(IArgument<A>, IArgument<A>),
 }
 
+/// A SWRL IArgument
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum IArgument<A> {
     Individual(Individual<A>),
@@ -1851,6 +1924,7 @@ impl<A: ForIRI> From<NamedIndividual<A>> for IArgument<A> {
     }
 }
 
+/// A SWRL DArgument
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum DArgument<A> {
     Literal(Literal<A>),
@@ -1907,14 +1981,16 @@ pub trait MutableOntology<A> {
     }
 }
 
+/// An adaptor between `MutableOntology` and `Iterator`
+///
 /// A wrapper to allow implementation of `FromIterator` and `Extend`
 /// on any `MutableOntology`.
 ///
 /// MutableOntology implementations in horned_owl implement these interfaces directly
 /// and these should be used in preference.
-pub struct MutableOntologyWrapper<O>(pub O);
+pub struct MutableOntologyAdaptor<O>(pub O);
 
-impl<A, O> FromIterator<AnnotatedComponent<A>> for MutableOntologyWrapper<O>
+impl<A, O> FromIterator<AnnotatedComponent<A>> for MutableOntologyAdaptor<O>
 where
     A: ForIRI,
     O: Default + MutableOntology<A>,
@@ -1928,7 +2004,7 @@ where
     }
 }
 
-impl<A, O> Extend<AnnotatedComponent<A>> for MutableOntologyWrapper<&mut O>
+impl<A, O> Extend<AnnotatedComponent<A>> for MutableOntologyAdaptor<&mut O>
 where
     A: ForIRI,
     O: MutableOntology<A>,
@@ -2117,7 +2193,7 @@ mod test {
 
         so.insert(oid.clone());
 
-        let newso: MutableOntologyWrapper<SetOntology<_>> = so.clone().into_iter().collect();
+        let newso: MutableOntologyAdaptor<SetOntology<_>> = so.clone().into_iter().collect();
         let newso: SetOntology<_> = newso.0;
 
         assert_eq!(so, newso);
@@ -2135,7 +2211,7 @@ mod test {
         so.insert(oid.clone());
 
         let mut so2 = SetOntology::new_rc();
-        let mut mow = MutableOntologyWrapper(&mut so2);
+        let mut mow = MutableOntologyAdaptor(&mut so2);
         mow.extend(so.clone());
 
         assert_eq!(so, so2);

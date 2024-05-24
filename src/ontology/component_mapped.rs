@@ -62,17 +62,6 @@ pub struct ComponentMappedIndex<A, AA> {
 }
 
 impl<A: ForIRI, AA: ForIndex<A>> ComponentMappedIndex<A, AA> {
-    /// Create a new ontology.
-    ///
-    /// # Examples
-    /// ```
-    /// # use std::rc::Rc;
-    /// # use horned_owl::ontology::component_mapped::ComponentMappedOntology;
-    /// let o = ComponentMappedOntology::new_rc();
-    /// let o2 = ComponentMappedOntology::new_rc();
-    ///
-    /// assert_eq!(o, o2);
-    /// ```
     pub fn new() -> ComponentMappedIndex<A, AA> {
         ComponentMappedIndex {
             component: RefCell::new(BTreeMap::new()),
@@ -326,12 +315,38 @@ impl<A: ForIRI, AA: ForIndex<A>> ComponentMappedOntology<A, AA> {
 }
 
 impl<A: ForIRI, AA: ForIndex<A>> ComponentMappedOntology<A, AA> {
+    /// Create a new ontology.
+    ///
+    /// See also [`ComponentMappedOntology::new_rc`] which achieves
+    /// the same thing with less type annotation.
+    ///
+    /// # Examples
+    /// ```
+    /// # use std::rc::Rc;
+    /// # use horned_owl::model::AnnotatedComponent;
+    /// # use horned_owl::ontology::component_mapped::ComponentMappedOntology;
+    /// let o:ComponentMappedOntology<Rc<str>, Rc<AnnotatedComponent<Rc<str>>>> = ComponentMappedOntology::new();
+    /// let o2 = ComponentMappedOntology::new();
+    ///
+    /// assert_eq!(o, o2);
+    /// ```
     pub fn new() -> ComponentMappedOntology<A, AA> {
-        ComponentMappedOntology(OneIndexedOntology::new(ComponentMappedIndex::new()))
+        Default::default()
     }
 }
 
 impl RcComponentMappedOntology {
+    /// Create a new ontology.
+    ///
+    /// # Examples
+    /// ```
+    /// # use std::rc::Rc;
+    /// # use horned_owl::ontology::component_mapped::ComponentMappedOntology;
+    /// let o = ComponentMappedOntology::new_rc();
+    /// let o2 = ComponentMappedOntology::new_rc();
+    ///
+    /// assert_eq!(o, o2);
+    /// ```
     pub fn new_rc() -> Self {
         ComponentMappedOntology::new()
     }
@@ -378,14 +393,14 @@ impl<A: ForIRI, AA: ForIndex<A>> FromIterator<AnnotatedComponent<A>>
 {
     fn from_iter<I: IntoIterator<Item = AnnotatedComponent<A>>>(iter: I) -> Self {
         iter.into_iter()
-            .collect::<MutableOntologyWrapper<ComponentMappedOntology<_, _>>>()
+            .collect::<MutableOntologyAdaptor<ComponentMappedOntology<_, _>>>()
             .0
     }
 }
 
 impl<A: ForIRI, AA: ForIndex<A>> Extend<AnnotatedComponent<A>> for ComponentMappedOntology<A, AA> {
     fn extend<T: IntoIterator<Item = AnnotatedComponent<A>>>(&mut self, iter: T) {
-        MutableOntologyWrapper(self).extend(iter);
+        MutableOntologyAdaptor(self).extend(iter);
     }
 }
 
