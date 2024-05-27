@@ -1355,7 +1355,7 @@ from_xml! {IRI, r, end,
 pub mod test {
     use super::*;
     use crate::ontology::component_mapped::ComponentMappedOntology;
-    use std::collections::HashMap;
+    use std::{borrow::Borrow, collections::HashMap};
 
     pub fn read_ok<R: BufRead>(
         bufread: &mut R,
@@ -1383,12 +1383,7 @@ pub mod test {
         let ont_s = include_str!("../../ont/owl-xml/ont.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
         assert_eq!(
-            ont.i()
-                .the_ontology_id_or_default()
-                .iri
-                .as_ref()
-                .unwrap()
-                .as_ref(),
+            Borrow::<str>::borrow(ont.i().the_ontology_id_or_default().iri.as_ref().unwrap()),
             "http://www.example.com/iri"
         );
     }
@@ -2082,7 +2077,7 @@ pub mod test {
         } = cl
         {
             assert!(match dr {
-                DataRange::Datatype(dt) => dt.is_s(OWL2Datatype::Literal.as_ref()),
+                DataRange::Datatype(dt) => dt.is_literal(),
                 _ => false,
             });
         } else {

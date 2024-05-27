@@ -589,9 +589,7 @@ impl<'a, A: ForIRI> Display for Functional<'a, ClassExpression<A>, A> {
         macro_rules! object_cardinality {
             ($name:literal, $n:ident, $ope:ident, $bce:ident, $self:ident, $f:ident) => {
                 match $bce.as_ref() {
-                    ClassExpression::Class(cls)
-                        if cls.0.as_ref() == crate::vocab::OWL::Thing.as_ref() =>
-                    {
+                    ClassExpression::Class(cls) if cls.is_thing() => {
                         write!(
                             f,
                             concat!($name, "({} {})"),
@@ -614,9 +612,7 @@ impl<'a, A: ForIRI> Display for Functional<'a, ClassExpression<A>, A> {
         macro_rules! data_cardinality {
             ($name:literal, $n:ident, $dp:ident, $dr:ident, $self:ident, $f:ident) => {
                 match $dr {
-                    DataRange::Datatype(dt)
-                        if dt.0.as_ref() == crate::vocab::OWL2Datatype::Literal.as_ref() =>
-                    {
+                    DataRange::Datatype(dt) if dt.is_literal() => {
                         write!(
                             f,
                             concat!($name, "({} {})"),

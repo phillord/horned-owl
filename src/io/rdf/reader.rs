@@ -27,11 +27,11 @@ use crate::{
 
 use enum_meta::Meta;
 
-use std::cmp::Ordering;
 use std::collections::BTreeSet;
 use std::collections::HashMap;
 use std::io::BufRead;
 use std::io::Cursor;
+use std::{borrow::Borrow, cmp::Ordering};
 
 type RioTerm<'a> = ::rio_api::model::Term<'a>;
 
@@ -598,11 +598,11 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
             // We assume that anything passed to here is an
             // annotation built in type
             [s, RDFS(rdfs), b] => {
-                let iri = self.b.iri(rdfs.as_ref());
+                let iri = self.b.iri(rdfs.borrow());
                 self.annotation(&[s.clone(), Term::Iri(iri), b.clone()])
             }
             [s, OWL(owl), b] => {
-                let iri = self.b.iri(owl.as_ref());
+                let iri = self.b.iri(owl.borrow());
                 self.annotation(&[s.clone(), Term::Iri(iri), b.clone()])
             }
             [_, Iri(p), ob @ Term::Literal(_)] => Annotation {
@@ -872,58 +872,52 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
 
         self.bnode_seq
             .remove(bnodeid)
-            .as_ref()?
-            .iter()
-            .map(|tce| self.fetch_ce(tce))
-            .collect()
+            .map(|vec| vec.iter().map(|tce| self.fetch_ce(tce)).collect())?
     }
 
+    // fn fetch_seq_helper<Q>(&mut self, fun: impl Fn(&Term<A>) -> Option<Q>, bnodeid: &BNode<A>) -> Option<Vec<Q>> {
+    //     self.bnode_seq
+    //     .remove(bnodeid)
+    //     .map(|vec| vec
+    //         .iter()
+    //         .map(|t| fun(t))
+    //         .collect()
+    //     )?
+    // }
+
     fn fetch_ni_seq(&mut self, bnodeid: &BNode<A>) -> Option<Vec<Individual<A>>> {
-        self.bnode_seq
-            .remove(bnodeid)
-            .as_ref()?
-            .iter()
-            .map(|t| self.fetch_iri(t).map(|iri| NamedIndividual(iri).into()))
-            .collect()
+        self.bnode_seq.remove(bnodeid).map(|vec| {
+            vec.iter()
+                .map(|t| self.fetch_iri(t).map(|iri| NamedIndividual(iri).into()))
+                .collect()
+        })?
     }
 
     fn fetch_dr_seq(&mut self, bnodeid: &BNode<A>) -> Option<Vec<DataRange<A>>> {
         self.bnode_seq
             .remove(bnodeid)
-            .as_ref()?
-            .iter()
-            .map(|t| self.fetch_dr(t))
-            .collect()
+            .map(|vec| vec.iter().map(|t| self.fetch_dr(t)).collect())?
     }
 
     // TODO Fix code duplication
     fn fetch_literal_seq(&mut self, bnodeid: &BNode<A>) -> Option<Vec<Literal<A>>> {
         self.bnode_seq
             .remove(bnodeid)
-            .as_ref()?
-            .iter()
-            .map(|t| self.fetch_literal(t))
-            .collect()
+            .map(|vec| vec.iter().map(|t| self.fetch_literal(t)).collect())?
     }
 
     // TODO Really, really fix code duplication
     fn fetch_atom_seq(&mut self, bnodeid: &BNode<A>) -> Option<Vec<Atom<A>>> {
         self.bnode_seq
             .remove(bnodeid)
-            .as_ref()?
-            .iter()
-            .map(|t| self.atom.remove(t))
-            .collect()
+            .map(|vec| vec.iter().map(|t| self.atom.remove(t)).collect())?
     }
 
     // TODO Really, really fix code duplication
     fn fetch_dargument_seq(&mut self, bnodeid: &BNode<A>) -> Option<Vec<DArgument<A>>> {
         self.bnode_seq
             .remove(bnodeid)
-            .as_ref()?
-            .iter()
-            .map(|t| self.to_dargument(t))
-            .collect()
+            .map(|vec| vec.iter().map(|t| self.to_dargument(t)).collect())?
     }
 
     fn fetch_dr(&mut self, t: &Term<A>) -> Option<DataRange<A>> {
@@ -1019,7 +1013,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
     ) -> Option<PropertyExpression<A>> {
         match term {
             Term::OWL(vowl) => {
-                let iri = self.b.iri(vowl.as_ref());
+                let iri = self.b.iri(vowl.borrow());
                 self.find_property_kind(&Term::Iri(iri), ic)
             }
             Term::Iri(iri) => match self.find_declaration_kind(iri, ic) {
@@ -1849,7 +1843,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
                 [Term::Iri(iri), Term::Iri(ap), _]
                     if parse_all
                         || (self.o.0).j().is_annotation_property(ap)
-                        || is_annotation_builtin(ap.as_ref()) =>
+                        || is_annotation_builtin(ap) =>
                 {
                     firi(self, &triple.0, iri)
                 }

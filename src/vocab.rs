@@ -58,7 +58,7 @@ macro_rules! vocabulary_traits {
 
             impl Borrow<str> for $enum_type {
                 fn borrow(&self) -> &str {
-                    self.meta().as_ref()
+                    self.meta().borrow()
                 }
             }
         )+
@@ -79,15 +79,10 @@ macro_rules! vocabulary_type {
         impl $enum_type {
             fn get_iri(self) -> IRI<String> {
 
-                let mut iri_str = String::new();
-                $(
-                    iri_str.push_str(Namespace::$ns.as_ref());
-                )?
-
                 match self {
                     $(
                         $enum_type::$variant => {
-                            let mut iri_str = String::from(Namespace::$ns.as_ref());
+                            let mut iri_str = String::from(Borrow::<str>::borrow(&Namespace::$ns));
                             let mut variant_str = String::from(stringify!($variant));
                             if $first_lowercase {
                                 let tail = variant_str.split_off(1);
@@ -246,13 +241,17 @@ vocabulary_type! {
 }
 
 /// Returns a [NamedOWLEntityKind] if the IRI points to a built-in entity, otherwise [None].
-pub fn to_built_in_entity<A: AsRef<str>>(iri: &IRI<A>) -> Option<NamedOWLEntityKind> {
-    let ir = iri.as_ref();
+pub fn to_built_in_entity<A: Borrow<str>>(iri: &IRI<A>) -> Option<NamedOWLEntityKind> {
+    let ir = Borrow::<str>::borrow(iri);
     match ir {
-        _ if ir == OWL::TopDataProperty.as_ref() => Some(NamedOWLEntityKind::DataProperty),
-        _ if ir == OWL::TopObjectProperty.as_ref() => Some(NamedOWLEntityKind::ObjectProperty),
-        _ if ir == OWL::Thing.as_ref() => Some(NamedOWLEntityKind::Class),
-        _ if ir == OWL::Nothing.as_ref() => Some(NamedOWLEntityKind::Class),
+        _ if ir == Borrow::<str>::borrow(&OWL::TopDataProperty) => {
+            Some(NamedOWLEntityKind::DataProperty)
+        }
+        _ if ir == Borrow::<str>::borrow(&OWL::TopObjectProperty) => {
+            Some(NamedOWLEntityKind::ObjectProperty)
+        }
+        _ if ir == Borrow::<str>::borrow(&OWL::Thing) => Some(NamedOWLEntityKind::Class),
+        _ if ir == Borrow::<str>::borrow(&OWL::Nothing) => Some(NamedOWLEntityKind::Class),
         _ => None,
     }
 }
@@ -262,15 +261,19 @@ pub fn entity_for_iri<A, S: Borrow<str>>(
     entity_iri: S,
     b: &Build<A>,
 ) -> Result<NamedOWLEntity<A>, HornedError>
-    where
-        A: Borrow<str> + Clone + From<String> + Ord {
+where
+    A: Borrow<str> + Clone + From<String> + Ord,
+{
     // Datatypes are handled here because they are not a
     // "type" but an "RDF schema" element.
     if type_iri.borrow() == "http://www.w3.org/2000/01/rdf-schema#Datatype" {
         return Ok(b.datatype(entity_iri).into());
     }
 
-    match &type_iri.borrow().strip_prefix(Namespace::OWL.as_ref()) {
+    match &type_iri
+        .borrow()
+        .strip_prefix(Borrow::<str>::borrow(&Namespace::OWL))
+    {
         Some("Class") => Ok(b.class(entity_iri).into()),
         Some("ObjectProperty") => Ok(b.object_property(entity_iri).into()),
         Some("DatatypeProperty") => Ok(b.data_property(entity_iri).into()),
@@ -305,11 +308,8 @@ vocabulary_type! {
 }
 
 #[inline]
-pub fn is_annotation_builtin<A: AsRef<str>>(iri: A) -> bool {
-    AnnotationBuiltIn::from_str(iri.as_ref()).is_ok()
-    // AnnotationBuiltIn::all()
-    //     .iter()
-    //     .any(|item| item.as_ref() == iri.as_ref())
+pub fn is_annotation_builtin<A: Borrow<str> + ?Sized>(iri: &A) -> bool {
+    AnnotationBuiltIn::from_str(iri.borrow()).is_ok()
 }
 
 vocabulary_type! {
@@ -335,9 +335,9 @@ vocabulary_type! {
     ]
 }
 
-pub fn is_xsd_datatype<A: AsRef<str>>(iri: A) -> bool {
+pub fn is_xsd_datatype<A: Borrow<str>>(iri: &A) -> bool {
     // This only checks that the IRI starts with the XSD namespace.
-    iri.as_ref().starts_with(Namespace::XSD.as_ref())
+    Borrow::<str>::borrow(iri).starts_with(Borrow::<str>::borrow(&Namespace::XSD))
 }
 
 vocabulary_type! {
@@ -461,23 +461,23 @@ mod tests {
     #[test]
     fn test_meta_rdf() {
         assert_eq!(
-            RDF::First.as_ref(),
+            Borrow::<str>::borrow(&RDF::First),
             "http://www.w3.org/1999/02/22-rdf-syntax-ns#first"
         );
         assert_eq!(
-            RDF::List.as_ref(),
+            Borrow::<str>::borrow(&RDF::List),
             "http://www.w3.org/1999/02/22-rdf-syntax-ns#List"
         );
         assert_eq!(
-            RDF::Nil.as_ref(),
+            Borrow::<str>::borrow(&RDF::Nil),
             "http://www.w3.org/1999/02/22-rdf-syntax-ns#nil"
         );
         assert_eq!(
-            RDF::Rest.as_ref(),
+            Borrow::<str>::borrow(&RDF::Rest),
             "http://www.w3.org/1999/02/22-rdf-syntax-ns#rest"
         );
         assert_eq!(
-            RDF::Type.as_ref(),
+            Borrow::<str>::borrow(&RDF::Type),
             "http://www.w3.org/1999/02/22-rdf-syntax-ns#type"
         );
     }
@@ -485,39 +485,39 @@ mod tests {
     #[test]
     fn test_meta_rdfs() {
         assert_eq!(
-            RDFS::Comment.as_ref(),
+            Borrow::<str>::borrow(&RDFS::Comment),
             "http://www.w3.org/2000/01/rdf-schema#comment"
         );
         assert_eq!(
-            RDFS::Datatype.as_ref(),
+            Borrow::<str>::borrow(&RDFS::Datatype),
             "http://www.w3.org/2000/01/rdf-schema#Datatype"
         );
         assert_eq!(
-            RDFS::Domain.as_ref(),
+            Borrow::<str>::borrow(&RDFS::Domain),
             "http://www.w3.org/2000/01/rdf-schema#domain"
         );
         assert_eq!(
-            RDFS::IsDefinedBy.as_ref(),
+            Borrow::<str>::borrow(&RDFS::IsDefinedBy),
             "http://www.w3.org/2000/01/rdf-schema#isDefinedBy"
         );
         assert_eq!(
-            RDFS::Label.as_ref(),
+            Borrow::<str>::borrow(&RDFS::Label),
             "http://www.w3.org/2000/01/rdf-schema#label"
         );
         assert_eq!(
-            RDFS::Range.as_ref(),
+            Borrow::<str>::borrow(&RDFS::Range),
             "http://www.w3.org/2000/01/rdf-schema#range"
         );
         assert_eq!(
-            RDFS::SeeAlso.as_ref(),
+            Borrow::<str>::borrow(&RDFS::SeeAlso),
             "http://www.w3.org/2000/01/rdf-schema#seeAlso"
         );
         assert_eq!(
-            RDFS::SubClassOf.as_ref(),
+            Borrow::<str>::borrow(&RDFS::SubClassOf),
             "http://www.w3.org/2000/01/rdf-schema#subClassOf"
         );
         assert_eq!(
-            RDFS::SubPropertyOf.as_ref(),
+            Borrow::<str>::borrow(&RDFS::SubPropertyOf),
             "http://www.w3.org/2000/01/rdf-schema#subPropertyOf"
         );
     }
@@ -525,240 +525,261 @@ mod tests {
     #[test]
     fn test_meta_owl() {
         assert_eq!(
-            OWL::AllDifferent.as_ref(),
+            Borrow::<str>::borrow(&OWL::AllDifferent),
             "http://www.w3.org/2002/07/owl#AllDifferent"
         );
         assert_eq!(
-            OWL::AllDisjointProperties.as_ref(),
+            Borrow::<str>::borrow(&OWL::AllDisjointProperties),
             "http://www.w3.org/2002/07/owl#AllDisjointProperties"
         );
         assert_eq!(
-            OWL::AllValuesFrom.as_ref(),
+            Borrow::<str>::borrow(&OWL::AllValuesFrom),
             "http://www.w3.org/2002/07/owl#allValuesFrom"
         );
         assert_eq!(
-            OWL::AnnotatedProperty.as_ref(),
+            Borrow::<str>::borrow(&OWL::AnnotatedProperty),
             "http://www.w3.org/2002/07/owl#annotatedProperty"
         );
         assert_eq!(
-            OWL::AnnotatedSource.as_ref(),
+            Borrow::<str>::borrow(&OWL::AnnotatedSource),
             "http://www.w3.org/2002/07/owl#annotatedSource"
         );
         assert_eq!(
-            OWL::AnnotatedTarget.as_ref(),
+            Borrow::<str>::borrow(&OWL::AnnotatedTarget),
             "http://www.w3.org/2002/07/owl#annotatedTarget"
         );
         assert_eq!(
-            OWL::AnnotationProperty.as_ref(),
+            Borrow::<str>::borrow(&OWL::AnnotationProperty),
             "http://www.w3.org/2002/07/owl#AnnotationProperty"
         );
         assert_eq!(
-            OWL::AssertionProperty.as_ref(),
+            Borrow::<str>::borrow(&OWL::AssertionProperty),
             "http://www.w3.org/2002/07/owl#assertionProperty"
         );
         assert_eq!(
-            OWL::AsymmetricProperty.as_ref(),
+            Borrow::<str>::borrow(&OWL::AsymmetricProperty),
             "http://www.w3.org/2002/07/owl#AsymmetricProperty"
         );
-        assert_eq!(OWL::Axiom.as_ref(), "http://www.w3.org/2002/07/owl#Axiom");
         assert_eq!(
-            OWL::Cardinality.as_ref(),
+            Borrow::<str>::borrow(&OWL::Axiom),
+            "http://www.w3.org/2002/07/owl#Axiom"
+        );
+        assert_eq!(
+            Borrow::<str>::borrow(&OWL::Cardinality),
             "http://www.w3.org/2002/07/owl#cardinality"
         );
-        assert_eq!(OWL::Class.as_ref(), "http://www.w3.org/2002/07/owl#Class");
         assert_eq!(
-            OWL::ComplementOf.as_ref(),
+            Borrow::<str>::borrow(&OWL::Class),
+            "http://www.w3.org/2002/07/owl#Class"
+        );
+        assert_eq!(
+            Borrow::<str>::borrow(&OWL::ComplementOf),
             "http://www.w3.org/2002/07/owl#complementOf"
         );
         assert_eq!(
-            OWL::DatatypeComplementOf.as_ref(),
+            Borrow::<str>::borrow(&OWL::DatatypeComplementOf),
             "http://www.w3.org/2002/07/owl#datatypeComplementOf"
         );
         assert_eq!(
-            OWL::DatatypeProperty.as_ref(),
+            Borrow::<str>::borrow(&OWL::DatatypeProperty),
             "http://www.w3.org/2002/07/owl#DatatypeProperty"
         );
         assert_eq!(
-            OWL::DifferentFrom.as_ref(),
+            Borrow::<str>::borrow(&OWL::DifferentFrom),
             "http://www.w3.org/2002/07/owl#differentFrom"
         );
         assert_eq!(
-            OWL::DisjointUnionOf.as_ref(),
+            Borrow::<str>::borrow(&OWL::DisjointUnionOf),
             "http://www.w3.org/2002/07/owl#disjointUnionOf"
         );
         assert_eq!(
-            OWL::DisjointWith.as_ref(),
+            Borrow::<str>::borrow(&OWL::DisjointWith),
             "http://www.w3.org/2002/07/owl#disjointWith"
         );
         assert_eq!(
-            OWL::DistinctMembers.as_ref(),
+            Borrow::<str>::borrow(&OWL::DistinctMembers),
             "http://www.w3.org/2002/07/owl#distinctMembers"
         );
         assert_eq!(
-            OWL::EquivalentClass.as_ref(),
+            Borrow::<str>::borrow(&OWL::EquivalentClass),
             "http://www.w3.org/2002/07/owl#equivalentClass"
         );
         assert_eq!(
-            OWL::EquivalentProperty.as_ref(),
+            Borrow::<str>::borrow(&OWL::EquivalentProperty),
             "http://www.w3.org/2002/07/owl#equivalentProperty"
         );
         assert_eq!(
-            OWL::FunctionalProperty.as_ref(),
+            Borrow::<str>::borrow(&OWL::FunctionalProperty),
             "http://www.w3.org/2002/07/owl#FunctionalProperty"
         );
-        assert_eq!(OWL::HasKey.as_ref(), "http://www.w3.org/2002/07/owl#hasKey");
         assert_eq!(
-            OWL::HasValue.as_ref(),
+            Borrow::<str>::borrow(&OWL::HasKey),
+            "http://www.w3.org/2002/07/owl#hasKey"
+        );
+        assert_eq!(
+            Borrow::<str>::borrow(&OWL::HasValue),
             "http://www.w3.org/2002/07/owl#hasValue"
         );
         assert_eq!(
-            OWL::Imports.as_ref(),
+            Borrow::<str>::borrow(&OWL::Imports),
             "http://www.w3.org/2002/07/owl#imports"
         );
         assert_eq!(
-            OWL::IntersectionOf.as_ref(),
+            Borrow::<str>::borrow(&OWL::IntersectionOf),
             "http://www.w3.org/2002/07/owl#intersectionOf"
         );
         assert_eq!(
-            OWL::InverseFunctionalProperty.as_ref(),
+            Borrow::<str>::borrow(&OWL::InverseFunctionalProperty),
             "http://www.w3.org/2002/07/owl#InverseFunctionalProperty"
         );
         assert_eq!(
-            OWL::InverseOf.as_ref(),
+            Borrow::<str>::borrow(&OWL::InverseOf),
             "http://www.w3.org/2002/07/owl#inverseOf"
         );
         assert_eq!(
-            OWL::IrreflexiveProperty.as_ref(),
+            Borrow::<str>::borrow(&OWL::IrreflexiveProperty),
             "http://www.w3.org/2002/07/owl#IrreflexiveProperty"
         );
         assert_eq!(
-            OWL::MaxCardinality.as_ref(),
+            Borrow::<str>::borrow(&OWL::MaxCardinality),
             "http://www.w3.org/2002/07/owl#maxCardinality"
         );
         assert_eq!(
-            OWL::MaxQualifiedCardinality.as_ref(),
+            Borrow::<str>::borrow(&OWL::MaxQualifiedCardinality),
             "http://www.w3.org/2002/07/owl#maxQualifiedCardinality"
         );
         assert_eq!(
-            OWL::Members.as_ref(),
+            Borrow::<str>::borrow(&OWL::Members),
             "http://www.w3.org/2002/07/owl#members"
         );
         assert_eq!(
-            OWL::MinCardinality.as_ref(),
+            Borrow::<str>::borrow(&OWL::MinCardinality),
             "http://www.w3.org/2002/07/owl#minCardinality"
         );
         assert_eq!(
-            OWL::MinQualifiedCardinality.as_ref(),
+            Borrow::<str>::borrow(&OWL::MinQualifiedCardinality),
             "http://www.w3.org/2002/07/owl#minQualifiedCardinality"
         );
         assert_eq!(
-            OWL::NamedIndividual.as_ref(),
+            Borrow::<str>::borrow(&OWL::NamedIndividual),
             "http://www.w3.org/2002/07/owl#NamedIndividual"
         );
         assert_eq!(
-            OWL::NegativePropertyAssertion.as_ref(),
+            Borrow::<str>::borrow(&OWL::NegativePropertyAssertion),
             "http://www.w3.org/2002/07/owl#NegativePropertyAssertion"
         );
         assert_eq!(
-            OWL::Nothing.as_ref(),
+            Borrow::<str>::borrow(&OWL::Nothing),
             "http://www.w3.org/2002/07/owl#Nothing"
         );
         assert_eq!(
-            OWL::ObjectProperty.as_ref(),
+            Borrow::<str>::borrow(&OWL::ObjectProperty),
             "http://www.w3.org/2002/07/owl#ObjectProperty"
         );
         assert_eq!(
-            OWL::OnClass.as_ref(),
+            Borrow::<str>::borrow(&OWL::OnClass),
             "http://www.w3.org/2002/07/owl#onClass"
         );
         assert_eq!(
-            OWL::OnDataRange.as_ref(),
+            Borrow::<str>::borrow(&OWL::OnDataRange),
             "http://www.w3.org/2002/07/owl#onDataRange"
         );
         assert_eq!(
-            OWL::OnDatatype.as_ref(),
+            Borrow::<str>::borrow(&OWL::OnDatatype),
             "http://www.w3.org/2002/07/owl#onDatatype"
         );
-        assert_eq!(OWL::OneOf.as_ref(), "http://www.w3.org/2002/07/owl#oneOf");
         assert_eq!(
-            OWL::OnProperty.as_ref(),
+            Borrow::<str>::borrow(&OWL::OneOf),
+            "http://www.w3.org/2002/07/owl#oneOf"
+        );
+        assert_eq!(
+            Borrow::<str>::borrow(&OWL::OnProperty),
             "http://www.w3.org/2002/07/owl#onProperty"
         );
         assert_eq!(
-            OWL::Ontology.as_ref(),
+            Borrow::<str>::borrow(&OWL::Ontology),
             "http://www.w3.org/2002/07/owl#Ontology"
         );
         assert_eq!(
-            OWL::QualifiedCardinality.as_ref(),
+            Borrow::<str>::borrow(&OWL::QualifiedCardinality),
             "http://www.w3.org/2002/07/owl#qualifiedCardinality"
         );
         assert_eq!(
-            OWL::PropertyChainAxiom.as_ref(),
+            Borrow::<str>::borrow(&OWL::PropertyChainAxiom),
             "http://www.w3.org/2002/07/owl#propertyChainAxiom"
         );
         assert_eq!(
-            OWL::PropertyDisjointWith.as_ref(),
+            Borrow::<str>::borrow(&OWL::PropertyDisjointWith),
             "http://www.w3.org/2002/07/owl#propertyDisjointWith"
         );
         assert_eq!(
-            OWL::ReflexiveProperty.as_ref(),
+            Borrow::<str>::borrow(&OWL::ReflexiveProperty),
             "http://www.w3.org/2002/07/owl#ReflexiveProperty"
         );
         assert_eq!(
-            OWL::Restriction.as_ref(),
+            Borrow::<str>::borrow(&OWL::Restriction),
             "http://www.w3.org/2002/07/owl#Restriction"
         );
-        assert_eq!(OWL::SameAs.as_ref(), "http://www.w3.org/2002/07/owl#sameAs");
         assert_eq!(
-            OWL::SourceIndividual.as_ref(),
+            Borrow::<str>::borrow(&OWL::SameAs),
+            "http://www.w3.org/2002/07/owl#sameAs"
+        );
+        assert_eq!(
+            Borrow::<str>::borrow(&OWL::SourceIndividual),
             "http://www.w3.org/2002/07/owl#sourceIndividual"
         );
         assert_eq!(
-            OWL::SomeValuesFrom.as_ref(),
+            Borrow::<str>::borrow(&OWL::SomeValuesFrom),
             "http://www.w3.org/2002/07/owl#someValuesFrom"
         );
         assert_eq!(
-            OWL::SymmetricProperty.as_ref(),
+            Borrow::<str>::borrow(&OWL::SymmetricProperty),
             "http://www.w3.org/2002/07/owl#SymmetricProperty"
         );
         assert_eq!(
-            OWL::TargetIndividual.as_ref(),
+            Borrow::<str>::borrow(&OWL::TargetIndividual),
             "http://www.w3.org/2002/07/owl#targetIndividual"
         );
         assert_eq!(
-            OWL::TargetValue.as_ref(),
+            Borrow::<str>::borrow(&OWL::TargetValue),
             "http://www.w3.org/2002/07/owl#targetValue"
         );
         assert_eq!(
-            OWL::TopDataProperty.as_ref(),
+            Borrow::<str>::borrow(&OWL::TopDataProperty),
             "http://www.w3.org/2002/07/owl#topDataProperty"
         );
         assert_eq!(
-            OWL::TopObjectProperty.as_ref(),
+            Borrow::<str>::borrow(&OWL::TopObjectProperty),
             "http://www.w3.org/2002/07/owl#topObjectProperty"
         );
-        assert_eq!(OWL::Thing.as_ref(), "http://www.w3.org/2002/07/owl#Thing");
         assert_eq!(
-            OWL::TransitiveProperty.as_ref(),
+            Borrow::<str>::borrow(&OWL::Thing),
+            "http://www.w3.org/2002/07/owl#Thing"
+        );
+        assert_eq!(
+            Borrow::<str>::borrow(&OWL::TransitiveProperty),
             "http://www.w3.org/2002/07/owl#TransitiveProperty"
         );
         assert_eq!(
-            OWL::UnionOf.as_ref(),
+            Borrow::<str>::borrow(&OWL::UnionOf),
             "http://www.w3.org/2002/07/owl#unionOf"
         );
         assert_eq!(
-            OWL::VersionIRI.as_ref(),
+            Borrow::<str>::borrow(&OWL::VersionIRI),
             "http://www.w3.org/2002/07/owl#versionIRI"
         );
         assert_eq!(
-            OWL::WithRestrictions.as_ref(),
+            Borrow::<str>::borrow(&OWL::WithRestrictions),
             "http://www.w3.org/2002/07/owl#withRestrictions"
         );
     }
 
     #[test]
     fn test_namespace_try_from() {
-        assert_eq!("http://www.w3.org/2002/07/owl#", Namespace::OWL.as_ref());
+        assert_eq!(
+            "http://www.w3.org/2002/07/owl#",
+            Borrow::<str>::borrow(&Namespace::OWL)
+        );
         assert_eq!(b"http://www.w3.org/2002/07/owl#", Namespace::OWL.as_bytes());
 
         assert!(Namespace::from_str("http://www.w3.org/2002/07/owl#").is_ok());
@@ -771,10 +792,10 @@ mod tests {
     #[test]
     fn test_to_built_in_entity() {
         let builder = Build::new_rc();
-        let iri_top_dp = builder.iri(OWL::TopDataProperty.as_ref());
-        let iri_top_op = builder.iri(OWL::TopObjectProperty.as_ref());
-        let iri_thing = builder.iri(OWL::Thing.as_ref());
-        let iri_nothing = builder.iri(OWL::Nothing.as_ref());
+        let iri_top_dp = builder.iri(Borrow::<str>::borrow(&OWL::TopDataProperty));
+        let iri_top_op = builder.iri(Borrow::<str>::borrow(&OWL::TopObjectProperty));
+        let iri_thing = builder.iri(Borrow::<str>::borrow(&OWL::Thing));
+        let iri_nothing = builder.iri(Borrow::<str>::borrow(&OWL::Nothing));
         assert_eq!(
             to_built_in_entity(&iri_top_dp),
             Some(NamedOWLEntityKind::DataProperty)
@@ -847,12 +868,12 @@ mod tests {
     #[test]
     fn test_meta_facet() {
         assert_eq!(
-            Facet::MinLength.as_ref(),
+            Borrow::<str>::borrow(&Facet::MinLength),
             "http://www.w3.org/2001/XMLSchema#minLength"
         );
 
         assert_eq!(
-            Facet::Pattern.as_ref(),
+            Borrow::<str>::borrow(&Facet::Pattern),
             "http://www.w3.org/2001/XMLSchema#pattern"
         );
 
@@ -869,12 +890,14 @@ mod tests {
 
     #[test]
     fn test_is_xsd_datatype() {
-        assert!(is_xsd_datatype(
+        assert!(is_xsd_datatype(&IRI(
             "http://www.w3.org/2001/XMLSchema#nonNegativeInteger"
-        ));
-        assert!(!is_xsd_datatype(
+        )));
+        assert!(!is_xsd_datatype(&IRI(
             "http://www.w3.org/2001/XMLSchemaaa#nonNegativeInteger"
-        ));
-        assert!(!is_xsd_datatype("http://www.w3.org/2001/XMLSchema.pdf"));
+        )));
+        assert!(!is_xsd_datatype(&IRI(
+            "http://www.w3.org/2001/XMLSchema.pdf"
+        )));
     }
 }

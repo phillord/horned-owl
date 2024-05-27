@@ -122,8 +122,8 @@ use crate::vocab::Facet;
 pub struct IRI<A>(pub(crate) A);
 
 /// A trait for representing IRIs.
-/// 
-/// It collects a list of trait bounds necessary to handle IRIs using [String]-like 
+///
+/// It collects a list of trait bounds necessary to handle IRIs using [String]-like
 /// types as the underlying data structure.
 pub trait ForIRI:
     AsRef<str>
@@ -172,12 +172,6 @@ impl<A: Deref<Target = str>> Deref for IRI<A> {
     }
 }
 
-impl<A: AsRef<str>> AsRef<str> for IRI<A> {
-    fn as_ref(&self) -> &str {
-        self.0.as_ref()
-    }
-}
-
 impl<A: Borrow<str>> Borrow<str> for IRI<A> {
     fn borrow(&self) -> &str {
         self.0.borrow()
@@ -214,34 +208,34 @@ impl<A: Borrow<str>> Display for IRI<A> {
     }
 }
 
-/// A builder for [IRIs](IRI), [named entities](NamedEntity) and 
+/// A builder for [IRIs](IRI), [named entities](NamedEntity) and
 /// [anonymous individuals](AnonymousIndividual).
 ///
 /// # Examples
-/// 
+///
 /// ```
 /// # use horned_owl::model::*;
 /// # use std::rc::Rc;
 /// let builder: Build<Rc<str>> = Build::new();
-/// 
+///
 /// let anon = builder.anon("_000000001");
-/// 
+///
 /// let iri_string = "http://www.example.com/#A";
 /// let iri = builder.iri(iri_string);
-/// 
+///
 /// let cl  = builder.class(iri_string);
 /// let cl_iri = IRI::from(cl);
-/// 
+///
 /// assert_eq!(iri, cl_iri);
 /// ```
 /// # Implementation details
-/// 
+///
 /// Using an internal cache, we ensure that if we use the same builder to create
 /// two instances using the same IRI, they will use the same object in memory.
 /// Equality, ordering and hashing are conserved across different builders,
 /// which allows for the combination of different instances without consequences
 /// (save for increased memory use).
-/// 
+///
 /// [Interior mutability](RefCell) is used to dispatch new objects from an immutable builder.
 
 // Currently `Build` uses Rc/RefCell, as does IRI which limits this
@@ -652,13 +646,20 @@ impl NamedEntityKind {
     }
 }
 
-impl<A: AsRef<str>> Class<A> {
+impl<A: Borrow<str>> Class<A> {
     pub fn is_thing(&self) -> bool {
-        self.0.as_ref() == crate::vocab::OWL::Thing.as_ref()
+        Borrow::<str>::borrow(&self.0) == Borrow::<str>::borrow(&crate::vocab::OWL::Thing)
     }
 
     pub fn is_nothing(&self) -> bool {
-        self.0.as_ref() == crate::vocab::OWL::Nothing.as_ref()
+        Borrow::<str>::borrow(&self.0) == Borrow::<str>::borrow(&crate::vocab::OWL::Nothing)
+    }
+}
+
+impl<A: Borrow<str>> Datatype<A> {
+    pub fn is_literal(&self) -> bool {
+        Borrow::<str>::borrow(&self.0)
+            == Borrow::<str>::borrow(&crate::vocab::OWL2Datatype::Literal)
     }
 }
 
@@ -676,12 +677,6 @@ impl<A: Deref<Target = str>> Deref for AnonymousIndividual<A> {
 impl<A: Clone> AnonymousIndividual<A> {
     pub fn underlying(&self) -> A {
         self.0.clone()
-    }
-}
-
-impl<A: AsRef<str>> AsRef<str> for AnonymousIndividual<A> {
-    fn as_ref(&self) -> &str {
-        self.0.as_ref()
     }
 }
 
@@ -2025,7 +2020,7 @@ mod test {
         let iri_string = String::from("http://www.example.com/#A");
         // The way we need to dereference looks a bit unnatural.
         let iri = builder.iri(&*iri_string);
-        let cl  = builder.class(&*iri_string);
+        let cl = builder.class(&*iri_string);
         let cl_iri = IRI::from(cl);
 
         // The two IRIs look the same.
