@@ -379,9 +379,11 @@ impl<A: ForIRI, AA: ForIndex<A>> FromIterator<AnnotatedComponent<A>>
     for ComponentMappedOntology<A, AA>
 {
     fn from_iter<I: IntoIterator<Item = AnnotatedComponent<A>>>(iter: I) -> Self {
-        iter.into_iter()
-            .collect::<MutableOntologyWrapper<ComponentMappedOntology<_, _>>>()
-            .0
+        let mut cmo: ComponentMappedOntology<A, AA> = ComponentMappedOntology::new();
+        for ac in iter.into_iter() {
+            cmo.insert(ac);
+        }
+        cmo
     }
 }
 

@@ -851,7 +851,7 @@ pub trait HigherKinded {
     }
 }
 
-/// An `AnnotatedComponent` is an `Component` with one orpmore `Annotation`.
+/// An `AnnotatedComponent` is an `Component` with one or more `Annotation`.
 #[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
 pub struct AnnotatedComponent<A> {
     pub component: Component<A>,
