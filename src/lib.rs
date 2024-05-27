@@ -3,7 +3,7 @@
 //! Horned-OWL provides an interface to parse, generate and handle ontologies
 //! written using the [Web Ontology Language (OWL)](https://www.w3.org/TR/2012/REC-owl2-primer-20121211/).
 
-//! Unlike a simple classification taxonomy, OWL is highly expressive and maps 
+//! Unlike a simple classification taxonomy, OWL is highly expressive and maps
 //! to a formal semantics which makes the ontology open to computational
 //! reasoning.
 //!

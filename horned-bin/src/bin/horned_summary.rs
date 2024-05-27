@@ -5,12 +5,11 @@ use clap::App;
 use clap::Arg;
 use clap::ArgMatches;
 
-
 use horned_bin::{
-    parse_path,
     config::{parser_app, parser_config},
     naming::name,
-    summary::summarize
+    parse_path,
+    summary::summarize,
 };
 
 use horned_owl::error::HornedError;
@@ -32,15 +31,15 @@ pub(crate) fn app(name: &str) -> App<'static> {
             .arg(
                 Arg::with_name("INPUT")
                     .help("Sets the input file to use")
-                    .required(true)
-            )
+                    .required(true),
+            ),
     )
 }
 
 pub(crate) fn matcher(matches: &ArgMatches) -> Result<(), HornedError> {
-    let input = matches.value_of("INPUT").ok_or_else(|| HornedError::CommandError(
-        "A file name must be specified".to_string(),
-    ))?;
+    let input = matches
+        .value_of("INPUT")
+        .ok_or_else(|| HornedError::CommandError("A file name must be specified".to_string()))?;
 
     let config = parser_config(matches);
     let (ont, p, i) = parse_path(Path::new(input), config)?.decompose();

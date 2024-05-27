@@ -361,7 +361,7 @@ impl<
     }
 
     pub fn l(&self) -> &L {
-        (self.0).j().k()
+        self.0.j().k()
     }
 
     pub fn index(self) -> (I, J, K, L) {
@@ -462,8 +462,6 @@ mod test {
     #[test]
     fn two_cons() {
         let _o = TwoIndexedOntology::from((SetIndex::new_rc(), SetIndex::new()));
-
-        let _o = TwoIndexedOntology::from((SetIndex::new_rc(), NullIndex::default()));
     }
 
     #[test]

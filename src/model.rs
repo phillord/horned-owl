@@ -99,6 +99,7 @@ use std::fmt::Display;
 use std::fmt::Formatter;
 use std::hash::Hash;
 use std::hash::Hasher;
+use std::iter::FromIterator;
 use std::ops::Deref;
 use std::rc::Rc;
 use std::sync::Arc;
@@ -447,6 +448,7 @@ impl Build<String> {
 macro_rules! namedenumimpl {
     ($name:ident, $enum:ident, $kindenum:ident) => {
         impl<A> From<$name<A>> for $enum<A> {
+
             fn from(n: $name<A>) -> $enum<A> {
                 Self::$name(n)
             }
@@ -1936,10 +1938,43 @@ pub trait MutableOntology<A> {
     }
 }
 
+/// A wrapper to allow implementation of `FromIterator` and `Extend`
+/// on any `MutableOntology`.
+///
+/// MutableOntology implementations in horned_owl implement these interfaces directly
+/// and these should be used in preference.
+pub struct MutableOntologyWrapper<O>(pub O);
+
+impl<A, O> FromIterator<AnnotatedComponent<A>> for MutableOntologyWrapper<O>
+where
+    A: ForIRI,
+    O: Default + MutableOntology<A>,
+{
+    fn from_iter<T: IntoIterator<Item = AnnotatedComponent<A>>>(iter: T) -> Self {
+        let mut mow = Self(O::default());
+        for c in iter {
+            mow.0.insert(c);
+        }
+        mow
+    }
+}
+
+impl<A, O> Extend<AnnotatedComponent<A>> for MutableOntologyWrapper<&mut O>
+where
+    A: ForIRI,
+    O: MutableOntology<A>,
+{
+    fn extend<T: IntoIterator<Item = AnnotatedComponent<A>>>(&mut self, iter: T) {
+        for c in iter {
+            self.0.insert(c);
+        }
+    }
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::ontology::component_mapped::ComponentMappedOntology;
+    use crate::ontology::{component_mapped::ComponentMappedOntology, set::SetOntology};
 
     #[test]
     fn test_iri_from_string() {
@@ -2120,5 +2155,40 @@ mod test {
         };
 
         assert_eq!(r.higher_kind(), HigherKind::SWRL);
+    }
+
+    #[test]
+    fn test_from_iterator() {
+        let mut so = SetOntology::new_rc();
+        let b = Build::new_rc();
+        let oid = OntologyID {
+            iri: Some(b.iri("http://www.example.com/iri")),
+            viri: Some(b.iri("http://www.example.com/viri")),
+        };
+
+        so.insert(oid.clone());
+
+        let newso: MutableOntologyWrapper<SetOntology<_>> = so.clone().into_iter().collect();
+        let newso: SetOntology<_> = newso.0;
+
+        assert_eq!(so, newso);
+    }
+
+    #[test]
+    fn test_extend() {
+        let mut so = SetOntology::new_rc();
+        let b = Build::new_rc();
+        let oid = OntologyID {
+            iri: Some(b.iri("http://www.example.com/iri")),
+            viri: Some(b.iri("http://www.example.com/viri")),
+        };
+
+        so.insert(oid.clone());
+
+        let mut so2 = SetOntology::new_rc();
+        let mut mow = MutableOntologyWrapper(&mut so2);
+        mow.extend(so.clone());
+
+        assert_eq!(so, so2);
     }
 }

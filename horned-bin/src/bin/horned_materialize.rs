@@ -10,9 +10,7 @@ use horned_bin::{
     materialize,
 };
 
-use horned_owl::{
-    error::HornedError
-};
+use horned_owl::error::HornedError;
 
 #[allow(dead_code)]
 fn main() -> Result<(), HornedError> {
@@ -31,19 +29,16 @@ pub(crate) fn app(name: &str) -> App<'static> {
                     .help("Sets the input file to use")
                     .required(true)
                     .index(1),
-            )
+            ),
     )
 }
 
 pub(crate) fn matcher(matches: &ArgMatches) -> Result<(), HornedError> {
-    let input = matches.value_of("INPUT").ok_or_else(|| HornedError::CommandError(
-        "Command requires a file argument".to_string(),
-    ))?;
+    let input = matches
+        .value_of("INPUT")
+        .ok_or_else(|| HornedError::CommandError("Command requires a file argument".to_string()))?;
 
-    let v = materialize(
-        input,
-        parser_config(matches)
-    )?;
+    let v = materialize(input, parser_config(matches))?;
 
     println!("Materialized");
     for i in v {

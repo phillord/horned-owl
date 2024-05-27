@@ -2,8 +2,8 @@
 
 use horned_owl::{
     error::HornedError,
-    io::{ParserOutput, ResourceType, ParserConfiguration},
-    model::{Build, IRI, RcAnnotatedComponent, RcStr},
+    io::{ParserConfiguration, ParserOutput, ResourceType},
+    model::{Build, RcAnnotatedComponent, RcStr, IRI},
     ontology::component_mapped::RcComponentMappedOntology,
     resolve::{localize_iri, strict_resolve_iri},
 };
@@ -25,16 +25,16 @@ pub fn path_type(path: &Path) -> Option<ResourceType> {
 
 pub fn parse_path(
     path: &Path,
-    config: ParserConfiguration
+    config: ParserConfiguration,
 ) -> Result<ParserOutput<RcStr, RcAnnotatedComponent>, HornedError> {
     Ok(match path_type(path) {
         Some(ResourceType::OFN) => {
-            let file = File::open(&path)?;
+            let file = File::open(path)?;
             let mut bufreader = BufReader::new(file);
             ParserOutput::ofn(horned_owl::io::ofn::reader::read(&mut bufreader, config)?)
         }
         Some(ResourceType::OWX) => {
-            let file = File::open(&path)?;
+            let file = File::open(path)?;
             let mut bufreader = BufReader::new(file);
             ParserOutput::owx(horned_owl::io::owx::reader::read(&mut bufreader, config)?)
         }
@@ -55,20 +55,22 @@ pub fn parse_path(
 /// Parse but only as far as the imports, if that makes sense.
 pub fn parse_imports(
     path: &Path,
-    config: ParserConfiguration
+    config: ParserConfiguration,
 ) -> Result<ParserOutput<RcStr, RcAnnotatedComponent>, HornedError> {
-    let file = File::open(&path)?;
+    let file = File::open(path)?;
     let mut bufreader = BufReader::new(file);
     Ok(match path_type(path) {
-        Some(ResourceType::OFN) => ParserOutput::ofn(horned_owl::io::owx::reader::read(&mut bufreader, config)?),
-        Some(ResourceType::OWX) => ParserOutput::owx(horned_owl::io::owx::reader::read(&mut bufreader, config)?),
+        Some(ResourceType::OFN) => {
+            ParserOutput::ofn(horned_owl::io::owx::reader::read(&mut bufreader, config)?)
+        }
+        Some(ResourceType::OWX) => {
+            ParserOutput::owx(horned_owl::io::owx::reader::read(&mut bufreader, config)?)
+        }
         Some(ResourceType::RDF) => {
             let b = Build::new();
             let mut p = horned_owl::io::rdf::reader::parser_with_build(&mut bufreader, &b, config);
             p.parse_imports()?;
-            ParserOutput::rdf(
-                p.as_ontology_and_incomplete()?
-            )
+            ParserOutput::rdf(p.as_ontology_and_incomplete()?)
         }
         None => {
             return Err(HornedError::CommandError(format!(
@@ -79,7 +81,10 @@ pub fn parse_imports(
     })
 }
 
-pub fn materialize(input: &str, config: ParserConfiguration) -> Result<Vec<IRI<RcStr>>, HornedError> {
+pub fn materialize(
+    input: &str,
+    config: ParserConfiguration,
+) -> Result<Vec<IRI<RcStr>>, HornedError> {
     let mut v = vec![];
     materialize_1(input, config, &mut v, true)?;
     Ok(v)
@@ -104,7 +109,7 @@ pub fn materialize_1<'a>(
             let local_path = Path::new(&local);
             if !local_path.exists() {
                 println!("Retrieving Ontology: {}", &i.0);
-                let imported_data = strict_resolve_iri(&i.0);
+                let imported_data = strict_resolve_iri(&i.0)?;
                 done.push(i.0.clone());
                 println!("Saving to {}", local);
                 let mut file = File::create(&local)?;
@@ -182,7 +187,10 @@ pub mod naming {
 
 pub mod summary {
 
-    use horned_owl::{model::{ComponentKind, HigherKinded}, ontology::component_mapped::RcComponentMappedOntology};
+    use horned_owl::{
+        model::{ComponentKind, HigherKinded},
+        ontology::component_mapped::RcComponentMappedOntology,
+    };
     use indexmap::map::IndexMap;
 
     #[derive(Debug)]
@@ -205,13 +213,9 @@ pub mod summary {
     {
         let ont: RcComponentMappedOntology = ont.into();
         SummaryStatistics {
-            logical_axiom: ont.i().iter().filter(|c|c.is_axiom()).count(),
-            annotation_axiom: ont
-                .i()
-                .iter()
-                .map(|aa| aa.ann.len())
-                .sum::<usize>(),
-            meta_comp: ont.i().iter().filter(|c|c.is_meta()).count(),
+            logical_axiom: ont.i().iter().filter(|c| c.is_axiom()).count(),
+            annotation_axiom: ont.i().iter().map(|aa| aa.ann.len()).sum::<usize>(),
+            meta_comp: ont.i().iter().filter(|c| c.is_meta()).count(),
             axiom_type: axiom_types(ont),
         }
     }
@@ -239,14 +243,14 @@ pub mod config {
             clap::arg!(--"strict")
                 .required(false)
                 .action(ArgAction::SetTrue)
-                .help("Parse RDF strictly")
+                .help("Parse RDF strictly"),
         )
     }
 
     pub fn parser_config(matches: &ArgMatches) -> ParserConfiguration {
-        ParserConfiguration{
+        ParserConfiguration {
             rdf: RDFParserConfiguration {
-                lax: !matches.get_one::<bool>("strict").unwrap_or(&false)
+                lax: !matches.get_one::<bool>("strict").unwrap_or(&false),
             },
             ..Default::default()
         }

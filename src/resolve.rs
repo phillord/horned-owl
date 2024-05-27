@@ -19,13 +19,14 @@ use ureq;
 /// # use horned_owl::resolve::*;
 /// let b = Build::new_rc();
 
-/// let doc_iri = b.iri("file://blah/and.owl");
+/// let doc_iri = b.iri("file://base_dir/and.owl");
 
 /// let path_buf = file_iri_to_pathbuf(&doc_iri);
-/// assert_eq!(path_buf.to_str().unwrap(), "blah/and.owl");
+/// assert_eq!(path_buf.to_str().unwrap(), "base_dir/and.owl");
 /// ```
+#[deprecated(since = "1.0.0", note = "please use `as_local_path_buffer` instead")]
 pub fn file_iri_to_pathbuf<A: ForIRI>(iri: &IRI<A>) -> PathBuf {
-    Path::new(&*iri.split_at(7).1).into()
+    Path::new(iri.split_at(7).1).into()
 }
 
 /// Return an `IRI` for the given `PathBuf`
@@ -37,17 +38,19 @@ pub fn file_iri_to_pathbuf<A: ForIRI>(iri: &IRI<A>) -> PathBuf {
 /// # use std::path::Path;
 /// let b = Build::new_rc();
 
-/// let target_iri = b.iri("file://blah/and.owl");
+/// let target_iri = b.iri("file://base_dir/and.owl");
 
-/// let path = Path::new("blah/and.owl");
+/// let path = Path::new("base_dir/and.owl");
 /// let source_iri = path_to_file_iri(&b, &path);
-/// assert_eq!(source_iri.as_ref(), "file://blah/and.owl");
+/// assert_eq!(source_iri.as_ref(), "file://base_dir/and.owl");
 /// ```
 pub fn path_to_file_iri<A: ForIRI>(b: &Build<A>, pb: &Path) -> IRI<A> {
-    b.iri(format!("file://{}", pb.to_str().unwrap()))
+    pb.to_str()
+        .map(|path_str| b.iri(format!("file://{path_str}")))
+        .expect("path should contain valid Unicode")
 }
 
-/// Return true if the iri is a file IRI.
+/// Returns `Some(path_buf)` if the input corresponds to a file IRI.
 ///
 /// # Examples
 /// ```
@@ -55,12 +58,15 @@ pub fn path_to_file_iri<A: ForIRI>(b: &Build<A>, pb: &Path) -> IRI<A> {
 /// # use horned_owl::resolve::*;
 /// let b = Build::new_rc();
 
-/// let doc_iri = b.iri("file://blah/and.owl");
+/// let doc_iri = b.iri("file://base_dir/and.owl");
+/// let path_buf = as_local_path_buffer(&doc_iri);
 
-/// assert!(is_file_iri(&doc_iri))
+/// assert!(path_buf.is_some());
+/// assert_eq!(path_buf.unwrap().to_str().unwrap(), "base_dir/and.owl");
 /// ```
-pub fn is_file_iri<A: ForIRI>(iri: &IRI<A>) -> bool {
-    (*iri).starts_with("file:/")
+pub fn as_local_path_buffer<A: ForIRI>(iri: &IRI<A>) -> Option<PathBuf> {
+    iri.strip_prefix("file://")
+        .map(|path_str| Path::new(path_str).into())
 }
 
 /// Assuming that doc_iri is a local file IRI, return a new IRI for
@@ -72,10 +78,10 @@ pub fn is_file_iri<A: ForIRI>(iri: &IRI<A>) -> bool {
 /// # use horned_owl::resolve::*;
 /// let b = Build::new_rc();
 
-/// let doc_iri = b.iri("file://blah/and.owl");
+/// let doc_iri = b.iri("file://base_dir/and.owl");
 /// let iri = b.iri("http://www.example.com/or.owl");
 
-/// let local = b.iri("file://blah/or.owl");
+/// let local = b.iri("file://base_dir/or.owl");
 
 /// assert_eq!(localize_iri(&iri, &doc_iri), local);
 /// ```
@@ -90,40 +96,86 @@ pub fn localize_iri<A: ForIRI>(iri: &IRI<A>, doc_iri: &IRI<A>) -> IRI<A> {
     })
 }
 
-// Return the ontology as Vec<u8> from `iri` unless we think that it
+// Return the ontology as a string from `iri` unless we think that it
 // is local to doc_iri
-pub fn resolve_iri<A: ForIRI>(iri: &IRI<A>, doc_iri: Option<&IRI<A>>) -> (IRI<A>, String) {
+pub fn resolve_iri<A: ForIRI>(
+    iri: &IRI<A>,
+    doc_iri: Option<&IRI<A>>,
+) -> Result<(IRI<A>, String), HornedError> {
     let local = if let Some(doc_iri) = doc_iri {
         localize_iri(iri, doc_iri)
     } else {
         iri.clone()
     };
 
-    if is_file_iri(&local) {
-        let mut path = file_iri_to_pathbuf(&local);
-        if path.as_path().exists() {
-            return (local, ::std::fs::read_to_string(path).unwrap());
-        }
+    if let Some(mut path) = as_local_path_buffer(&local) {
+        let file_exists = path.try_exists()?;
 
-        if let Some(doc_iri) = doc_iri {
-            let doc_ext = doc_iri.split_once('.').unwrap();
-            path.set_extension(doc_ext.1);
-            if path.exists() {
-                return (local, ::std::fs::read_to_string(path).unwrap());
+        if file_exists {
+            let result = ::std::fs::read_to_string(path)?;
+            Ok((local, result))
+        } else if let Some(doc_iri) = doc_iri {
+            let doc_ext = doc_iri.split_once('.').map(|(_, ext)| ext).unwrap_or("");
+            path.set_extension(doc_ext);
+
+            let doc_file_exists = path.try_exists()?;
+            if doc_file_exists {
+                let result = ::std::fs::read_to_string(path)?;
+                Ok((local, result))
+            } else {
+                Err(HornedError::IOError(std::io::Error::from(
+                    std::io::ErrorKind::NotFound,
+                )))
             }
+        } else {
+            Err(HornedError::IOError(std::io::Error::from(
+                std::io::ErrorKind::NotFound,
+            )))
         }
-        todo!("resolve_iri doesn't have error handling: {:?} {:?}", iri, doc_iri);
+    } else {
+        Ok((local, strict_resolve_iri(iri).unwrap()))
     }
+    // if is_file_iri(&local) {
+    //     let mut path = file_iri_to_pathbuf(&local);
+    //     if path.as_path().exists() {
+    //         return Ok((local, ::std::fs::read_to_string(path).unwrap()));
+    //     }
 
-    (local, strict_resolve_iri(iri))
+    //     if let Some(doc_iri) = doc_iri {
+    //         let doc_ext = doc_iri.split_once('.').unwrap();
+    //         path.set_extension(doc_ext.1);
+    //         if path.exists() {
+    //             return Ok((local, ::std::fs::read_to_string(path).unwrap()));
+    //         }
+    //     }
+    //     todo!("resolve_iri doesn't have error handling: {:?} {:?}", iri, doc_iri);
+    // }
 }
 
 // Return the ontology as Vec<u8> from `iri`.
 #[cfg(feature = "remote")]
-pub fn strict_resolve_iri<A: ForIRI>(iri: &IRI<A>) -> String {
-    let s: String = iri.into();
-    ureq::get(&s).call().unwrap().into_string().unwrap()
+use crate::error::HornedError;
+pub fn strict_resolve_iri<A: ForIRI>(iri: &IRI<A>) -> Result<String, HornedError> {
+    // let s: String = iri.into();
+    ureq::get(iri).call()?.into_string().map_err(|e| e.into())
 }
+
+// pub fn resolve_iri_as_bytes<A: ForIRI>(iri: &IRI<A>) -> Result<Vec<u8>, HornedError> {
+//     // let s: String = iri.into();
+//     let response = ureq::get(iri).call()?;
+//     let len: Option<usize> = response.header("Content-Length").map(|len| len.parse().unwrap());
+
+//     let mut bytes: Vec<u8> = if let Some(cap) = len {
+//         Vec::with_capacity(cap)
+//     } else {
+//         Vec::new()
+//     };
+
+//     response.into_reader()
+//         .read_to_end(&mut bytes)?;
+
+//     Ok(bytes)
+// }
 
 #[cfg(not(feature = "remote"))]
 pub fn strict_resolve_iri<A: ForIRI>(_iri: &IRI<A>) -> String {
@@ -132,6 +184,7 @@ pub fn strict_resolve_iri<A: ForIRI>(_iri: &IRI<A>) -> String {
 
 #[cfg(test)]
 mod test {
+
     use super::*;
     use crate::model::Build;
 
@@ -139,11 +192,11 @@ mod test {
     fn localize() {
         let b = Build::new_rc();
 
-        let doc_iri = b.iri("file://blah/and.owl");
+        let doc_iri = b.iri("file://base_dir/and.owl");
 
         let iri = b.iri("http://www.example.com/or.owl");
 
-        let local = b.iri("file://blah/or.owl");
+        let local = b.iri("file://base_dir/or.owl");
 
         assert_eq!(localize_iri(&iri, &doc_iri), local);
     }
@@ -154,7 +207,7 @@ mod test {
         let b = Build::new_rc();
         let i: IRI<_> = b.iri("http://www.example.com");
 
-        strict_resolve_iri(&i);
+        assert!(strict_resolve_iri(&i).is_ok());
     }
 
     #[test]
@@ -164,7 +217,7 @@ mod test {
         let doc_iri = b.iri("file://cargo.toml");
 
         let bikepath_str = ::std::fs::read_to_string("bikepath.md").unwrap();
-        let (_, iri_str) = resolve_iri(&i, Some(&doc_iri));
+        let (_, iri_str) = resolve_iri(&i, Some(&doc_iri)).unwrap();
         assert_eq!(bikepath_str, iri_str);
     }
 }

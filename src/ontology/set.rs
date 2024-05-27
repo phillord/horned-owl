@@ -1,6 +1,11 @@
 //! Rapid, simple, in-memory `Ontology` and `OntologyIndex`
 use std::borrow::Borrow;
-use std::{collections::HashSet, hash::Hash, iter::FromIterator, rc::Rc};
+use std::{
+    collections::HashSet,
+    hash::Hash,
+    iter::{FromIterator, FusedIterator},
+    rc::Rc,
+};
 
 use super::indexed::ForIndex;
 use super::indexed::{OneIndexedOntology, OntologyIndex};
@@ -93,6 +98,14 @@ impl<'a, A: ForIRI> Iterator for SetIter<'a, A> {
     }
 }
 
+impl<'a, A: ForIRI> FusedIterator for SetIter<'a, A> {}
+
+impl<'a, A: ForIRI> ExactSizeIterator for SetIter<'a, A> {
+    fn len(&self) -> usize {
+        self.0.len()
+    }
+}
+
 impl<'a, A: ForIRI> IntoIterator for &'a SetOntology<A> {
     type Item = &'a AnnotatedComponent<A>;
     type IntoIter = SetIter<'a, A>;
@@ -108,6 +121,14 @@ impl<A: ForIRI> Iterator for SetIntoIter<A> {
     type Item = AnnotatedComponent<A>;
     fn next(&mut self) -> Option<Self::Item> {
         self.0.next()
+    }
+}
+
+impl<A: ForIRI> FusedIterator for SetIntoIter<A> {}
+
+impl<A: ForIRI> ExactSizeIterator for SetIntoIter<A> {
+    fn len(&self) -> usize {
+        self.0.len()
     }
 }
 
@@ -151,10 +172,15 @@ impl<A: ForIRI> MutableOntology<A> for SetOntology<A> {
 
 impl<A: ForIRI> FromIterator<AnnotatedComponent<A>> for SetOntology<A> {
     fn from_iter<I: IntoIterator<Item = AnnotatedComponent<A>>>(iter: I) -> Self {
-        SetOntology(OneIndexedOntology::new(SetIndex(
-            HashSet::from_iter(iter),
-            Default::default(),
-        )))
+        iter.into_iter()
+            .collect::<MutableOntologyWrapper<SetOntology<_>>>()
+            .0
+    }
+}
+
+impl<A: ForIRI> Extend<AnnotatedComponent<A>> for SetOntology<A> {
+    fn extend<T: IntoIterator<Item = AnnotatedComponent<A>>>(&mut self, iter: T) {
+        MutableOntologyWrapper(self).extend(iter);
     }
 }
 

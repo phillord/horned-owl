@@ -4,7 +4,6 @@ extern crate horned_owl;
 use clap::App;
 use clap::Arg;
 
-
 use clap::ArgMatches;
 
 use horned_owl::error::HornedError;
@@ -49,9 +48,9 @@ pub(crate) fn app(name: &str) -> App<'static> {
 }
 
 pub(crate) fn matcher(matches: &ArgMatches) -> Result<(), HornedError> {
-    let input = matches.value_of("INPUT").ok_or_else(|| HornedError::CommandError(
-        "A file name must be specified".to_string(),
-    ))?;
+    let input = matches
+        .value_of("INPUT")
+        .ok_or_else(|| HornedError::CommandError("A file name must be specified".to_string()))?;
 
     let filter = matches.value_of("filter");
 
@@ -59,24 +58,20 @@ pub(crate) fn matcher(matches: &ArgMatches) -> Result<(), HornedError> {
     let bufreader = BufReader::new(file);
     let v: Vec<String> = rio_xml::RdfXmlParser::new(bufreader, None)
         .into_iter(|rio_triple| {
-            Ok(
-                (
-                    format!("{}", rio_triple.subject),
-                    format!("{}", rio_triple.predicate),
-                    format!("{}", rio_triple.object),
-                )
-            )
+            Ok((
+                format!("{}", rio_triple.subject),
+                format!("{}", rio_triple.predicate),
+                format!("{}", rio_triple.object),
+            ))
         })
-        .map(|t:Result<_, HornedError>| -> (String,String,String) {t.unwrap()})
-        .filter(|t|
-                if let Some(f) = filter {
-                    t.0.contains(f) ||
-                        t.1.contains(f) ||
-                        t.2.contains(f)
-                }
-                else{
-                    true
-                })
+        .map(|t: Result<_, HornedError>| -> (String, String, String) { t.unwrap() })
+        .filter(|t| {
+            if let Some(f) = filter {
+                t.0.contains(f) || t.1.contains(f) || t.2.contains(f)
+            } else {
+                true
+            }
+        })
         .map(|t| format!("{}\n\t{}\n\t{}", t.0, t.1, t.2))
         .collect();
 
@@ -109,9 +104,9 @@ pub(crate) fn matcher(matches: &ArgMatches) -> Result<(), HornedError> {
 
         let mut f: pretty_rdf::PrettyRdfXmlFormatter<String, _> =
             pretty_rdf::PrettyRdfXmlFormatter::new(
-                 b,
-                 pretty_rdf::ChunkedRdfXmlFormatterConfig::all(),
-             )?;
+                b,
+                pretty_rdf::ChunkedRdfXmlFormatterConfig::all(),
+            )?;
         //let mut f = rio_xml::RdfXmlFormatter::with_indentation(&b, 4)?;
         let file = File::open(input)?;
         let bufreader = BufReader::new(file);

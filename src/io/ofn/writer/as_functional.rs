@@ -35,8 +35,8 @@ pub trait AsFunctional<A: ForIRI> {
     /// having to build a fully-serialized string first, or to just get a string
     /// with the `ToString` implementation.
     ///
-    fn as_functional<'t>(&'t self) -> Functional<'t, Self, A> {
-        Functional(&self, None, None)
+    fn as_functional(&self) -> Functional<'_, Self, A> {
+        Functional(self, None, None)
     }
 
     /// Get a handle for displaying the element, using the given context.
@@ -48,7 +48,7 @@ pub trait AsFunctional<A: ForIRI> {
         &'t self,
         prefix: &'t PrefixMapping,
     ) -> Functional<'t, Self, A> {
-        Functional(&self, Some(prefix), None)
+        Functional(self, Some(prefix), None)
     }
 }
 
@@ -202,13 +202,13 @@ macro_rules! derive_declaration {
                         f,
                         concat!("Declaration({} ", stringify!($name), "({}))"),
                         Functional(annotations, self.1, None),
-                        Functional(&self.0.0, self.1, None)
+                        Functional(&self.0 .0, self.1, None)
                     )
                 } else {
                     write!(
                         f,
                         concat!("Declaration(", stringify!($name), "({}))"),
-                        Functional(&self.0.0, self.1, None)
+                        Functional(&self.0 .0, self.1, None)
                     )
                 }
             }
@@ -370,7 +370,7 @@ derive_axiom!(A, TransitiveObjectProperty<A>, TransitiveObjectProperty(0));
 
 impl<'a, A: ForIRI> Display for Functional<'a, AnnotatedComponent<A>, A> {
     fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
-        if self.0.ann.len() > 0 {
+        if !self.0.ann.is_empty() {
             Functional(&self.0.component, self.1, Some(&self.0.ann)).fmt(f)
         } else {
             Functional(&self.0.component, self.1, None).fmt(f)
@@ -440,7 +440,7 @@ impl<A: ForIRI> AsFunctional<A> for AnnotationValue<A> {}
 
 impl<'a, A: ForIRI> Display for Functional<'a, AnonymousIndividual<A>, A> {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
-        write!(f, "{}", self.0.0.borrow())
+        write!(f, "{}", self.0 .0.borrow())
     }
 }
 
@@ -499,7 +499,7 @@ impl<'a, A: ForIRI> Display for Functional<'a, Atom<A>, A> {
                     Functional(&pred, self.1, None),
                     Functional(&(&args.0, &args.1), self.1, None),
                 )
-            } 
+            }
             SameIndividualAtom(i1, i2) => {
                 write!(
                     f,
@@ -589,7 +589,9 @@ impl<'a, A: ForIRI> Display for Functional<'a, ClassExpression<A>, A> {
         macro_rules! object_cardinality {
             ($name:literal, $n:ident, $ope:ident, $bce:ident, $self:ident, $f:ident) => {
                 match $bce.as_ref() {
-                    ClassExpression::Class(cls) if cls.0.as_ref() == crate::vocab::OWL::Thing.as_ref() => {
+                    ClassExpression::Class(cls)
+                        if cls.0.as_ref() == crate::vocab::OWL::Thing.as_ref() =>
+                    {
                         write!(
                             f,
                             concat!($name, "({} {})"),
@@ -607,12 +609,14 @@ impl<'a, A: ForIRI> Display for Functional<'a, ClassExpression<A>, A> {
                         )
                     }
                 }
-            }
+            };
         }
         macro_rules! data_cardinality {
             ($name:literal, $n:ident, $dp:ident, $dr:ident, $self:ident, $f:ident) => {
                 match $dr {
-                    DataRange::Datatype(dt) if dt.0.as_ref() == crate::vocab::OWL2Datatype::Literal.as_ref() => {
+                    DataRange::Datatype(dt)
+                        if dt.0.as_ref() == crate::vocab::OWL2Datatype::Literal.as_ref() =>
+                    {
                         write!(
                             f,
                             concat!($name, "({} {})"),
@@ -630,7 +634,7 @@ impl<'a, A: ForIRI> Display for Functional<'a, ClassExpression<A>, A> {
                         )
                     }
                 }
-            }
+            };
         }
         match self.0 {
             Class(exp) => Functional(exp, self.1, None).fmt(f),
@@ -909,16 +913,16 @@ impl<A: ForIRI> AsFunctional<A> for Individual<A> {}
 impl<'a, A: ForIRI> Display for Functional<'a, Literal<A>, A> {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
         match self.0 {
-            Literal::Simple { literal } => quote(&literal, f),
+            Literal::Simple { literal } => quote(literal, f),
             Literal::Language { literal, lang } => {
-                quote(&literal, f)?;
+                quote(literal, f)?;
                 write!(f, "@{}", lang)
             }
             Literal::Datatype {
                 literal,
                 datatype_iri,
             } => {
-                quote(&literal, f)?;
+                quote(literal, f)?;
                 write!(f, "^^{}", Functional(datatype_iri, self.1, None))
             }
         }
@@ -964,7 +968,6 @@ impl<'a, A: ForIRI> Display for Functional<'a, Rule<A>, A> {
             Functional(&atom, self.1, None).fmt(f)?;
         }
         f.write_char(')')?;
-        
         f.write_char(')')
     }
 }
@@ -995,7 +998,7 @@ impl<A: ForIRI> AsFunctional<A> for SubObjectPropertyExpression<A> {}
 
 impl<'a, A: ForIRI> Display for Functional<'a, Variable<A>, A> {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
-        write!(f, "Variable({})", Functional(&self.0.0, self.1, None))
+        write!(f, "Variable({})", Functional(&self.0 .0, self.1, None))
     }
 }
 

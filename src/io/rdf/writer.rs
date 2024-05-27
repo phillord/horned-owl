@@ -12,7 +12,7 @@ use indexmap::indexmap;
 
 use pretty_rdf::{
     ChunkedRdfXmlFormatterConfig, PBlankNode, PLiteral, PNamedNode, PSubject, PTerm, PTriple,
-    RdfXmlFormatter, NonPrettyRdfXmlFormatter, PrettyRdfXmlFormatter,
+    PrettyRdfXmlFormatter, RdfXmlFormatter,
 };
 use std::{
     collections::{BTreeSet, HashSet},
@@ -32,25 +32,21 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
                     "http://www.w3.org/2002/07/owl#" => "owl",
                     "http://www.w3.org/2003/11/swrl#" => "swrl"
     ];
-    let p = p.into_iter().map(|(k, v)|(k.into(), v.into())).collect();
-
-
+    let p = p.into_iter().map(|(k, v)| (k.into(), v.into())).collect();
 
     let mut bng = NodeGenerator::default();
 
-    if !true {
-        let mut f = NonPrettyRdfXmlFormatter::new(write, ChunkedRdfXmlFormatterConfig::all().prefix(p))?;
-        ont.render(&mut f, &mut bng)?;
-        f.finish()?;
-    }
-    else {
-        let mut f = PrettyRdfXmlFormatter::new(write, ChunkedRdfXmlFormatterConfig::all().prefix(p))?;
-        ont.render(&mut f, &mut bng)?;
-        // for i in f.triples() {
-        //     eprintln!("{}", i.printable());
-        // }
-        f.finish()?;
-    }
+    // let mut f =
+    //     pretty_rdf::NonPrettyRdfXmlFormatter::new(write, ChunkedRdfXmlFormatterConfig::all().prefix(p))?;
+    // ont.render(&mut f, &mut bng)?;
+    // f.finish()?;
+
+    let mut f = PrettyRdfXmlFormatter::new(write, ChunkedRdfXmlFormatterConfig::all().prefix(p))?;
+    ont.render(&mut f, &mut bng)?;
+    // for i in f.triples() {
+    //     eprintln!("{}", i.printable());
+    // }
+    f.finish()?;
 
     Ok(())
 }
@@ -184,12 +180,8 @@ impl<A: ForIRI> From<&Individual<A>> for PSubject<A> {
 
 /// Trait enabling things to render themselves as RDF.
 /// The return type is some node that the entity was rendered onto.
-trait Render<A: ForIRI, F: RdfXmlFormatter<A, W>, R, W:Write> {
-    fn render(
-        &self,
-        f: &mut F,
-        ng: &mut NodeGenerator<A>,
-    ) -> Result<R, HornedError>;
+trait Render<A: ForIRI, F: RdfXmlFormatter<A, W>, R, W: Write> {
+    fn render(&self, f: &mut F, ng: &mut NodeGenerator<A>) -> Result<R, HornedError>;
 }
 
 enum Annotatable<A: ForIRI> {
@@ -350,9 +342,13 @@ where
 //     }
 // }
 
-
 /// Render a vector slice
-fn render_vec_subject<A: ForIRI, F: RdfXmlFormatter<A, W>, T: Render<A, F, PSubject<A>, W>, W: Write>(
+fn render_vec_subject<
+    A: ForIRI,
+    F: RdfXmlFormatter<A, W>,
+    T: Render<A, F, PSubject<A>, W>,
+    W: Write,
+>(
     v: &[T],
     f: &mut F,
     ng: &mut NodeGenerator<A>,
@@ -376,15 +372,11 @@ fn render_vec_subject<A: ForIRI, F: RdfXmlFormatter<A, W>, T: Render<A, F, PSubj
 }
 
 // TODO This code is an almost exact duplicate of render_vec_slice. Why do I need both?
-impl<A: ForIRI, F: RdfXmlFormatter<A, W>, T, W:Write> Render<A, F, PTerm<A>, W> for &Vec<T>
+impl<A: ForIRI, F: RdfXmlFormatter<A, W>, T, W: Write> Render<A, F, PTerm<A>, W> for &Vec<T>
 where
     T: Debug + Render<A, F, PTerm<A>, W>,
 {
-    fn render(
-        &self,
-        f: &mut F,
-        ng: &mut NodeGenerator<A>,
-    ) -> Result<PTerm<A>, HornedError> {
+    fn render(&self, f: &mut F, ng: &mut NodeGenerator<A>) -> Result<PTerm<A>, HornedError> {
         let mut rest: Option<PTerm<A>> = None;
         for i in self.iter().rev() {
             let bn = &ng.bn();
@@ -405,12 +397,10 @@ where
 }
 
 // Written long hand rather than using `render` because the rules don't quite fit
-impl<A: ForIRI, F:RdfXmlFormatter<A, W>, W:Write> Render<A, F, (), W> for BTreeSet<Annotation<A>> {
-    fn render(
-        &self,
-        f: &mut F,
-        ng: &mut NodeGenerator<A>,
-    ) -> Result<(), HornedError> {
+impl<A: ForIRI, F: RdfXmlFormatter<A, W>, W: Write> Render<A, F, (), W>
+    for BTreeSet<Annotation<A>>
+{
+    fn render(&self, f: &mut F, ng: &mut NodeGenerator<A>) -> Result<(), HornedError> {
         for r in self.iter() {
             r.render(f, ng)?;
         }
@@ -418,12 +408,10 @@ impl<A: ForIRI, F:RdfXmlFormatter<A, W>, W:Write> Render<A, F, (), W> for BTreeS
     }
 }
 
-impl<A: ForIRI, AA: ForIndex<A>, F:RdfXmlFormatter<A, W>, W:Write> Render<A, F, (), W> for &ComponentMappedOntology<A, AA> {
-    fn render(
-        &self,
-        f: &mut F,
-        ng: &mut NodeGenerator<A>,
-    ) -> Result<(), HornedError> {
+impl<A: ForIRI, AA: ForIndex<A>, F: RdfXmlFormatter<A, W>, W: Write> Render<A, F, (), W>
+    for &ComponentMappedOntology<A, AA>
+{
+    fn render(&self, f: &mut F, ng: &mut NodeGenerator<A>) -> Result<(), HornedError> {
         let ont_id = self.i().the_ontology_id_or_default();
         if let Some(iri) = &ont_id.iri {
             triples!(f, iri, ng.nn(RDF::Type), ng.nn(OWL::Ontology));
@@ -450,19 +438,15 @@ impl<A: ForIRI, AA: ForIndex<A>, F:RdfXmlFormatter<A, W>, W:Write> Render<A, F, 
     }
 }
 
-impl<A: ForIRI, F: RdfXmlFormatter<A, W>, W:Write> Render<A, F, (), W> for AnnotatedComponent<A> {
-    fn render(
-        &self,
-        f: &mut F,
-        ng: &mut NodeGenerator<A>,
-    ) -> Result<(), HornedError> {
+impl<A: ForIRI, F: RdfXmlFormatter<A, W>, W: Write> Render<A, F, (), W> for AnnotatedComponent<A> {
+    fn render(&self, f: &mut F, ng: &mut NodeGenerator<A>) -> Result<(), HornedError> {
         if self.component.is_meta() {
-            return Ok(())
+            return Ok(());
         }
 
         let cmp: Annotatable<A> = self.component.render(f, ng)?;
 
-        let mut r = |t: PTriple<A>| -> Result<(), HornedError>{
+        let mut r = |t: PTriple<A>| -> Result<(), HornedError> {
             let bn = ng.bn();
             triples!(
                 f,
@@ -476,7 +460,8 @@ impl<A: ForIRI, F: RdfXmlFormatter<A, W>, W:Write> Render<A, F, (), W> for Annot
                 ng.nn(OWL::AnnotatedProperty),
                 t.predicate,
                 bn.clone(),
-                ng.nn(OWL::AnnotatedTarget),                t.object // And the rest!
+                ng.nn(OWL::AnnotatedTarget),
+                t.object // And the rest!
             );
 
             ng.keep_this_bn(bn);
@@ -548,7 +533,7 @@ render! {
 render! {
     AnnotationAssertion, self, f, ng, PTriple,
     {
-        let nbn:PSubject<A> = (&self.subject).render(f, ng)?;
+        let nbn:PSubject<A> = self.subject.render(f, ng)?;
         ng.keep_this_bn(nbn);
 
         self.ann.render(f, ng)
@@ -573,12 +558,10 @@ render! {
     }
 }
 
-impl<A: ForIRI, F: RdfXmlFormatter<A, W>, W:Write> Render<A, F, Annotatable<A>, W> for Component<A> {
-    fn render(
-        &self,
-        f: &mut F,
-        ng: &mut NodeGenerator<A>,
-    ) -> Result<Annotatable<A>, HornedError> {
+impl<A: ForIRI, F: RdfXmlFormatter<A, W>, W: Write> Render<A, F, Annotatable<A>, W>
+    for Component<A>
+{
+    fn render(&self, f: &mut F, ng: &mut NodeGenerator<A>) -> Result<Annotatable<A>, HornedError> {
         Ok(match self {
             // We render imports and ontology annotations earlier
             Component::OntologyID(_) => panic!("OntologyID found where only axioms were expected"),
@@ -878,7 +861,12 @@ render_to_vec! {
     }
 }
 
-fn members<A: ForIRI, F:RdfXmlFormatter<A, W>, R: Debug + Render<A, F, PSubject<A>, W>, W: Write>(
+fn members<
+    A: ForIRI,
+    F: RdfXmlFormatter<A, W>,
+    R: Debug + Render<A, F, PSubject<A>, W>,
+    W: Write,
+>(
     f: &mut F,
     ng: &mut NodeGenerator<A>,
     ty_two: OWL,
@@ -1114,7 +1102,7 @@ render_to_node! {
     }
 }
 
-fn obj_cardinality<A: ForIRI, F:RdfXmlFormatter<A, W>, W: Write>(
+fn obj_cardinality<A: ForIRI, F: RdfXmlFormatter<A, W>, W: Write>(
     n: &u32,
     ope: &ObjectPropertyExpression<A>,
     ce: &ClassExpression<A>,
@@ -1163,7 +1151,7 @@ fn obj_cardinality<A: ForIRI, F:RdfXmlFormatter<A, W>, W: Write>(
     ))
 }
 
-fn data_cardinality<A: ForIRI, F:RdfXmlFormatter<A, W>, W: Write>(
+fn data_cardinality<A: ForIRI, F: RdfXmlFormatter<A, W>, W: Write>(
     n: &u32,
     dp: &DataProperty<A>,
     dr: &DataRange<A>,
@@ -1498,7 +1486,7 @@ render! {
                 // expression.
                 //
                 // It makes little sense to me.
-                let s:PSubject<_> = (&self.sup).render(f, ng)?;
+                let s:PSubject<_> = self.sup.render(f, ng)?;
                 let o = render_vec_subject(v, f, ng)?;
                 Ok(
                     triple!{
@@ -1508,7 +1496,7 @@ render! {
             }
             SubObjectPropertyExpression::ObjectPropertyExpression(e) =>{
                 let s:PSubject<_> = e.render(f, ng)?;
-                let o:PTerm<_> = (&self.sup).render(f, ng)?.into();
+                let o:PTerm<_> = self.sup.render(f, ng)?.into();
                 Ok(
                     triple!{
                         f, s, ng.nn(RDFS::SubPropertyOf), o
@@ -1519,7 +1507,7 @@ render! {
     }
 }
 
-fn obj_prop_char<A: ForIRI, F:RdfXmlFormatter<A, W>, W: Write>(
+fn obj_prop_char<A: ForIRI, F: RdfXmlFormatter<A, W>, W: Write>(
     ob: &ObjectPropertyExpression<A>,
     f: &mut F,
     ng: &mut NodeGenerator<A>,
@@ -1708,7 +1696,6 @@ render! {
     }
 }
 
-
 render_triple! {
     DeclareClass, self, ng,
     &self.0.0, ng.nn(RDF::Type), ng.nn(OWL::Class)
@@ -1797,7 +1784,7 @@ mod test {
         let iri = build.iri("http://www.example.com/a".to_string());
         ont.insert(OntologyID {
             iri: Some(iri),
-            viri: None
+            viri: None,
         });
 
         let temp_file = Temp::new_file().unwrap();
@@ -1822,8 +1809,15 @@ mod test {
         write(&mut buf_writer, &amo).ok().unwrap();
         buf_writer.flush().ok();
 
-        write(&mut BufWriter::new(&File::create("/tmp/last_roundtripped_file.rdf").ok().unwrap()),
-            &amo).unwrap();
+        write(
+            &mut BufWriter::new(
+                &File::create("/tmp/last_roundtripped_file.rdf")
+                    .ok()
+                    .unwrap(),
+            ),
+            &amo,
+        )
+        .unwrap();
 
         let file = File::open(&temp_file).ok().unwrap();
         let ont_round = read_ok(&mut BufReader::new(&file));
@@ -1843,7 +1837,7 @@ mod test {
 
     #[test_resources("src/ont/owl-rdf/*owl")]
     #[test_resources("src/ont/owl-rdf/ambiguous/*.owl")]
-    fn roundtrip_rdf(resource:&str) {
+    fn roundtrip_rdf(resource: &str) {
         let resource = &slurp::read_all_to_string(resource).unwrap();
         assert_round(&resource);
     }

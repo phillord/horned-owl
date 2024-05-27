@@ -37,7 +37,10 @@ pub trait VisitMut<A: ForIRI> {
     fn visit_object_property_domain(&mut self, _: &mut ObjectPropertyDomain<A>) {}
     fn visit_object_property_range(&mut self, _: &mut ObjectPropertyRange<A>) {}
     fn visit_functional_object_property(&mut self, _: &mut FunctionalObjectProperty<A>) {}
-    fn visit_inverse_functional_object_property(&mut self, _: &mut InverseFunctionalObjectProperty<A>) {
+    fn visit_inverse_functional_object_property(
+        &mut self,
+        _: &mut InverseFunctionalObjectProperty<A>,
+    ) {
     }
     fn visit_reflexive_object_property(&mut self, _: &mut ReflexiveObjectProperty<A>) {}
     fn visit_irreflexive_object_property(&mut self, _: &mut IrreflexiveObjectProperty<A>) {}
@@ -56,19 +59,23 @@ pub trait VisitMut<A: ForIRI> {
     fn visit_different_individuals(&mut self, _: &mut DifferentIndividuals<A>) {}
     fn visit_class_assertion(&mut self, _: &mut ClassAssertion<A>) {}
     fn visit_object_property_assertion(&mut self, _: &mut ObjectPropertyAssertion<A>) {}
-    fn visit_negative_object_property_assertion(&mut self, _: &mut NegativeObjectPropertyAssertion<A>) {
+    fn visit_negative_object_property_assertion(
+        &mut self,
+        _: &mut NegativeObjectPropertyAssertion<A>,
+    ) {
     }
     fn visit_data_property_assertion(&mut self, _: &mut DataPropertyAssertion<A>) {}
-    fn visit_negative_data_property_assertion(&mut self, _: &mut NegativeDataPropertyAssertion<A>) {}
+    fn visit_negative_data_property_assertion(&mut self, _: &mut NegativeDataPropertyAssertion<A>) {
+    }
     fn visit_annotation_assertion(&mut self, _: &mut AnnotationAssertion<A>) {}
     fn visit_sub_annotation_property_of(&mut self, _: &mut SubAnnotationPropertyOf<A>) {}
     fn visit_annotation_property_domain(&mut self, _: &mut AnnotationPropertyDomain<A>) {}
     fn visit_annotation_property_range(&mut self, _: &mut AnnotationPropertyRange<A>) {}
-    fn visit_rule(&mut self, _: &mut Rule<A>){}
-    fn visit_atom(&mut self, _: &mut Atom<A>){}
-    fn visit_variable(&mut self, _: &mut Variable<A>){}
-    fn visit_iarg(&mut self, _: &mut IArgument<A>){}
-    fn visit_darg(&mut self, _: &mut DArgument<A>){}
+    fn visit_rule(&mut self, _: &mut Rule<A>) {}
+    fn visit_atom(&mut self, _: &mut Atom<A>) {}
+    fn visit_variable(&mut self, _: &mut Variable<A>) {}
+    fn visit_iarg(&mut self, _: &mut IArgument<A>) {}
+    fn visit_darg(&mut self, _: &mut DArgument<A>) {}
     fn visit_literal(&mut self, _: &mut Literal<A>) {}
     fn visit_annotation(&mut self, _: &mut Annotation<A>) {}
     fn visit_annotation_value(&mut self, _: &mut AnnotationValue<A>) {}
@@ -90,15 +97,15 @@ pub trait VisitMut<A: ForIRI> {
     fn visit_individual_vec(&mut self, _: &mut Vec<Individual<A>>) {}
     fn visit_literal_vec(&mut self, _: &mut Vec<Literal<A>>) {}
     fn visit_facet_restriction_vec(&mut self, _: &Vec<FacetRestriction<A>>) {}
-    fn visit_atom_vec(&mut self, _:&mut Vec<Atom<A>>){}
-    fn visit_darg_vec(&mut self, _:&mut Vec<DArgument<A>>){}
+    fn visit_atom_vec(&mut self, _: &mut Vec<Atom<A>>) {}
+    fn visit_darg_vec(&mut self, _: &mut Vec<DArgument<A>>) {}
 }
 
 pub struct WalkMut<A, V>(V, PhantomData<A>);
 
 impl<A: ForIRI, V: VisitMut<A>> WalkMut<A, V> {
     pub fn new(v: V) -> Self {
-        WalkMut(v, PhantomData::default())
+        WalkMut(v, PhantomData)
     }
 
     pub fn as_mut_visit(&mut self) -> &mut V {
@@ -133,7 +140,7 @@ impl<A: ForIRI, V: VisitMut<A>> WalkMut<A, V> {
         }
     }
 
-    pub fn dociri(&mut self, e:&mut DocIRI<A>) {
+    pub fn dociri(&mut self, e: &mut DocIRI<A>) {
         self.0.visit_dociri(e);
         self.iri(&mut e.0);
     }
@@ -226,7 +233,9 @@ impl<A: ForIRI, V: VisitMut<A>> WalkMut<A, V> {
                 self.negative_object_property_assertion(ax)
             }
             Component::DataPropertyAssertion(ax) => self.data_property_assertion(ax),
-            Component::NegativeDataPropertyAssertion(ax) => self.negative_data_property_assertion(ax),
+            Component::NegativeDataPropertyAssertion(ax) => {
+                self.negative_data_property_assertion(ax)
+            }
             Component::AnnotationAssertion(ax) => self.annotation_assertion(ax),
             Component::SubAnnotationPropertyOf(ax) => self.sub_annotation_property_of(ax),
             Component::AnnotationPropertyDomain(ax) => self.annotation_property_domain(ax),
@@ -336,7 +345,10 @@ impl<A: ForIRI, V: VisitMut<A>> WalkMut<A, V> {
         self.object_property_expression(&mut e.0);
     }
 
-    pub fn inverse_functional_object_property(&mut self, e: &mut InverseFunctionalObjectProperty<A>) {
+    pub fn inverse_functional_object_property(
+        &mut self,
+        e: &mut InverseFunctionalObjectProperty<A>,
+    ) {
         self.0.visit_inverse_functional_object_property(e);
         self.object_property_expression(&mut e.0);
     }
@@ -436,7 +448,10 @@ impl<A: ForIRI, V: VisitMut<A>> WalkMut<A, V> {
         self.individual(&mut e.to);
     }
 
-    pub fn negative_object_property_assertion(&mut self, e: &mut NegativeObjectPropertyAssertion<A>) {
+    pub fn negative_object_property_assertion(
+        &mut self,
+        e: &mut NegativeObjectPropertyAssertion<A>,
+    ) {
         self.0.visit_negative_object_property_assertion(e);
         self.object_property_expression(&mut e.ope);
         self.individual(&mut e.from);
@@ -490,36 +505,36 @@ impl<A: ForIRI, V: VisitMut<A>> WalkMut<A, V> {
     pub fn atom(&mut self, a: &mut Atom<A>) {
         self.0.visit_atom(a);
         match a {
-            Atom::BuiltInAtom{pred, args} => {
+            Atom::BuiltInAtom { pred, args } => {
                 self.iri(pred);
                 self.darg_vec(args);
-            },
-            Atom::ClassAtom{pred, arg} => {
+            }
+            Atom::ClassAtom { pred, arg } => {
                 self.class_expression(pred);
                 self.iarg(arg);
-            },
-            Atom::DataPropertyAtom{pred, args} => {
+            }
+            Atom::DataPropertyAtom { pred, args } => {
                 self.data_property(pred);
                 self.darg(&mut args.0);
                 self.darg(&mut args.1);
-            },
-            Atom::DataRangeAtom{pred, arg} => {
+            }
+            Atom::DataRangeAtom { pred, arg } => {
                 self.data_range(pred);
                 self.darg(arg);
             }
             Atom::DifferentIndividualsAtom(arg1, arg2) => {
                 self.iarg(arg1);
                 self.iarg(arg2);
-            },
-            Atom::ObjectPropertyAtom {pred, args} => {
+            }
+            Atom::ObjectPropertyAtom { pred, args } => {
                 self.object_property_expression(pred);
                 self.iarg(&mut args.0);
                 self.iarg(&mut args.1);
-            },
-            Atom::SameIndividualAtom (arg1, arg2) =>{
+            }
+            Atom::SameIndividualAtom(arg1, arg2) => {
                 self.iarg(arg1);
                 self.iarg(arg2);
-            },
+            }
         }
     }
 
@@ -693,7 +708,7 @@ impl<A: ForIRI, V: VisitMut<A>> WalkMut<A, V> {
         }
     }
 
-    pub fn ontology_id(&mut self, e:&mut OntologyID<A>) {
+    pub fn ontology_id(&mut self, e: &mut OntologyID<A>) {
         self.0.visit_ontology_id(e);
         self.option_iri(&mut e.iri);
         self.option_iri(&mut e.viri);
@@ -771,39 +786,38 @@ impl<A: ForIRI, V: VisitMut<A>> WalkMut<A, V> {
         }
     }
 
-    pub fn atom_vec(&mut self, v:&mut Vec<Atom<A>>) {
+    pub fn atom_vec(&mut self, v: &mut Vec<Atom<A>>) {
         self.0.visit_atom_vec(v);
         for i in v.iter_mut() {
             self.atom(i);
         }
     }
 
-    pub fn darg_vec(&mut self, v:&mut Vec<DArgument<A>>) {
+    pub fn darg_vec(&mut self, v: &mut Vec<DArgument<A>>) {
         self.0.visit_darg_vec(v);
         for i in v.iter_mut() {
             self.darg(i);
         }
     }
-
-
 }
-
-
 
 #[cfg(test)]
 
 mod test {
+    use super::*;
+    use crate::io::owx::reader::read;
+    use crate::io::ParserConfiguration;
     use crate::model::Build;
     use crate::ontology::component_mapped::ComponentMappedOntology;
-    use crate::io::ParserConfiguration;
-    use crate::io::owx::reader::read;
     use curie::PrefixMapping;
     use std::io::BufRead;
-    use super::*;
 
     pub fn read_ok<R: BufRead>(
         bufread: &mut R,
-    ) -> (ComponentMappedOntology<RcStr, RcAnnotatedComponent>, PrefixMapping) {
+    ) -> (
+        ComponentMappedOntology<RcStr, RcAnnotatedComponent>,
+        PrefixMapping,
+    ) {
         let r = read(bufread, ParserConfiguration::default());
         assert!(r.is_ok(), "Expected ontology, got failure:{:?}", r.err());
         let (o, m) = r.ok().unwrap();
@@ -811,10 +825,18 @@ mod test {
     }
 
     struct LabeltoFred;
-    impl<A:ForIRI> VisitMut<A> for LabeltoFred {
-        fn visit_annotation(&mut self, a:&mut Annotation<A>) {
-            if a.ap.0.0.as_ref().eq("http://www.w3.org/2000/01/rdf-schema#label") {
-                 a.av = Literal::Simple{literal:"fred".into()}.into()
+    impl<A: ForIRI> VisitMut<A> for LabeltoFred {
+        fn visit_annotation(&mut self, a: &mut Annotation<A>) {
+            if a.ap
+                .0
+                 .0
+                .as_ref()
+                .eq("http://www.w3.org/2000/01/rdf-schema#label")
+            {
+                a.av = Literal::Simple {
+                    literal: "fred".into(),
+                }
+                .into()
             }
         }
     }
@@ -831,18 +853,16 @@ mod test {
         walk.ontology_vec(&mut vec);
 
         match &vec[2] {
-            AnnotatedComponent{
-                component: Component::AnnotationAssertion(
-                    AnnotationAssertion {
-                        ann: Annotation{
-                            av: AnnotationValue::Literal(
-                                Literal::Simple{literal}
-                            ),
-                            ..
-                        },
+            AnnotatedComponent {
+                component:
+                    Component::AnnotationAssertion(AnnotationAssertion {
+                        ann:
+                            Annotation {
+                                av: AnnotationValue::Literal(Literal::Simple { literal }),
+                                ..
+                            },
                         ..
-                    },
-                ),
+                    }),
                 ..
             } => {
                 assert_eq!(literal, &"fred".to_string());
@@ -853,16 +873,16 @@ mod test {
         }
     }
 
-
-    struct AddAnnotation<A:ForIRI>(Build<A>);
-    impl<A:ForIRI> VisitMut<A> for AddAnnotation<A>{
-        fn visit_annotation_vec(&mut self, a:&mut Vec<Annotation<A>>) {
-            a.push (
-                Annotation{
-                    ap: self.0.annotation_property("http://example.com"),
-                    av: Literal::Simple{literal:"hello".to_string()}.into()
+    struct AddAnnotation<A: ForIRI>(Build<A>);
+    impl<A: ForIRI> VisitMut<A> for AddAnnotation<A> {
+        fn visit_annotation_vec(&mut self, a: &mut Vec<Annotation<A>>) {
+            a.push(Annotation {
+                ap: self.0.annotation_property("http://example.com"),
+                av: Literal::Simple {
+                    literal: "hello".to_string(),
                 }
-            )
+                .into(),
+            })
         }
     }
 
@@ -871,16 +891,14 @@ mod test {
         let ont_s = include_str!("../ont/owl-xml/class.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
-
         dbg!(&ont.i().declare_class().next());
 
         let mut walk = super::WalkMut::new(AddAnnotation(Build::new()));
-        let mut vec:Vec<_> = ont.into_iter().collect();
+        let mut vec: Vec<_> = ont.into_iter().collect();
         assert_eq!(vec[0].ann.len(), 0);
 
         walk.ontology_vec(&mut vec);
 
         assert_eq!(vec[0].ann.len(), 1);
     }
-
 }

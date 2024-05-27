@@ -3,9 +3,9 @@ use curie::PrefixMapping;
 use crate::error::HornedError;
 use crate::model::Kinded;
 use crate::model::*;
+use crate::ontology::component_mapped::ComponentMappedOntology;
 use crate::ontology::indexed::ForIndex;
 use crate::vocab::Namespace::*;
-use crate::ontology::component_mapped::ComponentMappedOntology;
 
 use quick_xml::events::BytesDecl;
 use quick_xml::events::BytesEnd;
@@ -61,7 +61,7 @@ where
 }
 
 /// Add an IRI or AbbreviatedIRI attribute to elem
-fn iri_or_curie<'a>(mapping: &'a PrefixMapping, elem: &mut BytesStart, iri: &str) {
+fn iri_or_curie(mapping: &PrefixMapping, elem: &mut BytesStart, iri: &str) {
     match mapping.shrink_iri(&(*iri)[..]) {
         Ok(curie) => {
             let curie = format!("{}", curie);
@@ -72,9 +72,9 @@ fn iri_or_curie<'a>(mapping: &'a PrefixMapping, elem: &mut BytesStart, iri: &str
 }
 
 /// Write a tag with an IRI attribute.
-fn with_iri<'a, A: ForIRI, I, W>(
+fn with_iri<A: ForIRI, I, W>(
     w: &mut Writer<W>,
-    mapping: &'a PrefixMapping,
+    mapping: &PrefixMapping,
     // tag: &[u8],
     tag: &str,
     into_iri: I,
@@ -97,12 +97,12 @@ where
 /// Fetch the name of the tag that is used to render `ComponentKind`
 fn tag_for_kind(axk: ComponentKind) -> &'static str {
     match axk {
-        ComponentKind::OntologyID =>{
+        ComponentKind::OntologyID => {
             panic!("OntologyID found where only axioms were expected.")
-        },
-        ComponentKind:: DocIRI => {
+        }
+        ComponentKind::DocIRI => {
             panic!("DocIRI found where only axioms were expected.")
-        },
+        }
         ComponentKind::Import => "Import",
         ComponentKind::OntologyAnnotation => "Annotation",
         ComponentKind::DeclareClass => "Declaration",
@@ -237,7 +237,7 @@ where
     W: StdWrite,
 {
     // w.write_event(Event::Decl(BytesDecl::new(&b"1.0"[..], None, None)))?;
-    w.write_event(Event::Decl(BytesDecl::new(&"1.0"[..], None, None)))?;
+    w.write_event(Event::Decl(BytesDecl::new("1.0", None, None)))?;
 
     // let mut elem = BytesStart::owned_name("Ontology");
     let mut elem = BytesStart::new("Ontology");
@@ -248,7 +248,7 @@ where
 
     // Render XML Namespaces.
     for pre in m.mappings() {
-        elem.push_attribute((format!("xmlns:{}", pre.0).as_bytes(),pre.1.as_bytes()));
+        elem.push_attribute((format!("xmlns:{}", pre.0).as_bytes(), pre.1.as_bytes()));
     }
     iri_maybe(&mut elem, "ontologyIRI", &id.iri);
     iri_maybe(&mut elem, "versionIRI", &id.viri);
@@ -721,7 +721,7 @@ render! {
         match self {
             Atom::BuiltInAtom{pred, args} => {
                 let mut open = BytesStart::new("BuiltInAtom");
-                open.push_attribute(("IRI", &pred.0.borrow()[..]));
+                open.push_attribute(("IRI", pred.0.borrow()));
                 args.within_tag(w, m, open)?;
             }
             Atom::ClassAtom{pred, arg} => {
@@ -973,8 +973,8 @@ mod test {
 
     use self::mktemp::Temp;
     use super::*;
-    use crate::io::ParserConfiguration;
     use crate::io::owx::reader::*;
+    use crate::io::ParserConfiguration;
 
     use std::collections::HashMap;
 
@@ -999,7 +999,10 @@ mod test {
         let build = Build::new();
 
         let iri = build.iri("http://www.example.com/a".to_string());
-        ont.insert(OntologyID{iri:Some(iri.clone()), viri:None});
+        ont.insert(OntologyID {
+            iri: Some(iri.clone()),
+            viri: None,
+        });
         let temp_file = Temp::new_file().unwrap();
         let file = File::create(&temp_file).ok().unwrap();
         write(&mut BufWriter::new(file), &ont, None).ok().unwrap();
@@ -1008,13 +1011,13 @@ mod test {
         let (ont2, _) = read_ok(&mut BufReader::new(file));
 
         // Check ID is present and not default
-        assert!(
-            ont.i().the_ontology_id().is_some()
-        );
+        assert!(ont.i().the_ontology_id().is_some());
 
         // Check IDs are identical
-        assert_eq!(ont.i().the_ontology_id_or_default().iri,
-                   ont2.i().the_ontology_id_or_default().iri);
+        assert_eq!(
+            ont.i().the_ontology_id_or_default().iri,
+            ont2.i().the_ontology_id_or_default().iri
+        );
     }
 
     fn roundtrip_1(ont: &str) -> (RcComponentMappedOntology, PrefixMapping, Temp) {
@@ -1090,8 +1093,10 @@ mod test {
         let (ont_orig, _prefix_orig, ont_round, _prefix_round) =
             roundtrip(include_str!("../../ont/owl-xml/ont.owx"));
 
-        assert_eq!(ont_orig.i().the_ontology_id(),
-                   ont_round.i().the_ontology_id());
+        assert_eq!(
+            ont_orig.i().the_ontology_id(),
+            ont_round.i().the_ontology_id()
+        );
     }
 
     #[test]
@@ -1108,12 +1113,9 @@ mod test {
 
     #[test_resources("src/ont/owl-xml/*.owx")]
     fn roundtrip_resource(resource: &str) {
-        let resource = &slurp::read_all_to_string(
-            resource
-        ).unwrap();
+        let resource = &slurp::read_all_to_string(resource).unwrap();
 
-        let (ont_orig, _prefix_orig, ont_round, _prefix_round) =
-            roundtrip(resource);
+        let (ont_orig, _prefix_orig, ont_round, _prefix_round) = roundtrip(resource);
 
         dbg!(&ont_orig);
         dbg!(&ont_round);
@@ -1122,9 +1124,7 @@ mod test {
 
     #[test_resources("src/ont/owl-xml/ambiguous/*.owx")]
     fn roundtrip_nonround_resource(resource: &str) {
-        let resource = &slurp::read_all_to_string(
-            resource
-        ).unwrap();
+        let resource = &slurp::read_all_to_string(resource).unwrap();
 
         assert_round(resource);
     }

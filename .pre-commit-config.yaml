@@ -1,0 +1,30 @@
+# See https://pre-commit.com for more information
+# See https://pre-commit.com/hooks.html for more hooks
+repos:
+-   repo: local
+    hooks:
+    -  id: untracked-file
+       name: Untracked Files
+       language: system
+       entry: ./dev/untracked-files.sh
+       pass_filenames: false
+       stages: [pre-commit, pre-push]
+    -  id: run-tests
+       name: Running Test
+       language: system
+       entry: make pre-commit
+       pass_filenames: false
+       stages: [pre-commit, pre-push]
+-   repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v3.2.0
+    hooks:
+    -   id: check-added-large-files
+    -   id: no-commit-to-branch
+        args: [--branch, rfc]
+-   repo: https://github.com/doublify/pre-commit-rust
+    rev: eeee35a
+    hooks:
+    -   id: fmt
+        args: ["--check", "--"]
+        pass_filenames: false
+    -   id: clippy
