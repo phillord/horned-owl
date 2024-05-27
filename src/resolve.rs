@@ -42,7 +42,7 @@ pub fn file_iri_to_pathbuf<A: ForIRI>(iri: &IRI<A>) -> PathBuf {
 
 /// let path = Path::new("base_dir/and.owl");
 /// let source_iri = path_to_file_iri(&b, &path);
-/// assert_eq!(source_iri.as_ref(), "file://base_dir/and.owl");
+/// assert_eq!(&*source_iri, "file://base_dir/and.owl");
 /// ```
 pub fn path_to_file_iri<A: ForIRI>(b: &Build<A>, pb: &Path) -> IRI<A> {
     pb.to_str()
