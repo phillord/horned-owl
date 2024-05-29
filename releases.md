@@ -1,3 +1,14 @@
+Version 1.0.0
+=============
+
+This release brings Horned-OWL to a first stable release.
+
+Notable additions include:
+  - Support for SWRL rules
+  - Addition of Functional Syntax parser/renderer
+
+There is now documentation for all modules. Code has been regularized.
+
 Version 0.15.0
 ==============
 
