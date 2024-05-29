@@ -1,3 +1,11 @@
+//! A mutable Visitor for Horned-OWL
+//!
+
+//! The interface is similar to that of the immutable visitor; however,
+//! parts of the Horned-OWL data model use set implementations which
+//! are not readily mutable in place. These are, therefore, unwound
+//! into `Vec` before passing to the `VisitMut` instance.
+
 use crate::model::*;
 use crate::vocab::Facet;
 use std::marker::PhantomData;

@@ -1,3 +1,9 @@
+//! Fetches data from an IRI
+
+//! # Overview
+//!
+//! Given an IRI return the content using local resources if possible.
+//! Remote resolution is feature gated to reduce the binary size a little.
 use crate::model::{Build, ForIRI, IRI};
 
 use std::path::{Path, PathBuf};
@@ -96,8 +102,9 @@ pub fn localize_iri<A: ForIRI>(iri: &IRI<A>, doc_iri: &IRI<A>) -> IRI<A> {
     })
 }
 
-// Return the ontology as a string from `iri` unless we think that it
-// is local to doc_iri
+/// Return contents of an IRI as a string
+///
+/// This method will use local files if possible, or remote access if needed
 pub fn resolve_iri<A: ForIRI>(
     iri: &IRI<A>,
     doc_iri: Option<&IRI<A>>,
@@ -135,21 +142,6 @@ pub fn resolve_iri<A: ForIRI>(
     } else {
         Ok((local, strict_resolve_iri(iri).unwrap()))
     }
-    // if is_file_iri(&local) {
-    //     let mut path = file_iri_to_pathbuf(&local);
-    //     if path.as_path().exists() {
-    //         return Ok((local, ::std::fs::read_to_string(path).unwrap()));
-    //     }
-
-    //     if let Some(doc_iri) = doc_iri {
-    //         let doc_ext = doc_iri.split_once('.').unwrap();
-    //         path.set_extension(doc_ext.1);
-    //         if path.exists() {
-    //             return Ok((local, ::std::fs::read_to_string(path).unwrap()));
-    //         }
-    //     }
-    //     todo!("resolve_iri doesn't have error handling: {:?} {:?}", iri, doc_iri);
-    // }
 }
 
 // Return the ontology as Vec<u8> from `iri`.
@@ -159,23 +151,6 @@ pub fn strict_resolve_iri<A: ForIRI>(iri: &IRI<A>) -> Result<String, HornedError
     // let s: String = iri.into();
     ureq::get(iri).call()?.into_string().map_err(|e| e.into())
 }
-
-// pub fn resolve_iri_as_bytes<A: ForIRI>(iri: &IRI<A>) -> Result<Vec<u8>, HornedError> {
-//     // let s: String = iri.into();
-//     let response = ureq::get(iri).call()?;
-//     let len: Option<usize> = response.header("Content-Length").map(|len| len.parse().unwrap());
-
-//     let mut bytes: Vec<u8> = if let Some(cap) = len {
-//         Vec::with_capacity(cap)
-//     } else {
-//         Vec::new()
-//     };
-
-//     response.into_reader()
-//         .read_to_end(&mut bytes)?;
-
-//     Ok(bytes)
-// }
 
 #[cfg(not(feature = "remote"))]
 pub fn strict_resolve_iri<A: ForIRI>(_iri: &IRI<A>) -> String {

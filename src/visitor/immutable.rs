@@ -1,3 +1,4 @@
+/// An immutable `Visit`/`Walk` for Horned-OWL Ontologies.
 use crate::model::*;
 use crate::ontology::set::SetOntology;
 use crate::vocab::Facet;

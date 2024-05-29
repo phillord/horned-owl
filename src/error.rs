@@ -5,6 +5,7 @@ use std::ops::Range;
 use pest::RuleType;
 use thiserror::Error;
 
+/// The location in a file of an error
 #[derive(Debug)]
 pub enum Location {
     BytePosition(usize),

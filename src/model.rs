@@ -545,7 +545,7 @@ macro_rules! named {
             namedenumimpl!($name, NamedEntity, NamedEntityKind);
 
             impl<A:ForIRI> $name<A> {
-                 pub fn is<I>(&self, iri: I) -> bool
+                pub fn is<I>(&self, iri: I) -> bool
                     where I:Into<IRI<A>>
                 {
                     self.0 == iri.into()
@@ -872,6 +872,7 @@ pub enum HigherKind {
     SWRL,
 }
 
+/// Distinguish between kinds of component in an ontology
 pub trait HigherKinded {
     fn higher_kind(&self) -> HigherKind;
 
@@ -1219,7 +1220,7 @@ components! {
     /// A disjoint union expression between one `ClassExpression` and
     /// a set of others.
     ///
-    /// See also: https://www.w3.org/TR/owl2-syntax/#Disjoint_Union_of_Class_Expressions
+    /// See also: [`Disjoint Unison`](https://www.w3.org/TR/owl2-syntax/#Disjoint_Union_of_Class_Expressions)
     Axiom DisjointUnion(Class<A>, Vec<ClassExpression<A>>),
 
     // ObjectProperty axioms
@@ -1233,7 +1234,7 @@ components! {
     /// s b`.
     ///
     /// See also: [Property Hierarchies](https://www.w3.org/TR/2012/REC-owl2-primer-20121211/#Property_Hierarchies)
-    /// See also: [Property Chains](https://www.w3.org/TR/2012/REC-owl2-primer-20121211/#Property_Chains)
+    /// [Property Chains](https://www.w3.org/TR/2012/REC-owl2-primer-20121211/#Property_Chains)
     Axiom SubObjectPropertyOf{
         sup: ObjectPropertyExpression<A>,
         sub: SubObjectPropertyExpression<A>
@@ -1381,7 +1382,7 @@ components! {
     /// Any individual `i` can only be connected to a single literal
     /// by this DataProperty.
     ///
-    /// See also: [Functional Data Property]:(https://www.w3.org/TR/owl2-syntax/#Functional_Data_Properties)
+    /// See also: [Functional Data Property](https://www.w3.org/TR/owl2-syntax/#Functional_Data_Properties)
     Axiom FunctionalDataProperty(DataProperty<A>),
 
     /// Definition of a datatype.
@@ -1412,7 +1413,7 @@ components! {
 
     /// A different individuals expression.
     ///
-    /// See also: [Individual Inequality](https://www.w3.org/TR/owl2-syntax/#Individual_Inequality
+    /// See also: [Individual Inequality](https://www.w3.org/TR/owl2-syntax/#Individual_Inequality)
     Axiom DifferentIndividuals (
         Vec<Individual<A>>
     ),
@@ -1523,12 +1524,12 @@ impl<A: ForIRI> Default for OntologyID<A> {
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum Literal<A> {
     /// Simple Literals are syntactic sugar for a Datatype with type:
-    /// http://www.w3.org/2001/XMLSchema#string
+    /// `http://www.w3.org/2001/XMLSchema#string`
     Simple { literal: String },
 
     /// Language-tagged literals have a lang tag and must be (or have
     /// an implicit) of datatype
-    /// http://www.w3.org/1999/02/22-rdf-syntax-ns#langString
+    /// `http://www.w3.org/1999/02/22-rdf-syntax-ns#langString`
     Language { literal: String, lang: String },
     Datatype {
         literal: String,

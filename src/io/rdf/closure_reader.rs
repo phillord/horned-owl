@@ -48,7 +48,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> ClosureOntologyParser<'a, A, AA> {
     /// Parse content from some IRI.
     ///
     /// Content will be taken by using
-    /// [resolve_iri](crate::resolve::resolve_iri), meaning that it
+    /// [resolve_iri], meaning that it
     /// will be loaded from a local resource if possible.
     ///
     /// # Arguments

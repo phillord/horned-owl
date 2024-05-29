@@ -1,3 +1,4 @@
+//! An ontology that allows rapid lookup by logically equality.
 use crate::model::{AnnotatedComponent, Component, ForIRI, MutableOntology, RcStr};
 use crate::ontology::indexed::ForIndex;
 

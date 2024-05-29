@@ -1,3 +1,12 @@
+//! Transforms Ontology to a normalized representation
+
+//! # Overview
+//!
+//! In OWL2 it is possible to represent logically equivalent
+//! ontologies in more than one way, either through variations in metadata or the different
+//! uses of axioms.
+//!
+//! This module provides methods to standardize these to a singe representation.
 use crate::{
     model::{AnnotatedComponent, AnonymousIndividual, Build, ComponentKind, ForIRI, Kinded},
     visitor::mutable::{VisitMut, WalkMut},
