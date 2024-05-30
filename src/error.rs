@@ -107,6 +107,7 @@ impl<R: RuleType + 'static> From<pest::error::Error<R>> for HornedError {
     }
 }
 
+#[cfg(feature = "remote")]
 impl From<ureq::Error> for HornedError {
     fn from(e: ureq::Error) -> Self {
         Self::ParserError(e.into(), Location::Unknown)

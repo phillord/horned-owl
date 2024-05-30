@@ -4,6 +4,7 @@
 //!
 //! Given an IRI return the content using local resources if possible.
 //! Remote resolution is feature gated to reduce the binary size a little.
+use crate::error::HornedError;
 use crate::model::{Build, ForIRI, IRI};
 
 use std::path::{Path, PathBuf};
@@ -146,14 +147,13 @@ pub fn resolve_iri<A: ForIRI>(
 
 // Return the ontology as Vec<u8> from `iri`.
 #[cfg(feature = "remote")]
-use crate::error::HornedError;
 pub fn strict_resolve_iri<A: ForIRI>(iri: &IRI<A>) -> Result<String, HornedError> {
     // let s: String = iri.into();
     ureq::get(iri).call()?.into_string().map_err(|e| e.into())
 }
 
 #[cfg(not(feature = "remote"))]
-pub fn strict_resolve_iri<A: ForIRI>(_iri: &IRI<A>) -> String {
+pub fn strict_resolve_iri<A: ForIRI>(_iri: &IRI<A>) -> Result<String, HornedError> {
     todo!("fail")
 }
 
