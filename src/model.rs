@@ -216,6 +216,12 @@ impl<A: ForIRI> Display for IRI<A> {
     }
 }
 
+impl<A: ForIRI> IRI<A> {
+    fn is<O: ForIRI>(&self, other: &IRI<O>) -> bool {
+        **self == **other
+    }
+}
+
 /// `Build` creates new `IRI` and `NamedEntity` instances.
 ///
 /// There is caching for performance. An `IRI` or `NamedEntity` with a
