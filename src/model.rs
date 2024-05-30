@@ -571,14 +571,16 @@ macro_rules! named {
             namedenumimpl!($name, NamedEntity, NamedEntityKind);
 
             impl<A:ForIRI> $name<A> {
-                pub fn is(&self, iri: &IRI<A>) -> bool
+                /// Checks if the IRI associated to this named entity is equal to `other`.
+                pub fn is<O: ForIRI>(&self, other: &IRI<O>) -> bool
                 {
-                    **self == *iri
+                    IRI::<A>::is(self, other)
                 }
 
-                pub fn is_s(&self, iri: &str) -> bool
+                /// Checks if the IRI associated to this named entity has a string representation equal to `other`.
+                pub fn is_s(&self, other: &str) -> bool
                 {
-                    ***self == *iri
+                    ***self == *other
                 }
 
             }
@@ -705,14 +707,14 @@ impl NamedEntityKind {
 }
 
 impl<A: ForIRI> Class<A> {
-    /// Return true if Class is OWL:Thing
+    /// Checks if this class entity is `owl:Thing`.
     pub fn is_thing(&self) -> bool {
-        self.0.as_ref() == crate::vocab::OWL::Thing.as_ref()
+        self.is(&crate::vocab::OWL::Thing)
     }
 
-    /// Return true if Class is OWL::Nothing
+    /// Checks if this class entity is `owl:Nothing`.
     pub fn is_nothing(&self) -> bool {
-        self.0.as_ref() == crate::vocab::OWL::Nothing.as_ref()
+        self.is(&crate::vocab::OWL::Nothing)
     }
 }
 
@@ -2134,8 +2136,8 @@ mod test {
     #[test]
     fn test_is() {
         let c = Build::new_rc().class("http://www.example.com");
-        let i = Build::new().named_individual("http://www.example.com");
-        let iri = Build::new().iri("http://www.example.com");
+        let i = Build::new_string().named_individual("http://www.example.com");
+        let iri = Build::new_arc().iri("http://www.example.com");
 
         assert!(c.is(&iri));
         assert!(c.is(&i));
