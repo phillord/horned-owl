@@ -124,7 +124,17 @@ pub struct IRI<A>(pub(crate) A);
 /// The `ForIRI` is a trait that that provides the bounds for the
 /// majority of methods in Horned_OWL.
 pub trait ForIRI:
-    AsRef<str> + Borrow<str> + Clone + Debug + Eq + From<String> + Hash + PartialEq + Ord + PartialOrd
+    AsRef<str>
+    + Borrow<str>
+    + Clone
+    + Debug
+    + Deref<Target = str>
+    + Eq
+    + From<String>
+    + Hash
+    + PartialEq
+    + Ord
+    + PartialOrd
 {
 }
 
@@ -135,6 +145,7 @@ impl<T: ?Sized> ForIRI for T where
         + Borrow<str>
         + Clone
         + Debug
+        + Deref<Target = str>
         + Eq
         + From<String>
         + Hash
@@ -159,13 +170,13 @@ impl<A: ForIRI> Deref for IRI<A> {
     type Target = str;
 
     fn deref(&self) -> &Self::Target {
-        self.0.borrow()
+        self.0.deref()
     }
 }
 
 impl<A: ForIRI> AsRef<str> for IRI<A> {
     fn as_ref(&self) -> &str {
-        self.0.borrow()
+        self.0.as_ref()
     }
 }
 
@@ -542,19 +553,26 @@ macro_rules! named {
                 }
             }
 
+            impl<A: ForIRI> Deref for $name<A> {
+
+                type Target = IRI<A>;
+
+                fn deref(&self) -> &Self::Target {
+                    &self.0
+                }
+            }
+
             namedenumimpl!($name, NamedEntity, NamedEntityKind);
 
             impl<A:ForIRI> $name<A> {
-                pub fn is<I>(&self, iri: I) -> bool
-                    where I:Into<IRI<A>>
+                pub fn is(&self, iri: &IRI<A>) -> bool
                 {
-                    self.0 == iri.into()
+                    **self == *iri
                 }
 
-                pub fn is_s<S>(&self, iri:S) -> bool
-                    where S:Into<String>
+                pub fn is_s(&self, iri: &str) -> bool
                 {
-                    self.0.0.borrow() == iri.into()
+                    ***self == *iri
                 }
 
             }
@@ -700,7 +718,7 @@ impl<A: ForIRI> Deref for AnonymousIndividual<A> {
     type Target = str;
 
     fn deref(&self) -> &Self::Target {
-        self.0.borrow()
+        self.0.deref()
     }
 }
 
@@ -712,13 +730,13 @@ impl<A: ForIRI> AnonymousIndividual<A> {
 
 impl<A: ForIRI> AsRef<str> for AnonymousIndividual<A> {
     fn as_ref(&self) -> &str {
-        self.0.borrow()
+        self.0.as_ref()
     }
 }
 
 impl<A: ForIRI> Borrow<str> for AnonymousIndividual<A> {
     fn borrow(&self) -> &str {
-        self.as_ref()
+        self.0.borrow()
     }
 }
 
@@ -740,7 +758,7 @@ impl<A: ForIRI> Deref for Individual<A> {
 
     fn deref(&self) -> &Self::Target {
         match self {
-            Individual::Named(ni) => &ni.0,
+            Individual::Named(ni) => ni,
             Individual::Anonymous(ai) => ai,
         }
     }
@@ -2057,7 +2075,7 @@ mod test {
         let iri_from_iri = build.iri(iri_static.clone());
 
         let s = "http://www.example.com";
-        let iri_str = build.iri(&s[..]);
+        let iri_str = build.iri(s);
 
         assert_eq!(iri_string, iri_static);
         assert_eq!(iri_string, iri_str);
@@ -2104,7 +2122,7 @@ mod test {
         let s = String::from("http://www.example.com");
         let c = Build::new_rc().class(s.clone());
 
-        assert!(c.is_s(s));
+        assert!(c.is_s(&s));
     }
 
     #[test]
@@ -2113,9 +2131,9 @@ mod test {
         let i = Build::new().named_individual("http://www.example.com");
         let iri = Build::new().iri("http://www.example.com");
 
-        assert!(c.is(iri));
-        assert!(c.is(i.clone()));
-        assert!(i.is(c));
+        assert!(c.is(&iri));
+        assert!(c.is(&i));
+        assert!(i.is(&c));
     }
 
     #[test]
@@ -2152,7 +2170,7 @@ mod test {
         assert_eq!(decl1, decl2);
 
         decl1.ann.insert(ann);
-        assert!(!(decl1 == decl2));
+        assert!(decl1 != decl2);
     }
 
     #[test]
