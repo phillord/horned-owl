@@ -27,7 +27,6 @@ use crate::{
 
 use enum_meta::Meta;
 
-use std::cmp::Ordering;
 use std::collections::BTreeSet;
 use std::collections::HashMap;
 use std::io::BufRead;
@@ -48,59 +47,17 @@ macro_rules! ok_some {
 #[derive(Clone, Debug, Eq, Hash, PartialEq, Ord, PartialOrd)]
 pub struct BNode<A: ForIRI>(A);
 
-#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+// The order of the variants in the enum is crucial for round-tripping.
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum Term<A: ForIRI> {
-    Iri(IRI<A>),
-    BNode(BNode<A>),
-    Literal(Literal<A>),
     OWL(VOWL),
     RDF(VRDF),
     RDFS(VRDFS),
     SWRL(VSWRL),
     FacetTerm(Facet),
-}
-
-impl<A: ForIRI> Term<A> {
-    fn ord(&self) -> isize {
-        match self {
-            OWL(_) => 1,
-            RDF(_) => 2,
-            RDFS(_) => 3,
-            SWRL(_) => 4,
-            FacetTerm(_) => 5,
-            Iri(_) => 6,
-            Term::BNode(_) => 7,
-            Literal(_) => 8,
-        }
-    }
-}
-
-// impl PartialEq for Term {
-//     fn eq(&self, other: &Self) -> bool {
-//         match
-//     }
-// }
-
-impl<A: ForIRI> Ord for Term<A> {
-    fn cmp(&self, other: &Term<A>) -> Ordering {
-        match (self, other) {
-            (OWL(s), OWL(o)) => s.cmp(o),
-            (RDF(s), RDF(o)) => s.cmp(o),
-            (RDFS(s), RDFS(o)) => s.cmp(o),
-            (SWRL(s), SWRL(o)) => s.cmp(o),
-            (FacetTerm(s), FacetTerm(o)) => s.cmp(o),
-            (Iri(s), Iri(o)) => s.to_string().cmp(&o.to_string()),
-            (Term::BNode(s), Term::BNode(o)) => (*s).cmp(o),
-            (Literal(s), Literal(o)) => (s.literal()).cmp(o.literal()),
-            _ => self.ord().cmp(&other.ord()),
-        }
-    }
-}
-
-impl<A: ForIRI> PartialOrd for Term<A> {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
+    Iri(IRI<A>),
+    BNode(BNode<A>),
+    Literal(Literal<A>),
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -2147,8 +2104,8 @@ mod test {
     }
 
     fn compare(test: &str) {
-        let dot = test.rfind(".").unwrap();
-        let slash = test.rfind("/").unwrap();
+        let dot = test.rfind('.').unwrap();
+        let slash = test.rfind('/').unwrap();
         let stem = &test[(slash + 1)..dot];
 
         compare_two(stem, stem);
