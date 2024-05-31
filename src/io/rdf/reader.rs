@@ -2124,7 +2124,6 @@ pub fn read<R: BufRead>(
 mod test {
     use super::*;
 
-    use std::io::Write;
     use std::path::PathBuf;
     use std::rc::Rc;
 
@@ -2134,16 +2133,7 @@ mod test {
     use pretty_assertions::assert_eq;
     use test_generator::test_resources;
 
-    fn init_log() {
-        let _ = env_logger::builder()
-            .format(|buf, record| writeln!(buf, "{}", record.args()))
-            .is_test(true)
-            .try_init();
-    }
-
     fn read_ok<R: BufRead>(bufread: &mut R) -> RDFOntology<RcStr, Rc<AnnotatedComponent<RcStr>>> {
-        init_log();
-
         let r = read(bufread, Default::default());
 
         if let Err(e) = r {
