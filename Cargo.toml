@@ -20,7 +20,7 @@ thiserror = "1.0"
 lazy_static="1.4.0"
 log = {version="0.4.8"}
 oxiri="0.2.2"
-quick-xml={version="0.26.0"}
+quick-xml={version="0.31.0"}
 indexmap={workspace=true}
 pest = "2.7.8"
 pest_derive = "2.7.8"
@@ -36,7 +36,7 @@ default-members=[".", "horned-bin"]
 [workspace.dependencies]
 indexmap="1.0.2"
 ##pretty_rdf={path="./pretty_rdf"}
-pretty_rdf="0.6.0"
+pretty_rdf="0.7.0"
 rio_api="0.8.4"
 rio_xml="0.8.4"
 
