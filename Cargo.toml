@@ -37,8 +37,8 @@ default-members=[".", "horned-bin"]
 indexmap="1.0.2"
 ##pretty_rdf={path="./pretty_rdf"}
 pretty_rdf="0.6.0"
-rio_api="0.8.3"
-rio_xml="0.8.3"
+rio_api="0.8.4"
+rio_xml="0.8.4"
 
 [features]
 default = ["remote"]
