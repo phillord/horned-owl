@@ -487,6 +487,16 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
         for (k, v) in std::mem::take(&mut self.bnode) {
             match v.as_slice() {
                 [[_, Term::RDF(VRDF::First), val],
+                 [_, Term::RDF(VRDF::Rest), Term::RDF(VRDF::Nil)],
+                 // Lists may or may not have a "list" RDF type
+                 ..
+               ] =>
+                {
+                    extended=true;
+                    self.bnode_seq.insert(k.clone(), vec![val.clone()]);
+                }
+
+                [[_, Term::RDF(VRDF::First), val],
                  [_, Term::RDF(VRDF::Rest), Term::BNode(bnode_id)],
                  // Some sequences have a Type List, some do not
                  ..
@@ -512,22 +522,6 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
     }
 
     fn stitch_seqs(&mut self) {
-        for (k, v) in std::mem::take(&mut self.bnode) {
-            match v.as_slice() {
-                [[_, Term::RDF(VRDF::First), val],
-                 [_, Term::RDF(VRDF::Rest), Term::RDF(VRDF::Nil)],
-                 // Lists may or may not have a "list" RDF type
-                 ..
-                ] =>
-                {
-                    self.bnode_seq.insert(k.clone(), vec![val.clone()]);
-                }
-                _ => {
-                    self.bnode.insert(k, v);
-                }
-            };
-        }
-
         self.stitch_seqs_1();
 
         for (_, v) in self.bnode_seq.iter_mut() {
