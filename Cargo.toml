@@ -28,6 +28,7 @@ pretty_rdf={workspace=true}
 rio_api={workspace=true}
 rio_xml={workspace=true}
 ureq={version="2.1.1", optional=true}
+itertools = "0.13.0"
 
 [workspace]
 members=["horned-bin"]

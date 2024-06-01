@@ -27,6 +27,8 @@ use crate::{
 
 use enum_meta::Meta;
 
+use itertools::{Either, Itertools};
+
 use std::cmp::Ordering;
 use std::collections::BTreeSet;
 use std::collections::HashMap;
@@ -454,33 +456,28 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
         )
     }
 
-    fn group_triples(
-        triple: Vec<PosTriple<A>>,
-        simple: &mut Vec<PosTriple<A>>,
-        bnode: &mut HashMap<BNode<A>, VPosTriple<A>>,
-    ) {
+    fn group_triples(&mut self) {
         // Next group together triples on a BNode, so we have
         // HashMap<BNodeID, Vec<[SpTerm; 3]> All of which should be
         // triples should begin with the BNodeId. We should be able to
         // gather these in a single pass.
-        for t in triple {
-            match t.0 {
+        let triple = std::mem::take(&mut self.triple);
+        let (v_simple, v_bnode): (Vec<_>, Vec<_>) =
+            triple.into_iter().partition_map(|t| match t.0 {
                 [_, Term::OWL(VOWL::DisjointWith), _]
                 | [_, Term::OWL(VOWL::EquivalentClass), _]
                 | [_, Term::OWL(VOWL::InverseOf), _]
-                | [_, Term::RDFS(VRDFS::SubClassOf), _] => {
-                    simple.push(t);
-                }
-                [Term::BNode(ref id), _, _] => {
-                    let v = bnode
-                        .entry(id.clone())
-                        .or_insert_with(|| VPosTriple(vec![], t.1));
-                    v.push(t.0)
-                }
-                _ => {
-                    simple.push(t);
-                }
-            }
+                | [_, Term::RDFS(VRDFS::SubClassOf), _] => Either::Left(t),
+                [Term::BNode(ref id), _, _] => Either::Right((id.clone(), t)),
+                _ => Either::Left(t),
+            });
+
+        self.simple.extend(v_simple);
+        for (id, t) in v_bnode {
+            self.bnode
+                .entry(id.clone())
+                .or_insert_with(|| VPosTriple(vec![], t.1))
+                .push(t.0)
         }
     }
 
@@ -1895,8 +1892,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
     pub fn parse_imports(&mut self) -> Result<Vec<IRI<A>>, HornedError> {
         match self.state {
             OntologyParserState::New => {
-                let triple = std::mem::take(&mut self.triple);
-                Self::group_triples(triple, &mut self.simple, &mut self.bnode);
+                self.group_triples();
 
                 // sort the triples, so that I can get a dependable order
                 for (_, vec) in self.bnode.iter_mut() {
@@ -2056,13 +2052,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
         }
 
         // Regroup so that they print out nicer
-        let mut simple = vec![];
-
-        Self::group_triples(
-            std::mem::take(&mut self.simple),
-            &mut simple,
-            &mut self.bnode,
-        );
+        self.group_triples();
 
         let bnode: Vec<_> = self.bnode.into_iter().map(|kv| kv.1).collect();
         let bnode_seq: Vec<_> = self.bnode_seq.into_iter().map(|kv| kv.1).collect();
@@ -2073,6 +2063,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
             .map(|kv| kv.1)
             .collect();
         let data_range = self.data_range.into_iter().map(|kv| kv.1).collect();
+        let simple = self.simple;
 
         Ok((
             self.o,
