@@ -17,6 +17,7 @@ use std::{
     cell::RefCell,
     collections::{BTreeMap, BTreeSet, VecDeque},
     iter::FromIterator,
+    ops::Deref,
     rc::Rc,
     sync::Arc,
 };
@@ -314,6 +315,14 @@ impl<A: ForIRI, AA: ForIndex<A>> ComponentMappedOntology<A, AA> {
     }
 }
 
+impl<A: ForIRI, AA: ForIndex<A>> Deref for ComponentMappedOntology<A, AA> {
+    type Target = ComponentMappedIndex<A, AA>;
+
+    fn deref(&self) -> &Self::Target {
+        self.i()
+    }
+}
+
 impl<A: ForIRI, AA: ForIndex<A>> ComponentMappedOntology<A, AA> {
     /// Create a new ontology.
     ///
@@ -585,5 +594,16 @@ mod test {
         newont.extend(ont.clone());
 
         assert_eq!(ont, newont.into());
+    }
+
+    #[test]
+    fn deref_to_declare_class() {
+        let mut o = ComponentMappedOntology::new_rc();
+        let b = Build::new_rc();
+        o.declare(b.class("http://www.example.com/a"));
+        assert_eq!(o.i().declare_class().count(), 1);
+
+        // This requires deref support
+        assert_eq!(o.declare_class().count(), 1);
     }
 }
