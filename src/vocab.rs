@@ -369,6 +369,7 @@ vocabulary_type! {
     ]
 }
 
+#[derive(Debug, PartialEq)]
 pub enum Vocab {
     Facet(Facet),
     RDF(RDF),
@@ -881,5 +882,17 @@ mod tests {
             "http://www.w3.org/2001/XMLSchemaaa#nonNegativeInteger"
         ));
         assert!(!is_xsd_datatype("http://www.w3.org/2001/XMLSchema.pdf"));
+    }
+
+    #[test]
+    fn test_full_vocab_from_str() {
+        assert_eq!(
+            Vocab::from_str("http://www.w3.org/2001/XMLSchema#minExclusive").unwrap(),
+            Vocab::Facet(Facet::MinExclusive)
+        );
+        assert_eq!(
+            Vocab::from_str("http://www.w3.org/2001/XMLSchema#nonNegativeInteger").unwrap(),
+            Vocab::XSD(XSD::NonNegativeInteger)
+        );
     }
 }
