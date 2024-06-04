@@ -4,9 +4,9 @@ use rio_api::{
 };
 use Term::*;
 
-use crate::model::*;
 use crate::{error::HornedError, io::ParserConfiguration, vocab::Facet};
 use crate::{model::Literal, ontology::component_mapped::ComponentMappedOntology};
+use crate::{model::*, vocab::Vocab};
 
 use crate::ontology::indexed::ForIndex;
 use crate::vocab::is_annotation_builtin;
@@ -25,12 +25,10 @@ use crate::{
     vocab::RDFS as VRDFS,
 };
 
-use enum_meta::Meta;
-
-use std::collections::BTreeSet;
 use std::collections::HashMap;
 use std::io::BufRead;
 use std::io::Cursor;
+use std::{collections::BTreeSet, convert::TryFrom};
 
 type RioTerm<'a> = ::rio_api::model::Term<'a>;
 
@@ -60,6 +58,75 @@ pub enum Term<A: ForIRI> {
     Literal(Literal<A>),
 }
 
+impl<A: ForIRI> From<VOWL> for Term<A> {
+    fn from(value: VOWL) -> Self {
+        Self::OWL(value)
+    }
+}
+
+impl<A: ForIRI> From<VRDF> for Term<A> {
+    fn from(value: VRDF) -> Self {
+        Self::RDF(value)
+    }
+}
+
+impl<A: ForIRI> From<VRDFS> for Term<A> {
+    fn from(value: VRDFS) -> Self {
+        Self::RDFS(value)
+    }
+}
+
+impl<A: ForIRI> From<VSWRL> for Term<A> {
+    fn from(value: VSWRL) -> Self {
+        Self::SWRL(value)
+    }
+}
+
+impl<A: ForIRI> From<Facet> for Term<A> {
+    fn from(value: Facet) -> Self {
+        Self::FacetTerm(value)
+    }
+}
+
+impl<A: ForIRI> From<IRI<A>> for Term<A> {
+    fn from(value: IRI<A>) -> Self {
+        Self::Iri(value)
+    }
+}
+
+impl<A: ForIRI> From<BNode<A>> for Term<A> {
+    fn from(value: BNode<A>) -> Self {
+        Self::BNode(value)
+    }
+}
+
+impl<A: ForIRI> From<Literal<A>> for Term<A> {
+    fn from(value: Literal<A>) -> Self {
+        Self::Literal(value)
+    }
+}
+
+impl<A: ForIRI> TryFrom<crate::vocab::Vocab> for Term<A> {
+    type Error = HornedError;
+
+    fn try_from(value: crate::vocab::Vocab) -> Result<Self, Self::Error> {
+        match value {
+            crate::vocab::Vocab::Facet(facet) => Ok(facet.into()),
+            crate::vocab::Vocab::RDF(rdf) => Ok(rdf.into()),
+            crate::vocab::Vocab::RDFS(rdfs) => Ok(rdfs.into()),
+            crate::vocab::Vocab::OWL(owl) => Ok(owl.into()),
+            crate::vocab::Vocab::SWRL(swrl) => Ok(swrl.into()),
+            _ => Err(HornedError::invalid(value.to_string())),
+        }
+    }
+}
+
+impl<A: ForIRI> Term<A> {
+    fn try_into_vocab_term(s: &str) -> Result<Self, HornedError> {
+        s.parse::<Vocab>().and_then(Term::try_from)
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 enum OrTerm<A: ForIRI> {
     Term(Term<A>),
@@ -78,54 +145,12 @@ impl<A: ForIRI> From<Term<A>> for OrTerm<A> {
     }
 }
 
-/// Creates a lookup [HashMap] for OWL, RDF, RDFS and Facet vocabularies.
-fn vocab_lookup<A: ForIRI>() -> HashMap<String, Term<A>> {
-    // Preallocate capacity, as we know at compile-time how many elements will
-    // be stored in the hashmaps.
-    // 87 = #OWL variants - 1 + #RDF variants + #RDFS variants + #Facet variants
-    let mut lookup_map = HashMap::with_capacity(87);
-
-    lookup_map.extend(VOWL::all().into_iter().filter_map(|variant| match variant {
-        // Skip the builtin properties or we have to treat them separately
-        VOWL::TopDataProperty => None, // |
-        // VOWL::TopObjectProperty |
-        // VOWL::Thing |
-        // VOWL::Nothing => None,
-        _ => Some((variant.underlying(), Term::OWL(variant))),
-    }));
-
-    lookup_map.extend(
-        VRDFS::all()
-            .into_iter()
-            .map(|variant| (variant.underlying(), Term::RDFS(variant))),
-    );
-
-    lookup_map.extend(
-        VRDF::all()
-            .into_iter()
-            .map(|variant| (variant.underlying(), Term::RDF(variant))),
-    );
-
-    lookup_map.extend(
-        VSWRL::all()
-            .into_iter()
-            .map(|variant| (variant.underlying(), Term::SWRL(variant))),
-    );
-
-    lookup_map.extend(
-        Facet::all()
-            .into_iter()
-            .map(|variant| (variant.underlying(), Term::FacetTerm(variant))),
-    );
-
-    lookup_map
-}
-
-fn to_term_nn<A: ForIRI>(nn: &NamedNode, m: &HashMap<String, Term<A>>, b: &Build<A>) -> Term<A> {
-    if let Some(term) = m.get(nn.iri) {
-        return term.clone();
+fn to_term_nn<A: ForIRI>(nn: &NamedNode, b: &Build<A>) -> Term<A> {
+    if let Ok(term) = Term::try_into_vocab_term(nn.iri) {
+        term
+    } else {
+        Term::Iri(b.iri(nn.iri))
     }
-    Term::Iri(b.iri(nn.iri))
 }
 
 fn to_term_bn<A: ForIRI>(nn: &BlankNode) -> Term<A> {
@@ -157,17 +182,17 @@ fn to_term_lt<A: ForIRI>(lt: &rio_api::model::Literal, b: &Build<A>) -> Term<A> 
     }
 }
 
-fn to_term_nnb<A: ForIRI>(nnb: &Subject, m: &HashMap<String, Term<A>>, b: &Build<A>) -> Term<A> {
+fn to_term_nnb<A: ForIRI>(nnb: &Subject, b: &Build<A>) -> Term<A> {
     match nnb {
-        Subject::NamedNode(nn) => to_term_nn(nn, m, b),
+        Subject::NamedNode(nn) => to_term_nn(nn, b),
         Subject::BlankNode(bn) => to_term_bn(bn),
         Subject::Triple(_) => unimplemented!("Triple subjects are not implemented"),
     }
 }
 
-fn to_term<A: ForIRI>(t: &RioTerm, m: &HashMap<String, Term<A>>, b: &Build<A>) -> Term<A> {
+fn to_term<A: ForIRI>(t: &RioTerm, b: &Build<A>) -> Term<A> {
     match t {
-        rio_api::model::Term::NamedNode(iri) => to_term_nn(iri, m, b),
+        rio_api::model::Term::NamedNode(iri) => to_term_nn(iri, b),
         rio_api::model::Term::BlankNode(id) => to_term_bn(id),
         rio_api::model::Term::Literal(l) => to_term_lt(l, b),
         rio_api::model::Term::Triple(_) => unimplemented!("Triple subjects are not implemented"),
@@ -374,17 +399,15 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
         bufread: &'b mut R,
         config: ParserConfiguration,
     ) -> OntologyParser<'a, A, AA> {
-        let m = vocab_lookup();
-
         let mut parser = rio_xml::RdfXmlParser::new(bufread, None);
         let mut triples = vec![];
         let last_pos = std::cell::Cell::new(0);
         let mut on_triple = |rio_triple: rio_api::model::Triple| -> Result<_, HornedError> {
             triples.push(PosTriple(
                 [
-                    to_term_nnb(&rio_triple.subject, &m, b),
-                    to_term_nn(&rio_triple.predicate, &m, b),
-                    to_term(&rio_triple.object, &m, b),
+                    to_term_nnb(&rio_triple.subject, b),
+                    to_term_nn(&rio_triple.predicate, b),
+                    to_term(&rio_triple.object, b),
                 ],
                 last_pos.get(),
             ));
@@ -2021,15 +2044,12 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
             &mut self.bnode,
         );
 
-        let bnode: Vec<_> = self.bnode.into_iter().map(|kv| kv.1).collect();
-        let bnode_seq: Vec<_> = self.bnode_seq.into_iter().map(|kv| kv.1).collect();
-        let class_expression: Vec<_> = self.class_expression.into_iter().map(|kv| kv.1).collect();
-        let object_property_expression: Vec<_> = self
-            .object_property_expression
-            .into_iter()
-            .map(|kv| kv.1)
-            .collect();
-        let data_range = self.data_range.into_iter().map(|kv| kv.1).collect();
+        let bnode: Vec<_> = self.bnode.into_values().collect();
+        let bnode_seq: Vec<_> = self.bnode_seq.into_values().collect();
+        let class_expression: Vec<_> = self.class_expression.into_values().collect();
+        let object_property_expression: Vec<_> =
+            self.object_property_expression.into_values().collect();
+        let data_range = self.data_range.into_values().collect();
 
         Ok((
             self.o,
