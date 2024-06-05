@@ -11,12 +11,14 @@ use crate::model::{NamedOWLEntity, NamedOWLEntityKind};
 use std::borrow::Borrow;
 use std::convert::TryFrom;
 use std::str::FromStr;
+use std::sync::OnceLock;
 
 macro_rules! vocabulary_traits {
     ($($enum_type:ident),+; $return_type:ty
     ) => {
 
         $(
+
             impl TryFrom<&[u8]> for $enum_type {
             type Error = HornedError;
 
@@ -84,16 +86,12 @@ macro_rules! vocabulary_type {
         }
 
         impl $enum_type {
+
             fn get_iri(self) -> IRI<String> {
-
-                let mut iri_str = String::new();
-                $(
-                    iri_str.push_str(Namespace::$ns.as_ref());
-                )?
-
                 match self {
                     $(
                         $enum_type::$variant => {
+                            dbg!(&self);
                             let mut iri_str = String::from(Namespace::$ns.as_ref());
                             let mut variant_str = String::from(stringify!($variant));
                             if $first_lowercase {
@@ -106,6 +104,19 @@ macro_rules! vocabulary_type {
                         }
                     )*,
                 }
+            }
+        }
+
+        impl $enum_type {
+            fn lookup() -> &'static HashMap<&'static [u8],$enum_type> {
+                static STORAGE: OnceLock<HashMap<&[u8], $enum_type>> = OnceLock::new();
+                STORAGE.get_or_init(|| {
+                    let mut hm = HashMap::new();
+                    $(
+                        hm.insert($enum_type::$variant.meta().deref().as_bytes(), $enum_type::$variant);
+                    )*
+                    hm
+                })
             }
         }
 
@@ -336,7 +347,8 @@ vocabulary_type! {
 vocabulary_type! {
     XSD, IRI<String>, METAXSD, [
         (XSD, Boolean, true),
-        (XSD, NonNegativeInteger, true)
+        (XSD, NonNegativeInteger, true),
+        (XSD, String, true)
     ]
 }
 
@@ -383,6 +395,55 @@ pub enum Vocab {
 vocabulary_traits! {
     Vocab;
     IRI<String>
+}
+
+impl Vocab {
+    fn lookup_table() -> &'static HashMap<&'static str, Self> {
+        static STORAGE: OnceLock<HashMap<&str, Vocab>> = OnceLock::new();
+        STORAGE.get_or_init(|| {
+            let mut hm = HashMap::new();
+            hm.extend(
+                Facet::all()
+                    .into_iter()
+                    .map(|val| (val.meta().deref(), Self::Facet(val))),
+            );
+            hm.extend(
+                RDF::all()
+                    .into_iter()
+                    .map(|val| (val.meta().deref(), Self::RDF(val))),
+            );
+            hm.extend(
+                RDFS::all()
+                    .into_iter()
+                    .map(|val| (val.meta().deref(), Self::RDFS(val))),
+            );
+            hm.extend(
+                OWL::all()
+                    .into_iter()
+                    .map(|val| (val.meta().deref(), Self::OWL(val))),
+            );
+            hm.extend(
+                SWRL::all()
+                    .into_iter()
+                    .map(|val| (val.meta().deref(), Self::SWRL(val))),
+            );
+            hm.extend(
+                XSD::all()
+                    .into_iter()
+                    .map(|val| (val.meta().deref(), Self::XSD(val))),
+            );
+            hm.extend(
+                Namespace::all()
+                    .into_iter()
+                    .map(|val| (val.meta().deref(), Self::Namespace(val))),
+            );
+            hm
+        })
+    }
+
+    pub fn lookup(s: &str) -> Option<&Vocab> {
+        Self::lookup_table().get(s)
+    }
 }
 
 impl<'a> Meta<&'a IRI<String>> for Vocab {

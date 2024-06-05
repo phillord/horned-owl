@@ -1,5 +1,5 @@
 use rio_api::{
-    model::{BlankNode, NamedNode, Subject},
+    model::{BlankNode, NamedNode, Subject, Triple},
     parser::TriplesParser,
 };
 use Term::*;
@@ -25,10 +25,10 @@ use crate::{
     vocab::RDFS as VRDFS,
 };
 
-use std::collections::HashMap;
 use std::io::BufRead;
 use std::io::Cursor;
 use std::{collections::BTreeSet, convert::TryFrom};
+use std::{collections::HashMap, convert::TryInto};
 
 type RioTerm<'a> = ::rio_api::model::Term<'a>;
 
@@ -58,33 +58,33 @@ pub enum Term<A: ForIRI> {
     Literal(Literal<A>),
 }
 
-impl<A: ForIRI> From<VOWL> for Term<A> {
-    fn from(value: VOWL) -> Self {
-        Self::OWL(value)
+impl<A: ForIRI> From<&VOWL> for Term<A> {
+    fn from(value: &VOWL) -> Self {
+        Self::OWL(value.clone())
     }
 }
 
-impl<A: ForIRI> From<VRDF> for Term<A> {
-    fn from(value: VRDF) -> Self {
-        Self::RDF(value)
+impl<A: ForIRI> From<&VRDF> for Term<A> {
+    fn from(value: &VRDF) -> Self {
+        Self::RDF(value.clone())
     }
 }
 
-impl<A: ForIRI> From<VRDFS> for Term<A> {
-    fn from(value: VRDFS) -> Self {
-        Self::RDFS(value)
+impl<A: ForIRI> From<&VRDFS> for Term<A> {
+    fn from(value: &VRDFS) -> Self {
+        Self::RDFS(value.clone())
     }
 }
 
-impl<A: ForIRI> From<VSWRL> for Term<A> {
-    fn from(value: VSWRL) -> Self {
-        Self::SWRL(value)
+impl<A: ForIRI> From<&VSWRL> for Term<A> {
+    fn from(value: &VSWRL) -> Self {
+        Self::SWRL(value.clone())
     }
 }
 
-impl<A: ForIRI> From<Facet> for Term<A> {
-    fn from(value: Facet) -> Self {
-        Self::FacetTerm(value)
+impl<A: ForIRI> From<&Facet> for Term<A> {
+    fn from(value: &Facet) -> Self {
+        Self::FacetTerm(value.clone())
     }
 }
 
@@ -106,10 +106,10 @@ impl<A: ForIRI> From<Literal<A>> for Term<A> {
     }
 }
 
-impl<A: ForIRI> TryFrom<crate::vocab::Vocab> for Term<A> {
+impl<A: ForIRI> TryFrom<&crate::vocab::Vocab> for Term<A> {
     type Error = HornedError;
 
-    fn try_from(value: crate::vocab::Vocab) -> Result<Self, Self::Error> {
+    fn try_from(value: &crate::vocab::Vocab) -> Result<Self, Self::Error> {
         match value {
             crate::vocab::Vocab::Facet(facet) => Ok(facet.into()),
             crate::vocab::Vocab::RDF(rdf) => Ok(rdf.into()),
@@ -118,12 +118,6 @@ impl<A: ForIRI> TryFrom<crate::vocab::Vocab> for Term<A> {
             crate::vocab::Vocab::SWRL(swrl) => Ok(swrl.into()),
             _ => Err(HornedError::invalid(value.to_string())),
         }
-    }
-}
-
-impl<A: ForIRI> Term<A> {
-    fn try_into_vocab_term(s: &str) -> Result<Self, HornedError> {
-        s.parse::<Vocab>().and_then(Term::try_from)
     }
 }
 
@@ -145,57 +139,93 @@ impl<A: ForIRI> From<Term<A>> for OrTerm<A> {
     }
 }
 
-fn to_term_nn<A: ForIRI>(nn: &NamedNode, b: &Build<A>) -> Term<A> {
-    if let Ok(term) = Term::try_into_vocab_term(nn.iri) {
-        term
-    } else {
-        Term::Iri(b.iri(nn.iri))
-    }
-}
+impl<A: ForIRI> TryFrom<&NamedNode<'_>> for Term<A> {
+    type Error = HornedError;
 
-fn to_term_bn<A: ForIRI>(nn: &BlankNode) -> Term<A> {
-    Term::BNode(BNode(nn.id.to_string().into()))
-}
-
-fn to_term_lt<A: ForIRI>(lt: &rio_api::model::Literal, b: &Build<A>) -> Term<A> {
-    match lt {
-        rio_api::model::Literal::Simple { value } => Term::Literal(Literal::Simple {
-            literal: value.to_string(),
-        }),
-        rio_api::model::Literal::LanguageTaggedString { value, language } => {
-            Term::Literal(Literal::Language {
-                literal: value.to_string(),
-                lang: language.to_string(),
-            })
+    fn try_from(value: &NamedNode<'_>) -> Result<Self, Self::Error> {
+        if let Some(res) = Vocab::lookup(value.iri) {
+            Term::try_from(res)
+        } else {
+            Err(HornedError::invalid(value.iri))
         }
-        rio_api::model::Literal::Typed { value, datatype }
-            if datatype.iri == "http://www.w3.org/2001/XMLSchema#string" =>
-        {
-            Term::Literal(Literal::Simple {
-                literal: value.to_string(),
-            })
+    }
+}
+
+impl TryFrom<&NamedNode<'_>> for crate::vocab::XSD {
+    type Error = HornedError;
+
+    fn try_from(value: &NamedNode<'_>) -> Result<Self, Self::Error> {
+        value.iri.parse::<Self>()
+    }
+}
+
+impl<A: ForIRI> Build<A> {
+    fn to_term_bn(nn: &BlankNode) -> Term<A> {
+        Term::BNode(BNode(nn.id.to_string().into()))
+    }
+
+    fn to_pos_triple(&self, rio_triple: Triple, pos: usize) -> PosTriple<A> {
+        PosTriple(
+            [
+                self.to_term_bnn(&rio_triple.subject),
+                self.to_term_nn(&rio_triple.predicate),
+                self.to_term(&rio_triple.object),
+            ],
+            pos,
+        )
+    }
+
+    fn to_term(&self, t: &RioTerm) -> Term<A> {
+        match t {
+            rio_api::model::Term::NamedNode(iri) => self.to_term_nn(iri),
+            rio_api::model::Term::BlankNode(id) => Self::to_term_bn(id),
+            rio_api::model::Term::Literal(l) => self.to_term_lt(l),
+            rio_api::model::Term::Triple(_) => {
+                unimplemented!("Triple subjects are not implemented")
+            }
         }
-        rio_api::model::Literal::Typed { value, datatype } => Term::Literal(Literal::Datatype {
-            literal: value.to_string(),
-            datatype_iri: b.iri(datatype.iri),
-        }),
     }
-}
 
-fn to_term_nnb<A: ForIRI>(nnb: &Subject, b: &Build<A>) -> Term<A> {
-    match nnb {
-        Subject::NamedNode(nn) => to_term_nn(nn, b),
-        Subject::BlankNode(bn) => to_term_bn(bn),
-        Subject::Triple(_) => unimplemented!("Triple subjects are not implemented"),
+    fn to_term_bnn(&self, subj: &Subject) -> Term<A> {
+        match subj {
+            Subject::NamedNode(nn) => self.to_term_nn(nn),
+            Subject::BlankNode(bn) => Self::to_term_bn(bn),
+            Subject::Triple(_) => unimplemented!("Triple subjects are not implemented"),
+        }
     }
-}
 
-fn to_term<A: ForIRI>(t: &RioTerm, b: &Build<A>) -> Term<A> {
-    match t {
-        rio_api::model::Term::NamedNode(iri) => to_term_nn(iri, b),
-        rio_api::model::Term::BlankNode(id) => to_term_bn(id),
-        rio_api::model::Term::Literal(l) => to_term_lt(l, b),
-        rio_api::model::Term::Triple(_) => unimplemented!("Triple subjects are not implemented"),
+    fn to_term_nn(&self, nn: &NamedNode) -> Term<A> {
+        if let Ok(term) = nn.try_into() {
+            term
+        } else {
+            Term::Iri(self.iri(nn.iri))
+        }
+    }
+
+    fn to_term_lt(&self, lt: &rio_api::model::Literal) -> Term<A> {
+        match lt {
+            rio_api::model::Literal::Simple { value } => Term::Literal(Literal::Simple {
+                literal: value.to_string(),
+            }),
+            rio_api::model::Literal::LanguageTaggedString { value, language } => {
+                Term::Literal(Literal::Language {
+                    literal: value.to_string(),
+                    lang: language.to_string(),
+                })
+            }
+            rio_api::model::Literal::Typed { value, datatype } => {
+                if let Ok(crate::vocab::XSD::String) = datatype.try_into() {
+                    Term::Literal(Literal::Simple {
+                        literal: value.to_string(),
+                    })
+                } else {
+                    Term::Literal(Literal::Datatype {
+                        literal: value.to_string(),
+                        datatype_iri: self.iri(datatype.iri),
+                    })
+                }
+            }
+        }
     }
 }
 
@@ -403,14 +433,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
         let mut triples = vec![];
         let last_pos = std::cell::Cell::new(0);
         let mut on_triple = |rio_triple: rio_api::model::Triple| -> Result<_, HornedError> {
-            triples.push(PosTriple(
-                [
-                    to_term_nnb(&rio_triple.subject, b),
-                    to_term_nn(&rio_triple.predicate, b),
-                    to_term(&rio_triple.object, b),
-                ],
-                last_pos.get(),
-            ));
+            triples.push(b.to_pos_triple(rio_triple, last_pos.get()));
             Ok(())
         };
 
