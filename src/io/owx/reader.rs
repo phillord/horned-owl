@@ -2082,7 +2082,9 @@ pub mod test {
         } = cl
         {
             assert!(match dr {
-                DataRange::Datatype(dt) => dt.is_s(OWL2Datatype::Literal.as_ref()),
+                DataRange::Datatype(dt) => {
+                    dt.is(&OWL2Datatype::Literal)
+                }
                 _ => false,
             });
         } else {

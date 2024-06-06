@@ -217,8 +217,47 @@ impl<A: ForIRI> Display for IRI<A> {
 }
 
 impl<A: ForIRI> IRI<A> {
-    fn is<O: ForIRI>(&self, other: &IRI<O>) -> bool {
+    /// Compare this IRI to another
+    ///
+    /// Return true if two IRIs are lexically identical.
+    ///
+    /// IRIs can more simply be compared through equality
+    /// (==). However, these must by type identical IRIs, where as
+    /// this method can compare more widely.
+    ///
+    /// # Example
+    /// ```
+    /// # use horned_owl::model::Build;
+    /// let b_rc = Build::new_rc();
+    /// let b_arc = Build::new_arc();
+    ///
+    /// // Equality works
+    /// assert_eq!(b_rc.iri("http://example.com"), b_rc.iri("http://example.com"));
+    ///
+    /// // But this comparison cannot be with equality
+    /// assert!(b_rc.iri("http://example.com").is(&b_arc.iri("http://example.com")));
+    /// ```
+    ///
+    /// Use `is_as` to compare to strings
+    pub fn is<O: ForIRI>(&self, other: &IRI<O>) -> bool {
         **self == **other
+    }
+
+    /// Compare this IRI to a String
+    ///
+    /// Return true if the IRI is lexically identical to the String
+    ///
+    /// #Example
+    /// ```
+    /// # use horned_owl::model::Build;
+    /// let b = Build::new_rc();
+    ///
+    /// assert!(b.iri("http://example.com").is_as("http://example.com"));
+    /// ```
+    ///
+    /// Use `is` to compare to another IRI
+    pub fn is_as<S: AsRef<str>>(&self, other: S) -> bool {
+        **self == *other.as_ref()
     }
 }
 
@@ -571,16 +610,59 @@ macro_rules! named {
             namedenumimpl!($name, NamedEntity, NamedEntityKind);
 
             impl<A:ForIRI> $name<A> {
-                /// Checks if the IRI associated to this named entity is equal to `other`.
+
+                /// Compare this named entity to another
+                ///
+                /// Return true if two entities have IRIs which are lexically identical.
+                ///
+                /// $name can more simply be compared through equality
+                /// (==). However, these must by type identical named entity, where as
+                /// this method can compare more widely.
+                ///
+                /// # Example
+                /// ```
+                /// # use horned_owl::model::Build;
+                /// let build = Build::new_rc();
+                /// let iri = build.iri("http://www.example.com");
+                /// let class = build.class(iri.clone());
+                /// let individual = build.named_individual(iri.clone());
+                ///
+                /// // Named entities can use equality
+                /// assert_eq!(class, class);
+                ///
+                /// // Or this method more widely
+                /// assert!(class.is(&class));
+                /// assert!(class.is(&iri));
+                /// assert!(class.is(&individual));
+                /// assert!(!class.is(&crate::horned_owl::vocab::OWL::Class));
+                /// ```
                 pub fn is<O: ForIRI>(&self, other: &IRI<O>) -> bool
                 {
                     IRI::<A>::is(self, other)
                 }
 
-                /// Checks if the IRI associated to this named entity has a string representation equal to `other`.
-                pub fn is_s(&self, other: &str) -> bool
+                /// Compare this named entity to string
+                ///
+                /// Return true if this entity have an IRI which is lexically identical to the string.
+                ///
+                /// # Example
+                /// ```
+                /// # use horned_owl::model::Build;
+                /// let build = Build::new_rc();
+                /// let class = build.class("http://www.example.com");
+                ///
+                /// assert!(class.is_as("http://www.example.com"));
+                /// assert!(!class.is_as("http://www.example.com/not"));
+                ///
+                /// // We can also use is_as with deref semantics, but
+                /// // use `is` instead
+                /// assert!(class.is_as(&*class));
+                /// ```
+                ///
+                /// Use `is` to compare $name to other named entities, or IRIs
+                pub fn is_as<S:AsRef<str>>(&self, other: S) -> bool
                 {
-                    ***self == *other
+                    IRI::<A>::is_as(self, other)
                 }
 
             }
@@ -2130,7 +2212,7 @@ mod test {
         let s = String::from("http://www.example.com");
         let c = Build::new_rc().class(s.clone());
 
-        assert!(c.is_s(&s));
+        assert!(c.is_as(&s));
     }
 
     #[test]
@@ -2139,9 +2221,41 @@ mod test {
         let i = Build::new_string().named_individual("http://www.example.com");
         let iri = Build::new_arc().iri("http://www.example.com");
 
+        // Does is work with different A's
         assert!(c.is(&iri));
         assert!(c.is(&i));
         assert!(i.is(&c));
+    }
+
+    #[test]
+    fn test_is_as() {
+        let build = Build::new_rc();
+
+        let iri = build.iri("http://www.example.com");
+        let class = build.class(iri.clone());
+        let individual = build.named_individual(iri.clone());
+
+        // Class comparision with equals
+        assert_eq!(class, class);
+
+        // We can compare IRI to IRI
+        assert!(iri.is(&iri));
+        // We can compare Class to IRI
+        assert!(class.is(&iri));
+
+        // We can compare class or individual to each other through Deref semantics
+        assert!(class.is(&class));
+        assert!(class.is(&individual));
+
+        // Or to vocab, again through deref semantics
+        assert!(!class.is(&crate::vocab::OWL::Class));
+
+        // We can compare to strings
+        assert!(class.is_as("http://www.example.com"));
+        assert!(!class.is_as("http://www.fred.com"));
+
+        // Or other classes if we deref a bit
+        assert!(class.is_as(&*class));
     }
 
     #[test]
