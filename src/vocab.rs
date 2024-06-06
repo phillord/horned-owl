@@ -57,6 +57,12 @@ macro_rules! vocabulary_traits {
                 }
             }
 
+            impl AsRef<str> for $enum_type {
+                fn as_ref(&self) -> &str {
+                    self.meta().as_ref()
+                }
+            }
+
             impl Borrow<str> for $enum_type {
                 fn borrow(&self) -> &str {
                     self.meta().as_ref()
