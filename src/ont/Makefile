@@ -13,3 +13,4 @@ force-clean:
 	-rm owl-rdf/*owl
 	-rm owl-ttl/*ttl
 	-rm owl-functional/*ofn
+	-rm owl-manchester/*omn

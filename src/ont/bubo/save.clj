@@ -11,10 +11,11 @@
       (cc/println "\tSaving:" file)
       (save-ontology file format)))
 
-(cc/import org.semanticweb.owlapi.formats.FunctionalSyntaxDocumentFormat)
+(cc/import org.semanticweb.owlapi.formats.FunctionalSyntaxDocumentFormat org.semanticweb.owlapi.formats.ManchesterSyntaxDocumentFormat)
 
 (cc/defn save-all []
   (save-one "owl-rdf" ".owl" :rdf)
   (save-one "owl-xml" ".owx" :owl)
   (save-one "owl-ttl" ".ttl" :ttl)
-  (save-one "owl-functional" ".ofn" (FunctionalSyntaxDocumentFormat.)))
+  (save-one "owl-functional" ".ofn" (FunctionalSyntaxDocumentFormat.))
+  (save-one "owl-manchester" ".omn" (ManchesterSyntaxDocumentFormat.)))
