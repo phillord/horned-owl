@@ -1,0 +1,27 @@
+## This file was created by Tawny-OWL
+## It should not be edited by hand
+Prefix: o: <http://www.example.com/iri#>
+Prefix: owl: <http://www.w3.org/2002/07/owl#>
+Prefix: rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+Prefix: rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+Prefix: xml: <http://www.w3.org/XML/1998/namespace>
+Prefix: xsd: <http://www.w3.org/2001/XMLSchema#>
+Prefix: : <http://www.example.com/iri>
+
+
+
+Ontology: <http://www.example.com/iri>
+<http://www.example.com/viri>
+
+ObjectProperty: o:r
+
+    
+Class: o:A
+
+    
+Class: o:B
+
+    SubClassOf: 
+        o:r some (not (o:A))
+    
+    
