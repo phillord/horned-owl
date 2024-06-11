@@ -749,25 +749,9 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
                 {
                     ok_some! {
                         {
-                            let facet_seq = self.bnode_seq
-                                .remove(id)?;
-                            let some_facets =
-                                facet_seq.into_iter().map(|id|
-                                                          match facet_map.remove(&id)?.0 {
-                                                              [_, Term::FacetTerm(facet), literal] => Some(
-                                                                  FacetRestriction {
-                                                                      f: facet,
-                                                                      l: self.fetch_literal(&literal)?,
-                                                                  }
-                                                              ),
-                                                              _ => None
-                                                          }
-                                );
-
-                            let facets:Option<Vec<FacetRestriction<_>>> = some_facets.collect();
                             DataRange::DatatypeRestriction(
                                 iri.into(),
-                                facets?
+                                self.fetch_facet_seq(id, &mut facet_map)?
                             )
                         }
                     }
@@ -814,9 +798,10 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
     }
 
     fn fetch_iri(&self, t: &Term<A>) -> Option<IRI<A>> {
-        match t {
-            Term::Iri(iri) => Some(iri.clone()),
-            _ => None,
+        if let Term::Iri(iri) = t {
+            Some(iri.clone())
+        } else {
+            None
         }
     }
 
@@ -865,68 +850,83 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
         }
     }
 
+    /// Helper functions that fetches triples associated to a BNode and applies the supplied function.
+    fn fetch_bnode_seq_and_map<F, T>(&mut self, bnode: &BNode<A>, mut fun: F) -> Option<Vec<T>>
+    where
+        F: FnMut(&mut Self, &Term<A>) -> Option<T>,
+    {
+        self.bnode_seq
+            .remove(bnode)
+            .as_ref()?
+            .iter()
+            .map(|tce| fun(self, tce))
+            .collect()
+    }
+
     fn fetch_ce_seq(&mut self, bnodeid: &BNode<A>) -> Option<Vec<ClassExpression<A>>> {
-        if !self.bnode_seq.get(bnodeid)?.iter().all(|tce| match tce {
-            Term::BNode(id) => self.class_expression.contains_key(id),
-            _ => true,
+        if self.bnode_seq.get(bnodeid)?.iter().any(|tce| {
+            if let Term::BNode(id) = tce {
+                !self.class_expression.contains_key(id)
+            } else {
+                false
+            }
         }) {
             return None;
         }
 
-        self.bnode_seq
-            .remove(bnodeid)
-            .as_ref()?
-            .iter()
-            .map(|tce| self.fetch_ce(tce))
-            .collect()
+        self.fetch_bnode_seq_and_map(bnodeid, |op, t| op.fetch_ce(t))
+    }
+
+    fn fetch_pe_seq(
+        &mut self,
+        bnodeid: &BNode<A>,
+        ic: &[&RDFOntology<A, AA>],
+    ) -> Option<Vec<PropertyExpression<A>>> {
+        self.fetch_bnode_seq_and_map(bnodeid, |op, pr| op.find_property_kind(pr, ic))
+    }
+
+    fn fetch_ope_seq(
+        &mut self,
+        bnodeid: &BNode<A>,
+        ic: &[&RDFOntology<A, AA>],
+    ) -> Option<Vec<ObjectPropertyExpression<A>>> {
+        self.fetch_bnode_seq_and_map(bnodeid, |op, pr| op.fetch_ope(pr, ic))
     }
 
     fn fetch_ni_seq(&mut self, bnodeid: &BNode<A>) -> Option<Vec<Individual<A>>> {
-        self.bnode_seq
-            .remove(bnodeid)
-            .as_ref()?
-            .iter()
-            .map(|t| self.fetch_iri(t).map(|iri| NamedIndividual(iri).into()))
-            .collect()
+        self.fetch_bnode_seq_and_map(bnodeid, |op, t| {
+            op.fetch_iri(t).map(|iri| NamedIndividual(iri).into())
+        })
     }
 
     fn fetch_dr_seq(&mut self, bnodeid: &BNode<A>) -> Option<Vec<DataRange<A>>> {
-        self.bnode_seq
-            .remove(bnodeid)
-            .as_ref()?
-            .iter()
-            .map(|t| self.fetch_dr(t))
-            .collect()
+        self.fetch_bnode_seq_and_map(bnodeid, |op, t| op.fetch_dr(t))
     }
 
-    // TODO Fix code duplication
     fn fetch_literal_seq(&mut self, bnodeid: &BNode<A>) -> Option<Vec<Literal<A>>> {
-        self.bnode_seq
-            .remove(bnodeid)
-            .as_ref()?
-            .iter()
-            .map(|t| self.fetch_literal(t))
-            .collect()
+        self.fetch_bnode_seq_and_map(bnodeid, |op, t| op.fetch_literal(t))
     }
 
-    // TODO Really, really fix code duplication
     fn fetch_atom_seq(&mut self, bnodeid: &BNode<A>) -> Option<Vec<Atom<A>>> {
-        self.bnode_seq
-            .remove(bnodeid)
-            .as_ref()?
-            .iter()
-            .map(|t| self.atom.remove(t))
-            .collect()
+        self.fetch_bnode_seq_and_map(bnodeid, |op, t| op.atom.remove(t))
     }
 
-    // TODO Really, really fix code duplication
     fn fetch_dargument_seq(&mut self, bnodeid: &BNode<A>) -> Option<Vec<DArgument<A>>> {
-        self.bnode_seq
-            .remove(bnodeid)
-            .as_ref()?
-            .iter()
-            .map(|t| self.to_dargument(t))
-            .collect()
+        self.fetch_bnode_seq_and_map(bnodeid, |op, t| op.to_dargument(t))
+    }
+
+    fn fetch_facet_seq(
+        &mut self,
+        bnodeid: &BNode<A>,
+        facet_map: &mut HashMap<Term<A>, PosTriple<A>>,
+    ) -> Option<Vec<FacetRestriction<A>>> {
+        self.fetch_bnode_seq_and_map(bnodeid, |op, id| match facet_map.remove(id)?.0 {
+            [_, Term::FacetTerm(facet), literal] => Some(FacetRestriction {
+                f: facet,
+                l: op.fetch_literal(&literal)?,
+            }),
+            _ => None,
+        })
     }
 
     fn fetch_dr(&mut self, t: &Term<A>) -> Option<DataRange<A>> {
@@ -1423,15 +1423,9 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
                 [class, Term::OWL(VOWL::HasKey), Term::BNode(bnodeid)] => {
                     ok_some! {
                         {
-                            let vpe: Option<Vec<PropertyExpression<_>>> = self.bnode_seq
-                                .remove(bnodeid)?
-                                .into_iter()
-                                .map(|pr| self.find_property_kind(&pr, ic))
-                                .collect();
-
                             HasKey{
                                 ce:self.fetch_ce(class)?,
-                                vpe: vpe?
+                                vpe: self.fetch_pe_seq(bnodeid, ic)?
                             }.into()
                         }
                     }
@@ -1560,11 +1554,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
                     ok_some! {
                         SubObjectPropertyOf {
                             sub: SubObjectPropertyExpression::ObjectPropertyChain(
-                                self.bnode_seq
-                                    .remove(id)?
-                                    .iter()
-                                    .map(|t| self.fetch_ope(t, ic).unwrap())
-                                    .collect()
+                                self.fetch_ope_seq(id, ic)?
                             ),
                             sup: ObjectProperty(pr.clone()).into(),
                         }.into()
