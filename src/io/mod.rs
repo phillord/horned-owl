@@ -4,6 +4,7 @@
 pub mod ofn;
 pub mod owx;
 pub mod rdf;
+pub mod omn;
 
 use curie::PrefixMapping;
 

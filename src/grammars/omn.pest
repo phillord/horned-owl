@@ -1,0 +1,449 @@
+WHITESPACE = _{ " " | "\t" | "\n" | "\r" }
+COMMENT = _{ "#" ~ (!"\n" ~ ANY)* }
+
+LIT_PREFIX              = _{ "Prefix" }
+LIT_ONTOLOGY            = _{ "Ontology" }
+LIT_IMPORT              = _{ "Import" }
+LIT_DECLARATION         = _{ "Declaration" }
+LIT_CLASS               = _{ "Class" }
+LIT_DATATYPE            = _{ "Datatype" }
+LIT_OBJECT_PROPERTY     = _{ "ObjectProperty" }
+LIT_DATA_PROPERTY       = _{ "DataProperty" }
+LIT_ANNOTATION_PROPERTY = _{ "AnnotationProperty" }
+LIT_INDIVIDUAL          = _{ "Individual" }
+LIT_NAMED_INDIVIDUAL    = _{ "NamedIndividual" }
+LIT_ANNOTATION          = _{ "Annotation" }
+LIT_ANNOTATIONS         = _{ "Annotations" }
+LIT_SUB_CLASS_OF        = _{ "SubClassOf" }
+LIT_EQUIVALENT_TO       = _{ "EquivalentTo" }
+LIT_DISJOINT_WITH       = _{ "DisjointWith" }
+LIT_DISJOINT_UNION_OF   = _{ "DisjointUnionOf" }
+LIT_HAS_KEY             = _{ "HasKey" }
+LIT_TYPES               = _{ "Types" }
+LIT_FACTS               = _{ "Facts" }
+LIT_SAME_AS             = _{ "SameAs" }
+LIT_DIFFERENT_FROM      = _{ "DifferentFrom" }
+LIT_SUB_PROPERTY_OF     = _{ "SubPropertyOf" }
+LIT_DOMAIN              = _{ "Domain" }
+LIT_RANGE               = _{ "Range" }
+LIT_CHARACTERISTICS     = _{ "Characteristics" }
+LIT_INVERSE_OF          = _{ "InverseOf" }
+LIT_SUB_PROPERTY_CHAIN  = _{ "SubPropertyChain" }
+
+KEYWORD_AND             = _{ "and" }
+KEYWORD_OR              = _{ "or" }
+KEYWORD_NOT             = _{ "not" }
+KEYWORD_INVERSE         = _{ "inverse"}
+
+LBRACKET = _{ "(" }
+RBRACKET = _{ ")" }
+LSQUARE  = _{ "[" }
+RSQUARE  = _{ "]" }
+LCURLY   = _{ "{" }
+RCURLY   = _{ "}" }
+LCHEVRON = _{ "<" }
+RCHEVRON = _{ ">" }
+POINT    = _{ "." }
+COMMA    = _{ "," }
+COLON    = _{ ":" }
+CARET    = _{ "^" }
+DQUOTE   = _{ "\"" }
+SQUOTE   = _{ "'" }
+PLUS     = _{ "+" }
+MINUS    = _{ "-" }
+AT       = _{ "@" }
+
+
+// FIXME: Check that all keyword terminals are covered.
+KEYWORD = { 
+    "and" 
+    | "max" 
+    | "min" 
+    | "not" 
+    | "only" 
+    | "or" 
+    | "Self"
+    | "some" 
+    | "that" 
+    | "value" 
+    | "inverse"
+}
+
+
+// 2 The Grammar
+
+// 2.0 Meta-productions
+
+LiteralList    = { Literal ~ (COMMA ~ Literal)* }
+IndividualList = { Individual ~ (COMMA ~ Individual)* }
+FacetRestrictionList = { FacetRestriction ~ (COMMA ~ FacetRestriction)* }
+
+AnnotationAnnotatedList                   = { Annotations? ~ Annotation                   ~ (COMMA ~ Annotations? ~ Annotation)* }
+DescriptionAnnotatedList                  = { Annotations? ~ Description                  ~ (COMMA ~ Annotations? ~ Description)* }
+ObjectPropertyCharacteristicAnnotatedList = { Annotations? ~ ObjectPropertyCharacteristic ~ (COMMA ~ Annotations? ~ ObjectPropertyCharacteristic)* }
+DataPropertyCharacteristicAnnotatedList   = { Annotations? ~ DataPropertyCharacteristic   ~ (COMMA ~ Annotations? ~ DataPropertyCharacteristic)* }
+ObjectPropertyExpressionAnnotatedList     = { Annotations? ~ ObjectPropertyExpression     ~ (COMMA ~ Annotations? ~ ObjectPropertyExpression)* }
+DataPropertyExpressionAnnotatedList       = { Annotations? ~ DataPropertyExpression       ~ (COMMA ~ Annotations? ~ DataPropertyExpression)* }
+IRIAnnotatedList                          = { Annotations? ~ IRI                          ~ (COMMA ~ Annotations? ~ IRI)* }
+AnnotationPropertyIRIAnnotatedList        = { Annotations? ~ AnnotationPropertyIRI        ~ (COMMA ~ Annotations? ~ AnnotationPropertyIRI)* }
+FactAnnotatedList                         = { Annotations? ~ Fact                         ~ (COMMA ~ Annotations? ~ Fact)* }
+IndividualAnnotatedList                   = { Annotations? ~ Individual                   ~ (COMMA ~ Annotations? ~ Individual)* }
+DataRangeAnnotatedList                    = { Annotations? ~ DataRange                    ~ (COMMA ~ Annotations? ~ DataRange)* }
+
+Description2List              = { Description              ~ (COMMA ~ Description)+ }
+ObjectPropertyExpression2List = { ObjectPropertyExpression ~ (COMMA ~ ObjectPropertyExpression)+ }
+DataPropertyExpression2List   = { DataPropertyExpression   ~ (COMMA ~ DataPropertyExpression)+ }
+Individual2List               = { Individual               ~ (COMMA ~ Individual)+ }
+
+BracketedObjectPropertyIRI = { LBRACKET ~ ObjectPropertyIRI ~ RBRACKET }
+
+
+// 2.1 IRIs, Integers, Literals and Entities
+
+FullIRI = ${ LCHEVRON ~ RFC3987_Iri ~ RCHEVRON }
+PrefixName = ${ SPARQL_PnameNs }
+AbbreviatedIRI = ${ SPARQL_PnameLn }
+SimpleIRI = ${ SPARQL_PnLocal ~ !COLON }
+IRI = ${ !(KEYWORD ~ WHITESPACE) ~ (FullIRI | AbbreviatedIRI | SimpleIRI) }
+
+NonNegativeInteger = @{ Zero | PositiveInteger }
+PositiveInteger    = @{ NonZero ~ Digit* }
+Digits             = @{ Digit+ }
+NonZero            = @{ ASCII_NONZERO_DIGIT }
+Digit              = @{ ASCII_DIGIT }
+Zero               = @{ "0" }
+
+ClassIRI              = { IRI }
+Datatype              = { IntegerDatatype | DecimalDatatype | FloatDatatype | StringDatatype | DatatypeIRI }
+IntegerDatatype       = { "integer" }
+DecimalDatatype       = { "decimal" }
+FloatDatatype         = { "float"   }
+StringDatatype        = { "string"  }
+DatatypeIRI           = { IRI }
+ObjectPropertyIRI     = { IRI }
+DataPropertyIRI       = { IRI }
+AnnotationPropertyIRI = { IRI }
+Individual            = { NodeID | IndividualIRI }
+IndividualIRI         = { IRI }
+NodeID                = { SPARQL_BlankNodeLabel }
+
+TypedLiteral              = { QuotedString ~ CARET{2} ~ Datatype }
+StringLiteralNoLanguage   = { QuotedString }
+StringLiteralWithLanguage = { QuotedString ~ LanguageTag }
+BooleanLiteral            = { "true" | "false" }
+LanguageTag               = ${ AT ~ BCP47_LangTag }
+QuotedString              = ${ DQUOTE ~ ( !DQUOTE ~ ("\\\\" | "\\\"" | ANY) )* ~ DQUOTE }
+FloatingPointLiteral      = ${ (PLUS | MINUS)? ~ ((Digits ~ (POINT ~ Digits)? ~ Exponent?) | (POINT ~ Digits ~ Exponent?)) ~ FloatSuffix }
+Exponent                  = ${ ("e" | "E") ~ (PLUS | MINUS)? ~ Digits }
+FloatSuffix               = ${ "f" | "F" }
+DecimalLiteral            = ${ (PLUS | MINUS)? ~ Digits ~ POINT ~ Digits ~ !FloatSuffix }
+IntegerLiteral            = ${ (PLUS | MINUS)? ~ Digits }
+Literal                   = { 
+    TypedLiteral 
+    | StringLiteralWithLanguage 
+    | StringLiteralNoLanguage 
+    | BooleanLiteral                // NOTE: not part of the specification, but the OWL-API emits raw boolean tokens
+    | DecimalLiteral 
+    | FloatingPointLiteral 
+    | IntegerLiteral 
+}
+
+Entity = {
+    (LIT_DATATYPE ~ LBRACKET ~ DatatypeIRI ~ RBRACKET)
+    | (LIT_CLASS ~ LBRACKET ~ ClassIRI ~ RBRACKET)
+    | (LIT_OBJECT_PROPERTY ~ LBRACKET ~ ObjectPropertyIRI ~ RBRACKET)
+    | (LIT_DATA_PROPERTY ~ LBRACKET ~ DataPropertyIRI ~ RBRACKET)
+    | (LIT_ANNOTATION_PROPERTY ~ LBRACKET ~ AnnotationPropertyIRI ~ RBRACKET)
+    | (LIT_NAMED_INDIVIDUAL ~ LBRACKET ~ IndividualIRI ~ RBRACKET)
+}
+
+// 2.2 Ontologies and Annotations
+
+Annotations             = { "Annotations:" ~ AnnotationAnnotatedList }
+Annotation              = { AnnotationPropertyIRI ~ AnnotationTarget }
+AnnotationTarget        = { Literal | NodeID | IRI }
+
+OntologyDocument  = { SOI ~ PrefixDeclaration* ~ Ontology ~ EOI }
+PrefixDeclaration = { "Prefix:" ~ PrefixName ~ FullIRI }
+Ontology          = { "Ontology:" ~ OntologyID? ~ Import* ~ Annotations* ~ Frame* }
+OntologyID        = { IRI ~ IRI? }
+Import            = { "Import:" ~ ImportIRI }
+ImportIRI         = { IRI }
+Frame             = { 
+    DatatypeFrame 
+    | ClassFrame 
+    | InverseObjectPropertyFrame
+    | ObjectPropertyFrame 
+    | DataPropertyFrame 
+    | AnnotationPropertyFrame 
+    | IndividualFrame 
+    | MiscClause 
+}
+
+
+// 2.3 Property and Datatype Expressions
+
+ObjectPropertyExpression = { InverseObjectProperty | ObjectPropertyIRI }
+InverseObjectProperty    = { KEYWORD_INVERSE ~ (BracketedObjectPropertyIRI | ObjectPropertyIRI)  }
+DataPropertyExpression   = { DataPropertyIRI }
+PropertyExpression       = { ObjectPropertyExpression | DataPropertyExpression }
+
+DataRange = { DataConjunction ~ (KEYWORD_OR ~ DataConjunction)* }
+DataConjunction = { DataPrimary ~ (KEYWORD_AND ~ DataPrimary)*  }
+DataPrimary = { DataAtomicComplement | DataAtomic }
+DataAtomicComplement = { "not" ~ DataAtomic }
+DataAtomic = { 
+        ( LCURLY ~ LiteralList ~ RCURLY) 
+    |   ( LBRACKET ~ DataRange ~ RBRACKET )
+    |   DatatypeRestriction
+    |   Datatype 
+}
+DatatypeRestriction = { Datatype ~ LSQUARE ~ FacetRestrictionList ~ RSQUARE }
+FacetRestriction = { Facet ~ RestrictionValue }
+
+FacetLength = { "lenght" }
+FacetMinLength = { "minLength" }
+FacetMaxLength = { "maxLength" }
+FacetPattern = { "pattern" }
+FacetLangRange = { "langRange" }
+FacetMinInclusive = { "<=" }
+FacetMinExclusive = { "<" }
+FacetMaxInclusive = { ">=" }
+FacetMaxExclusive = { ">" }
+Facet = {
+    FacetLength
+    | FacetMinLength
+    | FacetMaxLength
+    | FacetPattern
+    | FacetLangRange
+    | FacetMinInclusive
+    | FacetMinExclusive
+    | FacetMaxInclusive
+    | FacetMaxExclusive
+}
+RestrictionValue = { Literal }
+
+
+// 2.4 Descriptions
+
+Description = { Conjunction ~ (KEYWORD_OR ~ Conjunction)* }
+Conjunction = { 
+        (ClassIRI ~ "that" ~ KEYWORD_NOT? ~ Restriction ~ ( KEYWORD_AND ~ KEYWORD_NOT? ~ Restriction )*)
+    |   (Primary ~ (KEYWORD_AND ~ Primary)*)
+}
+Primary = { KEYWORD_NOT? ~ (Restriction | Atomic) }
+
+DataSomeValuesFromRestriction     = { DataPropertyExpression ~ "some" ~ DataPrimary }
+DataAllValuesFromRestriction      = { DataPropertyExpression ~ "only" ~ DataPrimary }
+DataHasValueRestriction           = { DataPropertyExpression ~ "value" ~ Literal }
+DataMinCardinalityRestriction     = { DataPropertyExpression ~ "min" ~ NonNegativeInteger ~ DataPrimary? }
+DataMaxCardinalityRestriction     = { DataPropertyExpression ~ "max" ~ NonNegativeInteger ~ DataPrimary? }
+DataExactCardinalityRestriction   = { DataPropertyExpression ~ "exactly" ~ NonNegativeInteger ~ DataPrimary? }
+ObjectSomeValuesFromRestriction   = { ObjectPropertyExpression ~ "some" ~ Primary }
+ObjectAllValuesFromRestriction    = { ObjectPropertyExpression ~ "only" ~ Primary }
+ObjectHasValueRestriction         = { ObjectPropertyExpression ~ "value" ~ Individual }
+ObjectHasSelfRestriction          = { ObjectPropertyExpression ~ "Self" }
+ObjectMinCardinalityRestriction   = { ObjectPropertyExpression ~ "min" ~ NonNegativeInteger ~ Primary? }
+ObjectMaxCardinalityRestriction   = { ObjectPropertyExpression ~ "max" ~ NonNegativeInteger ~ Primary? }
+ObjectExactCardinalityRestriction = { ObjectPropertyExpression ~ "exactly" ~ NonNegativeInteger ~ Primary? }
+Restriction = {
+    DataSomeValuesFromRestriction
+    | DataAllValuesFromRestriction
+    | DataHasValueRestriction
+    | DataMinCardinalityRestriction
+    | DataMaxCardinalityRestriction
+    | DataExactCardinalityRestriction
+    | ObjectSomeValuesFromRestriction
+    | ObjectAllValuesFromRestriction
+    | ObjectHasValueRestriction
+    | ObjectHasSelfRestriction
+    | ObjectMinCardinalityRestriction
+    | ObjectMaxCardinalityRestriction
+    | ObjectExactCardinalityRestriction
+}
+
+Atomic = {
+    ClassIRI 
+    | ( LCURLY ~ IndividualList ~ RCURLY )
+    | ( LBRACKET ~ Description ~ RBRACKET )
+}
+
+
+// 2.5 Frames and Miscellaneous
+
+FunctionalCharacteristic        = { "Functional" }
+InverseFunctionalCharacteristic = { "InverseFunctional" }
+ReflexiveCharacteristic         = { "Reflexive" }
+IrreflexiveCharacteristic       = { "Irreflexive" }
+SymmetricCharacteristic         = { "Symmetric" }
+AsymmetricCharacteristic        = { "Asymmetric" }
+TransitiveCharacteristic        = { "Transitive" }
+
+DatatypeFrame              = { "Datatype:" ~ Datatype ~ DatatypeClause* }
+DatatypeAnnotationsClause  = { "Annotations:" ~ AnnotationAnnotatedList }
+DatatypeEquivalentToClause = { "EquivalentTo:" ~ Annotations? ~ DataRange }
+DatatypeClause = {
+    DatatypeAnnotationsClause
+    | DatatypeEquivalentToClause
+}
+
+ClassFrame                 = { "Class:" ~ ClassIRI ~ ClassClause* }
+ClassAnnotationsClause     = { "Annotations:" ~ AnnotationAnnotatedList }
+ClassSubClassOfClause      = { "SubClassOf:" ~ DescriptionAnnotatedList }
+ClassEquivalentToClause    = { "EquivalentTo:" ~ DescriptionAnnotatedList }
+ClassDisjointWithClause    = { "DisjointWith:" ~ DescriptionAnnotatedList }
+ClassDisjointUnionOfClause = { "DisjointUnionOf:" ~ Annotations? ~ Description2List }
+ClassHasKeyClause          = { "HasKey:" ~ Annotations? ~ PropertyExpression+ }
+ClassClause = { 
+    ClassAnnotationsClause 
+    | ClassSubClassOfClause 
+    | ClassEquivalentToClause 
+    | ClassDisjointWithClause 
+    | ClassDisjointUnionOfClause 
+    | ClassHasKeyClause 
+}
+
+ObjectPropertyFrame                  = { "ObjectProperty:" ~ ObjectPropertyIRI ~ ObjectPropertyClause* }
+ObjectPropertyAnnotationsClause      = { "Annotations:" ~ AnnotationAnnotatedList }
+ObjectPropertyDomainClause           = { "Domain:" ~ DescriptionAnnotatedList }
+ObjectPropertyRangeClause            = { "Range:" ~ DescriptionAnnotatedList }
+ObjectPropertyCharacteristicsClause  = { "Characteristics:" ~ ObjectPropertyCharacteristicAnnotatedList }
+ObjectPropertySubPropertyOfClause    = { "SubPropertyOf:" ~ ObjectPropertyExpressionAnnotatedList }
+ObjectPropertyEquivalentToClause     = { "EquivalentTo:" ~ ObjectPropertyExpressionAnnotatedList }
+ObjectPropertyDisjointWithClause     = { "DisjointWith:" ~ ObjectPropertyExpressionAnnotatedList }
+ObjectPropertyInverseOfClause        = { "InverseOf:" ~ ObjectPropertyExpressionAnnotatedList }
+ObjectPropertySubPropertyChainClause = { "SubPropertyChain:" ~ Annotations? ~ ObjectPropertyExpression ~ ("o" ~ ObjectPropertyExpression)+}
+ObjectPropertyClause = {
+    ObjectPropertyAnnotationsClause
+    | ObjectPropertyDomainClause
+    | ObjectPropertyRangeClause
+    | ObjectPropertyCharacteristicsClause
+    | ObjectPropertySubPropertyOfClause
+    | ObjectPropertyEquivalentToClause
+    | ObjectPropertyDisjointWithClause
+    | ObjectPropertyInverseOfClause
+    | ObjectPropertySubPropertyChainClause
+}
+ObjectPropertyCharacteristic = {
+    FunctionalCharacteristic
+    | InverseFunctionalCharacteristic
+    | ReflexiveCharacteristic
+    | IrreflexiveCharacteristic
+    | SymmetricCharacteristic
+    | AsymmetricCharacteristic
+    | TransitiveCharacteristic
+}
+
+DataPropertyFrame                 = { ("DataProperty:" ~ DataPropertyIRI) ~ DataPropertyClause* }
+DataPropertyAnnotationsClause     = { "Annotations:" ~ AnnotationAnnotatedList }
+DataPropertyDomainClause          = { "Domain:" ~ DescriptionAnnotatedList }
+DataPropertyRangeClause           = { "Range:" ~ DataRangeAnnotatedList }
+DataPropertyCharacteristicsClause = { "Characteristics:" ~ DataPropertyCharacteristicAnnotatedList }
+DataPropertySubPropertyOfClause   = { "SubPropertyOf:" ~ DataPropertyExpressionAnnotatedList }
+DataPropertyEquivalentToClause    = { "EquivalentTo:" ~ DataPropertyExpressionAnnotatedList }
+DataPropertyDisjointWithClause    = { "DisjointWith:" ~ DataPropertyExpressionAnnotatedList }
+DataPropertyClause = {
+    DataPropertyAnnotationsClause
+    | DataPropertyDomainClause
+    | DataPropertyRangeClause
+    | DataPropertyCharacteristicsClause
+    | DataPropertySubPropertyOfClause
+    | DataPropertyEquivalentToClause
+    | DataPropertyDisjointWithClause
+}
+DataPropertyCharacteristic = {
+    FunctionalCharacteristic
+}
+
+AnnotationPropertyFrame               = { "AnnotationProperty:" ~ AnnotationPropertyIRI ~ AnnotationPropertyClause* }
+AnnotationPropertyAnnotationsClause   = { "Annotations:" ~ AnnotationAnnotatedList }
+AnnotationPropertyDomainClause        = { "Domain:" ~ IRIAnnotatedList }
+AnnotationPropertyRangeClause         = { "Range:" ~ IRIAnnotatedList }
+AnnotationPropertySubPropertyOfClause = { "SubPropertyOf:" ~ AnnotationPropertyIRIAnnotatedList }
+AnnotationPropertyClause = {
+    AnnotationPropertyAnnotationsClause
+    | AnnotationPropertyDomainClause
+    | AnnotationPropertyRangeClause
+    | AnnotationPropertySubPropertyOfClause
+}
+
+IndividualFrame               = { "Individual:" ~ Individual ~ IndividualClause* }
+IndividualAnnotationsClause   = { "Annotations:" ~ AnnotationAnnotatedList }
+IndividualTypesClause         = { "Types:" ~ DescriptionAnnotatedList }
+IndividualFactsClause         = { "Facts:" ~ FactAnnotatedList }
+IndividualSameAsClause        = { "SameAs:" ~ IndividualAnnotatedList }
+IndividualDifferentFromClause = { "DifferentFrom:" ~ IndividualAnnotatedList }
+IndividualClause = {
+    IndividualAnnotationsClause
+    | IndividualTypesClause
+    | IndividualFactsClause
+    | IndividualSameAsClause
+    | IndividualDifferentFromClause
+}
+
+Fact = { InverseFact | ObjectPropertyFact | DataPropertyFact }
+InverseFact = { KEYWORD_NOT ~ (ObjectPropertyFact | DataPropertyFact) }
+ObjectPropertyFact = { ObjectPropertyIRI ~ Individual }
+DataPropertyFact = { DataPropertyIRI ~ Literal }
+
+MiscEquivalentClassesClause          = { "EquivalentClasses:" ~ Annotations? ~ Description2List }
+MiscDisjointClassesClause            = { "DisjointClasses:" ~ Annotations? ~ Description2List }
+MiscEquivalentObjectPropertiesClause = { "EquivalentProperties:" ~ Annotations? ~ ObjectPropertyExpression2List }
+MiscDisjointObjectPropertiesClause   = { "DisjointProperties:" ~ Annotations? ~ ObjectPropertyExpression2List }
+MiscEquivalentDataPropertiesClause   = { "EquivalentProperties:" ~ Annotations? ~ DataPropertyExpression2List }
+MiscDisjointDataPropertiesClause     = { "DisjointProperties:" ~ Annotations? ~ DataPropertyExpression2List }
+MiscSameIndividualClause             = { "SameIndividual:" ~ Annotations? ~ Individual2List }
+MiscDifferentIndividualsClause       = { "DifferentIndividuals:" ~ Annotations? ~ Individual2List }
+MiscRuleClause                       = { "Rule:" ~ SWRLRule }
+MiscClause = {
+    MiscEquivalentClassesClause
+    | MiscDisjointClassesClause
+    | MiscEquivalentObjectPropertiesClause
+    | MiscDisjointObjectPropertiesClause
+    | MiscEquivalentDataPropertiesClause
+    | MiscDisjointDataPropertiesClause
+    | MiscSameIndividualClause
+    | MiscDifferentIndividualsClause
+    | MiscRuleClause
+}
+
+// NOTE: This particular construct is not legal according to the OWL2 Manchester
+//       syntax, but it is actually emitted by the OWL API instead of using the 
+//       `DisjointProperties` and `EquivalentProperties` miscellaneous clauses 
+//       to mark object property disjunction or equivalence:
+//
+//       ObjectProperty:  inverse (obo:OBI_0000312)
+//          EquivalentTo: 
+//              obo:OBI_0000299 
+
+InverseObjectPropertyFrame              = { "ObjectProperty:" ~ InverseObjectProperty ~ InverseObjectPropertyClause }
+InverseObjectPropertyEquivalentToClause = { "EquivalentTo:" ~ ObjectPropertyExpressionAnnotatedList }
+InverseObjectPropertyDisjointWithClause = { "DisjointWith:" ~ ObjectPropertyExpressionAnnotatedList }
+InverseObjectPropertyClause             = { InverseObjectPropertyEquivalentToClause | InverseObjectPropertyDisjointWithClause }
+
+
+// Annex: SWRL Rules
+
+SWRLRule = { SWRLAntecedentList ~ "->" ~ SWRLConsequentList }
+
+SWRLAntecedentList = { SWRLAntecedent? ~ (COMMA ~ SWRLAntecedent)* }
+SWRLConsequentList = { SWRLConsequent? ~ (COMMA ~ SWRLConsequent)* }
+
+SWRLAntecedent = { SWRLAtom }
+SWRLConsequent = { SWRLAtom }
+
+SWRLAtom = {
+    Description ~ LBRACKET ~ SWRLIObject ~ RBRACKET 
+    | DataRange ~ LBRACKET ~ SWRLDObject ~ RBRACKET
+    | ObjectPropertyIRI ~ LBRACKET ~ SWRLIObject ~ COMMA ~ SWRLDObject ~ RBRACKET
+    | DataPropertyIRI ~ LBRACKET ~ SWRLIObject ~ COMMA ~ SWRLDObject ~ RBRACKET
+    | "sameAs" ~ LBRACKET ~ SWRLIObject ~ COMMA ~ SWRLIObject ~ RBRACKET
+    | "differentFrom" ~ LBRACKET ~ SWRLIObject ~ COMMA ~ SWRLIObject ~ RBRACKET
+    | "builtIn" ~ LBRACKET ~ SWRLBuiltinID ~ (COMMA ~ SWRLDObject)* ~ RBRACKET
+}
+
+SWRLBuiltinID = { IRI }
+SWRLIObject = { SWRLIvariable | Individual }
+SWRLDObject = { SWRLDvariable | Literal }
+SWRLIvariable = { "?" ~ IRI } 
+SWRLDvariable = { "?" ~ IRI } 
