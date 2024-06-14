@@ -36,13 +36,10 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> ClosureOntologyParser<'a, A, AA> {
     pub fn parse_path(&mut self, pb: &PathBuf) -> Result<Vec<IRI<A>>, HornedError> {
         let file_iri = path_to_file_iri(self.b, pb);
         let s = ::std::fs::read_to_string(pb)?;
-        let mut v = vec![];
 
         // We use the IRI that we try to parse, but we don't know that
         // this is the same as file says at this point.
-        self.parse_content_from_iri(s, None, file_iri, &mut v)?;
-
-        Ok(v)
+        self.parse_content_from_iri(s, None, file_iri)
     }
 
     /// Parse content from some IRI.
@@ -64,20 +61,8 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> ClosureOntologyParser<'a, A, AA> {
         source_iri: &IRI<A>,
         relative_doc_iri: Option<&IRI<A>>,
     ) -> Result<Vec<IRI<A>>, HornedError> {
-        let mut v = vec![];
-        self.parse_iri_1(source_iri, relative_doc_iri, &mut v)?;
-
-        Ok(v)
-    }
-
-    fn parse_iri_1(
-        &mut self,
-        source_iri: &IRI<A>,
-        relative_doc_iri: Option<&IRI<A>>,
-        v: &mut Vec<IRI<A>>,
-    ) -> Result<(), HornedError> {
         let (new_doc_iri, s) = resolve_iri(source_iri, relative_doc_iri)?;
-        self.parse_content_from_iri(s, relative_doc_iri, new_doc_iri, v)
+        self.parse_content_from_iri(s, relative_doc_iri, new_doc_iri)
     }
 
     /// Parse content from some IRI
@@ -93,14 +78,12 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> ClosureOntologyParser<'a, A, AA> {
     /// * `relative_doc_iri` -- The document IRI which was used to
     ///    determine the relative location of `s` if any.
     /// * `new_doc_iri` -- the IRI that `s` was actually read from
-    /// * `v` -- Vec containing all IRIs in the import closure.
     fn parse_content_from_iri(
         &mut self,
         s: String,
         relative_doc_iri: Option<&IRI<A>>,
         new_doc_iri: IRI<A>,
-        v: &mut Vec<IRI<A>>,
-    ) -> Result<(), HornedError> {
+    ) -> Result<Vec<IRI<A>>, HornedError> {
         let mut p = parser_with_build(&mut s.as_bytes(), self.b, self.config);
         let imports = p.parse_imports().unwrap();
         p.parse_declarations()?;
@@ -108,19 +91,25 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> ClosureOntologyParser<'a, A, AA> {
 
         o.insert(DocIRI(new_doc_iri.clone()));
 
-        if let Some(declared_iri) = o.i().the_ontology_id_or_default().iri.clone() {
-            v.push(declared_iri.clone());
+        let mut res = if let Some(declared_iri) = o.i().the_ontology_id_or_default().iri {
+            vec![declared_iri]
+        } else {
+            vec![]
+        };
 
+        if let Some(declared_iri) = o.i().the_ontology_id_or_default().iri {
             self.import_map
                 .insert(declared_iri.clone(), imports.clone());
             self.op.insert(declared_iri, p);
         }
 
-        for iri in imports {
-            // check we haven't already
-            self.parse_iri_1(&iri, relative_doc_iri.or(Some(&new_doc_iri)), v)?;
-        }
-        Ok(())
+        res.extend(
+            imports
+                .iter()
+                .flat_map(|iri| self.parse_iri(iri, relative_doc_iri.or(Some(&new_doc_iri))))
+                .flatten(),
+        );
+        Ok(res)
     }
 
     // Finish the parse for the ontology at index `i`
@@ -208,7 +197,7 @@ mod test {
     fn test_read() {
         let path = Path::new("src/ont/owl-rdf/withimport/import-property.owl");
         let b = Build::new_rc();
-        let iri = path_to_file_iri(&b, &path);
+        let iri = path_to_file_iri(&b, path);
 
         let (_, ic): (RcRDFOntology, _) = read(&iri, Default::default()).unwrap();
         assert!(ic.is_complete());
@@ -220,7 +209,7 @@ mod test {
     fn test_read_closure() {
         let path = Path::new("src/ont/owl-rdf/withimport/import-property.owl");
         let b = Build::new_rc();
-        let iri = path_to_file_iri(&b, &path);
+        let iri = path_to_file_iri(&b, path);
 
         let v: Vec<(RcRDFOntology, _)> = read_closure(&b, &iri, Default::default()).unwrap();
         let v: Vec<SetOntology<_>> = v
