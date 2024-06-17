@@ -3,16 +3,34 @@
 use horned_owl::{
     error::HornedError,
     io::{ParserConfiguration, ParserOutput, ResourceType},
-    model::{Build, RcAnnotatedComponent, RcStr, IRI},
-    ontology::component_mapped::RcComponentMappedOntology,
+    model::{Build, ForIRI, RcAnnotatedComponent, RcStr, IRI},
+    ontology::{
+        component_mapped::{ComponentMappedOntology, RcComponentMappedOntology},
+        indexed::ForIndex,
+    },
     resolve::{localize_iri, strict_resolve_iri},
 };
 
 use std::{
     fs::File,
-    io::{BufReader, Write},
+    io::{BufReader, Write as StdWrite},
     path::Path,
 };
+
+pub fn write<A: ForIRI, AA: ForIndex<A>, W: StdWrite>(
+    format: &str,
+    write: &mut W,
+    ont: &ComponentMappedOntology<A, AA>,
+) -> Result<(), HornedError> {
+    match format {
+        "owx" => horned_owl::io::owx::writer::write(write, ont, None),
+        "owl" => horned_owl::io::rdf::writer::write(write, ont),
+        _ => Err(HornedError::CommandError(format!(
+            "Format is unknown: {}",
+            format
+        ))),
+    }
+}
 
 pub fn path_type(path: &Path) -> Option<ResourceType> {
     match path.extension().and_then(|s| s.to_str()) {

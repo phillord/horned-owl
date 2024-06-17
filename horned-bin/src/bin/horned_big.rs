@@ -1,9 +1,11 @@
+use clap::arg;
 use clap::App;
 use clap::Arg;
 use clap::ArgMatches;
 
+use horned_bin::write;
+
 use horned_owl::error::HornedError;
-use horned_owl::io::owx::writer::write;
 use horned_owl::model::Build;
 use horned_owl::model::MutableOntology;
 use horned_owl::ontology::component_mapped::RcComponentMappedOntology;
@@ -22,6 +24,13 @@ pub(crate) fn app(name: &str) -> App<'static> {
         .version("0.1")
         .about("Generate a big OWL file for testing")
         .author("Phillip Lord")
+        .arg(
+            arg!(
+                --format <FORMAT> "Which format to write to"
+            )
+            .default_value("owl")
+            .required(false),
+        )
         .arg(
             Arg::with_name("SIZE")
                 .help("The number of classes the file should have")
@@ -44,5 +53,9 @@ pub(crate) fn matcher(matches: &ArgMatches) -> Result<(), HornedError> {
     }
 
     let amo: RcComponentMappedOntology = o.into();
-    write(&mut stdout(), &amo, None)
+    write(
+        matches.value_of("format").expect("oops"),
+        &mut stdout(),
+        &amo,
+    )
 }

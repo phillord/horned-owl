@@ -424,16 +424,18 @@ impl<A: ForIRI, AA: ForIndex<A>, F: RdfXmlFormatter<A, W>, W: Write> Render<A, F
             for i in imp {
                 triples!(f, iri, ng.nn(OWL::Imports), &i.0);
             }
+
             let oa = self.i().ontology_annotation();
             ng.keep_this_bn(iri.into());
             for a in oa {
                 a.0.render(f, ng)?;
             }
-
-            for cmp in self.i().iter() {
-                cmp.render(f, ng)?;
-            }
         }
+
+        for cmp in self.i().iter() {
+            cmp.render(f, ng)?;
+        }
+
         Ok(())
     }
 }
