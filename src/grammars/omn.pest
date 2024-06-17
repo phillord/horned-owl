@@ -293,7 +293,7 @@ ClassSubClassOfClause      = { "SubClassOf:" ~ DescriptionAnnotatedList }
 ClassEquivalentToClause    = { "EquivalentTo:" ~ DescriptionAnnotatedList }
 ClassDisjointWithClause    = { "DisjointWith:" ~ DescriptionAnnotatedList }
 ClassDisjointUnionOfClause = { "DisjointUnionOf:" ~ Annotations? ~ Description2List }
-ClassHasKeyClause          = { "HasKey:" ~ Annotations? ~ PropertyExpression+ }
+ClassHasKeyClause          = { "HasKey:" ~ Annotations? ~ PropertyExpression ~ (COMMA ~ PropertyExpression)* }
 ClassClause = { 
     ClassAnnotationsClause 
     | ClassSubClassOfClause 
@@ -446,7 +446,7 @@ SWRLAtom = {
     | DataPropertyIRI ~ LBRACKET ~ SWRLIObject ~ COMMA ~ SWRLDObject ~ RBRACKET
     | "SameAs" ~ LBRACKET ~ SWRLIObject ~ COMMA ~ SWRLIObject ~ RBRACKET
     | "DifferentFrom" ~ LBRACKET ~ SWRLIObject ~ COMMA ~ SWRLIObject ~ RBRACKET
-    | "BuiltIn" ~ LBRACKET ~ SWRLBuiltinID ~ (COMMA ~ SWRLDObject)* ~ RBRACKET
+    | SWRLBuiltinID ~ LBRACKET ~ SWRLDObject ~ (COMMA ~ SWRLDObject)* ~ RBRACKET
 }
 
 SWRLBuiltinID = { IRI }
