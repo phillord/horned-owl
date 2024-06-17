@@ -39,4 +39,17 @@ pub mod test {
             Err(e) => panic!("parser failed: {}", e),
         }
     }
+
+    #[test]
+    fn test_property_expression() {
+        OwlManchesterLexer::lex(Rule::PropertyExpression, "o:r").unwrap();
+    }
+
+
+    #[test]
+    fn test_has_key() {
+        let _ = OwlManchesterLexer::lex(Rule::ClassHasKeyClause, "HasKey:\no:r\n").unwrap();
+        let _ = OwlManchesterLexer::lex(Rule::ClassHasKeyClause, "HasKey:\no:r, o:s\n").unwrap();
+    }
+
 }

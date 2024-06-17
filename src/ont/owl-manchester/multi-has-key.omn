@@ -25,7 +25,6 @@ DataProperty: o:A
 Class: o:C
 
     HasKey: 
-        o:r, 
-        o:s
+        o:r, o:s
     
     
