@@ -91,7 +91,6 @@ macro_rules! vocabulary_type {
                 match self {
                     $(
                         $enum_type::$variant => {
-                            dbg!(&self);
                             let mut iri_str = String::from(Namespace::$ns.as_ref());
                             let mut variant_str = String::from(stringify!($variant));
                             if $first_lowercase {
