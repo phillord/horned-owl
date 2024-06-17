@@ -416,10 +416,17 @@ MiscClause = {
 //          EquivalentTo: 
 //              obo:OBI_0000299 
 
-InverseObjectPropertyFrame              = { "ObjectProperty:" ~ InverseObjectProperty ~ InverseObjectPropertyClause }
-InverseObjectPropertyEquivalentToClause = { "EquivalentTo:" ~ ObjectPropertyExpressionAnnotatedList }
-InverseObjectPropertyDisjointWithClause = { "DisjointWith:" ~ ObjectPropertyExpressionAnnotatedList }
-InverseObjectPropertyClause             = { InverseObjectPropertyEquivalentToClause | InverseObjectPropertyDisjointWithClause }
+InverseObjectPropertyFrame                 = { "ObjectProperty:" ~ InverseObjectProperty ~ InverseObjectPropertyClause }
+InverseObjectPropertyEquivalentToClause    = { "EquivalentTo:" ~ ObjectPropertyExpressionAnnotatedList }
+InverseObjectPropertyDisjointWithClause    = { "DisjointWith:" ~ ObjectPropertyExpressionAnnotatedList }
+InverseObjectPropertyCharacteristicsClause = { "Characteristics:" ~ ObjectPropertyCharacteristicAnnotatedList }
+InverseObjectPropertySubPropertyOfClause   = { "SubPropertyOf:" ~ ObjectPropertyExpressionAnnotatedList }
+InverseObjectPropertyClause                = { 
+    InverseObjectPropertyEquivalentToClause 
+  | InverseObjectPropertyDisjointWithClause 
+  | InverseObjectPropertyCharacteristicsClause
+  | InverseObjectPropertySubPropertyOfClause
+}
 
 
 // Annex: SWRL Rules
@@ -437,9 +444,9 @@ SWRLAtom = {
     | DataRange ~ LBRACKET ~ SWRLDObject ~ RBRACKET
     | ObjectPropertyIRI ~ LBRACKET ~ SWRLIObject ~ COMMA ~ SWRLDObject ~ RBRACKET
     | DataPropertyIRI ~ LBRACKET ~ SWRLIObject ~ COMMA ~ SWRLDObject ~ RBRACKET
-    | "sameAs" ~ LBRACKET ~ SWRLIObject ~ COMMA ~ SWRLIObject ~ RBRACKET
-    | "differentFrom" ~ LBRACKET ~ SWRLIObject ~ COMMA ~ SWRLIObject ~ RBRACKET
-    | "builtIn" ~ LBRACKET ~ SWRLBuiltinID ~ (COMMA ~ SWRLDObject)* ~ RBRACKET
+    | "SameAs" ~ LBRACKET ~ SWRLIObject ~ COMMA ~ SWRLIObject ~ RBRACKET
+    | "DifferentFrom" ~ LBRACKET ~ SWRLIObject ~ COMMA ~ SWRLIObject ~ RBRACKET
+    | "BuiltIn" ~ LBRACKET ~ SWRLBuiltinID ~ (COMMA ~ SWRLDObject)* ~ RBRACKET
 }
 
 SWRLBuiltinID = { IRI }
