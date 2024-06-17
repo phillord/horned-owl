@@ -104,5 +104,7 @@ triples-round-all:
 clippy:
 	cargo clippy
 
+install:
+	cargo install --path horned-bin
 
 -include makefile-local
