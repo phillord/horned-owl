@@ -8,3 +8,9 @@ Cargo.lock
 /tmp/
 /big-owl
 /makefile-local
+
+# IDEs
+.vscode/
+
+# Mac OS X
+.DS_Store

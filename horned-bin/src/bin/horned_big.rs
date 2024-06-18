@@ -51,7 +51,7 @@ pub(crate) fn matcher(matches: &ArgMatches) -> Result<(), HornedError> {
 
     o.insert(OntologyID {
         iri: Some(b.iri("http://www.example.com/iri")),
-        viri: None
+        viri: None,
     });
 
     for i in 1..size + 1 {

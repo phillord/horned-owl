@@ -106,19 +106,6 @@ macro_rules! vocabulary_type {
             }
         }
 
-        impl $enum_type {
-            fn lookup() -> &'static HashMap<&'static [u8],$enum_type> {
-                static STORAGE: OnceLock<HashMap<&[u8], $enum_type>> = OnceLock::new();
-                STORAGE.get_or_init(|| {
-                    let mut hm = HashMap::new();
-                    $(
-                        hm.insert($enum_type::$variant.meta().deref().as_bytes(), $enum_type::$variant);
-                    )*
-                    hm
-                })
-            }
-        }
-
         lazy_meta! {
             $enum_type, IRI<String>, $storage;
             $(
@@ -903,10 +890,10 @@ mod tests {
         ));
         // ...and `String`s.
         assert!(is_annotation_builtin(
-            &"http://www.w3.org/2000/01/rdf-schema#comment".to_string()
+            "http://www.w3.org/2000/01/rdf-schema#comment".to_string()
         ));
         assert!(!is_annotation_builtin(
-            &"http://www.w3.org/2002/07/owl#fred".to_string()
+            "http://www.w3.org/2002/07/owl#fred".to_string()
         ));
     }
 
