@@ -16,15 +16,16 @@ repos:
        pass_filenames: false
        stages: [pre-commit, pre-push]
 -   repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v3.2.0
+    rev: v4.6.0
     hooks:
     -   id: check-added-large-files
     -   id: no-commit-to-branch
         args: [--branch, rfc]
 -   repo: https://github.com/doublify/pre-commit-rust
-    rev: eeee35a
+    rev: v1.0
     hooks:
     -   id: fmt
         args: ["--check", "--"]
         pass_filenames: false
     -   id: clippy
+        pass_filenames: false
