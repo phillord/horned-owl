@@ -36,7 +36,7 @@ default-members=[".", "horned-bin"]
 [workspace.dependencies]
 indexmap="1.0.2"
 ##pretty_rdf={path="./pretty_rdf"}
-pretty_rdf="0.7.0"
+pretty_rdf="0.8.0"
 rio_api="0.8.4"
 rio_xml="0.8.4"
 
