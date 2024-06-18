@@ -2,9 +2,9 @@
 //! [W3C recommendation](https://www.w3.org/TR/owl2-overview/#Syntaxes).
 
 pub mod ofn;
+pub mod omn;
 pub mod owx;
 pub mod rdf;
-pub mod omn;
 
 use curie::PrefixMapping;
 

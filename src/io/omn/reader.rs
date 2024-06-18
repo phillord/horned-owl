@@ -45,11 +45,9 @@ pub mod test {
         OwlManchesterLexer::lex(Rule::PropertyExpression, "o:r").unwrap();
     }
 
-
     #[test]
     fn test_has_key() {
         let _ = OwlManchesterLexer::lex(Rule::ClassHasKeyClause, "HasKey:\no:r\n").unwrap();
         let _ = OwlManchesterLexer::lex(Rule::ClassHasKeyClause, "HasKey:\no:r, o:s\n").unwrap();
     }
-
 }

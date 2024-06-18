@@ -163,11 +163,12 @@ Annotations             = { "Annotations:" ~ AnnotationAnnotatedList }
 Annotation              = { AnnotationPropertyIRI ~ AnnotationTarget }
 AnnotationTarget        = { Literal | NodeID | IRI }
 
-OntologyDocument  = { SOI ~ PrefixDeclaration* ~ Ontology ~ EOI }
+OntologyDocument  = { SOI ~ Prefixes ~ Ontology ~ EOI }
+Prefixes          = { PrefixDeclaration* }
 PrefixDeclaration = { "Prefix:" ~ PrefixName ~ FullIRI }
 Ontology          = { "Ontology:" ~ OntologyID? ~ Import* ~ Annotations* ~ Frame* }
 OntologyID        = { IRI ~ IRI? }
-Import            = { "Import:" ~ ImportIRI }
+Import            = { "Import:" ~ IRI }
 ImportIRI         = { IRI }
 Frame             = { 
     DatatypeFrame 
@@ -201,7 +202,7 @@ DataAtomic = {
 DatatypeRestriction = { Datatype ~ LSQUARE ~ FacetRestrictionList ~ RSQUARE }
 FacetRestriction = { Facet ~ RestrictionValue }
 
-FacetLength = { "lenght" }
+FacetLength = { "length" }
 FacetMinLength = { "minLength" }
 FacetMaxLength = { "maxLength" }
 FacetPattern = { "pattern" }
