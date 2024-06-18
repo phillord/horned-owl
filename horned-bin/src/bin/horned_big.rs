@@ -8,6 +8,7 @@ use horned_bin::write;
 use horned_owl::error::HornedError;
 use horned_owl::model::Build;
 use horned_owl::model::MutableOntology;
+use horned_owl::model::OntologyID;
 use horned_owl::ontology::component_mapped::RcComponentMappedOntology;
 use horned_owl::ontology::set::SetOntology;
 
@@ -47,6 +48,11 @@ pub(crate) fn matcher(matches: &ArgMatches) -> Result<(), HornedError> {
 
     let b = Build::new_rc();
     let mut o = SetOntology::new_rc();
+
+    o.insert(OntologyID {
+        iri: Some(b.iri("http://www.example.com/iri")),
+        viri: None
+    });
 
     for i in 1..size + 1 {
         o.declare(b.class(format!("https://www.example.com/o{}", i)));
