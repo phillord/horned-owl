@@ -256,8 +256,8 @@ impl<A: ForIRI> IRI<A> {
     /// ```
     ///
     /// Use `is` to compare to another IRI
-    pub fn is_as<S: AsRef<str>>(&self, other: S) -> bool {
-        **self == *other.as_ref()
+    pub fn is_as(&self, other: &str) -> bool {
+        **self == *other
     }
 }
 
@@ -290,12 +290,12 @@ impl<A: ForIRI> Build<A> {
     /// let anon = b.anon("anon00001");
     /// assert_eq!("anon00001", String::from(anon));
     /// ```
-    pub fn anon<S: Borrow<str>>(&self, s: S) -> AnonymousIndividual<A> {
+    pub fn anon(&self, s: &str) -> AnonymousIndividual<A> {
         let mut cache = self.1.borrow_mut();
-        if let Some(anon) = cache.get(s.borrow()) {
+        if let Some(anon) = cache.get(s) {
             anon.clone()
         } else {
-            let anon = AnonymousIndividual(s.borrow().to_string().into());
+            let anon = AnonymousIndividual(s.to_string().into());
             cache.insert(anon.clone());
             anon
         }
@@ -311,12 +311,12 @@ impl<A: ForIRI> Build<A> {
     /// let iri = b.iri("http://www.example.com");
     /// assert_eq!("http://www.example.com", String::from(iri));
     /// ```
-    pub fn iri<S: Borrow<str>>(&self, s: S) -> IRI<A> {
+    pub fn iri(&self, s: &str) -> IRI<A> {
         let mut cache = self.0.borrow_mut();
-        if let Some(iri) = cache.get(s.borrow()) {
+        if let Some(iri) = cache.get(s) {
             iri.clone()
         } else {
-            let iri = IRI(s.borrow().to_string().into());
+            let iri = IRI(s.to_string().into());
             cache.insert(iri.clone());
             iri
         }
@@ -330,16 +330,13 @@ impl<A: ForIRI> Build<A> {
     /// ```
     /// # use horned_owl::model::*;
     /// let b = Build::new_rc();
-    /// let c1 = b.class("http://www.example.com".to_string());
+    /// let c1 = b.class(&"http://www.example.com".to_string());
     /// let c2 = b.class("http://www.example.com");
     ///
     /// assert_eq!(c1, c2);
     /// ```
     ///
-    pub fn class<S>(&self, s: S) -> Class<A>
-    where
-        S: Borrow<str>,
-    {
+    pub fn class(&self, s: &str) -> Class<A> {
         Class(self.iri(s))
     }
 
@@ -350,15 +347,12 @@ impl<A: ForIRI> Build<A> {
     /// ```
     /// # use horned_owl::model::*;
     /// let b = Build::new_rc();
-    /// let obp1 = b.object_property("http://www.example.com".to_string());
+    /// let obp1 = b.object_property(&"http://www.example.com".to_string());
     /// let obp2 = b.object_property("http://www.example.com");
     ///
     /// assert_eq!(obp1, obp2);
     /// ```
-    pub fn object_property<S>(&self, s: S) -> ObjectProperty<A>
-    where
-        S: Borrow<str>,
-    {
+    pub fn object_property(&self, s: &str) -> ObjectProperty<A> {
         ObjectProperty(self.iri(s))
     }
 
@@ -369,15 +363,12 @@ impl<A: ForIRI> Build<A> {
     /// ```
     /// # use horned_owl::model::*;
     /// let b = Build::new_rc();
-    /// let anp1 = b.annotation_property("http://www.example.com".to_string());
+    /// let anp1 = b.annotation_property(&"http://www.example.com".to_string());
     /// let anp2 = b.annotation_property("http://www.example.com");
     ///
     /// assert_eq!(anp1, anp2);
     /// ```
-    pub fn annotation_property<S>(&self, s: S) -> AnnotationProperty<A>
-    where
-        S: Borrow<str>,
-    {
+    pub fn annotation_property(&self, s: &str) -> AnnotationProperty<A> {
         AnnotationProperty(self.iri(s))
     }
 
@@ -388,15 +379,12 @@ impl<A: ForIRI> Build<A> {
     /// ```
     /// # use horned_owl::model::*;
     /// let b = Build::new_rc();
-    /// let dp1 = b.data_property("http://www.example.com".to_string());
+    /// let dp1 = b.data_property(&"http://www.example.com".to_string());
     /// let dp2 = b.data_property("http://www.example.com");
     ///
     /// assert_eq!(dp1, dp2);
     /// ```
-    pub fn data_property<S>(&self, s: S) -> DataProperty<A>
-    where
-        S: Borrow<str>,
-    {
+    pub fn data_property(&self, s: &str) -> DataProperty<A> {
         DataProperty(self.iri(s))
     }
 
@@ -407,15 +395,12 @@ impl<A: ForIRI> Build<A> {
     /// ```
     /// # use horned_owl::model::*;
     /// let b = Build::new_rc();
-    /// let ni1 = b.named_individual("http://www.example.com".to_string());
+    /// let ni1 = b.named_individual(&"http://www.example.com".to_string());
     /// let ni2 = b.named_individual("http://www.example.com");
     ///
     /// assert_eq!(ni1, ni2);
     /// ```
-    pub fn named_individual<S>(&self, s: S) -> NamedIndividual<A>
-    where
-        S: Borrow<str>,
-    {
+    pub fn named_individual(&self, s: &str) -> NamedIndividual<A> {
         NamedIndividual(self.iri(s))
     }
 
@@ -426,15 +411,12 @@ impl<A: ForIRI> Build<A> {
     /// ```
     /// # use horned_owl::model::*;
     /// let b = Build::new_rc();
-    /// let ni1 = b.datatype("http://www.example.com".to_string());
+    /// let ni1 = b.datatype(&"http://www.example.com".to_string());
     /// let ni2 = b.datatype("http://www.example.com");
     ///
     /// assert_eq!(ni1, ni2);
     /// ```
-    pub fn datatype<S>(&self, s: S) -> Datatype<A>
-    where
-        S: Borrow<str>,
-    {
+    pub fn datatype(&self, s: &str) -> Datatype<A> {
         Datatype(self.iri(s))
     }
 
@@ -445,15 +427,12 @@ impl<A: ForIRI> Build<A> {
     /// ```
     /// # use horned_owl::model::*;
     /// let b = Build::new_rc();
-    /// let ni1 = b.variable("http://www.example.com".to_string());
+    /// let ni1 = b.variable(&"http://www.example.com".to_string());
     /// let ni2 = b.variable("http://www.example.com");
     ///
     /// assert_eq!(ni1, ni2);
     /// ```
-    pub fn variable<S>(&self, s: S) -> Variable<A>
-    where
-        S: Borrow<str>,
-    {
+    pub fn variable(&self, s: &str) -> Variable<A> {
         Variable(self.iri(s))
     }
 }
@@ -624,8 +603,8 @@ macro_rules! named {
                 /// # use horned_owl::model::Build;
                 /// let build = Build::new_rc();
                 /// let iri = build.iri("http://www.example.com");
-                /// let class = build.class(iri.clone());
-                /// let individual = build.named_individual(iri.clone());
+                /// let class = build.class(&iri);
+                /// let individual = build.named_individual(&iri);
                 ///
                 /// // Named entities can use equality
                 /// assert_eq!(class, class);
@@ -660,7 +639,7 @@ macro_rules! named {
                 /// ```
                 ///
                 /// Use `is` to compare $name to other named entities, or IRIs
-                pub fn is_as<S:AsRef<str>>(&self, other: S) -> bool
+                pub fn is_as(&self, other: &str) -> bool
                 {
                     IRI::<A>::is_as(self, other)
                 }
@@ -2142,9 +2121,9 @@ mod test {
     fn test_iri_creaadtion() {
         let build = Build::new();
 
-        let iri1 = build.iri("http://example.com".to_string());
+        let iri1 = build.iri("http://example.com");
 
-        let iri2 = build.iri("http://example.com".to_string());
+        let iri2 = build.iri("http://example.com");
 
         // these are equal to each other
         assert_eq!(iri1, iri2);
@@ -2160,9 +2139,9 @@ mod test {
     fn test_iri_string_creation() {
         let build = Build::new_rc();
 
-        let iri_string = build.iri("http://www.example.com".to_string());
+        let iri_string = build.iri(&"http://www.example.com".to_string());
         let iri_static = build.iri("http://www.example.com");
-        let iri_from_iri = build.iri(iri_static.clone());
+        let iri_from_iri = build.iri(&iri_static);
 
         let s = "http://www.example.com";
         let iri_str = build.iri(s);
@@ -2210,7 +2189,7 @@ mod test {
     #[test]
     fn test_class_string_ref() {
         let s = String::from("http://www.example.com");
-        let c = Build::new_rc().class(s.clone());
+        let c = Build::new_rc().class(&s);
 
         assert!(c.is_as(&s));
     }
@@ -2232,8 +2211,8 @@ mod test {
         let build = Build::new_rc();
 
         let iri = build.iri("http://www.example.com");
-        let class = build.class(iri.clone());
-        let individual = build.named_individual(iri.clone());
+        let class = build.class(&iri);
+        let individual = build.named_individual(&iri);
 
         // Class comparision with equals
         assert_eq!(class, class);
@@ -2255,7 +2234,7 @@ mod test {
         assert!(!class.is_as("http://www.fred.com"));
 
         // Or other classes if we deref a bit
-        assert!(class.is_as(&*class));
+        assert!(class.is_as(&class));
     }
 
     #[test]
@@ -2311,7 +2290,7 @@ mod test {
 
         let iri = b.iri("http://www.example.com");
         let ca = Atom::ClassAtom {
-            pred: ClassExpression::Class(b.class(iri.clone())),
+            pred: ClassExpression::Class(b.class(&iri)),
             arg: IArgument::Variable(iri.clone().into()),
         };
 

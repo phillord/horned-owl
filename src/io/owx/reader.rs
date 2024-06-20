@@ -218,7 +218,7 @@ fn get_iri_value_for<A: ForIRI, R: BufRead>(
                 // Into an iri
                 r.build.iri(
                     // or a curie
-                    x,
+                    &x,
                 )
             }),
     )
@@ -926,7 +926,7 @@ impl<A: ForIRI> FromStart<A> for AnonymousIndividual<A> {
         e: &BytesStart,
     ) -> Result<AnonymousIndividual<A>, HornedError> {
         let ai: AnonymousIndividual<_> = r.build.anon(
-            get_attr_value_str(&mut r.reader, e, b"nodeID")?
+            &get_attr_value_str(&mut r.reader, e, b"nodeID")?
                 .ok_or_else(|| error_missing_attribute("nodeID Expected", r))?,
         );
         Ok(ai)
@@ -1337,7 +1337,7 @@ from_xml! {IRI, r, end,
                 match e {
                     (ref _ns,Event::Text(ref e)) => {
                         iri = Some(r.build.iri
-                                   (decode_expand_curie_maybe(r, e)?));
+                                   (&decode_expand_curie_maybe(r, e)?));
                     },
                     (ref ns, Event::End(ref e))
                         if is_owl_name(ns, e, end) =>

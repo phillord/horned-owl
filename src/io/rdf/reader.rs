@@ -1211,7 +1211,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
                                 {
                                     n:self.fetch_u32(literal)?,
                                     ope,
-                                    bce: self.b.class(VOWL::Thing).into()
+                                    bce: self.b.class(&VOWL::Thing).into()
                                 }
                             },
                             PropertyExpression::DataProperty(dp) => {
@@ -1219,7 +1219,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
                                 {
                                     n:self.fetch_u32(literal)?,
                                     dp,
-                                    dr: self.b.datatype(OWL2Datatype::Literal).into(),
+                                    dr: self.b.datatype(&OWL2Datatype::Literal).into(),
                                 }
                             }
                             _ => {
@@ -1251,7 +1251,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
                         {
                             n:self.fetch_u32(literal)?,
                             ope: pr.into(),
-                            bce: self.b.class(VOWL::Thing).into()
+                            bce: self.b.class(&VOWL::Thing).into()
                         }
                     }
                 }
@@ -1278,7 +1278,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
                         {
                             n:self.fetch_u32(literal)?,
                             ope: pr.into(),
-                            bce: self.b.class(VOWL::Thing).into()
+                            bce: self.b.class(&VOWL::Thing).into()
                         }
                     }
                 }
@@ -1852,7 +1852,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
                 [Term::Iri(iri), Term::Iri(ap), _]
                     if parse_all
                         || (self.o.0).j().is_annotation_property(ap)
-                        || is_annotation_builtin(ap.as_ref()) =>
+                        || is_annotation_builtin(ap) =>
                 {
                     firi(self, &triple.0, iri)
                 }
@@ -1864,7 +1864,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> OntologyParser<'a, A, AA> {
         for (k, v) in std::mem::take(&mut self.bnode) {
             let fbnode = |s: &mut OntologyParser<_, _>, t, ind: &BNode<A>| {
                 let ann = s.ann_map.remove(t).unwrap_or_default();
-                let ind: AnonymousIndividual<A> = s.b.anon(ind.0.clone());
+                let ind: AnonymousIndividual<A> = s.b.anon(&ind.0);
                 s.merge(AnnotatedComponent {
                     component: AnnotationAssertion {
                         subject: ind.into(),

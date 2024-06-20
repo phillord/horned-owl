@@ -53,7 +53,7 @@ pub fn file_iri_to_pathbuf<A: ForIRI>(iri: &IRI<A>) -> PathBuf {
 /// ```
 pub fn path_to_file_iri<A: ForIRI>(b: &Build<A>, pb: &Path) -> IRI<A> {
     pb.to_str()
-        .map(|path_str| b.iri(format!("file://{path_str}")))
+        .map(|path_str| b.iri(&format!("file://{path_str}")))
         .expect("path should contain valid Unicode")
 }
 
@@ -96,11 +96,13 @@ pub fn localize_iri<A: ForIRI>(iri: &IRI<A>, doc_iri: &IRI<A>) -> IRI<A> {
     let b = Build::new();
     let (_, term_iri) = iri.split_at(iri.rfind('/').unwrap() + 1);
 
-    b.iri(if let Some(index) = doc_iri.rfind('/') {
+    let s = if let Some(index) = doc_iri.rfind('/') {
         format!("{}/{}", doc_iri.split_at(index).0, term_iri)
     } else {
         format!("./{}", term_iri)
-    })
+    };
+
+    b.iri(&s)
 }
 
 /// Return contents of an IRI as a string
