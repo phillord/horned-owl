@@ -261,9 +261,9 @@ pub fn to_built_in_entity<A: ForIRI>(iri: &IRI<A>) -> Option<NamedOWLEntityKind>
     }
 }
 
-pub fn entity_for_iri<A: ForIRI, S: Borrow<str>>(
-    type_iri: S,
-    entity_iri: S,
+pub fn entity_for_iri<A: ForIRI>(
+    type_iri: &str,
+    entity_iri: &str,
     b: &Build<A>,
 ) -> Result<NamedOWLEntity<A>, HornedError> {
     // Datatypes are handled here because they are not a
@@ -272,16 +272,13 @@ pub fn entity_for_iri<A: ForIRI, S: Borrow<str>>(
         return Ok(b.datatype(entity_iri).into());
     }
 
-    match &type_iri.borrow().strip_prefix(Namespace::OWL.as_ref()) {
+    match &type_iri.strip_prefix(Namespace::OWL.as_ref()) {
         Some("Class") => Ok(b.class(entity_iri).into()),
         Some("ObjectProperty") => Ok(b.object_property(entity_iri).into()),
         Some("DatatypeProperty") => Ok(b.data_property(entity_iri).into()),
         Some("AnnotationProperty") => Ok(b.annotation_property(entity_iri).into()),
         Some("NamedIndividual") => Ok(b.named_individual(entity_iri).into()),
-        _ => Err(invalid!(
-            "IRI is not a type of entity:{:?}",
-            type_iri.borrow()
-        )),
+        _ => Err(invalid!("IRI is not a type of entity:{:?}", type_iri)),
     }
 }
 
@@ -307,8 +304,8 @@ vocabulary_type! {
 }
 
 #[inline]
-pub fn is_annotation_builtin<A: AsRef<str>>(iri: A) -> bool {
-    AnnotationBuiltIn::from_str(iri.as_ref()).is_ok()
+pub fn is_annotation_builtin(iri: &str) -> bool {
+    AnnotationBuiltIn::from_str(iri).is_ok()
     // AnnotationBuiltIn::all()
     //     .iter()
     //     .any(|item| item.as_ref() == iri.as_ref())
@@ -890,10 +887,10 @@ mod tests {
         ));
         // ...and `String`s.
         assert!(is_annotation_builtin(
-            "http://www.w3.org/2000/01/rdf-schema#comment".to_string()
+            &"http://www.w3.org/2000/01/rdf-schema#comment".to_string()
         ));
         assert!(!is_annotation_builtin(
-            "http://www.w3.org/2002/07/owl#fred".to_string()
+            &"http://www.w3.org/2002/07/owl#fred".to_string()
         ));
     }
 

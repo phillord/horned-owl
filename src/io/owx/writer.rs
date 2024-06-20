@@ -998,7 +998,7 @@ mod test {
         let mut ont = ComponentMappedOntology::new_rc();
         let build = Build::new();
 
-        let iri = build.iri("http://www.example.com/a".to_string());
+        let iri = build.iri("http://www.example.com/a");
         ont.insert(OntologyID {
             iri: Some(iri.clone()),
             viri: None,

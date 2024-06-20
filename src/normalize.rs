@@ -52,7 +52,7 @@ impl<A: ForIRI> Reanonymize<A> {
 impl<A: ForIRI> VisitMut<A> for Reanonymize<A> {
     fn visit_anonymous_individual(&mut self, ai: &mut AnonymousIndividual<A>) {
         self.count += 1;
-        std::mem::swap(ai, &mut self.b.anon(format!("anon_{}", self.count)))
+        std::mem::swap(ai, &mut self.b.anon(&format!("anon_{}", self.count)))
     }
 }
 

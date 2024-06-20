@@ -605,7 +605,7 @@ macro_rules! impl_ce_data_cardinality {
             Some(pair) => DataRange::from_pair(pair, $ctx)?,
             // No data range is equivalent to `rdfs:Literal` as a data range.
             // see https://www.w3.org/TR/owl2-syntax/#Data_Property_Cardinality_Restrictions
-            None => Datatype($ctx.build.iri(OWL2Datatype::Literal)).into(),
+            None => Datatype($ctx.build.iri(&OWL2Datatype::Literal)).into(),
         };
         Ok(ClassExpression::$dt { n, dp, dr })
     }};
@@ -620,7 +620,7 @@ macro_rules! impl_ce_obj_cardinality {
             Some(x) => Self::from_pair(x, $ctx).map(Box::new)?,
             // Missing class expression is equivalent to `owl:Thing` as class expression.
             // see https://www.w3.org/TR/owl2-syntax/#Object_Property_Cardinality_Restrictions
-            None => Box::new(ClassExpression::Class(Class($ctx.build.iri(OWL::Thing)))),
+            None => Box::new(ClassExpression::Class(Class($ctx.build.iri(&OWL::Thing)))),
         };
         Ok(ClassExpression::$card { n, ope, bce })
     }};
@@ -858,7 +858,7 @@ impl<A: ForIRI> FromPair<A> for IRI<A> {
                     local.as_str(),
                 );
                 match ctx.mapping.expand_curie(&curie) {
-                    Ok(s) => Ok(ctx.build.iri(s)),
+                    Ok(s) => Ok(ctx.build.iri(&s)),
                     Err(curie::ExpansionError::Invalid) => {
                         Err(HornedError::invalid_at("undefined prefix", span))
                     }

@@ -1783,7 +1783,7 @@ mod test {
         let mut ont = ComponentMappedOntology::new_rc();
         let build = Build::new();
 
-        let iri = build.iri("http://www.example.com/a".to_string());
+        let iri = build.iri("http://www.example.com/a");
         ont.insert(OntologyID {
             iri: Some(iri),
             viri: None,
@@ -1841,7 +1841,7 @@ mod test {
     #[test_resources("src/ont/owl-rdf/ambiguous/*.owl")]
     fn roundtrip_rdf(resource: &str) {
         let resource = &slurp::read_all_to_string(resource).unwrap();
-        assert_round(&resource);
+        assert_round(resource);
     }
 
     #[test]

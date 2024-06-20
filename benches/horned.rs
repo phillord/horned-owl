@@ -12,8 +12,8 @@ fn a_thousand_classes(bench: &mut Bencher) {
         let b = Build::new_rc();
         let mut o = SetOntology::new();
         for m in 1..1000 {
-            let i = b.iri(format!("http://example.com/b{}", m));
-            let _c = o.declare(b.class(i));
+            let i = b.iri(&format!("http://example.com/b{}", m));
+            let _c = o.declare(b.class(&i));
         }
     })
 }
@@ -28,8 +28,8 @@ fn big_tree(bench: &mut Bencher) {
 }
 
 fn create_tree<A: ForIRI, O: MutableOntology<A>>(b: &Build<A>, o: &mut O, n: &mut i32) {
-    let i = b.iri(format!("http://example.com/a{}", n));
-    let c = b.class(i);
+    let i = b.iri(&format!("http://example.com/a{}", n));
+    let c = b.class(&i);
     create_tree_0(b, o, vec![c], n);
 }
 
@@ -42,11 +42,11 @@ fn create_tree_0<A: ForIRI, O: MutableOntology<A>>(
     let mut next = vec![];
 
     for curr in current.into_iter() {
-        let i = b.iri(format!("http://example.com/a{}", remaining));
-        let c = b.class(i);
+        let i = b.iri(&format!("http://example.com/a{}", remaining));
+        let c = b.class(&i);
         *remaining -= 1;
-        let i = b.iri(format!("http://example.com/a{}", remaining));
-        let d = b.class(i);
+        let i = b.iri(&format!("http://example.com/a{}", remaining));
+        let d = b.class(&i);
         *remaining -= 1;
 
         next.push(c.clone());
@@ -191,8 +191,8 @@ fn food_to_vec() -> Vec<u8> {
     std::fs::read("./benches/ont/food.owl").unwrap()
 }
 
-fn read_vec<A: ForIRI, AA: ForIndex<A>>(v: &Vec<u8>, b: Build<A>) -> RDFOntology<A, AA> {
-    let mut c = Cursor::new(v.clone());
+fn read_vec<A: ForIRI, AA: ForIndex<A>>(v: &[u8], b: Build<A>) -> RDFOntology<A, AA> {
+    let mut c = Cursor::new(v);
     horned_owl::io::rdf::reader::read_with_build(&mut c, &b, Default::default())
         .unwrap()
         .0

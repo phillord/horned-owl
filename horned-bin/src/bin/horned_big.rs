@@ -55,7 +55,7 @@ pub(crate) fn matcher(matches: &ArgMatches) -> Result<(), HornedError> {
     });
 
     for i in 1..size + 1 {
-        o.declare(b.class(format!("https://www.example.com/o{}", i)));
+        o.declare(b.class(&format!("https://www.example.com/o{}", i)));
     }
 
     let amo: RcComponentMappedOntology = o.into();
