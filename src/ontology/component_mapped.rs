@@ -15,7 +15,7 @@ use super::set::SetOntology;
 use crate::model::*;
 use std::{
     cell::RefCell,
-    collections::{BTreeMap, BTreeSet, VecDeque},
+    collections::{HashMap, HashSet, VecDeque},
     iter::FromIterator,
     ops::Deref,
     rc::Rc,
@@ -57,37 +57,37 @@ macro_rules! onimpl {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct ComponentMappedIndex<A, AA> {
-    component: RefCell<BTreeMap<ComponentKind, BTreeSet<AA>>>,
+pub struct ComponentMappedIndex<A: ForIRI, AA: ForIndex<A>> {
+    component: RefCell<HashMap<ComponentKind, HashSet<AA>>>,
     pd: PhantomData<A>,
 }
 
 impl<A: ForIRI, AA: ForIndex<A>> ComponentMappedIndex<A, AA> {
     pub fn new() -> ComponentMappedIndex<A, AA> {
         ComponentMappedIndex {
-            component: RefCell::new(BTreeMap::new()),
+            component: RefCell::new(HashMap::new()),
             pd: Default::default(),
         }
     }
 
     /// Fetch the component hashmap as a raw pointer.
     ///
-    /// This method also ensures that the BTreeSet for `cmk` is
+    /// This method also ensures that the HashSet for `cmk` is
     /// instantiated, which means that it effects equality of the
     /// ontology. It should only be used where the intention is to
     /// update the ontology.
-    fn component_as_ptr(&self, cmk: ComponentKind) -> *mut BTreeMap<ComponentKind, BTreeSet<AA>> {
+    fn component_as_ptr(&self, cmk: ComponentKind) -> *mut HashMap<ComponentKind, HashSet<AA>> {
         self.component.borrow_mut().entry(cmk).or_default();
         self.component.as_ptr()
     }
 
     /// Fetch the components for the given kind.
-    fn set_for_kind(&self, cmk: ComponentKind) -> Option<&BTreeSet<AA>> {
+    fn set_for_kind(&self, cmk: ComponentKind) -> Option<&HashSet<AA>> {
         unsafe { (*self.component.as_ptr()).get(&cmk) }
     }
 
     /// Fetch the components for given kind as a mutable ref.
-    fn mut_set_for_kind(&mut self, cmk: ComponentKind) -> &mut BTreeSet<AA> {
+    fn mut_set_for_kind(&mut self, cmk: ComponentKind) -> &mut HashSet<AA> {
         unsafe { (*self.component_as_ptr(cmk)).get_mut(&cmk).unwrap() }
     }
 
@@ -203,7 +203,7 @@ onimpl! {AnnotationPropertyDomain, annotation_property_domain}
 onimpl! {AnnotationPropertyRange, annotation_property_range}
 onimpl! {Rule, rule}
 
-impl<A, AA> Default for ComponentMappedIndex<A, AA> {
+impl<A: ForIRI, AA: ForIndex<A>> Default for ComponentMappedIndex<A, AA> {
     fn default() -> Self {
         Self {
             component: Default::default(),
@@ -217,12 +217,12 @@ impl<A: ForIRI, AA: ForIndex<A>> IntoIterator for ComponentMappedIndex<A, AA> {
     type Item = AnnotatedComponent<A>;
     type IntoIter = std::vec::IntoIter<AnnotatedComponent<A>>;
     fn into_iter(self) -> Self::IntoIter {
-        let btreemap = self.component.into_inner();
+        let hashmap = self.component.into_inner();
 
         // The collect switches the type which shows up in the API. Blegh.
-        let v: Vec<AnnotatedComponent<A>> = btreemap
+        let v: Vec<AnnotatedComponent<A>> = hashmap
             .into_values()
-            .flat_map(BTreeSet::into_iter)
+            .flat_map(HashSet::into_iter)
             .map(|fi| fi.unwrap())
             .collect();
 
@@ -234,7 +234,7 @@ impl<A: ForIRI, AA: ForIndex<A>> IntoIterator for ComponentMappedIndex<A, AA> {
 pub struct ComponentMappedIter<'a, A: ForIRI, AA: ForIndex<A>> {
     ont: &'a ComponentMappedIndex<A, AA>,
     kinds: VecDeque<&'a ComponentKind>,
-    inner: Option<<&'a BTreeSet<AA> as IntoIterator>::IntoIter>,
+    inner: Option<<&'a HashSet<AA> as IntoIterator>::IntoIter>,
 }
 
 impl<'a, A: ForIRI, AA: ForIndex<A>> Iterator for ComponentMappedIter<'a, A, AA> {
@@ -249,7 +249,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> Iterator for ComponentMappedIter<'a, A, AA>
         // Attempt to consume the iterator for the next component kind
         if !self.kinds.is_empty() {
             let kind = self.kinds.pop_front().unwrap();
-            self.inner = self.ont.set_for_kind(*kind).map(BTreeSet::iter);
+            self.inner = self.ont.set_for_kind(*kind).map(HashSet::iter);
             self.next()
         } else {
             None
@@ -280,7 +280,7 @@ impl<A: ForIRI, AA: ForIndex<A>> OntologyIndex<A, AA> for ComponentMappedIndex<A
 }
 
 #[derive(Debug, Eq, PartialEq)]
-pub struct ComponentMappedOntology<A, AA>(OneIndexedOntology<A, AA, ComponentMappedIndex<A, AA>>);
+pub struct ComponentMappedOntology<A: ForIRI, AA: ForIndex<A>>(OneIndexedOntology<A, AA, ComponentMappedIndex<A, AA>>);
 
 pub type RcComponentMappedOntology = ComponentMappedOntology<RcStr, Rc<AnnotatedComponent<RcStr>>>;
 pub type ArcComponentMappedOntology =
