@@ -1,6 +1,7 @@
 use criterion::{criterion_group, BenchmarkId, Criterion, Throughput};
 use std::fs::File;
 use std::io::BufReader;
+use std::time::Duration;
 
 fn io_read(c: &mut Criterion) {
     let mut group = c.benchmark_group("io_read");
@@ -26,4 +27,10 @@ fn io_read(c: &mut Criterion) {
     }
 }
 
-criterion_group!(io, io_read);
+criterion_group! {
+    name = io;
+    config = Criterion::default()
+    .sample_size(50)
+    .measurement_time(Duration::from_secs(20));
+    targets = io_read
+}

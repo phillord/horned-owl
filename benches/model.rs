@@ -7,7 +7,9 @@ use horned_owl::io::rdf::reader::RDFOntology;
 use horned_owl::model::*;
 use horned_owl::ontology::component_mapped::ComponentMappedOntology;
 use horned_owl::ontology::declaration_mapped::DeclarationMappedIndex;
-use horned_owl::ontology::indexed::{ForIndex, OneIndexedOntology};
+use horned_owl::ontology::indexed::{
+    ForIndex, FourIndexedOntology, OneIndexedOntology, TwoIndexedOntology,
+};
 use horned_owl::ontology::iri_mapped::IRIMappedIndex;
 use horned_owl::ontology::logically_equal::LogicallyEqualIndex;
 use horned_owl::ontology::set::*;
@@ -142,7 +144,7 @@ fn set_index_tree(c: &mut Criterion) {
 fn multi_index_tree(c: &mut Criterion) {
     let mut group = c.benchmark_group("multi_index_tree");
 
-    for n in [100, 1_000, 10_000, 100_000].iter() {
+    for n in [100, 1_000, 10_000, 50_000, 100_000].iter() {
         group.throughput(Throughput::Elements(*n as u64));
         group.bench_with_input(BenchmarkId::new("SetOntology", n), n, |b, &n| {
             b.iter(|| {
@@ -180,6 +182,23 @@ fn multi_index_tree(c: &mut Criterion) {
             },
         );
 
+        group.bench_with_input(
+            BenchmarkId::new("SetAndDeclarationMappedOntology", n),
+            n,
+            |b, &n| {
+                b.iter(|| {
+                    let b = Build::new_rc();
+                    // This is a more realistic use of TwoIndexOntology
+                    let mut o: TwoIndexedOntology<_, Rc<AnnotatedComponent<_>>, _, _> =
+                        TwoIndexedOntology::new(
+                            SetIndex::default(),
+                            DeclarationMappedIndex::default(),
+                        );
+                    create_tree(&b, &mut o, n);
+                })
+            },
+        );
+
         group.bench_with_input(BenchmarkId::new("LogicallyEqualOntology", n), n, |b, &n| {
             b.iter(|| {
                 let b = Build::new_rc();
@@ -194,6 +213,20 @@ fn multi_index_tree(c: &mut Criterion) {
                 let b = Build::new_rc();
                 let mut o: OneIndexedOntology<_, Rc<AnnotatedComponent<_>>, _> =
                     OneIndexedOntology::new(IRIMappedIndex::new());
+                create_tree(&b, &mut o, n);
+            })
+        });
+
+        group.bench_with_input(BenchmarkId::new("FourIndexedOntology", n), n, |b, &n| {
+            b.iter(|| {
+                let b = Build::new_rc();
+                let mut o: FourIndexedOntology<_, Rc<AnnotatedComponent<_>>, _, _, _, _> =
+                    FourIndexedOntology::new(
+                        SetIndex::new(),
+                        SetIndex::new(),
+                        SetIndex::new(),
+                        SetIndex::new(),
+                    );
                 create_tree(&b, &mut o, n);
             })
         });

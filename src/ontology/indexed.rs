@@ -341,7 +341,7 @@ impl<
     }
 }
 
-/// FourIndexedOntology supports three indexes.
+/// FourIndexedOntology supports four indexes.
 #[derive(Debug)]
 pub struct FourIndexedOntology<A, AA, I, J, K, L>(
     TwoIndexedOntology<A, AA, I, ThreeIndexedOntology<A, AA, J, K, L>>,
