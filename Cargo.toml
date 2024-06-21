@@ -46,7 +46,7 @@ remote = ["ureq"]
 
 [dev-dependencies]
 horned-owl = {path=".", features = ["remote"]}
-bencher = "0.1.4"
+criterion = "0.5.1"
 mktemp = "0.5.1"
 pretty_assertions = "1.0.0"
 slurp = "1.0.1"
@@ -59,3 +59,4 @@ debug = true
 [[bench]]
 name = "horned"
 harness = false
+

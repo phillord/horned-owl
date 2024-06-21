@@ -1,0 +1,33 @@
+<?xml version="1.0"?>
+<Ontology xmlns="http://www.w3.org/2002/07/owl#" xml:base="http://www.example.com/iri" ontologyIRI="http://www.example.com/iri">
+    <Declaration>
+        <Class IRI="https://www.example.com/o1"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o10"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o2"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o3"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o4"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o5"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o6"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o7"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o8"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o9"/>
+    </Declaration>
+</Ontology>

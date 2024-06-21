@@ -1,320 +1,104 @@
-<?xml version="1.0"?>
-<Ontology xmlns="http://www.w3.org/2002/07/owl#"
-     xml:base="urn:absolute:340e521d-d935-497a-86d8-50436a9d0dad#o"
-     xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
-     xmlns:xml="http://www.w3.org/XML/1998/namespace"
-     xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
-     xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"
-     ontologyIRI="urn:absolute:340e521d-d935-497a-86d8-50436a9d0dad#o">
-    <Prefix name="o" IRI="urn:absolute:340e521d-d935-497a-86d8-50436a9d0dad#o#"/>
-    <Prefix name="owl" IRI="http://www.w3.org/2002/07/owl#"/>
-    <Prefix name="rdf" IRI="http://www.w3.org/1999/02/22-rdf-syntax-ns#"/>
-    <Prefix name="xml" IRI="http://www.w3.org/XML/1998/namespace"/>
-    <Prefix name="xsd" IRI="http://www.w3.org/2001/XMLSchema#"/>
-    <Prefix name="rdfs" IRI="http://www.w3.org/2000/01/rdf-schema#"/>
-    <Declaration>
-        <Class IRI="#n39"/>
-    </Declaration>
-    <Declaration>
-        <Class IRI="#n27"/>
-    </Declaration>
-    <Declaration>
-        <Class IRI="#n15"/>
-    </Declaration>
-    <Declaration>
-        <Class IRI="#n79"/>
-    </Declaration>
-    <Declaration>
-        <Class IRI="#n67"/>
-    </Declaration>
-    <Declaration>
-        <Class IRI="#n55"/>
-    </Declaration>
-    <Declaration>
-        <Class IRI="#n43"/>
-    </Declaration>
-    <Declaration>
-        <Class IRI="#n2"/>
-    </Declaration>
-    <Declaration>
-        <Class IRI="#n42"/>
-    </Declaration>
-    <Declaration>
-        <Class IRI="#n30"/>
-    </Declaration>
-    <Declaration>
-        <Class IRI="#n94"/>
-    </Declaration>
-    <Declaration>
-        <Class IRI="#n82"/>
-    </Declaration>
-    <Declaration>
-        <Class IRI="#n70"/>
-    </Declaration>
-    <Declaration>
-        <Class IRI="#n28"/>
-    </Declaration>
-    <Declaration>
-        <Class IRI="#n16"/>
-    </Declaration>
-    <Declaration>
-        <Class IRI="#n68"/>
-    </Declaration>
-    <Declaration>
-        <Class IRI="#n56"/>
-    </Declaration>
-    <Declaration>
-        <Class IRI="#n9"/>
-    </Declaration>
-    <Declaration>
-        <Class IRI="#n44"/>
-    </Declaration>
-    <Declaration>
-        <Class IRI="#n32"/>
-    </Declaration>
-    <Declaration>
-        <Class IRI="#n1"/>
-    </Declaration>
-    <Declaration>
-        <Class IRI="#n31"/>
-    </Declaration>
-    <Declaration>
-        <Class IRI="#n95"/>
-    </Declaration>
-    <Declaration>
-        <Class IRI="#n83"/>
-    </Declaration>
-    <Declaration>
-        <Class IRI="#n71"/>
-    </Declaration>
-    <Declaration>
-        <Class IRI="#n4"/>
-    </Declaration>
-    <Declaration>
-        <Class IRI="#n49"/>
-    </Declaration>
-    <Declaration>
-        <Class IRI="#n37"/>
-    </Declaration>
-    <Declaration>
-        <Class IRI="#n25"/>
-    </Declaration>
-    <Declaration>
-        <Class IRI="#n13"/>
-    </Declaration>
-    <Declaration>
-        <Class IRI="#n89"/>
-    </Declaration>
-    <Declaration>
-        <Class IRI="#n77"/>
-    </Declaration>
-    <Declaration>
-        <Class IRI="#n65"/>
-    </Declaration>
-    <Declaration>
-        <Class IRI="#n64"/>
-    </Declaration>
-    <Declaration>
-        <Class IRI="#n52"/>
-    </Declaration>
-    <Declaration>
-        <Class IRI="#n40"/>
-    </Declaration>
-    <Declaration>
-        <Class IRI="#n92"/>
-    </Declaration>
-    <Declaration>
-        <Class IRI="#n80"/>
-    </Declaration>
-    <Declaration>
-        <Class IRI="#n3"/>
-    </Declaration>
-    <Declaration>
-        <Class IRI="#n38"/>
-    </Declaration>
-    <Declaration>
-        <Class IRI="#n26"/>
-    </Declaration>
-    <Declaration>
-        <Class IRI="#n14"/>
-    </Declaration>
-    <Declaration>
-        <Class IRI="#n78"/>
-    </Declaration>
-    <Declaration>
-        <Class IRI="#n66"/>
-    </Declaration>
-    <Declaration>
-        <Class IRI="#n54"/>
-    </Declaration>
-    <Declaration>
-        <Class IRI="#n53"/>
-    </Declaration>
-    <Declaration>
-        <Class IRI="#n41"/>
-    </Declaration>
-    <Declaration>
-        <Class IRI="#n93"/>
-    </Declaration>
-    <Declaration>
-        <Class IRI="#n81"/>
-    </Declaration>
-    <Declaration>
-        <Class IRI="#n59"/>
-    </Declaration>
-    <Declaration>
-        <Class IRI="#n6"/>
-    </Declaration>
-    <Declaration>
-        <Class IRI="#n47"/>
-    </Declaration>
-    <Declaration>
-        <Class IRI="#n100"/>
-    </Declaration>
-    <Declaration>
-        <Class IRI="#n35"/>
-    </Declaration>
-    <Declaration>
-        <Class IRI="#n23"/>
-    </Declaration>
-    <Declaration>
-        <Class IRI="#n11"/>
-    </Declaration>
-    <Declaration>
-        <Class IRI="#n99"/>
-    </Declaration>
-    <Declaration>
-        <Class IRI="#n87"/>
-    </Declaration>
-    <Declaration>
-        <Class IRI="#n19"/>
-    </Declaration>
-    <Declaration>
-        <Class IRI="#n86"/>
-    </Declaration>
-    <Declaration>
-        <Class IRI="#n74"/>
-    </Declaration>
-    <Declaration>
-        <Class IRI="#n62"/>
-    </Declaration>
-    <Declaration>
-        <Class IRI="#n50"/>
-    </Declaration>
-    <Declaration>
-        <Class IRI="#n90"/>
-    </Declaration>
-    <Declaration>
-        <Class IRI="#n5"/>
-    </Declaration>
-    <Declaration>
-        <Class IRI="#n48"/>
-    </Declaration>
-    <Declaration>
-        <Class IRI="#n36"/>
-    </Declaration>
-    <Declaration>
-        <Class IRI="#n24"/>
-    </Declaration>
-    <Declaration>
-        <Class IRI="#n12"/>
-    </Declaration>
-    <Declaration>
-        <Class IRI="#n88"/>
-    </Declaration>
-    <Declaration>
-        <Class IRI="#n76"/>
-    </Declaration>
-    <Declaration>
-        <Class IRI="#n75"/>
-    </Declaration>
-    <Declaration>
-        <Class IRI="#n63"/>
-    </Declaration>
-    <Declaration>
-        <Class IRI="#n51"/>
-    </Declaration>
-    <Declaration>
-        <Class IRI="#n91"/>
-    </Declaration>
-    <Declaration>
-        <Class IRI="#n17"/>
-    </Declaration>
-    <Declaration>
-        <Class IRI="#n69"/>
-    </Declaration>
-    <Declaration>
-        <Class IRI="#n57"/>
-    </Declaration>
-    <Declaration>
-        <Class IRI="#n8"/>
-    </Declaration>
-    <Declaration>
-        <Class IRI="#n45"/>
-    </Declaration>
-    <Declaration>
-        <Class IRI="#n33"/>
-    </Declaration>
-    <Declaration>
-        <Class IRI="#n21"/>
-    </Declaration>
-    <Declaration>
-        <Class IRI="#n29"/>
-    </Declaration>
-    <Declaration>
-        <Class IRI="#n20"/>
-    </Declaration>
-    <Declaration>
-        <Class IRI="#n96"/>
-    </Declaration>
-    <Declaration>
-        <Class IRI="#n84"/>
-    </Declaration>
-    <Declaration>
-        <Class IRI="#n72"/>
-    </Declaration>
-    <Declaration>
-        <Class IRI="#n60"/>
-    </Declaration>
-    <Declaration>
-        <Class IRI="#n58"/>
-    </Declaration>
-    <Declaration>
-        <Class IRI="#n7"/>
-    </Declaration>
-    <Declaration>
-        <Class IRI="#n46"/>
-    </Declaration>
-    <Declaration>
-        <Class IRI="#n34"/>
-    </Declaration>
-    <Declaration>
-        <Class IRI="#n22"/>
-    </Declaration>
-    <Declaration>
-        <Class IRI="#n10"/>
-    </Declaration>
-    <Declaration>
-        <Class IRI="#n98"/>
-    </Declaration>
-    <Declaration>
-        <Class IRI="#n18"/>
-    </Declaration>
-    <Declaration>
-        <Class IRI="#n97"/>
-    </Declaration>
-    <Declaration>
-        <Class IRI="#n85"/>
-    </Declaration>
-    <Declaration>
-        <Class IRI="#n73"/>
-    </Declaration>
-    <Declaration>
-        <Class IRI="#n61"/>
-    </Declaration>
-</Ontology>
-
-
-
-<!-- Generated by the OWL API (version 4.2.8.20170104-2310) https://github.com/owlcs/owlapi -->
-
+<?xml version="1.0" encoding="UTF-8"?>
+<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xmlns:owl="http://www.w3.org/2002/07/owl#" xmlns:swrl="http://www.w3.org/2003/11/swrl#">
+    <owl:Ontology rdf:about="http://www.example.com/iri"/>
+    <owl:Class rdf:about="https://www.example.com/o1"/>
+    <owl:Class rdf:about="https://www.example.com/o10"/>
+    <owl:Class rdf:about="https://www.example.com/o100"/>
+    <owl:Class rdf:about="https://www.example.com/o11"/>
+    <owl:Class rdf:about="https://www.example.com/o12"/>
+    <owl:Class rdf:about="https://www.example.com/o13"/>
+    <owl:Class rdf:about="https://www.example.com/o14"/>
+    <owl:Class rdf:about="https://www.example.com/o15"/>
+    <owl:Class rdf:about="https://www.example.com/o16"/>
+    <owl:Class rdf:about="https://www.example.com/o17"/>
+    <owl:Class rdf:about="https://www.example.com/o18"/>
+    <owl:Class rdf:about="https://www.example.com/o19"/>
+    <owl:Class rdf:about="https://www.example.com/o2"/>
+    <owl:Class rdf:about="https://www.example.com/o20"/>
+    <owl:Class rdf:about="https://www.example.com/o21"/>
+    <owl:Class rdf:about="https://www.example.com/o22"/>
+    <owl:Class rdf:about="https://www.example.com/o23"/>
+    <owl:Class rdf:about="https://www.example.com/o24"/>
+    <owl:Class rdf:about="https://www.example.com/o25"/>
+    <owl:Class rdf:about="https://www.example.com/o26"/>
+    <owl:Class rdf:about="https://www.example.com/o27"/>
+    <owl:Class rdf:about="https://www.example.com/o28"/>
+    <owl:Class rdf:about="https://www.example.com/o29"/>
+    <owl:Class rdf:about="https://www.example.com/o3"/>
+    <owl:Class rdf:about="https://www.example.com/o30"/>
+    <owl:Class rdf:about="https://www.example.com/o31"/>
+    <owl:Class rdf:about="https://www.example.com/o32"/>
+    <owl:Class rdf:about="https://www.example.com/o33"/>
+    <owl:Class rdf:about="https://www.example.com/o34"/>
+    <owl:Class rdf:about="https://www.example.com/o35"/>
+    <owl:Class rdf:about="https://www.example.com/o36"/>
+    <owl:Class rdf:about="https://www.example.com/o37"/>
+    <owl:Class rdf:about="https://www.example.com/o38"/>
+    <owl:Class rdf:about="https://www.example.com/o39"/>
+    <owl:Class rdf:about="https://www.example.com/o4"/>
+    <owl:Class rdf:about="https://www.example.com/o40"/>
+    <owl:Class rdf:about="https://www.example.com/o41"/>
+    <owl:Class rdf:about="https://www.example.com/o42"/>
+    <owl:Class rdf:about="https://www.example.com/o43"/>
+    <owl:Class rdf:about="https://www.example.com/o44"/>
+    <owl:Class rdf:about="https://www.example.com/o45"/>
+    <owl:Class rdf:about="https://www.example.com/o46"/>
+    <owl:Class rdf:about="https://www.example.com/o47"/>
+    <owl:Class rdf:about="https://www.example.com/o48"/>
+    <owl:Class rdf:about="https://www.example.com/o49"/>
+    <owl:Class rdf:about="https://www.example.com/o5"/>
+    <owl:Class rdf:about="https://www.example.com/o50"/>
+    <owl:Class rdf:about="https://www.example.com/o51"/>
+    <owl:Class rdf:about="https://www.example.com/o52"/>
+    <owl:Class rdf:about="https://www.example.com/o53"/>
+    <owl:Class rdf:about="https://www.example.com/o54"/>
+    <owl:Class rdf:about="https://www.example.com/o55"/>
+    <owl:Class rdf:about="https://www.example.com/o56"/>
+    <owl:Class rdf:about="https://www.example.com/o57"/>
+    <owl:Class rdf:about="https://www.example.com/o58"/>
+    <owl:Class rdf:about="https://www.example.com/o59"/>
+    <owl:Class rdf:about="https://www.example.com/o6"/>
+    <owl:Class rdf:about="https://www.example.com/o60"/>
+    <owl:Class rdf:about="https://www.example.com/o61"/>
+    <owl:Class rdf:about="https://www.example.com/o62"/>
+    <owl:Class rdf:about="https://www.example.com/o63"/>
+    <owl:Class rdf:about="https://www.example.com/o64"/>
+    <owl:Class rdf:about="https://www.example.com/o65"/>
+    <owl:Class rdf:about="https://www.example.com/o66"/>
+    <owl:Class rdf:about="https://www.example.com/o67"/>
+    <owl:Class rdf:about="https://www.example.com/o68"/>
+    <owl:Class rdf:about="https://www.example.com/o69"/>
+    <owl:Class rdf:about="https://www.example.com/o7"/>
+    <owl:Class rdf:about="https://www.example.com/o70"/>
+    <owl:Class rdf:about="https://www.example.com/o71"/>
+    <owl:Class rdf:about="https://www.example.com/o72"/>
+    <owl:Class rdf:about="https://www.example.com/o73"/>
+    <owl:Class rdf:about="https://www.example.com/o74"/>
+    <owl:Class rdf:about="https://www.example.com/o75"/>
+    <owl:Class rdf:about="https://www.example.com/o76"/>
+    <owl:Class rdf:about="https://www.example.com/o77"/>
+    <owl:Class rdf:about="https://www.example.com/o78"/>
+    <owl:Class rdf:about="https://www.example.com/o79"/>
+    <owl:Class rdf:about="https://www.example.com/o8"/>
+    <owl:Class rdf:about="https://www.example.com/o80"/>
+    <owl:Class rdf:about="https://www.example.com/o81"/>
+    <owl:Class rdf:about="https://www.example.com/o82"/>
+    <owl:Class rdf:about="https://www.example.com/o83"/>
+    <owl:Class rdf:about="https://www.example.com/o84"/>
+    <owl:Class rdf:about="https://www.example.com/o85"/>
+    <owl:Class rdf:about="https://www.example.com/o86"/>
+    <owl:Class rdf:about="https://www.example.com/o87"/>
+    <owl:Class rdf:about="https://www.example.com/o88"/>
+    <owl:Class rdf:about="https://www.example.com/o89"/>
+    <owl:Class rdf:about="https://www.example.com/o9"/>
+    <owl:Class rdf:about="https://www.example.com/o90"/>
+    <owl:Class rdf:about="https://www.example.com/o91"/>
+    <owl:Class rdf:about="https://www.example.com/o92"/>
+    <owl:Class rdf:about="https://www.example.com/o93"/>
+    <owl:Class rdf:about="https://www.example.com/o94"/>
+    <owl:Class rdf:about="https://www.example.com/o95"/>
+    <owl:Class rdf:about="https://www.example.com/o96"/>
+    <owl:Class rdf:about="https://www.example.com/o97"/>
+    <owl:Class rdf:about="https://www.example.com/o98"/>
+    <owl:Class rdf:about="https://www.example.com/o99"/>
+</rdf:RDF>

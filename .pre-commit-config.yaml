@@ -19,6 +19,7 @@ repos:
     rev: v4.6.0
     hooks:
     -   id: check-added-large-files
+        args: ["--maxkb=1000"]
     -   id: no-commit-to-branch
         args: [--branch, rfc]
 -   repo: https://github.com/doublify/pre-commit-rust

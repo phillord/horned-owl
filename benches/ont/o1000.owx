@@ -1,0 +1,3003 @@
+<?xml version="1.0"?>
+<Ontology xmlns="http://www.w3.org/2002/07/owl#" xml:base="http://www.example.com/iri" ontologyIRI="http://www.example.com/iri">
+    <Declaration>
+        <Class IRI="https://www.example.com/o1"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o10"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o100"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o1000"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o101"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o102"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o103"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o104"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o105"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o106"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o107"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o108"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o109"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o11"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o110"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o111"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o112"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o113"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o114"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o115"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o116"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o117"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o118"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o119"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o12"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o120"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o121"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o122"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o123"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o124"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o125"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o126"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o127"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o128"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o129"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o13"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o130"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o131"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o132"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o133"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o134"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o135"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o136"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o137"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o138"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o139"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o14"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o140"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o141"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o142"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o143"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o144"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o145"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o146"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o147"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o148"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o149"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o15"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o150"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o151"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o152"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o153"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o154"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o155"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o156"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o157"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o158"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o159"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o16"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o160"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o161"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o162"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o163"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o164"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o165"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o166"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o167"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o168"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o169"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o17"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o170"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o171"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o172"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o173"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o174"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o175"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o176"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o177"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o178"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o179"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o18"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o180"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o181"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o182"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o183"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o184"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o185"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o186"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o187"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o188"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o189"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o19"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o190"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o191"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o192"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o193"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o194"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o195"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o196"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o197"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o198"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o199"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o2"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o20"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o200"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o201"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o202"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o203"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o204"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o205"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o206"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o207"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o208"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o209"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o21"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o210"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o211"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o212"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o213"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o214"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o215"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o216"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o217"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o218"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o219"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o22"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o220"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o221"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o222"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o223"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o224"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o225"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o226"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o227"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o228"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o229"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o23"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o230"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o231"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o232"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o233"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o234"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o235"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o236"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o237"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o238"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o239"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o24"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o240"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o241"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o242"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o243"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o244"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o245"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o246"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o247"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o248"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o249"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o25"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o250"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o251"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o252"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o253"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o254"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o255"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o256"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o257"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o258"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o259"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o26"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o260"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o261"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o262"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o263"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o264"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o265"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o266"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o267"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o268"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o269"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o27"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o270"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o271"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o272"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o273"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o274"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o275"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o276"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o277"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o278"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o279"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o28"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o280"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o281"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o282"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o283"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o284"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o285"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o286"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o287"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o288"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o289"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o29"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o290"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o291"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o292"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o293"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o294"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o295"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o296"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o297"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o298"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o299"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o3"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o30"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o300"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o301"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o302"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o303"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o304"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o305"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o306"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o307"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o308"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o309"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o31"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o310"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o311"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o312"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o313"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o314"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o315"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o316"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o317"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o318"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o319"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o32"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o320"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o321"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o322"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o323"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o324"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o325"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o326"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o327"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o328"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o329"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o33"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o330"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o331"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o332"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o333"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o334"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o335"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o336"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o337"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o338"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o339"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o34"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o340"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o341"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o342"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o343"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o344"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o345"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o346"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o347"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o348"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o349"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o35"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o350"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o351"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o352"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o353"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o354"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o355"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o356"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o357"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o358"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o359"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o36"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o360"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o361"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o362"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o363"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o364"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o365"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o366"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o367"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o368"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o369"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o37"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o370"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o371"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o372"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o373"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o374"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o375"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o376"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o377"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o378"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o379"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o38"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o380"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o381"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o382"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o383"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o384"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o385"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o386"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o387"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o388"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o389"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o39"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o390"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o391"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o392"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o393"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o394"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o395"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o396"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o397"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o398"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o399"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o4"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o40"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o400"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o401"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o402"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o403"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o404"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o405"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o406"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o407"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o408"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o409"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o41"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o410"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o411"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o412"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o413"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o414"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o415"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o416"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o417"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o418"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o419"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o42"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o420"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o421"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o422"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o423"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o424"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o425"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o426"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o427"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o428"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o429"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o43"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o430"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o431"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o432"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o433"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o434"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o435"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o436"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o437"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o438"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o439"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o44"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o440"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o441"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o442"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o443"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o444"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o445"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o446"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o447"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o448"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o449"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o45"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o450"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o451"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o452"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o453"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o454"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o455"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o456"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o457"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o458"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o459"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o46"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o460"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o461"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o462"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o463"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o464"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o465"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o466"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o467"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o468"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o469"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o47"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o470"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o471"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o472"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o473"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o474"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o475"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o476"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o477"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o478"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o479"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o48"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o480"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o481"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o482"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o483"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o484"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o485"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o486"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o487"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o488"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o489"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o49"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o490"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o491"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o492"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o493"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o494"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o495"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o496"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o497"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o498"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o499"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o5"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o50"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o500"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o501"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o502"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o503"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o504"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o505"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o506"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o507"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o508"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o509"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o51"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o510"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o511"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o512"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o513"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o514"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o515"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o516"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o517"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o518"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o519"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o52"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o520"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o521"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o522"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o523"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o524"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o525"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o526"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o527"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o528"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o529"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o53"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o530"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o531"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o532"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o533"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o534"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o535"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o536"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o537"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o538"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o539"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o54"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o540"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o541"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o542"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o543"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o544"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o545"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o546"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o547"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o548"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o549"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o55"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o550"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o551"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o552"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o553"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o554"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o555"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o556"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o557"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o558"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o559"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o56"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o560"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o561"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o562"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o563"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o564"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o565"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o566"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o567"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o568"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o569"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o57"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o570"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o571"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o572"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o573"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o574"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o575"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o576"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o577"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o578"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o579"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o58"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o580"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o581"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o582"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o583"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o584"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o585"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o586"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o587"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o588"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o589"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o59"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o590"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o591"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o592"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o593"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o594"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o595"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o596"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o597"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o598"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o599"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o6"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o60"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o600"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o601"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o602"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o603"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o604"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o605"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o606"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o607"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o608"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o609"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o61"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o610"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o611"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o612"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o613"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o614"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o615"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o616"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o617"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o618"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o619"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o62"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o620"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o621"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o622"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o623"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o624"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o625"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o626"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o627"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o628"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o629"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o63"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o630"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o631"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o632"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o633"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o634"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o635"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o636"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o637"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o638"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o639"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o64"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o640"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o641"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o642"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o643"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o644"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o645"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o646"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o647"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o648"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o649"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o65"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o650"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o651"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o652"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o653"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o654"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o655"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o656"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o657"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o658"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o659"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o66"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o660"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o661"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o662"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o663"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o664"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o665"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o666"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o667"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o668"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o669"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o67"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o670"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o671"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o672"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o673"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o674"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o675"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o676"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o677"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o678"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o679"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o68"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o680"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o681"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o682"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o683"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o684"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o685"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o686"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o687"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o688"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o689"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o69"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o690"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o691"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o692"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o693"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o694"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o695"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o696"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o697"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o698"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o699"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o7"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o70"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o700"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o701"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o702"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o703"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o704"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o705"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o706"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o707"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o708"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o709"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o71"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o710"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o711"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o712"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o713"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o714"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o715"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o716"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o717"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o718"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o719"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o72"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o720"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o721"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o722"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o723"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o724"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o725"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o726"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o727"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o728"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o729"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o73"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o730"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o731"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o732"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o733"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o734"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o735"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o736"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o737"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o738"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o739"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o74"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o740"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o741"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o742"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o743"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o744"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o745"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o746"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o747"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o748"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o749"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o75"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o750"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o751"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o752"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o753"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o754"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o755"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o756"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o757"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o758"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o759"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o76"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o760"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o761"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o762"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o763"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o764"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o765"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o766"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o767"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o768"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o769"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o77"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o770"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o771"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o772"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o773"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o774"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o775"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o776"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o777"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o778"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o779"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o78"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o780"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o781"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o782"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o783"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o784"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o785"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o786"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o787"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o788"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o789"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o79"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o790"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o791"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o792"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o793"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o794"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o795"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o796"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o797"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o798"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o799"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o8"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o80"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o800"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o801"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o802"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o803"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o804"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o805"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o806"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o807"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o808"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o809"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o81"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o810"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o811"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o812"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o813"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o814"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o815"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o816"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o817"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o818"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o819"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o82"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o820"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o821"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o822"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o823"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o824"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o825"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o826"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o827"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o828"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o829"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o83"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o830"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o831"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o832"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o833"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o834"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o835"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o836"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o837"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o838"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o839"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o84"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o840"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o841"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o842"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o843"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o844"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o845"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o846"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o847"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o848"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o849"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o85"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o850"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o851"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o852"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o853"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o854"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o855"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o856"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o857"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o858"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o859"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o86"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o860"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o861"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o862"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o863"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o864"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o865"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o866"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o867"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o868"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o869"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o87"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o870"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o871"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o872"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o873"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o874"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o875"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o876"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o877"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o878"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o879"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o88"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o880"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o881"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o882"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o883"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o884"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o885"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o886"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o887"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o888"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o889"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o89"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o890"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o891"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o892"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o893"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o894"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o895"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o896"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o897"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o898"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o899"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o9"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o90"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o900"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o901"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o902"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o903"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o904"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o905"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o906"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o907"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o908"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o909"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o91"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o910"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o911"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o912"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o913"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o914"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o915"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o916"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o917"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o918"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o919"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o92"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o920"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o921"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o922"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o923"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o924"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o925"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o926"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o927"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o928"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o929"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o93"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o930"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o931"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o932"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o933"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o934"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o935"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o936"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o937"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o938"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o939"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o94"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o940"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o941"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o942"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o943"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o944"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o945"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o946"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o947"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o948"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o949"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o95"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o950"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o951"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o952"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o953"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o954"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o955"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o956"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o957"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o958"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o959"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o96"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o960"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o961"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o962"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o963"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o964"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o965"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o966"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o967"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o968"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o969"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o97"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o970"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o971"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o972"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o973"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o974"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o975"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o976"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o977"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o978"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o979"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o98"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o980"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o981"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o982"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o983"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o984"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o985"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o986"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o987"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o988"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o989"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o99"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o990"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o991"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o992"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o993"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o994"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o995"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o996"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o997"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o998"/>
+    </Declaration>
+    <Declaration>
+        <Class IRI="https://www.example.com/o999"/>
+    </Declaration>
+</Ontology>
