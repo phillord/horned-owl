@@ -1,14 +1,13 @@
-use criterion::{criterion_group, BenchmarkId, Criterion, Throughput};
+use criterion::{criterion_group, AxisScale, BenchmarkId, Criterion, PlotConfiguration};
 use std::fs::File;
 use std::io::BufReader;
 use std::time::Duration;
 
 fn io_read(c: &mut Criterion) {
     let mut group = c.benchmark_group("io_read");
+    group.plot_config(PlotConfiguration::default().summary_scale(AxisScale::Logarithmic));
 
     for n in [10, 100, 1_000, 2500, 5000, 10_000].iter() {
-        group.throughput(Throughput::Elements(*n as u64));
-
         group.bench_with_input(BenchmarkId::new("owl_io_read", n), n, |b, &n| {
             b.iter(|| {
                 let f = File::open(format!("benches/ont/o{}.owl", n)).ok().unwrap();

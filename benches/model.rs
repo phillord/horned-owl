@@ -1,7 +1,7 @@
 use std::io::Cursor;
 use std::rc::Rc;
 
-use criterion::{criterion_group, BenchmarkId, Criterion, Throughput};
+use criterion::{criterion_group, AxisScale, BenchmarkId, Criterion, PlotConfiguration};
 
 use horned_owl::io::rdf::reader::RDFOntology;
 use horned_owl::model::*;
@@ -26,9 +26,9 @@ fn create_many_classes(i: isize) {
 // We start by testing the basic ontology model
 fn classes(c: &mut Criterion) {
     let mut group = c.benchmark_group("classes");
+    group.plot_config(PlotConfiguration::default().summary_scale(AxisScale::Logarithmic));
 
     for n in [100, 1_000, 10_000, 100_000].iter() {
-        group.throughput(Throughput::Elements(*n as u64));
         group.bench_with_input(BenchmarkId::from_parameter(n), n, |b, &n| {
             b.iter(|| create_many_classes(n));
         });
@@ -79,9 +79,9 @@ fn create_tree_0<A: ForIRI, O: MutableOntology<A>>(
 // Now test to see what impact the pointer and caching of strings has
 fn tree(c: &mut Criterion) {
     let mut group = c.benchmark_group("tree");
+    group.plot_config(PlotConfiguration::default().summary_scale(AxisScale::Logarithmic));
 
     for n in [100, 1_000, 10_000, 100_000].iter() {
-        group.throughput(Throughput::Elements(*n as u64));
         group.bench_with_input(BenchmarkId::new("Rc", n), n, |b, &n| {
             b.iter(|| {
                 let b = Build::new_rc();
@@ -111,9 +111,9 @@ fn tree(c: &mut Criterion) {
 // Now test to see the impact of the pointers in indexes have
 fn set_index_tree(c: &mut Criterion) {
     let mut group = c.benchmark_group("set_index_tree");
+    group.plot_config(PlotConfiguration::default().summary_scale(AxisScale::Logarithmic));
 
     for n in [100, 1_000, 10_000, 100_000].iter() {
-        group.throughput(Throughput::Elements(*n as u64));
         group.bench_with_input(BenchmarkId::new("SetOntology", n), n, |b, &n| {
             b.iter(|| {
                 let b = Build::new_rc();
@@ -143,9 +143,9 @@ fn set_index_tree(c: &mut Criterion) {
 // Test all of the different indexes
 fn multi_index_tree(c: &mut Criterion) {
     let mut group = c.benchmark_group("multi_index_tree");
+    group.plot_config(PlotConfiguration::default().summary_scale(AxisScale::Logarithmic));
 
     for n in [100, 1_000, 10_000, 50_000, 100_000].iter() {
-        group.throughput(Throughput::Elements(*n as u64));
         group.bench_with_input(BenchmarkId::new("SetOntology", n), n, |b, &n| {
             b.iter(|| {
                 let b = Build::new_rc();
