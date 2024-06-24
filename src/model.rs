@@ -92,7 +92,7 @@
 use std::borrow::Borrow;
 use std::cell::RefCell;
 use std::cmp::Ordering;
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashSet};
 use std::convert::{TryFrom, TryInto};
 use std::fmt::Debug;
 use std::fmt::Display;
@@ -271,13 +271,13 @@ impl<A: ForIRI> IRI<A> {
 /// without consequences except for increased memory use.
 #[derive(Debug, Default)]
 pub struct Build<A: ForIRI>(
-    RefCell<BTreeSet<IRI<A>>>,
-    RefCell<BTreeSet<AnonymousIndividual<A>>>,
+    RefCell<HashSet<IRI<A>>>,
+    RefCell<HashSet<AnonymousIndividual<A>>>,
 );
 
 impl<A: ForIRI> Build<A> {
     pub fn new() -> Build<A> {
-        Build(RefCell::new(BTreeSet::new()), RefCell::new(BTreeSet::new()))
+        Build(Default::default(), Default::default())
     }
 
     /// Constructs a new `AnonymousIndividual`
