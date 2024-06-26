@@ -60,10 +60,6 @@ impl<A: ForIRI> SetOntology<A> {
         self.0.i()
     }
 
-    pub fn index(self) -> SetIndex<A, AnnotatedComponent<A>> {
-        self.0.index()
-    }
-
     /// Gets an iterator that visits the annotated components of the ontology.
     pub fn iter(&self) -> SetIter<'_, A> {
         SetIter(self.0.i().0.iter())
