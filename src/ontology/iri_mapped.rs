@@ -22,7 +22,6 @@ use std::{
 use super::indexed::OntologyIndex;
 use super::set::SetIndex;
 
-
 #[derive(Debug, Eq, PartialEq)]
 pub struct IRIMappedIndex<A: ForIRI, AA: ForIndex<A>> {
     irindex: RefCell<HashMap<IRI<A>, HashSet<AA>>>,
@@ -102,7 +101,7 @@ impl<A: ForIRI, AA: ForIndex<A>> Default for IRIMappedIndex<A, AA> {
     }
 }
 
-impl <A: ForIRI, AA: ForIndex<A>> From<SetIndex<A, AA>> for IRIMappedIndex<A, AA> {
+impl<A: ForIRI, AA: ForIndex<A>> From<SetIndex<A, AA>> for IRIMappedIndex<A, AA> {
     fn from(value: SetIndex<A, AA>) -> Self {
         let mut imi = IRIMappedIndex::new();
         for cmp in value {
@@ -169,12 +168,6 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> IntoIterator for &'a IRIMappedIndex<A, AA> 
     }
 }
 
-
-
-
-
-
-
 impl<A: ForIRI, AA: ForIndex<A>> OntologyIndex<A, AA> for IRIMappedIndex<A, AA> {
     fn index_insert(&mut self, cmp: AA) -> bool {
         let iris = self.aa_to_iris(cmp.borrow());
@@ -191,33 +184,30 @@ impl<A: ForIRI, AA: ForIndex<A>> OntologyIndex<A, AA> for IRIMappedIndex<A, AA> 
     fn index_take(&mut self, cmp: &AnnotatedComponent<A>) -> Option<AnnotatedComponent<A>> {
         let iris = self.aa_to_iris(cmp);
         if !iris.is_empty() {
-            let iri = iris.iter().next();
-            if let Some(iri) = iri {
-                self.mut_set_for_iri(iri).take(cmp).map(|aax| aax.unwrap())
-            } else {
-                None
+            let mut result: Option<AnnotatedComponent<A>> = None;
+            for iri in self.aa_to_iris(cmp).iter() {
+                result = result.or(self.mut_set_for_iri(iri).take(cmp).map(|aax| aax.unwrap()));
             }
+
+            result
         } else {
             None
         }
     }
 
     fn index_remove(&mut self, cmp: &AnnotatedComponent<A>) -> bool {
-        if let Some(iri) = self.aa_to_iris(cmp).iter().next() {
-            self.mut_set_for_iri(&iri.clone()).remove(cmp)
-        } else {
-            false
+        let mut found = false;
+        for iri in self.aa_to_iris(cmp).iter() {
+            found |= self.mut_set_for_iri(iri).remove(cmp);
         }
+
+        found
     }
 }
 
 #[allow(clippy::type_complexity)]
 pub struct IRIMappedOntology<A: ForIRI, AA: ForIndex<A>>(
-    OneIndexedOntology<
-        A,
-        AA,
-        IRIMappedIndex<A, AA>,
-    >,
+    OneIndexedOntology<A, AA, IRIMappedIndex<A, AA>>,
 );
 
 pub type RcIRIMappedOntology = IRIMappedOntology<RcStr, Rc<AnnotatedComponent<RcStr>>>;
