@@ -1436,7 +1436,10 @@ pub mod test {
 
         assert_eq!(ont.i().annotation_assertion().count(), 2);
 
-        let aa = ont.i().annotation_assertion().next().unwrap();
+        let mut v: Vec<_> = ont.i().annotation_assertion().collect();
+        v.sort();
+        let aa = v[0];
+
         assert_eq!(*(aa.subject), *"http://www.example.com/iri#C");
 
         assert_eq!(

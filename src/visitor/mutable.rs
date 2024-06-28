@@ -859,6 +859,7 @@ mod test {
         let mut walk = super::WalkMut::new(LabeltoFred);
         let mut vec = ont.into_iter().collect();
         walk.ontology_vec(&mut vec);
+        vec.sort();
 
         match &vec[2] {
             AnnotatedComponent {
