@@ -9,7 +9,7 @@ use crate::model::*;
 use crate::vocab::Facet;
 use crate::vocab::Namespace::*;
 use crate::vocab::OWL2Datatype;
-use crate::{ontology::set::SetOntology, vocab::OWL};
+use crate::vocab::OWL;
 
 use std::borrow::Cow;
 use std::collections::BTreeSet;
@@ -30,10 +30,10 @@ where
     reader: NsReader<R>,
 }
 
-pub fn read<R: BufRead>(
+pub fn read<A: ForIRI, O: MutableOntology<A> + Default, R: BufRead>(
     bufread: &mut R,
     _config: ParserConfiguration,
-) -> Result<(SetOntology<RcStr>, PrefixMapping), HornedError> {
+) -> Result<(O, PrefixMapping), HornedError> {
     let b = Build::new();
     read_with_build(bufread, &b)
 }

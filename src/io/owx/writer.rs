@@ -990,7 +990,7 @@ mod test {
         let r = read(bufread, ParserConfiguration::default());
         assert!(r.is_ok(), "Expected ontology, got failure:{:?}", r.err());
         let (o, m) = r.ok().unwrap();
-        (o.into(), m)
+        (o, m)
     }
 
     #[test]

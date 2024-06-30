@@ -813,24 +813,8 @@ impl<A: ForIRI, V: VisitMut<A>> WalkMut<A, V> {
 
 mod test {
     use super::*;
-    use crate::io::owx::reader::read;
-    use crate::io::ParserConfiguration;
+    use crate::io::owx::reader::test::read_ok;
     use crate::model::Build;
-    use crate::ontology::component_mapped::ComponentMappedOntology;
-    use curie::PrefixMapping;
-    use std::io::BufRead;
-
-    pub fn read_ok<R: BufRead>(
-        bufread: &mut R,
-    ) -> (
-        ComponentMappedOntology<RcStr, RcAnnotatedComponent>,
-        PrefixMapping,
-    ) {
-        let r = read(bufread, ParserConfiguration::default());
-        assert!(r.is_ok(), "Expected ontology, got failure:{:?}", r.err());
-        let (o, m) = r.ok().unwrap();
-        (o.into(), m)
-    }
 
     struct LabeltoFred;
     impl<A: ForIRI> VisitMut<A> for LabeltoFred {
