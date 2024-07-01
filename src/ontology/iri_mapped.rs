@@ -5,12 +5,13 @@
 //! This module provides an `IRIMappedIndex` which provides rapid
 //! access to all components associated with a given IRI.
 //!
-use super::indexed::ForIndex;
+use super::indexed::{ForIndex, OneIndexedOntology};
 use super::set::SetOntology;
 use crate::{
     model::*,
     visitor::immutable::{entity::IRIExtract, Walk},
 };
+use std::collections::VecDeque;
 use std::{
     cell::RefCell,
     collections::{BTreeMap, BTreeSet},
@@ -18,15 +19,11 @@ use std::{
     sync::Arc,
 };
 
-use super::component_mapped::ComponentMappedIndex;
-use super::declaration_mapped::DeclarationMappedIndex;
-use super::indexed::{FourIndexedOntology, OntologyIndex};
+use super::indexed::OntologyIndex;
 use super::set::SetIndex;
 
-use std::collections::HashSet;
-
 #[derive(Debug, Eq, PartialEq)]
-pub struct IRIMappedIndex<A, AA> {
+pub struct IRIMappedIndex<A: ForIRI, AA: ForIndex<A>> {
     irindex: RefCell<BTreeMap<IRI<A>, BTreeSet<AA>>>,
 }
 
@@ -38,14 +35,14 @@ impl<A: ForIRI, AA: ForIndex<A>> IRIMappedIndex<A, AA> {
         }
     }
 
-    fn aa_to_iris(&self, cmp: &AnnotatedComponent<A>) -> HashSet<IRI<A>> {
+    fn aa_to_iris(&self, cmp: &AnnotatedComponent<A>) -> BTreeSet<IRI<A>> {
         let mut w = Walk::new(IRIExtract::default());
         w.annotated_component(cmp);
 
         w.into_visit().into_vec().into_iter().collect()
     }
 
-    /// Fetch the iris hashmap as a raw pointer.
+    /// Fetch the iris btreemap as a raw pointer.
     ///
     /// This method also ensures that the BTreeSet for `iri` is
     /// instantiated, which means that it effects equality of the
@@ -96,7 +93,7 @@ impl<A: ForIRI, AA: ForIndex<A>> IRIMappedIndex<A, AA> {
     }
 }
 
-impl<A, AA> Default for IRIMappedIndex<A, AA> {
+impl<A: ForIRI, AA: ForIndex<A>> Default for IRIMappedIndex<A, AA> {
     fn default() -> Self {
         Self {
             irindex: Default::default(),
@@ -104,50 +101,37 @@ impl<A, AA> Default for IRIMappedIndex<A, AA> {
     }
 }
 
-/*
-impl<A: ForIRI, AA: ForIndex<A>> AsRef<IRIMappedIndex<A,AA>> for
-    OneIndexedOntology<A,AA,IRIMappedIndex<A,AA>> {
-    fn as_ref(&self) -> &IRIMappedIndex<A,AA> {
-        self.i()
+impl<A: ForIRI, AA: ForIndex<A>> From<SetIndex<A, AA>> for IRIMappedIndex<A, AA> {
+    fn from(value: SetIndex<A, AA>) -> Self {
+        let mut imi = IRIMappedIndex::new();
+        for cmp in value {
+            imi.index_insert(AA::from(cmp));
+        }
+        imi
     }
 }
 
-impl<A: ForIRI, AA: ForIndex<A>, I: OntologyIndex<A,AA>> AsRef<IRIMappedIndex<A,AA>> for
-    TwoIndexedOntology<A, AA, I, IRIMappedIndex<A,AA>> {
-    fn as_ref(&self) -> &IRIMappedIndex<A,AA> {
-        self.j()
-    }
-}
-
-impl<A: ForIRI, AA: ForIndex<A>, I, J> AsRef<IRIMappedIndex<A,AA>> for
-    ThreeIndexedOntology<A, AA, I, J, IRIMappedIndex<A,AA>>
-where I: OntologyIndex<A,AA>,
-      J: OntologyIndex<A,AA>,
-{
-    fn as_ref(&self) -> &IRIMappedIndex<A,AA> {
-        self.k()
-    }
-}
-
-/// An owning iterator over the annotated axioms of an `Ontology`.
-impl<A: ForIRI, AA:ForIndex<A>> IntoIterator for IRIMappedIndex<A, AA> {
+/// An owning iterator over the annotated components of an `Ontology`.
+impl<A: ForIRI, AA: ForIndex<A>> IntoIterator for IRIMappedIndex<A, AA> {
     type Item = AnnotatedComponent<A>;
     type IntoIter = std::vec::IntoIter<AnnotatedComponent<A>>;
     fn into_iter(self) -> Self::IntoIter {
         let btreemap = self.irindex.into_inner();
+
+        // The collect switches the type which shows up in the API. Blegh.
         let v: Vec<AnnotatedComponent<A>> = btreemap
-            .into_iter()
-            .map(|(_k, v)| v)
+            .into_values()
             .flat_map(BTreeSet::into_iter)
             .map(|fi| fi.unwrap())
             .collect();
+
         v.into_iter()
     }
 }
 
-/// An iterator over the annotated axioms of an `Ontology`.
+/// An iterator over the annotated components of an `Ontology`.
 pub struct IRIMappedIter<'a, A: ForIRI, AA: ForIndex<A>> {
-    ont: &'a IRIMappedIndex<A,AA>,
+    ont: &'a IRIMappedIndex<A, AA>,
     iris: VecDeque<&'a IRI<A>>,
     inner: Option<<&'a BTreeSet<AA> as IntoIterator>::IntoIter>,
 }
@@ -157,24 +141,24 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> Iterator for IRIMappedIter<'a, A, AA> {
     fn next(&mut self) -> Option<Self::Item> {
         // Consume the current iterator if there are items left.
         if let Some(ref mut it) = self.inner {
-            if let Some(axiom) = it.next() {
-                return Some(axiom.borrow());
+            if let Some(component) = it.next() {
+                return Some(component.borrow());
             }
         }
-        // Attempt to consume the iterator for the next IRI
+        // Attempt to consume the iterator for the next component kind
         if !self.iris.is_empty() {
             let iri = self.iris.pop_front().unwrap();
-            self.inner = self.ont.set_for_iri(*iri).map(BTreeSet::iter);
-            self.next().map(|rc| &*rc)
+            self.inner = self.ont.set_for_iri(iri).map(BTreeSet::iter);
+            self.next()
         } else {
             None
         }
     }
 }
 
-impl<'a, A: ForIRI, AA: ForIndex<A>> IntoIterator for &'a IRIMappedIndex<A,AA> {
+impl<'a, A: ForIRI, AA: ForIndex<A>> IntoIterator for &'a IRIMappedIndex<A, AA> {
     type Item = &'a AnnotatedComponent<A>;
-    type IntoIter = IRIMappedIter<'a,A,AA>;
+    type IntoIter = IRIMappedIter<'a, A, AA>;
     fn into_iter(self) -> Self::IntoIter {
         IRIMappedIter {
             ont: self,
@@ -183,7 +167,6 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> IntoIterator for &'a IRIMappedIndex<A,AA> {
         }
     }
 }
-*/
 
 impl<A: ForIRI, AA: ForIndex<A>> OntologyIndex<A, AA> for IRIMappedIndex<A, AA> {
     fn index_insert(&mut self, cmp: AA) -> bool {
@@ -201,36 +184,30 @@ impl<A: ForIRI, AA: ForIndex<A>> OntologyIndex<A, AA> for IRIMappedIndex<A, AA> 
     fn index_take(&mut self, cmp: &AnnotatedComponent<A>) -> Option<AnnotatedComponent<A>> {
         let iris = self.aa_to_iris(cmp);
         if !iris.is_empty() {
-            let iri = iris.iter().next();
-            if let Some(iri) = iri {
-                self.mut_set_for_iri(iri).take(cmp).map(|aax| aax.unwrap())
-            } else {
-                None
+            let mut result: Option<AnnotatedComponent<A>> = None;
+            for iri in self.aa_to_iris(cmp).iter() {
+                result = result.or(self.mut_set_for_iri(iri).take(cmp).map(|aax| aax.unwrap()));
             }
+
+            result
         } else {
             None
         }
     }
 
     fn index_remove(&mut self, cmp: &AnnotatedComponent<A>) -> bool {
-        if let Some(iri) = self.aa_to_iris(cmp).iter().next() {
-            self.mut_set_for_iri(&iri.clone()).remove(cmp)
-        } else {
-            false
+        let mut found = false;
+        for iri in self.aa_to_iris(cmp).iter() {
+            found |= self.mut_set_for_iri(iri).remove(cmp);
         }
+
+        found
     }
 }
 
 #[allow(clippy::type_complexity)]
 pub struct IRIMappedOntology<A: ForIRI, AA: ForIndex<A>>(
-    FourIndexedOntology<
-        A,
-        AA,
-        SetIndex<A, AA>,
-        IRIMappedIndex<A, AA>,
-        ComponentMappedIndex<A, AA>,
-        DeclarationMappedIndex<A, AA>,
-    >,
+    OneIndexedOntology<A, AA, IRIMappedIndex<A, AA>>,
 );
 
 pub type RcIRIMappedOntology = IRIMappedOntology<RcStr, Rc<AnnotatedComponent<RcStr>>>;
@@ -253,30 +230,25 @@ impl<A: ForIRI, AA: ForIndex<A>> MutableOntology<A> for IRIMappedOntology<A, AA>
 
 impl<A: ForIRI, AA: ForIndex<A>> Default for IRIMappedOntology<A, AA> {
     fn default() -> IRIMappedOntology<A, AA> {
-        IRIMappedOntology(FourIndexedOntology::new(
-            SetIndex::new(),
-            IRIMappedIndex::new(),
-            ComponentMappedIndex::new(),
-            DeclarationMappedIndex::new(),
-        ))
+        IRIMappedOntology(OneIndexedOntology::new(IRIMappedIndex::new()))
     }
 }
 
 impl<A: ForIRI, AA: ForIndex<A>> IRIMappedOntology<A, AA> {
+    pub fn from_index(index: IRIMappedIndex<A, AA>) -> Self {
+        IRIMappedOntology(OneIndexedOntology::new(index))
+    }
+
+    pub fn index(self) -> IRIMappedIndex<A, AA> {
+        self.0.index()
+    }
+
     //Utility method gets an iterator over the components in the index for a given IRI
     pub fn components_for_iri(
         &mut self,
         iri: &IRI<A>,
     ) -> impl Iterator<Item = &AnnotatedComponent<A>> {
-        self.0.j().component_for_iri(iri)
-    }
-
-    //Utility method gets an iterator over the axioms in the index for a given IRI
-    pub fn component_for_kind(
-        &mut self,
-        cmk: ComponentKind,
-    ) -> impl Iterator<Item = &AnnotatedComponent<A>> {
-        self.0.k().component_for_kind(cmk)
+        self.0.i().component_for_iri(iri)
     }
 
     //Utility method updates an axiom in the index
@@ -289,7 +261,7 @@ impl<A: ForIRI, AA: ForIndex<A>> IRIMappedOntology<A, AA> {
         self.insert(new_cmp)
     }
 
-    pub fn iter(&self) -> std::vec::IntoIter<&AnnotatedComponent<A>> {
+    pub fn iter(&self) -> IRIMappedIter<A, AA> {
         self.0.i().into_iter()
     }
 }
@@ -310,7 +282,7 @@ impl<A: ForIRI, AA: ForIndex<A>> IntoIterator for IRIMappedOntology<A, AA> {
     type Item = AnnotatedComponent<A>;
     type IntoIter = std::vec::IntoIter<AnnotatedComponent<A>>;
     fn into_iter(self) -> Self::IntoIter {
-        self.0.index().0.into_iter()
+        self.0.index().into_iter()
     }
 }
 
@@ -326,7 +298,12 @@ impl<A: ForIRI, AA: ForIndex<A>> From<SetOntology<A>> for IRIMappedOntology<A, A
 
 impl<A: ForIRI, AA: ForIndex<A>> From<IRIMappedOntology<A, AA>> for SetOntology<A> {
     fn from(imo: IRIMappedOntology<A, AA>) -> SetOntology<A> {
-        imo.0.index().0.into()
+        let mut so = SetOntology::new();
+
+        for cmp in imo {
+            so.insert(cmp);
+        }
+        so
     }
 }
 
