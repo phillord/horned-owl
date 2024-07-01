@@ -7,7 +7,7 @@ pub mod rdf;
 
 use curie::PrefixMapping;
 
-use self::rdf::reader::{IncompleteParse, RDFOntology};
+use self::rdf::reader::{ConcreteRDFOntology, IncompleteParse};
 use crate::ontology::indexed::ForIndex;
 use crate::{
     model::ForIRI,
@@ -23,7 +23,7 @@ pub enum ResourceType {
 pub enum ParserOutput<A: ForIRI, AA: ForIndex<A>> {
     OFNParser(SetOntology<A>, PrefixMapping),
     OWXParser(SetOntology<A>, PrefixMapping),
-    RDFParser(RDFOntology<A, AA>, IncompleteParse<A>),
+    RDFParser(ConcreteRDFOntology<A, AA>, IncompleteParse<A>),
 }
 
 impl<A: ForIRI, AA: ForIndex<A>> ParserOutput<A, AA> {
@@ -35,7 +35,7 @@ impl<A: ForIRI, AA: ForIndex<A>> ParserOutput<A, AA> {
         ParserOutput::OWXParser(sop.0, sop.1)
     }
 
-    pub fn rdf(rop: (RDFOntology<A, AA>, IncompleteParse<A>)) -> ParserOutput<A, AA> {
+    pub fn rdf(rop: (ConcreteRDFOntology<A, AA>, IncompleteParse<A>)) -> ParserOutput<A, AA> {
         ParserOutput::RDFParser(rop.0, rop.1)
     }
 }

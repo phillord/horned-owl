@@ -7,8 +7,14 @@ use std::collections::HashMap;
 use std::convert::AsRef;
 use std::rc::Rc;
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct LogicallyEqualIndex<A, AA>(HashMap<Component<A>, AA>);
+
+impl<A: ForIRI, AA: ForIndex<A>> Default for LogicallyEqualIndex<A, AA> {
+    fn default() -> Self {
+        LogicallyEqualIndex(HashMap::new())
+    }
+}
 
 impl<A: ForIRI, AA: ForIndex<A>> LogicallyEqualIndex<A, AA> {
     pub fn new() -> Self {

@@ -7,7 +7,7 @@ use clap::ArgMatches;
 
 use horned_bin::config::{parser_app, parser_config};
 use horned_owl::error::HornedError;
-use horned_owl::io::rdf::reader::RDFOntology;
+use horned_owl::io::rdf::reader::ConcreteRDFOntology;
 use horned_owl::model::{RcAnnotatedComponent, RcStr};
 
 use std::{fs::File, io::BufReader, path::Path};
@@ -38,7 +38,7 @@ pub(crate) fn matcher(matches: &ArgMatches) -> Result<(), HornedError> {
         HornedError::CommandError("Command requires an INPUT argument".to_string())
     })?;
 
-    let (_ont, incomplete): (RDFOntology<RcStr, RcAnnotatedComponent>, _) =
+    let (_ont, incomplete): (ConcreteRDFOntology<RcStr, RcAnnotatedComponent>, _) =
         horned_owl::io::rdf::reader::read(
             &mut BufReader::new(File::open(Path::new(input))?),
             parser_config(matches),
