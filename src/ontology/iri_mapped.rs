@@ -14,7 +14,7 @@ use crate::{
 use std::collections::VecDeque;
 use std::{
     cell::RefCell,
-    collections::{HashMap, HashSet},
+    collections::{BTreeMap, BTreeSet},
     rc::Rc,
     sync::Arc,
 };
@@ -24,42 +24,42 @@ use super::set::SetIndex;
 
 #[derive(Debug, Eq, PartialEq)]
 pub struct IRIMappedIndex<A: ForIRI, AA: ForIndex<A>> {
-    irindex: RefCell<HashMap<IRI<A>, HashSet<AA>>>,
+    irindex: RefCell<BTreeMap<IRI<A>, BTreeSet<AA>>>,
 }
 
 impl<A: ForIRI, AA: ForIndex<A>> IRIMappedIndex<A, AA> {
     /// Create a new ontology.
     pub fn new() -> IRIMappedIndex<A, AA> {
         IRIMappedIndex {
-            irindex: RefCell::new(HashMap::new()),
+            irindex: RefCell::new(BTreeMap::new()),
         }
     }
 
-    fn aa_to_iris(&self, cmp: &AnnotatedComponent<A>) -> HashSet<IRI<A>> {
+    fn aa_to_iris(&self, cmp: &AnnotatedComponent<A>) -> BTreeSet<IRI<A>> {
         let mut w = Walk::new(IRIExtract::default());
         w.annotated_component(cmp);
 
         w.into_visit().into_vec().into_iter().collect()
     }
 
-    /// Fetch the iris hashmap as a raw pointer.
+    /// Fetch the iris btreemap as a raw pointer.
     ///
-    /// This method also ensures that the HashSet for `iri` is
+    /// This method also ensures that the BTreeSet for `iri` is
     /// instantiated, which means that it effects equality of the
     /// ontology. It should only be used where the intention is to
     /// update the ontology.
-    fn components_as_ptr(&self, iri: &IRI<A>) -> *mut HashMap<IRI<A>, HashSet<AA>> {
+    fn components_as_ptr(&self, iri: &IRI<A>) -> *mut BTreeMap<IRI<A>, BTreeSet<AA>> {
         self.irindex.borrow_mut().entry(iri.clone()).or_default();
         self.irindex.as_ptr()
     }
 
     /// Fetch the axioms for the given iri.
-    fn set_for_iri(&self, iri: &IRI<A>) -> Option<&HashSet<AA>> {
+    fn set_for_iri(&self, iri: &IRI<A>) -> Option<&BTreeSet<AA>> {
         unsafe { (*self.irindex.as_ptr()).get(iri) }
     }
 
     /// Fetch the axioms for given iri as a mutable ref.
-    fn mut_set_for_iri(&mut self, iri: &IRI<A>) -> &mut HashSet<AA> {
+    fn mut_set_for_iri(&mut self, iri: &IRI<A>) -> &mut BTreeSet<AA> {
         unsafe { (*self.components_as_ptr(iri)).get_mut(iri).unwrap() }
     }
 
@@ -121,7 +121,7 @@ impl<A: ForIRI, AA: ForIndex<A>> IntoIterator for IRIMappedIndex<A, AA> {
         // The collect switches the type which shows up in the API. Blegh.
         let v: Vec<AnnotatedComponent<A>> = btreemap
             .into_values()
-            .flat_map(HashSet::into_iter)
+            .flat_map(BTreeSet::into_iter)
             .map(|fi| fi.unwrap())
             .collect();
 
@@ -133,7 +133,7 @@ impl<A: ForIRI, AA: ForIndex<A>> IntoIterator for IRIMappedIndex<A, AA> {
 pub struct IRIMappedIter<'a, A: ForIRI, AA: ForIndex<A>> {
     ont: &'a IRIMappedIndex<A, AA>,
     iris: VecDeque<&'a IRI<A>>,
-    inner: Option<<&'a HashSet<AA> as IntoIterator>::IntoIter>,
+    inner: Option<<&'a BTreeSet<AA> as IntoIterator>::IntoIter>,
 }
 
 impl<'a, A: ForIRI, AA: ForIndex<A>> Iterator for IRIMappedIter<'a, A, AA> {
@@ -148,7 +148,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> Iterator for IRIMappedIter<'a, A, AA> {
         // Attempt to consume the iterator for the next component kind
         if !self.iris.is_empty() {
             let iri = self.iris.pop_front().unwrap();
-            self.inner = self.ont.set_for_iri(iri).map(HashSet::iter);
+            self.inner = self.ont.set_for_iri(iri).map(BTreeSet::iter);
             self.next()
         } else {
             None
