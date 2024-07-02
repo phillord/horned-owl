@@ -15,6 +15,12 @@ repos:
        entry: make pre-commit
        pass_filenames: false
        stages: [pre-commit, pre-push]
+    -  id: Compile Benches
+       name: Running Test
+       language: system
+       entry: cargo bench --no-run
+       pass_filenames: false
+       stages: [pre-commit, pre-push]
 -   repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v4.6.0
     hooks:

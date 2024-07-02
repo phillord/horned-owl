@@ -1,4 +1,6 @@
 use criterion::{criterion_group, AxisScale, BenchmarkId, Criterion, PlotConfiguration};
+use horned_owl::model::RcStr;
+use horned_owl::ontology::set::SetOntology;
 use std::fs::File;
 use std::io::BufReader;
 use std::time::Duration;
@@ -20,7 +22,10 @@ fn io_read(c: &mut Criterion) {
             b.iter(|| {
                 let f = File::open(format!("benches/ont/o{}.owx", n)).ok().unwrap();
                 let mut f = BufReader::new(f);
-                let _ = horned_owl::io::owx::reader::read(&mut f, Default::default()).ok();
+                let _: (SetOntology<RcStr>, _) =
+                    horned_owl::io::owx::reader::read(&mut f, Default::default())
+                        .ok()
+                        .unwrap();
             })
         });
     }

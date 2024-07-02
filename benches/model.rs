@@ -3,7 +3,7 @@ use std::rc::Rc;
 
 use criterion::{criterion_group, AxisScale, BenchmarkId, Criterion, PlotConfiguration};
 
-use horned_owl::io::rdf::reader::RDFOntology;
+use horned_owl::io::rdf::reader::ConcreteRDFOntology;
 use horned_owl::model::*;
 use horned_owl::ontology::component_mapped::ComponentMappedOntology;
 use horned_owl::ontology::declaration_mapped::DeclarationMappedIndex;
@@ -237,7 +237,7 @@ fn food_to_vec() -> Vec<u8> {
     std::fs::read("./benches/ont/food.owl").unwrap()
 }
 
-fn read_vec<A: ForIRI, AA: ForIndex<A>>(v: &Vec<u8>, b: Build<A>) -> RDFOntology<A, AA> {
+fn read_vec<A: ForIRI, AA: ForIndex<A>>(v: &Vec<u8>, b: Build<A>) -> ConcreteRDFOntology<A, AA> {
     let mut c = Cursor::new(v.clone());
     horned_owl::io::rdf::reader::read_with_build(&mut c, &b, Default::default())
         .unwrap()
@@ -253,21 +253,21 @@ fn food(c: &mut Criterion) {
     group.bench_function("food_rc_str_rc_comp", |b| {
         b.iter(|| {
             let b: Build<RcStr> = Build::new();
-            let _: RDFOntology<RcStr, RcAnnotatedComponent> = read_vec(&food, b);
+            let _: ConcreteRDFOntology<RcStr, RcAnnotatedComponent> = read_vec(&food, b);
         })
     });
 
     group.bench_function("food_arc_str_arc_comp", |b| {
         b.iter(|| {
             let b: Build<ArcStr> = Build::new();
-            let _: RDFOntology<ArcStr, ArcAnnotatedComponent> = read_vec(&food, b);
+            let _: ConcreteRDFOntology<ArcStr, ArcAnnotatedComponent> = read_vec(&food, b);
         })
     });
 
     group.bench_function("food_string_direct_comp", |b| {
         b.iter(|| {
             let b: Build<String> = Build::new();
-            let _: RDFOntology<String, AnnotatedComponent<String>> = read_vec(&food, b);
+            let _: ConcreteRDFOntology<String, AnnotatedComponent<String>> = read_vec(&food, b);
         })
     });
 }
