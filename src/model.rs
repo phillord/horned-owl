@@ -2044,7 +2044,7 @@ pub enum DArgument<A> {
 pub trait Ontology<A> {}
 
 /// Add or remove axioms to an `MutableOntology`
-pub trait MutableOntology<A> {
+pub trait MutableOntology<A>: Ontology<A> {
     /// Insert an axiom into the ontology.
     ///
     /// # Examples

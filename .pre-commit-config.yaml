@@ -16,9 +16,9 @@ repos:
        pass_filenames: false
        stages: [pre-commit, pre-push]
     -  id: Compile Benches
-       name: Running Test
+       name: Compile Benches
        language: system
-       entry: cargo bench --no-run
+       entry: cargo bench --no-run --quiet
        pass_filenames: false
        stages: [pre-commit, pre-push]
 -   repo: https://github.com/pre-commit/pre-commit-hooks

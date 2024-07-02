@@ -104,12 +104,11 @@ mod test {
         let reader = std::fs::File::open(&resource)
             .map(std::io::BufReader::new)
             .unwrap();
-        let (ont, prefixes) = crate::io::ofn::reader::read(reader, Default::default()).unwrap();
+        let (ont, prefixes): (ComponentMappedOntology<RcStr, AnnotatedComponent<RcStr>>, _) =
+            crate::io::ofn::reader::read(reader, Default::default()).unwrap();
 
-        let component_mapped: ComponentMappedOntology<RcStr, AnnotatedComponent<RcStr>> =
-            ont.clone().into();
         let mut writer = Vec::new();
-        crate::io::ofn::writer::write(&mut writer, &component_mapped, Some(&prefixes)).unwrap();
+        crate::io::ofn::writer::write(&mut writer, &ont, Some(&prefixes)).unwrap();
 
         let (ont2, prefixes2) =
             crate::io::ofn::reader::read(std::io::Cursor::new(&writer), Default::default())

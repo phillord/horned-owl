@@ -292,6 +292,8 @@ impl<A: ForIRI, AA: ForIndex<A>> Default for ComponentMappedOntology<A, AA> {
     }
 }
 
+impl<A: ForIRI, AA: ForIndex<A>> Ontology<A> for ComponentMappedOntology<A, AA> {}
+
 impl<A: ForIRI, AA: ForIndex<A>> MutableOntology<A> for ComponentMappedOntology<A, AA> {
     fn insert<IAA>(&mut self, cmp: IAA) -> bool
     where

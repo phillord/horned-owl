@@ -1,4 +1,5 @@
 use std::collections::BTreeSet;
+use std::marker::PhantomData;
 use std::str::FromStr;
 
 use curie::Curie;
@@ -8,7 +9,6 @@ use pest::iterators::Pair;
 
 use crate::error::HornedError;
 use crate::model::*;
-use crate::ontology::set::SetOntology;
 use crate::vocab::{Facet, OWL2Datatype, OWL};
 
 use super::Context;
@@ -941,63 +941,62 @@ impl<A: ForIRI> FromPair<A> for ObjectPropertyExpression<A> {
 }
 
 // ---------------------------------------------------------------------------
+pub(crate) struct MutableOntologyWrapper<A: ForIRI, O: MutableOntology<A> + Ontology<A> + Default>(
+    pub(crate) O,
+    PhantomData<A>,
+);
 
-macro_rules! impl_ontology {
-    ($ty:ident) => {
-        impl<A: ForIRI> FromPair<A> for $ty<A> {
-            const RULE: Rule = Rule::Ontology;
-            fn from_pair_unchecked(pair: Pair<Rule>, ctx: &Context<'_, A>) -> Result<Self> {
-                debug_assert!(pair.as_rule() == Rule::Ontology);
-                let mut pairs = pair.into_inner();
-                let mut pair = pairs.next().unwrap();
+impl<A: ForIRI, O: MutableOntology<A> + Ontology<A> + Default> FromPair<A>
+    for MutableOntologyWrapper<A, O>
+{
+    const RULE: Rule = Rule::Ontology;
+    fn from_pair_unchecked(pair: Pair<Rule>, ctx: &Context<'_, A>) -> Result<Self> {
+        debug_assert!(pair.as_rule() == Rule::Ontology);
+        let mut pairs = pair.into_inner();
+        let mut pair = pairs.next().unwrap();
 
-                let mut ontology = $ty::default();
-                let mut ontology_id = OntologyID::default();
+        let mut ontology: O = Default::default();
+        let mut ontology_id = OntologyID::default();
 
-                // Parse ontology IRI and Version IRI if any
-                if pair.as_rule() == Rule::OntologyIRI {
-                    let inner = pair.into_inner().next().unwrap();
-                    ontology_id.iri = Some(IRI::from_pair(inner, ctx)?);
-                    pair = pairs.next().unwrap();
-                    if pair.as_rule() == Rule::VersionIRI {
-                        let inner = pair.into_inner().next().unwrap();
-                        ontology_id.viri = Some(IRI::from_pair(inner, ctx)?);
-                        pair = pairs.next().unwrap();
-                    }
-                }
-                ontology.insert(ontology_id);
-
-                // Process imports
-                for p in pair.into_inner() {
-                    ontology.insert(Import::from_pair(p, ctx)?);
-                }
-
-                // Process ontology annotations
-                for pair in pairs.next().unwrap().into_inner() {
-                    ontology.insert(OntologyAnnotation::from_pair(pair, ctx)?);
-                }
-
-                // Process axioms, ignore SWRL rules
-                for pair in pairs.next().unwrap().into_inner() {
-                    let inner = pair.into_inner().next().unwrap();
-                    match inner.as_rule() {
-                        Rule::Axiom => {
-                            ontology.insert(AnnotatedComponent::from_pair(inner, ctx)?);
-                        }
-                        rule => {
-                            unreachable!("unexpected rule in Ontology::from_pair: {:?}", rule);
-                        }
-                    }
-                }
-
-                Ok(ontology)
+        // Parse ontology IRI and Version IRI if any
+        if pair.as_rule() == Rule::OntologyIRI {
+            let inner = pair.into_inner().next().unwrap();
+            ontology_id.iri = Some(IRI::from_pair(inner, ctx)?);
+            pair = pairs.next().unwrap();
+            if pair.as_rule() == Rule::VersionIRI {
+                let inner = pair.into_inner().next().unwrap();
+                ontology_id.viri = Some(IRI::from_pair(inner, ctx)?);
+                pair = pairs.next().unwrap();
             }
         }
-    };
-}
+        ontology.insert(ontology_id);
 
-impl_ontology!(SetOntology);
-// impl_ontology!(AxiomMappedOntology);
+        // Process imports
+        for p in pair.into_inner() {
+            ontology.insert(Import::from_pair(p, ctx)?);
+        }
+
+        // Process ontology annotations
+        for pair in pairs.next().unwrap().into_inner() {
+            ontology.insert(OntologyAnnotation::from_pair(pair, ctx)?);
+        }
+
+        // Process axioms, ignore SWRL rules
+        for pair in pairs.next().unwrap().into_inner() {
+            let inner = pair.into_inner().next().unwrap();
+            match inner.as_rule() {
+                Rule::Axiom => {
+                    ontology.insert(AnnotatedComponent::from_pair(inner, ctx)?);
+                }
+                rule => {
+                    unreachable!("unexpected rule in Ontology::from_pair: {:?}", rule);
+                }
+            }
+        }
+
+        Ok(MutableOntologyWrapper(ontology, Default::default()))
+    }
+}
 
 // ---------------------------------------------------------------------------
 
@@ -1035,17 +1034,18 @@ impl<A: ForIRI> FromPair<A> for PrefixMapping {
 
 // ---------------------------------------------------------------------------
 
-impl<A, O> FromPair<A> for (O, PrefixMapping)
+impl<A, O> FromPair<A> for (MutableOntologyWrapper<A, O>, PrefixMapping)
 where
     A: ForIRI,
-    O: Ontology<A> + FromPair<A>,
+    O: Default + MutableOntology<A> + Ontology<A>,
 {
     const RULE: Rule = Rule::OntologyDocument;
     fn from_pair_unchecked(pair: Pair<Rule>, ctx: &Context<'_, A>) -> Result<Self> {
         let mut pairs = pair.into_inner();
         let prefixes = PrefixMapping::from_pair(pairs.next().unwrap(), ctx)?;
         let context = Context::new(ctx.build, &prefixes);
-        O::from_pair(pairs.next().unwrap(), &context).map(|ont| (ont, prefixes))
+        MutableOntologyWrapper::from_pair(pairs.next().unwrap(), &context)
+            .map(|ont| (ont, prefixes))
     }
 }
 
@@ -1117,6 +1117,7 @@ mod tests {
 
     use super::*;
     use crate::io::ofn::reader::lexer::OwlFunctionalLexer;
+    use crate::ontology::set::SetOntology;
 
     use test_generator::test_resources;
 
@@ -1244,8 +1245,10 @@ mod tests {
             .next()
             .unwrap();
 
-        let doc: (SetOntology<String>, PrefixMapping) =
-            FromPair::from_pair(pair, &Context::new(&build, &prefixes)).unwrap();
+        let doc: (
+            MutableOntologyWrapper<_, SetOntology<String>>,
+            PrefixMapping,
+        ) = FromPair::from_pair(pair, &Context::new(&build, &prefixes)).unwrap();
         assert_eq!(
             doc.1.mappings().collect::<HashSet<_>>(),
             expected.mappings().collect::<HashSet<_>>()
@@ -1291,7 +1294,8 @@ mod tests {
         let build = Build::new();
         let prefixes = PrefixMapping::default();
         let ctx = Context::new(&build, &prefixes);
-        let item: (SetOntology<Rc<str>>, _) = FromPair::from_pair(pair, &ctx).unwrap();
+        let item: (MutableOntologyWrapper<_, SetOntology<Rc<str>>>, _) =
+            FromPair::from_pair(pair, &ctx).unwrap();
 
         let path = resource
             .replace("owl-functional", "owl-xml")
@@ -1301,6 +1305,6 @@ mod tests {
             crate::io::owx::reader::read(&mut Cursor::new(&owx), Default::default()).unwrap();
 
         // pretty_assertions::assert_eq!(item.1, expected.1);
-        pretty_assertions::assert_eq!(item.0, expected.0);
+        pretty_assertions::assert_eq!(item.0 .0, expected.0);
     }
 }

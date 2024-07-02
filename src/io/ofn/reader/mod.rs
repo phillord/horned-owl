@@ -6,13 +6,14 @@ use crate::error::HornedError;
 use crate::io::ParserConfiguration;
 use crate::model::Build;
 use crate::model::ForIRI;
-use crate::model::RcStr;
-use crate::ontology::set::SetOntology;
+use crate::model::MutableOntology;
+use crate::model::Ontology;
 
 mod from_pair;
 mod lexer;
 
 use self::from_pair::FromPair;
+use self::from_pair::MutableOntologyWrapper;
 use self::lexer::OwlFunctionalLexer;
 use self::lexer::Rule;
 
@@ -27,18 +28,18 @@ impl<'a, A: ForIRI> Context<'a, A> {
     }
 }
 
-pub fn read<R: BufRead>(
+pub fn read<A: ForIRI, O: MutableOntology<A> + Ontology<A> + Default, R: BufRead>(
     bufread: R,
     _config: ParserConfiguration,
-) -> Result<(SetOntology<RcStr>, PrefixMapping), HornedError> {
+) -> Result<(O, PrefixMapping), HornedError> {
     let b = Build::new();
     read_with_build(bufread, &b)
 }
 
-pub fn read_with_build<A: ForIRI, R: BufRead>(
+pub fn read_with_build<A: ForIRI, O: MutableOntology<A> + Ontology<A> + Default, R: BufRead>(
     mut bufread: R,
     build: &Build<A>,
-) -> Result<(SetOntology<A>, PrefixMapping), HornedError> {
+) -> Result<(O, PrefixMapping), HornedError> {
     let prefixes = PrefixMapping::default();
     let ctx = Context::new(build, &prefixes);
 
@@ -49,5 +50,7 @@ pub fn read_with_build<A: ForIRI, R: BufRead>(
         .next()
         .unwrap();
 
-    FromPair::from_pair(pair, &ctx)
+    let wrapper: Result<(MutableOntologyWrapper<A, O>, PrefixMapping), HornedError> =
+        FromPair::from_pair(pair, &ctx);
+    wrapper.map(|r| (r.0 .0, r.1))
 }
