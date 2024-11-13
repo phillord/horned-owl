@@ -43,6 +43,7 @@ rio_xml="0.8.4"
 [features]
 default = ["remote"]
 remote = ["ureq"]
+encoding = ["quick-xml/encoding"]
 
 [dev-dependencies]
 horned-owl = {path=".", features = ["remote"]}
