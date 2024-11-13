@@ -119,7 +119,7 @@ fn decode_expand_curie_maybe<'a, A: ForIRI, R: BufRead>(
     //   return it as as borrowed string.
     // - in any other case, we need to perform a copy, otherwise the decoded
     //   string / unabbreviated IRI is not going to live long enough.
-    #[cfg(feature = "quick-xml/encoding")]
+    #[cfg(feature = "encoding")]
     match r.reader.decode(val) {
         Cow::Borrowed(b) => expand_curie_maybe(r, b),
         Cow::Owned(o) => match expand_curie_maybe(r, &o) {
@@ -128,7 +128,7 @@ fn decode_expand_curie_maybe<'a, A: ForIRI, R: BufRead>(
         },
     }
 
-    #[cfg(not(feature = "quick-xml/encoding"))]
+    #[cfg(not(feature = "encoding"))]
     match r.reader.decoder().decode(val) {
         Ok(curie) => {
             let cur = expand_curie_maybe(r, curie);
