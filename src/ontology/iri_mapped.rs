@@ -199,25 +199,17 @@ impl<A: ForIRI, AA: ForIndex<A>> OntologyIndex<A, AA> for IRIMappedIndex<A, AA> 
     }
 
     fn index_take(&mut self, cmp: &AnnotatedComponent<A>) -> Option<AnnotatedComponent<A>> {
-        let iris = self.aa_to_iris(cmp);
-        if !iris.is_empty() {
-            let iri = iris.iter().next();
-            if let Some(iri) = iri {
-                self.mut_set_for_iri(iri).take(cmp).map(|aax| aax.unwrap())
-            } else {
-                None
-            }
-        } else {
-            None
-        }
+        self.aa_to_iris(cmp).iter().fold(None, |val, iri| {
+            self.mut_set_for_iri(iri)
+                .take(cmp)
+                .map_or(val, |c| Some(c.unwrap()))
+        })
     }
 
     fn index_remove(&mut self, cmp: &AnnotatedComponent<A>) -> bool {
-        if let Some(iri) = self.aa_to_iris(cmp).iter().next() {
-            self.mut_set_for_iri(&iri.clone()).remove(cmp)
-        } else {
-            false
-        }
+        self.aa_to_iris(cmp).iter().fold(false, |val, iri| {
+            self.mut_set_for_iri(iri).remove(cmp) || val
+        })
     }
 }
 
@@ -332,8 +324,8 @@ impl<A: ForIRI, AA: ForIndex<A>> From<IRIMappedOntology<A, AA>> for SetOntology<
 
 #[cfg(test)]
 mod test {
-    use super::IRIMappedOntology;
-    use crate::model::*;
+    use super::{IRIMappedIndex, IRIMappedOntology};
+    use crate::{model::*, ontology::indexed::OntologyIndex};
 
     #[test]
     fn test_ontology_cons() {
@@ -432,5 +424,31 @@ mod test {
                 &AnnotatedComponent::from(Component::DisjointClasses(disj2)),
             ]
         );
+    }
+
+    #[test]
+    fn test_index_remove() {
+        let build = Build::new();
+        let mut i = IRIMappedIndex::<RcStr, RcAnnotatedComponent>::new();
+        let disj1 = AnnotatedComponent {
+            component: Component::DisjointClasses(DisjointClasses(vec![
+                ClassExpression::Class(build.class("http://www.example.com/#A")),
+                ClassExpression::Class(build.class("http://www.example.com/#B")),
+            ])),
+            ann: Default::default(),
+        };
+
+        i.index_insert(RcAnnotatedComponent::new(disj1.clone()));
+        i.index_remove(&disj1);
+
+        let irindex = i.irindex.borrow();
+
+        let mut v: Vec<_> = irindex
+            .iter()
+            .flat_map(|(i, s)| s.into_iter().map(move |c| (i.clone(), c.clone())))
+            .collect();
+        v.sort();
+
+        assert_eq!(v, Vec::<(IRI<RcStr>, RcAnnotatedComponent)>::new())
     }
 }
