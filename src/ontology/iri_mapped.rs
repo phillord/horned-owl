@@ -1,9 +1,9 @@
-//! Access `AnnotatedComponent` by iri.
+//! An index to access all the [annotated components](crate::model::AnnotatedComponent) referencing a given [IRI](crate::model::IRI).
 
 //! # Overview
 //!
-//! This module provides an `IRIMappedIndex` which provides rapid
-//! access to all components associated with a given IRI.
+//! This module provides [IRIMappedIndex], which provides rapid
+//! access to all components associated with a given IRI, and the concrete ontology implementation [IRIMappedOntology] using this index.
 //!
 use super::indexed::ForIndex;
 use super::set::SetOntology;
@@ -32,9 +32,12 @@ use std::collections::HashSet;
 /// ```
 /// # use horned_owl::ontology::iri_mapped::IRIMappedIndex;
 /// # use horned_owl::{model::*, ontology::indexed::OntologyIndex};
+/// # use std::rc::Rc;
 /// # fn test_index_example() {
-///   let build = Build::new();
-///   let mut idx = IRIMappedIndex::<RcStr, RcAnnotatedComponent>::new();
+///   let build: Build<Rc<str>> = Build::new();
+///   let mut idx = IRIMappedIndex::new();
+///
+///   // We create a component to add to the index.
 ///   let cmp = AnnotatedComponent {
 ///       component: Component::DisjointClasses(DisjointClasses(vec![
 ///           ClassExpression::Class(build.class("http://www.example.com/#A")),
@@ -43,8 +46,10 @@ use std::collections::HashSet;
 ///       ann: Default::default(),
 ///   };
 ///
-///   idx.index_insert(RcAnnotatedComponent::new(cmp));
+///   // We insert the annotated component that we just created in the index.
+///   idx.index_insert(cmp);
 ///
+///   // The index now lists the annotated component for both entities occurring in it.
 ///   assert!(idx.component_for_iri(&build.iri("http://www.example.com/#A")).next().is_some());
 ///   assert!(idx.component_for_iri(&build.iri("http://www.example.com/#B")).next().is_some());
 /// # }
