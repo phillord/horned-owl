@@ -24,6 +24,31 @@ use super::set::SetIndex;
 
 use std::collections::HashSet;
 
+/// Implements an ontology index that stores for each IRI a set of annotated components in which this IRI occurs.
+///
+/// # Examples
+///
+/// The following snippet shows the effect of adding an axiom involving two IRIs to a new index.
+/// ```
+/// # use horned_owl::ontology::iri_mapped::IRIMappedIndex;
+/// # use horned_owl::{model::*, ontology::indexed::OntologyIndex};
+/// # fn test_index_example() {
+///   let build = Build::new();
+///   let mut idx = IRIMappedIndex::<RcStr, RcAnnotatedComponent>::new();
+///   let cmp = AnnotatedComponent {
+///       component: Component::DisjointClasses(DisjointClasses(vec![
+///           ClassExpression::Class(build.class("http://www.example.com/#A")),
+///           ClassExpression::Class(build.class("http://www.example.com/#B")),
+///       ])),
+///       ann: Default::default(),
+///   };
+///
+///   idx.index_insert(RcAnnotatedComponent::new(cmp));
+///
+///   assert!(idx.component_for_iri(&build.iri("http://www.example.com/#A")).next().is_some());
+///   assert!(idx.component_for_iri(&build.iri("http://www.example.com/#B")).next().is_some());
+/// # }
+/// ```
 #[derive(Debug, Eq, PartialEq)]
 pub struct IRIMappedIndex<A, AA> {
     irindex: BTreeMap<IRI<A>, BTreeSet<AA>>,
@@ -37,7 +62,8 @@ impl<A: ForIRI, AA: ForIndex<A>> IRIMappedIndex<A, AA> {
         }
     }
 
-    fn aa_to_iris(&self, cmp: &AnnotatedComponent<A>) -> HashSet<IRI<A>> {
+    /// Helper that visits an annotated component and extract all the occurring IRIs.
+    fn iris_from_component(cmp: &AnnotatedComponent<A>) -> HashSet<IRI<A>> {
         let mut w = Walk::new(IRIExtract::default());
         w.annotated_component(cmp);
 
@@ -54,20 +80,9 @@ impl<A: ForIRI, AA: ForIndex<A>> IRIMappedIndex<A, AA> {
         self.irindex.entry(iri.clone()).or_default()
     }
 
-    /*
-    /// Gets an iterator that visits the annotated components of the ontology.
-    pub fn iter(&self) -> IRIMappedIter<A, AA> {
-        IRIMappedIter {
-            ont: self,
-            inner: None,
-            iris: unsafe { (*self.irindex.as_ptr()).keys().collect() },
-        }
-    }
-     */
-
-    /// Fetch the AnnotatedComponent for a given IRI
+    /// Iterates over the annotated components associated to `iri` by the index.
     ///
-    /// See also `component` for access to the `Component` without annotations.
+    /// Use [`component()`](Self::component) to iterate over components without annotations.
     pub fn component_for_iri(&self, iri: &IRI<A>) -> impl Iterator<Item = &AnnotatedComponent<A>> {
         self.set_for_iri(iri)
             // Iterate over option
@@ -77,8 +92,9 @@ impl<A: ForIRI, AA: ForIndex<A>> IRIMappedIndex<A, AA> {
             .map(|rc| rc.borrow())
     }
 
-    /// Fetch the Component set iterator for a given iri
+    /// Iterates over the components (without annotations) associated to `iri` by the index.
     ///
+    /// Use [`component_for_iri()`](Self::component_for_iri) to iterate over annotated components.
     pub fn component(&self, iri: &IRI<A>) -> impl Iterator<Item = &Component<A>> {
         self.component_for_iri(iri).map(|ann| &ann.component)
     }
@@ -175,7 +191,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> IntoIterator for &'a IRIMappedIndex<A,AA> {
 
 impl<A: ForIRI, AA: ForIndex<A>> OntologyIndex<A, AA> for IRIMappedIndex<A, AA> {
     fn index_insert(&mut self, cmp: AA) -> bool {
-        let iris = self.aa_to_iris(cmp.borrow());
+        let iris = Self::iris_from_component(cmp.borrow());
         if !iris.is_empty() {
             for iri in iris.iter() {
                 self.mut_set_for_iri(iri).insert(cmp.clone());
@@ -187,17 +203,21 @@ impl<A: ForIRI, AA: ForIndex<A>> OntologyIndex<A, AA> for IRIMappedIndex<A, AA> 
     }
 
     fn index_take(&mut self, cmp: &AnnotatedComponent<A>) -> Option<AnnotatedComponent<A>> {
-        self.aa_to_iris(cmp).iter().fold(None, |val, iri| {
-            self.mut_set_for_iri(iri)
-                .take(cmp)
-                .map_or(val, |c| Some(c.unwrap()))
-        })
+        Self::iris_from_component(cmp)
+            .iter()
+            .fold(None, |val, iri| {
+                self.mut_set_for_iri(iri)
+                    .take(cmp)
+                    .map_or(val, |c| Some(c.unwrap()))
+            })
     }
 
     fn index_remove(&mut self, cmp: &AnnotatedComponent<A>) -> bool {
-        self.aa_to_iris(cmp).iter().fold(false, |val, iri| {
-            self.mut_set_for_iri(iri).remove(cmp) || val
-        })
+        Self::iris_from_component(cmp)
+            .iter()
+            .fold(false, |val, iri| {
+                self.mut_set_for_iri(iri).remove(cmp) || val
+            })
     }
 }
 
