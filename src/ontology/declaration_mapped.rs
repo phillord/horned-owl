@@ -168,7 +168,6 @@ mod test {
     #[test]
     fn test_cons() {
         let _d = DeclarationMappedIndex::new_rc();
-        assert!(true);
     }
 
     #[test]

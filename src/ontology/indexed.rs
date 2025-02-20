@@ -452,7 +452,6 @@ mod test {
     #[test]
     fn one_cons() {
         let _o = OneIndexedOntology::new_rc(SetIndex::new());
-        assert!(true);
     }
 
     #[test]
@@ -488,10 +487,8 @@ mod test {
     #[test]
     fn two_cons() {
         let _o = TwoIndexedOntology::new(SetIndex::new_rc(), SetIndex::new());
-        assert!(true);
 
         let _o = TwoIndexedOntology::new(SetIndex::new_rc(), NullIndex::default());
-        assert!(true);
     }
 
     #[test]
