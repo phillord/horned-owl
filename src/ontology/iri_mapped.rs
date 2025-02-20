@@ -12,7 +12,6 @@ use crate::{
     visitor::immutable::{entity::IRIExtract, Walk},
 };
 use std::{
-    cell::RefCell,
     collections::{BTreeMap, BTreeSet},
     rc::Rc,
     sync::Arc,
@@ -27,14 +26,14 @@ use std::collections::HashSet;
 
 #[derive(Debug, Eq, PartialEq)]
 pub struct IRIMappedIndex<A, AA> {
-    irindex: RefCell<BTreeMap<IRI<A>, BTreeSet<AA>>>,
+    irindex: BTreeMap<IRI<A>, BTreeSet<AA>>,
 }
 
 impl<A: ForIRI, AA: ForIndex<A>> IRIMappedIndex<A, AA> {
     /// Create a new ontology.
     pub fn new() -> IRIMappedIndex<A, AA> {
         IRIMappedIndex {
-            irindex: RefCell::new(BTreeMap::new()),
+            irindex: BTreeMap::new(),
         }
     }
 
@@ -45,25 +44,14 @@ impl<A: ForIRI, AA: ForIndex<A>> IRIMappedIndex<A, AA> {
         w.into_visit().into_vec().into_iter().collect()
     }
 
-    /// Fetch the iris hashmap as a raw pointer.
-    ///
-    /// This method also ensures that the BTreeSet for `iri` is
-    /// instantiated, which means that it effects equality of the
-    /// ontology. It should only be used where the intention is to
-    /// update the ontology.
-    fn components_as_ptr(&self, iri: &IRI<A>) -> *mut BTreeMap<IRI<A>, BTreeSet<AA>> {
-        self.irindex.borrow_mut().entry(iri.clone()).or_default();
-        self.irindex.as_ptr()
-    }
-
     /// Fetch the axioms for the given iri.
     fn set_for_iri(&self, iri: &IRI<A>) -> Option<&BTreeSet<AA>> {
-        unsafe { (*self.irindex.as_ptr()).get(iri) }
+        self.irindex.get(iri)
     }
 
     /// Fetch the axioms for given iri as a mutable ref.
     fn mut_set_for_iri(&mut self, iri: &IRI<A>) -> &mut BTreeSet<AA> {
-        unsafe { (*self.components_as_ptr(iri)).get_mut(iri).unwrap() }
+        self.irindex.entry(iri.clone()).or_default()
     }
 
     /*
@@ -324,13 +312,12 @@ impl<A: ForIRI, AA: ForIndex<A>> From<IRIMappedOntology<A, AA>> for SetOntology<
 
 #[cfg(test)]
 mod test {
-    use super::{IRIMappedIndex, IRIMappedOntology};
+    use super::{ArcIRIMappedOntology, IRIMappedIndex, IRIMappedOntology};
     use crate::{model::*, ontology::indexed::OntologyIndex};
 
     #[test]
     fn test_ontology_cons() {
         let _ = IRIMappedOntology::new_arc();
-        assert!(true);
     }
 
     #[test]
@@ -441,14 +428,20 @@ mod test {
         i.index_insert(RcAnnotatedComponent::new(disj1.clone()));
         i.index_remove(&disj1);
 
-        let irindex = i.irindex.borrow();
+        let irindex = &i.irindex;
 
         let mut v: Vec<_> = irindex
             .iter()
-            .flat_map(|(i, s)| s.into_iter().map(move |c| (i.clone(), c.clone())))
+            .flat_map(|(i, s)| s.iter().map(move |c| (i.clone(), c.clone())))
             .collect();
         v.sort();
 
         assert_eq!(v, Vec::<(IRI<RcStr>, RcAnnotatedComponent)>::new())
+    }
+
+    #[test]
+    fn test_once_lock_ontology() {
+        let _: std::cell::RefCell<ArcIRIMappedOntology> = std::cell::RefCell::default();
+        let _: std::sync::OnceLock<ArcIRIMappedOntology> = std::sync::OnceLock::new();
     }
 }

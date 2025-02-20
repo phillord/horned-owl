@@ -14,7 +14,6 @@ use super::indexed::ForIndex;
 use super::set::SetOntology;
 use crate::model::*;
 use std::{
-    cell::RefCell,
     collections::{BTreeMap, BTreeSet, VecDeque},
     iter::FromIterator,
     ops::Deref,
@@ -58,37 +57,26 @@ macro_rules! onimpl {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ComponentMappedIndex<A, AA> {
-    component: RefCell<BTreeMap<ComponentKind, BTreeSet<AA>>>,
+    component: BTreeMap<ComponentKind, BTreeSet<AA>>,
     pd: PhantomData<A>,
 }
 
 impl<A: ForIRI, AA: ForIndex<A>> ComponentMappedIndex<A, AA> {
     pub fn new() -> ComponentMappedIndex<A, AA> {
         ComponentMappedIndex {
-            component: RefCell::new(BTreeMap::new()),
+            component: BTreeMap::new(),
             pd: Default::default(),
         }
     }
 
-    /// Fetch the component hashmap as a raw pointer.
-    ///
-    /// This method also ensures that the BTreeSet for `cmk` is
-    /// instantiated, which means that it effects equality of the
-    /// ontology. It should only be used where the intention is to
-    /// update the ontology.
-    fn component_as_ptr(&self, cmk: ComponentKind) -> *mut BTreeMap<ComponentKind, BTreeSet<AA>> {
-        self.component.borrow_mut().entry(cmk).or_default();
-        self.component.as_ptr()
-    }
-
     /// Fetch the components for the given kind.
     fn set_for_kind(&self, cmk: ComponentKind) -> Option<&BTreeSet<AA>> {
-        unsafe { (*self.component.as_ptr()).get(&cmk) }
+        self.component.get(&cmk)
     }
 
     /// Fetch the components for given kind as a mutable ref.
     fn mut_set_for_kind(&mut self, cmk: ComponentKind) -> &mut BTreeSet<AA> {
-        unsafe { (*self.component_as_ptr(cmk)).get_mut(&cmk).unwrap() }
+        self.component.entry(cmk).or_default()
     }
 
     /// Gets an iterator that visits the annotated components of the ontology.
@@ -97,7 +85,7 @@ impl<A: ForIRI, AA: ForIndex<A>> ComponentMappedIndex<A, AA> {
         ComponentMappedIter {
             ont: self,
             inner: None,
-            kinds: unsafe { (*self.component.as_ptr()).keys().collect() },
+            kinds: self.component.keys().collect(),
         }
     }
 
@@ -217,10 +205,9 @@ impl<A: ForIRI, AA: ForIndex<A>> IntoIterator for ComponentMappedIndex<A, AA> {
     type Item = AnnotatedComponent<A>;
     type IntoIter = std::vec::IntoIter<AnnotatedComponent<A>>;
     fn into_iter(self) -> Self::IntoIter {
-        let btreemap = self.component.into_inner();
-
         // The collect switches the type which shows up in the API. Blegh.
-        let v: Vec<AnnotatedComponent<A>> = btreemap
+        let v: Vec<AnnotatedComponent<A>> = self
+            .component
             .into_values()
             .flat_map(BTreeSet::into_iter)
             .map(|fi| fi.unwrap())
@@ -264,7 +251,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> IntoIterator for &'a ComponentMappedIndex<A
         ComponentMappedIter {
             ont: self,
             inner: None,
-            kinds: unsafe { (*self.component.as_ptr()).keys().collect() },
+            kinds: self.component.keys().collect(),
         }
     }
 }
@@ -427,7 +414,6 @@ mod test {
     #[test]
     fn test_ontology_cons() {
         let _ = ComponentMappedOntology::new_rc();
-        assert!(true);
     }
 
     #[test]
@@ -540,7 +526,7 @@ mod test {
         o.insert(decl3.clone());
 
         // Iteration is based on ascending order of axiom kinds.
-        let mut it = (&o).i().iter();
+        let mut it = o.i().iter();
         assert_eq!(
             it.next(),
             Some(&AnnotatedComponent::from(Component::DeclareClass(decl1)))
