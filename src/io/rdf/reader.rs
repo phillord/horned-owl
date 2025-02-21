@@ -1683,21 +1683,20 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                     match (self.find_declaration_kind(sub, ic)?,
                            self.find_declaration_kind(pred, ic)?,
                            self.find_declaration_kind(obj, ic)?) {
-                        (NamedOWLEntityKind::NamedIndividual,
-                         NamedOWLEntityKind::ObjectProperty,
-                         NamedOWLEntityKind::NamedIndividual) => {
-                            ObjectPropertyAssertion {
-                                ope: ObjectProperty(pred.clone()).into(),
-                                from: sub.into(),
-                                to: obj.into()
-                            }.into()
-                        }
-                        _ => todo!()
-                    }
+                               (NamedOWLEntityKind::NamedIndividual,
+                                   NamedOWLEntityKind::ObjectProperty,
+                                   NamedOWLEntityKind::NamedIndividual) => {
+                                       ObjectPropertyAssertion {
+                                           ope: ObjectProperty(pred.clone()).into(),
+                                           from: sub.into(),
+                                           to: obj.into()
+                                       }.into()
+                                   }
+                               b @ _ => todo!("Error on {:?}, {:?}", triple, b)
+                           }
                 },
                 _ => Ok(None),
             };
-
             if let Some(axiom) = axiom? {
                 let ann = self.ann_map.remove(&triple.0).unwrap_or_default();
                 self.merge(AnnotatedComponent {
