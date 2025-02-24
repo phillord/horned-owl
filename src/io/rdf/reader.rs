@@ -912,7 +912,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
     fn fetch_pe_seq(
         &mut self,
         bnodeid: &BNode<A>,
-        ic: &[&RDFOntology<A, AA>],
+        ic: &[&O],
     ) -> Option<Vec<PropertyExpression<A>>> {
         self.fetch_bnode_seq_and_map(bnodeid, |op, pr| op.find_property_kind(pr, ic))
     }
@@ -920,7 +920,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
     fn fetch_ope_seq(
         &mut self,
         bnodeid: &BNode<A>,
-        ic: &[&RDFOntology<A, AA>],
+        ic: &[&O],
     ) -> Option<Vec<ObjectPropertyExpression<A>>> {
         self.fetch_bnode_seq_and_map(bnodeid, |op, pr| op.fetch_ope(pr, ic))
     }
