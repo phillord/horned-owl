@@ -2371,8 +2371,22 @@ pub mod test {
     }
 
     #[test]
+    fn punning() {
+        let ont_s = include_str!("../../ont/owl-xml/punning.owx");
+
+        let (_ont, _) = read_ok(&mut ont_s.as_bytes());
+
+        dbg!(_ont);
+        assert!(false);
+    }
+
+    #[test]
     fn family() {
         let ont_s = include_str!("../../ont/owl-xml/manual/family.owx");
         let (_, _) = read_ok(&mut ont_s.as_bytes());
     }
+
+
+
 }
+

@@ -1692,7 +1692,9 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                                            to: obj.into()
                                        }.into()
                                    }
-                               b @ _ => todo!("Error on {:?}, {:?}", triple, b)
+                               b @ _ => {
+                                   todo!("Error on {:?}, {:?}", triple, b)
+                               }
                            }
                 },
                 _ => Ok(None),
