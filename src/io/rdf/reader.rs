@@ -4,7 +4,12 @@ use rio_api::{
 };
 use Term::*;
 
-use crate::{error::HornedError, io::ParserConfiguration, vocab::Facet};
+use crate::{
+    error::HornedError,
+    io::ParserConfiguration,
+    ontology::declaration_mapped::{closure_declaration_kind, closure_declaration_kind_or_pun},
+    vocab::Facet,
+};
 use crate::{model::Literal, ontology::component_mapped::ComponentMappedOntology};
 use crate::{model::*, vocab::Vocab};
 
@@ -240,6 +245,7 @@ pub trait RDFOntology<A: ForIRI, AA: ForIndex<A>>:
     + AsRef<DeclarationMappedIndex<A, AA>>
     + AsRef<SetIndex<A, AA>>
     + Default
+    + std::fmt::Debug
     + MutableOntology<A>
 {
 }
@@ -249,6 +255,7 @@ impl<A: ForIRI, AA: ForIndex<A>, T: ?Sized> RDFOntology<A, AA> for T where
         + AsRef<DeclarationMappedIndex<A, AA>>
         + AsRef<SetIndex<A, AA>>
         + Default
+        + std::fmt::Debug
         + MutableOntology<A>
 {
 }
@@ -1031,12 +1038,27 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
     }
 
     fn find_declaration_kind(&mut self, iri: &IRI<A>, ic: &[&O]) -> Option<NamedOWLEntityKind> {
-        [&self.o]
-            .iter()
-            .chain(ic.iter())
-            .map(|o| <O as AsRef<DeclarationMappedIndex<A, AA>>>::as_ref(o).declaration_kind(iri))
-            .find(|d| d.is_some())
-            .flatten()
+        closure_declaration_kind(
+            iri,
+            [&self.o]
+                .iter()
+                .chain(ic.iter())
+                .map(|o| <O as AsRef<DeclarationMappedIndex<A, AA>>>::as_ref(o)),
+        )
+    }
+
+    fn find_declaration_kind_or_pun(
+        &mut self,
+        iri: &IRI<A>,
+        ic: &[&O],
+    ) -> Option<NamedOWLEntityKind> {
+        closure_declaration_kind_or_pun(
+            iri,
+            [&self.o]
+                .iter()
+                .chain(ic.iter())
+                .map(|o| <O as AsRef<DeclarationMappedIndex<A, AA>>>::as_ref(o)),
+        )
     }
 
     fn find_property_kind(&mut self, term: &Term<A>, ic: &[&O]) -> Option<PropertyExpression<A>> {
@@ -1680,10 +1702,10 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                     }
                 },
                 [Term::Iri(sub), Term::Iri(pred), Term::Iri(obj)] => ok_some! {
-                    match (self.find_declaration_kind(sub, ic)?,
-                           self.find_declaration_kind(pred, ic)?,
-                           self.find_declaration_kind(obj, ic)?) {
-                               (NamedOWLEntityKind::NamedIndividual,
+                    match (self.find_declaration_kind_or_pun(sub, ic)?,
+                        self.find_declaration_kind(pred, ic)?,
+                        self.find_declaration_kind_or_pun(obj, ic)?) {
+                            (NamedOWLEntityKind::NamedIndividual,
                                    NamedOWLEntityKind::ObjectProperty,
                                    NamedOWLEntityKind::NamedIndividual) => {
                                        ObjectPropertyAssertion {
@@ -1692,8 +1714,9 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                                            to: obj.into()
                                        }.into()
                                    }
-                               b @ _ => {
-                                   todo!("Error on {:?}, {:?}", triple, b)
+                            b @ _ => {
+                                dbg!(<O as AsRef<DeclarationMappedIndex<A, AA>>>::as_ref(&self.o));
+                                todo!("Error on {:?}, {:?}", triple, b)
                                }
                            }
                 },
