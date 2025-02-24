@@ -31,10 +31,28 @@ impl<A: ForIRI, AA: ForIndex<A>> DeclarationMappedIndex<A, AA> {
         }
     }
 
+    // Returns the declaration kind of an IRI, preferring
+    // NamedOwlEntityKind::NamedIndividual if the IRI is punned.
+    pub fn declaration_kind_or_pun(&self, iri: &IRI<A>) -> Option<NamedOWLEntityKind> {
+        if self.is_pun(iri) {
+            Some(NamedOWLEntityKind::NamedIndividual)
+        }
+        else {
+            self.declaration_kind(iri)
+        }
+    }
+
+    // Returns the declaration kind of an IRI.
+    //
+    // If the IRI is punned, NamedOWLEntityKind::Class will be returned.
     pub fn declaration_kind(&self, iri: &IRI<A>) -> Option<NamedOWLEntityKind> {
         self.kind(iri).and_then(|e| e.as_owl())
     }
 
+    // Returns the kind of an IRI as a NamedEntityKind.
+    //
+    // `declaration_kind` will normally be a better choice as only OWL
+    // entities can be declared.
     pub fn kind(&self, iri: &IRI<A>) -> Option<NamedEntityKind> {
         self.0
             .get(iri)
@@ -42,8 +60,15 @@ impl<A: ForIRI, AA: ForIndex<A>> DeclarationMappedIndex<A, AA> {
             .or_else(|| crate::vocab::to_built_in_entity(iri).map(|e| e.into()))
     }
 
+    // Returns a set of all IRIs which are punned (i.e. declared as
+    // both classes and individuals)
     pub fn puns(&self) -> &HashSet<IRI<A>> {
         &self.1
+    }
+
+    // Return true if an IRI is punned
+    pub fn is_pun(&self, iri: &IRI<A>) -> bool {
+        self.1.contains(iri)
     }
 
     fn aa_to_ne(&self, ax: &AnnotatedComponent<A>) -> Option<NamedEntityKind> {
@@ -146,9 +171,31 @@ impl DeclarationMappedIndex<RcStr, RcAnnotatedComponent> {
     }
 }
 
+pub fn closure_declaration_kind<'a, A:ForIRI + 'a,
+    AA:ForIndex<A> + 'a,
+    I: Iterator<Item=&'a DeclarationMappedIndex<A, AA>>>
+    (iri: &IRI<A>, ic: I) -> Option<NamedOWLEntityKind> {
+
+        ic.map(|index| index.declaration_kind(iri))
+            .find(|d| d.is_some())
+            .flatten()
+}
+
+pub fn closure_declaration_kind_or_pun<'a, A:ForIRI + 'a,
+    AA:ForIndex<A> + 'a,
+    I: Iterator<Item=&'a DeclarationMappedIndex<A, AA>>>
+    (iri: &IRI<A>, ic: I) -> Option<NamedOWLEntityKind> {
+
+        ic.map(|index| index.declaration_kind_or_pun(iri))
+            .find(|d| d.is_some())
+            .flatten()
+}
+
+
+
 #[cfg(test)]
 mod test {
-    use super::DeclarationMappedIndex;
+    use super::{closure_declaration_kind, closure_declaration_kind_or_pun, DeclarationMappedIndex};
     use crate::model::{AnnotatedComponent, Build, NamedOWLEntity, NamedOWLEntityKind, RcStr};
     use crate::ontology::indexed::OntologyIndex;
     use crate::vocab::OWL;
@@ -226,19 +273,120 @@ mod test {
         let ni: NamedOWLEntity<_> = b.named_individual("http://www.example.com/p").into();
         let ni: AnnotatedComponent<_> = ni.into();
 
+
+        // Insert the class first, then check we identify as a class,
+        // and that the pun number is correct.
         d.index_insert(c.clone().into());
         d.index_insert(ni.clone().into());
 
         assert_eq!(d.puns().len(), 1);
         assert_eq!(d.puns().iter().next(), Some(&iri));
+        assert!(d.is_pun(&iri));
         assert_eq!(d.declaration_kind(&iri), Some(NamedOWLEntityKind::Class));
+        assert_eq!(d.declaration_kind_or_pun(&iri), Some(NamedOWLEntityKind::NamedIndividual));
 
+        // Insert the individual first and check the same thing
         let mut d = DeclarationMappedIndex::new_rc();
         d.index_insert(ni.clone().into());
         d.index_insert(c.clone().into());
 
         assert_eq!(d.puns().len(), 1);
         assert_eq!(d.puns().iter().next(), Some(&iri));
+        assert!(d.is_pun(&iri));
         assert_eq!(d.declaration_kind(&iri), Some(NamedOWLEntityKind::Class));
+        assert_eq!(d.declaration_kind_or_pun(&iri), Some(NamedOWLEntityKind::NamedIndividual));
     }
+
+
+    #[test]
+    fn test_closure_declaration_kind() {
+        let mut d1 = DeclarationMappedIndex::new_rc();
+        let mut d2 = DeclarationMappedIndex::new_rc();
+
+        let b = Build::new_rc();
+
+        let ciri = b.iri("http://www.example.com/p1");
+        let c: NamedOWLEntity<_> = b.class(ciri.clone()).into();
+        let c: AnnotatedComponent<_> = c.into();
+        let niiri = b.iri("http://www.example.com/p2");
+        let ni: NamedOWLEntity<_> = b.named_individual(niiri.clone()).into();
+        let ni: AnnotatedComponent<_> = ni.into();
+
+        d1.index_insert(c.into());
+        d2.index_insert(ni.into());
+
+        assert_eq!(closure_declaration_kind(
+            &ciri,
+            // For reasons I do not understand this has to be vec! rather than just an array.
+            vec![&d1, &d2].into_iter()
+        ),
+            Some(NamedOWLEntityKind::Class)
+        );
+
+        assert_eq!(closure_declaration_kind(
+            &niiri,
+            vec![&d1, &d2].into_iter()
+        ),
+            Some(NamedOWLEntityKind::NamedIndividual)
+        );
+
+    }
+
+
+    #[test]
+    fn test_closure_declaration_kind_or_pun() {
+        let mut d1 = DeclarationMappedIndex::new_rc();
+        let mut d2 = DeclarationMappedIndex::new_rc();
+
+        let b = Build::new_rc();
+
+        let ciri = b.iri("http://www.example.com/p1");
+        let c: NamedOWLEntity<_> = b.class(ciri.clone()).into();
+        let c: AnnotatedComponent<_> = c.into();
+        let niiri = b.iri("http://www.example.com/p2");
+        let ni: NamedOWLEntity<_> = b.named_individual(niiri.clone()).into();
+        let ni: AnnotatedComponent<_> = ni.into();
+
+        d1.index_insert(c.into());
+        d2.index_insert(ni.into());
+
+        assert_eq!(closure_declaration_kind_or_pun(
+            &ciri,
+            // For reasons I do not understand this has to be vec! rather than just an array.
+            vec![&d1, &d2].into_iter()
+        ),
+            Some(NamedOWLEntityKind::Class)
+        );
+
+        assert_eq!(closure_declaration_kind_or_pun(
+            &niiri,
+            vec![&d1, &d2].into_iter()
+        ),
+            Some(NamedOWLEntityKind::NamedIndividual)
+        );
+
+
+        // now add a pun
+        let punned_individual: NamedOWLEntity<_> = b.named_individual(ciri.clone()).into();
+        let punned_individual: AnnotatedComponent<_> = punned_individual.into();
+        d1.index_insert(punned_individual.into());
+
+        // this should not have changed
+        assert_eq!(closure_declaration_kind(
+            &ciri,
+            vec![&d1, &d2].into_iter()
+        ),
+            Some(NamedOWLEntityKind::Class)
+        );
+
+        // but this should have
+        assert_eq!(closure_declaration_kind_or_pun(
+            &ciri,
+            vec![&d1, &d2].into_iter()
+        ),
+            Some(NamedOWLEntityKind::NamedIndividual)
+        );
+
+    }
+
 }
