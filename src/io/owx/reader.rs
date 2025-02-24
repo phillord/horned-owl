@@ -891,9 +891,7 @@ from_start! {
                 let ni:NamedIndividual<_> = iri.into();
                 Ok(ni.into())
             }
-            l => {
-                todo!("{:?}",std::str::from_utf8(l))
-            }
+            _ => Err(error_unknown_entity("Individual", e.local_name().as_ref(), r))
         }
     }
 }
@@ -910,9 +908,7 @@ from_start! {
                 let iri:IRI<_> = from_start(r, e)?;
                 Ok(iri.into())
             }
-            l => {
-                todo!("{:?}",std::str::from_utf8(l))
-            }
+            _ => Err(error_unknown_entity("AnnotationSubject", e.local_name().as_ref(), r))
         }
 
     }
@@ -960,7 +956,7 @@ from_start! {
                 }
                 _ => {
                     return Err(error_unknown_entity
-                                ("Object Property Expression",
+                                ("ObjectPropertyExpression",
                                  e.local_name().as_ref(), r));
                 }
             }
@@ -983,7 +979,7 @@ from_start! {
                     ObjectPropertyExpression(from_start(r, e)?)
                 }
                 _ => {
-                    return Err(error_unknown_entity("Sub Object Property",
+                    return Err(error_unknown_entity("SubObjectPropertyExpression",
                                                     e.local_name().as_ref(),
                                                     r));
                 }
@@ -1001,7 +997,7 @@ from_start! {
         Ok(
             FacetRestriction {
                 f: Facet::try_from(f.as_ref())
-                    .map_err(|_| error_unknown_entity("facet", &f, r))?,
+                    .map_err(|_| error_unknown_entity("FacetRestriction", &f, r))?,
                     // .ok_or_else(
                     //     || error_unknown_entity("facet", &f, r))?,
                 l: from_next(r)?
@@ -1280,42 +1276,34 @@ from_start! {
 from_start! {
     DArgument, r, e,
     {
-        Ok(
             match e.local_name().as_ref() {
                 b"Variable" => {
-                    DArgument::Variable(Variable::from_start(r, e)?)
+                    Ok(DArgument::Variable(Variable::from_start(r, e)?))
                 }
                 b"Literal" => {
-                    DArgument::Literal(Literal::from_start(r, e)?)
+                   Ok(DArgument::Literal(Literal::from_start(r, e)?))
                 }
-                _ => {
-                    todo!()
-                }
+                _ => Err(error_unknown_entity("DArgument", e.local_name().as_ref(), r))
             }
-        )
     }
 }
 
 from_start! {
     IArgument, r, e,
     {
-        Ok(
-            match e.local_name().as_ref() {
+
+        match e.local_name().as_ref() {
                 b"Variable" => {
-                    IArgument::Variable(Variable::from_start(r, e)?)
+                    Ok(IArgument::Variable(Variable::from_start(r, e)?))
                 }
                 b"NamedIndividual" => {
-                    IArgument::Individual(NamedIndividual::from_start(r, e)?.into())
+                    Ok(IArgument::Individual(NamedIndividual::from_start(r, e)?.into()))
                 }
                 b"AnonymousIndividual" => {
-                    IArgument::Individual(AnonymousIndividual::from_start(r, e)?.into())
+                    Ok(IArgument::Individual(AnonymousIndividual::from_start(r, e)?.into()))
                 }
-                a => {
-                    eprintln!("{:?}", std::str::from_utf8(a));
-                    todo!();
-                }
+                _ => Err(error_unknown_entity("IArgument", e.local_name().as_ref(), r))
             }
-        )
     }
 }
 
@@ -1802,7 +1790,7 @@ pub mod test {
         if let ClassExpression::ObjectHasValue { ope: _, i: _ } = ss.sup {
             return;
         }
-        assert!(false);
+        unreachable!();
     }
 
     #[test]
@@ -1967,17 +1955,16 @@ pub mod test {
         assert_eq!(ont.i().datatype_definition().count(), 1);
         let dd = ont.i().datatype_definition().next().unwrap();
 
-        match dd {
-            DatatypeDefinition { kind, range } => {
-                assert_eq!(String::from(kind), "http://www.example.com/iri#D");
+        let DatatypeDefinition { kind, range } = dd;
+        {
+            assert_eq!(String::from(kind), "http://www.example.com/iri#D");
 
-                match range {
-                    DataRange::Datatype(real) => {
-                        assert_eq!(String::from(real), "http://www.w3.org/2002/07/owl#real");
-                    }
-                    _ => {
-                        panic!("Unexpected type from test");
-                    }
+            match range {
+                DataRange::Datatype(real) => {
+                    assert_eq!(String::from(real), "http://www.w3.org/2002/07/owl#real");
+                }
+                _ => {
+                    panic!("Unexpected type from test");
                 }
             }
         }
@@ -2038,15 +2025,11 @@ pub mod test {
 
         let cl = &ont.i().sub_class_of().next().unwrap().sup;
         assert_eq!(ont.i().sub_class_of().count(), 1);
-        if let ClassExpression::DataAllValuesFrom {
-            dp: ref _dp,
-            dr: ref _dr,
-        } = cl
-        {
-            assert!(true);
-        } else {
-            panic!("Expecting DataAllValuesFrom");
-        }
+
+        assert!(matches!(
+            cl,
+            ClassExpression::DataAllValuesFrom { dp: _, dr: _ }
+        ));
     }
 
     #[test]
@@ -2056,16 +2039,10 @@ pub mod test {
 
         let cl = &ont.i().sub_class_of().next().unwrap().sup;
         assert_eq!(ont.i().sub_class_of().count(), 1);
-        if let ClassExpression::DataExactCardinality {
-            n: ref _n,
-            dp: ref _dp,
-            dr: ref _dr,
-        } = cl
-        {
-            assert!(true);
-        } else {
-            panic!("Expecting DataExactCardinality");
-        }
+
+        assert!(
+            matches!(cl, ClassExpression::DataExactCardinality { n: ref _n, dp: ref _dp, dr: ref _dr })
+        );
     }
 
     #[test]
@@ -2074,6 +2051,10 @@ pub mod test {
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
         let cl = &ont.i().sub_class_of().next().unwrap().sup;
         assert_eq!(ont.i().sub_class_of().count(), 1);
+
+        assert!(
+            matches!(cl, ClassExpression::DataExactCardinality { n: ref _n, dp: ref _dp, dr: ref _dr })
+        );
         if let ClassExpression::DataExactCardinality {
             n: ref _n,
             dp: ref _dp,
@@ -2098,16 +2079,10 @@ pub mod test {
 
         let cl = &ont.i().sub_class_of().next().unwrap().sup;
         assert_eq!(ont.i().sub_class_of().count(), 1);
-        if let ClassExpression::DataMinCardinality {
-            n: ref _n,
-            dp: ref _dp,
-            dr: ref _dr,
-        } = cl
-        {
-            assert!(true);
-        } else {
-            panic!("Expecting DataMinCardinality");
-        }
+
+        assert!(
+            matches!(cl, ClassExpression::DataMinCardinality { n: ref _n, dp: ref _dp, dr: ref _dr })
+        );
     }
 
     #[test]
@@ -2117,16 +2092,10 @@ pub mod test {
 
         let cl = &ont.i().sub_class_of().next().unwrap().sup;
         assert_eq!(ont.i().sub_class_of().count(), 1);
-        if let ClassExpression::DataMaxCardinality {
-            n: ref _n,
-            dp: ref _dp,
-            dr: ref _dr,
-        } = cl
-        {
-            assert!(true);
-        } else {
-            panic!("Expecting DataMaxCardinality");
-        }
+
+        assert!(
+            matches!(cl, ClassExpression::DataMaxCardinality { n: ref _n, dp: ref _dp, dr: ref _dr })
+        );
     }
 
     #[test]
@@ -2271,12 +2240,7 @@ pub mod test {
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
         let rule = ont.i().rule().next().unwrap();
-        assert! {
-            matches!{
-                rule.head[0],
-                Atom::ObjectPropertyAtom{..}
-            }
-        };
+        assert!(matches!(rule.head[0], Atom::ObjectPropertyAtom { .. }));
     }
 
     #[test]
@@ -2309,29 +2273,20 @@ pub mod test {
 
         let rule = ont.i().rule().next().unwrap();
         dbg!(rule);
-        if let Atom::ClassAtom { ref arg, .. } = rule.head[0] {
-            assert! {
-                matches!{
-                    arg,
-                    IArgument::Individual(Individual::Named(_))
-
-                }
+        assert!(matches!(
+            rule.head[0],
+            Atom::ClassAtom {
+                arg: IArgument::Individual(Individual::Named(_)),
+                ..
             }
-        } else {
-            assert!(false);
-        }
-
-        if let Atom::ClassAtom { ref arg, .. } = rule.body[0] {
-            assert! {
-                matches!{
-                    arg,
-                    IArgument::Individual(Individual::Anonymous(_))
-
-                }
+        ));
+        assert!(matches!(
+            rule.body[0],
+            Atom::ClassAtom {
+                arg: IArgument::Individual(Individual::Anonymous(_)),
+                ..
             }
-        } else {
-            assert!(false);
-        }
+        ));
     }
 
     #[test]
@@ -2339,8 +2294,6 @@ pub mod test {
         let ont_s = include_str!("../../ont/owl-xml/swrl_different_individuals.owx");
 
         let (_ont, _) = read_ok(&mut ont_s.as_bytes());
-
-        assert!(true);
     }
 
     #[test]
@@ -2348,8 +2301,6 @@ pub mod test {
         let ont_s = include_str!("../../ont/owl-xml/swrl_same_individual.owx");
 
         let (_ont, _) = read_ok(&mut ont_s.as_bytes());
-
-        assert!(true);
     }
 
     #[test]
@@ -2357,8 +2308,6 @@ pub mod test {
         let ont_s = include_str!("../../ont/owl-xml/swrl_built_in.owx");
 
         let (_ont, _) = read_ok(&mut ont_s.as_bytes());
-
-        assert!(true);
     }
 
     #[test]
@@ -2366,8 +2315,6 @@ pub mod test {
         let ont_s = include_str!("../../ont/owl-xml/swrl_data_range.owx");
 
         let (_ont, _) = read_ok(&mut ont_s.as_bytes());
-
-        assert!(true);
     }
 
     #[test]
