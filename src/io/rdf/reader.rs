@@ -126,6 +126,19 @@ impl<A: ForIRI> TryFrom<&crate::vocab::Vocab> for Term<A> {
     }
 }
 
+impl<A: ForIRI> Term<A> {
+    pub fn to_simple_iri(self, b: &Build<A>) -> Term<A> {
+        match self {
+            Self::OWL(owl) => b.iri(owl.as_ref()).into(),
+            Self::RDF(rdf) => b.iri(rdf.as_ref()).into(),
+            Self::RDFS(rdfs) => b.iri(rdfs.as_ref()).into(),
+            Self::SWRL(swrl) => b.iri(swrl.as_ref()).into(),
+            Self::FacetTerm(facet) => b.iri(facet.as_ref()).into(),
+            _ => self,
+        }
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 enum OrTerm<A: ForIRI> {
     Term(Term<A>),
@@ -648,20 +661,16 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
     }
 
     fn annotation(&self, t: &[Term<A>; 3]) -> Annotation<A> {
+        let t = [
+            t[0].clone().to_simple_iri(self.b),
+            t[1].clone().to_simple_iri(self.b),
+            t[2].clone().to_simple_iri(self.b),
+        ];
+
         match t {
-            // We assume that anything passed to here is an
-            // annotation built in type
-            [s, RDFS(rdfs), b] => {
-                let iri = self.b.iri(rdfs.as_ref());
-                self.annotation(&[s.clone(), Term::Iri(iri), b.clone()])
-            }
-            [s, OWL(owl), b] => {
-                let iri = self.b.iri(owl.as_ref());
-                self.annotation(&[s.clone(), Term::Iri(iri), b.clone()])
-            }
             [_, Iri(p), ob @ Term::Literal(_)] => Annotation {
                 ap: AnnotationProperty(p.clone()),
-                av: self.fetch_literal(ob).unwrap().into(),
+                av: self.fetch_literal(&ob).unwrap().into(),
             },
             [_, Iri(p), Iri(ob)] => {
                 // IRI annotation value
@@ -675,7 +684,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                 av: AnonymousIndividual(bnodeid.0.clone()).into(),
             },
             _ => {
-                todo!()
+                unreachable!()
             }
         }
     }
@@ -1714,10 +1723,16 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                                            to: obj.into()
                                        }.into()
                                    }
-                            b @ _ => {
-                                dbg!(<O as AsRef<DeclarationMappedIndex<A, AA>>>::as_ref(&self.o));
-                                todo!("Error on {:?}, {:?}", triple, b)
-                               }
+                            _ if self.config.rdf.lax => {
+                                ObjectPropertyAssertion {
+                                    ope: ObjectProperty(pred.clone()).into(),
+                                    from: sub.into(),
+                                    to: obj.into()
+                                }.into()
+                            }
+                            _ => {
+                                todo!("No matching type, perhaps need lax mode")
+                            }
                            }
                 },
                 _ => Ok(None),
