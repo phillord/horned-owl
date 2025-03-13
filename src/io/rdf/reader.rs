@@ -244,7 +244,7 @@ pub trait RDFOntology<A: ForIRI, AA: ForIndex<A>>:
 {
 }
 
-impl<A: ForIRI, AA: ForIndex<A>, T: ?Sized> RDFOntology<A, AA> for T where
+impl<A: ForIRI, AA: ForIndex<A>, T> RDFOntology<A, AA> for T where
     T: AsRef<LogicallyEqualIndex<A, AA>>
         + AsRef<DeclarationMappedIndex<A, AA>>
         + AsRef<SetIndex<A, AA>>

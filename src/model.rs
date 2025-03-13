@@ -28,14 +28,14 @@
 
 //! The rules are as follows:
 //! 1. Use tuples where all the entities are of the same type and
-//! semantically equivalent
+//!    semantically equivalent
 //! 2. Use structs where entities are not equivalent.
 //! 3. Where values are equivalent and bounded in number to two, use a
-//! tuple with two values.
+//!    tuple with two values.
 //! 4. Where values are equivalent, but unbounded, use a Vec, either as
-//! part of a tuple or struct.
+//!    part of a tuple or struct.
 //! 5. Where structs are used, variables names should be short,
-//! identify the type is unique, or be descriptive if not.
+//!    identify the type is unique, or be descriptive if not.
 
 //! # Example
 //! - Rule 1:
@@ -140,7 +140,7 @@ pub trait ForIRI:
 
 /// Blanket implementation of `ForIRI` for any type taht implements
 /// all the bounds.
-impl<T: ?Sized> ForIRI for T where
+impl<T> ForIRI for T where
     T: AsRef<str>
         + Borrow<str>
         + Clone
@@ -323,7 +323,6 @@ impl<A: ForIRI> Build<A> {
     }
 
     /// Constructs a new `Class`.
-
     ///
     /// # Examples
     ///
@@ -1919,18 +1918,18 @@ pub enum ClassExpression<A> {
     },
 
     /// A has-value relationship.
-
+    ///
     /// This is the class of individuals, `i`, which have the
     /// relationship `dp` to exactly the literal `l`.
-
+    ///
     /// See also [Value Restriction](https://www.w3.org/TR/owl2-syntax/#Literal_Value_Restriction)
     DataHasValue { dp: DataProperty<A>, l: Literal<A> },
 
     /// A minimum cardinality restriction
-
+    ///
     /// The class of individuals have at least `n` relationships of
     /// the kind `dp` to a given data range `dr`.
-
+    ///
     /// See also [Min Cardinality](https://www.w3.org/TR/owl2-syntax/#Minimum_Cardinality_2)
     DataMinCardinality {
         n: u32,
@@ -1939,10 +1938,10 @@ pub enum ClassExpression<A> {
     },
 
     /// A max cardinality restriction
-
+    ///
     /// The class of individuals have at most `n` relationships of
     /// the kind `dp` to a given data range `dr`.
-
+    ///
     /// See also [Max Cardinality](https://www.w3.org/TR/owl2-syntax/#Maximum_Cardinality_2)
     DataMaxCardinality {
         n: u32,
@@ -1951,10 +1950,10 @@ pub enum ClassExpression<A> {
     },
 
     /// An exact cardinality restriction
-
+    ///
     /// The class of individuals have exactly `n` relationships of
     /// the kind `dp` to a given data range `dr`.
-
+    ///
     /// See also [Exactly Cardinality](https://www.w3.org/TR/owl2-syntax/#Exact_Cardinality_2)
     DataExactCardinality {
         n: u32,

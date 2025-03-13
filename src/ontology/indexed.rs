@@ -42,7 +42,7 @@ pub trait ForIndex<A: ForIRI>:
     }
 }
 
-impl<A: ForIRI, T: ?Sized> ForIndex<A> for T where
+impl<A: ForIRI, T> ForIndex<A> for T where
     T: Borrow<AnnotatedComponent<A>>
         + Clone
         + Debug

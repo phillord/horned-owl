@@ -179,7 +179,7 @@ derive_tuple3!(A, ObjectPropertyExpression<A>, Individual<A>, Individual<A>);
 
 // ---------------------------------------------------------------------------
 
-impl<'a, A: ForIRI> Display for Functional<'a, BTreeSet<Annotation<A>>, A> {
+impl<A: ForIRI> Display for Functional<'_, BTreeSet<Annotation<A>>, A> {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
         for (i, x) in self.0.iter().enumerate() {
             if i != 0 {
@@ -368,7 +368,7 @@ derive_axiom!(A, TransitiveObjectProperty<A>, TransitiveObjectProperty(0));
 
 // ---------------------------------------------------------------------------
 
-impl<'a, A: ForIRI> Display for Functional<'a, AnnotatedComponent<A>, A> {
+impl<A: ForIRI> Display for Functional<'_, AnnotatedComponent<A>, A> {
     fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
         if !self.0.ann.is_empty() {
             Functional(&self.0.component, self.1, Some(&self.0.ann)).fmt(f)
@@ -382,7 +382,7 @@ impl<A: ForIRI> AsFunctional<A> for AnnotatedComponent<A> {}
 
 // ---------------------------------------------------------------------------
 
-impl<'a, A: ForIRI> Display for Functional<'a, AnnotationAssertion<A>, A> {
+impl<A: ForIRI> Display for Functional<'_, AnnotationAssertion<A>, A> {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
         if let Some(annotations) = self.2 {
             write!(
@@ -409,7 +409,7 @@ impl<A: ForIRI> AsFunctional<A> for AnnotationAssertion<A> {}
 
 // ---------------------------------------------------------------------------
 
-impl<'a, A: ForIRI> Display for Functional<'a, AnnotationSubject<A>, A> {
+impl<A: ForIRI> Display for Functional<'_, AnnotationSubject<A>, A> {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
         use AnnotationSubject::*;
         match &self.0 {
@@ -423,7 +423,7 @@ impl<A: ForIRI> AsFunctional<A> for AnnotationSubject<A> {}
 
 // ---------------------------------------------------------------------------
 
-impl<'a, A: ForIRI> Display for Functional<'a, AnnotationValue<A>, A> {
+impl<A: ForIRI> Display for Functional<'_, AnnotationValue<A>, A> {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
         use AnnotationValue::*;
         match &self.0 {
@@ -438,7 +438,7 @@ impl<A: ForIRI> AsFunctional<A> for AnnotationValue<A> {}
 
 // ---------------------------------------------------------------------------
 
-impl<'a, A: ForIRI> Display for Functional<'a, AnonymousIndividual<A>, A> {
+impl<A: ForIRI> Display for Functional<'_, AnonymousIndividual<A>, A> {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
         write!(f, "{}", self.0 .0.borrow())
     }
@@ -448,7 +448,7 @@ impl<A: ForIRI> AsFunctional<A> for AnonymousIndividual<A> {}
 
 // ---------------------------------------------------------------------------
 
-impl<'a, A: ForIRI> Display for Functional<'a, Atom<A>, A> {
+impl<A: ForIRI> Display for Functional<'_, Atom<A>, A> {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
         use Atom::*;
         match self.0 {
@@ -516,7 +516,7 @@ impl<A: ForIRI> AsFunctional<A> for Atom<A> {}
 
 // ---------------------------------------------------------------------------
 
-impl<'a, A: ForIRI> Display for Functional<'a, Component<A>, A> {
+impl<A: ForIRI> Display for Functional<'_, Component<A>, A> {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
         macro_rules! enum_impl {
             ($($variant:ident,)*) => {
@@ -583,7 +583,7 @@ impl<A: ForIRI> AsFunctional<A> for Component<A> {}
 
 // ---------------------------------------------------------------------------
 
-impl<'a, A: ForIRI> Display for Functional<'a, ClassExpression<A>, A> {
+impl<A: ForIRI> Display for Functional<'_, ClassExpression<A>, A> {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
         use ClassExpression::*;
         macro_rules! object_cardinality {
@@ -735,7 +735,7 @@ impl<A: ForIRI> AsFunctional<A> for ClassExpression<A> {}
 
 // ---------------------------------------------------------------------------
 
-impl<'a, A: ForIRI> Display for Functional<'a, DataRange<A>, A> {
+impl<A: ForIRI> Display for Functional<'_, DataRange<A>, A> {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
         use DataRange::*;
         match self.0 {
@@ -772,7 +772,7 @@ impl<A: ForIRI> AsFunctional<A> for DataRange<A> {}
 
 // ---------------------------------------------------------------------------
 
-impl<'a, A: ForIRI> Display for Functional<'a, DArgument<A>, A> {
+impl<A: ForIRI> Display for Functional<'_, DArgument<A>, A> {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
         use DArgument::*;
         match self.0 {
@@ -786,7 +786,7 @@ impl<A: ForIRI> AsFunctional<A> for DArgument<A> {}
 
 // ---------------------------------------------------------------------------
 
-impl<'a, A: ForIRI> Display for Functional<'a, Facet, A> {
+impl<A: ForIRI> Display for Functional<'_, Facet, A> {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
         let iri = self.0.meta();
         Functional::<_, String>(iri, self.1, None).fmt(f)
@@ -797,7 +797,7 @@ impl<A: ForIRI> AsFunctional<A> for Facet {}
 
 // ---------------------------------------------------------------------------
 
-impl<'a, A: ForIRI> Display for Functional<'a, FacetRestriction<A>, A> {
+impl<A: ForIRI> Display for Functional<'_, FacetRestriction<A>, A> {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
         write!(
             f,
@@ -812,7 +812,7 @@ impl<A: ForIRI> AsFunctional<A> for FacetRestriction<A> {}
 
 // ---------------------------------------------------------------------------
 
-impl<'a, A: ForIRI> Display for Functional<'a, HasKey<A>, A> {
+impl<A: ForIRI> Display for Functional<'_, HasKey<A>, A> {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
         write!(f, "HasKey({} ", Functional(&self.0.ce, self.1, None))?;
 
@@ -848,7 +848,7 @@ impl<A: ForIRI> AsFunctional<A> for HasKey<A> {}
 
 // ---------------------------------------------------------------------------
 
-impl<'a, A: ForIRI> Display for Functional<'a, IArgument<A>, A> {
+impl<A: ForIRI> Display for Functional<'_, IArgument<A>, A> {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
         use IArgument::*;
         match self.0 {
@@ -862,7 +862,7 @@ impl<A: ForIRI> AsFunctional<A> for IArgument<A> {}
 
 // ---------------------------------------------------------------------------
 
-impl<'a, A: ForIRI> Display for Functional<'a, IRI<A>, A> {
+impl<A: ForIRI> Display for Functional<'_, IRI<A>, A> {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
         if let Some(prefixes) = self.1.as_ref() {
             match prefixes.shrink_iri(self.0) {
@@ -896,7 +896,7 @@ impl<A: ForIRI> AsFunctional<A> for IRI<A> {}
 
 // ---------------------------------------------------------------------------
 
-impl<'a, A: ForIRI> Display for Functional<'a, Individual<A>, A> {
+impl<A: ForIRI> Display for Functional<'_, Individual<A>, A> {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
         use Individual::*;
         match self.0 {
@@ -910,7 +910,7 @@ impl<A: ForIRI> AsFunctional<A> for Individual<A> {}
 
 // ---------------------------------------------------------------------------
 
-impl<'a, A: ForIRI> Display for Functional<'a, Literal<A>, A> {
+impl<A: ForIRI> Display for Functional<'_, Literal<A>, A> {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
         match self.0 {
             Literal::Simple { literal } => quote(literal, f),
@@ -933,7 +933,7 @@ impl<A: ForIRI> AsFunctional<A> for Literal<A> {}
 
 // ---------------------------------------------------------------------------
 
-impl<'a, A: ForIRI> Display for Functional<'a, ObjectPropertyExpression<A>, A> {
+impl<A: ForIRI> Display for Functional<'_, ObjectPropertyExpression<A>, A> {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
         use ObjectPropertyExpression::*;
         match self.0 {
@@ -949,7 +949,7 @@ impl<A: ForIRI> AsFunctional<A> for ObjectPropertyExpression<A> {}
 
 // ---------------------------------------------------------------------------
 
-impl<'a, A: ForIRI> Display for Functional<'a, Rule<A>, A> {
+impl<A: ForIRI> Display for Functional<'_, Rule<A>, A> {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
         if let Some(annotations) = self.2 {
             write!(f, "DLSafeRule({}", Functional(annotations, self.1, None))?;
@@ -976,7 +976,7 @@ impl<A: ForIRI> AsFunctional<A> for Rule<A> {}
 
 // ---------------------------------------------------------------------------
 
-impl<'a, A: ForIRI> Display for Functional<'a, SubObjectPropertyExpression<A>, A> {
+impl<A: ForIRI> Display for Functional<'_, SubObjectPropertyExpression<A>, A> {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
         use SubObjectPropertyExpression::*;
         match self.0 {
@@ -996,7 +996,7 @@ impl<A: ForIRI> AsFunctional<A> for SubObjectPropertyExpression<A> {}
 
 // ---------------------------------------------------------------------------
 
-impl<'a, A: ForIRI> Display for Functional<'a, Variable<A>, A> {
+impl<A: ForIRI> Display for Functional<'_, Variable<A>, A> {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
         write!(f, "Variable({})", Functional(&self.0 .0, self.1, None))
     }
@@ -1006,7 +1006,7 @@ impl<A: ForIRI> AsFunctional<A> for Variable<A> {}
 
 // ---------------------------------------------------------------------------
 
-impl<'a, A: ForIRI> Display for Functional<'a, curie::PrefixMapping, A> {
+impl<A: ForIRI> Display for Functional<'_, curie::PrefixMapping, A> {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
         for (name, value) in self.0.mappings() {
             writeln!(f, "Prefix({}:=<{}>)", name, value)?;
@@ -1019,7 +1019,7 @@ impl<A: ForIRI> AsFunctional<A> for curie::PrefixMapping {}
 
 // ---------------------------------------------------------------------------
 
-impl<'a, A: ForIRI> Display for Functional<'a, OntologyID<A>, A> {
+impl<A: ForIRI> Display for Functional<'_, OntologyID<A>, A> {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
         match (&self.0.iri, &self.0.viri) {
             (Some(x), Some(y)) => Functional(&(x, y), self.1, None).fmt(f),
@@ -1034,7 +1034,7 @@ impl<A: ForIRI> AsFunctional<A> for OntologyID<A> {}
 
 // ---------------------------------------------------------------------------
 
-impl<'a, A: ForIRI> Display for Functional<'a, DocIRI<A>, A> {
+impl<A: ForIRI> Display for Functional<'_, DocIRI<A>, A> {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
         Functional(&self.0 .0, self.1, None).fmt(f)
     }

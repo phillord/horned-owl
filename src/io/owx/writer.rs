@@ -45,11 +45,8 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: StdWrite>(
 ///
 /// `key` is the attribute name to use.
 fn iri_maybe<A: ForIRI>(elem: &mut BytesStart, key: &str, iri: &Option<IRI<A>>) {
-    match iri {
-        Some(iri) => {
-            elem.push_attribute((key, &(*iri)[..]));
-        }
-        None => {}
+    if let Some(iri) = iri {
+        elem.push_attribute((key, &(*iri)[..]));
     }
 }
 

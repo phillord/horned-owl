@@ -25,9 +25,9 @@ use ureq;
 /// # use horned_owl::model::*;
 /// # use horned_owl::resolve::*;
 /// let b = Build::new_rc();
-
+///
 /// let doc_iri = b.iri("file://base_dir/and.owl");
-
+///
 /// let path_buf = file_iri_to_pathbuf(&doc_iri);
 /// assert_eq!(path_buf.to_str().unwrap(), "base_dir/and.owl");
 /// ```
@@ -44,9 +44,9 @@ pub fn file_iri_to_pathbuf<A: ForIRI>(iri: &IRI<A>) -> PathBuf {
 /// # use horned_owl::resolve::*;
 /// # use std::path::Path;
 /// let b = Build::new_rc();
-
+///
 /// let target_iri = b.iri("file://base_dir/and.owl");
-
+///
 /// let path = Path::new("base_dir/and.owl");
 /// let source_iri = path_to_file_iri(&b, &path);
 /// assert_eq!(source_iri.as_ref(), "file://base_dir/and.owl");
@@ -64,10 +64,10 @@ pub fn path_to_file_iri<A: ForIRI>(b: &Build<A>, pb: &Path) -> IRI<A> {
 /// # use horned_owl::model::*;
 /// # use horned_owl::resolve::*;
 /// let b = Build::new_rc();
-
+///
 /// let doc_iri = b.iri("file://base_dir/and.owl");
 /// let path_buf = as_local_path_buffer(&doc_iri);
-
+///
 /// assert!(path_buf.is_some());
 /// assert_eq!(path_buf.unwrap().to_str().unwrap(), "base_dir/and.owl");
 /// ```
@@ -84,12 +84,12 @@ pub fn as_local_path_buffer<A: ForIRI>(iri: &IRI<A>) -> Option<PathBuf> {
 /// # use horned_owl::model::*;
 /// # use horned_owl::resolve::*;
 /// let b = Build::new_rc();
-
+///
 /// let doc_iri = b.iri("file://base_dir/and.owl");
 /// let iri = b.iri("http://www.example.com/or.owl");
-
+///
 /// let local = b.iri("file://base_dir/or.owl");
-
+///
 /// assert_eq!(localize_iri(&iri, &doc_iri), local);
 /// ```
 pub fn localize_iri<A: ForIRI>(iri: &IRI<A>, doc_iri: &IRI<A>) -> IRI<A> {
