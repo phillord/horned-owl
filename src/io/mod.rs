@@ -20,6 +20,7 @@ pub enum ResourceType {
     RDF,
 }
 
+#[allow(clippy::large_enum_variant)]
 pub enum ParserOutput<A: ForIRI, AA: ForIndex<A>> {
     OFNParser(SetOntology<A>, PrefixMapping),
     OWXParser(SetOntology<A>, PrefixMapping),

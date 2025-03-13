@@ -709,9 +709,8 @@ impl<A: ForIRI, V: Visit<A>> Walk<A, V> {
 
     pub fn option_iri(&mut self, e: &Option<IRI<A>>) {
         self.0.visit_option_iri(e);
-        match e {
-            Some(e) => self.iri(e),
-            None => {}
+        if let Some(e) = e {
+            self.iri(e)
         }
     }
 

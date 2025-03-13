@@ -731,9 +731,8 @@ impl<A: ForIRI, V: VisitMut<A>> WalkMut<A, V> {
 
     pub fn option_iri(&mut self, e: &mut Option<IRI<A>>) {
         self.0.visit_option_iri(e);
-        match e {
-            Some(e) => self.iri(e),
-            None => {}
+        if let Some(e) = e {
+            self.iri(e)
         }
     }
 

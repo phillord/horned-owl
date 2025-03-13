@@ -97,9 +97,9 @@ impl<'a, A: ForIRI> Iterator for SetIter<'a, A> {
     }
 }
 
-impl<'a, A: ForIRI> FusedIterator for SetIter<'a, A> {}
+impl<A: ForIRI> FusedIterator for SetIter<'_, A> {}
 
-impl<'a, A: ForIRI> ExactSizeIterator for SetIter<'a, A> {
+impl<A: ForIRI> ExactSizeIterator for SetIter<'_, A> {
     fn len(&self) -> usize {
         self.0.len()
     }
