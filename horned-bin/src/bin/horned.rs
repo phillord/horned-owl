@@ -12,6 +12,7 @@ mod horned_round;
 mod horned_summary;
 mod horned_triples;
 mod horned_unparsed;
+mod horned_validate;
 
 fn main() -> Result<(), HornedError> {
     let matches = app().get_matches();
@@ -34,6 +35,7 @@ fn app() -> App<'static> {
         .subcommand(horned_summary::app("summary"))
         .subcommand(horned_triples::app("triples"))
         .subcommand(horned_unparsed::app("unparsed"))
+        .subcommand(horned_validate::app("validate"))
 }
 
 fn matcher(matches: ArgMatches) -> Result<(), HornedError> {
@@ -48,6 +50,7 @@ fn matcher(matches: ArgMatches) -> Result<(), HornedError> {
             "summary" => horned_summary::matcher(submatches),
             "triples" => horned_triples::matcher(submatches),
             "unparsed" => horned_unparsed::matcher(submatches),
+            "validate" => horned_validate::matcher(submatches),
             _ => todo!(),
         }
     } else {

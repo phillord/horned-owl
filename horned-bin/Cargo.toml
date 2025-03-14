@@ -66,3 +66,7 @@ path = "src/bin/horned_triples.rs"
 [[bin]]
 name = "horned-unparsed"
 path = "src/bin/horned_unparsed.rs"
+
+[[bin]]
+name = "horned-validate"
+path = "src/bin/horned_validate.rs"
