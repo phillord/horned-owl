@@ -2294,6 +2294,20 @@ mod test {
     }
 
     #[test]
+    #[ignore]
+    fn non_deterministic_rdf_parse() {
+        //    https://github.com/phillord/horned-owl/issues/123
+        let mut vont: Vec<SetOntology<_>> = vec![];
+        for i in 0..10 {
+            dbg!(i);
+            vont.push(read_ok(&mut slurp_rdfont("manual/oeo-snippet").as_bytes()).into());
+        }
+
+        let first = &vont[0];
+        assert!(vont.iter().all(|ont| ont == first));
+    }
+
+    #[test]
     fn import_with_partial_parse() {
         let b = Build::new_rc();
         let mut p: OntologyParser<_, Rc<AnnotatedComponent<RcStr>>, ConcreteRDFOntology<_, _>> =
