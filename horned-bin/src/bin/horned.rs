@@ -13,9 +13,9 @@ mod horned_summary;
 mod horned_triples;
 mod horned_unparsed;
 
-fn main() -> Result<(), HornedError> {
+fn main() -> std::process::ExitCode {
     let matches = app().get_matches();
-    matcher(matches)
+    std::process::Termination::report(matcher(matches))
 }
 
 fn app() -> App<'static> {
