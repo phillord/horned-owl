@@ -15,9 +15,9 @@ use horned_owl::ontology::set::SetOntology;
 use std::io::stdout;
 
 #[allow(dead_code)]
-fn main() -> Result<(), HornedError> {
+fn main() -> std::process::ExitCode {
     let matches = app("horned-big").get_matches();
-    matcher(&matches)
+    std::process::Termination::report(matcher(&matches))
 }
 
 pub(crate) fn app(name: &str) -> App<'static> {

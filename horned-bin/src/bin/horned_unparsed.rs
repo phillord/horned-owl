@@ -13,9 +13,9 @@ use horned_owl::model::{RcAnnotatedComponent, RcStr};
 use std::{fs::File, io::BufReader, path::Path};
 
 #[allow(dead_code)]
-fn main() -> Result<(), HornedError> {
+fn main() -> std::process::ExitCode {
     let matches = app("horned-unparsed").get_matches();
-    matcher(&matches)
+    std::process::Termination::report(matcher(&matches))
 }
 
 pub(crate) fn app(name: &str) -> App<'static> {

@@ -16,9 +16,9 @@ use horned_owl::ontology::component_mapped::RcComponentMappedOntology;
 use std::{io::stdout, path::Path};
 
 #[allow(dead_code)]
-fn main() -> Result<(), HornedError> {
+fn main() -> std::process::ExitCode {
     let matches = app("horned-round").get_matches();
-    matcher(&matches)
+    std::process::Termination::report(matcher(&matches))
 }
 
 pub(crate) fn app(name: &str) -> App<'static> {

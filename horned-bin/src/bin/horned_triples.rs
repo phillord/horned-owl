@@ -16,9 +16,9 @@ use std::io::BufReader;
 use std::{fs::File, io::stdout};
 
 #[allow(dead_code)]
-fn main() -> Result<(), HornedError> {
+fn main() -> std::process::ExitCode {
     let matches = app("horned-triples").get_matches();
-    matcher(&matches)
+    std::process::Termination::report(matcher(&matches))
 }
 
 pub(crate) fn app(name: &str) -> App<'static> {

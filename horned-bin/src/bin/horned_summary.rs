@@ -17,9 +17,9 @@ use horned_owl::error::HornedError;
 use std::path::Path;
 
 #[allow(dead_code)]
-fn main() -> Result<(), HornedError> {
+fn main() -> std::process::ExitCode {
     let matches = app("horned-summary").get_matches();
-    matcher(&matches)
+    std::process::Termination::report(matcher(&matches))
 }
 
 pub(crate) fn app(name: &str) -> App<'static> {
