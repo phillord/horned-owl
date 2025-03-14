@@ -17,6 +17,14 @@ use std::{
     path::Path,
 };
 
+pub mod error {
+    use super::*;
+
+    pub fn error_missing_input() -> HornedError {
+        HornedError::CommandError("Command requires an INPUT parameter".to_string())
+    }
+}
+
 pub fn write<A: ForIRI, AA: ForIndex<A>, W: StdWrite>(
     format: &str,
     write: &mut W,
@@ -200,6 +208,24 @@ pub mod naming {
             AnnotationPropertyRange => "Annotation Property Range",
             Rule => "Rule",
         }
+    }
+}
+
+pub mod validation {
+    use horned_owl::{io::rdf::reader::IncompleteParse, model::ForIRI};
+
+    pub fn write_incomplete<T: ForIRI>(incomplete: IncompleteParse<T>) {
+        println!("\n\nIncompleted Parsed");
+        println!("\tSimple Triples: {:#?}", incomplete.simple);
+        println!("\tbnode: {:#?}", incomplete.bnode);
+        println!("\tsequences: {:#?}", incomplete.bnode_seq);
+        println!("\tClass Expressions: {:#?}", incomplete.class_expression);
+        println!(
+            "\tObject Property Expressions: {:#?}",
+            incomplete.object_property_expression
+        );
+        println!("\tData Range: {:#?}", incomplete.data_range);
+        println!("\tAnnotations: {:#?}", incomplete.ann_map);
     }
 }
 

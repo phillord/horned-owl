@@ -67,7 +67,9 @@ impl<A: ForIRI, AA: ForIndex<A>> ParserOutput<A, AA> {
         match self {
             ParserOutput::OFNParser(o, m) => (o, Some(m), None),
             ParserOutput::OWXParser(o, m) => (o, Some(m), None),
-            ParserOutput::RDFParser(o, i) => (o.into(), None, Some(i)),
+            ParserOutput::RDFParser(o, i) => {
+                (o.into(), None, if i.is_complete() { None } else { Some(i) })
+            }
         }
     }
 }

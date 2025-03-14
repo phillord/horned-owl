@@ -44,17 +44,7 @@ pub(crate) fn matcher(matches: &ArgMatches) -> Result<(), HornedError> {
             parser_config(matches),
         )?;
 
-    println!("\n\nIncompleted Parsed");
-    println!("\tSimple Triples: {:#?}", incomplete.simple);
-    println!("\tbnode: {:#?}", incomplete.bnode);
-    println!("\tsequences: {:#?}", incomplete.bnode_seq);
-    println!("\tClass Expressions: {:#?}", incomplete.class_expression);
-    println!(
-        "\tObject Property Expressions: {:#?}",
-        incomplete.object_property_expression
-    );
-    println!("\tData Range: {:#?}", incomplete.data_range);
-    println!("\tAnnotations: {:#?}", incomplete.ann_map);
+    horned_bin::validation::write_incomplete(incomplete);
 
     Ok(())
 }
