@@ -1063,7 +1063,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
     }
 
     fn class_expressions(&mut self, ic: &[&O]) -> Result<(), HornedError> {
-        let class_expression_len = self.class_expression.len();
+        let mut parsed_new_ce = false;
         for (this_bnode, v) in std::mem::take(&mut self.bnode) {
             // rustfmt breaks this (putting the triples all on one
             // line) so skip
@@ -1321,12 +1321,13 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
 
             if let Some(ce) = ce? {
                 self.class_expression.insert(this_bnode, ce);
+                parsed_new_ce = true;
             } else {
                 self.bnode.insert(this_bnode, v);
             }
         }
 
-        if self.class_expression.len() > class_expression_len {
+        if parsed_new_ce {
             self.class_expressions(ic)?
         }
 
