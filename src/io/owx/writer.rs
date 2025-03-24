@@ -1097,6 +1097,7 @@ mod test {
     }
 
     #[test]
+    #[cfg(bubo)]
     fn round_one_ont_prefix() {
         let (_ont_orig, prefix_orig, _ont_round, prefix_round) =
             roundtrip(include_str!("../../ont/owl-xml/ont.owx"));
@@ -1122,59 +1123,7 @@ mod test {
     #[test_resources("src/ont/owl-xml/ambiguous/*.owx")]
     fn roundtrip_nonround_resource(resource: &str) {
         let resource = &slurp::read_all_to_string(resource).unwrap();
-
         assert_round(resource);
-    }
-
-
-    #[test_resources("src/ont/owl-xml/*owx")]
-    fn reparse(resource:&str) {
-        let data = &slurp::read_all_to_string(resource).unwrap();
-
-        let (_, _, tmpfile) = roundtrip_1(data);
-
-        let tmpfile_location = tmpfile.to_str().unwrap();
-        let mut cmd = std::process::Command::new("java");
-        let cmd_ref = cmd
-            // block stdout or it is piped to existing stdout
-            .stdout(std::process::Stdio::null())
-            .arg("-jar")
-            // passed in my build.rs
-            .arg(env!("BUBO_LOCATION"))
-            .arg("dev/reparse.clj")
-            .arg(tmpfile_location)
-            .arg(resource);
-
-        if !cmd_ref.status().unwrap().success() {
-            let out = cmd_ref.output().unwrap();
-            let out = String::from_utf8(out.stdout).unwrap();
-            // preserve the tmp file
-            tmpfile.release();
-            assert!(false, "Bubo reparse failed: {}\nCommand:{:?}\nData:{}",
-                out,
-                cmd,
-                data
-            );
-        }
-        else{
-            assert!(true);
-        }
-    }
-
-    #[test]
-    #[should_panic]
-    fn reparse_broken() {
-        reparse("src/ont/owl-xml/manual/broken.owx")
-    }
-
-    #[test]
-    fn reparse_ont() {
-        reparse("src/ont/owl-xml/ont.owx");
-    }
-
-    #[test]
-    fn reparse_and() {
-        reparse("src/ont/owl-xml/and.owx");
     }
 
     #[test]
@@ -1192,5 +1141,51 @@ mod test {
     #[test]
     fn family() {
         assert_round(include_str!("../../ont/owl-xml/manual/family.owx"));
+    }
+
+    #[cfg(all(test, bubo))]
+    mod bubo_test {
+        use crate::io::owx::writer::test::roundtrip_1;
+        use test_generator::test_resources;
+
+
+        #[test_resources("src/ont/owl-xml/*owx")]
+        fn reparse(resource: &str) {
+            let data = &slurp::read_all_to_string(resource).unwrap();
+
+            let (_, _, tmpfile) = roundtrip_1(data);
+
+            let tmpfile_location = tmpfile.to_str().unwrap();
+            let mut cmd = std::process::Command::new("java");
+            let cmd_ref = cmd
+                // block stdout or it is piped to existing stdout
+                .stdout(std::process::Stdio::null())
+                .arg("-jar")
+                // passed in my build.rs
+                .arg(option_env!("BUBO_LOCATION").unwrap())
+                .arg("dev/reparse.clj")
+                .arg(tmpfile_location)
+                .arg(resource);
+
+            if !cmd_ref.status().unwrap().success() {
+                let out = cmd_ref.output().unwrap();
+                let out = String::from_utf8(out.stdout).unwrap();
+                // preserve the tmp file
+                tmpfile.release();
+                assert!(
+                    false,
+                    "Bubo reparse failed: {}\nCommand:{:?}\nData:{}",
+                    out, cmd, data
+                );
+            } else {
+                assert!(true);
+            }
+        }
+
+        #[test]
+        #[should_panic]
+        fn reparse_broken() {
+            reparse("src/ont/owl-xml/manual/broken.owx")
+        }
     }
 }
