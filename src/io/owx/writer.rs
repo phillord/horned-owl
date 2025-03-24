@@ -1018,7 +1018,8 @@ mod test {
 
     fn roundtrip_1(ont: &str) -> (RcComponentMappedOntology, PrefixMapping, Temp) {
         let (ont_orig, prefix_orig) = read_ok(&mut ont.as_bytes());
-        let temp_file = Temp::new_file().unwrap();
+        let mut temp_file = Temp::new_path();
+        temp_file.set_extension("owx");
 
         let file = File::create(&temp_file).ok().unwrap();
         let mut buf_writer = BufWriter::new(&file);
@@ -1123,6 +1124,57 @@ mod test {
         let resource = &slurp::read_all_to_string(resource).unwrap();
 
         assert_round(resource);
+    }
+
+
+    #[test_resources("src/ont/owl-xml/*owx")]
+    fn reparse(resource:&str) {
+        let data = &slurp::read_all_to_string(resource).unwrap();
+
+        let (_, _, tmpfile) = roundtrip_1(data);
+
+        let tmpfile_location = tmpfile.to_str().unwrap();
+        let mut cmd = std::process::Command::new("java");
+        let cmd_ref = cmd
+            // block stdout or it is piped to existing stdout
+            .stdout(std::process::Stdio::null())
+            .arg("-jar")
+            // passed in my build.rs
+            .arg(env!("BUBO_LOCATION"))
+            .arg("dev/reparse.clj")
+            .arg(tmpfile_location)
+            .arg(resource);
+
+        if !cmd_ref.status().unwrap().success() {
+            let out = cmd_ref.output().unwrap();
+            let out = String::from_utf8(out.stdout).unwrap();
+            // preserve the tmp file
+            tmpfile.release();
+            assert!(false, "Bubo reparse failed: {}\nCommand:{:?}\nData:{}",
+                out,
+                cmd,
+                data
+            );
+        }
+        else{
+            assert!(true);
+        }
+    }
+
+    #[test]
+    #[should_panic]
+    fn reparse_broken() {
+        reparse("src/ont/owl-xml/manual/broken.owx")
+    }
+
+    #[test]
+    fn reparse_ont() {
+        reparse("src/ont/owl-xml/ont.owx");
+    }
+
+    #[test]
+    fn reparse_and() {
+        reparse("src/ont/owl-xml/and.owx");
     }
 
     #[test]
