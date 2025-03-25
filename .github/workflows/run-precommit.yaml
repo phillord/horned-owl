@@ -12,13 +12,24 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
+        ## Install for bubo checks
+      - uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu' # See 'Supported distributions' for available options
+          java-version: '21'
+      - run: |
+          mkdir --parents $HOME/.local/bin
+          wget https://github.com/phillord/tawny-bubo/releases/download/0.3.2/bubo -O $HOME/.local/bin/bubo
+          chmod +x $HOME/.local/bin/bubo
+        shell: bash
       - run: python -m pip install pre-commit
         shell: bash
+      - uses: actions/checkout@v4
       - uses: actions/cache@v4
         with:
           path: ~/.cache/pre-commit
           key: pre-commit-3|${{ env.pythonLocation }}|${{ hashFiles('.pre-commit-config.yaml') }}
-      - run: pre-commit run --all-files --show-diff-on-failure --color=always ${{ inputs.extra_args }}
+      - run: pre-commit run --verbose --all-files --show-diff-on-failure --color=always ${{ inputs.extra_args }}
         shell: bash
 
 
