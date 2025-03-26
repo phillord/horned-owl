@@ -357,7 +357,7 @@ render! {
         let iri_st: String = self.into();
 
         match m.shrink_iri(&iri_st[..]) {
-            Ok(curie) => curie.to_string().within(w, m, "AbbreviatedIRI"),
+            Ok(curie) => curie.to_string().within(w, m, "IRI"),
             Err(_) => iri_st.within(w, m, "IRI"),
         }
     }
@@ -1135,7 +1135,7 @@ mod test {
         let s = roundtrip_to_string(s);
         assert!(!s.contains("<NamedIndividual"));
         // I still do not understand IRI vs AbbreviatedIRI
-        assert!(s.contains("<AbbreviatedIRI>"));
+        assert!(s.contains("<IRI>"));
     }
 
     #[test]
