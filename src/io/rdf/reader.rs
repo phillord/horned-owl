@@ -129,10 +129,10 @@ impl<A: ForIRI> From<Term<A>> for OrTerm<A> {
     }
 }
 
-impl<A: ForIRI> TryFrom<&NamedNode<'_>> for Term<A> {
+impl<A: ForIRI> TryFrom<NamedNode<'_>> for Term<A> {
     type Error = HornedError;
 
-    fn try_from(value: &NamedNode<'_>) -> Result<Self, Self::Error> {
+    fn try_from(value: NamedNode<'_>) -> Result<Self, Self::Error> {
         if let Some(res) = Vocab::lookup(value.iri) {
             Term::try_from(res)
         } else {
@@ -141,31 +141,31 @@ impl<A: ForIRI> TryFrom<&NamedNode<'_>> for Term<A> {
     }
 }
 
-impl TryFrom<&NamedNode<'_>> for crate::vocab::XSD {
+impl TryFrom<NamedNode<'_>> for crate::vocab::XSD {
     type Error = HornedError;
 
-    fn try_from(value: &NamedNode<'_>) -> Result<Self, Self::Error> {
+    fn try_from(value: NamedNode<'_>) -> Result<Self, Self::Error> {
         value.iri.parse::<Self>()
     }
 }
 
 impl<A: ForIRI> Build<A> {
-    fn to_term_bn(nn: &BlankNode) -> Term<A> {
+    fn to_term_bn(nn: BlankNode) -> Term<A> {
         Term::BNode(BNode(nn.id.to_string().into()))
     }
 
     fn to_pos_triple(&self, rio_triple: Triple, pos: usize) -> PosTriple<A> {
         PosTriple(
             [
-                self.to_term_bnn(&rio_triple.subject),
-                self.to_term_nn(&rio_triple.predicate),
-                self.to_term(&rio_triple.object),
+                self.to_term_bnn(rio_triple.subject),
+                self.to_term_nn(rio_triple.predicate),
+                self.to_term(rio_triple.object),
             ],
             pos,
         )
     }
 
-    fn to_term(&self, t: &RioTerm) -> Term<A> {
+    fn to_term(&self, t: RioTerm) -> Term<A> {
         match t {
             rio_api::model::Term::NamedNode(iri) => self.to_term_nn(iri),
             rio_api::model::Term::BlankNode(id) => Self::to_term_bn(id),
@@ -176,7 +176,7 @@ impl<A: ForIRI> Build<A> {
         }
     }
 
-    fn to_term_bnn(&self, subj: &Subject) -> Term<A> {
+    fn to_term_bnn(&self, subj: Subject) -> Term<A> {
         match subj {
             Subject::NamedNode(nn) => self.to_term_nn(nn),
             Subject::BlankNode(bn) => Self::to_term_bn(bn),
@@ -184,7 +184,7 @@ impl<A: ForIRI> Build<A> {
         }
     }
 
-    fn to_term_nn(&self, nn: &NamedNode) -> Term<A> {
+    fn to_term_nn(&self, nn: NamedNode) -> Term<A> {
         if let Ok(term) = nn.try_into() {
             term
         } else {
@@ -192,7 +192,7 @@ impl<A: ForIRI> Build<A> {
         }
     }
 
-    fn to_term_lt(&self, lt: &rio_api::model::Literal) -> Term<A> {
+    fn to_term_lt(&self, lt: rio_api::model::Literal) -> Term<A> {
         match lt {
             rio_api::model::Literal::Simple { value } => Term::Literal(Literal::Simple {
                 literal: value.to_string(),
@@ -509,10 +509,11 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                     simple.push(t);
                 }
                 [Term::BNode(ref id), _, _] => {
-                    let v = bnode
+                    bnode
                         .entry(id.clone())
-                        .or_insert_with(|| VPosTriple(vec![], t.1));
-                    v.push(t.0)
+                        .or_insert(VPosTriple(vec![], t.1))
+                        .push(t.0);
+                    // v.push(t.0)
                 }
                 _ => {
                     simple.push(t);
@@ -560,7 +561,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                  ..
                 ] =>
                 {
-                    self.bnode_seq.insert(k.clone(), vec![val.clone()]);
+                    self.bnode_seq.insert(k, vec![val.clone()]);
                 }
                 _ => {
                     self.bnode.insert(k, v);
@@ -604,12 +605,12 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
         for t in std::mem::take(&mut self.simple) {
             match t.0 {
                 [Term::Iri(s), Term::RDF(VRDF::Type), Term::OWL(VOWL::Ontology)] => {
-                    iri = Some(s.clone());
+                    iri = Some(s);
                 }
                 [Term::Iri(s), Term::OWL(VOWL::VersionIRI), Term::Iri(ob)]
                     if iri.as_ref() == Some(&s) =>
                 {
-                    viri = Some(ob.clone());
+                    viri = Some(ob);
                 }
                 _ => self.simple.push(t),
             }
@@ -625,37 +626,37 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
     fn parse_annotations(&self, triples: &[[Term<A>; 3]]) -> BTreeSet<Annotation<A>> {
         let mut ann = BTreeSet::default();
         for a in triples {
-            ann.insert(self.annotation(a));
+            ann.insert(self.annotation(a.clone()));
         }
         ann
     }
 
-    fn annotation(&self, t: &[Term<A>; 3]) -> Annotation<A> {
+    fn annotation(&self, t: [Term<A>; 3]) -> Annotation<A> {
         match t {
             // We assume that anything passed to here is an
             // annotation built in type
             [s, RDFS(rdfs), b] => {
                 let iri = self.b.iri(rdfs.as_ref());
-                self.annotation(&[s.clone(), Term::Iri(iri), b.clone()])
+                self.annotation([s, Term::Iri(iri), b])
             }
             [s, OWL(owl), b] => {
                 let iri = self.b.iri(owl.as_ref());
-                self.annotation(&[s.clone(), Term::Iri(iri), b.clone()])
+                self.annotation([s, Term::Iri(iri), b])
             }
             [_, Iri(p), ob @ Term::Literal(_)] => Annotation {
-                ap: AnnotationProperty(p.clone()),
-                av: self.fetch_literal(ob).unwrap().into(),
+                ap: AnnotationProperty(p),
+                av: self.fetch_literal(&ob).unwrap().into(),
             },
             [_, Iri(p), Iri(ob)] => {
                 // IRI annotation value
                 Annotation {
-                    ap: AnnotationProperty(p.clone()),
-                    av: ob.clone().into(),
+                    ap: AnnotationProperty(p),
+                    av: ob.into(),
                 }
             }
             [_, Iri(p), Term::BNode(bnodeid)] => Annotation {
-                ap: AnnotationProperty(p.clone()),
-                av: AnonymousIndividual(bnodeid.0.clone()).into(),
+                ap: AnnotationProperty(p),
+                av: AnonymousIndividual(bnodeid.0).into(),
             },
             _ => {
                 todo!()
@@ -1707,9 +1708,9 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
     fn swrl(&mut self, ic: &[&O]) -> Result<(), HornedError> {
         // identify variables first
         for triple in std::mem::take(&mut self.simple) {
-            match &triple.0 {
+            match triple.0 {
                 [Term::Iri(s), Term::RDF(VRDF::Type), Term::SWRL(VSWRL::Variable)] => {
-                    self.variable.insert(s.clone(), Variable(s.clone()));
+                    self.variable.insert(s.clone(), Variable(s));
                 }
                 _ => {
                     self.simple.push(triple);
@@ -1804,8 +1805,8 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
     fn simple_annotations(&mut self, parse_all: bool) {
         let ont_id = <O as AsRef<SetIndex<A, AA>>>::as_ref(&self.o).the_ontology_id_or_default();
         for triple in std::mem::take(&mut self.simple) {
-            let firi = |s: &mut OntologyParser<_, _, _>, t, iri: &IRI<_>| {
-                let ann = s.ann_map.remove(t).unwrap_or_default();
+            let firi = |s: &mut OntologyParser<_, _, _>, t: [Term<A>; 3], iri: &IRI<_>| {
+                let ann = s.ann_map.remove(&t).unwrap_or_default();
                 s.merge(AnnotatedComponent {
                     component: AnnotationAssertion {
                         subject: iri.into(),
@@ -1816,24 +1817,23 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                 })
             };
 
-            match &triple.0 {
+            match triple.0 {
                 // Catch anything about the ontology and assume it is
                 // an annotation. Some versions of the OWL API do not
                 // declare annotation properties for ontology annotations
-                [Term::Iri(iri), _, _] if ont_id.iri.as_ref() == Some(iri) => {
-                    self.o
-                        .insert(OntologyAnnotation(self.annotation(&triple.0)));
+                [Term::Iri(ref iri), _, _] if ont_id.iri.as_ref() == Some(iri) => {
+                    self.o.insert(OntologyAnnotation(self.annotation(triple.0)));
                 }
-                [Term::Iri(iri), Term::RDFS(rdfs), _] if rdfs.is_builtin() => {
-                    firi(self, &triple.0, iri)
+                [Term::Iri(ref iri), Term::RDFS(ref rdfs), _] if rdfs.is_builtin() => {
+                    firi(self, triple.0.clone(), iri)
                 }
-                [Term::Iri(iri), Term::Iri(ap), _]
+                [Term::Iri(ref iri), Term::Iri(ref ap), _]
                     if parse_all
                         || <O as AsRef<DeclarationMappedIndex<A, AA>>>::as_ref(&self.o)
                             .is_annotation_property(ap)
                         || is_annotation_builtin(ap.as_ref()) =>
                 {
-                    firi(self, &triple.0, iri)
+                    firi(self, triple.0.clone(), iri)
                 }
                 _ => {
                     self.simple.push(triple);
@@ -1841,8 +1841,8 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
             }
         }
         for (k, v) in std::mem::take(&mut self.bnode) {
-            let fbnode = |s: &mut OntologyParser<_, _, _>, t, ind: &BNode<A>| {
-                let ann = s.ann_map.remove(t).unwrap_or_default();
+            let fbnode = |s: &mut OntologyParser<_, _, _>, t: [Term<A>; 3], ind: &BNode<A>| {
+                let ann = s.ann_map.remove(&t).unwrap_or_default();
                 let ind: AnonymousIndividual<A> = s.b.anon(ind.0.clone());
                 s.merge(AnnotatedComponent {
                     component: AnnotationAssertion {
@@ -1856,7 +1856,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
 
             match v.as_slice() {
                 [triple @ [Term::BNode(ind), Term::RDFS(rdfs), _]] if rdfs.is_builtin() => {
-                    fbnode(self, triple, ind)
+                    fbnode(self, triple.clone(), ind)
                 }
                 [triple @ [Term::BNode(ind), Term::Iri(ap), _]]
                     if parse_all
@@ -1864,7 +1864,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                             .is_annotation_property(ap)
                         || is_annotation_builtin(ap) =>
                 {
-                    fbnode(self, triple, ind)
+                    fbnode(self, triple.clone(), ind)
                 }
                 _ => {
                     self.bnode.insert(k, v);
