@@ -32,16 +32,6 @@ use std::{io::BufRead, marker::PhantomData};
 
 type RioTerm<'a> = ::rio_api::model::Term<'a>;
 
-macro_rules! ok_some {
-    ($body:expr) => {
-        (if let Some(retn) = (|| Some($body))() {
-            Ok(Some(retn))
-        } else {
-            Ok(None)
-        })
-    };
-}
-
 #[derive(Clone, Debug, Eq, Hash, PartialEq, Ord, PartialOrd)]
 pub struct BNode<A: ForIRI>(A);
 
@@ -754,56 +744,44 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                 [[_, Term::OWL(VOWL::IntersectionOf), Term::BNode(bnodeid)],//: rustfmt hard line!
                  [_, Term::RDF(VRDF::Type), Term::RDFS(VRDFS::Datatype)]] =>
                 {
-                    ok_some! {
-                        DataRange::DataIntersectionOf(
+                        Ok(DataRange::DataIntersectionOf(
                             self.fetch_dr_seq(bnodeid)?
-                        )
-                    }
+                        ))
                 }
                 [[_, Term::OWL(VOWL::UnionOf), Term::BNode(bnodeid)],//: rustfmt hard line!
                  [_, Term::RDF(VRDF::Type), Term::RDFS(VRDFS::Datatype)]] =>
                 {
-                    ok_some! {
-                        DataRange::DataUnionOf(
+                        Ok(DataRange::DataUnionOf(
                             self.fetch_dr_seq(bnodeid)?
-                        )
-                    }
+                        ))
                 }
                 [[_, Term::OWL(VOWL::DatatypeComplementOf), term],//:
                  [_, Term::RDF(VRDF::Type), Term::RDFS(VRDFS::Datatype)]] =>
                 {
-                    ok_some! {
-                      DataRange::DataComplementOf(
+                      Ok(DataRange::DataComplementOf(
                             Box::new(self.fetch_dr(term)?)
-                        )
-                    }
+                        ))
                 }
                 [[_, Term::OWL(VOWL::OneOf), Term::BNode(bnode)],//:
                  [_, Term::RDF(VRDF::Type), Term::RDFS(VRDFS::Datatype)]] =>
                 {
-                    ok_some! {
-                        DataRange::DataOneOf(
+                        Ok(DataRange::DataOneOf(
                             self.fetch_literal_seq(bnode)?
-                        )
-                    }
+                        ))
                 }
                 [[_, Term::OWL(VOWL::OnDatatype), Term::Iri(iri)],//:
                  [_, Term::OWL(VOWL::WithRestrictions), Term::BNode(id)],//:
                  [_, Term::RDF(VRDF::Type), Term::RDFS(VRDFS::Datatype)]] =>
                 {
-                    ok_some! {
-                        {
-                            DataRange::DatatypeRestriction(
+                            Ok(DataRange::DatatypeRestriction(
                                 iri.into(),
                                 self.fetch_facet_seq(id, &mut facet_map)?
-                            )
-                        }
-                    }
+                            ))
                 }
-                _ => Ok(None),
+                _ => Err(HornedError::invalid("Invalid data range")),
             };
 
-            if let Some(dr) = dr? {
+            if let Ok(dr) = dr {
                 self.data_range.insert(this_bnode, dr);
             } else {
                 self.bnode.insert(this_bnode, v);
@@ -841,69 +819,93 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
         }
     }
 
-    fn fetch_iri(&self, t: &Term<A>) -> Option<IRI<A>> {
+    fn fetch_iri(&self, t: &Term<A>) -> Result<IRI<A>, HornedError> {
         if let Term::Iri(iri) = t {
-            Some(iri.clone())
+            Ok(iri.clone())
         } else {
-            None
+            Err(HornedError::invalid("Expected IRI"))
         }
     }
 
-    fn fetch_sope(&mut self, t: &Term<A>, ic: &[&O]) -> Option<SubObjectPropertyExpression<A>> {
-        Some(self.fetch_ope(t, ic)?.into())
+    fn fetch_sope(
+        &mut self,
+        t: &Term<A>,
+        ic: &[&O],
+    ) -> Result<SubObjectPropertyExpression<A>, HornedError> {
+        self.fetch_ope(t, ic).map(|ope| ope.into())
     }
 
-    fn fetch_ope(&mut self, t: &Term<A>, ic: &[&O]) -> Option<ObjectPropertyExpression<A>> {
+    fn fetch_ope(
+        &mut self,
+        t: &Term<A>,
+        ic: &[&O],
+    ) -> Result<ObjectPropertyExpression<A>, HornedError> {
         match self.find_property_kind(t, ic)? {
-            PropertyExpression::ObjectPropertyExpression(ope) => Some(ope),
-            _ => None,
+            PropertyExpression::ObjectPropertyExpression(ope) => Ok(ope),
+            _ => Err(HornedError::invalid("Expected ObjectPropertyExpression")),
         }
     }
 
-    fn fetch_ap(&mut self, t: &Term<A>, ic: &[&O]) -> Option<AnnotationProperty<A>> {
+    fn fetch_ap(&mut self, t: &Term<A>, ic: &[&O]) -> Result<AnnotationProperty<A>, HornedError> {
         match self.find_property_kind(t, ic)? {
-            PropertyExpression::AnnotationProperty(ap) => Some(ap),
-            _ => None,
+            PropertyExpression::AnnotationProperty(ap) => Ok(ap),
+            _ => Err(HornedError::invalid("Expected AnnotationProperty")),
         }
     }
 
-    fn fetch_dp(&mut self, t: &Term<A>, ic: &[&O]) -> Option<DataProperty<A>> {
+    fn fetch_dp(&mut self, t: &Term<A>, ic: &[&O]) -> Result<DataProperty<A>, HornedError> {
         match self.find_property_kind(t, ic)? {
-            PropertyExpression::DataProperty(dp) => Some(dp),
-            _ => None,
+            PropertyExpression::DataProperty(dp) => Ok(dp),
+            _ => Err(HornedError::invalid("Expected DataProperty")),
         }
     }
 
-    fn fetch_ce(&mut self, tce: &Term<A>) -> Option<ClassExpression<A>> {
+    fn fetch_ce(&mut self, tce: &Term<A>) -> Result<ClassExpression<A>, HornedError> {
         match tce {
-            Term::Iri(cl) => Some(Class(cl.clone()).into()),
-            Term::BNode(id) => self.class_expression.remove(id),
-            _ => None,
+            Term::Iri(cl) => Ok(Class(cl.clone()).into()),
+            Term::BNode(id) => self
+                .class_expression
+                .remove(id)
+                .ok_or(HornedError::invalid("Unknown class expression")),
+            _ => Err(HornedError::invalid("Term cannot be class expression")),
         }
     }
 
     /// Helper functions that fetches triples associated to a BNode and applies the supplied function.
-    fn fetch_bnode_seq_and_map<F, T>(&mut self, bnode: &BNode<A>, mut fun: F) -> Option<Vec<T>>
+    fn fetch_bnode_seq_and_map<F, T>(
+        &mut self,
+        bnode: &BNode<A>,
+        mut fun: F,
+    ) -> Result<Vec<T>, HornedError>
     where
-        F: FnMut(&mut Self, &Term<A>) -> Option<T>,
+        F: FnMut(&mut Self, &Term<A>) -> Result<T, HornedError>,
     {
         self.bnode_seq
             .remove(bnode)
-            .as_ref()?
+            .ok_or(HornedError::invalid("Bnode not found."))?
+            // .as_ref()
             .iter()
             .map(|tce| fun(self, tce))
             .collect()
     }
 
-    fn fetch_ce_seq(&mut self, bnodeid: &BNode<A>) -> Option<Vec<ClassExpression<A>>> {
-        if self.bnode_seq.get(bnodeid)?.iter().any(|tce| {
-            if let Term::BNode(id) = tce {
-                !self.class_expression.contains_key(id)
-            } else {
-                false
-            }
-        }) {
-            return None;
+    fn fetch_ce_seq(&mut self, bnodeid: &BNode<A>) -> Result<Vec<ClassExpression<A>>, HornedError> {
+        if self
+            .bnode_seq
+            .get(bnodeid)
+            .ok_or(HornedError::invalid("not a bnode"))?
+            .iter()
+            .any(|tce| {
+                if let Term::BNode(id) = tce {
+                    !self.class_expression.contains_key(id)
+                } else {
+                    false
+                }
+            })
+        {
+            return Err(HornedError::invalid(
+                "bnode not associate to class expression",
+            ));
         }
 
         self.fetch_bnode_seq_and_map(bnodeid, |op, t| op.fetch_ce(t))
@@ -913,7 +915,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
         &mut self,
         bnodeid: &BNode<A>,
         ic: &[&O],
-    ) -> Option<Vec<PropertyExpression<A>>> {
+    ) -> Result<Vec<PropertyExpression<A>>, HornedError> {
         self.fetch_bnode_seq_and_map(bnodeid, |op, pr| op.find_property_kind(pr, ic))
     }
 
@@ -921,29 +923,36 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
         &mut self,
         bnodeid: &BNode<A>,
         ic: &[&O],
-    ) -> Option<Vec<ObjectPropertyExpression<A>>> {
+    ) -> Result<Vec<ObjectPropertyExpression<A>>, HornedError> {
         self.fetch_bnode_seq_and_map(bnodeid, |op, pr| op.fetch_ope(pr, ic))
     }
 
-    fn fetch_ni_seq(&mut self, bnodeid: &BNode<A>) -> Option<Vec<Individual<A>>> {
+    fn fetch_ni_seq(&mut self, bnodeid: &BNode<A>) -> Result<Vec<Individual<A>>, HornedError> {
         self.fetch_bnode_seq_and_map(bnodeid, |op, t| {
             op.fetch_iri(t).map(|iri| NamedIndividual(iri).into())
         })
     }
 
-    fn fetch_dr_seq(&mut self, bnodeid: &BNode<A>) -> Option<Vec<DataRange<A>>> {
+    fn fetch_dr_seq(&mut self, bnodeid: &BNode<A>) -> Result<Vec<DataRange<A>>, HornedError> {
         self.fetch_bnode_seq_and_map(bnodeid, |op, t| op.fetch_dr(t))
     }
 
-    fn fetch_literal_seq(&mut self, bnodeid: &BNode<A>) -> Option<Vec<Literal<A>>> {
+    fn fetch_literal_seq(&mut self, bnodeid: &BNode<A>) -> Result<Vec<Literal<A>>, HornedError> {
         self.fetch_bnode_seq_and_map(bnodeid, |op, t| op.fetch_literal(t))
     }
 
-    fn fetch_atom_seq(&mut self, bnodeid: &BNode<A>) -> Option<Vec<Atom<A>>> {
-        self.fetch_bnode_seq_and_map(bnodeid, |op, t| op.atom.remove(t))
+    fn fetch_atom_seq(&mut self, bnodeid: &BNode<A>) -> Result<Vec<Atom<A>>, HornedError> {
+        self.fetch_bnode_seq_and_map(bnodeid, |op, t| {
+            op.atom
+                .remove(t)
+                .ok_or(HornedError::invalid("Invalid atom"))
+        })
     }
 
-    fn fetch_dargument_seq(&mut self, bnodeid: &BNode<A>) -> Option<Vec<DArgument<A>>> {
+    fn fetch_dargument_seq(
+        &mut self,
+        bnodeid: &BNode<A>,
+    ) -> Result<Vec<DArgument<A>>, HornedError> {
         self.fetch_bnode_seq_and_map(bnodeid, |op, t| op.to_dargument(t))
     }
 
@@ -951,114 +960,148 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
         &mut self,
         bnodeid: &BNode<A>,
         facet_map: &mut HashMap<Term<A>, PosTriple<A>>,
-    ) -> Option<Vec<FacetRestriction<A>>> {
-        self.fetch_bnode_seq_and_map(bnodeid, |op, id| match facet_map.remove(id)?.0 {
-            [_, Term::FacetTerm(facet), literal] => Some(FacetRestriction {
-                f: facet,
-                l: op.fetch_literal(&literal)?,
-            }),
-            _ => None,
+    ) -> Result<Vec<FacetRestriction<A>>, HornedError> {
+        self.fetch_bnode_seq_and_map(bnodeid, |op, id| {
+            match facet_map
+                .remove(id)
+                .ok_or(HornedError::invalid("invalid facet"))?
+                .0
+            {
+                [_, Term::FacetTerm(facet), literal] => Ok(FacetRestriction {
+                    f: facet,
+                    l: op.fetch_literal(&literal)?,
+                }),
+                _ => Err(HornedError::invalid("invalid facet")),
+            }
         })
     }
 
-    fn fetch_dr(&mut self, t: &Term<A>) -> Option<DataRange<A>> {
+    fn fetch_dr(&mut self, t: &Term<A>) -> Result<DataRange<A>, HornedError> {
         match t {
             Term::Iri(iri) => {
                 let dt: Datatype<_> = iri.into();
-                Some(dt.into())
+                Ok(dt.into())
             }
-            Term::BNode(id) => self.data_range.remove(id),
+            Term::BNode(id) => self
+                .data_range
+                .remove(id)
+                .ok_or(HornedError::invalid("Unknown BNode")),
             _ => todo!(),
         }
     }
 
-    fn fetch_u32(&self, t: &Term<A>) -> Option<u32> {
+    fn fetch_u32(&self, t: &Term<A>) -> Result<u32, HornedError> {
         match t {
-            Term::Literal(val) => val.literal().parse::<u32>().ok(),
-            _ => None,
+            Term::Literal(val) => val
+                .literal()
+                .parse::<u32>()
+                .map_err(|_| HornedError::invalid("expected u32 literal")),
+            _ => Err(HornedError::invalid("expected u32")),
         }
     }
 
-    fn fetch_literal(&self, t: &Term<A>) -> Option<Literal<A>> {
-        match t {
-            Term::Literal(ob) => Some(ob.clone()),
-            _ => None,
+    fn fetch_literal(&self, t: &Term<A>) -> Result<Literal<A>, HornedError> {
+        if let Term::Literal(ob) = t {
+            Ok(ob.clone())
+        } else {
+            Err(HornedError::invalid("Expected a literal"))
         }
     }
 
     #[allow(clippy::wrong_self_convention)]
-    fn to_iargument(&mut self, t: &Term<A>, ic: &[&O]) -> Option<IArgument<A>> {
+    fn to_iargument(&mut self, t: &Term<A>, ic: &[&O]) -> Result<IArgument<A>, HornedError> {
         match t {
-            Term::BNode(bn) => Some(IArgument::Individual(
+            Term::BNode(bn) => Ok(IArgument::Individual(
                 AnonymousIndividual(bn.0.clone()).into(),
             )),
-            Term::Iri(iri) => self
-                .variable
-                .get(iri)
-                .map(|var| var.clone().into())
-                .or_else(|| {
-                    if self.find_declaration_kind(iri, ic)
-                        == Some(NamedOWLEntityKind::NamedIndividual)
-                    {
-                        Some(NamedIndividual(iri.clone()).into())
-                    } else {
-                        None
+            Term::Iri(iri) => {
+                if let Some(var) = self.variable.get(iri) {
+                    Ok(var.clone().into())
+                } else {
+                    match self.find_declaration_kind(iri, ic) {
+                        Ok(NamedOWLEntityKind::NamedIndividual) => {
+                            Ok(NamedIndividual(iri.clone()).into())
+                        }
+                        _ => Err(HornedError::invalid("Invalid IRI")),
                     }
-                }),
-            _ => None,
+                }
+            }
+            _ => Err(HornedError::invalid("Invalid term")),
         }
     }
 
-    fn to_dargument(&self, t: &Term<A>) -> Option<DArgument<A>> {
+    fn to_dargument(&self, t: &Term<A>) -> Result<DArgument<A>, HornedError> {
         match t {
-            Term::Literal(l) => Some(DArgument::Literal(l.clone())),
-            Term::Iri(i) => self.variable.get(i).map(|v| DArgument::Variable(v.clone())),
-            _ => None,
+            Term::Literal(l) => Ok(DArgument::Literal(l.clone())),
+            Term::Iri(i) => self
+                .variable
+                .get(i)
+                .map(|v| DArgument::Variable(v.clone()))
+                .ok_or(HornedError::invalid("Invalid IRI")),
+            _ => Err(HornedError::invalid("Invalid term")),
         }
     }
 
-    fn find_term_kind(&mut self, term: &Term<A>, ic: &[&O]) -> Option<NamedOWLEntityKind> {
+    fn find_term_kind(
+        &mut self,
+        term: &Term<A>,
+        ic: &[&O],
+    ) -> Result<NamedOWLEntityKind, HornedError> {
         match term {
             Term::Iri(iri) if crate::vocab::is_xsd_datatype(iri) => {
-                Some(NamedOWLEntityKind::Datatype)
+                Ok(NamedOWLEntityKind::Datatype)
             }
             Term::Iri(iri) => self.find_declaration_kind(iri, ic),
             // TODO: this might be too general. At the moment, I am
             // only using this function to distinguish between a
             // datatype and an class
-            _ => Some(NamedOWLEntityKind::Class),
+            _ => Ok(NamedOWLEntityKind::Class),
         }
     }
 
-    fn find_declaration_kind(&mut self, iri: &IRI<A>, ic: &[&O]) -> Option<NamedOWLEntityKind> {
+    fn find_declaration_kind(
+        &mut self,
+        iri: &IRI<A>,
+        ic: &[&O],
+    ) -> Result<NamedOWLEntityKind, HornedError> {
         [&self.o]
             .iter()
             .chain(ic.iter())
-            .map(|o| <O as AsRef<DeclarationMappedIndex<A, AA>>>::as_ref(o).declaration_kind(iri))
-            .find(|d| d.is_some())
-            .flatten()
+            .filter_map(|o| {
+                <O as AsRef<DeclarationMappedIndex<A, AA>>>::as_ref(o).declaration_kind(iri)
+            })
+            .next()
+            .ok_or_else(|| HornedError::invalid("Declaration not found".to_string()))
     }
 
-    fn find_property_kind(&mut self, term: &Term<A>, ic: &[&O]) -> Option<PropertyExpression<A>> {
+    fn find_property_kind(
+        &mut self,
+        term: &Term<A>,
+        ic: &[&O],
+    ) -> Result<PropertyExpression<A>, HornedError> {
         match term {
             Term::OWL(vowl) => {
                 let iri = self.b.iri(vowl.as_ref());
                 self.find_property_kind(&Term::Iri(iri), ic)
             }
             Term::Iri(iri) => match self.find_declaration_kind(iri, ic) {
-                Some(NamedOWLEntityKind::AnnotationProperty) => {
-                    Some(PropertyExpression::AnnotationProperty(iri.into()))
+                Ok(NamedOWLEntityKind::AnnotationProperty) => {
+                    Ok(PropertyExpression::AnnotationProperty(iri.into()))
                 }
-                Some(NamedOWLEntityKind::DataProperty) => {
-                    Some(PropertyExpression::DataProperty(iri.into()))
+                Ok(NamedOWLEntityKind::DataProperty) => {
+                    Ok(PropertyExpression::DataProperty(iri.into()))
                 }
-                Some(NamedOWLEntityKind::ObjectProperty) => {
-                    Some(PropertyExpression::ObjectPropertyExpression(iri.into()))
+                Ok(NamedOWLEntityKind::ObjectProperty) => {
+                    Ok(PropertyExpression::ObjectPropertyExpression(iri.into()))
                 }
-                _ => None,
+                _ => Err(HornedError::invalid("Invalid property kind")),
             },
-            Term::BNode(id) => Some(self.object_property_expression.remove(id)?.into()),
-            _ => None,
+            Term::BNode(id) => self
+                .object_property_expression
+                .remove(id)
+                .map(Into::into)
+                .ok_or(HornedError::invalid("Invalid property kind")),
+            _ => Err(HornedError::invalid("Invalid property kind")),
         }
     }
 
@@ -1067,262 +1110,21 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
         for (this_bnode, v) in std::mem::take(&mut self.bnode) {
             // rustfmt breaks this (putting the triples all on one
             // line) so skip
-            let ce: Result<_, HornedError> = match v.as_slice() {
-                [[_, Term::OWL(VOWL::OnProperty), pr],//:
-                 [_, Term::OWL(VOWL::SomeValuesFrom), ce_or_dr],//:
-                 [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Restriction)]] => {
-                    ok_some! {
-                        match self.find_property_kind(pr, ic)? {
-                            PropertyExpression::ObjectPropertyExpression(ope) => {
-                                ClassExpression::ObjectSomeValuesFrom {
-                                    ope,
-                                    bce: self.fetch_ce(ce_or_dr)?.into()
-                                }
-                            },
-                            PropertyExpression::DataProperty(dp) => {
-                                ClassExpression::DataSomeValuesFrom {
-                                    dp,
-                                    dr: self.fetch_dr(ce_or_dr)?
-                                }
-                            },
-                            _ => panic!("Unexpected Property Kind")
-                        }
-                    }
-                },
-                [[_, Term::OWL(VOWL::HasValue), val],//:
-                 [_, Term::OWL(VOWL::OnProperty), pr],//:
-                 [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Restriction)]] => {
-                    ok_some! {
-                        match self.find_property_kind(pr, ic)? {
-                            PropertyExpression::ObjectPropertyExpression(ope) => {
-                                ClassExpression::ObjectHasValue {
-                                    ope,
-                                    i: NamedIndividual(self.fetch_iri(val)?).into()
-                                }
-                            },
-                            PropertyExpression::DataProperty(dp) => {
-                                ClassExpression::DataHasValue {
-                                    dp,
-                                    l: self.fetch_literal(val)?
-                                }
-                            }
-                            _ => panic!("Unexpected Property kind"),
-                        }
-                    }
-                },
-                [[_, Term::OWL(VOWL::AllValuesFrom), ce_or_dr],//:
-                 [_, Term::OWL(VOWL::OnProperty), pr],//:
-                 [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Restriction)]] => {
-                    ok_some! {
-                        match self.find_property_kind(pr, ic)? {
-                            PropertyExpression::ObjectPropertyExpression(ope) => {
-                                ClassExpression::ObjectAllValuesFrom {
-                                    ope,
-                                    bce: self.fetch_ce(ce_or_dr)?.into()
-                                }
-                            },
-                            PropertyExpression::DataProperty(dp) => {
-                                ClassExpression::DataAllValuesFrom {
-                                    dp,
-                                    dr: self.fetch_dr(ce_or_dr)?
-                                }
-                            },
-                            _ => panic!("Unexpected Property Kind")
-                        }
-                    }
-                },
-                [[_, Term::OWL(VOWL::OneOf), Term::BNode(bnodeid)],//:
-                 [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Class)]] => {
-                    ok_some!{
-                        ClassExpression::ObjectOneOf(
-                            self.fetch_ni_seq(bnodeid)?
-                        )
-                    }
-                 },
-                 [[_, Term::OWL(VOWL::HasSelf), _],//:
-                  [_, Term::OWL(VOWL::OnProperty), pr],
-                  [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Restriction)]] => {
-                    ok_some!{
-                        ClassExpression::ObjectHasSelf(
-                            self.fetch_ope(pr, ic)?
-                        )
-                    }
-                }
-                [[_, Term::OWL(VOWL::IntersectionOf), Term::BNode(bnodeid)],//:
-                 [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Class)]] => {
-                    ok_some!{
-                        ClassExpression::ObjectIntersectionOf(
-                            self.fetch_ce_seq(bnodeid)?
-                        )
-                    }
-                },
-                [[_, Term::OWL(VOWL::UnionOf), Term::BNode(bnodeid)],//:
-                 [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Class)]] => {
-                    ok_some!{
-                        ClassExpression::ObjectUnionOf(
-                            self.fetch_ce_seq(
-                                bnodeid,
-                            )?
-                        )
-                    }
-                },
-                [[_, Term::OWL(VOWL::ComplementOf), tce],//:
-                 [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Class)]] => {
-                    ok_some!{
-                        ClassExpression::ObjectComplementOf(
-                            self.fetch_ce(tce)?.into()
-                        )
-                    }
-                },
-                [[_, Term::OWL(VOWL::OnDataRange), dr],//:
-                 [_, Term::OWL(VOWL::OnProperty), Term::Iri(pr)],//:
-                 [_, Term::OWL(VOWL::QualifiedCardinality), literal],//:
-                 [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Restriction)]
-                ] => {
-                    ok_some!{
-                        ClassExpression::DataExactCardinality
-                        {
-                            n:self.fetch_u32(literal)?,
-                            dp: pr.into(),
-                            dr: self.fetch_dr(dr)?
-                        }
-                    }
-                }
-                [[_, Term::OWL(VOWL::MaxQualifiedCardinality), literal],//:
-                 [_, Term::OWL(VOWL::OnDataRange), dr],//:
-                 [_, Term::OWL(VOWL::OnProperty), Term::Iri(pr)],//:
-                 [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Restriction)]
-                ] => {
-                    ok_some!{
-                        ClassExpression::DataMaxCardinality
-                        {
-                            n:self.fetch_u32(literal)?,
-                            dp: pr.into(),
-                            dr: self.fetch_dr(dr)?
-                        }
-                    }
-                }
-                [[_, Term::OWL(VOWL::MinQualifiedCardinality), literal],//:
-                 [_, Term::OWL(VOWL::OnDataRange), dr],//:
-                 [_, Term::OWL(VOWL::OnProperty), Term::Iri(pr)],//:
-                 [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Restriction)]
-                ] => {
-                    ok_some!{
-                        ClassExpression::DataMinCardinality
-                        {
-                            n:self.fetch_u32(literal)?,
-                            dp: pr.into(),
-                            dr: self.fetch_dr(dr)?
-                        }
-                    }
-                }
-                //_:x rdf:type owl:Restriction .
-                //_:x owl:cardinality NN_INT(n) .
-                //_:x owl:onProperty y .
-                //{ OPE(y) ≠ ε }
-                [[_, Term::OWL(VOWL::Cardinality), literal],//:
-                 [_, Term::OWL(VOWL::OnProperty), pr],//:
-                 [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Restriction)]
-                ] => {
-                    ok_some!{
-                        match self.find_property_kind(pr, ic)? {
-                            PropertyExpression::ObjectPropertyExpression(ope) => {
-                                ClassExpression::ObjectExactCardinality
-                                {
-                                    n:self.fetch_u32(literal)?,
-                                    ope,
-                                    bce: self.b.class(VOWL::Thing).into()
-                                }
-                            },
-                            PropertyExpression::DataProperty(dp) => {
-                                ClassExpression::DataExactCardinality
-                                {
-                                    n:self.fetch_u32(literal)?,
-                                    dp,
-                                    dr: self.b.datatype(OWL2Datatype::Literal).into(),
-                                }
-                            }
-                            _ => {
-                                todo!("Unexpected property kind")
-                            }
-                        }
-                    }
-                }
-                [[_, Term::OWL(VOWL::OnClass), tce],//:
-                 [_, Term::OWL(VOWL::OnProperty), Term::Iri(pr)],//:
-                 [_, Term::OWL(VOWL::QualifiedCardinality), literal],//:
-                 [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Restriction)]
-                ] => {
-                    ok_some!{
-                        ClassExpression::ObjectExactCardinality
-                        {
-                            n:self.fetch_u32(literal)?,
-                            ope: pr.into(),
-                            bce: self.fetch_ce(tce)?.into()
-                        }
-                    }
-                }
-                [[_, Term::OWL(VOWL::MinCardinality), literal],//:
-                 [_, Term::OWL(VOWL::OnProperty), Term::Iri(pr)],//:
-                 [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Restriction)]
-                ] => {
-                    ok_some!{
-                        ClassExpression::ObjectMinCardinality
-                        {
-                            n:self.fetch_u32(literal)?,
-                            ope: pr.into(),
-                            bce: self.b.class(VOWL::Thing).into()
-                        }
-                    }
-                }
-                [[_, Term::OWL(VOWL::MinQualifiedCardinality), literal],//:
-                 [_, Term::OWL(VOWL::OnClass), tce],//:
-                 [_, Term::OWL(VOWL::OnProperty), Term::Iri(pr)],//:
-                 [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Restriction)]
-                ] => {
-                    ok_some!{
-                        ClassExpression::ObjectMinCardinality
-                        {
-                            n:self.fetch_u32(literal)?,
-                            ope: pr.into(),
-                            bce: self.fetch_ce(tce)?.into()
-                        }
-                    }
-                }
-                [[_, Term::OWL(VOWL::MaxCardinality), literal],//:
-                 [_, Term::OWL(VOWL::OnProperty), Term::Iri(pr)],//:
-                 [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Restriction)]
-                ] => {
-                    ok_some!{
-                        ClassExpression::ObjectMaxCardinality
-                        {
-                            n:self.fetch_u32(literal)?,
-                            ope: pr.into(),
-                            bce: self.b.class(VOWL::Thing).into()
-                        }
-                    }
-                }
-                [[_, Term::OWL(VOWL::MaxQualifiedCardinality), literal],//:
-                 [_, Term::OWL(VOWL::OnClass), tce],//:
-                 [_, Term::OWL(VOWL::OnProperty), Term::Iri(pr)],//:
-                 [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Restriction)]
-                ] => {
-                    ok_some!{
-                        ClassExpression::ObjectMaxCardinality
-                        {
-                            n:self.fetch_u32(literal)?,
-                            ope: pr.into(),
-                            bce: self.fetch_ce(tce)?.into()
-                        }
-                    }
-                }
-                _a => Ok(None),
-            };
+            let ce: Result<ClassExpression<A>, HornedError> =
+                self.try_into_class_expression(ic, &v);
 
-            if let Some(ce) = ce? {
-                self.class_expression.insert(this_bnode, ce);
-            } else {
-                self.bnode.insert(this_bnode, v);
+            // Idea: to distinguish triples that should be yielding class expressions but fail from triples that are not
+            // supposed to yield class expressions, we could add an error variant so that we can then check what error is
+            // returned and act accordingly: in the former case, we propagate the error upward, in the latter, we reinsert
+            // the triple into the buffer and continue.
+
+            match ce {
+                Ok(ce) => {
+                    self.class_expression.insert(this_bnode, ce);
+                }
+                Err(_err) => {
+                    self.bnode.insert(this_bnode, v);
+                }
             }
         }
 
@@ -1333,56 +1135,277 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
         Ok(())
     }
 
+    fn try_into_class_expression(
+        &mut self,
+        ic: &[&O],
+        v: &VPosTriple<A>,
+    ) -> Result<ClassExpression<A>, HornedError> {
+        match v.as_slice() {
+            [[_, Term::OWL(VOWL::OnProperty), pr],//:
+             [_, Term::OWL(VOWL::SomeValuesFrom), ce_or_dr],//:
+             [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Restriction)]] => {
+                    match self.find_property_kind(pr, ic)? {
+                        PropertyExpression::ObjectPropertyExpression(ope) => {
+                            Ok(ClassExpression::ObjectSomeValuesFrom {
+                                ope,
+                                bce: self.fetch_ce(ce_or_dr)?.into()
+                            })
+                        },
+                        PropertyExpression::DataProperty(dp) => {
+                            Ok(ClassExpression::DataSomeValuesFrom {
+                                dp,
+                                dr: self.fetch_dr(ce_or_dr)?
+                            })
+                        },
+                        _ => panic!("Unexpected Property Kind")
+                    }
+            },
+            [[_, Term::OWL(VOWL::HasValue), val],//:
+             [_, Term::OWL(VOWL::OnProperty), pr],//:
+             [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Restriction)]] => {
+                    match self.find_property_kind(pr, ic)? {
+                        PropertyExpression::ObjectPropertyExpression(ope) => {
+                            Ok(ClassExpression::ObjectHasValue {
+                                ope,
+                                i: NamedIndividual(self.fetch_iri(val)?).into()
+                            })
+                        },
+                        PropertyExpression::DataProperty(dp) => {
+                            Ok(ClassExpression::DataHasValue {
+                                dp,
+                                l: self.fetch_literal(val)?
+                            })
+                        }
+                        _ => panic!("Unexpected Property kind"),
+                    }
+            },
+            [[_, Term::OWL(VOWL::AllValuesFrom), ce_or_dr],//:
+             [_, Term::OWL(VOWL::OnProperty), pr],//:
+             [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Restriction)]] => {
+                    match self.find_property_kind(pr, ic)? {
+                        PropertyExpression::ObjectPropertyExpression(ope) => {
+                            Ok(ClassExpression::ObjectAllValuesFrom {
+                                ope,
+                                bce: self.fetch_ce(ce_or_dr)?.into()
+                            })
+                        },
+                        PropertyExpression::DataProperty(dp) => {
+                            Ok(ClassExpression::DataAllValuesFrom {
+                                dp,
+                                dr: self.fetch_dr(ce_or_dr)?
+                            })
+                        },
+                        _ => panic!("Unexpected Property Kind")
+                    }
+            },
+            [[_, Term::OWL(VOWL::OneOf), Term::BNode(bnodeid)],//:
+             [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Class)]] => {
+                    Ok(ClassExpression::ObjectOneOf(
+                        self.fetch_ni_seq(bnodeid)?
+                    ))
+             },
+             [[_, Term::OWL(VOWL::HasSelf), _],//:
+              [_, Term::OWL(VOWL::OnProperty), pr],
+              [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Restriction)]] => {
+                    Ok(ClassExpression::ObjectHasSelf(
+                        self.fetch_ope(pr, ic)?
+                    ))
+            }
+            [[_, Term::OWL(VOWL::IntersectionOf), Term::BNode(bnodeid)],//:
+             [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Class)]] => {
+                    Ok(ClassExpression::ObjectIntersectionOf(
+                        self.fetch_ce_seq(bnodeid)?
+                    ))
+            },
+            [[_, Term::OWL(VOWL::UnionOf), Term::BNode(bnodeid)],//:
+             [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Class)]] => {
+                    Ok(ClassExpression::ObjectUnionOf(
+                        self.fetch_ce_seq(
+                            bnodeid,
+                        )?
+                    ))
+            },
+            [[_, Term::OWL(VOWL::ComplementOf), tce],//:
+             [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Class)]] => {
+                    Ok(ClassExpression::ObjectComplementOf(
+                        self.fetch_ce(tce)?.into()
+                    ))
+            },
+            [[_, Term::OWL(VOWL::OnDataRange), dr],//:
+             [_, Term::OWL(VOWL::OnProperty), Term::Iri(pr)],//:
+             [_, Term::OWL(VOWL::QualifiedCardinality), literal],//:
+             [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Restriction)]
+            ] => {
+                    Ok(ClassExpression::DataExactCardinality
+                    {
+                        n:self.fetch_u32(literal)?,
+                        dp: pr.into(),
+                        dr: self.fetch_dr(dr)?
+                    })
+            }
+            [[_, Term::OWL(VOWL::MaxQualifiedCardinality), literal],//:
+             [_, Term::OWL(VOWL::OnDataRange), dr],//:
+             [_, Term::OWL(VOWL::OnProperty), Term::Iri(pr)],//:
+             [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Restriction)]
+            ] => {
+                    Ok(ClassExpression::DataMaxCardinality
+                    {
+                        n:self.fetch_u32(literal)?,
+                        dp: pr.into(),
+                        dr: self.fetch_dr(dr)?
+                    })
+            }
+            [[_, Term::OWL(VOWL::MinQualifiedCardinality), literal],//:
+             [_, Term::OWL(VOWL::OnDataRange), dr],//:
+             [_, Term::OWL(VOWL::OnProperty), Term::Iri(pr)],//:
+             [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Restriction)]
+            ] => {
+                    Ok(ClassExpression::DataMinCardinality
+                    {
+                        n:self.fetch_u32(literal)?,
+                        dp: pr.into(),
+                        dr: self.fetch_dr(dr)?
+                    })
+            }
+            //_:x rdf:type owl:Restriction .
+            //_:x owl:cardinality NN_INT(n) .
+            //_:x owl:onProperty y .
+            //{ OPE(y) ≠ ε }
+            [[_, Term::OWL(VOWL::Cardinality), literal],//:
+             [_, Term::OWL(VOWL::OnProperty), pr],//:
+             [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Restriction)]
+            ] => {
+                    match self.find_property_kind(pr, ic)? {
+                        PropertyExpression::ObjectPropertyExpression(ope) => {
+                            Ok(ClassExpression::ObjectExactCardinality
+                            {
+                                n:self.fetch_u32(literal)?,
+                                ope,
+                                bce: self.b.class(VOWL::Thing).into()
+                            })
+                        },
+                        PropertyExpression::DataProperty(dp) => {
+                            Ok(ClassExpression::DataExactCardinality
+                            {
+                                n:self.fetch_u32(literal)?,
+                                dp,
+                                dr: self.b.datatype(OWL2Datatype::Literal).into(),
+                            })
+                        }
+                        _ => {
+                            todo!("Unexpected property kind")
+                        }
+                    }
+            }
+            [[_, Term::OWL(VOWL::OnClass), tce],//:
+             [_, Term::OWL(VOWL::OnProperty), Term::Iri(pr)],//:
+             [_, Term::OWL(VOWL::QualifiedCardinality), literal],//:
+             [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Restriction)]
+            ] => {
+                // ok_some!{
+                    Ok(ClassExpression::ObjectExactCardinality
+                    {
+                        n:self.fetch_u32(literal)?,
+                        ope: pr.into(),
+                        bce: self.fetch_ce(tce)?.into()
+                    })
+            }
+            [[_, Term::OWL(VOWL::MinCardinality), literal],//:
+             [_, Term::OWL(VOWL::OnProperty), Term::Iri(pr)],//:
+             [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Restriction)]
+            ] => {
+                // ok_some!{
+                    Ok(ClassExpression::ObjectMinCardinality
+                    {
+                        n:self.fetch_u32(literal)?,
+                        ope: pr.into(),
+                        bce: self.b.class(VOWL::Thing).into()
+                    })
+            }
+            [[_, Term::OWL(VOWL::MinQualifiedCardinality), literal],//:
+             [_, Term::OWL(VOWL::OnClass), tce],//:
+             [_, Term::OWL(VOWL::OnProperty), Term::Iri(pr)],//:
+             [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Restriction)]
+            ] => {
+                // ok_some!{
+                    Ok(ClassExpression::ObjectMinCardinality
+                    {
+                        n:self.fetch_u32(literal)?,
+                        ope: pr.into(),
+                        bce: self.fetch_ce(tce)?.into()
+                    })
+            }
+            [[_, Term::OWL(VOWL::MaxCardinality), literal],//:
+             [_, Term::OWL(VOWL::OnProperty), Term::Iri(pr)],//:
+             [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Restriction)]
+            ] => {
+                    Ok(ClassExpression::ObjectMaxCardinality
+                    {
+                        n:self.fetch_u32(literal)?,
+                        ope: pr.into(),
+                        bce: self.b.class(VOWL::Thing).into()
+                    })
+            }
+            [[_, Term::OWL(VOWL::MaxQualifiedCardinality), literal],//:
+             [_, Term::OWL(VOWL::OnClass), tce],//:
+             [_, Term::OWL(VOWL::OnProperty), Term::Iri(pr)],//:
+             [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Restriction)]
+            ] => {
+                    Ok(ClassExpression::ObjectMaxCardinality
+                    {
+                        n:self.fetch_u32(literal)?,
+                        ope: pr.into(),
+                        bce: self.fetch_ce(tce)?.into()
+                    })
+            }
+            _a => Err(HornedError::invalid("not_a_class_expression")),
+        }
+    }
+
     fn axioms(&mut self, ic: &[&O]) -> Result<(), HornedError> {
         let mut single_bnodes = vec![];
 
         for (this_bnode, v) in std::mem::take(&mut self.bnode) {
-            let axiom: Result<_, HornedError> = match v.as_slice() {
+            let axiom: Result<Component<A>, HornedError> = match v.as_slice() {
                 [[_, Term::OWL(VOWL::AssertionProperty), pr],//:
                  [_, Term::OWL(VOWL::SourceIndividual), Term::Iri(i)],//:
                  [_, target_type, target],//:
                  [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::NegativePropertyAssertion)]] =>
                 {
-                    ok_some! {
-                        match target_type {
-                            Term::OWL(VOWL::TargetIndividual) =>
-                                NegativeObjectPropertyAssertion {
-                                    ope: self.fetch_ope(pr, ic)?,
+                    match target_type {
+                        Term::OWL(VOWL::TargetIndividual) =>
+                            Ok(NegativeObjectPropertyAssertion {
+                                ope: self.fetch_ope(pr, ic)?,
                                     from: i.into(),
-                                    to: self.fetch_iri(target)?.into(),
-                                }.into(),
-                            Term::OWL(VOWL::TargetValue) =>
-                                NegativeDataPropertyAssertion {
-                                    dp: self.fetch_dp(pr, ic)?,
-                                    from: i.into(),
-                                    to: self.fetch_literal(target)?,
-                                }.into(),
-                            _ => todo!()
-                        }
+                                to: self.fetch_iri(target)?.into(),
+                            }.into()),
+                        Term::OWL(VOWL::TargetValue) =>
+                            Ok(NegativeDataPropertyAssertion {
+                                dp: self.fetch_dp(pr, ic)?,
+                                from: i.into(),
+                                to: self.fetch_literal(target)?,
+                            }.into()),
+                        _ => todo!()
                     }
                 }
                 [[_, Term::OWL(VOWL::Members), Term::BNode(bnodeid)],//:
                  [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::AllDifferent)]] =>
                 {
-                    ok_some! {
-                        DifferentIndividuals (
+                        Ok(DifferentIndividuals (
                             self.fetch_ni_seq(bnodeid)?
-                        ).into()
-                    }
+                        ).into())
                 }
                 [[_, Term::OWL(VOWL::DistinctMembers), Term::BNode(bnodeid)],//:
                  [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::AllDifferent)]] =>
                 {
-                    ok_some! {
-                        DifferentIndividuals (
+                        Ok(DifferentIndividuals (
                             self.fetch_ni_seq(bnodeid)?
-                        ).into()
-                    }
+                        ).into())
                 }
-                _ => Ok(None),
+                _ => Err(HornedError::invalid("not an assertion axiom.")),
             };
 
-            if let Some(axiom) = axiom? {
+            if let Ok(axiom) = axiom {
                 self.merge(AnnotatedComponent {
                     component: axiom,
                     ann: BTreeSet::new(),
@@ -1398,33 +1421,35 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
             .into_iter()
             .chain(single_bnodes.into_iter().map(|t| t.into()))
         {
-            let axiom: Result<_, HornedError> = match &triple.0 {
-                [sub_tce, Term::RDFS(VRDFS::SubClassOf), sup_tce] => ok_some! {
-                    SubClassOf {
+            let axiom: Result<Component<A>, HornedError> = match &triple.0 {
+                [sub_tce, Term::RDFS(VRDFS::SubClassOf), sup_tce] =>
+                {
+                    Ok(SubClassOf {
                         sub: self.fetch_ce(sub_tce)?,
                         sup: self.fetch_ce(sup_tce)?,
                     }
-                    .into()
-                },
+                    .into())
+                }
+                ,
                 // TODO: We need to check whether these
                 // EquivalentClasses have any other EquivalentClasses
                 // and add to that axiom
                 [a, Term::OWL(VOWL::EquivalentClass), b] => match self.find_term_kind(a, ic) {
-                    Some(NamedOWLEntityKind::Class) => ok_some! {
-                        EquivalentClasses(
-                            vec![
-                                self.fetch_ce(a)?,
-                                self.fetch_ce(b)?,
-                            ]).into()
-                    },
-                    Some(NamedOWLEntityKind::Datatype) => {
+                    Ok(NamedOWLEntityKind::Class) =>
+                    {
+                        Ok(
+                            EquivalentClasses(vec![self.fetch_ce(a)?, self.fetch_ce(b)?])
+                                .into(),
+                        )
+                    }
+                    ,
+                    Ok(NamedOWLEntityKind::Datatype) => {
                         if let Term::Iri(iri) = a {
-                            ok_some! {
-                                DatatypeDefinition{
-                                    kind: iri.clone().into(),
-                                    range: self.fetch_dr(b)?,
-                                }.into()
+                            Ok(DatatypeDefinition {
+                                kind: iri.clone().into(),
+                                range: self.fetch_dr(b)?,
                             }
+                            .into())
                         } else {
                             Err(HornedError::invalid_at(
                                 "Unexpected entity in equivalent datatype",
@@ -1441,168 +1466,145 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                     )),
                 },
                 [class, Term::OWL(VOWL::HasKey), Term::BNode(bnodeid)] => {
-                    ok_some! {
-                        {
-                            HasKey{
-                                ce:self.fetch_ce(class)?,
-                                vpe: self.fetch_pe_seq(bnodeid, ic)?
-                            }.into()
-                        }
+                    Ok(HasKey {
+                        ce: self.fetch_ce(class)?,
+                        vpe: self.fetch_pe_seq(bnodeid, ic)?,
                     }
+                    .into())
                 }
                 [Term::Iri(iri), Term::OWL(VOWL::DisjointUnionOf), Term::BNode(bnodeid)] => {
-                    ok_some! {
-                        DisjointUnion(
-                            Class(iri.clone()),
-                            self.fetch_ce_seq(bnodeid)?
-                        ).into()
-                    }
+
+                    Ok(DisjointUnion(Class(iri.clone()), self.fetch_ce_seq(bnodeid)?).into())
+
                 }
-                [Term::Iri(p), Term::OWL(VOWL::InverseOf), Term::Iri(r)] => Ok(Some(
+                [Term::Iri(p), Term::OWL(VOWL::InverseOf), Term::Iri(r)] => Ok(
                     InverseObjectProperties(ObjectProperty(p.clone()), ObjectProperty(r.clone()))
                         .into(),
-                )),
+                ),
                 [pr, Term::RDF(VRDF::Type), Term::OWL(VOWL::TransitiveProperty)] => {
-                    ok_some! {
-                        TransitiveObjectProperty(self.fetch_ope(pr, ic)?).into()
-                    }
+                    Ok(TransitiveObjectProperty(self.fetch_ope(pr, ic)?).into())
                 }
                 [pr, Term::RDF(VRDF::Type), Term::OWL(VOWL::FunctionalProperty)] => {
-                    ok_some! {
-                        match self.find_property_kind(pr, ic)? {
-                            PropertyExpression::ObjectPropertyExpression(ope) => {
-                                FunctionalObjectProperty(ope).into()
-                            },
-                            PropertyExpression::DataProperty(dp) => {
-                                FunctionalDataProperty(dp).into()
-                            },
-                            _ => todo!()
+                Ok(match self.find_property_kind(pr, ic)? {
+                        PropertyExpression::ObjectPropertyExpression(ope) => {
+                            FunctionalObjectProperty(ope).into()
                         }
-                    }
+                        PropertyExpression::DataProperty(dp) => FunctionalDataProperty(dp).into(),
+                        _ => todo!(),
+                    })
                 }
                 [pr, Term::RDF(VRDF::Type), Term::OWL(VOWL::AsymmetricProperty)] => {
-                    ok_some! {
-                        match self.find_property_kind(pr, ic)? {
-                            PropertyExpression::ObjectPropertyExpression(ope) => {
-                                AsymmetricObjectProperty(ope).into()
-                            },
-
-                            _ => todo!()
+                    Ok(match self.find_property_kind(pr, ic)? {
+                        PropertyExpression::ObjectPropertyExpression(ope) => {
+                            AsymmetricObjectProperty(ope).into()
                         }
-                    }
+
+                        _ => todo!(),
+                    })
                 }
                 [pr, Term::RDF(VRDF::Type), Term::OWL(VOWL::SymmetricProperty)] => {
-                    ok_some! {
-                        match self.find_property_kind(pr, ic)? {
-                            PropertyExpression::ObjectPropertyExpression(ope) => {
-                                SymmetricObjectProperty(ope).into()
-                            },
-
-                            _ => todo!()
+                    Ok(match self.find_property_kind(pr, ic)? {
+                        PropertyExpression::ObjectPropertyExpression(ope) => {
+                            SymmetricObjectProperty(ope).into()
                         }
-                    }
+
+                        _ => todo!(),
+                    })
                 }
                 [pr, Term::RDF(VRDF::Type), Term::OWL(VOWL::ReflexiveProperty)] => {
-                    ok_some! {
-                        match self.find_property_kind(pr, ic)? {
-                            PropertyExpression::ObjectPropertyExpression(ope) => {
-                                ReflexiveObjectProperty(ope).into()
-                            },
-
-                            _ => todo!()
+                    Ok(match self.find_property_kind(pr, ic)? {
+                        PropertyExpression::ObjectPropertyExpression(ope) => {
+                            ReflexiveObjectProperty(ope).into()
                         }
-                    }
+
+                        _ => todo!(),
+                    })
                 }
                 [pr, Term::RDF(VRDF::Type), Term::OWL(VOWL::IrreflexiveProperty)] => {
-                    ok_some! {
-                        match self.find_property_kind(pr, ic)? {
-                            PropertyExpression::ObjectPropertyExpression(ope) => {
-                                IrreflexiveObjectProperty(ope).into()
-                            },
-
-                            _ => todo!()
+                    Ok(match self.find_property_kind(pr, ic)? {
+                        PropertyExpression::ObjectPropertyExpression(ope) => {
+                            IrreflexiveObjectProperty(ope).into()
                         }
-                    }
+
+                        _ => todo!(),
+                    })
                 }
                 [pr, Term::RDF(VRDF::Type), Term::OWL(VOWL::InverseFunctionalProperty)] => {
-                    ok_some! {
-                        match self.find_property_kind(pr, ic)? {
-                            PropertyExpression::ObjectPropertyExpression(ope) => {
-                                InverseFunctionalObjectProperty(ope).into()
-                            },
-
-                            _ => todo!()
+                    Ok(match self.find_property_kind(pr, ic)? {
+                        PropertyExpression::ObjectPropertyExpression(ope) => {
+                            InverseFunctionalObjectProperty(ope).into()
                         }
-                    }
+                        _ => todo!(),
+                    })
                 }
-                [Term::Iri(sub), Term::RDF(VRDF::Type), cls] => ok_some! {
-                    {
-                        ClassAssertion {
+                [Term::Iri(sub), Term::RDF(VRDF::Type), cls] =>
+                {
+                    // This case is needed since we are not scanning to find SWRL variables before this step.
+                    if let Term::SWRL(VSWRL::Variable) = cls {
+                        Err(HornedError::invalid("Variable found while searching for class expression."))
+                    } else {
+                        Ok(ClassAssertion {
                             ce: self.fetch_ce(cls)?,
-                            i: NamedIndividual(sub.clone()).into()
-                        }.into()
-                    }
-                },
-                [a, Term::OWL(VOWL::DisjointWith), b] => ok_some! {
-                        DisjointClasses(vec![
-                            self.fetch_ce(a)?,
-                            self.fetch_ce(b)?
-                        ]).into()
-                },
-                [pr, Term::RDFS(VRDFS::SubPropertyOf), t] => {
-                    ok_some! {
-                        match self.find_property_kind(t, ic)? {
-                            PropertyExpression::ObjectPropertyExpression(ope) =>
-                                SubObjectPropertyOf {
-                                    sup: ope,
-                                    sub: self.fetch_sope(pr, ic)?,
-                                }.into(),
-                            PropertyExpression::DataProperty(dp) =>
-                                SubDataPropertyOf {
-                                    sup: dp,
-                                    sub: self.fetch_dp(pr, ic)?
-                                }.into(),
-                            PropertyExpression::AnnotationProperty(ap) =>
-                                SubAnnotationPropertyOf {
-                                    sup: ap,
-                                    sub: self.fetch_ap(pr, ic)?
-                                }.into(),
+                            i: NamedIndividual(sub.clone()).into(),
                         }
+                        .into())
                     }
+                },
+                [a, Term::OWL(VOWL::DisjointWith), b] =>
+                {
+                    Ok(DisjointClasses(vec![self.fetch_ce(a)?, self.fetch_ce(b)?]).into())
+                }
+                ,
+                [pr, Term::RDFS(VRDFS::SubPropertyOf), t] => {
+                    Ok(match self.find_property_kind(t, ic)? {
+                        PropertyExpression::ObjectPropertyExpression(ope) => SubObjectPropertyOf {
+                            sup: ope,
+                            sub: self.fetch_sope(pr, ic)?,
+                        }
+                        .into(),
+                        PropertyExpression::DataProperty(dp) => SubDataPropertyOf {
+                            sup: dp,
+                            sub: self.fetch_dp(pr, ic)?,
+                        }
+                        .into(),
+                        PropertyExpression::AnnotationProperty(ap) => SubAnnotationPropertyOf {
+                            sup: ap,
+                            sub: self.fetch_ap(pr, ic)?,
+                        }
+                        .into(),
+                    })
                 }
                 [Term::Iri(pr), Term::OWL(VOWL::PropertyChainAxiom), Term::BNode(id)] => {
-                    ok_some! {
-                        SubObjectPropertyOf {
-                            sub: SubObjectPropertyExpression::ObjectPropertyChain(
-                                self.fetch_ope_seq(id, ic)?
-                            ),
-                            sup: ObjectProperty(pr.clone()).into(),
-                        }.into()
+                    Ok(SubObjectPropertyOf {
+                        sub: SubObjectPropertyExpression::ObjectPropertyChain(
+                            self.fetch_ope_seq(id, ic)?,
+                        ),
+                        sup: ObjectProperty(pr.clone()).into(),
                     }
+                    .into())
                 }
                 [pr, Term::RDFS(VRDFS::Domain), t] => {
-                    ok_some! {
-                        match self.find_property_kind(pr, ic)? {
-                            PropertyExpression::ObjectPropertyExpression(ope) => ObjectPropertyDomain {
-                                ope,
-                                ce: self.fetch_ce(t)?,
-                            }
-                            .into(),
-                            PropertyExpression::DataProperty(dp) => DataPropertyDomain {
-                                dp,
-                                ce: self.fetch_ce(t)?,
-                            }
-                            .into(),
-                            PropertyExpression::AnnotationProperty(ap) => AnnotationPropertyDomain {
-                                ap,
-                                iri: self.fetch_iri(t)?,
-                            }
-                            .into(),
+                    Ok(match self.find_property_kind(pr, ic)? {
+                        PropertyExpression::ObjectPropertyExpression(ope) => ObjectPropertyDomain {
+                            ope,
+                            ce: self.fetch_ce(t)?,
                         }
-                    }
+                        .into(),
+                        PropertyExpression::DataProperty(dp) => DataPropertyDomain {
+                            dp,
+                            ce: self.fetch_ce(t)?,
+                        }
+                        .into(),
+                        PropertyExpression::AnnotationProperty(ap) => AnnotationPropertyDomain {
+                            ap,
+                            iri: self.fetch_iri(t)?,
+                        }
+                        .into(),
+                    })
                 }
-                [pr, Term::RDFS(VRDFS::Range), t] => ok_some! {
-                    match self.find_property_kind(pr, ic)? {
+                [pr, Term::RDFS(VRDFS::Range), t] =>
+                {
+                    Ok(match self.find_property_kind(pr, ic)? {
                         PropertyExpression::ObjectPropertyExpression(ope) => ObjectPropertyRange {
                             ope,
                             ce: self.fetch_ce(t)?,
@@ -1618,77 +1620,77 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                             iri: self.fetch_iri(t)?,
                         }
                         .into(),
-                    }
-                },
-                [r, Term::OWL(VOWL::PropertyDisjointWith), s] => ok_some! {
-                    match self.find_property_kind(r, ic)? {
-                        PropertyExpression::ObjectPropertyExpression(ope) => DisjointObjectProperties (
-                            vec![ope, self.fetch_ope(s, ic)?]
-                        )
-                        .into(),
-                        PropertyExpression::DataProperty(dp) => DisjointDataProperties (
-                            vec![dp, self.fetch_dp(s, ic)?]
-                        )
-                            .into(),
-                        _ => todo!()
-                    }
-                },
-                [r, Term::OWL(VOWL::EquivalentProperty), s] => ok_some! {
-                    match self.find_property_kind(r, ic)? {
-                        PropertyExpression::ObjectPropertyExpression(ope) => EquivalentObjectProperties (
-                            vec![ope, self.fetch_ope(s, ic)?]
-                        )
-                        .into(),
-                        PropertyExpression::DataProperty(dp) => EquivalentDataProperties (
-                            vec![dp, self.fetch_dp(s, ic)?]
-                        )
-                        .into(),
-                        _ => todo!()
-                    }
-                },
+                    })
+                }
+                [r, Term::OWL(VOWL::PropertyDisjointWith), s] =>
+                {
+                    Ok(match self.find_property_kind(r, ic)? {
+                        PropertyExpression::ObjectPropertyExpression(ope) => {
+                            DisjointObjectProperties(vec![ope, self.fetch_ope(s, ic)?]).into()
+                        }
+                        PropertyExpression::DataProperty(dp) => {
+                            DisjointDataProperties(vec![dp, self.fetch_dp(s, ic)?]).into()
+                        }
+                        _ => todo!(),
+                    })
+                }
+                [r, Term::OWL(VOWL::EquivalentProperty), s] =>
+                {
+                    Ok(match self.find_property_kind(r, ic)? {
+                        PropertyExpression::ObjectPropertyExpression(ope) => {
+                            EquivalentObjectProperties(vec![ope, self.fetch_ope(s, ic)?]).into()
+                        }
+                        PropertyExpression::DataProperty(dp) => {
+                            EquivalentDataProperties(vec![dp, self.fetch_dp(s, ic)?]).into()
+                        }
+                        _ => todo!(),
+                    })
+                }
                 [Term::Iri(sub), Term::OWL(VOWL::SameAs), Term::Iri(obj)] => {
-                    Ok(Some(SameIndividual(vec![sub.into(), obj.into()]).into()))
+                    Ok(SameIndividual(vec![sub.into(), obj.into()]).into())
                 }
                 [Term::Iri(i), Term::OWL(VOWL::DifferentFrom), Term::Iri(j)] => {
-                    Ok(Some(DifferentIndividuals(vec![i.into(), j.into()]).into()))
+                    Ok(DifferentIndividuals(vec![i.into(), j.into()]).into())
                 }
-                [Term::Iri(sub), Term::Iri(pred), t @ Term::Literal(_)] => ok_some! {
-                    match (self.find_declaration_kind(sub, ic)?,
-                           self.find_declaration_kind(pred, ic)?) {
-                        (NamedOWLEntityKind::NamedIndividual,
-                         NamedOWLEntityKind::DataProperty) => {
-                            DataPropertyAssertion {
-                                dp: pred.clone().into(),
-                                from: sub.into(),
-                                to: self.fetch_literal(t)?
-                            }.into()
+                [Term::Iri(sub), Term::Iri(pred), t @ Term::Literal(_)] =>
+                {
+                    match (self.find_declaration_kind(sub, ic), self.find_declaration_kind(pred, ic),) {
+                        (Ok(NamedOWLEntityKind::NamedIndividual), Ok(NamedOWLEntityKind::DataProperty)) => Ok(DataPropertyAssertion {
+                            dp: pred.clone().into(),
+                            from: sub.into(),
+                            to: self.fetch_literal(t)?,
                         }
-                        _ => {
-                            return None;
-                            //todo!()
-                        }
+                        .into()),
+                        _ => Err(HornedError::invalid("Invalid data property assertion"))
                     }
-                },
-                [Term::Iri(sub), Term::Iri(pred), Term::Iri(obj)] => ok_some! {
-                    match (self.find_declaration_kind(sub, ic)?,
-                           self.find_declaration_kind(pred, ic)?,
-                           self.find_declaration_kind(obj, ic)?) {
-                        (NamedOWLEntityKind::NamedIndividual,
-                         NamedOWLEntityKind::ObjectProperty,
-                         NamedOWLEntityKind::NamedIndividual) => {
-                            ObjectPropertyAssertion {
+                }
+                [Term::Iri(sub), Term::Iri(pred), Term::Iri(obj)] =>
+                {
+                    Ok(
+                        match (
+                            self.find_declaration_kind(sub, ic)?,
+                            self.find_declaration_kind(pred, ic)?,
+                            self.find_declaration_kind(obj, ic)?,
+                        ) {
+                            (
+                                NamedOWLEntityKind::NamedIndividual,
+                                NamedOWLEntityKind::ObjectProperty,
+                                NamedOWLEntityKind::NamedIndividual,
+                            ) => ObjectPropertyAssertion {
                                 ope: ObjectProperty(pred.clone()).into(),
                                 from: sub.into(),
-                                to: obj.into()
-                            }.into()
-                        }
-                        _ => todo!()
-                    }
-                },
-                _ => Ok(None),
+                                to: obj.into(),
+                            }
+                            .into(),
+                            _ => todo!(),
+                        },
+                    )
+                }
+                ,
+                _ => Err(HornedError::invalid("Invalid triple")),
             };
 
-            if let Some(axiom) = axiom? {
+            if let Ok(axiom) = axiom {
                 let ann = self.ann_map.remove(&triple.0).unwrap_or_default();
                 self.merge(AnnotatedComponent {
                     component: axiom,
@@ -1718,88 +1720,57 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
         // Next identify the atoms with a big pattern matcher over bnodes
         for (bnode, triple) in std::mem::take(&mut self.bnode) {
             let atom: Result<_, HornedError> = match triple.as_slice() {
-                [[_, Term::RDF(VRDF::Type), Term::SWRL(VSWRL::ClassAtom)], [_, Term::SWRL(VSWRL::Argument1), arg], [_, Term::SWRL(VSWRL::ClassPredicate), pred]] =>
-                {
-                    ok_some! {
-                        {
-                            Atom::ClassAtom{
-                                pred: self.fetch_ce(pred)?,
-                                arg: self.to_iargument(arg, ic)?
+                [[_, Term::RDF(VRDF::Type), Term::SWRL(VSWRL::ClassAtom)], [_, Term::SWRL(VSWRL::Argument1), arg], [_, Term::SWRL(VSWRL::ClassPredicate), pred]] => {
+                    Ok(Atom::ClassAtom {
+                        pred: self.fetch_ce(pred)?,
+                        arg: self.to_iargument(arg, ic)?,
+                    })
+                }
+                [[_, Term::RDF(VRDF::Type), Term::SWRL(VSWRL::DataRangeAtom)], [_, Term::SWRL(VSWRL::Argument1), arg], [_, Term::SWRL(VSWRL::DataRange), pred]] => {
+                    Ok(Atom::DataRangeAtom {
+                        pred: self.fetch_dr(pred)?,
+                        arg: self.to_dargument(arg)?,
+                    })
+                }
+                [[_, Term::RDF(VRDF::Type), Term::SWRL(VSWRL::IndividualPropertyAtom)], [_, Term::SWRL(VSWRL::Argument1), arg1], [_, Term::SWRL(VSWRL::Argument2), arg2], [_, Term::SWRL(VSWRL::PropertyPredicate), pred]] => {
+                    Ok(match self.find_property_kind(pred, ic)? {
+                        PropertyExpression::ObjectPropertyExpression(pred) => {
+                            Atom::ObjectPropertyAtom {
+                                pred,
+                                args: (self.to_iargument(arg1, ic)?, self.to_iargument(arg2, ic)?),
                             }
                         }
-                    }
+                        _ => todo!(),
+                    })
                 }
-                [[_, Term::RDF(VRDF::Type), Term::SWRL(VSWRL::DataRangeAtom)], [_, Term::SWRL(VSWRL::Argument1), arg], [_, Term::SWRL(VSWRL::DataRange), pred]] =>
-                {
-                    ok_some! {
-                        {
-                            Atom::DataRangeAtom{
-                                pred: self.fetch_dr(pred)?,
-                                arg: self.to_dargument(arg)?
-                            }
-                        }
-                    }
+                [[_, Term::RDF(VRDF::Type), Term::SWRL(VSWRL::DatavaluedPropertyAtom)], [_, Term::SWRL(VSWRL::Argument1), arg1], [_, Term::SWRL(VSWRL::Argument2), arg2], [_, Term::SWRL(VSWRL::PropertyPredicate), pred]] => {
+                    Ok(Atom::DataPropertyAtom {
+                        pred: self.fetch_dp(pred, ic)?,
+                        args: (self.to_dargument(arg1)?, self.to_dargument(arg2)?),
+                    })
                 }
-                [[_, Term::RDF(VRDF::Type), Term::SWRL(VSWRL::IndividualPropertyAtom)], [_, Term::SWRL(VSWRL::Argument1), arg1], [_, Term::SWRL(VSWRL::Argument2), arg2], [_, Term::SWRL(VSWRL::PropertyPredicate), pred]] =>
-                {
-                    ok_some! {
-                        match self.find_property_kind(pred, ic)? {
-                            PropertyExpression::ObjectPropertyExpression(pred) => {
-                                Atom::ObjectPropertyAtom{
-                                    pred,
-                                    args: (
-                                        self.to_iargument(arg1, ic)?,
-                                        self.to_iargument(arg2, ic)?,
-                                    )
-                                }
-                            }
-                            _=> todo!()
-                        }
-                    }
+                [[_, Term::RDF(VRDF::Type), Term::SWRL(VSWRL::DifferentIndividualsAtom)], [_, Term::SWRL(VSWRL::Argument1), arg1], [_, Term::SWRL(VSWRL::Argument2), arg2]] => {
+                    Ok(Atom::DifferentIndividualsAtom(
+                        self.to_iargument(arg1, ic)?,
+                        self.to_iargument(arg2, ic)?,
+                    ))
                 }
-                [[_, Term::RDF(VRDF::Type), Term::SWRL(VSWRL::DatavaluedPropertyAtom)], [_, Term::SWRL(VSWRL::Argument1), arg1], [_, Term::SWRL(VSWRL::Argument2), arg2], [_, Term::SWRL(VSWRL::PropertyPredicate), pred]] =>
-                {
-                    ok_some! {
-                        Atom::DataPropertyAtom {
-                            pred: self.fetch_dp(pred, ic)?,
-                            args: (
-                                self.to_dargument(arg1)?,
-                                self.to_dargument(arg2)?,
-                            )
-                        }
-                    }
+                [[_, Term::RDF(VRDF::Type), Term::SWRL(VSWRL::SameIndividualAtom)], [_, Term::SWRL(VSWRL::Argument1), arg1], [_, Term::SWRL(VSWRL::Argument2), arg2]] => {
+                    Ok(Atom::SameIndividualAtom(
+                        self.to_iargument(arg1, ic)?,
+                        self.to_iargument(arg2, ic)?,
+                    ))
                 }
-                [[_, Term::RDF(VRDF::Type), Term::SWRL(VSWRL::DifferentIndividualsAtom)], [_, Term::SWRL(VSWRL::Argument1), arg1], [_, Term::SWRL(VSWRL::Argument2), arg2]] =>
-                {
-                    ok_some! {
-                        Atom::DifferentIndividualsAtom(
-                            self.to_iargument(arg1, ic)?,
-                            self.to_iargument(arg2, ic)?,
-                        )
-                    }
+                [[_, Term::RDF(VRDF::Type), Term::SWRL(VSWRL::BuiltinAtom)], [_, Term::SWRL(VSWRL::Arguments), Term::BNode(args)], [_, Term::SWRL(VSWRL::Builtin), Term::Iri(iri)]] => {
+                    Ok(Atom::BuiltInAtom {
+                        pred: iri.clone(),
+                        args: self.fetch_dargument_seq(args)?,
+                    })
                 }
-                [[_, Term::RDF(VRDF::Type), Term::SWRL(VSWRL::SameIndividualAtom)], [_, Term::SWRL(VSWRL::Argument1), arg1], [_, Term::SWRL(VSWRL::Argument2), arg2]] =>
-                {
-                    ok_some! {
-                        Atom::SameIndividualAtom(
-                            self.to_iargument(arg1, ic)?,
-                            self.to_iargument(arg2, ic)?,
-                        )
-                    }
-                }
-                [[_, Term::RDF(VRDF::Type), Term::SWRL(VSWRL::BuiltinAtom)], [_, Term::SWRL(VSWRL::Arguments), Term::BNode(args)], [_, Term::SWRL(VSWRL::Builtin), Term::Iri(iri)]] =>
-                {
-                    ok_some! {
-                        Atom::BuiltInAtom{
-                            pred: iri.clone(),
-                            args: self.fetch_dargument_seq(args)?
-                        }
-                    }
-                }
-                _ => Ok(None),
+                _ => Err(HornedError::invalid("Invalid SWRL rule")),
             };
 
-            if let Some(atom) = atom? {
+            if let Ok(atom) = atom {
                 self.atom.insert(Term::BNode(bnode), atom);
             } else {
                 self.bnode.insert(bnode, triple);
@@ -1811,19 +1782,16 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
         // entire rule
         for (bnode, triple) in std::mem::take(&mut self.bnode) {
             let rule: Result<_, HornedError> = match triple.as_slice() {
-                [[_, Term::RDF(VRDF::Type), Term::SWRL(VSWRL::Imp)], [_, Term::SWRL(VSWRL::Body), Term::BNode(body_bn)], [_, Term::SWRL(VSWRL::Head), Term::BNode(head_bn)]] =>
-                {
-                    ok_some! {
-                        Rule {
-                            head: self.fetch_atom_seq(head_bn)?,
-                            body: self.fetch_atom_seq(body_bn)?,
-                        }
-                    }
+                [[_, Term::RDF(VRDF::Type), Term::SWRL(VSWRL::Imp)], [_, Term::SWRL(VSWRL::Body), Term::BNode(body_bn)], [_, Term::SWRL(VSWRL::Head), Term::BNode(head_bn)]] => {
+                    Ok(Rule {
+                        head: self.fetch_atom_seq(head_bn)?,
+                        body: self.fetch_atom_seq(body_bn)?,
+                    })
                 }
-                _ => Ok(None),
+                _ => Err(HornedError::invalid("Invalid rule")),
             };
 
-            if let Some(rule) = rule? {
+            if let Ok(rule) = rule {
                 self.merge(rule);
             } else {
                 self.bnode.insert(bnode, triple);
@@ -1951,7 +1919,6 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                 //             //bnode_seq.insert(s.clone(), self.seq())
                 //         }
                 //     }
-                // }
 
                 // Then handle SEQ this should give HashMap<BNodeID,
                 // Vec<[SpTerm]> where the BNodeID is the first node of the
@@ -2213,7 +2180,6 @@ mod test {
     //     let op = OntologyParser::from_doc_iri(&b, &i);
     //     let _o = op.parse().unwrap();
     //     assert!(true);
-    // }
 
     #[test_resources("src/ont/owl-rdf/*.owl")]
     fn compare_to_xml(resource: &str) {
@@ -2359,7 +2325,6 @@ mod test {
     // #[test]
     // fn import_property() {
     //     compare("import-property")
-    // }
 
     // #[test]
     // fn family_import() -> Result<(),HornedError>{
@@ -2377,10 +2342,8 @@ mod test {
 
     //     assert!(incomplete.is_complete());
     //     Ok(())
-    // }
 
     // #[test]
     // fn family() {
     //     compare("family");
-    // }
 }
