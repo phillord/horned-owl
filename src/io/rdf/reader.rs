@@ -219,12 +219,6 @@ impl<A: ForIRI> Build<A> {
     }
 }
 
-macro_rules! d {
-    () => {
-        Default::default()
-    };
-}
-
 pub trait RDFOntology<A: ForIRI, AA: ForIndex<A>>:
     AsRef<LogicallyEqualIndex<A, AA>>
     + AsRef<DeclarationMappedIndex<A, AA>>
@@ -337,8 +331,9 @@ impl<A: ForIRI, AA: ForIndex<A>> AsRef<SetIndex<A, AA>> for ConcreteRDFOntology<
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug,Default)]
 enum OntologyParserState {
+    #[default]
     New,
     Imports,
     Declarations,
@@ -427,7 +422,7 @@ pub struct OntologyParser<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>>
     variable: HashMap<IRI<A>, Variable<A>>,
 
     state: OntologyParserState,
-    error: Result<(), HornedError>,
+    error: Option<HornedError>,
     p: PhantomData<AA>,
 }
 
@@ -438,23 +433,22 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
         config: ParserConfiguration,
     ) -> OntologyParser<'a, A, AA, O> {
         OntologyParser {
-            o: d!(),
+            o: Default::default(),
             b,
             config,
-
             triple,
-            simple: d!(),
-            bnode: d!(),
-            bnode_seq: d!(),
-            class_expression: d!(),
-            object_property_expression: d!(),
-            data_range: d!(),
-            ann_map: d!(),
-            atom: d!(),
-            variable: d!(),
-            state: OntologyParserState::New,
-            error: Ok(()),
-            p: d!(),
+            simple: Default::default(),
+            bnode: Default::default(),
+            bnode_seq: Default::default(),
+            class_expression: Default::default(),
+            object_property_expression: Default::default(),
+            data_range: Default::default(),
+            ann_map: Default::default(),
+            atom: Default::default(),
+            variable: Default::default(),
+            state: Default::default(),
+            error: Default::default(),
+            p: Default::default(),
         }
     }
 
@@ -669,6 +663,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
         update_or_insert_logically_equal_component(&mut self.o, cmp);
     }
 
+    // Table 10: Parsing of Annotations
     fn axiom_annotations(&mut self) {
         for (k, v) in std::mem::take(&mut self.bnode) {
             match v.as_slice() {
@@ -677,6 +672,8 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                  [_, Term::OWL(VOWL::AnnotatedTarget), ob],//:
                  [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Axiom)], ann @ ..] =>
                 {
+                    // why can't we just remove the triple from simple and treat this map as a collection of triples 
+                    // with annotations that are waiting to be parsed?
                     self.ann_map.insert(
                         [sb.clone(), p.clone(), ob.clone()],
                         self.parse_annotations(ann),
@@ -1992,23 +1989,27 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
     }
 
     pub fn parse(mut self) -> Result<(O, IncompleteParse<A>), HornedError> {
-        if self.error.is_err() {
-            return Err(self.error.unwrap_err());
+
+        if let Some(e) = self.error {
+            return Err(e);
         }
 
         match self.state {
             OntologyParserState::New => {
-                // Ditch the vec that this might return as we don't
-                // need it!
-                self.error = self.parse_imports().and(Ok(()));
+                self.error = self.parse_imports().err();
                 self.parse()
+                // if let Some(e) = self.error {
+                //     Err(e)
+                // } else {
+                //     self.parse()
+                // }
             }
             OntologyParserState::Imports => {
-                self.error = self.parse_declarations();
+                self.error = self.parse_declarations().err();
                 self.parse()
             }
             OntologyParserState::Declarations => {
-                self.error = self.finish_parse(vec![].as_slice());
+                self.error = self.finish_parse(&[]).err();
                 self.parse()
             }
             OntologyParserState::Parse => self.as_ontology_and_incomplete(),
@@ -2025,14 +2026,18 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
 
     /// Consume the parser and return an Ontology.
     pub fn as_ontology(self) -> Result<O, HornedError> {
-        self.error.and(Ok(self.o))
+        if let Some(e) = self.error {
+            Err(e)
+        } else {
+            Ok(self.o)
+        }
     }
 
     /// Consume the parser and return an Ontology and any data
     /// structures that have not been fully parsed
     pub fn as_ontology_and_incomplete(mut self) -> Result<(O, IncompleteParse<A>), HornedError> {
-        if self.error.is_err() {
-            return Err(self.error.unwrap_err());
+        if let Some(e) = self.error {
+            return Err(e);
         }
 
         // Regroup so that they print out nicer
@@ -2313,6 +2318,7 @@ mod test {
     #[test]
     fn annotation_with_anonymous() {
         let s = slurp_rdfont("ambiguous/annotation-with-anonymous");
+        dbg!(&s);
         let ont: ComponentMappedOntology<_, _> = read_ok(&mut s.as_bytes()).into();
 
         // We cannot do the usual "compare" because the anonymous
