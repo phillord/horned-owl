@@ -15,6 +15,16 @@ pre-push: all-tests
 
 
 
+## Bench prepare
+bench-prepare:
+	mkdir --parents target/bench-data
+	for i in 10 100 1000 2500 5000 10000;\
+	do \
+		cargo run --bin horned-big -- --format owl $$i > target/bench-data/o$$i.owl; \
+		cargo run --bin horned-big -- --format owx $$i > target/bench-data/o$$i.owx; \
+	done
+
+
 ## Build the Unit test Ontology code
 just-bubo:
 	$(MAKE) -C src/ont/bubo

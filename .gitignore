@@ -1,8 +1,6 @@
 /target/
 **/*.rs.bk
 Cargo.lock
-/benches/ont/o1000*.owl
-/benches/ont/o5000*.owl
 /notes.org
 /src/bin/horned_temp.rs
 /tmp/
