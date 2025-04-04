@@ -52,7 +52,7 @@ mktemp = "0.5.1"
 pretty_assertions = "1.0.0"
 slurp = "1.0.1"
 test-generator =  { version = "^0.3" }
-
+horned-bin = {path="horned-bin"}
 
 [profile.release]
 debug = true

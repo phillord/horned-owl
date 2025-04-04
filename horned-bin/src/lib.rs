@@ -3,10 +3,11 @@
 use horned_owl::{
     error::HornedError,
     io::{ParserConfiguration, ParserOutput, ResourceType},
-    model::{Build, ForIRI, RcAnnotatedComponent, RcStr, IRI},
+    model::{Build, ForIRI, MutableOntology, OntologyID, RcAnnotatedComponent, RcStr, IRI},
     ontology::{
         component_mapped::{ComponentMappedOntology, RcComponentMappedOntology},
         indexed::ForIndex,
+        set::SetOntology,
     },
     resolve::{localize_iri, strict_resolve_iri},
 };
@@ -152,6 +153,27 @@ pub fn materialize_1<'a>(
     }
 
     Ok(done)
+}
+
+pub fn generate_big_owl<W: StdWrite>(
+    size: isize,
+    format: &str,
+    w: &mut W,
+) -> Result<(), HornedError> {
+    let b = Build::new_rc();
+    let mut o = SetOntology::new_rc();
+
+    o.insert(OntologyID {
+        iri: Some(b.iri("http://www.example.com/iri")),
+        viri: None,
+    });
+
+    for i in 1..size + 1 {
+        o.declare(b.class(format!("https://www.example.com/o{}", i)));
+    }
+
+    let amo: RcComponentMappedOntology = o.into();
+    write(format, w, &amo)
 }
 
 pub mod naming {

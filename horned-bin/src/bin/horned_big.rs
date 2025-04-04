@@ -3,14 +3,8 @@ use clap::App;
 use clap::Arg;
 use clap::ArgMatches;
 
-use horned_bin::write;
-
+use horned_bin::generate_big_owl;
 use horned_owl::error::HornedError;
-use horned_owl::model::Build;
-use horned_owl::model::MutableOntology;
-use horned_owl::model::OntologyID;
-use horned_owl::ontology::component_mapped::RcComponentMappedOntology;
-use horned_owl::ontology::set::SetOntology;
 
 use std::io::stdout;
 
@@ -45,23 +39,6 @@ pub(crate) fn matcher(matches: &ArgMatches) -> Result<(), HornedError> {
         matches.value_of("SIZE").unwrap().parse().map_err(|_| {
             HornedError::CommandError("Cannot parse SIZE as an integer".to_string())
         })?;
-
-    let b = Build::new_rc();
-    let mut o = SetOntology::new_rc();
-
-    o.insert(OntologyID {
-        iri: Some(b.iri("http://www.example.com/iri")),
-        viri: None,
-    });
-
-    for i in 1..size + 1 {
-        o.declare(b.class(format!("https://www.example.com/o{}", i)));
-    }
-
-    let amo: RcComponentMappedOntology = o.into();
-    write(
-        matches.value_of("format").expect("oops"),
-        &mut stdout(),
-        &amo,
-    )
+    let format = matches.value_of("format").expect("oops");
+    generate_big_owl(size, format, &mut stdout())
 }
