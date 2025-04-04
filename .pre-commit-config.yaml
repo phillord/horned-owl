@@ -1,6 +1,21 @@
 # See https://pre-commit.com for more information
 # See https://pre-commit.com/hooks.html for more hooks
 repos:
+-   repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+    -   id: check-added-large-files
+        args: ["--maxkb=1000"]
+    -   id: no-commit-to-branch
+        args: [--branch, rfc]
+-   repo: https://github.com/doublify/pre-commit-rust
+    rev: v1.0
+    hooks:
+    -   id: fmt
+        args: ["--check", "--"]
+        pass_filenames: false
+    -   id: clippy
+        pass_filenames: false
 -   repo: local
     hooks:
     -  id: untracked-file
@@ -21,18 +36,3 @@ repos:
        entry: cargo bench --no-run --quiet
        pass_filenames: false
        stages: [pre-commit, pre-push]
--   repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.6.0
-    hooks:
-    -   id: check-added-large-files
-        args: ["--maxkb=1000"]
-    -   id: no-commit-to-branch
-        args: [--branch, rfc]
--   repo: https://github.com/doublify/pre-commit-rust
-    rev: v1.0
-    hooks:
-    -   id: fmt
-        args: ["--check", "--"]
-        pass_filenames: false
-    -   id: clippy
-        pass_filenames: false
