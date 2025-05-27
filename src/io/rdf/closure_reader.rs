@@ -54,11 +54,11 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> ClosureOntologyParse
     /// # Arguments
     ///
     /// * `source_iri` -- the source IRI from which we should
-    ///    parse. This may be the declared IRI of the ontology, or a
-    ///    local document IRI. This IRI may not be used directly as
-    ///    the source depending on the `relative_doc_iri`.
+    ///   parse. This may be the declared IRI of the ontology, or a
+    ///   local document IRI. This IRI may not be used directly as the
+    ///   source depending on the `relative_doc_iri`.
     /// * `relative_doc_iri` -- an IRI that `source_iri` should be
-    ///    interpreted as relative to, if any.
+    ///   interpreted as relative to, if any.
     pub fn parse_iri(
         &mut self,
         source_iri: &IRI<A>,
@@ -79,7 +79,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> ClosureOntologyParse
     ///
     /// * `s` -- A string of the ontology to be parsed
     /// * `relative_doc_iri` -- The document IRI which was used to
-    ///    determine the relative location of `s` if any.
+    ///   determine the relative location of `s` if any.
     /// * `new_doc_iri` -- the IRI that `s` was actually read from
     fn parse_content_from_iri(
         &mut self,
