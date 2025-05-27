@@ -2295,7 +2295,6 @@ mod test {
     }
 
     #[test]
-    #[ignore]
     fn non_deterministic_rdf_parse() {
         //    https://github.com/phillord/horned-owl/issues/123
         let mut vont: Vec<SetOntology<_>> = vec![];
