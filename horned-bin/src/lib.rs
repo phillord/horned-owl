@@ -126,12 +126,12 @@ pub fn materialize_1<'a>(
     let amont: RcComponentMappedOntology = parse_imports(Path::new(input), config)?.into();
     let import = amont.i().import();
 
-    let b = Build::new_rc();
+    let _b = Build::new_rc();
 
     // Get all the imports
     for i in import {
         if !done.contains(&i.0) {
-            let local: String = localize_iri(&i.0, &b.iri(input)).into();
+            let local: String = localize_iri(&i.0, input);
             let local_path = Path::new(&local);
             if !local_path.exists() {
                 println!("Retrieving Ontology: {}", &i.0);

@@ -88,19 +88,18 @@ pub fn as_local_path_buffer<A: ForIRI>(iri: &IRI<A>) -> Option<PathBuf> {
 /// let doc_iri = b.iri("file://base_dir/and.owl");
 /// let iri = b.iri("http://www.example.com/or.owl");
 ///
-/// let local = b.iri("file://base_dir/or.owl");
+/// let local = String::from("file://base_dir/or.owl");
 ///
 /// assert_eq!(localize_iri(&iri, &doc_iri), local);
 /// ```
-pub fn localize_iri<A: ForIRI>(iri: &IRI<A>, doc_iri: &IRI<A>) -> IRI<A> {
-    let b = Build::new();
+pub fn localize_iri<A: ForIRI>(iri: &IRI<A>, doc_iri: &str) -> String {
     let (_, term_iri) = iri.split_at(iri.rfind('/').unwrap() + 1);
 
-    b.iri(if let Some(index) = doc_iri.rfind('/') {
+    if let Some(index) = doc_iri.rfind('/') {
         format!("{}/{}", doc_iri.split_at(index).0, term_iri)
     } else {
         format!("./{}", term_iri)
-    })
+    }
 }
 
 /// Return contents of an IRI as a string
@@ -111,7 +110,8 @@ pub fn resolve_iri<A: ForIRI>(
     doc_iri: Option<&IRI<A>>,
 ) -> Result<(IRI<A>, String), HornedError> {
     let local = if let Some(doc_iri) = doc_iri {
-        localize_iri(iri, doc_iri)
+        let b = Build::new();
+        b.iri(localize_iri(iri, doc_iri))
     } else {
         iri.clone()
     };
@@ -171,7 +171,7 @@ mod test {
 
         let iri = b.iri("http://www.example.com/or.owl");
 
-        let local = b.iri("file://base_dir/or.owl");
+        let local = String::from("file://base_dir/or.owl");
 
         assert_eq!(localize_iri(&iri, &doc_iri), local);
     }
