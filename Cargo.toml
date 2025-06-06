@@ -50,8 +50,9 @@ horned-owl = {path=".", features = ["remote"]}
 criterion = "0.5.1"
 mktemp = "0.5.1"
 pretty_assertions = "1.0.0"
+similar = {version="2.7.0", features=["bytes"]}
 slurp = "1.0.1"
-test-generator =  { version = "^0.3" }
+test-generator =  { git="https://github.com/phillord/test-generator.git"}
 
 
 [profile.release]

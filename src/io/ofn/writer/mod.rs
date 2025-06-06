@@ -51,7 +51,7 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
     // Write prefixes
     write!(
         &mut write,
-        "{}",
+        "{}\n\n",
         <PrefixMapping as AsFunctional<A>>::as_functional(mapping)
     )?;
 
@@ -61,9 +61,9 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
     // Write the IRI and Version IRI if any
     if let Some(ontology_id) = optional_id {
         if let Some(iri) = &ontology_id.iri {
-            write!(write, "{}", iri.as_functional_with_prefixes(mapping))?;
+            writeln!(write, "{}", iri.as_functional_with_prefixes(mapping))?;
             if let Some(viri) = &ontology_id.viri {
-                writeln!(write, " {}", viri.as_functional_with_prefixes(mapping))?;
+                writeln!(write, "{}\n", viri.as_functional_with_prefixes(mapping))?;
             } else {
                 writeln!(write)?;
             }
@@ -86,7 +86,7 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
     }
 
     // Close the ontology
-    writeln!(write, ")").map_err(From::from)
+    write!(write, ")").map_err(From::from)
 }
 
 #[cfg(test)]
@@ -116,5 +116,32 @@ mod test {
 
         assert_eq!(prefixes, prefixes2, "prefix mapping differ");
         assert_eq!(ont, ont2, "ontologies differ");
+    }
+
+    #[ignore]
+    #[test_resources("src/ont/owl-functional/*.ofn")]
+    fn owlapi_diff_resource(resource: &str) {
+        let reader = std::fs::File::open(&resource)
+            .map(std::io::BufReader::new)
+            .unwrap();
+
+        let (ont, prefixes): (ComponentMappedOntology<RcStr, AnnotatedComponent<RcStr>>, _) =
+            crate::io::ofn::reader::read(reader, Default::default()).unwrap();
+
+        let mut written = Vec::new();
+        crate::io::ofn::writer::write(&mut written, &ont, Some(&prefixes)).unwrap();
+
+        let original = slurp::read_all_bytes(resource).unwrap();
+
+        assert!(
+            &original == &written,
+            "{}",
+            similar::TextDiff::from_lines(&original, &written).unified_diff()
+        );
+    }
+
+    #[test]
+    fn owlapi_diff_thing() {
+        owlapi_diff_resource("src/ont/owl-functional/ont.ofn")
     }
 }
