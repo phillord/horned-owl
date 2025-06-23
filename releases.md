@@ -1,3 +1,16 @@
+Version 1.1.0
+=============
+
+Features
+
+  - Adds horned-validate
+  - Many small interface extensions
+  - IRI::is allows comparison between different generic IRIs
+  
+Bugs
+  - Non deterministic parsing in RDF
+  - Make more indexes usable cross thread
+
 Version 1.0.0
 =============
 
