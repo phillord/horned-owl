@@ -16,7 +16,7 @@ edition = "2018"
 
 [dependencies]
 clap = "3.2.2"
-horned-owl={path="../", version= "1.0.1-dev"}
+horned-owl={path="../", version= "1.1.0" }
 indexmap={workspace=true}
 pretty_rdf={workspace=true}
 rio_api={workspace=true}
