@@ -73,7 +73,11 @@ pub fn read_with_build<A: ForIRI, O: MutableOntology<A> + Default, R: BufRead>(
                         let prefix = get_attr_value_str(&mut r.reader, e, b"name")?;
                         match (prefix, iri) {
                             (Some(p), Some(i)) => {
-                                r.mapping.add_prefix(&p, &i).ok();
+                                if p.is_empty() {
+                                    r.mapping.set_default(&i);
+                                } else {
+                                    let _ = r.mapping.add_prefix(&p, &i);
+                                }
                             }
                             (None, _) => {
                                 return Err(error_missing_attribute("IRI", &mut r));
@@ -1363,6 +1367,17 @@ pub mod test {
 
         let hash_map: HashMap<&String, &String> = mapping.mappings().collect();
         assert_eq!(6, hash_map.len());
+    }
+
+    #[test]
+    fn test_ontology_empty_prefix() {
+        let ont_s = include_str!("../../ont/owl-xml/manual/empty-prefix.owx");
+        let (_, mapping) = read_ok(&mut ont_s.as_bytes());
+
+        assert_eq!(
+            mapping.expand_curie_string(""),
+            Ok(String::from("http://example.com/"))
+        );
     }
 
     #[test]
