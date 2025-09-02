@@ -122,6 +122,7 @@ impl<A: ForIRI> TryFrom<&crate::vocab::Vocab> for Term<A> {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+#[allow(dead_code)]
 enum OrTerm<A: ForIRI> {
     Term(Term<A>),
     ClassExpression(ClassExpression<A>),
