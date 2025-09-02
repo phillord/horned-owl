@@ -1,8 +1,8 @@
 //! An index that provides rapid look up via declaration kind
 
 use crate::model::{
-    AnnotatedComponent, Component, ComponentKind, ForIRI, Kinded, NamedEntityKind,
-    NamedOWLEntityKind, RcAnnotatedComponent, RcStr, IRI,
+    AnnotatedComponent, Component, ComponentKind, ForIRI, IRI, Kinded, NamedEntityKind,
+    NamedOWLEntityKind, RcAnnotatedComponent, RcStr,
 };
 
 use super::indexed::ForIndex;
@@ -88,7 +88,7 @@ impl<A: ForIRI, AA: ForIndex<A>> DeclarationMappedIndex<A, AA> {
 }
 
 macro_rules! some {
-    ($body:expr) => {
+    ($body:expr_2021) => {
         (|| Some($body))()
     };
 }

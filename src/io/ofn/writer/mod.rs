@@ -59,14 +59,14 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
     write!(write, "Ontology(")?;
 
     // Write the IRI and Version IRI if any
-    if let Some(ontology_id) = optional_id {
-        if let Some(iri) = &ontology_id.iri {
-            write!(write, "{}", iri.as_functional_with_prefixes(mapping))?;
-            if let Some(viri) = &ontology_id.viri {
-                writeln!(write, " {}", viri.as_functional_with_prefixes(mapping))?;
-            } else {
-                writeln!(write)?;
-            }
+    if let Some(ontology_id) = optional_id
+        && let Some(iri) = &ontology_id.iri
+    {
+        write!(write, "{}", iri.as_functional_with_prefixes(mapping))?;
+        if let Some(viri) = &ontology_id.viri {
+            writeln!(write, " {}", viri.as_functional_with_prefixes(mapping))?;
+        } else {
+            writeln!(write)?;
         }
     }
 

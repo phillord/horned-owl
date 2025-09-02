@@ -52,5 +52,5 @@ pub fn read_with_build<A: ForIRI, O: MutableOntology<A> + Ontology<A> + Default,
 
     let wrapper: Result<(MutableOntologyWrapper<A, O>, PrefixMapping), HornedError> =
         FromPair::from_pair(pair, &ctx);
-    wrapper.map(|r| (r.0 .0, r.1))
+    wrapper.map(|r| (r.0.0, r.1))
 }

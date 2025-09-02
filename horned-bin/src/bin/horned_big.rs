@@ -1,7 +1,7 @@
-use clap::arg;
 use clap::App;
 use clap::Arg;
 use clap::ArgMatches;
+use clap::arg;
 
 use horned_bin::write;
 

@@ -7,12 +7,12 @@ use crate::ontology::component_mapped::ComponentMappedOntology;
 use crate::ontology::indexed::ForIndex;
 use crate::vocab::Namespace::*;
 
+use quick_xml::Writer;
 use quick_xml::events::BytesDecl;
 use quick_xml::events::BytesEnd;
 use quick_xml::events::BytesStart;
 use quick_xml::events::BytesText;
 use quick_xml::events::Event;
-use quick_xml::Writer;
 
 use std::collections::BTreeSet;
 use std::io::Write as StdWrite;
@@ -210,7 +210,7 @@ macro_rules! render {
 }
 
 macro_rules! contents {
-    ($type:ident, $self:ident, $body:expr) => {
+    ($type:ident, $self:ident, $body:expr_2021) => {
         render! {$type, $self, w, m,{
                 $body.render(w, m)?;
                 Ok(())
@@ -970,8 +970,8 @@ mod test {
 
     use self::mktemp::Temp;
     use super::*;
-    use crate::io::owx::reader::*;
     use crate::io::ParserConfiguration;
+    use crate::io::owx::reader::*;
 
     use std::collections::HashMap;
 

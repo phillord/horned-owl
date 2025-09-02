@@ -820,7 +820,7 @@ mod test {
         fn visit_annotation(&mut self, a: &mut Annotation<A>) {
             if a.ap
                 .0
-                 .0
+                .0
                 .as_ref()
                 .eq("http://www.w3.org/2000/01/rdf-schema#label")
             {

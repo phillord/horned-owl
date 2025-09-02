@@ -9,7 +9,7 @@ use pest::iterators::Pair;
 
 use crate::error::HornedError;
 use crate::model::*;
-use crate::vocab::{Facet, OWL2Datatype, OWL};
+use crate::vocab::{Facet, OWL, OWL2Datatype};
 
 use super::Context;
 use super::Rule;
@@ -1122,7 +1122,7 @@ mod tests {
     use test_generator::test_resources;
 
     macro_rules! assert_parse_into {
-        ($ty:ty, $rule:path, $build:ident, $prefixes:ident, $doc:expr, $expected:expr) => {
+        ($ty:ty, $rule:path, $build:ident, $prefixes:ident, $doc:expr_2021, $expected:expr_2021) => {
             let doc = $doc.trim();
             let ctx = Context::new(&$build, &$prefixes);
             match OwlFunctionalLexer::lex($rule, doc) {
@@ -1305,6 +1305,6 @@ mod tests {
             crate::io::owx::reader::read(&mut Cursor::new(&owx), Default::default()).unwrap();
 
         // pretty_assertions::assert_eq!(item.1, expected.1);
-        pretty_assertions::assert_eq!(item.0 .0, expected.0);
+        pretty_assertions::assert_eq!(item.0.0, expected.0);
     }
 }

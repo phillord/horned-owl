@@ -43,7 +43,7 @@ macro_rules! onimpl {
     ($kind:ident, $method:ident) => {
         onimpl!($kind, $method, stringify!($kind));
     };
-    ($kind:ident, $method:ident, $skind:expr) => {
+    ($kind:ident, $method:ident, $skind:expr_2021) => {
         impl<A: ForIRI, AA: ForIndex<A>> ComponentMappedIndex<A, AA> {
             #[doc = "Return all instances of"]
             #[doc = $skind]
@@ -228,10 +228,10 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> Iterator for ComponentMappedIter<'a, A, AA>
     type Item = &'a AnnotatedComponent<A>;
     fn next(&mut self) -> Option<Self::Item> {
         // Consume the current iterator if there are items left.
-        if let Some(ref mut it) = self.inner {
-            if let Some(component) = it.next() {
-                return Some(component.borrow());
-            }
+        if let Some(ref mut it) = self.inner
+            && let Some(component) = it.next()
+        {
+            return Some(component.borrow());
         }
         // Attempt to consume the iterator for the next component kind
         if !self.kinds.is_empty() {
