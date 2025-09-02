@@ -20,7 +20,7 @@ impl OwlFunctionalLexer {
     ///
     /// [`Rule`]: ./enum.Rule.html
     /// [`pest::Parser::parse`]: https://docs.rs/pest/latest/pest/trait.Parser.html
-    pub fn lex(rule: Rule, input: &str) -> Result<Pairs<Rule>, HornedError> {
+    pub fn lex(rule: Rule, input: &str) -> Result<Pairs<'_, Rule>, HornedError> {
         <Self as pest::Parser<Rule>>::parse(rule, input).map_err(From::from)
     }
 }

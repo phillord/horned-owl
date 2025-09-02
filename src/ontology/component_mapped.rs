@@ -80,7 +80,7 @@ impl<A: ForIRI, AA: ForIndex<A>> ComponentMappedIndex<A, AA> {
     }
 
     /// Gets an iterator that visits the annotated components of the ontology.
-    pub fn iter(&self) -> ComponentMappedIter<A, AA> {
+    pub fn iter(&self) -> ComponentMappedIter<'_, A, AA> {
         // TODO -- what can't this just use flat_map?
         ComponentMappedIter {
             ont: self,
