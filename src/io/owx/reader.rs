@@ -674,7 +674,7 @@ fn data_cardinality_restriction<A: ForIRI, R: BufRead>(
     end_tag: &[u8],
 ) -> Result<(u32, DataProperty<A>, DataRange<A>), HornedError> {
     let n = get_attr_value_str(&mut r.reader, e, b"cardinality")?;
-    let n = n.ok_or_else(|| (error_missing_attribute("cardinality", r)))?;
+    let n = n.ok_or_else(|| error_missing_attribute("cardinality", r))?;
 
     let dp = from_next(r)?;
     let mut vdr: Vec<DataRange<_>> = till_end(r, end_tag)?;
