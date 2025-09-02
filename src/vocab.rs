@@ -898,11 +898,9 @@ mod tests {
         ));
         // ...and `String`s.
         assert!(is_annotation_builtin(
-            "http://www.w3.org/2000/01/rdf-schema#comment".to_string()
+            "http://www.w3.org/2000/01/rdf-schema#comment"
         ));
-        assert!(!is_annotation_builtin(
-            "http://www.w3.org/2002/07/owl#fred".to_string()
-        ));
+        assert!(!is_annotation_builtin("http://www.w3.org/2002/07/owl#fred"));
     }
 
     #[test]

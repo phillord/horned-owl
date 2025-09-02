@@ -42,6 +42,6 @@ pub(crate) fn matcher(matches: &ArgMatches) -> Result<(), HornedError> {
 
     parse_path(Path::new(input), parser_config(matches))?;
 
-    println!("Parse Complete: {:?}", input);
+    println!("Parse Complete: {input:?}");
     Ok(())
 }

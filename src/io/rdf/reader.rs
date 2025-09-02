@@ -2299,7 +2299,7 @@ mod test {
         let r = read(bufread, Default::default());
 
         if let Err(e) = r {
-            panic!("Expected ontology, get failure: {:?}", e,);
+            panic!("Expected ontology, get failure: {e:?}",);
         }
 
         let (ont, incomp) = r.unwrap();
@@ -2321,10 +2321,8 @@ mod test {
         let dir = dir_path_buf.parent().unwrap().to_string_lossy();
 
         compare_str(
-            &slurp::read_all_to_string(format!("{}/../../ont/owl-rdf/{}.owl", dir, testrdf))
-                .unwrap(),
-            &slurp::read_all_to_string(format!("{}/../../ont/owl-xml/{}.owx", dir, testowl))
-                .unwrap(),
+            &slurp::read_all_to_string(format!("{dir}/../../ont/owl-rdf/{testrdf}.owl")).unwrap(),
+            &slurp::read_all_to_string(format!("{dir}/../../ont/owl-xml/{testowl}.owx")).unwrap(),
         );
     }
 
@@ -2332,7 +2330,7 @@ mod test {
         let dir_path_buf = PathBuf::from(file!());
         let dir = dir_path_buf.parent().unwrap().to_string_lossy();
 
-        slurp::read_all_to_string(format!("{}/../../ont/owl-rdf/{}.owl", dir, testrdf)).unwrap()
+        slurp::read_all_to_string(format!("{dir}/../../ont/owl-rdf/{testrdf}.owl")).unwrap()
     }
 
     fn compare_str(rdfread: &str, xmlread: &str) {

@@ -76,7 +76,7 @@ pub(crate) fn matcher(matches: &ArgMatches) -> Result<(), HornedError> {
         .collect();
 
     for t in v {
-        println!("{}", t);
+        println!("{t}");
     }
 
     if matches.is_present("round") {

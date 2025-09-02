@@ -99,7 +99,7 @@ pub fn localize_iri<A: ForIRI>(iri: &IRI<A>, doc_iri: &IRI<A>) -> IRI<A> {
     b.iri(if let Some(index) = doc_iri.rfind('/') {
         format!("{}/{}", doc_iri.split_at(index).0, term_iri)
     } else {
-        format!("./{}", term_iri)
+        format!("./{term_iri}")
     })
 }
 

@@ -1283,7 +1283,7 @@ mod tests {
     fn from_pair_resource(resource: &str) {
         let text = &slurp::read_all_to_string(resource).unwrap();
         let pair = match OwlFunctionalLexer::lex(Rule::OntologyDocument, text.trim()) {
-            Err(e) => panic!("parser failed: {}", e),
+            Err(e) => panic!("parser failed: {e}"),
             Ok(mut pairs) => {
                 let pair = pairs.next().unwrap();
                 assert_eq!(pair.as_str(), text.trim());
