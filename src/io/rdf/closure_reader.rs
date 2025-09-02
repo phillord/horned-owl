@@ -124,7 +124,12 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> ClosureOntologyParse
         let import_iris = self.import_map.get(iri).unwrap();
         let import_closure: Vec<_> = import_iris
             .iter()
-            .map(|i| self.op.get(i).unwrap().ontology_ref())
+            .map(|i| {
+                self.op
+                    .get(i)
+                    .unwrap_or_else(|| panic!("failed to import ontology IRI {}", i))
+                    .ontology_ref()
+            })
             .collect();
 
         // The import closure references ontologies in the op
