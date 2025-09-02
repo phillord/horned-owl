@@ -3,7 +3,7 @@
 use horned_owl::{
     error::HornedError,
     io::{ParserConfiguration, ParserOutput, ResourceType},
-    model::{Build, ForIRI, RcAnnotatedComponent, RcStr, IRI},
+    model::{Build, ForIRI, IRI, RcAnnotatedComponent, RcStr},
     ontology::{
         component_mapped::{ComponentMappedOntology, RcComponentMappedOntology},
         indexed::ForIndex,
@@ -102,7 +102,7 @@ pub fn parse_imports(
             return Err(HornedError::CommandError(format!(
                 "Cannot parse a file of this format: {:?}",
                 path
-            )))
+            )));
         }
     })
 }

@@ -1,9 +1,9 @@
 use crate::error::HornedError;
-use crate::io::rdf::reader::parser_with_build;
-use crate::io::rdf::reader::OntologyParser;
-use crate::io::rdf::reader::RDFOntology;
 use crate::io::IncompleteParse;
 use crate::io::ParserConfiguration;
+use crate::io::rdf::reader::OntologyParser;
+use crate::io::rdf::reader::RDFOntology;
+use crate::io::rdf::reader::parser_with_build;
 use crate::model::Build;
 use crate::model::DocIRI;
 use crate::model::ForIRI;
@@ -96,10 +96,13 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> ClosureOntologyParse
 
         let si: &SetIndex<A, AA> = o.as_ref();
 
-        let mut res = if let Some(declared_iri) = si.the_ontology_id_or_default().iri {
-            vec![declared_iri]
-        } else {
-            vec![]
+        let mut res = match si.the_ontology_id_or_default().iri {
+            Some(declared_iri) => {
+                vec![declared_iri]
+            }
+            _ => {
+                vec![]
+            }
         };
 
         if let Some(declared_iri) = si.the_ontology_id_or_default().iri {

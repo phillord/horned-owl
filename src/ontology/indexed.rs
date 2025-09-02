@@ -18,7 +18,7 @@
 //! and `ThreeIndexedOntology`, each of which operate something like a
 //! named tuple, allowing differently typed `OntologyIndex` objects to
 //! be added.
-use crate::model::{AnnotatedComponent, ArcStr, ForIRI, MutableOntology, Ontology, RcStr, IRI};
+use crate::model::{AnnotatedComponent, ArcStr, ForIRI, IRI, MutableOntology, Ontology, RcStr};
 use std::borrow::Borrow;
 use std::fmt::Debug;
 use std::hash::Hash;
@@ -253,12 +253,12 @@ pub struct ThreeIndexedOntology<A, AA, I, J, K>(
 );
 
 impl<
-        A: ForIRI,
-        AA: ForIndex<A>,
-        I: OntologyIndex<A, AA>,
-        J: OntologyIndex<A, AA>,
-        K: OntologyIndex<A, AA>,
-    > ThreeIndexedOntology<A, AA, I, J, K>
+    A: ForIRI,
+    AA: ForIndex<A>,
+    I: OntologyIndex<A, AA>,
+    J: OntologyIndex<A, AA>,
+    K: OntologyIndex<A, AA>,
+> ThreeIndexedOntology<A, AA, I, J, K>
 {
     pub fn new(i: I, j: J, k: K) -> Self {
         ThreeIndexedOntology(TwoIndexedOntology(
@@ -294,22 +294,22 @@ impl<A, AA, I: Default, J: Default, K: Default> Default for ThreeIndexedOntology
 }
 
 impl<
-        A: ForIRI,
-        AA: ForIndex<A>,
-        I: OntologyIndex<A, AA>,
-        J: OntologyIndex<A, AA>,
-        K: OntologyIndex<A, AA>,
-    > Ontology<A> for ThreeIndexedOntology<A, AA, I, J, K>
+    A: ForIRI,
+    AA: ForIndex<A>,
+    I: OntologyIndex<A, AA>,
+    J: OntologyIndex<A, AA>,
+    K: OntologyIndex<A, AA>,
+> Ontology<A> for ThreeIndexedOntology<A, AA, I, J, K>
 {
 }
 
 impl<
-        A: ForIRI,
-        AA: ForIndex<A>,
-        I: OntologyIndex<A, AA>,
-        J: OntologyIndex<A, AA>,
-        K: OntologyIndex<A, AA>,
-    > MutableOntology<A> for ThreeIndexedOntology<A, AA, I, J, K>
+    A: ForIRI,
+    AA: ForIndex<A>,
+    I: OntologyIndex<A, AA>,
+    J: OntologyIndex<A, AA>,
+    K: OntologyIndex<A, AA>,
+> MutableOntology<A> for ThreeIndexedOntology<A, AA, I, J, K>
 {
     fn insert<IAA: Into<AnnotatedComponent<A>>>(&mut self, cmp: IAA) -> bool {
         self.0.insert(cmp)
@@ -321,12 +321,12 @@ impl<
 }
 
 impl<
-        A: ForIRI,
-        AA: ForIndex<A>,
-        I: OntologyIndex<A, AA>,
-        J: OntologyIndex<A, AA>,
-        K: OntologyIndex<A, AA>,
-    > OntologyIndex<A, AA> for ThreeIndexedOntology<A, AA, I, J, K>
+    A: ForIRI,
+    AA: ForIndex<A>,
+    I: OntologyIndex<A, AA>,
+    J: OntologyIndex<A, AA>,
+    K: OntologyIndex<A, AA>,
+> OntologyIndex<A, AA> for ThreeIndexedOntology<A, AA, I, J, K>
 {
     fn index_insert(&mut self, cmp: AA) -> bool {
         let rtn = (self.0).0.index_insert(cmp.clone());
@@ -348,13 +348,13 @@ pub struct FourIndexedOntology<A, AA, I, J, K, L>(
 );
 
 impl<
-        A: ForIRI,
-        AA: ForIndex<A>,
-        I: OntologyIndex<A, AA>,
-        J: OntologyIndex<A, AA>,
-        K: OntologyIndex<A, AA>,
-        L: OntologyIndex<A, AA>,
-    > FourIndexedOntology<A, AA, I, J, K, L>
+    A: ForIRI,
+    AA: ForIndex<A>,
+    I: OntologyIndex<A, AA>,
+    J: OntologyIndex<A, AA>,
+    K: OntologyIndex<A, AA>,
+    L: OntologyIndex<A, AA>,
+> FourIndexedOntology<A, AA, I, J, K, L>
 {
     pub fn new(i: I, j: J, k: K, l: L) -> Self {
         FourIndexedOntology(TwoIndexedOntology(
@@ -396,24 +396,24 @@ impl<A, AA, I: Default, J: Default, K: Default, L: Default> Default
 }
 
 impl<
-        A: ForIRI,
-        AA: ForIndex<A>,
-        I: OntologyIndex<A, AA>,
-        J: OntologyIndex<A, AA>,
-        K: OntologyIndex<A, AA>,
-        L: OntologyIndex<A, AA>,
-    > Ontology<A> for FourIndexedOntology<A, AA, I, J, K, L>
+    A: ForIRI,
+    AA: ForIndex<A>,
+    I: OntologyIndex<A, AA>,
+    J: OntologyIndex<A, AA>,
+    K: OntologyIndex<A, AA>,
+    L: OntologyIndex<A, AA>,
+> Ontology<A> for FourIndexedOntology<A, AA, I, J, K, L>
 {
 }
 
 impl<
-        A: ForIRI,
-        AA: ForIndex<A>,
-        I: OntologyIndex<A, AA>,
-        J: OntologyIndex<A, AA>,
-        K: OntologyIndex<A, AA>,
-        L: OntologyIndex<A, AA>,
-    > MutableOntology<A> for FourIndexedOntology<A, AA, I, J, K, L>
+    A: ForIRI,
+    AA: ForIndex<A>,
+    I: OntologyIndex<A, AA>,
+    J: OntologyIndex<A, AA>,
+    K: OntologyIndex<A, AA>,
+    L: OntologyIndex<A, AA>,
+> MutableOntology<A> for FourIndexedOntology<A, AA, I, J, K, L>
 {
     fn insert<IAA: Into<AnnotatedComponent<A>>>(&mut self, cmp: IAA) -> bool {
         self.0.insert(cmp)

@@ -1,7 +1,7 @@
 use std::io::Cursor;
 use std::rc::Rc;
 
-use criterion::{criterion_group, AxisScale, BenchmarkId, Criterion, PlotConfiguration};
+use criterion::{AxisScale, BenchmarkId, Criterion, PlotConfiguration, criterion_group};
 
 use horned_owl::io::rdf::reader::ConcreteRDFOntology;
 use horned_owl::model::*;

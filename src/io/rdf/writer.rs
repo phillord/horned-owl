@@ -1,9 +1,9 @@
 use crate::{
-    error::invalid,
     error::HornedError,
+    error::invalid,
     model::*,
     ontology::component_mapped::ComponentMappedOntology,
-    vocab::{Vocab, OWL, RDF, RDFS, SWRL, XSD},
+    vocab::{OWL, RDF, RDFS, SWRL, Vocab, XSD},
 };
 
 use crate::ontology::indexed::ForIndex;
@@ -239,7 +239,7 @@ macro_rules! render_to_vec {
 
 /// Render to a single triple
 macro_rules! render_triple {
-    ($type:ident, $self:ident, $ng:ident, $sub:expr, $pred:expr, $ob:expr) => {
+    ($type:ident, $self:ident, $ng:ident, $sub:expr_2021, $pred:expr_2021, $ob:expr_2021) => {
         render! {
             $type, $self, f, $ng, PTriple,
             {
@@ -251,7 +251,7 @@ macro_rules! render_triple {
 
 /// Generate and write a triple
 macro_rules! triple {
-    ($f:ident, $sub:expr, $pred:expr, $ob:expr) => {{
+    ($f:ident, $sub:expr_2021, $pred:expr_2021, $ob:expr_2021) => {{
         let t = to_triple($sub, $pred, $ob);
         $f.format(t.clone())?;
         t
@@ -261,12 +261,12 @@ macro_rules! triple {
 /// Generate many triples
 macro_rules! triples {
     ($f:ident) => {};
-    ($f:ident, $sub:expr, $pred:expr, $ob:expr) => {
+    ($f:ident, $sub:expr_2021, $pred:expr_2021, $ob:expr_2021) => {
         $f.format(to_triple(
                  $sub, $pred, $ob
         ))?;
      };
-    ($f:ident, $sub:expr, $pred:expr, $ob:expr, $($rest:expr),+) => {
+    ($f:ident, $sub:expr_2021, $pred:expr_2021, $ob:expr_2021, $($rest:expr_2021),+) => {
         triples!($f, $sub, $pred, $ob);
         triples!($f, $($rest),*);
     }
@@ -275,7 +275,7 @@ macro_rules! triples {
 /// Generate and write many triples and return the first
 macro_rules! triples_to_node {
     ($f:ident) => {};
-    ($f:ident, $sub:expr, $pred:expr, $ob:expr) => {
+    ($f:ident, $sub:expr_2021, $pred:expr_2021, $ob:expr_2021) => {
         {
             let s = $sub;
 
@@ -286,7 +286,7 @@ macro_rules! triples_to_node {
             s
         }
     };
-    ($f:ident, $sub:expr, $pred:expr, $ob:expr, $($rest:expr),+) => {
+    ($f:ident, $sub:expr_2021, $pred:expr_2021, $ob:expr_2021, $($rest:expr_2021),+) => {
         {
             let s = triples_to_node!($f, $sub, $pred, $ob);
             triples!($f, $($rest),*);
@@ -299,7 +299,7 @@ macro_rules! triples_to_node {
 /// Generate and write many triples and return all as a vec
 macro_rules! triples_to_vec {
     ($f:ident) => {};
-    ($f:ident, $sub:expr, $pred:expr, $ob:expr) => {
+    ($f:ident, $sub:expr_2021, $pred:expr_2021, $ob:expr_2021) => {
         {
             let t = to_triple($sub, $pred, $ob);
             $f.format(t.clone())?;
@@ -307,7 +307,7 @@ macro_rules! triples_to_vec {
             vec![t]
         }
      };
-    ($f:ident, $sub:expr, $pred:expr, $ob:expr, $($rest:expr),+) => {
+    ($f:ident, $sub:expr_2021, $pred:expr_2021, $ob:expr_2021, $($rest:expr_2021),+) => {
         {
             let mut v = triples_to_vec!($f, $sub, $pred, $ob);
             v.extend(triples_to_vec!($f, $($rest),*));
@@ -360,10 +360,13 @@ fn render_vec_subject<
 
         triples!(f, bn.clone(), ng.nn(RDF::First), item);
 
-        if let Some(r) = rest.take() {
-            triples!(f, bn.clone(), ng.nn(RDF::Rest), r);
-        } else {
-            triples!(f, bn.clone(), ng.nn(RDF::Rest), ng.nn(RDF::Nil));
+        match rest.take() {
+            Some(r) => {
+                triples!(f, bn.clone(), ng.nn(RDF::Rest), r);
+            }
+            _ => {
+                triples!(f, bn.clone(), ng.nn(RDF::Rest), ng.nn(RDF::Nil));
+            }
         }
         rest = Some(bn.clone())
     }
@@ -384,10 +387,13 @@ where
 
             triples!(f, bn.clone(), ng.nn(RDF::First), item);
 
-            if let Some(r) = rest.take() {
-                triples!(f, bn.clone(), ng.nn(RDF::Rest), r);
-            } else {
-                triples!(f, bn.clone(), ng.nn(RDF::Rest), ng.nn(RDF::Nil));
+            match rest.take() {
+                Some(r) => {
+                    triples!(f, bn.clone(), ng.nn(RDF::Rest), r);
+                }
+                _ => {
+                    triples!(f, bn.clone(), ng.nn(RDF::Rest), ng.nn(RDF::Nil));
+                }
             }
             rest = Some(bn.clone().into())
         }
@@ -1134,11 +1140,11 @@ fn obj_cardinality<A: ForIRI, F: RdfXmlFormatter<A, W>, W: Write>(
         node_ope
     );
 
-    if let ClassExpression::Class(ref cl) = *ce {
-        if cl.is_thing() {
-            triples!(f, bn.clone(), unqual, node_n);
-            return Ok(bn);
-        }
+    if let ClassExpression::Class(ref cl) = *ce
+        && cl.is_thing()
+    {
+        triples!(f, bn.clone(), unqual, node_n);
+        return Ok(bn);
     }
     let node_ce: PTerm<_> = ce.render(f, ng)?.into();
 
@@ -1238,7 +1244,7 @@ render_to_node! {
                         bn, ng.nn(OWL::OneOf), node_seq
                     )
                 }
-                Self::ObjectSomeValuesFrom{ref bce, ref ope} => {
+                Self::ObjectSomeValuesFrom{bce, ope} => {
                     let bn = ng.bn();
                     let node_ce:PTerm<_> = bce.render(f, ng)?.into();
                     let node_ope:PTerm<_> = ope.render(f, ng)?.into();

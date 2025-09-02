@@ -1,4 +1,4 @@
-use criterion::{criterion_group, AxisScale, BenchmarkId, Criterion, PlotConfiguration};
+use criterion::{AxisScale, BenchmarkId, Criterion, PlotConfiguration, criterion_group};
 use horned_owl::model::RcStr;
 use horned_owl::ontology::set::SetOntology;
 use std::fs::File;

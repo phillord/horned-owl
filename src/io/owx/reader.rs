@@ -8,18 +8,18 @@ use crate::io::ParserConfiguration;
 use crate::model::*;
 use crate::vocab::Facet;
 use crate::vocab::Namespace::*;
-use crate::vocab::OWL2Datatype;
 use crate::vocab::OWL;
+use crate::vocab::OWL2Datatype;
 
 use std::borrow::Cow;
 use std::collections::BTreeSet;
 use std::convert::TryFrom;
 use std::io::BufRead;
 
+use quick_xml::NsReader;
 use quick_xml::events::BytesEnd;
 use quick_xml::events::BytesStart;
 use quick_xml::events::Event;
-use quick_xml::NsReader;
 
 struct Read<'a, A: ForIRI, R>
 where
@@ -371,9 +371,8 @@ from_start! {
         let mut literal = String::new();
         let mut buf = Vec::new();
         loop {
-            if let Event::End(event) = r.reader.read_event_into(&mut buf)? {
-                if let b"Literal" = event.local_name().as_ref() { break; }
-            }
+            if let Event::End(event) = r.reader.read_event_into(&mut buf)?
+                && let b"Literal" = event.local_name().as_ref() { break; }
 
             // This decoding step is not sufficient on its own.
             // For instance, "A --> B" would yield "A --&gt; B".
@@ -2040,9 +2039,14 @@ pub mod test {
         let cl = &ont.i().sub_class_of().next().unwrap().sup;
         assert_eq!(ont.i().sub_class_of().count(), 1);
 
-        assert!(
-            matches!(cl, ClassExpression::DataExactCardinality { n: ref _n, dp: ref _dp, dr: ref _dr })
-        );
+        assert!(matches!(
+            cl,
+            ClassExpression::DataExactCardinality {
+                n: _n,
+                dp: _dp,
+                dr: _dr
+            }
+        ));
     }
 
     #[test]
@@ -2052,15 +2056,15 @@ pub mod test {
         let cl = &ont.i().sub_class_of().next().unwrap().sup;
         assert_eq!(ont.i().sub_class_of().count(), 1);
 
-        assert!(
-            matches!(cl, ClassExpression::DataExactCardinality { n: ref _n, dp: ref _dp, dr: ref _dr })
-        );
-        if let ClassExpression::DataExactCardinality {
-            n: ref _n,
-            dp: ref _dp,
-            ref dr,
-        } = cl
-        {
+        assert!(matches!(
+            cl,
+            ClassExpression::DataExactCardinality {
+                n: _n,
+                dp: _dp,
+                dr: _dr
+            }
+        ));
+        if let ClassExpression::DataExactCardinality { n: _n, dp: _dp, dr } = cl {
             assert!(match dr {
                 DataRange::Datatype(dt) => {
                     dt.is(&OWL2Datatype::Literal)
@@ -2080,9 +2084,14 @@ pub mod test {
         let cl = &ont.i().sub_class_of().next().unwrap().sup;
         assert_eq!(ont.i().sub_class_of().count(), 1);
 
-        assert!(
-            matches!(cl, ClassExpression::DataMinCardinality { n: ref _n, dp: ref _dp, dr: ref _dr })
-        );
+        assert!(matches!(
+            cl,
+            ClassExpression::DataMinCardinality {
+                n: _n,
+                dp: _dp,
+                dr: _dr
+            }
+        ));
     }
 
     #[test]
@@ -2093,9 +2102,14 @@ pub mod test {
         let cl = &ont.i().sub_class_of().next().unwrap().sup;
         assert_eq!(ont.i().sub_class_of().count(), 1);
 
-        assert!(
-            matches!(cl, ClassExpression::DataMaxCardinality { n: ref _n, dp: ref _dp, dr: ref _dr })
-        );
+        assert!(matches!(
+            cl,
+            ClassExpression::DataMaxCardinality {
+                n: _n,
+                dp: _dp,
+                dr: _dr
+            }
+        ));
     }
 
     #[test]

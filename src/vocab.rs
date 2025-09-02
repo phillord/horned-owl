@@ -1,8 +1,8 @@
 //! Core RDF vocabularies used in the OWL2 RDF format.
 use enum_meta::*;
 
-use crate::error::invalid;
 use crate::error::HornedError;
+use crate::error::invalid;
 use crate::model::Build;
 use crate::model::ForIRI;
 use crate::model::IRI;
@@ -75,7 +75,7 @@ macro_rules! vocabulary_traits {
 }
 
 macro_rules! vocabulary_type {
-    ($(#[$attr:meta])* $enum_type:ident, $return_type:ty, $storage:ident, [$(($ns:ident, $variant:ident, $first_lowercase:expr)),*]) => {
+    ($(#[$attr:meta])* $enum_type:ident, $return_type:ty, $storage:ident, [$(($ns:ident, $variant:ident, $first_lowercase:expr_2021)),*]) => {
 
         $(#[$attr]) *
         #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
@@ -850,36 +850,44 @@ mod tests {
     pub fn test_entity_for_iri() {
         let b = Build::new_rc();
 
-        assert!(entity_for_iri(
-            "http://www.w3.org/2002/07/owl#Class",
-            "http://www.example.com",
-            &b
-        )
-        .is_ok());
-        assert!(entity_for_iri(
-            "http://www.w3.org/2002/07/owl#Fred",
-            "http://www.example.com",
-            &b
-        )
-        .is_err());
+        assert!(
+            entity_for_iri(
+                "http://www.w3.org/2002/07/owl#Class",
+                "http://www.example.com",
+                &b
+            )
+            .is_ok()
+        );
+        assert!(
+            entity_for_iri(
+                "http://www.w3.org/2002/07/owl#Fred",
+                "http://www.example.com",
+                &b
+            )
+            .is_err()
+        );
     }
 
     #[test]
     pub fn test_namespace_in_entity_for_iri() {
         let b = Build::new_rc();
 
-        assert!(entity_for_iri(
-            "http://www.w3.org/2002/07/low#Class",
-            "http://www.example.com",
-            &b
-        )
-        .is_err());
-        assert!(entity_for_iri(
-            "abcdefghijklmnopqrstuvwxyz123#Class",
-            "http://www.example.com",
-            &b
-        )
-        .is_err());
+        assert!(
+            entity_for_iri(
+                "http://www.w3.org/2002/07/low#Class",
+                "http://www.example.com",
+                &b
+            )
+            .is_err()
+        );
+        assert!(
+            entity_for_iri(
+                "abcdefghijklmnopqrstuvwxyz123#Class",
+                "http://www.example.com",
+                &b
+            )
+            .is_err()
+        );
     }
 
     #[test]
