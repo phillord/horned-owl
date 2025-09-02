@@ -101,7 +101,7 @@ mod test {
 
     #[test_resources("src/ont/owl-functional/*.ofn")]
     fn roundtrip_resource(resource: &str) {
-        let reader = std::fs::File::open(&resource)
+        let reader = std::fs::File::open(resource)
             .map(std::io::BufReader::new)
             .unwrap();
         let (ont, prefixes): (ComponentMappedOntology<RcStr, AnnotatedComponent<RcStr>>, _) =

@@ -867,7 +867,7 @@ impl<A: ForIRI> Display for Functional<'_, IRI<A>, A> {
         if let Some(prefixes) = self.1.as_ref() {
             match prefixes.shrink_iri(self.0) {
                 Err(_) => write!(f, "<{}>", self.0),
-                Ok(curie) => write!(f, "{}", curie),
+                Ok(curie) => write!(f, "{curie}"),
             }
         } else {
             write!(f, "<{}>", self.0)
@@ -916,7 +916,7 @@ impl<A: ForIRI> Display for Functional<'_, Literal<A>, A> {
             Literal::Simple { literal } => quote(literal, f),
             Literal::Language { literal, lang } => {
                 quote(literal, f)?;
-                write!(f, "@{}", lang)
+                write!(f, "@{lang}")
             }
             Literal::Datatype {
                 literal,
@@ -1009,7 +1009,7 @@ impl<A: ForIRI> AsFunctional<A> for Variable<A> {}
 impl<A: ForIRI> Display for Functional<'_, curie::PrefixMapping, A> {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
         for (name, value) in self.0.mappings() {
-            writeln!(f, "Prefix({}:=<{}>)", name, value)?;
+            writeln!(f, "Prefix({name}:=<{value}>)")?;
         }
         Ok(())
     }

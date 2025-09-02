@@ -12,7 +12,7 @@ fn io_read(c: &mut Criterion) {
     for n in [10, 100, 1_000, 2500, 5000, 10_000].iter() {
         group.bench_with_input(BenchmarkId::new("owl_io_read", n), n, |b, &n| {
             b.iter(|| {
-                let f = File::open(format!("benches/ont/o{}.owl", n)).ok().unwrap();
+                let f = File::open(format!("benches/ont/o{n}.owl")).ok().unwrap();
                 let mut f = BufReader::new(f);
                 let _ = horned_owl::io::rdf::reader::read(&mut f, Default::default()).ok();
             })
@@ -20,7 +20,7 @@ fn io_read(c: &mut Criterion) {
 
         group.bench_with_input(BenchmarkId::new("owx_io_read", n), n, |b, &n| {
             b.iter(|| {
-                let f = File::open(format!("benches/ont/o{}.owx", n)).ok().unwrap();
+                let f = File::open(format!("benches/ont/o{n}.owx")).ok().unwrap();
                 let mut f = BufReader::new(f);
                 let _: (SetOntology<RcStr>, _) =
                     horned_owl::io::owx::reader::read(&mut f, Default::default())

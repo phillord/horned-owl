@@ -1125,7 +1125,7 @@ fn obj_cardinality<A: ForIRI, F: RdfXmlFormatter<A, W>, W: Write>(
     let bn = ng.bn();
     let node_ope: PTerm<_> = ope.render(f, ng)?.into();
     let node_n = PTerm::Literal(PLiteral::Typed {
-        value: format!("{}", n).into(),
+        value: format!("{n}").into(),
         datatype: ng.nn(XSD::NonNegativeInteger),
     });
 
@@ -1174,7 +1174,7 @@ fn data_cardinality<A: ForIRI, F: RdfXmlFormatter<A, W>, W: Write>(
     let bn = ng.bn();
     let node_dp: PTerm<_> = (&dp.0).into();
     let node_n = PTerm::Literal(PLiteral::Typed {
-        value: format!("{}", n).into(),
+        value: format!("{n}").into(),
         datatype: ng.nn(XSD::NonNegativeInteger),
     });
     let node_dr: PTerm<_> = dr.render(f, ng)?.into();
@@ -1778,8 +1778,7 @@ mod test {
 
         assert!(
             incomplete.is_complete(),
-            "Read Not Complete: {:#?}",
-            incomplete
+            "Read Not Complete: {incomplete:#?}"
         );
         o.into()
     }
@@ -1836,8 +1835,8 @@ mod test {
     fn assert_round(ont: &str) -> (SetOntology<RcStr>, SetOntology<RcStr>) {
         let (ont_orig, ont_round) = roundtrip(ont);
 
-        println!("ont_orig\n{:#?}", ont_orig);
-        println!("ont_round\n{:#?}", ont_round);
+        println!("ont_orig\n{ont_orig:#?}");
+        println!("ont_round\n{ont_round:#?}");
         assert_eq!(ont_orig, ont_round);
 
         (ont_orig, ont_round)
@@ -1847,7 +1846,7 @@ mod test {
     #[test_resources("src/ont/owl-rdf/ambiguous/*.owl")]
     fn roundtrip_rdf(resource: &str) {
         let resource = &slurp::read_all_to_string(resource).unwrap();
-        assert_round(&resource);
+        assert_round(resource);
     }
 
     #[test]

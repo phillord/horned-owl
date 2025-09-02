@@ -34,8 +34,7 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: StdWrite>(
         "owx" => horned_owl::io::owx::writer::write(write, ont, None),
         "owl" => horned_owl::io::rdf::writer::write(write, ont),
         _ => Err(HornedError::CommandError(format!(
-            "Format is unknown: {}",
-            format
+            "Format is unknown: {format}"
         ))),
     }
 }
@@ -71,8 +70,7 @@ pub fn parse_path(
         }
         None => {
             return Err(HornedError::CommandError(format!(
-                "Cannot parse a file of this format: {:?}",
-                path
+                "Cannot parse a file of this format: {path:?}"
             )));
         }
     })
@@ -100,8 +98,7 @@ pub fn parse_imports(
         }
         None => {
             return Err(HornedError::CommandError(format!(
-                "Cannot parse a file of this format: {:?}",
-                path
+                "Cannot parse a file of this format: {path:?}"
             )));
         }
     })
@@ -122,7 +119,7 @@ pub fn materialize_1<'a>(
     done: &'a mut Vec<IRI<RcStr>>,
     recurse: bool,
 ) -> Result<&'a mut Vec<IRI<RcStr>>, HornedError> {
-    println!("Parsing: {}", input);
+    println!("Parsing: {input}");
     let amont: RcComponentMappedOntology = parse_imports(Path::new(input), config)?.into();
     let import = amont.i().import();
 
@@ -137,11 +134,11 @@ pub fn materialize_1<'a>(
                 println!("Retrieving Ontology: {}", &i.0);
                 let imported_data = strict_resolve_iri(&i.0)?;
                 done.push(i.0.clone());
-                println!("Saving to {}", local);
+                println!("Saving to {local}");
                 let mut file = File::create(&local)?;
                 file.write_all(imported_data.as_bytes())?;
             } else {
-                println!("Already Present: {}", local);
+                println!("Already Present: {local}");
             }
             if recurse {
                 materialize_1(&local, config, done, true)?;

@@ -12,6 +12,7 @@ categories = ["command-line-utilities", "parsing",
 
 license = "LGPL-3.0"
 edition = "2024"
+rust-version = "1.88"
 
 [dependencies]
 curie = "0.1.1"
