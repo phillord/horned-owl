@@ -33,7 +33,7 @@ use std::{io::BufRead, marker::PhantomData};
 type RioTerm<'a> = ::rio_api::model::Term<'a>;
 
 macro_rules! ok_some {
-    ($body:expr_2021) => {
+    ($body:expr) => {
         (if let Some(retn) = (|| Some($body))() {
             Ok(Some(retn))
         } else {

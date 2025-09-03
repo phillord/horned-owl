@@ -209,7 +209,7 @@ macro_rules! render {
 }
 
 macro_rules! contents {
-    ($type:ident, $self:ident, $body:expr_2021) => {
+    ($type:ident, $self:ident, $body:expr) => {
         render! {$type, $self, w, m,{
                 $body.render(w, m)?;
                 Ok(())

@@ -1122,7 +1122,7 @@ mod tests {
     use test_generator::test_resources;
 
     macro_rules! assert_parse_into {
-        ($ty:ty, $rule:path, $build:ident, $prefixes:ident, $doc:expr_2021, $expected:expr_2021) => {
+        ($ty:ty, $rule:path, $build:ident, $prefixes:ident, $doc:expr, $expected:expr_2021) => {
             let doc = $doc.trim();
             let ctx = Context::new(&$build, &$prefixes);
             match OwlFunctionalLexer::lex($rule, doc) {
