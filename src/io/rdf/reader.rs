@@ -25,9 +25,9 @@ use crate::{
     vocab::RDFS as VRDFS,
 };
 
+use std::collections::BTreeSet;
+use std::collections::HashMap;
 use std::io::Cursor;
-use std::{collections::BTreeSet, convert::TryFrom};
-use std::{collections::HashMap, convert::TryInto};
 use std::{io::BufRead, marker::PhantomData};
 
 type RioTerm<'a> = ::rio_api::model::Term<'a>;
