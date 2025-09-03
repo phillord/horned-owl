@@ -9,7 +9,6 @@ use crate::model::IRI;
 use crate::model::{NamedOWLEntity, NamedOWLEntityKind};
 
 use std::borrow::Borrow;
-use std::convert::TryFrom;
 use std::str::FromStr;
 use std::sync::OnceLock;
 

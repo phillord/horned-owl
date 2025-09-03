@@ -13,7 +13,6 @@ use crate::vocab::OWL2Datatype;
 
 use std::borrow::Cow;
 use std::collections::BTreeSet;
-use std::convert::TryFrom;
 use std::io::BufRead;
 
 use quick_xml::NsReader;
