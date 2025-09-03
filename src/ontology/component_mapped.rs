@@ -15,7 +15,6 @@ use super::set::SetOntology;
 use crate::model::*;
 use std::{
     collections::{BTreeMap, BTreeSet, VecDeque},
-    iter::FromIterator,
     ops::Deref,
     rc::Rc,
     sync::Arc,

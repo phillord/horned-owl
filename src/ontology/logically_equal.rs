@@ -4,7 +4,6 @@ use crate::ontology::indexed::ForIndex;
 
 use super::indexed::{OntologyIndex, ThreeIndexedOntology, TwoIndexedOntology};
 use std::collections::HashMap;
-use std::convert::AsRef;
 use std::rc::Rc;
 
 #[derive(Debug)]

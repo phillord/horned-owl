@@ -98,7 +98,6 @@ use std::fmt::Display;
 use std::fmt::Formatter;
 use std::hash::Hash;
 use std::hash::Hasher;
-use std::iter::FromIterator;
 use std::ops::Deref;
 use std::rc::Rc;
 use std::sync::Arc;

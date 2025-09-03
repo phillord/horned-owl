@@ -9,9 +9,6 @@ use crate::model::{Build, ForIRI, IRI};
 
 use std::path::{Path, PathBuf};
 
-#[cfg(feature = "remote")]
-use ureq;
-
 // fn from_dir_bufread<R: BufRead>(dir: PathBuf, iri:&String) -> R {
 //     // Split the string from the last / (rsplit)
 //     // File in same directory exists?
