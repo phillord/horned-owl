@@ -1,7 +1,6 @@
 use curie::PrefixMapping;
 
 use crate::error::HornedError;
-use crate::model::Kinded;
 use crate::model::*;
 use crate::ontology::component_mapped::ComponentMappedOntology;
 use crate::ontology::indexed::ForIndex;
