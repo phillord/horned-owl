@@ -42,7 +42,7 @@ macro_rules! onimpl {
     ($kind:ident, $method:ident) => {
         onimpl!($kind, $method, stringify!($kind));
     };
-    ($kind:ident, $method:ident, $skind:expr_2021) => {
+    ($kind:ident, $method:ident, $skind:expr) => {
         impl<A: ForIRI, AA: ForIndex<A>> ComponentMappedIndex<A, AA> {
             #[doc = "Return all instances of"]
             #[doc = $skind]

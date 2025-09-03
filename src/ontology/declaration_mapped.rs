@@ -88,7 +88,7 @@ impl<A: ForIRI, AA: ForIndex<A>> DeclarationMappedIndex<A, AA> {
 }
 
 macro_rules! some {
-    ($body:expr_2021) => {
+    ($body:expr) => {
         (|| Some($body))()
     };
 }

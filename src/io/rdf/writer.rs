@@ -239,7 +239,7 @@ macro_rules! render_to_vec {
 
 /// Render to a single triple
 macro_rules! render_triple {
-    ($type:ident, $self:ident, $ng:ident, $sub:expr_2021, $pred:expr_2021, $ob:expr_2021) => {
+    ($type:ident, $self:ident, $ng:ident, $sub:expr, $pred:expr_2021, $ob:expr_2021) => {
         render! {
             $type, $self, f, $ng, PTriple,
             {
@@ -251,7 +251,7 @@ macro_rules! render_triple {
 
 /// Generate and write a triple
 macro_rules! triple {
-    ($f:ident, $sub:expr_2021, $pred:expr_2021, $ob:expr_2021) => {{
+    ($f:ident, $sub:expr, $pred:expr_2021, $ob:expr_2021) => {{
         let t = to_triple($sub, $pred, $ob);
         $f.format(t.clone())?;
         t
@@ -261,12 +261,12 @@ macro_rules! triple {
 /// Generate many triples
 macro_rules! triples {
     ($f:ident) => {};
-    ($f:ident, $sub:expr_2021, $pred:expr_2021, $ob:expr_2021) => {
+    ($f:ident, $sub:expr, $pred:expr_2021, $ob:expr_2021) => {
         $f.format(to_triple(
                  $sub, $pred, $ob
         ))?;
      };
-    ($f:ident, $sub:expr_2021, $pred:expr_2021, $ob:expr_2021, $($rest:expr_2021),+) => {
+    ($f:ident, $sub:expr, $pred:expr_2021, $ob:expr_2021, $($rest:expr_2021),+) => {
         triples!($f, $sub, $pred, $ob);
         triples!($f, $($rest),*);
     }
@@ -275,7 +275,7 @@ macro_rules! triples {
 /// Generate and write many triples and return the first
 macro_rules! triples_to_node {
     ($f:ident) => {};
-    ($f:ident, $sub:expr_2021, $pred:expr_2021, $ob:expr_2021) => {
+    ($f:ident, $sub:expr, $pred:expr_2021, $ob:expr_2021) => {
         {
             let s = $sub;
 
@@ -286,7 +286,7 @@ macro_rules! triples_to_node {
             s
         }
     };
-    ($f:ident, $sub:expr_2021, $pred:expr_2021, $ob:expr_2021, $($rest:expr_2021),+) => {
+    ($f:ident, $sub:expr, $pred:expr_2021, $ob:expr_2021, $($rest:expr_2021),+) => {
         {
             let s = triples_to_node!($f, $sub, $pred, $ob);
             triples!($f, $($rest),*);
@@ -299,7 +299,7 @@ macro_rules! triples_to_node {
 /// Generate and write many triples and return all as a vec
 macro_rules! triples_to_vec {
     ($f:ident) => {};
-    ($f:ident, $sub:expr_2021, $pred:expr_2021, $ob:expr_2021) => {
+    ($f:ident, $sub:expr, $pred:expr_2021, $ob:expr_2021) => {
         {
             let t = to_triple($sub, $pred, $ob);
             $f.format(t.clone())?;
@@ -307,7 +307,7 @@ macro_rules! triples_to_vec {
             vec![t]
         }
      };
-    ($f:ident, $sub:expr_2021, $pred:expr_2021, $ob:expr_2021, $($rest:expr_2021),+) => {
+    ($f:ident, $sub:expr, $pred:expr_2021, $ob:expr_2021, $($rest:expr_2021),+) => {
         {
             let mut v = triples_to_vec!($f, $sub, $pred, $ob);
             v.extend(triples_to_vec!($f, $($rest),*));
