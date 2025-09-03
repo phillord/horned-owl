@@ -69,6 +69,10 @@ pub enum HornedError {
     /// A command has been given that is invalid
     #[error("Command Error: {0}")]
     CommandError(String),
+
+    /// Import Error
+    #[error("Cannot import IRI: {0}")]
+    ImportError(String),
 }
 
 macro_rules! invalid {

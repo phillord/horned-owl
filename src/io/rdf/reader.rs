@@ -27,6 +27,7 @@ use crate::{
 
 use std::collections::BTreeSet;
 use std::collections::HashMap;
+use std::fmt::Debug;
 use std::io::Cursor;
 use std::{io::BufRead, marker::PhantomData};
 
@@ -237,6 +238,7 @@ pub trait RDFOntology<A: ForIRI, AA: ForIndex<A>>:
     + AsRef<DeclarationMappedIndex<A, AA>>
     + AsRef<SetIndex<A, AA>>
     + Default
+    + Debug
     + MutableOntology<A>
 {
 }
@@ -246,6 +248,7 @@ impl<A: ForIRI, AA: ForIndex<A>, T> RDFOntology<A, AA> for T where
         + AsRef<DeclarationMappedIndex<A, AA>>
         + AsRef<SetIndex<A, AA>>
         + Default
+        + Debug
         + MutableOntology<A>
 {
 }
