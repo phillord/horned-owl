@@ -145,7 +145,10 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> ClosureOntologyParse
 
     // Return ontology in potentially incompletely parsed state
     pub fn as_ontology_vec(self) -> Vec<O> {
-        todo!()
+        self.as_ontology_vec_and_incomplete()
+            .into_iter()
+            .map(|(o, _)| o)
+            .collect()
     }
 
     // Return ontology in potentially incompletely parsed state
