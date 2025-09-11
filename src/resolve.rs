@@ -54,7 +54,8 @@ pub fn path_to_file_iri<A: ForIRI>(b: &Build<A>, pb: &Path) -> IRI<A> {
         .expect("path should contain valid Unicode")
 }
 
-/// Returns `Some(path_buf)` if the input corresponds to a file IRI.
+/// Returns `Some(path_buf)` if the input corresponds to a file
+/// IRI. If the IRI is not a file IRI, return None.
 ///
 /// # Examples
 /// ```
@@ -102,24 +103,34 @@ pub fn localize_iri<A: ForIRI>(iri: &IRI<A>, doc_iri: &IRI<A>) -> IRI<A> {
 
 /// Return contents of an IRI as a string
 ///
-/// This method will use local files if possible, or remote access if needed
+/// This will return the content accessible relevant for `iri`. It
+/// will attempt to use local contents which are assumed to be the
+/// same as the content at `iri`. This is done relative to `doc_iri`
+/// which will normally be the Document IRI of an importing ontology.
+///
+/// Should the local resolution fail, remote access is used instead.
 pub fn resolve_iri<A: ForIRI>(
     iri: &IRI<A>,
     doc_iri: Option<&IRI<A>>,
 ) -> Result<(IRI<A>, String), HornedError> {
+    // Attempt to determine the local IRI if there is a `doc_iri`,
+    // otherwise use the IRI to be resolved.
     let local = if let Some(doc_iri) = doc_iri {
         localize_iri(iri, doc_iri)
     } else {
         iri.clone()
     };
 
+    // If this is a File IRI change it to a path buffer
     if let Some(mut path) = as_local_path_buffer(&local) {
+        // Does the file exist?
         let file_exists = path.try_exists()?;
-
         if file_exists {
             let result = ::std::fs::read_to_string(path)?;
             Ok((local, result))
         } else if let Some(doc_iri) = doc_iri {
+            // take the extension of the doc_iri and assume we have the same thing
+            // and try again
             let doc_ext = doc_iri.split_once('.').map(|(_, ext)| ext).unwrap_or("");
             path.set_extension(doc_ext);
 
@@ -138,11 +149,17 @@ pub fn resolve_iri<A: ForIRI>(
             )))
         }
     } else {
+        // It is not a file IRI so hope that it is a http(s) IRI and resolve it using ureq
         Ok((local, strict_resolve_iri(iri).unwrap()))
     }
 }
 
-// Return the ontology as Vec<u8> from `iri`.
+/// Resolve the contents of the IRI as a String.
+///
+/// This functions only over "http(s)" IRIs and will not resolve any
+/// other form of IRI.
+///
+/// Fails with panic if the `remote` feature is not enabled.
 #[cfg(feature = "remote")]
 pub fn strict_resolve_iri<A: ForIRI>(iri: &IRI<A>) -> Result<String, HornedError> {
     // let s: String = iri.into();
@@ -159,6 +176,14 @@ mod test {
 
     use super::*;
     use crate::model::Build;
+
+    #[test]
+    fn test_as_local_path_buffer() {
+        let b = Build::new_rc();
+
+        assert!(as_local_path_buffer(&b.iri("http://www.example.com")).is_none());
+        assert!(as_local_path_buffer(&b.iri("file://b.owl")).is_some());
+    }
 
     #[test]
     fn localize() {
