@@ -33,6 +33,11 @@ use std::{io::BufRead, marker::PhantomData};
 
 type RioTerm<'a> = ::rio_api::model::Term<'a>;
 
+/// Evaluate $body which should return a value while allowing the use
+/// of the ? operator within body.
+///
+/// This is useful for unpacking multiple Option return values. The
+/// first that unpacks to return makes the whole body return None.
 macro_rules! ok_some {
     ($body:expr) => {
         (if let Some(retn) = (|| Some($body))() {
@@ -1782,7 +1787,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                                            to: obj.into()
                                        }.into()
                                    }
-                               _ => todo!("Found un-interpretable triple: {:?}", &triple)
+                               all => todo!("Found un-interpretable triple: {:?} which are of type {:?}", &triple, all)
                            }
                 },
                 _ => Ok(None),
