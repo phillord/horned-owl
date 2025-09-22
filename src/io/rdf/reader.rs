@@ -1773,17 +1773,17 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                     match (self.find_declaration_kind(sub, ic)?,
                            self.find_declaration_kind(pred, ic)?,
                            self.find_declaration_kind(obj, ic)?) {
-                        (NamedOWLEntityKind::NamedIndividual,
-                         NamedOWLEntityKind::ObjectProperty,
-                         NamedOWLEntityKind::NamedIndividual) => {
-                            ObjectPropertyAssertion {
-                                ope: ObjectProperty(pred.clone()).into(),
-                                from: sub.into(),
-                                to: obj.into()
-                            }.into()
-                        }
-                        _ => todo!()
-                    }
+                               (NamedOWLEntityKind::NamedIndividual,
+                                   NamedOWLEntityKind::ObjectProperty,
+                                   NamedOWLEntityKind::NamedIndividual) => {
+                                       ObjectPropertyAssertion {
+                                           ope: ObjectProperty(pred.clone()).into(),
+                                           from: sub.into(),
+                                           to: obj.into()
+                                       }.into()
+                                   }
+                               _ => todo!("Found un-interpretable triple: {:?}", &triple)
+                           }
                 },
                 _ => Ok(None),
             };
