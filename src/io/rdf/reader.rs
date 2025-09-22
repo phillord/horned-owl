@@ -1791,11 +1791,13 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                         }
                         .into(),
                     )),
-                    all => todo!(
-                        "Found un-interpretable triple: {:?} which are of type {:?}",
-                        &triple,
-                        all
-                    ),
+                    all => Err(HornedError::invalid_at(
+                        format!(
+                            "Found un-interpretable triple: {:?} which are of type {:?}",
+                            &triple.0, all
+                        ),
+                        triple.1,
+                    )),
                 },
                 _ => Ok(None),
             };
