@@ -13,15 +13,17 @@ use std::collections::HashSet;
 use std::marker::PhantomData;
 
 #[derive(Debug)]
-pub struct DeclarationMappedIndex<A, AA>(
-    HashMap<IRI<A>, NamedEntityKind>,
-    HashSet<IRI<A>>,
-    PhantomData<AA>,
-);
+pub struct DeclarationMappedIndex<A, AA> {
+    // Map between IRIs and their kinds
+    kinds: HashMap<IRI<A>, NamedEntityKind>,
+    // Set of punned IRIs
+    puns: HashSet<IRI<A>>,
+    pd: PhantomData<AA>,
+}
 
 impl<A: ForIRI, AA: ForIndex<A>> DeclarationMappedIndex<A, AA> {
     pub fn new() -> DeclarationMappedIndex<A, AA> {
-        DeclarationMappedIndex(HashMap::new(), HashSet::new(), Default::default())
+        DeclarationMappedIndex::default()
     }
 
     pub fn is_annotation_property(&self, iri: &IRI<A>) -> bool {
@@ -36,14 +38,14 @@ impl<A: ForIRI, AA: ForIndex<A>> DeclarationMappedIndex<A, AA> {
     }
 
     pub fn kind(&self, iri: &IRI<A>) -> Option<NamedEntityKind> {
-        self.0
+        self.kinds
             .get(iri)
             .cloned()
             .or_else(|| crate::vocab::to_built_in_entity(iri).map(|e| e.into()))
     }
 
     pub fn puns(&self) -> &HashSet<IRI<A>> {
-        &self.1
+        &self.puns
     }
 
     fn aa_to_ne(&self, ax: &AnnotatedComponent<A>) -> Option<NamedEntityKind> {
@@ -95,7 +97,11 @@ macro_rules! some {
 
 impl<A, AA> Default for DeclarationMappedIndex<A, AA> {
     fn default() -> Self {
-        DeclarationMappedIndex(Default::default(), Default::default(), Default::default())
+        DeclarationMappedIndex {
+            kinds: Default::default(),
+            puns: Default::default(),
+            pd: Default::default(),
+        }
     }
 }
 
@@ -109,20 +115,20 @@ impl<A: ForIRI, AA: ForIndex<A>> OntologyIndex<A, AA> for DeclarationMappedIndex
                 // If this is a individual and we already have a
                 // class, this is a pun, and we ignore the NI
                 if ne == NamedEntityKind::NamedIndividual &&
-                    self.0.get(&iri) == Some(&NamedEntityKind::Class)
+                    self.kinds.get(&iri) == Some(&NamedEntityKind::Class)
                 {
-                    self.1.insert(iri.clone());
+                    self.puns.insert(iri.clone());
                     return None;
                 }
 
                 // Save the kind
-                let s = self.0.insert(iri.clone(), ne);
+                let s = self.kinds.insert(iri.clone(), ne);
 
                 // If we have replaced an NI with a class, we have a pun
                 if ne == NamedEntityKind::Class &&
                     s == Some(NamedEntityKind::NamedIndividual)
                 {
-                    self.1.insert(iri);
+                    self.puns.insert(iri);
                 }
 
                 s
@@ -133,7 +139,7 @@ impl<A: ForIRI, AA: ForIndex<A>> OntologyIndex<A, AA> for DeclarationMappedIndex
 
     fn index_remove(&mut self, ax: &AnnotatedComponent<A>) -> bool {
         let s = some! {
-            self.0.remove(&self.aa_to_iri(ax)?)
+            self.kinds.remove(&self.aa_to_iri(ax)?)
         };
 
         s.is_some()
@@ -142,7 +148,7 @@ impl<A: ForIRI, AA: ForIndex<A>> OntologyIndex<A, AA> for DeclarationMappedIndex
 
 impl DeclarationMappedIndex<RcStr, RcAnnotatedComponent> {
     pub fn new_rc() -> Self {
-        Self::new()
+        Self::default()
     }
 }
 

@@ -183,7 +183,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> ClosureOntologyParse
     pub fn as_ontology_vec_and_incomplete(self) -> Vec<(O, IncompleteParse<A>)> {
         self.op
             .into_values()
-            .map(|op| op.as_ontology_and_incomplete().unwrap())
+            .map(|op| op.as_ontology_and_incomplete())
             .collect()
     }
 }
