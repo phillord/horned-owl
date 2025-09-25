@@ -442,7 +442,6 @@ pub struct OntologyParser<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>>
     variable: HashMap<IRI<A>, Variable<A>>,
 
     state: OntologyParserState,
-    error: Result<(), HornedError>,
     p: PhantomData<AA>,
 }
 
@@ -468,7 +467,6 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
             atom: d!(),
             variable: d!(),
             state: OntologyParserState::New,
-            error: Ok(()),
             p: d!(),
         }
     }
@@ -2191,50 +2189,57 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
         Ok(())
     }
 
+    /// Parse an Ontology or return an Error if this fails.
     pub fn parse(mut self) -> Result<(O, IncompleteParse<A>), HornedError> {
-        if self.error.is_err() {
-            return Err(self.error.unwrap_err());
-        }
-
         match self.state {
             OntologyParserState::New => {
                 // Ditch the vec that this might return as we don't
                 // need it!
-                self.error = self.parse_imports().and(Ok(()));
+                self.parse_imports().and(Ok(()))?;
                 self.parse()
             }
             OntologyParserState::Imports => {
-                self.error = self.parse_declarations();
+                self.parse_declarations()?;
                 self.parse()
             }
             OntologyParserState::Declarations => {
-                self.error = self.finish_parse(vec![].as_slice());
+                self.finish_parse(vec![].as_slice())?;
                 self.parse()
             }
-            OntologyParserState::Parse => self.as_ontology_and_incomplete(),
+            OntologyParserState::Parse => Ok(self.as_ontology_and_incomplete()),
         }
     }
 
+    /// Return a reference to the Ontology
+    ///
+    /// The ontology will be incomplete or even empty if the parse has not been completed.
+    /// See `parse` to ensure that this has happened.
     pub fn ontology_ref(&self) -> &O {
         &self.o
     }
 
+    /// Return a mutable reference to the Ontology
+    ///
+    /// The ontology will be incomplete or even empty if the parse has not been completed.
+    /// See `parse` to ensure that this has happened.
     pub fn mut_ontology_ref(&mut self) -> &mut O {
         &mut self.o
     }
 
     /// Consume the parser and return an Ontology.
-    pub fn as_ontology(self) -> Result<O, HornedError> {
-        self.error.and(Ok(self.o))
+    ///
+    /// The ontology will be incomplete or even empty if the parse has not been completed.
+    /// See `parse` to ensure that this has happened.
+    pub fn as_ontology(self) -> O {
+        self.o
     }
 
     /// Consume the parser and return an Ontology and any data
     /// structures that have not been fully parsed
-    pub fn as_ontology_and_incomplete(mut self) -> Result<(O, IncompleteParse<A>), HornedError> {
-        if self.error.is_err() {
-            return Err(self.error.unwrap_err());
-        }
-
+    ///
+    /// The ontology will be incomplete or even empty if the parse has not been completed.
+    /// See `parse` to ensure that this has happened.
+    pub fn as_ontology_and_incomplete(mut self) -> (O, IncompleteParse<A>) {
         // Regroup so that they print out nicer
         let mut simple = vec![];
 
@@ -2251,7 +2256,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
             self.object_property_expression.into_values().collect();
         let data_range = self.data_range.into_values().collect();
 
-        Ok((
+        (
             self.o,
             IncompleteParse {
                 simple,
@@ -2263,7 +2268,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                 ann_map: self.ann_map,
                 atom: self.atom,
             },
-        ))
+        )
     }
 }
 
@@ -2462,6 +2467,16 @@ mod test {
     }
 
     #[test]
+    #[ignore]
+    fn punning_in_ec() {
+        //    https://github.com/phillord/horned-owl/issues/124
+        //    https://github.com/phillord/horned-owl/issues/129
+
+        let ont: SetOntology<_> =
+            read_ok(&mut slurp_rdfont("manual/broken-ontology-annotation").as_bytes()).into();
+    }
+
+    #[test]
     fn import_with_partial_parse() {
         let b = Build::new_rc();
         let mut p: OntologyParser<_, Rc<AnnotatedComponent<RcStr>>, ConcreteRDFOntology<_, _>> =
@@ -2470,9 +2485,9 @@ mod test {
                 &b,
                 Default::default(),
             );
-        let _ = p.parse_imports();
+        p.parse_imports().unwrap();
 
-        let rdfont = p.as_ontology().unwrap();
+        let rdfont = p.as_ontology();
         let so: SetOntology<_> = rdfont.into();
         let amont: RcComponentMappedOntology = so.into();
         assert_eq!(amont.i().import().count(), 1);
@@ -2490,7 +2505,7 @@ mod test {
             );
         let _ = p.parse_declarations();
 
-        let rdfont = p.as_ontology().unwrap();
+        let rdfont = p.as_ontology();
         let so: SetOntology<_> = rdfont.into();
         let amont: RcComponentMappedOntology = so.into();
         assert_eq!(amont.i().declare_class().count(), 1);
@@ -2517,7 +2532,7 @@ mod test {
         p.parse_declarations()?;
         p.finish_parse(vec![&family_other].as_slice())?;
 
-        let (_rdfont, incomplete) = p.as_ontology_and_incomplete()?;
+        let (_rdfont, incomplete) = p.as_ontology_and_incomplete();
         assert!(incomplete.is_complete());
         Ok(())
     }

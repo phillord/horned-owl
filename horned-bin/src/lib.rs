@@ -94,7 +94,7 @@ pub fn parse_imports(
             let b = Build::new();
             let mut p = horned_owl::io::rdf::reader::parser_with_build(&mut bufreader, &b, config);
             p.parse_imports()?;
-            ParserOutput::rdf(p.as_ontology_and_incomplete()?)
+            ParserOutput::rdf(p.as_ontology_and_incomplete())
         }
         None => {
             return Err(HornedError::CommandError(format!(
