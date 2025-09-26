@@ -1049,10 +1049,32 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
     }
 
     fn find_declaration_kind(&mut self, iri: &IRI<A>, ic: &[&O]) -> Option<NamedOWLEntityKind> {
+        self.find_declaration_kind_1(iri, ic, |o, iri| {
+            <O as AsRef<DeclarationMappedIndex<A, AA>>>::as_ref(o).declaration_kind(iri)
+        })
+    }
+
+    fn find_declaration_kind_prefer_punned_individual(
+        &mut self,
+        iri: &IRI<A>,
+        ic: &[&O],
+    ) -> Option<NamedOWLEntityKind> {
+        self.find_declaration_kind_1(iri, ic, |o, iri| {
+            <O as AsRef<DeclarationMappedIndex<A, AA>>>::as_ref(o)
+                .declaration_kind_prefer_punned_individual(iri)
+        })
+    }
+
+    fn find_declaration_kind_1(
+        &mut self,
+        iri: &IRI<A>,
+        ic: &[&O],
+        f: fn(&O, &IRI<A>) -> Option<NamedOWLEntityKind>,
+    ) -> Option<NamedOWLEntityKind> {
         [&self.o]
             .iter()
             .chain(ic.iter())
-            .map(|o| <O as AsRef<DeclarationMappedIndex<A, AA>>>::as_ref(o).declaration_kind(iri))
+            .map(|o| f(o, iri))
             .find(|d| d.is_some())
             .flatten()
     }
@@ -1773,9 +1795,9 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                     }
                 },
                 [Term::Iri(sub), Term::Iri(pred), Term::Iri(obj)] => match (
-                    self.find_declaration_kind(sub, ic),
+                    self.find_declaration_kind_prefer_punned_individual(sub, ic),
                     self.find_declaration_kind(pred, ic),
-                    self.find_declaration_kind(obj, ic),
+                    self.find_declaration_kind_prefer_punned_individual(obj, ic),
                 ) {
                     (
                         Some(NamedOWLEntityKind::NamedIndividual),
@@ -2467,13 +2489,12 @@ mod test {
     }
 
     #[test]
-    #[ignore]
     fn punning_in_ec() {
         //    https://github.com/phillord/horned-owl/issues/124
         //    https://github.com/phillord/horned-owl/issues/129
 
-        let ont: SetOntology<_> =
-            read_ok(&mut slurp_rdfont("manual/broken-ontology-annotation").as_bytes()).into();
+        let _ont: SetOntology<_> =
+            read_ok(&mut slurp_rdfont("manual/ec_short_124_129").as_bytes()).into();
     }
 
     #[test]

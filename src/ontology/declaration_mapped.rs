@@ -37,11 +37,30 @@ impl<A: ForIRI, AA: ForIndex<A>> DeclarationMappedIndex<A, AA> {
         self.kind(iri).and_then(|e| e.as_owl())
     }
 
+    pub fn declaration_kind_prefer_punned_individual(
+        &self,
+        iri: &IRI<A>,
+    ) -> Option<NamedOWLEntityKind> {
+        self.kind_prefer_punned_individual(iri)
+            .and_then(|e| e.as_owl())
+    }
+
     pub fn kind(&self, iri: &IRI<A>) -> Option<NamedEntityKind> {
         self.kinds
             .get(iri)
             .cloned()
+            // If the IRI is to a built in property (such as Thing) it
+            // won't have been declared but should return the right
+            // thing.
             .or_else(|| crate::vocab::to_built_in_entity(iri).map(|e| e.into()))
+    }
+
+    pub fn kind_prefer_punned_individual(&self, iri: &IRI<A>) -> Option<NamedEntityKind> {
+        if self.puns.contains(iri) {
+            Some(NamedEntityKind::NamedIndividual)
+        } else {
+            self.kind(iri)
+        }
     }
 
     pub fn puns(&self) -> &HashSet<IRI<A>> {
@@ -237,6 +256,10 @@ mod test {
         assert_eq!(d.puns().len(), 1);
         assert_eq!(d.puns().iter().next(), Some(&iri));
         assert_eq!(d.declaration_kind(&iri), Some(NamedOWLEntityKind::Class));
+        assert_eq!(
+            d.declaration_kind_prefer_punned_individual(&iri),
+            Some(NamedOWLEntityKind::NamedIndividual)
+        );
 
         let mut d = DeclarationMappedIndex::new_rc();
         d.index_insert(ni.clone().into());
@@ -245,5 +268,9 @@ mod test {
         assert_eq!(d.puns().len(), 1);
         assert_eq!(d.puns().iter().next(), Some(&iri));
         assert_eq!(d.declaration_kind(&iri), Some(NamedOWLEntityKind::Class));
+        assert_eq!(
+            d.declaration_kind_prefer_punned_individual(&iri),
+            Some(NamedOWLEntityKind::NamedIndividual)
+        );
     }
 }

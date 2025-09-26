@@ -20,28 +20,29 @@
     <owl:Ontology rdf:about="https://w3id.org/biopragmatics/resources/ec/ec.ofn">
     </owl:Ontology>
 
-    <!-- https://www.enzyme-database.org/query.php?ec=1.1.1.n11 -->
-        
     <owl:Class rdf:about="https://www.enzyme-database.org/query.php?ec=1.1.1.n11">
       <rdfs:subClassOf rdf:resource="https://www.enzyme-database.org/query.php?ec=1.1.1"/>
     </owl:Class>
+
+    <owl:ObjectProperty rdf:about="http://purl.obolibrary.org/obo/RO_0002351">
+        <rdfs:label>has member</rdfs:label>
+    </owl:ObjectProperty>
+
+    <owl:AnnotationProperty rdf:about="http://purl.org/dc/terms/description"/>
 
     <rdf:Description rdf:about="https://www.enzyme-database.org/query.php?ec=1.1.1.n11">
         <dcterms:description>4-hydroxybutanoate + NADP(+) = succinate semialdehyde + NADPH + H(+)</dcterms:description>
         <rdfs:label>succinic semialdehyde reductase</rdfs:label>
     </rdf:Description>
 
-        <!-- https://www.enzyme-database.org/query.php?ec=1.1.1.n11 -->
 
+    <owl:NamedIndividual rdf:about="http://purl.uniprot.org/uniprot/F4I907"/>
+
+    <!-- This is the part that was causing the crash. 1.1.1.n11 was also named as
+         a Class above -->
     <owl:NamedIndividual rdf:about="https://www.enzyme-database.org/query.php?ec=1.1.1.n11">
         <obo:RO_0002351 rdf:resource="http://purl.uniprot.org/uniprot/F4I907"/>
-        <obo:RO_0002351 rdf:resource="http://purl.uniprot.org/uniprot/O43488"/>
-        <obo:RO_0002351 rdf:resource="http://purl.uniprot.org/uniprot/Q8CG45"/>
-        <obo:RO_0002351 rdf:resource="http://purl.uniprot.org/uniprot/Q8CG76"/>
-        <obo:RO_0002351 rdf:resource="http://purl.uniprot.org/uniprot/Q9LSV0"/>
     </owl:NamedIndividual>
-
-
 </rdf:RDF>
 
 
