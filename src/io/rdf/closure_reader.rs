@@ -17,10 +17,10 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 
 pub struct ClosureOntologyParser<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> {
-    // A map between the declared IRI of an Ontology and an OntologyParser
+    // A map between the resolvable IRI of an Ontology and an OntologyParser
     op: HashMap<IRI<A>, OntologyParser<'a, A, AA, O>>,
-    // A map between the declared IRI of an Ontology and the declared
-    // IRIs of any Ontology that it imports.
+    // A map between the resolvable IRI of an Ontology and the
+    // resolvable IRIs of any Ontology that it imports.
     import_map: HashMap<IRI<A>, Vec<IRI<A>>>,
     b: &'a Build<A>,
     config: ParserConfiguration,
@@ -97,36 +97,42 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> ClosureOntologyParse
         relative_doc_iri: Option<&IRI<A>>,
         new_doc_iri: IRI<A>,
     ) -> Result<Vec<IRI<A>>, HornedError> {
+        // Parse the contents of the string
         let mut p = parser_with_build(&mut s.as_bytes(), self.b, self.config);
         let imports = p.parse_imports().unwrap();
         p.parse_declarations()?;
-        let o: &mut O = p.mut_ontology_ref();
 
+        // push the DocIRI onto the partially parsed ontology
+        let o: &mut O = p.mut_ontology_ref();
         o.insert(DocIRI(new_doc_iri.clone()));
 
+        // Find the viri_or_iri
         let si: &SetIndex<A, AA> = o.as_ref();
 
-        let mut res = match si.the_ontology_id_or_default().iri {
-            Some(declared_iri) => {
-                vec![declared_iri]
+        // Stuff the iri of this ontology, if we have one into a vec
+        let mut res = match si.the_ontology_id_or_default().viri_or_iri() {
+            Some(resolved_iri) => {
+                vec![resolved_iri]
             }
             _ => {
                 vec![]
             }
         };
 
-        if let Some(declared_iri) = si.the_ontology_id_or_default().iri {
+        // Add the ontology that we have parsed into import_map
+        if let Some(resolved_iri) = si.the_ontology_id_or_default().viri_or_iri() {
             self.import_map
-                .insert(declared_iri.clone(), imports.clone());
-            self.op.insert(declared_iri, p);
+                .insert(resolved_iri.clone(), imports.clone());
+            self.op.insert(resolved_iri, p);
         }
 
-        res.extend(
-            imports
-                .iter()
-                .flat_map(|iri| self.parse_iri(iri, relative_doc_iri.or(Some(&new_doc_iri))))
-                .flatten(),
-        );
+        // Now parse all of the imported ontologies as well
+        for import in imports {
+            let recursive_imports =
+                self.parse_iri(&import, relative_doc_iri.or(Some(&new_doc_iri)))?;
+            res.extend(recursive_imports);
+        }
+
         Ok(res)
     }
 
@@ -146,6 +152,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> ClosureOntologyParse
         let import_closure: Result<Vec<_>, HornedError> = import_iris
             .iter()
             .map(|i| {
+                dbg!(i);
                 self.op
                     .get(i)
                     .ok_or_else(|| HornedError::ImportError(i.to_string()))
@@ -236,12 +243,12 @@ mod test {
     use std::path::Path;
 
     #[test]
-    fn test_read() {
+    fn test_read_single() {
         let path = Path::new("src/ont/owl-rdf/withimport/import-property.owl");
         let b = Build::new_rc();
         let iri = path_to_file_iri(&b, path);
 
-        let (_, ic): (ConcreteRcRDFOntology, _) = read(&iri, Default::default()).unwrap();
+        let (_, ic): (ConcreteRcRDFOntology, _) = dbg!(read(&iri, Default::default())).unwrap();
         assert!(ic.is_complete());
     }
 
@@ -265,4 +272,33 @@ mod test {
 
         assert_eq!(v.len(), 2);
     }
+
+    #[test]
+    fn test_read_closure_with_viri() {
+        let path = Path::new("src/ont/owl-rdf/withimport/import-property-by-viri.owl");
+        let b = Build::new_rc();
+        let iri = path_to_file_iri(&b, path);
+
+        let v: Vec<(ConcreteRcRDFOntology, _)> =
+            read_closure(&b, &iri, Default::default()).unwrap();
+        let v: Vec<SetOntology<_>> = v
+            .into_iter()
+            .map(|(rdfo, ic)| {
+                assert!(ic.is_complete());
+                rdfo.into()
+            })
+            .collect();
+
+        assert_eq!(v.len(), 2);
+    }
+
+    // #[test]
+    // fn test_import_with_version() {
+    //     let path = Path::new("src/ont/owl-rdf/manual/annodc.owl");
+    //     let b = Build::new_rc();
+    //     let iri = path_to_file_iri(&b, path);
+
+    //     let (_, ic): (ConcreteRcRDFOntology, _) = read(&iri, Default::default()).unwrap();
+    //     assert!(ic.is_complete());
+    // }
 }

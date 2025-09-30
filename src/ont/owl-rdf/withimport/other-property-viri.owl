@@ -8,6 +8,7 @@
      xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"
      xmlns:other="http://www.example.com/other-property#">
     <owl:Ontology rdf:about="http://www.example.com/other-property">
+        <owl:versionIRI rdf:resource="http://www.example.com/other-property-viri"/>
     </owl:Ontology>
     
 
