@@ -1625,6 +1625,12 @@ impl<A: ForIRI> Default for OntologyID<A> {
     }
 }
 
+impl<A: ForIRI> OntologyID<A> {
+    pub fn viri_or_iri(self) -> Option<IRI<A>> {
+        self.viri.or(self.iri)
+    }
+}
+
 /// Non-axiom data structures associated with OWL
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum Literal<A> {

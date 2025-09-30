@@ -162,7 +162,6 @@ pub fn resolve_iri<A: ForIRI>(
 /// Fails with panic if the `remote` feature is not enabled.
 #[cfg(feature = "remote")]
 pub fn strict_resolve_iri<A: ForIRI>(iri: &IRI<A>) -> Result<String, HornedError> {
-    // let s: String = iri.into();
     ureq::get(iri).call()?.into_string().map_err(|e| e.into())
 }
 
