@@ -18,6 +18,7 @@ edition = "2024"
 clap = "3.2.2"
 horned-owl={path="../", version= "1.1.0" }
 indexmap={workspace=true}
+oxiri={workspace=true}
 pretty_rdf={workspace=true}
 rio_api={workspace=true}
 rio_xml={workspace=true}

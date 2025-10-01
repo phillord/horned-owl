@@ -7,6 +7,8 @@
 use crate::error::HornedError;
 use crate::model::{Build, ForIRI, IRI};
 
+use oxiri::Iri;
+
 use std::path::{Path, PathBuf};
 
 // fn from_dir_bufread<R: BufRead>(dir: PathBuf, iri:&String) -> R {
@@ -86,19 +88,23 @@ pub fn as_local_path_buffer<A: ForIRI>(iri: &IRI<A>) -> Option<PathBuf> {
 /// let doc_iri = b.iri("file://base_dir/and.owl");
 /// let iri = b.iri("http://www.example.com/or.owl");
 ///
-/// let local = b.iri("file://base_dir/or.owl");
-///
-/// assert_eq!(localize_iri(&iri, &doc_iri), local);
+/// assert_eq!(localize_iri(&iri, &doc_iri).to_str().unwrap(), "base_dir/or.owl");
 /// ```
-pub fn localize_iri<A: ForIRI>(iri: &IRI<A>, doc_iri: &IRI<A>) -> IRI<A> {
-    let b = Build::new();
-    let (_, term_iri) = iri.split_at(iri.rfind('/').unwrap() + 1);
+pub fn localize_iri<A: ForIRI>(iri: &IRI<A>, doc_iri: &IRI<A>) -> PathBuf {
+    let parsed_iri = Iri::parse(iri.to_string()).unwrap();
+    let doc_iri_path_buf = as_local_path_buffer(doc_iri);
 
-    b.iri(if let Some(index) = doc_iri.rfind('/') {
-        format!("{}/{}", doc_iri.split_at(index).0, term_iri)
+    let iri_path = parsed_iri.path().strip_prefix("/").unwrap();
+
+    if let Some(buf) = doc_iri_path_buf
+        && let Some(parent) = buf.parent()
+    {
+        let mut location = parent.to_path_buf();
+        location.push(iri_path);
+        location
     } else {
-        format!("./{term_iri}")
-    })
+        PathBuf::from(iri_path)
+    }
 }
 
 /// Return contents of an IRI as a string
@@ -109,49 +115,55 @@ pub fn localize_iri<A: ForIRI>(iri: &IRI<A>, doc_iri: &IRI<A>) -> IRI<A> {
 /// which will normally be the Document IRI of an importing ontology.
 ///
 /// Should the local resolution fail, remote access is used instead.
+///
+/// Returns the doc IRI from which it was resolved, the content or an
+/// error.
 pub fn resolve_iri<A: ForIRI>(
     iri: &IRI<A>,
     doc_iri: Option<&IRI<A>>,
 ) -> Result<(IRI<A>, String), HornedError> {
-    // Attempt to determine the local IRI if there is a `doc_iri`,
-    // otherwise use the IRI to be resolved.
-    let local = if let Some(doc_iri) = doc_iri {
-        localize_iri(iri, doc_iri)
-    } else {
-        iri.clone()
-    };
+    let b = Build::new();
 
-    // If this is a File IRI change it to a path buffer
-    if let Some(mut path) = as_local_path_buffer(&local) {
-        // Does the file exist?
-        let file_exists = path.try_exists()?;
+    // Do we have a file IRI
+    let mut some_local = as_local_path_buffer(iri);
+
+    if some_local.is_none() {
+        // Attempt to determine the local IRI if there is a `doc_iri`,
+        // otherwise use the IRI to be resolved.
+        some_local = doc_iri.map(|di| localize_iri(iri, di))
+    }
+
+    // If we now have a local file iri, we can attempt to read from local
+    if let Some(mut local) = some_local {
+        // Does the file exist. If so we are all sorted
+        let file_exists = local.try_exists()?;
         if file_exists {
-            let result = ::std::fs::read_to_string(path)?;
-            Ok((local, result))
-        } else if let Some(doc_iri) = doc_iri {
+            let result = ::std::fs::read_to_string(&local)?;
+            return Ok((path_to_file_iri(&b, &local), result));
+        }
+
+        // The path might not have the correct extension, so again check
+        if let Some(doc_iri) = doc_iri {
             // take the extension of the doc_iri and assume we have the same thing
             // and try again
             let doc_ext = doc_iri.split_once('.').map(|(_, ext)| ext).unwrap_or("");
-            path.set_extension(doc_ext);
+            local.set_extension(doc_ext);
 
-            let doc_file_exists = path.try_exists()?;
+            let doc_file_exists = local.try_exists()?;
             if doc_file_exists {
-                let result = ::std::fs::read_to_string(path)?;
-                Ok((local, result))
-            } else {
-                Err(HornedError::IOError(std::io::Error::from(
-                    std::io::ErrorKind::NotFound,
-                )))
+                let result = ::std::fs::read_to_string(&local)?;
+                return Ok((path_to_file_iri(&b, &local), result));
             }
-        } else {
-            Err(HornedError::IOError(std::io::Error::from(
-                std::io::ErrorKind::NotFound,
-            )))
         }
-    } else {
-        // It is not a file IRI so hope that it is a http(s) IRI and resolve it using ureq
-        Ok((local, strict_resolve_iri(iri).unwrap()))
+
+        // It looks like a local file, but we cannot resolve it
+        return Err(HornedError::IOError(std::io::Error::from(
+            std::io::ErrorKind::NotFound,
+        )));
     }
+
+    // It is not a file IRI so hope that it is a http(s) IRI and resolve it using ureq
+    Ok((iri.clone(), strict_resolve_iri(iri)?))
 }
 
 /// Resolve the contents of the IRI as a String.
@@ -192,9 +204,10 @@ mod test {
 
         let iri = b.iri("http://www.example.com/or.owl");
 
-        let local = b.iri("file://base_dir/or.owl");
-
-        assert_eq!(localize_iri(&iri, &doc_iri), local);
+        assert_eq!(
+            localize_iri(&iri, &doc_iri).to_str().unwrap(),
+            "base_dir/or.owl"
+        );
     }
 
     #[test]
