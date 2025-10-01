@@ -152,7 +152,6 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> ClosureOntologyParse
         let import_closure: Result<Vec<_>, HornedError> = import_iris
             .iter()
             .map(|i| {
-                dbg!(i);
                 self.op
                     .get(i)
                     .ok_or_else(|| HornedError::ImportError(i.to_string()))
@@ -248,7 +247,7 @@ mod test {
         let b = Build::new_rc();
         let iri = path_to_file_iri(&b, path);
 
-        let (_, ic): (ConcreteRcRDFOntology, _) = dbg!(read(&iri, Default::default())).unwrap();
+        let (_, ic): (ConcreteRcRDFOntology, _) = read(&iri, Default::default()).unwrap();
         assert!(ic.is_complete());
     }
 
