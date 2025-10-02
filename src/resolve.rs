@@ -103,7 +103,11 @@ pub fn as_local_path_buffer<A: ForIRI>(iri: &IRI<A>) -> Option<PathBuf> {
 ///   ]
 /// );
 /// ```
-pub fn localize_iri<A: ForIRI>(iri: &IRI<A>, doc_iri: Option<&IRI<A>>) -> Vec<PathBuf> {
+pub fn localize_iri<'a, A: ForIRI + 'a, IO: Into<Option<&'a IRI<A>>>>(
+    iri: &IRI<A>,
+    doc_iri: IO,
+) -> Vec<PathBuf> {
+    let doc_iri = doc_iri.into();
     let parsed_iri = Iri::parse(iri.to_string()).unwrap();
     let doc_iri_path_buf = doc_iri.and_then(as_local_path_buffer);
 
@@ -154,9 +158,12 @@ pub fn localize_iri<A: ForIRI>(iri: &IRI<A>, doc_iri: Option<&IRI<A>>) -> Vec<Pa
 /// let doc_iri = b.iri("file://base_dir/and.owl");
 /// let iri = b.iri("http://www.example.com/or.owl");
 ///
-/// assert_eq!(localize_iri_favored(&iri, Some(&doc_iri)).to_string_lossy(), "base_dir/or.owl");
+/// assert_eq!(localize_iri_favored(&iri, &doc_iri).to_string_lossy(), "base_dir/or.owl");
 /// ```
-pub fn localize_iri_favored<A: ForIRI>(iri: &IRI<A>, doc_iri: Option<&IRI<A>>) -> PathBuf {
+pub fn localize_iri_favored<'a, A: ForIRI + 'a, IO: Into<Option<&'a IRI<A>>>>(
+    iri: &IRI<A>,
+    doc_iri: IO,
+) -> PathBuf {
     localize_iri(iri, doc_iri)
         .into_iter()
         .next()
@@ -174,9 +181,9 @@ pub fn localize_iri_favored<A: ForIRI>(iri: &IRI<A>, doc_iri: Option<&IRI<A>>) -
 ///
 /// Returns the doc IRI from which it was resolved, the content or an
 /// error.
-pub fn resolve_iri<A: ForIRI>(
+pub fn resolve_iri<'a, A: ForIRI + 'a, IO: Into<Option<&'a IRI<A>>>>(
     iri: &IRI<A>,
-    doc_iri: Option<&IRI<A>>,
+    doc_iri: IO,
 ) -> Result<(IRI<A>, String), HornedError> {
     let b = Build::new();
 
@@ -198,6 +205,7 @@ pub fn resolve_iri<A: ForIRI>(
     }
 
     // Attempt to determine potential local locations if there is a `doc_iri`
+    let doc_iri = doc_iri.into();
     let some_local = doc_iri
         .map(|di| localize_iri(iri, Some(di)))
         .unwrap_or_default();
@@ -374,7 +382,7 @@ mod test {
         let doc_iri = b.iri("file://Cargo.toml");
 
         let bikepath_str = ::std::fs::read_to_string("bikepath.md").unwrap();
-        let (_, iri_str) = resolve_iri(&i, Some(&doc_iri)).unwrap();
+        let (_, iri_str) = resolve_iri(&i, &doc_iri).unwrap();
         assert_eq!(bikepath_str, iri_str);
     }
 
@@ -383,11 +391,8 @@ mod test {
         let b = Build::new_rc();
         let tester = |iri, resolve_to, doc_iri| {
             let read_str = ::std::fs::read_to_string(format!("dev/resolve/{resolve_to}")).unwrap();
-            let (_, iri_str) = resolve_iri(
-                &b.iri(iri),
-                Some(&b.iri(format!("file://dev/resolve/{doc_iri}"))),
-            )
-            .unwrap();
+            let (_, iri_str) =
+                resolve_iri(&b.iri(iri), &b.iri(format!("file://dev/resolve/{doc_iri}"))).unwrap();
             assert_eq!(read_str, iri_str);
         };
 
