@@ -76,8 +76,11 @@ pub fn as_local_path_buffer<A: ForIRI>(iri: &IRI<A>) -> Option<PathBuf> {
         .map(|path_str| Path::new(path_str).into())
 }
 
-/// Assuming that doc_iri is a local file IRI, return a new IRI for
-/// that is the local equivalent of `iri`.
+/// Assuming that doc_iri is a local file IRI, return a Vec of BufRead
+/// instances that are the local equivalent of `iri`. The BufRead
+/// instances cover a range of possible options for the local
+/// equivalent, in the order that they will be checked during
+/// resolution.
 ///
 /// # Examples
 /// ```
@@ -88,23 +91,76 @@ pub fn as_local_path_buffer<A: ForIRI>(iri: &IRI<A>) -> Option<PathBuf> {
 /// let doc_iri = b.iri("file://base_dir/and.owl");
 /// let iri = b.iri("http://www.example.com/or.owl");
 ///
-/// assert_eq!(localize_iri(&iri, &doc_iri).to_str().unwrap(), "base_dir/or.owl");
+/// let localized_vec:Vec<_> = localize_iri(&iri, Some(&doc_iri))
+///       .into_iter().map(|pb|
+///                 pb.to_string_lossy().to_string()
+///       ).collect();
+///
+/// assert_eq!(
+///   localized_vec,
+///   vec![
+///     "base_dir/or.owl"
+///   ]
+/// );
 /// ```
-pub fn localize_iri<A: ForIRI>(iri: &IRI<A>, doc_iri: &IRI<A>) -> PathBuf {
+pub fn localize_iri<A: ForIRI>(iri: &IRI<A>, doc_iri: Option<&IRI<A>>) -> Vec<PathBuf> {
     let parsed_iri = Iri::parse(iri.to_string()).unwrap();
-    let doc_iri_path_buf = as_local_path_buffer(doc_iri);
+    let doc_iri_path_buf = doc_iri.and_then(as_local_path_buffer);
 
     let iri_path = parsed_iri.path().strip_prefix("/").unwrap();
+    let iri_path_with_underscore = iri_path.replace("/", "_");
+    let option_iri_path_final = iri_path.rsplit("/").next();
+    let option_iri_path_has_extension = iri_path.contains('.');
 
-    if let Some(buf) = doc_iri_path_buf
-        && let Some(parent) = buf.parent()
-    {
-        let mut location = parent.to_path_buf();
-        location.push(iri_path);
-        location
-    } else {
-        PathBuf::from(iri_path)
+    let with_doc_iri_or_not = |name_from_iri| {
+        if let Some(buf) = doc_iri_path_buf.clone()
+            && let Some(parent) = buf.parent()
+        {
+            let mut location = parent.to_path_buf();
+            location.push(name_from_iri);
+            if !option_iri_path_has_extension && let Some(extension) = buf.extension() {
+                location.set_extension(extension);
+            }
+
+            location
+        } else {
+            PathBuf::from(name_from_iri)
+        }
+    };
+
+    let mut v = vec![with_doc_iri_or_not(iri_path_with_underscore.as_str())];
+
+    if let Some(iri_path_final) = option_iri_path_final {
+        let pb = with_doc_iri_or_not(iri_path_final);
+        if !v.contains(&pb) {
+            v.push(pb)
+        }
     }
+
+    v
+}
+
+/// Assuming that doc_iri is a local file IRI, return a new BufRead
+/// for that is the local equivalent of `iri`. This function will
+/// return the local equivalent which is Horned-OWL favored local
+/// equivalent, which where it serializes to.
+///
+/// # Examples
+/// ```
+/// # use horned_owl::model::*;
+/// # use horned_owl::resolve::*;
+/// let b = Build::new_rc();
+///
+/// let doc_iri = b.iri("file://base_dir/and.owl");
+/// let iri = b.iri("http://www.example.com/or.owl");
+///
+/// assert_eq!(localize_iri_favored(&iri, Some(&doc_iri)).to_string_lossy(), "base_dir/or.owl");
+/// ```
+pub fn localize_iri_favored<A: ForIRI>(iri: &IRI<A>, doc_iri: Option<&IRI<A>>) -> PathBuf {
+    localize_iri(iri, doc_iri)
+        .into_iter()
+        .next()
+        .expect("localize_iri should always return at least one element")
 }
 
 /// Return contents of an IRI as a string
@@ -125,16 +181,29 @@ pub fn resolve_iri<A: ForIRI>(
     let b = Build::new();
 
     // Do we have a file IRI
-    let mut some_local = as_local_path_buffer(iri);
+    let some_local_pb = as_local_path_buffer(iri);
 
-    if some_local.is_none() {
-        // Attempt to determine the local IRI if there is a `doc_iri`,
-        // otherwise use the IRI to be resolved.
-        some_local = doc_iri.map(|di| localize_iri(iri, di))
+    if let Some(pb) = some_local_pb {
+        let file_exists = pb.try_exists()?;
+        if file_exists {
+            let result = ::std::fs::read_to_string(&pb)?;
+            return Ok((path_to_file_iri(&b, &pb), result));
+        }
+
+        // It looks like a file IRI but we cannot resolve it, so we
+        // should return an error
+        return Err(HornedError::IOError(std::io::Error::from(
+            std::io::ErrorKind::NotFound,
+        )));
     }
 
-    // If we now have a local file iri, we can attempt to read from local
-    if let Some(mut local) = some_local {
+    // Attempt to determine potential local locations if there is a `doc_iri`
+    let some_local = doc_iri
+        .map(|di| localize_iri(iri, Some(di)))
+        .unwrap_or_default();
+
+    // If we now have a local file locations, we can attempt to read from them
+    for mut local in some_local {
         // Does the file exist. If so we are all sorted
         let file_exists = local.try_exists()?;
         if file_exists {
@@ -155,14 +224,9 @@ pub fn resolve_iri<A: ForIRI>(
                 return Ok((path_to_file_iri(&b, &local), result));
             }
         }
-
-        // It looks like a local file, but we cannot resolve it
-        return Err(HornedError::IOError(std::io::Error::from(
-            std::io::ErrorKind::NotFound,
-        )));
     }
 
-    // It is not a file IRI so hope that it is a http(s) IRI and resolve it using ureq
+    // All attempts to resolve it locally have failed, so try remote
     Ok((iri.clone(), strict_resolve_iri(iri)?))
 }
 
@@ -197,16 +261,98 @@ mod test {
     }
 
     #[test]
-    fn localize() {
+    fn test_localize_favored() {
         let b = Build::new_rc();
+        let favored = |iri, doc_iri| {
+            localize_iri_favored(&b.iri(iri), doc_iri)
+                .to_string_lossy()
+                .to_string()
+        };
 
-        let doc_iri = b.iri("file://base_dir/and.owl");
+        let favored_none = |iri| favored(iri, None);
 
-        let iri = b.iri("http://www.example.com/or.owl");
+        assert_eq!(favored_none("http://www.example.com/or.owl"), "or.owl");
 
         assert_eq!(
-            localize_iri(&iri, &doc_iri).to_str().unwrap(),
+            favored_none("http://www.example.com/intermediate/or.owl"),
+            "intermediate_or.owl"
+        );
+
+        // assert_eq!(
+        //     favored_none("http://www.example.com/or/2025-12-10"),
+        //     "or_2025-12-10.owl"
+        // );
+
+        let doc_iri = b.iri("file://base_dir/and.owl");
+        let favored_with_base = |iri| favored(iri, Some(&doc_iri));
+
+        // TODO -- should this include the host?
+        assert_eq!(
+            favored_with_base("http://www.example.com/or.owl"),
             "base_dir/or.owl"
+        );
+
+        assert_eq!(
+            favored_with_base("http://www.example.com/intermediate/or.owl"),
+            "base_dir/intermediate_or.owl"
+        );
+
+        assert_eq!(
+            favored_with_base("http://www.example.com/or/2025-12-10"),
+            "base_dir/or_2025-12-10.owl"
+        );
+    }
+
+    #[test]
+    fn test_localize() {
+        let b = Build::new_rc();
+        let localized = |iri, doc_iri| {
+            localize_iri(&b.iri(iri), doc_iri)
+                .into_iter()
+                .map(|pb| pb.to_string_lossy().to_string())
+                .collect::<Vec<_>>()
+        };
+
+        let localized_none = |iri| localized(iri, None);
+
+        assert_eq!(
+            localized_none("http://www.example.com/or.owl"),
+            vec!["or.owl"]
+        );
+
+        assert_eq!(
+            localized_none("http://www.example.com/intermediate/or.owl"),
+            vec!["intermediate_or.owl", "or.owl"]
+        );
+
+        let doc_iri = b.iri("file://base_dir/and.owl");
+        let localized_with_base = |iri| localized(iri, Some(&doc_iri));
+
+        assert_eq!(
+            localized_with_base("http://www.example.com/or.owl"),
+            vec!["base_dir/or.owl"]
+        );
+
+        assert_eq!(
+            localized_with_base("http://www.example.com/intermediate/or.owl"),
+            vec!["base_dir/intermediate_or.owl", "base_dir/or.owl"]
+        );
+
+        assert_eq!(
+            localized_with_base("http://www.example.com/or/2025-12-10"),
+            vec!["base_dir/or_2025-12-10.owl", "base_dir/2025-12-10.owl"]
+        );
+
+        assert_eq!(
+            localized_with_base("http://www.example.com/or.ext"),
+            vec!["base_dir/or.ext",]
+        );
+        assert_eq!(
+            localized(
+                "http://www.example.com/or/2025-12-10",
+                Some(&b.iri("file://base_dir/and.rdf"))
+            ),
+            vec!["base_dir/or_2025-12-10.rdf", "base_dir/2025-12-10.rdf"]
         );
     }
 
@@ -216,6 +362,8 @@ mod test {
         let b = Build::new_rc();
         let i: IRI<_> = b.iri("http://www.example.com");
 
+        // This does network access (to example.com). This cannot be
+        // guaranteed to succeed. Perhaps we don't need this test at all.
         assert!(strict_resolve_iri(&i).is_ok());
     }
 
@@ -223,10 +371,52 @@ mod test {
     fn test_resolve_iri() {
         let b = Build::new_rc();
         let i: IRI<_> = b.iri("http://www.example.com/bikepath.md");
-        let doc_iri = b.iri("file://cargo.toml");
+        let doc_iri = b.iri("file://Cargo.toml");
 
         let bikepath_str = ::std::fs::read_to_string("bikepath.md").unwrap();
         let (_, iri_str) = resolve_iri(&i, Some(&doc_iri)).unwrap();
         assert_eq!(bikepath_str, iri_str);
+    }
+
+    #[test]
+    fn test_resolve_iri_multiple() {
+        let b = Build::new_rc();
+        let tester = |iri, resolve_to, doc_iri| {
+            let read_str = ::std::fs::read_to_string(format!("dev/resolve/{resolve_to}")).unwrap();
+            let (_, iri_str) = resolve_iri(
+                &b.iri(iri),
+                Some(&b.iri(format!("file://dev/resolve/{doc_iri}"))),
+            )
+            .unwrap();
+            assert_eq!(read_str, iri_str);
+        };
+
+        // Simple case -- find and.txt relative to or.txt
+        tester(
+            "http://www.example.com/and.txt",
+            "simple/and.txt",
+            "simple/or.txt",
+        );
+
+        // With more complex file path
+        tester(
+            "http://www.example.com/intermediate/and.txt",
+            "intermediate/intermediate_and.txt",
+            "intermediate/or.txt",
+        );
+
+        // With more complex file path and fall back to simple resolution
+        tester(
+            "http://www.example.com/intermediate/and.txt",
+            "simple/and.txt",
+            "simple/or.txt",
+        );
+
+        // Without file extension, fall back to extension from doc IRI
+        tester(
+            "http://www.example.com/and",
+            "simple/and.txt",
+            "simple/or.txt",
+        );
     }
 }

@@ -8,7 +8,7 @@ use horned_owl::{
         component_mapped::{ComponentMappedOntology, RcComponentMappedOntology},
         indexed::ForIndex,
     },
-    resolve::{localize_iri, path_to_file_iri, strict_resolve_iri},
+    resolve::{localize_iri_favored, path_to_file_iri, strict_resolve_iri},
 };
 
 use std::{
@@ -120,7 +120,7 @@ pub fn materialize(
     // Can we just do this with parse_iri method from OxIri?
 
     let file_pathbuf = match parsed {
-        Result::Ok(_) => ensure_local(&b.iri(file_or_iri), &b.iri(""))?,
+        Result::Ok(_) => ensure_local(&b.iri(file_or_iri), None)?,
         Result::Err(_) => PathBuf::from_str(file_or_iri).expect("Result is infallable"),
     };
 
@@ -128,8 +128,12 @@ pub fn materialize(
     Ok(v)
 }
 
-fn ensure_local(iri: &IRI<RcStr>, relative_doc_iri: &IRI<RcStr>) -> Result<PathBuf, HornedError> {
-    let local_path = localize_iri(iri, relative_doc_iri);
+fn ensure_local(
+    iri: &IRI<RcStr>,
+    relative_doc_iri: Option<&IRI<RcStr>>,
+) -> Result<PathBuf, HornedError> {
+    let local_path = localize_iri_favored(iri, relative_doc_iri);
+
     if !local_path.exists() {
         println!("Retrieving Ontology: {}", iri);
         let imported_data = strict_resolve_iri(iri)?;
@@ -158,7 +162,7 @@ fn materialize_1<'a>(
     for i in import {
         if !done.contains(&i.0) {
             done.push(i.0.clone());
-            let local_path = ensure_local(&i.0, &doc_iri)?;
+            let local_path = ensure_local(&i.0, Some(&doc_iri))?;
 
             if recurse {
                 materialize_1(&local_path, config, done, true)?;
