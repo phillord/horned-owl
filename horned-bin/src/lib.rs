@@ -3,19 +3,20 @@
 use horned_owl::{
     error::HornedError,
     io::{ParserConfiguration, ParserOutput, ResourceType},
-    model::{Build, ForIRI, MutableOntology, OntologyID, RcAnnotatedComponent, RcStr, IRI},
+    model::{Build, ForIRI, IRI, MutableOntology, OntologyID, RcAnnotatedComponent, RcStr},
     ontology::{
         component_mapped::{ComponentMappedOntology, RcComponentMappedOntology},
         indexed::ForIndex,
         set::SetOntology,
     },
-    resolve::{localize_iri, strict_resolve_iri},
+    resolve::{localize_iri_favored, path_to_file_iri, strict_resolve_iri},
 };
 
 use std::{
     fs::File,
     io::{BufReader, Write as StdWrite},
-    path::Path,
+    path::{Path, PathBuf},
+    str::FromStr,
 };
 
 pub mod error {
@@ -35,8 +36,7 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: StdWrite>(
         "owx" => horned_owl::io::owx::writer::write(write, ont, None),
         "owl" => horned_owl::io::rdf::writer::write(write, ont),
         _ => Err(HornedError::CommandError(format!(
-            "Format is unknown: {}",
-            format
+            "Format is unknown: {format}"
         ))),
     }
 }
@@ -72,8 +72,7 @@ pub fn parse_path(
         }
         None => {
             return Err(HornedError::CommandError(format!(
-                "Cannot parse a file of this format: {:?}",
-                path
+                "Cannot parse a file of this format: {path:?}"
             )));
         }
     })
@@ -97,55 +96,77 @@ pub fn parse_imports(
             let b = Build::new();
             let mut p = horned_owl::io::rdf::reader::parser_with_build(&mut bufreader, &b, config);
             p.parse_imports()?;
-            ParserOutput::rdf(p.as_ontology_and_incomplete()?)
+            ParserOutput::rdf(p.as_ontology_and_incomplete())
         }
         None => {
             return Err(HornedError::CommandError(format!(
-                "Cannot parse a file of this format: {:?}",
-                path
-            )))
+                "Cannot parse a file of this format: {path:?}"
+            )));
         }
     })
 }
 
 pub fn materialize(
-    input: &str,
+    file_or_iri: &str,
     config: ParserConfiguration,
 ) -> Result<Vec<IRI<RcStr>>, HornedError> {
     let mut v = vec![];
-    materialize_1(input, config, &mut v, true)?;
+    let b = Build::new();
+
+    // We need to determine at this point whether we have an IRI or a file location, already.
+    let parsed = oxiri::Iri::parse(file_or_iri);
+
+    // If it is an IRI then we need to run ensure_local on it to bring it local
+    // If it is a file location, then we just turn it into a path buf
+    // Can we just do this with parse_iri method from OxIri?
+
+    let file_pathbuf = match parsed {
+        Result::Ok(_) => ensure_local(&b.iri(file_or_iri), None)?,
+        Result::Err(_) => PathBuf::from_str(file_or_iri).expect("Result is infallable"),
+    };
+
+    materialize_1(&file_pathbuf, config, &mut v, true)?;
     Ok(v)
 }
 
-pub fn materialize_1<'a>(
-    input: &str,
+fn ensure_local(
+    iri: &IRI<RcStr>,
+    relative_doc_iri: Option<&IRI<RcStr>>,
+) -> Result<PathBuf, HornedError> {
+    let local_path = localize_iri_favored(iri, relative_doc_iri);
+
+    if !local_path.exists() {
+        println!("Retrieving Ontology: {}", iri);
+        let imported_data = strict_resolve_iri(iri)?;
+        println!("Saving to {}", local_path.display());
+        let mut file = File::create(&local_path)?;
+        file.write_all(imported_data.as_bytes())?;
+    } else {
+        println!("Already Present: {}", local_path.display());
+    }
+    Ok(local_path)
+}
+
+fn materialize_1<'a>(
+    file_location: &PathBuf,
     config: ParserConfiguration,
     done: &'a mut Vec<IRI<RcStr>>,
     recurse: bool,
 ) -> Result<&'a mut Vec<IRI<RcStr>>, HornedError> {
-    println!("Parsing: {}", input);
-    let amont: RcComponentMappedOntology = parse_imports(Path::new(input), config)?.into();
+    println!("Parsing: {}", file_location.display());
+    let amont: RcComponentMappedOntology = parse_imports(Path::new(file_location), config)?.into();
     let import = amont.i().import();
 
     let b = Build::new_rc();
-
+    let doc_iri = path_to_file_iri(&b, file_location.as_path());
     // Get all the imports
     for i in import {
         if !done.contains(&i.0) {
-            let local: String = localize_iri(&i.0, &b.iri(input)).into();
-            let local_path = Path::new(&local);
-            if !local_path.exists() {
-                println!("Retrieving Ontology: {}", &i.0);
-                let imported_data = strict_resolve_iri(&i.0)?;
-                done.push(i.0.clone());
-                println!("Saving to {}", local);
-                let mut file = File::create(&local)?;
-                file.write_all(imported_data.as_bytes())?;
-            } else {
-                println!("Already Present: {}", local);
-            }
+            done.push(i.0.clone());
+            let local_path = ensure_local(&i.0, Some(&doc_iri))?;
+
             if recurse {
-                materialize_1(&local, config, done, true)?;
+                materialize_1(&local_path, config, done, true)?;
             }
         } else {
             println!("Already materialized: {}", &i.0);

@@ -1,7 +1,7 @@
-use clap::arg;
 use clap::App;
 use clap::Arg;
 use clap::ArgMatches;
+use clap::arg;
 
 use horned_bin::generate_big_owl;
 use horned_owl::error::HornedError;
@@ -39,6 +39,7 @@ pub(crate) fn matcher(matches: &ArgMatches) -> Result<(), HornedError> {
         matches.value_of("SIZE").unwrap().parse().map_err(|_| {
             HornedError::CommandError("Cannot parse SIZE as an integer".to_string())
         })?;
+
     let format = matches.value_of("format").expect("oops");
     generate_big_owl(size, format, &mut stdout())
 }

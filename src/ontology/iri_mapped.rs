@@ -9,7 +9,7 @@ use super::indexed::ForIndex;
 use super::set::SetOntology;
 use crate::{
     model::*,
-    visitor::immutable::{entity::IRIExtract, Walk},
+    visitor::immutable::{Walk, entity::IRIExtract},
 };
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -88,7 +88,10 @@ impl<A: ForIRI, AA: ForIndex<A>> IRIMappedIndex<A, AA> {
     /// Iterates over the annotated components associated to `iri` by the index.
     ///
     /// Use [`component()`](Self::component) to iterate over components without annotations.
-    pub fn component_for_iri(&self, iri: &IRI<A>) -> impl Iterator<Item = &AnnotatedComponent<A>> {
+    pub fn component_for_iri(
+        &self,
+        iri: &IRI<A>,
+    ) -> impl Iterator<Item = &AnnotatedComponent<A>> + use<'_, A, AA> {
         self.set_for_iri(iri)
             // Iterate over option
             .into_iter()
@@ -100,7 +103,7 @@ impl<A: ForIRI, AA: ForIndex<A>> IRIMappedIndex<A, AA> {
     /// Iterates over the components (without annotations) associated to `iri` by the index.
     ///
     /// Use [`component_for_iri()`](Self::component_for_iri) to iterate over annotated components.
-    pub fn component(&self, iri: &IRI<A>) -> impl Iterator<Item = &Component<A>> {
+    pub fn component(&self, iri: &IRI<A>) -> impl Iterator<Item = &Component<A>> + use<'_, A, AA> {
         self.component_for_iri(iri).map(|ann| &ann.component)
     }
 }
@@ -272,7 +275,7 @@ impl<A: ForIRI, AA: ForIndex<A>> IRIMappedOntology<A, AA> {
     pub fn components_for_iri(
         &mut self,
         iri: &IRI<A>,
-    ) -> impl Iterator<Item = &AnnotatedComponent<A>> {
+    ) -> impl Iterator<Item = &AnnotatedComponent<A>> + use<'_, A, AA> {
         self.0.j().component_for_iri(iri)
     }
 

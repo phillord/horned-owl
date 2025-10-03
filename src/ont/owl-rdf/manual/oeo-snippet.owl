@@ -1,0 +1,38 @@
+<?xml version="1.0"?>
+<rdf:RDF xmlns="http://openenergy-platform.org/ontology/oeo/"
+     xml:base="http://openenergy-platform.org/ontology/oeo/"
+     xmlns:oeo="http://openenergy-platform.org/ontology/oeo/"
+     xmlns:owl="http://www.w3.org/2002/07/owl#"
+     xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+     xmlns:xml="http://www.w3.org/XML/1998/namespace"
+     xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+     xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#">
+    <owl:Ontology rdf:about="http://openenergy-platform.org/ontology/oeo/"/>
+
+
+    
+    <owl:ObjectProperty rdf:about="http://purl.obolibrary.org/obo/IAO_0000136"/>
+    <owl:ObjectProperty rdf:about="http://purl.obolibrary.org/obo/RO_0000056"/>
+    <owl:Class rdf:about="http://openenergy-platform.org/ontology/oeo/OEO_00240014"/>
+    <owl:Class rdf:about="http://openenergy-platform.org/ontology/oeo/OEO_00000334"/>
+
+    <owl:Class rdf:about="http://openenergy-platform.org/ontology/oeo/OEO_00010423">
+        <rdfs:subClassOf>
+            <owl:Restriction>
+                <owl:onProperty rdf:resource="http://purl.obolibrary.org/obo/IAO_0000136"/>
+                <owl:someValuesFrom>
+                    <owl:Class>
+                        <owl:intersectionOf rdf:parseType="Collection">
+                            <rdf:Description rdf:about="http://openenergy-platform.org/ontology/oeo/OEO_00000334"/>
+                            <owl:Restriction>
+                                <owl:onProperty rdf:resource="http://purl.obolibrary.org/obo/RO_0000056"/>
+                                <owl:someValuesFrom rdf:resource="http://openenergy-platform.org/ontology/oeo/OEO_00240014"/>
+                            </owl:Restriction>
+                        </owl:intersectionOf>
+                    </owl:Class>
+                </owl:someValuesFrom>
+            </owl:Restriction>
+        </rdfs:subClassOf>
+    </owl:Class>
+</rdf:RDF>
+

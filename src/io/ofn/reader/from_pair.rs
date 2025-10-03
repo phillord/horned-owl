@@ -9,7 +9,7 @@ use pest::iterators::Pair;
 
 use crate::error::HornedError;
 use crate::model::*;
-use crate::vocab::{Facet, OWL2Datatype, OWL};
+use crate::vocab::{Facet, OWL, OWL2Datatype};
 
 use super::Context;
 use super::Rule;
@@ -1122,7 +1122,7 @@ mod tests {
     use test_generator::test_resources;
 
     macro_rules! assert_parse_into {
-        ($ty:ty, $rule:path, $build:ident, $prefixes:ident, $doc:expr, $expected:expr) => {
+        ($ty:ty, $rule:path, $build:ident, $prefixes:ident, $doc:expr, $expected:expr_2021) => {
             let doc = $doc.trim();
             let ctx = Context::new(&$build, &$prefixes);
             match OwlFunctionalLexer::lex($rule, doc) {
@@ -1283,7 +1283,7 @@ mod tests {
     fn from_pair_resource(resource: &str) {
         let text = &slurp::read_all_to_string(resource).unwrap();
         let pair = match OwlFunctionalLexer::lex(Rule::OntologyDocument, text.trim()) {
-            Err(e) => panic!("parser failed: {}", e),
+            Err(e) => panic!("parser failed: {e}"),
             Ok(mut pairs) => {
                 let pair = pairs.next().unwrap();
                 assert_eq!(pair.as_str(), text.trim());
@@ -1305,6 +1305,6 @@ mod tests {
             crate::io::owx::reader::read(&mut Cursor::new(&owx), Default::default()).unwrap();
 
         // pretty_assertions::assert_eq!(item.1, expected.1);
-        pretty_assertions::assert_eq!(item.0 .0, expected.0);
+        pretty_assertions::assert_eq!(item.0.0, expected.0);
     }
 }

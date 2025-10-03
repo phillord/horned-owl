@@ -1,15 +1,14 @@
 //! Core RDF vocabularies used in the OWL2 RDF format.
 use enum_meta::*;
 
-use crate::error::invalid;
 use crate::error::HornedError;
+use crate::error::invalid;
 use crate::model::Build;
 use crate::model::ForIRI;
 use crate::model::IRI;
 use crate::model::{NamedOWLEntity, NamedOWLEntityKind};
 
 use std::borrow::Borrow;
-use std::convert::TryFrom;
 use std::str::FromStr;
 use std::sync::OnceLock;
 
@@ -850,36 +849,44 @@ mod tests {
     pub fn test_entity_for_iri() {
         let b = Build::new_rc();
 
-        assert!(entity_for_iri(
-            "http://www.w3.org/2002/07/owl#Class",
-            "http://www.example.com",
-            &b
-        )
-        .is_ok());
-        assert!(entity_for_iri(
-            "http://www.w3.org/2002/07/owl#Fred",
-            "http://www.example.com",
-            &b
-        )
-        .is_err());
+        assert!(
+            entity_for_iri(
+                "http://www.w3.org/2002/07/owl#Class",
+                "http://www.example.com",
+                &b
+            )
+            .is_ok()
+        );
+        assert!(
+            entity_for_iri(
+                "http://www.w3.org/2002/07/owl#Fred",
+                "http://www.example.com",
+                &b
+            )
+            .is_err()
+        );
     }
 
     #[test]
     pub fn test_namespace_in_entity_for_iri() {
         let b = Build::new_rc();
 
-        assert!(entity_for_iri(
-            "http://www.w3.org/2002/07/low#Class",
-            "http://www.example.com",
-            &b
-        )
-        .is_err());
-        assert!(entity_for_iri(
-            "abcdefghijklmnopqrstuvwxyz123#Class",
-            "http://www.example.com",
-            &b
-        )
-        .is_err());
+        assert!(
+            entity_for_iri(
+                "http://www.w3.org/2002/07/low#Class",
+                "http://www.example.com",
+                &b
+            )
+            .is_err()
+        );
+        assert!(
+            entity_for_iri(
+                "abcdefghijklmnopqrstuvwxyz123#Class",
+                "http://www.example.com",
+                &b
+            )
+            .is_err()
+        );
     }
 
     #[test]
@@ -890,11 +897,9 @@ mod tests {
         ));
         // ...and `String`s.
         assert!(is_annotation_builtin(
-            "http://www.w3.org/2000/01/rdf-schema#comment".to_string()
+            "http://www.w3.org/2000/01/rdf-schema#comment"
         ));
-        assert!(!is_annotation_builtin(
-            "http://www.w3.org/2002/07/owl#fred".to_string()
-        ));
+        assert!(!is_annotation_builtin("http://www.w3.org/2002/07/owl#fred"));
     }
 
     #[test]

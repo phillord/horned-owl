@@ -59,14 +59,14 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
     write!(write, "Ontology(")?;
 
     // Write the IRI and Version IRI if any
-    if let Some(ontology_id) = optional_id {
-        if let Some(iri) = &ontology_id.iri {
-            write!(write, "{}", iri.as_functional_with_prefixes(mapping))?;
-            if let Some(viri) = &ontology_id.viri {
-                writeln!(write, " {}", viri.as_functional_with_prefixes(mapping))?;
-            } else {
-                writeln!(write)?;
-            }
+    if let Some(ontology_id) = optional_id
+        && let Some(iri) = &ontology_id.iri
+    {
+        write!(write, "{}", iri.as_functional_with_prefixes(mapping))?;
+        if let Some(viri) = &ontology_id.viri {
+            writeln!(write, " {}", viri.as_functional_with_prefixes(mapping))?;
+        } else {
+            writeln!(write)?;
         }
     }
 
@@ -101,7 +101,7 @@ mod test {
 
     #[test_resources("src/ont/owl-functional/*.ofn")]
     fn roundtrip_resource(resource: &str) {
-        let reader = std::fs::File::open(&resource)
+        let reader = std::fs::File::open(resource)
             .map(std::io::BufReader::new)
             .unwrap();
         let (ont, prefixes): (ComponentMappedOntology<RcStr, AnnotatedComponent<RcStr>>, _) =

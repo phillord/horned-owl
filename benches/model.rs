@@ -1,7 +1,7 @@
 use std::io::Cursor;
 use std::rc::Rc;
 
-use criterion::{criterion_group, AxisScale, BenchmarkId, Criterion, PlotConfiguration};
+use criterion::{AxisScale, BenchmarkId, Criterion, PlotConfiguration, criterion_group};
 
 use horned_owl::io::rdf::reader::ConcreteRDFOntology;
 use horned_owl::model::*;
@@ -18,7 +18,7 @@ fn create_many_classes(i: isize) {
     let b = Build::new_rc();
     let mut o = SetOntology::new();
     for m in 1..i {
-        let i = b.iri(format!("http://example.com/b{}", m));
+        let i = b.iri(format!("http://example.com/b{m}"));
         let _c = o.declare(b.class(i));
     }
 }
@@ -36,7 +36,7 @@ fn classes(c: &mut Criterion) {
 }
 
 fn create_tree<A: ForIRI, O: MutableOntology<A>>(b: &Build<A>, o: &mut O, n: isize) {
-    let i = b.iri(format!("http://example.com/a{}", n));
+    let i = b.iri(format!("http://example.com/a{n}"));
     let c = b.class(i);
     create_tree_0(b, o, vec![c], n);
 }
@@ -50,10 +50,10 @@ fn create_tree_0<A: ForIRI, O: MutableOntology<A>>(
     let mut next = vec![];
 
     for curr in current.into_iter() {
-        let i = b.iri(format!("http://example.com/a{}", remaining));
+        let i = b.iri(format!("http://example.com/a{remaining}"));
         let c = b.class(i);
         remaining -= 1;
-        let i = b.iri(format!("http://example.com/a{}", remaining));
+        let i = b.iri(format!("http://example.com/a{remaining}"));
         let d = b.class(i);
         remaining -= 1;
 

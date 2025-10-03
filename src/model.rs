@@ -93,13 +93,11 @@ use std::borrow::Borrow;
 use std::cell::RefCell;
 use std::cmp::Ordering;
 use std::collections::BTreeSet;
-use std::convert::{TryFrom, TryInto};
 use std::fmt::Debug;
 use std::fmt::Display;
 use std::fmt::Formatter;
 use std::hash::Hash;
 use std::hash::Hasher;
-use std::iter::FromIterator;
 use std::ops::Deref;
 use std::rc::Rc;
 use std::sync::Arc;
@@ -1624,6 +1622,12 @@ impl<A: ForIRI> Default for OntologyID<A> {
             iri: None,
             viri: None,
         }
+    }
+}
+
+impl<A: ForIRI> OntologyID<A> {
+    pub fn viri_or_iri(self) -> Option<IRI<A>> {
+        self.viri.or(self.iri)
     }
 }
 

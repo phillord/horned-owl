@@ -6,8 +6,6 @@
 //! provides parsing and validation support.
 use crate::model::ForIRI;
 
-use std::convert::TryInto;
-
 impl<A: ForIRI> crate::model::IRI<A> {
     pub fn as_oxiri(&self) -> Result<oxiri::Iri<&str>, oxiri::IriParseError> {
         oxiri::Iri::parse(self.0.borrow())
@@ -25,8 +23,6 @@ impl<'a, A: ForIRI> TryInto<oxiri::Iri<&'a str>> for &'a crate::model::IRI<A> {
 #[cfg(test)]
 mod test {
     use crate::model::Build;
-
-    use std::convert::TryInto;
 
     #[test]
     fn test_oxiri() {

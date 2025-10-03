@@ -42,7 +42,7 @@ pub(crate) fn matcher(matches: &ArgMatches) -> Result<(), HornedError> {
 
     println!("Materialized");
     for i in v {
-        println!("\t{:?}", i);
+        println!("\t{i:?}");
     }
 
     Ok(())

@@ -108,7 +108,7 @@ macro_rules! derive_tuple1 {
     ($A:ident, $t:ty) => {
         impl<'a, $A: ForIRI> Display for Functional<'a, (&$t,), $A> {
             fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
-                write!(f, "{}", Functional(self.0 .0, self.1, None),)
+                write!(f, "{}", Functional(self.0.0, self.1, None),)
             }
         }
     };
@@ -129,8 +129,8 @@ macro_rules! derive_tuple2 {
                 write!(
                     f,
                     "{} {}",
-                    Functional(self.0 .0, self.1, None),
-                    Functional(self.0 .1, self.1, None),
+                    Functional(self.0.0, self.1, None),
+                    Functional(self.0.1, self.1, None),
                 )
             }
         }
@@ -165,9 +165,9 @@ macro_rules! derive_tuple3 {
                 write!(
                     f,
                     "{} {} {}",
-                    Functional(self.0 .0, self.1, None),
-                    Functional(self.0 .1, self.1, None),
-                    Functional(self.0 .2, self.1, None),
+                    Functional(self.0.0, self.1, None),
+                    Functional(self.0.1, self.1, None),
+                    Functional(self.0.2, self.1, None),
                 )
             }
         }
@@ -202,13 +202,13 @@ macro_rules! derive_declaration {
                         f,
                         concat!("Declaration({} ", stringify!($name), "({}))"),
                         Functional(annotations, self.1, None),
-                        Functional(&self.0 .0, self.1, None)
+                        Functional(&self.0.0, self.1, None)
                     )
                 } else {
                     write!(
                         f,
                         concat!("Declaration(", stringify!($name), "({}))"),
-                        Functional(&self.0 .0, self.1, None)
+                        Functional(&self.0.0, self.1, None)
                     )
                 }
             }
@@ -246,7 +246,7 @@ macro_rules! derive_wrapper {
     ($A:ident, $ty:ty) => {
         impl<'a, $A: ForIRI> Display for Functional<'a, $ty, $A> {
             fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
-                write!(f, "{}", Functional(&self.0 .0, self.1, None))
+                write!(f, "{}", Functional(&self.0.0, self.1, None))
             }
         }
 
@@ -440,7 +440,7 @@ impl<A: ForIRI> AsFunctional<A> for AnnotationValue<A> {}
 
 impl<A: ForIRI> Display for Functional<'_, AnonymousIndividual<A>, A> {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
-        write!(f, "{}", self.0 .0.borrow())
+        write!(f, "{}", self.0.0.borrow())
     }
 }
 
@@ -867,7 +867,7 @@ impl<A: ForIRI> Display for Functional<'_, IRI<A>, A> {
         if let Some(prefixes) = self.1.as_ref() {
             match prefixes.shrink_iri(self.0) {
                 Err(_) => write!(f, "<{}>", self.0),
-                Ok(curie) => write!(f, "{}", curie),
+                Ok(curie) => write!(f, "{curie}"),
             }
         } else {
             write!(f, "<{}>", self.0)
@@ -916,7 +916,7 @@ impl<A: ForIRI> Display for Functional<'_, Literal<A>, A> {
             Literal::Simple { literal } => quote(literal, f),
             Literal::Language { literal, lang } => {
                 quote(literal, f)?;
-                write!(f, "@{}", lang)
+                write!(f, "@{lang}")
             }
             Literal::Datatype {
                 literal,
@@ -998,7 +998,7 @@ impl<A: ForIRI> AsFunctional<A> for SubObjectPropertyExpression<A> {}
 
 impl<A: ForIRI> Display for Functional<'_, Variable<A>, A> {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
-        write!(f, "Variable({})", Functional(&self.0 .0, self.1, None))
+        write!(f, "Variable({})", Functional(&self.0.0, self.1, None))
     }
 }
 
@@ -1009,7 +1009,7 @@ impl<A: ForIRI> AsFunctional<A> for Variable<A> {}
 impl<A: ForIRI> Display for Functional<'_, curie::PrefixMapping, A> {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
         for (name, value) in self.0.mappings() {
-            writeln!(f, "Prefix({}:=<{}>)", name, value)?;
+            writeln!(f, "Prefix({name}:=<{value}>)")?;
         }
         Ok(())
     }
@@ -1036,7 +1036,7 @@ impl<A: ForIRI> AsFunctional<A> for OntologyID<A> {}
 
 impl<A: ForIRI> Display for Functional<'_, DocIRI<A>, A> {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
-        Functional(&self.0 .0, self.1, None).fmt(f)
+        Functional(&self.0.0, self.1, None).fmt(f)
     }
 }
 

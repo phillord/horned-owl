@@ -1,10 +1,5 @@
 //! Rapid, simple, in-memory `Ontology` and `OntologyIndex`
-use std::{
-    collections::HashSet,
-    hash::Hash,
-    iter::{FromIterator, FusedIterator},
-    rc::Rc,
-};
+use std::{collections::HashSet, hash::Hash, iter::FusedIterator, rc::Rc};
 
 use super::indexed::ForIndex;
 use super::indexed::{OneIndexedOntology, OntologyIndex};

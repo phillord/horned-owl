@@ -43,7 +43,7 @@ impl<'i> From<pest::Span<'i>> for Location {
 impl Display for Location {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::BytePosition(u) => write!(f, "Byte Position: {}", u),
+            Self::BytePosition(u) => write!(f, "Byte Position: {u}"),
             Self::ByteSpan(r) => write!(f, "Byte Span: {} to {}", r.start, r.end),
             Self::Unknown => write!(f, "Unknown"),
         }
@@ -69,6 +69,10 @@ pub enum HornedError {
     /// A command has been given that is invalid
     #[error("Command Error: {0}")]
     CommandError(String),
+
+    /// Import Error
+    #[error("Cannot import IRI: {0}")]
+    ImportError(String),
 }
 
 macro_rules! invalid {

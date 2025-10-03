@@ -1,18 +1,17 @@
 use curie::PrefixMapping;
 
 use crate::error::HornedError;
-use crate::model::Kinded;
 use crate::model::*;
 use crate::ontology::component_mapped::ComponentMappedOntology;
 use crate::ontology::indexed::ForIndex;
 use crate::vocab::Namespace::*;
 
+use quick_xml::Writer;
 use quick_xml::events::BytesDecl;
 use quick_xml::events::BytesEnd;
 use quick_xml::events::BytesStart;
 use quick_xml::events::BytesText;
 use quick_xml::events::Event;
-use quick_xml::Writer;
 
 use std::collections::BTreeSet;
 use std::io::Write as StdWrite;
@@ -61,7 +60,7 @@ where
 fn iri_or_curie(mapping: &PrefixMapping, elem: &mut BytesStart, iri: &str) {
     match mapping.shrink_iri(&(*iri)[..]) {
         Ok(curie) => {
-            let curie = format!("{}", curie);
+            let curie = format!("{curie}");
             elem.push_attribute(("abbreviatedIRI", &curie[..]));
         }
         Err(_) => elem.push_attribute(("IRI", iri)),
@@ -970,8 +969,8 @@ mod test {
 
     use self::mktemp::Temp;
     use super::*;
-    use crate::io::owx::reader::*;
     use crate::io::ParserConfiguration;
+    use crate::io::owx::reader::*;
 
     use std::collections::HashMap;
 

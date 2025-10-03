@@ -15,7 +15,6 @@ use super::set::SetOntology;
 use crate::model::*;
 use std::{
     collections::{BTreeMap, BTreeSet, VecDeque},
-    iter::FromIterator,
     ops::Deref,
     rc::Rc,
     sync::Arc,
@@ -80,7 +79,7 @@ impl<A: ForIRI, AA: ForIndex<A>> ComponentMappedIndex<A, AA> {
     }
 
     /// Gets an iterator that visits the annotated components of the ontology.
-    pub fn iter(&self) -> ComponentMappedIter<A, AA> {
+    pub fn iter(&self) -> ComponentMappedIter<'_, A, AA> {
         // TODO -- what can't this just use flat_map?
         ComponentMappedIter {
             ont: self,
@@ -228,10 +227,10 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> Iterator for ComponentMappedIter<'a, A, AA>
     type Item = &'a AnnotatedComponent<A>;
     fn next(&mut self) -> Option<Self::Item> {
         // Consume the current iterator if there are items left.
-        if let Some(ref mut it) = self.inner {
-            if let Some(component) = it.next() {
-                return Some(component.borrow());
-            }
+        if let Some(ref mut it) = self.inner
+            && let Some(component) = it.next()
+        {
+            return Some(component.borrow());
         }
         // Attempt to consume the iterator for the next component kind
         if !self.kinds.is_empty() {

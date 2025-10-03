@@ -1,8 +1,8 @@
-use criterion::{criterion_group, AxisScale, BenchmarkId, Criterion, PlotConfiguration};
+use criterion::{AxisScale, BenchmarkId, Criterion, PlotConfiguration, criterion_group};
 use horned_bin::generate_big_owl;
 use horned_owl::model::RcStr;
 use horned_owl::ontology::set::SetOntology;
-use std::fs::{create_dir_all, File};
+use std::fs::{File, create_dir_all};
 use std::io::BufReader;
 use std::time::Duration;
 
