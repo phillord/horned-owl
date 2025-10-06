@@ -1,3 +1,14 @@
+Version 1.2.0
+=============
+
+Features:
+ - The resolution mechanism for imported ontologies now supports the OWL2 versioning mechanism.
+ - Rust edition has been upgraded to 2024
+
+Bugs:
+ - Punning now works in all syntaxes
+ - Some error handling improvements
+
 Version 1.1.0
 =============
 
@@ -6,7 +17,7 @@ Features
   - Adds horned-validate
   - Many small interface extensions
   - IRI::is allows comparison between different generic IRIs
-  
+
 Bugs
   - Non deterministic parsing in RDF
   - Make more indexes usable cross thread
