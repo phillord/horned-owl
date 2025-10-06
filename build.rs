@@ -12,7 +12,7 @@ fn main() {
             let out = String::from_utf8(out.stdout).unwrap();
 
             println!("cargo::rustc-env=BUBO_LOCATION={}", out);
-        },
+        }
         _ => {}
     }
 }
