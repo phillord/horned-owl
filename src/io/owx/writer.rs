@@ -61,7 +61,7 @@ fn iri_or_curie(mapping: &PrefixMapping, elem: &mut BytesStart, iri: &str) {
     match mapping.shrink_iri(&(*iri)[..]) {
         Ok(curie) => {
             let curie = format!("{curie}");
-            elem.push_attribute(("abbreviatedIRI", &curie[..]));
+            elem.push_attribute(("IRI", &curie[..]));
         }
         Err(_) => elem.push_attribute(("IRI", iri)),
     }
@@ -1147,7 +1147,6 @@ mod test {
     mod bubo_test {
         use crate::io::owx::writer::test::roundtrip_1;
         use test_generator::test_resources;
-
 
         #[test_resources("src/ont/owl-xml/*owx")]
         fn reparse(resource: &str) {
