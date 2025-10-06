@@ -396,6 +396,24 @@ impl<A: ForIRI> From<[Term<A>; 3]> for PosTriple<A> {
     }
 }
 
+impl<A: ForIRI> PosTriple<A> {
+    pub fn triple(&self) -> &[Term<A>; 3] {
+        &self.0
+    }
+
+    pub fn as_triple(self) -> [Term<A>; 3] {
+        self.0
+    }
+
+    pub fn triple_mut(&mut self) -> &mut [Term<A>; 3] {
+        &mut self.0
+    }
+
+    pub fn position(&self) -> usize {
+        self.1
+    }
+}
+
 #[derive(Debug)]
 pub struct VPosTriple<A: ForIRI>(Vec<[Term<A>; 3]>, usize);
 
@@ -505,7 +523,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
     }
 
     fn group_triples(
-        triple: Vec<PosTriple<A>>,
+        triples: Vec<PosTriple<A>>,
         simple: &mut Vec<PosTriple<A>>,
         bnode: &mut HashMap<BNode<A>, VPosTriple<A>>,
     ) {
@@ -513,19 +531,19 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
         // HashMap<BNodeID, Vec<[SpTerm; 3]> All of which should be
         // triples should begin with the BNodeId. We should be able to
         // gather these in a single pass.
-        for t in triple {
-            match t.0 {
+        for t in triples {
+            match t.triple() {
                 [_, Term::OWL(VOWL::DisjointWith), _]
                 | [_, Term::OWL(VOWL::EquivalentClass), _]
                 | [_, Term::OWL(VOWL::InverseOf), _]
                 | [_, Term::RDFS(VRDFS::SubClassOf), _] => {
                     simple.push(t);
                 }
-                [Term::BNode(ref id), _, _] => {
+                [Term::BNode(id), _, _] => {
                     let v = bnode
                         .entry(id.clone())
                         .or_insert_with(|| VPosTriple(vec![], t.1));
-                    v.push(t.0)
+                    v.push(t.as_triple())
                 }
                 _ => {
                     simple.push(t);
@@ -616,7 +634,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
         let mut viri: Option<IRI<_>> = None;
 
         for t in std::mem::take(&mut self.simple) {
-            match t.0 {
+            match t.triple() {
                 [
                     Term::Iri(s),
                     Term::RDF(VRDF::Type),
@@ -625,7 +643,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                     iri = Some(s.clone());
                 }
                 [Term::Iri(s), Term::OWL(VOWL::VersionIRI), Term::Iri(ob)]
-                    if iri.as_ref() == Some(&s) =>
+                    if iri.as_ref() == Some(s) =>
                 {
                     viri = Some(ob.clone());
                 }
@@ -711,10 +729,10 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
 
     fn declarations(&mut self) {
         // Table 7
-        for triple in std::mem::take(&mut self.simple) {
-            let entity = match triple.0 {
+        for t in std::mem::take(&mut self.simple) {
+            let entity = match t.triple() {
                 // TODO Change this into a single outer match
-                [Term::Iri(ref s), Term::RDF(VRDF::Type), ref entity] => {
+                [Term::Iri(s), Term::RDF(VRDF::Type), entity] => {
                     // TODO Move match into function
                     match entity {
                         Term::OWL(VOWL::Class) => Some(Class(s.clone()).into()),
@@ -732,14 +750,14 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
             };
 
             if let Some(entity) = entity {
-                let ann = self.ann_map.remove(&triple.0).unwrap_or_default();
+                let ann = self.ann_map.remove(t.triple()).unwrap_or_default();
                 let ne: NamedOWLEntity<_> = entity;
                 self.merge(AnnotatedComponent {
                     component: ne.into(),
                     ann,
                 });
             } else {
-                self.simple.push(triple);
+                self.simple.push(t);
             }
         }
     }
@@ -1473,11 +1491,11 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
             }
         }
 
-        for triple in std::mem::take(&mut self.simple)
+        for t in std::mem::take(&mut self.simple)
             .into_iter()
             .chain(single_bnodes.into_iter().map(|t| t.into()))
         {
-            let axiom: Result<_, HornedError> = match &triple.0 {
+            let axiom: Result<_, HornedError> = match t.triple() {
                 [sub_tce, Term::RDFS(VRDFS::SubClassOf), sup_tce] => ok_some! {
                     SubClassOf {
                         sub: self.fetch_ce(sub_tce)?,
@@ -1507,16 +1525,16 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                         } else {
                             Err(HornedError::invalid_at(
                                 "Unexpected entity in equivalent datatype",
-                                triple.1,
+                                t.position(),
                             ))
                         }
                     }
                     _ => Err(HornedError::invalid_at(
                         format!(
                             "Unknown entity in equivalent class statement: {:?}",
-                            triple.0
+                            t.triple()
                         ),
-                        triple.1,
+                        t.position(),
                     )),
                 },
                 [class, Term::OWL(VOWL::HasKey), Term::BNode(bnodeid)] => {
@@ -1814,9 +1832,10 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                     all => Err(HornedError::invalid_at(
                         format!(
                             "Found un-interpretable triple: {:?} which are of type {:?}",
-                            &triple.0, all
+                            t.triple(),
+                            all
                         ),
-                        triple.1,
+                        t.position(),
                     )),
                 },
                 _ => Ok(None),
@@ -1824,13 +1843,13 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
 
             match axiom? {
                 Some(axiom) => {
-                    let ann = self.ann_map.remove(&triple.0).unwrap_or_default();
+                    let ann = self.ann_map.remove(t.triple()).unwrap_or_default();
                     self.merge(AnnotatedComponent {
                         component: axiom,
                         ann,
                     })
                 }
-                _ => self.simple.push(triple),
+                _ => self.simple.push(t),
             }
         }
 
@@ -1839,8 +1858,8 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
 
     fn swrl(&mut self, ic: &[&O]) -> Result<(), HornedError> {
         // identify variables first
-        for triple in std::mem::take(&mut self.simple) {
-            match &triple.0 {
+        for t in std::mem::take(&mut self.simple) {
+            match t.triple() {
                 [
                     Term::Iri(s),
                     Term::RDF(VRDF::Type),
@@ -1849,7 +1868,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                     self.variable.insert(s.clone(), Variable(s.clone()));
                 }
                 _ => {
-                    self.simple.push(triple);
+                    self.simple.push(t);
                 }
             }
         }
@@ -2022,7 +2041,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
 
     fn simple_annotations(&mut self, parse_all: bool) {
         let ont_id = <O as AsRef<SetIndex<A, AA>>>::as_ref(&self.o).the_ontology_id_or_default();
-        for triple in std::mem::take(&mut self.simple) {
+        for t in std::mem::take(&mut self.simple) {
             let firi = |s: &mut OntologyParser<_, _, _>, t, iri: &IRI<_>| {
                 let ann = s.ann_map.remove(t).unwrap_or_default();
                 s.merge(AnnotatedComponent {
@@ -2035,16 +2054,16 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                 })
             };
 
-            match &triple.0 {
+            match t.triple() {
                 // Catch anything about the ontology and assume it is
                 // an annotation. Some versions of the OWL API do not
                 // declare annotation properties for ontology annotations
                 [Term::Iri(iri), _, _] if ont_id.iri.as_ref() == Some(iri) => {
                     self.o
-                        .insert(OntologyAnnotation(self.annotation(&triple.0)));
+                        .insert(OntologyAnnotation(self.annotation(t.triple())));
                 }
                 [Term::Iri(iri), Term::RDFS(rdfs), _] if rdfs.is_builtin() => {
-                    firi(self, &triple.0, iri)
+                    firi(self, t.triple(), iri)
                 }
                 [Term::Iri(iri), Term::Iri(ap), _]
                     if parse_all
@@ -2052,10 +2071,10 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                             .is_annotation_property(ap)
                         || is_annotation_builtin(ap.as_ref()) =>
                 {
-                    firi(self, &triple.0, iri)
+                    firi(self, t.triple(), iri)
                 }
                 _ => {
-                    self.simple.push(triple);
+                    self.simple.push(t);
                 }
             }
         }
