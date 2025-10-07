@@ -1659,17 +1659,19 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                     pr,
                     Term::RDF(VRDF::Type),
                     Term::OWL(VOWL::InverseFunctionalProperty),
-                ] => {
-                    ok_some! {
-                        match self.find_property_kind(pr, ic)? {
-                            PropertyExpression::ObjectPropertyExpression(ope) => {
-                                InverseFunctionalObjectProperty(ope).into()
-                            },
-
-                            _ => todo!()
-                        }
+                ] => match self.find_property_kind(pr, ic) {
+                    Some(PropertyExpression::ObjectPropertyExpression(ope)) => {
+                        Ok(Some(InverseFunctionalObjectProperty(ope).into()))
                     }
-                }
+                    all => Err(HornedError::invalid_at(
+                        format!(
+                            "Found un-interpretable triple: {:?} which are of type {:?}",
+                            t.triple(),
+                            all
+                        ),
+                        t.position(),
+                    )),
+                },
                 [Term::Iri(sub), Term::RDF(VRDF::Type), cls] => ok_some! {
                     {
                         ClassAssertion {
