@@ -1145,46 +1145,57 @@ mod test {
 
     #[cfg(all(test, bubo))]
     mod bubo_test {
-        use crate::io::owx::writer::test::roundtrip_1;
-        use test_generator::test_resources;
+        use crate::io::owx::writer::test::*;
+        use crate::io::owx::writer::write;
 
-        #[test_resources("src/ont/owl-xml/*owx")]
-        fn reparse(resource: &str) {
-            let data = &slurp::read_all_to_string(resource).unwrap();
+        use std::fs::{File, create_dir_all, read_dir, remove_dir_all};
+        use std::io::{BufWriter, Write};
+        use std::path::Path;
 
-            let (_, _, tmpfile) = roundtrip_1(data);
+        fn parse_then_output(in_file: &Path) {
+            let ont = &slurp::read_all_to_string(in_file).unwrap();
+            let (ont_orig, prefix_orig) = read_ok(&mut ont.as_bytes());
 
-            let tmpfile_location = tmpfile.to_str().unwrap();
-            let mut cmd = std::process::Command::new("java");
-            let cmd_ref = cmd
-                // block stdout or it is piped to existing stdout
-                .stdout(std::process::Stdio::null())
-                .arg("-jar")
-                // passed in my build.rs
-                .arg(option_env!("BUBO_LOCATION").unwrap())
-                .arg("dev/reparse.clj")
-                .arg(tmpfile_location)
-                .arg(resource);
+            let file = File::create(Path::new("./tmp/owl-xml").join(in_file.file_name().unwrap()))
+                .unwrap();
+            let mut buf_writer = BufWriter::new(&file);
 
-            if !cmd_ref.status().unwrap().success() {
-                let out = cmd_ref.output().unwrap();
-                let out = String::from_utf8(out.stdout).unwrap();
-                // preserve the tmp file
-                tmpfile.release();
-                assert!(
-                    false,
-                    "Bubo reparse failed: {}\nCommand:{:?}\nData:{}",
-                    out, cmd, data
-                );
-            } else {
-                assert!(true);
-            }
+            write(&mut buf_writer, &ont_orig, Some(&prefix_orig))
+                .ok()
+                .unwrap();
+            buf_writer.flush().ok();
         }
 
         #[test]
-        #[should_panic]
-        fn reparse_broken() {
-            reparse("src/ont/owl-xml/manual/broken.owx")
+        fn reparse_owx() -> Result<(), Box<dyn std::error::Error>> {
+            create_dir_all("./tmp/owl-xml")?;
+
+            for entry in read_dir("./src/ont/owl-xml")? {
+                let entry = entry?;
+                let path = entry.path();
+                if path.is_file() {
+                    parse_then_output(&path);
+                }
+            }
+
+            let mut cmd = std::process::Command::new("java");
+            let output = cmd
+                // block stdout or it is piped to existing stdout
+                //.stdout(std::process::Stdio::null())
+                .arg("-jar")
+                // passed in my build.rs
+                .arg(option_env!("BUBO_LOCATION").unwrap())
+                .arg("./dev/reparse-all.clj")
+                .arg("owl-xml")
+                .output()?;
+
+            if !output.status.success() {
+                let out = String::from_utf8(output.stdout).unwrap();
+                assert!(false, "Bubo reparse failed: {out}");
+            }
+
+            remove_dir_all("./tmp/owl-xml")?;
+            Ok(())
         }
     }
 }
