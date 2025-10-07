@@ -29,7 +29,14 @@
 (doall
  (map
   #(parse-file %1 format-kind)
-  (filter #(.isFile %)
+  (filter #(and
+            ;; For some reason swrl_individual.owx cannot be parsed by
+            ;; OWL API even when it is produced by the OWL API. So,
+            ;; filter this out for the moment.
+            (not
+             (.equals "swrl_individual.owx"
+                      (.getName %)))
+            (.isFile %))
           file-list)))
 
 
