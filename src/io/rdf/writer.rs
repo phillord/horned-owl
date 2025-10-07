@@ -1855,4 +1855,61 @@ mod test {
             "../../ont/owl-rdf/ambiguous/annotation-with-anonymous.owl"
         ));
     }
+
+    #[cfg(all(test, bubo))]
+    mod bubo_test {
+        use crate::io::rdf::writer::test::*;
+        use crate::io::rdf::writer::write;
+
+        use std::fs::{File, create_dir_all, read_dir, remove_dir_all};
+        use std::io::{BufWriter, Write};
+        use std::path::Path;
+
+        fn parse_then_output(in_file: &Path) {
+            let ont = &slurp::read_all_to_string(in_file).unwrap();
+            let ont_orig = read_ok(&mut ont.as_bytes());
+
+            let file = File::create(Path::new("./tmp/owl-rdf").join(in_file.file_name().unwrap()))
+                .unwrap();
+            let mut buf_writer = BufWriter::new(&file);
+
+            let amo: ComponentMappedOntology<RcStr, Rc<AnnotatedComponent<RcStr>>> =
+                ont_orig.clone().into();
+
+            write(&mut buf_writer, &amo).ok().unwrap();
+            buf_writer.flush().ok();
+        }
+
+        #[test]
+        fn reparse_rdf() -> Result<(), Box<dyn std::error::Error>> {
+            create_dir_all("./tmp/owl-rdf")?;
+
+            for entry in read_dir("./src/ont/owl-rdf")? {
+                let entry = entry?;
+                let path = entry.path();
+                if path.is_file() {
+                    parse_then_output(&path);
+                }
+            }
+
+            let mut cmd = std::process::Command::new("java");
+            let output = cmd
+                // block stdout or it is piped to existing stdout
+                //.stdout(std::process::Stdio::null())
+                .arg("-jar")
+                // passed in my build.rs
+                .arg(option_env!("BUBO_LOCATION").unwrap())
+                .arg("./dev/reparse-all.clj")
+                .arg("owl-rdf")
+                .output()?;
+
+            if !output.status.success() {
+                let out = String::from_utf8(output.stdout).unwrap();
+                assert!(false, "Bubo reparse failed: {out}");
+            }
+
+            remove_dir_all("./tmp/owl-rdf")?;
+            Ok(())
+        }
+    }
 }
