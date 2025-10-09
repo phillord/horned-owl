@@ -327,17 +327,17 @@ pub mod config {
 
     pub fn parser_app(app: App<'static>) -> App<'static> {
         app.arg(
-            clap::arg!(--"strict")
+            clap::arg!(--"lax")
                 .required(false)
                 .action(ArgAction::SetTrue)
-                .help("Parse RDF strictly"),
+                .help("Parse RDF in a lax manner"),
         )
     }
 
     pub fn parser_config(matches: &ArgMatches) -> ParserConfiguration {
         ParserConfiguration {
             rdf: RDFParserConfiguration {
-                lax: !matches.get_one::<bool>("strict").unwrap_or(&false),
+                lax: *matches.get_one::<bool>("lax").unwrap_or(&false),
             },
             ..Default::default()
         }
