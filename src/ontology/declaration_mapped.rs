@@ -33,6 +33,10 @@ impl<A: ForIRI, AA: ForIndex<A>> DeclarationMappedIndex<A, AA> {
         }
     }
 
+    pub fn is_declaration_kind(&self, iri: &IRI<A>, kind: NamedOWLEntityKind) -> bool {
+        self.declaration_kind(iri).is_some_and(|k| k == kind)
+    }
+
     pub fn declaration_kind(&self, iri: &IRI<A>) -> Option<NamedOWLEntityKind> {
         self.kind(iri).and_then(|e| e.as_owl())
     }
@@ -43,6 +47,10 @@ impl<A: ForIRI, AA: ForIndex<A>> DeclarationMappedIndex<A, AA> {
     ) -> Option<NamedOWLEntityKind> {
         self.kind_prefer_punned_individual(iri)
             .and_then(|e| e.as_owl())
+    }
+
+    pub fn is_kind(&self, iri: &IRI<A>, kind: NamedEntityKind) -> bool {
+        self.kind(iri).is_some_and(|k| k == kind)
     }
 
     pub fn kind(&self, iri: &IRI<A>) -> Option<NamedEntityKind> {
@@ -217,14 +225,31 @@ mod test {
             d.declaration_kind(&b.iri("http://www.example.com/c")),
             Some(NamedOWLEntityKind::Class)
         );
+
+        assert!(d.is_declaration_kind(
+            &b.iri("http://www.example.com/c"),
+            NamedOWLEntityKind::Class
+        ));
+
         assert_eq!(
             d.declaration_kind(&b.iri("http://www.example.com/p")),
             Some(NamedOWLEntityKind::ObjectProperty)
         );
+
+        assert!(d.is_declaration_kind(
+            &b.iri("http://www.example.com/p"),
+            NamedOWLEntityKind::ObjectProperty
+        ));
+
         assert_eq!(
             d.declaration_kind(&b.iri("http://www.example.com/d")),
             Some(NamedOWLEntityKind::DataProperty)
         );
+
+        assert!(d.is_declaration_kind(
+            &b.iri("http://www.example.com/d"),
+            NamedOWLEntityKind::DataProperty
+        ));
     }
 
     #[test]
