@@ -1984,6 +1984,12 @@ impl<A: ForIRI> From<Class<A>> for Box<ClassExpression<A>> {
     }
 }
 
+impl<A: ForIRI> From<IRI<A>> for ClassExpression<A> {
+    fn from(iri: IRI<A>) -> ClassExpression<A> {
+        ClassExpression::Class(iri.into())
+    }
+}
+
 /// A SWRL Atom
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum Atom<A> {
