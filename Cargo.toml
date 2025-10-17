@@ -49,7 +49,7 @@ encoding = ["quick-xml/encoding"]
 
 [dev-dependencies]
 horned-owl = {path=".", features = ["remote"]}
-criterion = "0.5.1"
+criterion = "0.7.0"
 mktemp = "0.5.1"
 pretty_assertions = "1.0.0"
 slurp = "1.0.1"
