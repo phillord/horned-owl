@@ -1012,7 +1012,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
 
     /// Retrieve a Vec of Dargument or None.
     fn retrieve_to_dargument_seq(&mut self, bnodeid: &BNode<A>) -> Option<Vec<DArgument<A>>> {
-        self.retrieve_to_seq(bnodeid, |slf, t| slf.to_dargument(t))
+        self.retrieve_to_seq(bnodeid, |slf, t| slf.retrieve_to_dargument(t))
     }
 
     /// Retrieve a DataRange or None.
@@ -1043,30 +1043,25 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
         }
     }
 
-    #[allow(clippy::wrong_self_convention)]
-    fn to_iargument(&mut self, t: &Term<A>, ic: &[&O]) -> Option<IArgument<A>> {
+    /// Convert to an IArgument or None
+    fn retrieve_to_iargument(&mut self, t: &Term<A>) -> Option<IArgument<A>> {
         match t {
             Term::BNode(bn) => Some(IArgument::Individual(
                 AnonymousIndividual(bn.0.clone()).into(),
             )),
             Term::Iri(iri) => self
+                // if it is a variable return it
                 .variable
                 .get(iri)
                 .map(|var| var.clone().into())
-                .or_else(|| {
-                    if self.find_declaration_kind(iri, ic)
-                        == Some(NamedOWLEntityKind::NamedIndividual)
-                    {
-                        Some(NamedIndividual(iri.clone()).into())
-                    } else {
-                        None
-                    }
-                }),
+                // or else it's an individual
+                .or_else(|| Some(NamedIndividual(iri.clone()).into())),
             _ => None,
         }
     }
 
-    fn to_dargument(&self, t: &Term<A>) -> Option<DArgument<A>> {
+    /// Retrieve or Convert to a DArgument or None.
+    fn retrieve_to_dargument(&self, t: &Term<A>) -> Option<DArgument<A>> {
         match t {
             Term::Literal(l) => Some(DArgument::Literal(l.clone())),
             Term::Iri(i) => self.variable.get(i).map(|v| DArgument::Variable(v.clone())),
@@ -1074,12 +1069,12 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
         }
     }
 
-    fn find_term_kind(&mut self, term: &Term<A>, ic: &[&O]) -> Option<NamedOWLEntityKind> {
+    fn distinguish_term_kind(&mut self, term: &Term<A>, ic: &[&O]) -> Option<NamedOWLEntityKind> {
         match term {
             Term::Iri(iri) if crate::vocab::is_xsd_datatype(iri) => {
                 Some(NamedOWLEntityKind::Datatype)
             }
-            Term::Iri(iri) => self.find_declaration_kind(iri, ic),
+            Term::Iri(iri) => self.distinguish_declaration_kind(iri, ic),
             // TODO: this might be too general. At the moment, I am
             // only using this function to distinguish between a
             // datatype and an class
@@ -1087,28 +1082,10 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
         }
     }
 
-    fn find_declaration_kind(&mut self, iri: &IRI<A>, ic: &[&O]) -> Option<NamedOWLEntityKind> {
-        self.find_declaration_kind_1(iri, ic, |o, iri| {
-            <O as AsRef<DeclarationMappedIndex<A, AA>>>::as_ref(o).declaration_kind(iri)
-        })
-    }
-
-    fn find_declaration_kind_prefer_punned_individual(
+    fn distinguish_declaration_kind(
         &mut self,
         iri: &IRI<A>,
         ic: &[&O],
-    ) -> Option<NamedOWLEntityKind> {
-        self.find_declaration_kind_1(iri, ic, |o, iri| {
-            <O as AsRef<DeclarationMappedIndex<A, AA>>>::as_ref(o)
-                .declaration_kind_prefer_punned_individual(iri)
-        })
-    }
-
-    fn find_declaration_kind_1(
-        &mut self,
-        iri: &IRI<A>,
-        ic: &[&O],
-        f: fn(&O, &IRI<A>) -> Option<NamedOWLEntityKind>,
     ) -> Option<NamedOWLEntityKind> {
         // For this ontology
         [&self.o]
@@ -1116,16 +1093,22 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
             // and the import closure
             .chain(ic.iter())
             // find the first declaration
-            .find_map(|o| f(o, iri))
+            .find_map(|o| {
+                <O as AsRef<DeclarationMappedIndex<A, AA>>>::as_ref(o).declaration_kind(iri)
+            })
     }
 
-    fn find_property_kind(&mut self, term: &Term<A>, ic: &[&O]) -> Option<PropertyExpression<A>> {
+    fn distinguish_property_kind(
+        &mut self,
+        term: &Term<A>,
+        ic: &[&O],
+    ) -> Option<PropertyExpression<A>> {
         match term {
             Term::OWL(vowl) => {
                 let iri = self.b.iri(vowl.as_ref());
-                self.find_property_kind(&Term::Iri(iri), ic)
+                self.distinguish_property_kind(&Term::Iri(iri), ic)
             }
-            Term::Iri(iri) => match self.find_declaration_kind(iri, ic) {
+            Term::Iri(iri) => match self.distinguish_declaration_kind(iri, ic) {
                 Some(NamedOWLEntityKind::AnnotationProperty) => {
                     Some(PropertyExpression::AnnotationProperty(iri.into()))
                 }
@@ -1155,7 +1138,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                     [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Restriction)],
                 ] => {
                     ok_some! {
-                        match self.find_property_kind(pr, ic)? {
+                        match self.distinguish_property_kind(pr, ic)? {
                             PropertyExpression::ObjectPropertyExpression(ope) => {
                                 ClassExpression::ObjectSomeValuesFrom {
                                     ope,
@@ -1178,7 +1161,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                     [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Restriction)],
                 ] => {
                     ok_some! {
-                        match self.find_property_kind(pr, ic)? {
+                        match self.distinguish_property_kind(pr, ic)? {
                             PropertyExpression::ObjectPropertyExpression(ope) => {
                                 ClassExpression::ObjectHasValue {
                                     ope,
@@ -1201,7 +1184,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                     [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Restriction)],
                 ] => {
                     ok_some! {
-                        match self.find_property_kind(pr, ic)? {
+                        match self.distinguish_property_kind(pr, ic)? {
                             PropertyExpression::ObjectPropertyExpression(ope) => {
                                 ClassExpression::ObjectAllValuesFrom {
                                     ope,
@@ -1221,24 +1204,14 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                 [
                     [_, Term::OWL(VOWL::OneOf), Term::BNode(bnodeid)], //:
                     [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Class)],
-                ] => {
-                    ok_some! {
-                        ClassExpression::ObjectOneOf(
-                            self.retrieve_to_ni_seq(bnodeid)?
-                        )
-                    }
-                }
+                ] => Ok(self
+                    .retrieve_to_ni_seq(bnodeid)
+                    .map(ClassExpression::ObjectOneOf)),
                 [
                     [_, Term::OWL(VOWL::HasSelf), _], //:
                     [_, Term::OWL(VOWL::OnProperty), pr],
                     [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Restriction)],
-                ] => {
-                    ok_some! {
-                        ClassExpression::ObjectHasSelf(
-                            self.retrieve_to_ope(pr)?
-                        )
-                    }
-                }
+                ] => Ok(self.retrieve_to_ope(pr).map(ClassExpression::ObjectHasSelf)),
                 [
                     [_, Term::OWL(VOWL::IntersectionOf), Term::BNode(bnodeid)], //:
                     [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Class)],
@@ -1248,25 +1221,15 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                 [
                     [_, Term::OWL(VOWL::UnionOf), Term::BNode(bnodeid)], //:
                     [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Class)],
-                ] => {
-                    ok_some! {
-                        ClassExpression::ObjectUnionOf(
-                            self.retrieve_to_ce_seq(
-                                bnodeid,
-                            )?
-                        )
-                    }
-                }
+                ] => Ok(self
+                    .retrieve_to_ce_seq(bnodeid)
+                    .map(ClassExpression::ObjectUnionOf)),
                 [
                     [_, Term::OWL(VOWL::ComplementOf), tce], //:
                     [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Class)],
-                ] => {
-                    ok_some! {
-                        ClassExpression::ObjectComplementOf(
-                            self.retrieve_to_ce(tce)?.into()
-                        )
-                    }
-                }
+                ] => Ok(self
+                    .retrieve_to_ce(tce)
+                    .map(|ce| ClassExpression::ObjectComplementOf(ce.into()))),
                 [
                     [_, Term::OWL(VOWL::OnDataRange), dr],               //:
                     [_, Term::OWL(VOWL::OnProperty), Term::Iri(pr)],     //:
@@ -1322,7 +1285,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                     [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Restriction)],
                 ] => {
                     ok_some! {
-                        match self.find_property_kind(pr, ic)? {
+                        match self.distinguish_property_kind(pr, ic)? {
                             PropertyExpression::ObjectPropertyExpression(ope) => {
                                 ClassExpression::ObjectExactCardinality
                                 {
@@ -1525,7 +1488,8 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                 // TODO: We need to check whether these
                 // EquivalentClasses have any other EquivalentClasses
                 // and add to that axiom
-                [a, Term::OWL(VOWL::EquivalentClass), b] => match self.find_term_kind(a, ic) {
+                [a, Term::OWL(VOWL::EquivalentClass), b] => match self.distinguish_term_kind(a, ic)
+                {
                     Some(NamedOWLEntityKind::Class) => ok_some! {
                         EquivalentClasses(
                             vec![
@@ -1562,7 +1526,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                             let vpe: Option<Vec<PropertyExpression<_>>> = self.bnode_seq
                                 .remove(bnodeid)?
                                 .into_iter()
-                                .map(|pr| self.find_property_kind(&pr, ic))
+                                .map(|pr| self.distinguish_property_kind(&pr, ic))
                                 .collect();
 
                             HasKey{
@@ -1603,7 +1567,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                     Term::OWL(VOWL::FunctionalProperty),
                 ] => {
                     ok_some! {
-                        match self.find_property_kind(pr, ic)? {
+                        match self.distinguish_property_kind(pr, ic)? {
                             PropertyExpression::ObjectPropertyExpression(ope) => {
                                 FunctionalObjectProperty(ope).into()
                             },
@@ -1618,79 +1582,42 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                     pr,
                     Term::RDF(VRDF::Type),
                     Term::OWL(VOWL::AsymmetricProperty),
-                ] => {
-                    ok_some! {
-                        match self.find_property_kind(pr, ic)? {
-                            PropertyExpression::ObjectPropertyExpression(ope) => {
-                                AsymmetricObjectProperty(ope).into()
-                            },
-
-                            _ => todo!()
-                        }
-                    }
-                }
+                ] => Ok(self
+                    .retrieve_to_ope(pr)
+                    .map(AsymmetricObjectProperty)
+                    .map(Into::into)),
                 [
                     pr,
                     Term::RDF(VRDF::Type),
                     Term::OWL(VOWL::SymmetricProperty),
-                ] => {
-                    ok_some! {
-                        match self.find_property_kind(pr, ic)? {
-                            PropertyExpression::ObjectPropertyExpression(ope) => {
-                                SymmetricObjectProperty(ope).into()
-                            },
-
-                            _ => todo!()
-                        }
-                    }
-                }
+                ] => Ok(self
+                    .retrieve_to_ope(pr)
+                    .map(SymmetricObjectProperty)
+                    .map(Into::into)),
                 [
                     pr,
                     Term::RDF(VRDF::Type),
                     Term::OWL(VOWL::ReflexiveProperty),
-                ] => {
-                    ok_some! {
-                        match self.find_property_kind(pr, ic)? {
-                            PropertyExpression::ObjectPropertyExpression(ope) => {
-                                ReflexiveObjectProperty(ope).into()
-                            },
-
-                            _ => todo!()
-                        }
-                    }
-                }
+                ] => Ok(self
+                    .retrieve_to_ope(pr)
+                    .map(ReflexiveObjectProperty)
+                    .map(Into::into)),
                 [
                     pr,
                     Term::RDF(VRDF::Type),
                     Term::OWL(VOWL::IrreflexiveProperty),
-                ] => {
-                    ok_some! {
-                        match self.find_property_kind(pr, ic)? {
-                            PropertyExpression::ObjectPropertyExpression(ope) => {
-                                IrreflexiveObjectProperty(ope).into()
-                            },
-
-                            _ => todo!()
-                        }
-                    }
-                }
+                ] => Ok(self
+                    .retrieve_to_ope(pr)
+                    .map(IrreflexiveObjectProperty)
+                    .map(Into::into)),
                 [
                     pr,
                     Term::RDF(VRDF::Type),
                     Term::OWL(VOWL::InverseFunctionalProperty),
-                ] => match self.find_property_kind(pr, ic) {
-                    Some(PropertyExpression::ObjectPropertyExpression(ope)) => {
-                        Ok(Some(InverseFunctionalObjectProperty(ope).into()))
-                    }
-                    all => Err(HornedError::invalid_at(
-                        format!(
-                            "Found un-interpretable triple: {:?} which are of type {:?}",
-                            t.triple(),
-                            all
-                        ),
-                        t.position(),
-                    )),
-                },
+                ] => Ok(self
+                    .retrieve_to_ope(pr)
+                    .map(InverseFunctionalObjectProperty)
+                    .map(Into::into)),
                 [Term::Iri(sub), Term::RDF(VRDF::Type), cls] => ok_some! {
                     {
                         ClassAssertion {
@@ -1707,7 +1634,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                 },
                 [pr, Term::RDFS(VRDFS::SubPropertyOf), t] => {
                     ok_some! {
-                        match self.find_property_kind(t, ic)? {
+                        match self.distinguish_property_kind(t, ic)? {
                             PropertyExpression::ObjectPropertyExpression(ope) =>
                                 SubObjectPropertyOf {
                                     sup: ope,
@@ -1746,7 +1673,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                 }
                 [pr, Term::RDFS(VRDFS::Domain), t] => {
                     ok_some! {
-                        match self.find_property_kind(pr, ic)? {
+                        match self.distinguish_property_kind(pr, ic)? {
                             PropertyExpression::ObjectPropertyExpression(ope) => ObjectPropertyDomain {
                                 ope,
                                 ce: self.retrieve_to_ce(t)?,
@@ -1766,7 +1693,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                     }
                 }
                 [pr, Term::RDFS(VRDFS::Range), t] => ok_some! {
-                    match self.find_property_kind(pr, ic)? {
+                    match self.distinguish_property_kind(pr, ic)? {
                         PropertyExpression::ObjectPropertyExpression(ope) => ObjectPropertyRange {
                             ope,
                             ce: self.retrieve_to_ce(t)?,
@@ -1785,7 +1712,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                     }
                 },
                 [r, Term::OWL(VOWL::PropertyDisjointWith), s] => ok_some! {
-                    match self.find_property_kind(r, ic)? {
+                    match self.distinguish_property_kind(r, ic)? {
                         PropertyExpression::ObjectPropertyExpression(ope) => DisjointObjectProperties (
                             vec![ope, self.retrieve_to_ope(s)?]
                         )
@@ -1798,7 +1725,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                     }
                 },
                 [r, Term::OWL(VOWL::EquivalentProperty), s] => ok_some! {
-                    match self.find_property_kind(r, ic)? {
+                    match self.distinguish_property_kind(r, ic)? {
                         PropertyExpression::ObjectPropertyExpression(ope) => EquivalentObjectProperties (
                             vec![ope, self.retrieve_to_ope(s)?]
                         )
@@ -1817,51 +1744,22 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                     Ok(Some(DifferentIndividuals(vec![i.into(), j.into()]).into()))
                 }
                 [Term::Iri(sub), Term::Iri(pred), t @ Term::Literal(_)] => ok_some! {
-                    match (self.find_declaration_kind(sub, ic)?,
-                           self.find_declaration_kind(pred, ic)?) {
-                        (NamedOWLEntityKind::NamedIndividual,
-                         NamedOWLEntityKind::DataProperty) => {
-                            DataPropertyAssertion {
-                                dp: pred.clone().into(),
-                                from: sub.into(),
-                                to: self.convert_to_literal(t)?
-                            }.into()
-                        }
-                        _ => {
-                            return None;
-                            //todo!()
-                        }
+                    DataPropertyAssertion {
+                        dp: pred.clone().into(),
+                        from: sub.into(),
+                        to: self.convert_to_literal(t)?
+                    }.into()
+                },
+                [Term::Iri(sub), Term::Iri(pred), Term::Iri(obj)] => Ok(Some(
+                    ObjectPropertyAssertion {
+                        ope: ObjectProperty(pred.clone()).into(),
+                        from: sub.into(),
+                        to: obj.into(),
                     }
-                },
-                [Term::Iri(sub), Term::Iri(pred), Term::Iri(obj)] => match (
-                    self.find_declaration_kind_prefer_punned_individual(sub, ic),
-                    self.find_declaration_kind(pred, ic),
-                    self.find_declaration_kind_prefer_punned_individual(obj, ic),
-                ) {
-                    (
-                        Some(NamedOWLEntityKind::NamedIndividual),
-                        Some(NamedOWLEntityKind::ObjectProperty),
-                        Some(NamedOWLEntityKind::NamedIndividual),
-                    ) => Ok(Some(
-                        ObjectPropertyAssertion {
-                            ope: ObjectProperty(pred.clone()).into(),
-                            from: sub.into(),
-                            to: obj.into(),
-                        }
-                        .into(),
-                    )),
-                    all => Err(HornedError::invalid_at(
-                        format!(
-                            "Found un-interpretable triple: {:?} which are of type {:?}",
-                            t.triple(),
-                            all
-                        ),
-                        t.position(),
-                    )),
-                },
+                    .into(),
+                )),
                 _ => Ok(None),
             };
-
             match axiom? {
                 Some(axiom) => {
                     let ann = self.ann_map.remove(t.triple()).unwrap_or_default();
@@ -1877,7 +1775,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
         Ok(())
     }
 
-    fn swrl(&mut self, ic: &[&O]) -> Result<(), HornedError> {
+    fn swrl(&mut self) -> Result<(), HornedError> {
         // identify variables first
         for t in std::mem::take(&mut self.simple) {
             match t.triple() {
@@ -1906,7 +1804,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                         {
                             Atom::ClassAtom{
                                 pred: self.retrieve_to_ce(pred)?,
-                                arg: self.to_iargument(arg, ic)?
+                                arg: self.retrieve_to_iargument(arg)?
                             }
                         }
                     }
@@ -1920,7 +1818,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                         {
                             Atom::DataRangeAtom{
                                 pred: self.retrieve_to_dr(pred)?,
-                                arg: self.to_dargument(arg)?
+                                arg: self.retrieve_to_dargument(arg)?
                             }
                         }
                     }
@@ -1936,17 +1834,12 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                     [_, Term::SWRL(VSWRL::PropertyPredicate), pred],
                 ] => {
                     ok_some! {
-                        match self.find_property_kind(pred, ic)? {
-                            PropertyExpression::ObjectPropertyExpression(pred) => {
-                                Atom::ObjectPropertyAtom{
-                                    pred,
-                                    args: (
-                                        self.to_iargument(arg1, ic)?,
-                                        self.to_iargument(arg2, ic)?,
-                                    )
-                                }
-                            }
-                            _=> todo!()
+                        Atom::ObjectPropertyAtom{
+                            pred: self.retrieve_to_ope(pred)?,
+                            args: (
+                                self.retrieve_to_iargument(arg1)?,
+                                self.retrieve_to_iargument(arg2)?,
+                            )
                         }
                     }
                 }
@@ -1964,8 +1857,8 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                         Atom::DataPropertyAtom {
                             pred: self.convert_to_dp(pred)?,
                             args: (
-                                self.to_dargument(arg1)?,
-                                self.to_dargument(arg2)?,
+                                self.retrieve_to_dargument(arg1)?,
+                                self.retrieve_to_dargument(arg2)?,
                             )
                         }
                     }
@@ -1981,8 +1874,8 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                 ] => {
                     ok_some! {
                         Atom::DifferentIndividualsAtom(
-                            self.to_iargument(arg1, ic)?,
-                            self.to_iargument(arg2, ic)?,
+                            self.retrieve_to_iargument(arg1)?,
+                            self.retrieve_to_iargument(arg2)?,
                         )
                     }
                 }
@@ -1997,8 +1890,8 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                 ] => {
                     ok_some! {
                         Atom::SameIndividualAtom(
-                            self.to_iargument(arg1, ic)?,
-                            self.to_iargument(arg2, ic)?,
+                            self.retrieve_to_iargument(arg1)?,
+                            self.retrieve_to_iargument(arg2)?,
                         )
                     }
                 }
@@ -2242,7 +2135,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
         self.axioms(ic)?;
 
         // SWRL rules
-        self.swrl(ic)?;
+        self.swrl()?;
 
         if self.config.rdf.lax {
             self.simple_annotations(true);
@@ -2371,7 +2264,6 @@ mod test {
     use std::path::PathBuf;
     use std::rc::Rc;
 
-    use crate::io::RDFParserConfiguration;
     use crate::normalize::normalize;
     use crate::ontology::component_mapped::RcComponentMappedOntology;
     use pretty_assertions::assert_eq;
@@ -2467,41 +2359,6 @@ mod test {
     #[test]
     fn one_some_property_filler_reversed() {
         compare_two("manual/one-some-property-filler-reversed", "some");
-    }
-
-    #[test]
-    fn annotation_missing_declaration() {
-        let ont_s = slurp_rdfont("manual/annotation_no_declaration");
-
-        let ont_strict = read(&mut ont_s.as_bytes(), Default::default());
-        let ont_lax = read(
-            &mut ont_s.as_bytes(),
-            ParserConfiguration {
-                rdf: RDFParserConfiguration { lax: true },
-                ..Default::default()
-            },
-        );
-
-        // Both should parse without error
-        let (ont_strict, incomp_strict) = ont_strict.unwrap();
-        let (ont_lax, incomp_lax) = ont_lax.unwrap();
-
-        // Strict parsing should be incomplete
-        assert!(!incomp_strict.is_complete());
-        assert!(incomp_lax.is_complete());
-
-        let ont_strict: ComponentMappedOntology<_, _> = ont_strict.into();
-        let ont_lax: ComponentMappedOntology<_, _> = ont_lax.into();
-
-        // strict mode should have no annotation assertions or
-        // annotation properties
-        assert_eq!(ont_strict.i().annotation_assertion().count(), 0);
-        assert_eq!(ont_strict.i().declare_annotation_property().count(), 0);
-
-        // lax mode should have one annotation but this annotation
-        // should cause the declaration of the annotation property
-        assert_eq!(ont_lax.i().annotation_assertion().count(), 1);
-        assert_eq!(ont_lax.i().declare_annotation_property().count(), 0);
     }
 
     #[test]
