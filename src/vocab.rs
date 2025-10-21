@@ -256,6 +256,10 @@ pub fn to_built_in_entity<A: ForIRI>(iri: &IRI<A>) -> Option<NamedOWLEntityKind>
         _ if ir == OWL::TopObjectProperty.as_ref() => Some(NamedOWLEntityKind::ObjectProperty),
         _ if ir == OWL::Thing.as_ref() => Some(NamedOWLEntityKind::Class),
         _ if ir == OWL::Nothing.as_ref() => Some(NamedOWLEntityKind::Class),
+        _ if ir == RDFS::Label.as_ref() => Some(NamedOWLEntityKind::AnnotationProperty),
+        _ if ir == RDFS::Comment.as_ref() => Some(NamedOWLEntityKind::AnnotationProperty),
+        _ if ir == RDFS::SeeAlso.as_ref() => Some(NamedOWLEntityKind::AnnotationProperty),
+        _ if ir == RDFS::IsDefinedBy.as_ref() => Some(NamedOWLEntityKind::AnnotationProperty),
         _ => None,
     }
 }

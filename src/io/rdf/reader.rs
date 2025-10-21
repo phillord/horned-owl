@@ -1769,9 +1769,9 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                             self.retrieve_to_ce(b)?,
                         ]).into()
                 },
-                [pr, Term::RDFS(VRDFS::SubPropertyOf), t] => {
+                [pr, Term::RDFS(VRDFS::SubPropertyOf), spr] => {
                     ok_some! {
-                        match self.distinguish_retrieve_property_kind(t, ic)? {
+                        match self.distinguish_retrieve_property_kind(spr, ic)? {
                             PropertyExpression::ObjectPropertyExpression(ope) =>
                                 SubObjectPropertyOf {
                                     sup: ope,
