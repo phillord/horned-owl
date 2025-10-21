@@ -1759,6 +1759,13 @@ pub enum PropertyExpression<A> {
     AnnotationProperty(AnnotationProperty<A>),
 }
 
+impl<A: ForIRI> From<ObjectProperty<A>> for PropertyExpression<A> {
+    fn from(op: ObjectProperty<A>) -> PropertyExpression<A> {
+        let ope: ObjectPropertyExpression<A> = op.into();
+        ope.into()
+    }
+}
+
 impl<A: ForIRI> From<ObjectPropertyExpression<A>> for PropertyExpression<A> {
     fn from(ope: ObjectPropertyExpression<A>) -> PropertyExpression<A> {
         PropertyExpression::ObjectPropertyExpression(ope)
@@ -1767,6 +1774,12 @@ impl<A: ForIRI> From<ObjectPropertyExpression<A>> for PropertyExpression<A> {
 impl<A: ForIRI> From<DataProperty<A>> for PropertyExpression<A> {
     fn from(dp: DataProperty<A>) -> PropertyExpression<A> {
         PropertyExpression::DataProperty(dp)
+    }
+}
+
+impl<A: ForIRI> From<AnnotationProperty<A>> for PropertyExpression<A> {
+    fn from(dp: AnnotationProperty<A>) -> PropertyExpression<A> {
+        PropertyExpression::AnnotationProperty(dp)
     }
 }
 

@@ -146,6 +146,24 @@ impl<A: ForIRI> From<Term<A>> for OrTerm<A> {
     }
 }
 
+impl<A: ForIRI> Term<A> {
+    fn substitute(self) -> Term<A> {
+        if let Term::Iri(ref iri) = self
+            && let Some(vocab) = Vocab::lookup(iri)
+        {
+            return match vocab {
+                crate::vocab::Vocab::Facet(facet) => facet.into(),
+                crate::vocab::Vocab::RDF(rdf) => rdf.into(),
+                crate::vocab::Vocab::RDFS(rdfs) => rdfs.into(),
+                crate::vocab::Vocab::OWL(owl) => owl.into(),
+                crate::vocab::Vocab::SWRL(swrl) => swrl.into(),
+                _ => self,
+            };
+        }
+        self
+    }
+}
+
 impl<A: ForIRI> TryFrom<&NamedNode<'_>> for Term<A> {
     type Error = HornedError;
 
@@ -171,7 +189,7 @@ impl<A: ForIRI> Build<A> {
         Term::BNode(BNode(nn.id.to_string().into()))
     }
 
-    fn to_pos_triple(&self, rio_triple: Triple, pos: usize) -> PosTriple<A> {
+    fn convert_to_pos_triple(&self, rio_triple: Triple, pos: usize) -> PosTriple<A> {
         PosTriple(
             [
                 self.to_term_bnn(&rio_triple.subject),
@@ -180,6 +198,29 @@ impl<A: ForIRI> Build<A> {
             ],
             pos,
         )
+    }
+
+    fn substitute_term(&self, term: [Term<A>; 3]) -> [Term<A>; 3] {
+        let [subject, predicate, object] = term;
+        let predicate = predicate.substitute();
+        let object = if matches!(predicate, Term::RDF(VRDF::Type)) {
+            object.substitute()
+        } else {
+            object
+        };
+        [subject, predicate, object]
+    }
+
+    fn substitute_triple(&self, triple: PosTriple<A>) -> PosTriple<A> {
+        let PosTriple(term, pos) = triple;
+
+        let term = self.substitute_term(term);
+
+        PosTriple(term, pos)
+    }
+
+    fn convert_substitute_triple(&self, rio_triple: Triple, pos: usize) -> PosTriple<A> {
+        self.substitute_triple(self.convert_to_pos_triple(rio_triple, pos))
     }
 
     fn to_term(&self, t: &RioTerm) -> Term<A> {
@@ -202,10 +243,7 @@ impl<A: ForIRI> Build<A> {
     }
 
     fn to_term_nn(&self, nn: &NamedNode) -> Term<A> {
-        match nn.try_into() {
-            Ok(term) => term,
-            _ => Term::Iri(self.iri(nn.iri)),
-        }
+        Term::Iri(self.iri(nn.iri))
     }
 
     fn to_term_lt(&self, lt: &rio_api::model::Literal) -> Term<A> {
@@ -498,7 +536,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
         let mut triples = vec![];
         let last_pos = std::cell::Cell::new(0);
         let mut on_triple = |rio_triple: rio_api::model::Triple| -> Result<_, HornedError> {
-            triples.push(b.to_pos_triple(rio_triple, last_pos.get()));
+            triples.push(b.convert_substitute_triple(rio_triple, last_pos.get()));
             Ok(())
         };
 
@@ -588,10 +626,10 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
             match v.as_slice() {
                 [
                     [_, Term::RDF(VRDF::First), val],
-                    [_, Term::RDF(VRDF::Rest), Term::RDF(VRDF::Nil)],
+                    [_, Term::RDF(VRDF::Rest), Term::Iri(iri)],
                     // Lists may or may not have a "list" RDF type
                     ..,
-                ] => {
+                ] if **iri == **VRDF::Nil => {
                     self.bnode_seq.insert(k.clone(), vec![val.clone()]);
                 }
                 _ => {
@@ -715,7 +753,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                     ann @ ..,
                 ] => {
                     self.ann_map.insert(
-                        [sb.clone(), p.clone(), ob.clone()],
+                        self.b.substitute_term([sb.clone(), p.clone(), ob.clone()]),
                         self.parse_annotations(ann),
                     );
                 }
@@ -1098,7 +1136,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
             })
     }
 
-    fn distinguish_property_kind(
+    fn distinguish_retrieve_property_kind(
         &mut self,
         term: &Term<A>,
         ic: &[&O],
@@ -1106,7 +1144,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
         match term {
             Term::OWL(vowl) => {
                 let iri = self.b.iri(vowl.as_ref());
-                self.distinguish_property_kind(&Term::Iri(iri), ic)
+                self.distinguish_retrieve_property_kind(&Term::Iri(iri), ic)
             }
             Term::Iri(iri) => match self.distinguish_declaration_kind(iri, ic) {
                 Some(NamedOWLEntityKind::AnnotationProperty) => {
@@ -1125,6 +1163,105 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
         }
     }
 
+    /// Return the property kind of the pair of terms.
+    ///
+    /// If either or both of the pair is a known type return that.  If
+    /// the pair are two different types, return an Error if parsing
+    /// is strict or favour the first, if possible. If neither is
+    /// known return None.
+    #[allow(clippy::type_complexity)]
+    fn distinguish_retrieve_property_term_pair_kind(
+        &mut self,
+        a: &Term<A>,
+        b: &Term<A>,
+        ic: &[&O],
+    ) -> Result<Option<(PropertyExpression<A>, PropertyExpression<A>)>, HornedError> {
+        let mut mix_match = |a, b| match (
+            self.object_property_expression.remove(a),
+            self.distinguish_declaration_kind(b, ic),
+        ) {
+            (Some(ope), Some(NamedOWLEntityKind::ObjectProperty)) | (Some(ope), None) => {
+                Ok(Some((ope.into(), ObjectProperty(b.clone()).into())))
+            }
+            (Some(ope), _any) if self.config.rdf.lax => {
+                Ok(Some((ope.into(), ObjectProperty(b.clone()).into())))
+            }
+            _ => Err(HornedError::invalid(format!(
+                "Types of two properties do not match: {:?} and {:?}",
+                a, b
+            ))),
+        };
+
+        match (a, b) {
+            (Term::BNode(a), Term::BNode(b)) => Ok(self
+                .object_property_expression
+                .remove(a)
+                .zip(self.object_property_expression.remove(b))
+                .map(|(a, b)| {
+                    (
+                        PropertyExpression::ObjectPropertyExpression(a),
+                        PropertyExpression::ObjectPropertyExpression(b),
+                    )
+                })),
+            (Term::BNode(a), Term::Iri(b)) => mix_match(a, b),
+            (Term::Iri(a), Term::BNode(b)) => {
+                let t = mix_match(b, a);
+                t.map(|o| o.map(|t| (t.1, t.0)))
+            }
+            (Term::Iri(a), Term::Iri(b)) => self.distinguish_property_iri_pair_kind(a, b, ic),
+            _ => Ok(None),
+        }
+    }
+
+    #[allow(clippy::type_complexity)]
+    fn distinguish_property_iri_pair_kind(
+        &mut self,
+        a: &IRI<A>,
+        b: &IRI<A>,
+        ic: &[&O],
+    ) -> Result<Option<(PropertyExpression<A>, PropertyExpression<A>)>, HornedError> {
+        use crate::model::NamedOWLEntityKind as NEK;
+        match (
+            self.distinguish_declaration_kind(a, ic),
+            self.distinguish_declaration_kind(b, ic),
+        ) {
+            (Some(NEK::ObjectProperty), Some(NEK::ObjectProperty))
+            | (Some(NEK::ObjectProperty), None)
+            | (None, Some(NEK::ObjectProperty)) => Ok(Some((
+                ObjectProperty(a.clone()).into(),
+                ObjectProperty(b.clone()).into(),
+            ))),
+            (Some(NEK::DataProperty), Some(NEK::DataProperty))
+            | (Some(NEK::DataProperty), None)
+            | (None, Some(NEK::DataProperty)) => Ok(Some((
+                DataProperty(a.clone()).into(),
+                DataProperty(b.clone()).into(),
+            ))),
+            (Some(NEK::AnnotationProperty), Some(NEK::AnnotationProperty))
+            | (Some(NEK::AnnotationProperty), None)
+            | (None, Some(NEK::AnnotationProperty)) => Ok(Some((
+                AnnotationProperty(a.clone()).into(),
+                AnnotationProperty(b.clone()).into(),
+            ))),
+            (Some(NEK::ObjectProperty), _) if self.config.rdf.lax => Ok(Some((
+                ObjectProperty(a.clone()).into(),
+                ObjectProperty(b.clone()).into(),
+            ))),
+            (Some(NEK::DataProperty), _) if self.config.rdf.lax => Ok(Some((
+                DataProperty(a.clone()).into(),
+                DataProperty(b.clone()).into(),
+            ))),
+            (Some(NEK::AnnotationProperty), _) if self.config.rdf.lax => Ok(Some((
+                AnnotationProperty(a.clone()).into(),
+                AnnotationProperty(b.clone()).into(),
+            ))),
+            _ => Err(HornedError::invalid(format!(
+                "Types of two properties do not match: {:?} and {:?}",
+                a, b
+            ))),
+        }
+    }
+
     fn class_expressions(&mut self, ic: &[&O]) -> Result<(), HornedError> {
         let mut parsed_new_ce = false;
 
@@ -1138,7 +1275,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                     [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Restriction)],
                 ] => {
                     ok_some! {
-                        match self.distinguish_property_kind(pr, ic)? {
+                        match self.distinguish_retrieve_property_kind(pr, ic)? {
                             PropertyExpression::ObjectPropertyExpression(ope) => {
                                 ClassExpression::ObjectSomeValuesFrom {
                                     ope,
@@ -1161,7 +1298,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                     [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Restriction)],
                 ] => {
                     ok_some! {
-                        match self.distinguish_property_kind(pr, ic)? {
+                        match self.distinguish_retrieve_property_kind(pr, ic)? {
                             PropertyExpression::ObjectPropertyExpression(ope) => {
                                 ClassExpression::ObjectHasValue {
                                     ope,
@@ -1184,7 +1321,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                     [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Restriction)],
                 ] => {
                     ok_some! {
-                        match self.distinguish_property_kind(pr, ic)? {
+                        match self.distinguish_retrieve_property_kind(pr, ic)? {
                             PropertyExpression::ObjectPropertyExpression(ope) => {
                                 ClassExpression::ObjectAllValuesFrom {
                                     ope,
@@ -1285,7 +1422,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                     [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Restriction)],
                 ] => {
                     ok_some! {
-                        match self.distinguish_property_kind(pr, ic)? {
+                        match self.distinguish_retrieve_property_kind(pr, ic)? {
                             PropertyExpression::ObjectPropertyExpression(ope) => {
                                 ClassExpression::ObjectExactCardinality
                                 {
@@ -1526,7 +1663,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                             let vpe: Option<Vec<PropertyExpression<_>>> = self.bnode_seq
                                 .remove(bnodeid)?
                                 .into_iter()
-                                .map(|pr| self.distinguish_property_kind(&pr, ic))
+                                .map(|pr| self.distinguish_retrieve_property_kind(&pr, ic))
                                 .collect();
 
                             HasKey{
@@ -1567,7 +1704,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                     Term::OWL(VOWL::FunctionalProperty),
                 ] => {
                     ok_some! {
-                        match self.distinguish_property_kind(pr, ic)? {
+                        match self.distinguish_retrieve_property_kind(pr, ic)? {
                             PropertyExpression::ObjectPropertyExpression(ope) => {
                                 FunctionalObjectProperty(ope).into()
                             },
@@ -1634,7 +1771,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                 },
                 [pr, Term::RDFS(VRDFS::SubPropertyOf), t] => {
                     ok_some! {
-                        match self.distinguish_property_kind(t, ic)? {
+                        match self.distinguish_retrieve_property_kind(t, ic)? {
                             PropertyExpression::ObjectPropertyExpression(ope) =>
                                 SubObjectPropertyOf {
                                     sup: ope,
@@ -1673,7 +1810,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                 }
                 [pr, Term::RDFS(VRDFS::Domain), t] => {
                     ok_some! {
-                        match self.distinguish_property_kind(pr, ic)? {
+                        match self.distinguish_retrieve_property_kind(pr, ic)? {
                             PropertyExpression::ObjectPropertyExpression(ope) => ObjectPropertyDomain {
                                 ope,
                                 ce: self.retrieve_to_ce(t)?,
@@ -1693,7 +1830,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                     }
                 }
                 [pr, Term::RDFS(VRDFS::Range), t] => ok_some! {
-                    match self.distinguish_property_kind(pr, ic)? {
+                    match self.distinguish_retrieve_property_kind(pr, ic)? {
                         PropertyExpression::ObjectPropertyExpression(ope) => ObjectPropertyRange {
                             ope,
                             ce: self.retrieve_to_ce(t)?,
@@ -1711,32 +1848,54 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                         .into(),
                     }
                 },
-                [r, Term::OWL(VOWL::PropertyDisjointWith), s] => ok_some! {
-                    match self.distinguish_property_kind(r, ic)? {
-                        PropertyExpression::ObjectPropertyExpression(ope) => DisjointObjectProperties (
-                            vec![ope, self.retrieve_to_ope(s)?]
-                        )
-                        .into(),
-                        PropertyExpression::DataProperty(dp) => DisjointDataProperties (
-                            vec![dp, self.convert_to_dp(s)?]
-                        )
-                            .into(),
-                        _ => todo!()
+                [r, Term::OWL(VOWL::PropertyDisjointWith), s] => {
+                    match self.distinguish_retrieve_property_term_pair_kind(r, s, ic) {
+                        Ok(Some((
+                            PropertyExpression::ObjectPropertyExpression(r),
+                            PropertyExpression::ObjectPropertyExpression(s),
+                        ))) => Ok(Some(DisjointObjectProperties(vec![r, s]).into())),
+                        Ok(Some((
+                            PropertyExpression::DataProperty(r),
+                            PropertyExpression::DataProperty(s),
+                        ))) => Ok(Some(DisjointDataProperties(vec![r, s]).into())),
+                        Ok(Some((
+                            PropertyExpression::AnnotationProperty(r),
+                            PropertyExpression::AnnotationProperty(s),
+                        ))) => Err(HornedError::invalid(format!(
+                            "Annotation properties cannot be disjoint: {:?}, {:?}",
+                            r, s
+                        ))),
+                        Ok(None) => Err(HornedError::invalid(
+                            "Cannot distinguish the types of {r} and {s}",
+                        )),
+                        Err(err) => Err(err),
+                        _ => unreachable!("Unexpected error in disjoint property matching"),
                     }
-                },
-                [r, Term::OWL(VOWL::EquivalentProperty), s] => ok_some! {
-                    match self.distinguish_property_kind(r, ic)? {
-                        PropertyExpression::ObjectPropertyExpression(ope) => EquivalentObjectProperties (
-                            vec![ope, self.retrieve_to_ope(s)?]
-                        )
-                        .into(),
-                        PropertyExpression::DataProperty(dp) => EquivalentDataProperties (
-                            vec![dp, self.convert_to_dp(s)?]
-                        )
-                        .into(),
-                        _ => todo!()
+                }
+                [r, Term::OWL(VOWL::EquivalentProperty), s] => {
+                    match self.distinguish_retrieve_property_term_pair_kind(r, s, ic) {
+                        Ok(Some((
+                            PropertyExpression::ObjectPropertyExpression(r),
+                            PropertyExpression::ObjectPropertyExpression(s),
+                        ))) => Ok(Some(EquivalentObjectProperties(vec![r, s]).into())),
+                        Ok(Some((
+                            PropertyExpression::DataProperty(r),
+                            PropertyExpression::DataProperty(s),
+                        ))) => Ok(Some(EquivalentDataProperties(vec![r, s]).into())),
+                        Ok(Some((
+                            PropertyExpression::AnnotationProperty(r),
+                            PropertyExpression::AnnotationProperty(s),
+                        ))) => Err(HornedError::invalid(format!(
+                            "Annotation properties cannot be equivalent: {:?}, {:?}",
+                            r, s
+                        ))),
+                        Ok(None) => Err(HornedError::invalid(
+                            "Cannot distinguish the types of {r} and {s}",
+                        )),
+                        Err(err) => Err(err),
+                        _ => unreachable!("Unexpected error in equivalent property matching"),
                     }
-                },
+                }
                 [Term::Iri(sub), Term::OWL(VOWL::SameAs), Term::Iri(obj)] => {
                     Ok(Some(SameIndividual(vec![sub.into(), obj.into()]).into()))
                 }
@@ -1760,6 +1919,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                 )),
                 _ => Ok(None),
             };
+
             match axiom? {
                 Some(axiom) => {
                     let ann = self.ann_map.remove(t.triple()).unwrap_or_default();
