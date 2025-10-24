@@ -1156,6 +1156,9 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                 Some(NamedOWLEntityKind::ObjectProperty) => {
                     Some(PropertyExpression::ObjectPropertyExpression(iri.into()))
                 }
+                _ if self.config.rdf.lax => {
+                    Some(PropertyExpression::ObjectPropertyExpression(iri.into()))
+                }
                 _ => None,
             },
             Term::BNode(id) => Some(self.object_property_expression.remove(id)?.into()),
