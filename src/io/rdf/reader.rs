@@ -276,6 +276,8 @@ macro_rules! d {
     };
 }
 
+/// The RDFOntology supports logical equality and IRI->type mapping
+/// which are the two speeds ups that we need for RDF parsing.
 pub trait RDFOntology<A: ForIRI, AA: ForIndex<A>>:
     AsRef<LogicallyEqualIndex<A, AA>>
     + AsRef<DeclarationMappedIndex<A, AA>>
@@ -398,17 +400,35 @@ enum OntologyParserState {
     Parse,
 }
 
+/// Represents all the parts of a set of RDF triples that were not
+/// able to be completed parsed to OWL2 structures.
 #[derive(Debug, Default)]
 pub struct IncompleteParse<A: ForIRI> {
+    /// Simple Triples are those were subject, object and predicate
+    /// are all IRIs
     pub simple: Vec<PosTriple<A>>,
+    /// BNode triples are those that start with a BNode, except where
+    /// they are part of an RDF sequence.
     pub bnode: Vec<VPosTriple<A>>,
+    /// BNode seq are those triples that are part of a sequence.
     pub bnode_seq: Vec<Vec<Term<A>>>,
 
+    /// ClassExpression's that are otherwise unconnected to
+    /// other parts of the Ontology.
     pub class_expression: Vec<ClassExpression<A>>,
+
+    /// ObjectPropertyExpression' that are otherwise unconnected to
+    /// other parts of the Ontology.
     pub object_property_expression: Vec<ObjectPropertyExpression<A>>,
+    /// DataRange's that are otherwise unconnected to other parts of the
+    /// Ontology.
     pub data_range: Vec<DataRange<A>>,
+    /// Atom's that are otherwise unconnected to other parts of the
+    /// Ontology.
     pub atom: HashMap<Term<A>, Atom<A>>,
 
+    /// Annotations that are otherwise unconnected to other parts of
+    /// the Ontology
     pub ann_map: HashMap<[Term<A>; 3], BTreeSet<Annotation<A>>>,
 }
 
@@ -425,6 +445,8 @@ impl<A: ForIRI> IncompleteParse<A> {
     }
 }
 
+/// A triple of terms with a position from the file from which the
+/// triple was read.
 #[derive(Clone, Debug)]
 pub struct PosTriple<A: ForIRI>([Term<A>; 3], usize);
 
@@ -452,6 +474,8 @@ impl<A: ForIRI> PosTriple<A> {
     }
 }
 
+/// A set of triples with a position in the file from which the
+/// triples were loaded.
 #[derive(Debug)]
 pub struct VPosTriple<A: ForIRI>(Vec<[Term<A>; 3]>, usize);
 
@@ -479,29 +503,42 @@ impl<A: ForIRI> std::ops::DerefMut for VPosTriple<A> {
     }
 }
 
+/// An ontology parser which takes a set of RDF triples and turns them
+/// into an RDFOntology.
 #[derive(Debug)]
 pub struct OntologyParser<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> {
+    /// The ontology being populated
     o: O,
     b: &'a Build<A>,
     config: ParserConfiguration,
 
+    // A vector of the triples from which we are parsing
     triple: Vec<PosTriple<A>>,
+    // Triples with an IRI for subject, predicate and object
     simple: Vec<PosTriple<A>>,
+    // Triples that start with a BNode
     bnode: HashMap<BNode<A>, VPosTriple<A>>,
+    // The object of triples that are part of a sequence, keyed on the
+    // bnode subject of the first known triple that is part of that sequence
     bnode_seq: HashMap<BNode<A>, Vec<Term<A>>>,
 
+    // Parsed OWL Objects keyed on their bnode
     class_expression: HashMap<BNode<A>, ClassExpression<A>>,
     object_property_expression: HashMap<BNode<A>, ObjectPropertyExpression<A>>,
     data_range: HashMap<BNode<A>, DataRange<A>>,
+    // Annotations mapped to Triples
     ann_map: HashMap<[Term<A>; 3], BTreeSet<Annotation<A>>>,
     atom: HashMap<Term<A>, Atom<A>>,
     variable: HashMap<IRI<A>, Variable<A>>,
 
+    // How far through the parse have we got?
     state: OntologyParserState,
+    // AA is otherwise unreferenced
     p: PhantomData<AA>,
 }
 
 impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A, AA, O> {
+    /// Return a new empty OntologyParser.
     pub fn new(
         b: &'a Build<A>,
         triple: Vec<PosTriple<A>>,
@@ -527,6 +564,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
         }
     }
 
+    /// Return a new OntologyParser taking all triples from an BufRead in RDF-XML.
     pub fn from_bufread<'b, R: BufRead>(
         b: &'a Build<A>,
         bufread: &'b mut R,
@@ -548,6 +586,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
         OntologyParser::new(b, triples, config)
     }
 
+    /// Return an new OntologyParser taking all triples in RDF-XML from the given IRI.
     pub fn from_doc_iri(
         b: &'a Build<A>,
         iri: &IRI<A>,
@@ -560,6 +599,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
         )
     }
 
+    /// Groups `triples` into `simple` (those which do not start with a BNode) and those that do.
     fn group_triples(
         triples: Vec<PosTriple<A>>,
         simple: &mut Vec<PosTriple<A>>,
@@ -571,6 +611,9 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
         // gather these in a single pass.
         for t in triples {
             match t.triple() {
+                // These triples define axioms and are pattern matched
+                // along with the simple triples. This makes much of
+                // my documentation slightly wrong.
                 [_, Term::OWL(VOWL::DisjointWith), _]
                 | [_, Term::OWL(VOWL::EquivalentClass), _]
                 | [_, Term::OWL(VOWL::InverseOf), _]
@@ -578,8 +621,10 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                     simple.push(t);
                 }
                 [Term::BNode(id), _, _] => {
+                    // Are there any triples on this bnode already
                     let v = bnode
                         .entry(id.clone())
+                        // if there are not store the location of this as it is the first
                         .or_insert_with(|| VPosTriple(vec![], t.1));
                     v.push(t.as_triple())
                 }
@@ -590,6 +635,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
         }
     }
 
+    /// Find and group all triples on a sequence.
     fn stitch_seqs_1(&mut self) {
         let mut extended = false;
 
@@ -598,9 +644,13 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                 [
                     [_, Term::RDF(VRDF::First), val],
                     [_, Term::RDF(VRDF::Rest), Term::BNode(bnode_id)],
-                    // Some sequences have a Type List, some do not
+                    // Some sequences have a Type List, some do not,
+                    // so do not use this as part of the lookup
                     ..,
                 ] => {
+                    // Only put sequence triples on bnode_seq if they
+                    // are next in line for a sequence already on
+                    // there, so we grow from the end backward.
                     let some_seq = self.bnode_seq.remove(bnode_id);
                     if let Some(mut seq) = some_seq {
                         seq.push(val.clone());
@@ -621,9 +671,11 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
         }
     }
 
+    /// Find and group all triples on a sequence.
     fn stitch_seqs(&mut self) {
         for (k, v) in std::mem::take(&mut self.bnode) {
             match v.as_slice() {
+                // Find the end of the list
                 [
                     [_, Term::RDF(VRDF::First), val],
                     [_, Term::RDF(VRDF::Rest), Term::Iri(iri)],
@@ -645,6 +697,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
         }
     }
 
+    /// Process all import statements
     fn resolve_imports(&mut self) -> Vec<IRI<A>> {
         let mut v = vec![];
         for t in std::mem::take(&mut self.simple) {
@@ -664,6 +717,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
         // Section 3.1.2/table 4 of RDF Graphs
     }
 
+    /// Process the header statement
     fn headers(&mut self) {
         //Section 3.1.2/table 4
         //   *:x rdf:type owl:Ontology .
@@ -692,6 +746,9 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
         self.o.insert(OntologyID { iri, viri });
     }
 
+    /// We should process the backward compatability rules, but
+    /// currently do nothing here at all. I expect that there are not
+    /// many OWL1 ontologies that need processing in existence.
     fn backward_compat(&mut self) {
         // Table 5, Table 6
     }
@@ -704,6 +761,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
         ann
     }
 
+    // Process annotations
     fn annotation(&self, t: &[Term<A>; 3]) -> Annotation<A> {
         match t {
             // We assume that anything passed to here is an
@@ -742,6 +800,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
         update_or_insert_logically_equal_component(&mut self.o, cmp);
     }
 
+    /// Process axiom annotations.
     fn axiom_annotations(&mut self) {
         for (k, v) in std::mem::take(&mut self.bnode) {
             match v.as_slice() {
@@ -753,6 +812,11 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                     ann @ ..,
                 ] => {
                     self.ann_map.insert(
+                        // The original axiom that this annotation
+                        // sits on will have it's IRIs convert to
+                        // OWL/RDF vocab, so we must do this here or
+                        // they will not match the key of the
+                        // annotation.
                         self.b.substitute_term([sb.clone(), p.clone(), ob.clone()]),
                         self.parse_annotations(ann),
                     );
@@ -765,25 +829,22 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
         }
     }
 
+    /// Process named entity declaration axioms
     fn declarations(&mut self) {
         // Table 7
         for t in std::mem::take(&mut self.simple) {
             let entity = match t.triple() {
-                // TODO Change this into a single outer match
-                [Term::Iri(s), Term::RDF(VRDF::Type), entity] => {
-                    // TODO Move match into function
-                    match entity {
-                        Term::OWL(VOWL::Class) => Some(Class(s.clone()).into()),
-                        Term::OWL(VOWL::ObjectProperty) => Some(ObjectProperty(s.clone()).into()),
-                        Term::OWL(VOWL::AnnotationProperty) => {
-                            Some(AnnotationProperty(s.clone()).into())
-                        }
-                        Term::OWL(VOWL::DatatypeProperty) => Some(DataProperty(s.clone()).into()),
-                        Term::OWL(VOWL::NamedIndividual) => Some(NamedIndividual(s.clone()).into()),
-                        Term::RDFS(VRDFS::Datatype) => Some(Datatype(s.clone()).into()),
-                        _ => None,
+                [Term::Iri(s), Term::RDF(VRDF::Type), entity] => match entity {
+                    Term::OWL(VOWL::Class) => Some(Class(s.clone()).into()),
+                    Term::OWL(VOWL::ObjectProperty) => Some(ObjectProperty(s.clone()).into()),
+                    Term::OWL(VOWL::AnnotationProperty) => {
+                        Some(AnnotationProperty(s.clone()).into())
                     }
-                }
+                    Term::OWL(VOWL::DatatypeProperty) => Some(DataProperty(s.clone()).into()),
+                    Term::OWL(VOWL::NamedIndividual) => Some(NamedIndividual(s.clone()).into()),
+                    Term::RDFS(VRDFS::Datatype) => Some(Datatype(s.clone()).into()),
+                    _ => None,
+                },
                 _ => None,
             };
 
@@ -800,6 +861,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
         }
     }
 
+    /// Process data ranges
     fn data_ranges(&mut self) -> Result<(), HornedError> {
         let data_range_len = self.data_range.len();
         let mut facet_map: HashMap<Term<A>, PosTriple<A>> = HashMap::new();
@@ -915,6 +977,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
         Ok(())
     }
 
+    /// Process ObjectPropertyExpression
     fn object_property_expressions(&mut self) {
         for t in std::mem::take(&mut self.simple) {
             match t.0 {
@@ -1107,6 +1170,8 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
         }
     }
 
+    /// Give a Term, return the NamedOWLEntityKind that it represents,
+    /// or a Class if we do not know.
     fn distinguish_term_kind(&mut self, term: &Term<A>, ic: &[&O]) -> Option<NamedOWLEntityKind> {
         match term {
             Term::Iri(iri) if crate::vocab::is_xsd_datatype(iri) => {
@@ -1120,6 +1185,12 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
         }
     }
 
+    /// Given an IRI work out its declaration kind, as defined in
+    /// either this Ontology or any Ontology in the import closure.
+    ///
+    /// If there are multiple contradictory declarations, declarations
+    /// in this Ontology will considered first, but otherwise the
+    /// result is not defined.
     fn distinguish_declaration_kind(
         &mut self,
         iri: &IRI<A>,
@@ -1136,6 +1207,12 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
             })
     }
 
+    /// Distinguish or retrieve the property kind using either a
+    /// declaration or, for BNode the presence of an
+    /// ObjectPropertyExpression.
+    ///
+    /// In lax mode, return an ObjectProperty if no declaration is
+    /// known.
     fn distinguish_retrieve_property_kind(
         &mut self,
         term: &Term<A>,
@@ -1216,6 +1293,10 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
         }
     }
 
+    /// Distinguish the type of a property pair. If one property has a
+    /// known type, both are assumed to be the same; if there are
+    /// contradictory types return an error or, in lax mode, favour
+    /// the first.
     #[allow(clippy::type_complexity)]
     fn distinguish_property_iri_pair_kind(
         &mut self,
@@ -1265,6 +1346,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
         }
     }
 
+    /// Process class expressions.
     fn class_expressions(&mut self, ic: &[&O]) -> Result<(), HornedError> {
         let mut parsed_new_ce = false;
 
