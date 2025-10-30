@@ -503,6 +503,24 @@ impl<A: ForIRI> std::ops::DerefMut for VPosTriple<A> {
     }
 }
 
+impl<A: ForIRI> VPosTriple<A> {
+    pub fn vec_triple(&self) -> &Vec<[Term<A>; 3]> {
+        &self.0
+    }
+
+    pub fn as_triple(self) -> Vec<[Term<A>; 3]> {
+        self.0
+    }
+
+    pub fn triple_mut(&mut self) -> &mut Vec<[Term<A>; 3]> {
+        &mut self.0
+    }
+
+    pub fn position(&self) -> usize {
+        self.1
+    }
+}
+
 /// An ontology parser which takes a set of RDF triples and turns them
 /// into an RDFOntology.
 #[derive(Debug)]
@@ -1351,78 +1369,82 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
         let mut parsed_new_ce = false;
 
         for (this_bnode, v) in std::mem::take(&mut self.bnode) {
-            // rustfmt breaks this (putting the triples all on one
-            // line) so skip
             let ce: Result<_, HornedError> = match v.as_slice() {
                 [
                     [_, Term::OWL(VOWL::OnProperty), pr],           //:
                     [_, Term::OWL(VOWL::SomeValuesFrom), ce_or_dr], //:
                     [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Restriction)],
-                ] => {
-                    ok_some! {
-                        match self.distinguish_retrieve_property_kind(pr, ic)? {
-                            PropertyExpression::ObjectPropertyExpression(ope) => {
-                                ClassExpression::ObjectSomeValuesFrom {
-                                    ope,
-                                    bce: self.retrieve_to_ce(ce_or_dr)?.into()
-                                }
-                            },
-                            PropertyExpression::DataProperty(dp) => {
-                                ClassExpression::DataSomeValuesFrom {
-                                    dp,
-                                    dr: self.retrieve_to_dr(ce_or_dr)?
-                                }
-                            },
-                            _ => panic!("Unexpected Property Kind")
-                        }
+                ] => match self.distinguish_retrieve_property_kind(pr, ic) {
+                    Some(PropertyExpression::ObjectPropertyExpression(ope)) => {
+                        ok_some!(ClassExpression::ObjectSomeValuesFrom {
+                            ope,
+                            bce: self.retrieve_to_ce(ce_or_dr)?.into()
+                        })
                     }
-                }
+                    Some(PropertyExpression::DataProperty(dp)) => {
+                        ok_some!(ClassExpression::DataSomeValuesFrom {
+                            dp,
+                            dr: self.retrieve_to_dr(ce_or_dr)?
+                        })
+                    }
+                    Some(PropertyExpression::AnnotationProperty(_)) => {
+                        Err(HornedError::invalid_at(
+                            "Unexpected property kind in restriction",
+                            v.position(),
+                        ))
+                    }
+                    None => Ok(None),
+                },
                 [
                     [_, Term::OWL(VOWL::HasValue), val],  //:
                     [_, Term::OWL(VOWL::OnProperty), pr], //:
                     [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Restriction)],
-                ] => {
-                    ok_some! {
-                        match self.distinguish_retrieve_property_kind(pr, ic)? {
-                            PropertyExpression::ObjectPropertyExpression(ope) => {
-                                ClassExpression::ObjectHasValue {
-                                    ope,
-                                    i: NamedIndividual(self.convert_to_iri(val)?).into()
-                                }
-                            },
-                            PropertyExpression::DataProperty(dp) => {
-                                ClassExpression::DataHasValue {
-                                    dp,
-                                    l: self.convert_to_literal(val)?
-                                }
-                            }
-                            _ => panic!("Unexpected Property kind"),
-                        }
+                ] => match self.distinguish_retrieve_property_kind(pr, ic) {
+                    Some(PropertyExpression::ObjectPropertyExpression(ope)) => {
+                        ok_some!(ClassExpression::ObjectHasValue {
+                            ope,
+                            i: NamedIndividual(self.convert_to_iri(val)?).into()
+                        })
                     }
-                }
+                    Some(PropertyExpression::DataProperty(dp)) => {
+                        ok_some!(ClassExpression::DataHasValue {
+                            dp,
+                            l: self.convert_to_literal(val)?
+                        })
+                    }
+                    Some(PropertyExpression::AnnotationProperty(_)) => {
+                        Err(HornedError::invalid_at(
+                            "Unexpected property kind in restriction",
+                            v.position(),
+                        ))
+                    }
+                    None => Ok(None),
+                },
                 [
                     [_, Term::OWL(VOWL::AllValuesFrom), ce_or_dr], //:
                     [_, Term::OWL(VOWL::OnProperty), pr],          //:
                     [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Restriction)],
-                ] => {
-                    ok_some! {
-                        match self.distinguish_retrieve_property_kind(pr, ic)? {
-                            PropertyExpression::ObjectPropertyExpression(ope) => {
-                                ClassExpression::ObjectAllValuesFrom {
-                                    ope,
-                                    bce: self.retrieve_to_ce(ce_or_dr)?.into()
-                                }
-                            },
-                            PropertyExpression::DataProperty(dp) => {
-                                ClassExpression::DataAllValuesFrom {
-                                    dp,
-                                    dr: self.retrieve_to_dr(ce_or_dr)?
-                                }
-                            },
-                            _ => panic!("Unexpected Property Kind")
-                        }
+                ] => match self.distinguish_retrieve_property_kind(pr, ic) {
+                    Some(PropertyExpression::ObjectPropertyExpression(ope)) => {
+                        ok_some!(ClassExpression::ObjectAllValuesFrom {
+                            ope,
+                            bce: self.retrieve_to_ce(ce_or_dr)?.into()
+                        })
                     }
-                }
+                    Some(PropertyExpression::DataProperty(dp)) => {
+                        ok_some!(ClassExpression::DataAllValuesFrom {
+                            dp,
+                            dr: self.retrieve_to_dr(ce_or_dr)?
+                        })
+                    }
+                    Some(PropertyExpression::AnnotationProperty(_)) => {
+                        Err(HornedError::invalid_at(
+                            "Unexpected property kind in restriction",
+                            v.position(),
+                        ))
+                    }
+                    None => Ok(None),
+                },
                 [
                     [_, Term::OWL(VOWL::OneOf), Term::BNode(bnodeid)], //:
                     [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Class)],
@@ -1505,31 +1527,29 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                     [_, Term::OWL(VOWL::Cardinality), literal], //:
                     [_, Term::OWL(VOWL::OnProperty), pr],       //:
                     [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Restriction)],
-                ] => {
-                    ok_some! {
-                        match self.distinguish_retrieve_property_kind(pr, ic)? {
-                            PropertyExpression::ObjectPropertyExpression(ope) => {
-                                ClassExpression::ObjectExactCardinality
-                                {
-                                    n:self.convert_to_u32(literal)?,
-                                    ope,
-                                    bce: self.b.class(VOWL::Thing).into()
-                                }
-                            },
-                            PropertyExpression::DataProperty(dp) => {
-                                ClassExpression::DataExactCardinality
-                                {
-                                    n:self.convert_to_u32(literal)?,
-                                    dp,
-                                    dr: self.b.datatype(OWL2Datatype::Literal).into(),
-                                }
-                            }
-                            _ => {
-                                todo!("Unexpected property kind")
-                            }
-                        }
+                ] => match self.distinguish_retrieve_property_kind(pr, ic) {
+                    Some(PropertyExpression::ObjectPropertyExpression(ope)) => {
+                        ok_some!(ClassExpression::ObjectExactCardinality {
+                            n: self.convert_to_u32(literal)?,
+                            ope,
+                            bce: self.b.class(VOWL::Thing).into()
+                        })
                     }
-                }
+                    Some(PropertyExpression::DataProperty(dp)) => {
+                        ok_some!(ClassExpression::DataExactCardinality {
+                            n: self.convert_to_u32(literal)?,
+                            dp,
+                            dr: self.b.datatype(OWL2Datatype::Literal).into(),
+                        })
+                    }
+                    Some(PropertyExpression::AnnotationProperty(_)) => {
+                        Err(HornedError::invalid_at(
+                            "Unexpected property kind in restriction",
+                            v.position(),
+                        ))
+                    }
+                    None => Ok(None),
+                },
                 [
                     [_, Term::OWL(VOWL::OnClass), tce],                  //:
                     [_, Term::OWL(VOWL::OnProperty), Term::Iri(pr)],     //:
@@ -2709,6 +2729,18 @@ mod test {
         assert_eq!(ont.i().annotation_assertion().count(), 1);
 
         let _aa = ont.i().annotation_assertion().next();
+    }
+
+    #[test]
+    fn error_on_some_broken() {
+        // Check error handling on (some a c) where a is an annotation property
+        let err = read(
+            &mut slurp_rdfont("manual/some-broken").as_bytes(),
+            Default::default(),
+        )
+        .unwrap_err();
+
+        assert!(matches! {err, HornedError::ValidityError(_,_)})
     }
 
     // #[test]
