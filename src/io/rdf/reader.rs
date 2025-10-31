@@ -745,11 +745,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
 
         for t in std::mem::take(&mut self.simple) {
             match t.triple() {
-                [
-                    Term::Iri(s),
-                    Term::RDF(VRDF::Type),
-                    Term::OWL(VOWL::Ontology),
-                ] => {
+                [Term::Iri(s), Term::RDF(VRDF::Type), Term::OWL(VOWL::Ontology)] => {
                     iri = Some(s.clone());
                 }
                 [Term::Iri(s), Term::OWL(VOWL::VersionIRI), Term::Iri(ob)]
@@ -771,16 +767,19 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
         // Table 5, Table 6
     }
 
-    fn parse_annotations(&self, triples: &[[Term<A>; 3]]) -> BTreeSet<Annotation<A>> {
+    fn parse_annotations(
+        &self,
+        triples: &[[Term<A>; 3]],
+    ) -> Result<BTreeSet<Annotation<A>>, HornedError> {
         let mut ann = BTreeSet::default();
         for a in triples {
-            ann.insert(self.annotation(a));
+            ann.insert(self.annotation(a)?);
         }
-        ann
+        Ok(ann)
     }
 
     // Process annotations
-    fn annotation(&self, t: &[Term<A>; 3]) -> Annotation<A> {
+    fn annotation(&self, t: &[Term<A>; 3]) -> Result<Annotation<A>, HornedError> {
         match t {
             // We assume that anything passed to here is an
             // annotation built in type
@@ -792,24 +791,25 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                 let iri = self.b.iri(owl.as_ref());
                 self.annotation(&[s.clone(), Term::Iri(iri), b.clone()])
             }
-            [_, Iri(p), ob @ Term::Literal(_)] => Annotation {
+            [_, Iri(p), ob @ Term::Literal(_)] => Ok(Annotation {
                 ap: AnnotationProperty(p.clone()),
                 av: self.convert_to_literal(ob).unwrap().into(),
-            },
+            }),
             [_, Iri(p), Iri(ob)] => {
                 // IRI annotation value
-                Annotation {
+                Ok(Annotation {
                     ap: AnnotationProperty(p.clone()),
                     av: ob.clone().into(),
-                }
+                })
             }
-            [_, Iri(p), Term::BNode(bnodeid)] => Annotation {
+            [_, Iri(p), Term::BNode(bnodeid)] => Ok(Annotation {
                 ap: AnnotationProperty(p.clone()),
                 av: AnonymousIndividual(bnodeid.0.clone()).into(),
-            },
-            _ => {
-                todo!()
-            }
+            }),
+            all => Err(HornedError::invalid(format!(
+                "Invalid annotation found {:?}",
+                all
+            ))),
         }
     }
 
@@ -819,7 +819,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
     }
 
     /// Process axiom annotations.
-    fn axiom_annotations(&mut self) {
+    fn axiom_annotations(&mut self) -> Result<(), HornedError> {
         for (k, v) in std::mem::take(&mut self.bnode) {
             match v.as_slice() {
                 [
@@ -836,7 +836,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                         // they will not match the key of the
                         // annotation.
                         self.b.substitute_term([sb.clone(), p.clone(), ob.clone()]),
-                        self.parse_annotations(ann),
+                        self.parse_annotations(ann)?,
                     );
                 }
 
@@ -845,6 +845,8 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                 }
             }
         }
+
+        Ok(())
     }
 
     /// Process named entity declaration axioms
@@ -1364,6 +1366,27 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
         }
     }
 
+    /// Returns an errorif spe is an AnnotationProperty or None if it
+    /// is none.
+    ///
+    /// panics if spe is any other kind of property
+    fn error_or_none_on_annotation<X>(
+        spe: Option<PropertyExpression<A>>,
+        pos: usize,
+    ) -> Result<Option<X>, HornedError> {
+        match spe {
+            Some(PropertyExpression::AnnotationProperty(_)) => Err(HornedError::invalid_at(
+                "Unexpected property kind in restriction",
+                pos,
+            )),
+            None => Ok(None),
+            // We should already have checked to see whether spe is an
+            // Object or Data property meaning that the whole match is
+            // exhaustive but we cannot express that in the type system.
+            _ => panic!("error_or_none_on_annotation called with wrong type"),
+        }
+    }
+
     /// Process class expressions.
     fn class_expressions(&mut self, ic: &[&O]) -> Result<(), HornedError> {
         let mut parsed_new_ce = false;
@@ -1387,13 +1410,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                             dr: self.retrieve_to_dr(ce_or_dr)?
                         })
                     }
-                    Some(PropertyExpression::AnnotationProperty(_)) => {
-                        Err(HornedError::invalid_at(
-                            "Unexpected property kind in restriction",
-                            v.position(),
-                        ))
-                    }
-                    None => Ok(None),
+                    any => Self::error_or_none_on_annotation(any, v.position()),
                 },
                 [
                     [_, Term::OWL(VOWL::HasValue), val],  //:
@@ -1412,13 +1429,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                             l: self.convert_to_literal(val)?
                         })
                     }
-                    Some(PropertyExpression::AnnotationProperty(_)) => {
-                        Err(HornedError::invalid_at(
-                            "Unexpected property kind in restriction",
-                            v.position(),
-                        ))
-                    }
-                    None => Ok(None),
+                    any => Self::error_or_none_on_annotation(any, v.position()),
                 },
                 [
                     [_, Term::OWL(VOWL::AllValuesFrom), ce_or_dr], //:
@@ -1437,13 +1448,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                             dr: self.retrieve_to_dr(ce_or_dr)?
                         })
                     }
-                    Some(PropertyExpression::AnnotationProperty(_)) => {
-                        Err(HornedError::invalid_at(
-                            "Unexpected property kind in restriction",
-                            v.position(),
-                        ))
-                    }
-                    None => Ok(None),
+                    any => Self::error_or_none_on_annotation(any, v.position()),
                 },
                 [
                     [_, Term::OWL(VOWL::OneOf), Term::BNode(bnodeid)], //:
@@ -1542,13 +1547,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                             dr: self.b.datatype(OWL2Datatype::Literal).into(),
                         })
                     }
-                    Some(PropertyExpression::AnnotationProperty(_)) => {
-                        Err(HornedError::invalid_at(
-                            "Unexpected property kind in restriction",
-                            v.position(),
-                        ))
-                    }
-                    None => Ok(None),
+                    any => Self::error_or_none_on_annotation(any, v.position()),
                 },
                 [
                     [_, Term::OWL(VOWL::OnClass), tce],                  //:
@@ -1653,30 +1652,29 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                     [_, Term::OWL(VOWL::AssertionProperty), pr],          //:
                     [_, Term::OWL(VOWL::SourceIndividual), Term::Iri(i)], //:
                     [_, target_type, target],                             //:
-                    [
-                        _,
-                        Term::RDF(VRDF::Type),
-                        Term::OWL(VOWL::NegativePropertyAssertion),
-                    ],
-                ] => {
-                    ok_some! {
-                        match target_type {
-                            Term::OWL(VOWL::TargetIndividual) =>
-                                NegativeObjectPropertyAssertion {
-                                    ope: self.retrieve_to_ope(pr)?,
-                                    from: i.into(),
-                                    to: self.convert_to_iri(target)?.into(),
-                                }.into(),
-                            Term::OWL(VOWL::TargetValue) =>
-                                NegativeDataPropertyAssertion {
-                                    dp: self.convert_to_dp(pr)?,
-                                    from: i.into(),
-                                    to: self.convert_to_literal(target)?,
-                                }.into(),
-                            _ => todo!()
+                    [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::NegativePropertyAssertion)], //:
+                ] => match target_type {
+                    Term::OWL(VOWL::TargetIndividual) => ok_some!(
+                        NegativeObjectPropertyAssertion {
+                            ope: self.retrieve_to_ope(pr)?,
+                            from: i.into(),
+                            to: self.convert_to_iri(target)?.into(),
                         }
-                    }
-                }
+                        .into()
+                    ),
+                    Term::OWL(VOWL::TargetValue) => ok_some!(
+                        NegativeDataPropertyAssertion {
+                            dp: self.convert_to_dp(pr)?,
+                            from: i.into(),
+                            to: self.convert_to_literal(target)?,
+                        }
+                        .into()
+                    ),
+                    _ => Err(HornedError::invalid_at(
+                        "Unable to interpret negative property assertion",
+                        v.position(),
+                    )),
+                },
                 [
                     [_, Term::OWL(VOWL::Members), Term::BNode(bnodeid)], //:
                     [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::AllDifferent)],
@@ -1803,23 +1801,17 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                         TransitiveObjectProperty(self.retrieve_to_ope(pr)?).into()
                     }
                 }
-                [
-                    pr,
-                    Term::RDF(VRDF::Type),
-                    Term::OWL(VOWL::FunctionalProperty),
-                ] => {
-                    ok_some! {
-                        match self.distinguish_retrieve_property_kind(pr, ic)? {
-                            PropertyExpression::ObjectPropertyExpression(ope) => {
-                                FunctionalObjectProperty(ope).into()
-                            },
-                            PropertyExpression::DataProperty(dp) => {
-                                FunctionalDataProperty(dp).into()
-                            },
-                            _ => todo!()
-                        }
-                    }
-                }
+                [pr, Term::RDF(VRDF::Type), Term::OWL(VOWL::FunctionalProperty)] //:
+                   =>
+                       match self.distinguish_retrieve_property_kind(pr, ic) {
+                           Some(PropertyExpression::ObjectPropertyExpression(ope)) => {
+                               Ok(Some(FunctionalObjectProperty(ope).into()))
+                           },
+                           Some(PropertyExpression::DataProperty(dp)) => {
+                               Ok(Some(FunctionalDataProperty(dp).into()))
+                           },
+                           any => Self::error_or_none_on_annotation(any, t.position())
+                       }
                 [
                     pr,
                     Term::RDF(VRDF::Type),
@@ -2044,11 +2036,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
         // identify variables first
         for t in std::mem::take(&mut self.simple) {
             match t.triple() {
-                [
-                    Term::Iri(s),
-                    Term::RDF(VRDF::Type),
-                    Term::SWRL(VSWRL::Variable),
-                ] => {
+                [Term::Iri(s), Term::RDF(VRDF::Type), Term::SWRL(VSWRL::Variable)] => {
                     self.variable.insert(s.clone(), Variable(s.clone()));
                 }
                 _ => {
@@ -2089,11 +2077,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                     }
                 }
                 [
-                    [
-                        _,
-                        Term::RDF(VRDF::Type),
-                        Term::SWRL(VSWRL::IndividualPropertyAtom),
-                    ],
+                    [_, Term::RDF(VRDF::Type), Term::SWRL(VSWRL::IndividualPropertyAtom)],
                     [_, Term::SWRL(VSWRL::Argument1), arg1],
                     [_, Term::SWRL(VSWRL::Argument2), arg2],
                     [_, Term::SWRL(VSWRL::PropertyPredicate), pred],
@@ -2109,11 +2093,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                     }
                 }
                 [
-                    [
-                        _,
-                        Term::RDF(VRDF::Type),
-                        Term::SWRL(VSWRL::DatavaluedPropertyAtom),
-                    ],
+                    [_, Term::RDF(VRDF::Type), Term::SWRL(VSWRL::DatavaluedPropertyAtom)],
                     [_, Term::SWRL(VSWRL::Argument1), arg1],
                     [_, Term::SWRL(VSWRL::Argument2), arg2],
                     [_, Term::SWRL(VSWRL::PropertyPredicate), pred],
@@ -2129,11 +2109,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                     }
                 }
                 [
-                    [
-                        _,
-                        Term::RDF(VRDF::Type),
-                        Term::SWRL(VSWRL::DifferentIndividualsAtom),
-                    ],
+                    [_, Term::RDF(VRDF::Type), Term::SWRL(VSWRL::DifferentIndividualsAtom)],
                     [_, Term::SWRL(VSWRL::Argument1), arg1],
                     [_, Term::SWRL(VSWRL::Argument2), arg2],
                 ] => {
@@ -2145,11 +2121,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                     }
                 }
                 [
-                    [
-                        _,
-                        Term::RDF(VRDF::Type),
-                        Term::SWRL(VSWRL::SameIndividualAtom),
-                    ],
+                    [_, Term::RDF(VRDF::Type), Term::SWRL(VSWRL::SameIndividualAtom)],
                     [_, Term::SWRL(VSWRL::Argument1), arg1],
                     [_, Term::SWRL(VSWRL::Argument2), arg2],
                 ] => {
@@ -2218,20 +2190,22 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
         Ok(())
     }
 
-    fn simple_annotations(&mut self, parse_all: bool) {
+    fn simple_annotations(&mut self, parse_all: bool) -> Result<(), HornedError> {
         let ont_id = <O as AsRef<SetIndex<A, AA>>>::as_ref(&self.o).the_ontology_id_or_default();
         for t in std::mem::take(&mut self.simple) {
-            let firi = |s: &mut OntologyParser<_, _, _>, t, iri: &IRI<_>| {
-                let ann = s.ann_map.remove(t).unwrap_or_default();
-                s.merge(AnnotatedComponent {
-                    component: AnnotationAssertion {
-                        subject: iri.into(),
-                        ann: s.annotation(t),
-                    }
-                    .into(),
-                    ann,
-                })
-            };
+            let firi =
+                |s: &mut OntologyParser<_, _, _>, t, iri: &IRI<_>| -> Result<(), HornedError> {
+                    let ann = s.ann_map.remove(t).unwrap_or_default();
+                    s.merge(AnnotatedComponent {
+                        component: AnnotationAssertion {
+                            subject: iri.into(),
+                            ann: s.annotation(t)?,
+                        }
+                        .into(),
+                        ann,
+                    });
+                    Ok(())
+                };
 
             match t.triple() {
                 // Catch anything about the ontology and assume it is
@@ -2239,10 +2213,10 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                 // declare annotation properties for ontology annotations
                 [Term::Iri(iri), _, _] if ont_id.iri.as_ref() == Some(iri) => {
                     self.o
-                        .insert(OntologyAnnotation(self.annotation(t.triple())));
+                        .insert(OntologyAnnotation(self.annotation(t.triple())?));
                 }
                 [Term::Iri(iri), Term::RDFS(rdfs), _] if rdfs.is_builtin() => {
-                    firi(self, t.triple(), iri)
+                    firi(self, t.triple(), iri)?
                 }
                 [Term::Iri(iri), Term::Iri(ap), _]
                     if parse_all
@@ -2250,7 +2224,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                             .is_annotation_property(ap)
                         || is_annotation_builtin(ap.as_ref()) =>
                 {
-                    firi(self, t.triple(), iri)
+                    firi(self, t.triple(), iri)?
                 }
                 _ => {
                     self.simple.push(t);
@@ -2258,22 +2232,24 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
             }
         }
         for (k, v) in std::mem::take(&mut self.bnode) {
-            let fbnode = |s: &mut OntologyParser<_, _, _>, t, ind: &BNode<A>| {
-                let ann = s.ann_map.remove(t).unwrap_or_default();
-                let ind: AnonymousIndividual<A> = s.b.anon(ind.0.clone());
-                s.merge(AnnotatedComponent {
-                    component: AnnotationAssertion {
-                        subject: ind.into(),
-                        ann: s.annotation(t),
-                    }
-                    .into(),
-                    ann,
-                })
-            };
+            let fbnode =
+                |s: &mut OntologyParser<_, _, _>, t, ind: &BNode<A>| -> Result<_, HornedError> {
+                    let ann = s.ann_map.remove(t).unwrap_or_default();
+                    let ind: AnonymousIndividual<A> = s.b.anon(ind.0.clone());
+                    s.merge(AnnotatedComponent {
+                        component: AnnotationAssertion {
+                            subject: ind.into(),
+                            ann: s.annotation(t)?,
+                        }
+                        .into(),
+                        ann,
+                    });
+                    Ok(())
+                };
 
             match v.as_slice() {
                 [triple @ [Term::BNode(ind), Term::RDFS(rdfs), _]] if rdfs.is_builtin() => {
-                    fbnode(self, triple, ind)
+                    fbnode(self, triple, ind)?
                 }
                 [triple @ [Term::BNode(ind), Term::Iri(ap), _]]
                     if parse_all
@@ -2281,13 +2257,15 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                             .is_annotation_property(ap)
                         || is_annotation_builtin(ap) =>
                 {
-                    fbnode(self, triple, ind)
+                    fbnode(self, triple, ind)?
                 }
                 _ => {
                     self.bnode.insert(k, v);
                 }
             }
         }
+
+        Ok(())
     }
 
     /// Parse all imports and add to the Ontology.
@@ -2306,7 +2284,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                 self.stitch_seqs();
 
                 // Table 10
-                self.axiom_annotations();
+                self.axiom_annotations()?;
                 let v = self.resolve_imports();
                 self.state = OntologyParserState::Imports;
 
@@ -2386,7 +2364,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
     /// relied on to resolve declarations.
     pub fn finish_parse(&mut self, ic: &[&O]) -> Result<(), HornedError> {
         // Table 10
-        self.simple_annotations(false);
+        self.simple_annotations(false)?;
 
         self.data_ranges()?;
 
@@ -2403,7 +2381,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
         self.swrl()?;
 
         if self.config.rdf.lax {
-            self.simple_annotations(true);
+            self.simple_annotations(true)?;
         }
         self.state = OntologyParserState::Parse;
         Ok(())

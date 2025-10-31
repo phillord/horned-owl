@@ -1,0 +1,7 @@
+## Specify the edition so that both cargo fmt and rustfmt work
+edition="2024"
+
+## The matching of triples in the RDF Parser really needs full width or we will get random newlines
+## Unfortunately, this causes lots of error messages, apparently fixed here
+## https://github.com/rust-lang/rustfmt/pull/6651
+array_width=100
