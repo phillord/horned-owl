@@ -220,7 +220,7 @@ mod test {
         assert!(d.index_insert(s.1.into()));
         assert!(d.index_insert(s.2.into()));
 
-        let b = Build::new();
+        let b = Build::default();
         assert_eq!(
             d.declaration_kind(&b.iri("http://www.example.com/c")),
             Some(NamedOWLEntityKind::Class)

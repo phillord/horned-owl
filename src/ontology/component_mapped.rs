@@ -448,7 +448,7 @@ mod test {
     #[test]
     fn test_ontology_into_iter() {
         // Setup
-        let build = Build::new();
+        let build = Build::default();
         let mut o = ComponentMappedOntology::new_rc();
         let decl1 = DeclareClass(build.class("http://www.example.com#a"));
         let decl2 = DeclareClass(build.class("http://www.example.com#b"));

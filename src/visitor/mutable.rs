@@ -109,6 +109,7 @@ pub trait VisitMut<A: ForIRI> {
     fn visit_darg_vec(&mut self, _: &mut Vec<DArgument<A>>) {}
 }
 
+#[derive(Default)]
 pub struct WalkMut<A, V>(V, PhantomData<A>);
 
 impl<A: ForIRI, V: VisitMut<A>> WalkMut<A, V> {
@@ -809,12 +810,12 @@ impl<A: ForIRI, V: VisitMut<A>> WalkMut<A, V> {
 }
 
 #[cfg(test)]
-
 mod test {
     use super::*;
     use crate::io::owx::reader::test::read_ok;
     use crate::model::Build;
 
+    #[derive(Default)]
     struct LabeltoFred;
     impl<A: ForIRI> VisitMut<A> for LabeltoFred {
         fn visit_annotation(&mut self, a: &mut Annotation<A>) {
@@ -859,12 +860,13 @@ mod test {
                 assert_eq!(literal, &"fred".to_string());
             }
             _ => {
-                assert!(false);
+                unreachable!();
             }
         }
     }
 
-    struct AddAnnotation<A: ForIRI>(Build<A>);
+    #[derive(Default)]
+    struct AddAnnotation<A>(Build<A>);
     impl<A: ForIRI> VisitMut<A> for AddAnnotation<A> {
         fn visit_annotation_vec(&mut self, a: &mut Vec<Annotation<A>>) {
             a.push(Annotation {
@@ -882,9 +884,7 @@ mod test {
         let ont_s = include_str!("../ont/owl-xml/class.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
-        dbg!(&ont.i().declare_class().next());
-
-        let mut walk = super::WalkMut::new(AddAnnotation(Build::new()));
+        let mut walk: super::WalkMut<_, AddAnnotation<_>> = super::WalkMut::default();
         let mut vec: Vec<_> = ont.into_iter().collect();
         assert_eq!(vec[0].ann.len(), 0);
 

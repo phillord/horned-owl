@@ -66,7 +66,7 @@ pub fn parse_path(
             ParserOutput::owx(horned_owl::io::owx::reader::read(&mut bufreader, config)?)
         }
         Some(ResourceType::RDF) => {
-            let b = Build::new();
+            let b = Build::default();
             let iri = horned_owl::resolve::path_to_file_iri(&b, path);
             ParserOutput::rdf(horned_owl::io::rdf::closure_reader::read(&iri, config)?)
         }
@@ -93,7 +93,7 @@ pub fn parse_imports(
             ParserOutput::owx(horned_owl::io::owx::reader::read(&mut bufreader, config)?)
         }
         Some(ResourceType::RDF) => {
-            let b = Build::new();
+            let b = Build::default();
             let mut p = horned_owl::io::rdf::reader::parser_with_build(&mut bufreader, &b, config);
             p.parse_imports()?;
             ParserOutput::rdf(p.as_ontology_and_incomplete())
@@ -111,7 +111,7 @@ pub fn materialize(
     config: ParserConfiguration,
 ) -> Result<Vec<IRI<RcStr>>, HornedError> {
     let mut v = vec![];
-    let b = Build::new();
+    let b = Build::default();
 
     // We need to determine at this point whether we have an IRI or a file location, already.
     let parsed = oxiri::Iri::parse(file_or_iri);

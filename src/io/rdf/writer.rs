@@ -1786,7 +1786,7 @@ mod test {
     #[test]
     fn test_ont_rt() {
         let mut ont = ComponentMappedOntology::new_rc();
-        let build = Build::new();
+        let build = Build::default();
 
         let iri = build.iri("http://www.example.com/a".to_string());
         ont.insert(OntologyID {
