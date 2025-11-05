@@ -72,10 +72,9 @@ pub fn read_with_build<A: ForIRI, O: MutableOntology<A> + Default, R: BufRead>(
                         let prefix = get_attr_value_str(&mut r.reader, e, b"name")?;
                         match (prefix, iri) {
                             (Some(p), Some(i)) => {
+                                let _ = r.mapping.add_prefix(&p, &i);
                                 if p.is_empty() {
                                     r.mapping.set_default(&i);
-                                } else {
-                                    let _ = r.mapping.add_prefix(&p, &i);
                                 }
                             }
                             (None, _) => {
@@ -1376,6 +1375,20 @@ pub mod test {
             mapping.expand_curie_string(""),
             Ok(String::from("http://example.com/"))
         );
+        assert_eq!(
+            mapping
+                .mappings()
+                .map(|(k, v)| (k.as_ref(), v.as_ref()))
+                .collect::<Vec<_>>(),
+            vec![
+                ("", "http://example.com/"),
+                ("owl", "http://www.w3.org/2002/07/owl#"),
+                ("rdf", "http://www.w3.org/1999/02/22-rdf-syntax-ns#"),
+                ("xml", "http://www.w3.org/XML/1998/namespace"),
+                ("xsd", "http://www.w3.org/2001/XMLSchema#"),
+                ("rdfs", "http://www.w3.org/2000/01/rdf-schema#"),
+            ]
+        )
     }
 
     #[test]
