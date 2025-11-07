@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<rdf:RDF xmlns:dcam="http://purl.org/dc/dcam/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:owl="http://www.w3.org/2002/07/owl#" xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#" xmlns:skos="http://www.w3.org/2004/02/skos/core#">
+  <rdf:Description rdf:about="http://purl.org/dc/terms/creator">
+
+    <!-- https://github.com/phillord/horned-owl/issues/168 This use of
+         an OWL entity in the middle of an RDF file renamed after an
+         XML file is the cause of non-termination bug
+    -->
+
+    <owl:equivalentProperty rdf:resource="http://xmlns.com/foaf/0.1/maker"/>
+  </rdf:Description>
+</rdf:RDF>

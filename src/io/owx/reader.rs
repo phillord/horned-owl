@@ -100,10 +100,7 @@ pub fn read_with_build<A: ForIRI, O: MutableOntology<A> + Default, R: BufRead>(
             }
             // this initially was in `read_event`.
             (_, Event::Eof) => {
-                let pos = &r.reader.buffer_position();
-                return Err(invalid! {
-                    "Unexpected EoF at {}", pos
-                });
+                return Err(error_eof(&r));
             }
             _ => {}
         }
@@ -251,6 +248,12 @@ fn error_missing_attribute<A: ForIRI, AT: Into<String>, R: BufRead>(
     let pos = r.reader.buffer_position();
     invalid! {
         "Missing Attribute: expected {attribute} at {pos}"
+    }
+}
+
+fn error_eof<A: ForIRI, R: BufRead>(r: &Read<A, R>) -> HornedError {
+    invalid! {
+        "Unexpected EoF at {}", r.reader.buffer_position()
     }
 }
 
@@ -641,6 +644,9 @@ fn till_end_with<A: ForIRI, R: BufRead, T: FromStart<A> + std::fmt::Debug>(
             (ref ns, Event::End(ref e)) if is_owl_name(ns, e, end_tag) => {
                 return Ok(operands);
             }
+            (_, Event::Eof) => {
+                return Err(error_eof(r));
+            }
             _ => {}
         }
     }
@@ -848,7 +854,10 @@ from_start! {
                 {
                     return Err(error_unexpected_end_tag(axiom_kind.as_ref(), r));
                 },
-                _=>{
+                (_, Event::Eof) => {
+                    return Err(error_eof(r));
+                }
+                _ =>{
                 }
             }
         }
@@ -1143,6 +1152,9 @@ from_xml! {
                         av:av.unwrap()
                     });
                 },
+                (_, Event::Eof) => {
+                    return Err(error_eof(r));
+                },
                 _ =>{}
             }
         }
@@ -1157,6 +1169,9 @@ fn from_next<A: ForIRI, R: BufRead, T: FromStart<A>>(r: &mut Read<A, R>) -> Resu
         match e {
             (ref ns, Event::Empty(ref e)) | (ref ns, Event::Start(ref e)) if is_owl(ns) => {
                 return from_start(r, e);
+            }
+            (_, Event::Eof) => {
+                return Err(error_eof(r));
             }
             _ => {}
         }
@@ -1333,6 +1348,9 @@ from_xml! {IRI, r, end,
                         return iri.ok_or_else(
                             || error_unexpected_end_tag(end, r)                        );
                     },
+                    (_, Event::Eof) => {
+                        return Err(error_eof(r));
+                    },
                     _=>{}
                 }
             }
@@ -1345,14 +1363,26 @@ pub mod test {
     use crate::ontology::component_mapped::ComponentMappedOntology;
     use std::collections::HashMap;
 
+    pub fn read<R: BufRead>(
+        bufread: &mut R,
+    ) -> Result<
+        (
+            ComponentMappedOntology<RcStr, RcAnnotatedComponent>,
+            PrefixMapping,
+        ),
+        HornedError,
+    > {
+        let b = Build::new();
+        read_with_build(bufread, &b)
+    }
+
     pub fn read_ok<R: BufRead>(
         bufread: &mut R,
     ) -> (
         ComponentMappedOntology<RcStr, RcAnnotatedComponent>,
         PrefixMapping,
     ) {
-        let b = Build::new();
-        let r = read_with_build(bufread, &b);
+        let r = read(bufread);
         assert!(r.is_ok(), "Expected ontology, got failure:{:?}", r.err());
         let (o, m) = r.ok().unwrap();
         (o, m)
@@ -2349,5 +2379,22 @@ pub mod test {
     fn family() {
         let ont_s = include_str!("../../ont/owl-xml/manual/family.owx");
         let (_, _) = read_ok(&mut ont_s.as_bytes());
+    }
+
+    #[test]
+    fn does_read_terminate() {
+        let empty = "".to_string();
+        let b = Build::new_rc();
+        let r = read(&mut empty.as_bytes());
+
+        assert!(r.is_err());
+    }
+
+    #[test]
+    fn does_read_dc_terms_terminate() {
+        let ont_s = include_str!("../../ont/owl-xml/manual/terms_short.owx");
+        let r = read(&mut ont_s.as_bytes());
+
+        assert!(r.is_err());
     }
 }
