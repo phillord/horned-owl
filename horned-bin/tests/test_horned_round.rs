@@ -1,9 +1,10 @@
+use assert_cmd::cargo;
 use assert_cmd::prelude::*; // Add methods on commands
 use std::process::Command; // Run programs
 
 #[test]
 fn integration_round_ontology_xml() -> Result<(), Box<dyn std::error::Error>> {
-    let mut cmd = Command::cargo_bin("horned-round")?;
+    let mut cmd = Command::new(cargo::cargo_bin!("horned-round"));
 
     // and.owx is the output from bubo so will not be the
     // syntactically comparible
@@ -15,7 +16,7 @@ fn integration_round_ontology_xml() -> Result<(), Box<dyn std::error::Error>> {
 
 #[test]
 fn integration_round_ontology_rdf() -> Result<(), Box<dyn std::error::Error>> {
-    let mut cmd = Command::cargo_bin("horned-round")?;
+    let mut cmd = Command::new(cargo::cargo_bin!("horned-round"));
     // and.owx is the output from bubo so will not be the
     // syntactically comparible
     cmd.arg("../src/ont/owl-rdf/and.owl");

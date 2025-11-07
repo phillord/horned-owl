@@ -1,10 +1,12 @@
+use assert_cmd::cargo;
 use assert_cmd::prelude::*; // Add methods on commands
+
 use predicates::prelude::*; // Used for writing assertions
 use std::process::Command; // Run programs
 
 #[test]
 fn integration_file_doesnt_exist_owl() -> Result<(), Box<dyn std::error::Error>> {
-    let mut cmd = Command::cargo_bin("horned-parse")?;
+    let mut cmd = Command::new(cargo::cargo_bin!("horned-parse"));
 
     cmd.arg("test/file/doesnt/exist.owl");
     cmd.assert().failure();
@@ -15,7 +17,7 @@ fn integration_file_doesnt_exist_owl() -> Result<(), Box<dyn std::error::Error>>
 }
 #[test]
 fn integration_file_doesnt_exist_owx() -> Result<(), Box<dyn std::error::Error>> {
-    let mut cmd = Command::cargo_bin("horned-parse")?;
+    let mut cmd = Command::new(cargo::cargo_bin!("horned-parse"));
 
     cmd.arg("test/file/doesnt/exist.owx");
     cmd.assert()
@@ -27,7 +29,7 @@ fn integration_file_doesnt_exist_owx() -> Result<(), Box<dyn std::error::Error>>
 
 #[test]
 fn integration_parse_ontology_rdf() -> Result<(), Box<dyn std::error::Error>> {
-    let mut cmd = Command::cargo_bin("horned-parse")?;
+    let mut cmd = Command::new(cargo::cargo_bin!("horned-parse"));
 
     cmd.arg("../src/ont/owl-rdf/and.owl");
     cmd.assert()
@@ -39,7 +41,7 @@ fn integration_parse_ontology_rdf() -> Result<(), Box<dyn std::error::Error>> {
 
 #[test]
 fn integration_parse_ontology_xml() -> Result<(), Box<dyn std::error::Error>> {
-    let mut cmd = Command::cargo_bin("horned-parse")?;
+    let mut cmd = Command::new(cargo::cargo_bin!("horned-parse"));
 
     cmd.arg("../src/ont/owl-xml/and.owx");
     cmd.assert()
