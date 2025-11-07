@@ -8,19 +8,19 @@ use thiserror::Error;
 /// The location in a file of an error
 #[derive(Debug)]
 pub enum Location {
-    BytePosition(usize),
-    ByteSpan(Range<usize>),
+    BytePosition(u64),
+    ByteSpan(Range<u64>),
     Unknown,
 }
 
-impl From<usize> for Location {
-    fn from(u: usize) -> Self {
+impl From<u64> for Location {
+    fn from(u: u64) -> Self {
         Location::BytePosition(u)
     }
 }
 
-impl From<Range<usize>> for Location {
-    fn from(r: Range<usize>) -> Self {
+impl From<Range<u64>> for Location {
+    fn from(r: Range<u64>) -> Self {
         Location::ByteSpan(r)
     }
 }
@@ -28,15 +28,17 @@ impl From<Range<usize>> for Location {
 impl From<pest::error::InputLocation> for Location {
     fn from(l: pest::error::InputLocation) -> Self {
         match l {
-            pest::error::InputLocation::Pos(x) => Location::BytePosition(x),
-            pest::error::InputLocation::Span((x, y)) => Location::ByteSpan(x..y),
+            pest::error::InputLocation::Pos(x) => Location::BytePosition(x.try_into().unwrap()),
+            pest::error::InputLocation::Span((x, y)) => {
+                Location::ByteSpan(x.try_into().unwrap()..y.try_into().unwrap())
+            }
         }
     }
 }
 
 impl<'i> From<pest::Span<'i>> for Location {
     fn from(span: pest::Span<'i>) -> Self {
-        Location::ByteSpan(span.start()..span.end())
+        Location::ByteSpan(span.start().try_into().unwrap()..span.end().try_into().unwrap())
     }
 }
 

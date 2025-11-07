@@ -189,7 +189,7 @@ impl<A: ForIRI> Build<A> {
         Term::BNode(BNode(nn.id.to_string().into()))
     }
 
-    fn convert_to_pos_triple(&self, rio_triple: Triple, pos: usize) -> PosTriple<A> {
+    fn convert_to_pos_triple(&self, rio_triple: Triple, pos: u64) -> PosTriple<A> {
         PosTriple(
             [
                 self.to_term_bnn(&rio_triple.subject),
@@ -219,7 +219,7 @@ impl<A: ForIRI> Build<A> {
         PosTriple(term, pos)
     }
 
-    fn convert_substitute_triple(&self, rio_triple: Triple, pos: usize) -> PosTriple<A> {
+    fn convert_substitute_triple(&self, rio_triple: Triple, pos: u64) -> PosTriple<A> {
         self.substitute_triple(self.convert_to_pos_triple(rio_triple, pos))
     }
 
@@ -448,7 +448,7 @@ impl<A: ForIRI> IncompleteParse<A> {
 /// A triple of terms with a position from the file from which the
 /// triple was read.
 #[derive(Clone, Debug)]
-pub struct PosTriple<A: ForIRI>([Term<A>; 3], usize);
+pub struct PosTriple<A: ForIRI>([Term<A>; 3], u64);
 
 impl<A: ForIRI> From<[Term<A>; 3]> for PosTriple<A> {
     fn from(t: [Term<A>; 3]) -> PosTriple<A> {
@@ -469,7 +469,7 @@ impl<A: ForIRI> PosTriple<A> {
         &mut self.0
     }
 
-    pub fn position(&self) -> usize {
+    pub fn position(&self) -> u64 {
         self.1
     }
 }
@@ -477,7 +477,7 @@ impl<A: ForIRI> PosTriple<A> {
 /// A set of triples with a position in the file from which the
 /// triples were loaded.
 #[derive(Debug)]
-pub struct VPosTriple<A: ForIRI>(Vec<[Term<A>; 3]>, usize);
+pub struct VPosTriple<A: ForIRI>(Vec<[Term<A>; 3]>, u64);
 
 impl<A: ForIRI> IntoIterator for VPosTriple<A> {
     type Item = [Term<A>; 3];
@@ -516,7 +516,7 @@ impl<A: ForIRI> VPosTriple<A> {
         &mut self.0
     }
 
-    pub fn position(&self) -> usize {
+    pub fn position(&self) -> u64 {
         self.1
     }
 }
@@ -582,7 +582,8 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
         }
     }
 
-    /// Return a new OntologyParser taking all triples from an BufRead in RDF-XML.
+    /// Return a new OntologyParser taking all triples from an BufRead
+    /// in RDF-XML.
     pub fn from_bufread<'b, R: BufRead>(
         b: &'a Build<A>,
         bufread: &'b mut R,
@@ -598,7 +599,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
 
         while !parser.is_end() {
             parser.parse_step(&mut on_triple).unwrap();
-            last_pos.set(parser.buffer_position());
+            last_pos.set(parser.buffer_position().try_into().unwrap());
         }
 
         OntologyParser::new(b, triples, config)
@@ -1372,7 +1373,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
     /// panics if spe is any other kind of property
     fn error_or_none_on_annotation<X>(
         spe: Option<PropertyExpression<A>>,
-        pos: usize,
+        pos: u64,
     ) -> Result<Option<X>, HornedError> {
         match spe {
             Some(PropertyExpression::AnnotationProperty(_)) => Err(HornedError::invalid_at(

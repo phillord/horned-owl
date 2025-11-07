@@ -232,7 +232,7 @@ fn decode_tag<A: ForIRI, R: BufRead>(
 fn error_missing_end_tag<A: ForIRI, R: BufRead>(
     tag: &[u8],
     r: &mut Read<A, R>,
-    pos: usize,
+    pos: u64,
 ) -> HornedError {
     match decode_tag(tag, r) {
         Ok(tag) => invalid! {"Missing End Tag: expected {tag} after {pos}"},
@@ -2384,7 +2384,6 @@ pub mod test {
     #[test]
     fn does_read_terminate() {
         let empty = "".to_string();
-        let b = Build::new_rc();
         let r = read(&mut empty.as_bytes());
 
         assert!(r.is_err());
