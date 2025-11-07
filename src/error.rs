@@ -100,6 +100,12 @@ impl From<quick_xml::Error> for HornedError {
     }
 }
 
+impl From<quick_xml::encoding::EncodingError> for HornedError {
+    fn from(e: quick_xml::encoding::EncodingError) -> Self {
+        Self::ParserError(e.into(), Location::Unknown)
+    }
+}
+
 impl From<rio_xml::RdfXmlError> for HornedError {
     fn from(e: rio_xml::RdfXmlError) -> Self {
         Self::ParserError(e.into(), Location::Unknown)
