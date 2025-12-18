@@ -106,8 +106,8 @@ impl From<quick_xml::encoding::EncodingError> for HornedError {
     }
 }
 
-impl From<rio_xml::RdfXmlError> for HornedError {
-    fn from(e: rio_xml::RdfXmlError) -> Self {
+impl From<oxrdfio::RdfParseError> for HornedError {
+    fn from(e: oxrdfio::RdfParseError) -> Self {
         Self::ParserError(e.into(), Location::Unknown)
     }
 }

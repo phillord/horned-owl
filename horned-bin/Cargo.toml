@@ -20,8 +20,8 @@ horned-owl={path="../", version= "1.2.0" }
 indexmap={workspace=true}
 oxiri={workspace=true}
 pretty_rdf={workspace=true}
-rio_api={workspace=true}
-rio_xml={workspace=true}
+oxrdf={workspace=true}
+oxrdfio={workspace=true}
 
 [dev-dependencies]
 assert_cmd = "2.1.1"

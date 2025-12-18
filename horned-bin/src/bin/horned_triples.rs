@@ -8,9 +8,8 @@ use clap::ArgMatches;
 
 use horned_owl::error::HornedError;
 
-use pretty_rdf::RdfXmlFormatter;
-
-use rio_api::parser::TriplesParser;
+use oxrdfio::RdfParser;
+use pretty_rdf::{PTriple, RdfXmlFormatter};
 
 use std::io::BufReader;
 use std::{fs::File, io::stdout};
@@ -56,15 +55,17 @@ pub(crate) fn matcher(matches: &ArgMatches) -> Result<(), HornedError> {
 
     let file = File::open(input)?;
     let bufreader = BufReader::new(file);
-    let v: Vec<String> = rio_xml::RdfXmlParser::new(bufreader, None)
-        .into_iter(|rio_triple| {
-            Ok((
-                format!("{}", rio_triple.subject),
-                format!("{}", rio_triple.predicate),
-                format!("{}", rio_triple.object),
-            ))
+    let v: Vec<String> = RdfParser::from_format(oxrdfio::RdfFormat::RdfXml)
+        .for_reader(bufreader)
+        .map(Result::unwrap)
+        .map(|quad| {
+            (
+                format!("{}", quad.subject),
+                format!("{}", quad.predicate),
+                format!("{}", quad.object),
+                // ignore graph name
+            )
         })
-        .map(|t: Result<_, HornedError>| -> (String, String, String) { t.unwrap() })
         .filter(|t| {
             if let Some(f) = filter {
                 t.0.contains(f) || t.1.contains(f) || t.2.contains(f)
@@ -110,12 +111,17 @@ pub(crate) fn matcher(matches: &ArgMatches) -> Result<(), HornedError> {
         //let mut f = rio_xml::RdfXmlFormatter::with_indentation(&b, 4)?;
         let file = File::open(input)?;
         let bufreader = BufReader::new(file);
-        let _: Vec<Result<_, _>> = rio_xml::RdfXmlParser::new(bufreader, None)
-            .into_iter(|rio_triple| {
-                let t = rio_triple.into();
-                f.format(t)
-            })
+
+        let triples: Vec<PTriple<String>> = RdfParser::from_format(oxrdfio::RdfFormat::RdfXml)
+            .for_reader(bufreader)
+            .map(Result::unwrap)
+            .map(Into::into)
             .collect();
+
+        for t in triples {
+            f.format(t)?;
+        }
+
         f.finish()?;
     }
 

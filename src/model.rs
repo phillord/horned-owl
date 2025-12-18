@@ -271,11 +271,34 @@ impl<A: ForIRI> IRI<A> {
 pub struct Build<A: ForIRI>(
     RefCell<BTreeSet<IRI<A>>>,
     RefCell<BTreeSet<AnonymousIndividual<A>>>,
+    // Last anon individual
+    RefCell<i64>,
 );
 
 impl<A: ForIRI> Build<A> {
     pub fn new() -> Build<A> {
-        Build(RefCell::new(BTreeSet::new()), RefCell::new(BTreeSet::new()))
+        Build(
+            RefCell::new(BTreeSet::new()),
+            RefCell::new(BTreeSet::new()),
+            RefCell::new(0),
+        )
+    }
+
+    /// Constructs a new `AnonymousIndividual` with predictable name
+    ///
+    /// The naming scheme given in the test is not guaranteed
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use horned_owl::model::*;
+    /// let b = Build::new_rc();
+    /// assert_eq!("anon000001", String::from(b.anon_renumbered()));
+    /// assert_eq!("anon000002", String::from(b.anon_renumbered()));
+    /// ```
+    pub fn anon_renumbered(&self) -> AnonymousIndividual<A> {
+        self.2.replace_with(|&mut old| old + 1);
+        self.anon(format!("anon{:06}", self.2.borrow()))
     }
 
     /// Constructs a new `AnonymousIndividual`

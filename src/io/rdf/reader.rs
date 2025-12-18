@@ -1,8 +1,5 @@
 use Term::*;
-use rio_api::{
-    model::{BlankNode, NamedNode, Subject, Triple},
-    parser::TriplesParser,
-};
+use oxrdf::{BlankNode, NamedNode, NamedOrBlankNode, Triple};
 
 use crate::{error::HornedError, io::ParserConfiguration, vocab::Facet};
 use crate::{model::Literal, ontology::component_mapped::ComponentMappedOntology};
@@ -31,7 +28,7 @@ use std::fmt::Debug;
 use std::io::Cursor;
 use std::{io::BufRead, marker::PhantomData};
 
-type RioTerm<'a> = ::rio_api::model::Term<'a>;
+type OxTerm<'a> = ::oxrdf::Term;
 
 /// Evaluate $body which should return a value while allowing the use
 /// of the ? operator within body.
@@ -164,29 +161,29 @@ impl<A: ForIRI> Term<A> {
     }
 }
 
-impl<A: ForIRI> TryFrom<&NamedNode<'_>> for Term<A> {
+impl<A: ForIRI> TryFrom<&NamedNode> for Term<A> {
     type Error = HornedError;
 
-    fn try_from(value: &NamedNode<'_>) -> Result<Self, Self::Error> {
-        if let Some(res) = Vocab::lookup(value.iri) {
+    fn try_from(value: &NamedNode) -> Result<Self, Self::Error> {
+        if let Some(res) = Vocab::lookup(value.as_str()) {
             Term::try_from(res)
         } else {
-            Err(HornedError::invalid(value.iri))
+            Err(HornedError::invalid(value.as_str()))
         }
     }
 }
 
-impl TryFrom<&NamedNode<'_>> for crate::vocab::XSD {
+impl TryFrom<&NamedNode> for crate::vocab::XSD {
     type Error = HornedError;
 
-    fn try_from(value: &NamedNode<'_>) -> Result<Self, Self::Error> {
-        value.iri.parse::<Self>()
+    fn try_from(value: &NamedNode) -> Result<Self, Self::Error> {
+        value.as_str().parse::<Self>()
     }
 }
 
 impl<A: ForIRI> Build<A> {
     fn to_term_bn(nn: &BlankNode) -> Term<A> {
-        Term::BNode(BNode(nn.id.to_string().into()))
+        Term::BNode(BNode(nn.clone().into_string().into()))
     }
 
     fn convert_to_pos_triple(&self, rio_triple: Triple, pos: u64) -> PosTriple<A> {
@@ -223,50 +220,43 @@ impl<A: ForIRI> Build<A> {
         self.substitute_triple(self.convert_to_pos_triple(rio_triple, pos))
     }
 
-    fn to_term(&self, t: &RioTerm) -> Term<A> {
+    fn to_term(&self, t: &OxTerm) -> Term<A> {
         match t {
-            rio_api::model::Term::NamedNode(iri) => self.to_term_nn(iri),
-            rio_api::model::Term::BlankNode(id) => Self::to_term_bn(id),
-            rio_api::model::Term::Literal(l) => self.to_term_lt(l),
-            rio_api::model::Term::Triple(_) => {
-                unimplemented!("Triple subjects are not implemented")
-            }
+            oxrdf::Term::NamedNode(iri) => self.to_term_nn(iri),
+            oxrdf::Term::BlankNode(id) => Self::to_term_bn(id),
+            oxrdf::Term::Literal(l) => self.to_term_lt(l),
         }
     }
 
-    fn to_term_bnn(&self, subj: &Subject) -> Term<A> {
+    fn to_term_bnn(&self, subj: &NamedOrBlankNode) -> Term<A> {
         match subj {
-            Subject::NamedNode(nn) => self.to_term_nn(nn),
-            Subject::BlankNode(bn) => Self::to_term_bn(bn),
-            Subject::Triple(_) => unimplemented!("Triple subjects are not implemented"),
+            NamedOrBlankNode::NamedNode(nn) => self.to_term_nn(nn),
+            NamedOrBlankNode::BlankNode(bn) => Self::to_term_bn(bn),
         }
     }
 
     fn to_term_nn(&self, nn: &NamedNode) -> Term<A> {
-        Term::Iri(self.iri(nn.iri))
+        Term::Iri(self.iri(nn.as_str()))
     }
 
-    fn to_term_lt(&self, lt: &rio_api::model::Literal) -> Term<A> {
-        match lt {
-            rio_api::model::Literal::Simple { value } => Term::Literal(Literal::Simple {
-                literal: value.to_string(),
-            }),
-            rio_api::model::Literal::LanguageTaggedString { value, language } => {
-                Term::Literal(Literal::Language {
-                    literal: value.to_string(),
-                    lang: language.to_string(),
-                })
-            }
-            rio_api::model::Literal::Typed { value, datatype } => match datatype.try_into() {
-                Ok(crate::vocab::XSD::String) => Term::Literal(Literal::Simple {
-                    literal: value.to_string(),
-                }),
-                _ => Term::Literal(Literal::Datatype {
-                    literal: value.to_string(),
-                    datatype_iri: self.iri(datatype.iri),
-                }),
-            },
+    fn to_term_lt(&self, lt: &oxrdf::Literal) -> Term<A> {
+        if let Some(lang) = lt.language() {
+            return Term::Literal(Literal::Language {
+                literal: lt.value().to_string(),
+                lang: lang.to_string(),
+            });
         }
+
+        if lt.datatype().as_str() == "http://www.w3.org/2001/XMLSchema#string" {
+            return Term::Literal(Literal::Simple {
+                literal: lt.value().to_string(),
+            });
+        }
+
+        Term::Literal(Literal::Datatype {
+            literal: lt.value().to_string(),
+            datatype_iri: self.iri(lt.datatype().as_str()),
+        })
     }
 }
 
@@ -589,17 +579,15 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
         bufread: &'b mut R,
         config: ParserConfiguration,
     ) -> OntologyParser<'a, A, AA, O> {
-        let mut parser = rio_xml::RdfXmlParser::new(bufread, None);
+        let parser = oxrdfio::RdfParser::from_format(oxrdfio::RdfFormat::RdfXml);
         let mut triples = vec![];
         let last_pos = std::cell::Cell::new(0);
-        let mut on_triple = |rio_triple: rio_api::model::Triple| -> Result<_, HornedError> {
-            triples.push(b.convert_substitute_triple(rio_triple, last_pos.get()));
-            Ok(())
-        };
 
-        while !parser.is_end() {
-            parser.parse_step(&mut on_triple).unwrap();
-            last_pos.set(parser.buffer_position().try_into().unwrap());
+        for ox_quad in parser.for_reader(bufread) {
+            // TODO!
+            let ox_triple = ox_quad.unwrap().into();
+            triples.push(b.convert_substitute_triple(ox_triple, last_pos.get()));
+            //last_pos.set(parser.buffer_position().try_into().unwrap());
         }
 
         OntologyParser::new(b, triples, config)
@@ -803,9 +791,9 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                     av: ob.clone().into(),
                 })
             }
-            [_, Iri(p), Term::BNode(bnodeid)] => Ok(Annotation {
+            [_, Iri(p), Term::BNode(_)] => Ok(Annotation {
                 ap: AnnotationProperty(p.clone()),
-                av: AnonymousIndividual(bnodeid.0.clone()).into(),
+                av: self.b.anon_renumbered().into(),
             }),
             all => Err(HornedError::invalid(format!(
                 "Invalid annotation found {:?}",
@@ -1168,9 +1156,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
     /// Convert to an IArgument or None
     fn retrieve_to_iargument(&mut self, t: &Term<A>) -> Option<IArgument<A>> {
         match t {
-            Term::BNode(bn) => Some(IArgument::Individual(
-                AnonymousIndividual(bn.0.clone()).into(),
-            )),
+            Term::BNode(_) => Some(IArgument::Individual(self.b.anon_renumbered().into())),
             Term::Iri(iri) => self
                 // if it is a variable return it
                 .variable
@@ -2234,9 +2220,9 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
         }
         for (k, v) in std::mem::take(&mut self.bnode) {
             let fbnode =
-                |s: &mut OntologyParser<_, _, _>, t, ind: &BNode<A>| -> Result<_, HornedError> {
+                |s: &mut OntologyParser<_, _, _>, t, _: &BNode<A>| -> Result<_, HornedError> {
                     let ann = s.ann_map.remove(t).unwrap_or_default();
-                    let ind: AnonymousIndividual<A> = s.b.anon(ind.0.clone());
+                    let ind: AnonymousIndividual<A> = s.b.anon_renumbered();
                     s.merge(AnnotatedComponent {
                         component: AnnotationAssertion {
                             subject: ind.into(),

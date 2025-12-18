@@ -26,8 +26,8 @@ oxiri={workspace=true}
 pest = "2.7.8"
 pest_derive = "2.7.8"
 pretty_rdf={workspace=true}
-rio_api={workspace=true}
-rio_xml={workspace=true}
+oxrdf={workspace=true}
+oxrdfio={workspace=true}
 ureq={version="2.1.1", optional=true}
 
 [workspace]
@@ -38,9 +38,9 @@ default-members=[".", "horned-bin"]
 indexmap="1.0.2"
 oxiri="0.2.11"
 ##pretty_rdf={path="./pretty_rdf"}
-pretty_rdf="0.8.0"
-rio_api="0.8.4"
-rio_xml="0.8.4"
+pretty_rdf="0.10.0"
+oxrdf="0.3.0"
+oxrdfio="0.2.0"
 
 [features]
 default = ["remote"]
