@@ -579,7 +579,16 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
         bufread: &'b mut R,
         config: ParserConfiguration,
     ) -> OntologyParser<'a, A, AA, O> {
-        let parser = oxrdfio::RdfParser::from_format(oxrdfio::RdfFormat::RdfXml);
+        Self::from_bufread_with_format(b, bufread, config, oxrdfio::RdfFormat::RdfXml)
+    }
+
+    pub fn from_bufread_with_format<'b, R: BufRead>(
+        b: &'a Build<A>,
+        bufread: &'b mut R,
+        config: ParserConfiguration,
+        format: oxrdfio::RdfFormat,
+    ) -> OntologyParser<'a, A, AA, O> {
+        let parser = oxrdfio::RdfParser::from_format(format);
         let mut triples = vec![];
         let last_pos = std::cell::Cell::new(0);
 
@@ -2706,6 +2715,89 @@ mod test {
         .unwrap_err();
 
         assert!(matches! {err, HornedError::ValidityError(_,_)})
+    }
+
+    fn read_from_format<R: BufRead>(
+        bufread: &mut R,
+        config: ParserConfiguration,
+        format: oxrdfio::RdfFormat,
+    ) {
+        let (ont, incomp): (ConcreteRDFOntology<RcStr, Rc<AnnotatedComponent<RcStr>>>, _) =
+            OntologyParser::from_bufread_with_format(&Build::new_rc(), bufread, config, format)
+                .parse()
+                .unwrap();
+
+        dbg!(ont, incomp);
+    }
+
+    #[test]
+    fn test_ttl() {
+        let ont = r#"@prefix : <http://www.example.com/iri#> .
+@prefix o: <http://www.example.com/iri#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix xml: <http://www.w3.org/XML/1998/namespace> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@base <http://www.example.com/iri> .
+
+<http://www.example.com/iri> rdf:type owl:Ontology ;
+                              owl:versionIRI <http://www.example.com/viri> .
+
+#################################################################
+#    Classes
+#################################################################
+
+###  http://www.example.com/iri#C
+o:C rdf:type owl:Class .
+"#;
+
+        read_from_format(
+            &mut ont.as_bytes(),
+            Default::default(),
+            oxrdfio::RdfFormat::Turtle,
+        );
+
+        assert!(true);
+    }
+
+    #[test]
+    fn test_jsonld() {
+        let ont = r#"[
+  {
+    "@id": "http://www.example.com/iri",
+    "@type": [
+      "http://www.w3.org/2002/07/owl#Ontology"
+    ],
+    "http://www.w3.org/2002/07/owl#versionIRI": [
+      {
+        "@id": "http://www.example.com/viri"
+      }
+    ]
+  },
+  {
+    "@id": "http://www.example.com/iri#C",
+    "@type": [
+      "http://www.w3.org/2002/07/owl#Class"
+    ]
+  },
+  {
+    "@id": "http://www.example.com/viri"
+  },
+  {
+    "@id": "http://www.w3.org/2002/07/owl#Class"
+  },
+  {
+    "@id": "http://www.w3.org/2002/07/owl#Ontology"
+  }
+]"#;
+        read_from_format(
+            &mut ont.as_bytes(),
+            Default::default(),
+            oxrdfio::RdfFormat::JsonLd {
+                profile: oxrdfio::JsonLdProfileSet::empty(),
+            },
+        );
     }
 
     // #[test]
