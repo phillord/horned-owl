@@ -51,7 +51,8 @@ pub(crate) fn matcher(matches: &ArgMatches) -> Result<(), HornedError> {
             horned_owl::io::owx::writer::write(&mut stdout(), &amo, Some(&pm))
         }
         horned_owl::io::ParserOutput::RDFParser(rdfo, _ip) => {
-            horned_owl::io::rdf::writer::write(&mut stdout(), &rdfo.into())
+            horned_owl::io::rdf::writer::write(&mut stdout(), &rdfo.into())?;
+            Ok(())
         }
     };
     // Finish off nicely

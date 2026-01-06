@@ -9,7 +9,7 @@ use clap::ArgMatches;
 use horned_owl::error::HornedError;
 
 use oxrdfio::RdfParser;
-use pretty_rdf::{PTriple, RdfXmlFormatter};
+use pretty_rdf::{PTriple, RdfFormatter};
 
 use std::io::BufReader;
 use std::{fs::File, io::stdout};

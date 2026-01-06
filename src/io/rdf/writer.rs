@@ -12,7 +12,7 @@ use indexmap::indexmap;
 
 use pretty_rdf::{
     ChunkedRdfXmlFormatterConfig, PBlankNode, PLiteral, PNamedNode, PNamedOrBlankNode, PTerm,
-    PTriple, PrettyRdfXmlFormatter, RdfXmlFormatter,
+    PTriple, PrettyRdfXmlFormatter, RdfFormatter,
 };
 use std::{
     collections::{BTreeSet, HashSet},
@@ -20,13 +20,10 @@ use std::{
     io::Write,
 };
 
-/// Write a component mapped ontology into RDF
 pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
-    write: &mut W,
+    write: W,
     ont: &ComponentMappedOntology<A, AA>,
-) -> Result<(), HornedError> {
-    // Entirely unsatisfying to set this randomly here, but we can't
-    // access ns our parser yet
+) -> Result<W, HornedError> {
     let p = indexmap![
                     "http://www.w3.org/1999/02/22-rdf-syntax-ns#" => "rdf",
                     "http://www.w3.org/2002/07/owl#" => "owl",
@@ -34,21 +31,24 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
     ];
     let p = p.into_iter().map(|(k, v)| (k.into(), v.into())).collect();
 
+    let f = PrettyRdfXmlFormatter::new(write, ChunkedRdfXmlFormatterConfig::all().prefix(p))?;
+    write_to_rdf_formatter(ont, f)
+}
+
+/// Write a component mapped ontology into RDF
+pub fn write_to_rdf_formatter<A: ForIRI, AA: ForIndex<A>, F: RdfFormatter<A, W>, W: Write>(
+    ont: &ComponentMappedOntology<A, AA>,
+    mut formatter: F,
+) -> Result<W, HornedError> {
+    // Entirely unsatisfying to set this randomly here, but we can't
+    // access ns our parser yet
     let mut bng = NodeGenerator::default();
 
-    // let mut f =
-    //     pretty_rdf::NonPrettyRdfXmlFormatter::new(write, ChunkedRdfXmlFormatterConfig::all().prefix(p))?;
-    // ont.render(&mut f, &mut bng)?;
-    // f.finish()?;
-
-    let mut f = PrettyRdfXmlFormatter::new(write, ChunkedRdfXmlFormatterConfig::all().prefix(p))?;
-    ont.render(&mut f, &mut bng)?;
+    ont.render(&mut formatter, &mut bng)?;
     // for i in f.triples() {
     //     eprintln!("{}", i.printable());
     // }
-    f.finish()?;
-
-    Ok(())
+    Ok(formatter.finish()?)
 }
 
 /// Generates Nodes for RDF output
@@ -180,7 +180,7 @@ impl<A: ForIRI> From<&Individual<A>> for PNamedOrBlankNode<A> {
 
 /// Trait enabling things to render themselves as RDF.
 /// The return type is some node that the entity was rendered onto.
-trait Render<A: ForIRI, F: RdfXmlFormatter<A, W>, R, W: Write> {
+trait Render<A: ForIRI, F: RdfFormatter<A, W>, R, W: Write> {
     fn render(&self, f: &mut F, ng: &mut NodeGenerator<A>) -> Result<R, HornedError>;
 }
 
@@ -206,7 +206,7 @@ impl<A: ForIRI> From<Vec<PTriple<A>>> for Annotatable<A> {
 macro_rules! render {
     ($type:ident, $self:ident, $f:ident, $ng:ident, $return:ident,
      $body:tt) => {
-         impl<A: ForIRI, F: RdfXmlFormatter<A, W>, W:Write> Render<A, F, $return<A>, W> for $type<A> {
+         impl<A: ForIRI, F: RdfFormatter<A, W>, W:Write> Render<A, F, $return<A>, W> for $type<A> {
              fn render(& $self,
                  $f:&mut F,
                  $ng: &mut NodeGenerator<A>)
@@ -228,7 +228,7 @@ macro_rules! render_to_node {
 macro_rules! render_to_vec {
     ($type:ident, $self:ident, $f:ident, $ng:ident,
      $body:tt) => {
-         impl<A: ForIRI, F:RdfXmlFormatter<A, W>, W:Write> Render<A, F, Vec<PTriple<A>>, W> for $type<A> {
+         impl<A: ForIRI, F:RdfFormatter<A, W>, W:Write> Render<A, F, Vec<PTriple<A>>, W> for $type<A> {
             fn render(& $self, $f:&mut F,
                                $ng: &mut NodeGenerator<A>)
                                -> Result<Vec<PTriple<A>>, HornedError>
@@ -335,7 +335,7 @@ where
 // {
 //     fn render<W: Write>(
 //         &self,
-//         f: &mut PrettyRdfXmlFormatter<A, W>,
+//         f: &mut PrettyRdfFormatter<A, W>,
 //         ng: &mut NodeGenerator,
 //     ) -> Result<PTerm<A>, HornedError> {
 //         Ok(self.render(f, ng)?.into())
@@ -345,7 +345,7 @@ where
 /// Render a vector slice
 fn render_vec_subject<
     A: ForIRI,
-    F: RdfXmlFormatter<A, W>,
+    F: RdfFormatter<A, W>,
     T: Render<A, F, PNamedOrBlankNode<A>, W>,
     W: Write,
 >(
@@ -375,7 +375,7 @@ fn render_vec_subject<
 }
 
 // TODO This code is an almost exact duplicate of render_vec_slice. Why do I need both?
-impl<A: ForIRI, F: RdfXmlFormatter<A, W>, T, W: Write> Render<A, F, PTerm<A>, W> for &Vec<T>
+impl<A: ForIRI, F: RdfFormatter<A, W>, T, W: Write> Render<A, F, PTerm<A>, W> for &Vec<T>
 where
     T: Debug + Render<A, F, PTerm<A>, W>,
 {
@@ -403,9 +403,7 @@ where
 }
 
 // Written long hand rather than using `render` because the rules don't quite fit
-impl<A: ForIRI, F: RdfXmlFormatter<A, W>, W: Write> Render<A, F, (), W>
-    for BTreeSet<Annotation<A>>
-{
+impl<A: ForIRI, F: RdfFormatter<A, W>, W: Write> Render<A, F, (), W> for BTreeSet<Annotation<A>> {
     fn render(&self, f: &mut F, ng: &mut NodeGenerator<A>) -> Result<(), HornedError> {
         for r in self.iter() {
             r.render(f, ng)?;
@@ -414,7 +412,7 @@ impl<A: ForIRI, F: RdfXmlFormatter<A, W>, W: Write> Render<A, F, (), W>
     }
 }
 
-impl<A: ForIRI, AA: ForIndex<A>, F: RdfXmlFormatter<A, W>, W: Write> Render<A, F, (), W>
+impl<A: ForIRI, AA: ForIndex<A>, F: RdfFormatter<A, W>, W: Write> Render<A, F, (), W>
     for &ComponentMappedOntology<A, AA>
 {
     fn render(&self, f: &mut F, ng: &mut NodeGenerator<A>) -> Result<(), HornedError> {
@@ -446,7 +444,7 @@ impl<A: ForIRI, AA: ForIndex<A>, F: RdfXmlFormatter<A, W>, W: Write> Render<A, F
     }
 }
 
-impl<A: ForIRI, F: RdfXmlFormatter<A, W>, W: Write> Render<A, F, (), W> for AnnotatedComponent<A> {
+impl<A: ForIRI, F: RdfFormatter<A, W>, W: Write> Render<A, F, (), W> for AnnotatedComponent<A> {
     fn render(&self, f: &mut F, ng: &mut NodeGenerator<A>) -> Result<(), HornedError> {
         if self.component.is_meta() {
             return Ok(());
@@ -566,9 +564,7 @@ render! {
     }
 }
 
-impl<A: ForIRI, F: RdfXmlFormatter<A, W>, W: Write> Render<A, F, Annotatable<A>, W>
-    for Component<A>
-{
+impl<A: ForIRI, F: RdfFormatter<A, W>, W: Write> Render<A, F, Annotatable<A>, W> for Component<A> {
     fn render(&self, f: &mut F, ng: &mut NodeGenerator<A>) -> Result<Annotatable<A>, HornedError> {
         Ok(match self {
             // We render imports and ontology annotations earlier
@@ -871,7 +867,7 @@ render_to_vec! {
 
 fn members<
     A: ForIRI,
-    F: RdfXmlFormatter<A, W>,
+    F: RdfFormatter<A, W>,
     R: Debug + Render<A, F, PNamedOrBlankNode<A>, W>,
     W: Write,
 >(
@@ -1110,7 +1106,7 @@ render_to_node! {
     }
 }
 
-fn obj_cardinality<A: ForIRI, F: RdfXmlFormatter<A, W>, W: Write>(
+fn obj_cardinality<A: ForIRI, F: RdfFormatter<A, W>, W: Write>(
     n: &u32,
     ope: &ObjectPropertyExpression<A>,
     ce: &ClassExpression<A>,
@@ -1159,7 +1155,7 @@ fn obj_cardinality<A: ForIRI, F: RdfXmlFormatter<A, W>, W: Write>(
     ))
 }
 
-fn data_cardinality<A: ForIRI, F: RdfXmlFormatter<A, W>, W: Write>(
+fn data_cardinality<A: ForIRI, F: RdfFormatter<A, W>, W: Write>(
     n: &u32,
     dp: &DataProperty<A>,
     dr: &DataRange<A>,
@@ -1374,7 +1370,7 @@ render_to_node! {
     }
 }
 
-fn nary<A: ForIRI, F: RdfXmlFormatter<A, W>, R: Render<A, F, PNamedOrBlankNode<A>, W>, W: Write>(
+fn nary<A: ForIRI, F: RdfFormatter<A, W>, R: Render<A, F, PNamedOrBlankNode<A>, W>, W: Write>(
     f: &mut F,
     ng: &mut NodeGenerator<A>,
     entities: &[R],
@@ -1515,7 +1511,7 @@ render! {
     }
 }
 
-fn obj_prop_char<A: ForIRI, F: RdfXmlFormatter<A, W>, W: Write>(
+fn obj_prop_char<A: ForIRI, F: RdfFormatter<A, W>, W: Write>(
     ob: &ObjectPropertyExpression<A>,
     f: &mut F,
     ng: &mut NodeGenerator<A>,
@@ -1759,6 +1755,8 @@ mod test {
     use super::*;
     use crate::{model::Build, ontology::set::SetOntology};
 
+    use oxrdfio::RdfSerializer;
+    use pretty_rdf::ox::WriterQuadSerializerAdaptor;
     use test_generator::test_resources;
     // use std::collections::HashMap;
 
@@ -1904,5 +1902,44 @@ mod test {
             remove_dir_all("./tmp/owl-rdf")?;
             Ok(())
         }
+    }
+
+    #[test]
+    fn test_turtle() {
+        let rdfont = r#"
+<?xml version="1.0"?>
+<rdf:RDF xmlns="http://www.example.com/iri#"
+     xml:base="http://www.example.com/iri"
+     xmlns:o="http://www.example.com/iri#"
+     xmlns:owl="http://www.w3.org/2002/07/owl#"
+     xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+     xmlns:xml="http://www.w3.org/XML/1998/namespace"
+     xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+     xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#">
+    <owl:Ontology rdf:about="http://www.example.com/iri">
+        <owl:versionIRI rdf:resource="http://www.example.com/viri"/>
+    </owl:Ontology>
+    <owl:Class rdf:about="http://www.example.com/iri#C"/>
+</rdf:RDF>
+"#;
+        let ont = read_ok(&mut rdfont.as_bytes());
+        let sink = vec![];
+
+        let cmo: ComponentMappedOntology<RcStr, Rc<AnnotatedComponent<RcStr>>> = ont.into();
+
+        let formatter = WriterQuadSerializerAdaptor::new(
+            RdfSerializer::from_format(oxrdfio::RdfFormat::NTriples).for_writer(sink),
+        );
+
+        let w = write_to_rdf_formatter(&cmo, formatter).unwrap();
+
+        let out = String::from_utf8(w).unwrap();
+        assert_eq!(
+            out,
+            r#"<http://www.example.com/iri> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/2002/07/owl#Ontology> .
+<http://www.example.com/iri> <http://www.w3.org/2002/07/owl#versionIRI> <http://www.example.com/viri> .
+<http://www.example.com/iri#C> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/2002/07/owl#Class> .
+"#
+        );
     }
 }

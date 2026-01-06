@@ -34,7 +34,10 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: StdWrite>(
 ) -> Result<(), HornedError> {
     match format {
         "owx" => horned_owl::io::owx::writer::write(write, ont, None),
-        "owl" => horned_owl::io::rdf::writer::write(write, ont),
+        "owl" => {
+            horned_owl::io::rdf::writer::write(write, ont)?;
+            Ok(())
+        }
         _ => Err(HornedError::CommandError(format!(
             "Format is unknown: {format}"
         ))),
