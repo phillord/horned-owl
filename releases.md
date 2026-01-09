@@ -1,3 +1,8 @@
+Version 1.4.0
+=============
+
+Last release was not fully complete
+
 Version 1.3.0
 =============
 
@@ -13,7 +18,6 @@ Bugs:
  - The test suite is now more extensive and will reparse output from
    Horned-OWL with the OWL API to test for errors.
  - Lots of `todo!` statements have been removed.
- 
 
 Version 1.2.0
 =============
@@ -49,7 +53,7 @@ Notable additions include:
   - Addition of Functional Syntax parser/renderer
 
 There is now documentation for all modules. Code has been regularized.
- 
+
 Version 0.15.0
 ==============
 
