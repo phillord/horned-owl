@@ -29,15 +29,14 @@ pub mod error {
 
 pub fn write<A: ForIRI, AA: ForIndex<A>, W: StdWrite>(
     format: &str,
-    write: &mut W,
+    write: W,
     ont: &ComponentMappedOntology<A, AA>,
-) -> Result<(), HornedError> {
+) -> Result<W, HornedError> {
     match format {
         "owx" => horned_owl::io::owx::writer::write(write, ont, None),
-        "owl" => {
-            horned_owl::io::rdf::writer::write(write, ont)?;
-            Ok(())
-        }
+        "ofn" => horned_owl::io::ofn::writer::write(write, ont, None),
+        "owl" | "ttl" => horned_owl::io::rdf::writer::write_to_rdf_format(write, ont, format),
+
         _ => Err(HornedError::CommandError(format!(
             "Format is unknown: {format}"
         ))),
@@ -179,11 +178,7 @@ fn materialize_1<'a>(
     Ok(done)
 }
 
-pub fn generate_big_owl<W: StdWrite>(
-    size: isize,
-    format: &str,
-    w: &mut W,
-) -> Result<(), HornedError> {
+pub fn generate_big_owl<W: StdWrite>(size: isize, format: &str, w: W) -> Result<W, HornedError> {
     let b = Build::new_rc();
     let mut o = SetOntology::new_rc();
 
@@ -341,6 +336,7 @@ pub mod config {
         ParserConfiguration {
             rdf: RDFParserConfiguration {
                 lax: *matches.get_one::<bool>("lax").unwrap_or(&false),
+                format: None,
             },
             ..Default::default()
         }

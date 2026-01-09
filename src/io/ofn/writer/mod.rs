@@ -23,7 +23,7 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
     mut write: W,
     ont: &ComponentMappedOntology<A, AA>,
     mapping: Option<&PrefixMapping>,
-) -> Result<(), HornedError> {
+) -> Result<W, HornedError> {
     // Ensure we have a prefix mapping; the default is a no-op and
     // it's easier than checking every time.
     let default_mapper = PrefixMapping::default();
@@ -50,7 +50,7 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
 
     // Write prefixes
     write!(
-        &mut write,
+        write,
         "{}",
         <PrefixMapping as AsFunctional<A>>::as_functional(mapping)
     )?;
@@ -77,7 +77,7 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
             components.sort();
             for component in components {
                 writeln!(
-                    &mut write,
+                    write,
                     "    {}",
                     component.as_functional_with_prefixes(mapping)
                 )?;
@@ -86,7 +86,9 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
     }
 
     // Close the ontology
-    writeln!(write, ")").map_err(From::from)
+    writeln!(write, ")")?;
+
+    Ok(write)
 }
 
 #[cfg(test)]

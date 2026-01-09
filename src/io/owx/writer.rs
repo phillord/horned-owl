@@ -24,7 +24,7 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: StdWrite>(
     write: W,
     ont: &ComponentMappedOntology<A, AA>,
     mapping: Option<&PrefixMapping>,
-) -> Result<(), HornedError> {
+) -> Result<W, HornedError> {
     let mut writer = Writer::new_with_indent(write, b' ', 4);
 
     // Ensure we have a prefix mapping; the default is a no-op and
@@ -37,7 +37,7 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: StdWrite>(
 
     render_ont(ont, &mut writer, mapping)?;
 
-    Ok(())
+    Ok(writer.into_inner())
 }
 
 /// Add an IRI to BytesStart as a element if necessary

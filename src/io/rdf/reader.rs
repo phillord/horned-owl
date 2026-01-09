@@ -579,7 +579,12 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
         bufread: &'b mut R,
         config: ParserConfiguration,
     ) -> OntologyParser<'a, A, AA, O> {
-        Self::from_bufread_with_format(b, bufread, config, oxrdfio::RdfFormat::RdfXml)
+        Self::from_bufread_with_format(
+            b,
+            bufread,
+            config,
+            config.rdf.format.unwrap_or(oxrdfio::RdfFormat::RdfXml),
+        )
     }
 
     pub fn from_bufread_with_format<'b, R: BufRead>(

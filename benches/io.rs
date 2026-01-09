@@ -1,5 +1,6 @@
 use criterion::{AxisScale, BenchmarkId, Criterion, PlotConfiguration, criterion_group};
 use horned_bin::generate_big_owl;
+use horned_owl::io::{ParserConfiguration, RDFParserConfiguration};
 use horned_owl::model::RcStr;
 use horned_owl::ontology::set::SetOntology;
 use std::fs::{File, create_dir_all};
@@ -43,6 +44,26 @@ fn io_read(c: &mut Criterion) {
                     horned_owl::io::owx::reader::read(&mut f, Default::default())
                         .ok()
                         .unwrap();
+            })
+        });
+
+        let filename = format!("target/bench-data/o{}.ttl", n);
+        generate_if_needed(filename.clone(), n, "ttl");
+        group.bench_function(BenchmarkId::new("ttl_io_read", n), |b| {
+            b.iter(|| {
+                let f = File::open(filename.clone()).ok().unwrap();
+                let mut f = BufReader::new(f);
+                let _ = horned_owl::io::rdf::reader::read(
+                    &mut f,
+                    ParserConfiguration {
+                        rdf: RDFParserConfiguration {
+                            format: Some(oxrdfio::RdfFormat::Turtle),
+                            ..Default::default()
+                        },
+                        ..Default::default()
+                    },
+                )
+                .ok();
             })
         });
     }

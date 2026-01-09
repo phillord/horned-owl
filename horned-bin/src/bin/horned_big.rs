@@ -41,5 +41,6 @@ pub(crate) fn matcher(matches: &ArgMatches) -> Result<(), HornedError> {
         })?;
 
     let format = matches.value_of("format").expect("oops");
-    generate_big_owl(size, format, &mut stdout())
+    generate_big_owl(size, format, &mut stdout())?;
+    Ok(())
 }

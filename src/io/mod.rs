@@ -54,6 +54,7 @@ pub struct OWXParserConfiguration {}
 #[derive(Clone, Copy, Debug, Default)]
 pub struct RDFParserConfiguration {
     pub lax: bool,
+    pub format: Option<oxrdfio::RdfFormat>,
 }
 
 impl<A: ForIRI, AA: ForIndex<A>> ParserOutput<A, AA> {

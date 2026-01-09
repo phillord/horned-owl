@@ -41,22 +41,21 @@ pub(crate) fn matcher(matches: &ArgMatches) -> Result<(), HornedError> {
 
     let res = parse_path(Path::new(input), parser_config(matches))?;
 
-    let rtn = match res {
+    match res {
         horned_owl::io::ParserOutput::OFNParser(so, pm) => {
             let amo: RcComponentMappedOntology = so.into();
-            horned_owl::io::owx::writer::write(&mut stdout(), &amo, Some(&pm))
+            horned_owl::io::owx::writer::write(stdout(), &amo, Some(&pm))
         }
         horned_owl::io::ParserOutput::OWXParser(so, pm) => {
             let amo: RcComponentMappedOntology = so.into();
-            horned_owl::io::owx::writer::write(&mut stdout(), &amo, Some(&pm))
+            horned_owl::io::owx::writer::write(stdout(), &amo, Some(&pm))
         }
         horned_owl::io::ParserOutput::RDFParser(rdfo, _ip) => {
-            horned_owl::io::rdf::writer::write(&mut stdout(), &rdfo.into())?;
-            Ok(())
+            horned_owl::io::rdf::writer::write(stdout(), &rdfo.into())
         }
-    };
+    }?;
     // Finish off nicely
     println!();
 
-    rtn
+    Ok(())
 }

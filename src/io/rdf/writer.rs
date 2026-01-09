@@ -10,9 +10,10 @@ use crate::ontology::indexed::ForIndex;
 
 use indexmap::indexmap;
 
+use oxrdfio::RdfSerializer;
 use pretty_rdf::{
     ChunkedRdfXmlFormatterConfig, PBlankNode, PLiteral, PNamedNode, PNamedOrBlankNode, PTerm,
-    PTriple, PrettyRdfXmlFormatter, RdfFormatter,
+    PTriple, PrettyRdfXmlFormatter, RdfFormatter, ox::WriterQuadSerializerAdaptor,
 };
 use std::{
     collections::{BTreeSet, HashSet},
@@ -33,6 +34,24 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
 
     let f = PrettyRdfXmlFormatter::new(write, ChunkedRdfXmlFormatterConfig::all().prefix(p))?;
     write_to_rdf_formatter(ont, f)
+}
+
+pub fn write_to_rdf_format<A: ForIRI, AA: ForIndex<A>, W: Write>(
+    write: W,
+    ont: &ComponentMappedOntology<A, AA>,
+    format: &str,
+) -> Result<W, HornedError> {
+    let serial = |write, format| {
+        WriterQuadSerializerAdaptor::new(RdfSerializer::from_format(format).for_writer(write))
+    };
+
+    match format {
+        "owl" => crate::io::rdf::writer::write(write, ont),
+        "ttl" => write_to_rdf_formatter(ont, serial(write, oxrdfio::RdfFormat::NTriples)),
+        _ => Err(HornedError::CommandError(format!(
+            "Format is unknown: {format}"
+        ))),
+    }
 }
 
 /// Write a component mapped ontology into RDF
