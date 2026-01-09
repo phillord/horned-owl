@@ -1,3 +1,20 @@
+Version 1.3.0
+=============
+
+Features:
+ - The RDF parser has been substantially re-written, and the
+   mechanisms that it uses for distinguish properties changed, meaning
+   it now has a more meaningful "lax" mode which will parse more ontologies.
+ - The Rio dependency has been replaced by oxrdfio and all RDF output
+   formats that it provides are now supported.
+ - XML and RDF writer interface has been updated to return the Write instance.
+
+Bugs:
+ - The test suite is now more extensive and will reparse output from
+   Horned-OWL with the OWL API to test for errors.
+ - Lots of `todo!` statements have been removed.
+ 
+
 Version 1.2.0
 =============
 
@@ -32,7 +49,7 @@ Notable additions include:
   - Addition of Functional Syntax parser/renderer
 
 There is now documentation for all modules. Code has been regularized.
-
+ 
 Version 0.15.0
 ==============
 
