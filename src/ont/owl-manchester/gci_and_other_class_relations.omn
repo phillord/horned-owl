@@ -25,3 +25,9 @@ Class: o:mononucleate
 Class: o:nucleus
 
     
+Class: o:has_part some o:nucleus
+
+    SubClassOf: 
+        o:bearer_of some o:mononucleate
+    
+    

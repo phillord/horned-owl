@@ -16,7 +16,7 @@ Ontology: <http://www.example.com/iri>
 AnnotationProperty: rdfs:label
 
     
-Datatype: rdf:PlainLiteral
+Datatype: rdf:langString
 
     
 ObjectProperty: o:t

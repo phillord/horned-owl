@@ -19,8 +19,9 @@ AnnotationProperty: rdfs:comment
 Datatype: rdf:langString
 
     
-Class: 
-    Annotations: rdfs:comment "Comment on Declaration"@en
-  o:C
+Individual: _:genid2147483648
 
+    Annotations: 
+        rdfs:comment "fred"@en
+    
     

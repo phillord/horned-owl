@@ -13,6 +13,9 @@ Prefix: : <http://www.example.com/iri>
 Ontology: <http://www.example.com/iri>
 <http://www.example.com/viri>
 
+ObjectProperty: owl:sameAs
+
+    
 Individual: o:I
 
     

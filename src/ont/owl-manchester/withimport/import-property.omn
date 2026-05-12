@@ -1,6 +1,7 @@
 ## This file was created by Tawny-OWL
 ## It should not be edited by hand
 Prefix: o: <http://www.example.com/iri#>
+Prefix: other: <http://www.example.com/other-property#>
 Prefix: owl: <http://www.w3.org/2002/07/owl#>
 Prefix: rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
 Prefix: rdfs: <http://www.w3.org/2000/01/rdf-schema#>
@@ -12,15 +13,17 @@ Prefix: : <http://www.example.com/iri>
 
 Ontology: <http://www.example.com/iri>
 <http://www.example.com/viri>
+Import: <http://www.example.com/other-property>
 
-AnnotationProperty: rdfs:comment
-
-    
-Datatype: rdf:langString
+ObjectProperty: other:other-o
 
     
-Class: 
-    Annotations: rdfs:comment "Comment on Declaration"@en
-  o:C
+Class: o:A
 
+    
+Class: o:B
+
+    SubClassOf: 
+        other:other-o some o:A
+    
     

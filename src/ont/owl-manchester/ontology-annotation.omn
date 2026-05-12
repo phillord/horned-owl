@@ -19,6 +19,6 @@ Annotations:
 AnnotationProperty: <http://www.example.com/iri/propformat-version>
 
     
-Datatype: rdf:PlainLiteral
+Datatype: rdf:langString
 
     

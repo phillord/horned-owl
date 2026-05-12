@@ -16,6 +16,6 @@ Ontology: <http://www.example.com/iri>
 AnnotationProperty: rdfs:comment
 
     
-Datatype: rdf:PlainLiteral
+Datatype: rdf:langString
 
     

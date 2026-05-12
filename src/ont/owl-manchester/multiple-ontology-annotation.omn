@@ -27,6 +27,6 @@ AnnotationProperty: <http://purl.org/dc/terms/description>
 AnnotationProperty: rdfs:comment
 
     
-Datatype: rdf:PlainLiteral
+Datatype: rdf:langString
 
     

@@ -19,7 +19,7 @@ AnnotationProperty: rdfs:comment
 AnnotationProperty: rdfs:label
 
     
-Datatype: rdf:PlainLiteral
+Datatype: rdf:langString
 
     
 Class: o:C

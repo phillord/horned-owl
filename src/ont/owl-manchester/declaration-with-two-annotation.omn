@@ -19,9 +19,12 @@ AnnotationProperty: rdfs:comment
 AnnotationProperty: rdfs:label
 
     
-Datatype: rdf:PlainLiteral
+Datatype: rdf:langString
 
     
-Class: o:C
+Class: 
+    Annotations: rdfs:comment "Comment on Declaration"@en, 
+                 rdfs:label "Label on Declaration"@en
+  o:C
 
     

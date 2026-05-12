@@ -26,5 +26,5 @@ Class: o:B1
 
     
 Rule: 
-    o:A1(?<http://www.example.com/iri#x>), o:A(?<http://www.example.com/iri#x>) -> o:B1(?<http://www.example.com/iri#x>), o:B(?<http://www.example.com/iri#x>)
+    o:A(?<http://www.example.com/iri#x>), o:A1(?<http://www.example.com/iri#x>) -> o:B(?<http://www.example.com/iri#x>), o:B1(?<http://www.example.com/iri#x>)
 
