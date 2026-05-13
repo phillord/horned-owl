@@ -3,7 +3,7 @@ use pest_derive::Parser;
 
 use crate::error::HornedError;
 
-/// The OWL2 Functional-style Syntax lexer.
+/// The OWL2 Manchester-style Syntax lexer.
 #[derive(Debug, Parser)]
 #[grammar = "grammars/bcp47.pest"]
 #[grammar = "grammars/rfc3987.pest"]
