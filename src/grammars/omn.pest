@@ -33,7 +33,7 @@ LIT_SUB_PROPERTY_CHAIN  = _{ "SubPropertyChain" }
 KEYWORD_AND             = _{ "and" }
 KEYWORD_OR              = _{ "or" }
 KEYWORD_NOT             = _{ "not" }
-KEYWORD_INVERSE         = _{ "inverse"}
+KEYWORD_INVERSE         = _{ "inverse" | "inv" }
 
 LBRACKET = _{ "(" }
 RBRACKET = _{ ")" }
@@ -54,13 +54,17 @@ MINUS    = _{ "-" }
 AT       = _{ "@" }
 
 
-// FIXME: Check that all keyword terminals are covered.
+// FIXME: Check that all keyword terminals are covered. Done (what about `o`?)
 KEYWORD = { 
     "and" 
+    | "exactly"
+    | "inverse"
+    | "inv" // NOTE: not part of the specification, but the OWL-API accepts it as an alternative to `inverse`
     | "max" 
     | "min" 
     | "not" 
     | "only" 
+    | "onlysome"  // NOTE: not part of the specification, but the OWL-API accepts it as an alternative to TODO:
     | "or" 
     | "Self"
     | "some" 
@@ -148,6 +152,7 @@ Literal                   = {
     | IntegerLiteral 
 }
 
+// TODO: Is this needed? Seems to originate from OFN
 Entity = {
     (LIT_DATATYPE ~ LBRACKET ~ DatatypeIRI ~ RBRACKET)
     | (LIT_CLASS ~ LBRACKET ~ ClassIRI ~ RBRACKET)
@@ -163,14 +168,16 @@ Annotations             = { "Annotations:" ~ AnnotationAnnotatedList }
 Annotation              = { AnnotationPropertyIRI ~ AnnotationTarget }
 AnnotationTarget        = { Literal | NodeID | IRI }
 
-OntologyDocument  = { SOI ~ Prefixes ~ Ontology ~ EOI }
-Prefixes          = { PrefixDeclaration* }
-PrefixDeclaration = { "Prefix:" ~ PrefixName ~ FullIRI }
-Ontology          = { "Ontology:" ~ OntologyID? ~ Import* ~ Annotations* ~ Frame* }
-OntologyID        = { IRI ~ IRI? }
-Import            = { "Import:" ~ IRI }
-ImportIRI         = { IRI }
-Frame             = { 
+OntologyDocument    = { SOI ~ Prefixes ~ Ontology ~ EOI }
+Prefixes            = { PrefixDeclaration* }
+PrefixDeclaration   = { "Prefix:" ~ PrefixName ~ FullIRI }
+Ontology            = { "Ontology:" ~ OntologyID? ~ OntologyImports ~ OntologyAnnotations ~ Frame* }
+OntologyID          = { IRI ~ IRI? }
+OntologyImports     = { Import* }
+OntologyAnnotations = { Annotations* }
+Import              = { "Import:" ~ IRI }
+ImportIRI           = { IRI } // TODO: Needed?
+Frame               = { 
     DatatypeFrame 
     | ClassFrame 
     | InverseObjectPropertyFrame
@@ -192,7 +199,7 @@ PropertyExpression       = { ObjectPropertyExpression | DataPropertyExpression }
 DataRange = { DataConjunction ~ (KEYWORD_OR ~ DataConjunction)* }
 DataConjunction = { DataPrimary ~ (KEYWORD_AND ~ DataPrimary)*  }
 DataPrimary = { DataAtomicComplement | DataAtomic }
-DataAtomicComplement = { "not" ~ DataAtomic }
+DataAtomicComplement = { KEYWORD_NOT ~ DataAtomic }
 DataAtomic = { 
         ( LCURLY ~ LiteralList ~ RCURLY) 
     |   ( LBRACKET ~ DataRange ~ RBRACKET )
@@ -280,7 +287,7 @@ SymmetricCharacteristic         = { "Symmetric" }
 AsymmetricCharacteristic        = { "Asymmetric" }
 TransitiveCharacteristic        = { "Transitive" }
 
-DatatypeFrame              = { "Datatype:" ~ Datatype ~ DatatypeClause* }
+DatatypeFrame              = { "Datatype:" ~ Annotations? ~ Datatype ~ DatatypeClause* }
 DatatypeAnnotationsClause  = { "Annotations:" ~ AnnotationAnnotatedList }
 DatatypeEquivalentToClause = { "EquivalentTo:" ~ Annotations? ~ DataRange }
 DatatypeClause = {
@@ -288,23 +295,23 @@ DatatypeClause = {
     | DatatypeEquivalentToClause
 }
 
-ClassFrame                 = { "Class:" ~ ClassIRI ~ ClassClause* }
+ClassFrame                 = { "Class:" ~ Annotations? ~ Description ~ ClassClause* }
 ClassAnnotationsClause     = { "Annotations:" ~ AnnotationAnnotatedList }
 ClassSubClassOfClause      = { "SubClassOf:" ~ DescriptionAnnotatedList }
 ClassEquivalentToClause    = { "EquivalentTo:" ~ DescriptionAnnotatedList }
 ClassDisjointWithClause    = { "DisjointWith:" ~ DescriptionAnnotatedList }
 ClassDisjointUnionOfClause = { "DisjointUnionOf:" ~ Annotations? ~ Description2List }
 ClassHasKeyClause          = { "HasKey:" ~ Annotations? ~ PropertyExpression ~ (COMMA ~ PropertyExpression)* }
-ClassClause = { 
+ClassClause = {
     ClassAnnotationsClause 
     | ClassSubClassOfClause 
     | ClassEquivalentToClause 
     | ClassDisjointWithClause 
-    | ClassDisjointUnionOfClause 
+    | ClassDisjointUnionOfClause
     | ClassHasKeyClause 
 }
 
-ObjectPropertyFrame                  = { "ObjectProperty:" ~ ObjectPropertyIRI ~ ObjectPropertyClause* }
+ObjectPropertyFrame                  = { "ObjectProperty:" ~ Annotations? ~ ObjectPropertyExpression ~ ObjectPropertyClause* }
 ObjectPropertyAnnotationsClause      = { "Annotations:" ~ AnnotationAnnotatedList }
 ObjectPropertyDomainClause           = { "Domain:" ~ DescriptionAnnotatedList }
 ObjectPropertyRangeClause            = { "Range:" ~ DescriptionAnnotatedList }
@@ -335,7 +342,7 @@ ObjectPropertyCharacteristic = {
     | TransitiveCharacteristic
 }
 
-DataPropertyFrame                 = { ("DataProperty:" ~ DataPropertyIRI) ~ DataPropertyClause* }
+DataPropertyFrame                 = { "DataProperty:" ~ Annotations? ~ DataPropertyIRI ~ DataPropertyClause* }
 DataPropertyAnnotationsClause     = { "Annotations:" ~ AnnotationAnnotatedList }
 DataPropertyDomainClause          = { "Domain:" ~ DescriptionAnnotatedList }
 DataPropertyRangeClause           = { "Range:" ~ DataRangeAnnotatedList }
@@ -356,7 +363,7 @@ DataPropertyCharacteristic = {
     FunctionalCharacteristic
 }
 
-AnnotationPropertyFrame               = { "AnnotationProperty:" ~ AnnotationPropertyIRI ~ AnnotationPropertyClause* }
+AnnotationPropertyFrame               = { "AnnotationProperty:" ~ Annotations? ~ AnnotationPropertyIRI ~ AnnotationPropertyClause* }
 AnnotationPropertyAnnotationsClause   = { "Annotations:" ~ AnnotationAnnotatedList }
 AnnotationPropertyDomainClause        = { "Domain:" ~ IRIAnnotatedList }
 AnnotationPropertyRangeClause         = { "Range:" ~ IRIAnnotatedList }
@@ -368,7 +375,7 @@ AnnotationPropertyClause = {
     | AnnotationPropertySubPropertyOfClause
 }
 
-IndividualFrame               = { "Individual:" ~ Individual ~ IndividualClause* }
+IndividualFrame               = { "Individual:" ~ Annotations? ~ Individual ~ IndividualClause* }
 IndividualAnnotationsClause   = { "Annotations:" ~ AnnotationAnnotatedList }
 IndividualTypesClause         = { "Types:" ~ DescriptionAnnotatedList }
 IndividualFactsClause         = { "Facts:" ~ FactAnnotatedList }
