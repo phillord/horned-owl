@@ -744,8 +744,16 @@ impl<A: ForIRI, O: MutableOntology<A> + Ontology<A> + Default> FromPair<A>
         }
 
         // Process ontology annotations
-        for pair in next_or_err!(pairs)?.into_inner() {
-            ontology.insert(OntologyAnnotation::from_pair(pair, ctx)?);
+        for annotations_pair in next_or_err!(pairs)?.into_inner() {
+            let mut annotated_list = descend(annotations_pair)?.into_inner();
+            while let Some(mut item) = annotated_list.next() {
+                let ann = component_annotations(&mut item, &mut annotated_list, ctx)?;
+                let annotation = OntologyAnnotation::from_pair(item, ctx)?;
+                ontology.insert(AnnotatedComponent {
+                    ann,
+                    component: Component::OntologyAnnotation(annotation),
+                });
+            }
         }
 
         // Process frames
