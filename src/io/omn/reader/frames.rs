@@ -1,7 +1,7 @@
+use std::collections::BTreeSet;
+
 use crate::model::{
-    AnnotatedComponent, AnnotationProperty, Class, DataProperty, Datatype,
-    DeclareAnnotationProperty, DeclareClass, DeclareDataProperty, DeclareDatatype,
-    DeclareNamedIndividual, DeclareObjectProperty, ForIRI, Individual, ObjectProperty, ObjectPropertyExpression,
+    AnnotatedComponent, Annotation, AnnotationProperty, ClassExpression, Component, DataProperty, Datatype, DeclareAnnotationProperty, DeclareClass, DeclareDataProperty, DeclareDatatype, DeclareNamedIndividual, DeclareObjectProperty, ForIRI, Individual, ObjectProperty, ObjectPropertyExpression
 };
 
 // ---------------------------------------------------------------------------
@@ -26,11 +26,31 @@ impl<A: ForIRI, T> Frame<A, T> {
 
 // ---------------------------------------------------------------------------
 
-macro_rules! impl_from {
+macro_rules! impl_new {
+    ($ty:ident, $entity:ident, $complex_entity:ident, $declare:ident) => {
+        impl<A: ForIRI> $ty<A> {
+            pub fn new(entity: $complex_entity<A>, annotations: BTreeSet<Annotation<A>>) -> Self {
+                let components = if let $complex_entity::$entity(ref c) = entity {
+                    vec![AnnotatedComponent::new(
+                        Component::$declare($declare(c.clone()).into()),
+                        annotations,
+                    )]
+                } else {
+                    vec![]
+                };
+                Self { entity, components }
+            }
+        }
+    };
     ($ty:ident, $entity:ident, $declare:ident) => {
-        impl<A: ForIRI> From<$entity<A>> for $ty<A> {
-            fn from(entity: $entity<A>) -> Self {
-                let components = vec![$declare(entity.clone()).into()];
+        impl<A: ForIRI> $ty<A> {
+            pub fn new(entity: $entity<A>, annotations: BTreeSet<Annotation<A>>) -> Self {
+                let components = vec![
+                    AnnotatedComponent::new(
+                        Component::$declare($declare(entity.clone()).into()),
+                        annotations,
+                    ),
+                ];
                 Self { entity, components }
             }
         }
@@ -41,31 +61,31 @@ macro_rules! impl_from {
 
 pub type DatatypeFrame<A> = Frame<A, Datatype<A>>;
 
-impl_from!(DatatypeFrame, Datatype, DeclareDatatype);
+impl_new!(DatatypeFrame, Datatype, DeclareDatatype);
 
 // ---------------------------------------------------------------------------
 
-pub type ClassFrame<A> = Frame<A, Class<A>>;
+pub type ClassFrame<A> = Frame<A, ClassExpression<A>>;
 
-impl_from!(ClassFrame, Class, DeclareClass);
+impl_new!(ClassFrame, Class, ClassExpression, DeclareClass);
 
 // ---------------------------------------------------------------------------
 
-pub type ObjectPropertyFrame<A> = Frame<A, ObjectProperty<A>>;
+pub type ObjectPropertyFrame<A> = Frame<A, ObjectPropertyExpression<A>>;
 
-impl_from!(ObjectPropertyFrame, ObjectProperty, DeclareObjectProperty);
+impl_new!(ObjectPropertyFrame, ObjectProperty, ObjectPropertyExpression, DeclareObjectProperty);
 
 // ---------------------------------------------------------------------------
 
 pub type DataPropertyFrame<A> = Frame<A, DataProperty<A>>;
 
-impl_from!(DataPropertyFrame, DataProperty, DeclareDataProperty);
+impl_new!(DataPropertyFrame, DataProperty, DeclareDataProperty);
 
 // ---------------------------------------------------------------------------
 
 pub type AnnotationPropertyFrame<A> = Frame<A, AnnotationProperty<A>>;
 
-impl_from!(
+impl_new!(
     AnnotationPropertyFrame,
     AnnotationProperty,
     DeclareAnnotationProperty
