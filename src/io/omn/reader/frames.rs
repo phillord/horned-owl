@@ -1,7 +1,7 @@
 use std::collections::BTreeSet;
 
 use crate::model::{
-    AnnotatedComponent, Annotation, AnnotationProperty, ClassExpression, Component, DataProperty, Datatype, DeclareAnnotationProperty, DeclareClass, DeclareDataProperty, DeclareDatatype, DeclareNamedIndividual, DeclareObjectProperty, ForIRI, Individual, ObjectProperty, ObjectPropertyExpression
+    AnnotatedComponent, Annotation, AnnotationProperty, ClassExpression, Component, DataProperty, Datatype, DeclareAnnotationProperty, DeclareClass, DeclareDataProperty, DeclareDatatype, DeclareNamedIndividual, DeclareObjectProperty, ForIRI, Individual, ObjectPropertyExpression
 };
 
 // ---------------------------------------------------------------------------
@@ -96,11 +96,16 @@ impl_new!(
 pub type IndividualFrame<A> = Frame<A, Individual<A>>;
 
 // Need manual implementation because anonymous individuals must not be declared.
-impl<A: ForIRI> From<Individual<A>> for IndividualFrame<A> {
-    fn from(entity: Individual<A>) -> Self {
+impl<A: ForIRI> IndividualFrame<A> {
+    pub fn new(entity: Individual<A>, annotations: BTreeSet<Annotation<A>>) -> Self {
         let components = match &entity {
             Individual::Anonymous(_) => Vec::new(),
-            Individual::Named(ni) => vec![DeclareNamedIndividual(ni.clone()).into()],
+            Individual::Named(ni) => vec![
+                AnnotatedComponent::new(
+                    Component::DeclareNamedIndividual(DeclareNamedIndividual(ni.clone())),
+                    annotations,
+                )
+            ],
         };
         Self { entity, components }
     }

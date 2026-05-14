@@ -1470,8 +1470,9 @@ impl<A: ForIRI> FromPair<A> for IndividualFrame<A> {
     fn from_pair_unchecked(pair: Pair<Rule>, ctx: &Context<'_, A>) -> Result<Self> {
         let mut pairs = pair.into_inner();
 
+        let annotations = parse_optional_annotations(&mut pairs, ctx)?;
         let individual = Individual::from_pair(next_or_err!(pairs)?, ctx)?;
-        let mut frame = IndividualFrame::from(individual);
+        let mut frame = IndividualFrame::new(individual, annotations);
 
         for pair in pairs {
             debug_assert!(pair.as_rule() == Rule::IndividualClause);
@@ -2180,32 +2181,32 @@ use super::*;
     }
 
 
-    // #[test_resources("src/ont/owl-manchester/*.omn")]
-    // fn from_pair_resource(resource: &str) {
-    //     let text = &slurp::read_all_to_string(resource).unwrap();
-    //     let pair = match OwlManchesterLexer::lex(Rule::OntologyDocument, text.trim()) {
-    //         Err(e) => panic!("parser failed: {e}"),
-    //         Ok(mut pairs) => {
-    //             let pair = pairs.next().unwrap();
-    //             assert_eq!(pair.as_str(), text.trim());
-    //             pair
-    //         }
-    //     };
+    #[test_resources("src/ont/owl-manchester/*.omn")]
+    fn from_pair_resource(resource: &str) {
+        let text = &slurp::read_all_to_string(resource).unwrap();
+        let pair = match OwlManchesterLexer::lex(Rule::OntologyDocument, text.trim()) {
+            Err(e) => panic!("parser failed: {e}"),
+            Ok(mut pairs) => {
+                let pair = pairs.next().unwrap();
+                assert_eq!(pair.as_str(), text.trim());
+                pair
+            }
+        };
 
-    //     let build = Build::new();
-    //     let prefixes = PrefixMapping::default();
-    //     let ctx = Context::new(&build, &prefixes);
-    //     let item: (MutableOntologyWrapper<_, SetOntology<Rc<str>>>, _) =
-    //         FromPair::from_pair(pair, &ctx).unwrap();
+        let build = Build::new();
+        let prefixes = PrefixMapping::default();
+        let ctx = Context::new(&build, &prefixes);
+        let item: (MutableOntologyWrapper<_, SetOntology<Rc<str>>>, _) =
+            FromPair::from_pair(pair, &ctx).unwrap();
 
-    //     let path = resource
-    //         .replace("owl-manchester", "owl-xml")
-    //         .replace(".omn", ".owx");
-    //     let owx = &slurp::read_all_to_string(path).unwrap();
-    //     let expected =
-    //         crate::io::owx::reader::read(&mut Cursor::new(&owx), Default::default()).unwrap();
+        let path = resource
+            .replace("owl-manchester", "owl-xml")
+            .replace(".omn", ".owx");
+        let owx = &slurp::read_all_to_string(path).unwrap();
+        let expected =
+            crate::io::owx::reader::read(&mut Cursor::new(&owx), Default::default()).unwrap();
 
-    //     // pretty_assertions::assert_eq!(item.1, expected.1);
-    //     pretty_assertions::assert_eq!(item.0.0, expected.0);
-    // }
+        // pretty_assertions::assert_eq!(item.1, expected.1);
+        pretty_assertions::assert_eq!(item.0.0, expected.0);
+    }
 }
