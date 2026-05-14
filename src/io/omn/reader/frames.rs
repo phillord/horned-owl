@@ -95,10 +95,6 @@ impl<A: ForIRI> MiscClause<A> {
     pub fn new(component: AnnotatedComponent<A>) -> Self {
         MiscClause(Some(component))
     }
-
-    pub fn empty() -> Self {
-        MiscClause(None)
-    }
 }
 
 impl<A: ForIRI> From<AnnotatedComponent<A>> for MiscClause<A> {

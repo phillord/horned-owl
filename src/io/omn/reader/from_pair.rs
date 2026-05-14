@@ -11,7 +11,6 @@ use pest::iterators::Pairs;
 
 use crate::error::HornedError;
 use crate::model::*;
-use crate::ontology::set::SetOntology;
 use crate::vocab::Facet;
 
 use super::Context;
@@ -697,13 +696,6 @@ pub(crate) struct MutableOntologyWrapper<A: ForIRI, O: MutableOntology<A> + Onto
     PhantomData<A>,
 );
 
-impl <A: ForIRI> From<MutableOntologyWrapper<A, SetOntology<A>>> for SetOntology<A> {
-    fn from(wrapper: MutableOntologyWrapper<A, SetOntology<A>>) -> Self {
-        wrapper.0
-    }
-}
-
-
 impl<A: ForIRI> FromPair<A> for OntologyID<A> {
     const RULE: Rule = Rule::OntologyID;
     fn from_pair_unchecked(pair: Pair<Rule>, ctx: &Context<'_, A>) -> Result<Self> {
@@ -725,23 +717,26 @@ impl<A: ForIRI, O: MutableOntology<A> + Ontology<A> + Default> FromPair<A>
     const RULE: Rule = Rule::Ontology;
     fn from_pair_unchecked(pair: Pair<Rule>, ctx: &Context<'_, A>) -> Result<Self> {
         let mut pairs = pair.into_inner();
+
         let mut pair = next_or_err!(&mut pairs)?;
 
         let mut ontology: O = Default::default();
-        let mut ontology_id = OntologyID::default();
 
         // Parse ontology IRI and Version IRI if any
         if pair.as_rule() == Rule::OntologyID {
-            let inner = next_or_err!(&mut pair.into_inner())?;
-            ontology_id.iri = Some(IRI::from_pair(inner, ctx)?);
+            let mut inners = pair.into_inner();
+            let iri = Some(IRI::from_pair(next_or_err!(inners)?, ctx)?);
 
-            if let Some(inner) = pairs.next() {
-                ontology_id.viri = Some(IRI::from_pair(inner, ctx)?)
-            }
+            let viri = if let Some(inner) = inners.next() {
+                Some(IRI::from_pair(inner, ctx)?)
+            } else {
+                None
+            };
 
+            ontology.insert(OntologyID::new(iri, viri));
+            
             pair = next_or_err!(&mut pairs)?;
         }
-        ontology.insert(ontology_id);
 
         // Process imports
         for p in pair.into_inner() {
@@ -753,8 +748,8 @@ impl<A: ForIRI, O: MutableOntology<A> + Ontology<A> + Default> FromPair<A>
             ontology.insert(OntologyAnnotation::from_pair(pair, ctx)?);
         }
 
-        // Process frames: TODO
-        for pair in next_or_err!(pairs)?.into_inner() {
+        // Process frames
+        for pair in pairs {
             debug_assert!(pair.as_rule() == Rule::Frame);
             let inner = descend(pair)?;
             let components = match inner.as_rule() {
@@ -1738,6 +1733,15 @@ mod tests {
     use super::*;
     use crate::{io::omn::reader::lexer::OwlManchesterLexer, ontology::set::SetOntology};
 
+    impl FromPair<String> for SetOntology<String> {
+        const RULE: Rule = Rule::Ontology;
+
+        fn from_pair_unchecked(pair: Pair<Rule>, context: &Context<'_, String>) -> Result<Self> {
+            MutableOntologyWrapper::<String, SetOntology<String>>::from_pair(pair, context)
+                .map(|wrapper| wrapper.0)
+        }
+    }
+
     macro_rules! assert_parse_into {
         ($ty:ty, $rule:path, $build:ident, $prefixes:ident, $doc:expr, $expected:expr) => {
             let doc = $doc.trim();
@@ -1745,7 +1749,7 @@ mod tests {
             match OwlManchesterLexer::lex($rule, doc) {
                 Ok(mut pairs) => {
                     let res = <$ty as FromPair<_>>::from_pair(pairs.next().unwrap(), &ctx);
-                    assert_eq!(res.unwrap().into(), $expected.into());
+                    assert_eq!(res.unwrap(), $expected);
                 }
                 Err(e) => panic!(
                     "parsing using {:?}:\n{}\nfailed with: {}",
@@ -2054,31 +2058,31 @@ mod tests {
             .unwrap();
 
         assert_parse_into!(
-            MutableOntologyWrapper<String, SetOntology<String>>,
+            SetOntology<String>,
             Rule::Ontology,
             build,
             prefixes,
             r#"
             Ontology:
             "#,
-            MutableOntologyWrapper(SetOntology::new(), Default::default())
+            SetOntology::<String>::new()
         );
 
         let mut ont = SetOntology::new();
-        let mut id = OntologyID::new(
+        let id = OntologyID::new(
             Some(build.iri("http://purl.obolibrary.org/obo/ms.owl")),
             Some(build.iri("http://purl.obolibrary.org/obo/ms/4.1.29/ms.owl")),
         );
         ont.insert(id);
         assert_parse_into!(
-            MutableOntologyWrapper<String, SetOntology<String>>,
+            SetOntology<String>,
             Rule::Ontology,
             build,
             prefixes,
             r#"Ontology: <http://purl.obolibrary.org/obo/ms.owl>
                 <http://purl.obolibrary.org/obo/ms/4.1.29/ms.owl>
             "#,
-            MutableOntologyWrapper(ont, Default::default())
+            ont
         );
 
         let mut ont = SetOntology::new();
@@ -2107,7 +2111,7 @@ mod tests {
             })),
         });
         assert_parse_into!(
-            MutableOntologyWrapper<String, SetOntology<String>>,
+            SetOntology<String>,
             Rule::Ontology,
             build,
             prefixes,
@@ -2119,7 +2123,7 @@ mod tests {
                 <http://www.geneontology.org/formats/oboInOwl#hasOBOFormatVersion> "1.2",
                 <http://www.geneontology.org/formats/oboInOwl#saved-by> "cooperl"
             "#,
-            MutableOntologyWrapper(ont, Default::default())
+            ont
         );
     }
 
