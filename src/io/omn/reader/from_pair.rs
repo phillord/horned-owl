@@ -10,6 +10,7 @@ use pest::iterators::Pair;
 use pest::iterators::Pairs;
 
 use crate::error::HornedError;
+use crate::io::omn::reader::PropertyKind;
 use crate::model::*;
 use crate::vocab::Facet;
 
@@ -25,6 +26,88 @@ use super::frames::ObjectPropertyFrame;
 use super::lexer::Rule;
 
 type Result<T> = std::result::Result<T, HornedError>;
+// Alias for better readability
+enum ParseResult<'a, T> {
+    Success(T),
+    Ambiguous(T, Span<'a>),
+}
+use ParseResult::*;
+
+fn collect_parse_result<'a, T>(
+    results: impl Iterator<Item = ParseResult<'a, T>>,
+) -> ParseResult<'a, Vec<T>> {
+    let mut values = Vec::new();
+    let mut ambiguous = None;
+
+    for result in results {
+        match result {
+            Success(value) => values.push(value),
+            Ambiguous(value, span) => {
+                values.push(value);
+                ambiguous.get_or_insert(span);
+            }
+        }
+    }
+
+    if let Some(span) = ambiguous {
+        Ambiguous(values, span)
+    } else {
+        Success(values)
+    }
+}
+
+impl<'a, T> ParseResult<'a, T> {
+    fn map<U, F: FnOnce(T) -> U>(self, f: F) -> ParseResult<'a, U> {
+        match self {
+            Success(value) => Success(f(value)),
+            Ambiguous(value, span) => Ambiguous(f(value), span),
+        }
+    }
+
+    fn inner(&self) -> &T {
+        match self {
+            Success(value) => value,
+            Ambiguous(value, _) => value,
+        }
+    }
+
+    fn into_inner(self) -> T {
+        match self {
+            Success(value) => value,
+            Ambiguous(value, _) => value,
+        }
+    }
+
+    fn is_ambiguous(&self) -> bool {
+        matches!(self, Ambiguous(_, _))
+    }
+
+    fn is_success(&self) -> bool {
+        matches!(self, Success(_))
+    }
+
+    fn ambiguous_span(&self) -> Option<Span<'a>> {
+        match self {
+            Success(_) => None,
+            Ambiguous(_, span) => Some(*span),
+        }
+    }
+}
+
+impl<'a, T> From<T> for ParseResult<'a, T> {
+    fn from(value: T) -> Self {
+        Success(value)
+    }
+}
+
+impl<'a, T> From<ParseResult<'a, Result<T>>> for Result<ParseResult<'a, T>> {
+    fn from(result: ParseResult<'a, Result<T>>) -> Self {
+        match result {
+            Success(value) => value.map(Success),
+            Ambiguous(value, span) => value.map(|v| Ambiguous(v, span)),
+        }
+    }
+}
 
 fn pair_or_err<'a>(pair: Option<Pair<'a, Rule>>, message: &str) -> Result<Pair<'a, Rule>> {
     match pair {
@@ -87,13 +170,13 @@ macro_rules! parse_error {
 ///
 /// `Pair<Rule>` values can be obtained from the `OwlManchesterParser` struct
 /// after parsing a document.
-pub trait FromPair<A: ForIRI>: Sized {
+pub trait FromPair<'a, A: ForIRI>: Sized {
     /// The valid production rule for the implementor.
     const RULE: Rule;
 
     /// Create a new instance from a `Pair`.
     #[inline]
-    fn from_pair(pair: Pair<Rule>, context: &Context<'_, A>) -> Result<Self> {
+    fn from_pair(pair: Pair<'a, Rule>, context: &mut Context<'a, A>) -> Result<Self> {
         if cfg!(debug_assertions) && pair.as_rule() != Self::RULE {
             return Err(HornedError::from(pest::error::Error::new_from_span(
                 pest::error::ErrorVariant::ParsingError {
@@ -107,7 +190,7 @@ pub trait FromPair<A: ForIRI>: Sized {
     }
 
     /// Create a new instance from a `Pair` without checking the PEG rule.
-    fn from_pair_unchecked(pair: Pair<Rule>, context: &Context<'_, A>) -> Result<Self>;
+    fn from_pair_unchecked(pair: Pair<'a, Rule>, context: &mut Context<'a, A>) -> Result<Self>;
 }
 
 // --- Helpers ---------------------------------------------------------------
@@ -132,7 +215,7 @@ fn descend(pair: Pair<Rule>) -> Result<Pair<Rule>> {
 fn component_annotations<'a, A: ForIRI>(
     pair: &mut Pair<'a, Rule>,
     pairs: &mut Pairs<'a, Rule>,
-    ctx: &Context<'_, A>,
+    ctx: &mut Context<'a, A>,
 ) -> Result<BTreeSet<Annotation<A>>> {
     if pair.as_rule() == Rule::Annotations {
         let p = std::mem::replace(pair, next_or_err!(pairs)?);
@@ -147,10 +230,10 @@ fn component_annotations<'a, A: ForIRI>(
 
 macro_rules! impl_wrapper {
     ($ty:ident, $rule:path) => {
-        impl<A: ForIRI> FromPair<A> for $ty<A> {
+        impl<'a, A: ForIRI> FromPair<'a, A> for $ty<A> {
             const RULE: Rule = $rule;
-            fn from_pair_unchecked(pair: Pair<Rule>, ctx: &Context<'_, A>) -> Result<Self> {
-                FromPair::<A>::from_pair(descend(pair)?, ctx).map($ty)
+            fn from_pair_unchecked(pair: Pair<'a, Rule>, ctx: &mut Context<'a, A>) -> Result<Self> {
+                FromPair::<'a, A>::from_pair(descend(pair)?, ctx).map($ty)
             }
         }
     };
@@ -167,11 +250,14 @@ impl_wrapper!(AnnotationProperty, Rule::AnnotationPropertyIRI);
 
 macro_rules! impl_vector {
     ($A:ident, $ty:ty, $rule:path) => {
-        impl<$A: ForIRI> FromPair<$A> for $ty {
+        impl<'a, $A: ForIRI> FromPair<'a, $A> for $ty {
             const RULE: Rule = $rule;
-            fn from_pair_unchecked(pair: Pair<Rule>, ctx: &Context<'_, $A>) -> Result<Self> {
+            fn from_pair_unchecked(
+                pair: Pair<'a, Rule>,
+                ctx: &mut Context<'a, $A>,
+            ) -> Result<Self> {
                 pair.into_inner()
-                    .map(|pair| FromPair::from_pair(pair, ctx))
+                    .map(|pair| FromPair::<'a, $A>::from_pair(pair, ctx))
                     .collect()
             }
         }
@@ -184,31 +270,31 @@ impl_vector!(A, Vec<FacetRestriction<A>>, Rule::FacetRestrictionList);
 
 // --- Annotation ------------------------------------------------------------
 
-impl<A: ForIRI> FromPair<A> for Annotation<A> {
+impl<'a, A: ForIRI> FromPair<'a, A> for Annotation<A> {
     const RULE: Rule = Rule::Annotation;
-    fn from_pair_unchecked(pair: Pair<Rule>, ctx: &Context<'_, A>) -> Result<Self> {
+    fn from_pair_unchecked(pair: Pair<'a, Rule>, ctx: &mut Context<'a, A>) -> Result<Self> {
         let mut inner = pair.into_inner();
-        let ap = FromPair::<A>::from_pair(next_or_err!(inner)?, ctx)?;
-        let av = FromPair::<A>::from_pair(next_or_err!(inner)?, ctx)?;
+        let ap = FromPair::<'a, A>::from_pair(next_or_err!(inner)?, ctx)?;
+        let av = FromPair::<'a, A>::from_pair(next_or_err!(inner)?, ctx)?;
         Ok(Annotation { ap, av })
     }
 }
 
-impl<A: ForIRI> FromPair<A> for AnnotationValue<A> {
+impl<'a, A: ForIRI> FromPair<'a, A> for AnnotationValue<A> {
     const RULE: Rule = Rule::AnnotationTarget;
-    fn from_pair_unchecked(pair: Pair<Rule>, ctx: &Context<'_, A>) -> Result<Self> {
+    fn from_pair_unchecked(pair: Pair<'a, Rule>, ctx: &mut Context<'a, A>) -> Result<Self> {
         let inner = descend(pair)?;
         match inner.as_rule() {
             Rule::NodeID => {
-                let individual = FromPair::<A>::from_pair(inner, ctx)?;
+                let individual = FromPair::<'a, A>::from_pair(inner, ctx)?;
                 Ok(AnnotationValue::AnonymousIndividual(individual))
             }
             Rule::IRI => {
-                let iri = FromPair::<A>::from_pair(inner, ctx)?;
+                let iri = FromPair::<'a, A>::from_pair(inner, ctx)?;
                 Ok(AnnotationValue::IRI(iri))
             }
             Rule::Literal => {
-                let literal = FromPair::<A>::from_pair(inner, ctx)?;
+                let literal = FromPair::<'a, A>::from_pair(inner, ctx)?;
                 Ok(AnnotationValue::Literal(literal))
             }
             rule => unexpected_rule!(AnnotationValue, rule),
@@ -216,9 +302,9 @@ impl<A: ForIRI> FromPair<A> for AnnotationValue<A> {
     }
 }
 
-impl<A: ForIRI> FromPair<A> for BTreeSet<Annotation<A>> {
+impl<'a, A: ForIRI> FromPair<'a, A> for BTreeSet<Annotation<A>> {
     const RULE: Rule = Rule::AnnotationAnnotatedList;
-    fn from_pair_unchecked(pair: Pair<Rule>, ctx: &Context<'_, A>) -> Result<Self> {
+    fn from_pair_unchecked(pair: Pair<'a, Rule>, ctx: &mut Context<'a, A>) -> Result<Self> {
         let inner = pair.into_inner();
 
         inner
@@ -243,10 +329,11 @@ impl<A: ForIRI> FromPair<A> for BTreeSet<Annotation<A>> {
 // different rules into a ClassExpression anyway, but we still need to
 // support the different rules.
 
-fn from_restriction_pair<A: ForIRI>(
-    pair: Pair<Rule>,
-    ctx: &Context<'_, A>,
-) -> Result<ClassExpression<A>> {
+// Returns None if the restriction contains an undeclared property
+fn from_restriction_pair<'a, A: ForIRI>(
+    pair: Pair<'a, Rule>,
+    ctx: &mut Context<'a, A>,
+) -> Result<ParseResult<'a, ClassExpression<A>>> {
     debug_assert!(pair.as_rule() == Rule::Restriction);
 
     macro_rules! data_cardinality {
@@ -271,7 +358,33 @@ fn from_restriction_pair<A: ForIRI>(
                 );
             };
 
-            Ok(ClassExpression::$variant { n, dp, dr })
+            Ok(Success(ClassExpression::$variant { n, dp, dr }))
+        }};
+    }
+
+    macro_rules! ensure_object_property {
+        ($ope:ident, $span:ident, $result:expr) => {{
+            match $result {
+                Success(r) => {
+                    let kind = $ope
+                        .as_property()
+                        .map(|p| ctx.get_property_kind(p.clone()))
+                        .unwrap_or(Some(PropertyKind::Object));
+
+                    match kind {
+                        Some(PropertyKind::Object) => Ok(Success(r)),
+                        Some(_) => parse_error!(
+                            format!(
+                                "Expected '{:?}' as object property but is declared as {:?}",
+                                $ope, kind
+                            ),
+                            $span
+                        ),
+                        None => Ok(Ambiguous(r, $span)),
+                    }
+                }
+                Ambiguous(r, span) => Ok(Ambiguous(r, span)),
+            }
         }};
     }
 
@@ -284,7 +397,7 @@ fn from_restriction_pair<A: ForIRI>(
             let n = u32::from_pair(next_or_err!(pairs)?, $ctx)?;
 
             let bce = if let Some(pair) = pairs.next() {
-                from_primary_pair(pair, $ctx).map(Box::new)?
+                from_primary_pair(pair, $ctx)?.map(Box::new)
             } else {
                 // FIXME: currently unsupported in `horned-owl`
                 return parse_error!(
@@ -296,29 +409,39 @@ fn from_restriction_pair<A: ForIRI>(
                 );
             };
 
-            Ok(ClassExpression::$variant { n, ope, bce })
+            let ce = bce.map(|bce| ClassExpression::$variant {
+                n,
+                ope: ope.clone(),
+                bce,
+            });
+
+            ensure_object_property!(ope, span, ce)
         }};
     }
 
     let inner = descend(pair)?;
+    let span = inner.as_span();
+
+    // Resolve ambiguity between object and data property restrictions by first checking if the property is declared as a data property.
+    // For object properties we then
     match inner.as_rule() {
         Rule::DataSomeValuesFromRestriction => {
             let mut pairs = inner.into_inner();
             let dp = FromPair::from_pair(descend(next_or_err!(pairs)?)?, ctx)?;
             let dr = FromPair::from_pair(last_or_err!(pairs)?, ctx)?;
-            Ok(ClassExpression::DataSomeValuesFrom { dp, dr })
+            Ok(Success(ClassExpression::DataSomeValuesFrom { dp, dr }))
         }
         Rule::DataAllValuesFromRestriction => {
             let mut pairs = inner.into_inner();
             let dp = FromPair::from_pair(last_or_err!(next_or_err!(pairs)?.into_inner())?, ctx)?;
             let dr = FromPair::from_pair(last_or_err!(pairs)?, ctx)?;
-            Ok(ClassExpression::DataAllValuesFrom { dp, dr })
+            Ok(Success(ClassExpression::DataAllValuesFrom { dp, dr }))
         }
         Rule::DataHasValueRestriction => {
             let mut pairs = inner.into_inner();
             let dp = FromPair::from_pair(descend(next_or_err!(pairs)?)?, ctx)?;
             let l = FromPair::from_pair(last_or_err!(pairs)?, ctx)?;
-            Ok(ClassExpression::DataHasValue { dp, l })
+            Ok(Success(ClassExpression::DataHasValue { dp, l }))
         }
         Rule::DataMinCardinalityRestriction => {
             data_cardinality!(inner, ctx, ClassExpression::DataMinCardinality)
@@ -331,26 +454,53 @@ fn from_restriction_pair<A: ForIRI>(
         }
         Rule::ObjectSomeValuesFromRestriction => {
             let mut pairs = inner.into_inner();
-            let ope = FromPair::from_pair(next_or_err!(pairs)?, ctx)?;
-            let bce = from_primary_pair(next_or_err!(pairs)?, ctx).map(Box::new)?;
-            Ok(ClassExpression::ObjectSomeValuesFrom { ope, bce })
+            let ope: ObjectPropertyExpression<A> = FromPair::from_pair(next_or_err!(pairs)?, ctx)?;
+
+            let bce = from_primary_pair(next_or_err!(pairs)?, ctx)?.map(Box::new);
+
+            ensure_object_property!(
+                ope,
+                span,
+                bce.map(|bce| ClassExpression::ObjectSomeValuesFrom {
+                    ope: ope.clone(),
+                    bce
+                })
+            )
         }
         Rule::ObjectAllValuesFromRestriction => {
             let mut pairs = inner.into_inner();
-            let ope = FromPair::from_pair(next_or_err!(pairs)?, ctx)?;
-            let bce = from_primary_pair(next_or_err!(pairs)?, ctx).map(Box::new)?;
-            Ok(ClassExpression::ObjectAllValuesFrom { ope, bce })
+            let ope: ObjectPropertyExpression<A> = FromPair::from_pair(next_or_err!(pairs)?, ctx)?;
+
+            let bce = from_primary_pair(next_or_err!(pairs)?, ctx)?.map(Box::new);
+
+            ensure_object_property!(
+                ope,
+                span,
+                bce.map(|bce| ClassExpression::ObjectAllValuesFrom {
+                    ope: ope.clone(),
+                    bce
+                })
+            )
         }
         Rule::ObjectHasValueRestriction => {
             let mut pairs = inner.into_inner();
-            let ope = FromPair::from_pair(next_or_err!(pairs)?, ctx)?;
+            let ope: ObjectPropertyExpression<A> = FromPair::from_pair(next_or_err!(pairs)?, ctx)?;
+
             let i = FromPair::from_pair(next_or_err!(pairs)?, ctx)?;
-            Ok(ClassExpression::ObjectHasValue { ope, i })
+
+            ensure_object_property!(
+                ope,
+                span,
+                Success(ClassExpression::ObjectHasValue {
+                    ope: ope.clone(),
+                    i
+                })
+            )
         }
         Rule::ObjectHasSelfRestriction => {
             let mut pairs = inner.into_inner();
             let ope = FromPair::from_pair(next_or_err!(pairs)?, ctx)?;
-            Ok(ClassExpression::ObjectHasSelf(ope))
+            Ok(Success(ClassExpression::ObjectHasSelf(ope)))
         }
         Rule::ObjectMinCardinalityRestriction => {
             object_cardinality!(inner, ctx, ClassExpression::ObjectMinCardinality)
@@ -365,25 +515,29 @@ fn from_restriction_pair<A: ForIRI>(
     }
 }
 
-fn from_atomic_pair<A: ForIRI>(
-    pair: Pair<Rule>,
-    ctx: &Context<'_, A>,
-) -> Result<ClassExpression<A>> {
+fn from_atomic_pair<'a, A: ForIRI>(
+    pair: Pair<'a, Rule>,
+    ctx: &mut Context<'a, A>,
+) -> Result<ParseResult<'a, ClassExpression<A>>> {
     debug_assert!(pair.as_rule() == Rule::Atomic);
 
     let inner = descend(pair)?;
     match inner.as_rule() {
-        Rule::Description => FromPair::from_pair(inner, ctx),
-        Rule::ClassIRI => FromPair::from_pair(inner, ctx).map(ClassExpression::Class),
-        Rule::IndividualList => FromPair::from_pair(inner, ctx).map(ClassExpression::ObjectOneOf),
+        Rule::Description => FromPair::<'a, A>::from_pair(inner, ctx),
+        Rule::ClassIRI => FromPair::<'a, A>::from_pair(inner, ctx)
+            .map(ClassExpression::Class)
+            .map(Success),
+        Rule::IndividualList => FromPair::<'a, A>::from_pair(inner, ctx)
+            .map(ClassExpression::ObjectOneOf)
+            .map(Success),
         rule => unexpected_rule!(ClassExpression, rule),
     }
 }
 
-fn from_primary_pair<A: ForIRI>(
-    pair: Pair<Rule>,
-    ctx: &Context<'_, A>,
-) -> Result<ClassExpression<A>> {
+fn from_primary_pair<'a, A: ForIRI>(
+    pair: Pair<'a, Rule>,
+    ctx: &mut Context<'a, A>,
+) -> Result<ParseResult<'a, ClassExpression<A>>> {
     debug_assert!(pair.as_rule() == Rule::Primary);
 
     let mut inner = pair.into_inner();
@@ -402,17 +556,19 @@ fn from_primary_pair<A: ForIRI>(
         rule => unexpected_rule!(ClassExpression, rule),
     };
 
-    if is_complement {
-        ce.map(Box::new).map(ClassExpression::ObjectComplementOf)
-    } else {
-        ce
-    }
+    ce.map(|ce| {
+        if is_complement {
+            ce.map(Box::new).map(ClassExpression::ObjectComplementOf)
+        } else {
+            ce
+        }
+    })
 }
 
-fn from_conjunction_pair<A: ForIRI>(
-    pair: Pair<Rule>,
-    ctx: &Context<'_, A>,
-) -> Result<ClassExpression<A>> {
+fn from_conjunction_pair<'a, A: ForIRI>(
+    pair: Pair<'a, Rule>,
+    ctx: &mut Context<'a, A>,
+) -> Result<ParseResult<'a, ClassExpression<A>>> {
     debug_assert!(pair.as_rule() == Rule::Conjunction);
 
     let span = pair.as_span();
@@ -423,28 +579,32 @@ fn from_conjunction_pair<A: ForIRI>(
         .map(|r| match r.as_rule() {
             Rule::ClassIRI => {
                 let class = Class::from_pair(next_or_err!(inner)?, ctx)?;
-                let mut intersection = vec![ClassExpression::Class(class)];
+                let mut intersection: Vec<ParseResult<ClassExpression<A>>> =
+                    vec![Success(ClassExpression::Class(class))];
+
                 while let Some(pair) = inner.next() {
                     let cexp = if pair.as_rule() == Rule::KEYWORD_NOT {
-                        ClassExpression::ObjectComplementOf(Box::new(from_restriction_pair(
-                            next_or_err!(inner)?,
-                            ctx,
-                        )?))
+                        from_restriction_pair(next_or_err!(inner)?, ctx)?
+                            .map(|c| ClassExpression::ObjectComplementOf(Box::new(c)))
                     } else {
                         from_restriction_pair(pair, ctx)?
                     };
-                    intersection.push(cexp)
+                    intersection.push(cexp);
                 }
-                Ok(ClassExpression::ObjectIntersectionOf(intersection))
+
+                let intersection = collect_parse_result(intersection.into_iter());
+                Ok(intersection.map(ClassExpression::ObjectIntersectionOf))
             }
             Rule::Primary => {
-                let mut primaries = inner
+                let primaries: Vec<ParseResult<ClassExpression<A>>> = inner
                     .map(|pair| from_primary_pair(pair, ctx))
                     .collect::<Result<Vec<_>>>()?;
+
                 if primaries.len() == 1 {
-                    Ok(primaries.pop().unwrap())
+                    Ok(primaries.into_iter().next().unwrap())
                 } else {
-                    Ok(ClassExpression::ObjectIntersectionOf(primaries))
+                    Ok(collect_parse_result(primaries.into_iter())
+                        .map(ClassExpression::ObjectIntersectionOf))
                 }
             }
             rule => unexpected_rule!(ClassExpression, rule),
@@ -457,18 +617,17 @@ fn from_conjunction_pair<A: ForIRI>(
         })
 }
 
-impl<A: ForIRI> FromPair<A> for ClassExpression<A> {
+impl<'a, A: ForIRI> FromPair<'a, A> for ParseResult<'a, ClassExpression<A>> {
     const RULE: Rule = Rule::Description;
-    fn from_pair_unchecked(pair: Pair<Rule>, ctx: &Context<'_, A>) -> Result<Self> {
+    fn from_pair_unchecked(pair: Pair<'a, Rule>, ctx: &mut Context<'a, A>) -> Result<Self> {
         let mut inner = pair.into_inner();
         if inner.len() == 1 {
             from_conjunction_pair(next_or_err!(inner)?, ctx)
         } else {
-            Ok(ClassExpression::ObjectUnionOf(
-                inner
-                    .map(|pair| from_conjunction_pair(pair, ctx))
-                    .collect::<Result<_>>()?,
-            ))
+            let union_of = inner
+                .map(|pair| from_conjunction_pair(pair, ctx))
+                .collect::<Result<Vec<_>>>()?;
+            Ok(collect_parse_result(union_of.into_iter()).map(ClassExpression::ObjectUnionOf))
         }
     }
 }
@@ -478,9 +637,9 @@ impl<A: ForIRI> FromPair<A> for ClassExpression<A> {
 // Similarly to class expressions, data ranges can be parsed from several
 // production rules.
 
-fn from_data_conjunction_pair<A: ForIRI>(
-    pair: Pair<Rule>,
-    ctx: &Context<'_, A>,
+fn from_data_conjunction_pair<'a, A: ForIRI>(
+    pair: Pair<'a, Rule>,
+    ctx: &mut Context<'a, A>,
 ) -> Result<DataRange<A>> {
     debug_assert!(pair.as_rule() == Rule::DataConjunction);
 
@@ -495,7 +654,10 @@ fn from_data_conjunction_pair<A: ForIRI>(
     }
 }
 
-fn from_data_range_pair<A: ForIRI>(pair: Pair<Rule>, ctx: &Context<'_, A>) -> Result<DataRange<A>> {
+fn from_data_range_pair<'a, A: ForIRI>(
+    pair: Pair<'a, Rule>,
+    ctx: &mut Context<'a, A>,
+) -> Result<DataRange<A>> {
     debug_assert!(pair.as_rule() == Rule::DataRange);
 
     let mut ranges = pair
@@ -509,9 +671,9 @@ fn from_data_range_pair<A: ForIRI>(pair: Pair<Rule>, ctx: &Context<'_, A>) -> Re
     }
 }
 
-fn from_data_atomic_pair<A: ForIRI>(
-    pair: Pair<Rule>,
-    ctx: &Context<'_, A>,
+fn from_data_atomic_pair<'a, A: ForIRI>(
+    pair: Pair<'a, Rule>,
+    ctx: &mut Context<'a, A>,
 ) -> Result<DataRange<A>> {
     debug_assert!(pair.as_rule() == Rule::DataAtomic);
 
@@ -536,9 +698,9 @@ fn from_data_atomic_pair<A: ForIRI>(
     }
 }
 
-impl<A: ForIRI> FromPair<A> for DataRange<A> {
+impl<'a, A: ForIRI> FromPair<'a, A> for DataRange<A> {
     const RULE: Rule = Rule::DataPrimary;
-    fn from_pair_unchecked(pair: Pair<Rule>, ctx: &Context<'_, A>) -> Result<Self> {
+    fn from_pair_unchecked(pair: Pair<'a, Rule>, ctx: &mut Context<'a, A>) -> Result<Self> {
         let inner = descend(pair)?;
         match inner.as_rule() {
             Rule::DataAtomic => from_data_atomic_pair(inner, ctx),
@@ -553,9 +715,9 @@ impl<A: ForIRI> FromPair<A> for DataRange<A> {
     }
 }
 
-impl<A: ForIRI> FromPair<A> for Facet {
+impl<'a, A: ForIRI> FromPair<'a, A> for Facet {
     const RULE: Rule = Rule::FacetRestriction;
-    fn from_pair_unchecked(pair: Pair<Rule>, _ctx: &Context<'_, A>) -> Result<Self> {
+    fn from_pair_unchecked(pair: Pair<'a, Rule>, _ctx: &mut Context<'a, A>) -> Result<Self> {
         let inner = descend(pair)?;
         let facet = match inner.as_rule() {
             Rule::FacetLength => Facet::Length,
@@ -573,9 +735,9 @@ impl<A: ForIRI> FromPair<A> for Facet {
     }
 }
 
-impl<A: ForIRI> FromPair<A> for FacetRestriction<A> {
+impl<'a, A: ForIRI> FromPair<'a, A> for FacetRestriction<A> {
     const RULE: Rule = Rule::FacetRestriction;
-    fn from_pair_unchecked(pair: Pair<Rule>, ctx: &Context<'_, A>) -> Result<Self> {
+    fn from_pair_unchecked(pair: Pair<'a, Rule>, ctx: &mut Context<'a, A>) -> Result<Self> {
         let mut inner = pair.into_inner();
         let f = FromPair::from_pair(next_or_err!(inner)?, ctx)?;
         let l = FromPair::from_pair(descend(next_or_err!(inner)?)?, ctx)?;
@@ -592,9 +754,9 @@ impl<A: ForIRI> FromPair<A> for FacetRestriction<A> {
 // we can use hardcoded IRIs.
 // (see https://www.w3.org/TR/owl2-manchester-syntax/#Ontologies_and_Annotations)
 
-impl<A: ForIRI> FromPair<A> for Datatype<A> {
+impl<'a, A: ForIRI> FromPair<'a, A> for Datatype<A> {
     const RULE: Rule = Rule::Datatype;
-    fn from_pair_unchecked(pair: Pair<Rule>, ctx: &Context<'_, A>) -> Result<Self> {
+    fn from_pair_unchecked(pair: Pair<'a, Rule>, ctx: &mut Context<'a, A>) -> Result<Self> {
         macro_rules! xsd_datatype {
             ($ctx:ident, xsd: $datatype:expr) => {{
                 Ok($ctx.build.datatype(concat!(
@@ -618,9 +780,9 @@ impl<A: ForIRI> FromPair<A> for Datatype<A> {
 
 // ---------------------------------------------------------------------------
 
-impl<A: ForIRI> FromPair<A> for Individual<A> {
+impl<'a, A: ForIRI> FromPair<'a, A> for Individual<A> {
     const RULE: Rule = Rule::Individual;
-    fn from_pair_unchecked(pair: Pair<Rule>, ctx: &Context<'_, A>) -> Result<Self> {
+    fn from_pair_unchecked(pair: Pair<'a, Rule>, ctx: &mut Context<'a, A>) -> Result<Self> {
         let inner = descend(pair)?;
         match inner.as_rule() {
             Rule::IndividualIRI => FromPair::from_pair(inner, ctx).map(Individual::Named),
@@ -630,9 +792,9 @@ impl<A: ForIRI> FromPair<A> for Individual<A> {
     }
 }
 
-impl<A: ForIRI> FromPair<A> for AnonymousIndividual<A> {
+impl<'a, A: ForIRI> FromPair<'a, A> for AnonymousIndividual<A> {
     const RULE: Rule = Rule::NodeID;
-    fn from_pair_unchecked(pair: Pair<Rule>, ctx: &Context<'_, A>) -> Result<Self> {
+    fn from_pair_unchecked(pair: Pair<'a, Rule>, ctx: &mut Context<'a, A>) -> Result<Self> {
         let iri = ctx.build.iri(pair.as_str());
         Ok(AnonymousIndividual(iri.underlying()))
     }
@@ -640,9 +802,9 @@ impl<A: ForIRI> FromPair<A> for AnonymousIndividual<A> {
 
 // ---------------------------------------------------------------------------
 
-impl<A: ForIRI> FromPair<A> for Literal<A> {
+impl<'a, A: ForIRI> FromPair<'a, A> for Literal<A> {
     const RULE: Rule = Rule::Literal;
-    fn from_pair_unchecked(pair: Pair<Rule>, ctx: &Context<'_, A>) -> Result<Self> {
+    fn from_pair_unchecked(pair: Pair<'a, Rule>, ctx: &mut Context<'a, A>) -> Result<Self> {
         macro_rules! xsd_literal {
             ($pair:ident, $ctx:ident, xsd: $datatype:expr) => {{
                 let literal = $pair.as_str().to_string();
@@ -696,9 +858,9 @@ pub(crate) struct MutableOntologyWrapper<A: ForIRI, O: MutableOntology<A> + Onto
     PhantomData<A>,
 );
 
-impl<A: ForIRI> FromPair<A> for OntologyID<A> {
+impl<'a, A: ForIRI> FromPair<'a, A> for OntologyID<A> {
     const RULE: Rule = Rule::OntologyID;
-    fn from_pair_unchecked(pair: Pair<Rule>, ctx: &Context<'_, A>) -> Result<Self> {
+    fn from_pair_unchecked(pair: Pair<'a, Rule>, ctx: &mut Context<'a, A>) -> Result<Self> {
         let mut pairs = pair.into_inner();
 
         let iri = Some(FromPair::<A>::from_pair(next_or_err!(pairs)?, ctx)?);
@@ -711,11 +873,11 @@ impl<A: ForIRI> FromPair<A> for OntologyID<A> {
     }
 }
 
-impl<A: ForIRI, O: MutableOntology<A> + Ontology<A> + Default> FromPair<A>
+impl<'a, A: ForIRI, O: MutableOntology<A> + Ontology<A> + Default> FromPair<'a, A>
     for MutableOntologyWrapper<A, O>
 {
     const RULE: Rule = Rule::Ontology;
-    fn from_pair_unchecked(pair: Pair<Rule>, ctx: &Context<'_, A>) -> Result<Self> {
+    fn from_pair_unchecked(pair: Pair<'a, Rule>, ctx: &mut Context<'a, A>) -> Result<Self> {
         let mut pairs = pair.into_inner();
 
         let mut pair = next_or_err!(&mut pairs)?;
@@ -734,7 +896,7 @@ impl<A: ForIRI, O: MutableOntology<A> + Ontology<A> + Default> FromPair<A>
             };
 
             ontology.insert(OntologyID::new(iri, viri));
-            
+
             pair = next_or_err!(&mut pairs)?;
         }
 
@@ -756,13 +918,28 @@ impl<A: ForIRI, O: MutableOntology<A> + Ontology<A> + Default> FromPair<A>
             }
         }
 
+        let frames = pairs;
+
         // Process frames
-        for pair in pairs {
+        for pair in frames {
             debug_assert!(pair.as_rule() == Rule::Frame);
             let inner = descend(pair)?;
             let components = match inner.as_rule() {
                 Rule::DatatypeFrame => DatatypeFrame::from_pair(inner, ctx)?.into_components(),
-                Rule::ClassFrame => ClassFrame::from_pair(inner, ctx)?.into_components(),
+                Rule::ClassFrame => {
+                    let class_components: ParseResult<ClassFrame<A>> =
+                        FromPair::from_pair(inner, ctx)?;
+                    match class_components {
+                        Success(frame) => frame.into_components(),
+                        Ambiguous(frame, span) => {
+                            for component in frame.into_components() {
+                                ctx.add_ambiguous_component(component, span);
+                            }
+                            vec![]
+                        }
+                        _ => vec![],
+                    }
+                }
                 Rule::ObjectPropertyFrame => {
                     ObjectPropertyFrame::from_pair(inner, ctx)?.into_components()
                 }
@@ -777,11 +954,16 @@ impl<A: ForIRI, O: MutableOntology<A> + Ontology<A> + Default> FromPair<A>
                 }
                 Rule::IndividualFrame => IndividualFrame::from_pair(inner, ctx)?.into_components(),
                 Rule::MiscClause => {
-                    let clause = MiscClause::from_pair(inner, ctx)?;
-                    clause
-                        .0
-                        .map(|component| vec![component])
-                        .unwrap_or_default()
+                    let clause: ParseResult<MiscClause<A>> = FromPair::from_pair(inner, ctx)?;
+
+                    match clause {
+                        Success(c) => c.0.map(|component| vec![component]).unwrap_or_default(),
+                        Ambiguous(MiscClause(Some(c)), span) => {
+                            ctx.add_ambiguous_component(c, span);
+                            vec![]
+                        }
+                        _ => vec![],
+                    }
                 }
                 rule => unexpected_rule!(Frame, rule)?,
             };
@@ -794,13 +976,13 @@ impl<A: ForIRI, O: MutableOntology<A> + Ontology<A> + Default> FromPair<A>
     }
 }
 
-impl<A, O> FromPair<A> for (MutableOntologyWrapper<A, O>, PrefixMapping)
+impl<'a, A, O> FromPair<'a, A> for (MutableOntologyWrapper<A, O>, PrefixMapping)
 where
     A: ForIRI,
     O: Ontology<A> + MutableOntology<A> + Default,
 {
     const RULE: Rule = Rule::OntologyDocument;
-    fn from_pair_unchecked(pair: Pair<Rule>, ctx: &Context<'_, A>) -> Result<Self> {
+    fn from_pair_unchecked(pair: Pair<'a, Rule>, ctx: &mut Context<'a, A>) -> Result<Self> {
         let mut pairs = pair.into_inner();
 
         // Build the prefix mapping and use it to build the ontology
@@ -822,14 +1004,13 @@ where
             }
         }
 
-        let context = Context::new(ctx.build, &prefixes);
-        MutableOntologyWrapper::from_pair(next_or_err!(pairs)?, &context).map(|ont| (ont, prefixes))
+        MutableOntologyWrapper::from_pair(next_or_err!(pairs)?, ctx).map(|ont| (ont, prefixes))
     }
 }
 
-impl<A: ForIRI> FromPair<A> for OntologyAnnotation<A> {
+impl<'a, A: ForIRI> FromPair<'a, A> for OntologyAnnotation<A> {
     const RULE: Rule = Rule::Annotation;
-    fn from_pair_unchecked(pair: Pair<Rule>, ctx: &Context<'_, A>) -> Result<Self> {
+    fn from_pair_unchecked(pair: Pair<'a, Rule>, ctx: &mut Context<'a, A>) -> Result<Self> {
         Annotation::from_pair(pair, ctx).map(OntologyAnnotation)
     }
 }
@@ -842,9 +1023,14 @@ macro_rules! annotated_component {
         while let Some(mut $pair) = annotated_list.next() {
             let ann = component_annotations(&mut $pair, &mut annotated_list, $ctx)?;
             let component = $component;
-            $frame
-                .components
-                .push(AnnotatedComponent { component, ann });
+            match component {
+                Success(component) => $frame
+                    .components
+                    .push(AnnotatedComponent { ann, component }),
+                Ambiguous(component, span) => {
+                    $ctx.add_ambiguous_component(component, span);
+                }
+            }
         }
     }};
 }
@@ -861,22 +1047,22 @@ macro_rules! simple_component {
     };
 }
 
-fn parse_optional_annotations<A: ForIRI>(
-    pairs: &mut Pairs<Rule>,
-    ctx: &Context<'_, A>,
+fn parse_optional_annotations<'a, A: ForIRI>(
+    pairs: &mut Pairs<'a, Rule>,
+    ctx: &mut Context<'a, A>,
 ) -> Result<BTreeSet<Annotation<A>>> {
     if let Some(pair) = pairs.peek() {
         if pair.as_rule() == Rule::Annotations {
-            return BTreeSet::from_pair(descend(pair)?, ctx)
+            return BTreeSet::from_pair(descend(pair)?, ctx);
         }
     }
 
     Ok(BTreeSet::new())
 }
 
-impl<A: ForIRI> FromPair<A> for DatatypeFrame<A> {
+impl<'a, A: ForIRI> FromPair<'a, A> for DatatypeFrame<A> {
     const RULE: Rule = Rule::DatatypeFrame;
-    fn from_pair_unchecked(pair: Pair<Rule>, ctx: &Context<'_, A>) -> Result<Self> {
+    fn from_pair_unchecked(pair: Pair<'a, Rule>, ctx: &mut Context<'a, A>) -> Result<Self> {
         let mut pairs = pair.into_inner();
 
         let annotations = parse_optional_annotations(&mut pairs, ctx)?;
@@ -896,7 +1082,7 @@ impl<A: ForIRI> FromPair<A> for DatatypeFrame<A> {
                         component = {
                             let ann = FromPair::from_pair(pair, ctx)?;
                             let subject = AnnotationSubject::IRI(frame.entity.0.clone());
-                            AnnotationAssertion { subject, ann }.into()
+                            Success(AnnotationAssertion { subject, ann }.into())
                         }
                     )
                 }
@@ -919,15 +1105,17 @@ impl<A: ForIRI> FromPair<A> for DatatypeFrame<A> {
     }
 }
 
-
-
-impl<A: ForIRI> FromPair<A> for ClassFrame<A> {
+impl<'a, A: ForIRI> FromPair<'a, A> for ParseResult<'a, ClassFrame<A>> {
     const RULE: Rule = Rule::ClassFrame;
-    fn from_pair_unchecked(pair: Pair<Rule>, ctx: &Context<'_, A>) -> Result<Self> {
+    fn from_pair_unchecked(pair: Pair<'a, Rule>, ctx: &mut Context<'a, A>) -> Result<Self> {
         let mut pairs = pair.into_inner();
 
         let annotations = parse_optional_annotations(&mut pairs, ctx)?;
-        let class_expr = ClassExpression::from_pair(next_or_err!(pairs)?, ctx)?;
+        let class_expr: ParseResult<ClassExpression<A>> =
+            FromPair::from_pair(next_or_err!(pairs)?, ctx)?;
+
+        class_expr.map(|class_expr| {
+
         let mut frame = ClassFrame::new(class_expr, annotations);
 
         for pair in pairs {
@@ -944,9 +1132,13 @@ impl<A: ForIRI> FromPair<A> for ClassFrame<A> {
                             let ann = FromPair::from_pair(pair, ctx)?;
                             let subject = match &frame.entity {
                                 ClassExpression::Class(c) => AnnotationSubject::IRI(c.0.clone()),
-                                _ => return Err(HornedError::invalid("AnnotationAssertion requires a named class subject")),
+                                _ => {
+                                    return Err(HornedError::invalid(
+                                        "AnnotationAssertion requires a named class subject",
+                                    ));
+                                }
                             };
-                            AnnotationAssertion { subject, ann }.into()
+                            Success(AnnotationAssertion { subject, ann }.into())
                         }
                     )
                 }
@@ -957,11 +1149,15 @@ impl<A: ForIRI> FromPair<A> for ClassFrame<A> {
                         ctx,
                         frame,
                         component = {
-                            SubClassOf {
-                                sup: ClassExpression::from_pair(pair, ctx)?,
-                                sub: frame.entity.clone(),
-                            }
-                            .into()
+                            let sup: ParseResult<ClassExpression<A>> =
+                                FromPair::from_pair(pair, ctx)?;
+                            sup.map(|sup| {
+                                SubClassOf {
+                                    sup: sup,
+                                    sub: frame.entity.clone(),
+                                }
+                                .into()
+                            })
                         }
                     )
                 }
@@ -972,11 +1168,9 @@ impl<A: ForIRI> FromPair<A> for ClassFrame<A> {
                         ctx,
                         frame,
                         component = {
-                            EquivalentClasses(vec![
-                                frame.entity.clone(),
-                                ClassExpression::from_pair(pair, ctx)?,
-                            ])
-                            .into()
+                            let ce: ParseResult<ClassExpression<A>> =
+                                FromPair::from_pair(pair, ctx)?;
+                            ce.map(|ce| EquivalentClasses(vec![frame.entity.clone(), ce]).into())
                         }
                     )
                 }
@@ -987,11 +1181,9 @@ impl<A: ForIRI> FromPair<A> for ClassFrame<A> {
                         ctx,
                         frame,
                         component = {
-                            DisjointClasses(vec![
-                                frame.entity.clone(),
-                                ClassExpression::from_pair(pair, ctx)?,
-                            ])
-                            .into()
+                            let ce: ParseResult<ClassExpression<A>> =
+                                FromPair::from_pair(pair, ctx)?;
+                            ce.map(|ce| DisjointClasses(vec![frame.entity.clone(), ce]).into())
                         }
                     )
                 }
@@ -1001,14 +1193,27 @@ impl<A: ForIRI> FromPair<A> for ClassFrame<A> {
                     let ann = component_annotations(&mut pair, &mut value, ctx)?;
                     let descriptions = pair
                         .into_inner()
-                        .map(|pair| ClassExpression::from_pair(pair, ctx))
-                        .collect::<Result<Vec<_>>>()?;
-                    let class = match frame.entity.clone() {
-                        ClassExpression::Class(c) => c,
-                        _ => return Err(HornedError::invalid("DisjointUnion requires a named class")),
+                        .map(|pair| FromPair::from_pair(pair, ctx))
+                        .collect::<Result<Vec<ParseResult<ClassExpression<A>>>>>()?;
+                    let descriptions = collect_parse_result(descriptions.into_iter());
+                    let class = match &frame.entity {
+                        ClassExpression::Class(c) => c.clone(),
+                        _ => {
+                            return Err(HornedError::invalid(
+                                "DisjointUnion requires a named class",
+                            ));
+                        }
                     };
-                    let component = DisjointUnion(class, descriptions).into();
-                    frame.components.push(AnnotatedComponent { component, ann })
+
+                    let component =
+                        descriptions.map(|descriptions| DisjointUnion(class, descriptions).into());
+
+                    match component {
+                        Success(component) => {
+                            frame.components.push(AnnotatedComponent { component, ann })
+                        }
+                        Ambiguous(component, span) => ctx.add_ambiguous_component(component, span),
+                    }
                 }
                 Rule::ClassHasKeyClause => {
                     let mut value = inner.into_inner().peekable();
@@ -1029,23 +1234,31 @@ impl<A: ForIRI> FromPair<A> for ClassFrame<A> {
         }
 
         Ok(frame)
+    }).into()
     }
 }
 
-impl<A: ForIRI> FromPair<A> for ObjectPropertyFrame<A> {
+impl<'a, A: ForIRI> FromPair<'a, A> for ObjectPropertyFrame<A> {
     const RULE: Rule = Rule::ObjectPropertyFrame;
-    fn from_pair_unchecked(pair: Pair<Rule>, ctx: &Context<'_, A>) -> Result<Self> {
+    fn from_pair_unchecked(pair: Pair<'a, Rule>, ctx: &mut Context<'a, A>) -> Result<Self> {
         let mut pairs = pair.into_inner();
 
         let annotations = parse_optional_annotations(&mut pairs, ctx)?;
         let op = ObjectPropertyExpression::from_pair(next_or_err!(pairs)?, ctx)?;
+
+        if let ObjectPropertyExpression::ObjectProperty(op) = &op {
+            ctx.mark_property_kind(op.clone(), PropertyKind::Object);
+        }
+
         let mut frame = ObjectPropertyFrame::new(op, annotations);
 
         for pair in pairs {
             debug_assert!(pair.as_rule() == Rule::ObjectPropertyClause);
             let inner = descend(pair)?;
             match inner.as_rule() {
-                Rule::ObjectPropertyAnnotationsClause if let Some(frame_entity) = frame.entity.as_property() => {
+                Rule::ObjectPropertyAnnotationsClause
+                    if let Some(frame_entity) = frame.entity.as_property() =>
+                {
                     annotated_component!(
                         pair,
                         inner,
@@ -1054,7 +1267,7 @@ impl<A: ForIRI> FromPair<A> for ObjectPropertyFrame<A> {
                         component = {
                             let ann = FromPair::from_pair(pair, ctx)?;
                             let subject = AnnotationSubject::IRI(frame_entity.0.clone());
-                            AnnotationAssertion { subject, ann }.into()
+                            Success(AnnotationAssertion { subject, ann }.into())
                         }
                     )
                 }
@@ -1065,9 +1278,10 @@ impl<A: ForIRI> FromPair<A> for ObjectPropertyFrame<A> {
                         ctx,
                         frame,
                         component = {
-                            let ce = FromPair::from_pair(pair, ctx)?;
+                            let ce: ParseResult<ClassExpression<A>> =
+                                FromPair::from_pair(pair, ctx)?;
                             let ope = frame.entity.clone().into();
-                            ObjectPropertyDomain { ope, ce }.into()
+                            ce.map(|ce| ObjectPropertyDomain { ope, ce }.into())
                         }
                     )
                 }
@@ -1078,9 +1292,10 @@ impl<A: ForIRI> FromPair<A> for ObjectPropertyFrame<A> {
                         ctx,
                         frame,
                         component = {
-                            let ce = FromPair::from_pair(pair, ctx)?;
+                            let ce: ParseResult<ClassExpression<A>> =
+                                FromPair::from_pair(pair, ctx)?;
                             let ope = frame.entity.clone().into();
-                            ObjectPropertyRange { ope, ce }.into()
+                            ce.map(|ce| ObjectPropertyRange { ope, ce }.into())
                         }
                     )
                 }
@@ -1092,7 +1307,7 @@ impl<A: ForIRI> FromPair<A> for ObjectPropertyFrame<A> {
                         frame,
                         component = {
                             let op = frame.entity.clone();
-                            match descend(pair)?.as_rule() {
+                            Success(match descend(pair)?.as_rule() {
                                 Rule::FunctionalCharacteristic => {
                                     simple_component!(FunctionalObjectProperty(op))
                                 }
@@ -1115,7 +1330,7 @@ impl<A: ForIRI> FromPair<A> for ObjectPropertyFrame<A> {
                                     simple_component!(TransitiveObjectProperty(op))
                                 }
                                 rule => unexpected_rule!(ObjectPropertyFrame, rule)?,
-                            }
+                            })
                         }
                     )
                 }
@@ -1126,13 +1341,15 @@ impl<A: ForIRI> FromPair<A> for ObjectPropertyFrame<A> {
                         ctx,
                         frame,
                         component = {
-                            SubObjectPropertyOf {
-                                sup: ObjectPropertyExpression::from_pair(pair, ctx)?,
-                                sub: SubObjectPropertyExpression::ObjectPropertyExpression(
-                                    frame.entity.clone().into(),
-                                ),
-                            }
-                            .into()
+                            Success(
+                                SubObjectPropertyOf {
+                                    sup: ObjectPropertyExpression::from_pair(pair, ctx)?,
+                                    sub: SubObjectPropertyExpression::ObjectPropertyExpression(
+                                        frame.entity.clone().into(),
+                                    ),
+                                }
+                                .into(),
+                            )
                         }
                     )
                 }
@@ -1143,11 +1360,13 @@ impl<A: ForIRI> FromPair<A> for ObjectPropertyFrame<A> {
                         ctx,
                         frame,
                         component = {
-                            EquivalentObjectProperties(vec![
-                                frame.entity.clone(),
-                                ObjectPropertyExpression::from_pair(pair, ctx)?,
-                            ])
-                            .into()
+                            Success(
+                                EquivalentObjectProperties(vec![
+                                    frame.entity.clone(),
+                                    ObjectPropertyExpression::from_pair(pair, ctx)?,
+                                ])
+                                .into(),
+                            )
                         }
                     )
                 }
@@ -1158,15 +1377,19 @@ impl<A: ForIRI> FromPair<A> for ObjectPropertyFrame<A> {
                         ctx,
                         frame,
                         component = {
-                            DisjointObjectProperties(vec![
-                                frame.entity.clone(),
-                                ObjectPropertyExpression::from_pair(pair, ctx)?,
-                            ])
-                            .into()
+                            Success(
+                                DisjointObjectProperties(vec![
+                                    frame.entity.clone(),
+                                    ObjectPropertyExpression::from_pair(pair, ctx)?,
+                                ])
+                                .into(),
+                            )
                         }
                     )
                 }
-                Rule::ObjectPropertyInverseOfClause if let Some(frame_entity) = frame.entity.as_property() => {
+                Rule::ObjectPropertyInverseOfClause
+                    if let Some(frame_entity) = frame.entity.as_property() =>
+                {
                     annotated_component!(
                         pair,
                         inner,
@@ -1185,7 +1408,7 @@ impl<A: ForIRI> FromPair<A> for ObjectPropertyFrame<A> {
                                 }
                                 rule => unexpected_rule!(ObjectPropertyExpression, rule)?,
                             };
-                            InverseObjectProperties(op, frame_entity.clone()).into()
+                            Success(InverseObjectProperties(op, frame_entity.clone()).into())
                         }
                     )
                 }
@@ -1211,9 +1434,9 @@ impl<A: ForIRI> FromPair<A> for ObjectPropertyFrame<A> {
     }
 }
 
-impl<A: ForIRI> FromPair<A> for InverseObjectPropertyFrame<A> {
+impl<'a, A: ForIRI> FromPair<'a, A> for InverseObjectPropertyFrame<A> {
     const RULE: Rule = Rule::InverseObjectPropertyFrame;
-    fn from_pair_unchecked(pair: Pair<Rule>, ctx: &Context<'_, A>) -> Result<Self> {
+    fn from_pair_unchecked(pair: Pair<'a, Rule>, ctx: &mut Context<'a, A>) -> Result<Self> {
         let mut pairs = pair.into_inner();
 
         let mut pair = descend(next_or_err!(pairs)?)?;
@@ -1236,11 +1459,13 @@ impl<A: ForIRI> FromPair<A> for InverseObjectPropertyFrame<A> {
                         ctx,
                         frame,
                         component = {
-                            EquivalentObjectProperties(vec![
-                                frame.entity.clone(),
-                                ObjectPropertyExpression::from_pair(pair, ctx)?,
-                            ])
-                            .into()
+                            Success(
+                                EquivalentObjectProperties(vec![
+                                    frame.entity.clone(),
+                                    ObjectPropertyExpression::from_pair(pair, ctx)?,
+                                ])
+                                .into(),
+                            )
                         }
                     )
                 }
@@ -1251,11 +1476,13 @@ impl<A: ForIRI> FromPair<A> for InverseObjectPropertyFrame<A> {
                         ctx,
                         frame,
                         component = {
-                            DisjointObjectProperties(vec![
-                                frame.entity.clone(),
-                                ObjectPropertyExpression::from_pair(pair, ctx)?,
-                            ])
-                            .into()
+                            Success(
+                                DisjointObjectProperties(vec![
+                                    frame.entity.clone(),
+                                    ObjectPropertyExpression::from_pair(pair, ctx)?,
+                                ])
+                                .into(),
+                            )
                         }
                     )
                 }
@@ -1267,13 +1494,16 @@ impl<A: ForIRI> FromPair<A> for InverseObjectPropertyFrame<A> {
     }
 }
 
-impl<A: ForIRI> FromPair<A> for DataPropertyFrame<A> {
+impl<'a, A: ForIRI> FromPair<'a, A> for DataPropertyFrame<A> {
     const RULE: Rule = Rule::DataPropertyFrame;
-    fn from_pair_unchecked(pair: Pair<Rule>, ctx: &Context<'_, A>) -> Result<Self> {
+    fn from_pair_unchecked(pair: Pair<'a, Rule>, ctx: &mut Context<'a, A>) -> Result<Self> {
         let mut pairs = pair.into_inner();
 
         let annotations = parse_optional_annotations(&mut pairs, ctx)?;
         let dt = DataProperty::from_pair(next_or_err!(pairs)?, ctx)?;
+
+        ctx.mark_property_kind(dt.clone(), PropertyKind::Data);
+
         let mut frame = DataPropertyFrame::new(dt, annotations);
 
         for pair in pairs {
@@ -1289,7 +1519,7 @@ impl<A: ForIRI> FromPair<A> for DataPropertyFrame<A> {
                         component = {
                             let ann = FromPair::from_pair(pair, ctx)?;
                             let subject = AnnotationSubject::IRI(frame.entity.0.clone());
-                            AnnotationAssertion { subject, ann }.into()
+                            Success(AnnotationAssertion { subject, ann }.into())
                         }
                     )
                 }
@@ -1301,8 +1531,9 @@ impl<A: ForIRI> FromPair<A> for DataPropertyFrame<A> {
                         frame,
                         component = {
                             let dp = frame.entity.clone();
-                            let ce = FromPair::from_pair(pair, ctx)?;
-                            DataPropertyDomain { dp, ce }.into()
+                            let ce: ParseResult<ClassExpression<A>> =
+                                FromPair::from_pair(pair, ctx)?;
+                            ce.map(|ce| DataPropertyDomain { dp, ce }.into())
                         }
                     )
                 }
@@ -1315,7 +1546,7 @@ impl<A: ForIRI> FromPair<A> for DataPropertyFrame<A> {
                         component = {
                             let dp = frame.entity.clone();
                             let dr = from_data_range_pair(pair, ctx)?;
-                            DataPropertyRange { dp, dr }.into()
+                            Success(DataPropertyRange { dp, dr }.into())
                         }
                     )
                 }
@@ -1329,7 +1560,7 @@ impl<A: ForIRI> FromPair<A> for DataPropertyFrame<A> {
                             let dp = frame.entity.clone();
                             match descend(pair)?.as_rule() {
                                 Rule::FunctionalCharacteristic => {
-                                    simple_component!(FunctionalDataProperty(dp))
+                                    Success(simple_component!(FunctionalDataProperty(dp)))
                                 }
                                 rule => unexpected_rule!(ObjectPropertyFrame, rule)?,
                             }
@@ -1344,11 +1575,13 @@ impl<A: ForIRI> FromPair<A> for DataPropertyFrame<A> {
                         frame,
                         component = {
                             let inner = descend(pair)?;
-                            SubDataPropertyOf {
-                                sup: DataProperty::from_pair(inner, ctx)?,
-                                sub: frame.entity.clone(),
-                            }
-                            .into()
+                            Success(
+                                SubDataPropertyOf {
+                                    sup: DataProperty::from_pair(inner, ctx)?,
+                                    sub: frame.entity.clone(),
+                                }
+                                .into(),
+                            )
                         }
                     )
                 }
@@ -1359,11 +1592,13 @@ impl<A: ForIRI> FromPair<A> for DataPropertyFrame<A> {
                         ctx,
                         frame,
                         component = {
-                            EquivalentDataProperties(vec![
-                                frame.entity.clone(),
-                                DataProperty::from_pair(descend(pair)?, ctx)?,
-                            ])
-                            .into()
+                            Success(
+                                EquivalentDataProperties(vec![
+                                    frame.entity.clone(),
+                                    DataProperty::from_pair(descend(pair)?, ctx)?,
+                                ])
+                                .into(),
+                            )
                         }
                     )
                 }
@@ -1374,11 +1609,13 @@ impl<A: ForIRI> FromPair<A> for DataPropertyFrame<A> {
                         ctx,
                         frame,
                         component = {
-                            DisjointDataProperties(vec![
-                                frame.entity.clone(),
-                                DataProperty::from_pair(descend(pair)?, ctx)?,
-                            ])
-                            .into()
+                            Success(
+                                DisjointDataProperties(vec![
+                                    frame.entity.clone(),
+                                    DataProperty::from_pair(descend(pair)?, ctx)?,
+                                ])
+                                .into(),
+                            )
                         }
                     )
                 }
@@ -1390,13 +1627,16 @@ impl<A: ForIRI> FromPair<A> for DataPropertyFrame<A> {
     }
 }
 
-impl<A: ForIRI> FromPair<A> for AnnotationPropertyFrame<A> {
+impl<'a, A: ForIRI> FromPair<'a, A> for AnnotationPropertyFrame<A> {
     const RULE: Rule = Rule::AnnotationPropertyFrame;
-    fn from_pair_unchecked(pair: Pair<Rule>, ctx: &Context<'_, A>) -> Result<Self> {
+    fn from_pair_unchecked(pair: Pair<'a, Rule>, ctx: &mut Context<'a, A>) -> Result<Self> {
         let mut pairs = pair.into_inner();
 
         let annotations = parse_optional_annotations(&mut pairs, ctx)?;
         let ap = AnnotationProperty::from_pair(next_or_err!(pairs)?, ctx)?;
+
+        ctx.mark_property_kind(ap.clone(), PropertyKind::Annotation);
+
         let mut frame = AnnotationPropertyFrame::new(ap, annotations);
 
         for pair in pairs {
@@ -1412,7 +1652,7 @@ impl<A: ForIRI> FromPair<A> for AnnotationPropertyFrame<A> {
                         component = {
                             let ann = FromPair::from_pair(pair, ctx)?;
                             let subject = AnnotationSubject::IRI(frame.entity.0.clone());
-                            AnnotationAssertion { subject, ann }.into()
+                            Success(AnnotationAssertion { subject, ann }.into())
                         }
                     )
                 }
@@ -1425,7 +1665,7 @@ impl<A: ForIRI> FromPair<A> for AnnotationPropertyFrame<A> {
                         component = {
                             let iri = FromPair::from_pair(pair, ctx)?;
                             let ap = frame.entity.clone();
-                            AnnotationPropertyDomain { ap, iri }.into()
+                            Success(AnnotationPropertyDomain { ap, iri }.into())
                         }
                     )
                 }
@@ -1438,7 +1678,7 @@ impl<A: ForIRI> FromPair<A> for AnnotationPropertyFrame<A> {
                         component = {
                             let iri = FromPair::from_pair(pair, ctx)?;
                             let ap = frame.entity.clone();
-                            AnnotationPropertyRange { ap, iri }.into()
+                            Success(AnnotationPropertyRange { ap, iri }.into())
                         }
                     )
                 }
@@ -1449,11 +1689,13 @@ impl<A: ForIRI> FromPair<A> for AnnotationPropertyFrame<A> {
                         ctx,
                         frame,
                         component = {
-                            SubAnnotationPropertyOf {
-                                sup: AnnotationProperty::from_pair(pair, ctx)?,
-                                sub: frame.entity.clone(),
-                            }
-                            .into()
+                            Success(
+                                SubAnnotationPropertyOf {
+                                    sup: AnnotationProperty::from_pair(pair, ctx)?,
+                                    sub: frame.entity.clone(),
+                                }
+                                .into(),
+                            )
                         }
                     )
                 }
@@ -1465,9 +1707,9 @@ impl<A: ForIRI> FromPair<A> for AnnotationPropertyFrame<A> {
     }
 }
 
-impl<A: ForIRI> FromPair<A> for IndividualFrame<A> {
+impl<'a, A: ForIRI> FromPair<'a, A> for IndividualFrame<A> {
     const RULE: Rule = Rule::IndividualFrame;
-    fn from_pair_unchecked(pair: Pair<Rule>, ctx: &Context<'_, A>) -> Result<Self> {
+    fn from_pair_unchecked(pair: Pair<'a, Rule>, ctx: &mut Context<'a, A>) -> Result<Self> {
         let mut pairs = pair.into_inner();
 
         let annotations = parse_optional_annotations(&mut pairs, ctx)?;
@@ -1492,7 +1734,7 @@ impl<A: ForIRI> FromPair<A> for IndividualFrame<A> {
                                 }
                                 Individual::Named(anon) => AnnotationSubject::IRI(anon.0.clone()),
                             };
-                            AnnotationAssertion { subject, ann }.into()
+                            Success(AnnotationAssertion { subject, ann }.into())
                         }
                     )
                 }
@@ -1504,8 +1746,9 @@ impl<A: ForIRI> FromPair<A> for IndividualFrame<A> {
                         frame,
                         component = {
                             let i = frame.entity.clone();
-                            let ce = ClassExpression::from_pair(pair, ctx)?;
-                            ClassAssertion { ce, i }.into()
+                            let ce: ParseResult<ClassExpression<A>> =
+                                FromPair::from_pair(pair, ctx)?;
+                            ce.map(|ce| ClassAssertion { ce, i }.into())
                         }
                     )
                 }
@@ -1518,7 +1761,7 @@ impl<A: ForIRI> FromPair<A> for IndividualFrame<A> {
                         component = {
                             let i1 = frame.entity.clone();
                             let i2 = Individual::from_pair(pair, ctx)?;
-                            SameIndividual(vec![i1, i2]).into()
+                            Success(SameIndividual(vec![i1, i2]).into())
                         }
                     )
                 }
@@ -1531,7 +1774,7 @@ impl<A: ForIRI> FromPair<A> for IndividualFrame<A> {
                         component = {
                             let i1 = frame.entity.clone();
                             let i2 = Individual::from_pair(pair, ctx)?;
-                            DifferentIndividuals(vec![i1, i2]).into()
+                            Success(DifferentIndividuals(vec![i1, i2]).into())
                         }
                     )
                 }
@@ -1551,7 +1794,7 @@ impl<A: ForIRI> FromPair<A> for IndividualFrame<A> {
                             };
 
                             let from = frame.entity.clone();
-                            match fact.as_rule() {
+                            Success(match fact.as_rule() {
                                 Rule::ObjectPropertyFact => {
                                     let mut pairs = fact.into_inner();
                                     let op = FromPair::from_pair(next_or_err!(pairs)?, ctx)?;
@@ -1578,7 +1821,7 @@ impl<A: ForIRI> FromPair<A> for IndividualFrame<A> {
                                     }
                                 }
                                 rule => unexpected_rule!(AnnotationPropertyFrame, rule)?,
-                            }
+                            })
                         }
                     )
                 }
@@ -1590,9 +1833,9 @@ impl<A: ForIRI> FromPair<A> for IndividualFrame<A> {
     }
 }
 
-impl<A: ForIRI> FromPair<A> for MiscClause<A> {
+impl<'a, A: ForIRI> FromPair<'a, A> for ParseResult<'a, MiscClause<A>> {
     const RULE: Rule = Rule::MiscClause;
-    fn from_pair_unchecked(pair: Pair<Rule>, ctx: &Context<'_, A>) -> Result<Self> {
+    fn from_pair_unchecked(pair: Pair<'a, Rule>, ctx: &mut Context<'a, A>) -> Result<Self> {
         macro_rules! entity_list {
             ($inner:ident, $ctx:ident, $clause:ident) => {{
                 entity_list!($inner, $ctx, $clause, |pair| FromPair::from_pair(
@@ -1603,9 +1846,13 @@ impl<A: ForIRI> FromPair<A> for MiscClause<A> {
                 let mut pairs = $inner.into_inner();
                 let mut pair = next_or_err!(pairs)?;
                 let ann = component_annotations(&mut pair, &mut pairs, $ctx)?;
-                let entities = pair.into_inner().map($closure).collect::<Result<_>>()?;
-                let component = $clause(entities).into();
-                Ok(MiscClause::new(AnnotatedComponent { ann, component }))
+                let entities = pair
+                    .into_inner()
+                    .map($closure)
+                    .collect::<Result<Vec<ParseResult<_>>>>()?;
+                let entities = collect_parse_result(entities.into_iter());
+                let component: ParseResult<Component<A>> = entities.map(|e| $clause(e).into());
+                Ok(component.map(|c| MiscClause::new(AnnotatedComponent { ann, component: c })))
             }};
         }
 
@@ -1640,7 +1887,7 @@ impl<A: ForIRI> FromPair<A> for MiscClause<A> {
                 entity_list!(inner, ctx, DifferentIndividuals)
             }
             Rule::MiscRuleClause => {
-                todo!()
+                parse_error!("Rule clauses are not supported yet", inner.as_span())
             }
             rule => unexpected_rule!(MiscClause, rule),
         }
@@ -1649,9 +1896,9 @@ impl<A: ForIRI> FromPair<A> for MiscClause<A> {
 
 // ---------------------------------------------------------------------------
 
-impl<A: ForIRI> FromPair<A> for PropertyExpression<A> {
+impl<'a, A: ForIRI> FromPair<'a, A> for PropertyExpression<A> {
     const RULE: Rule = Rule::PropertyExpression;
-    fn from_pair_unchecked(pair: Pair<Rule>, ctx: &Context<'_, A>) -> Result<Self> {
+    fn from_pair_unchecked(pair: Pair<'a, Rule>, ctx: &mut Context<'a, A>) -> Result<Self> {
         let inner = descend(pair)?;
         match inner.as_rule() {
             Rule::ObjectPropertyExpression => {
@@ -1666,9 +1913,23 @@ impl<A: ForIRI> FromPair<A> for PropertyExpression<A> {
     }
 }
 
-impl<A: ForIRI> FromPair<A> for ObjectPropertyExpression<A> {
+macro_rules! impl_from_pair_for_parse_result {
+    ($typ:ident, $rule:expr) => {
+        impl<'a, A: ForIRI> FromPair<'a, A> for ParseResult<'a, $typ<A>> {
+            const RULE: Rule = $rule;
+            fn from_pair_unchecked(pair: Pair<'a, Rule>, ctx: &mut Context<'a, A>) -> Result<Self> {
+                $typ::from_pair(pair, ctx).map(Success)
+            }
+        }
+    };
+    ($typ:ident) => {
+        impl_from_pair_for_parse_result!($typ, Rule::$typ);
+    };
+}
+
+impl<'a, A: ForIRI> FromPair<'a, A> for ObjectPropertyExpression<A> {
     const RULE: Rule = Rule::ObjectPropertyExpression;
-    fn from_pair_unchecked(pair: Pair<Rule>, ctx: &Context<'_, A>) -> Result<Self> {
+    fn from_pair_unchecked(pair: Pair<'a, Rule>, ctx: &mut Context<'a, A>) -> Result<Self> {
         let inner = descend(pair)?;
         match inner.as_rule() {
             Rule::ObjectPropertyIRI => {
@@ -1677,7 +1938,9 @@ impl<A: ForIRI> FromPair<A> for ObjectPropertyExpression<A> {
             Rule::InverseObjectProperty => {
                 let pair = descend(inner)?;
                 let op = match pair.as_rule() {
-                    Rule::BracketedObjectPropertyIRI => ObjectProperty::from_pair(descend(pair)?, ctx)?,
+                    Rule::BracketedObjectPropertyIRI => {
+                        ObjectProperty::from_pair(descend(pair)?, ctx)?
+                    }
                     Rule::ObjectPropertyIRI => ObjectProperty::from_pair(pair, ctx)?,
                     rule => unexpected_rule!(ObjectPropertyExpression, rule)?,
                 };
@@ -1688,9 +1951,17 @@ impl<A: ForIRI> FromPair<A> for ObjectPropertyExpression<A> {
     }
 }
 
+impl_from_pair_for_parse_result!(ObjectPropertyExpression);
+impl_from_pair_for_parse_result!(Individual);
+impl_from_pair_for_parse_result!(DataProperty, Rule::DataPropertyIRI);
+
 // ---------------------------------------------------------------------------
 
-fn expand_iri<A: ForIRI>(curie: &Curie, ctx: &Context<'_, A>, span: Span<'_>) -> Result<IRI<A>> {
+fn expand_iri<'a, A: ForIRI>(
+    curie: &Curie,
+    ctx: &mut Context<'a, A>,
+    span: Span<'_>,
+) -> Result<IRI<A>> {
     match ctx.mapping.expand_curie(&curie) {
         Ok(s) => Ok(ctx.build.iri(s)),
         Err(curie::ExpansionError::Invalid) => {
@@ -1702,9 +1973,9 @@ fn expand_iri<A: ForIRI>(curie: &Curie, ctx: &Context<'_, A>, span: Span<'_>) ->
     }
 }
 
-impl<A: ForIRI> FromPair<A> for IRI<A> {
+impl<'a, A: ForIRI> FromPair<'a, A> for IRI<A> {
     const RULE: Rule = Rule::IRI;
-    fn from_pair_unchecked(pair: Pair<Rule>, ctx: &Context<'_, A>) -> Result<Self> {
+    fn from_pair_unchecked(pair: Pair<'a, Rule>, ctx: &mut Context<'a, A>) -> Result<Self> {
         let inner = descend(pair)?;
         let span = inner.as_span();
         match inner.as_rule() {
@@ -1731,9 +2002,9 @@ impl<A: ForIRI> FromPair<A> for IRI<A> {
 
 // ---------------------------------------------------------------------------
 
-impl<A: ForIRI> FromPair<A> for String {
+impl<'a, A: ForIRI> FromPair<'a, A> for String {
     const RULE: Rule = Rule::QuotedString;
-    fn from_pair_unchecked(pair: Pair<Rule>, _ctx: &Context<'_, A>) -> Result<Self> {
+    fn from_pair_unchecked(pair: Pair<'a, Rule>, _ctx: &mut Context<'a, A>) -> Result<Self> {
         let l = pair.as_str().len();
         let s = &pair.as_str()[1..l - 1];
         if s.contains(r"\\") || s.contains(r#"\""#) {
@@ -1744,16 +2015,16 @@ impl<A: ForIRI> FromPair<A> for String {
     }
 }
 
-impl<A: ForIRI> FromPair<A> for u32 {
+impl<'a, A: ForIRI> FromPair<'a, A> for u32 {
     const RULE: Rule = Rule::NonNegativeInteger;
-    fn from_pair_unchecked(pair: Pair<Rule>, _ctx: &Context<'_, A>) -> Result<Self> {
+    fn from_pair_unchecked(pair: Pair<'a, Rule>, _ctx: &mut Context<'a, A>) -> Result<Self> {
         Ok(Self::from_str(pair.as_str()).expect("cannot fail with the right rule"))
     }
 }
 
-impl<A: ForIRI> FromPair<A> for NonZeroU32 {
+impl<'a, A: ForIRI> FromPair<'a, A> for NonZeroU32 {
     const RULE: Rule = Rule::PositiveInteger;
-    fn from_pair_unchecked(pair: Pair<Rule>, _ctx: &Context<'_, A>) -> Result<Self> {
+    fn from_pair_unchecked(pair: Pair<'a, Rule>, _ctx: &mut Context<'a, A>) -> Result<Self> {
         let n = u32::from_str(pair.as_str()).expect("cannot fail with the right rule");
         Ok(Self::new(n).expect("cannot be zero with the right rule"))
     }
@@ -1766,15 +2037,18 @@ mod tests {
 
     use std::{io::Cursor, rc::Rc};
 
-use test_generator::test_resources;
+    use test_generator::test_resources;
 
-use super::*;
+    use super::*;
     use crate::{io::omn::reader::lexer::OwlManchesterLexer, ontology::set::SetOntology};
 
-    impl FromPair<String> for SetOntology<String> {
+    impl<'a> FromPair<'a, String> for SetOntology<String> {
         const RULE: Rule = Rule::Ontology;
 
-        fn from_pair_unchecked(pair: Pair<Rule>, context: &Context<'_, String>) -> Result<Self> {
+        fn from_pair_unchecked(
+            pair: Pair<'a, Rule>,
+            context: &mut Context<'a, String>,
+        ) -> Result<Self> {
             MutableOntologyWrapper::<String, SetOntology<String>>::from_pair(pair, context)
                 .map(|wrapper| wrapper.0)
         }
@@ -1783,10 +2057,10 @@ use super::*;
     macro_rules! assert_parse_into {
         ($ty:ty, $rule:path, $build:ident, $prefixes:ident, $doc:expr, $expected:expr) => {
             let doc = $doc.trim();
-            let ctx = Context::new(&$build, &$prefixes);
+            let mut ctx = Context::new(&$build, &$prefixes);
             match OwlManchesterLexer::lex($rule, doc) {
                 Ok(mut pairs) => {
-                    let res = <$ty as FromPair<_>>::from_pair(pairs.next().unwrap(), &ctx);
+                    let res = <$ty as FromPair<_>>::from_pair(pairs.next().unwrap(), &mut ctx);
                     assert_eq!(res.unwrap(), $expected);
                 }
                 Err(e) => panic!(
@@ -2048,7 +2322,9 @@ use super::*;
 
             "#,
             ObjectPropertyFrame::with_components(
-                build.object_property("http://purl.obolibrary.org/obo/RO_0000052").into(),
+                build
+                    .object_property("http://purl.obolibrary.org/obo/RO_0000052")
+                    .into(),
                 vec![
                     DeclareObjectProperty(
                         build.object_property("http://purl.obolibrary.org/obo/RO_0000052")
@@ -2180,7 +2456,6 @@ use super::*;
         );
     }
 
-
     #[test_resources("src/ont/owl-manchester/*.omn")]
     fn from_pair_resource(resource: &str) {
         let text = &slurp::read_all_to_string(resource).unwrap();
@@ -2195,9 +2470,9 @@ use super::*;
 
         let build = Build::new();
         let prefixes = PrefixMapping::default();
-        let ctx = Context::new(&build, &prefixes);
+        let mut ctx = Context::new(&build, &prefixes);
         let item: (MutableOntologyWrapper<_, SetOntology<Rc<str>>>, _) =
-            FromPair::from_pair(pair, &ctx).unwrap();
+            FromPair::from_pair(pair, &mut ctx).unwrap();
 
         let path = resource
             .replace("owl-manchester", "owl-xml")
