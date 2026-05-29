@@ -67,6 +67,11 @@ pub fn parse_path(
             let mut bufreader = BufReader::new(file);
             ParserOutput::owx(horned_owl::io::owx::reader::read(&mut bufreader, config)?)
         }
+        Some(ResourceType::OMN) => {
+            let file = File::open(path)?;
+            let mut bufreader = BufReader::new(file);
+            ParserOutput::omn(horned_owl::io::omn::reader::read(&mut bufreader, config)?)
+        }
         Some(ResourceType::RDF) => {
             let b = Build::new();
             let iri = horned_owl::resolve::path_to_file_iri(&b, path);
@@ -89,7 +94,10 @@ pub fn parse_imports(
     let mut bufreader = BufReader::new(file);
     Ok(match path_type(path) {
         Some(ResourceType::OFN) => {
-            ParserOutput::ofn(horned_owl::io::owx::reader::read(&mut bufreader, config)?)
+            ParserOutput::ofn(horned_owl::io::ofn::reader::read(&mut bufreader, config)?)
+        }
+        Some(ResourceType::OMN) => {
+            ParserOutput::omn(horned_owl::io::omn::reader::read(&mut bufreader, config)?)
         }
         Some(ResourceType::OWX) => {
             ParserOutput::owx(horned_owl::io::owx::reader::read(&mut bufreader, config)?)
