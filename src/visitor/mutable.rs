@@ -111,7 +111,7 @@ pub trait VisitMut<A: ForIRI> {
 
 pub struct WalkMut<A, V>(V, PhantomData<A>);
 
-impl<A: ForIRI, V: VisitMut<A>> WalkMut<A, V> {
+impl<'a, A: ForIRI + 'a, V: VisitMut<A>> WalkMut<A, V> {
     pub fn new(v: V) -> Self {
         WalkMut(v, PhantomData)
     }
@@ -122,6 +122,16 @@ impl<A: ForIRI, V: VisitMut<A>> WalkMut<A, V> {
 
     pub fn into_visit(self) -> V {
         self.0
+    }
+
+    pub fn for_iter<O>(&mut self, ontology: &'a O) -> &mut Self
+    where
+        &'a O: IntoIterator<Item = &'a mut AnnotatedComponent<A>>,
+    {
+        for c in ontology {
+            self.annotated_component(c);
+        }
+        self
     }
 
     pub fn iri(&mut self, e: &mut IRI<A>) {
