@@ -7,21 +7,24 @@ use pest::Span;
 
 use crate::error::HornedError;
 use crate::io::ParserConfiguration;
+use crate::model::AnnotatedComponent;
 use crate::model::Build;
-use crate::model::Component;
 use crate::model::ForIRI;
 use crate::model::IRI;
 use crate::model::MutableOntology;
 use crate::model::Ontology;
+use crate::visitor::mutable::WalkMut;
 
 mod frames;
 mod from_pair;
 mod lexer;
+mod ambiguity;
 
 use self::from_pair::FromPair;
 use self::from_pair::MutableOntologyWrapper;
 use self::lexer::OwlManchesterLexer;
 use self::lexer::Rule;
+use self::ambiguity::ComponentVisitor;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum PropertyKind {
@@ -34,8 +37,7 @@ struct Context<'a, A: ForIRI> {
     build: &'a Build<A>,
     mapping: &'a PrefixMapping,
     property_kinds: HashMap<IRI<A>, PropertyKind>,
-    ambiguous_components: HashSet<(Component<A>, Span<'a>)>,
-    allow_partial_parsing: bool,
+    ambiguous_components: HashSet<(AnnotatedComponent<A>, Span<'a>)>,
 }
 
 impl<'a, A: ForIRI> Context<'a, A> {
@@ -45,11 +47,10 @@ impl<'a, A: ForIRI> Context<'a, A> {
             mapping,
             property_kinds: Default::default(),
             ambiguous_components: Default::default(),
-            allow_partial_parsing: false,
         }
     }
 
-    fn add_ambiguous_component(&mut self, component: Component<A>, span: Span<'a>) {
+    fn add_ambiguous_component(&mut self, component: AnnotatedComponent<A>, span: Span<'a>) {
         self.ambiguous_components.insert((component, span));
     }
 
@@ -88,7 +89,15 @@ pub fn read_with_build<A: ForIRI, O: MutableOntology<A> + Ontology<A> + Default,
     let wrapper: Result<(MutableOntologyWrapper<A, O>, PrefixMapping), HornedError> =
         FromPair::from_pair(pair, &mut ctx);
 
-    let (ontology, mapping) = wrapper.map(|r| (r.0.0, r.1))?;
+    let (mut ontology, mapping) = wrapper.map(|r| (r.0.0, r.1))?;
+
+    let mut walk = WalkMut::new(ComponentVisitor {
+        property_kinds: ctx.property_kinds,
+    });
+    for (mut component, _) in ctx.ambiguous_components {
+        walk.annotated_component(&mut component);
+        ontology.insert(component);
+    }
 
     Ok((ontology, mapping))
 }

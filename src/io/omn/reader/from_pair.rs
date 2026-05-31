@@ -11,6 +11,7 @@ use pest::iterators::Pairs;
 
 use crate::error::HornedError;
 use crate::io::omn::reader::PropertyKind;
+use crate::io::omn::reader::ambiguity::data_range_to_class_expression;
 use crate::model::*;
 use crate::vocab::Facet;
 
@@ -27,6 +28,7 @@ use super::lexer::Rule;
 
 type Result<T> = std::result::Result<T, HornedError>;
 // Alias for better readability
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 enum ParseResult<'a, T> {
     Success(T),
     Ambiguous(T, Span<'a>),
@@ -61,35 +63,6 @@ impl<'a, T> ParseResult<'a, T> {
         match self {
             Success(value) => Success(f(value)),
             Ambiguous(value, span) => Ambiguous(f(value), span),
-        }
-    }
-
-    fn inner(&self) -> &T {
-        match self {
-            Success(value) => value,
-            Ambiguous(value, _) => value,
-        }
-    }
-
-    fn into_inner(self) -> T {
-        match self {
-            Success(value) => value,
-            Ambiguous(value, _) => value,
-        }
-    }
-
-    fn is_ambiguous(&self) -> bool {
-        matches!(self, Ambiguous(_, _))
-    }
-
-    fn is_success(&self) -> bool {
-        matches!(self, Success(_))
-    }
-
-    fn ambiguous_span(&self) -> Option<Span<'a>> {
-        match self {
-            Success(_) => None,
-            Ambiguous(_, span) => Some(*span),
         }
     }
 }
@@ -336,10 +309,39 @@ fn from_restriction_pair<'a, A: ForIRI>(
 ) -> Result<ParseResult<'a, ClassExpression<A>>> {
     debug_assert!(pair.as_rule() == Rule::Restriction);
 
+    macro_rules! ensure_property_kind {
+        (Object, $ope:expr, $span:ident, $result:expr) => {{ ensure_property_kind!($ope.as_property(), $span, $result, Object) }};
+        (Data, $dp:expr, $span:ident, $result:expr) => {{ ensure_property_kind!(Some(&$dp), $span, $result, Data) }};
+        ($prop:expr, $span:ident, $result:expr, $kind:ident) => {{
+            match $result {
+                Success(r) => {
+                    let kind = $prop
+                        .map(|p| ctx.get_property_kind(p.clone()))
+                        .unwrap_or(Some(PropertyKind::Object));
+
+                    match kind {
+                        Some(PropertyKind::$kind) => Ok(Success(r)),
+                        Some(_) => parse_error!(
+                            format!(
+                                "Expected '{:?}' as {:?}Property but is declared as {:?}Property",
+                                $prop,
+                                PropertyKind::$kind,
+                                kind
+                            ),
+                            $span
+                        ),
+                        None => Ok(Ambiguous(r, $span)),
+                    }
+                }
+                Ambiguous(r, span) => Ok(Ambiguous(r, span)),
+            }
+        }};
+    }
+
     macro_rules! data_cardinality {
-        ($inner:ident, $ctx:ident, ClassExpression:: $variant:ident) => {{
-            let span = $inner.as_span();
-            let mut pairs = $inner.into_inner();
+        ($pairs:ident, $span:ident, $ctx:ident, ClassExpression:: $variant:ident) => {{
+            let span = $span;
+            let mut pairs = $pairs;
 
             let dp = DataProperty::from_pair(descend(next_or_err!(pairs)?)?, $ctx)?;
             let n = u32::from_pair(next_or_err!(pairs)?, $ctx)?;
@@ -358,46 +360,26 @@ fn from_restriction_pair<'a, A: ForIRI>(
                 );
             };
 
-            Ok(Success(ClassExpression::$variant { n, dp, dr }))
-        }};
-    }
+            let ce = ClassExpression::$variant {
+                n,
+                dp: dp.clone(),
+                dr,
+            };
 
-    macro_rules! ensure_object_property {
-        ($ope:ident, $span:ident, $result:expr) => {{
-            match $result {
-                Success(r) => {
-                    let kind = $ope
-                        .as_property()
-                        .map(|p| ctx.get_property_kind(p.clone()))
-                        .unwrap_or(Some(PropertyKind::Object));
-
-                    match kind {
-                        Some(PropertyKind::Object) => Ok(Success(r)),
-                        Some(_) => parse_error!(
-                            format!(
-                                "Expected '{:?}' as object property but is declared as {:?}",
-                                $ope, kind
-                            ),
-                            $span
-                        ),
-                        None => Ok(Ambiguous(r, $span)),
-                    }
-                }
-                Ambiguous(r, span) => Ok(Ambiguous(r, span)),
-            }
+            ensure_property_kind!(Data, dp, span, Success(ce))
         }};
     }
 
     macro_rules! object_cardinality {
-        ($inner:ident, $ctx:ident, ClassExpression:: $variant:ident) => {{
-            let span = $inner.as_span();
-            let mut pairs = $inner.into_inner();
+        ($pairs:ident, $span:ident, $ctx:ident, ClassExpression:: $variant:ident) => {{
+            let span = $span;
+            let mut pairs = $pairs;
 
-            let ope = ObjectPropertyExpression::from_pair(next_or_err!(pairs)?, $ctx)?;
+            let ope = ope_from_pair(next_or_err!(pairs)?, $ctx)?;
             let n = u32::from_pair(next_or_err!(pairs)?, $ctx)?;
 
             let bce = if let Some(pair) = pairs.next() {
-                from_primary_pair(pair, $ctx)?.map(Box::new)
+                ce_from_primary_or_data_primary_pair(pair, $ctx)?.map(Box::new)
             } else {
                 // FIXME: currently unsupported in `horned-owl`
                 return parse_error!(
@@ -415,50 +397,65 @@ fn from_restriction_pair<'a, A: ForIRI>(
                 bce,
             });
 
-            ensure_object_property!(ope, span, ce)
+            ensure_property_kind!(Object, ope, span, ce)
         }};
     }
 
     let inner = descend(pair)?;
+    let rule = inner.as_rule();
     let span = inner.as_span();
+    let mut pairs = inner.into_inner();
+
+    let property_kind = pairs.peek().and_then(|p| {
+        let iri = DataProperty::from_pair(descend(p.clone()).ok()?, ctx).ok()?.0;
+        ctx.get_property_kind(iri)
+    });
+
+    macro_rules! dp {
+        () => (Some(PropertyKind::Data) | None);
+    }
 
     // Resolve ambiguity between object and data property restrictions by first checking if the property is declared as a data property.
     // For object properties we then
-    match inner.as_rule() {
-        Rule::DataSomeValuesFromRestriction => {
-            let mut pairs = inner.into_inner();
-            let dp = FromPair::from_pair(descend(next_or_err!(pairs)?)?, ctx)?;
+    match (rule, property_kind) {
+        (Rule::DataSomeValuesFromRestriction, dp!()) => {
+            let dp = DataProperty::from_pair(descend(next_or_err!(pairs)?)?, ctx)?;
             let dr = FromPair::from_pair(last_or_err!(pairs)?, ctx)?;
-            Ok(Success(ClassExpression::DataSomeValuesFrom { dp, dr }))
+            let ce = ClassExpression::DataSomeValuesFrom { dp: dp.clone(), dr };
+
+            ensure_property_kind!(Data, dp, span, Success(ce))
         }
-        Rule::DataAllValuesFromRestriction => {
-            let mut pairs = inner.into_inner();
-            let dp = FromPair::from_pair(last_or_err!(next_or_err!(pairs)?.into_inner())?, ctx)?;
+        (Rule::DataAllValuesFromRestriction, dp!()) => {
+            let dp =
+                DataProperty::from_pair(last_or_err!(next_or_err!(pairs)?.into_inner())?, ctx)?;
             let dr = FromPair::from_pair(last_or_err!(pairs)?, ctx)?;
-            Ok(Success(ClassExpression::DataAllValuesFrom { dp, dr }))
+            let ce = ClassExpression::DataAllValuesFrom { dp: dp.clone(), dr };
+
+            ensure_property_kind!(Data, dp, span, Success(ce))
         }
-        Rule::DataHasValueRestriction => {
-            let mut pairs = inner.into_inner();
-            let dp = FromPair::from_pair(descend(next_or_err!(pairs)?)?, ctx)?;
+        (Rule::DataHasValueRestriction, dp!()) => {
+            let dp = DataProperty::from_pair(descend(next_or_err!(pairs)?)?, ctx)?;
             let l = FromPair::from_pair(last_or_err!(pairs)?, ctx)?;
-            Ok(Success(ClassExpression::DataHasValue { dp, l }))
-        }
-        Rule::DataMinCardinalityRestriction => {
-            data_cardinality!(inner, ctx, ClassExpression::DataMinCardinality)
-        }
-        Rule::DataMaxCardinalityRestriction => {
-            data_cardinality!(inner, ctx, ClassExpression::DataMaxCardinality)
-        }
-        Rule::DataExactCardinalityRestriction => {
-            data_cardinality!(inner, ctx, ClassExpression::DataExactCardinality)
-        }
-        Rule::ObjectSomeValuesFromRestriction => {
-            let mut pairs = inner.into_inner();
-            let ope: ObjectPropertyExpression<A> = FromPair::from_pair(next_or_err!(pairs)?, ctx)?;
+            let ce = ClassExpression::DataHasValue { dp: dp.clone(), l };
 
-            let bce = from_primary_pair(next_or_err!(pairs)?, ctx)?.map(Box::new);
+            ensure_property_kind!(Data, dp, span, Success(ce))
+        }
+        (Rule::DataMinCardinalityRestriction, dp!()) => {
+            data_cardinality!(pairs, span, ctx, ClassExpression::DataMinCardinality)
+        }
+        (Rule::DataMaxCardinalityRestriction, dp!()) => {
+            data_cardinality!(pairs, span, ctx, ClassExpression::DataMaxCardinality)
+        }
+        (Rule::DataExactCardinalityRestriction, dp!()) => {
+            data_cardinality!(pairs, span, ctx, ClassExpression::DataExactCardinality)
+        }
+        (Rule::ObjectSomeValuesFromRestriction | Rule::DataSomeValuesFromRestriction, _) => {
+            let ope: ObjectPropertyExpression<A> = ope_from_pair(next_or_err!(pairs)?, ctx)?;
 
-            ensure_object_property!(
+            let bce = ce_from_primary_or_data_primary_pair(next_or_err!(pairs)?, ctx)?.map(Box::new);
+
+            ensure_property_kind!(
+                Object,
                 ope,
                 span,
                 bce.map(|bce| ClassExpression::ObjectSomeValuesFrom {
@@ -467,13 +464,13 @@ fn from_restriction_pair<'a, A: ForIRI>(
                 })
             )
         }
-        Rule::ObjectAllValuesFromRestriction => {
-            let mut pairs = inner.into_inner();
-            let ope: ObjectPropertyExpression<A> = FromPair::from_pair(next_or_err!(pairs)?, ctx)?;
+        (Rule::ObjectAllValuesFromRestriction | Rule::DataAllValuesFromRestriction, _) => {
+            let ope: ObjectPropertyExpression<A> = ope_from_pair(next_or_err!(pairs)?, ctx)?;
 
-            let bce = from_primary_pair(next_or_err!(pairs)?, ctx)?.map(Box::new);
+            let bce = ce_from_primary_or_data_primary_pair(next_or_err!(pairs)?, ctx)?.map(Box::new);
 
-            ensure_object_property!(
+            ensure_property_kind!(
+                Object,
                 ope,
                 span,
                 bce.map(|bce| ClassExpression::ObjectAllValuesFrom {
@@ -482,13 +479,13 @@ fn from_restriction_pair<'a, A: ForIRI>(
                 })
             )
         }
-        Rule::ObjectHasValueRestriction => {
-            let mut pairs = inner.into_inner();
-            let ope: ObjectPropertyExpression<A> = FromPair::from_pair(next_or_err!(pairs)?, ctx)?;
+        (Rule::ObjectHasValueRestriction | Rule::DataHasValueRestriction, _) => {
+            let ope: ObjectPropertyExpression<A> = ope_from_pair(next_or_err!(pairs)?, ctx)?;
 
             let i = FromPair::from_pair(next_or_err!(pairs)?, ctx)?;
 
-            ensure_object_property!(
+            ensure_property_kind!(
+                Object,
                 ope,
                 span,
                 Success(ClassExpression::ObjectHasValue {
@@ -497,19 +494,18 @@ fn from_restriction_pair<'a, A: ForIRI>(
                 })
             )
         }
-        Rule::ObjectHasSelfRestriction => {
-            let mut pairs = inner.into_inner();
+        (Rule::ObjectHasSelfRestriction, _) => {
             let ope = FromPair::from_pair(next_or_err!(pairs)?, ctx)?;
             Ok(Success(ClassExpression::ObjectHasSelf(ope)))
         }
-        Rule::ObjectMinCardinalityRestriction => {
-            object_cardinality!(inner, ctx, ClassExpression::ObjectMinCardinality)
+        (Rule::ObjectMinCardinalityRestriction | Rule::DataMinCardinalityRestriction, _) => {
+            object_cardinality!(pairs, span, ctx, ClassExpression::ObjectMinCardinality)
         }
-        Rule::ObjectMaxCardinalityRestriction => {
-            object_cardinality!(inner, ctx, ClassExpression::ObjectMaxCardinality)
+        (Rule::ObjectMaxCardinalityRestriction | Rule::DataMaxCardinalityRestriction, _) => {
+            object_cardinality!(pairs, span, ctx, ClassExpression::ObjectMaxCardinality)
         }
-        Rule::ObjectExactCardinalityRestriction => {
-            object_cardinality!(inner, ctx, ClassExpression::ObjectExactCardinality)
+        (Rule::ObjectExactCardinalityRestriction | Rule::DataExactCardinalityRestriction, _) => {
+            object_cardinality!(pairs, span, ctx, ClassExpression::ObjectExactCardinality)
         }
         rule => unexpected_rule!(ClassExpression, rule),
     }
@@ -563,6 +559,43 @@ fn from_primary_pair<'a, A: ForIRI>(
             ce
         }
     })
+}
+
+/// Parse an `ObjectPropertyExpression` from either an `ObjectPropertyExpression`
+/// or `DataPropertyExpression` pair. Used when a `Data*Restriction` is matched
+/// but the property is known to be an object property.
+fn ope_from_pair<'a, A: ForIRI>(
+    pair: Pair<'a, Rule>,
+    ctx: &mut Context<'a, A>,
+) -> Result<ObjectPropertyExpression<A>> {
+    match pair.as_rule() {
+        Rule::ObjectPropertyExpression => ObjectPropertyExpression::from_pair(pair, ctx),
+        Rule::DataPropertyExpression => {
+            let dp = DataProperty::from_pair(descend(pair)?, ctx)?;
+            Ok(ObjectPropertyExpression::ObjectProperty(ObjectProperty(dp.0)))
+        }
+        rule => parse_error!(format!(
+            "Unexpected rule for object property expression: {:?}",
+            rule
+        )),
+    }
+}
+
+/// Parse a `ClassExpression` from either a `Primary` or `DataPrimary` pair.
+/// Used when a `Data*Restriction` is matched but the property is known to be an object property.
+fn ce_from_primary_or_data_primary_pair<'a, A: ForIRI>(
+    pair: Pair<'a, Rule>,
+    ctx: &mut Context<'a, A>,
+) -> Result<ParseResult<'a, ClassExpression<A>>> {
+    if pair.as_rule() == Rule::Primary {
+        return from_primary_pair(pair, ctx);
+    }
+    debug_assert!(pair.as_rule() == Rule::DataPrimary);
+    let span = pair.as_span();
+    let dr = DataRange::from_pair(pair, ctx)?;
+    data_range_to_class_expression(dr.clone())
+        .map(Success)
+        .ok_or_else(|| HornedError::invalid_at(format!("Cannot reinterpret data range '{:?}' as class expression", dr), span))
 }
 
 fn from_conjunction_pair<'a, A: ForIRI>(
@@ -937,7 +970,6 @@ impl<'a, A: ForIRI, O: MutableOntology<A> + Ontology<A> + Default> FromPair<'a, 
                             }
                             vec![]
                         }
-                        _ => vec![],
                     }
                 }
                 Rule::ObjectPropertyFrame => {
@@ -1028,7 +1060,7 @@ macro_rules! annotated_component {
                     .components
                     .push(AnnotatedComponent { ann, component }),
                 Ambiguous(component, span) => {
-                    $ctx.add_ambiguous_component(component, span);
+                    $ctx.add_ambiguous_component(AnnotatedComponent { ann, component }, span);
                 }
             }
         }
@@ -1212,7 +1244,7 @@ impl<'a, A: ForIRI> FromPair<'a, A> for ParseResult<'a, ClassFrame<A>> {
                         Success(component) => {
                             frame.components.push(AnnotatedComponent { component, ann })
                         }
-                        Ambiguous(component, span) => ctx.add_ambiguous_component(component, span),
+                        Ambiguous(component, span) => ctx.add_ambiguous_component(AnnotatedComponent { ann, component }, span),
                     }
                 }
                 Rule::ClassHasKeyClause => {
@@ -2035,7 +2067,7 @@ impl<'a, A: ForIRI> FromPair<'a, A> for NonZeroU32 {
 #[cfg(test)]
 mod tests {
 
-    use std::{io::Cursor, rc::Rc};
+    use std::{collections::HashSet, io::Cursor, rc::Rc};
 
     use test_generator::test_resources;
 
@@ -2054,14 +2086,57 @@ mod tests {
         }
     }
 
-    macro_rules! assert_parse_into {
-        ($ty:ty, $rule:path, $build:ident, $prefixes:ident, $doc:expr, $expected:expr) => {
+    macro_rules! assert_parse_fail {
+        ($ty:ty, $rule:path, $build:ident, $prefixes:ident, $doc:expr, $expected_err:expr) => {{
+            assert_parse_fail!(
+                $ty,
+                $rule,
+                &mut Context::new(&$build, &$prefixes),
+                $doc,
+                $expected_err
+            )
+        }};
+        ($ty:ty, $rule:path, $ctx:expr, $doc:expr, $expected_err:expr) => {{
             let doc = $doc.trim();
-            let mut ctx = Context::new(&$build, &$prefixes);
+            match OwlManchesterLexer::lex($rule, doc)
+                .map(|mut pairs| <$ty as FromPair<_>>::from_pair(next_or_err!(pairs)?, $ctx))
+                .flatten()
+            {
+                Ok(res) => {
+                    panic!(
+                        "Expected parsing failure for:\n{}\nbut got:\n{:#?}",
+                        doc, res
+                    );
+                }
+                Err(err) => {
+                    let err_str = format!("{}", err);
+                    assert!(
+                        err_str.contains($expected_err),
+                        "Expected error to contain {:?} but got {:?}",
+                        $expected_err,
+                        err_str
+                    );
+                }
+            }
+        }};
+    }
+
+    macro_rules! assert_parse_into {
+        ($ty:ty, $rule:path, $build:ident, $prefixes:ident, $doc:expr, $expected:expr) => {{
+            assert_parse_into!(
+                $ty,
+                $rule,
+                &mut Context::new(&$build, &$prefixes),
+                $doc,
+                $expected
+            )
+        }};
+        ($ty:ty, $rule:path, $ctx:expr, $doc:expr, $expected:expr) => {{
+            let doc = $doc.trim();
             match OwlManchesterLexer::lex($rule, doc) {
                 Ok(mut pairs) => {
-                    let res = <$ty as FromPair<_>>::from_pair(pairs.next().unwrap(), &mut ctx);
-                    assert_eq!(res.unwrap(), $expected);
+                    let res = <$ty as FromPair<_>>::from_pair(pairs.next().unwrap(), $ctx).unwrap();
+                    assert_eq!(res, $expected);
                 }
                 Err(e) => panic!(
                     "parsing using {:?}:\n{}\nfailed with: {}",
@@ -2070,7 +2145,7 @@ mod tests {
                     e
                 ),
             }
-        };
+        }};
     }
 
     #[test]
@@ -2175,7 +2250,7 @@ mod tests {
             .unwrap();
 
         assert_parse_into!(
-            ClassFrame<String>,
+            ParseResult<ClassFrame<String>>,
             Rule::ClassFrame,
             build,
             prefixes,
@@ -2188,7 +2263,7 @@ mod tests {
                 SubClassOf:
                     <http://purl.obolibrary.org/obo/APO_0000096>
             "#,
-            ClassFrame::with_components(
+            Success(ClassFrame::with_components(
                 ClassExpression::Class(build.class("http://purl.obolibrary.org/obo/APO_0000098")),
                 vec![
                     DeclareClass(build.class("http://purl.obolibrary.org/obo/APO_0000098"),).into(),
@@ -2215,11 +2290,11 @@ mod tests {
                     }
                     .into(),
                 ]
-            )
+            ))
         );
 
         assert_parse_into!(
-            ClassFrame<String>,
+            ParseResult<ClassFrame<String>>,
             Rule::ClassFrame,
             build,
             prefixes,
@@ -2229,7 +2304,7 @@ mod tests {
             DisjointWith:
                 <http://purl.obolibrary.org/obo/BFO_0000003>
             "#,
-            ClassFrame::with_components(
+            Success(ClassFrame::with_components(
                 ClassExpression::Class(build.class("http://purl.obolibrary.org/obo/BFO_0000002")),
                 vec![
                     DeclareClass(build.class("http://purl.obolibrary.org/obo/BFO_0000002"),).into(),
@@ -2243,7 +2318,7 @@ mod tests {
                     ])
                     .into(),
                 ]
-            )
+            ))
         );
     }
 
@@ -2454,6 +2529,255 @@ mod tests {
             r#""\"Hello, there\", he said""#,
             String::from(r#""Hello, there", he said"#)
         );
+    }
+
+    #[test]
+    fn ambiguous_component() {
+        let build = Build::new();
+        let prefixes = PrefixMapping::default();
+
+        let input = r#"
+            Class: <http://example.com/ontology/classB>
+
+            SubClassOf:
+                <http://example.com/ontology/propA> some <http://example.com/ontology/classA>
+            "#
+        .trim();
+
+        let mut ctx = Context::new(&build, &prefixes);
+
+        assert_parse_into!(
+            ParseResult<ClassFrame<String>>,
+            Rule::ClassFrame,
+            &mut ctx,
+            input,
+            Success(ClassFrame::with_components(
+                ClassExpression::Class(build.class("http://example.com/ontology/classB")),
+                vec![DeclareClass(build.class("http://example.com/ontology/classB")).into()]
+            ))
+        );
+
+        let expected: HashSet<(AnnotatedComponent<_>, _)> = HashSet::from_iter(vec![(
+            Component::SubClassOf(SubClassOf {
+                sub: ClassExpression::Class(build.class("http://example.com/ontology/classB")),
+                sup: ClassExpression::DataSomeValuesFrom {
+                    dp: build
+                        .data_property("http://example.com/ontology/propA")
+                        .into(),
+                    dr: build.datatype("http://example.com/ontology/classA").into(),
+                },
+            })
+            .into(),
+            Span::new(input, 85, 162).unwrap(),
+        )]);
+
+        assert_eq!(ctx.ambiguous_components, expected);
+    }
+
+    #[test]
+    fn explicit_property_type() {
+        let build = Build::<String>::new();
+        let mut prefixes = PrefixMapping::default();
+        prefixes.set_default("http://example.com/ontology/");
+
+        let mut ctx = Context::new(&build, &prefixes);
+        ctx.mark_property_kind(
+            build.iri("http://example.com/ontology/propA"),
+            PropertyKind::Object,
+        );
+        ctx.mark_property_kind(
+            build.iri("http://example.com/ontology/propB"),
+            PropertyKind::Object,
+        );
+
+        let input = r#"
+        Ontology:
+            Class: classB
+
+            SubClassOf:
+                propA some classA
+            "#.trim();
+
+        let expected = SetOntology::from_iter(vec![
+            DeclareClass(build.class("http://example.com/ontology/classB")).into(),
+            SubClassOf {
+                sub: ClassExpression::Class(build.class("http://example.com/ontology/classB")),
+                sup: ClassExpression::ObjectSomeValuesFrom {
+                    ope: build.object_property("http://example.com/ontology/propA").into(),
+                    bce: build.class("http://example.com/ontology/classA").into(),
+                },
+            }
+            .into(),
+        ]);
+
+        assert_parse_into!(
+            SetOntology<String>,
+            Rule::Ontology,
+            &mut ctx,
+            input,
+            expected
+        );
+
+
+        let expected = HashSet::new();
+
+        assert_eq!(ctx.ambiguous_components, expected);
+    }
+
+    /// Returns a context where propA is declared as Object.
+    fn explicit_object_ctx<'a>(
+        build: &'a Build<String>,
+        prefixes: &'a PrefixMapping,
+    ) -> Context<'a, String> {
+        let mut ctx = Context::new(build, prefixes);
+        ctx.mark_property_kind(
+            build.iri("http://example.com/ontology/propA"),
+            PropertyKind::Object,
+        );
+        ctx
+    }
+
+    #[test]
+    fn explicit_property_type_only() {
+        let build = Build::<String>::new();
+        let mut prefixes = PrefixMapping::default();
+        prefixes.set_default("http://example.com/ontology/");
+
+        let mut ctx = explicit_object_ctx(&build, &prefixes);
+
+        let input = r#"
+        Ontology:
+            Class: classB
+
+            SubClassOf:
+                propA only classA
+            "#
+        .trim();
+
+        let expected = SetOntology::from_iter(vec![
+            DeclareClass(build.class("http://example.com/ontology/classB")).into(),
+            SubClassOf {
+                sub: ClassExpression::Class(build.class("http://example.com/ontology/classB")),
+                sup: ClassExpression::ObjectAllValuesFrom {
+                    ope: build
+                        .object_property("http://example.com/ontology/propA")
+                        .into(),
+                    bce: build.class("http://example.com/ontology/classA").into(),
+                },
+            }
+            .into(),
+        ]);
+
+        assert_parse_into!(SetOntology<String>, Rule::Ontology, &mut ctx, input, expected);
+        assert_eq!(ctx.ambiguous_components, HashSet::new());
+    }
+
+    #[test]
+    fn explicit_property_type_min_cardinality() {
+        let build = Build::<String>::new();
+        let mut prefixes = PrefixMapping::default();
+        prefixes.set_default("http://example.com/ontology/");
+
+        let mut ctx = explicit_object_ctx(&build, &prefixes);
+
+        let input = r#"
+        Ontology:
+            Class: classB
+
+            SubClassOf:
+                propA min 1 classA
+            "#
+        .trim();
+
+        let expected = SetOntology::from_iter(vec![
+            DeclareClass(build.class("http://example.com/ontology/classB")).into(),
+            SubClassOf {
+                sub: ClassExpression::Class(build.class("http://example.com/ontology/classB")),
+                sup: ClassExpression::ObjectMinCardinality {
+                    n: 1,
+                    ope: build
+                        .object_property("http://example.com/ontology/propA")
+                        .into(),
+                    bce: build.class("http://example.com/ontology/classA").into(),
+                },
+            }
+            .into(),
+        ]);
+
+        assert_parse_into!(SetOntology<String>, Rule::Ontology, &mut ctx, input, expected);
+        assert_eq!(ctx.ambiguous_components, HashSet::new());
+    }
+
+    #[test]
+    fn explicit_property_type_max_cardinality() {
+        let build = Build::<String>::new();
+        let mut prefixes = PrefixMapping::default();
+        prefixes.set_default("http://example.com/ontology/");
+
+        let mut ctx = explicit_object_ctx(&build, &prefixes);
+
+        let input = r#"
+        Ontology:
+            Class: classB
+
+            SubClassOf:
+                propA max 1 classA
+            "#
+        .trim();
+
+        let expected = SetOntology::from_iter(vec![
+            DeclareClass(build.class("http://example.com/ontology/classB")).into(),
+            SubClassOf {
+                sub: ClassExpression::Class(build.class("http://example.com/ontology/classB")),
+                sup: ClassExpression::ObjectMaxCardinality {
+                    n: 1,
+                    ope: build
+                        .object_property("http://example.com/ontology/propA")
+                        .into(),
+                    bce: build.class("http://example.com/ontology/classA").into(),
+                },
+            }
+            .into(),
+        ]);
+
+        assert_parse_into!(SetOntology<String>, Rule::Ontology, &mut ctx, input, expected);
+        assert_eq!(ctx.ambiguous_components, HashSet::new());
+    }
+
+    #[test]
+    fn explicit_property_type_exact_cardinality() {
+        let build = Build::<String>::new();
+        let mut prefixes = PrefixMapping::default();
+        prefixes.set_default("http://example.com/ontology/");
+
+        let mut ctx = explicit_object_ctx(&build, &prefixes);
+
+        let input = r#"
+        Ontology:
+            Class: classB
+
+            SubClassOf:
+                propA exactly 1 classA
+            "#
+        .trim();
+
+        let expected = SetOntology::from_iter(vec![
+            DeclareClass(build.class("http://example.com/ontology/classB")).into(),
+            SubClassOf {
+                sub: ClassExpression::Class(build.class("http://example.com/ontology/classB")),
+                sup: ClassExpression::ObjectExactCardinality {
+                    n: 1,
+                    ope: build
+                        .object_property("http://example.com/ontology/propA")
+                        .into(),
+                    bce: build.class("http://example.com/ontology/classA").into(),
+                },
+            }
+            .into(),
+        ]);
+
+        assert_parse_into!(SetOntology<String>, Rule::Ontology, &mut ctx, input, expected);
+        assert_eq!(ctx.ambiguous_components, HashSet::new());
     }
 
     #[test_resources("src/ont/owl-manchester/*.omn")]
