@@ -36,7 +36,7 @@ impl<A: ForIRI> VisitMut<A> for ComponentVisitor<A> {
         };
 
         let is_object = |dp: &crate::model::DataProperty<A>| {
-            self.property_kinds.get(&dp.0) == Some(&PropertyKind::Object)
+            matches!(self.property_kinds.get(&dp.0), Some(&PropertyKind::Object) | None)
         };
 
         let converted = match e {

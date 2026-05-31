@@ -101,3 +101,41 @@ pub fn read_with_build<A: ForIRI, O: MutableOntology<A> + Ontology<A> + Default,
 
     Ok((ontology, mapping))
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::model::*;
+    use crate::ontology::set::SetOntology;
+
+    #[test]
+    fn undeclared_property_defaults_to_object() {
+        let build = Build::<String>::new();
+
+        let input = r#"
+        Ontology:
+            Class: <http://example.com/ontology/classB>
+
+            SubClassOf:
+                <http://example.com/ontology/propA> some <http://example.com/ontology/classA>
+        "#;
+
+        let (ont, _): (SetOntology<String>, _) =
+            super::read_with_build(&mut input.as_bytes(), &build).unwrap();
+
+        let expected = SetOntology::from_iter(vec![
+            DeclareClass(build.class("http://example.com/ontology/classB")).into(),
+            SubClassOf {
+                sub: ClassExpression::Class(build.class("http://example.com/ontology/classB")),
+                sup: ClassExpression::ObjectSomeValuesFrom {
+                    ope: build
+                        .object_property("http://example.com/ontology/propA")
+                        .into(),
+                    bce: build.class("http://example.com/ontology/classA").into(),
+                },
+            }
+            .into(),
+        ]);
+
+        assert_eq!(ont, expected);
+    }
+}
