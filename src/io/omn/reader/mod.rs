@@ -35,13 +35,13 @@ pub(super) enum PropertyKind {
 
 struct Context<'a, A: ForIRI> {
     build: &'a Build<A>,
-    mapping: &'a PrefixMapping,
+    mapping: PrefixMapping,
     property_kinds: HashMap<IRI<A>, PropertyKind>,
     ambiguous_components: HashSet<(AnnotatedComponent<A>, Span<'a>)>,
 }
 
 impl<'a, A: ForIRI> Context<'a, A> {
-    fn new(build: &'a Build<A>, mapping: &'a PrefixMapping) -> Self {
+    fn new(build: &'a Build<A>, mapping: PrefixMapping) -> Self {
         Self {
             build,
             mapping,
@@ -75,8 +75,7 @@ pub fn read_with_build<A: ForIRI, O: MutableOntology<A> + Ontology<A> + Default,
     mut bufread: R,
     build: &Build<A>,
 ) -> Result<(O, PrefixMapping), HornedError> {
-    let prefixes = PrefixMapping::default();
-    let mut ctx = Context::new(build, &prefixes);
+    let mut ctx = Context::new(build, PrefixMapping::default());
 
     // FIXME: implement iterative parser (this is possible in )
     let mut doc = String::new();

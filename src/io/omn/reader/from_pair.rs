@@ -1017,8 +1017,7 @@ where
     fn from_pair_unchecked(pair: Pair<'a, Rule>, ctx: &mut Context<'a, A>) -> Result<Self> {
         let mut pairs = pair.into_inner();
 
-        // Build the prefix mapping and use it to build the ontology
-        let mut prefixes = PrefixMapping::default();
+        // Register prefix declarations into ctx so IRI expansion works during parsing
         for inner in next_or_err!(pairs)?.into_inner() {
             debug_assert!(inner.as_rule() == Rule::PrefixDeclaration);
             let mut decl = inner.into_inner();
@@ -1026,16 +1025,17 @@ where
             let iri = descend(last_or_err!(decl)?)?;
 
             if let Some(prefix) = next_or_err!(pname)?.into_inner().next() {
-                prefixes
+                ctx.mapping
                     .add_prefix(prefix.as_str(), iri.as_str())
                     .map_err(|_| {
                         HornedError::invalid_at("The prefix `\"_\"` is reserved.", prefix.as_span())
                     })?;
             } else {
-                prefixes.set_default(iri.as_str());
+                ctx.mapping.set_default(iri.as_str());
             }
         }
 
+        let prefixes = ctx.mapping.clone();
         MutableOntologyWrapper::from_pair(next_or_err!(pairs)?, ctx).map(|ont| (ont, prefixes))
     }
 }
@@ -2091,7 +2091,7 @@ mod tests {
             assert_parse_fail!(
                 $ty,
                 $rule,
-                &mut Context::new(&$build, &$prefixes),
+                &mut Context::new(&$build, $prefixes.clone()),
                 $doc,
                 $expected_err
             )
@@ -2126,7 +2126,7 @@ mod tests {
             assert_parse_into!(
                 $ty,
                 $rule,
-                &mut Context::new(&$build, &$prefixes),
+                &mut Context::new(&$build, $prefixes.clone()),
                 $doc,
                 $expected
             )
@@ -2544,7 +2544,7 @@ mod tests {
             "#
         .trim();
 
-        let mut ctx = Context::new(&build, &prefixes);
+        let mut ctx = Context::new(&build, prefixes);
 
         assert_parse_into!(
             ParseResult<ClassFrame<String>>,
@@ -2580,7 +2580,7 @@ mod tests {
         let mut prefixes = PrefixMapping::default();
         prefixes.set_default("http://example.com/ontology/");
 
-        let mut ctx = Context::new(&build, &prefixes);
+        let mut ctx = Context::new(&build, prefixes);
         ctx.mark_property_kind(
             build.iri("http://example.com/ontology/propA"),
             PropertyKind::Object,
@@ -2627,9 +2627,9 @@ mod tests {
     /// Returns a context where propA is declared as Object.
     fn explicit_object_ctx<'a>(
         build: &'a Build<String>,
-        prefixes: &'a PrefixMapping,
+        prefixes: &PrefixMapping,
     ) -> Context<'a, String> {
-        let mut ctx = Context::new(build, prefixes);
+        let mut ctx = Context::new(build, prefixes.clone());
         ctx.mark_property_kind(
             build.iri("http://example.com/ontology/propA"),
             PropertyKind::Object,
@@ -2793,8 +2793,7 @@ mod tests {
         };
 
         let build = Build::new();
-        let prefixes = PrefixMapping::default();
-        let mut ctx = Context::new(&build, &prefixes);
+        let mut ctx = Context::new(&build, PrefixMapping::default());
         let item: (MutableOntologyWrapper<_, SetOntology<Rc<str>>>, _) =
             FromPair::from_pair(pair, &mut ctx).unwrap();
 
