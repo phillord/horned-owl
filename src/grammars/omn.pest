@@ -34,6 +34,10 @@ KEYWORD_AND             = _{ "and" }
 KEYWORD_OR              = _{ "or" }
 KEYWORD_NOT             = _{ "not" }
 KEYWORD_INVERSE         = _{ "inverse" | "inv" }
+// NOTE: `KEYWORD_NOT` does not lead to a `KEYWORD_NOT` pair while `NOT` does.
+// Sometimes rules (like `DataAtomicComplement`) already contain the information that the construct is a complement.
+// But e.g. for descriptions the `KEYWORD_NOT` is optional.
+NOT                     = { KEYWORD_NOT }
 
 LBRACKET = _{ "(" }
 RBRACKET = _{ ")" }
@@ -236,10 +240,10 @@ RestrictionValue = { Literal }
 
 Description = { Conjunction ~ (KEYWORD_OR ~ Conjunction)* }
 Conjunction = { 
-        (ClassIRI ~ "that" ~ KEYWORD_NOT? ~ Restriction ~ ( KEYWORD_AND ~ KEYWORD_NOT? ~ Restriction )*)
+        (ClassIRI ~ "that" ~ NOT? ~ Restriction ~ ( KEYWORD_AND ~ NOT? ~ Restriction )*)
     |   (Primary ~ (KEYWORD_AND ~ Primary)*)
 }
-Primary = { KEYWORD_NOT? ~ (Restriction | Atomic) }
+Primary = { NOT? ~ (Restriction | Atomic) }
 
 DataSomeValuesFromRestriction     = { DataPropertyExpression ~ "some" ~ DataPrimary }
 DataAllValuesFromRestriction      = { DataPropertyExpression ~ "only" ~ DataPrimary }

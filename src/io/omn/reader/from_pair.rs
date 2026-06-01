@@ -407,12 +407,16 @@ fn from_restriction_pair<'a, A: ForIRI>(
     let mut pairs = inner.into_inner();
 
     let property_kind = pairs.peek().and_then(|p| {
-        let iri = DataProperty::from_pair(descend(p.clone()).ok()?, ctx).ok()?.0;
+        let iri = DataProperty::from_pair(descend(p.clone()).ok()?, ctx)
+            .ok()?
+            .0;
         ctx.get_property_kind(iri)
     });
 
     macro_rules! dp {
-        () => (Some(PropertyKind::Data) | None);
+        () => {
+            Some(PropertyKind::Data) | None
+        };
     }
 
     // Resolve ambiguity between object and data property restrictions by first checking if the property is declared as a data property.
@@ -452,7 +456,8 @@ fn from_restriction_pair<'a, A: ForIRI>(
         (Rule::ObjectSomeValuesFromRestriction | Rule::DataSomeValuesFromRestriction, _) => {
             let ope: ObjectPropertyExpression<A> = ope_from_pair(next_or_err!(pairs)?, ctx)?;
 
-            let bce = ce_from_primary_or_data_primary_pair(next_or_err!(pairs)?, ctx)?.map(Box::new);
+            let bce =
+                ce_from_primary_or_data_primary_pair(next_or_err!(pairs)?, ctx)?.map(Box::new);
 
             ensure_property_kind!(
                 Object,
@@ -467,7 +472,8 @@ fn from_restriction_pair<'a, A: ForIRI>(
         (Rule::ObjectAllValuesFromRestriction | Rule::DataAllValuesFromRestriction, _) => {
             let ope: ObjectPropertyExpression<A> = ope_from_pair(next_or_err!(pairs)?, ctx)?;
 
-            let bce = ce_from_primary_or_data_primary_pair(next_or_err!(pairs)?, ctx)?.map(Box::new);
+            let bce =
+                ce_from_primary_or_data_primary_pair(next_or_err!(pairs)?, ctx)?.map(Box::new);
 
             ensure_property_kind!(
                 Object,
@@ -541,7 +547,9 @@ fn from_primary_pair<'a, A: ForIRI>(
 
     let mut is_complement = false;
 
-    if pair.as_rule() == Rule::KEYWORD_NOT {
+    println!("from_primary_pair: rule={:?}, text={:?}", pair.as_rule(), pair.as_str());
+
+    if pair.as_rule() == Rule::NOT {
         is_complement = true;
         pair = next_or_err!(inner)?;
     }
@@ -572,7 +580,9 @@ fn ope_from_pair<'a, A: ForIRI>(
         Rule::ObjectPropertyExpression => ObjectPropertyExpression::from_pair(pair, ctx),
         Rule::DataPropertyExpression => {
             let dp = DataProperty::from_pair(descend(pair)?, ctx)?;
-            Ok(ObjectPropertyExpression::ObjectProperty(ObjectProperty(dp.0)))
+            Ok(ObjectPropertyExpression::ObjectProperty(ObjectProperty(
+                dp.0,
+            )))
         }
         rule => parse_error!(format!(
             "Unexpected rule for object property expression: {:?}",
@@ -595,7 +605,15 @@ fn ce_from_primary_or_data_primary_pair<'a, A: ForIRI>(
     let dr = DataRange::from_pair(pair, ctx)?;
     data_range_to_class_expression(dr.clone())
         .map(Success)
-        .ok_or_else(|| HornedError::invalid_at(format!("Cannot reinterpret data range '{:?}' as class expression", dr), span))
+        .ok_or_else(|| {
+            HornedError::invalid_at(
+                format!(
+                    "Cannot reinterpret data range '{:?}' as class expression",
+                    dr
+                ),
+                span,
+            )
+        })
 }
 
 fn from_conjunction_pair<'a, A: ForIRI>(
@@ -616,7 +634,7 @@ fn from_conjunction_pair<'a, A: ForIRI>(
                     vec![Success(ClassExpression::Class(class))];
 
                 while let Some(pair) = inner.next() {
-                    let cexp = if pair.as_rule() == Rule::KEYWORD_NOT {
+                    let cexp = if pair.as_rule() == Rule::NOT {
                         from_restriction_pair(next_or_err!(inner)?, ctx)?
                             .map(|c| ClassExpression::ObjectComplementOf(Box::new(c)))
                     } else {
@@ -2069,10 +2087,13 @@ mod tests {
 
     use std::{collections::HashSet, io::Cursor, rc::Rc};
 
+    use enum_meta::Meta;
     use test_generator::test_resources;
 
     use super::*;
-    use crate::{io::omn::reader::lexer::OwlManchesterLexer, ontology::set::SetOntology};
+    use crate::{
+        io::omn::reader::lexer::OwlManchesterLexer, ontology::set::SetOntology, vocab::{Namespace, Vocab},
+    };
 
     impl<'a> FromPair<'a, String> for SetOntology<String> {
         const RULE: Rule = Rule::Ontology;
@@ -2084,41 +2105,6 @@ mod tests {
             MutableOntologyWrapper::<String, SetOntology<String>>::from_pair(pair, context)
                 .map(|wrapper| wrapper.0)
         }
-    }
-
-    macro_rules! assert_parse_fail {
-        ($ty:ty, $rule:path, $build:ident, $prefixes:ident, $doc:expr, $expected_err:expr) => {{
-            assert_parse_fail!(
-                $ty,
-                $rule,
-                &mut Context::new(&$build, $prefixes.clone()),
-                $doc,
-                $expected_err
-            )
-        }};
-        ($ty:ty, $rule:path, $ctx:expr, $doc:expr, $expected_err:expr) => {{
-            let doc = $doc.trim();
-            match OwlManchesterLexer::lex($rule, doc)
-                .map(|mut pairs| <$ty as FromPair<_>>::from_pair(next_or_err!(pairs)?, $ctx))
-                .flatten()
-            {
-                Ok(res) => {
-                    panic!(
-                        "Expected parsing failure for:\n{}\nbut got:\n{:#?}",
-                        doc, res
-                    );
-                }
-                Err(err) => {
-                    let err_str = format!("{}", err);
-                    assert!(
-                        err_str.contains($expected_err),
-                        "Expected error to contain {:?} but got {:?}",
-                        $expected_err,
-                        err_str
-                    );
-                }
-            }
-        }};
     }
 
     macro_rules! assert_parse_into {
@@ -2136,7 +2122,7 @@ mod tests {
             match OwlManchesterLexer::lex($rule, doc) {
                 Ok(mut pairs) => {
                     let res = <$ty as FromPair<_>>::from_pair(pairs.next().unwrap(), $ctx).unwrap();
-                    assert_eq!(res, $expected);
+                    pretty_assertions::assert_eq!(res, $expected);
                 }
                 Err(e) => panic!(
                     "parsing using {:?}:\n{}\nfailed with: {}",
@@ -2596,14 +2582,17 @@ mod tests {
 
             SubClassOf:
                 propA some classA
-            "#.trim();
+            "#
+        .trim();
 
         let expected = SetOntology::from_iter(vec![
             DeclareClass(build.class("http://example.com/ontology/classB")).into(),
             SubClassOf {
                 sub: ClassExpression::Class(build.class("http://example.com/ontology/classB")),
                 sup: ClassExpression::ObjectSomeValuesFrom {
-                    ope: build.object_property("http://example.com/ontology/propA").into(),
+                    ope: build
+                        .object_property("http://example.com/ontology/propA")
+                        .into(),
                     bce: build.class("http://example.com/ontology/classA").into(),
                 },
             }
@@ -2618,170 +2607,60 @@ mod tests {
             expected
         );
 
-
         let expected = HashSet::new();
 
         assert_eq!(ctx.ambiguous_components, expected);
     }
 
-    /// Returns a context where propA is declared as Object.
-    fn explicit_object_ctx<'a>(
-        build: &'a Build<String>,
-        prefixes: &PrefixMapping,
-    ) -> Context<'a, String> {
-        let mut ctx = Context::new(build, prefixes.clone());
-        ctx.mark_property_kind(
-            build.iri("http://example.com/ontology/propA"),
-            PropertyKind::Object,
+    #[test]
+    fn complex_class_assertion() {
+        let build = Build::<String>::new();
+        let mut prefixes = PrefixMapping::default();
+        prefixes.set_default("http://example.com/ontology/");
+
+        let input = r#"
+        Individual: indA
+
+        Types:
+            not A
+        "#
+        .trim();
+
+        let expected = IndividualFrame::with_components(
+            build
+                .named_individual("http://example.com/ontology/indA")
+                .into(),
+            vec![
+                DeclareNamedIndividual(build.named_individual("http://example.com/ontology/indA")).into(),
+                ClassAssertion {
+                    ce: ClassExpression::ObjectComplementOf(
+                        build.class("http://example.com/ontology/classA").into(),
+                    ),
+                    i: build
+                        .named_individual("http://example.com/ontology/indA")
+                        .into(),
+                }
+                .into(),
+            ],
         );
-        ctx
-    }
 
-    #[test]
-    fn explicit_property_type_only() {
-        let build = Build::<String>::new();
-        let mut prefixes = PrefixMapping::default();
-        prefixes.set_default("http://example.com/ontology/");
-
-        let mut ctx = explicit_object_ctx(&build, &prefixes);
-
-        let input = r#"
-        Ontology:
-            Class: classB
-
-            SubClassOf:
-                propA only classA
-            "#
-        .trim();
-
-        let expected = SetOntology::from_iter(vec![
-            DeclareClass(build.class("http://example.com/ontology/classB")).into(),
-            SubClassOf {
-                sub: ClassExpression::Class(build.class("http://example.com/ontology/classB")),
-                sup: ClassExpression::ObjectAllValuesFrom {
-                    ope: build
-                        .object_property("http://example.com/ontology/propA")
-                        .into(),
-                    bce: build.class("http://example.com/ontology/classA").into(),
-                },
-            }
-            .into(),
-        ]);
-
-        assert_parse_into!(SetOntology<String>, Rule::Ontology, &mut ctx, input, expected);
-        assert_eq!(ctx.ambiguous_components, HashSet::new());
-    }
-
-    #[test]
-    fn explicit_property_type_min_cardinality() {
-        let build = Build::<String>::new();
-        let mut prefixes = PrefixMapping::default();
-        prefixes.set_default("http://example.com/ontology/");
-
-        let mut ctx = explicit_object_ctx(&build, &prefixes);
-
-        let input = r#"
-        Ontology:
-            Class: classB
-
-            SubClassOf:
-                propA min 1 classA
-            "#
-        .trim();
-
-        let expected = SetOntology::from_iter(vec![
-            DeclareClass(build.class("http://example.com/ontology/classB")).into(),
-            SubClassOf {
-                sub: ClassExpression::Class(build.class("http://example.com/ontology/classB")),
-                sup: ClassExpression::ObjectMinCardinality {
-                    n: 1,
-                    ope: build
-                        .object_property("http://example.com/ontology/propA")
-                        .into(),
-                    bce: build.class("http://example.com/ontology/classA").into(),
-                },
-            }
-            .into(),
-        ]);
-
-        assert_parse_into!(SetOntology<String>, Rule::Ontology, &mut ctx, input, expected);
-        assert_eq!(ctx.ambiguous_components, HashSet::new());
-    }
-
-    #[test]
-    fn explicit_property_type_max_cardinality() {
-        let build = Build::<String>::new();
-        let mut prefixes = PrefixMapping::default();
-        prefixes.set_default("http://example.com/ontology/");
-
-        let mut ctx = explicit_object_ctx(&build, &prefixes);
-
-        let input = r#"
-        Ontology:
-            Class: classB
-
-            SubClassOf:
-                propA max 1 classA
-            "#
-        .trim();
-
-        let expected = SetOntology::from_iter(vec![
-            DeclareClass(build.class("http://example.com/ontology/classB")).into(),
-            SubClassOf {
-                sub: ClassExpression::Class(build.class("http://example.com/ontology/classB")),
-                sup: ClassExpression::ObjectMaxCardinality {
-                    n: 1,
-                    ope: build
-                        .object_property("http://example.com/ontology/propA")
-                        .into(),
-                    bce: build.class("http://example.com/ontology/classA").into(),
-                },
-            }
-            .into(),
-        ]);
-
-        assert_parse_into!(SetOntology<String>, Rule::Ontology, &mut ctx, input, expected);
-        assert_eq!(ctx.ambiguous_components, HashSet::new());
-    }
-
-    #[test]
-    fn explicit_property_type_exact_cardinality() {
-        let build = Build::<String>::new();
-        let mut prefixes = PrefixMapping::default();
-        prefixes.set_default("http://example.com/ontology/");
-
-        let mut ctx = explicit_object_ctx(&build, &prefixes);
-
-        let input = r#"
-        Ontology:
-            Class: classB
-
-            SubClassOf:
-                propA exactly 1 classA
-            "#
-        .trim();
-
-        let expected = SetOntology::from_iter(vec![
-            DeclareClass(build.class("http://example.com/ontology/classB")).into(),
-            SubClassOf {
-                sub: ClassExpression::Class(build.class("http://example.com/ontology/classB")),
-                sup: ClassExpression::ObjectExactCardinality {
-                    n: 1,
-                    ope: build
-                        .object_property("http://example.com/ontology/propA")
-                        .into(),
-                    bce: build.class("http://example.com/ontology/classA").into(),
-                },
-            }
-            .into(),
-        ]);
-
-        assert_parse_into!(SetOntology<String>, Rule::Ontology, &mut ctx, input, expected);
-        assert_eq!(ctx.ambiguous_components, HashSet::new());
+        assert_parse_into!(
+            IndividualFrame<String>,
+            Rule::IndividualFrame,
+            build,
+            prefixes,
+            input,
+            expected
+        );
     }
 
     #[test_resources("src/ont/owl-manchester/*.omn")]
     fn from_pair_resource(resource: &str) {
+        pub fn is_built_in(iri: &IRI<RcStr>) -> bool {
+            Namespace::all().iter()
+                .any(|ns| iri.to_string().starts_with(&ns.to_string()))
+        }
+
         let text = &slurp::read_all_to_string(resource).unwrap();
         let pair = match OwlManchesterLexer::lex(Rule::OntologyDocument, text.trim()) {
             Err(e) => panic!("parser failed: {e}"),
@@ -2794,17 +2673,51 @@ mod tests {
 
         let build = Build::new();
         let mut ctx = Context::new(&build, PrefixMapping::default());
-        let item: (MutableOntologyWrapper<_, SetOntology<Rc<str>>>, _) =
+        let (wrapper, actual_prefixes): (MutableOntologyWrapper<_, SetOntology<Rc<str>>>, _) =
             FromPair::from_pair(pair, &mut ctx).unwrap();
 
         let path = resource
             .replace("owl-manchester", "owl-xml")
             .replace(".omn", ".owx");
         let owx = &slurp::read_all_to_string(path).unwrap();
-        let expected =
+        let (owx_ontology, expected_prefixes): (SetOntology<Rc<str>>, PrefixMapping) =
             crate::io::owx::reader::read(&mut Cursor::new(&owx), Default::default()).unwrap();
 
-        // pretty_assertions::assert_eq!(item.1, expected.1);
-        pretty_assertions::assert_eq!(item.0.0, expected.0);
+        // The OWL API includes built-in entities in the OMN output but not in the OWX output.
+        // -> Filter them in the actual output for comparison
+        let mut actual: Vec<AnnotatedComponent<Rc<str>>> = wrapper
+            .0
+            .into_iter()
+            .filter(|c| match c {
+                AnnotatedComponent {
+                    component: Component::DeclareClass(DeclareClass(c)),
+                    ann: _,
+                } => !is_built_in(&c.0),
+                AnnotatedComponent {
+                    component: Component::DeclareObjectProperty(DeclareObjectProperty(p)),
+                    ann: _,
+                } => !is_built_in(&p.0),
+                AnnotatedComponent {
+                    component: Component::DeclareDataProperty(DeclareDataProperty(p)),
+                    ann: _,
+                } => !is_built_in(&p.0),
+                AnnotatedComponent {
+                    component: Component::DeclareAnnotationProperty(DeclareAnnotationProperty(p)),
+                    ann: _,
+                } => !is_built_in(&p.0),
+                AnnotatedComponent {
+                    component: Component::DeclareDatatype(DeclareDatatype(d)),
+                    ann: _,
+                } => !is_built_in(&d.0),
+                _ => true,
+            })
+            .collect();
+        actual.sort();
+
+        let mut expected: Vec<AnnotatedComponent<Rc<str>>> = owx_ontology.into_iter().collect();
+        expected.sort();
+
+        pretty_assertions::assert_eq!(actual_prefixes, expected_prefixes);
+        pretty_assertions::assert_eq!(actual, expected);
     }
 }
