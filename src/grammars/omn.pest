@@ -445,24 +445,34 @@ InverseObjectPropertyClause                = {
 
 SWRLRule = { SWRLAntecedentList ~ "->" ~ SWRLConsequentList }
 
+SWRLAtomList = { SWRLAtom ~ (COMMA ~ SWRLAtom)* }
+
 SWRLAntecedentList = { SWRLAntecedent? ~ (COMMA ~ SWRLAntecedent)* }
 SWRLConsequentList = { SWRLConsequent? ~ (COMMA ~ SWRLConsequent)* }
 
 SWRLAntecedent = { SWRLAtom }
 SWRLConsequent = { SWRLAtom }
 
+SWRLAmbiguousUnaryAtom =        { IRI               ~ LBRACKET ~ SWRLVariable ~ RBRACKET }
+SWRLClassAtom =                 { Description       ~ LBRACKET ~ SWRLIObject  ~ RBRACKET }
+SWRLDataRangeAtom =             { DataRange         ~ LBRACKET ~ SWRLDObject  ~ RBRACKET }
+SWRLAmbiguousBinaryAtom =       { IRI               ~ LBRACKET ~ SWRLIObject ~ COMMA ~ SWRLVariable ~ RBRACKET }
+SWRLDataPropertyAtom =          { DataPropertyIRI   ~ LBRACKET ~ SWRLIObject  ~ COMMA ~ SWRLDObject  ~ RBRACKET }
+SWRLObjectPropertyAtom =        { ObjectPropertyIRI ~ LBRACKET ~ SWRLIObject  ~ COMMA ~ SWRLDObject  ~ RBRACKET }
+SWRLSameIndividualAtom =        { "SameAs"          ~ LBRACKET ~ SWRLIObject  ~ COMMA ~ SWRLIObject  ~ RBRACKET }
+SWRLDifferentIndividualsAtom =  { "DifferentFrom"   ~ LBRACKET ~ SWRLIObject  ~ COMMA ~ SWRLIObject  ~ RBRACKET }
+SWRLBuiltInAtom =               { SWRLBuiltinID     ~ LBRACKET ~ SWRLDObject  ~ (COMMA ~ SWRLDObject)* ~ RBRACKET }
 SWRLAtom = {
-    Description ~ LBRACKET ~ SWRLIObject ~ RBRACKET 
-    | DataRange ~ LBRACKET ~ SWRLDObject ~ RBRACKET
-    | ObjectPropertyIRI ~ LBRACKET ~ SWRLIObject ~ COMMA ~ SWRLDObject ~ RBRACKET
-    | DataPropertyIRI ~ LBRACKET ~ SWRLIObject ~ COMMA ~ SWRLDObject ~ RBRACKET
-    | "SameAs" ~ LBRACKET ~ SWRLIObject ~ COMMA ~ SWRLIObject ~ RBRACKET
-    | "DifferentFrom" ~ LBRACKET ~ SWRLIObject ~ COMMA ~ SWRLIObject ~ RBRACKET
-    | SWRLBuiltinID ~ LBRACKET ~ SWRLDObject ~ (COMMA ~ SWRLDObject)* ~ RBRACKET
+    SWRLClassAtom
+    | SWRLDataRangeAtom
+    | SWRLDataPropertyAtom
+    | SWRLObjectPropertyAtom
+    | SWRLSameIndividualAtom
+    | SWRLDifferentIndividualsAtom
+    | SWRLBuiltInAtom
 }
 
 SWRLBuiltinID = { IRI }
-SWRLIObject = { SWRLIvariable | Individual }
-SWRLDObject = { SWRLDvariable | Literal }
-SWRLIvariable = { "?" ~ IRI } 
-SWRLDvariable = { "?" ~ IRI } 
+SWRLIObject = { SWRLVariable | Individual }
+SWRLDObject = { SWRLVariable | Literal }
+SWRLVariable = { "?" ~ IRI } 

@@ -2039,7 +2039,7 @@ pub enum Atom<A> {
     },
     DataPropertyAtom {
         pred: DataProperty<A>,
-        args: (DArgument<A>, DArgument<A>),
+        args: (IArgument<A>, DArgument<A>),
     },
     DataRangeAtom {
         pred: DataRange<A>,
@@ -2048,7 +2048,7 @@ pub enum Atom<A> {
     DifferentIndividualsAtom(IArgument<A>, IArgument<A>),
     ObjectPropertyAtom {
         pred: ObjectPropertyExpression<A>,
-        args: (IArgument<A>, IArgument<A>),
+        args: (IArgument<A>, DArgument<A>),
     },
     SameIndividualAtom(IArgument<A>, IArgument<A>),
 }
@@ -2083,6 +2083,18 @@ impl<A: ForIRI> From<NamedIndividual<A>> for IArgument<A> {
 pub enum DArgument<A> {
     Literal(Literal<A>),
     Variable(Variable<A>),
+}
+
+impl<A: ForIRI> From<Variable<A>> for DArgument<A> {
+    fn from(var: Variable<A>) -> Self {
+        Self::Variable(var)
+    }
+}
+
+impl<A: ForIRI> From<Literal<A>> for DArgument<A> {
+    fn from(i: Literal<A>) -> Self {
+        Self::Literal(i)
+    }
 }
 
 /// Access or change the `OntologyID` of an `Ontology`

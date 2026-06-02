@@ -12,6 +12,7 @@ use pest::iterators::Pairs;
 use crate::error::HornedError;
 use crate::io::omn::reader::PropertyKind;
 use crate::io::omn::reader::ambiguity::data_range_to_class_expression;
+use crate::model::Rule as SWRLRule;
 use crate::model::*;
 use crate::vocab::Facet;
 
@@ -63,6 +64,17 @@ impl<'a, T> ParseResult<'a, T> {
         match self {
             Success(value) => Success(f(value)),
             Ambiguous(value, span) => Ambiguous(f(value), span),
+        }
+    }
+}
+
+impl<'a, T, S> From<(ParseResult<'a, T>, ParseResult<'a, S>)> for ParseResult<'a, (T, S)> {
+    fn from((result, suffix): (ParseResult<'a, T>, ParseResult<'a, S>)) -> Self {
+        match (result, suffix) {
+            (Success(value), Success(suffix)) => Success((value, suffix)),
+            (Success(value), Ambiguous(suffix, span))
+            | (Ambiguous(value, span), Success(suffix)) => Ambiguous((value, suffix), span),
+            (Ambiguous(value, span), Ambiguous(suffix, _)) => Ambiguous((value, suffix), span),
         }
     }
 }
@@ -547,7 +559,11 @@ fn from_primary_pair<'a, A: ForIRI>(
 
     let mut is_complement = false;
 
-    println!("from_primary_pair: rule={:?}, text={:?}", pair.as_rule(), pair.as_str());
+    println!(
+        "from_primary_pair: rule={:?}, text={:?}",
+        pair.as_rule(),
+        pair.as_str()
+    );
 
     if pair.as_rule() == Rule::NOT {
         is_complement = true;
@@ -1937,13 +1953,185 @@ impl<'a, A: ForIRI> FromPair<'a, A> for ParseResult<'a, MiscClause<A>> {
                 entity_list!(inner, ctx, DifferentIndividuals)
             }
             Rule::MiscRuleClause => {
-                parse_error!("Rule clauses are not supported yet", inner.as_span())
+                let rule = ParseResult::<SWRLRule<A>>::from_pair(inner, ctx)?;
+                Ok(rule.map(|r| MiscClause(Some(r.into()))))
             }
             rule => unexpected_rule!(MiscClause, rule),
         }
     }
 }
 
+// ---------------------------------------------------------------------------
+
+impl<'a, A: ForIRI> FromPair<'a, A> for ParseResult<'a, SWRLRule<A>> {
+    const RULE: Rule = Rule::MiscRuleClause;
+
+    fn from_pair_unchecked(pair: Pair<'a, Rule>, ctx: &mut Context<'a, A>) -> Result<Self> {
+        let inner = descend(pair)?;
+        debug_assert!(inner.as_rule() == Rule::SWRLRule);
+
+        let mut inner = inner.into_inner();
+
+        // parse antecedent list
+        let pair = next_or_err!(inner)?;
+        debug_assert!(pair.as_rule() == Rule::SWRLAntecedent);
+        let head = pair
+            .into_inner()
+            .map(|pair| {
+                debug_assert!(pair.as_rule() == Rule::SWRLAntecedent);
+                ParseResult::<Atom<A>>::from_pair(descend(pair)?, ctx)
+            })
+            .collect::<Result<Vec<_>>>()?;
+        let head = collect_parse_result(head.into_iter());
+
+        // parse consequent list
+        let pair = next_or_err!(inner)?;
+        debug_assert!(pair.as_rule() == Rule::SWRLConsequent);
+        let body = pair
+            .into_inner()
+            .map(|pair| {
+                debug_assert!(pair.as_rule() == Rule::SWRLConsequent);
+                ParseResult::<Atom<A>>::from_pair(descend(pair)?, ctx)
+            })
+            .collect::<Result<Vec<_>>>()?;
+        let body = collect_parse_result(body.into_iter());
+
+        Ok(ParseResult::<(Vec<_>, Vec<_>)>::from((head, body))
+            .map(|(head, body)| SWRLRule { head, body }))
+    }
+}
+
+impl<'a, A: ForIRI> FromPair<'a, A> for ParseResult<'a, Atom<A>> {
+    const RULE: Rule = Rule::SWRLAtom;
+
+    fn from_pair_unchecked(pair: Pair<'a, Rule>, ctx: &mut Context<'a, A>) -> Result<Self> {
+        let inner = descend(pair)?;
+        let span = inner.as_span();
+        match inner.as_rule() {
+            // Unary
+            Rule::SWRLAmbiguousUnaryAtom => {
+                let mut pairs = inner.into_inner();
+                let iri = IRI::from_pair(next_or_err!(pairs)?, ctx)?;
+                let arg = Variable::from_pair(next_or_err!(pairs)?, ctx)?;
+
+                Ok(Ambiguous(
+                    Atom::ClassAtom {
+                        pred: iri.into(),
+                        arg: arg.into(),
+                    },
+                    span,
+                ))
+            }
+            Rule::SWRLClassAtom => {
+                let mut pairs = inner.into_inner();
+                let ce: ParseResult<ClassExpression<A>> =
+                    FromPair::from_pair(next_or_err!(pairs)?, ctx)?;
+                let i = FromPair::from_pair(next_or_err!(pairs)?, ctx)?;
+                Ok(ce.map(|pred| Atom::ClassAtom { pred, arg: i }))
+            }
+            Rule::SWRLDataRangeAtom => {
+                let mut pairs = inner.into_inner();
+                let dr = from_data_range_pair(next_or_err!(pairs)?, ctx)?;
+                let arg = Variable::from_pair(next_or_err!(pairs)?, ctx)?;
+                Ok(Success(Atom::DataRangeAtom {
+                    pred: dr,
+                    arg: arg.into(),
+                }))
+            }
+            // Binary
+            Rule::SWRLAmbiguousBinaryAtom => {
+                let mut pairs = inner.into_inner();
+                let iri = IRI::from_pair(next_or_err!(pairs)?, ctx)?;
+                let arg1 = IArgument::from_pair(next_or_err!(pairs)?, ctx)?;
+                let arg2 = Variable::from_pair(next_or_err!(pairs)?, ctx)?;
+                Ok(Ambiguous(
+                    Atom::DataPropertyAtom {
+                        pred: iri.into(),
+                        args: (arg1.into(), arg2.into()),
+                    },
+                    span,
+                ))
+            }
+            Rule::SWRLObjectPropertyAtom => {
+                let mut pairs = inner.into_inner();
+                let op = ObjectPropertyExpression::from_pair(next_or_err!(pairs)?, ctx)?;
+                let arg1 = IArgument::from_pair(next_or_err!(pairs)?, ctx)?;
+                let arg2 = DArgument::from_pair(next_or_err!(pairs)?, ctx)?;
+                Ok(Success(Atom::ObjectPropertyAtom {
+                    pred: op,
+                    args: (arg1.into(), arg2.into()),
+                }))
+            }
+            Rule::SWRLSameIndividualAtom => {
+                let mut pairs = inner.into_inner();
+                let arg1 = IArgument::from_pair(next_or_err!(pairs)?, ctx)?;
+                let arg2 = IArgument::from_pair(next_or_err!(pairs)?, ctx)?;
+                Ok(Success(Atom::SameIndividualAtom(arg1.into(), arg2.into())))
+            }
+            Rule::SWRLDifferentIndividualsAtom => {
+                let mut pairs = inner.into_inner();
+                let arg1 = IArgument::from_pair(next_or_err!(pairs)?, ctx)?;
+                let arg2 = IArgument::from_pair(next_or_err!(pairs)?, ctx)?;
+                Ok(Success(Atom::DifferentIndividualsAtom(
+                    arg1.into(),
+                    arg2.into(),
+                )))
+            }
+            // Built-in
+            Rule::SWRLBuiltInAtom => {
+                let mut pairs = inner.into_inner();
+                let iri = IRI::from_pair(next_or_err!(pairs)?, ctx)?;
+                let args = pairs
+                    .map(|pair| DArgument::from_pair(pair, ctx))
+                    .collect::<Result<Vec<_>>>()?;
+                Ok(Success(Atom::BuiltInAtom {
+                    pred: iri.into(),
+                    args,
+                }))
+            }
+            rule => unexpected_rule!(Atom, rule),
+        }
+    }
+}
+
+impl<'a, A: ForIRI> FromPair<'a, A> for Variable<A> {
+    const RULE: Rule = Rule::SWRLVariable;
+
+    fn from_pair_unchecked(pair: Pair<'a, Rule>, context: &mut Context<'a, A>) -> Result<Self> {
+        let inner = descend(pair)?;
+        debug_assert!(inner.as_rule() == Rule::SWRLVariable);
+        let iri = IRI::from_pair(descend(inner)?, context)?;
+        Ok(Variable(iri))
+    }
+}
+
+impl<'a, A: ForIRI> FromPair<'a, A> for IArgument<A> {
+    const RULE: Rule = Rule::SWRLIObject;
+
+    fn from_pair_unchecked(pair: Pair<'a, Rule>, context: &mut Context<'a, A>) -> Result<Self> {
+        let inner = descend(pair)?;
+        debug_assert!(inner.as_rule() == Rule::SWRLIObject);
+        match inner.as_rule() {
+            Rule::SWRLVariable => Variable::from_pair(inner, context).map(IArgument::Variable),
+            Rule::Individual => Individual::from_pair(inner, context).map(IArgument::Individual),
+            rule => unexpected_rule!(IArgument, rule),
+        }
+    }
+}
+
+impl<'a, A: ForIRI> FromPair<'a, A> for DArgument<A> {
+    const RULE: Rule = Rule::SWRLDObject;
+
+    fn from_pair_unchecked(pair: Pair<'a, Rule>, context: &mut Context<'a, A>) -> Result<Self> {
+        let inner = descend(pair)?;
+        debug_assert!(inner.as_rule() == Rule::SWRLDObject);
+        match inner.as_rule() {
+            Rule::SWRLVariable => Variable::from_pair(inner, context).map(DArgument::Variable),
+            Rule::Literal => Literal::from_pair(inner, context).map(DArgument::Literal),
+            rule => unexpected_rule!(DArgument, rule),
+        }
+    }
+}
 // ---------------------------------------------------------------------------
 
 impl<'a, A: ForIRI> FromPair<'a, A> for PropertyExpression<A> {
@@ -2092,7 +2280,9 @@ mod tests {
 
     use super::*;
     use crate::{
-        io::omn::reader::lexer::OwlManchesterLexer, ontology::set::SetOntology, vocab::{Namespace, Vocab},
+        io::omn::reader::lexer::OwlManchesterLexer,
+        ontology::set::SetOntology,
+        vocab::{Namespace, Vocab},
     };
 
     impl<'a> FromPair<'a, String> for SetOntology<String> {
@@ -2631,7 +2821,8 @@ mod tests {
                 .named_individual("http://example.com/ontology/indA")
                 .into(),
             vec![
-                DeclareNamedIndividual(build.named_individual("http://example.com/ontology/indA")).into(),
+                DeclareNamedIndividual(build.named_individual("http://example.com/ontology/indA"))
+                    .into(),
                 ClassAssertion {
                     ce: ClassExpression::ObjectComplementOf(
                         build.class("http://example.com/ontology/classA").into(),
@@ -2657,7 +2848,8 @@ mod tests {
     #[test_resources("src/ont/owl-manchester/*.omn")]
     fn from_pair_resource(resource: &str) {
         pub fn is_built_in(iri: &IRI<RcStr>) -> bool {
-            Namespace::all().iter()
+            Namespace::all()
+                .iter()
                 .any(|ns| iri.to_string().starts_with(&ns.to_string()))
         }
 
