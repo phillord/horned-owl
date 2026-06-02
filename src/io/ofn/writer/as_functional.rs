@@ -140,6 +140,7 @@ macro_rules! derive_tuple2 {
 derive_tuple2!(A, IRI<A>, IRI<A>);
 derive_tuple2!(A, IArgument<A>, IArgument<A>);
 derive_tuple2!(A, DArgument<A>, DArgument<A>);
+derive_tuple2!(A, IArgument<A>, DArgument<A>);
 derive_tuple2!(A, Class<A>, Vec<ClassExpression<A>>);
 derive_tuple2!(A, Datatype<A>, DataRange<A>);
 derive_tuple2!(A, ClassExpression<A>, Individual<A>);

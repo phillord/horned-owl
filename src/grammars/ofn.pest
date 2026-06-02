@@ -350,8 +350,8 @@ Atom = {
 
 AtomClass                = { LIT_CLASS_ATOM ~ LBRACKET ~ ClassExpression ~ IArg ~ RBRACKET }
 AtomDataRange            = { LIT_DATA_RANGE_ATOM ~ LBRACKET ~ DataRange ~ DArg ~ RBRACKET }
-AtomObjectProperty       = { LIT_OBJECT_PROPERTY_ATOM ~ LBRACKET ~ ObjectPropertyExpression ~ IArg ~ IArg ~ RBRACKET }
-AtomDataProperty         = { LIT_DATA_PROPERTY_ATOM ~ LBRACKET ~ DataProperty ~ DArg ~ DArg ~ RBRACKET }
+AtomObjectProperty       = { LIT_OBJECT_PROPERTY_ATOM ~ LBRACKET ~ ObjectPropertyExpression ~ IArg ~ DArg ~ RBRACKET }
+AtomDataProperty         = { LIT_DATA_PROPERTY_ATOM ~ LBRACKET ~ DataProperty ~ IArg ~ DArg ~ RBRACKET }
 AtomBuiltIn              = { LIT_BUILT_IN_ATOM ~ LBRACKET ~ IRI ~ DArg+ ~ RBRACKET }
 AtomSameIndividual       = { LIT_SAME_INDIVIDUAL_ATOM ~ LBRACKET ~ IArg ~ IArg ~ RBRACKET }
 AtomDifferentIndividuals = { LIT_DIFFERENT_INDIVIDUALS_ATOM ~ LBRACKET ~ IArg ~ IArg ~ RBRACKET }

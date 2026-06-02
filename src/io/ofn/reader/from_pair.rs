@@ -543,7 +543,7 @@ impl<A: ForIRI> FromPair<A> for Atom<A> {
             Rule::AtomDataProperty => {
                 let mut pairs = inner.into_inner();
                 let pred = FromPair::from_pair(pairs.next().unwrap(), ctx)?;
-                let d1 = DArgument::from_pair(pairs.next().unwrap(), ctx)?;
+                let d1 = IArgument::from_pair(pairs.next().unwrap(), ctx)?;
                 let d2 = DArgument::from_pair(pairs.next().unwrap(), ctx)?;
                 let args = (d1, d2);
                 Ok(Atom::DataPropertyAtom { pred, args })
@@ -1265,7 +1265,7 @@ mod tests {
         let expected = Atom::DataPropertyAtom {
             pred: build.data_property("https://example.com/d"),
             args: (
-                DArgument::Variable(build.variable("https://example.com/x")),
+                IArgument::Variable(build.variable("https://example.com/x")),
                 DArgument::Literal(Literal::Simple {
                     literal: String::from("Literal String"),
                 }),
