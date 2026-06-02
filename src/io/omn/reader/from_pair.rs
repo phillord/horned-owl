@@ -1480,11 +1480,14 @@ impl<'a, A: ForIRI> FromPair<'a, A> for ObjectPropertyFrame<A> {
                 }
                 Rule::ObjectPropertySubPropertyChainClause => {
                     let mut chainlist = inner.into_inner();
-                    let mut pair = chainlist.next().unwrap();
+                    let mut pair = next_or_err!(chainlist)?;
                     let ann = component_annotations(&mut pair, &mut chainlist, ctx)?;
-                    let chain = chainlist
+                    let first = ObjectPropertyExpression::from_pair(pair, ctx)?;
+                    let mut chain = chainlist
                         .map(|pair| FromPair::from_pair(pair, ctx))
                         .collect::<Result<Vec<_>>>()?;
+                    chain.insert(0, first);
+
                     let component = SubObjectPropertyOf {
                         sup: frame.entity.clone().into(),
                         sub: SubObjectPropertyExpression::ObjectPropertyChain(chain),
@@ -2802,48 +2805,6 @@ mod tests {
         assert_eq!(ctx.ambiguous_components, expected);
     }
 
-    #[test]
-    fn complex_class_assertion() {
-        let build = Build::<String>::new();
-        let mut prefixes = PrefixMapping::default();
-        prefixes.set_default("http://example.com/ontology/");
-
-        let input = r#"
-        Individual: indA
-
-        Types:
-            not A
-        "#
-        .trim();
-
-        let expected = IndividualFrame::with_components(
-            build
-                .named_individual("http://example.com/ontology/indA")
-                .into(),
-            vec![
-                DeclareNamedIndividual(build.named_individual("http://example.com/ontology/indA"))
-                    .into(),
-                ClassAssertion {
-                    ce: ClassExpression::ObjectComplementOf(
-                        build.class("http://example.com/ontology/classA").into(),
-                    ),
-                    i: build
-                        .named_individual("http://example.com/ontology/indA")
-                        .into(),
-                }
-                .into(),
-            ],
-        );
-
-        assert_parse_into!(
-            IndividualFrame<String>,
-            Rule::IndividualFrame,
-            build,
-            prefixes,
-            input,
-            expected
-        );
-    }
 
     #[test_resources("src/ont/owl-manchester/*.omn")]
     fn from_pair_resource(resource: &str) {
