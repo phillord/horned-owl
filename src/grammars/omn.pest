@@ -184,7 +184,7 @@ ImportIRI           = { IRI } // TODO: Needed?
 Frame               = { 
     DatatypeFrame 
     | ClassFrame 
-    | InverseObjectPropertyFrame
+    // | InverseObjectPropertyFrame
     | ObjectPropertyFrame 
     | DataPropertyFrame 
     | AnnotationPropertyFrame 
@@ -218,10 +218,10 @@ FacetMinLength = { "minLength" }
 FacetMaxLength = { "maxLength" }
 FacetPattern = { "pattern" }
 FacetLangRange = { "langRange" }
-FacetMinInclusive = { "<=" }
-FacetMinExclusive = { "<" }
-FacetMaxInclusive = { ">=" }
-FacetMaxExclusive = { ">" }
+FacetMinInclusive = { ">=" }
+FacetMinExclusive = { ">" }
+FacetMaxInclusive = { "<=" }
+FacetMaxExclusive = { "<" }
 Facet = {
     FacetLength
     | FacetMinLength
@@ -428,17 +428,17 @@ MiscClause = {
 //          EquivalentTo: 
 //              obo:OBI_0000299 
 
-InverseObjectPropertyFrame                 = { "ObjectProperty:" ~ InverseObjectProperty ~ InverseObjectPropertyClause }
-InverseObjectPropertyEquivalentToClause    = { "EquivalentTo:" ~ ObjectPropertyExpressionAnnotatedList }
-InverseObjectPropertyDisjointWithClause    = { "DisjointWith:" ~ ObjectPropertyExpressionAnnotatedList }
-InverseObjectPropertyCharacteristicsClause = { "Characteristics:" ~ ObjectPropertyCharacteristicAnnotatedList }
-InverseObjectPropertySubPropertyOfClause   = { "SubPropertyOf:" ~ ObjectPropertyExpressionAnnotatedList }
-InverseObjectPropertyClause                = { 
-    InverseObjectPropertyEquivalentToClause 
-  | InverseObjectPropertyDisjointWithClause 
-  | InverseObjectPropertyCharacteristicsClause
-  | InverseObjectPropertySubPropertyOfClause
-}
+// InverseObjectPropertyFrame                 = { "ObjectProperty:" ~ InverseObjectProperty ~ InverseObjectPropertyClause }
+// InverseObjectPropertyEquivalentToClause    = { "EquivalentTo:" ~ ObjectPropertyExpressionAnnotatedList }
+// InverseObjectPropertyDisjointWithClause    = { "DisjointWith:" ~ ObjectPropertyExpressionAnnotatedList }
+// InverseObjectPropertyCharacteristicsClause = { "Characteristics:" ~ ObjectPropertyCharacteristicAnnotatedList }
+// InverseObjectPropertySubPropertyOfClause   = { "SubPropertyOf:" ~ ObjectPropertyExpressionAnnotatedList }
+// InverseObjectPropertyClause                = { 
+//     InverseObjectPropertyEquivalentToClause 
+//   | InverseObjectPropertyDisjointWithClause 
+//   | InverseObjectPropertyCharacteristicsClause
+//   | InverseObjectPropertySubPropertyOfClause
+// }
 
 
 // Annex: SWRL Rules
@@ -456,19 +456,21 @@ SWRLConsequent = { SWRLAtom }
 SWRLAmbiguousUnaryAtom =        { IRI               ~ LBRACKET ~ SWRLVariable ~ RBRACKET }
 SWRLClassAtom =                 { Description       ~ LBRACKET ~ SWRLIObject  ~ RBRACKET }
 SWRLDataRangeAtom =             { DataRange         ~ LBRACKET ~ SWRLDObject  ~ RBRACKET }
-SWRLAmbiguousBinaryAtom =       { IRI               ~ LBRACKET ~ SWRLIObject ~ COMMA ~ SWRLVariable ~ RBRACKET }
+SWRLAmbiguousBinaryAtom =       { IRI               ~ LBRACKET ~ SWRLIObject  ~ COMMA ~ SWRLVariable ~ RBRACKET }
 SWRLDataPropertyAtom =          { DataPropertyIRI   ~ LBRACKET ~ SWRLIObject  ~ COMMA ~ SWRLDObject  ~ RBRACKET }
 SWRLObjectPropertyAtom =        { ObjectPropertyIRI ~ LBRACKET ~ SWRLIObject  ~ COMMA ~ SWRLDObject  ~ RBRACKET }
 SWRLSameIndividualAtom =        { "SameAs"          ~ LBRACKET ~ SWRLIObject  ~ COMMA ~ SWRLIObject  ~ RBRACKET }
 SWRLDifferentIndividualsAtom =  { "DifferentFrom"   ~ LBRACKET ~ SWRLIObject  ~ COMMA ~ SWRLIObject  ~ RBRACKET }
 SWRLBuiltInAtom =               { SWRLBuiltinID     ~ LBRACKET ~ SWRLDObject  ~ (COMMA ~ SWRLDObject)* ~ RBRACKET }
 SWRLAtom = {
-    SWRLClassAtom
+    SWRLAmbiguousUnaryAtom
+    | SWRLClassAtom
     | SWRLDataRangeAtom
-    | SWRLDataPropertyAtom
-    | SWRLObjectPropertyAtom
     | SWRLSameIndividualAtom
     | SWRLDifferentIndividualsAtom
+    | SWRLAmbiguousBinaryAtom
+    | SWRLDataPropertyAtom
+    | SWRLObjectPropertyAtom
     | SWRLBuiltInAtom
 }
 
