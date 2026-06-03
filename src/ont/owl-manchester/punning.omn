@@ -13,15 +13,18 @@ Prefix: : <http://www.example.com/iri>
 Ontology: <http://www.example.com/iri>
 <http://www.example.com/viri>
 
-AnnotationProperty: rdfs:comment
+ObjectProperty: o:op
 
     
-Datatype: rdf:langString
+Class: o:C
 
     
-Individual: o:i
+Individual: o:C
 
-    Annotations: 
-        rdfs:comment "non-anonymous individual"@en
+    Facts:  
+     o:op  o:D
     
+    
+Individual: o:D
+
     

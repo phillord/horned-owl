@@ -20,7 +20,7 @@ Declaration(NamedIndividual(o:D))
 #   Named Individuals
 ############################
 
-# Individual: o:C (o:C)
+# Individual: <http://www.example.com/iri#C> (<http://www.example.com/iri#C>)
 
 ObjectPropertyAssertion(o:op o:C o:D)
 

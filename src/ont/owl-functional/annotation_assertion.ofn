@@ -10,7 +10,16 @@ Prefix(rdfs:=<http://www.w3.org/2000/01/rdf-schema#>)
 Ontology(<http://www.example.com/iri>
 <http://www.example.com/viri>
 
+Declaration(NamedIndividual(o:i))
 
 
-AnnotationAssertion(rdfs:comment <http://www.example.com/i> "non-anonymous individual"@en)
+############################
+#   Named Individuals
+############################
+
+# Individual: <http://www.example.com/iri#i> (<http://www.example.com/iri#i>)
+
+AnnotationAssertion(rdfs:comment o:i "non-anonymous individual"@en)
+
+
 )
