@@ -2851,13 +2851,44 @@ mod tests {
             _ => true,
         };
 
+        // Manchester syntax expresses symmetric n-ary axioms once per member frame, so
+        // `SameIndividual(o:r o:s)` is written as both `Individual: o:r SameAs: o:s` and
+        // `Individual: o:s SameAs: o:r`, yielding two axioms that differ only in member order.
+        // Normalise member order and drop the resulting duplicates before comparing.
+        fn normalize(c: &mut AnnotatedComponent<Rc<str>>) {
+            match &mut c.component {
+                Component::EquivalentClasses(EquivalentClasses(v)) => v.sort(),
+                Component::DisjointClasses(DisjointClasses(v)) => v.sort(),
+                Component::EquivalentObjectProperties(EquivalentObjectProperties(v)) => v.sort(),
+                Component::DisjointObjectProperties(DisjointObjectProperties(v)) => v.sort(),
+                Component::EquivalentDataProperties(EquivalentDataProperties(v)) => v.sort(),
+                Component::DisjointDataProperties(DisjointDataProperties(v)) => v.sort(),
+                Component::SameIndividual(SameIndividual(v)) => v.sort(),
+                Component::DifferentIndividuals(DifferentIndividuals(v)) => v.sort(),
+                Component::InverseObjectProperties(InverseObjectProperties(a, b)) => {
+                    if a > b {
+                        std::mem::swap(a, b);
+                    }
+                }
+                Component::Rule(SWRLRule{ head, body }) => {
+                    head.sort();
+                    body.sort();
+                }
+                _ => {}
+            }
+        }
+
         let mut actual: Vec<AnnotatedComponent<Rc<str>>> =
             wrapper.0.into_iter().filter(filter_built_in).collect();
+        actual.iter_mut().for_each(normalize);
         actual.sort();
+        actual.dedup();
 
         let mut expected: Vec<AnnotatedComponent<Rc<str>>> =
             owx_ontology.into_iter().filter(filter_built_in).collect();
+        expected.iter_mut().for_each(normalize);
         expected.sort();
+        expected.dedup();
 
         pretty_assertions::assert_eq!(actual_prefixes, expected_prefixes);
         pretty_assertions::assert_eq!(actual, expected);
