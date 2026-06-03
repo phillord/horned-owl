@@ -225,7 +225,7 @@ macro_rules! impl_wrapper {
 }
 
 impl_wrapper!(Class, Rule::ClassIRI);
-impl_wrapper!(Import, Rule::ImportIRI);
+impl_wrapper!(Import, Rule::Import);
 impl_wrapper!(NamedIndividual, Rule::IndividualIRI);
 impl_wrapper!(ObjectProperty, Rule::ObjectPropertyIRI);
 impl_wrapper!(DataProperty, Rule::DataPropertyIRI);
@@ -758,7 +758,7 @@ fn from_data_atomic_pair<'a, A: ForIRI>(
             Ok(DataRange::Datatype(dt))
         }
         Rule::LiteralList => {
-            let literals = FromPair::from_pair(descend(inner)?, ctx)?;
+            let literals = FromPair::from_pair(inner, ctx)?;
             Ok(DataRange::DataOneOf(literals))
         }
         rule => unexpected_rule!(DataRange, rule),
@@ -783,7 +783,7 @@ impl<'a, A: ForIRI> FromPair<'a, A> for DataRange<A> {
 }
 
 impl<'a, A: ForIRI> FromPair<'a, A> for Facet {
-    const RULE: Rule = Rule::FacetRestriction;
+    const RULE: Rule = Rule::Facet;
     fn from_pair_unchecked(pair: Pair<'a, Rule>, _ctx: &mut Context<'a, A>) -> Result<Self> {
         let inner = descend(pair)?;
         let facet = match inner.as_rule() {
@@ -1117,10 +1117,9 @@ fn parse_optional_annotations<'a, A: ForIRI>(
     pairs: &mut Pairs<'a, Rule>,
     ctx: &mut Context<'a, A>,
 ) -> Result<BTreeSet<Annotation<A>>> {
-    if let Some(pair) = pairs.peek() {
-        if pair.as_rule() == Rule::Annotations {
-            return BTreeSet::from_pair(descend(pair)?, ctx);
-        }
+    if pairs.peek().map(|p| p.as_rule()) == Some(Rule::Annotations) {
+        let pair = next_or_err!(pairs)?;
+        return BTreeSet::from_pair(descend(pair)?, ctx);
     }
 
     Ok(BTreeSet::new())
@@ -1463,8 +1462,10 @@ impl<'a, A: ForIRI> FromPair<'a, A> for ObjectPropertyFrame<A> {
                         frame,
                         component = {
                             let pair = descend(pair)?;
-                            let op = match pair.as_rule() {
-                                Rule::ObjectPropertyIRI => IRI::from_pair(pair, ctx)?.into(),
+                            let op: ObjectProperty<A> = match pair.as_rule() {
+                                Rule::ObjectPropertyIRI => {
+                                    IRI::from_pair(descend(pair)?, ctx)?.into()
+                                }
                                 Rule::InverseObjectProperty => {
                                     // FIXME: currently unsupported in `horned-owl`
                                     return parse_error!(
@@ -1977,27 +1978,27 @@ impl<'a, A: ForIRI> FromPair<'a, A> for ParseResult<'a, SWRLRule<A>> {
 
         // parse antecedent list
         let pair = next_or_err!(inner)?;
-        debug_assert!(pair.as_rule() == Rule::SWRLAntecedent);
-        let head = pair
+        debug_assert!(pair.as_rule() == Rule::SWRLAntecedentList);
+        let body = pair
             .into_inner()
             .map(|pair| {
                 debug_assert!(pair.as_rule() == Rule::SWRLAntecedent);
                 ParseResult::<Atom<A>>::from_pair(descend(pair)?, ctx)
             })
             .collect::<Result<Vec<_>>>()?;
-        let head = collect_parse_result(head.into_iter());
+        let body = collect_parse_result(body.into_iter());
 
         // parse consequent list
         let pair = next_or_err!(inner)?;
-        debug_assert!(pair.as_rule() == Rule::SWRLConsequent);
-        let body = pair
+        debug_assert!(pair.as_rule() == Rule::SWRLConsequentList);
+        let head = pair
             .into_inner()
             .map(|pair| {
                 debug_assert!(pair.as_rule() == Rule::SWRLConsequent);
                 ParseResult::<Atom<A>>::from_pair(descend(pair)?, ctx)
             })
             .collect::<Result<Vec<_>>>()?;
-        let body = collect_parse_result(body.into_iter());
+        let head = collect_parse_result(head.into_iter());
 
         Ok(ParseResult::<(Vec<_>, Vec<_>)>::from((head, body))
             .map(|(head, body)| SWRLRule { head, body }))
@@ -2035,11 +2036,8 @@ impl<'a, A: ForIRI> FromPair<'a, A> for ParseResult<'a, Atom<A>> {
             Rule::SWRLDataRangeAtom => {
                 let mut pairs = inner.into_inner();
                 let dr = from_data_range_pair(next_or_err!(pairs)?, ctx)?;
-                let arg = Variable::from_pair(next_or_err!(pairs)?, ctx)?;
-                Ok(Success(Atom::DataRangeAtom {
-                    pred: dr,
-                    arg: arg.into(),
-                }))
+                let arg = DArgument::from_pair(next_or_err!(pairs)?, ctx)?;
+                Ok(Success(Atom::DataRangeAtom { pred: dr, arg }))
             }
             // Binary
             Rule::SWRLAmbiguousBinaryAtom => {
@@ -2083,7 +2081,7 @@ impl<'a, A: ForIRI> FromPair<'a, A> for ParseResult<'a, Atom<A>> {
             // Built-in
             Rule::SWRLBuiltInAtom => {
                 let mut pairs = inner.into_inner();
-                let iri = IRI::from_pair(next_or_err!(pairs)?, ctx)?;
+                let iri = IRI::from_pair(descend(next_or_err!(pairs)?)?, ctx)?;
                 let args = pairs
                     .map(|pair| DArgument::from_pair(pair, ctx))
                     .collect::<Result<Vec<_>>>()?;
@@ -2102,8 +2100,7 @@ impl<'a, A: ForIRI> FromPair<'a, A> for Variable<A> {
 
     fn from_pair_unchecked(pair: Pair<'a, Rule>, context: &mut Context<'a, A>) -> Result<Self> {
         let inner = descend(pair)?;
-        debug_assert!(inner.as_rule() == Rule::SWRLVariable);
-        let iri = IRI::from_pair(descend(inner)?, context)?;
+        let iri = IRI::from_pair(inner, context)?;
         Ok(Variable(iri))
     }
 }
@@ -2113,7 +2110,6 @@ impl<'a, A: ForIRI> FromPair<'a, A> for IArgument<A> {
 
     fn from_pair_unchecked(pair: Pair<'a, Rule>, context: &mut Context<'a, A>) -> Result<Self> {
         let inner = descend(pair)?;
-        debug_assert!(inner.as_rule() == Rule::SWRLIObject);
         match inner.as_rule() {
             Rule::SWRLVariable => Variable::from_pair(inner, context).map(IArgument::Variable),
             Rule::Individual => Individual::from_pair(inner, context).map(IArgument::Individual),
@@ -2127,7 +2123,6 @@ impl<'a, A: ForIRI> FromPair<'a, A> for DArgument<A> {
 
     fn from_pair_unchecked(pair: Pair<'a, Rule>, context: &mut Context<'a, A>) -> Result<Self> {
         let inner = descend(pair)?;
-        debug_assert!(inner.as_rule() == Rule::SWRLDObject);
         match inner.as_rule() {
             Rule::SWRLVariable => Variable::from_pair(inner, context).map(DArgument::Variable),
             Rule::Literal => Literal::from_pair(inner, context).map(DArgument::Literal),
@@ -2804,7 +2799,6 @@ mod tests {
 
         assert_eq!(ctx.ambiguous_components, expected);
     }
-
 
     #[test_resources("src/ont/owl-manchester/*.omn")]
     fn from_pair_resource(resource: &str) {
