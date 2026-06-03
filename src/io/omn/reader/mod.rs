@@ -12,31 +12,25 @@ use crate::model::Build;
 use crate::model::ForIRI;
 use crate::model::IRI;
 use crate::model::MutableOntology;
+use crate::model::NamedEntityKind;
 use crate::model::Ontology;
 use crate::visitor::mutable::WalkMut;
 
+mod ambiguity;
 mod frames;
 mod from_pair;
 mod lexer;
-mod ambiguity;
 
+use self::ambiguity::ComponentVisitor;
 use self::from_pair::FromPair;
 use self::from_pair::MutableOntologyWrapper;
 use self::lexer::OwlManchesterLexer;
 use self::lexer::Rule;
-use self::ambiguity::ComponentVisitor;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) enum PropertyKind {
-    Object,
-    Data,
-    Annotation,
-}
 
 struct Context<'a, A: ForIRI> {
     build: &'a Build<A>,
     mapping: PrefixMapping,
-    property_kinds: HashMap<IRI<A>, PropertyKind>,
+    entity_kinds: HashMap<IRI<A>, crate::model::NamedEntityKind>,
     ambiguous_components: HashSet<(AnnotatedComponent<A>, Span<'a>)>,
 }
 
@@ -45,7 +39,7 @@ impl<'a, A: ForIRI> Context<'a, A> {
         Self {
             build,
             mapping,
-            property_kinds: Default::default(),
+            entity_kinds: Default::default(),
             ambiguous_components: Default::default(),
         }
     }
@@ -54,12 +48,12 @@ impl<'a, A: ForIRI> Context<'a, A> {
         self.ambiguous_components.insert((component, span));
     }
 
-    fn mark_property_kind(&mut self, iri: impl Into<IRI<A>>, kind: PropertyKind) {
-        self.property_kinds.insert(iri.into(), kind);
+    fn record_entity_kind(&mut self, iri: impl Into<IRI<A>>, kind: NamedEntityKind) {
+        self.entity_kinds.insert(iri.into(), kind);
     }
 
-    fn get_property_kind(&self, iri: impl Into<IRI<A>>) -> Option<PropertyKind> {
-        self.property_kinds.get(&iri.into()).copied()
+    fn get_property_kind(&self, iri: &IRI<A>) -> Option<NamedEntityKind> {
+        self.entity_kinds.get(iri).copied()
     }
 }
 
@@ -91,7 +85,7 @@ pub fn read_with_build<A: ForIRI, O: MutableOntology<A> + Ontology<A> + Default,
     let (mut ontology, mapping) = wrapper.map(|r| (r.0.0, r.1))?;
 
     let mut walk = WalkMut::new(ComponentVisitor {
-        property_kinds: ctx.property_kinds,
+        entity_kinds: ctx.entity_kinds,
     });
     for (mut component, _) in ctx.ambiguous_components {
         walk.annotated_component(&mut component);

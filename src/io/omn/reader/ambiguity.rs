@@ -1,12 +1,20 @@
 use std::collections::HashMap;
 
-use crate::{io::omn::reader::PropertyKind, model::{Class, ClassExpression, DataRange, ForIRI, IRI, ObjectProperty, ObjectPropertyExpression}, visitor::mutable::VisitMut};
+use crate::{
+    model::{
+        Class, ClassExpression, DataRange, ForIRI, IRI, NamedEntityKind, ObjectProperty,
+        ObjectPropertyExpression,
+    },
+    visitor::mutable::VisitMut,
+};
 
 /// Convert a `DataRange` to a `ClassExpression` by reinterpreting datatype IRIs as class IRIs.
 ///
 /// Returns `None` for data ranges that have no class expression equivalent (e.g. facet
 /// restrictions, data oneOf).
-pub (super) fn data_range_to_class_expression<A: ForIRI>(dr: DataRange<A>) -> Option<ClassExpression<A>> {
+pub(super) fn data_range_to_class_expression<A: ForIRI>(
+    dr: DataRange<A>,
+) -> Option<ClassExpression<A>> {
     match dr {
         DataRange::Datatype(dt) => Some(ClassExpression::Class(Class(dt.0))),
         DataRange::DataComplementOf(dr) => data_range_to_class_expression(*dr)
@@ -25,8 +33,8 @@ pub (super) fn data_range_to_class_expression<A: ForIRI>(dr: DataRange<A>) -> Op
     }
 }
 
-pub (crate) struct ComponentVisitor<A: ForIRI> {
-    pub(crate) property_kinds: HashMap<IRI<A>, PropertyKind>,
+pub(crate) struct ComponentVisitor<A: ForIRI> {
+    pub(crate) entity_kinds: HashMap<IRI<A>, NamedEntityKind>,
 }
 
 impl<A: ForIRI> VisitMut<A> for ComponentVisitor<A> {
@@ -36,7 +44,10 @@ impl<A: ForIRI> VisitMut<A> for ComponentVisitor<A> {
         };
 
         let is_object = |dp: &crate::model::DataProperty<A>| {
-            matches!(self.property_kinds.get(&dp.0), Some(&PropertyKind::Object) | None)
+            matches!(
+                self.entity_kinds.get(&dp.0),
+                Some(&NamedEntityKind::ObjectProperty) | None
+            )
         };
 
         let converted = match e {

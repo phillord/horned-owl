@@ -10,7 +10,6 @@ use pest::iterators::Pair;
 use pest::iterators::Pairs;
 
 use crate::error::HornedError;
-use crate::io::omn::reader::PropertyKind;
 use crate::io::omn::reader::ambiguity::data_range_to_class_expression;
 use crate::model::Rule as SWRLRule;
 use crate::model::*;
@@ -22,7 +21,6 @@ use super::frames::ClassFrame;
 use super::frames::DataPropertyFrame;
 use super::frames::DatatypeFrame;
 use super::frames::IndividualFrame;
-use super::frames::InverseObjectPropertyFrame;
 use super::frames::MiscClause;
 use super::frames::ObjectPropertyFrame;
 use super::lexer::Rule;
@@ -322,22 +320,22 @@ fn from_restriction_pair<'a, A: ForIRI>(
     debug_assert!(pair.as_rule() == Rule::Restriction);
 
     macro_rules! ensure_property_kind {
-        (Object, $ope:expr, $span:ident, $result:expr) => {{ ensure_property_kind!($ope.as_property(), $span, $result, Object) }};
-        (Data, $dp:expr, $span:ident, $result:expr) => {{ ensure_property_kind!(Some(&$dp), $span, $result, Data) }};
+        (Object, $ope:expr, $span:ident, $result:expr) => {{ ensure_property_kind!($ope.as_property(), $span, $result, ObjectProperty) }};
+        (Data, $dp:expr, $span:ident, $result:expr) => {{ ensure_property_kind!(Some(&$dp), $span, $result, DataProperty) }};
         ($prop:expr, $span:ident, $result:expr, $kind:ident) => {{
             match $result {
                 Success(r) => {
                     let kind = $prop
-                        .map(|p| ctx.get_property_kind(p.clone()))
-                        .unwrap_or(Some(PropertyKind::Object));
+                        .map(|p| ctx.get_property_kind(&p))
+                        .unwrap_or(Some(NamedEntityKind::ObjectProperty));
 
                     match kind {
-                        Some(PropertyKind::$kind) => Ok(Success(r)),
+                        Some(NamedEntityKind::$kind) => Ok(Success(r)),
                         Some(_) => parse_error!(
                             format!(
                                 "Expected '{:?}' as {:?}Property but is declared as {:?}Property",
                                 $prop,
-                                PropertyKind::$kind,
+                                NamedEntityKind::$kind,
                                 kind
                             ),
                             $span
@@ -422,12 +420,12 @@ fn from_restriction_pair<'a, A: ForIRI>(
         let iri = DataProperty::from_pair(descend(p.clone()).ok()?, ctx)
             .ok()?
             .0;
-        ctx.get_property_kind(iri)
+        ctx.get_property_kind(&iri)
     });
 
     macro_rules! dp {
         () => {
-            Some(PropertyKind::Data) | None
+            Some(NamedEntityKind::DataProperty) | None
         };
     }
 
@@ -558,12 +556,6 @@ fn from_primary_pair<'a, A: ForIRI>(
     let mut pair = next_or_err!(inner)?;
 
     let mut is_complement = false;
-
-    println!(
-        "from_primary_pair: rule={:?}, text={:?}",
-        pair.as_rule(),
-        pair.as_str()
-    );
 
     if pair.as_rule() == Rule::NOT {
         is_complement = true;
@@ -1009,9 +1001,6 @@ impl<'a, A: ForIRI, O: MutableOntology<A> + Ontology<A> + Default> FromPair<'a, 
                 Rule::ObjectPropertyFrame => {
                     ObjectPropertyFrame::from_pair(inner, ctx)?.into_components()
                 }
-                Rule::InverseObjectPropertyFrame => {
-                    InverseObjectPropertyFrame::from_pair(inner, ctx)?.into_components()
-                }
                 Rule::DataPropertyFrame => {
                     DataPropertyFrame::from_pair(inner, ctx)?.into_components()
                 }
@@ -1132,6 +1121,9 @@ impl<'a, A: ForIRI> FromPair<'a, A> for DatatypeFrame<A> {
 
         let annotations = parse_optional_annotations(&mut pairs, ctx)?;
         let datatype = Datatype::from_pair(next_or_err!(pairs)?, ctx)?;
+
+        ctx.record_entity_kind(datatype.clone(), NamedEntityKind::Datatype);
+
         let mut frame = DatatypeFrame::new(datatype, annotations);
 
         for pair in pairs {
@@ -1178,6 +1170,10 @@ impl<'a, A: ForIRI> FromPair<'a, A> for ParseResult<'a, ClassFrame<A>> {
         let annotations = parse_optional_annotations(&mut pairs, ctx)?;
         let class_expr: ParseResult<ClassExpression<A>> =
             FromPair::from_pair(next_or_err!(pairs)?, ctx)?;
+
+        if let Success(ClassExpression::Class(c)) = &class_expr {
+            ctx.record_entity_kind(c.clone(), NamedEntityKind::Class);
+        }
 
         class_expr.map(|class_expr| {
 
@@ -1312,7 +1308,7 @@ impl<'a, A: ForIRI> FromPair<'a, A> for ObjectPropertyFrame<A> {
         let op = ObjectPropertyExpression::from_pair(next_or_err!(pairs)?, ctx)?;
 
         if let ObjectPropertyExpression::ObjectProperty(op) = &op {
-            ctx.mark_property_kind(op.clone(), PropertyKind::Object);
+            ctx.record_entity_kind(op.clone(), NamedEntityKind::ObjectProperty);
         }
 
         let mut frame = ObjectPropertyFrame::new(op, annotations);
@@ -1504,66 +1500,6 @@ impl<'a, A: ForIRI> FromPair<'a, A> for ObjectPropertyFrame<A> {
     }
 }
 
-impl<'a, A: ForIRI> FromPair<'a, A> for InverseObjectPropertyFrame<A> {
-    const RULE: Rule = Rule::InverseObjectPropertyFrame;
-    fn from_pair_unchecked(pair: Pair<'a, Rule>, ctx: &mut Context<'a, A>) -> Result<Self> {
-        let mut pairs = pair.into_inner();
-
-        let mut pair = descend(next_or_err!(pairs)?)?;
-        if pair.as_rule() == Rule::BracketedObjectPropertyIRI {
-            pair = descend(pair)?;
-        }
-
-        let op = ObjectProperty::from_pair(pair, ctx)?;
-        let ope = ObjectPropertyExpression::InverseObjectProperty(op);
-        let mut frame = InverseObjectPropertyFrame::from(ope);
-
-        for pair in pairs {
-            debug_assert!(pair.as_rule() == Rule::InverseObjectPropertyClause);
-            let inner = descend(pair)?;
-            match inner.as_rule() {
-                Rule::InverseObjectPropertyEquivalentToClause => {
-                    annotated_component!(
-                        pair,
-                        inner,
-                        ctx,
-                        frame,
-                        component = {
-                            Success(
-                                EquivalentObjectProperties(vec![
-                                    frame.entity.clone(),
-                                    ObjectPropertyExpression::from_pair(pair, ctx)?,
-                                ])
-                                .into(),
-                            )
-                        }
-                    )
-                }
-                Rule::InverseObjectPropertyDisjointWithClause => {
-                    annotated_component!(
-                        pair,
-                        inner,
-                        ctx,
-                        frame,
-                        component = {
-                            Success(
-                                DisjointObjectProperties(vec![
-                                    frame.entity.clone(),
-                                    ObjectPropertyExpression::from_pair(pair, ctx)?,
-                                ])
-                                .into(),
-                            )
-                        }
-                    )
-                }
-                rule => unexpected_rule!(InverseObjectPropertyFrame, rule)?,
-            }
-        }
-
-        Ok(frame)
-    }
-}
-
 impl<'a, A: ForIRI> FromPair<'a, A> for DataPropertyFrame<A> {
     const RULE: Rule = Rule::DataPropertyFrame;
     fn from_pair_unchecked(pair: Pair<'a, Rule>, ctx: &mut Context<'a, A>) -> Result<Self> {
@@ -1572,7 +1508,7 @@ impl<'a, A: ForIRI> FromPair<'a, A> for DataPropertyFrame<A> {
         let annotations = parse_optional_annotations(&mut pairs, ctx)?;
         let dt = DataProperty::from_pair(next_or_err!(pairs)?, ctx)?;
 
-        ctx.mark_property_kind(dt.clone(), PropertyKind::Data);
+        ctx.record_entity_kind(dt.clone(), NamedEntityKind::DataProperty);
 
         let mut frame = DataPropertyFrame::new(dt, annotations);
 
@@ -1705,7 +1641,7 @@ impl<'a, A: ForIRI> FromPair<'a, A> for AnnotationPropertyFrame<A> {
         let annotations = parse_optional_annotations(&mut pairs, ctx)?;
         let ap = AnnotationProperty::from_pair(next_or_err!(pairs)?, ctx)?;
 
-        ctx.mark_property_kind(ap.clone(), PropertyKind::Annotation);
+        ctx.record_entity_kind(ap.clone(), NamedEntityKind::AnnotationProperty);
 
         let mut frame = AnnotationPropertyFrame::new(ap, annotations);
 
@@ -1784,6 +1720,11 @@ impl<'a, A: ForIRI> FromPair<'a, A> for IndividualFrame<A> {
 
         let annotations = parse_optional_annotations(&mut pairs, ctx)?;
         let individual = Individual::from_pair(next_or_err!(pairs)?, ctx)?;
+
+        if let Individual::Named(named) = &individual {
+            ctx.record_entity_kind(named.clone(), NamedEntityKind::NamedIndividual);
+        }
+
         let mut frame = IndividualFrame::new(individual, annotations);
 
         for pair in pairs {
@@ -2018,13 +1959,30 @@ impl<'a, A: ForIRI> FromPair<'a, A> for ParseResult<'a, Atom<A>> {
                 let iri = IRI::from_pair(next_or_err!(pairs)?, ctx)?;
                 let arg = Variable::from_pair(next_or_err!(pairs)?, ctx)?;
 
-                Ok(Ambiguous(
-                    Atom::ClassAtom {
+                match ctx.get_property_kind(&iri) {
+                    Some(NamedEntityKind::Class) => Ok(Success(Atom::ClassAtom {
                         pred: iri.into(),
                         arg: arg.into(),
-                    },
-                    span,
-                ))
+                    })),
+                    Some(NamedEntityKind::Datatype) => Ok(Success(Atom::DataRangeAtom {
+                        pred: iri.into(),
+                        arg: DArgument::Variable(arg),
+                    })),
+                    None => Ok(Ambiguous(
+                        Atom::ClassAtom {
+                            pred: iri.into(),
+                            arg: arg.into(),
+                        },
+                        span,
+                    )),
+                    Some(kind) => parse_error!(
+                        format!(
+                            "property used in atom has incompatible kind: expected object or data property, found {:?}",
+                            kind
+                        ),
+                        span
+                    ),
+                }
             }
             Rule::SWRLClassAtom => {
                 let mut pairs = inner.into_inner();
@@ -2045,13 +2003,33 @@ impl<'a, A: ForIRI> FromPair<'a, A> for ParseResult<'a, Atom<A>> {
                 let iri = IRI::from_pair(next_or_err!(pairs)?, ctx)?;
                 let arg1 = IArgument::from_pair(next_or_err!(pairs)?, ctx)?;
                 let arg2 = Variable::from_pair(next_or_err!(pairs)?, ctx)?;
-                Ok(Ambiguous(
-                    Atom::DataPropertyAtom {
+
+                match ctx.get_property_kind(&iri) {
+                    Some(NamedEntityKind::ObjectProperty) => {
+                        Ok(Success(Atom::ObjectPropertyAtom {
+                            pred: iri.into(),
+                            args: (arg1.into(), arg2.into()),
+                        }))
+                    }
+                    Some(NamedEntityKind::DataProperty) => Ok(Success(Atom::DataPropertyAtom {
                         pred: iri.into(),
                         args: (arg1.into(), arg2.into()),
-                    },
-                    span,
-                ))
+                    })),
+                    None => Ok(Ambiguous(
+                        Atom::DataPropertyAtom {
+                            pred: iri.into(),
+                            args: (arg1.into(), arg2.into()),
+                        },
+                        span,
+                    )),
+                    Some(kind) => parse_error!(
+                        format!(
+                            "property used in atom has incompatible kind: expected object or data property, found {:?}",
+                            kind
+                        ),
+                        span
+                    ),
+                }
             }
             Rule::SWRLObjectPropertyAtom => {
                 let mut pairs = inner.into_inner();
@@ -2060,6 +2038,16 @@ impl<'a, A: ForIRI> FromPair<'a, A> for ParseResult<'a, Atom<A>> {
                 let arg2 = DArgument::from_pair(next_or_err!(pairs)?, ctx)?;
                 Ok(Success(Atom::ObjectPropertyAtom {
                     pred: op,
+                    args: (arg1.into(), arg2.into()),
+                }))
+            }
+            Rule::SWRLDataPropertyAtom => {
+                let mut pairs = inner.into_inner();
+                let dp = DataProperty::from_pair(next_or_err!(pairs)?, ctx)?;
+                let arg1 = IArgument::from_pair(next_or_err!(pairs)?, ctx)?;
+                let arg2 = DArgument::from_pair(next_or_err!(pairs)?, ctx)?;
+                Ok(Success(Atom::DataPropertyAtom {
+                    pred: dp,
                     args: (arg1.into(), arg2.into()),
                 }))
             }
@@ -2138,6 +2126,15 @@ impl<'a, A: ForIRI> FromPair<'a, A> for PropertyExpression<A> {
         let inner = descend(pair)?;
         match inner.as_rule() {
             Rule::ObjectPropertyExpression => {
+                // // Grammar tries ObjectPropertyExpression first, but IRI may be a data property.
+                // // Use context to resolve the ambiguity.
+                // let ope_inner = descend(inner.clone())?;
+                // if ope_inner.as_rule() == Rule::ObjectPropertyIRI {
+                //     let iri = IRI::from_pair(descend(ope_inner)?, ctx)?;
+                //     if ctx.get_property_kind(iri.clone()) == Some(PropertyKind::Data) {
+                //         return Ok(PropertyExpression::DataProperty(DataProperty(iri)));
+                //     }
+                // }
                 FromPair::from_pair(inner, ctx).map(PropertyExpression::ObjectPropertyExpression)
             }
             Rule::DataPropertyExpression => {
@@ -2278,9 +2275,7 @@ mod tests {
 
     use super::*;
     use crate::{
-        io::omn::reader::lexer::OwlManchesterLexer,
-        ontology::set::SetOntology,
-        vocab::{Namespace, Vocab},
+        io::omn::reader::lexer::OwlManchesterLexer, ontology::set::SetOntology, vocab::Namespace,
     };
 
     impl<'a> FromPair<'a, String> for SetOntology<String> {
@@ -2755,13 +2750,13 @@ mod tests {
         prefixes.set_default("http://example.com/ontology/");
 
         let mut ctx = Context::new(&build, prefixes);
-        ctx.mark_property_kind(
+        ctx.record_entity_kind(
             build.iri("http://example.com/ontology/propA"),
-            PropertyKind::Object,
+            NamedEntityKind::ObjectProperty,
         );
-        ctx.mark_property_kind(
+        ctx.record_entity_kind(
             build.iri("http://example.com/ontology/propB"),
-            PropertyKind::Object,
+            NamedEntityKind::ObjectProperty,
         );
 
         let input = r#"
@@ -2830,38 +2825,38 @@ mod tests {
         let (owx_ontology, expected_prefixes): (SetOntology<Rc<str>>, PrefixMapping) =
             crate::io::owx::reader::read(&mut Cursor::new(&owx), Default::default()).unwrap();
 
-        // The OWL API includes built-in entities in the OMN output but not in the OWX output.
-        // -> Filter them in the actual output for comparison
-        let mut actual: Vec<AnnotatedComponent<Rc<str>>> = wrapper
-            .0
-            .into_iter()
-            .filter(|c| match c {
-                AnnotatedComponent {
-                    component: Component::DeclareClass(DeclareClass(c)),
-                    ann: _,
-                } => !is_built_in(&c.0),
-                AnnotatedComponent {
-                    component: Component::DeclareObjectProperty(DeclareObjectProperty(p)),
-                    ann: _,
-                } => !is_built_in(&p.0),
-                AnnotatedComponent {
-                    component: Component::DeclareDataProperty(DeclareDataProperty(p)),
-                    ann: _,
-                } => !is_built_in(&p.0),
-                AnnotatedComponent {
-                    component: Component::DeclareAnnotationProperty(DeclareAnnotationProperty(p)),
-                    ann: _,
-                } => !is_built_in(&p.0),
-                AnnotatedComponent {
-                    component: Component::DeclareDatatype(DeclareDatatype(d)),
-                    ann: _,
-                } => !is_built_in(&d.0),
-                _ => true,
-            })
-            .collect();
+        // The OWL API includes built-in entities in the OMN output but not always in the OWX
+        // output. Filter them from both sides for a consistent comparison.
+        let filter_built_in = |c: &AnnotatedComponent<Rc<str>>| match c {
+            AnnotatedComponent {
+                component: Component::DeclareClass(DeclareClass(c)),
+                ann: _,
+            } => !is_built_in(&c.0),
+            AnnotatedComponent {
+                component: Component::DeclareObjectProperty(DeclareObjectProperty(p)),
+                ann: _,
+            } => !is_built_in(&p.0),
+            AnnotatedComponent {
+                component: Component::DeclareDataProperty(DeclareDataProperty(p)),
+                ann: _,
+            } => !is_built_in(&p.0),
+            AnnotatedComponent {
+                component: Component::DeclareAnnotationProperty(DeclareAnnotationProperty(p)),
+                ann: _,
+            } => !is_built_in(&p.0),
+            AnnotatedComponent {
+                component: Component::DeclareDatatype(DeclareDatatype(d)),
+                ann: _,
+            } => !is_built_in(&d.0),
+            _ => true,
+        };
+
+        let mut actual: Vec<AnnotatedComponent<Rc<str>>> =
+            wrapper.0.into_iter().filter(filter_built_in).collect();
         actual.sort();
 
-        let mut expected: Vec<AnnotatedComponent<Rc<str>>> = owx_ontology.into_iter().collect();
+        let mut expected: Vec<AnnotatedComponent<Rc<str>>> =
+            owx_ontology.into_iter().filter(filter_built_in).collect();
         expected.sort();
 
         pretty_assertions::assert_eq!(actual_prefixes, expected_prefixes);

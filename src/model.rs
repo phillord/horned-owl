@@ -1830,6 +1830,12 @@ impl<A: ForIRI> From<Datatype<A>> for DataRange<A> {
     }
 }
 
+impl<A: ForIRI> From<IRI<A>> for DataRange<A> {
+    fn from(iri: IRI<A>) -> DataRange<A> {
+        Datatype::from(iri).into()
+    }
+}
+
 /// A class expression
 ///
 /// As well as a named class, it is possible to define classes of
