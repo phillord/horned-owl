@@ -1286,9 +1286,17 @@ impl<'a, A: ForIRI> FromPair<'a, A> for ParseResult<'a, ClassFrame<A>> {
                     let ce = frame.entity.clone();
                     let vpe = value
                         .map(|pair| FromPair::from_pair(pair, ctx))
-                        .collect::<Result<Vec<_>>>()?;
-                    let component = HasKey { ce, vpe }.into();
-                    frame.components.push(AnnotatedComponent { component, ann });
+                        .collect::<Result<Vec<ParseResult<PropertyExpression<A>>>>>()?;
+                    let component = collect_parse_result(vpe.into_iter()).map(|vpe| HasKey { ce, vpe }.into());
+
+                    match component {
+                        Success(component) => {
+                            frame.components.push(AnnotatedComponent { component, ann });
+                        }
+                        Ambiguous(component, span) => {
+                            ctx.add_ambiguous_component(AnnotatedComponent { ann, component }, span);
+                        }
+                    }
                 }
                 rule => unexpected_rule!(ClassFrame, rule)?,
             }
@@ -2120,26 +2128,33 @@ impl<'a, A: ForIRI> FromPair<'a, A> for DArgument<A> {
 }
 // ---------------------------------------------------------------------------
 
-impl<'a, A: ForIRI> FromPair<'a, A> for PropertyExpression<A> {
+impl<'a, A: ForIRI> FromPair<'a, A> for ParseResult<'a, PropertyExpression<A>> {
     const RULE: Rule = Rule::PropertyExpression;
     fn from_pair_unchecked(pair: Pair<'a, Rule>, ctx: &mut Context<'a, A>) -> Result<Self> {
         let inner = descend(pair)?;
         match inner.as_rule() {
-            Rule::ObjectPropertyExpression => {
-                // // Grammar tries ObjectPropertyExpression first, but IRI may be a data property.
-                // // Use context to resolve the ambiguity.
-                // let ope_inner = descend(inner.clone())?;
-                // if ope_inner.as_rule() == Rule::ObjectPropertyIRI {
-                //     let iri = IRI::from_pair(descend(ope_inner)?, ctx)?;
-                //     if ctx.get_property_kind(iri.clone()) == Some(PropertyKind::Data) {
-                //         return Ok(PropertyExpression::DataProperty(DataProperty(iri)));
-                //     }
-                // }
-                FromPair::from_pair(inner, ctx).map(PropertyExpression::ObjectPropertyExpression)
-            }
+            Rule::ObjectPropertyExpression => ObjectPropertyExpression::from_pair(inner, ctx)
+                .map(PropertyExpression::ObjectPropertyExpression)
+                .map(Success),
             Rule::DataPropertyExpression => {
                 let pair = descend(inner)?;
-                FromPair::from_pair(pair, ctx).map(PropertyExpression::DataProperty)
+                let span = pair.as_span();
+                let dp = DataProperty::from_pair(pair, ctx)?;
+                match ctx.get_property_kind(&dp.0) {
+                    Some(NamedEntityKind::DataProperty) => Ok(Success(dp.into())),
+                    Some(NamedEntityKind::ObjectProperty) => Ok(Success(ObjectProperty::from(dp.0).into())),
+                    Some(kind) => parse_error!(
+                        format!(
+                            "property used in data property expression has incompatible kind: expected data property, found {:?}",
+                            kind
+                        ),
+                        span
+                    ),
+                    None => Ok(Ambiguous(
+                        PropertyExpression::DataProperty(dp),
+                        span,
+                    )),
+                }
             }
             rule => unexpected_rule!(PropertyExpression, rule),
         }

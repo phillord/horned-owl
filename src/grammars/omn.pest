@@ -198,7 +198,7 @@ Frame               = {
 ObjectPropertyExpression = { InverseObjectProperty | ObjectPropertyIRI }
 InverseObjectProperty    = { KEYWORD_INVERSE ~ (BracketedObjectPropertyIRI | ObjectPropertyIRI)  }
 DataPropertyExpression   = { DataPropertyIRI }
-PropertyExpression       = { ObjectPropertyExpression | DataPropertyExpression }
+PropertyExpression       = { DataPropertyExpression | ObjectPropertyExpression }
 
 DataRange = { DataConjunction ~ (KEYWORD_OR ~ DataConjunction)* }
 DataConjunction = { DataPrimary ~ (KEYWORD_AND ~ DataPrimary)*  }
