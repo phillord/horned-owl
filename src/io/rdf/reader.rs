@@ -2199,7 +2199,25 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
         // should have everything else in place by then to build the
         // entire rule
         for (bnode, triple) in std::mem::take(&mut self.bnode) {
-            let rule: Result<_, HornedError> = match triple.as_slice() {
+            // A SWRL rule's bnode carries `rdf:type swrl:Imp`,
+            // `swrl:body` and `swrl:head`. It may *also* carry
+            // annotation triples directly on the Imp node -- this is
+            // how the OWL API (and so Protege) serialises an annotated
+            // rule; it does not reify them via owl:Axiom. Partition the
+            // structural triples from any such annotations so the
+            // direct annotations do not defeat the structural match,
+            // which would otherwise drop the whole rule.
+            let (structural, ann_triples): (Vec<_>, Vec<_>) =
+                triple.iter().cloned().partition(|t| {
+                    matches!(
+                        t,
+                        [_, Term::RDF(VRDF::Type), Term::SWRL(VSWRL::Imp)]
+                            | [_, Term::SWRL(VSWRL::Body), _]
+                            | [_, Term::SWRL(VSWRL::Head), _]
+                    )
+                });
+
+            let rule: Result<_, HornedError> = match structural.as_slice() {
                 [
                     [_, Term::RDF(VRDF::Type), Term::SWRL(VSWRL::Imp)],
                     [_, Term::SWRL(VSWRL::Body), Term::BNode(body_bn)],
@@ -2217,7 +2235,18 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
 
             match rule? {
                 Some(rule) => {
-                    self.merge(rule);
+                    // Annotations attached directly to the Imp node,
+                    // plus any reified (owl:Axiom) annotations collected
+                    // earlier by `axiom_annotations` (this is the form
+                    // produced by Horned-OWL's own RDF writer).
+                    let mut ann = self.parse_annotations(&ann_triples)?;
+                    let key = self.b.substitute_term([
+                        Term::BNode(bnode),
+                        Term::RDF(VRDF::Type),
+                        Term::SWRL(VSWRL::Imp),
+                    ]);
+                    ann.extend(self.ann_map.remove(&key).unwrap_or_default());
+                    self.merge(AnnotatedComponent::new(rule, ann));
                 }
                 _ => {
                     self.bnode.insert(bnode, triple);
