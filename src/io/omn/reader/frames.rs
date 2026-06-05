@@ -1,7 +1,9 @@
 use std::collections::BTreeSet;
 
 use crate::model::{
-    AnnotatedComponent, Annotation, AnnotationProperty, ClassExpression, Component, DataProperty, Datatype, DeclareAnnotationProperty, DeclareClass, DeclareDataProperty, DeclareDatatype, DeclareNamedIndividual, DeclareObjectProperty, ForIRI, Individual, ObjectPropertyExpression
+    AnnotatedComponent, Annotation, AnnotationProperty, ClassExpression, Component, DataProperty,
+    Datatype, DeclareAnnotationProperty, DeclareClass, DeclareDataProperty, DeclareDatatype,
+    DeclareNamedIndividual, DeclareObjectProperty, ForIRI, Individual, ObjectPropertyExpression,
 };
 
 // ---------------------------------------------------------------------------
@@ -45,12 +47,10 @@ macro_rules! impl_new {
     ($ty:ident, $entity:ident, $declare:ident) => {
         impl<A: ForIRI> $ty<A> {
             pub fn new(entity: $entity<A>, annotations: BTreeSet<Annotation<A>>) -> Self {
-                let components = vec![
-                    AnnotatedComponent::new(
-                        Component::$declare($declare(entity.clone()).into()),
-                        annotations,
-                    ),
-                ];
+                let components = vec![AnnotatedComponent::new(
+                    Component::$declare($declare(entity.clone()).into()),
+                    annotations,
+                )];
                 Self { entity, components }
             }
         }
@@ -73,7 +73,12 @@ impl_new!(ClassFrame, Class, ClassExpression, DeclareClass);
 
 pub type ObjectPropertyFrame<A> = Frame<A, ObjectPropertyExpression<A>>;
 
-impl_new!(ObjectPropertyFrame, ObjectProperty, ObjectPropertyExpression, DeclareObjectProperty);
+impl_new!(
+    ObjectPropertyFrame,
+    ObjectProperty,
+    ObjectPropertyExpression,
+    DeclareObjectProperty
+);
 
 // ---------------------------------------------------------------------------
 
@@ -100,12 +105,10 @@ impl<A: ForIRI> IndividualFrame<A> {
     pub fn new(entity: Individual<A>, annotations: BTreeSet<Annotation<A>>) -> Self {
         let components = match &entity {
             Individual::Anonymous(_) => Vec::new(),
-            Individual::Named(ni) => vec![
-                AnnotatedComponent::new(
-                    Component::DeclareNamedIndividual(DeclareNamedIndividual(ni.clone())),
-                    annotations,
-                )
-            ],
+            Individual::Named(ni) => vec![AnnotatedComponent::new(
+                Component::DeclareNamedIndividual(DeclareNamedIndividual(ni.clone())),
+                annotations,
+            )],
         };
         Self { entity, components }
     }
@@ -127,4 +130,3 @@ impl<A: ForIRI> From<AnnotatedComponent<A>> for MiscClause<A> {
         MiscClause::new(component)
     }
 }
-

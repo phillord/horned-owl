@@ -1199,7 +1199,7 @@ impl<'a, A: ForIRI> FromPair<'a, A> for ParseResult<'a, ClassFrame<A>> {
                                 FromPair::from_pair(pair, ctx)?;
                             sup.map(|sup| {
                                 SubClassOf {
-                                    sup: sup,
+                                    sup,
                                     sub: frame.entity.clone(),
                                 }
                                 .into()
@@ -1334,7 +1334,7 @@ impl<'a, A: ForIRI> FromPair<'a, A> for ObjectPropertyFrame<A> {
                         component = {
                             let ce: ParseResult<ClassExpression<A>> =
                                 FromPair::from_pair(pair, ctx)?;
-                            let ope = frame.entity.clone().into();
+                            let ope = frame.entity.clone();
                             ce.map(|ce| ObjectPropertyDomain { ope, ce }.into())
                         }
                     )
@@ -1348,7 +1348,7 @@ impl<'a, A: ForIRI> FromPair<'a, A> for ObjectPropertyFrame<A> {
                         component = {
                             let ce: ParseResult<ClassExpression<A>> =
                                 FromPair::from_pair(pair, ctx)?;
-                            let ope = frame.entity.clone().into();
+                            let ope = frame.entity.clone();
                             ce.map(|ce| ObjectPropertyRange { ope, ce }.into())
                         }
                     )
@@ -1399,7 +1399,7 @@ impl<'a, A: ForIRI> FromPair<'a, A> for ObjectPropertyFrame<A> {
                                 SubObjectPropertyOf {
                                     sup: ObjectPropertyExpression::from_pair(pair, ctx)?,
                                     sub: SubObjectPropertyExpression::ObjectPropertyExpression(
-                                        frame.entity.clone().into(),
+                                        frame.entity.clone(),
                                     ),
                                 }
                                 .into(),
@@ -1479,7 +1479,7 @@ impl<'a, A: ForIRI> FromPair<'a, A> for ObjectPropertyFrame<A> {
                     chain.insert(0, first);
 
                     let component = SubObjectPropertyOf {
-                        sup: frame.entity.clone().into(),
+                        sup: frame.entity.clone(),
                         sub: SubObjectPropertyExpression::ObjectPropertyChain(chain),
                     }
                     .into();
@@ -2001,17 +2001,17 @@ impl<'a, A: ForIRI> FromPair<'a, A> for ParseResult<'a, Atom<A>> {
                     Some(NamedEntityKind::ObjectProperty) => {
                         Ok(Success(Atom::ObjectPropertyAtom {
                             pred: iri.into(),
-                            args: (arg1.into(), arg2.into()),
+                            args: (arg1, arg2.into()),
                         }))
                     }
                     Some(NamedEntityKind::DataProperty) => Ok(Success(Atom::DataPropertyAtom {
                         pred: iri.into(),
-                        args: (arg1.into(), arg2.into()),
+                        args: (arg1, arg2.into()),
                     })),
                     None => Ok(Ambiguous(
                         Atom::DataPropertyAtom {
                             pred: iri.into(),
-                            args: (arg1.into(), arg2.into()),
+                            args: (arg1, arg2.into()),
                         },
                         span,
                     )),
@@ -2031,7 +2031,7 @@ impl<'a, A: ForIRI> FromPair<'a, A> for ParseResult<'a, Atom<A>> {
                 let arg2 = IArgument::from_pair(next_or_err!(pairs)?, ctx)?;
                 Ok(Success(Atom::ObjectPropertyAtom {
                     pred: op,
-                    args: (arg1.into(), arg2.into()),
+                    args: (arg1, arg2),
                 }))
             }
             Rule::SWRLDataPropertyAtom => {
@@ -2041,23 +2041,20 @@ impl<'a, A: ForIRI> FromPair<'a, A> for ParseResult<'a, Atom<A>> {
                 let arg2 = DArgument::from_pair(next_or_err!(pairs)?, ctx)?;
                 Ok(Success(Atom::DataPropertyAtom {
                     pred: dp,
-                    args: (arg1.into(), arg2.into()),
+                    args: (arg1, arg2),
                 }))
             }
             Rule::SWRLSameIndividualAtom => {
                 let mut pairs = inner.into_inner();
                 let arg1 = IArgument::from_pair(next_or_err!(pairs)?, ctx)?;
                 let arg2 = IArgument::from_pair(next_or_err!(pairs)?, ctx)?;
-                Ok(Success(Atom::SameIndividualAtom(arg1.into(), arg2.into())))
+                Ok(Success(Atom::SameIndividualAtom(arg1, arg2)))
             }
             Rule::SWRLDifferentIndividualsAtom => {
                 let mut pairs = inner.into_inner();
                 let arg1 = IArgument::from_pair(next_or_err!(pairs)?, ctx)?;
                 let arg2 = IArgument::from_pair(next_or_err!(pairs)?, ctx)?;
-                Ok(Success(Atom::DifferentIndividualsAtom(
-                    arg1.into(),
-                    arg2.into(),
-                )))
+                Ok(Success(Atom::DifferentIndividualsAtom(arg1, arg2)))
             }
             // Built-in
             Rule::SWRLBuiltInAtom => {
@@ -2066,10 +2063,7 @@ impl<'a, A: ForIRI> FromPair<'a, A> for ParseResult<'a, Atom<A>> {
                 let args = pairs
                     .map(|pair| DArgument::from_pair(pair, ctx))
                     .collect::<Result<Vec<_>>>()?;
-                Ok(Success(Atom::BuiltInAtom {
-                    pred: iri.into(),
-                    args,
-                }))
+                Ok(Success(Atom::BuiltInAtom { pred: iri, args }))
             }
             rule => unexpected_rule!(Atom, rule),
         }
@@ -2127,7 +2121,9 @@ impl<'a, A: ForIRI> FromPair<'a, A> for ParseResult<'a, PropertyExpression<A>> {
                 let dp = DataProperty::from_pair(pair, ctx)?;
                 match ctx.get_property_kind(&dp.0) {
                     Some(NamedEntityKind::DataProperty) => Ok(Success(dp.into())),
-                    Some(NamedEntityKind::ObjectProperty) => Ok(Success(ObjectProperty::from(dp.0).into())),
+                    Some(NamedEntityKind::ObjectProperty) => {
+                        Ok(Success(ObjectProperty::from(dp.0).into()))
+                    }
                     Some(kind) => parse_error!(
                         format!(
                             "property used in data property expression has incompatible kind: expected data property, found {:?}",
@@ -2135,10 +2131,7 @@ impl<'a, A: ForIRI> FromPair<'a, A> for ParseResult<'a, PropertyExpression<A>> {
                         ),
                         span
                     ),
-                    None => Ok(Ambiguous(
-                        PropertyExpression::DataProperty(dp),
-                        span,
-                    )),
+                    None => Ok(Ambiguous(PropertyExpression::DataProperty(dp), span)),
                 }
             }
             rule => unexpected_rule!(PropertyExpression, rule),
@@ -2195,7 +2188,7 @@ fn expand_iri<'a, A: ForIRI>(
     ctx: &mut Context<'a, A>,
     span: Span<'_>,
 ) -> Result<IRI<A>> {
-    match ctx.mapping.expand_curie(&curie) {
+    match ctx.mapping.expand_curie(curie) {
         Ok(s) => Ok(ctx.build.iri(s)),
         Err(curie::ExpansionError::Invalid) => {
             Err(HornedError::invalid_at("undefined prefix", span))
@@ -2875,7 +2868,7 @@ mod tests {
                         std::mem::swap(a, b);
                     }
                 }
-                Component::Rule(SWRLRule{ head, body }) => {
+                Component::Rule(SWRLRule { head, body }) => {
                     head.sort();
                     body.sort();
                 }
