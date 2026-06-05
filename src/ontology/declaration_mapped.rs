@@ -82,13 +82,15 @@ impl<A: ForIRI, AA: ForIndex<A>> DeclarationMappedIndex<A, AA> {
             | ComponentKind::DeclareAnnotationProperty
             | ComponentKind::DeclareDataProperty
             | ComponentKind::DeclareDatatype
-            | ComponentKind::DeclareNamedIndividual => match ax.clone().component {
-                Component::DeclareClass(dc) => Some(dc.0.into()),
-                Component::DeclareObjectProperty(op) => Some(op.0.into()),
-                Component::DeclareAnnotationProperty(ap) => Some(ap.0.into()),
-                Component::DeclareDataProperty(dp) => Some(dp.0.into()),
-                Component::DeclareDatatype(dt) => Some(dt.0.into()),
-                Component::DeclareNamedIndividual(ni) => Some(ni.0.into()),
+            | ComponentKind::DeclareNamedIndividual => match &ax.component {
+                Component::DeclareClass(_) => Some(NamedEntityKind::Class),
+                Component::DeclareObjectProperty(_) => Some(NamedEntityKind::ObjectProperty),
+                Component::DeclareAnnotationProperty(_) => {
+                    Some(NamedEntityKind::AnnotationProperty)
+                }
+                Component::DeclareDataProperty(_) => Some(NamedEntityKind::DataProperty),
+                Component::DeclareDatatype(_) => Some(NamedEntityKind::Datatype),
+                Component::DeclareNamedIndividual(_) => Some(NamedEntityKind::NamedIndividual),
                 _ => None,
             },
             _ => None,
@@ -102,13 +104,13 @@ impl<A: ForIRI, AA: ForIndex<A>> DeclarationMappedIndex<A, AA> {
             | ComponentKind::DeclareAnnotationProperty
             | ComponentKind::DeclareDataProperty
             | ComponentKind::DeclareDatatype
-            | ComponentKind::DeclareNamedIndividual => match ax.clone().component {
-                Component::DeclareClass(dc) => Some(dc.0.into()),
-                Component::DeclareObjectProperty(op) => Some(op.0.into()),
-                Component::DeclareAnnotationProperty(ap) => Some(ap.0.into()),
-                Component::DeclareDataProperty(dp) => Some(dp.0.into()),
-                Component::DeclareDatatype(dt) => Some(dt.0.into()),
-                Component::DeclareNamedIndividual(ni) => Some(ni.0.into()),
+            | ComponentKind::DeclareNamedIndividual => match &ax.component {
+                Component::DeclareClass(dc) => Some(dc.0.0.clone()),
+                Component::DeclareObjectProperty(op) => Some(op.0.0.clone()),
+                Component::DeclareAnnotationProperty(ap) => Some(ap.0.0.clone()),
+                Component::DeclareDataProperty(dp) => Some(dp.0.0.clone()),
+                Component::DeclareDatatype(dt) => Some(dt.0.0.clone()),
+                Component::DeclareNamedIndividual(ni) => Some(ni.0.0.clone()),
                 _ => None,
             },
             _ => None,
