@@ -46,6 +46,7 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: StdWrite>(
 pub fn path_type(path: &Path) -> Option<ResourceType> {
     match path.extension().and_then(|s| s.to_str()) {
         Some("ofn") => Some(ResourceType::OFN),
+        Some("omn") => Some(ResourceType::OMN),
         Some("owx") => Some(ResourceType::OWX),
         Some("owl") => Some(ResourceType::RDF),
         _ => None,
