@@ -128,27 +128,3 @@ impl<A: ForIRI> From<AnnotatedComponent<A>> for MiscClause<A> {
     }
 }
 
-// ---------------------------------------------------------------------------
-
-#[derive(Debug, Clone)]
-pub struct InverseObjectPropertyFrame<A: ForIRI> {
-    pub entity: ObjectPropertyExpression<A>,
-    pub components: Vec<AnnotatedComponent<A>>,
-}
-
-impl<A: ForIRI> InverseObjectPropertyFrame<A> {
-    pub fn new(entity: ObjectPropertyExpression<A>) -> Self {
-        let components = Vec::new();
-        Self { entity, components }
-    }
-
-    pub fn into_components(self) -> Vec<AnnotatedComponent<A>> {
-        self.components
-    }
-}
-
-impl<A: ForIRI> From<ObjectPropertyExpression<A>> for InverseObjectPropertyFrame<A> {
-    fn from(ope: ObjectPropertyExpression<A>) -> Self {
-        Self::new(ope)
-    }
-}
