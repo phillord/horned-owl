@@ -186,7 +186,7 @@ impl<A: ForIRI, V: VisitMut<A>> WalkMut<A, V> {
     pub fn annotated_component(&mut self, e: &mut AnnotatedComponent<A>) {
         self.0.visit_annotated_component(e);
         self.component(&mut e.component);
-        let mut v = e.clone().ann.into_iter().collect();
+        let mut v = e.ann.iter().cloned().collect();
         self.annotation_vec(&mut v);
 
         let mut annset = v.into_iter().collect();

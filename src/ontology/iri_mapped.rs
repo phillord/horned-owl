@@ -220,6 +220,7 @@ impl<A: ForIRI, AA: ForIndex<A>> OntologyIndex<A, AA> for IRIMappedIndex<A, AA> 
             })
     }
 
+    #[allow(clippy::unnecessary_fold)]
     fn index_remove(&mut self, cmp: &AnnotatedComponent<A>) -> bool {
         Self::iris_from_component(cmp)
             .iter()
