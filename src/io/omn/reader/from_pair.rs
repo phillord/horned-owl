@@ -917,21 +917,6 @@ pub(crate) struct MutableOntologyWrapper<A: ForIRI, O: MutableOntology<A> + Onto
     PhantomData<A>,
 );
 
-impl<'a, A: ForIRI> FromPair<'a, A> for OntologyID<A> {
-    const RULE: Rule = Rule::OntologyID;
-    fn from_pair_unchecked(pair: Pair<'a, Rule>, ctx: &mut Context<'a, A>) -> Result<Self> {
-        let mut pairs = pair.into_inner();
-
-        let iri = Some(FromPair::<A>::from_pair(next_or_err!(pairs)?, ctx)?);
-        let viri = match pairs.next() {
-            Some(pair) => Some(FromPair::<A>::from_pair(pair, ctx)?),
-            None => None,
-        };
-
-        Ok(OntologyID { iri, viri })
-    }
-}
-
 impl<'a, A: ForIRI, O: MutableOntology<A> + Ontology<A> + Default> FromPair<'a, A>
     for MutableOntologyWrapper<A, O>
 {
