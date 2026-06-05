@@ -2043,7 +2043,7 @@ impl<'a, A: ForIRI> FromPair<'a, A> for ParseResult<'a, Atom<A>> {
                 let mut pairs = inner.into_inner();
                 let op = ObjectPropertyExpression::from_pair(next_or_err!(pairs)?, ctx)?;
                 let arg1 = IArgument::from_pair(next_or_err!(pairs)?, ctx)?;
-                let arg2 = DArgument::from_pair(next_or_err!(pairs)?, ctx)?;
+                let arg2 = IArgument::from_pair(next_or_err!(pairs)?, ctx)?;
                 Ok(Success(Atom::ObjectPropertyAtom {
                     pred: op,
                     args: (arg1.into(), arg2.into()),

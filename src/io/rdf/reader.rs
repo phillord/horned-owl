@@ -2088,7 +2088,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                             pred: self.retrieve_to_ope(pred)?,
                             args: (
                                 self.retrieve_to_iargument(arg1)?,
-                                self.retrieve_to_dargument(arg2)?,
+                                self.retrieve_to_iargument(arg2)?,
                             )
                         }
                     }

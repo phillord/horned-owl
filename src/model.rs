@@ -2054,7 +2054,7 @@ pub enum Atom<A> {
     DifferentIndividualsAtom(IArgument<A>, IArgument<A>),
     ObjectPropertyAtom {
         pred: ObjectPropertyExpression<A>,
-        args: (IArgument<A>, DArgument<A>),
+        args: (IArgument<A>, IArgument<A>),
     },
     SameIndividualAtom(IArgument<A>, IArgument<A>),
 }

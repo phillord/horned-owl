@@ -537,7 +537,7 @@ impl<A: ForIRI, V: VisitMut<A>> WalkMut<A, V> {
             Atom::ObjectPropertyAtom { pred, args } => {
                 self.object_property_expression(pred);
                 self.iarg(&mut args.0);
-                self.darg(&mut args.1);
+                self.iarg(&mut args.1);
             }
             Atom::SameIndividualAtom(arg1, arg2) => {
                 self.iarg(arg1);
