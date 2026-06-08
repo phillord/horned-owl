@@ -134,11 +134,15 @@ pub trait ForIRI:
     + Ord
     + PartialOrd
 {
+    /// Convert a `&str` to the owned representation allocated
+    /// directly, without an intermediate `String`.
+    fn from_str(s: &str) -> Self;
 }
 
 /// Blanket implementation of `ForIRI` for any type taht implements
 /// all the bounds.
-impl<T> ForIRI for T where
+impl<T> ForIRI for T
+where
     T: AsRef<str>
         + Borrow<str>
         + Clone
@@ -149,8 +153,12 @@ impl<T> ForIRI for T where
         + Hash
         + PartialEq
         + Ord
-        + PartialOrd
+        + PartialOrd,
+    for<'a> T: From<&'a str>,
 {
+    fn from_str(s: &str) -> Self {
+        s.into()
+    }
 }
 
 /// Shortcut types to reduce the number of angle brackets in code.
@@ -316,7 +324,7 @@ impl<A: ForIRI> Build<A> {
         if let Some(anon) = cache.get(s.borrow()) {
             anon.clone()
         } else {
-            let anon = AnonymousIndividual(s.borrow().to_string().into());
+            let anon = AnonymousIndividual(A::from_str(s.borrow()));
             cache.insert(anon.clone());
             anon
         }
@@ -337,7 +345,7 @@ impl<A: ForIRI> Build<A> {
         if let Some(iri) = cache.get(s.borrow()) {
             iri.clone()
         } else {
-            let iri = IRI(s.borrow().to_string().into());
+            let iri = IRI(A::from_str(s.borrow()));
             cache.insert(iri.clone());
             iri
         }
