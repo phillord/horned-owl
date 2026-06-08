@@ -1,3 +1,11 @@
+Version 2 (Next)
+=============
+
+Enhancements:
+- The ForIRI interface has been updated to avoid an allocation which results in 5-10% performance gains.
+
+
+
 Version 1.4.0
 =============
 
