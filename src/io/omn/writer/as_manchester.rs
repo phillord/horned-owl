@@ -485,9 +485,12 @@ impl<A: ForIRI> AsManchester<A> for ClassExpression<A> {}
 // Component — per-axiom Manchester rendering
 //
 // The ~20 common logical axioms get bespoke Manchester clauses; the rest
-// (structural/meta/annotation/SWRL) fall back to the functional-syntax
-// rendering via `AsFunctional`, which is always valid and rarely appears
-// in justifications anyway.
+// (structural/meta/annotation/SWRL) fall back to OWL FUNCTIONAL syntax via
+// `AsFunctional`.  That fallback is NOT valid Manchester — it is a readable,
+// lossless stopgap for variants with no implemented Manchester form (Import,
+// HasKey, OntologyAnnotation, annotation axioms, SWRL Rule, …).  Native
+// Manchester for the common ones (Import:, header Annotations:) is a
+// pre-upstream-PR follow-up.
 
 impl<A: ForIRI> Display for Manchester<'_, Component<A>, A> {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {

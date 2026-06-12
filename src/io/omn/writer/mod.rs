@@ -53,6 +53,13 @@ struct Frame {
 /// whose subject is that entity.  Axioms that do not have a clean named-entity
 /// subject (n-ary equivalences/disjunctions, property chains, etc.) are
 /// emitted as free-standing lines in a trailing `# General axioms` section.
+///
+/// **Note on the `# General axioms` section:** components that lack a native
+/// Manchester rendering (e.g. `Import`, `HasKey`, `OntologyAnnotation`,
+/// annotation axioms, SWRL `Rule`) are serialised in **OWL functional syntax**
+/// as a stopgap.  Those lines are NOT valid Manchester syntax.  A fully
+/// Manchester-conformant document (with `Import:`, `Annotations:`, etc.)
+/// awaits native handling of those variants and is a pre-upstream-PR follow-up.
 pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
     mut write: W,
     ont: &ComponentMappedOntology<A, AA>,
@@ -563,9 +570,15 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
 
     // -----------------------------------------------------------------------
     // 5. Emit misc / general axioms.
+    //    Lines here may be in OWL functional syntax (see `as_manchester.rs`
+    //    Component impl) for variants with no Manchester form yet — they are
+    //    NOT valid Manchester.  Pre-upstream-PR follow-up: native Import: /
+    //    Annotations: rendering.
     // -----------------------------------------------------------------------
     if !misc.is_empty() {
         writeln!(write)?;
+        // # functional-syntax fallback: some lines below use OWL functional
+        // syntax (not Manchester) for Component variants lacking a native form.
         writeln!(write, "# General axioms")?;
         for line in &misc {
             writeln!(write, "{line}")?;
