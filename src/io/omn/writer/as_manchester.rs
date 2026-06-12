@@ -482,6 +482,221 @@ impl<A: ForIRI> Display for Manchester<'_, ClassExpression<A>, A> {
 impl<A: ForIRI> AsManchester<A> for ClassExpression<A> {}
 
 // ---------------------------------------------------------------------------
+// Component — per-axiom Manchester rendering
+//
+// The ~20 common logical axioms get bespoke Manchester clauses; the rest
+// (structural/meta/annotation/SWRL) fall back to the functional-syntax
+// rendering via `AsFunctional`, which is always valid and rarely appears
+// in justifications anyway.
+
+impl<A: ForIRI> Display for Manchester<'_, Component<A>, A> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
+        use crate::io::ofn::writer::AsFunctional as _;
+        let pm = self.1;
+
+        // Shorthand: wrap any `&T` that already has Manchester<T,A>: Display.
+        macro_rules! m {
+            ($e:expr) => {
+                Manchester($e, pm, PhantomData::<A>)
+            };
+        }
+
+        // Render a `Vec<T>` where Manchester<T,A>: Display, joining with `sep`.
+        // Writes nothing for empty vecs.
+        macro_rules! join_vec {
+            ($vec:expr, $sep:expr) => {{
+                let mut first = true;
+                for item in ($vec).iter() {
+                    if !first {
+                        write!(f, $sep)?;
+                    }
+                    first = false;
+                    write!(f, "{}", m!(item))?;
+                }
+            }};
+        }
+
+        match self.0 {
+            // --- Class axioms ---
+            Component::SubClassOf(ax) => {
+                write!(f, "{} SubClassOf {}", m!(&ax.sub), m!(&ax.sup))
+            }
+            Component::EquivalentClasses(ax) => {
+                // ax.0 is Vec<ClassExpression<A>>
+                let mut it = ax.0.iter();
+                if let Some(first) = it.next() {
+                    write!(f, "{}", m!(first))?;
+                    for item in it {
+                        write!(f, " EquivalentTo {}", m!(item))?;
+                    }
+                }
+                Ok(())
+            }
+            Component::DisjointClasses(ax) => {
+                let mut it = ax.0.iter();
+                if let Some(first) = it.next() {
+                    write!(f, "{}", m!(first))?;
+                    for item in it {
+                        write!(f, " DisjointWith {}", m!(item))?;
+                    }
+                }
+                Ok(())
+            }
+            Component::DisjointUnion(ax) => {
+                // ax.0 = Class, ax.1 = Vec<ClassExpression>
+                write!(f, "{} DisjointUnionOf ", m!(&ax.0))?;
+                join_vec!(&ax.1, ", ");
+                Ok(())
+            }
+
+            // --- Object property axioms ---
+            Component::SubObjectPropertyOf(ax) => {
+                // ax.sub: SubObjectPropertyExpression — render inline (no Manchester impl for it)
+                let sub_str = match &ax.sub {
+                    SubObjectPropertyExpression::ObjectPropertyChain(chain) => chain
+                        .iter()
+                        .map(|p| m!(p).to_string())
+                        .collect::<Vec<_>>()
+                        .join(" o "),
+                    SubObjectPropertyExpression::ObjectPropertyExpression(ope) => {
+                        m!(ope).to_string()
+                    }
+                };
+                write!(f, "{sub_str} SubPropertyOf {}", m!(&ax.sup))
+            }
+            Component::EquivalentObjectProperties(ax) => {
+                let mut it = ax.0.iter();
+                if let Some(first) = it.next() {
+                    write!(f, "{}", m!(first))?;
+                    for item in it {
+                        write!(f, " EquivalentTo {}", m!(item))?;
+                    }
+                }
+                Ok(())
+            }
+            Component::DisjointObjectProperties(ax) => {
+                let mut it = ax.0.iter();
+                if let Some(first) = it.next() {
+                    write!(f, "{}", m!(first))?;
+                    for item in it {
+                        write!(f, " DisjointWith {}", m!(item))?;
+                    }
+                }
+                Ok(())
+            }
+            Component::InverseObjectProperties(ax) => {
+                // ax.0 and ax.1 are ObjectProperty (not expression)
+                write!(f, "{} InverseOf {}", m!(&ax.0), m!(&ax.1))
+            }
+            Component::ObjectPropertyDomain(ax) => {
+                write!(f, "{} Domain {}", m!(&ax.ope), m!(&ax.ce))
+            }
+            Component::ObjectPropertyRange(ax) => {
+                write!(f, "{} Range {}", m!(&ax.ope), m!(&ax.ce))
+            }
+            Component::FunctionalObjectProperty(ax) => {
+                write!(f, "{} Characteristics: Functional", m!(&ax.0))
+            }
+            Component::InverseFunctionalObjectProperty(ax) => {
+                write!(f, "{} Characteristics: InverseFunctional", m!(&ax.0))
+            }
+            Component::ReflexiveObjectProperty(ax) => {
+                write!(f, "{} Characteristics: Reflexive", m!(&ax.0))
+            }
+            Component::IrreflexiveObjectProperty(ax) => {
+                write!(f, "{} Characteristics: Irreflexive", m!(&ax.0))
+            }
+            Component::SymmetricObjectProperty(ax) => {
+                write!(f, "{} Characteristics: Symmetric", m!(&ax.0))
+            }
+            Component::AsymmetricObjectProperty(ax) => {
+                write!(f, "{} Characteristics: Asymmetric", m!(&ax.0))
+            }
+            Component::TransitiveObjectProperty(ax) => {
+                write!(f, "{} Characteristics: Transitive", m!(&ax.0))
+            }
+
+            // --- Data property axioms ---
+            Component::SubDataPropertyOf(ax) => {
+                write!(f, "{} SubPropertyOf {}", m!(&ax.sub), m!(&ax.sup))
+            }
+            Component::EquivalentDataProperties(ax) => {
+                let mut it = ax.0.iter();
+                if let Some(first) = it.next() {
+                    write!(f, "{}", m!(first))?;
+                    for item in it {
+                        write!(f, " EquivalentTo {}", m!(item))?;
+                    }
+                }
+                Ok(())
+            }
+            Component::DisjointDataProperties(ax) => {
+                let mut it = ax.0.iter();
+                if let Some(first) = it.next() {
+                    write!(f, "{}", m!(first))?;
+                    for item in it {
+                        write!(f, " DisjointWith {}", m!(item))?;
+                    }
+                }
+                Ok(())
+            }
+            Component::DataPropertyDomain(ax) => {
+                write!(f, "{} Domain {}", m!(&ax.dp), m!(&ax.ce))
+            }
+            Component::DataPropertyRange(ax) => {
+                write!(f, "{} Range {}", m!(&ax.dp), m!(&ax.dr))
+            }
+            Component::FunctionalDataProperty(ax) => {
+                write!(f, "{} Characteristics: Functional", m!(&ax.0))
+            }
+
+            // --- Assertion axioms ---
+            Component::ClassAssertion(ax) => {
+                write!(f, "{} Type {}", m!(&ax.i), m!(&ax.ce))
+            }
+            Component::ObjectPropertyAssertion(ax) => {
+                write!(f, "{} {} {}", m!(&ax.from), m!(&ax.ope), m!(&ax.to))
+            }
+            Component::NegativeObjectPropertyAssertion(ax) => {
+                write!(f, "{} not {} {}", m!(&ax.from), m!(&ax.ope), m!(&ax.to))
+            }
+            Component::DataPropertyAssertion(ax) => {
+                write!(f, "{} {} {}", m!(&ax.from), m!(&ax.dp), m!(&ax.to))
+            }
+            Component::NegativeDataPropertyAssertion(ax) => {
+                write!(f, "{} not {} {}", m!(&ax.from), m!(&ax.dp), m!(&ax.to))
+            }
+            Component::SameIndividual(ax) => {
+                let mut it = ax.0.iter();
+                if let Some(first) = it.next() {
+                    write!(f, "{}", m!(first))?;
+                    for item in it {
+                        write!(f, " SameAs {}", m!(item))?;
+                    }
+                }
+                Ok(())
+            }
+            Component::DifferentIndividuals(ax) => {
+                let mut it = ax.0.iter();
+                if let Some(first) = it.next() {
+                    write!(f, "{}", m!(first))?;
+                    for item in it {
+                        write!(f, " DifferentFrom {}", m!(item))?;
+                    }
+                }
+                Ok(())
+            }
+
+            // --- Fallback: structural/meta/annotation/SWRL/declarations/HasKey/
+            //               DatatypeDefinition — use functional syntax (always valid,
+            //               rarely appear in justifications).
+            other => write!(f, "{}", other.as_functional()),
+        }
+    }
+}
+impl<A: ForIRI> AsManchester<A> for Component<A> {}
+
+// ---------------------------------------------------------------------------
 
 #[cfg(test)]
 mod tests {
@@ -605,6 +820,54 @@ mod tests {
         assert_eq!(
             m(&DataRange::DataComplementOf(Box::new(union2))),
             "not (xsd:integer or xsd:string)"
+        );
+    }
+
+    #[test]
+    fn renders_axioms_per_line() {
+        let b = Build::new_rc();
+        let mut pm = curie::PrefixMapping::default();
+        pm.add_prefix("", "http://t/").unwrap();
+        let m = |c: &Component<_>| c.as_manchester_with_prefixes(&pm).to_string();
+
+        let a = ClassExpression::Class(b.class("http://t/A"));
+        let cc = ClassExpression::Class(b.class("http://t/C"));
+        assert_eq!(
+            m(&Component::SubClassOf(SubClassOf {
+                sub: a.clone(),
+                sup: cc.clone()
+            })),
+            "A SubClassOf C"
+        );
+
+        let x = Individual::Named(b.named_individual("http://t/x"));
+        assert_eq!(
+            m(&Component::ClassAssertion(ClassAssertion {
+                ce: a.clone(),
+                i: x.clone()
+            })),
+            "x Type A"
+        );
+
+        let r = b.object_property("http://t/r");
+        let y = Individual::Named(b.named_individual("http://t/y"));
+        assert_eq!(
+            m(&Component::ObjectPropertyAssertion(
+                ObjectPropertyAssertion {
+                    ope: ObjectPropertyExpression::ObjectProperty(r.clone()),
+                    from: x.clone(),
+                    to: y,
+                }
+            )),
+            "x r y"
+        );
+
+        assert_eq!(
+            m(&Component::DisjointClasses(DisjointClasses(vec![
+                a.clone(),
+                cc.clone()
+            ]))),
+            "A DisjointWith C"
         );
     }
 
