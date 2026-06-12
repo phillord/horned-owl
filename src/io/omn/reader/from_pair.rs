@@ -4,7 +4,7 @@ use pest::iterators::Pair;
 
 use crate::error::HornedError;
 use crate::model::*;
-use crate::vocab::Facet;
+use crate::vocab::{Facet, OWL};
 
 use super::Rule;
 
@@ -277,6 +277,257 @@ impl<A: ForIRI> FromPair<A> for DataRange<A> {
 
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// ClassExpression — inverse of the P1 Manchester writer
+//
+// The grammar has 5 layers: Description (or), Conjunction (and), Primary (not?),
+// Atomic (oneOf / parens / ClassIRI), Restriction (property restrictions).
+//
+// RULE is Description (the top-layer and public entry point).
+// Internal recursion MUST call from_pair_unchecked (not from_pair) because
+// child pairs carry sub-layer rules (Conjunction/Primary/…) ≠ Description,
+// which would trip the debug-assertion in from_pair.
+
+impl<A: ForIRI> FromPair<A> for ClassExpression<A> {
+    const RULE: Rule = Rule::Description;
+
+    fn from_pair_unchecked(pair: Pair<Rule>, ctx: &Context<'_, A>) -> Result<Self> {
+        match pair.as_rule() {
+            // Description = { Conjunction ~ (^"or" ~ Conjunction)* }
+            // Collect all Conjunction children; 1 → unwrap, ≥2 → ObjectUnionOf.
+            Rule::Description => {
+                let mut ces: Vec<ClassExpression<A>> = pair
+                    .into_inner()
+                    .map(|p| Self::from_pair_unchecked(p, ctx))
+                    .collect::<Result<_>>()?;
+                if ces.len() == 1 {
+                    Ok(ces.pop().unwrap())
+                } else {
+                    Ok(ClassExpression::ObjectUnionOf(ces))
+                }
+            }
+
+            // Conjunction = { Primary ~ (^"and" ~ Primary)* }
+            // Collect all Primary children; 1 → unwrap, ≥2 → ObjectIntersectionOf.
+            Rule::Conjunction => {
+                let mut ces: Vec<ClassExpression<A>> = pair
+                    .into_inner()
+                    .map(|p| Self::from_pair_unchecked(p, ctx))
+                    .collect::<Result<_>>()?;
+                if ces.len() == 1 {
+                    Ok(ces.pop().unwrap())
+                } else {
+                    Ok(ClassExpression::ObjectIntersectionOf(ces))
+                }
+            }
+
+            // Primary = { (^"not")? ~ (Restriction | Atomic) }
+            // Detect "not" by comparing Primary span start vs its single child span start.
+            // If there is a gap (Primary starts before child), the keyword "not" was consumed.
+            Rule::Primary => {
+                let p_start = pair.as_span().start();
+                let child = pair.into_inner().next().unwrap();
+                let is_not = child.as_span().start() > p_start;
+                let inner = Self::from_pair_unchecked(child, ctx)?;
+                if is_not {
+                    Ok(ClassExpression::ObjectComplementOf(Box::new(inner)))
+                } else {
+                    Ok(inner)
+                }
+            }
+
+            // Atomic = { ObjectOneOf | "(" ~ Description ~ ")" | ClassIRI }
+            Rule::Atomic => {
+                let child = pair.into_inner().next().unwrap();
+                match child.as_rule() {
+                    Rule::ObjectOneOf => {
+                        let individuals: Result<Vec<Individual<A>>> = child
+                            .into_inner()
+                            .map(|p| Individual::from_pair(p, ctx))
+                            .collect();
+                        Ok(ClassExpression::ObjectOneOf(individuals?))
+                    }
+                    Rule::Description => Self::from_pair_unchecked(child, ctx),
+                    Rule::ClassIRI => Class::from_pair(child, ctx).map(ClassExpression::Class),
+                    rule => unreachable!("unexpected rule in Atomic::from_pair: {rule:?}"),
+                }
+            }
+
+            // Restriction — object or data, keyword extracted from raw text gap.
+            //
+            // Object arms:
+            //   ope ~ ^"some"    ~ Primary
+            //   ope ~ ^"only"    ~ Primary
+            //   ope ~ ^"value"   ~ Individual
+            //   ope ~ ^"Self"
+            //   ope ~ ^"min"     ~ Cardinality ~ Primary?
+            //   ope ~ ^"max"     ~ Cardinality ~ Primary?
+            //   ope ~ ^"exactly" ~ Cardinality ~ Primary?
+            //
+            // Data arms:
+            //   DataPropertyIRI ~ ^"some"    ~ DataRange
+            //   DataPropertyIRI ~ ^"only"    ~ DataRange
+            //   DataPropertyIRI ~ ^"value"   ~ Literal
+            //   DataPropertyIRI ~ ^"min"     ~ Cardinality ~ DataRange?
+            //   DataPropertyIRI ~ ^"max"     ~ Cardinality ~ DataRange?
+            //   DataPropertyIRI ~ ^"exactly" ~ Cardinality ~ DataRange?
+            Rule::Restriction => {
+                let r_str = pair.as_str();
+                let r_start = pair.as_span().start();
+                let mut children = pair.into_inner().peekable();
+
+                let prop_pair = children.next().unwrap();
+                let is_object = prop_pair.as_rule() == Rule::ope;
+
+                // Extract the keyword from the text between end-of-property and the next token.
+                let prop_end = prop_pair.as_span().end() - r_start;
+                let after_prop = r_str[prop_end..].trim_start();
+                let keyword = after_prop
+                    .split_whitespace()
+                    .next()
+                    .unwrap_or("")
+                    .to_ascii_lowercase();
+
+                if is_object {
+                    let ope = ObjectPropertyExpression::from_pair(prop_pair, ctx)?;
+                    match keyword.as_str() {
+                        "some" => {
+                            let filler = children.next().unwrap();
+                            let bce = Box::new(Self::from_pair_unchecked(filler, ctx)?);
+                            Ok(ClassExpression::ObjectSomeValuesFrom { ope, bce })
+                        }
+                        "only" => {
+                            let filler = children.next().unwrap();
+                            let bce = Box::new(Self::from_pair_unchecked(filler, ctx)?);
+                            Ok(ClassExpression::ObjectAllValuesFrom { ope, bce })
+                        }
+                        "value" => {
+                            let ind = children.next().unwrap();
+                            let i = Individual::from_pair(ind, ctx)?;
+                            Ok(ClassExpression::ObjectHasValue { ope, i })
+                        }
+                        "self" => Ok(ClassExpression::ObjectHasSelf(ope)),
+                        "min" => {
+                            let card_pair = children.next().unwrap();
+                            let n: u32 = card_pair.as_str().parse().map_err(|_| {
+                                HornedError::invalid_at("invalid cardinality", card_pair.as_span())
+                            })?;
+                            let bce = match children.next() {
+                                Some(p) => Box::new(Self::from_pair_unchecked(p, ctx)?),
+                                None => Box::new(ClassExpression::Class(Class(
+                                    ctx.build.iri(OWL::Thing),
+                                ))),
+                            };
+                            Ok(ClassExpression::ObjectMinCardinality { n, ope, bce })
+                        }
+                        "max" => {
+                            let card_pair = children.next().unwrap();
+                            let n: u32 = card_pair.as_str().parse().map_err(|_| {
+                                HornedError::invalid_at("invalid cardinality", card_pair.as_span())
+                            })?;
+                            let bce = match children.next() {
+                                Some(p) => Box::new(Self::from_pair_unchecked(p, ctx)?),
+                                None => Box::new(ClassExpression::Class(Class(
+                                    ctx.build.iri(OWL::Thing),
+                                ))),
+                            };
+                            Ok(ClassExpression::ObjectMaxCardinality { n, ope, bce })
+                        }
+                        "exactly" => {
+                            let card_pair = children.next().unwrap();
+                            let n: u32 = card_pair.as_str().parse().map_err(|_| {
+                                HornedError::invalid_at("invalid cardinality", card_pair.as_span())
+                            })?;
+                            let bce = match children.next() {
+                                Some(p) => Box::new(Self::from_pair_unchecked(p, ctx)?),
+                                None => Box::new(ClassExpression::Class(Class(
+                                    ctx.build.iri(OWL::Thing),
+                                ))),
+                            };
+                            Ok(ClassExpression::ObjectExactCardinality { n, ope, bce })
+                        }
+                        kw => Err(HornedError::invalid_at(
+                            format!("unknown object restriction keyword: {kw}"),
+                            // Use span from the restriction itself (already moved, so synthesise from rest)
+                            pest::Span::new("", 0, 0).unwrap(),
+                        )),
+                    }
+                } else {
+                    // Data property arm
+                    let dp = DataProperty::from_pair(prop_pair, ctx)?;
+                    match keyword.as_str() {
+                        "some" => {
+                            let dr_pair = children.next().unwrap();
+                            let dr = DataRange::from_pair(dr_pair, ctx)?;
+                            Ok(ClassExpression::DataSomeValuesFrom { dp, dr })
+                        }
+                        "only" => {
+                            let dr_pair = children.next().unwrap();
+                            let dr = DataRange::from_pair(dr_pair, ctx)?;
+                            Ok(ClassExpression::DataAllValuesFrom { dp, dr })
+                        }
+                        "value" => {
+                            let l_pair = children.next().unwrap();
+                            let l = Literal::from_pair(l_pair, ctx)?;
+                            Ok(ClassExpression::DataHasValue { dp, l })
+                        }
+                        "min" => {
+                            let card_pair = children.next().unwrap();
+                            let n: u32 = card_pair.as_str().parse().map_err(|_| {
+                                HornedError::invalid_at("invalid cardinality", card_pair.as_span())
+                            })?;
+                            let dr = match children.next() {
+                                Some(p) => DataRange::from_pair(p, ctx)?,
+                                None => DataRange::Datatype(Datatype(
+                                    ctx.build
+                                        .iri("http://www.w3.org/2000/01/rdf-schema#Literal"),
+                                )),
+                            };
+                            Ok(ClassExpression::DataMinCardinality { n, dp, dr })
+                        }
+                        "max" => {
+                            let card_pair = children.next().unwrap();
+                            let n: u32 = card_pair.as_str().parse().map_err(|_| {
+                                HornedError::invalid_at("invalid cardinality", card_pair.as_span())
+                            })?;
+                            let dr = match children.next() {
+                                Some(p) => DataRange::from_pair(p, ctx)?,
+                                None => DataRange::Datatype(Datatype(
+                                    ctx.build
+                                        .iri("http://www.w3.org/2000/01/rdf-schema#Literal"),
+                                )),
+                            };
+                            Ok(ClassExpression::DataMaxCardinality { n, dp, dr })
+                        }
+                        "exactly" => {
+                            let card_pair = children.next().unwrap();
+                            let n: u32 = card_pair.as_str().parse().map_err(|_| {
+                                HornedError::invalid_at("invalid cardinality", card_pair.as_span())
+                            })?;
+                            let dr = match children.next() {
+                                Some(p) => DataRange::from_pair(p, ctx)?,
+                                None => DataRange::Datatype(Datatype(
+                                    ctx.build
+                                        .iri("http://www.w3.org/2000/01/rdf-schema#Literal"),
+                                )),
+                            };
+                            Ok(ClassExpression::DataExactCardinality { n, dp, dr })
+                        }
+                        kw => Err(HornedError::invalid_at(
+                            format!("unknown data restriction keyword: {kw}"),
+                            pest::Span::new("", 0, 0).unwrap(),
+                        )),
+                    }
+                }
+            }
+
+            rule => unreachable!("unexpected rule in ClassExpression::from_pair: {rule:?}"),
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -343,5 +594,70 @@ mod tests {
             }
             _ => panic!("expected DatatypeRestriction, got {parsed:?}"),
         }
+    }
+
+    #[test]
+    fn parses_class_expressions() {
+        use crate::model::*;
+        let b = Build::new_rc();
+        let pm = curie::PrefixMapping::default();
+        let p =
+            |s: &str| crate::io::omn::reader::parse_class_expression::<RcStr>(s, &pm, &b).unwrap();
+        let a = ClassExpression::Class(b.class("http://t/A"));
+        let c = ClassExpression::Class(b.class("http://t/C"));
+        let d = ClassExpression::Class(b.class("http://t/D"));
+        // atomic
+        assert_eq!(p("<http://t/A>"), a);
+        // and
+        assert_eq!(
+            p("<http://t/A> and <http://t/C>"),
+            ClassExpression::ObjectIntersectionOf(vec![a.clone(), c.clone()])
+        );
+        // or
+        assert_eq!(
+            p("<http://t/A> or <http://t/C>"),
+            ClassExpression::ObjectUnionOf(vec![a.clone(), c.clone()])
+        );
+        // not
+        assert_eq!(
+            p("not <http://t/A>"),
+            ClassExpression::ObjectComplementOf(Box::new(a.clone()))
+        );
+        // precedence: (A or C) and D  — parens force union inside intersection
+        let aorc = ClassExpression::ObjectUnionOf(vec![a.clone(), c.clone()]);
+        assert_eq!(
+            p("(<http://t/A> or <http://t/C>) and <http://t/D>"),
+            ClassExpression::ObjectIntersectionOf(vec![aorc, d.clone()])
+        );
+        // precedence: A or C and D  == A or (C and D)  — and binds tighter
+        let cand = ClassExpression::ObjectIntersectionOf(vec![c.clone(), d.clone()]);
+        assert_eq!(
+            p("<http://t/A> or <http://t/C> and <http://t/D>"),
+            ClassExpression::ObjectUnionOf(vec![a.clone(), cand])
+        );
+        // restrictions
+        let r = ObjectPropertyExpression::ObjectProperty(b.object_property("http://t/r"));
+        assert_eq!(
+            p("<http://t/r> some <http://t/A>"),
+            ClassExpression::ObjectSomeValuesFrom {
+                ope: r.clone(),
+                bce: Box::new(a.clone())
+            }
+        );
+        assert_eq!(
+            p("<http://t/r> only (<http://t/A> or <http://t/C>)"),
+            ClassExpression::ObjectAllValuesFrom {
+                ope: r.clone(),
+                bce: Box::new(ClassExpression::ObjectUnionOf(vec![a.clone(), c.clone()]))
+            }
+        );
+        assert_eq!(
+            p("<http://t/r> min 2 <http://t/A>"),
+            ClassExpression::ObjectMinCardinality {
+                n: 2,
+                ope: r,
+                bce: Box::new(a)
+            }
+        );
     }
 }
