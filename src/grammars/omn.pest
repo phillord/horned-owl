@@ -53,6 +53,12 @@ Restriction = {
     | ope ~ ^"min"     ~ Cardinality ~ Primary?
     | ope ~ ^"max"     ~ Cardinality ~ Primary?
     | ope ~ ^"exactly" ~ Cardinality ~ Primary?
+    // NOTE (P2): the six arms below are currently DEAD PRODUCTIONS.
+    // `DataPropertyIRI` is defined as `{ IRI }`, identical to `ObjectPropertyIRI`,
+    // so PEG always commits to one of the object-property arms above and never
+    // backtracks here.  A bare `dp some xsd:integer` is silently captured as an
+    // object restriction; a faceted form errors at EOI.  Disambiguation is deferred
+    // to a future phase that introduces a distinct lexical class for data properties.
     | DataPropertyIRI ~ ^"some"    ~ DataRange
     | DataPropertyIRI ~ ^"only"    ~ DataRange
     | DataPropertyIRI ~ ^"value"   ~ Literal
