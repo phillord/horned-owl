@@ -40,6 +40,12 @@
 //! - **Annotation nesting is not representable.** The horned-owl model has no
 //!   `ann` field on `Annotation`; nested annotations (annotation-on-annotation)
 //!   are discarded by both the OFN and OMN readers and are never preserved.
+//! - **Data-property restrictions parse as OBJECT restrictions (silent).** The
+//!   grammar's data-property restriction arms are dead PEG productions (a data
+//!   property and an object property are lexically identical), so a restriction
+//!   such as `dp some xsd:integer` is parsed as an `ObjectSomeValuesFrom` over a
+//!   `Class`-typed datatype IRI, with no error. Pre-existing (predates the frame
+//!   reader); disambiguation is deferred to a future phase.
 //! - **FIXED (commit e7a2b83): keyword / CURIE-prefix collision.** Manchester
 //!   keywords (`not`, `and`, `or`, `some`, `only`, `value`, `min`, `max`,
 //!   `exactly`, `Self`, `inverse`, and the facet words) now carry a
