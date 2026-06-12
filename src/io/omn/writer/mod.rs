@@ -78,7 +78,11 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
             && let Some(iri) = &oid.iri
         {
             writeln!(write)?;
-            writeln!(write, "Ontology: {}", iri.as_manchester_with_prefixes(mapping))?;
+            writeln!(
+                write,
+                "Ontology: {}",
+                iri.as_manchester_with_prefixes(mapping)
+            )?;
         }
     }
 
