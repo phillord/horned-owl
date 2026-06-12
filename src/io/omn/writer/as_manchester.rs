@@ -752,9 +752,12 @@ impl<A: ForIRI> AsManchester<A> for Component<A> {}
 
 /// Render a single `Annotation` as `<ap-iri> <value>` for Manchester syntax.
 ///
-/// Value is rendered as a literal or IRI. `AnonymousIndividual` annotation
-/// values are not expressible in Manchester and are rendered as a placeholder
-/// using OWL functional syntax (fallback, will land in misc).
+/// Callers MUST ensure the annotation value is `Literal` or `IRI` before
+/// calling this function.  `AnonymousIndividual` annotation values are NOT
+/// expressible in Manchester (`AnnotationTarget = { Literal | IRI }`) and
+/// MUST be routed to the misc / functional-syntax fallback section instead.
+/// The `AnonymousIndividual` arm is `unreachable!()` here to document that
+/// invariant — the guards in `mod.rs` enforce it before this function is reached.
 pub(crate) fn annotation_to_manchester<A: ForIRI>(
     ann: &Annotation<A>,
     pm: &PrefixMapping,
@@ -763,8 +766,14 @@ pub(crate) fn annotation_to_manchester<A: ForIRI>(
     let av_str = match &ann.av {
         AnnotationValue::Literal(lit) => Manchester(lit, Some(pm), PhantomData::<A>).to_string(),
         AnnotationValue::IRI(iri) => Manchester(iri, Some(pm), PhantomData::<A>).to_string(),
-        AnnotationValue::AnonymousIndividual(ai) => {
-            Manchester(ai, Some(pm), PhantomData::<A>).to_string()
+        // SAFETY INVARIANT: callers in mod.rs guard against AnonymousIndividual
+        // values before reaching this function.  If this arm fires, there is a
+        // bug in the calling code.
+        AnnotationValue::AnonymousIndividual(_) => {
+            unreachable!(
+                "annotation_to_manchester called with AnonymousIndividual value; \
+                 callers must route these to misc before calling this function"
+            )
         }
     };
     format!("{ap_str} {av_str}")
