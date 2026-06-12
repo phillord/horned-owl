@@ -794,7 +794,7 @@ impl<A: ForIRI> FromPair<A> for Facet {
         let iri = IRI::from_pair(pair, ctx)?;
         Facet::all()
             .into_iter()
-            .find(|facet| iri.to_string() == facet.as_ref())
+            .find(|facet| iri.as_ref() == facet.as_ref())
             .ok_or_else(|| HornedError::invalid_at("invalid facet", span))
     }
 }
