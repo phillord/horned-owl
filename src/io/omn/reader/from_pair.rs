@@ -1,6 +1,7 @@
 use curie::Curie;
 use curie::PrefixMapping;
 use pest::iterators::Pair;
+use std::collections::BTreeSet;
 
 use crate::error::HornedError;
 use crate::model::*;
@@ -680,40 +681,65 @@ fn insert_class_frame<A: ForIRI, O: MutableOntology<A>>(
 
     for clause in clauses {
         let kw = clause_keyword(&clause);
-        // Defer body-parsing into each arm (body may be DescriptionList OR
-        // PropertyExprList depending on the clause keyword).
-        let body = clause.into_inner().next().unwrap();
+        // Peek the first inner pair: if the clause is a keyworded arm with an
+        // optional `Annotations?` prefix, consume it into `ann`; otherwise `ann`
+        // is empty. Guard with `kw != "annotations"` so the standalone entity-
+        // annotation arm (which has exactly one inner pair = the Annotations rule)
+        // never tries to advance past it.
+        let mut it = clause.into_inner();
+        let mut first = it.next().unwrap();
+        let mut ann: BTreeSet<Annotation<A>> = BTreeSet::new();
+        if kw != "annotations" && first.as_rule() == Rule::Annotations {
+            ann = parse_annotations(first, ctx)?.into_iter().collect();
+            first = it.next().unwrap();
+        }
+        let body = first;
         match kw.as_str() {
             "annotations" => {
                 // `body` is the inner `Annotations` pair (AnnotationEntry items).
-                for ann in parse_annotations(body, ctx)? {
+                for ann_item in parse_annotations(body, ctx)? {
                     ont.insert(AnnotationAssertion {
                         subject: AnnotationSubject::IRI(subject.clone()),
-                        ann,
+                        ann: ann_item,
                     });
                 }
             }
             "subclassof" => {
                 for sup in parse_description_list(body, ctx)? {
-                    ont.insert(SubClassOf {
-                        sub: subject_ce.clone(),
-                        sup,
+                    ont.insert(AnnotatedComponent {
+                        component: Component::SubClassOf(SubClassOf {
+                            sub: subject_ce.clone(),
+                            sup,
+                        }),
+                        ann: ann.clone(),
                     });
                 }
             }
             "equivalentto" => {
                 let mut all = vec![subject_ce.clone()];
                 all.extend(parse_description_list(body, ctx)?);
-                ont.insert(EquivalentClasses(all));
+                ont.insert(AnnotatedComponent {
+                    component: Component::EquivalentClasses(EquivalentClasses(all)),
+                    ann,
+                });
             }
             "disjointwith" => {
                 let mut all = vec![subject_ce.clone()];
                 all.extend(parse_description_list(body, ctx)?);
-                ont.insert(DisjointClasses(all));
+                ont.insert(AnnotatedComponent {
+                    component: Component::DisjointClasses(DisjointClasses(all)),
+                    ann,
+                });
             }
             "disjointunionof" => {
                 let items = parse_description_list(body, ctx)?;
-                ont.insert(DisjointUnion(Class(subject.clone()), items));
+                ont.insert(AnnotatedComponent {
+                    component: Component::DisjointUnion(DisjointUnion(
+                        Class(subject.clone()),
+                        items,
+                    )),
+                    ann,
+                });
             }
             "haskey" => {
                 // body is a PropertyExprList of `ope`. Manchester HasKey: does NOT
@@ -727,9 +753,12 @@ fn insert_class_frame<A: ForIRI, O: MutableOntology<A>>(
                         vpe.push(PropertyExpression::ObjectPropertyExpression(ope));
                     }
                 }
-                ont.insert(HasKey {
-                    ce: ClassExpression::Class(Class(subject.clone())),
-                    vpe,
+                ont.insert(AnnotatedComponent {
+                    component: Component::HasKey(HasKey {
+                        ce: ClassExpression::Class(Class(subject.clone())),
+                        vpe,
+                    }),
+                    ann,
                 });
             }
             other => unreachable!("unexpected class clause keyword: {other}"),
@@ -771,13 +800,20 @@ fn insert_object_property_frame<A: ForIRI, O: MutableOntology<A>>(
 
     for clause in clauses {
         let kw = clause_keyword(&clause);
-        let body = clause.into_inner().next().unwrap();
+        let mut it = clause.into_inner();
+        let mut first = it.next().unwrap();
+        let mut ann: BTreeSet<Annotation<A>> = BTreeSet::new();
+        if kw != "annotations" && first.as_rule() == Rule::Annotations {
+            ann = parse_annotations(first, ctx)?.into_iter().collect();
+            first = it.next().unwrap();
+        }
+        let body = first;
         match kw.as_str() {
             "annotations" => {
-                for ann in parse_annotations(body, ctx)? {
+                for ann_item in parse_annotations(body, ctx)? {
                     ont.insert(AnnotationAssertion {
                         subject: AnnotationSubject::IRI(subject.clone()),
-                        ann,
+                        ann: ann_item,
                     });
                 }
             }
@@ -790,37 +826,57 @@ fn insert_object_property_frame<A: ForIRI, O: MutableOntology<A>>(
                     .filter(|p| p.as_rule() == Rule::ope)
                     .map(|p| ObjectPropertyExpression::from_pair(p, ctx))
                     .collect::<Result<_>>()?;
-                ont.insert(SubObjectPropertyOf {
-                    sub: SubObjectPropertyExpression::ObjectPropertyChain(chain),
-                    sup: subject_ope.clone(),
+                ont.insert(AnnotatedComponent {
+                    component: Component::SubObjectPropertyOf(SubObjectPropertyOf {
+                        sub: SubObjectPropertyExpression::ObjectPropertyChain(chain),
+                        sup: subject_ope.clone(),
+                    }),
+                    ann,
                 });
             }
             "subpropertyof" => {
                 for sup in parse_ope_list(body, ctx)? {
-                    ont.insert(SubObjectPropertyOf {
-                        sub: SubObjectPropertyExpression::ObjectPropertyExpression(
-                            subject_ope.clone(),
-                        ),
-                        sup,
+                    ont.insert(AnnotatedComponent {
+                        component: Component::SubObjectPropertyOf(SubObjectPropertyOf {
+                            sub: SubObjectPropertyExpression::ObjectPropertyExpression(
+                                subject_ope.clone(),
+                            ),
+                            sup,
+                        }),
+                        ann: ann.clone(),
                     });
                 }
             }
             "equivalentto" => {
                 let mut all = vec![subject_ope.clone()];
                 all.extend(parse_ope_list(body, ctx)?);
-                ont.insert(EquivalentObjectProperties(all));
+                ont.insert(AnnotatedComponent {
+                    component: Component::EquivalentObjectProperties(EquivalentObjectProperties(
+                        all,
+                    )),
+                    ann,
+                });
             }
             "disjointwith" => {
                 let mut all = vec![subject_ope.clone()];
                 all.extend(parse_ope_list(body, ctx)?);
-                ont.insert(DisjointObjectProperties(all));
+                ont.insert(AnnotatedComponent {
+                    component: Component::DisjointObjectProperties(DisjointObjectProperties(all)),
+                    ann,
+                });
             }
             "inverseof" => {
                 for inv in parse_ope_list(body, ctx)? {
                     // InverseObjectProperties takes ObjectProperty, not OPE;
                     // the writer only emits a plain property here.
                     if let ObjectPropertyExpression::ObjectProperty(p) = inv {
-                        ont.insert(InverseObjectProperties(ObjectProperty(subject.clone()), p));
+                        ont.insert(AnnotatedComponent {
+                            component: Component::InverseObjectProperties(InverseObjectProperties(
+                                ObjectProperty(subject.clone()),
+                                p,
+                            )),
+                            ann: ann.clone(),
+                        });
                     } else {
                         return Err(HornedError::invalid(
                             "InverseOf: expected a named object property",
@@ -830,23 +886,29 @@ fn insert_object_property_frame<A: ForIRI, O: MutableOntology<A>>(
             }
             "domain" => {
                 for ce in parse_description_list(body, ctx)? {
-                    ont.insert(ObjectPropertyDomain {
-                        ope: subject_ope.clone(),
-                        ce,
+                    ont.insert(AnnotatedComponent {
+                        component: Component::ObjectPropertyDomain(ObjectPropertyDomain {
+                            ope: subject_ope.clone(),
+                            ce,
+                        }),
+                        ann: ann.clone(),
                     });
                 }
             }
             "range" => {
                 for ce in parse_description_list(body, ctx)? {
-                    ont.insert(ObjectPropertyRange {
-                        ope: subject_ope.clone(),
-                        ce,
+                    ont.insert(AnnotatedComponent {
+                        component: Component::ObjectPropertyRange(ObjectPropertyRange {
+                            ope: subject_ope.clone(),
+                            ce,
+                        }),
+                        ann: ann.clone(),
                     });
                 }
             }
             "characteristics" => {
                 for ch in body.into_inner() {
-                    insert_object_characteristic(ch.as_str(), &subject_ope, ont)?;
+                    insert_object_characteristic(ch.as_str(), &subject_ope, &ann, ont)?;
                 }
             }
             other => unreachable!("unexpected object-property clause keyword: {other}"),
@@ -858,17 +920,41 @@ fn insert_object_property_frame<A: ForIRI, O: MutableOntology<A>>(
 fn insert_object_characteristic<A: ForIRI, O: MutableOntology<A>>(
     kw: &str,
     ope: &ObjectPropertyExpression<A>,
+    ann: &BTreeSet<Annotation<A>>,
     ont: &mut O,
 ) -> Result<()> {
     let ope = ope.clone();
     match kw.to_ascii_lowercase().as_str() {
-        "functional" => ont.insert(FunctionalObjectProperty(ope)),
-        "inversefunctional" => ont.insert(InverseFunctionalObjectProperty(ope)),
-        "reflexive" => ont.insert(ReflexiveObjectProperty(ope)),
-        "irreflexive" => ont.insert(IrreflexiveObjectProperty(ope)),
-        "symmetric" => ont.insert(SymmetricObjectProperty(ope)),
-        "asymmetric" => ont.insert(AsymmetricObjectProperty(ope)),
-        "transitive" => ont.insert(TransitiveObjectProperty(ope)),
+        "functional" => ont.insert(AnnotatedComponent {
+            component: Component::FunctionalObjectProperty(FunctionalObjectProperty(ope)),
+            ann: ann.clone(),
+        }),
+        "inversefunctional" => ont.insert(AnnotatedComponent {
+            component: Component::InverseFunctionalObjectProperty(InverseFunctionalObjectProperty(
+                ope,
+            )),
+            ann: ann.clone(),
+        }),
+        "reflexive" => ont.insert(AnnotatedComponent {
+            component: Component::ReflexiveObjectProperty(ReflexiveObjectProperty(ope)),
+            ann: ann.clone(),
+        }),
+        "irreflexive" => ont.insert(AnnotatedComponent {
+            component: Component::IrreflexiveObjectProperty(IrreflexiveObjectProperty(ope)),
+            ann: ann.clone(),
+        }),
+        "symmetric" => ont.insert(AnnotatedComponent {
+            component: Component::SymmetricObjectProperty(SymmetricObjectProperty(ope)),
+            ann: ann.clone(),
+        }),
+        "asymmetric" => ont.insert(AnnotatedComponent {
+            component: Component::AsymmetricObjectProperty(AsymmetricObjectProperty(ope)),
+            ann: ann.clone(),
+        }),
+        "transitive" => ont.insert(AnnotatedComponent {
+            component: Component::TransitiveObjectProperty(TransitiveObjectProperty(ope)),
+            ann: ann.clone(),
+        }),
         other => {
             return Err(HornedError::invalid(format!(
                 "unknown object characteristic: {other}"
@@ -888,47 +974,69 @@ fn insert_data_property_frame<A: ForIRI, O: MutableOntology<A>>(
 
     for clause in clauses {
         let kw = clause_keyword(&clause);
-        let body = clause.into_inner().next().unwrap();
+        let mut it = clause.into_inner();
+        let mut first = it.next().unwrap();
+        let mut ann: BTreeSet<Annotation<A>> = BTreeSet::new();
+        if kw != "annotations" && first.as_rule() == Rule::Annotations {
+            ann = parse_annotations(first, ctx)?.into_iter().collect();
+            first = it.next().unwrap();
+        }
+        let body = first;
         match kw.as_str() {
             "annotations" => {
-                for ann in parse_annotations(body, ctx)? {
+                for ann_item in parse_annotations(body, ctx)? {
                     ont.insert(AnnotationAssertion {
                         subject: AnnotationSubject::IRI(subject.clone()),
-                        ann,
+                        ann: ann_item,
                     });
                 }
             }
             "subpropertyof" => {
                 for iri in parse_iri_list(body, ctx)? {
-                    ont.insert(SubDataPropertyOf {
-                        sub: DataProperty(subject.clone()),
-                        sup: DataProperty(iri),
+                    ont.insert(AnnotatedComponent {
+                        component: Component::SubDataPropertyOf(SubDataPropertyOf {
+                            sub: DataProperty(subject.clone()),
+                            sup: DataProperty(iri),
+                        }),
+                        ann: ann.clone(),
                     });
                 }
             }
             "equivalentto" => {
                 let mut all = vec![DataProperty(subject.clone())];
                 all.extend(parse_iri_list(body, ctx)?.into_iter().map(DataProperty));
-                ont.insert(EquivalentDataProperties(all));
+                ont.insert(AnnotatedComponent {
+                    component: Component::EquivalentDataProperties(EquivalentDataProperties(all)),
+                    ann,
+                });
             }
             "disjointwith" => {
                 let mut all = vec![DataProperty(subject.clone())];
                 all.extend(parse_iri_list(body, ctx)?.into_iter().map(DataProperty));
-                ont.insert(DisjointDataProperties(all));
+                ont.insert(AnnotatedComponent {
+                    component: Component::DisjointDataProperties(DisjointDataProperties(all)),
+                    ann,
+                });
             }
             "domain" => {
                 for ce in parse_description_list(body, ctx)? {
-                    ont.insert(DataPropertyDomain {
-                        dp: DataProperty(subject.clone()),
-                        ce,
+                    ont.insert(AnnotatedComponent {
+                        component: Component::DataPropertyDomain(DataPropertyDomain {
+                            dp: DataProperty(subject.clone()),
+                            ce,
+                        }),
+                        ann: ann.clone(),
                     });
                 }
             }
             "range" => {
                 for dr in parse_data_range_list(body, ctx)? {
-                    ont.insert(DataPropertyRange {
-                        dp: DataProperty(subject.clone()),
-                        dr,
+                    ont.insert(AnnotatedComponent {
+                        component: Component::DataPropertyRange(DataPropertyRange {
+                            dp: DataProperty(subject.clone()),
+                            dr,
+                        }),
+                        ann: ann.clone(),
                     });
                 }
             }
@@ -936,7 +1044,12 @@ fn insert_data_property_frame<A: ForIRI, O: MutableOntology<A>>(
                 for ch in body.into_inner() {
                     // Only Functional is valid on a data property.
                     if ch.as_str().eq_ignore_ascii_case("functional") {
-                        ont.insert(FunctionalDataProperty(DataProperty(subject.clone())));
+                        ont.insert(AnnotatedComponent {
+                            component: Component::FunctionalDataProperty(FunctionalDataProperty(
+                                DataProperty(subject.clone()),
+                            )),
+                            ann: ann.clone(),
+                        });
                     } else {
                         return Err(HornedError::invalid(
                             "data properties only support the Functional characteristic",
@@ -962,37 +1075,53 @@ fn insert_annotation_property_frame<A: ForIRI, O: MutableOntology<A>>(
 
     for clause in clauses {
         let kw = clause_keyword(&clause);
-        let body = clause.into_inner().next().unwrap();
+        let mut it = clause.into_inner();
+        let mut first = it.next().unwrap();
+        let mut ann: BTreeSet<Annotation<A>> = BTreeSet::new();
+        if kw != "annotations" && first.as_rule() == Rule::Annotations {
+            ann = parse_annotations(first, ctx)?.into_iter().collect();
+            first = it.next().unwrap();
+        }
+        let body = first;
         match kw.as_str() {
             "annotations" => {
-                for ann in parse_annotations(body, ctx)? {
+                for ann_item in parse_annotations(body, ctx)? {
                     ont.insert(AnnotationAssertion {
                         subject: AnnotationSubject::IRI(subject.clone()),
-                        ann,
+                        ann: ann_item,
                     });
                 }
             }
             "subpropertyof" => {
                 for iri in parse_iri_list(body, ctx)? {
-                    ont.insert(SubAnnotationPropertyOf {
-                        sub: AnnotationProperty(subject.clone()),
-                        sup: AnnotationProperty(iri),
+                    ont.insert(AnnotatedComponent {
+                        component: Component::SubAnnotationPropertyOf(SubAnnotationPropertyOf {
+                            sub: AnnotationProperty(subject.clone()),
+                            sup: AnnotationProperty(iri),
+                        }),
+                        ann: ann.clone(),
                     });
                 }
             }
             "domain" => {
                 for iri in parse_iri_list(body, ctx)? {
-                    ont.insert(AnnotationPropertyDomain {
-                        ap: AnnotationProperty(subject.clone()),
-                        iri,
+                    ont.insert(AnnotatedComponent {
+                        component: Component::AnnotationPropertyDomain(AnnotationPropertyDomain {
+                            ap: AnnotationProperty(subject.clone()),
+                            iri,
+                        }),
+                        ann: ann.clone(),
                     });
                 }
             }
             "range" => {
                 for iri in parse_iri_list(body, ctx)? {
-                    ont.insert(AnnotationPropertyRange {
-                        ap: AnnotationProperty(subject.clone()),
-                        iri,
+                    ont.insert(AnnotatedComponent {
+                        component: Component::AnnotationPropertyRange(AnnotationPropertyRange {
+                            ap: AnnotationProperty(subject.clone()),
+                            iri,
+                        }),
+                        ann: ann.clone(),
                     });
                 }
             }
@@ -1013,27 +1142,37 @@ fn insert_individual_frame<A: ForIRI, O: MutableOntology<A>>(
 
     for clause in clauses {
         let kw = clause_keyword(&clause);
-        let body = clause.into_inner().next().unwrap();
+        let mut it = clause.into_inner();
+        let mut first = it.next().unwrap();
+        let mut ann: BTreeSet<Annotation<A>> = BTreeSet::new();
+        if kw != "annotations" && first.as_rule() == Rule::Annotations {
+            ann = parse_annotations(first, ctx)?.into_iter().collect();
+            first = it.next().unwrap();
+        }
+        let body = first;
         match kw.as_str() {
             "annotations" => {
-                for ann in parse_annotations(body, ctx)? {
+                for ann_item in parse_annotations(body, ctx)? {
                     ont.insert(AnnotationAssertion {
                         subject: AnnotationSubject::IRI(subject.clone()),
-                        ann,
+                        ann: ann_item,
                     });
                 }
             }
             "types" => {
                 for ce in parse_description_list(body, ctx)? {
-                    ont.insert(ClassAssertion {
-                        i: subject_ind.clone(),
-                        ce,
+                    ont.insert(AnnotatedComponent {
+                        component: Component::ClassAssertion(ClassAssertion {
+                            i: subject_ind.clone(),
+                            ce,
+                        }),
+                        ann: ann.clone(),
                     });
                 }
             }
             "facts" => {
                 for fact in body.into_inner() {
-                    insert_fact(fact, ctx, &subject_ind, ont)?;
+                    insert_fact(fact, ctx, &subject_ind, &ann, ont)?;
                 }
             }
             "sameas" => {
@@ -1041,14 +1180,20 @@ fn insert_individual_frame<A: ForIRI, O: MutableOntology<A>>(
                 for p in body.into_inner() {
                     all.push(Individual::from_pair(p, ctx)?);
                 }
-                ont.insert(SameIndividual(all));
+                ont.insert(AnnotatedComponent {
+                    component: Component::SameIndividual(SameIndividual(all)),
+                    ann,
+                });
             }
             "differentfrom" => {
                 let mut all = vec![subject_ind.clone()];
                 for p in body.into_inner() {
                     all.push(Individual::from_pair(p, ctx)?);
                 }
-                ont.insert(DifferentIndividuals(all));
+                ont.insert(AnnotatedComponent {
+                    component: Component::DifferentIndividuals(DifferentIndividuals(all)),
+                    ann,
+                });
             }
             other => unreachable!("unexpected individual clause keyword: {other}"),
         }
@@ -1066,6 +1211,7 @@ fn insert_fact<A: ForIRI, O: MutableOntology<A>>(
     fact: Pair<Rule>,
     ctx: &Context<'_, A>,
     from: &Individual<A>,
+    ann: &BTreeSet<Annotation<A>>,
     ont: &mut O,
 ) -> Result<()> {
     let mut inner = fact.into_inner();
@@ -1088,32 +1234,48 @@ fn insert_fact<A: ForIRI, O: MutableOntology<A>>(
                 }
             };
             if negated {
-                ont.insert(NegativeDataPropertyAssertion {
-                    dp,
-                    from: from.clone(),
-                    to: lit,
+                ont.insert(AnnotatedComponent {
+                    component: Component::NegativeDataPropertyAssertion(
+                        NegativeDataPropertyAssertion {
+                            dp,
+                            from: from.clone(),
+                            to: lit,
+                        },
+                    ),
+                    ann: ann.clone(),
                 });
             } else {
-                ont.insert(DataPropertyAssertion {
-                    dp,
-                    from: from.clone(),
-                    to: lit,
+                ont.insert(AnnotatedComponent {
+                    component: Component::DataPropertyAssertion(DataPropertyAssertion {
+                        dp,
+                        from: from.clone(),
+                        to: lit,
+                    }),
+                    ann: ann.clone(),
                 });
             }
         }
         Rule::Individual => {
             let to = Individual::from_pair(target, ctx)?;
             if negated {
-                ont.insert(NegativeObjectPropertyAssertion {
-                    ope,
-                    from: from.clone(),
-                    to,
+                ont.insert(AnnotatedComponent {
+                    component: Component::NegativeObjectPropertyAssertion(
+                        NegativeObjectPropertyAssertion {
+                            ope,
+                            from: from.clone(),
+                            to,
+                        },
+                    ),
+                    ann: ann.clone(),
                 });
             } else {
-                ont.insert(ObjectPropertyAssertion {
-                    ope,
-                    from: from.clone(),
-                    to,
+                ont.insert(AnnotatedComponent {
+                    component: Component::ObjectPropertyAssertion(ObjectPropertyAssertion {
+                        ope,
+                        from: from.clone(),
+                        to,
+                    }),
+                    ann: ann.clone(),
                 });
             }
         }
@@ -2030,6 +2192,55 @@ mod tests {
         assert_eq!(
             parsed_pm.expand_curie_string("ex:A").unwrap(),
             "http://ex/A"
+        );
+    }
+
+    #[test]
+    fn reads_axiom_annotations_round_trip() {
+        use crate::io::omn::{read_with_build, write};
+        use crate::ontology::component_mapped::ComponentMappedOntology;
+        use crate::ontology::set::SetOntology;
+        use std::collections::BTreeSet;
+        use std::io::BufReader;
+        let b = Build::new_rc();
+        let mut pm = PrefixMapping::default();
+        pm.add_prefix("ex", "http://ex/").unwrap();
+
+        let mut o = SetOntology::new_rc();
+        o.insert(DeclareClass(b.class("http://ex/A")));
+        o.insert(DeclareClass(b.class("http://ex/B")));
+        let mut ann = BTreeSet::new();
+        ann.insert(Annotation {
+            ap: b.annotation_property("http://ex/prov"),
+            av: AnnotationValue::Literal(Literal::Simple {
+                literal: "inferred".to_string(),
+            }),
+        });
+        o.insert(AnnotatedComponent {
+            component: Component::SubClassOf(SubClassOf {
+                sub: ClassExpression::Class(b.class("http://ex/A")),
+                sup: ClassExpression::Class(b.class("http://ex/B")),
+            }),
+            ann,
+        });
+
+        type TestOnt = ComponentMappedOntology<
+            std::rc::Rc<str>,
+            std::rc::Rc<AnnotatedComponent<std::rc::Rc<str>>>,
+        >;
+        let amo: TestOnt = o.clone().into();
+        let mut buf = Vec::<u8>::new();
+        write(&mut buf, &amo, Some(&pm)).unwrap();
+        let (parsed, _): (SetOntology<_>, PrefixMapping) =
+            read_with_build(BufReader::new(&buf[..]), &b).unwrap();
+        // compare FULL AnnotatedComponents (component + ann), not just components
+        let orig: BTreeSet<_> = o.iter().cloned().collect();
+        let got: BTreeSet<_> = parsed.iter().cloned().collect();
+        assert_eq!(
+            orig,
+            got,
+            "axiom annotation did not round-trip\n{}",
+            String::from_utf8_lossy(&buf)
         );
     }
 
