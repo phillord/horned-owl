@@ -33,6 +33,8 @@ where
 }
 
 /// Render an IRI: abbreviated `prefix:local` if a prefix matches, else `<iri>`.
+/// When the prefix is empty (default namespace) the CURIE Display produces `:local`;
+/// we strip the leading colon so Manchester gets bare local names.
 fn write_iri(
     iri: &str,
     prefix: Option<&PrefixMapping>,
@@ -41,7 +43,13 @@ fn write_iri(
     if let Some(pm) = prefix
         && let Ok(curie) = pm.shrink_iri(iri)
     {
-        return write!(f, "{curie}");
+        let s = curie.to_string();
+        // Curie with empty prefix ("") formats as ":local" — emit bare local name instead.
+        return if let Some(local) = s.strip_prefix(':') {
+            write!(f, "{local}")
+        } else {
+            write!(f, "{s}")
+        };
     }
     write!(f, "<{iri}>")
 }
@@ -177,6 +185,257 @@ impl<A: ForIRI> Display for Manchester<'_, Literal<A>, A> {
 }
 impl<A: ForIRI> AsManchester<A> for Literal<A> {}
 
+// ---------------------------------------------------------------------------
+// DataRange — minimal stub (Task 4 adds facets/composite arms)
+
+impl<A: ForIRI> Display for Manchester<'_, DataRange<A>, A> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
+        use DataRange::*;
+        match self.0 {
+            Datatype(dt) => Manchester(dt, self.1, PhantomData::<A>).fmt(f),
+            DataIntersectionOf(drs) => {
+                let mut first = true;
+                for dr in drs {
+                    if !first {
+                        write!(f, " and ")?;
+                    }
+                    first = false;
+                    Manchester(dr, self.1, PhantomData::<A>).fmt(f)?;
+                }
+                Ok(())
+            }
+            DataUnionOf(drs) => {
+                let mut first = true;
+                for dr in drs {
+                    if !first {
+                        write!(f, " or ")?;
+                    }
+                    first = false;
+                    Manchester(dr, self.1, PhantomData::<A>).fmt(f)?;
+                }
+                Ok(())
+            }
+            DataComplementOf(dr) => {
+                write!(f, "not ")?;
+                Manchester(dr.as_ref(), self.1, PhantomData::<A>).fmt(f)
+            }
+            DataOneOf(lits) => {
+                write!(f, "{{")?;
+                let mut first = true;
+                for l in lits {
+                    if !first {
+                        write!(f, ", ")?;
+                    }
+                    first = false;
+                    Manchester(l, self.1, PhantomData::<A>).fmt(f)?;
+                }
+                write!(f, "}}")
+            }
+            DatatypeRestriction(dt, frs) => {
+                Manchester(dt, self.1, PhantomData::<A>).fmt(f)?;
+                write!(f, "[")?;
+                let mut first = true;
+                for fr in frs {
+                    if !first {
+                        write!(f, ", ")?;
+                    }
+                    first = false;
+                    write_iri(fr.f.as_ref(), self.1, f)?;
+                    write!(f, " ")?;
+                    Manchester(&fr.l, self.1, PhantomData::<A>).fmt(f)?;
+                }
+                write!(f, "]")
+            }
+        }
+    }
+}
+impl<A: ForIRI> AsManchester<A> for DataRange<A> {}
+
+// ---------------------------------------------------------------------------
+// ClassExpression — Manchester operator precedence
+//
+// Tightest → loosest: atoms / `not` / restrictions (prec 3) > `and` (2) > `or` (1).
+// A sub-expression is parenthesized when its precedence is STRICTLY LOWER than
+// the minimum precedence required by the context.
+
+fn ce_prec<A: ForIRI>(ce: &ClassExpression<A>) -> u8 {
+    match ce {
+        ClassExpression::ObjectUnionOf(_) => 1,
+        ClassExpression::ObjectIntersectionOf(_) => 2,
+        _ => 3,
+    }
+}
+
+/// Render `inner` as an operand under a context requiring at least `need` precedence.
+/// Parenthesizes when `inner` binds looser than `need`.
+fn ce_operand<A: ForIRI>(
+    inner: &ClassExpression<A>,
+    need: u8,
+    pm: Option<&PrefixMapping>,
+    f: &mut Formatter<'_>,
+) -> Result<(), Error> {
+    if ce_prec(inner) < need {
+        write!(f, "({})", Manchester(inner, pm, PhantomData::<A>))
+    } else {
+        write!(f, "{}", Manchester(inner, pm, PhantomData::<A>))
+    }
+}
+
+impl<A: ForIRI> Display for Manchester<'_, ClassExpression<A>, A> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
+        use ClassExpression::*;
+        let pm = self.1;
+        match self.0 {
+            Class(c) => Manchester(c, pm, PhantomData::<A>).fmt(f),
+
+            ObjectIntersectionOf(operands) => {
+                let mut first = true;
+                for ce in operands {
+                    if !first {
+                        write!(f, " and ")?;
+                    }
+                    first = false;
+                    ce_operand(ce, 2, pm, f)?;
+                }
+                Ok(())
+            }
+
+            ObjectUnionOf(operands) => {
+                let mut first = true;
+                for ce in operands {
+                    if !first {
+                        write!(f, " or ")?;
+                    }
+                    first = false;
+                    ce_operand(ce, 1, pm, f)?;
+                }
+                Ok(())
+            }
+
+            ObjectComplementOf(bce) => {
+                write!(f, "not ")?;
+                ce_operand(bce.as_ref(), 3, pm, f)
+            }
+
+            ObjectOneOf(individuals) => {
+                write!(f, "{{")?;
+                let mut first = true;
+                for i in individuals {
+                    if !first {
+                        write!(f, ", ")?;
+                    }
+                    first = false;
+                    Manchester(i, pm, PhantomData::<A>).fmt(f)?;
+                }
+                write!(f, "}}")
+            }
+
+            ObjectSomeValuesFrom { ope, bce } => {
+                write!(f, "{} some ", Manchester(ope, pm, PhantomData::<A>))?;
+                ce_operand(bce.as_ref(), 3, pm, f)
+            }
+
+            ObjectAllValuesFrom { ope, bce } => {
+                write!(f, "{} only ", Manchester(ope, pm, PhantomData::<A>))?;
+                ce_operand(bce.as_ref(), 3, pm, f)
+            }
+
+            ObjectHasValue { ope, i } => {
+                write!(
+                    f,
+                    "{} value {}",
+                    Manchester(ope, pm, PhantomData::<A>),
+                    Manchester(i, pm, PhantomData::<A>)
+                )
+            }
+
+            ObjectHasSelf(ope) => {
+                write!(f, "{} Self", Manchester(ope, pm, PhantomData::<A>))
+            }
+
+            ObjectMinCardinality { n, ope, bce } => {
+                write!(f, "{} min {} ", Manchester(ope, pm, PhantomData::<A>), n)?;
+                ce_operand(bce.as_ref(), 3, pm, f)
+            }
+
+            ObjectMaxCardinality { n, ope, bce } => {
+                write!(f, "{} max {} ", Manchester(ope, pm, PhantomData::<A>), n)?;
+                ce_operand(bce.as_ref(), 3, pm, f)
+            }
+
+            ObjectExactCardinality { n, ope, bce } => {
+                write!(
+                    f,
+                    "{} exactly {} ",
+                    Manchester(ope, pm, PhantomData::<A>),
+                    n
+                )?;
+                ce_operand(bce.as_ref(), 3, pm, f)
+            }
+
+            DataSomeValuesFrom { dp, dr } => {
+                write!(
+                    f,
+                    "{} some {}",
+                    Manchester(dp, pm, PhantomData::<A>),
+                    Manchester(dr, pm, PhantomData::<A>)
+                )
+            }
+
+            DataAllValuesFrom { dp, dr } => {
+                write!(
+                    f,
+                    "{} only {}",
+                    Manchester(dp, pm, PhantomData::<A>),
+                    Manchester(dr, pm, PhantomData::<A>)
+                )
+            }
+
+            DataHasValue { dp, l } => {
+                write!(
+                    f,
+                    "{} value {}",
+                    Manchester(dp, pm, PhantomData::<A>),
+                    Manchester(l, pm, PhantomData::<A>)
+                )
+            }
+
+            DataMinCardinality { n, dp, dr } => {
+                write!(
+                    f,
+                    "{} min {} {}",
+                    Manchester(dp, pm, PhantomData::<A>),
+                    n,
+                    Manchester(dr, pm, PhantomData::<A>)
+                )
+            }
+
+            DataMaxCardinality { n, dp, dr } => {
+                write!(
+                    f,
+                    "{} max {} {}",
+                    Manchester(dp, pm, PhantomData::<A>),
+                    n,
+                    Manchester(dr, pm, PhantomData::<A>)
+                )
+            }
+
+            DataExactCardinality { n, dp, dr } => {
+                write!(
+                    f,
+                    "{} exactly {} {}",
+                    Manchester(dp, pm, PhantomData::<A>),
+                    n,
+                    Manchester(dr, pm, PhantomData::<A>)
+                )
+            }
+        }
+    }
+}
+impl<A: ForIRI> AsManchester<A> for ClassExpression<A> {}
+
+// ---------------------------------------------------------------------------
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -241,5 +500,85 @@ mod tests {
             literal: "plain".to_string(),
         };
         assert_eq!(simple.as_manchester().to_string(), "\"plain\"");
+    }
+
+    #[test]
+    fn renders_class_expressions_with_precedence() {
+        let b = Build::new_rc();
+        let a = ClassExpression::Class(b.class("http://t/A"));
+        let c = ClassExpression::Class(b.class("http://t/C"));
+        let d = ClassExpression::Class(b.class("http://t/D"));
+        let mut pm = curie::PrefixMapping::default();
+        pm.add_prefix("", "http://t/").unwrap(); // default prefix → bare local names
+        let m = |ce: &ClassExpression<_>| ce.as_manchester_with_prefixes(&pm).to_string();
+
+        assert_eq!(
+            m(&ClassExpression::ObjectIntersectionOf(vec![
+                a.clone(),
+                c.clone()
+            ])),
+            "A and C"
+        );
+        assert_eq!(
+            m(&ClassExpression::ObjectUnionOf(vec![a.clone(), c.clone()])),
+            "A or C"
+        );
+        assert_eq!(
+            m(&ClassExpression::ObjectComplementOf(Box::new(a.clone()))),
+            "not A"
+        );
+
+        // and binds tighter than or → no parens on the and-operand inside or
+        let cd = ClassExpression::ObjectIntersectionOf(vec![c.clone(), d.clone()]);
+        assert_eq!(
+            m(&ClassExpression::ObjectUnionOf(vec![a.clone(), cd])),
+            "A or C and D"
+        );
+        // or under and → MUST parenthesize
+        let ac = ClassExpression::ObjectUnionOf(vec![a.clone(), c.clone()]);
+        assert_eq!(
+            m(&ClassExpression::ObjectIntersectionOf(vec![ac, d.clone()])),
+            "(A or C) and D"
+        );
+        // not with an atom-level operand — no parens
+        // not (A or C) — or is looser than the 3-threshold → parens
+        let aorc = ClassExpression::ObjectUnionOf(vec![a.clone(), c.clone()]);
+        assert_eq!(
+            m(&ClassExpression::ObjectComplementOf(Box::new(aorc))),
+            "not (A or C)"
+        );
+
+        let r = ObjectPropertyExpression::ObjectProperty(b.object_property("http://t/r"));
+        assert_eq!(
+            m(&ClassExpression::ObjectSomeValuesFrom {
+                ope: r.clone(),
+                bce: Box::new(a.clone())
+            }),
+            "r some A"
+        );
+        assert_eq!(
+            m(&ClassExpression::ObjectAllValuesFrom {
+                ope: r.clone(),
+                bce: Box::new(a.clone())
+            }),
+            "r only A"
+        );
+        assert_eq!(
+            m(&ClassExpression::ObjectMinCardinality {
+                n: 2,
+                ope: r.clone(),
+                bce: Box::new(a.clone())
+            }),
+            "r min 2 A"
+        );
+        // filler that's an `or` under a restriction → parens
+        let aorc2 = ClassExpression::ObjectUnionOf(vec![a.clone(), c.clone()]);
+        assert_eq!(
+            m(&ClassExpression::ObjectSomeValuesFrom {
+                ope: r,
+                bce: Box::new(aorc2)
+            }),
+            "r some (A or C)"
+        );
     }
 }
