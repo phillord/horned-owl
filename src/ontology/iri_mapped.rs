@@ -298,7 +298,7 @@ impl<A: ForIRI, AA: ForIndex<A>> IRIMappedOntology<A, AA> {
         self.insert(new_cmp)
     }
 
-    pub fn iter(&self) -> std::vec::IntoIter<&AnnotatedComponent<A>> {
+    pub fn iter(&self) -> impl Iterator<Item = &AnnotatedComponent<A>> {
         self.0.i().into_iter()
     }
 }

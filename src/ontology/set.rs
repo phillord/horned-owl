@@ -258,13 +258,23 @@ impl<A: ForIRI, AA: ForIndex<A>> IntoIterator for SetIndex<A, AA> {
     }
 }
 
+pub struct SetIndexIter<'a, A: ForIRI, AA: ForIndex<A>>(
+    std::collections::hash_set::Iter<'a, AA>,
+    PhantomData<&'a A>,
+);
+
+impl<'a, A: ForIRI, AA: ForIndex<A>> Iterator for SetIndexIter<'a, A, AA> {
+    type Item = &'a AnnotatedComponent<A>;
+    fn next(&mut self) -> Option<Self::Item> {
+        self.0.next().map(|aa| aa.borrow())
+    }
+}
+
 impl<'a, A: ForIRI, AA: ForIndex<A>> IntoIterator for &'a SetIndex<A, AA> {
     type Item = &'a AnnotatedComponent<A>;
-    type IntoIter = std::vec::IntoIter<&'a AnnotatedComponent<A>>;
+    type IntoIter = SetIndexIter<'a, A, AA>;
     fn into_iter(self) -> Self::IntoIter {
-        #[allow(clippy::needless_collect)]
-        let v: Vec<&'a AnnotatedComponent<A>> = self.0.iter().map(|fiac| fiac.borrow()).collect();
-        v.into_iter()
+        SetIndexIter(self.0.iter(), PhantomData)
     }
 }
 
