@@ -134,7 +134,8 @@ FacetSymbol = {
 // Non-silent wrapper so from_pair gets one ManchesterDocument node whose inner
 // is [PrefixDeclaration*, OntologyHeader?, Frame*].
 
-ManchesterDocument = { SOI ~ PrefixDeclaration* ~ OntologyHeader? ~ Frame* ~ EOI }
+ManchesterDocument = { SOI ~ PrefixDeclaration* ~ ImportDeclaration* ~ OntologyHeader? ~ Frame* ~ EOI }
+ImportDeclaration  = { ^"Import:" ~ IRI }
 
 PrefixDeclaration = { ^"Prefix:" ~ PrefixName ~ FullIRI }
 PrefixName        = { SPARQL_PnameNs }          // matches "ex:" and ":"

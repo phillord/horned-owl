@@ -1692,6 +1692,42 @@ mod tests {
     }
 
     #[test]
+    fn reads_import_round_trip() {
+        use crate::io::omn::{read_with_build, write};
+        use crate::ontology::component_mapped::ComponentMappedOntology;
+        use crate::ontology::set::SetOntology;
+        use std::io::BufReader;
+
+        let b = Build::new_rc();
+        let mut pm = PrefixMapping::default();
+        pm.add_prefix("ex", "http://ex/").unwrap();
+
+        let mut o = SetOntology::new_rc();
+        o.insert(Import(b.iri("http://ex/imported")));
+        o.insert(DeclareClass(b.class("http://ex/A")));
+
+        type TestOnt = ComponentMappedOntology<
+            std::rc::Rc<str>,
+            std::rc::Rc<AnnotatedComponent<std::rc::Rc<str>>>,
+        >;
+        let amo: TestOnt = o.clone().into();
+        let mut buf = Vec::<u8>::new();
+        write(&mut buf, &amo, Some(&pm)).unwrap();
+
+        let (parsed, _): (SetOntology<_>, PrefixMapping) =
+            read_with_build(BufReader::new(&buf[..]), &b).unwrap();
+        let orig: std::collections::BTreeSet<_> = o.iter().map(|ac| ac.component.clone()).collect();
+        let got: std::collections::BTreeSet<_> =
+            parsed.iter().map(|ac| ac.component.clone()).collect();
+        assert_eq!(
+            orig,
+            got,
+            "import did not round-trip\n{}",
+            String::from_utf8_lossy(&buf)
+        );
+    }
+
+    #[test]
     fn whole_ontology_round_trips() {
         use crate::io::omn::{read_with_build, write};
         use crate::model::RcAnnotatedComponent;

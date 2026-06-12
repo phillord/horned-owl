@@ -123,6 +123,12 @@ pub fn read_with_build<A: ForIRI, O: MutableOntology<A> + Ontology<A> + Default,
     for child in children {
         match child.as_rule() {
             Rule::PrefixDeclaration | Rule::EOI => {}
+            Rule::ImportDeclaration => {
+                let iri_pair = child.into_inner().next().unwrap(); // IRI
+                ontology.insert(crate::model::Import(crate::model::IRI::from_pair(
+                    iri_pair, &ctx,
+                )?));
+            }
             Rule::OntologyHeader => {
                 header_present = true;
                 if let Some(iri_pair) = child.into_inner().next() {
