@@ -44,7 +44,11 @@ fn write_iri(
         && let Ok(curie) = pm.shrink_iri(iri)
     {
         let s = curie.to_string();
-        // Curie with empty prefix ("") formats as ":local" — emit bare local name instead.
+        // `add_prefix("", ns)` stores "" in the prefix *mapping* (not the
+        // default slot), so `shrink_iri` returns a `Curie { prefix: Some(""), .. }`
+        // which `Display` formats as ":local". curie 0.1.4's `reference` field is
+        // private (no clean accessor), so strip the leading ':' to get the bare
+        // local name.
         return if let Some(local) = s.strip_prefix(':') {
             write!(f, "{local}")
         } else {
@@ -232,6 +236,10 @@ impl<A: ForIRI> Display for Manchester<'_, DataRange<A>, A> {
                 write!(f, "}}")
             }
             DatatypeRestriction(dt, frs) => {
+                // TODO(Task 4): facet names must render as Manchester symbols
+                // (minInclusive→">=", maxExclusive→"<", length→"length", …) via a
+                // facet_symbol() map. The current write_iri spelling emits
+                // "xsd:minInclusive 0" which is NOT valid Manchester — placeholder only.
                 Manchester(dt, self.1, PhantomData::<A>).fmt(f)?;
                 write!(f, "[")?;
                 let mut first = true;
@@ -540,8 +548,7 @@ mod tests {
             m(&ClassExpression::ObjectIntersectionOf(vec![ac, d.clone()])),
             "(A or C) and D"
         );
-        // not with an atom-level operand — no parens
-        // not (A or C) — or is looser than the 3-threshold → parens
+        // not over an `or` → parenthesized
         let aorc = ClassExpression::ObjectUnionOf(vec![a.clone(), c.clone()]);
         assert_eq!(
             m(&ClassExpression::ObjectComplementOf(Box::new(aorc))),
