@@ -40,4 +40,42 @@ mod tests {
         assert!(lexes("{ <http://t/a>, <http://t/b> }"));
         assert!(!lexes("and and and")); // garbage must NOT lex
     }
+
+    fn lex_doc(s: &str) -> bool {
+        ManchesterLexer::lex(Rule::ManchesterDocument, s).is_ok()
+    }
+
+    #[test]
+    fn lex_documents() {
+        assert!(lex_doc("Prefix: ex: <http://ex/>"));
+        assert!(lex_doc("Prefix: : <http://ex/>")); // default prefix decl
+        assert!(lex_doc("Ontology: <http://ex/o>"));
+        assert!(lex_doc("Prefix: ex: <http://ex/>\nOntology: <http://ex/o>"));
+        assert!(lex_doc("")); // empty document is valid
+        assert!(lex_doc("Class: <http://ex/A>"));
+        assert!(lex_doc(
+            "Class: <http://ex/A>\n    SubClassOf: <http://ex/B>"
+        ));
+        assert!(lex_doc(
+            "Class: <http://ex/A>\n    EquivalentTo: <http://ex/B>, <http://ex/C>"
+        ));
+        assert!(lex_doc(
+            "ObjectProperty: <http://ex/r>\n    Characteristics: Functional\n    InverseOf: <http://ex/t>"
+        ));
+        assert!(lex_doc(
+            "DataProperty: <http://ex/p>\n    Range: <http://ex/dt>"
+        ));
+        assert!(lex_doc(
+            "AnnotationProperty: <http://ex/n>\n    Domain: <http://ex/A>"
+        ));
+        assert!(lex_doc(
+            "Individual: <http://ex/a>\n    Types: <http://ex/A>\n    Facts: <http://ex/r> <http://ex/b>"
+        ));
+        assert!(lex_doc("Datatype: <http://ex/dt>"));
+        // two frames in sequence
+        assert!(lex_doc("Class: <http://ex/A>\nClass: <http://ex/B>"));
+        // garbage must not lex
+        assert!(!lex_doc("Class:"));
+        assert!(!lex_doc("Frobnicate: <http://ex/A>"));
+    }
 }

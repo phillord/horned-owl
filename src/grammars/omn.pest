@@ -100,3 +100,88 @@ FacetSymbol = {
     | ^"totalDigits"
     | ^"fractionDigits"
 }
+
+// ---- whole-ontology document ------------------------------------------------
+// Non-silent wrapper so from_pair gets one ManchesterDocument node whose inner
+// is [PrefixDeclaration*, OntologyHeader?, Frame*].
+
+ManchesterDocument = { SOI ~ PrefixDeclaration* ~ OntologyHeader? ~ Frame* ~ EOI }
+
+PrefixDeclaration = { ^"Prefix:" ~ PrefixName ~ FullIRI }
+PrefixName        = { SPARQL_PnameNs }          // matches "ex:" and ":"
+OntologyHeader    = { ^"Ontology:" ~ IRI? }
+
+// ---- frames -----------------------------------------------------------------
+
+Frame = {
+      ClassFrame
+    | ObjectPropertyFrame
+    | DataPropertyFrame
+    | AnnotationPropertyFrame
+    | IndividualFrame
+    | DatatypeFrame
+}
+
+FrameSubject = { IRI }
+
+ClassFrame = { ^"Class:" ~ FrameSubject ~ ClassClause* }
+ClassClause = {
+      ^"SubClassOf:"      ~ DescriptionList
+    | ^"EquivalentTo:"    ~ DescriptionList
+    | ^"DisjointWith:"    ~ DescriptionList
+    | ^"DisjointUnionOf:" ~ DescriptionList
+}
+
+ObjectPropertyFrame = { ^"ObjectProperty:" ~ FrameSubject ~ ObjectPropertyClause* }
+ObjectPropertyClause = {
+      ^"SubPropertyOf:"  ~ OpeList
+    | ^"EquivalentTo:"   ~ OpeList
+    | ^"DisjointWith:"   ~ OpeList
+    | ^"InverseOf:"      ~ OpeList
+    | ^"Domain:"         ~ DescriptionList
+    | ^"Range:"          ~ DescriptionList
+    | ^"Characteristics:" ~ CharacteristicList
+}
+
+DataPropertyFrame = { ^"DataProperty:" ~ FrameSubject ~ DataPropertyClause* }
+DataPropertyClause = {
+      ^"SubPropertyOf:"   ~ IriList
+    | ^"EquivalentTo:"    ~ IriList
+    | ^"DisjointWith:"    ~ IriList
+    | ^"Domain:"          ~ DescriptionList
+    | ^"Range:"           ~ DataRangeList
+    | ^"Characteristics:" ~ CharacteristicList
+}
+
+AnnotationPropertyFrame = { ^"AnnotationProperty:" ~ FrameSubject ~ AnnotationPropertyClause* }
+AnnotationPropertyClause = {
+      ^"SubPropertyOf:" ~ IriList
+    | ^"Domain:"        ~ IriList
+    | ^"Range:"         ~ IriList
+}
+
+IndividualFrame = { ^"Individual:" ~ FrameSubject ~ IndividualClause* }
+IndividualClause = {
+      ^"Types:"         ~ DescriptionList
+    | ^"Facts:"         ~ FactList
+    | ^"SameAs:"        ~ IndividualList
+    | ^"DifferentFrom:" ~ IndividualList
+}
+
+DatatypeFrame = { ^"Datatype:" ~ FrameSubject }
+
+// ---- shared comma-separated lists -------------------------------------------
+
+DescriptionList  = { Description ~ ( "," ~ Description )* }
+OpeList          = { ope ~ ( "," ~ ope )* }
+IriList          = { IRI ~ ( "," ~ IRI )* }
+DataRangeList    = { DataRange ~ ( "," ~ DataRange )* }
+IndividualList   = { Individual ~ ( "," ~ Individual )* }
+CharacteristicList = { Characteristic ~ ( "," ~ Characteristic )* }
+Characteristic = {
+      ^"Functional" | ^"InverseFunctional" | ^"Reflexive" | ^"Irreflexive"
+    | ^"Symmetric" | ^"Asymmetric" | ^"Transitive"
+}
+
+FactList = { Fact ~ ( "," ~ Fact )* }
+Fact     = { ^"not"? ~ ope ~ ( Literal | Individual ) }
