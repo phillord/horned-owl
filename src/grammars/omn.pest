@@ -3,7 +3,9 @@
 // and sparql.pest (SPARQL_PnameLn / SPARQL_PnameNs).
 
 WHITESPACE = _{ " " | "\t" | "\n" | "\r" }
-COMMENT    = _{ "#" ~ (!"\n" ~ !"\r" ~ ANY)* }
+// COMMENT must NOT consume the `# General axioms` sentinel: that exact marker
+// must remain visible to GeneralAxiomBlock at the end of the document.
+COMMENT    = _{ !"# General axioms" ~ "#" ~ (!"\n" ~ !"\r" ~ ANY)* }
 
 // ---- terminal building-blocks -----------------------------------------------
 
@@ -134,7 +136,12 @@ FacetSymbol = {
 // Non-silent wrapper so from_pair gets one ManchesterDocument node whose inner
 // is [PrefixDeclaration*, OntologyHeader?, Frame*].
 
-ManchesterDocument = { SOI ~ PrefixDeclaration* ~ OntologyHeader? ~ Frame* ~ EOI }
+// Opaque trailing block: everything from the `# General axioms` marker to
+// end-of-input is consumed as a single node so the reader can skip-and-warn
+// rather than hard-erroring at EOI.  The marker must be kept in exact sync
+// with the writer's `writeln!(write, "# General axioms")` literal.
+GeneralAxiomBlock  = { "# General axioms" ~ ANY* }
+ManchesterDocument = { SOI ~ PrefixDeclaration* ~ OntologyHeader? ~ Frame* ~ GeneralAxiomBlock? ~ EOI }
 ImportDeclaration  = { ^"Import:" ~ IRI }
 
 PrefixDeclaration = { ^"Prefix:" ~ PrefixName ~ FullIRI }

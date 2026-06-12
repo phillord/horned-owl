@@ -5,16 +5,11 @@
 //! `AnnotationProperty:`, `Individual:`, `Datatype:`) into a mutable ontology.
 //! It is the structural inverse of [`crate::io::omn::write`].
 //!
-//! ## Known limitations (P3)
+//! ## Known limitations
 //! - The writer's trailing `# General axioms` block (OWL functional syntax for
-//!   components with no native Manchester form — `Import`, `HasKey`,
-//!   `OntologyAnnotation`, axiom annotations, SWRL rules, property chains,
-//!   n-ary axioms over anonymous subjects) is NOT parsed. The `#` line itself
-//!   is consumed as a `COMMENT`, but the functional-syntax lines beneath it
-//!   match no `Frame` rule, so a document carrying a non-empty misc block is
-//!   REJECTED at EOI (a hard parse error) rather than partially parsed. Such
-//!   documents do not round-trip; the round-trip corpus avoids misc-only
-//!   axioms.
+//!   genuinely-inexpressible components — general anonymous-subject class axioms,
+//!   SWRL rules) is **skipped with a warning** (its axioms are dropped, not
+//!   round-tripped). The frame portion of the document is parsed normally.
 //! - Frame headers conflate declaration and reference: every frame yields a
 //!   `Declare*` axiom, so an entity used without an explicit declaration gains
 //!   one on round-trip. Declarations are non-logical (entailment-neutral).
@@ -24,26 +19,32 @@
 //! - A bare local name as a frame subject or IRI (emitted by the writer only
 //!   when a default `""` prefix is registered) is not lexable; use `<full>` or
 //!   `prefix:local`. Round-tripping requires a non-default prefix.
-//! - `Annotations:` clauses are not parsed (the writer does not emit them).
-//! - **Keyword / CURIE-prefix collision (correctness gap, MUST FIX BEFORE the
-//!   upstream PR).** Manchester keywords (`not`, `and`, `or`, `some`, `only`,
-//!   `value`, `min`, `max`, `exactly`, `Self`, `inverse`, and the facet words)
-//!   are matched without a name-boundary, so an *abbreviated* CURIE whose
-//!   prefix begins with a keyword is silently mis-parsed — e.g. `notation:foo`
-//!   lexes as `not` + `ation:foo`, and `andx:bar` as `and` + `x:bar`. Full
-//!   `<...>` IRIs are immune (they start with `<`). This reader round-trips the
-//!   **writer's own output** completely (the writer never emits such CURIEs),
-//!   but it is therefore NOT yet a general hand-written-Manchester parser.
-//!   In a `Facts:` clause the collision is nastier: a property CURIE whose
-//!   prefix starts with `not` (e.g. `Facts: notes:r b`) is read as a negated
-//!   assertion (`not` + `es:r`), simultaneously flipping the assertion polarity
-//!   AND remapping the property to a different IRI — same root cause, same
-//!   must-fix-before-PR fix.
-//!   The fix is maximal-munch boundary anchoring on every keyword token —
-//!   `@{ ^"not" ~ !PnChar }` rather than a trailing-whitespace guard (which
-//!   would break `not(C and D)`) — applied across BOTH the P2 class-expression
-//!   rules and the P3 frame rules, with a per-keyword negative test and the
-//!   full P2 round-trip suite as regression. See the pre-upstream-PR list.
+//! - **`HasKey:` object-vs-data key conflation.** Manchester `HasKey:` provides
+//!   no lexical distinction between object and data property keys. Data-property
+//!   keys are read back as `ObjectPropertyExpression` members; a round-trip
+//!   containing data-property keys will not reconstruct the original component.
+//!   Use object-property-only key lists to guarantee round-trip fidelity.
+//! - **Entity annotations on an IRI heading no frame are dropped.** An
+//!   `AnnotationAssertion` whose subject IRI does not correspond to any declared
+//!   entity frame is emitted to the `# General axioms` misc block (and thus
+//!   skipped by the reader). Only annotations on entities with a corresponding
+//!   `Class:` / `ObjectProperty:` / … frame round-trip.
+//! - **Anonymous-individual annotation values are not rendered.** An
+//!   `AnnotationValue::AnonymousIndividual` has no Manchester literal form and
+//!   is routed to the misc block (dropped on read).
+//! - **Axiom annotations on misc-routed axioms are dropped.** Complex-LHS
+//!   `SubClassOf`, anonymous-subject assertions, `DatatypeDefinition`, and SWRL
+//!   rules cannot be expressed in a Manchester frame clause, so they land in the
+//!   misc block. The misc fallback emits the bare OWL functional-syntax
+//!   component with no annotation; the annotation is silently lost.
+//! - **Annotation nesting is not representable.** The horned-owl model has no
+//!   `ann` field on `Annotation`; nested annotations (annotation-on-annotation)
+//!   are discarded by both the OFN and OMN readers and are never preserved.
+//! - **FIXED (commit e7a2b83): keyword / CURIE-prefix collision.** Manchester
+//!   keywords (`not`, `and`, `or`, `some`, `only`, `value`, `min`, `max`,
+//!   `exactly`, `Self`, `inverse`, and the facet words) now carry a
+//!   `!( SPARQL_PnChars | ":" )` maximal-munch boundary so a CURIE whose prefix
+//!   begins with a keyword (e.g. `notation:Foo`) is no longer mis-split.
 
 pub mod from_pair;
 pub mod lexer;
@@ -81,8 +82,8 @@ pub fn parse_class_expression<A: ForIRI>(
 /// `Build`.  Mirrors `io::ofn::reader::read`.
 ///
 /// The `# General axioms` block emitted by the writer for components lacking a
-/// native Manchester form (in OWL functional syntax) is NOT parsed — see the
-/// P3 limitations note.
+/// native Manchester form is skipped with a warning — see the limitations note
+/// in the module doc.
 pub fn read<A: ForIRI, O: MutableOntology<A> + Ontology<A> + Default, R: BufRead>(
     bufread: R,
     _config: ParserConfiguration,
@@ -158,6 +159,19 @@ pub fn read_with_build<A: ForIRI, O: MutableOntology<A> + Ontology<A> + Default,
                 }
             }
             Rule::Frame => from_pair::insert_frame(child, &ctx, &mut ontology)?,
+            Rule::GeneralAxiomBlock => {
+                let body = child.as_str();
+                let n = body
+                    .lines()
+                    .filter(|l| {
+                        !l.trim().is_empty() && !l.trim_start().starts_with("# General axioms")
+                    })
+                    .count();
+                eprintln!(
+                    "warning: omn reader skipped {n} axiom(s) in the non-Manchester \
+                     `# General axioms` block (components with no Manchester form)"
+                );
+            }
             rule => unreachable!("unexpected document child: {:?}", rule),
         }
     }
