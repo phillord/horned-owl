@@ -538,6 +538,135 @@ impl<A: ForIRI> FromPair<A> for ClassExpression<A> {
 }
 
 // ---------------------------------------------------------------------------
+// Whole-ontology document support.
+// ---------------------------------------------------------------------------
+
+/// Build a `PrefixMapping` from a slice of `PrefixDeclaration` pairs.
+///
+/// `PrefixDeclaration = { ^"Prefix:" ~ PrefixName ~ FullIRI }`
+/// `PrefixName        = { SPARQL_PnameNs }`  (e.g. `ex:` or bare `:`)
+pub(crate) fn prefixes_from_decls<'a>(
+    decls: impl Iterator<Item = Pair<'a, Rule>>,
+) -> Result<PrefixMapping> {
+    let mut prefixes = PrefixMapping::default();
+    for decl in decls {
+        let mut inner = decl.into_inner();
+        let pname = inner.next().unwrap(); // PrefixName
+        let full_iri = inner.next().unwrap(); // FullIRI
+        // FullIRI = ${ "<" ~ RFC3987_Iri ~ ">" } — its inner is the bare IRI text.
+        let iri_text = full_iri.into_inner().next().unwrap().as_str();
+        // PrefixName = { SPARQL_PnameNs }; SPARQL_PnameNs = ${ SPARQL_PnPrefix? ~ ":" }
+        let prefix_part = pname.into_inner().next().unwrap().into_inner().next();
+        match prefix_part {
+            Some(p) => prefixes
+                .add_prefix(p.as_str(), iri_text)
+                .expect("grammar guarantees a valid prefix"),
+            None => prefixes
+                .add_prefix("", iri_text)
+                .expect("empty prefix shouldn't fail"),
+        }
+    }
+    Ok(prefixes)
+}
+
+/// Dispatch a single `Frame` pair to the matching sub-function, inserting the
+/// resulting components into `ont`.
+pub(crate) fn insert_frame<A: ForIRI, O: MutableOntology<A>>(
+    frame: Pair<Rule>,
+    ctx: &Context<'_, A>,
+    ont: &mut O,
+) -> Result<()> {
+    let inner = frame.into_inner().next().unwrap();
+    match inner.as_rule() {
+        Rule::ClassFrame => insert_class_frame(inner, ctx, ont),
+        Rule::ObjectPropertyFrame => insert_object_property_frame(inner, ctx, ont),
+        Rule::DataPropertyFrame => insert_data_property_frame(inner, ctx, ont),
+        Rule::AnnotationPropertyFrame => insert_annotation_property_frame(inner, ctx, ont),
+        Rule::IndividualFrame => insert_individual_frame(inner, ctx, ont),
+        Rule::DatatypeFrame => insert_datatype_frame(inner, ctx, ont),
+        rule => unreachable!("unexpected frame rule: {:?}", rule),
+    }
+}
+
+/// Parse a frame's `FrameSubject` (the first inner pair) into an `IRI`,
+/// returning it plus the remaining clause pairs.
+fn frame_subject_and_clauses<'a, A: ForIRI>(
+    frame: Pair<'a, Rule>,
+    ctx: &Context<'_, A>,
+) -> Result<(IRI<A>, pest::iterators::Pairs<'a, Rule>)> {
+    let mut inner = frame.into_inner();
+    let subject_pair = inner.next().unwrap(); // FrameSubject
+    let iri = IRI::from_pair(subject_pair.into_inner().next().unwrap(), ctx)?;
+    Ok((iri, inner))
+}
+
+fn insert_class_frame<A: ForIRI, O: MutableOntology<A>>(
+    frame: Pair<Rule>,
+    ctx: &Context<'_, A>,
+    ont: &mut O,
+) -> Result<()> {
+    let (subject, _clauses) = frame_subject_and_clauses(frame, ctx)?;
+    ont.insert(DeclareClass(Class(subject)));
+    // clauses handled in Task 3
+    Ok(())
+}
+
+fn insert_object_property_frame<A: ForIRI, O: MutableOntology<A>>(
+    frame: Pair<Rule>,
+    ctx: &Context<'_, A>,
+    ont: &mut O,
+) -> Result<()> {
+    let (subject, _clauses) = frame_subject_and_clauses(frame, ctx)?;
+    ont.insert(DeclareObjectProperty(ObjectProperty(subject)));
+    // clauses handled in Task 4
+    Ok(())
+}
+
+fn insert_data_property_frame<A: ForIRI, O: MutableOntology<A>>(
+    frame: Pair<Rule>,
+    ctx: &Context<'_, A>,
+    ont: &mut O,
+) -> Result<()> {
+    let (subject, _clauses) = frame_subject_and_clauses(frame, ctx)?;
+    ont.insert(DeclareDataProperty(DataProperty(subject)));
+    // clauses handled in Task 4
+    Ok(())
+}
+
+fn insert_annotation_property_frame<A: ForIRI, O: MutableOntology<A>>(
+    frame: Pair<Rule>,
+    ctx: &Context<'_, A>,
+    ont: &mut O,
+) -> Result<()> {
+    let (subject, _clauses) = frame_subject_and_clauses(frame, ctx)?;
+    ont.insert(DeclareAnnotationProperty(AnnotationProperty(subject)));
+    // clauses handled in Task 5
+    Ok(())
+}
+
+fn insert_individual_frame<A: ForIRI, O: MutableOntology<A>>(
+    frame: Pair<Rule>,
+    ctx: &Context<'_, A>,
+    ont: &mut O,
+) -> Result<()> {
+    let (subject, _clauses) = frame_subject_and_clauses(frame, ctx)?;
+    ont.insert(DeclareNamedIndividual(NamedIndividual(subject)));
+    // clauses handled in Task 5
+    Ok(())
+}
+
+fn insert_datatype_frame<A: ForIRI, O: MutableOntology<A>>(
+    frame: Pair<Rule>,
+    ctx: &Context<'_, A>,
+    ont: &mut O,
+) -> Result<()> {
+    let (subject, _clauses) = frame_subject_and_clauses(frame, ctx)?;
+    ont.insert(DeclareDatatype(Datatype(subject)));
+    // Datatype frames carry no clauses.
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
 
 #[cfg(test)]
 mod tests {
@@ -832,6 +961,44 @@ mod tests {
     /// two-byte é in `<ab://éx>`), that indexing panics with a char-boundary error.
     /// The fix replaces `s[..7]` with `s.get(..7)` which returns `None` on a
     /// non-boundary index and therefore never panics.
+    #[test]
+    fn reads_declarations_round_trip() {
+        use crate::io::omn::write;
+        use crate::model::RcAnnotatedComponent;
+        use crate::ontology::component_mapped::ComponentMappedOntology;
+        use crate::ontology::set::SetOntology;
+        use std::io::BufReader;
+        use std::rc::Rc;
+
+        type TestOnt = ComponentMappedOntology<Rc<str>, RcAnnotatedComponent>;
+
+        let b = Build::new_rc();
+        let mut pm = PrefixMapping::default();
+        pm.add_prefix("ex", "http://ex/").unwrap();
+
+        let mut o = SetOntology::new_rc();
+        o.insert(DeclareClass(b.class("http://ex/A")));
+        o.insert(DeclareObjectProperty(b.object_property("http://ex/r")));
+        o.insert(DeclareDataProperty(b.data_property("http://ex/p")));
+        o.insert(DeclareAnnotationProperty(
+            b.annotation_property("http://ex/n"),
+        ));
+        o.insert(DeclareNamedIndividual(b.named_individual("http://ex/a")));
+        o.insert(DeclareDatatype(b.datatype("http://ex/dt")));
+
+        let amo: TestOnt = o.clone().into();
+        let mut buf = Vec::<u8>::new();
+        write(&mut buf, &amo, Some(&pm)).unwrap();
+
+        let (parsed, _pm): (SetOntology<_>, PrefixMapping) =
+            crate::io::omn::reader::read_with_build(BufReader::new(&buf[..]), &b).unwrap();
+
+        let orig: std::collections::BTreeSet<_> = o.iter().map(|ac| ac.component.clone()).collect();
+        let got: std::collections::BTreeSet<_> =
+            parsed.iter().map(|ac| ac.component.clone()).collect();
+        assert_eq!(orig, got, "declarations did not round-trip");
+    }
+
     #[test]
     fn parses_unicode_iri_property_no_panic() {
         use crate::model::*;
