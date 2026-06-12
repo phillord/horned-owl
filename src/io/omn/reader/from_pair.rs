@@ -850,9 +850,43 @@ fn insert_annotation_property_frame<A: ForIRI, O: MutableOntology<A>>(
     ctx: &Context<'_, A>,
     ont: &mut O,
 ) -> Result<()> {
-    let (subject, _clauses) = frame_subject_and_clauses(frame, ctx)?;
-    ont.insert(DeclareAnnotationProperty(AnnotationProperty(subject)));
-    // clauses handled in Task 5
+    let (subject, clauses) = frame_subject_and_clauses(frame, ctx)?;
+    ont.insert(DeclareAnnotationProperty(AnnotationProperty(
+        subject.clone(),
+    )));
+
+    for clause in clauses {
+        let kw = clause_keyword(&clause);
+        let body = clause.into_inner().next().unwrap();
+        let iris = parse_iri_list(body, ctx)?;
+        match kw.as_str() {
+            "subpropertyof" => {
+                for iri in iris {
+                    ont.insert(SubAnnotationPropertyOf {
+                        sub: AnnotationProperty(subject.clone()),
+                        sup: AnnotationProperty(iri),
+                    });
+                }
+            }
+            "domain" => {
+                for iri in iris {
+                    ont.insert(AnnotationPropertyDomain {
+                        ap: AnnotationProperty(subject.clone()),
+                        iri,
+                    });
+                }
+            }
+            "range" => {
+                for iri in iris {
+                    ont.insert(AnnotationPropertyRange {
+                        ap: AnnotationProperty(subject.clone()),
+                        iri,
+                    });
+                }
+            }
+            other => unreachable!("unexpected annotation-property clause keyword: {other}"),
+        }
+    }
     Ok(())
 }
 
@@ -861,9 +895,109 @@ fn insert_individual_frame<A: ForIRI, O: MutableOntology<A>>(
     ctx: &Context<'_, A>,
     ont: &mut O,
 ) -> Result<()> {
-    let (subject, _clauses) = frame_subject_and_clauses(frame, ctx)?;
-    ont.insert(DeclareNamedIndividual(NamedIndividual(subject)));
-    // clauses handled in Task 5
+    let (subject, clauses) = frame_subject_and_clauses(frame, ctx)?;
+    let subject_ind = Individual::Named(NamedIndividual(subject.clone()));
+    ont.insert(DeclareNamedIndividual(NamedIndividual(subject.clone())));
+
+    for clause in clauses {
+        let kw = clause_keyword(&clause);
+        let body = clause.into_inner().next().unwrap();
+        match kw.as_str() {
+            "types" => {
+                for ce in parse_description_list(body, ctx)? {
+                    ont.insert(ClassAssertion {
+                        i: subject_ind.clone(),
+                        ce,
+                    });
+                }
+            }
+            "facts" => {
+                for fact in body.into_inner() {
+                    insert_fact(fact, ctx, &subject_ind, ont)?;
+                }
+            }
+            "sameas" => {
+                let mut all = vec![subject_ind.clone()];
+                for p in body.into_inner() {
+                    all.push(Individual::from_pair(p, ctx)?);
+                }
+                ont.insert(SameIndividual(all));
+            }
+            "differentfrom" => {
+                let mut all = vec![subject_ind.clone()];
+                for p in body.into_inner() {
+                    all.push(Individual::from_pair(p, ctx)?);
+                }
+                ont.insert(DifferentIndividuals(all));
+            }
+            other => unreachable!("unexpected individual clause keyword: {other}"),
+        }
+    }
+    Ok(())
+}
+
+/// `Fact = { ^"not"? ~ ope ~ ( Literal | Individual ) }`
+///
+/// A trailing `Literal` => (negative) data-property assertion; a trailing
+/// `Individual` => (negative) object-property assertion. The leading `not`
+/// keyword is a bare literal (no child pair), so detect it from the span.
+fn insert_fact<A: ForIRI, O: MutableOntology<A>>(
+    fact: Pair<Rule>,
+    ctx: &Context<'_, A>,
+    from: &Individual<A>,
+    ont: &mut O,
+) -> Result<()> {
+    let negated = fact
+        .as_str()
+        .trim_start()
+        .get(..3)
+        .is_some_and(|h| h.eq_ignore_ascii_case("not"));
+    let mut inner = fact.into_inner();
+    let ope_pair = inner.next().unwrap(); // ope
+    let ope = ObjectPropertyExpression::from_pair(ope_pair, ctx)?;
+    let target = inner.next().unwrap();
+    match target.as_rule() {
+        Rule::Literal => {
+            // data-property assertion; the ope's inner IRI is the data property.
+            let lit = Literal::from_pair(target, ctx)?;
+            let dp = match &ope {
+                ObjectPropertyExpression::ObjectProperty(p) => DataProperty(p.0.clone()),
+                ObjectPropertyExpression::InverseObjectProperty(_) => {
+                    return Err(HornedError::invalid("inverse property in a data fact"));
+                }
+            };
+            if negated {
+                ont.insert(NegativeDataPropertyAssertion {
+                    dp,
+                    from: from.clone(),
+                    to: lit,
+                });
+            } else {
+                ont.insert(DataPropertyAssertion {
+                    dp,
+                    from: from.clone(),
+                    to: lit,
+                });
+            }
+        }
+        Rule::Individual => {
+            let to = Individual::from_pair(target, ctx)?;
+            if negated {
+                ont.insert(NegativeObjectPropertyAssertion {
+                    ope,
+                    from: from.clone(),
+                    to,
+                });
+            } else {
+                ont.insert(ObjectPropertyAssertion {
+                    ope,
+                    from: from.clone(),
+                    to,
+                });
+            }
+        }
+        rule => unreachable!("unexpected fact target: {:?}", rule),
+    }
     Ok(())
 }
 
@@ -1388,6 +1522,123 @@ mod tests {
         let got: std::collections::BTreeSet<_> =
             parsed.iter().map(|ac| ac.component.clone()).collect();
         assert_eq!(orig, got, "data property frame did not round-trip");
+    }
+
+    #[test]
+    fn reads_annotation_property_frame_round_trip() {
+        use crate::io::omn::write;
+        use crate::model::RcAnnotatedComponent;
+        use crate::ontology::component_mapped::ComponentMappedOntology;
+        use crate::ontology::set::SetOntology;
+        use std::io::BufReader;
+        use std::rc::Rc;
+
+        type TestOnt = ComponentMappedOntology<Rc<str>, RcAnnotatedComponent>;
+
+        let b = Build::new_rc();
+        let mut pm = PrefixMapping::default();
+        pm.add_prefix("ex", "http://ex/").unwrap();
+
+        let mut o = SetOntology::new_rc();
+        o.insert(DeclareAnnotationProperty(
+            b.annotation_property("http://ex/n"),
+        ));
+        o.insert(SubAnnotationPropertyOf {
+            sub: b.annotation_property("http://ex/n"),
+            sup: b.annotation_property("http://ex/m"),
+        });
+        o.insert(AnnotationPropertyDomain {
+            ap: b.annotation_property("http://ex/n"),
+            iri: b.iri("http://ex/A"),
+        });
+        o.insert(AnnotationPropertyRange {
+            ap: b.annotation_property("http://ex/n"),
+            iri: b.iri("http://ex/B"),
+        });
+
+        let amo: TestOnt = o.clone().into();
+        let mut buf = Vec::<u8>::new();
+        write(&mut buf, &amo, Some(&pm)).unwrap();
+        let (parsed, _): (SetOntology<_>, PrefixMapping) =
+            crate::io::omn::reader::read_with_build(BufReader::new(&buf[..]), &b).unwrap();
+
+        let orig: std::collections::BTreeSet<_> = o.iter().map(|ac| ac.component.clone()).collect();
+        let got: std::collections::BTreeSet<_> =
+            parsed.iter().map(|ac| ac.component.clone()).collect();
+        assert_eq!(orig, got, "annotation property frame did not round-trip");
+    }
+
+    #[test]
+    fn reads_individual_frame_round_trip() {
+        use crate::io::omn::write;
+        use crate::model::RcAnnotatedComponent;
+        use crate::ontology::component_mapped::ComponentMappedOntology;
+        use crate::ontology::set::SetOntology;
+        use std::io::BufReader;
+        use std::rc::Rc;
+
+        type TestOnt = ComponentMappedOntology<Rc<str>, RcAnnotatedComponent>;
+
+        let b = Build::new_rc();
+        let mut pm = PrefixMapping::default();
+        pm.add_prefix("ex", "http://ex/").unwrap();
+        pm.add_prefix("xsd", "http://www.w3.org/2001/XMLSchema#")
+            .unwrap();
+        let named = |i: &str| Individual::Named(b.named_individual(i));
+
+        let mut o = SetOntology::new_rc();
+        o.insert(DeclareNamedIndividual(b.named_individual("http://ex/a")));
+        o.insert(DeclareClass(b.class("http://ex/A")));
+        o.insert(ClassAssertion {
+            i: named("http://ex/a"),
+            ce: ClassExpression::Class(b.class("http://ex/A")),
+        });
+        o.insert(ObjectPropertyAssertion {
+            ope: ObjectPropertyExpression::ObjectProperty(b.object_property("http://ex/r")),
+            from: b.named_individual("http://ex/a").into(),
+            to: b.named_individual("http://ex/b").into(),
+        });
+        o.insert(DataPropertyAssertion {
+            dp: b.data_property("http://ex/p"),
+            from: b.named_individual("http://ex/a").into(),
+            to: Literal::Datatype {
+                literal: "5".to_string(),
+                datatype_iri: b.iri("http://www.w3.org/2001/XMLSchema#integer"),
+            },
+        });
+        // negative facts exercise the `Facts: not …` negation-detection path
+        o.insert(NegativeObjectPropertyAssertion {
+            ope: ObjectPropertyExpression::ObjectProperty(b.object_property("http://ex/r")),
+            from: b.named_individual("http://ex/a").into(),
+            to: named("http://ex/b"),
+        });
+        o.insert(NegativeDataPropertyAssertion {
+            dp: b.data_property("http://ex/p"),
+            from: b.named_individual("http://ex/a").into(),
+            to: Literal::Datatype {
+                literal: "6".to_string(),
+                datatype_iri: b.iri("http://www.w3.org/2001/XMLSchema#integer"),
+            },
+        });
+        o.insert(SameIndividual(vec![
+            named("http://ex/a"),
+            named("http://ex/c"),
+        ]));
+        o.insert(DifferentIndividuals(vec![
+            named("http://ex/a"),
+            named("http://ex/d"),
+        ]));
+
+        let amo: TestOnt = o.clone().into();
+        let mut buf = Vec::<u8>::new();
+        write(&mut buf, &amo, Some(&pm)).unwrap();
+        let (parsed, _): (SetOntology<_>, PrefixMapping) =
+            crate::io::omn::reader::read_with_build(BufReader::new(&buf[..]), &b).unwrap();
+
+        let orig: std::collections::BTreeSet<_> = o.iter().map(|ac| ac.component.clone()).collect();
+        let got: std::collections::BTreeSet<_> =
+            parsed.iter().map(|ac| ac.component.clone()).collect();
+        assert_eq!(orig, got, "individual frame did not round-trip");
     }
 
     #[test]
