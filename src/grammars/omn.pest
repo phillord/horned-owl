@@ -1,0 +1,96 @@
+// OWL Manchester Syntax — class-expression sub-grammar
+// Terminals from bcp47.pest (BCP47_LanguageTag), rfc3987.pest (RFC3987_Iri),
+// and sparql.pest (SPARQL_PnameLn / SPARQL_PnameNs).
+
+WHITESPACE = _{ " " | "\t" | "\n" | "\r" }
+COMMENT    = _{ "#" ~ (!"\n" ~ !"\r" ~ ANY)* }
+
+// ---- terminal building-blocks -----------------------------------------------
+
+QuotedString   = ${ "\"" ~ (!"\"" ~ ("\\\\" | "\\\"" | ANY))* ~ "\"" }
+LanguageTag    = ${ "@" ~ BCP47_LanguageTag }
+FullIRI        = ${ "<" ~ RFC3987_Iri ~ ">" }
+AbbreviatedIRI =  { SPARQL_PnameLn }
+IRI            =  { FullIRI | AbbreviatedIRI }
+
+Literal                   =  { TypedLiteral | StringLiteralWithLanguage | StringLiteralNoLanguage }
+TypedLiteral              =  { QuotedString ~ "^^" ~ DatatypeIRI }
+StringLiteralWithLanguage =  { QuotedString ~ LanguageTag }
+StringLiteralNoLanguage   =  { QuotedString }
+
+// ---- entry point ------------------------------------------------------------
+
+ClassExpressionDocument = _{ SOI ~ Description ~ EOI }
+
+// ---- class-expression precedence --------------------------------------------
+// lowest precedence: "or"
+
+Description = { Conjunction ~ ( ^"or" ~ Conjunction )* }
+
+// next: "and"
+
+Conjunction = { Primary ~ ( ^"and" ~ Primary )* }
+
+// highest: "not" prefix + restriction/atomic
+
+Primary = { (^"not")? ~ ( Restriction | Atomic ) }
+
+// ---- atomic -----------------------------------------------------------------
+
+Atomic = { ObjectOneOf | "(" ~ Description ~ ")" | ClassIRI }
+
+ObjectOneOf = { "{" ~ Individual ~ ( "," ~ Individual )* ~ "}" }
+
+// ---- restrictions -----------------------------------------------------------
+// Object-property arms first; data-property arms after.
+// Within each group: some/only/value/Self before min/max/exactly.
+
+Restriction = {
+      ope ~ ^"some"    ~ Primary
+    | ope ~ ^"only"    ~ Primary
+    | ope ~ ^"value"   ~ Individual
+    | ope ~ ^"Self"
+    | ope ~ ^"min"     ~ Cardinality ~ Primary?
+    | ope ~ ^"max"     ~ Cardinality ~ Primary?
+    | ope ~ ^"exactly" ~ Cardinality ~ Primary?
+    | DataPropertyIRI ~ ^"some"    ~ DataRange
+    | DataPropertyIRI ~ ^"only"    ~ DataRange
+    | DataPropertyIRI ~ ^"value"   ~ Literal
+    | DataPropertyIRI ~ ^"min"     ~ Cardinality ~ DataRange?
+    | DataPropertyIRI ~ ^"max"     ~ Cardinality ~ DataRange?
+    | DataPropertyIRI ~ ^"exactly" ~ Cardinality ~ DataRange?
+}
+
+// object-property expression: plain IRI or inverse(IRI)
+
+ope = { ( ^"inverse" ~ "(" ~ ObjectPropertyIRI ~ ")" ) | ObjectPropertyIRI }
+
+// atomic cardinality integer (no embedded whitespace)
+
+Cardinality = @{ ASCII_DIGIT+ }
+
+// ---- IRI wrappers -----------------------------------------------------------
+
+ClassIRI          = { IRI }
+ObjectPropertyIRI = { IRI }
+DataPropertyIRI   = { IRI }
+Individual        = { IRI }
+
+// ---- data ranges ------------------------------------------------------------
+
+DataRange  = { DatatypeIRI ~ ( "[" ~ Facet ~ ( "," ~ Facet )* ~ "]" )? }
+DatatypeIRI = { IRI }
+Facet       = { FacetSymbol ~ Literal }
+FacetSymbol = {
+      ">="
+    | "<="
+    | ">"
+    | "<"
+    | ^"length"
+    | ^"minLength"
+    | ^"maxLength"
+    | ^"pattern"
+    | ^"langRange"
+    | ^"totalDigits"
+    | ^"fractionDigits"
+}
