@@ -2334,4 +2334,132 @@ mod tests {
             String::from_utf8_lossy(&buf)
         );
     }
+
+    #[test]
+    fn skips_general_axioms_block_without_error() {
+        use crate::io::omn::reader::read_with_build;
+        use crate::ontology::set::SetOntology;
+        use std::io::BufReader;
+        let b = Build::new_rc();
+        // a document with a frame + a trailing non-Manchester block
+        let doc = "Prefix: ex: <http://ex/>\n\nClass: ex:A\n\n# General axioms\nSubClassOf(ObjectIntersectionOf(<http://ex/A> <http://ex/B>) <http://ex/C>)\n";
+        let (parsed, _): (SetOntology<_>, PrefixMapping) =
+            read_with_build(BufReader::new(doc.as_bytes()), &b).unwrap();
+        // the frame parsed; the misc block was skipped (not errored)
+        assert!(
+            parsed
+                .iter()
+                .any(|ac| matches!(&ac.component, Component::DeclareClass(_)))
+        );
+    }
+
+    #[test]
+    fn whole_ontology_with_extras_round_trips() {
+        use crate::io::omn::{read_with_build, write};
+        use crate::model::RcAnnotatedComponent;
+        use crate::ontology::component_mapped::ComponentMappedOntology;
+        use crate::ontology::set::SetOntology;
+        use std::collections::BTreeSet;
+        use std::io::BufReader;
+        use std::rc::Rc;
+
+        type TestOnt = ComponentMappedOntology<Rc<str>, RcAnnotatedComponent>;
+
+        let b = Build::new_rc();
+        let mut pm = PrefixMapping::default();
+        pm.add_prefix("ex", "http://ex/").unwrap();
+        pm.add_prefix("rdfs", "http://www.w3.org/2000/01/rdf-schema#")
+            .unwrap();
+
+        let ce = |i: &str| ClassExpression::Class(b.class(i));
+        let ope = |i: &str| ObjectPropertyExpression::ObjectProperty(b.object_property(i));
+
+        let mut o = SetOntology::new_rc();
+
+        // ontology header
+        let mut oid = OntologyID::default();
+        oid.iri = Some(b.iri("http://ex/onto"));
+        o.insert(oid);
+
+        // Import
+        o.insert(Import(b.iri("http://ex/imported")));
+
+        // OntologyAnnotation
+        o.insert(OntologyAnnotation(Annotation {
+            ap: b.annotation_property("http://www.w3.org/2000/01/rdf-schema#comment"),
+            av: AnnotationValue::Literal(Literal::Simple {
+                literal: "capstone ontology".to_string(),
+            }),
+        }));
+
+        // declarations
+        for c in ["A", "B", "C"] {
+            o.insert(DeclareClass(b.class(format!("http://ex/{c}"))));
+        }
+        o.insert(DeclareObjectProperty(b.object_property("http://ex/r")));
+        o.insert(DeclareObjectProperty(b.object_property("http://ex/p")));
+        o.insert(DeclareObjectProperty(b.object_property("http://ex/q")));
+        o.insert(DeclareObjectProperty(b.object_property("http://ex/k1")));
+
+        // entity AnnotationAssertion on a declared class
+        o.insert(AnnotationAssertion {
+            subject: AnnotationSubject::IRI(b.iri("http://ex/A")),
+            ann: Annotation {
+                ap: b.annotation_property("http://www.w3.org/2000/01/rdf-schema#label"),
+                av: AnnotationValue::Literal(Literal::Simple {
+                    literal: "Class A".to_string(),
+                }),
+            },
+        });
+
+        // property chain: p o q -> r
+        o.insert(SubObjectPropertyOf {
+            sub: SubObjectPropertyExpression::ObjectPropertyChain(vec![
+                ope("http://ex/p"),
+                ope("http://ex/q"),
+            ]),
+            sup: ope("http://ex/r"),
+        });
+
+        // HasKey (object-only keys — data keys are a known conflation)
+        o.insert(HasKey {
+            ce: ce("http://ex/A"),
+            vpe: vec![PropertyExpression::ObjectPropertyExpression(
+                ObjectPropertyExpression::ObjectProperty(b.object_property("http://ex/k1")),
+            )],
+        });
+
+        // AnnotatedComponent: SubClassOf with annotation
+        let mut ann = BTreeSet::new();
+        ann.insert(Annotation {
+            ap: b.annotation_property("http://ex/prov"),
+            av: AnnotationValue::Literal(Literal::Simple {
+                literal: "inferred".to_string(),
+            }),
+        });
+        o.insert(AnnotatedComponent {
+            component: Component::SubClassOf(SubClassOf {
+                sub: ce("http://ex/B"),
+                sup: ce("http://ex/C"),
+            }),
+            ann,
+        });
+
+        let amo: TestOnt = o.clone().into();
+        let mut buf = Vec::<u8>::new();
+        write(&mut buf, &amo, Some(&pm)).unwrap();
+
+        let (parsed, _): (SetOntology<_>, PrefixMapping) =
+            read_with_build(BufReader::new(&buf[..]), &b).unwrap();
+
+        // compare full AnnotatedComponents (component + ann)
+        let orig: BTreeSet<_> = o.iter().cloned().collect();
+        let got: BTreeSet<_> = parsed.iter().cloned().collect();
+        assert_eq!(
+            orig,
+            got,
+            "whole_ontology_with_extras did not round-trip\n--- document ---\n{}",
+            String::from_utf8_lossy(&buf)
+        );
+    }
 }
