@@ -241,8 +241,21 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
                             misc.push(ac.component.as_manchester_with_prefixes(pm).to_string());
                         }
                     }
-                    SubObjectPropertyExpression::ObjectPropertyChain(_) => {
-                        misc.push(ac.component.as_manchester_with_prefixes(pm).to_string());
+                    SubObjectPropertyExpression::ObjectPropertyChain(chain) => {
+                        if let Some(iri) = ope_iri(&ax.sup) {
+                            let rendered = chain
+                                .iter()
+                                .map(|o| o.as_manchester_with_prefixes(pm).to_string())
+                                .collect::<Vec<_>>()
+                                .join(" o ");
+                            push_clause!(
+                                FrameKind::ObjectProperty,
+                                iri,
+                                format!("SubPropertyChain: {rendered}")
+                            );
+                        } else {
+                            misc.push(ac.component.as_manchester_with_prefixes(pm).to_string());
+                        }
                     }
                 },
                 Component::EquivalentObjectProperties(ax) => {
@@ -539,8 +552,36 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
                     push_clause!(FrameKind::AnnotationProperty, ax.ap.0.as_ref(), clause);
                 }
 
+                // ---- HasKey ----
+                Component::HasKey(ax) => {
+                    if let crate::model::ClassExpression::Class(c) = &ax.ce {
+                        let parts: Vec<String> = ax
+                            .vpe
+                            .iter()
+                            .map(|pe| match pe {
+                                crate::model::PropertyExpression::ObjectPropertyExpression(ope) => {
+                                    ope.as_manchester_with_prefixes(pm).to_string()
+                                }
+                                crate::model::PropertyExpression::DataProperty(dp) => {
+                                    dp.as_manchester_with_prefixes(pm).to_string()
+                                }
+                                crate::model::PropertyExpression::AnnotationProperty(ap) => {
+                                    ap.as_manchester_with_prefixes(pm).to_string()
+                                }
+                            })
+                            .collect();
+                        push_clause!(
+                            FrameKind::Class,
+                            c.0.as_ref(),
+                            format!("HasKey: {}", parts.join(", "))
+                        );
+                    } else {
+                        misc.push(ac.component.as_manchester_with_prefixes(pm).to_string());
+                    }
+                }
+
                 // ---- Misc / fallback ----
-                // OntologyAnnotation, Import, HasKey, DatatypeDefinition,
+                // OntologyAnnotation, DatatypeDefinition,
                 // SWRL rules, annotations on axioms, etc.
                 _ => {
                     misc.push(ac.component.as_manchester_with_prefixes(pm).to_string());

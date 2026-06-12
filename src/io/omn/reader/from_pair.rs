@@ -641,13 +641,13 @@ fn insert_class_frame<A: ForIRI, O: MutableOntology<A>>(
     ont.insert(DeclareClass(Class(subject.clone())));
 
     for clause in clauses {
-        // each clause: keyword token (silent) + a DescriptionList child
         let kw = clause_keyword(&clause);
-        let list = clause.into_inner().next().unwrap(); // DescriptionList
-        let items = parse_description_list(list, ctx)?;
+        // Defer body-parsing into each arm (body may be DescriptionList OR
+        // PropertyExprList depending on the clause keyword).
+        let body = clause.into_inner().next().unwrap();
         match kw.as_str() {
             "subclassof" => {
-                for sup in items {
+                for sup in parse_description_list(body, ctx)? {
                     ont.insert(SubClassOf {
                         sub: subject_ce.clone(),
                         sup,
@@ -656,16 +656,34 @@ fn insert_class_frame<A: ForIRI, O: MutableOntology<A>>(
             }
             "equivalentto" => {
                 let mut all = vec![subject_ce.clone()];
-                all.extend(items);
+                all.extend(parse_description_list(body, ctx)?);
                 ont.insert(EquivalentClasses(all));
             }
             "disjointwith" => {
                 let mut all = vec![subject_ce.clone()];
-                all.extend(items);
+                all.extend(parse_description_list(body, ctx)?);
                 ont.insert(DisjointClasses(all));
             }
             "disjointunionof" => {
+                let items = parse_description_list(body, ctx)?;
                 ont.insert(DisjointUnion(Class(subject.clone()), items));
+            }
+            "haskey" => {
+                // body is a PropertyExprList of `ope`. Manchester HasKey: does NOT
+                // lexically distinguish object vs data properties — they are all bare
+                // property IRIs. The reader therefore reconstructs every key as an
+                // ObjectPropertyExpression. See Task 7 for the limitation note.
+                let mut vpe = Vec::new();
+                for p in body.into_inner() {
+                    if p.as_rule() == Rule::ope {
+                        let ope = ObjectPropertyExpression::from_pair(p, ctx)?;
+                        vpe.push(PropertyExpression::ObjectPropertyExpression(ope));
+                    }
+                }
+                ont.insert(HasKey {
+                    ce: ClassExpression::Class(Class(subject.clone())),
+                    vpe,
+                });
             }
             other => unreachable!("unexpected class clause keyword: {other}"),
         }
@@ -708,6 +726,20 @@ fn insert_object_property_frame<A: ForIRI, O: MutableOntology<A>>(
         let kw = clause_keyword(&clause);
         let body = clause.into_inner().next().unwrap();
         match kw.as_str() {
+            "subpropertychain" => {
+                // body is a PropertyChain: `ope (OKw ope)+`. Filter OUT the emitted
+                // `OKw` keyword pairs (compound-atomic, emit a pair); keep only the
+                // `ope` operands.
+                let chain: Vec<ObjectPropertyExpression<A>> = body
+                    .into_inner()
+                    .filter(|p| p.as_rule() == Rule::ope)
+                    .map(|p| ObjectPropertyExpression::from_pair(p, ctx))
+                    .collect::<Result<_>>()?;
+                ont.insert(SubObjectPropertyOf {
+                    sub: SubObjectPropertyExpression::ObjectPropertyChain(chain),
+                    sup: subject_ope.clone(),
+                });
+            }
             "subpropertyof" => {
                 for sup in parse_ope_list(body, ctx)? {
                     ont.insert(SubObjectPropertyOf {
@@ -1689,6 +1721,91 @@ mod tests {
             }
             other => panic!("expected ObjectSomeValuesFrom, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn reads_property_chain_round_trip() {
+        use crate::io::omn::{read_with_build, write};
+        use crate::ontology::component_mapped::ComponentMappedOntology;
+        use crate::ontology::set::SetOntology;
+        use std::io::BufReader;
+        let b = Build::new_rc();
+        let mut pm = PrefixMapping::default();
+        pm.add_prefix("ex", "http://ex/").unwrap();
+        let ope = |i: &str| ObjectPropertyExpression::ObjectProperty(b.object_property(i));
+        let mut o = SetOntology::new_rc();
+        for p in ["r", "p", "q"] {
+            o.insert(DeclareObjectProperty(
+                b.object_property(format!("http://ex/{p}")),
+            ));
+        }
+        o.insert(SubObjectPropertyOf {
+            sub: SubObjectPropertyExpression::ObjectPropertyChain(vec![
+                ope("http://ex/p"),
+                ope("http://ex/q"),
+            ]),
+            sup: ope("http://ex/r"),
+        });
+        type TestOnt = ComponentMappedOntology<
+            std::rc::Rc<str>,
+            std::rc::Rc<AnnotatedComponent<std::rc::Rc<str>>>,
+        >;
+        let amo: TestOnt = o.clone().into();
+        let mut buf = Vec::<u8>::new();
+        write(&mut buf, &amo, Some(&pm)).unwrap();
+        let (parsed, _): (SetOntology<_>, PrefixMapping) =
+            read_with_build(BufReader::new(&buf[..]), &b).unwrap();
+        let orig: std::collections::BTreeSet<_> = o.iter().map(|ac| ac.component.clone()).collect();
+        let got: std::collections::BTreeSet<_> =
+            parsed.iter().map(|ac| ac.component.clone()).collect();
+        assert_eq!(
+            orig,
+            got,
+            "chain did not round-trip\n{}",
+            String::from_utf8_lossy(&buf)
+        );
+    }
+
+    #[test]
+    fn reads_haskey_round_trip() {
+        use crate::io::omn::{read_with_build, write};
+        use crate::ontology::component_mapped::ComponentMappedOntology;
+        use crate::ontology::set::SetOntology;
+        use std::io::BufReader;
+        let b = Build::new_rc();
+        let mut pm = PrefixMapping::default();
+        pm.add_prefix("ex", "http://ex/").unwrap();
+        let mut o = SetOntology::new_rc();
+        o.insert(DeclareClass(b.class("http://ex/C")));
+        o.insert(DeclareObjectProperty(b.object_property("http://ex/k1")));
+        // NOTE: object-only keys — Manchester HasKey: does not lexically distinguish
+        // object vs data properties; the reader reconstructs all keys as
+        // ObjectPropertyExpression. Using a data-property key here would fail on
+        // round-trip (parsed back as object). See Task 7 for the limitation doc.
+        o.insert(HasKey {
+            ce: ClassExpression::Class(b.class("http://ex/C")),
+            vpe: vec![PropertyExpression::ObjectPropertyExpression(
+                ObjectPropertyExpression::ObjectProperty(b.object_property("http://ex/k1")),
+            )],
+        });
+        type TestOnt = ComponentMappedOntology<
+            std::rc::Rc<str>,
+            std::rc::Rc<AnnotatedComponent<std::rc::Rc<str>>>,
+        >;
+        let amo: TestOnt = o.clone().into();
+        let mut buf = Vec::<u8>::new();
+        write(&mut buf, &amo, Some(&pm)).unwrap();
+        let (parsed, _): (SetOntology<_>, PrefixMapping) =
+            read_with_build(BufReader::new(&buf[..]), &b).unwrap();
+        let orig: std::collections::BTreeSet<_> = o.iter().map(|ac| ac.component.clone()).collect();
+        let got: std::collections::BTreeSet<_> =
+            parsed.iter().map(|ac| ac.component.clone()).collect();
+        assert_eq!(
+            orig,
+            got,
+            "haskey did not round-trip\n{}",
+            String::from_utf8_lossy(&buf)
+        );
     }
 
     #[test]
