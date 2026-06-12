@@ -663,14 +663,121 @@ fn insert_class_frame<A: ForIRI, O: MutableOntology<A>>(
     Ok(())
 }
 
+fn parse_ope_list<A: ForIRI>(
+    list: Pair<Rule>,
+    ctx: &Context<'_, A>,
+) -> Result<Vec<ObjectPropertyExpression<A>>> {
+    list.into_inner()
+        .map(|p| ObjectPropertyExpression::from_pair(p, ctx))
+        .collect()
+}
+
+fn parse_iri_list<A: ForIRI>(list: Pair<Rule>, ctx: &Context<'_, A>) -> Result<Vec<IRI<A>>> {
+    list.into_inner().map(|p| IRI::from_pair(p, ctx)).collect()
+}
+
+fn parse_data_range_list<A: ForIRI>(
+    list: Pair<Rule>,
+    ctx: &Context<'_, A>,
+) -> Result<Vec<DataRange<A>>> {
+    list.into_inner()
+        .map(|p| DataRange::from_pair(p, ctx))
+        .collect()
+}
+
 fn insert_object_property_frame<A: ForIRI, O: MutableOntology<A>>(
     frame: Pair<Rule>,
     ctx: &Context<'_, A>,
     ont: &mut O,
 ) -> Result<()> {
-    let (subject, _clauses) = frame_subject_and_clauses(frame, ctx)?;
-    ont.insert(DeclareObjectProperty(ObjectProperty(subject)));
-    // clauses handled in Task 4
+    let (subject, clauses) = frame_subject_and_clauses(frame, ctx)?;
+    let subject_ope = ObjectPropertyExpression::ObjectProperty(ObjectProperty(subject.clone()));
+    ont.insert(DeclareObjectProperty(ObjectProperty(subject.clone())));
+
+    for clause in clauses {
+        let kw = clause_keyword(&clause);
+        let body = clause.into_inner().next().unwrap();
+        match kw.as_str() {
+            "subpropertyof" => {
+                for sup in parse_ope_list(body, ctx)? {
+                    ont.insert(SubObjectPropertyOf {
+                        sub: SubObjectPropertyExpression::ObjectPropertyExpression(
+                            subject_ope.clone(),
+                        ),
+                        sup,
+                    });
+                }
+            }
+            "equivalentto" => {
+                let mut all = vec![subject_ope.clone()];
+                all.extend(parse_ope_list(body, ctx)?);
+                ont.insert(EquivalentObjectProperties(all));
+            }
+            "disjointwith" => {
+                let mut all = vec![subject_ope.clone()];
+                all.extend(parse_ope_list(body, ctx)?);
+                ont.insert(DisjointObjectProperties(all));
+            }
+            "inverseof" => {
+                for inv in parse_ope_list(body, ctx)? {
+                    // InverseObjectProperties takes ObjectProperty, not OPE;
+                    // the writer only emits a plain property here.
+                    if let ObjectPropertyExpression::ObjectProperty(p) = inv {
+                        ont.insert(InverseObjectProperties(ObjectProperty(subject.clone()), p));
+                    } else {
+                        return Err(HornedError::invalid(
+                            "InverseOf: expected a named object property",
+                        ));
+                    }
+                }
+            }
+            "domain" => {
+                for ce in parse_description_list(body, ctx)? {
+                    ont.insert(ObjectPropertyDomain {
+                        ope: subject_ope.clone(),
+                        ce,
+                    });
+                }
+            }
+            "range" => {
+                for ce in parse_description_list(body, ctx)? {
+                    ont.insert(ObjectPropertyRange {
+                        ope: subject_ope.clone(),
+                        ce,
+                    });
+                }
+            }
+            "characteristics" => {
+                for ch in body.into_inner() {
+                    insert_object_characteristic(ch.as_str(), &subject_ope, ont)?;
+                }
+            }
+            other => unreachable!("unexpected object-property clause keyword: {other}"),
+        }
+    }
+    Ok(())
+}
+
+fn insert_object_characteristic<A: ForIRI, O: MutableOntology<A>>(
+    kw: &str,
+    ope: &ObjectPropertyExpression<A>,
+    ont: &mut O,
+) -> Result<()> {
+    let ope = ope.clone();
+    match kw.to_ascii_lowercase().as_str() {
+        "functional" => ont.insert(FunctionalObjectProperty(ope)),
+        "inversefunctional" => ont.insert(InverseFunctionalObjectProperty(ope)),
+        "reflexive" => ont.insert(ReflexiveObjectProperty(ope)),
+        "irreflexive" => ont.insert(IrreflexiveObjectProperty(ope)),
+        "symmetric" => ont.insert(SymmetricObjectProperty(ope)),
+        "asymmetric" => ont.insert(AsymmetricObjectProperty(ope)),
+        "transitive" => ont.insert(TransitiveObjectProperty(ope)),
+        other => {
+            return Err(HornedError::invalid(format!(
+                "unknown object characteristic: {other}"
+            )));
+        }
+    };
     Ok(())
 }
 
@@ -679,9 +786,62 @@ fn insert_data_property_frame<A: ForIRI, O: MutableOntology<A>>(
     ctx: &Context<'_, A>,
     ont: &mut O,
 ) -> Result<()> {
-    let (subject, _clauses) = frame_subject_and_clauses(frame, ctx)?;
-    ont.insert(DeclareDataProperty(DataProperty(subject)));
-    // clauses handled in Task 4
+    let (subject, clauses) = frame_subject_and_clauses(frame, ctx)?;
+    ont.insert(DeclareDataProperty(DataProperty(subject.clone())));
+
+    for clause in clauses {
+        let kw = clause_keyword(&clause);
+        let body = clause.into_inner().next().unwrap();
+        match kw.as_str() {
+            "subpropertyof" => {
+                for iri in parse_iri_list(body, ctx)? {
+                    ont.insert(SubDataPropertyOf {
+                        sub: DataProperty(subject.clone()),
+                        sup: DataProperty(iri),
+                    });
+                }
+            }
+            "equivalentto" => {
+                let mut all = vec![DataProperty(subject.clone())];
+                all.extend(parse_iri_list(body, ctx)?.into_iter().map(DataProperty));
+                ont.insert(EquivalentDataProperties(all));
+            }
+            "disjointwith" => {
+                let mut all = vec![DataProperty(subject.clone())];
+                all.extend(parse_iri_list(body, ctx)?.into_iter().map(DataProperty));
+                ont.insert(DisjointDataProperties(all));
+            }
+            "domain" => {
+                for ce in parse_description_list(body, ctx)? {
+                    ont.insert(DataPropertyDomain {
+                        dp: DataProperty(subject.clone()),
+                        ce,
+                    });
+                }
+            }
+            "range" => {
+                for dr in parse_data_range_list(body, ctx)? {
+                    ont.insert(DataPropertyRange {
+                        dp: DataProperty(subject.clone()),
+                        dr,
+                    });
+                }
+            }
+            "characteristics" => {
+                for ch in body.into_inner() {
+                    // Only Functional is valid on a data property.
+                    if ch.as_str().eq_ignore_ascii_case("functional") {
+                        ont.insert(FunctionalDataProperty(DataProperty(subject.clone())));
+                    } else {
+                        return Err(HornedError::invalid(
+                            "data properties only support the Functional characteristic",
+                        ));
+                    }
+                }
+            }
+            other => unreachable!("unexpected data-property clause keyword: {other}"),
+        }
+    }
     Ok(())
 }
 
@@ -1103,6 +1263,131 @@ mod tests {
         let got: std::collections::BTreeSet<_> =
             parsed.iter().map(|ac| ac.component.clone()).collect();
         assert_eq!(orig, got, "class frame did not round-trip");
+    }
+
+    #[test]
+    fn reads_object_property_frame_round_trip() {
+        use crate::io::omn::write;
+        use crate::model::RcAnnotatedComponent;
+        use crate::ontology::component_mapped::ComponentMappedOntology;
+        use crate::ontology::set::SetOntology;
+        use std::io::BufReader;
+        use std::rc::Rc;
+
+        type TestOnt = ComponentMappedOntology<Rc<str>, RcAnnotatedComponent>;
+
+        let b = Build::new_rc();
+        let mut pm = PrefixMapping::default();
+        pm.add_prefix("ex", "http://ex/").unwrap();
+        let ope = |i: &str| ObjectPropertyExpression::ObjectProperty(b.object_property(i));
+
+        let mut o = SetOntology::new_rc();
+        o.insert(DeclareObjectProperty(b.object_property("http://ex/r")));
+        o.insert(DeclareObjectProperty(b.object_property("http://ex/s")));
+        o.insert(DeclareObjectProperty(b.object_property("http://ex/t")));
+        o.insert(DeclareClass(b.class("http://ex/A")));
+        o.insert(DeclareClass(b.class("http://ex/B")));
+        o.insert(SubObjectPropertyOf {
+            sub: SubObjectPropertyExpression::ObjectPropertyExpression(ope("http://ex/r")),
+            sup: ope("http://ex/s"),
+        });
+        o.insert(EquivalentObjectProperties(vec![
+            ope("http://ex/r"),
+            ope("http://ex/s"),
+        ]));
+        o.insert(DisjointObjectProperties(vec![
+            ope("http://ex/r"),
+            ope("http://ex/t"),
+        ]));
+        o.insert(ObjectPropertyDomain {
+            ope: ope("http://ex/r"),
+            ce: ClassExpression::Class(b.class("http://ex/A")),
+        });
+        o.insert(ObjectPropertyRange {
+            ope: ope("http://ex/r"),
+            ce: ClassExpression::Class(b.class("http://ex/B")),
+        });
+        // every characteristic arm (round-trip only — semantic consistency irrelevant)
+        o.insert(FunctionalObjectProperty(ope("http://ex/r")));
+        o.insert(InverseFunctionalObjectProperty(ope("http://ex/r")));
+        o.insert(ReflexiveObjectProperty(ope("http://ex/r")));
+        o.insert(IrreflexiveObjectProperty(ope("http://ex/r")));
+        o.insert(SymmetricObjectProperty(ope("http://ex/r")));
+        o.insert(AsymmetricObjectProperty(ope("http://ex/r")));
+        o.insert(TransitiveObjectProperty(ope("http://ex/r")));
+        o.insert(InverseObjectProperties(
+            b.object_property("http://ex/r"),
+            b.object_property("http://ex/t"),
+        ));
+
+        let amo: TestOnt = o.clone().into();
+        let mut buf = Vec::<u8>::new();
+        write(&mut buf, &amo, Some(&pm)).unwrap();
+        let (parsed, _): (SetOntology<_>, PrefixMapping) =
+            crate::io::omn::reader::read_with_build(BufReader::new(&buf[..]), &b).unwrap();
+
+        let orig: std::collections::BTreeSet<_> = o.iter().map(|ac| ac.component.clone()).collect();
+        let got: std::collections::BTreeSet<_> =
+            parsed.iter().map(|ac| ac.component.clone()).collect();
+        assert_eq!(orig, got, "object property frame did not round-trip");
+    }
+
+    #[test]
+    fn reads_data_property_frame_round_trip() {
+        use crate::io::omn::write;
+        use crate::model::RcAnnotatedComponent;
+        use crate::ontology::component_mapped::ComponentMappedOntology;
+        use crate::ontology::set::SetOntology;
+        use std::io::BufReader;
+        use std::rc::Rc;
+
+        type TestOnt = ComponentMappedOntology<Rc<str>, RcAnnotatedComponent>;
+
+        let b = Build::new_rc();
+        let mut pm = PrefixMapping::default();
+        pm.add_prefix("ex", "http://ex/").unwrap();
+        pm.add_prefix("xsd", "http://www.w3.org/2001/XMLSchema#")
+            .unwrap();
+
+        let dp = |i: &str| b.data_property(i);
+        let mut o = SetOntology::new_rc();
+        o.insert(DeclareDataProperty(dp("http://ex/p")));
+        o.insert(DeclareDataProperty(dp("http://ex/q")));
+        o.insert(DeclareDataProperty(dp("http://ex/u")));
+        o.insert(DeclareDataProperty(dp("http://ex/v")));
+        o.insert(DeclareClass(b.class("http://ex/A")));
+        o.insert(SubDataPropertyOf {
+            sub: dp("http://ex/p"),
+            sup: dp("http://ex/q"),
+        });
+        o.insert(EquivalentDataProperties(vec![
+            dp("http://ex/p"),
+            dp("http://ex/u"),
+        ]));
+        o.insert(DisjointDataProperties(vec![
+            dp("http://ex/p"),
+            dp("http://ex/v"),
+        ]));
+        o.insert(DataPropertyDomain {
+            dp: dp("http://ex/p"),
+            ce: ClassExpression::Class(b.class("http://ex/A")),
+        });
+        o.insert(DataPropertyRange {
+            dp: dp("http://ex/p"),
+            dr: DataRange::Datatype(b.datatype("http://www.w3.org/2001/XMLSchema#integer")),
+        });
+        o.insert(FunctionalDataProperty(dp("http://ex/p")));
+
+        let amo: TestOnt = o.clone().into();
+        let mut buf = Vec::<u8>::new();
+        write(&mut buf, &amo, Some(&pm)).unwrap();
+        let (parsed, _): (SetOntology<_>, PrefixMapping) =
+            crate::io::omn::reader::read_with_build(BufReader::new(&buf[..]), &b).unwrap();
+
+        let orig: std::collections::BTreeSet<_> = o.iter().map(|ac| ac.component.clone()).collect();
+        let got: std::collections::BTreeSet<_> =
+            parsed.iter().map(|ac| ac.component.clone()).collect();
+        assert_eq!(orig, got, "data property frame did not round-trip");
     }
 
     #[test]
