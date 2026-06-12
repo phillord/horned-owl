@@ -192,8 +192,9 @@ impl<A: ForIRI> FromPair<A> for ObjectPropertyExpression<A> {
         let s = pair.as_str().trim_start();
         // "inverse" arm: starts with the keyword followed by '(' (after optional whitespace).
         // Guard against a CURIE whose prefix is "inverse:" (rare but possible).
-        let is_inverse = s.len() >= 7
-            && s[..7].eq_ignore_ascii_case("inverse")
+        let is_inverse = s
+            .get(..7)
+            .is_some_and(|h| h.eq_ignore_ascii_case("inverse"))
             && s[7..].trim_start().starts_with('(');
         let op_pair = pair.into_inner().next().unwrap();
         let op = ObjectProperty::from_pair(op_pair, ctx)?;
@@ -799,13 +800,18 @@ mod tests {
             }
         );
         assert_eq!(p("<http://t/r> Self"), ClassExpression::ObjectHasSelf(r));
-        // data restriction with a facet — P2 known limitation: object/data ambiguity.
-        // The `ClassExpressionDocument` top rule is `SOI ~ Description ~ EOI`.
-        // Pest's `Description` layer successfully parses `<dp> some xsd:integer` via the
-        // object-property arm (treating `xsd:integer` as a ClassIRI), commits, and then
-        // fails at `EOI` because `[...]` is left unconsumed. There is no backtracking past
-        // the committed `Description` level, so `DataSomeValuesFrom` is unreachable here.
-        // This is a P2/disambiguation limitation, not a bug in the keyword extraction.
+        // data restriction — P2 known limitation: object/data ambiguity.
+        // ALL restrictions currently parse as OBJECT restrictions:
+        //   - BARE data range (`<dp> some xsd:integer`): silently mis-parsed as
+        //     `ObjectSomeValuesFrom { bce: Class(xsd:integer) }` — the datatype IRI is
+        //     captured as a plain ClassIRI with no error. This is a SILENT mis-bind.
+        //   - FACETED data range (`<dp> some xsd:integer[>= "0"^^xsd:integer]`): the
+        //     object-property arm commits, consumes `<dp> some xsd:integer`, and then
+        //     fails at EOI because `[...]` is left unconsumed — visible error.
+        // Root cause: `DataPropertyIRI` in the `Restriction` grammar rule is identical to
+        // `ObjectPropertyIRI` (both are `{ IRI }`), so PEG commits to the first (object)
+        // arm and never backtracks to the data arms.  Data-property restrictions are
+        // deferred to P2.
         // The `DataRange` parser itself handles facets correctly (see `parses_ope_and_datarange`).
         // TODO(P2): disambiguate object vs data property at `Restriction` rule level.
         // -- test intentionally ignored until P2 is resolved --
@@ -816,5 +822,37 @@ mod tests {
         //     }
         //     other => panic!("expected DataSomeValuesFrom, got {other:?}"),
         // }
+    }
+
+    /// Regression test for the boundary-safe inverse detection fix.
+    ///
+    /// Before the fix, `ObjectPropertyExpression::from_pair_unchecked` used the raw
+    /// byte slice `s[..7]` to probe for the "inverse" keyword.  When the IRI contains
+    /// a multi-byte UTF-8 character whose byte sequence straddles index 7 (e.g. the
+    /// two-byte é in `<ab://éx>`), that indexing panics with a char-boundary error.
+    /// The fix replaces `s[..7]` with `s.get(..7)` which returns `None` on a
+    /// non-boundary index and therefore never panics.
+    #[test]
+    fn parses_unicode_iri_property_no_panic() {
+        use crate::model::*;
+        let b = Build::new_rc();
+        let pm = curie::PrefixMapping::default();
+        let p =
+            |s: &str| crate::io::omn::reader::parse_class_expression::<RcStr>(s, &pm, &b).unwrap();
+        // `é` (U+00E9) is encoded as two bytes (0xC3 0xA9) in UTF-8.  The IRI
+        // `<ab://éx>` is 12 UTF-8 bytes inside the angle brackets; byte index 7
+        // (`<ab://` = 6 bytes for the bracket+scheme, then `é` starts at 6) falls
+        // inside the multi-byte sequence — the old `s[..7]` would panic here.
+        let result = p("<ab://\u{00e9}x> some <http://t/A>");
+        match result {
+            ClassExpression::ObjectSomeValuesFrom { ope, bce } => {
+                assert_eq!(
+                    ope,
+                    ObjectPropertyExpression::ObjectProperty(b.object_property("ab://\u{00e9}x"))
+                );
+                assert_eq!(*bce, ClassExpression::Class(b.class("http://t/A")));
+            }
+            other => panic!("expected ObjectSomeValuesFrom, got {other:?}"),
+        }
     }
 }
