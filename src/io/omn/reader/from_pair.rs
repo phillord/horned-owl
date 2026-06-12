@@ -181,22 +181,22 @@ impl<A: ForIRI> FromPair<A> for Literal<A> {
 
 // ---------------------------------------------------------------------------
 
-/// `ope = { ( ^"inverse" ~ "(" ~ ObjectPropertyIRI ~ ")" ) | ObjectPropertyIRI }`
+/// `ope = { ( InverseKw ~ "(" ~ ObjectPropertyIRI ~ ")" ) | ObjectPropertyIRI }`
 ///
-/// The `inverse` keyword and the parentheses are bare literals — pest does NOT
-/// emit them as child pairs. So `into_inner()` always yields `[ObjectPropertyIRI]`
-/// regardless of which arm matched. We discriminate on the raw string instead.
+/// `InverseKw` is a compound-atomic keyword guard rule (emits a pair).
+/// When the inverse arm matches, `into_inner()` yields `[InverseKw, ObjectPropertyIRI]`.
+/// When the plain arm matches, `into_inner()` yields `[ObjectPropertyIRI]`.
+/// We check the rule of the first inner pair to detect the inverse case.
 impl<A: ForIRI> FromPair<A> for ObjectPropertyExpression<A> {
     const RULE: Rule = Rule::ope;
     fn from_pair_unchecked(pair: Pair<Rule>, ctx: &Context<'_, A>) -> Result<Self> {
-        let s = pair.as_str().trim_start();
-        // "inverse" arm: starts with the keyword followed by '(' (after optional whitespace).
-        // Guard against a CURIE whose prefix is "inverse:" (rare but possible).
-        let is_inverse = s
-            .get(..7)
-            .is_some_and(|h| h.eq_ignore_ascii_case("inverse"))
-            && s[7..].trim_start().starts_with('(');
-        let op_pair = pair.into_inner().next().unwrap();
+        let mut inner = pair.into_inner();
+        let first = inner.next().unwrap();
+        let (is_inverse, op_pair) = if first.as_rule() == Rule::InverseKw {
+            (true, inner.next().unwrap())
+        } else {
+            (false, first)
+        };
         let op = ObjectProperty::from_pair(op_pair, ctx)?;
         if is_inverse {
             Ok(ObjectPropertyExpression::InverseObjectProperty(op))
@@ -294,11 +294,14 @@ impl<A: ForIRI> FromPair<A> for ClassExpression<A> {
 
     fn from_pair_unchecked(pair: Pair<Rule>, ctx: &Context<'_, A>) -> Result<Self> {
         match pair.as_rule() {
-            // Description = { Conjunction ~ (^"or" ~ Conjunction)* }
-            // Collect all Conjunction children; 1 → unwrap, ≥2 → ObjectUnionOf.
+            // Description = { Conjunction ~ (OrKw ~ Conjunction)* }
+            // `OrKw` is a compound-atomic keyword guard rule (emits a pair);
+            // we filter to only `Conjunction` children.
+            // 1 Conjunction → unwrap, ≥2 → ObjectUnionOf.
             Rule::Description => {
                 let mut ces: Vec<ClassExpression<A>> = pair
                     .into_inner()
+                    .filter(|p| p.as_rule() == Rule::Conjunction)
                     .map(|p| Self::from_pair_unchecked(p, ctx))
                     .collect::<Result<_>>()?;
                 if ces.len() == 1 {
@@ -308,11 +311,14 @@ impl<A: ForIRI> FromPair<A> for ClassExpression<A> {
                 }
             }
 
-            // Conjunction = { Primary ~ (^"and" ~ Primary)* }
-            // Collect all Primary children; 1 → unwrap, ≥2 → ObjectIntersectionOf.
+            // Conjunction = { Primary ~ (AndKw ~ Primary)* }
+            // `AndKw` is a compound-atomic keyword guard rule (emits a pair);
+            // we filter to only `Primary` children.
+            // 1 Primary → unwrap, ≥2 → ObjectIntersectionOf.
             Rule::Conjunction => {
                 let mut ces: Vec<ClassExpression<A>> = pair
                     .into_inner()
+                    .filter(|p| p.as_rule() == Rule::Primary)
                     .map(|p| Self::from_pair_unchecked(p, ctx))
                     .collect::<Result<_>>()?;
                 if ces.len() == 1 {
@@ -322,24 +328,23 @@ impl<A: ForIRI> FromPair<A> for ClassExpression<A> {
                 }
             }
 
-            // Primary = { (^"not")? ~ (Restriction | Atomic) }
-            // Detect a leading `not`. Pest does not emit a child pair for the
-            // silent keyword literal `^"not"` inside `Primary`; only the
-            // Restriction/Atomic child is returned. The enclosing Conjunction has
-            // already consumed any whitespace before `Primary` begins, so
-            // `Primary.span.start()` is the first matched char: if `not` matched,
-            // the child (after "not" + ws) starts strictly later → a span gap;
-            // if absent, the child starts AT the Primary start. No false positive
-            // from outer whitespace (it's consumed before Primary's span).
+            // Primary = { NotKw? ~ (Restriction | Atomic) }
+            // `NotKw` is a compound-atomic keyword guard rule that emits a pair
+            // when `not` is present. Detect negation by checking whether the
+            // first inner pair is `Rule::NotKw`.
             Rule::Primary => {
-                let p_start = pair.as_span().start();
-                let child = pair.into_inner().next().unwrap();
-                let is_not = child.as_span().start() > p_start;
-                let inner = Self::from_pair_unchecked(child, ctx)?;
-                if is_not {
-                    Ok(ClassExpression::ObjectComplementOf(Box::new(inner)))
+                let mut inner = pair.into_inner();
+                let first = inner.next().unwrap();
+                let (is_not, child) = if first.as_rule() == Rule::NotKw {
+                    (true, inner.next().unwrap())
                 } else {
-                    Ok(inner)
+                    (false, first)
+                };
+                let ce = Self::from_pair_unchecked(child, ctx)?;
+                if is_not {
+                    Ok(ClassExpression::ObjectComplementOf(Box::new(ce)))
+                } else {
+                    Ok(ce)
                 }
             }
 
@@ -399,6 +404,11 @@ impl<A: ForIRI> FromPair<A> for ClassExpression<A> {
                     .take_while(|c| c.is_ascii_alphabetic())
                     .collect::<String>()
                     .to_ascii_lowercase();
+
+                // The compound-atomic keyword guard rules (`SomeKw`, `OnlyKw`, etc.)
+                // each emit one pair. Skip it — the keyword text was already extracted
+                // from the raw string above.
+                let _ = children.next(); // consume the keyword pair
 
                 if is_object {
                     let ope = ObjectPropertyExpression::from_pair(prop_pair, ctx)?;
@@ -936,24 +946,25 @@ fn insert_individual_frame<A: ForIRI, O: MutableOntology<A>>(
     Ok(())
 }
 
-/// `Fact = { ^"not"? ~ ope ~ ( Literal | Individual ) }`
+/// `Fact = { NotKw? ~ ope ~ ( Literal | Individual ) }`
 ///
 /// A trailing `Literal` => (negative) data-property assertion; a trailing
-/// `Individual` => (negative) object-property assertion. The leading `not`
-/// keyword is a bare literal (no child pair), so detect it from the span.
+/// `Individual` => (negative) object-property assertion. `NotKw` is a
+/// compound-atomic keyword guard rule that emits a pair when `not` is present;
+/// we detect negation by checking whether the first inner pair is `Rule::NotKw`.
 fn insert_fact<A: ForIRI, O: MutableOntology<A>>(
     fact: Pair<Rule>,
     ctx: &Context<'_, A>,
     from: &Individual<A>,
     ont: &mut O,
 ) -> Result<()> {
-    let negated = fact
-        .as_str()
-        .trim_start()
-        .get(..3)
-        .is_some_and(|h| h.eq_ignore_ascii_case("not"));
     let mut inner = fact.into_inner();
-    let ope_pair = inner.next().unwrap(); // ope
+    let first = inner.next().unwrap();
+    let (negated, ope_pair) = if first.as_rule() == Rule::NotKw {
+        (true, inner.next().unwrap())
+    } else {
+        (false, first)
+    };
     let ope = ObjectPropertyExpression::from_pair(ope_pair, ctx)?;
     let target = inner.next().unwrap();
     match target.as_rule() {

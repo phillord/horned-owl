@@ -78,4 +78,39 @@ mod tests {
         assert!(!lex_doc("Class:"));
         assert!(!lex_doc("Frobnicate: <http://ex/A>"));
     }
+
+    #[test]
+    fn keyword_curie_collisions_do_not_misparse() {
+        use crate::io::omn::reader::parse_class_expression;
+        use crate::model::Build;
+        let b = Build::new_rc();
+        let mut pm = curie::PrefixMapping::default();
+        pm.add_prefix("notation", "http://ex/notation#").unwrap();
+        pm.add_prefix("andro", "http://ex/andro#").unwrap();
+        pm.add_prefix("somers", "http://ex/somers#").unwrap();
+
+        // prefix `not` literally registered, so `not:Foo` is a valid CURIE.
+        pm.add_prefix("not", "http://ex/not#").unwrap();
+
+        // `notation:Foo` must parse as the atomic class, NOT `not` + `ation:Foo`
+        // (keyword-prefix-of-name collision, closed by the `!SPARQL_PnChars` guard).
+        let ce = parse_class_expression("notation:Foo", &pm, &b).unwrap();
+        assert!(
+            matches!(ce, crate::model::ClassExpression::Class(_)),
+            "notation:Foo must be an atomic class, got {ce:?}"
+        );
+        // `not:Foo` must parse as the atomic class, NOT `not` + `:Foo`
+        // (keyword-EQUALS-prefix collision, closed by also guarding `:`).
+        let ce = parse_class_expression("not:Foo", &pm, &b).unwrap();
+        assert!(
+            matches!(ce, crate::model::ClassExpression::Class(_)),
+            "not:Foo must be an atomic class, got {ce:?}"
+        );
+        // `andro:X and somers:Y` must be a 2-way intersection of two atomic classes.
+        let ce = parse_class_expression("andro:X and somers:Y", &pm, &b).unwrap();
+        match ce {
+            crate::model::ClassExpression::ObjectIntersectionOf(v) => assert_eq!(v.len(), 2),
+            other => panic!("expected intersection of 2, got {other:?}"),
+        }
+    }
 }
