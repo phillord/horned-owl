@@ -22,18 +22,39 @@ StringLiteralNoLanguage   =  { QuotedString }
 
 ClassExpressionDocument = _{ SOI ~ Description ~ EOI }
 
+// Compound-atomic keyword guards: in a ${ } rule, WHITESPACE is NOT implicitly
+// consumed between tokens, so the `!(SPARQL_PnChars|":")` lookahead fires at
+// the character IMMEDIATELY after the keyword text — before any whitespace.
+// This closes `notation:Foo` (letter follows `not`) and `not:Foo` (`:` follows).
+// Being compound-atomic, each rule emits ONE pair (the keyword span); the reader
+// is updated to skip these keyword pairs where needed.
+// Note: `_$` (silent compound-atomic) is NOT valid pest syntax; these are non-
+// silent but their spans equal exactly the keyword text (zero-width lookahead).
+NameBoundary   = _{ !( SPARQL_PnChars | ":" ) }   // used only inside ${ } helpers
+OrKw           = ${ ^"or"      ~ NameBoundary }
+AndKw          = ${ ^"and"     ~ NameBoundary }
+NotKw          = ${ ^"not"     ~ NameBoundary }
+SomeKw         = ${ ^"some"    ~ NameBoundary }
+OnlyKw         = ${ ^"only"    ~ NameBoundary }
+ValueKw        = ${ ^"value"   ~ NameBoundary }
+SelfKw         = ${ ^"Self"    ~ NameBoundary }
+MinKw          = ${ ^"min"     ~ NameBoundary }
+MaxKw          = ${ ^"max"     ~ NameBoundary }
+ExactlyKw      = ${ ^"exactly" ~ NameBoundary }
+InverseKw      = ${ ^"inverse" ~ NameBoundary }
+
 // ---- class-expression precedence --------------------------------------------
 // lowest precedence: "or"
 
-Description = { Conjunction ~ ( ^"or" ~ Conjunction )* }
+Description = { Conjunction ~ ( OrKw ~ Conjunction )* }
 
 // next: "and"
 
-Conjunction = { Primary ~ ( ^"and" ~ Primary )* }
+Conjunction = { Primary ~ ( AndKw ~ Primary )* }
 
 // highest: "not" prefix + restriction/atomic
 
-Primary = { (^"not")? ~ ( Restriction | Atomic ) }
+Primary = { NotKw? ~ ( Restriction | Atomic ) }
 
 // ---- atomic -----------------------------------------------------------------
 
@@ -46,30 +67,30 @@ ObjectOneOf = { "{" ~ Individual ~ ( "," ~ Individual )* ~ "}" }
 // Within each group: some/only/value/Self before min/max/exactly.
 
 Restriction = {
-      ope ~ ^"some"    ~ Primary
-    | ope ~ ^"only"    ~ Primary
-    | ope ~ ^"value"   ~ Individual
-    | ope ~ ^"Self"
-    | ope ~ ^"min"     ~ Cardinality ~ Primary?
-    | ope ~ ^"max"     ~ Cardinality ~ Primary?
-    | ope ~ ^"exactly" ~ Cardinality ~ Primary?
+      ope ~ SomeKw    ~ Primary
+    | ope ~ OnlyKw    ~ Primary
+    | ope ~ ValueKw   ~ Individual
+    | ope ~ SelfKw
+    | ope ~ MinKw     ~ Cardinality ~ Primary?
+    | ope ~ MaxKw     ~ Cardinality ~ Primary?
+    | ope ~ ExactlyKw ~ Cardinality ~ Primary?
     // NOTE (P2): the six arms below are currently DEAD PRODUCTIONS.
     // `DataPropertyIRI` is defined as `{ IRI }`, identical to `ObjectPropertyIRI`,
     // so PEG always commits to one of the object-property arms above and never
     // backtracks here.  A bare `dp some xsd:integer` is silently captured as an
     // object restriction; a faceted form errors at EOI.  Disambiguation is deferred
     // to a future phase that introduces a distinct lexical class for data properties.
-    | DataPropertyIRI ~ ^"some"    ~ DataRange
-    | DataPropertyIRI ~ ^"only"    ~ DataRange
-    | DataPropertyIRI ~ ^"value"   ~ Literal
-    | DataPropertyIRI ~ ^"min"     ~ Cardinality ~ DataRange?
-    | DataPropertyIRI ~ ^"max"     ~ Cardinality ~ DataRange?
-    | DataPropertyIRI ~ ^"exactly" ~ Cardinality ~ DataRange?
+    | DataPropertyIRI ~ SomeKw    ~ DataRange
+    | DataPropertyIRI ~ OnlyKw    ~ DataRange
+    | DataPropertyIRI ~ ValueKw   ~ Literal
+    | DataPropertyIRI ~ MinKw     ~ Cardinality ~ DataRange?
+    | DataPropertyIRI ~ MaxKw     ~ Cardinality ~ DataRange?
+    | DataPropertyIRI ~ ExactlyKw ~ Cardinality ~ DataRange?
 }
 
 // object-property expression: plain IRI or inverse(IRI)
 
-ope = { ( ^"inverse" ~ "(" ~ ObjectPropertyIRI ~ ")" ) | ObjectPropertyIRI }
+ope = { ( InverseKw ~ "(" ~ ObjectPropertyIRI ~ ")" ) | ObjectPropertyIRI }
 
 // atomic cardinality integer (no embedded whitespace)
 
@@ -87,18 +108,26 @@ Individual        = { IRI }
 DataRange  = { DatatypeIRI ~ ( "[" ~ Facet ~ ( "," ~ Facet )* ~ "]" )? }
 DatatypeIRI = { IRI }
 Facet       = { FacetSymbol ~ Literal }
+LengthKw         = ${ ^"length"         ~ NameBoundary }
+MinLengthKw      = ${ ^"minLength"      ~ NameBoundary }
+MaxLengthKw      = ${ ^"maxLength"      ~ NameBoundary }
+PatternKw        = ${ ^"pattern"        ~ NameBoundary }
+LangRangeKw      = ${ ^"langRange"      ~ NameBoundary }
+TotalDigitsKw    = ${ ^"totalDigits"    ~ NameBoundary }
+FractionDigitsKw = ${ ^"fractionDigits" ~ NameBoundary }
+
 FacetSymbol = {
       ">="
     | "<="
     | ">"
     | "<"
-    | ^"length"
-    | ^"minLength"
-    | ^"maxLength"
-    | ^"pattern"
-    | ^"langRange"
-    | ^"totalDigits"
-    | ^"fractionDigits"
+    | LengthKw
+    | MinLengthKw
+    | MaxLengthKw
+    | PatternKw
+    | LangRangeKw
+    | TotalDigitsKw
+    | FractionDigitsKw
 }
 
 // ---- whole-ontology document ------------------------------------------------
@@ -178,10 +207,23 @@ IriList          = { IRI ~ ( "," ~ IRI )* }
 DataRangeList    = { DataRange ~ ( "," ~ DataRange )* }
 IndividualList   = { Individual ~ ( "," ~ Individual )* }
 CharacteristicList = { Characteristic ~ ( "," ~ Characteristic )* }
+FunctionalKw        = ${ ^"Functional"        ~ NameBoundary }
+InverseFunctionalKw = ${ ^"InverseFunctional" ~ NameBoundary }
+ReflexiveKw         = ${ ^"Reflexive"         ~ NameBoundary }
+IrreflexiveKw       = ${ ^"Irreflexive"       ~ NameBoundary }
+SymmetricKw         = ${ ^"Symmetric"         ~ NameBoundary }
+AsymmetricKw        = ${ ^"Asymmetric"        ~ NameBoundary }
+TransitiveKw        = ${ ^"Transitive"        ~ NameBoundary }
+
 Characteristic = {
-      ^"Functional" | ^"InverseFunctional" | ^"Reflexive" | ^"Irreflexive"
-    | ^"Symmetric" | ^"Asymmetric" | ^"Transitive"
+      FunctionalKw
+    | InverseFunctionalKw
+    | ReflexiveKw
+    | IrreflexiveKw
+    | SymmetricKw
+    | AsymmetricKw
+    | TransitiveKw
 }
 
 FactList = { Fact ~ ( "," ~ Fact )* }
-Fact     = { ^"not"? ~ ope ~ ( Literal | Individual ) }
+Fact     = { NotKw? ~ ope ~ ( Literal | Individual ) }
