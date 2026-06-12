@@ -1511,6 +1511,21 @@ mod tests {
             dr: DataRange::Datatype(b.datatype("http://www.w3.org/2001/XMLSchema#integer")),
         });
         o.insert(FunctionalDataProperty(dp("http://ex/p")));
+        // Faceted range: xsd:integer[>= "0"^^xsd:integer] on a second property ex:w.
+        o.insert(DeclareDataProperty(dp("http://ex/w")));
+        o.insert(DataPropertyRange {
+            dp: dp("http://ex/w"),
+            dr: DataRange::DatatypeRestriction(
+                b.datatype("http://www.w3.org/2001/XMLSchema#integer"),
+                vec![FacetRestriction {
+                    f: Facet::MinInclusive,
+                    l: Literal::Datatype {
+                        literal: "0".to_string(),
+                        datatype_iri: b.iri("http://www.w3.org/2001/XMLSchema#integer"),
+                    },
+                }],
+            ),
+        });
 
         let amo: TestOnt = o.clone().into();
         let mut buf = Vec::<u8>::new();

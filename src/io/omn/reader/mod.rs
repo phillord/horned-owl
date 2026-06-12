@@ -33,8 +33,13 @@
 //!   lexes as `not` + `ation:foo`, and `andx:bar` as `and` + `x:bar`. Full
 //!   `<...>` IRIs are immune (they start with `<`). This reader round-trips the
 //!   **writer's own output** completely (the writer never emits such CURIEs),
-//!   but it is therefore NOT yet a general hand-written-Manchester parser. The
-//!   fix is maximal-munch boundary anchoring on every keyword token —
+//!   but it is therefore NOT yet a general hand-written-Manchester parser.
+//!   In a `Facts:` clause the collision is nastier: a property CURIE whose
+//!   prefix starts with `not` (e.g. `Facts: notes:r b`) is read as a negated
+//!   assertion (`not` + `es:r`), simultaneously flipping the assertion polarity
+//!   AND remapping the property to a different IRI — same root cause, same
+//!   must-fix-before-PR fix.
+//!   The fix is maximal-munch boundary anchoring on every keyword token —
 //!   `@{ ^"not" ~ !PnChar }` rather than a trailing-whitespace guard (which
 //!   would break `not(C and D)`) — applied across BOTH the P2 class-expression
 //!   rules and the P3 frame rules, with a per-keyword negative test and the
