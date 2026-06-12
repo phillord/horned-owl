@@ -691,6 +691,96 @@ mod tests {
     }
 
     #[test]
+    fn class_expression_round_trips() {
+        use crate::io::omn::AsManchester;
+        use crate::model::*;
+        let b = Build::new_rc();
+        let pm = curie::PrefixMapping::default();
+        let a = ClassExpression::Class(b.class("http://t/A"));
+        let c = ClassExpression::Class(b.class("http://t/C"));
+        let d = ClassExpression::Class(b.class("http://t/D"));
+        let r = ObjectPropertyExpression::ObjectProperty(b.object_property("http://t/r"));
+        let s = ObjectPropertyExpression::ObjectProperty(b.object_property("http://t/s"));
+        let x = Individual::Named(b.named_individual("http://t/x"));
+        let cases: Vec<ClassExpression<RcStr>> = vec![
+            a.clone(),
+            ClassExpression::ObjectIntersectionOf(vec![a.clone(), c.clone()]),
+            ClassExpression::ObjectUnionOf(vec![a.clone(), c.clone(), d.clone()]),
+            ClassExpression::ObjectComplementOf(Box::new(a.clone())),
+            // precedence-sensitive nestings (the heart of the gate)
+            ClassExpression::ObjectIntersectionOf(vec![
+                ClassExpression::ObjectUnionOf(vec![a.clone(), c.clone()]),
+                d.clone(),
+            ]), // (A or C) and D
+            ClassExpression::ObjectUnionOf(vec![
+                a.clone(),
+                ClassExpression::ObjectIntersectionOf(vec![c.clone(), d.clone()]),
+            ]), // A or C and D
+            ClassExpression::ObjectComplementOf(Box::new(ClassExpression::ObjectUnionOf(vec![
+                a.clone(),
+                c.clone(),
+            ]))), // not (A or C)
+            ClassExpression::ObjectSomeValuesFrom {
+                ope: r.clone(),
+                bce: Box::new(a.clone()),
+            },
+            ClassExpression::ObjectAllValuesFrom {
+                ope: r.clone(),
+                bce: Box::new(ClassExpression::ObjectUnionOf(vec![a.clone(), c.clone()])),
+            }, // r only (A or C)
+            ClassExpression::ObjectMinCardinality {
+                n: 2,
+                ope: r.clone(),
+                bce: Box::new(a.clone()),
+            },
+            ClassExpression::ObjectMaxCardinality {
+                n: 1,
+                ope: r.clone(),
+                bce: Box::new(c.clone()),
+            },
+            ClassExpression::ObjectExactCardinality {
+                n: 3,
+                ope: r.clone(),
+                bce: Box::new(d.clone()),
+            },
+            ClassExpression::ObjectHasValue {
+                ope: r.clone(),
+                i: x.clone(),
+            },
+            ClassExpression::ObjectHasSelf(r.clone()),
+            ClassExpression::ObjectOneOf(vec![x.clone()]),
+            // inverse property + nested restriction
+            ClassExpression::ObjectSomeValuesFrom {
+                ope: ObjectPropertyExpression::InverseObjectProperty(
+                    b.object_property("http://t/r"),
+                ),
+                bce: Box::new(a.clone()),
+            },
+            // deeper nesting
+            ClassExpression::ObjectIntersectionOf(vec![
+                ClassExpression::ObjectSomeValuesFrom {
+                    ope: r.clone(),
+                    bce: Box::new(a.clone()),
+                },
+                ClassExpression::ObjectAllValuesFrom {
+                    ope: s,
+                    bce: Box::new(c.clone()),
+                },
+            ]),
+        ];
+        for ce in &cases {
+            let rendered = ce.as_manchester().to_string();
+            let parsed =
+                crate::io::omn::reader::parse_class_expression::<RcStr>(&rendered, &pm, &b)
+                    .unwrap_or_else(|e| panic!("PARSE FAILED for {rendered:?}: {e}"));
+            assert_eq!(
+                &parsed, ce,
+                "ROUND-TRIP MISMATCH\n  rendered: {rendered}\n  expected: {ce:?}\n  got:      {parsed:?}"
+            );
+        }
+    }
+
+    #[test]
     fn parses_value_self_and_data_restriction() {
         use crate::model::*;
         let b = Build::new_rc();
