@@ -4,6 +4,8 @@ use std::io::Write;
 use curie::PrefixMapping;
 
 use crate::error::HornedError;
+use crate::model::Annotation;
+use crate::model::AnnotationSubject;
 use crate::model::Component;
 use crate::model::ComponentKind;
 use crate::model::ForIRI;
@@ -48,18 +50,19 @@ struct Frame {
 /// [Manchester Syntax](https://www.w3.org/TR/2012/REC-owl2-manchester-syntax-20121211/),
 /// using the given `PrefixMapping`.
 ///
-/// The output is a frame-grouped document: prefix declarations, an optional
-/// `Ontology:` header, then one frame per named entity grouping all axioms
-/// whose subject is that entity.  Axioms that do not have a clean named-entity
-/// subject (n-ary equivalences/disjunctions, property chains, etc.) are
+/// The output is a frame-grouped document: prefix declarations, a conformant
+/// `Ontology:` header (with nested `Import:` and `Annotations:` sub-lines when
+/// present), then one frame per named entity grouping all axioms whose subject
+/// is that entity.  Entity annotations (`AnnotationAssertion` with a named-IRI
+/// subject) are rendered as `Annotations:` clauses inside the entity's frame.
+/// Axioms that do not have a clean named-entity subject (n-ary
+/// equivalences/disjunctions over anonymous subjects, SWRL rules, etc.) are
 /// emitted as free-standing lines in a trailing `# General axioms` section.
 ///
-/// **Note on the `# General axioms` section:** components that lack a native
-/// Manchester rendering (e.g. `Import`, `HasKey`, `OntologyAnnotation`,
-/// annotation axioms, SWRL `Rule`) are serialised in **OWL functional syntax**
-/// as a stopgap.  Those lines are NOT valid Manchester syntax.  A fully
-/// Manchester-conformant document (with `Import:`, `Annotations:`, etc.)
-/// awaits native handling of those variants and is a pre-upstream-PR follow-up.
+/// **Note on the `# General axioms` section:** genuinely-inexpressible components
+/// (general anonymous-subject class axioms, SWRL `Rule`, anonymous-subject
+/// annotation values) are serialised in **OWL functional syntax** as a stopgap.
+/// Those lines are NOT valid Manchester syntax.
 pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
     mut write: W,
     ont: &ComponentMappedOntology<A, AA>,
@@ -76,33 +79,67 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
     }
 
     // -----------------------------------------------------------------------
-    // 1b. Import directives (Manchester: `Import: <iri>`)
-    // -----------------------------------------------------------------------
-    for ac in ont.i().component_for_kind(ComponentKind::Import) {
-        if let Component::Import(imp) = &ac.component {
-            writeln!(
-                write,
-                "Import: {}",
-                imp.0.as_manchester_with_prefixes(mapping)
-            )?;
-        }
-    }
-
-    // -----------------------------------------------------------------------
-    // 2. Ontology: header
+    // 2. Conformant Ontology: header (IRI + nested Import: + Annotations:)
+    //    W3C Manchester puts imports and ontology annotations INSIDE the
+    //    Ontology: frame, not at top level.
     // -----------------------------------------------------------------------
     {
-        let mut id_iter = ont.i().component_for_kind(ComponentKind::OntologyID);
-        if let Some(ac) = id_iter.next()
-            && let Component::OntologyID(oid) = &ac.component
-            && let Some(iri) = &oid.iri
-        {
+        let header_iri: Option<crate::model::IRI<A>> = {
+            let mut id_iter = ont.i().component_for_kind(ComponentKind::OntologyID);
+            if let Some(ac) = id_iter.next()
+                && let Component::OntologyID(oid) = &ac.component
+            {
+                oid.iri.clone()
+            } else {
+                None
+            }
+        };
+        let imports: Vec<crate::model::IRI<A>> = ont
+            .i()
+            .component_for_kind(ComponentKind::Import)
+            .filter_map(|ac| {
+                if let Component::Import(imp) = &ac.component {
+                    Some(imp.0.clone())
+                } else {
+                    None
+                }
+            })
+            .collect();
+        let ont_anns: Vec<Annotation<A>> = ont
+            .i()
+            .component_for_kind(ComponentKind::OntologyAnnotation)
+            .filter_map(|ac| {
+                if let Component::OntologyAnnotation(oa) = &ac.component {
+                    Some(oa.0.clone())
+                } else {
+                    None
+                }
+            })
+            .collect();
+        if header_iri.is_some() || !imports.is_empty() || !ont_anns.is_empty() {
             writeln!(write)?;
-            writeln!(
-                write,
-                "Ontology: {}",
-                iri.as_manchester_with_prefixes(mapping)
-            )?;
+            match &header_iri {
+                Some(iri) => writeln!(
+                    write,
+                    "Ontology: {}",
+                    iri.as_manchester_with_prefixes(mapping)
+                )?,
+                None => writeln!(write, "Ontology:")?,
+            }
+            for imp in &imports {
+                writeln!(
+                    write,
+                    "    Import: {}",
+                    imp.as_manchester_with_prefixes(mapping)
+                )?;
+            }
+            for ann in &ont_anns {
+                writeln!(
+                    write,
+                    "    Annotations: {}",
+                    as_manchester::annotation_to_manchester(ann, mapping)
+                )?;
+            }
         }
     }
 
@@ -152,6 +189,8 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
         if kind == ComponentKind::OntologyID
             || kind == ComponentKind::DocIRI
             || kind == ComponentKind::Import
+            || kind == ComponentKind::OntologyAnnotation
+            || kind == ComponentKind::AnnotationAssertion
         {
             continue;
         }
@@ -581,11 +620,51 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
                 }
 
                 // ---- Misc / fallback ----
-                // OntologyAnnotation, DatatypeDefinition,
-                // SWRL rules, annotations on axioms, etc.
+                // DatatypeDefinition, SWRL rules, anonymous-subject axioms, etc.
                 _ => {
                     misc.push(ac.component.as_manchester_with_prefixes(pm).to_string());
                 }
+            }
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // 3b. POST-PASS: entity annotations (AnnotationAssertion with named IRI
+    //     subject).  Runs AFTER the main loop so every declaration/axiom frame
+    //     already exists in `frames`.  A main-loop arm would leak to misc when
+    //     the AnnotationAssertion kind is visited before the subject's Declare.
+    // -----------------------------------------------------------------------
+    for ac in ont
+        .i()
+        .component_for_kind(ComponentKind::AnnotationAssertion)
+    {
+        if let Component::AnnotationAssertion(aa) = &ac.component {
+            if let AnnotationSubject::IRI(subj_iri) = &aa.subject {
+                let clause = format!(
+                    "Annotations: {}",
+                    as_manchester::annotation_to_manchester(&aa.ann, mapping)
+                );
+                // Attach to the existing frame whose subject_iri matches.
+                if let Some(frame) = frames
+                    .values_mut()
+                    .find(|fr| fr.subject_iri == subj_iri.as_ref())
+                {
+                    frame.clauses.push(clause);
+                } else {
+                    // Orphan: no frame heads this IRI → not Manchester-expressible.
+                    misc.push(
+                        ac.component
+                            .as_manchester_with_prefixes(mapping)
+                            .to_string(),
+                    );
+                }
+            } else {
+                // AnonymousIndividual subject → misc.
+                misc.push(
+                    ac.component
+                        .as_manchester_with_prefixes(mapping)
+                        .to_string(),
+                );
             }
         }
     }
@@ -628,9 +707,9 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
     // -----------------------------------------------------------------------
     // 5. Emit misc / general axioms.
     //    Lines here may be in OWL functional syntax (see `as_manchester.rs`
-    //    Component impl) for variants with no Manchester form yet — they are
-    //    NOT valid Manchester.  Pre-upstream-PR follow-up: native Import: /
-    //    Annotations: rendering.
+    //    Component impl) for genuinely-inexpressible components (general
+    //    anonymous-subject class axioms, SWRL rules) — they are NOT valid
+    //    Manchester syntax.
     // -----------------------------------------------------------------------
     if !misc.is_empty() {
         writeln!(write)?;
