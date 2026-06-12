@@ -19,6 +19,7 @@ pub enum ResourceType {
     OFN,
     OWX,
     RDF,
+    OMN,
 }
 
 #[allow(clippy::large_enum_variant)]
@@ -26,6 +27,7 @@ pub enum ParserOutput<A: ForIRI, AA: ForIndex<A>> {
     OFNParser(SetOntology<A>, PrefixMapping),
     OWXParser(SetOntology<A>, PrefixMapping),
     RDFParser(ConcreteRDFOntology<A, AA>, IncompleteParse<A>),
+    OMNParser(SetOntology<A>, PrefixMapping),
 }
 
 impl<A: ForIRI, AA: ForIndex<A>> ParserOutput<A, AA> {
@@ -39,6 +41,10 @@ impl<A: ForIRI, AA: ForIndex<A>> ParserOutput<A, AA> {
 
     pub fn rdf(rop: (ConcreteRDFOntology<A, AA>, IncompleteParse<A>)) -> ParserOutput<A, AA> {
         ParserOutput::RDFParser(rop.0, rop.1)
+    }
+
+    pub fn omn(sop: (SetOntology<A>, PrefixMapping)) -> ParserOutput<A, AA> {
+        ParserOutput::OMNParser(sop.0, sop.1)
     }
 }
 
@@ -72,6 +78,7 @@ impl<A: ForIRI, AA: ForIndex<A>> ParserOutput<A, AA> {
             ParserOutput::RDFParser(o, i) => {
                 (o.into(), None, if i.is_complete() { None } else { Some(i) })
             }
+            ParserOutput::OMNParser(o, m) => (o, Some(m), None),
         }
     }
 }
@@ -82,6 +89,7 @@ impl<A: ForIRI, AA: ForIndex<A>> From<ParserOutput<A, AA>> for SetOntology<A> {
             ParserOutput::OFNParser(so, _) => so,
             ParserOutput::OWXParser(so, _) => so,
             ParserOutput::RDFParser(rdfo, _) => rdfo.into(),
+            ParserOutput::OMNParser(so, _) => so,
         }
     }
 }
@@ -92,6 +100,21 @@ impl<A: ForIRI, AA: ForIndex<A>> From<ParserOutput<A, AA>> for ComponentMappedOn
             ParserOutput::OFNParser(so, _) => so.into(),
             ParserOutput::OWXParser(so, _) => so.into(),
             ParserOutput::RDFParser(rdfo, _) => rdfo.into(),
+            ParserOutput::OMNParser(so, _) => so.into(),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn omn_parser_output_constructs_and_decomposes() {
+        use super::*;
+        use crate::ontology::set::SetOntology;
+        type Idx = std::rc::Rc<crate::model::AnnotatedComponent<std::rc::Rc<str>>>;
+        let o = SetOntology::<std::rc::Rc<str>>::new_rc();
+        let pm = curie::PrefixMapping::default();
+        let out: ParserOutput<std::rc::Rc<str>, Idx> = ParserOutput::omn((o, pm));
+        assert!(matches!(out, ParserOutput::OMNParser(_, _)));
     }
 }
