@@ -203,6 +203,23 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
         }
     }
 
+    // Helper: produce an optional `Annotations: <entries> ` prefix string for a
+    // clause when the `AnnotatedComponent` carries a non-empty annotation set.
+    // Returns an empty string when there are no annotations (common case).
+    fn ann_prefix<A: ForIRI>(
+        ann: &std::collections::BTreeSet<Annotation<A>>,
+        pm: &PrefixMapping,
+    ) -> String {
+        if ann.is_empty() {
+            return String::new();
+        }
+        let entries: Vec<String> = ann
+            .iter()
+            .map(|a| as_manchester::annotation_to_manchester(a, pm))
+            .collect();
+        format!("Annotations: {} ", entries.join(", "))
+    }
+
     for kind in ComponentKind::all_kinds() {
         if kind == ComponentKind::OntologyID
             || kind == ComponentKind::DocIRI
@@ -239,8 +256,11 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
                 // ---- Class axioms ----
                 Component::SubClassOf(ax) => {
                     if let crate::model::ClassExpression::Class(c) = &ax.sub {
-                        let clause =
-                            format!("SubClassOf: {}", ax.sup.as_manchester_with_prefixes(pm));
+                        let clause = format!(
+                            "SubClassOf: {}{}",
+                            ann_prefix(&ac.ann, pm),
+                            ax.sup.as_manchester_with_prefixes(pm)
+                        );
                         push_clause!(FrameKind::Class, c.0.as_ref(), clause);
                     } else {
                         misc.push(ac.component.as_manchester_with_prefixes(pm).to_string());
@@ -254,7 +274,11 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
                                 .map(|ce| ce.as_manchester_with_prefixes(pm).to_string())
                                 .collect();
                         if !others.is_empty() {
-                            let clause = format!("EquivalentTo: {}", others.join(", "));
+                            let clause = format!(
+                                "EquivalentTo: {}{}",
+                                ann_prefix(&ac.ann, pm),
+                                others.join(", ")
+                            );
                             push_clause!(FrameKind::Class, c.0.as_ref(), clause);
                         }
                     } else {
@@ -269,7 +293,11 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
                                 .map(|ce| ce.as_manchester_with_prefixes(pm).to_string())
                                 .collect();
                         if !others.is_empty() {
-                            let clause = format!("DisjointWith: {}", others.join(", "));
+                            let clause = format!(
+                                "DisjointWith: {}{}",
+                                ann_prefix(&ac.ann, pm),
+                                others.join(", ")
+                            );
                             push_clause!(FrameKind::Class, c.0.as_ref(), clause);
                         }
                     } else {
@@ -281,7 +309,11 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
                         ax.1.iter()
                             .map(|ce| ce.as_manchester_with_prefixes(pm).to_string())
                             .collect();
-                    let clause = format!("DisjointUnionOf: {}", members.join(", "));
+                    let clause = format!(
+                        "DisjointUnionOf: {}{}",
+                        ann_prefix(&ac.ann, pm),
+                        members.join(", ")
+                    );
                     push_clause!(FrameKind::Class, ax.0.0.as_ref(), clause);
                 }
 
@@ -290,7 +322,8 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
                     SubObjectPropertyExpression::ObjectPropertyExpression(ope) => {
                         if let Some(iri) = ope_iri(ope) {
                             let clause = format!(
-                                "SubPropertyOf: {}",
+                                "SubPropertyOf: {}{}",
+                                ann_prefix(&ac.ann, pm),
                                 ax.sup.as_manchester_with_prefixes(pm)
                             );
                             push_clause!(FrameKind::ObjectProperty, iri, clause);
@@ -308,7 +341,11 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
                             push_clause!(
                                 FrameKind::ObjectProperty,
                                 iri,
-                                format!("SubPropertyChain: {rendered}")
+                                format!(
+                                    "SubPropertyChain: {}{}",
+                                    ann_prefix(&ac.ann, pm),
+                                    rendered
+                                )
                             );
                         } else {
                             misc.push(ac.component.as_manchester_with_prefixes(pm).to_string());
@@ -324,7 +361,11 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
                                     .map(|o| o.as_manchester_with_prefixes(pm).to_string())
                                     .collect();
                             if !others.is_empty() {
-                                let clause = format!("EquivalentTo: {}", others.join(", "));
+                                let clause = format!(
+                                    "EquivalentTo: {}{}",
+                                    ann_prefix(&ac.ann, pm),
+                                    others.join(", ")
+                                );
                                 push_clause!(FrameKind::ObjectProperty, iri, clause);
                             }
                         } else {
@@ -343,7 +384,11 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
                                     .map(|o| o.as_manchester_with_prefixes(pm).to_string())
                                     .collect();
                             if !others.is_empty() {
-                                let clause = format!("DisjointWith: {}", others.join(", "));
+                                let clause = format!(
+                                    "DisjointWith: {}{}",
+                                    ann_prefix(&ac.ann, pm),
+                                    others.join(", ")
+                                );
                                 push_clause!(FrameKind::ObjectProperty, iri, clause);
                             }
                         } else {
@@ -355,12 +400,20 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
                 }
                 Component::InverseObjectProperties(ax) => {
                     // ax.0 and ax.1 are ObjectProperty (not expression).
-                    let clause = format!("InverseOf: {}", ax.1.as_manchester_with_prefixes(pm));
+                    let clause = format!(
+                        "InverseOf: {}{}",
+                        ann_prefix(&ac.ann, pm),
+                        ax.1.as_manchester_with_prefixes(pm)
+                    );
                     push_clause!(FrameKind::ObjectProperty, ax.0.0.as_ref(), clause);
                 }
                 Component::ObjectPropertyDomain(ax) => {
                     if let Some(iri) = ope_iri(&ax.ope) {
-                        let clause = format!("Domain: {}", ax.ce.as_manchester_with_prefixes(pm));
+                        let clause = format!(
+                            "Domain: {}{}",
+                            ann_prefix(&ac.ann, pm),
+                            ax.ce.as_manchester_with_prefixes(pm)
+                        );
                         push_clause!(FrameKind::ObjectProperty, iri, clause);
                     } else {
                         misc.push(ac.component.as_manchester_with_prefixes(pm).to_string());
@@ -368,7 +421,11 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
                 }
                 Component::ObjectPropertyRange(ax) => {
                     if let Some(iri) = ope_iri(&ax.ope) {
-                        let clause = format!("Range: {}", ax.ce.as_manchester_with_prefixes(pm));
+                        let clause = format!(
+                            "Range: {}{}",
+                            ann_prefix(&ac.ann, pm),
+                            ax.ce.as_manchester_with_prefixes(pm)
+                        );
                         push_clause!(FrameKind::ObjectProperty, iri, clause);
                     } else {
                         misc.push(ac.component.as_manchester_with_prefixes(pm).to_string());
@@ -379,7 +436,7 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
                         push_clause!(
                             FrameKind::ObjectProperty,
                             iri,
-                            "Characteristics: Functional".to_string()
+                            format!("Characteristics: {}Functional", ann_prefix(&ac.ann, pm))
                         );
                     } else {
                         misc.push(ac.component.as_manchester_with_prefixes(pm).to_string());
@@ -390,7 +447,10 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
                         push_clause!(
                             FrameKind::ObjectProperty,
                             iri,
-                            "Characteristics: InverseFunctional".to_string()
+                            format!(
+                                "Characteristics: {}InverseFunctional",
+                                ann_prefix(&ac.ann, pm)
+                            )
                         );
                     } else {
                         misc.push(ac.component.as_manchester_with_prefixes(pm).to_string());
@@ -401,7 +461,7 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
                         push_clause!(
                             FrameKind::ObjectProperty,
                             iri,
-                            "Characteristics: Reflexive".to_string()
+                            format!("Characteristics: {}Reflexive", ann_prefix(&ac.ann, pm))
                         );
                     } else {
                         misc.push(ac.component.as_manchester_with_prefixes(pm).to_string());
@@ -412,7 +472,7 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
                         push_clause!(
                             FrameKind::ObjectProperty,
                             iri,
-                            "Characteristics: Irreflexive".to_string()
+                            format!("Characteristics: {}Irreflexive", ann_prefix(&ac.ann, pm))
                         );
                     } else {
                         misc.push(ac.component.as_manchester_with_prefixes(pm).to_string());
@@ -423,7 +483,7 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
                         push_clause!(
                             FrameKind::ObjectProperty,
                             iri,
-                            "Characteristics: Symmetric".to_string()
+                            format!("Characteristics: {}Symmetric", ann_prefix(&ac.ann, pm))
                         );
                     } else {
                         misc.push(ac.component.as_manchester_with_prefixes(pm).to_string());
@@ -434,7 +494,7 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
                         push_clause!(
                             FrameKind::ObjectProperty,
                             iri,
-                            "Characteristics: Asymmetric".to_string()
+                            format!("Characteristics: {}Asymmetric", ann_prefix(&ac.ann, pm))
                         );
                     } else {
                         misc.push(ac.component.as_manchester_with_prefixes(pm).to_string());
@@ -445,7 +505,7 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
                         push_clause!(
                             FrameKind::ObjectProperty,
                             iri,
-                            "Characteristics: Transitive".to_string()
+                            format!("Characteristics: {}Transitive", ann_prefix(&ac.ann, pm))
                         );
                     } else {
                         misc.push(ac.component.as_manchester_with_prefixes(pm).to_string());
@@ -454,8 +514,11 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
 
                 // ---- Data property axioms ----
                 Component::SubDataPropertyOf(ax) => {
-                    let clause =
-                        format!("SubPropertyOf: {}", ax.sup.as_manchester_with_prefixes(pm));
+                    let clause = format!(
+                        "SubPropertyOf: {}{}",
+                        ann_prefix(&ac.ann, pm),
+                        ax.sup.as_manchester_with_prefixes(pm)
+                    );
                     push_clause!(FrameKind::DataProperty, ax.sub.0.as_ref(), clause);
                 }
                 Component::EquivalentDataProperties(ax) => {
@@ -466,7 +529,11 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
                                 .map(|dp| dp.as_manchester_with_prefixes(pm).to_string())
                                 .collect();
                         if !others.is_empty() {
-                            let clause = format!("EquivalentTo: {}", others.join(", "));
+                            let clause = format!(
+                                "EquivalentTo: {}{}",
+                                ann_prefix(&ac.ann, pm),
+                                others.join(", ")
+                            );
                             push_clause!(FrameKind::DataProperty, first.0.as_ref(), clause);
                         }
                     } else {
@@ -481,7 +548,11 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
                                 .map(|dp| dp.as_manchester_with_prefixes(pm).to_string())
                                 .collect();
                         if !others.is_empty() {
-                            let clause = format!("DisjointWith: {}", others.join(", "));
+                            let clause = format!(
+                                "DisjointWith: {}{}",
+                                ann_prefix(&ac.ann, pm),
+                                others.join(", ")
+                            );
                             push_clause!(FrameKind::DataProperty, first.0.as_ref(), clause);
                         }
                     } else {
@@ -489,25 +560,37 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
                     }
                 }
                 Component::DataPropertyDomain(ax) => {
-                    let clause = format!("Domain: {}", ax.ce.as_manchester_with_prefixes(pm));
+                    let clause = format!(
+                        "Domain: {}{}",
+                        ann_prefix(&ac.ann, pm),
+                        ax.ce.as_manchester_with_prefixes(pm)
+                    );
                     push_clause!(FrameKind::DataProperty, ax.dp.0.as_ref(), clause);
                 }
                 Component::DataPropertyRange(ax) => {
-                    let clause = format!("Range: {}", ax.dr.as_manchester_with_prefixes(pm));
+                    let clause = format!(
+                        "Range: {}{}",
+                        ann_prefix(&ac.ann, pm),
+                        ax.dr.as_manchester_with_prefixes(pm)
+                    );
                     push_clause!(FrameKind::DataProperty, ax.dp.0.as_ref(), clause);
                 }
                 Component::FunctionalDataProperty(ax) => {
                     push_clause!(
                         FrameKind::DataProperty,
                         ax.0.0.as_ref(),
-                        "Characteristics: Functional".to_string()
+                        format!("Characteristics: {}Functional", ann_prefix(&ac.ann, pm))
                     );
                 }
 
                 // ---- Assertion axioms ----
                 Component::ClassAssertion(ax) => {
                     if let crate::model::Individual::Named(ni) = &ax.i {
-                        let clause = format!("Types: {}", ax.ce.as_manchester_with_prefixes(pm));
+                        let clause = format!(
+                            "Types: {}{}",
+                            ann_prefix(&ac.ann, pm),
+                            ax.ce.as_manchester_with_prefixes(pm)
+                        );
                         push_clause!(FrameKind::Individual, ni.0.as_ref(), clause);
                     } else {
                         misc.push(ac.component.as_manchester_with_prefixes(pm).to_string());
@@ -516,7 +599,8 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
                 Component::ObjectPropertyAssertion(ax) => {
                     if let crate::model::Individual::Named(ni) = &ax.from {
                         let clause = format!(
-                            "Facts: {} {}",
+                            "Facts: {}{} {}",
+                            ann_prefix(&ac.ann, pm),
                             ax.ope.as_manchester_with_prefixes(pm),
                             ax.to.as_manchester_with_prefixes(pm)
                         );
@@ -528,7 +612,8 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
                 Component::NegativeObjectPropertyAssertion(ax) => {
                     if let crate::model::Individual::Named(ni) = &ax.from {
                         let clause = format!(
-                            "Facts: not {} {}",
+                            "Facts: {}not {} {}",
+                            ann_prefix(&ac.ann, pm),
                             ax.ope.as_manchester_with_prefixes(pm),
                             ax.to.as_manchester_with_prefixes(pm)
                         );
@@ -540,7 +625,8 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
                 Component::DataPropertyAssertion(ax) => {
                     if let crate::model::Individual::Named(ni) = &ax.from {
                         let clause = format!(
-                            "Facts: {} {}",
+                            "Facts: {}{} {}",
+                            ann_prefix(&ac.ann, pm),
                             ax.dp.as_manchester_with_prefixes(pm),
                             ax.to.as_manchester_with_prefixes(pm)
                         );
@@ -552,7 +638,8 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
                 Component::NegativeDataPropertyAssertion(ax) => {
                     if let crate::model::Individual::Named(ni) = &ax.from {
                         let clause = format!(
-                            "Facts: not {} {}",
+                            "Facts: {}not {} {}",
+                            ann_prefix(&ac.ann, pm),
                             ax.dp.as_manchester_with_prefixes(pm),
                             ax.to.as_manchester_with_prefixes(pm)
                         );
@@ -569,7 +656,8 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
                                 .map(|i| i.as_manchester_with_prefixes(pm).to_string())
                                 .collect();
                         if !others.is_empty() {
-                            let clause = format!("SameAs: {}", others.join(", "));
+                            let clause =
+                                format!("SameAs: {}{}", ann_prefix(&ac.ann, pm), others.join(", "));
                             push_clause!(FrameKind::Individual, ni.0.as_ref(), clause);
                         }
                     } else {
@@ -584,7 +672,11 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
                                 .map(|i| i.as_manchester_with_prefixes(pm).to_string())
                                 .collect();
                         if !others.is_empty() {
-                            let clause = format!("DifferentFrom: {}", others.join(", "));
+                            let clause = format!(
+                                "DifferentFrom: {}{}",
+                                ann_prefix(&ac.ann, pm),
+                                others.join(", ")
+                            );
                             push_clause!(FrameKind::Individual, ni.0.as_ref(), clause);
                         }
                     } else {
@@ -595,17 +687,26 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
                 // ---- Annotation property axioms ----
                 Component::SubAnnotationPropertyOf(ax) => {
                     let clause = format!(
-                        "SubPropertyOf: {}",
+                        "SubPropertyOf: {}{}",
+                        ann_prefix(&ac.ann, pm),
                         ax.sup.0.as_manchester_with_prefixes(pm)
                     );
                     push_clause!(FrameKind::AnnotationProperty, ax.sub.0.as_ref(), clause);
                 }
                 Component::AnnotationPropertyDomain(ax) => {
-                    let clause = format!("Domain: {}", ax.iri.as_manchester_with_prefixes(pm));
+                    let clause = format!(
+                        "Domain: {}{}",
+                        ann_prefix(&ac.ann, pm),
+                        ax.iri.as_manchester_with_prefixes(pm)
+                    );
                     push_clause!(FrameKind::AnnotationProperty, ax.ap.0.as_ref(), clause);
                 }
                 Component::AnnotationPropertyRange(ax) => {
-                    let clause = format!("Range: {}", ax.iri.as_manchester_with_prefixes(pm));
+                    let clause = format!(
+                        "Range: {}{}",
+                        ann_prefix(&ac.ann, pm),
+                        ax.iri.as_manchester_with_prefixes(pm)
+                    );
                     push_clause!(FrameKind::AnnotationProperty, ax.ap.0.as_ref(), clause);
                 }
 
@@ -630,7 +731,7 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
                         push_clause!(
                             FrameKind::Class,
                             c.0.as_ref(),
-                            format!("HasKey: {}", parts.join(", "))
+                            format!("HasKey: {}{}", ann_prefix(&ac.ann, pm), parts.join(", "))
                         );
                     } else {
                         misc.push(ac.component.as_manchester_with_prefixes(pm).to_string());

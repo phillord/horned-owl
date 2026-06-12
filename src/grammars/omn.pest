@@ -162,52 +162,52 @@ FrameSubject = { IRI }
 ClassFrame = { ^"Class:" ~ FrameSubject ~ ClassClause* }
 ClassClause = {
       Annotations
-    | ^"SubClassOf:"      ~ DescriptionList
-    | ^"EquivalentTo:"    ~ DescriptionList
-    | ^"DisjointWith:"    ~ DescriptionList
-    | ^"DisjointUnionOf:" ~ DescriptionList
-    | ^"HasKey:"          ~ PropertyExprList
+    | ^"SubClassOf:"      ~ Annotations? ~ DescriptionList
+    | ^"EquivalentTo:"    ~ Annotations? ~ DescriptionList
+    | ^"DisjointWith:"    ~ Annotations? ~ DescriptionList
+    | ^"DisjointUnionOf:" ~ Annotations? ~ DescriptionList
+    | ^"HasKey:"          ~ Annotations? ~ PropertyExprList
 }
 
 ObjectPropertyFrame = { ^"ObjectProperty:" ~ FrameSubject ~ ObjectPropertyClause* }
 ObjectPropertyClause = {
       Annotations
-    | ^"SubPropertyChain:" ~ PropertyChain
-    | ^"SubPropertyOf:"    ~ OpeList
-    | ^"EquivalentTo:"     ~ OpeList
-    | ^"DisjointWith:"     ~ OpeList
-    | ^"InverseOf:"        ~ OpeList
-    | ^"Domain:"           ~ DescriptionList
-    | ^"Range:"            ~ DescriptionList
-    | ^"Characteristics:"  ~ CharacteristicList
+    | ^"SubPropertyChain:" ~ Annotations? ~ PropertyChain
+    | ^"SubPropertyOf:"    ~ Annotations? ~ OpeList
+    | ^"EquivalentTo:"     ~ Annotations? ~ OpeList
+    | ^"DisjointWith:"     ~ Annotations? ~ OpeList
+    | ^"InverseOf:"        ~ Annotations? ~ OpeList
+    | ^"Domain:"           ~ Annotations? ~ DescriptionList
+    | ^"Range:"            ~ Annotations? ~ DescriptionList
+    | ^"Characteristics:"  ~ Annotations? ~ CharacteristicList
 }
 
 DataPropertyFrame = { ^"DataProperty:" ~ FrameSubject ~ DataPropertyClause* }
 DataPropertyClause = {
       Annotations
-    | ^"SubPropertyOf:"   ~ IriList
-    | ^"EquivalentTo:"    ~ IriList
-    | ^"DisjointWith:"    ~ IriList
-    | ^"Domain:"          ~ DescriptionList
-    | ^"Range:"           ~ DataRangeList
-    | ^"Characteristics:" ~ CharacteristicList
+    | ^"SubPropertyOf:"   ~ Annotations? ~ IriList
+    | ^"EquivalentTo:"    ~ Annotations? ~ IriList
+    | ^"DisjointWith:"    ~ Annotations? ~ IriList
+    | ^"Domain:"          ~ Annotations? ~ DescriptionList
+    | ^"Range:"           ~ Annotations? ~ DataRangeList
+    | ^"Characteristics:" ~ Annotations? ~ CharacteristicList
 }
 
 AnnotationPropertyFrame = { ^"AnnotationProperty:" ~ FrameSubject ~ AnnotationPropertyClause* }
 AnnotationPropertyClause = {
       Annotations
-    | ^"SubPropertyOf:" ~ IriList
-    | ^"Domain:"        ~ IriList
-    | ^"Range:"         ~ IriList
+    | ^"SubPropertyOf:" ~ Annotations? ~ IriList
+    | ^"Domain:"        ~ Annotations? ~ IriList
+    | ^"Range:"         ~ Annotations? ~ IriList
 }
 
 IndividualFrame = { ^"Individual:" ~ FrameSubject ~ IndividualClause* }
 IndividualClause = {
       Annotations
-    | ^"Types:"         ~ DescriptionList
-    | ^"Facts:"         ~ FactList
-    | ^"SameAs:"        ~ IndividualList
-    | ^"DifferentFrom:" ~ IndividualList
+    | ^"Types:"         ~ Annotations? ~ DescriptionList
+    | ^"Facts:"         ~ Annotations? ~ FactList
+    | ^"SameAs:"        ~ Annotations? ~ IndividualList
+    | ^"DifferentFrom:" ~ Annotations? ~ IndividualList
 }
 
 DatatypeFrame = { ^"Datatype:" ~ FrameSubject }
