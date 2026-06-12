@@ -1,3 +1,45 @@
+//! OWL Manchester Syntax reader.
+//!
+//! Parses prefix declarations, an optional `Ontology:` header, and the six
+//! entity frames (`Class:`, `ObjectProperty:`, `DataProperty:`,
+//! `AnnotationProperty:`, `Individual:`, `Datatype:`) into a mutable ontology.
+//! It is the structural inverse of [`crate::io::omn::write`].
+//!
+//! ## Known limitations (P3)
+//! - The writer's trailing `# General axioms` block (OWL functional syntax for
+//!   components with no native Manchester form — `Import`, `HasKey`,
+//!   `OntologyAnnotation`, axiom annotations, SWRL rules, property chains,
+//!   n-ary axioms over anonymous subjects) is NOT parsed. The `#` line itself
+//!   is consumed as a `COMMENT`, but the functional-syntax lines beneath it
+//!   match no `Frame` rule, so a document carrying a non-empty misc block is
+//!   REJECTED at EOI (a hard parse error) rather than partially parsed. Such
+//!   documents do not round-trip; the round-trip corpus avoids misc-only
+//!   axioms.
+//! - Frame headers conflate declaration and reference: every frame yields a
+//!   `Declare*` axiom, so an entity used without an explicit declaration gains
+//!   one on round-trip. Declarations are non-logical (entailment-neutral).
+//! - n-ary `EquivalentTo:`/`DisjointWith:`/`SameAs:`/`DifferentFrom:` lists are
+//!   read as a SINGLE n-ary axiom with the frame subject prepended (the exact
+//!   inverse of the writer), not OWL-API's pairwise expansion.
+//! - A bare local name as a frame subject or IRI (emitted by the writer only
+//!   when a default `""` prefix is registered) is not lexable; use `<full>` or
+//!   `prefix:local`. Round-tripping requires a non-default prefix.
+//! - `Annotations:` clauses are not parsed (the writer does not emit them).
+//! - **Keyword / CURIE-prefix collision (correctness gap, MUST FIX BEFORE the
+//!   upstream PR).** Manchester keywords (`not`, `and`, `or`, `some`, `only`,
+//!   `value`, `min`, `max`, `exactly`, `Self`, `inverse`, and the facet words)
+//!   are matched without a name-boundary, so an *abbreviated* CURIE whose
+//!   prefix begins with a keyword is silently mis-parsed — e.g. `notation:foo`
+//!   lexes as `not` + `ation:foo`, and `andx:bar` as `and` + `x:bar`. Full
+//!   `<...>` IRIs are immune (they start with `<`). This reader round-trips the
+//!   **writer's own output** completely (the writer never emits such CURIEs),
+//!   but it is therefore NOT yet a general hand-written-Manchester parser. The
+//!   fix is maximal-munch boundary anchoring on every keyword token —
+//!   `@{ ^"not" ~ !PnChar }` rather than a trailing-whitespace guard (which
+//!   would break `not(C and D)`) — applied across BOTH the P2 class-expression
+//!   rules and the P3 frame rules, with a per-keyword negative test and the
+//!   full P2 round-trip suite as regression. See the pre-upstream-PR list.
+
 pub mod from_pair;
 pub mod lexer;
 
