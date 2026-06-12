@@ -72,7 +72,7 @@ impl<A: ForIRI, AA: ForIndex<A>> IRIMappedIndex<A, AA> {
         let mut w = Walk::new(IRIExtract::default());
         w.annotated_component(cmp);
 
-        w.into_visit().into_vec().into_iter().collect()
+        w.into_visit().into_set()
     }
 
     /// Fetch the axioms for the given iri.

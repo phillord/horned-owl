@@ -787,32 +787,34 @@ impl<A: ForIRI, V: Visit<A>> Walk<A, V> {
 }
 
 pub mod entity {
+    use std::collections::HashSet;
+
     use super::Visit;
     use crate::model::AnonymousIndividual;
     use crate::model::ForIRI;
     use crate::model::IRI;
 
-    pub struct IRIExtract<A>(Vec<IRI<A>>);
+    pub struct IRIExtract<A>(HashSet<IRI<A>>);
 
     impl<A> Default for IRIExtract<A> {
         fn default() -> Self {
-            IRIExtract(vec![])
+            IRIExtract(HashSet::default())
         }
     }
 
     impl<A> IRIExtract<A> {
-        pub fn as_mut_vec(&mut self) -> &mut Vec<IRI<A>> {
+        pub fn as_mut_set(&mut self) -> &mut HashSet<IRI<A>> {
             &mut self.0
         }
 
-        pub fn into_vec(self) -> Vec<IRI<A>> {
+        pub fn into_set(self) -> HashSet<IRI<A>> {
             self.0
         }
     }
 
     impl<A: ForIRI> Visit<A> for IRIExtract<A> {
         fn visit_iri(&mut self, iri: &IRI<A>) {
-            self.0.push(iri.clone())
+            self.0.insert(iri.clone());
         }
     }
 
