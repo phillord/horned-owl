@@ -160,17 +160,19 @@ ClassClause = {
     | ^"EquivalentTo:"    ~ DescriptionList
     | ^"DisjointWith:"    ~ DescriptionList
     | ^"DisjointUnionOf:" ~ DescriptionList
+    | ^"HasKey:"          ~ PropertyExprList
 }
 
 ObjectPropertyFrame = { ^"ObjectProperty:" ~ FrameSubject ~ ObjectPropertyClause* }
 ObjectPropertyClause = {
-      ^"SubPropertyOf:"  ~ OpeList
-    | ^"EquivalentTo:"   ~ OpeList
-    | ^"DisjointWith:"   ~ OpeList
-    | ^"InverseOf:"      ~ OpeList
-    | ^"Domain:"         ~ DescriptionList
-    | ^"Range:"          ~ DescriptionList
-    | ^"Characteristics:" ~ CharacteristicList
+      ^"SubPropertyChain:" ~ PropertyChain
+    | ^"SubPropertyOf:"    ~ OpeList
+    | ^"EquivalentTo:"     ~ OpeList
+    | ^"DisjointWith:"     ~ OpeList
+    | ^"InverseOf:"        ~ OpeList
+    | ^"Domain:"           ~ DescriptionList
+    | ^"Range:"            ~ DescriptionList
+    | ^"Characteristics:"  ~ CharacteristicList
 }
 
 DataPropertyFrame = { ^"DataProperty:" ~ FrameSubject ~ DataPropertyClause* }
@@ -228,3 +230,11 @@ Characteristic = {
 
 FactList = { Fact ~ ( "," ~ Fact )* }
 Fact     = { NotKw? ~ ope ~ ( Literal | Individual ) }
+
+// ---- property chain and HasKey lists ----------------------------------------
+// The `o` chain-composition operator is a bare-word keyword. Use the same
+// ${ } compound-atomic keyword-rule idiom (from Task 1) so the NameBoundary
+// fires immediately after `o` with no preceding whitespace consumption.
+OKw              = ${ ^"o" ~ NameBoundary }
+PropertyChain    =  { ope ~ ( OKw ~ ope )+ }
+PropertyExprList =  { ope ~ ( "," ~ ope )* }
