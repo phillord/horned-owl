@@ -76,6 +76,19 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
     }
 
     // -----------------------------------------------------------------------
+    // 1b. Import directives (Manchester: `Import: <iri>`)
+    // -----------------------------------------------------------------------
+    for ac in ont.i().component_for_kind(ComponentKind::Import) {
+        if let Component::Import(imp) = &ac.component {
+            writeln!(
+                write,
+                "Import: {}",
+                imp.0.as_manchester_with_prefixes(mapping)
+            )?;
+        }
+    }
+
+    // -----------------------------------------------------------------------
     // 2. Ontology: header
     // -----------------------------------------------------------------------
     {
@@ -136,7 +149,10 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
     }
 
     for kind in ComponentKind::all_kinds() {
-        if kind == ComponentKind::OntologyID || kind == ComponentKind::DocIRI {
+        if kind == ComponentKind::OntologyID
+            || kind == ComponentKind::DocIRI
+            || kind == ComponentKind::Import
+        {
             continue;
         }
         for ac in ont.i().component_for_kind(kind) {
