@@ -190,13 +190,57 @@ impl<A: ForIRI> Display for Manchester<'_, Literal<A>, A> {
 impl<A: ForIRI> AsManchester<A> for Literal<A> {}
 
 // ---------------------------------------------------------------------------
-// DataRange — minimal stub (Task 4 adds facets/composite arms)
+// DataRange — facets + operator precedence
+
+/// Map each `Facet` variant to its W3C OWL 2 Manchester Syntax symbol.
+fn facet_symbol(f: &crate::vocab::Facet) -> &'static str {
+    use crate::vocab::Facet::*;
+    match f {
+        MinInclusive => ">=",
+        MaxInclusive => "<=",
+        MinExclusive => ">",
+        MaxExclusive => "<",
+        Length => "length",
+        MinLength => "minLength",
+        MaxLength => "maxLength",
+        Pattern => "pattern",
+        LangRange => "langRange",
+        TotalDigits => "totalDigits",
+        FractionDigits => "fractionDigits",
+    }
+}
+
+/// Precedence for `DataRange` operators.
+/// Tightest → loosest: atoms/restrictions (3) > `and` (2) > `or` (1).
+fn dr_prec<A: ForIRI>(dr: &DataRange<A>) -> u8 {
+    match dr {
+        DataRange::DataUnionOf(_) => 1,
+        DataRange::DataIntersectionOf(_) => 2,
+        _ => 3,
+    }
+}
+
+/// Render `inner` as an operand requiring at least `need` precedence.
+/// Parenthesizes when `inner` binds looser than `need`.
+fn dr_operand<A: ForIRI>(
+    inner: &DataRange<A>,
+    need: u8,
+    pm: Option<&PrefixMapping>,
+    f: &mut Formatter<'_>,
+) -> Result<(), Error> {
+    if dr_prec(inner) < need {
+        write!(f, "({})", Manchester(inner, pm, PhantomData::<A>))
+    } else {
+        write!(f, "{}", Manchester(inner, pm, PhantomData::<A>))
+    }
+}
 
 impl<A: ForIRI> Display for Manchester<'_, DataRange<A>, A> {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
         use DataRange::*;
+        let pm = self.1;
         match self.0 {
-            Datatype(dt) => Manchester(dt, self.1, PhantomData::<A>).fmt(f),
+            Datatype(dt) => Manchester(dt, pm, PhantomData::<A>).fmt(f),
             DataIntersectionOf(drs) => {
                 let mut first = true;
                 for dr in drs {
@@ -204,7 +248,7 @@ impl<A: ForIRI> Display for Manchester<'_, DataRange<A>, A> {
                         write!(f, " and ")?;
                     }
                     first = false;
-                    Manchester(dr, self.1, PhantomData::<A>).fmt(f)?;
+                    dr_operand(dr, 2, pm, f)?;
                 }
                 Ok(())
             }
@@ -215,32 +259,28 @@ impl<A: ForIRI> Display for Manchester<'_, DataRange<A>, A> {
                         write!(f, " or ")?;
                     }
                     first = false;
-                    Manchester(dr, self.1, PhantomData::<A>).fmt(f)?;
+                    dr_operand(dr, 1, pm, f)?;
                 }
                 Ok(())
             }
             DataComplementOf(dr) => {
                 write!(f, "not ")?;
-                Manchester(dr.as_ref(), self.1, PhantomData::<A>).fmt(f)
+                dr_operand(dr.as_ref(), 3, pm, f)
             }
             DataOneOf(lits) => {
-                write!(f, "{{")?;
+                write!(f, "{{ ")?;
                 let mut first = true;
                 for l in lits {
                     if !first {
                         write!(f, ", ")?;
                     }
                     first = false;
-                    Manchester(l, self.1, PhantomData::<A>).fmt(f)?;
+                    Manchester(l, pm, PhantomData::<A>).fmt(f)?;
                 }
-                write!(f, "}}")
+                write!(f, " }}")
             }
             DatatypeRestriction(dt, frs) => {
-                // TODO(Task 4): facet names must render as Manchester symbols
-                // (minInclusive→">=", maxExclusive→"<", length→"length", …) via a
-                // facet_symbol() map. The current write_iri spelling emits
-                // "xsd:minInclusive 0" which is NOT valid Manchester — placeholder only.
-                Manchester(dt, self.1, PhantomData::<A>).fmt(f)?;
+                Manchester(dt, pm, PhantomData::<A>).fmt(f)?;
                 write!(f, "[")?;
                 let mut first = true;
                 for fr in frs {
@@ -248,9 +288,8 @@ impl<A: ForIRI> Display for Manchester<'_, DataRange<A>, A> {
                         write!(f, ", ")?;
                     }
                     first = false;
-                    write_iri(fr.f.as_ref(), self.1, f)?;
-                    write!(f, " ")?;
-                    Manchester(&fr.l, self.1, PhantomData::<A>).fmt(f)?;
+                    write!(f, "{} ", facet_symbol(&fr.f))?;
+                    Manchester(&fr.l, pm, PhantomData::<A>).fmt(f)?;
                 }
                 write!(f, "]")
             }
@@ -508,6 +547,65 @@ mod tests {
             literal: "plain".to_string(),
         };
         assert_eq!(simple.as_manchester().to_string(), "\"plain\"");
+    }
+
+    #[test]
+    fn renders_data_ranges_and_facets() {
+        use crate::vocab::Facet;
+        let b = Build::new_rc();
+        let int = b.datatype("http://www.w3.org/2001/XMLSchema#integer");
+        let mut pm = curie::PrefixMapping::default();
+        pm.add_prefix("xsd", "http://www.w3.org/2001/XMLSchema#")
+            .unwrap();
+        let m = |dr: &DataRange<_>| dr.as_manchester_with_prefixes(&pm).to_string();
+
+        // bare datatype
+        assert_eq!(m(&DataRange::Datatype(int.clone())), "xsd:integer");
+
+        // xsd:integer[>= "0"^^xsd:integer]
+        let fr = FacetRestriction {
+            f: Facet::MinInclusive,
+            l: Literal::Datatype {
+                literal: "0".to_string(),
+                datatype_iri: b.iri("http://www.w3.org/2001/XMLSchema#integer"),
+            },
+        };
+        assert_eq!(
+            m(&DataRange::DatatypeRestriction(int.clone(), vec![fr])),
+            "xsd:integer[>= \"0\"^^xsd:integer]"
+        );
+
+        // {1, 2} enumeration
+        let one = Literal::Datatype {
+            literal: "1".into(),
+            datatype_iri: b.iri("http://www.w3.org/2001/XMLSchema#integer"),
+        };
+        let two = Literal::Datatype {
+            literal: "2".into(),
+            datatype_iri: b.iri("http://www.w3.org/2001/XMLSchema#integer"),
+        };
+        assert_eq!(
+            m(&DataRange::DataOneOf(vec![one, two])),
+            "{ \"1\"^^xsd:integer, \"2\"^^xsd:integer }"
+        );
+
+        // DataIntersectionOf precedence: union-inside-intersection → parens
+        let int_dr = DataRange::Datatype(int.clone());
+        let string_dt = b.datatype("http://www.w3.org/2001/XMLSchema#string");
+        let str_dr = DataRange::Datatype(string_dt);
+        let union = DataRange::DataUnionOf(vec![int_dr.clone(), str_dr.clone()]);
+        // union inside intersection must be parenthesized
+        assert_eq!(
+            m(&DataRange::DataIntersectionOf(vec![union, int_dr.clone()])),
+            "(xsd:integer or xsd:string) and xsd:integer"
+        );
+
+        // DataComplementOf a union → parens
+        let union2 = DataRange::DataUnionOf(vec![int_dr.clone(), str_dr.clone()]);
+        assert_eq!(
+            m(&DataRange::DataComplementOf(Box::new(union2))),
+            "not (xsd:integer or xsd:string)"
+        );
     }
 
     #[test]
