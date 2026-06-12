@@ -748,6 +748,49 @@ impl<A: ForIRI> Display for Manchester<'_, Component<A>, A> {
 impl<A: ForIRI> AsManchester<A> for Component<A> {}
 
 // ---------------------------------------------------------------------------
+// Annotation helpers
+
+/// Render a single `Annotation` as `<ap-iri> <value>` for Manchester syntax.
+///
+/// Value is rendered as a literal or IRI. `AnonymousIndividual` annotation
+/// values are not expressible in Manchester and are rendered as a placeholder
+/// using OWL functional syntax (fallback, will land in misc).
+pub(crate) fn annotation_to_manchester<A: ForIRI>(
+    ann: &Annotation<A>,
+    pm: &PrefixMapping,
+) -> String {
+    let ap_str = write_iri_to_string(ann.ap.0.as_ref(), Some(pm));
+    let av_str = match &ann.av {
+        AnnotationValue::Literal(lit) => Manchester(lit, Some(pm), PhantomData::<A>).to_string(),
+        AnnotationValue::IRI(iri) => Manchester(iri, Some(pm), PhantomData::<A>).to_string(),
+        AnnotationValue::AnonymousIndividual(ai) => {
+            Manchester(ai, Some(pm), PhantomData::<A>).to_string()
+        }
+    };
+    format!("{ap_str} {av_str}")
+}
+
+/// Render an IRI string to a String using prefix abbreviation.
+fn write_iri_to_string(iri: &str, pm: Option<&PrefixMapping>) -> String {
+    use std::fmt::Write as _;
+    let mut s = String::new();
+    // Reuse the same logic as write_iri but collect into a String.
+    if let Some(pm) = pm
+        && let Ok(curie) = pm.shrink_iri(iri)
+    {
+        let curie_s = curie.to_string();
+        if let Some(local) = curie_s.strip_prefix(':') {
+            let _ = write!(s, "{local}");
+        } else {
+            let _ = write!(s, "{curie_s}");
+        }
+        return s;
+    }
+    let _ = write!(s, "<{iri}>");
+    s
+}
+
+// ---------------------------------------------------------------------------
 
 #[cfg(test)]
 mod tests {

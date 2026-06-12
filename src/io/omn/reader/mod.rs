@@ -117,36 +117,49 @@ pub fn read_with_build<A: ForIRI, O: MutableOntology<A> + Ontology<A> + Default,
     // Pass 2: build the ontology under a prefix-aware context.
     let ctx = Context::new(build, &prefixes);
     let mut ontology: O = Default::default();
-    let mut ontology_id = crate::model::OntologyID::default();
-    let mut header_present = false;
 
     for child in children {
         match child.as_rule() {
             Rule::PrefixDeclaration | Rule::EOI => {}
-            Rule::ImportDeclaration => {
-                let iri_pair = child.into_inner().next().unwrap(); // IRI
-                ontology.insert(crate::model::Import(crate::model::IRI::from_pair(
-                    iri_pair, &ctx,
-                )?));
-            }
             Rule::OntologyHeader => {
-                header_present = true;
-                if let Some(iri_pair) = child.into_inner().next() {
-                    ontology_id.iri = Some(crate::model::IRI::from_pair(iri_pair, &ctx)?);
+                // OntologyHeader = { ^"Ontology:" ~ IRI? ~ ImportDeclaration* ~ Annotations* }
+                // Iterate children: optional IRI, then zero or more ImportDeclaration,
+                // then zero or more Annotations (ontology annotations).
+                // GATE: insert OntologyID only when an IRI/version was present —
+                // NOT merely because the `Ontology:` keyword appeared. A bare
+                // `Ontology:` (emitted to host imports/annotations when there is no
+                // ontology IRI) must NOT inject a spurious OntologyID(None,None).
+                let mut oid = crate::model::OntologyID::default();
+                let mut has_id = false;
+                for h in child.into_inner() {
+                    match h.as_rule() {
+                        Rule::IRI => {
+                            oid.iri = Some(crate::model::IRI::from_pair(h, &ctx)?);
+                            has_id = true;
+                        }
+                        Rule::ImportDeclaration => {
+                            let iri_pair = h.into_inner().next().unwrap();
+                            ontology.insert(crate::model::Import(crate::model::IRI::from_pair(
+                                iri_pair, &ctx,
+                            )?));
+                        }
+                        Rule::Annotations => {
+                            for ann in from_pair::parse_annotations(h, &ctx)? {
+                                ontology.insert(crate::model::OntologyAnnotation(ann));
+                            }
+                        }
+                        rule => {
+                            unreachable!("unexpected ontology-header child: {:?}", rule)
+                        }
+                    }
+                }
+                if has_id {
+                    ontology.insert(oid);
                 }
             }
             Rule::Frame => from_pair::insert_frame(child, &ctx, &mut ontology)?,
             rule => unreachable!("unexpected document child: {:?}", rule),
         }
-    }
-    // Only insert an OntologyID when the document actually carried an
-    // `Ontology:` header. A fresh `SetOntology` does NOT seed one, and the
-    // writer omits the header for a default (empty) OntologyID — so inserting
-    // `OntologyID::default()` unconditionally (as ofn does) would add a
-    // spurious `Component::OntologyID(None, None)` and break the round-trip
-    // against a hand-built ontology that never declared an ID.
-    if header_present {
-        ontology.insert(ontology_id);
     }
 
     Ok((ontology, prefixes))

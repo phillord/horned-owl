@@ -134,12 +134,17 @@ FacetSymbol = {
 // Non-silent wrapper so from_pair gets one ManchesterDocument node whose inner
 // is [PrefixDeclaration*, OntologyHeader?, Frame*].
 
-ManchesterDocument = { SOI ~ PrefixDeclaration* ~ ImportDeclaration* ~ OntologyHeader? ~ Frame* ~ EOI }
+ManchesterDocument = { SOI ~ PrefixDeclaration* ~ OntologyHeader? ~ Frame* ~ EOI }
 ImportDeclaration  = { ^"Import:" ~ IRI }
 
 PrefixDeclaration = { ^"Prefix:" ~ PrefixName ~ FullIRI }
 PrefixName        = { SPARQL_PnameNs }          // matches "ex:" and ":"
-OntologyHeader    = { ^"Ontology:" ~ IRI? }
+OntologyHeader    = { ^"Ontology:" ~ IRI? ~ ImportDeclaration* ~ Annotations* }
+
+// Annotation clauses (entity annotations inside frames; ontology annotations in header)
+Annotations     = { ^"Annotations:" ~ AnnotationEntry ~ ( "," ~ AnnotationEntry )* }
+AnnotationEntry = { IRI ~ AnnotationTarget }
+AnnotationTarget = { Literal | IRI }
 
 // ---- frames -----------------------------------------------------------------
 
@@ -156,7 +161,8 @@ FrameSubject = { IRI }
 
 ClassFrame = { ^"Class:" ~ FrameSubject ~ ClassClause* }
 ClassClause = {
-      ^"SubClassOf:"      ~ DescriptionList
+      Annotations
+    | ^"SubClassOf:"      ~ DescriptionList
     | ^"EquivalentTo:"    ~ DescriptionList
     | ^"DisjointWith:"    ~ DescriptionList
     | ^"DisjointUnionOf:" ~ DescriptionList
@@ -165,7 +171,8 @@ ClassClause = {
 
 ObjectPropertyFrame = { ^"ObjectProperty:" ~ FrameSubject ~ ObjectPropertyClause* }
 ObjectPropertyClause = {
-      ^"SubPropertyChain:" ~ PropertyChain
+      Annotations
+    | ^"SubPropertyChain:" ~ PropertyChain
     | ^"SubPropertyOf:"    ~ OpeList
     | ^"EquivalentTo:"     ~ OpeList
     | ^"DisjointWith:"     ~ OpeList
@@ -177,7 +184,8 @@ ObjectPropertyClause = {
 
 DataPropertyFrame = { ^"DataProperty:" ~ FrameSubject ~ DataPropertyClause* }
 DataPropertyClause = {
-      ^"SubPropertyOf:"   ~ IriList
+      Annotations
+    | ^"SubPropertyOf:"   ~ IriList
     | ^"EquivalentTo:"    ~ IriList
     | ^"DisjointWith:"    ~ IriList
     | ^"Domain:"          ~ DescriptionList
@@ -187,14 +195,16 @@ DataPropertyClause = {
 
 AnnotationPropertyFrame = { ^"AnnotationProperty:" ~ FrameSubject ~ AnnotationPropertyClause* }
 AnnotationPropertyClause = {
-      ^"SubPropertyOf:" ~ IriList
+      Annotations
+    | ^"SubPropertyOf:" ~ IriList
     | ^"Domain:"        ~ IriList
     | ^"Range:"         ~ IriList
 }
 
 IndividualFrame = { ^"Individual:" ~ FrameSubject ~ IndividualClause* }
 IndividualClause = {
-      ^"Types:"         ~ DescriptionList
+      Annotations
+    | ^"Types:"         ~ DescriptionList
     | ^"Facts:"         ~ FactList
     | ^"SameAs:"        ~ IndividualList
     | ^"DifferentFrom:" ~ IndividualList

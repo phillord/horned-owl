@@ -548,6 +548,44 @@ impl<A: ForIRI> FromPair<A> for ClassExpression<A> {
 }
 
 // ---------------------------------------------------------------------------
+// Annotation FromPair impls
+// ---------------------------------------------------------------------------
+
+impl<A: ForIRI> FromPair<A> for AnnotationValue<A> {
+    const RULE: Rule = Rule::AnnotationTarget;
+    fn from_pair_unchecked(pair: Pair<Rule>, ctx: &Context<'_, A>) -> Result<Self> {
+        let inner = pair.into_inner().next().unwrap();
+        match inner.as_rule() {
+            Rule::Literal => Ok(AnnotationValue::Literal(Literal::from_pair(inner, ctx)?)),
+            Rule::IRI => Ok(AnnotationValue::IRI(IRI::from_pair(inner, ctx)?)),
+            rule => unreachable!("unexpected annotation target: {:?}", rule),
+        }
+    }
+}
+
+impl<A: ForIRI> FromPair<A> for Annotation<A> {
+    const RULE: Rule = Rule::AnnotationEntry;
+    fn from_pair_unchecked(pair: Pair<Rule>, ctx: &Context<'_, A>) -> Result<Self> {
+        let mut inner = pair.into_inner();
+        let ap = AnnotationProperty(IRI::from_pair(inner.next().unwrap(), ctx)?);
+        let av = AnnotationValue::from_pair(inner.next().unwrap(), ctx)?;
+        Ok(Annotation { ap, av })
+    }
+}
+
+/// Parse an `Annotations` clause pair into a `Vec<Annotation>`.
+/// The pair's inner children are `AnnotationEntry` items.
+pub(crate) fn parse_annotations<A: ForIRI>(
+    clause: Pair<Rule>,
+    ctx: &Context<'_, A>,
+) -> Result<Vec<Annotation<A>>> {
+    clause
+        .into_inner()
+        .map(|e| Annotation::from_pair(e, ctx))
+        .collect()
+}
+
+// ---------------------------------------------------------------------------
 // Whole-ontology document support.
 // ---------------------------------------------------------------------------
 
@@ -646,6 +684,15 @@ fn insert_class_frame<A: ForIRI, O: MutableOntology<A>>(
         // PropertyExprList depending on the clause keyword).
         let body = clause.into_inner().next().unwrap();
         match kw.as_str() {
+            "annotations" => {
+                // `body` is the inner `Annotations` pair (AnnotationEntry items).
+                for ann in parse_annotations(body, ctx)? {
+                    ont.insert(AnnotationAssertion {
+                        subject: AnnotationSubject::IRI(subject.clone()),
+                        ann,
+                    });
+                }
+            }
             "subclassof" => {
                 for sup in parse_description_list(body, ctx)? {
                     ont.insert(SubClassOf {
@@ -726,6 +773,14 @@ fn insert_object_property_frame<A: ForIRI, O: MutableOntology<A>>(
         let kw = clause_keyword(&clause);
         let body = clause.into_inner().next().unwrap();
         match kw.as_str() {
+            "annotations" => {
+                for ann in parse_annotations(body, ctx)? {
+                    ont.insert(AnnotationAssertion {
+                        subject: AnnotationSubject::IRI(subject.clone()),
+                        ann,
+                    });
+                }
+            }
             "subpropertychain" => {
                 // body is a PropertyChain: `ope (OKw ope)+`. Filter OUT the emitted
                 // `OKw` keyword pairs (compound-atomic, emit a pair); keep only the
@@ -835,6 +890,14 @@ fn insert_data_property_frame<A: ForIRI, O: MutableOntology<A>>(
         let kw = clause_keyword(&clause);
         let body = clause.into_inner().next().unwrap();
         match kw.as_str() {
+            "annotations" => {
+                for ann in parse_annotations(body, ctx)? {
+                    ont.insert(AnnotationAssertion {
+                        subject: AnnotationSubject::IRI(subject.clone()),
+                        ann,
+                    });
+                }
+            }
             "subpropertyof" => {
                 for iri in parse_iri_list(body, ctx)? {
                     ont.insert(SubDataPropertyOf {
@@ -900,10 +963,17 @@ fn insert_annotation_property_frame<A: ForIRI, O: MutableOntology<A>>(
     for clause in clauses {
         let kw = clause_keyword(&clause);
         let body = clause.into_inner().next().unwrap();
-        let iris = parse_iri_list(body, ctx)?;
         match kw.as_str() {
+            "annotations" => {
+                for ann in parse_annotations(body, ctx)? {
+                    ont.insert(AnnotationAssertion {
+                        subject: AnnotationSubject::IRI(subject.clone()),
+                        ann,
+                    });
+                }
+            }
             "subpropertyof" => {
-                for iri in iris {
+                for iri in parse_iri_list(body, ctx)? {
                     ont.insert(SubAnnotationPropertyOf {
                         sub: AnnotationProperty(subject.clone()),
                         sup: AnnotationProperty(iri),
@@ -911,7 +981,7 @@ fn insert_annotation_property_frame<A: ForIRI, O: MutableOntology<A>>(
                 }
             }
             "domain" => {
-                for iri in iris {
+                for iri in parse_iri_list(body, ctx)? {
                     ont.insert(AnnotationPropertyDomain {
                         ap: AnnotationProperty(subject.clone()),
                         iri,
@@ -919,7 +989,7 @@ fn insert_annotation_property_frame<A: ForIRI, O: MutableOntology<A>>(
                 }
             }
             "range" => {
-                for iri in iris {
+                for iri in parse_iri_list(body, ctx)? {
                     ont.insert(AnnotationPropertyRange {
                         ap: AnnotationProperty(subject.clone()),
                         iri,
@@ -945,6 +1015,14 @@ fn insert_individual_frame<A: ForIRI, O: MutableOntology<A>>(
         let kw = clause_keyword(&clause);
         let body = clause.into_inner().next().unwrap();
         match kw.as_str() {
+            "annotations" => {
+                for ann in parse_annotations(body, ctx)? {
+                    ont.insert(AnnotationAssertion {
+                        subject: AnnotationSubject::IRI(subject.clone()),
+                        ann,
+                    });
+                }
+            }
             "types" => {
                 for ce in parse_description_list(body, ctx)? {
                     ont.insert(ClassAssertion {
@@ -1952,6 +2030,69 @@ mod tests {
         assert_eq!(
             parsed_pm.expand_curie_string("ex:A").unwrap(),
             "http://ex/A"
+        );
+    }
+
+    #[test]
+    fn reads_entity_and_ontology_annotations_round_trip() {
+        use crate::io::omn::{read_with_build, write};
+        use crate::ontology::component_mapped::ComponentMappedOntology;
+        use crate::ontology::set::SetOntology;
+        use std::io::BufReader;
+        let b = Build::new_rc();
+        let mut pm = PrefixMapping::default();
+        pm.add_prefix("ex", "http://ex/").unwrap();
+        pm.add_prefix("rdfs", "http://www.w3.org/2000/01/rdf-schema#")
+            .unwrap();
+
+        let mut o = SetOntology::new_rc();
+        let mut oid = OntologyID::default();
+        oid.iri = Some(b.iri("http://ex/o"));
+        o.insert(oid);
+        // an import too — validates the conformant header hosts iri+import+annotations together
+        o.insert(Import(b.iri("http://ex/imported")));
+        o.insert(OntologyAnnotation(Annotation {
+            ap: b.annotation_property("http://www.w3.org/2000/01/rdf-schema#comment"),
+            av: AnnotationValue::Literal(Literal::Simple {
+                literal: "an ontology".to_string(),
+            }),
+        }));
+        o.insert(DeclareClass(b.class("http://ex/A")));
+        o.insert(AnnotationAssertion {
+            subject: AnnotationSubject::IRI(b.iri("http://ex/A")),
+            ann: Annotation {
+                ap: b.annotation_property("http://www.w3.org/2000/01/rdf-schema#label"),
+                av: AnnotationValue::Literal(Literal::Simple {
+                    literal: "the A class".to_string(),
+                }),
+            },
+        });
+        // an IRI-valued entity annotation too
+        o.insert(AnnotationAssertion {
+            subject: AnnotationSubject::IRI(b.iri("http://ex/A")),
+            ann: Annotation {
+                ap: b.annotation_property("http://ex/seeAlso"),
+                av: AnnotationValue::IRI(b.iri("http://ex/B")),
+            },
+        });
+
+        type TestOnt = ComponentMappedOntology<
+            std::rc::Rc<str>,
+            std::rc::Rc<AnnotatedComponent<std::rc::Rc<str>>>,
+        >;
+        let amo: TestOnt = o.clone().into();
+        let mut buf = Vec::<u8>::new();
+        write(&mut buf, &amo, Some(&pm)).unwrap();
+        let (parsed, _): (SetOntology<_>, PrefixMapping) =
+            read_with_build(BufReader::new(&buf[..]), &b).unwrap();
+        let orig: std::collections::BTreeSet<_> = o.iter().map(|ac| ac.component.clone()).collect();
+        let got: std::collections::BTreeSet<_> =
+            parsed.iter().map(|ac| ac.component.clone()).collect();
+        assert_eq!(
+            orig,
+            got,
+            "annotations did not round-trip\n{}",
+            String::from_utf8_lossy(&buf)
         );
     }
 }
