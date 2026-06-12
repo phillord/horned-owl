@@ -600,14 +600,66 @@ fn frame_subject_and_clauses<'a, A: ForIRI>(
     Ok((iri, inner))
 }
 
+/// Extract the lower-cased clause keyword (without the trailing colon) from a
+/// clause pair, e.g. `"SubClassOf: ..."` -> `"subclassof"`.
+fn clause_keyword(clause: &Pair<Rule>) -> String {
+    clause
+        .as_str()
+        .chars()
+        .take_while(|c| c.is_ascii_alphabetic())
+        .flat_map(|c| c.to_lowercase())
+        .collect()
+}
+
+/// Parse a `DescriptionList` pair into a `Vec<ClassExpression>`.
+fn parse_description_list<A: ForIRI>(
+    list: Pair<Rule>,
+    ctx: &Context<'_, A>,
+) -> Result<Vec<ClassExpression<A>>> {
+    list.into_inner()
+        .map(|d| ClassExpression::from_pair(d, ctx))
+        .collect()
+}
+
 fn insert_class_frame<A: ForIRI, O: MutableOntology<A>>(
     frame: Pair<Rule>,
     ctx: &Context<'_, A>,
     ont: &mut O,
 ) -> Result<()> {
-    let (subject, _clauses) = frame_subject_and_clauses(frame, ctx)?;
-    ont.insert(DeclareClass(Class(subject)));
-    // clauses handled in Task 3
+    let (subject, clauses) = frame_subject_and_clauses(frame, ctx)?;
+    let subject_ce = ClassExpression::Class(Class(subject.clone()));
+    ont.insert(DeclareClass(Class(subject.clone())));
+
+    for clause in clauses {
+        // each clause: keyword token (silent) + a DescriptionList child
+        let kw = clause_keyword(&clause);
+        let list = clause.into_inner().next().unwrap(); // DescriptionList
+        let items = parse_description_list(list, ctx)?;
+        match kw.as_str() {
+            "subclassof" => {
+                for sup in items {
+                    ont.insert(SubClassOf {
+                        sub: subject_ce.clone(),
+                        sup,
+                    });
+                }
+            }
+            "equivalentto" => {
+                let mut all = vec![subject_ce.clone()];
+                all.extend(items);
+                ont.insert(EquivalentClasses(all));
+            }
+            "disjointwith" => {
+                let mut all = vec![subject_ce.clone()];
+                all.extend(items);
+                ont.insert(DisjointClasses(all));
+            }
+            "disjointunionof" => {
+                ont.insert(DisjointUnion(Class(subject.clone()), items));
+            }
+            other => unreachable!("unexpected class clause keyword: {other}"),
+        }
+    }
     Ok(())
 }
 
@@ -997,6 +1049,60 @@ mod tests {
         let got: std::collections::BTreeSet<_> =
             parsed.iter().map(|ac| ac.component.clone()).collect();
         assert_eq!(orig, got, "declarations did not round-trip");
+    }
+
+    #[test]
+    fn reads_class_frame_round_trip() {
+        use crate::io::omn::write;
+        use crate::model::RcAnnotatedComponent;
+        use crate::ontology::component_mapped::ComponentMappedOntology;
+        use crate::ontology::set::SetOntology;
+        use std::io::BufReader;
+        use std::rc::Rc;
+
+        type TestOnt = ComponentMappedOntology<Rc<str>, RcAnnotatedComponent>;
+
+        let b = Build::new_rc();
+        let mut pm = PrefixMapping::default();
+        pm.add_prefix("ex", "http://ex/").unwrap();
+
+        let a = || ClassExpression::Class(b.class("http://ex/A"));
+        let mut o = SetOntology::new_rc();
+        for c in ["A", "B", "C", "D", "E", "F", "G"] {
+            o.insert(DeclareClass(b.class(format!("http://ex/{c}"))));
+        }
+        o.insert(SubClassOf {
+            sub: a(),
+            sup: ClassExpression::Class(b.class("http://ex/B")),
+        });
+        o.insert(EquivalentClasses(vec![
+            a(),
+            ClassExpression::Class(b.class("http://ex/C")),
+        ]));
+        o.insert(DisjointClasses(vec![
+            a(),
+            ClassExpression::Class(b.class("http://ex/D")),
+        ]));
+        // DisjointUnion exercises the disjointunionof clause arm.
+        o.insert(DisjointUnion(
+            b.class("http://ex/A"),
+            vec![
+                ClassExpression::Class(b.class("http://ex/F")),
+                ClassExpression::Class(b.class("http://ex/G")),
+            ],
+        ));
+
+        let amo: TestOnt = o.clone().into();
+        let mut buf = Vec::<u8>::new();
+        write(&mut buf, &amo, Some(&pm)).unwrap();
+
+        let (parsed, _): (SetOntology<_>, PrefixMapping) =
+            crate::io::omn::reader::read_with_build(BufReader::new(&buf[..]), &b).unwrap();
+
+        let orig: std::collections::BTreeSet<_> = o.iter().map(|ac| ac.component.clone()).collect();
+        let got: std::collections::BTreeSet<_> =
+            parsed.iter().map(|ac| ac.component.clone()).collect();
+        assert_eq!(orig, got, "class frame did not round-trip");
     }
 
     #[test]
