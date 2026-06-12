@@ -2206,22 +2206,50 @@ mod tests {
         let mut pm = PrefixMapping::default();
         pm.add_prefix("ex", "http://ex/").unwrap();
 
+        // Helper: build a one-annotation BTreeSet with the given literal value.
+        let make_ann = |val: &str| -> BTreeSet<Annotation<std::rc::Rc<str>>> {
+            let mut s = BTreeSet::new();
+            s.insert(Annotation {
+                ap: b.annotation_property("http://ex/prov"),
+                av: AnnotationValue::Literal(Literal::Simple {
+                    literal: val.to_string(),
+                }),
+            });
+            s
+        };
+
         let mut o = SetOntology::new_rc();
+        // --- SubClassOf (tests the basic push_clause ann_prefix path) ---
         o.insert(DeclareClass(b.class("http://ex/A")));
         o.insert(DeclareClass(b.class("http://ex/B")));
-        let mut ann = BTreeSet::new();
-        ann.insert(Annotation {
-            ap: b.annotation_property("http://ex/prov"),
-            av: AnnotationValue::Literal(Literal::Simple {
-                literal: "inferred".to_string(),
-            }),
-        });
         o.insert(AnnotatedComponent {
             component: Component::SubClassOf(SubClassOf {
                 sub: ClassExpression::Class(b.class("http://ex/A")),
                 sup: ClassExpression::Class(b.class("http://ex/B")),
             }),
-            ann,
+            ann: make_ann("inferred"),
+        });
+
+        // --- Characteristics (tests insert_object_characteristic with ann) ---
+        o.insert(DeclareObjectProperty(b.object_property("http://ex/r")));
+        let r_ope = ObjectPropertyExpression::ObjectProperty(b.object_property("http://ex/r"));
+        o.insert(AnnotatedComponent {
+            component: Component::FunctionalObjectProperty(FunctionalObjectProperty(r_ope.clone())),
+            ann: make_ann("char-ann"),
+        });
+
+        // --- Facts (tests insert_fact with ann) ---
+        o.insert(DeclareNamedIndividual(b.named_individual("http://ex/a")));
+        o.insert(DeclareNamedIndividual(b.named_individual("http://ex/b")));
+        let ind_a = Individual::Named(b.named_individual("http://ex/a"));
+        let ind_b = Individual::Named(b.named_individual("http://ex/b"));
+        o.insert(AnnotatedComponent {
+            component: Component::ObjectPropertyAssertion(ObjectPropertyAssertion {
+                ope: r_ope,
+                from: ind_a,
+                to: ind_b,
+            }),
+            ann: make_ann("fact-ann"),
         });
 
         type TestOnt = ComponentMappedOntology<
