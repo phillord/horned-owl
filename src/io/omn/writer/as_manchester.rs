@@ -533,11 +533,24 @@ impl<A: ForIRI> Display for Manchester<'_, Component<A>, A> {
                 Ok(())
             }
             Component::DisjointClasses(ax) => {
+                // Pairwise semantics: chain (`A DisjointWith B DisjointWith C`) only
+                // conveys {A,B} and {B,C}, dropping {A,C}.  For 3+ members use the
+                // first-member + comma-list form (`A DisjointWith B, C`) which
+                // unambiguously lists all members.  Binary case is identical either way.
                 let mut it = ax.0.iter();
                 if let Some(first) = it.next() {
                     write!(f, "{}", m!(first))?;
-                    for item in it {
-                        write!(f, " DisjointWith {}", m!(item))?;
+                    let rest: Vec<_> = it.collect();
+                    if !rest.is_empty() {
+                        write!(f, " DisjointWith ")?;
+                        let mut first_rest = true;
+                        for item in &rest {
+                            if !first_rest {
+                                write!(f, ", ")?;
+                            }
+                            first_rest = false;
+                            write!(f, "{}", m!(*item))?;
+                        }
                     }
                 }
                 Ok(())
@@ -552,6 +565,8 @@ impl<A: ForIRI> Display for Manchester<'_, Component<A>, A> {
             // --- Object property axioms ---
             Component::SubObjectPropertyOf(ax) => {
                 // ax.sub: SubObjectPropertyExpression — render inline (no Manchester impl for it)
+                // Note for upstream PR: `p o q SubPropertyOf r` is the readable infix form used
+                // here; strict Manchester frame syntax writes `r SubPropertyChain: p o q` instead.
                 let sub_str = match &ax.sub {
                     SubObjectPropertyExpression::ObjectPropertyChain(chain) => chain
                         .iter()
@@ -575,11 +590,22 @@ impl<A: ForIRI> Display for Manchester<'_, Component<A>, A> {
                 Ok(())
             }
             Component::DisjointObjectProperties(ax) => {
+                // Pairwise semantics: use first-member + comma-list for 3+ members
+                // to convey all pairs (not just consecutive pairs from chaining).
                 let mut it = ax.0.iter();
                 if let Some(first) = it.next() {
                     write!(f, "{}", m!(first))?;
-                    for item in it {
-                        write!(f, " DisjointWith {}", m!(item))?;
+                    let rest: Vec<_> = it.collect();
+                    if !rest.is_empty() {
+                        write!(f, " DisjointWith ")?;
+                        let mut first_rest = true;
+                        for item in &rest {
+                            if !first_rest {
+                                write!(f, ", ")?;
+                            }
+                            first_rest = false;
+                            write!(f, "{}", m!(*item))?;
+                        }
                     }
                 }
                 Ok(())
@@ -631,11 +657,22 @@ impl<A: ForIRI> Display for Manchester<'_, Component<A>, A> {
                 Ok(())
             }
             Component::DisjointDataProperties(ax) => {
+                // Pairwise semantics: use first-member + comma-list for 3+ members
+                // to convey all pairs (not just consecutive pairs from chaining).
                 let mut it = ax.0.iter();
                 if let Some(first) = it.next() {
                     write!(f, "{}", m!(first))?;
-                    for item in it {
-                        write!(f, " DisjointWith {}", m!(item))?;
+                    let rest: Vec<_> = it.collect();
+                    if !rest.is_empty() {
+                        write!(f, " DisjointWith ")?;
+                        let mut first_rest = true;
+                        for item in &rest {
+                            if !first_rest {
+                                write!(f, ", ")?;
+                            }
+                            first_rest = false;
+                            write!(f, "{}", m!(*item))?;
+                        }
                     }
                 }
                 Ok(())
@@ -677,11 +714,22 @@ impl<A: ForIRI> Display for Manchester<'_, Component<A>, A> {
                 Ok(())
             }
             Component::DifferentIndividuals(ax) => {
+                // Pairwise semantics: use first-member + comma-list for 3+ members
+                // to convey all pairs (not just consecutive pairs from chaining).
                 let mut it = ax.0.iter();
                 if let Some(first) = it.next() {
                     write!(f, "{}", m!(first))?;
-                    for item in it {
-                        write!(f, " DifferentFrom {}", m!(item))?;
+                    let rest: Vec<_> = it.collect();
+                    if !rest.is_empty() {
+                        write!(f, " DifferentFrom ")?;
+                        let mut first_rest = true;
+                        for item in &rest {
+                            if !first_rest {
+                                write!(f, ", ")?;
+                            }
+                            first_rest = false;
+                            write!(f, "{}", m!(*item))?;
+                        }
                     }
                 }
                 Ok(())
@@ -869,6 +917,31 @@ mod tests {
             ]))),
             "A DisjointWith C"
         );
+    }
+
+    #[test]
+    fn renders_nary_disjoint_completely() {
+        let b = Build::new_rc();
+        let mut pm = curie::PrefixMapping::default();
+        pm.add_prefix("", "http://t/").unwrap();
+        let m = |c: &Component<_>| c.as_manchester_with_prefixes(&pm).to_string();
+        let ce = |n: &str| ClassExpression::Class(b.class(format!("http://t/{n}")));
+        // 3-member DisjointClasses must convey all members, not a lossy chain.
+        let s = m(&Component::DisjointClasses(DisjointClasses(vec![
+            ce("A"),
+            ce("B"),
+            ce("C"),
+        ])));
+        assert_eq!(
+            s, "A DisjointWith B, C",
+            "n-ary disjoint must list all members; got {s}"
+        );
+        // binary unchanged
+        let s2 = m(&Component::DisjointClasses(DisjointClasses(vec![
+            ce("A"),
+            ce("B"),
+        ])));
+        assert_eq!(s2, "A DisjointWith B");
     }
 
     #[test]
