@@ -1664,4 +1664,115 @@ mod tests {
             other => panic!("expected ObjectSomeValuesFrom, got {other:?}"),
         }
     }
+
+    #[test]
+    fn whole_ontology_round_trips() {
+        use crate::io::omn::{read_with_build, write};
+        use crate::model::RcAnnotatedComponent;
+        use crate::ontology::component_mapped::ComponentMappedOntology;
+        use crate::ontology::set::SetOntology;
+        use std::io::BufReader;
+        use std::rc::Rc;
+
+        type TestOnt = ComponentMappedOntology<Rc<str>, RcAnnotatedComponent>;
+
+        let b = Build::new_rc();
+        let mut pm = PrefixMapping::default();
+        pm.add_prefix("ex", "http://ex/").unwrap();
+        pm.add_prefix("xsd", "http://www.w3.org/2001/XMLSchema#")
+            .unwrap();
+
+        let ce = |i: &str| ClassExpression::Class(b.class(i));
+        let ope = |i: &str| ObjectPropertyExpression::ObjectProperty(b.object_property(i));
+        let named = |i: &str| Individual::Named(b.named_individual(i));
+
+        let mut o = SetOntology::new_rc();
+        // ontology header
+        let mut oid = OntologyID::default();
+        oid.iri = Some(b.iri("http://ex/onto"));
+        o.insert(oid);
+        // declarations
+        for c in ["A", "B", "C", "D"] {
+            o.insert(DeclareClass(b.class(format!("http://ex/{c}"))));
+        }
+        o.insert(DeclareObjectProperty(b.object_property("http://ex/r")));
+        o.insert(DeclareObjectProperty(b.object_property("http://ex/t")));
+        o.insert(DeclareDataProperty(b.data_property("http://ex/p")));
+        o.insert(DeclareAnnotationProperty(
+            b.annotation_property("http://ex/n"),
+        ));
+        o.insert(DeclareNamedIndividual(b.named_individual("http://ex/a")));
+        o.insert(DeclareNamedIndividual(b.named_individual("http://ex/b")));
+        o.insert(DeclareDatatype(b.datatype("http://ex/dt")));
+        // class axioms
+        o.insert(SubClassOf {
+            sub: ce("http://ex/A"),
+            sup: ce("http://ex/B"),
+        });
+        o.insert(EquivalentClasses(vec![
+            ce("http://ex/A"),
+            ce("http://ex/C"),
+        ]));
+        o.insert(DisjointClasses(vec![ce("http://ex/A"), ce("http://ex/D")]));
+        // object property axioms
+        o.insert(ObjectPropertyDomain {
+            ope: ope("http://ex/r"),
+            ce: ce("http://ex/A"),
+        });
+        o.insert(FunctionalObjectProperty(ope("http://ex/r")));
+        o.insert(InverseObjectProperties(
+            b.object_property("http://ex/r"),
+            b.object_property("http://ex/t"),
+        ));
+        // data property axioms
+        o.insert(DataPropertyRange {
+            dp: b.data_property("http://ex/p"),
+            dr: DataRange::Datatype(b.datatype("http://www.w3.org/2001/XMLSchema#integer")),
+        });
+        // annotation property axioms
+        o.insert(AnnotationPropertyDomain {
+            ap: b.annotation_property("http://ex/n"),
+            iri: b.iri("http://ex/A"),
+        });
+        // individual axioms
+        o.insert(ClassAssertion {
+            i: named("http://ex/a"),
+            ce: ce("http://ex/A"),
+        });
+        o.insert(ObjectPropertyAssertion {
+            ope: ope("http://ex/r"),
+            from: named("http://ex/a"),
+            to: named("http://ex/b"),
+        });
+        o.insert(DataPropertyAssertion {
+            dp: b.data_property("http://ex/p"),
+            from: named("http://ex/a"),
+            to: Literal::Datatype {
+                literal: "5".into(),
+                datatype_iri: b.iri("http://www.w3.org/2001/XMLSchema#integer"),
+            },
+        });
+
+        let amo: TestOnt = o.clone().into();
+        let mut buf = Vec::<u8>::new();
+        write(&mut buf, &amo, Some(&pm)).unwrap();
+
+        let (parsed, parsed_pm): (SetOntology<_>, PrefixMapping) =
+            read_with_build(BufReader::new(&buf[..]), &b).unwrap();
+
+        let orig: std::collections::BTreeSet<_> = o.iter().map(|ac| ac.component.clone()).collect();
+        let got: std::collections::BTreeSet<_> =
+            parsed.iter().map(|ac| ac.component.clone()).collect();
+        assert_eq!(
+            orig,
+            got,
+            "whole ontology did not round-trip\n--- document ---\n{}",
+            String::from_utf8_lossy(&buf)
+        );
+        // prefixes survive the round-trip
+        assert_eq!(
+            parsed_pm.expand_curie_string("ex:A").unwrap(),
+            "http://ex/A"
+        );
+    }
 }
