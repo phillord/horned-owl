@@ -524,6 +524,30 @@ pub const CASES: &[Case] = &[
               Prefix: rdfs: <http://www.w3.org/2000/01/rdf-schema#>\n\
               Class: :A\n    Annotations: rdfs:comment \"42\"^^xsd:integer\n",
     },
+    // §2.5 quotedString escape sequences: `\"` and `\\` inside a literal.
+    // The writer must use `char_indices()` (byte offsets) when scanning for
+    // characters to escape — using `chars().enumerate()` (char ordinals)
+    // causes incorrect byte-slicing for multi-byte UTF-8 prefixes, corrupting
+    // the literal content after the first non-ASCII character.
+    Case {
+        id: "lit.escaped.quote",
+        residual: Residual::None,
+        expect_debug_contains: "AnnotationAssertion",
+        // Literal contains `α` (2-byte UTF-8) BEFORE the `"` that must be
+        // escaped — this triggers the char-vs-byte index bug if present.
+        omn: "Prefix: : <http://e/>\n\
+              Prefix: rdfs: <http://www.w3.org/2000/01/rdf-schema#>\n\
+              Class: :A\n    Annotations: rdfs:comment \"17α the \\\"stress hormone\\\"\"\n",
+    },
+    Case {
+        id: "lit.escaped.backslash",
+        residual: Residual::None,
+        expect_debug_contains: "AnnotationAssertion",
+        // Literal contains `α` before a `\` that must be escaped.
+        omn: "Prefix: : <http://e/>\n\
+              Prefix: rdfs: <http://www.w3.org/2000/01/rdf-schema#>\n\
+              Class: :A\n    Annotations: rdfs:comment \"17α path\\\\separator\"\n",
+    },
     // -----------------------------------------------------------------------
     // Datatype definition
     // -----------------------------------------------------------------------
