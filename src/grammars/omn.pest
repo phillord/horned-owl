@@ -268,7 +268,19 @@ Misc = {
     | ^"DifferentIndividuals:" ~ Annotations? ~ IndividualList
 }
 
-ClassFrame = { ^"Class:" ~ FrameSubject ~ ClassClause* }
+// OWL-API/Protégé/ROBOT emit general class axioms (GCIs) as a `Class:` frame
+// whose subject is a complex class expression, e.g.:
+//   Class: :r some :C
+//       SubClassOf: :D
+// Strict §2.5 requires a classIRI subject, but we accept leniently.  When the
+// subject parses as a compound ClassExpression (anything other than a bare
+// ClassIRI), the clauses are emitted as GCIs (SubClassOf / EquivalentClasses /
+// DisjointClasses over the expression) with NO DeclareClass.
+// `ClassFrameSubject` is separate from the shared `FrameSubject` rule so that
+// widening the subject grammar here does NOT affect ObjectProperty / DataProperty
+// / AnnotationProperty / Datatype frames (which keep the IRI-only subject).
+ClassFrameSubject = { Description }
+ClassFrame = { ^"Class:" ~ ClassFrameSubject ~ ClassClause* }
 ClassClause = {
       Annotations
     | ^"SubClassOf:"      ~ Annotations? ~ DescriptionList
