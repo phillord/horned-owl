@@ -15,28 +15,29 @@ hand-estimated.
 ## Conformance (compliance-report.md)
 
 - **§2.5 construct matrix (A1):** **89 constructs** pass read + write +
-  round-trip; **10 documented residuals** across 9 kinds. Each residual row
-  asserts its *specific* documented behavior (compiler-exhaustive `match` — no
-  rubber-stamp). Residual kinds: `SwrlRule`, `BareNameNeedsPrefix`,
-  `BareInverseUnsupported`, `ComplexLhsGci`, `NestedAnnotationDropped`,
-  `DataRestrictionAsObject`, `HasKeyObjectDataConflation`,
-  `PropertyObjectDataConflation` (×2: Equivalent/DisjointProperties over data
-  properties), `AnonSubjectWriterGap`.
+  round-trip; **8 documented residuals** across 7 kinds (down from 10/9 after
+  the 2026-06-13 fixes below). Each residual row asserts its *specific*
+  documented behavior (compiler-exhaustive `match` — no rubber-stamp). Residual
+  kinds: `SwrlRule`, `BareNameNeedsPrefix`, `ComplexLhsGci`,
+  `NestedAnnotationDropped`, `DataRestrictionAsObject`,
+  `HasKeyObjectDataConflation`, `PropertyObjectDataConflation` (×2:
+  Equivalent/DisjointProperties over data properties).
 - **Corpus parse + round-trip (A2)** (source → ROBOT/OWL-API → `.omn` → our
   reader → our writer → re-parse): koala parses (83 components) but **does not
-  round-trip** (our writer emits output our own reader rejects at rendered
-  ~11:17); obi-core parses (54 232 components) but round-trip has a component
-  mismatch; **sio and hp fail to parse** (reader gaps on annotation-heavy OBO
-  Manchester); doid excluded (ROBOT's Manchester serializer >2 min).
+  round-trip** (writer emits output our own reader rejects at rendered ~11:17 —
+  separate writer bug); obi-core parses (54 232 components) but round-trip has a
+  component mismatch; **sio fails to parse** (data-property restriction
+  `dp some xsd:double[…]` hits the object `some` arm — see #4) and **hp fails to
+  parse** (`Class: <complex expr>` — a complex-LHS general class axiom ROBOT
+  emits as a non-strict-§2.5 `Class:` frame subject — the `ComplexLhsGci`
+  residual); doid excluded (ROBOT's Manchester serializer >2 min).
 - **Semantic axiom-set equality vs OWL-API (A3)** (canonicalized, declarations +
-  non-logical meta dropped — so it cannot hide a logical-axiom gap): koala
-  **42 matched / 3 missing / 4 extra**; obi-core **48 290 matched / 20 / 20**.
-  Root cause of nearly all diffs: a typed literal such as `true` in
-  `DataHasValue` / `AnnotationAssertion` value position is parsed as an **IRI**
-  (base-IRI + bare local, e.g. `koala.owltrue`) instead of a typed literal —
-  a manifestation of the documented object/data-property lexical ambiguity in
-  Manchester (`value true` cannot disambiguate a data vs object property) plus
-  bare-name IRI resolution.
+  non-logical meta dropped — so it cannot hide a logical-axiom gap): **after the
+  boolean/value fix**, koala **45 matched / 0 missing / 1 extra** (the lone extra
+  is n-ary↔pairwise representation noise — full logical-axiom parity); obi-core
+  **48 409 matched / 16 missing / 20 extra** (was 20 missing; +119 matched). The
+  closed diffs were `value true`/`false` boolean operands; the remaining obi-core
+  residual is other constructs (under investigation / partly #4).
 - **Adversarial / fuzz (A4):** unicode IRIs & literals, 6-deep nesting, CRLF, and
   dotted CURIEs all read + round-trip; **4 000 proptest cases** (2 000 arbitrary +
   2 000 Manchester-ish) with **zero reader panics** (pest converts malformed input
@@ -68,26 +69,38 @@ hot medians carry per-call docker overhead; component counts differ across
 formats (declaration handling), so this measures per-format parse/serialize
 *speed*, not identical-axiom-set parsing.
 
+## Fixes landed (2026-06-13)
+
+Three reader/writer gaps closed (commits `9a5269d`, `365cfa9`, `c4dd599`):
+- **Bare `inverse R`** now parses (§2.5 allows `inverse` without parentheses).
+- **Anonymous-individual subjects** now render as `Individual: _:<id>` frames
+  (were emitted to `# General axioms` and lost on round-trip); all five
+  assertion arms fixed.
+- **`p value true`/`false`** now parses as `DataHasValue(p, "true"^^xsd:boolean)`
+  (lenient OWL-API/Protégé boolean literal) instead of `ObjectHasValue` over a
+  bare-name IRI — closing koala's A3 diff to full parity (45/0/1) and recovering
+  119 obi-core axioms.
+
 ## Residual limitations (authoritative)
 
 **Inherent — no §2.5 form exists:** SWRL `Rule:` (Manchester has no rule syntax);
-complex-LHS general class axioms (no frame form — the writer emits them to a
-`# General axioms` block the reader skips with a warning); a bare default-prefix
-local name is not lexable (use `<full>` or `prefix:local`).
+complex-LHS general class axioms (no §2.5 frame form — the writer emits them to a
+`# General axioms` block the reader skips, and ROBOT conversely emits them as a
+non-strict `Class: <complex expr>` subject that the reader rejects — this is what
+blocks **hp**); a bare default-prefix local name is not lexable.
 
-**Reader §2.5 gaps (findings, fixable, currently reported not fixed):** bare
-`inverse R` (without parentheses) is rejected though §2.5 allows it; a typed
-literal in `DataHasValue`/annotation-value position is read as an IRI (the
-object/data-property ambiguity above); data-property restrictions (`dp some dt`)
-parse as object restrictions; `EquivalentProperties:`/`DisjointProperties:` over
-data properties read as object-property axioms.
+**Reader gaps remaining (the data-vs-object disambiguation cluster):**
+data-property restrictions (`dp some dt`) parse as object restrictions (the
+grammar's data arms are dead PEG productions — `DataPropertyIRI` and
+`ObjectPropertyIRI` are lexically identical), which is what blocks **sio** and
+underlies the `DataRestrictionAsObject` + `PropertyObjectDataConflation`
+residuals. Resolving this needs either a filler-shape heuristic
+(facet-bracket / recognized `xsd:` datatype ⇒ data restriction) or two-pass
+declaration-aware parsing. **This is the open architectural decision.**
 
-**Writer follow-ups:** anonymous-individual subject assertions are emitted to the
-`# General axioms` block (the reader then skips them), so they do not round-trip
-— though the reader *does* parse `Individual: _:b1` on input, so this is a small
-writer fix (`ClassAssertion` currently only frames `Named` individuals). koala
-and obi-core round-trip gaps trace to writer/reader asymmetries on
-OWL-API-sourced input.
+**Writer follow-ups:** koala and obi-core fail round-trip on OWL-API-sourced
+input (koala re-parse error at rendered ~11:17) — separate writer bugs to
+characterize.
 
 **Model limits:** nested annotation-on-annotation is parsed but the inner nesting
 is dropped (the horned-owl model has no nested-annotation slot — the OFN reader
@@ -97,7 +110,7 @@ data-property keys round-trip as object keys.
 ## Bottom line
 
 The writer is OWL-API-conformant on the corpus and the reader is a fast,
-general §2.5 parser (89/99 constructs clean; ~11× faster than omny; competitive
+general §2.5 parser (93/101 constructs clean; ~11× faster than omny; competitive
 with the other Rust impl). The conformance harness now pins this with assertions
 and surfaces a small, well-characterized set of fixable reader/writer gaps
 (typed-literal-as-IRI, bare-`inverse`, anon-subject round-trip, sio/hp parse) as
