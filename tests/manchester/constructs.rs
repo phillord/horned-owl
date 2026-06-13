@@ -33,11 +33,6 @@ pub enum Residual {
     /// in the Misc section are parsed as the object-property form — a
     /// lexical ambiguity.  Parses but does NOT round-trip correctly.
     PropertyObjectDataConflation,
-    /// Anonymous-individual `ClassAssertion` parses fine, but the writer
-    /// routes it to `# General axioms` (no named-individual frame key),
-    /// which the reader skips — so round-trip fails.  This is a fixable
-    /// writer gap, not an inherent §2.5 limitation.
-    AnonSubjectWriterGap,
     /// A bare local name with no declared default prefix is not lexable.
     BareNameNeedsPrefix,
 }
@@ -690,14 +685,12 @@ pub const CASES: &[Case] = &[
         expect_debug_contains: "NegativeDataPropertyAssertion",
         omn: "Prefix: : <http://e/>\nIndividual: :a\n    Facts: not :p \"hello\"\n",
     },
-    // Anonymous individuals as frame subjects: the writer emits assertions
-    // on anonymous subjects to the non-Manchester `# General axioms` block
-    // (no named-individual frame key available), which the reader skips —
-    // so round-trip fails.  This is a fixable WRITER GAP: the reader already
-    // accepts `Individual: _:b1`, but the writer only frames Named individuals.
+    // Anonymous individuals as frame subjects round-trip correctly: the writer
+    // emits an `Individual: _:b1` frame (matching the reader's accepted form)
+    // instead of routing to the `# General axioms` block.
     Case {
         id: "indiv.anonymous",
-        residual: Residual::AnonSubjectWriterGap,
+        residual: Residual::None,
         expect_debug_contains: "AnonymousIndividual",
         omn: "Prefix: : <http://e/>\nIndividual: _:b1\n    Types: :A\n",
     },
@@ -883,12 +876,6 @@ fn construct_matrix_has_no_unexpected_failures() {
             Residual::PropertyObjectDataConflation => {
                 // EquivalentProperties/DisjointProperties over data props parsed
                 // as object-property form — reads ok but does NOT round-trip.
-                row.read_ok && !row.roundtrip_ok
-            }
-            Residual::AnonSubjectWriterGap => {
-                // Anonymous-individual frame parses ok; writer routes to
-                // `# General axioms` (no named-individual key) → reader skips
-                // → round-trip fails.
                 row.read_ok && !row.roundtrip_ok
             }
             Residual::ComplexLhsGci => {
