@@ -236,7 +236,11 @@ IndividualClause = {
     | ^"DifferentFrom:" ~ Annotations? ~ IndividualList
 }
 
-DatatypeFrame = { ^"Datatype:" ~ FrameSubject }
+DatatypeFrame = { ^"Datatype:" ~ FrameSubject ~ DatatypeClause* }
+DatatypeClause = {
+      Annotations
+    | ^"EquivalentTo:" ~ Annotations? ~ DataRange
+}
 
 // ---- shared comma-separated lists -------------------------------------------
 

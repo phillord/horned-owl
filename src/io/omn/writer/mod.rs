@@ -749,8 +749,18 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
                     }
                 }
 
+                // ---- Datatype definition ----
+                Component::DatatypeDefinition(ax) => {
+                    let clause = format!(
+                        "EquivalentTo: {}{}",
+                        ann_prefix(&ac.ann, pm),
+                        ax.range.as_manchester_with_prefixes(pm)
+                    );
+                    push_clause!(FrameKind::Datatype, ax.kind.0.as_ref(), clause);
+                }
+
                 // ---- Misc / fallback ----
-                // DatatypeDefinition, SWRL rules, anonymous-subject axioms, etc.
+                // SWRL rules, anonymous-subject axioms, etc.
                 _ => {
                     misc.push(ac.component.as_manchester_with_prefixes(pm).to_string());
                 }
