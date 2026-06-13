@@ -27,10 +27,27 @@ AbbreviatedIRI =  { SPARQL_PnameLn }
 SimpleIRI      = @{ SPARQL_PnLocal ~ !":" }
 IRI            =  { FullIRI | AbbreviatedIRI | SimpleIRI }
 
-Literal                   =  { TypedLiteral | StringLiteralWithLanguage | StringLiteralNoLanguage }
+// §2.5 literal ::= typedLiteral | stringLiteralNoLanguage | stringLiteralWithLanguage
+//                | integerLiteral | decimalLiteral | floatingPointLiteral
+// The quoted/typed/lang forms all start with `"` and are first-char-disjoint
+// from the numeric forms (a leading sign or digit), so order between the two
+// groups is irrelevant. WITHIN the numeric group, ordered-choice requires
+// float → decimal → integer: an integer is a prefix of a decimal is a prefix of
+// a float, so the most specific must be tried first (else `2.5` matches `2` as
+// an IntegerLiteral and orphans `.5`). FloatingPointLiteral requires the §2.5
+// `f`/`F` suffix; DecimalLiteral requires a `.`; IntegerLiteral is bare digits.
+Literal                   =  { TypedLiteral | StringLiteralWithLanguage | StringLiteralNoLanguage | FloatingPointLiteral | DecimalLiteral | IntegerLiteral }
 TypedLiteral              =  { QuotedString ~ "^^" ~ DatatypeIRI }
 StringLiteralWithLanguage =  { QuotedString ~ LanguageTag }
 StringLiteralNoLanguage   =  { QuotedString }
+// Atomic so `as_str()` yields the full lexical text. A trailing `!`-boundary on
+// the integer form keeps it from matching the integer prefix of a decimal/float
+// (ordered-choice already handles that, but the guard documents intent and is
+// cheap). Exponent uses `e`/`E`; float suffix is `f`/`F`.
+Exponent              = @{ ("e" | "E") ~ ("+" | "-")? ~ ASCII_DIGIT+ }
+FloatingPointLiteral  = @{ ("+" | "-")? ~ ( ASCII_DIGIT+ ~ ("." ~ ASCII_DIGIT+)? | "." ~ ASCII_DIGIT+ ) ~ Exponent? ~ ("f" | "F") }
+DecimalLiteral        = @{ ("+" | "-")? ~ ASCII_DIGIT+ ~ "." ~ ASCII_DIGIT+ }
+IntegerLiteral        = @{ ("+" | "-")? ~ ASCII_DIGIT+ }
 
 // ---- entry point ------------------------------------------------------------
 

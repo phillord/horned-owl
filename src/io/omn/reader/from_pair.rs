@@ -154,7 +154,8 @@ impl<A: ForIRI> FromPair<A> for IRI<A> {
 
 // ---------------------------------------------------------------------------
 
-/// `Individual` in omn is `{ IRI }` — always named (no blank node syntax).
+/// `Individual = { AnonymousIndividual | IRI }` — a named IRI OR an anonymous
+/// (blank-node) `_:id` individual.
 impl<A: ForIRI> FromPair<A> for Individual<A> {
     const RULE: Rule = Rule::Individual;
     fn from_pair_unchecked(pair: Pair<Rule>, ctx: &Context<'_, A>) -> Result<Self> {
@@ -204,6 +205,20 @@ impl<A: ForIRI> FromPair<A> for Literal<A> {
                 let literal = String::from_pair(parts.next().unwrap(), ctx)?;
                 Ok(Literal::Simple { literal })
             }
+            // §2.5 bare numeric literals: the lexical text IS the value; the
+            // datatype is fixed by the production (integer/decimal/float).
+            Rule::IntegerLiteral => Ok(Literal::Datatype {
+                literal: inner.as_str().to_string(),
+                datatype_iri: ctx.build.iri("http://www.w3.org/2001/XMLSchema#integer"),
+            }),
+            Rule::DecimalLiteral => Ok(Literal::Datatype {
+                literal: inner.as_str().to_string(),
+                datatype_iri: ctx.build.iri("http://www.w3.org/2001/XMLSchema#decimal"),
+            }),
+            Rule::FloatingPointLiteral => Ok(Literal::Datatype {
+                literal: inner.as_str().to_string(),
+                datatype_iri: ctx.build.iri("http://www.w3.org/2001/XMLSchema#float"),
+            }),
             rule => unreachable!("unexpected rule in Literal::from_pair: {:?}", rule),
         }
     }
@@ -791,19 +806,14 @@ where
     Ok(out)
 }
 
-/// Union the clause-level annotations with a single item's annotations
-/// (per-item-axiom clauses). Cheap clone of the clause set in the common case
-/// where `item_ann` is empty.
-fn merge_ann<A: ForIRI>(
-    clause: &BTreeSet<Annotation<A>>,
-    item_ann: BTreeSet<Annotation<A>>,
-) -> BTreeSet<Annotation<A>> {
-    if item_ann.is_empty() {
-        clause.clone()
-    } else {
-        let mut s = clause.clone();
-        s.extend(item_ann);
-        s
+/// §2.5 `descriptionAnnotatedList ::= [annotations] description { ',' …` — a
+/// LEADING clause-level annotation binds the FIRST list item ONLY. Fold the
+/// clause-level `ann` into `list[0]`'s own annotations; every other item keeps
+/// its own (post-comma) annotations untouched. Single-item clauses (the common
+/// case) are unchanged: the leading annotation still annotates the one axiom.
+fn bind_leading_to_first<A: ForIRI, T>(ann: BTreeSet<Annotation<A>>, list: &mut [AnnItem<A, T>]) {
+    if let Some(first) = list.first_mut() {
+        first.0.extend(ann);
     }
 }
 
@@ -865,13 +875,15 @@ fn insert_class_frame<A: ForIRI, O: MutableOntology<A>>(
                 }
             }
             "subclassof" => {
-                for (item_ann, sup) in parse_description_list(body, ctx)? {
+                let mut list = parse_description_list(body, ctx)?;
+                bind_leading_to_first(ann, &mut list);
+                for (item_ann, sup) in list {
                     ont.insert(AnnotatedComponent {
                         component: Component::SubClassOf(SubClassOf {
                             sub: subject_ce.clone(),
                             sup,
                         }),
-                        ann: merge_ann(&ann, item_ann),
+                        ann: item_ann,
                     });
                 }
             }
@@ -1059,7 +1071,9 @@ fn insert_object_property_frame<A: ForIRI, O: MutableOntology<A>>(
                 });
             }
             "subpropertyof" => {
-                for (item_ann, sup) in parse_ope_list(body, ctx)? {
+                let mut list = parse_ope_list(body, ctx)?;
+                bind_leading_to_first(ann, &mut list);
+                for (item_ann, sup) in list {
                     ont.insert(AnnotatedComponent {
                         component: Component::SubObjectPropertyOf(SubObjectPropertyOf {
                             sub: SubObjectPropertyExpression::ObjectPropertyExpression(
@@ -1067,7 +1081,7 @@ fn insert_object_property_frame<A: ForIRI, O: MutableOntology<A>>(
                             ),
                             sup,
                         }),
-                        ann: merge_ann(&ann, item_ann),
+                        ann: item_ann,
                     });
                 }
             }
@@ -1090,7 +1104,9 @@ fn insert_object_property_frame<A: ForIRI, O: MutableOntology<A>>(
                 });
             }
             "inverseof" => {
-                for (item_ann, inv) in parse_ope_list(body, ctx)? {
+                let mut list = parse_ope_list(body, ctx)?;
+                bind_leading_to_first(ann, &mut list);
+                for (item_ann, inv) in list {
                     // InverseObjectProperties takes ObjectProperty, not OPE;
                     // the writer only emits a plain property here.
                     if let ObjectPropertyExpression::ObjectProperty(p) = inv {
@@ -1099,7 +1115,7 @@ fn insert_object_property_frame<A: ForIRI, O: MutableOntology<A>>(
                                 ObjectProperty(subject.clone()),
                                 p,
                             )),
-                            ann: merge_ann(&ann, item_ann),
+                            ann: item_ann,
                         });
                     } else {
                         return Err(HornedError::invalid(
@@ -1109,24 +1125,28 @@ fn insert_object_property_frame<A: ForIRI, O: MutableOntology<A>>(
                 }
             }
             "domain" => {
-                for (item_ann, ce) in parse_description_list(body, ctx)? {
+                let mut list = parse_description_list(body, ctx)?;
+                bind_leading_to_first(ann, &mut list);
+                for (item_ann, ce) in list {
                     ont.insert(AnnotatedComponent {
                         component: Component::ObjectPropertyDomain(ObjectPropertyDomain {
                             ope: subject_ope.clone(),
                             ce,
                         }),
-                        ann: merge_ann(&ann, item_ann),
+                        ann: item_ann,
                     });
                 }
             }
             "range" => {
-                for (item_ann, ce) in parse_description_list(body, ctx)? {
+                let mut list = parse_description_list(body, ctx)?;
+                bind_leading_to_first(ann, &mut list);
+                for (item_ann, ce) in list {
                     ont.insert(AnnotatedComponent {
                         component: Component::ObjectPropertyRange(ObjectPropertyRange {
                             ope: subject_ope.clone(),
                             ce,
                         }),
-                        ann: merge_ann(&ann, item_ann),
+                        ann: item_ann,
                     });
                 }
             }
@@ -1216,13 +1236,15 @@ fn insert_data_property_frame<A: ForIRI, O: MutableOntology<A>>(
                 }
             }
             "subpropertyof" => {
-                for (item_ann, iri) in parse_iri_list(body, ctx)? {
+                let mut list = parse_iri_list(body, ctx)?;
+                bind_leading_to_first(ann, &mut list);
+                for (item_ann, iri) in list {
                     ont.insert(AnnotatedComponent {
                         component: Component::SubDataPropertyOf(SubDataPropertyOf {
                             sub: DataProperty(subject.clone()),
                             sup: DataProperty(iri),
                         }),
-                        ann: merge_ann(&ann, item_ann),
+                        ann: item_ann,
                     });
                 }
             }
@@ -1247,13 +1269,15 @@ fn insert_data_property_frame<A: ForIRI, O: MutableOntology<A>>(
                 });
             }
             "domain" => {
-                for (item_ann, ce) in parse_description_list(body, ctx)? {
+                let mut list = parse_description_list(body, ctx)?;
+                bind_leading_to_first(ann, &mut list);
+                for (item_ann, ce) in list {
                     ont.insert(AnnotatedComponent {
                         component: Component::DataPropertyDomain(DataPropertyDomain {
                             dp: DataProperty(subject.clone()),
                             ce,
                         }),
-                        ann: merge_ann(&ann, item_ann),
+                        ann: item_ann,
                     });
                 }
             }
@@ -1321,35 +1345,41 @@ fn insert_annotation_property_frame<A: ForIRI, O: MutableOntology<A>>(
                 }
             }
             "subpropertyof" => {
-                for (item_ann, iri) in parse_iri_list(body, ctx)? {
+                let mut list = parse_iri_list(body, ctx)?;
+                bind_leading_to_first(ann, &mut list);
+                for (item_ann, iri) in list {
                     ont.insert(AnnotatedComponent {
                         component: Component::SubAnnotationPropertyOf(SubAnnotationPropertyOf {
                             sub: AnnotationProperty(subject.clone()),
                             sup: AnnotationProperty(iri),
                         }),
-                        ann: merge_ann(&ann, item_ann),
+                        ann: item_ann,
                     });
                 }
             }
             "domain" => {
-                for (item_ann, iri) in parse_iri_list(body, ctx)? {
+                let mut list = parse_iri_list(body, ctx)?;
+                bind_leading_to_first(ann, &mut list);
+                for (item_ann, iri) in list {
                     ont.insert(AnnotatedComponent {
                         component: Component::AnnotationPropertyDomain(AnnotationPropertyDomain {
                             ap: AnnotationProperty(subject.clone()),
                             iri,
                         }),
-                        ann: merge_ann(&ann, item_ann),
+                        ann: item_ann,
                     });
                 }
             }
             "range" => {
-                for (item_ann, iri) in parse_iri_list(body, ctx)? {
+                let mut list = parse_iri_list(body, ctx)?;
+                bind_leading_to_first(ann, &mut list);
+                for (item_ann, iri) in list {
                     ont.insert(AnnotatedComponent {
                         component: Component::AnnotationPropertyRange(AnnotationPropertyRange {
                             ap: AnnotationProperty(subject.clone()),
                             iri,
                         }),
-                        ann: merge_ann(&ann, item_ann),
+                        ann: item_ann,
                     });
                 }
             }
@@ -1399,13 +1429,15 @@ fn insert_individual_frame<A: ForIRI, O: MutableOntology<A>>(
                 }
             }
             "types" => {
-                for (item_ann, ce) in parse_description_list(body, ctx)? {
+                let mut list = parse_description_list(body, ctx)?;
+                bind_leading_to_first(ann, &mut list);
+                for (item_ann, ce) in list {
                     ont.insert(AnnotatedComponent {
                         component: Component::ClassAssertion(ClassAssertion {
                             i: subject_ind.clone(),
                             ce,
                         }),
-                        ann: merge_ann(&ann, item_ann),
+                        ann: item_ann,
                     });
                 }
             }
@@ -1596,6 +1628,67 @@ mod tests {
         assert_eq!(
             IRI::<RcStr>::from_pair(pfx, &ctx).unwrap(),
             b.iri("http://t/A")
+        );
+    }
+
+    /// §2.5 allows bare numeric literals (integer/decimal/float) wherever a
+    /// `Literal` is expected — e.g. a facet value `xsd:integer[>= 0]` or a
+    /// `DataOneOf { 1, 2.5, 3.0f }`. Previously these hard-failed (the `Literal`
+    /// rule only had the quoted/typed/lang forms).
+    #[test]
+    fn reads_bare_numeric_literals() {
+        let b = Build::new_rc();
+        let mut pm = curie::PrefixMapping::default();
+        pm.add_prefix("xsd", "http://www.w3.org/2001/XMLSchema#")
+            .unwrap();
+        let ctx = Context::new(&b, &pm);
+
+        // Facet value: a bare integer `0`.
+        let dr = ManchesterLexer::lex(Rule::DataRange, "xsd:integer[>= 0]")
+            .unwrap()
+            .next()
+            .unwrap();
+        let parsed = DataRange::<RcStr>::from_pair(dr, &ctx).unwrap();
+        match parsed {
+            DataRange::DatatypeRestriction(_, facets) => {
+                assert_eq!(facets.len(), 1);
+                assert_eq!(facets[0].f, crate::vocab::Facet::MinInclusive);
+                assert_eq!(
+                    facets[0].l,
+                    Literal::Datatype {
+                        literal: "0".to_string(),
+                        datatype_iri: b.iri("http://www.w3.org/2001/XMLSchema#integer"),
+                    }
+                );
+            }
+            _ => panic!("expected DatatypeRestriction, got {parsed:?}"),
+        }
+
+        // DataOneOf with integer, decimal, float members.
+        let one_of = ManchesterLexer::lex(Rule::DataRange, "{ 1, 2.5, 3.0f }")
+            .unwrap()
+            .next()
+            .unwrap();
+        let parsed = DataRange::<RcStr>::from_pair(one_of, &ctx).unwrap();
+        let DataRange::DataOneOf(lits) = parsed else {
+            panic!("expected DataOneOf, got {parsed:?}");
+        };
+        assert_eq!(
+            lits,
+            vec![
+                Literal::Datatype {
+                    literal: "1".to_string(),
+                    datatype_iri: b.iri("http://www.w3.org/2001/XMLSchema#integer"),
+                },
+                Literal::Datatype {
+                    literal: "2.5".to_string(),
+                    datatype_iri: b.iri("http://www.w3.org/2001/XMLSchema#decimal"),
+                },
+                Literal::Datatype {
+                    literal: "3.0f".to_string(),
+                    datatype_iri: b.iri("http://www.w3.org/2001/XMLSchema#float"),
+                },
+            ]
         );
     }
 
@@ -3131,6 +3224,73 @@ mod tests {
         assert!(
             got.contains(&annotated),
             "expected A ⊑ C with ex:p \"x\" annotation, got:\n{got:#?}"
+        );
+    }
+
+    /// §2.5 `descriptionAnnotatedList`: a LEADING clause-level `Annotations?`
+    /// binds the FIRST list item ONLY — not every item. Repro: `SubClassOf:
+    /// Annotations: ex:note "x" :B, :C` must yield `A ⊑ B` ann `{note x}` and
+    /// `A ⊑ C` UNANNOTATED. (Reader previously spread the leading annotation to
+    /// every item via `merge_ann(&ann, item_ann)`.)
+    #[test]
+    fn leading_annotation_binds_first_item_only() {
+        use crate::io::omn::reader::read_with_build;
+        use crate::ontology::set::SetOntology;
+        use std::collections::BTreeSet;
+        use std::io::BufReader;
+        let b = Build::new_rc();
+        let doc = "Prefix: : <http://ex/>\n\
+                   Prefix: ex: <http://ex/>\n\
+                   Ontology:\n\
+                   Class: :A\n    \
+                   SubClassOf: Annotations: ex:note \"x\" :B, :C\n";
+        let (parsed, _): (SetOntology<_>, PrefixMapping) =
+            read_with_build(BufReader::new(doc.as_bytes()), &b).unwrap();
+
+        // First item (A ⊑ B) carries the leading annotation.
+        let mut ann = BTreeSet::new();
+        ann.insert(Annotation {
+            ap: b.annotation_property("http://ex/note"),
+            av: AnnotationValue::Literal(Literal::Simple {
+                literal: "x".to_string(),
+            }),
+        });
+        let annotated_b = AnnotatedComponent {
+            component: Component::SubClassOf(SubClassOf {
+                sub: ClassExpression::Class(b.class("http://ex/A")),
+                sup: ClassExpression::Class(b.class("http://ex/B")),
+            }),
+            ann: ann.clone(),
+        };
+        // Second item (A ⊑ C) must be UNANNOTATED.
+        let plain_c = AnnotatedComponent {
+            component: Component::SubClassOf(SubClassOf {
+                sub: ClassExpression::Class(b.class("http://ex/A")),
+                sup: ClassExpression::Class(b.class("http://ex/C")),
+            }),
+            ann: BTreeSet::new(),
+        };
+        // The bug-producing axiom: A ⊑ C WITH the leading annotation.
+        let bad_c = AnnotatedComponent {
+            component: Component::SubClassOf(SubClassOf {
+                sub: ClassExpression::Class(b.class("http://ex/A")),
+                sup: ClassExpression::Class(b.class("http://ex/C")),
+            }),
+            ann,
+        };
+
+        let got: BTreeSet<_> = parsed.iter().cloned().collect();
+        assert!(
+            got.contains(&annotated_b),
+            "expected A ⊑ B with ex:note \"x\" annotation, got:\n{got:#?}"
+        );
+        assert!(
+            got.contains(&plain_c),
+            "expected UNANNOTATED A ⊑ C, got:\n{got:#?}"
+        );
+        assert!(
+            !got.contains(&bad_c),
+            "leading annotation must NOT spread to A ⊑ C, got:\n{got:#?}"
         );
     }
 
