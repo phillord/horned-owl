@@ -121,7 +121,7 @@ Restriction = {
 
 // object-property expression: plain IRI or inverse(IRI)
 
-ope = { ( InverseKw ~ "(" ~ ObjectPropertyIRI ~ ")" ) | ObjectPropertyIRI }
+ope = { ( InverseKw ~ "(" ~ ObjectPropertyIRI ~ ")" ) | ( InverseKw ~ ObjectPropertyIRI ) | ObjectPropertyIRI }
 
 // atomic cardinality integer (no embedded whitespace)
 
