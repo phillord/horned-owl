@@ -36,7 +36,9 @@ IRI            =  { FullIRI | AbbreviatedIRI | SimpleIRI }
 // a float, so the most specific must be tried first (else `2.5` matches `2` as
 // an IntegerLiteral and orphans `.5`). FloatingPointLiteral requires the §2.5
 // `f`/`F` suffix; DecimalLiteral requires a `.`; IntegerLiteral is bare digits.
-Literal                   =  { TypedLiteral | StringLiteralWithLanguage | StringLiteralNoLanguage | FloatingPointLiteral | DecimalLiteral | IntegerLiteral }
+// OWL-API/Protégé compat: bare true/false as xsd:boolean (not strict §2.5)
+BooleanLiteral            = ${ ("true" | "false") ~ NameBoundary }
+Literal                   =  { TypedLiteral | StringLiteralWithLanguage | StringLiteralNoLanguage | BooleanLiteral | FloatingPointLiteral | DecimalLiteral | IntegerLiteral }
 TypedLiteral              =  { QuotedString ~ "^^" ~ DatatypeIRI }
 StringLiteralWithLanguage =  { QuotedString ~ LanguageTag }
 StringLiteralNoLanguage   =  { QuotedString }
@@ -100,12 +102,17 @@ ObjectOneOf = { "{" ~ Individual ~ ( "," ~ Individual )* ~ "}" }
 Restriction = {
       ope ~ SomeKw    ~ Primary
     | ope ~ OnlyKw    ~ Primary
+    // Data value arm BEFORE object value arm: a Literal operand (quoted string,
+    // typed literal, number, or bare boolean) wins over the object arm, whose
+    // Individual filler would otherwise silently consume bare `true`/`false` as IRIs.
+    // Backtracking is safe: if the operand is not a Literal the object arm is tried.
+    | DataPropertyIRI ~ ValueKw   ~ Literal
     | ope ~ ValueKw   ~ Individual
     | ope ~ SelfKw
     | ope ~ MinKw     ~ Cardinality ~ Primary?
     | ope ~ MaxKw     ~ Cardinality ~ Primary?
     | ope ~ ExactlyKw ~ Cardinality ~ Primary?
-    // NOTE (P2): the six arms below are currently DEAD PRODUCTIONS.
+    // NOTE (P2): the five arms below are currently DEAD PRODUCTIONS.
     // `DataPropertyIRI` is defined as `{ IRI }`, identical to `ObjectPropertyIRI`,
     // so PEG always commits to one of the object-property arms above and never
     // backtracks here.  A bare `dp some xsd:integer` is silently captured as an
@@ -113,7 +120,6 @@ Restriction = {
     // to a future phase that introduces a distinct lexical class for data properties.
     | DataPropertyIRI ~ SomeKw    ~ DataRange
     | DataPropertyIRI ~ OnlyKw    ~ DataRange
-    | DataPropertyIRI ~ ValueKw   ~ Literal
     | DataPropertyIRI ~ MinKw     ~ Cardinality ~ DataRange?
     | DataPropertyIRI ~ MaxKw     ~ Cardinality ~ DataRange?
     | DataPropertyIRI ~ ExactlyKw ~ Cardinality ~ DataRange?
