@@ -44,16 +44,25 @@ fn write_iri(
         && let Ok(curie) = pm.shrink_iri(iri)
     {
         let s = curie.to_string();
-        // `add_prefix("", ns)` stores "" in the prefix *mapping* (not the
-        // default slot), so `shrink_iri` returns a `Curie { prefix: Some(""), .. }`
-        // which `Display` formats as ":local". curie 0.1.4's `reference` field is
-        // private (no clean accessor), so strip the leading ':' to get the bare
-        // local name.
-        return if let Some(local) = s.strip_prefix(':') {
-            write!(f, "{local}")
-        } else {
-            write!(f, "{s}")
-        };
+        // The local name is everything after the first ':' (curie prefixes never
+        // contain a ':'). OWL-API's Manchester lexer tokenizes a digit-leading
+        // local (e.g. `EC:2.5.1.30`) as a number and cannot re-parse such a
+        // CURIE, so it emits a full IRI instead — match that, and only abbreviate
+        // when the local name begins with a (non-digit) name char.
+        let local = s.split_once(':').map_or(s.as_str(), |(_, l)| l);
+        if local.chars().next().is_some_and(|c| !c.is_ascii_digit()) {
+            // `add_prefix("", ns)` stores "" in the prefix *mapping* (not the
+            // default slot), so `shrink_iri` returns a `Curie { prefix: Some(""), .. }`
+            // which `Display` formats as ":local". curie 0.1.4's `reference` field
+            // is private (no clean accessor), so strip the leading ':' to get the
+            // bare local name.
+            return if let Some(stripped) = s.strip_prefix(':') {
+                write!(f, "{stripped}")
+            } else {
+                write!(f, "{s}")
+            };
+        }
+        // else: digit-leading or empty local — fall through to the full IRI form.
     }
     write!(f, "<{iri}>")
 }
@@ -765,7 +774,14 @@ pub(crate) fn annotation_to_manchester<A: ForIRI>(
     let ap_str = write_iri_to_string(ann.ap.0.as_ref(), Some(pm));
     let av_str = match &ann.av {
         AnnotationValue::Literal(lit) => Manchester(lit, Some(pm), PhantomData::<A>).to_string(),
-        AnnotationValue::IRI(iri) => Manchester(iri, Some(pm), PhantomData::<A>).to_string(),
+        // Render an IRI VALUE as a full `<…>` IRI, never an abbreviated CURIE.
+        // OWL-API's Manchester parser expects a literal in the annotation-value
+        // position when the annotation property is also used as an object/data
+        // property (OBO punning, e.g. RO relations / `skos:exactMatch`), so it
+        // rejects an abbreviated-CURIE value there; a full IRI is unambiguous.
+        // OWL-API's own renderer does the same. (The property in `ap_str` keeps
+        // its abbreviation — only the value position is affected.)
+        AnnotationValue::IRI(iri) => format!("<{}>", iri.as_ref()),
         // SAFETY INVARIANT: callers in mod.rs guard against AnonymousIndividual
         // values before reaching this function.  If this arm fires, there is a
         // bug in the calling code.
