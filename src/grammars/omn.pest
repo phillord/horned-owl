@@ -13,7 +13,19 @@ QuotedString   = ${ "\"" ~ (!"\"" ~ ("\\\\" | "\\\"" | ANY))* ~ "\"" }
 LanguageTag    = ${ "@" ~ BCP47_LanguageTag }
 FullIRI        = ${ "<" ~ RFC3987_Iri ~ ">" }
 AbbreviatedIRI =  { SPARQL_PnameLn }
-IRI            =  { FullIRI | AbbreviatedIRI }
+// A bare local name (no prefix), resolved against the DEFAULT (empty) prefix.
+// Tried LAST: `prefix:local` and `:local` match AbbreviatedIRI first; only a
+// colon-less name reaches SimpleIRI. Writers (ours, OWL-API, Protégé) emit bare
+// names for default-namespace entities (`Class: Ancestor`), so the reader must
+// accept them for round-trip + interop. (A bare name that is exactly a keyword
+// — e.g. a class literally named `not` — remains ambiguous; the maximal-munch
+// keyword guards resolve all non-keyword names.)
+// Atomic + `!":"` so a bare name is NOT matched when immediately followed by a
+// colon — otherwise the optional IRI in e.g. `Ontology: IRI?` would greedily eat
+// the `Import`/`Class`/… keyword (or a CURIE prefix) as a bare name. A genuine
+// bare local name is followed by whitespace/operator/`)`/EOI, never an abutting `:`.
+SimpleIRI      = @{ SPARQL_PnLocal ~ !":" }
+IRI            =  { FullIRI | AbbreviatedIRI | SimpleIRI }
 
 Literal                   =  { TypedLiteral | StringLiteralWithLanguage | StringLiteralNoLanguage }
 TypedLiteral              =  { QuotedString ~ "^^" ~ DatatypeIRI }
