@@ -857,6 +857,57 @@ fn parse_iri_list<A: ForIRI>(list: Pair<Rule>, ctx: &Context<'_, A>) -> Result<V
     list.into_inner().map(|p| IRI::from_pair(p, ctx)).collect()
 }
 
+fn parse_individual_list<A: ForIRI>(
+    list: Pair<Rule>,
+    ctx: &Context<'_, A>,
+) -> Result<Vec<Individual<A>>> {
+    list.into_inner()
+        .map(|p| Individual::from_pair(p, ctx))
+        .collect()
+}
+
+/// Parse a top-level `Misc` axiom (§2.5 `misc`) into the corresponding n-ary
+/// `Component` and insert it.  A leading `Annotations?` (axiom annotation on the
+/// whole clause) folds into the component's `ann` set.
+pub(crate) fn insert_misc<A: ForIRI, O: MutableOntology<A>>(
+    misc: Pair<Rule>,
+    ctx: &Context<'_, A>,
+    ont: &mut O,
+) -> Result<()> {
+    let kw = clause_keyword(&misc);
+    let mut it = misc.into_inner();
+    let mut first = it.next().unwrap();
+    let mut ann: BTreeSet<Annotation<A>> = BTreeSet::new();
+    if first.as_rule() == Rule::Annotations {
+        ann = parse_annotations(first, ctx)?.into_iter().collect();
+        first = it.next().unwrap();
+    }
+    let body = first; // DescriptionList | OpeList | IndividualList
+    let component = match kw.as_str() {
+        "equivalentclasses" => {
+            Component::EquivalentClasses(EquivalentClasses(parse_description_list(body, ctx)?))
+        }
+        "disjointclasses" => {
+            Component::DisjointClasses(DisjointClasses(parse_description_list(body, ctx)?))
+        }
+        "equivalentproperties" => Component::EquivalentObjectProperties(
+            EquivalentObjectProperties(parse_ope_list(body, ctx)?),
+        ),
+        "disjointproperties" => Component::DisjointObjectProperties(DisjointObjectProperties(
+            parse_ope_list(body, ctx)?,
+        )),
+        "sameindividual" => {
+            Component::SameIndividual(SameIndividual(parse_individual_list(body, ctx)?))
+        }
+        "differentindividuals" => {
+            Component::DifferentIndividuals(DifferentIndividuals(parse_individual_list(body, ctx)?))
+        }
+        other => unreachable!("unexpected misc keyword: {other}"),
+    };
+    ont.insert(AnnotatedComponent { component, ann });
+    Ok(())
+}
+
 fn parse_data_range_list<A: ForIRI>(
     list: Pair<Rule>,
     ctx: &Context<'_, A>,
@@ -2824,5 +2875,101 @@ mod tests {
         let got: std::collections::BTreeSet<_> =
             parsed.iter().map(|ac| ac.component.clone()).collect();
         assert_eq!(orig, got, "datatype definition did not round-trip\n{s}");
+    }
+
+    #[test]
+    fn reads_misc_disjoint_complex_round_trip() {
+        use crate::io::omn::{read_with_build, write};
+        use crate::ontology::component_mapped::ComponentMappedOntology;
+        use crate::ontology::set::SetOntology;
+        use std::io::BufReader;
+        let b = Build::new_rc();
+        let mut pm = PrefixMapping::default();
+        pm.add_prefix("ex", "http://ex/").unwrap();
+        let some = |r: &str, c: &str| ClassExpression::ObjectSomeValuesFrom {
+            ope: ObjectPropertyExpression::ObjectProperty(b.object_property(r)),
+            bce: Box::new(ClassExpression::Class(b.class(c))),
+        };
+        let mut o = SetOntology::new_rc();
+        for n in ["r", "s"] {
+            o.insert(DeclareObjectProperty(
+                b.object_property(format!("http://ex/{n}")),
+            ));
+        }
+        for n in ["A", "B"] {
+            o.insert(DeclareClass(b.class(format!("http://ex/{n}"))));
+        }
+        o.insert(DisjointClasses(vec![
+            some("http://ex/r", "http://ex/A"),
+            some("http://ex/s", "http://ex/B"),
+        ]));
+        type TestOnt = ComponentMappedOntology<
+            std::rc::Rc<str>,
+            std::rc::Rc<AnnotatedComponent<std::rc::Rc<str>>>,
+        >;
+        let amo: TestOnt = o.clone().into();
+        let mut buf = Vec::<u8>::new();
+        write(&mut buf, &amo, Some(&pm)).unwrap();
+        let s = String::from_utf8(buf.clone()).unwrap();
+        assert!(
+            s.contains("DisjointClasses:"),
+            "expected misc DisjointClasses:, got:\n{s}"
+        );
+        let (parsed, _): (SetOntology<_>, PrefixMapping) =
+            read_with_build(BufReader::new(&buf[..]), &b).unwrap();
+        let orig: std::collections::BTreeSet<_> = o.iter().map(|ac| ac.component.clone()).collect();
+        let got: std::collections::BTreeSet<_> =
+            parsed.iter().map(|ac| ac.component.clone()).collect();
+        assert_eq!(orig, got, "misc DisjointClasses did not round-trip\n{s}");
+    }
+
+    #[test]
+    fn reads_misc_object_property_keywords_round_trip() {
+        // Locks the native Misc property keyword (`EquivalentProperties:` /
+        // `DisjointProperties:`, NOT the functional `EquivalentObjectProperties:`):
+        // a complex (inverse) first member has no frame subject, so these route to
+        // the top-level Misc section.
+        use crate::io::omn::{read_with_build, write};
+        use crate::ontology::component_mapped::ComponentMappedOntology;
+        use crate::ontology::set::SetOntology;
+        use std::io::BufReader;
+        let b = Build::new_rc();
+        let mut pm = PrefixMapping::default();
+        pm.add_prefix("ex", "http://ex/").unwrap();
+        let inv_r =
+            ObjectPropertyExpression::InverseObjectProperty(b.object_property("http://ex/r"));
+        let s_ope = ObjectPropertyExpression::ObjectProperty(b.object_property("http://ex/s"));
+        let mut o = SetOntology::new_rc();
+        for n in ["r", "s"] {
+            o.insert(DeclareObjectProperty(
+                b.object_property(format!("http://ex/{n}")),
+            ));
+        }
+        o.insert(EquivalentObjectProperties(vec![
+            inv_r.clone(),
+            s_ope.clone(),
+        ]));
+        o.insert(DisjointObjectProperties(vec![inv_r, s_ope]));
+        type TestOnt = ComponentMappedOntology<
+            std::rc::Rc<str>,
+            std::rc::Rc<AnnotatedComponent<std::rc::Rc<str>>>,
+        >;
+        let amo: TestOnt = o.clone().into();
+        let mut buf = Vec::<u8>::new();
+        write(&mut buf, &amo, Some(&pm)).unwrap();
+        let s = String::from_utf8(buf.clone()).unwrap();
+        assert!(
+            s.contains("EquivalentProperties:") && s.contains("DisjointProperties:"),
+            "expected native Misc property keywords, got:\n{s}"
+        );
+        let (parsed, _): (SetOntology<_>, PrefixMapping) =
+            read_with_build(BufReader::new(&buf[..]), &b).unwrap();
+        let orig: std::collections::BTreeSet<_> = o.iter().map(|ac| ac.component.clone()).collect();
+        let got: std::collections::BTreeSet<_> =
+            parsed.iter().map(|ac| ac.component.clone()).collect();
+        assert_eq!(
+            orig, got,
+            "misc object-property axioms did not round-trip\n{s}"
+        );
     }
 }

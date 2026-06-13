@@ -158,7 +158,7 @@ FacetSymbol = {
 // rather than hard-erroring at EOI.  The marker must be kept in exact sync
 // with the writer's `writeln!(write, "# General axioms")` literal.
 GeneralAxiomBlock  = { "# General axioms" ~ ANY* }
-ManchesterDocument = { SOI ~ PrefixDeclaration* ~ OntologyHeader? ~ Frame* ~ GeneralAxiomBlock? ~ EOI }
+ManchesterDocument = { SOI ~ PrefixDeclaration* ~ OntologyHeader? ~ ( Frame | Misc )* ~ GeneralAxiomBlock? ~ EOI }
 ImportDeclaration  = { ^"Import:" ~ IRI }
 
 PrefixDeclaration = { ^"Prefix:" ~ PrefixName ~ FullIRI }
@@ -184,6 +184,22 @@ Frame = {
 }
 
 FrameSubject = { IRI }
+
+// ---- top-level misc axioms (§2.5 `misc`) ------------------------------------
+// n-ary equivalence/disjointness/same/different axioms whose members are not all
+// named (so they cannot be expressed under a frame).  `EquivalentProperties:` /
+// `DisjointProperties:` are object-vs-data ambiguous in Manchester; the list is
+// parsed as `OpeList` (object properties), mirroring the existing object-vs-data
+// restriction ambiguity (data-property equivalence/disjointness over bare IRIs is
+// read as object-property axioms; the writer only emits the object form here).
+Misc = {
+      ^"EquivalentClasses:"    ~ Annotations? ~ DescriptionList
+    | ^"DisjointClasses:"      ~ Annotations? ~ DescriptionList
+    | ^"EquivalentProperties:" ~ Annotations? ~ OpeList
+    | ^"DisjointProperties:"   ~ Annotations? ~ OpeList
+    | ^"SameIndividual:"       ~ Annotations? ~ IndividualList
+    | ^"DifferentIndividuals:" ~ Annotations? ~ IndividualList
+}
 
 ClassFrame = { ^"Class:" ~ FrameSubject ~ ClassClause* }
 ClassClause = {

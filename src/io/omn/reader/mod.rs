@@ -173,6 +173,7 @@ pub fn read_with_build<A: ForIRI, O: MutableOntology<A> + Ontology<A> + Default,
                 }
             }
             Rule::Frame => from_pair::insert_frame(child, &ctx, &mut ontology)?,
+            Rule::Misc => from_pair::insert_misc(child, &ctx, &mut ontology)?,
             Rule::GeneralAxiomBlock => {
                 let body = child.as_str();
                 let n = body
