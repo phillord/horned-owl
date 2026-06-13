@@ -14,24 +14,22 @@ hand-estimated.
 
 ## Conformance (compliance-report.md)
 
-- **§2.5 construct matrix (A1):** **96 constructs** pass read + write +
-  round-trip; **8 documented residuals** (down from 89/10 after the six
+- **§2.5 construct matrix (A1):** **99 constructs** pass read + write +
+  round-trip; **7 documented residuals** (down from 89/10 after the eight
   2026-06-13 fixes below). Each residual row asserts its *specific* documented
   behavior (compiler-exhaustive `match` — no rubber-stamp). Remaining residual
-  kinds: `SwrlRule` (no §2.5 rule syntax), `BareNameNeedsPrefix`,
-  `ComplexLhsGci` + `ComplexLhsGciFrameNoRoundtrip` (writer emits complex-LHS
-  GCIs to `# General axioms`), `NestedAnnotationDropped` (model limit),
+  kinds (6, all genuine §2.5/model limits): `SwrlRule` (no §2.5 rule syntax),
+  `BareNameNeedsPrefix`, `ComplexLhsGci` (a GCI in a `# General axioms`
+  functional block — distinct from the now-supported `Class: <expr>` frame
+  form), `NestedAnnotationDropped` (model has no nested-annotation slot),
   `HasKeyObjectDataConflation`, `PropertyObjectDataConflation`
   (Equivalent/DisjointProperties over data properties — the Misc-list object/data
-  ambiguity, no filler-shape signal).
+  ambiguity, no filler-shape signal, needs declaration context).
 - **Corpus parse + round-trip (A2)** (source → ROBOT/OWL-API → `.omn` → our
-  reader → our writer → re-parse): **all four ontologies now PARSE** —
-  koala (83), sio (12 116), obi-core (54 232), hp (346 381). **koala and sio
-  round-trip cleanly.** obi-core round-trip has a 0-count mismatch (3
-  `AnnotationAssertion`s differ in literal content — a writer literal-
-  normalization issue) and hp loses 9 components (346 381 vs 346 372 — complex-LHS
-  GCIs the writer still routes to `# General axioms`, the writer complement to
-  the FIX-5 reader support). doid excluded (ROBOT's Manchester serializer >2 min).
+  reader → our writer → re-parse): **all four ontologies now PARSE and
+  ROUND-TRIP** — koala (83), sio (12 116), obi-core (54 232), hp (346 381),
+  every one structurally component-equal across write→reread. doid excluded
+  (ROBOT's Manchester serializer >2 min).
 - **Semantic axiom-set equality vs OWL-API (A3)** (canonicalized, declarations +
   non-logical meta dropped — so it cannot hide a logical-axiom gap): koala
   **45 / 0 / 1** (full logical-axiom parity; the lone extra is n-ary↔pairwise
@@ -89,27 +87,30 @@ Six reader/writer gaps closed:
 - **Writer IRI rendering** — frame subjects with an invalid abbreviated local
   (namespace lacking a `#`/`/` separator) now emit the full `<IRI>` instead of a
   malformed `#Animal`. **Closed koala's round-trip.** `466aa20`
+- **Writer complex-LHS GCIs** — `SubClassOf` with a complex subject now renders
+  as a `Class: <expr>` frame (complement to the FIX-5 reader), not the
+  reader-skipped `# General axioms` block. **Closed hp's round-trip.** `5419491`
+- **Writer literal escaping (UTF-8 slicing bug)** — `quote()` mixed char-ordinals
+  with byte-offset slicing, corrupting literals with multibyte chars before an
+  escaped `"`/`\`; fixed via `char_indices()`. **Closed obi-core's round-trip.**
+  `35218ee`
 
 ## Residual limitations (authoritative)
 
 **Inherent — no §2.5 form exists:** SWRL `Rule:` (Manchester has no rule syntax);
-complex-LHS general class axioms (no §2.5 frame form — the writer emits them to a
-`# General axioms` block the reader skips, and ROBOT conversely emits them as a
-non-strict `Class: <complex expr>` subject that the reader rejects — this is what
-blocks **hp**); a bare default-prefix local name is not lexable.
+a bare default-prefix local name is not lexable (use `<full>` or `prefix:local`).
+Complex-LHS GCIs now round-trip via `Class: <expr>` frames (FIX-5/FIX-7); the
+`ComplexLhsGci` residual that remains is only the alternate `# General axioms`
+functional-block form, which the reader still skips.
 
-**Reader gaps remaining (the data-vs-object disambiguation cluster):**
-data-property restrictions (`dp some dt`) parse as object restrictions (the
-grammar's data arms are dead PEG productions — `DataPropertyIRI` and
-`ObjectPropertyIRI` are lexically identical), which is what blocks **sio** and
-underlies the `DataRestrictionAsObject` + `PropertyObjectDataConflation`
-residuals. Resolving this needs either a filler-shape heuristic
-(facet-bracket / recognized `xsd:` datatype ⇒ data restriction) or two-pass
-declaration-aware parsing. **This is the open architectural decision.**
-
-**Writer follow-ups:** koala and obi-core fail round-trip on OWL-API-sourced
-input (koala re-parse error at rendered ~11:17) — separate writer bugs to
-characterize.
+**Reader gap remaining (the data-vs-object disambiguation tail):** the filler-shape
+heuristic (FIX-4) closes the common case — a faceted (`dt[…]`) or known-datatype
+(`xsd:`/`rdf:`/`rdfs:`) filler ⇒ data restriction, which unblocked **sio**. The
+residual tail is a **bare user-declared-datatype** filler (no facet, no known
+prefix) used in a `some`/`only`/etc. restriction, and the same object/data
+ambiguity in the Misc `EquivalentProperties:`/`DisjointProperties:` lists
+(`PropertyObjectDataConflation`) — both need declaration-aware (two-pass) parsing,
+deferred as a documented follow-up.
 
 **Model limits:** nested annotation-on-annotation is parsed but the inner nesting
 is dropped (the horned-owl model has no nested-annotation slot — the OFN reader
@@ -119,9 +120,9 @@ data-property keys round-trip as object keys.
 ## Bottom line
 
 The writer is OWL-API-conformant on the corpus and the reader is a fast,
-general §2.5 parser (96 constructs clean; ~11× faster than omny; competitive
-with the other Rust impl) that now parses all four real-corpus ontologies
-(koala/sio/obi-core/hp) and round-trips koala + sio. The conformance harness
+general §2.5 parser (99 constructs clean; ~11× faster than omny; competitive
+with the other Rust impl) that now **parses and round-trips all four real-corpus
+ontologies** (koala/sio/obi-core/hp). The conformance harness
 pins this with assertions and surfaces a small, well-characterized set of
 remaining reader/writer gaps
 (typed-literal-as-IRI, bare-`inverse`, anon-subject round-trip, sio/hp parse) as
