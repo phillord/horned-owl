@@ -90,6 +90,16 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
     // swallows everything to EOF).
     let mut misc_axioms: Vec<String> = Vec::new();
 
+    // Complex-LHS GCI frames: `Class: <complexExpr>\n    SubClassOf: <sup>`
+    // blocks for SubClassOf axioms whose `sub` is not a named Class.  These
+    // are emitted as complete stand-alone frame texts (already fully rendered,
+    // including the leading blank line), bypassing the normal `subject_iri` /
+    // `render_iri_to_string` path so the complex expression is never mangled.
+    // They are collected separately from `frames` (which is keyed by named-IRI
+    // subject) and emitted after all named-entity frames but BEFORE the
+    // `# General axioms` block (GeneralAxiomBlock swallows to EOF).
+    let mut complex_gci_frames: Vec<String> = Vec::new();
+
     // -----------------------------------------------------------------------
     // 2. Conformant Ontology: header (IRI + nested Import: + Annotations:)
     //    W3C Manchester puts imports and ontology annotations INSIDE the
@@ -281,7 +291,18 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
                         );
                         push_clause!(FrameKind::Class, c.0.as_ref(), clause);
                     } else {
-                        misc.push(ac.component.as_manchester_with_prefixes(pm).to_string());
+                        // Complex-LHS GCI: emit as `Class: <complexExpr>` frame.
+                        // The subject is rendered as a Manchester class expression
+                        // (not an IRI), so we accumulate the full block verbatim
+                        // and bypass the named-entity frame machinery entirely.
+                        let sub_rendered = ax.sub.as_manchester_with_prefixes(pm).to_string();
+                        let sup_rendered = format!(
+                            "SubClassOf: {}{}",
+                            ann_prefix(&ac.ann, pm),
+                            ax.sup.as_manchester_with_prefixes(pm)
+                        );
+                        complex_gci_frames
+                            .push(format!("\nClass: {sub_rendered}\n    {sup_rendered}"));
                     }
                 }
                 Component::EquivalentClasses(ax) => {
@@ -918,6 +939,17 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
     }
 
     // -----------------------------------------------------------------------
+    // 4b-pre. Emit complex-LHS GCI frames (SubClassOf with complex sub).
+    //     Each entry is a fully-rendered `\nClass: <expr>\n    SubClassOf: <sup>`
+    //     block collected above.  Must precede `# General axioms` (which
+    //     GeneralAxiomBlock swallows to EOF) and also precede the `Misc:` block
+    //     for the same reason.
+    // -----------------------------------------------------------------------
+    for block in &complex_gci_frames {
+        write!(write, "{block}\n")?;
+    }
+
+    // -----------------------------------------------------------------------
     // 4b. Emit native Manchester top-level `Misc` axioms (§2.5) — DisjointClasses:
     //     / EquivalentClasses: / EquivalentProperties: / DisjointProperties: /
     //     SameIndividual: / DifferentIndividuals:.  These are valid Manchester and
@@ -973,9 +1005,10 @@ mod tests {
     #[test]
     fn misc_axioms_precede_general_axioms_block() {
         // A complex-member DisjointClasses → native `DisjointClasses:` Misc line.
-        // A complex-LHS SubClassOf → functional `# General axioms` fallback.
-        // The Misc line MUST appear BEFORE the `# General axioms` marker (else the
-        // GeneralAxiomBlock rule swallows it on re-read).
+        // A complex-LHS SubClassOf → `Class: <expr>` frame (FIX-7; no longer
+        // goes to `# General axioms`).
+        // Verify: DisjointClasses: Misc line appears BEFORE any `Class:` frame
+        // for the complex GCI subject.
         let b = Build::new_rc();
         let some = |r: &str, c: &str| ClassExpression::ObjectSomeValuesFrom {
             ope: ObjectPropertyExpression::ObjectProperty(b.object_property(r)),
@@ -986,7 +1019,7 @@ mod tests {
             some("http://t/r", "http://t/A"),
             some("http://t/s", "http://t/B"),
         ]));
-        // complex-LHS SubClassOf → functional fallback block
+        // complex-LHS SubClassOf → `Class: <expr>` frame after FIX-7
         o.insert(SubClassOf {
             sub: some("http://t/r", "http://t/A"),
             sup: ClassExpression::Class(b.class("http://t/C")),
@@ -995,13 +1028,107 @@ mod tests {
         let mut out = Vec::<u8>::new();
         write(&mut out, &amo, None).unwrap();
         let s = String::from_utf8(out).unwrap();
-        let disjoint_pos = s
-            .find("DisjointClasses:")
-            .expect("native Misc line present");
-        let general_pos = s.find("# General axioms").expect("fallback block present");
+        // After FIX-7 the SubClassOf no longer produces a `# General axioms` block.
         assert!(
-            disjoint_pos < general_pos,
-            "DisjointClasses: Misc line must precede `# General axioms`, got:\n{s}"
+            !s.contains("# General axioms"),
+            "complex-LHS SubClassOf must no longer go to # General axioms, got:\n{s}"
+        );
+        // The DisjointClasses Misc line is still emitted natively.
+        assert!(
+            s.contains("DisjointClasses:"),
+            "native DisjointClasses: Misc line must still be present, got:\n{s}"
+        );
+        // The complex SubClassOf is emitted as a `Class: <expr>` frame.
+        assert!(
+            s.contains("SubClassOf:"),
+            "complex-LHS SubClassOf must appear as a SubClassOf: clause in a Class: frame, got:\n{s}"
+        );
+    }
+
+    /// FIX-7: SubClassOf with a complex `sub` is emitted as a `Class: <expr>`
+    /// frame and round-trips correctly (read → write → read = same components).
+    #[test]
+    fn complex_lhs_subclassof_emits_class_frame_and_roundtrips() {
+        use crate::io::omn::read_with_build;
+        use std::io::BufReader;
+
+        let b = Build::new_rc();
+        let mut pm = PrefixMapping::default();
+        pm.add_prefix("", "http://e/").unwrap();
+        let r_some_c = ClassExpression::ObjectSomeValuesFrom {
+            ope: ObjectPropertyExpression::ObjectProperty(b.object_property("http://e/r")),
+            bce: Box::new(ClassExpression::Class(b.class("http://e/C"))),
+        };
+        let mut o = SetOntology::new_rc();
+        let ax = SubClassOf {
+            sub: r_some_c,
+            sup: ClassExpression::Class(b.class("http://e/D")),
+        };
+        o.insert(ax);
+        let amo: TestOnt = o.clone().into();
+        let mut out = Vec::<u8>::new();
+        write(&mut out, &amo, Some(&pm)).unwrap();
+        let s = String::from_utf8(out.clone()).unwrap();
+
+        // Must NOT fall to `# General axioms`.
+        assert!(
+            !s.contains("# General axioms"),
+            "complex-LHS SubClassOf must not go to # General axioms, got:\n{s}"
+        );
+        // Must emit a `Class: ` frame whose subject is the rendered complex expr.
+        assert!(s.contains("Class: "), "expected a Class: frame, got:\n{s}");
+        // The `SubClassOf:` clause must appear inside it.
+        assert!(
+            s.contains("SubClassOf:"),
+            "expected a SubClassOf: clause, got:\n{s}"
+        );
+        // The subject line must contain the complex expression, not an IRI.
+        // Expected: `Class: r some C` (using prefix abbreviation).
+        assert!(
+            s.lines()
+                .any(|l| l.starts_with("Class: ") && l.contains("some")),
+            "expected 'Class: ... some ...' subject line, got:\n{s}"
+        );
+
+        // Round-trip: read → write → read must yield component-equal result.
+        let (ont2, pm2): (crate::ontology::set::SetOntology<_>, PrefixMapping) =
+            read_with_build(BufReader::new(&out[..]), &b)
+                .unwrap_or_else(|e| panic!("round-trip re-parse failed: {e}\n---\n{s}"));
+        let mut out2 = Vec::<u8>::new();
+        let amo2: TestOnt = ont2.into();
+        write(&mut out2, &amo2, Some(&pm2)).unwrap();
+        let (ont3, _): (crate::ontology::set::SetOntology<_>, PrefixMapping) =
+            read_with_build(BufReader::new(&out2[..]), &b)
+                .unwrap_or_else(|e| panic!("second round-trip re-parse failed: {e}"));
+
+        // Component sets must be equal after one round-trip (write → read).
+        let orig: std::collections::BTreeSet<_> = o.iter().map(|ac| ac.component.clone()).collect();
+        let got: std::collections::BTreeSet<_> =
+            amo2.i().iter().map(|ac| ac.component.clone()).collect();
+        assert_eq!(orig, got, "round-trip mismatch:\n---written---\n{s}");
+
+        // And stable after a second round-trip.
+        let got2: std::collections::BTreeSet<_> =
+            ont3.iter().map(|ac| ac.component.clone()).collect();
+        assert_eq!(
+            orig, got2,
+            "second round-trip mismatch:\n---written---\n{s}"
+        );
+
+        // Named-subject regression: a normal SubClassOf(named, named) must still
+        // emit as a Class: <subject> frame clause (not a complex GCI frame).
+        let mut o_named = SetOntology::new_rc();
+        o_named.insert(SubClassOf {
+            sub: ClassExpression::Class(b.class("http://e/A")),
+            sup: ClassExpression::Class(b.class("http://e/B")),
+        });
+        let amo_named: TestOnt = o_named.into();
+        let mut out_named = Vec::<u8>::new();
+        write(&mut out_named, &amo_named, Some(&pm)).unwrap();
+        let s_named = String::from_utf8(out_named).unwrap();
+        assert!(
+            s_named.lines().any(|l| l.starts_with("Class: A")),
+            "named-subject SubClassOf must still emit as 'Class: A' frame, got:\n{s_named}"
         );
     }
 
