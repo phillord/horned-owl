@@ -85,6 +85,12 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
     // -----------------------------------------------------------------------
     let mut misc: Vec<String> = Vec::new();
 
+    // Native Manchester top-level `Misc:` lines (§2.5) for non-frameable n-ary
+    // axioms (members not all named).  Emitted BEFORE the `# General axioms`
+    // block so they parse as `Misc` on re-read (the GeneralAxiomBlock rule
+    // swallows everything to EOF).
+    let mut misc_axioms: Vec<String> = Vec::new();
+
     // -----------------------------------------------------------------------
     // 2. Conformant Ontology: header (IRI + nested Import: + Annotations:)
     //    W3C Manchester puts imports and ontology annotations INSIDE the
@@ -292,8 +298,16 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
                             );
                             push_clause!(FrameKind::Class, c.0.as_ref(), clause);
                         }
-                    } else {
-                        misc.push(ac.component.as_manchester_with_prefixes(pm).to_string());
+                    } else if !ax.0.is_empty() {
+                        let members: Vec<String> =
+                            ax.0.iter()
+                                .map(|ce| ce.as_manchester_with_prefixes(pm).to_string())
+                                .collect();
+                        misc_axioms.push(format!(
+                            "EquivalentClasses: {}{}",
+                            ann_prefix(&ac.ann, pm),
+                            members.join(", ")
+                        ));
                     }
                 }
                 Component::DisjointClasses(ax) => {
@@ -311,8 +325,16 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
                             );
                             push_clause!(FrameKind::Class, c.0.as_ref(), clause);
                         }
-                    } else {
-                        misc.push(ac.component.as_manchester_with_prefixes(pm).to_string());
+                    } else if !ax.0.is_empty() {
+                        let members: Vec<String> =
+                            ax.0.iter()
+                                .map(|ce| ce.as_manchester_with_prefixes(pm).to_string())
+                                .collect();
+                        misc_axioms.push(format!(
+                            "DisjointClasses: {}{}",
+                            ann_prefix(&ac.ann, pm),
+                            members.join(", ")
+                        ));
                     }
                 }
                 Component::DisjointUnion(ax) => {
@@ -380,11 +402,21 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
                                 push_clause!(FrameKind::ObjectProperty, iri, clause);
                             }
                         } else {
-                            misc.push(ac.component.as_manchester_with_prefixes(pm).to_string());
+                            // First member not a named property → no frame subject.
+                            // Native `Misc` keyword is `EquivalentProperties:` (object form).
+                            let members: Vec<String> =
+                                ax.0.iter()
+                                    .map(|o| o.as_manchester_with_prefixes(pm).to_string())
+                                    .collect();
+                            misc_axioms.push(format!(
+                                "EquivalentProperties: {}{}",
+                                ann_prefix(&ac.ann, pm),
+                                members.join(", ")
+                            ));
                         }
-                    } else {
-                        misc.push(ac.component.as_manchester_with_prefixes(pm).to_string());
                     }
+                    // empty member list (ax.0.first() == None) is vacuous → dropped,
+                    // matching the class/individual n-ary arms.
                 }
                 Component::DisjointObjectProperties(ax) => {
                     if let Some(ope) = ax.0.first() {
@@ -403,11 +435,21 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
                                 push_clause!(FrameKind::ObjectProperty, iri, clause);
                             }
                         } else {
-                            misc.push(ac.component.as_manchester_with_prefixes(pm).to_string());
+                            // First member not a named property → no frame subject.
+                            // Native `Misc` keyword is `DisjointProperties:` (object form).
+                            let members: Vec<String> =
+                                ax.0.iter()
+                                    .map(|o| o.as_manchester_with_prefixes(pm).to_string())
+                                    .collect();
+                            misc_axioms.push(format!(
+                                "DisjointProperties: {}{}",
+                                ann_prefix(&ac.ann, pm),
+                                members.join(", ")
+                            ));
                         }
-                    } else {
-                        misc.push(ac.component.as_manchester_with_prefixes(pm).to_string());
                     }
+                    // empty member list (ax.0.first() == None) is vacuous → dropped,
+                    // matching the class/individual n-ary arms.
                 }
                 Component::InverseObjectProperties(ax) => {
                     // ax.0 and ax.1 are ObjectProperty (not expression).
@@ -672,6 +714,11 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
                             push_clause!(FrameKind::Individual, ni.0.as_ref(), clause);
                         }
                     } else {
+                        // First member anonymous (no frame subject) or empty list.
+                        // The Manchester `Individual` rule cannot re-parse an
+                        // anonymous individual (`_:id`), so a native `SameIndividual:`
+                        // Misc line carrying one would FAIL on read. Keep the
+                        // functional `# General axioms` fallback (skip-and-warn).
                         misc.push(ac.component.as_manchester_with_prefixes(pm).to_string());
                     }
                 }
@@ -691,6 +738,11 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
                             push_clause!(FrameKind::Individual, ni.0.as_ref(), clause);
                         }
                     } else {
+                        // First member anonymous (no frame subject) or empty list.
+                        // The Manchester `Individual` rule cannot re-parse an
+                        // anonymous individual (`_:id`), so a native
+                        // `DifferentIndividuals:` Misc line carrying one would FAIL
+                        // on read. Keep the functional `# General axioms` fallback.
                         misc.push(ac.component.as_manchester_with_prefixes(pm).to_string());
                     }
                 }
@@ -872,6 +924,21 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
     }
 
     // -----------------------------------------------------------------------
+    // 4b. Emit native Manchester top-level `Misc` axioms (§2.5) — DisjointClasses:
+    //     / EquivalentClasses: / EquivalentProperties: / DisjointProperties: /
+    //     SameIndividual: / DifferentIndividuals:.  These are valid Manchester and
+    //     MUST precede the `# General axioms` marker (GeneralAxiomBlock swallows
+    //     everything to EOF, so a Misc line after it would be silently eaten on
+    //     read).
+    // -----------------------------------------------------------------------
+    if !misc_axioms.is_empty() {
+        writeln!(write)?;
+        for line in &misc_axioms {
+            writeln!(write, "{line}")?;
+        }
+    }
+
+    // -----------------------------------------------------------------------
     // 5. Emit misc / general axioms.
     //    Lines here may be in OWL functional syntax (see `as_manchester.rs`
     //    Component impl) for genuinely-inexpressible components (general
@@ -907,6 +974,41 @@ mod tests {
 
     fn into_amo(o: SetOntology<std::rc::Rc<str>>) -> TestOnt {
         o.into()
+    }
+
+    #[test]
+    fn misc_axioms_precede_general_axioms_block() {
+        // A complex-member DisjointClasses → native `DisjointClasses:` Misc line.
+        // A complex-LHS SubClassOf → functional `# General axioms` fallback.
+        // The Misc line MUST appear BEFORE the `# General axioms` marker (else the
+        // GeneralAxiomBlock rule swallows it on re-read).
+        let b = Build::new_rc();
+        let some = |r: &str, c: &str| ClassExpression::ObjectSomeValuesFrom {
+            ope: ObjectPropertyExpression::ObjectProperty(b.object_property(r)),
+            bce: Box::new(ClassExpression::Class(b.class(c))),
+        };
+        let mut o = SetOntology::new_rc();
+        o.insert(DisjointClasses(vec![
+            some("http://t/r", "http://t/A"),
+            some("http://t/s", "http://t/B"),
+        ]));
+        // complex-LHS SubClassOf → functional fallback block
+        o.insert(SubClassOf {
+            sub: some("http://t/r", "http://t/A"),
+            sup: ClassExpression::Class(b.class("http://t/C")),
+        });
+        let amo = into_amo(o);
+        let mut out = Vec::<u8>::new();
+        write(&mut out, &amo, None).unwrap();
+        let s = String::from_utf8(out).unwrap();
+        let disjoint_pos = s
+            .find("DisjointClasses:")
+            .expect("native Misc line present");
+        let general_pos = s.find("# General axioms").expect("fallback block present");
+        assert!(
+            disjoint_pos < general_pos,
+            "DisjointClasses: Misc line must precede `# General axioms`, got:\n{s}"
+        );
     }
 
     #[test]
