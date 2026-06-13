@@ -38,7 +38,13 @@ mod tests {
         assert!(lexes("<http://t/r> min 2 <http://t/A>"));
         assert!(lexes("inverse (<http://t/r>) some <http://t/A>"));
         assert!(lexes("{ <http://t/a>, <http://t/b> }"));
-        assert!(!lexes("and and and")); // garbage must NOT lex
+        // Genuine garbage must NOT lex. (Note: `and and and` now DOES lex since
+        // bare local names are accepted — it reads as the intersection of a class
+        // literally named `and` with itself; that keyword/bare-name ambiguity is
+        // the documented cost of bare-name support. A dangling operator is real
+        // garbage regardless.)
+        assert!(!lexes("<http://t/A> and")); // trailing operator, no operand
+        assert!(!lexes("(<http://t/A>")); // unclosed parenthesis
     }
 
     fn lex_doc(s: &str) -> bool {

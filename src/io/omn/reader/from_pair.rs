@@ -130,6 +130,23 @@ impl<A: ForIRI> FromPair<A> for IRI<A> {
                 let iri = inner.into_inner().next().unwrap();
                 Ok(ctx.build.iri(iri.as_str()))
             }
+            Rule::SimpleIRI => {
+                // SimpleIRI = { SPARQL_PnLocal } — a bare local name resolved
+                // against the DEFAULT (empty) prefix, exactly like the empty-prefix
+                // AbbreviatedIRI (`:local`) path above.
+                let span = inner.as_span();
+                let curie = Curie::new(Some(""), inner.as_str());
+                match ctx.prefixes.expand_curie(&curie) {
+                    Ok(s) => Ok(ctx.build.iri(s)),
+                    Err(curie::ExpansionError::Invalid) => {
+                        Err(HornedError::invalid_at("undefined prefix", span))
+                    }
+                    Err(curie::ExpansionError::MissingDefault) => Err(HornedError::invalid_at(
+                        "bare local name but no default prefix is declared",
+                        span,
+                    )),
+                }
+            }
             rule => unreachable!("unexpected rule in IRI::from_pair: {:?}", rule),
         }
     }
@@ -2461,5 +2478,50 @@ mod tests {
             "whole_ontology_with_extras did not round-trip\n--- document ---\n{}",
             String::from_utf8_lossy(&buf)
         );
+    }
+
+    #[test]
+    fn reads_bare_default_prefix_names_round_trip() {
+        // With a DEFAULT (empty) prefix the writer emits bare local names
+        // (`Class: Ancestor`, not `Class: :Ancestor`); the reader must accept
+        // them via the `SimpleIRI` production for the round-trip to hold.
+        use crate::io::omn::{read_with_build, write};
+        use crate::ontology::component_mapped::ComponentMappedOntology;
+        use crate::ontology::set::SetOntology;
+        use std::io::BufReader;
+
+        let b = Build::new_rc();
+        let mut pm = PrefixMapping::default();
+        pm.add_prefix("", "http://ex/").unwrap(); // default prefix → bare names
+
+        let mut o = SetOntology::new_rc();
+        let mut oid = OntologyID::default();
+        oid.iri = Some(b.iri("http://ex/o"));
+        o.insert(oid);
+        o.insert(DeclareClass(b.class("http://ex/Ancestor")));
+        o.insert(DeclareClass(b.class("http://ex/Person")));
+        o.insert(SubClassOf {
+            sub: ClassExpression::Class(b.class("http://ex/Ancestor")),
+            sup: ClassExpression::Class(b.class("http://ex/Person")),
+        });
+
+        type TestOnt = ComponentMappedOntology<
+            std::rc::Rc<str>,
+            std::rc::Rc<AnnotatedComponent<std::rc::Rc<str>>>,
+        >;
+        let amo: TestOnt = o.clone().into();
+        let mut buf = Vec::<u8>::new();
+        write(&mut buf, &amo, Some(&pm)).unwrap();
+        let s = String::from_utf8(buf.clone()).unwrap();
+        assert!(
+            s.contains("Class: Ancestor"),
+            "expected a bare default-prefix name, got:\n{s}"
+        );
+
+        let (parsed, _): (SetOntology<_>, PrefixMapping) =
+            read_with_build(BufReader::new(&buf[..]), &b).unwrap();
+        let orig: BTreeSet<_> = o.iter().map(|ac| ac.component.clone()).collect();
+        let got: BTreeSet<_> = parsed.iter().map(|ac| ac.component.clone()).collect();
+        assert_eq!(orig, got, "bare-name round-trip failed\n{s}");
     }
 }
