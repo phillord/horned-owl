@@ -3243,4 +3243,116 @@ mod tests {
             parsed.iter().map(|ac| ac.component.clone()).collect();
         assert_eq!(orig, got, "anonymous individual did not round-trip\n{s}");
     }
+
+    #[test]
+    fn parses_general_manchester_document() {
+        // A single hand-written §2.5 document exercising the constructs added
+        // across Tasks 1–5c together: a version IRI in the header, a top-level
+        // `DisjointClasses:` misc axiom over complex (ObjectSomeValuesFrom)
+        // expressions, a `Datatype: D EquivalentTo: <facet range>`, a compound
+        // data range (`xsd:integer and not {…}`) via a `DataProperty Range:`
+        // AND inside a `SubClassOf: p some (…)`, an anonymous individual as a
+        // `Facts:` target, and a nested annotation-on-annotation (parse-and-drop,
+        // the outer annotation survives). Parsed via the READER on external-style
+        // syntax (not our own writer's output) and asserted with `matches!`
+        // spot-checks — this locks the general-§2.5 capability in one test.
+        // The component count + variant shapes were verified empirically with the
+        // `omnread`/`omndump` harness before baking them in.
+        use crate::io::omn::read_with_build;
+        use crate::ontology::set::SetOntology;
+        use std::io::BufReader;
+        let b = Build::new_rc();
+        let doc = "\
+Prefix: ex: <http://ex/>
+Prefix: xsd: <http://www.w3.org/2001/XMLSchema#>
+Ontology: <http://ex/o> <http://ex/o/1.0.0>
+
+Datatype: ex:SmallInt
+    EquivalentTo: xsd:integer[<= \"255\"^^xsd:integer]
+
+DataProperty: ex:p
+    Range: (xsd:integer and not {\"x\"})
+
+ObjectProperty: ex:r
+
+Class: ex:A
+    Annotations: Annotations: ex:meta \"m\" ex:label \"L\"
+    SubClassOf: ex:p some (xsd:integer and not {\"x\"})
+
+Class: ex:B
+
+Individual: ex:a
+    Facts: ex:r _:genid1
+
+DisjointClasses: ex:r some ex:A, ex:r some ex:B
+";
+        let (parsed, _): (SetOntology<_>, PrefixMapping) =
+            read_with_build(BufReader::new(doc.as_bytes()), &b).unwrap();
+        let comps: Vec<_> = parsed.iter().map(|ac| ac.component.clone()).collect();
+        assert_eq!(comps.len(), 13, "unexpected component count\n{comps:#?}");
+
+        // Version IRI in the header.
+        assert!(
+            comps.iter().any(|c| matches!(
+                c,
+                Component::OntologyID(oid) if oid.viri.is_some()
+            )),
+            "expected an OntologyID carrying a version IRI"
+        );
+        // Datatype definition with a facet range.
+        assert!(
+            comps.iter().any(|c| matches!(
+                c,
+                Component::DatatypeDefinition(dd)
+                    if matches!(dd.range, DataRange::DatatypeRestriction(_, _))
+            )),
+            "expected a DatatypeDefinition with a DatatypeRestriction range"
+        );
+        // Compound data range on the data-property Range:.
+        assert!(
+            comps.iter().any(|c| matches!(
+                c,
+                Component::DataPropertyRange(dpr)
+                    if matches!(dpr.dr, DataRange::DataIntersectionOf(_))
+            )),
+            "expected a DataPropertyRange with a compound (intersection) range"
+        );
+        // SubClassOf carrying the compound DataSomeValuesFrom.
+        assert!(
+            comps.iter().any(|c| matches!(
+                c,
+                Component::SubClassOf(sc)
+                    if matches!(&sc.sup, ClassExpression::DataSomeValuesFrom { dr, .. }
+                        if matches!(dr, DataRange::DataIntersectionOf(_)))
+            )),
+            "expected a SubClassOf with a compound DataSomeValuesFrom on the RHS"
+        );
+        // Anonymous individual as a Facts target.
+        assert!(
+            comps.iter().any(|c| matches!(
+                c,
+                Component::ObjectPropertyAssertion(opa)
+                    if matches!(opa.to, Individual::Anonymous(_))
+            )),
+            "expected an ObjectPropertyAssertion with an anonymous individual target"
+        );
+        // Top-level DisjointClasses misc axiom over complex expressions.
+        assert!(
+            comps.iter().any(|c| matches!(
+                c,
+                Component::DisjointClasses(DisjointClasses(v))
+                    if v.iter().all(|ce| matches!(
+                        ce, ClassExpression::ObjectSomeValuesFrom { .. }))
+            )),
+            "expected a top-level DisjointClasses over ObjectSomeValuesFrom members"
+        );
+        // Nested annotation-on-annotation: the inner is dropped, the OUTER
+        // (ex:label \"L\") survives as an AnnotationAssertion.
+        assert!(
+            comps
+                .iter()
+                .any(|c| matches!(c, Component::AnnotationAssertion(_))),
+            "expected the outer annotation to survive (nested dropped)"
+        );
+    }
 }
