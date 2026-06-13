@@ -111,17 +111,22 @@ impl<A: ForIRI> AsManchester<A> for Class<A> {}
 
 // ---------------------------------------------------------------------------
 
-/// Write a string literal while escaping `"` and `\` characters.
+/// Write a string literal while escaping `"` and `\` characters per §2.5:
+/// `quotedString ::= '"' (\" | \\ | not(" or \))* '"'`
+///
+/// Uses `char_indices()` (byte offsets) — NOT `chars().enumerate()`
+/// (character indices) — so that multibyte UTF-8 sequences are sliced
+/// correctly.
 fn quote(mut s: &str, f: &mut Formatter<'_>) -> Result<(), Error> {
     f.write_str("\"")?;
-    while let Some((i, c)) = s.chars().enumerate().find(|(_, c)| *c == '\\' || *c == '"') {
-        f.write_str(&s[..i])?;
+    while let Some((byte_i, c)) = s.char_indices().find(|(_, c)| *c == '\\' || *c == '"') {
+        f.write_str(&s[..byte_i])?;
         match c {
             '\\' => f.write_str("\\\\")?,
             '"' => f.write_str("\\\"")?,
             _ => unreachable!(),
         }
-        s = &s[i + 1..];
+        s = &s[byte_i + c.len_utf8()..];
     }
     f.write_str(s)?;
     f.write_str("\"")
