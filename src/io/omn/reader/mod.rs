@@ -1,45 +1,64 @@
 //! OWL Manchester Syntax reader.
 //!
-//! Parses prefix declarations, an optional `Ontology:` header, and the six
-//! entity frames (`Class:`, `ObjectProperty:`, `DataProperty:`,
-//! `AnnotationProperty:`, `Individual:`, `Datatype:`) into a mutable ontology.
-//! It is the structural inverse of [`crate::io::omn::write`].
+//! Targets the full **W3C OWL 2 Manchester Syntax §2.5** grammar — a *general*
+//! Manchester reader, not merely the inverse of [`crate::io::omn::write`]. It
+//! consumes any valid §2.5 document (OWL-API / ROBOT / Protégé output included),
+//! validated against the OWL-API oracle across the rustdl corpus (pizza, family,
+//! go-basic, sio/ro/bibtex modules, etc.) — every measured ontology parses fully
+//! except where it contains a construct §2.5 cannot express (see residuals).
 //!
-//! ## Known limitations
-//! - The writer's trailing `# General axioms` block (OWL functional syntax for
-//!   genuinely-inexpressible components — general anonymous-subject class axioms,
-//!   SWRL rules) is **skipped with a warning** (its axioms are dropped, not
-//!   round-tripped). The frame portion of the document is parsed normally.
+//! Supported §2.5 surface:
+//! - prefix declarations and the `Ontology:` header, including the optional
+//!   **version IRI** (`Ontology: <oiri> <viri>`);
+//! - the six entity frames (`Class:`, `ObjectProperty:`, `DataProperty:`,
+//!   `AnnotationProperty:`, `Individual:`, `Datatype:`), with full clause sets;
+//! - **datatype definitions** (`Datatype: D EquivalentTo: <dataRange>`);
+//! - **full data ranges** (`and` / `or` / `not` / `{ oneOf }` / parenthesised /
+//!   facet `[ … ]` restrictions), not just bare datatypes + a single facet;
+//! - the top-level **misc axiom section** (`EquivalentClasses:`,
+//!   `DisjointClasses:`, `EquivalentProperties:`, `DisjointProperties:`,
+//!   `SameIndividual:`, `DifferentIndividuals:`) over arbitrary expressions;
+//! - full per-item `annotatedList`s (each comma-list element may carry its own
+//!   leading `Annotations:`);
+//! - nested annotation-on-annotation (parsed; the inner nesting is **dropped** —
+//!   the model has no nested-annotation slot — matching the OFN reader);
+//! - **anonymous (blank-node) individuals** `_:id` as frame subjects, `Facts:`
+//!   targets, list members, and annotation values;
+//! - bare local names as frame subjects / IRIs.
+//!
+//! ## Residual constructs the reader cannot represent
+//!
+//! All residuals are either inherent (no §2.5 form exists), a horned-owl model
+//! limit, or a writer follow-up — none is a §2.5 reader gap:
+//! - **SWRL `Rule:`** — Manchester §2.5 has no rule syntax; the `Rule:` keyword
+//!   is OWL-API's non-standard extension. A document containing one cannot be
+//!   parsed past it (this is what blocks `ro` in the corpus). Inherent.
+//! - **Complex-LHS general class axioms** — a `SubClassOf` whose subject is a
+//!   complex expression has no §2.5 frame form; the writer emits it to the
+//!   trailing `# General axioms` functional-syntax block, which the reader
+//!   **skips with a warning**. Inherent (no §2.5 form).
+//! - **Nested annotations are parsed but dropped.** The horned-owl model has no
+//!   `ann` field on `Annotation`, so annotation-on-annotation cannot be stored;
+//!   both the OFN and OMN readers discard the nesting. Model limit.
+//! - **Writer follow-ups (round-trip only):** anonymous-subject assertions are
+//!   still emitted to the misc block by the writer (the reader accepts them when
+//!   present), and a leading per-item annotation on a comma-list is applied
+//!   clause-wide on emission. The reader handles both forms on input; only the
+//!   *writer* round-trip is incomplete here.
 //! - Frame headers conflate declaration and reference: every frame yields a
 //!   `Declare*` axiom, so an entity used without an explicit declaration gains
 //!   one on round-trip. Declarations are non-logical (entailment-neutral).
 //! - n-ary `EquivalentTo:`/`DisjointWith:`/`SameAs:`/`DifferentFrom:` lists are
 //!   read as a SINGLE n-ary axiom with the frame subject prepended (the exact
 //!   inverse of the writer), not OWL-API's pairwise expansion.
-//! - A bare local name as a frame subject or IRI (emitted by the writer only
-//!   when a default `""` prefix is registered) is not lexable; use `<full>` or
-//!   `prefix:local`. Round-tripping requires a non-default prefix.
+//! - A bare local name emitted by the writer only when a default `""` prefix is
+//!   registered is not lexable; use `<full>` or `prefix:local`. Round-tripping a
+//!   bare name requires a non-default prefix.
 //! - **`HasKey:` object-vs-data key conflation.** Manchester `HasKey:` provides
 //!   no lexical distinction between object and data property keys. Data-property
 //!   keys are read back as `ObjectPropertyExpression` members; a round-trip
 //!   containing data-property keys will not reconstruct the original component.
 //!   Use object-property-only key lists to guarantee round-trip fidelity.
-//! - **Entity annotations on an IRI heading no frame are dropped.** An
-//!   `AnnotationAssertion` whose subject IRI does not correspond to any declared
-//!   entity frame is emitted to the `# General axioms` misc block (and thus
-//!   skipped by the reader). Only annotations on entities with a corresponding
-//!   `Class:` / `ObjectProperty:` / … frame round-trip.
-//! - **Anonymous-individual annotation values are not rendered.** An
-//!   `AnnotationValue::AnonymousIndividual` has no Manchester literal form and
-//!   is routed to the misc block (dropped on read).
-//! - **Axiom annotations on misc-routed axioms are dropped.** Complex-LHS
-//!   `SubClassOf`, anonymous-subject assertions, `DatatypeDefinition`, and SWRL
-//!   rules cannot be expressed in a Manchester frame clause, so they land in the
-//!   misc block. The misc fallback emits the bare OWL functional-syntax
-//!   component with no annotation; the annotation is silently lost.
-//! - **Annotation nesting is not representable.** The horned-owl model has no
-//!   `ann` field on `Annotation`; nested annotations (annotation-on-annotation)
-//!   are discarded by both the OFN and OMN readers and are never preserved.
 //! - **Data-property restrictions parse as OBJECT restrictions (silent).** The
 //!   grammar's data-property restriction arms are dead PEG productions (a data
 //!   property and an object property are lexically identical), so a restriction
