@@ -325,6 +325,7 @@ fn nary_and_pairwise_canonicalize_equal() {
 // ---------------------------------------------------------------------------
 
 #[test]
+#[ignore = "slow + docker/ROBOT-dependent; run via --ignored or the report generator"]
 fn corpus_axiom_equality_documents_diffs() {
     if !super::corpus::docker_available() {
         eprintln!("SKIPPED A3: docker/ROBOT not available");

@@ -226,7 +226,11 @@ pub fn run_corpus() -> Vec<CorpusRow> {
 // Gated test
 // ---------------------------------------------------------------------------
 
+// Slow (≈minutes) and docker/ROBOT-dependent; characterization, not a
+// deterministic gate (findings live in the generated compliance report). Run
+// explicitly: `cargo test --test manchester_conformance -- --ignored corpus_parses`.
 #[test]
+#[ignore = "slow + docker/ROBOT-dependent; run via --ignored or the report generator"]
 fn corpus_parses_or_documents_blocker() {
     if !docker_available() {
         eprintln!("SKIPPED A2: docker/ROBOT not available");

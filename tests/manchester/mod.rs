@@ -4,7 +4,6 @@ use std::rc::Rc;
 
 use curie::PrefixMapping;
 use horned_owl::io::ParserConfiguration;
-use horned_owl::io::ofn::reader::read as read_ofn;
 use horned_owl::io::omn::{read as read_omn, write as write_omn};
 use horned_owl::model::AnnotatedComponent;
 use horned_owl::ontology::component_mapped::ComponentMappedOntology;
@@ -36,11 +35,4 @@ pub fn components_sorted(ont: &O) -> Vec<String> {
     let mut v: Vec<String> = ont.iter().map(|ac| format!("{:?}", ac.component)).collect();
     v.sort();
     v
-}
-
-/// Parse a Functional-style OWL document string into a SetOntology + prefixes.
-/// Mirrors `read_str` but uses the OFN parser instead of the Manchester parser.
-pub fn read_ofn_str(s: &str) -> Result<(O, PrefixMapping), String> {
-    read_ofn::<Rc<str>, O, _>(BufReader::new(s.as_bytes()), ParserConfiguration::default())
-        .map_err(|e| format!("{e}"))
 }
