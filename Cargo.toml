@@ -48,6 +48,7 @@ remote = ["ureq"]
 encoding = ["quick-xml/encoding"]
 
 [dev-dependencies]
+proptest = "1"
 horned-owl = {path=".", features = ["remote"]}
 criterion = "0.7.0"
 mktemp = "0.5.1"
