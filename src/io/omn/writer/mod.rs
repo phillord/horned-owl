@@ -831,8 +831,22 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
 
         writeln!(write)?;
         writeln!(write, "{}: {subject_display}", frame_keyword(&frame.kind))?;
+        // Emit standalone entity `Annotations:` clauses FIRST, before the logical
+        // clauses — matching OWL-API's canonical frame layout. OWL-API's Manchester
+        // parser desyncs when a logical clause whose value ends in an ObjectOneOf
+        // `{…}` is immediately followed by an `Annotations:` clause; emitting the
+        // annotations first avoids that adjacency. (Axiom-annotation clauses begin
+        // with their logical keyword, e.g. `SubClassOf: Annotations: …`, so the
+        // `starts_with("Annotations:")` test selects only entity annotations.)
         for clause in &frame.clauses {
-            writeln!(write, "    {clause}")?;
+            if clause.starts_with("Annotations:") {
+                writeln!(write, "    {clause}")?;
+            }
+        }
+        for clause in &frame.clauses {
+            if !clause.starts_with("Annotations:") {
+                writeln!(write, "    {clause}")?;
+            }
         }
     }
 
