@@ -1366,9 +1366,44 @@ fn insert_datatype_frame<A: ForIRI, O: MutableOntology<A>>(
     ctx: &Context<'_, A>,
     ont: &mut O,
 ) -> Result<()> {
-    let (subject, _clauses) = frame_subject_and_clauses(frame, ctx)?;
-    ont.insert(DeclareDatatype(Datatype(subject)));
-    // Datatype frames carry no clauses.
+    let (subject, clauses) = frame_subject_and_clauses(frame, ctx)?;
+    ont.insert(DeclareDatatype(Datatype(subject.clone())));
+
+    for clause in clauses {
+        let kw = clause_keyword(&clause);
+        // Mirror `insert_class_frame`: a keyworded clause may carry a leading
+        // `Annotations?` axiom-annotation slot; consume it into `ann`. The
+        // standalone entity-annotation arm (`kw == "annotations"`) keeps its
+        // single inner `Annotations` pair as the body.
+        let mut it = clause.into_inner();
+        let mut first = it.next().unwrap();
+        let mut ann: BTreeSet<Annotation<A>> = BTreeSet::new();
+        if kw != "annotations" && first.as_rule() == Rule::Annotations {
+            ann = parse_annotations(first, ctx)?.into_iter().collect();
+            first = it.next().unwrap();
+        }
+        let body = first;
+        match kw.as_str() {
+            "annotations" => {
+                for ann_item in parse_annotations(body, ctx)? {
+                    ont.insert(AnnotationAssertion {
+                        subject: AnnotationSubject::IRI(subject.clone()),
+                        ann: ann_item,
+                    });
+                }
+            }
+            "equivalentto" => {
+                ont.insert(AnnotatedComponent {
+                    component: Component::DatatypeDefinition(DatatypeDefinition {
+                        kind: Datatype(subject.clone()),
+                        range: DataRange::from_pair(body, ctx)?,
+                    }),
+                    ann,
+                });
+            }
+            other => unreachable!("unexpected datatype clause keyword: {other}"),
+        }
+    }
     Ok(())
 }
 
@@ -2742,5 +2777,52 @@ mod tests {
             "compound data range did not round-trip\n{}",
             String::from_utf8_lossy(&buf)
         );
+    }
+
+    #[test]
+    fn reads_datatype_definition_round_trip() {
+        use crate::io::omn::{read_with_build, write};
+        use crate::ontology::component_mapped::ComponentMappedOntology;
+        use crate::ontology::set::SetOntology;
+        use crate::vocab::Facet;
+        use std::io::BufReader;
+        let b = Build::new_rc();
+        let mut pm = PrefixMapping::default();
+        pm.add_prefix("ex", "http://ex/").unwrap();
+        pm.add_prefix("xsd", "http://www.w3.org/2001/XMLSchema#")
+            .unwrap();
+        let mut o = SetOntology::new_rc();
+        o.insert(DeclareDatatype(b.datatype("http://ex/SmallInt")));
+        o.insert(DatatypeDefinition {
+            kind: b.datatype("http://ex/SmallInt"),
+            range: DataRange::DatatypeRestriction(
+                b.datatype("http://www.w3.org/2001/XMLSchema#integer"),
+                vec![FacetRestriction {
+                    f: Facet::MaxInclusive,
+                    l: Literal::Datatype {
+                        literal: "255".into(),
+                        datatype_iri: b.iri("http://www.w3.org/2001/XMLSchema#integer"),
+                    },
+                }],
+            ),
+        });
+        type TestOnt = ComponentMappedOntology<
+            std::rc::Rc<str>,
+            std::rc::Rc<AnnotatedComponent<std::rc::Rc<str>>>,
+        >;
+        let amo: TestOnt = o.clone().into();
+        let mut buf = Vec::<u8>::new();
+        write(&mut buf, &amo, Some(&pm)).unwrap();
+        let s = String::from_utf8(buf.clone()).unwrap();
+        assert!(
+            s.contains("Datatype: ex:SmallInt") && s.contains("EquivalentTo:"),
+            "got:\n{s}"
+        );
+        let (parsed, _): (SetOntology<_>, PrefixMapping) =
+            read_with_build(BufReader::new(&buf[..]), &b).unwrap();
+        let orig: std::collections::BTreeSet<_> = o.iter().map(|ac| ac.component.clone()).collect();
+        let got: std::collections::BTreeSet<_> =
+            parsed.iter().map(|ac| ac.component.clone()).collect();
+        assert_eq!(orig, got, "datatype definition did not round-trip\n{s}");
     }
 }
