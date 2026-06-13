@@ -737,14 +737,72 @@ fn clause_keyword(clause: &Pair<Rule>) -> String {
         .collect()
 }
 
-/// Parse a `DescriptionList` pair into a `Vec<ClassExpression>`.
+/// Per-item annotated-list entry: an item plus the `Annotations:` that
+/// immediately preceded it (empty in the common case).
+type AnnItem<A, T> = (BTreeSet<Annotation<A>>, T);
+
+/// Fold an annotatedList's inner pairs (interleaved `Annotations` markers and
+/// item pairs, per the §2.5 grammar) into `(per-item annotations, item)` pairs.
+/// A leading `Annotations` pair attaches to the item that follows it; items
+/// without a preceding `Annotations` carry an empty set. Behaviour is identical
+/// to a plain list when no per-item annotations are present.
+fn parse_annotated_list<A: ForIRI, T, F>(
+    list: Pair<Rule>,
+    ctx: &Context<'_, A>,
+    mut item: F,
+) -> Result<Vec<AnnItem<A, T>>>
+where
+    F: FnMut(Pair<Rule>, &Context<'_, A>) -> Result<T>,
+{
+    let mut out = Vec::new();
+    let mut pending: BTreeSet<Annotation<A>> = BTreeSet::new();
+    for p in list.into_inner() {
+        if p.as_rule() == Rule::Annotations {
+            pending.extend(parse_annotations(p, ctx)?);
+        } else {
+            out.push((std::mem::take(&mut pending), item(p, ctx)?));
+        }
+    }
+    Ok(out)
+}
+
+/// Union the clause-level annotations with a single item's annotations
+/// (per-item-axiom clauses). Cheap clone of the clause set in the common case
+/// where `item_ann` is empty.
+fn merge_ann<A: ForIRI>(
+    clause: &BTreeSet<Annotation<A>>,
+    item_ann: BTreeSet<Annotation<A>>,
+) -> BTreeSet<Annotation<A>> {
+    if item_ann.is_empty() {
+        clause.clone()
+    } else {
+        let mut s = clause.clone();
+        s.extend(item_ann);
+        s
+    }
+}
+
+/// Drain a per-item annotated list into `items`, folding every item's
+/// annotations into the single n-ary axiom's `ann` (§2.5: per-item annotations
+/// on an n-ary list annotate the axiom). Identity to the old behaviour when no
+/// item carries annotations.
+fn merge_list_ann<A: ForIRI, T>(
+    ann: &mut BTreeSet<Annotation<A>>,
+    list: Vec<AnnItem<A, T>>,
+    items: &mut Vec<T>,
+) {
+    for (item_ann, item) in list {
+        ann.extend(item_ann);
+        items.push(item);
+    }
+}
+
+/// Parse a `DescriptionList` pair into per-item `(annotations, ClassExpression)`.
 fn parse_description_list<A: ForIRI>(
     list: Pair<Rule>,
     ctx: &Context<'_, A>,
-) -> Result<Vec<ClassExpression<A>>> {
-    list.into_inner()
-        .map(|d| ClassExpression::from_pair(d, ctx))
-        .collect()
+) -> Result<Vec<AnnItem<A, ClassExpression<A>>>> {
+    parse_annotated_list(list, ctx, ClassExpression::from_pair)
 }
 
 fn insert_class_frame<A: ForIRI, O: MutableOntology<A>>(
@@ -782,19 +840,19 @@ fn insert_class_frame<A: ForIRI, O: MutableOntology<A>>(
                 }
             }
             "subclassof" => {
-                for sup in parse_description_list(body, ctx)? {
+                for (item_ann, sup) in parse_description_list(body, ctx)? {
                     ont.insert(AnnotatedComponent {
                         component: Component::SubClassOf(SubClassOf {
                             sub: subject_ce.clone(),
                             sup,
                         }),
-                        ann: ann.clone(),
+                        ann: merge_ann(&ann, item_ann),
                     });
                 }
             }
             "equivalentto" => {
                 let mut all = vec![subject_ce.clone()];
-                all.extend(parse_description_list(body, ctx)?);
+                merge_list_ann(&mut ann, parse_description_list(body, ctx)?, &mut all);
                 ont.insert(AnnotatedComponent {
                     component: Component::EquivalentClasses(EquivalentClasses(all)),
                     ann,
@@ -802,14 +860,15 @@ fn insert_class_frame<A: ForIRI, O: MutableOntology<A>>(
             }
             "disjointwith" => {
                 let mut all = vec![subject_ce.clone()];
-                all.extend(parse_description_list(body, ctx)?);
+                merge_list_ann(&mut ann, parse_description_list(body, ctx)?, &mut all);
                 ont.insert(AnnotatedComponent {
                     component: Component::DisjointClasses(DisjointClasses(all)),
                     ann,
                 });
             }
             "disjointunionof" => {
-                let items = parse_description_list(body, ctx)?;
+                let mut items = Vec::new();
+                merge_list_ann(&mut ann, parse_description_list(body, ctx)?, &mut items);
                 ont.insert(AnnotatedComponent {
                     component: Component::DisjointUnion(DisjointUnion(
                         Class(subject.clone()),
@@ -847,23 +906,22 @@ fn insert_class_frame<A: ForIRI, O: MutableOntology<A>>(
 fn parse_ope_list<A: ForIRI>(
     list: Pair<Rule>,
     ctx: &Context<'_, A>,
-) -> Result<Vec<ObjectPropertyExpression<A>>> {
-    list.into_inner()
-        .map(|p| ObjectPropertyExpression::from_pair(p, ctx))
-        .collect()
+) -> Result<Vec<AnnItem<A, ObjectPropertyExpression<A>>>> {
+    parse_annotated_list(list, ctx, ObjectPropertyExpression::from_pair)
 }
 
-fn parse_iri_list<A: ForIRI>(list: Pair<Rule>, ctx: &Context<'_, A>) -> Result<Vec<IRI<A>>> {
-    list.into_inner().map(|p| IRI::from_pair(p, ctx)).collect()
+fn parse_iri_list<A: ForIRI>(
+    list: Pair<Rule>,
+    ctx: &Context<'_, A>,
+) -> Result<Vec<AnnItem<A, IRI<A>>>> {
+    parse_annotated_list(list, ctx, IRI::from_pair)
 }
 
 fn parse_individual_list<A: ForIRI>(
     list: Pair<Rule>,
     ctx: &Context<'_, A>,
-) -> Result<Vec<Individual<A>>> {
-    list.into_inner()
-        .map(|p| Individual::from_pair(p, ctx))
-        .collect()
+) -> Result<Vec<AnnItem<A, Individual<A>>>> {
+    parse_annotated_list(list, ctx, Individual::from_pair)
 }
 
 /// Parse a top-level `Misc` axiom (§2.5 `misc`) into the corresponding n-ary
@@ -883,24 +941,37 @@ pub(crate) fn insert_misc<A: ForIRI, O: MutableOntology<A>>(
         first = it.next().unwrap();
     }
     let body = first; // DescriptionList | OpeList | IndividualList
+    // All misc axioms are n-ary: per-item annotations fold into the axiom `ann`.
     let component = match kw.as_str() {
         "equivalentclasses" => {
-            Component::EquivalentClasses(EquivalentClasses(parse_description_list(body, ctx)?))
+            let mut v = Vec::new();
+            merge_list_ann(&mut ann, parse_description_list(body, ctx)?, &mut v);
+            Component::EquivalentClasses(EquivalentClasses(v))
         }
         "disjointclasses" => {
-            Component::DisjointClasses(DisjointClasses(parse_description_list(body, ctx)?))
+            let mut v = Vec::new();
+            merge_list_ann(&mut ann, parse_description_list(body, ctx)?, &mut v);
+            Component::DisjointClasses(DisjointClasses(v))
         }
-        "equivalentproperties" => Component::EquivalentObjectProperties(
-            EquivalentObjectProperties(parse_ope_list(body, ctx)?),
-        ),
-        "disjointproperties" => Component::DisjointObjectProperties(DisjointObjectProperties(
-            parse_ope_list(body, ctx)?,
-        )),
+        "equivalentproperties" => {
+            let mut v = Vec::new();
+            merge_list_ann(&mut ann, parse_ope_list(body, ctx)?, &mut v);
+            Component::EquivalentObjectProperties(EquivalentObjectProperties(v))
+        }
+        "disjointproperties" => {
+            let mut v = Vec::new();
+            merge_list_ann(&mut ann, parse_ope_list(body, ctx)?, &mut v);
+            Component::DisjointObjectProperties(DisjointObjectProperties(v))
+        }
         "sameindividual" => {
-            Component::SameIndividual(SameIndividual(parse_individual_list(body, ctx)?))
+            let mut v = Vec::new();
+            merge_list_ann(&mut ann, parse_individual_list(body, ctx)?, &mut v);
+            Component::SameIndividual(SameIndividual(v))
         }
         "differentindividuals" => {
-            Component::DifferentIndividuals(DifferentIndividuals(parse_individual_list(body, ctx)?))
+            let mut v = Vec::new();
+            merge_list_ann(&mut ann, parse_individual_list(body, ctx)?, &mut v);
+            Component::DifferentIndividuals(DifferentIndividuals(v))
         }
         other => unreachable!("unexpected misc keyword: {other}"),
     };
@@ -963,7 +1034,7 @@ fn insert_object_property_frame<A: ForIRI, O: MutableOntology<A>>(
                 });
             }
             "subpropertyof" => {
-                for sup in parse_ope_list(body, ctx)? {
+                for (item_ann, sup) in parse_ope_list(body, ctx)? {
                     ont.insert(AnnotatedComponent {
                         component: Component::SubObjectPropertyOf(SubObjectPropertyOf {
                             sub: SubObjectPropertyExpression::ObjectPropertyExpression(
@@ -971,13 +1042,13 @@ fn insert_object_property_frame<A: ForIRI, O: MutableOntology<A>>(
                             ),
                             sup,
                         }),
-                        ann: ann.clone(),
+                        ann: merge_ann(&ann, item_ann),
                     });
                 }
             }
             "equivalentto" => {
                 let mut all = vec![subject_ope.clone()];
-                all.extend(parse_ope_list(body, ctx)?);
+                merge_list_ann(&mut ann, parse_ope_list(body, ctx)?, &mut all);
                 ont.insert(AnnotatedComponent {
                     component: Component::EquivalentObjectProperties(EquivalentObjectProperties(
                         all,
@@ -987,14 +1058,14 @@ fn insert_object_property_frame<A: ForIRI, O: MutableOntology<A>>(
             }
             "disjointwith" => {
                 let mut all = vec![subject_ope.clone()];
-                all.extend(parse_ope_list(body, ctx)?);
+                merge_list_ann(&mut ann, parse_ope_list(body, ctx)?, &mut all);
                 ont.insert(AnnotatedComponent {
                     component: Component::DisjointObjectProperties(DisjointObjectProperties(all)),
                     ann,
                 });
             }
             "inverseof" => {
-                for inv in parse_ope_list(body, ctx)? {
+                for (item_ann, inv) in parse_ope_list(body, ctx)? {
                     // InverseObjectProperties takes ObjectProperty, not OPE;
                     // the writer only emits a plain property here.
                     if let ObjectPropertyExpression::ObjectProperty(p) = inv {
@@ -1003,7 +1074,7 @@ fn insert_object_property_frame<A: ForIRI, O: MutableOntology<A>>(
                                 ObjectProperty(subject.clone()),
                                 p,
                             )),
-                            ann: ann.clone(),
+                            ann: merge_ann(&ann, item_ann),
                         });
                     } else {
                         return Err(HornedError::invalid(
@@ -1013,24 +1084,24 @@ fn insert_object_property_frame<A: ForIRI, O: MutableOntology<A>>(
                 }
             }
             "domain" => {
-                for ce in parse_description_list(body, ctx)? {
+                for (item_ann, ce) in parse_description_list(body, ctx)? {
                     ont.insert(AnnotatedComponent {
                         component: Component::ObjectPropertyDomain(ObjectPropertyDomain {
                             ope: subject_ope.clone(),
                             ce,
                         }),
-                        ann: ann.clone(),
+                        ann: merge_ann(&ann, item_ann),
                     });
                 }
             }
             "range" => {
-                for ce in parse_description_list(body, ctx)? {
+                for (item_ann, ce) in parse_description_list(body, ctx)? {
                     ont.insert(AnnotatedComponent {
                         component: Component::ObjectPropertyRange(ObjectPropertyRange {
                             ope: subject_ope.clone(),
                             ce,
                         }),
-                        ann: ann.clone(),
+                        ann: merge_ann(&ann, item_ann),
                     });
                 }
             }
@@ -1120,40 +1191,44 @@ fn insert_data_property_frame<A: ForIRI, O: MutableOntology<A>>(
                 }
             }
             "subpropertyof" => {
-                for iri in parse_iri_list(body, ctx)? {
+                for (item_ann, iri) in parse_iri_list(body, ctx)? {
                     ont.insert(AnnotatedComponent {
                         component: Component::SubDataPropertyOf(SubDataPropertyOf {
                             sub: DataProperty(subject.clone()),
                             sup: DataProperty(iri),
                         }),
-                        ann: ann.clone(),
+                        ann: merge_ann(&ann, item_ann),
                     });
                 }
             }
             "equivalentto" => {
+                let mut iris = Vec::new();
+                merge_list_ann(&mut ann, parse_iri_list(body, ctx)?, &mut iris);
                 let mut all = vec![DataProperty(subject.clone())];
-                all.extend(parse_iri_list(body, ctx)?.into_iter().map(DataProperty));
+                all.extend(iris.into_iter().map(DataProperty));
                 ont.insert(AnnotatedComponent {
                     component: Component::EquivalentDataProperties(EquivalentDataProperties(all)),
                     ann,
                 });
             }
             "disjointwith" => {
+                let mut iris = Vec::new();
+                merge_list_ann(&mut ann, parse_iri_list(body, ctx)?, &mut iris);
                 let mut all = vec![DataProperty(subject.clone())];
-                all.extend(parse_iri_list(body, ctx)?.into_iter().map(DataProperty));
+                all.extend(iris.into_iter().map(DataProperty));
                 ont.insert(AnnotatedComponent {
                     component: Component::DisjointDataProperties(DisjointDataProperties(all)),
                     ann,
                 });
             }
             "domain" => {
-                for ce in parse_description_list(body, ctx)? {
+                for (item_ann, ce) in parse_description_list(body, ctx)? {
                     ont.insert(AnnotatedComponent {
                         component: Component::DataPropertyDomain(DataPropertyDomain {
                             dp: DataProperty(subject.clone()),
                             ce,
                         }),
-                        ann: ann.clone(),
+                        ann: merge_ann(&ann, item_ann),
                     });
                 }
             }
@@ -1221,35 +1296,35 @@ fn insert_annotation_property_frame<A: ForIRI, O: MutableOntology<A>>(
                 }
             }
             "subpropertyof" => {
-                for iri in parse_iri_list(body, ctx)? {
+                for (item_ann, iri) in parse_iri_list(body, ctx)? {
                     ont.insert(AnnotatedComponent {
                         component: Component::SubAnnotationPropertyOf(SubAnnotationPropertyOf {
                             sub: AnnotationProperty(subject.clone()),
                             sup: AnnotationProperty(iri),
                         }),
-                        ann: ann.clone(),
+                        ann: merge_ann(&ann, item_ann),
                     });
                 }
             }
             "domain" => {
-                for iri in parse_iri_list(body, ctx)? {
+                for (item_ann, iri) in parse_iri_list(body, ctx)? {
                     ont.insert(AnnotatedComponent {
                         component: Component::AnnotationPropertyDomain(AnnotationPropertyDomain {
                             ap: AnnotationProperty(subject.clone()),
                             iri,
                         }),
-                        ann: ann.clone(),
+                        ann: merge_ann(&ann, item_ann),
                     });
                 }
             }
             "range" => {
-                for iri in parse_iri_list(body, ctx)? {
+                for (item_ann, iri) in parse_iri_list(body, ctx)? {
                     ont.insert(AnnotatedComponent {
                         component: Component::AnnotationPropertyRange(AnnotationPropertyRange {
                             ap: AnnotationProperty(subject.clone()),
                             iri,
                         }),
-                        ann: ann.clone(),
+                        ann: merge_ann(&ann, item_ann),
                     });
                 }
             }
@@ -1288,13 +1363,13 @@ fn insert_individual_frame<A: ForIRI, O: MutableOntology<A>>(
                 }
             }
             "types" => {
-                for ce in parse_description_list(body, ctx)? {
+                for (item_ann, ce) in parse_description_list(body, ctx)? {
                     ont.insert(AnnotatedComponent {
                         component: Component::ClassAssertion(ClassAssertion {
                             i: subject_ind.clone(),
                             ce,
                         }),
-                        ann: ann.clone(),
+                        ann: merge_ann(&ann, item_ann),
                     });
                 }
             }
@@ -1305,9 +1380,7 @@ fn insert_individual_frame<A: ForIRI, O: MutableOntology<A>>(
             }
             "sameas" => {
                 let mut all = vec![subject_ind.clone()];
-                for p in body.into_inner() {
-                    all.push(Individual::from_pair(p, ctx)?);
-                }
+                merge_list_ann(&mut ann, parse_individual_list(body, ctx)?, &mut all);
                 ont.insert(AnnotatedComponent {
                     component: Component::SameIndividual(SameIndividual(all)),
                     ann,
@@ -1315,9 +1388,7 @@ fn insert_individual_frame<A: ForIRI, O: MutableOntology<A>>(
             }
             "differentfrom" => {
                 let mut all = vec![subject_ind.clone()];
-                for p in body.into_inner() {
-                    all.push(Individual::from_pair(p, ctx)?);
-                }
+                merge_list_ann(&mut ann, parse_individual_list(body, ctx)?, &mut all);
                 ont.insert(AnnotatedComponent {
                     component: Component::DifferentIndividuals(DifferentIndividuals(all)),
                     ann,
@@ -2970,6 +3041,114 @@ mod tests {
         assert_eq!(
             orig, got,
             "misc object-property axioms did not round-trip\n{s}"
+        );
+    }
+
+    /// Hand-written §2.5 per-item annotatedList: a mid-list `Annotations:`
+    /// after a comma annotates only the following list item. This exercises the
+    /// new per-item grammar+reader path (the OWL-API ro.owlapi.omn line-1231
+    /// shape) — the leading clause-level `Annotations?` slot is shadowed by PEG
+    /// greediness, so the post-comma form is the only one that exercises it.
+    #[test]
+    fn reads_mid_list_per_item_annotation() {
+        use crate::io::omn::reader::read_with_build;
+        use crate::ontology::set::SetOntology;
+        use std::collections::BTreeSet;
+        use std::io::BufReader;
+        let b = Build::new_rc();
+        // `SubClassOf: :B, Annotations: ex:p "x" :C` => two SubClassOf axioms;
+        // only the second (A ⊑ C) carries the `ex:p "x"` annotation.
+        let doc = "Prefix: : <http://ex/>\n\
+                   Prefix: ex: <http://ex/>\n\
+                   Ontology:\n\
+                   Class: :A\n    \
+                   SubClassOf: :B, Annotations: ex:p \"x\" :C\n";
+        let (parsed, _): (SetOntology<_>, PrefixMapping) =
+            read_with_build(BufReader::new(doc.as_bytes()), &b).unwrap();
+
+        let plain = AnnotatedComponent {
+            component: Component::SubClassOf(SubClassOf {
+                sub: ClassExpression::Class(b.class("http://ex/A")),
+                sup: ClassExpression::Class(b.class("http://ex/B")),
+            }),
+            ann: BTreeSet::new(),
+        };
+        let mut ann = BTreeSet::new();
+        ann.insert(Annotation {
+            ap: b.annotation_property("http://ex/p"),
+            av: AnnotationValue::Literal(Literal::Simple {
+                literal: "x".to_string(),
+            }),
+        });
+        let annotated = AnnotatedComponent {
+            component: Component::SubClassOf(SubClassOf {
+                sub: ClassExpression::Class(b.class("http://ex/A")),
+                sup: ClassExpression::Class(b.class("http://ex/C")),
+            }),
+            ann,
+        };
+        let got: BTreeSet<_> = parsed.iter().cloned().collect();
+        assert!(
+            got.contains(&plain),
+            "expected un-annotated A ⊑ B, got:\n{got:#?}"
+        );
+        assert!(
+            got.contains(&annotated),
+            "expected A ⊑ C with ex:p \"x\" annotation, got:\n{got:#?}"
+        );
+    }
+
+    /// Our own writer emits one clause per per-item axiom, so an annotated and a
+    /// plain SubClassOf round-trip even without per-item lists. Regression guard
+    /// that the helper-signature refactor does not break the common case.
+    #[test]
+    fn reads_per_item_annotated_list_round_trip() {
+        use crate::io::omn::{read_with_build, write};
+        use crate::ontology::component_mapped::ComponentMappedOntology;
+        use crate::ontology::set::SetOntology;
+        use std::collections::BTreeSet;
+        use std::io::BufReader;
+        let b = Build::new_rc();
+        let mut pm = PrefixMapping::default();
+        pm.add_prefix("ex", "http://ex/").unwrap();
+        let mut o = SetOntology::new_rc();
+        for n in ["A", "B", "C"] {
+            o.insert(DeclareClass(b.class(format!("http://ex/{n}"))));
+        }
+        o.insert(SubClassOf {
+            sub: ClassExpression::Class(b.class("http://ex/A")),
+            sup: ClassExpression::Class(b.class("http://ex/B")),
+        });
+        let mut ann = BTreeSet::new();
+        ann.insert(Annotation {
+            ap: b.annotation_property("http://ex/p"),
+            av: AnnotationValue::Literal(Literal::Simple {
+                literal: "x".into(),
+            }),
+        });
+        o.insert(AnnotatedComponent {
+            component: Component::SubClassOf(SubClassOf {
+                sub: ClassExpression::Class(b.class("http://ex/A")),
+                sup: ClassExpression::Class(b.class("http://ex/C")),
+            }),
+            ann,
+        });
+        type TestOnt = ComponentMappedOntology<
+            std::rc::Rc<str>,
+            std::rc::Rc<AnnotatedComponent<std::rc::Rc<str>>>,
+        >;
+        let amo: TestOnt = o.clone().into();
+        let mut buf = Vec::<u8>::new();
+        write(&mut buf, &amo, Some(&pm)).unwrap();
+        let (parsed, _): (SetOntology<_>, PrefixMapping) =
+            read_with_build(BufReader::new(&buf[..]), &b).unwrap();
+        let orig: BTreeSet<_> = o.iter().cloned().collect();
+        let got: BTreeSet<_> = parsed.iter().cloned().collect();
+        assert_eq!(
+            orig,
+            got,
+            "per-item annotated list did not round-trip\n{}",
+            String::from_utf8_lossy(&buf)
         );
     }
 }

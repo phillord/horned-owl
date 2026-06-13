@@ -260,11 +260,15 @@ DatatypeClause = {
 
 // ---- shared comma-separated lists -------------------------------------------
 
-DescriptionList  = { Description ~ ( "," ~ Description )* }
-OpeList          = { ope ~ ( "," ~ ope )* }
-IriList          = { IRI ~ ( "," ~ IRI )* }
+// §2.5 annotatedList shape: each list item may be preceded by its own
+// `Annotations?`. The list's leading `Annotations?` is shadowed by the
+// clause-level `Annotations?` (PEG greediness), so only post-comma per-item
+// annotations actually fire; the reader folds each into the item's axiom.
+DescriptionList  = { Annotations? ~ Description ~ ( "," ~ Annotations? ~ Description )* }
+OpeList          = { Annotations? ~ ope ~ ( "," ~ Annotations? ~ ope )* }
+IriList          = { Annotations? ~ IRI ~ ( "," ~ Annotations? ~ IRI )* }
 DataRangeList    = { DataRange ~ ( "," ~ DataRange )* }
-IndividualList   = { Individual ~ ( "," ~ Individual )* }
+IndividualList   = { Annotations? ~ Individual ~ ( "," ~ Annotations? ~ Individual )* }
 CharacteristicList = { Characteristic ~ ( "," ~ Characteristic )* }
 FunctionalKw        = ${ ^"Functional"        ~ NameBoundary }
 InverseFunctionalKw = ${ ^"InverseFunctional" ~ NameBoundary }
