@@ -38,9 +38,6 @@ pub enum Residual {
     /// which the reader skips — so round-trip fails.  This is a fixable
     /// writer gap, not an inherent §2.5 limitation.
     AnonSubjectWriterGap,
-    /// Bare `inverse R` (without parentheses) is not accepted by the
-    /// parser; only `inverse(R)` is valid.
-    BareInverseUnsupported,
     /// A bare local name with no declared default prefix is not lexable.
     BareNameNeedsPrefix,
 }
@@ -341,13 +338,20 @@ pub const CASES: &[Case] = &[
         expect_debug_contains: "ObjectOneOf",
         omn: "Prefix: : <http://e/>\nClass: :A\n    SubClassOf: {:x , :y}\n",
     },
-    // `inverse` must be parenthesized: `inverse(:r) some :B` is the
-    // valid form; bare `inverse :r some :B` fails to parse (§2.5 gap).
+    // Parenthesized `inverse(R)` form — the canonical round-trip path.
     Case {
         id: "ce.inverse",
         residual: Residual::None,
         expect_debug_contains: "InverseObjectProperty",
         omn: "Prefix: : <http://e/>\nClass: :A\n    SubClassOf: inverse(:r) some :B\n",
+    },
+    // Bare `inverse R` (no parentheses) — §2.5 grammar allows both forms;
+    // parses identically to the parenthesized form above.
+    Case {
+        id: "ce.inverse.bare",
+        residual: Residual::None,
+        expect_debug_contains: "InverseObjectProperty",
+        omn: "Prefix: : <http://e/>\nClass: :A\n    SubClassOf: inverse :r some :B\n",
     },
     Case {
         id: "ce.parens",
@@ -763,17 +767,6 @@ pub const CASES: &[Case] = &[
         omn: "Class: Foo\n",
     },
     // -----------------------------------------------------------------------
-    // Bare `inverse R` (no parentheses) is a §2.5 gap: parse fails.
-    // Only `inverse(R) some C` is accepted.  The passing `ce.inverse` row
-    // (parenthesized form) already covers the valid path.
-    // -----------------------------------------------------------------------
-    Case {
-        id: "residual.bareinverse",
-        residual: Residual::BareInverseUnsupported,
-        expect_debug_contains: "",
-        omn: "Prefix: : <http://e/>\nClass: :A\n    SubClassOf: inverse :r some :B\n",
-    },
-    // -----------------------------------------------------------------------
     // Complex-LHS GCI — no §2.5 frame form.  The writer emits it to the
     // `# General axioms` functional-syntax block; the reader skips that block
     // (returns Ok, prints a warning).  Document parses cleanly (`read_ok`),
@@ -871,10 +864,6 @@ fn construct_matrix_has_no_unexpected_failures() {
             }
             Residual::BareNameNeedsPrefix => {
                 // Bare local name without default prefix is not lexable.
-                !row.read_ok
-            }
-            Residual::BareInverseUnsupported => {
-                // Bare `inverse R` (no parens) fails to parse.
                 !row.read_ok
             }
             Residual::NestedAnnotationDropped => {
