@@ -54,6 +54,11 @@ pub(crate) fn matcher(matches: &ArgMatches) -> Result<(), HornedError> {
             println!("Ontology:\n{ont:#?}\n\nMapping:\n{hash_map:#?}");
             Ok(())
         }
+        horned_owl::io::ParserOutput::OMNParser(ont, map) => {
+            let hash_map: HashMap<&String, &String> = map.mappings().collect();
+            println!("Ontology:\n{ont:#?}\n\nMapping:\n{hash_map:#?}");
+            Ok(())
+        }
         horned_owl::io::ParserOutput::RDFParser(ont, inc) => {
             if !matches.is_present("incomplete") {
                 let so: SetOntology<_> = ont.into();
