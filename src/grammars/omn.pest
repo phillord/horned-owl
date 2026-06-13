@@ -158,7 +158,9 @@ ImportDeclaration  = { ^"Import:" ~ IRI }
 
 PrefixDeclaration = { ^"Prefix:" ~ PrefixName ~ FullIRI }
 PrefixName        = { SPARQL_PnameNs }          // matches "ex:" and ":"
-OntologyHeader    = { ^"Ontology:" ~ IRI? ~ ImportDeclaration* ~ Annotations* }
+OntologyHeader    = { ^"Ontology:" ~ ( OntologyIRI ~ VersionIRI? )? ~ ImportDeclaration* ~ Annotations* }
+OntologyIRI       = { IRI }
+VersionIRI        = { IRI }
 
 // Annotation clauses (entity annotations inside frames; ontology annotations in header)
 Annotations     = { ^"Annotations:" ~ AnnotationEntry ~ ( "," ~ AnnotationEntry )* }
