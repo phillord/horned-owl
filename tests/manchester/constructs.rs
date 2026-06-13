@@ -16,18 +16,31 @@ pub enum Residual {
     /// Manchester §2.5 has no `Rule:` syntax; parse fails by design.
     SwrlRule,
     /// Complex-LHS GCI has no §2.5 frame form; writer emits to the
-    /// `# General axioms` block which the reader skips.  Here used for
-    /// anonymous-individual assertions emitted to that same block.
+    /// `# General axioms` functional-syntax block which the reader skips
+    /// with a warning.  The document parses (`read_ok`), but the axiom is
+    /// absent from the component set (visible via `note`).
     ComplexLhsGci,
     /// Nested annotations are parsed and silently dropped (model limit).
     NestedAnnotationDropped,
     /// Data-property restrictions in class expressions parse as
     /// `ObjectSomeValuesFrom` (data vs object props are lexically
-    /// identical in Manchester).
+    /// identical in Manchester).  Parses and round-trips as the wrong type.
     DataRestrictionAsObject,
-    /// `HasKey:` / `EquivalentProperties:`/`DisjointProperties:` in the
-    /// Misc section cannot distinguish object from data property keys.
+    /// `HasKey:` with a data-property key cannot distinguish object from
+    /// data property keys; parses and round-trips (conflated).
     HasKeyObjectDataConflation,
+    /// `EquivalentProperties:`/`DisjointProperties:` over data properties
+    /// in the Misc section are parsed as the object-property form — a
+    /// lexical ambiguity.  Parses but does NOT round-trip correctly.
+    PropertyObjectDataConflation,
+    /// Anonymous-individual `ClassAssertion` parses fine, but the writer
+    /// routes it to `# General axioms` (no named-individual frame key),
+    /// which the reader skips — so round-trip fails.  This is a fixable
+    /// writer gap, not an inherent §2.5 limitation.
+    AnonSubjectWriterGap,
+    /// Bare `inverse R` (without parentheses) is not accepted by the
+    /// parser; only `inverse(R)` is valid.
+    BareInverseUnsupported,
     /// A bare local name with no declared default prefix is not lexable.
     BareNameNeedsPrefix,
 }
@@ -329,7 +342,7 @@ pub const CASES: &[Case] = &[
         omn: "Prefix: : <http://e/>\nClass: :A\n    SubClassOf: {:x , :y}\n",
     },
     // `inverse` must be parenthesized: `inverse(:r) some :B` is the
-    // valid form; bare `inverse :r some :B` doesn't parse (documented).
+    // valid form; bare `inverse :r some :B` fails to parse (§2.5 gap).
     Case {
         id: "ce.inverse",
         residual: Residual::None,
@@ -341,6 +354,13 @@ pub const CASES: &[Case] = &[
         residual: Residual::None,
         expect_debug_contains: "ObjectIntersectionOf",
         omn: "Prefix: : <http://e/>\nClass: :A\n    SubClassOf: (:B and :C)\n",
+    },
+    // Nested class expression: restriction whose filler is itself a conjunction.
+    Case {
+        id: "ce.nested",
+        residual: Residual::None,
+        expect_debug_contains: "ObjectIntersectionOf",
+        omn: "Prefix: : <http://e/>\nClass: :A\n    SubClassOf: :r some (:B and :C)\n",
     },
     // -----------------------------------------------------------------------
     // Data ranges
@@ -667,11 +687,13 @@ pub const CASES: &[Case] = &[
         omn: "Prefix: : <http://e/>\nIndividual: :a\n    Facts: not :p \"hello\"\n",
     },
     // Anonymous individuals as frame subjects: the writer emits assertions
-    // on anonymous subjects to the non-Manchester `# General axioms` block,
-    // which the reader skips — so round-trip is not possible here.
+    // on anonymous subjects to the non-Manchester `# General axioms` block
+    // (no named-individual frame key available), which the reader skips —
+    // so round-trip fails.  This is a fixable WRITER GAP: the reader already
+    // accepts `Individual: _:b1`, but the writer only frames Named individuals.
     Case {
         id: "indiv.anonymous",
-        residual: Residual::ComplexLhsGci,
+        residual: Residual::AnonSubjectWriterGap,
         expect_debug_contains: "AnonymousIndividual",
         omn: "Prefix: : <http://e/>\nIndividual: _:b1\n    Types: :A\n",
     },
@@ -710,14 +732,14 @@ pub const CASES: &[Case] = &[
     // -----------------------------------------------------------------------
     Case {
         id: "residual.misc.equivdp",
-        residual: Residual::HasKeyObjectDataConflation,
+        residual: Residual::PropertyObjectDataConflation,
         expect_debug_contains: "EquivalentObjectProperties",
         omn: "Prefix: : <http://e/>\n\
               DataProperty: :p\nDataProperty: :q\nEquivalentProperties: :p , :q\n",
     },
     Case {
         id: "residual.misc.disjdp",
-        residual: Residual::HasKeyObjectDataConflation,
+        residual: Residual::PropertyObjectDataConflation,
         expect_debug_contains: "DisjointObjectProperties",
         omn: "Prefix: : <http://e/>\n\
               DataProperty: :p\nDataProperty: :q\nDisjointProperties: :p , :q\n",
@@ -741,10 +763,35 @@ pub const CASES: &[Case] = &[
         omn: "Class: Foo\n",
     },
     // -----------------------------------------------------------------------
-    // Complex-LHS GCI — no §2.5 frame form; omitted per task note.
-    // (The writer emits it to the `# General axioms` block which the reader
-    // skips; tested implicitly by `indiv.anonymous` above.)
+    // Bare `inverse R` (no parentheses) is a §2.5 gap: parse fails.
+    // Only `inverse(R) some C` is accepted.  The passing `ce.inverse` row
+    // (parenthesized form) already covers the valid path.
     // -----------------------------------------------------------------------
+    Case {
+        id: "residual.bareinverse",
+        residual: Residual::BareInverseUnsupported,
+        expect_debug_contains: "",
+        omn: "Prefix: : <http://e/>\nClass: :A\n    SubClassOf: inverse :r some :B\n",
+    },
+    // -----------------------------------------------------------------------
+    // Complex-LHS GCI — no §2.5 frame form.  The writer emits it to the
+    // `# General axioms` functional-syntax block; the reader skips that block
+    // (returns Ok, prints a warning).  Document parses cleanly (`read_ok`),
+    // but the complex-subject axiom is absent from the component set —
+    // demonstrated by asserting `expect_debug_contains` yields a non-empty
+    // `note` (the axiom was not found).
+    // -----------------------------------------------------------------------
+    Case {
+        id: "residual.complexgci",
+        residual: Residual::ComplexLhsGci,
+        // The complex SubClassOf axiom's subject is an intersection; if the
+        // axiom were present we'd see "ObjectIntersectionOf" in a component.
+        // Since the block is skipped it will be absent → note populated.
+        expect_debug_contains: "ObjectIntersectionOf",
+        omn: "Prefix: : <http://e/>\n\
+              # General axioms\n\
+              SubClassOf(ObjectIntersectionOf(<http://e/A> <http://e/B>) <http://e/C>)\n",
+    },
 ];
 
 // ---------------------------------------------------------------------------
@@ -810,11 +857,58 @@ fn construct_matrix_has_no_unexpected_failures() {
     for c in CASES {
         let row = run_case(c);
         println!("{:?}", row);
-        let ok = if c.residual == Residual::None {
-            row.read_ok && row.note.is_empty() && row.roundtrip_ok
-        } else {
-            // Residual rows: documented behaviour — we don't require round-trip.
-            true
+        // Every arm must be a SPECIFIC assertion — no unconditional `true`.
+        // If a residual row's actual behavior differs from the expectation,
+        // fix the tag/expectation in the CASES table, not this match.
+        let ok = match c.residual {
+            Residual::None => {
+                // Fully supported: must parse, pass debug check, and round-trip.
+                row.read_ok && row.note.is_empty() && row.roundtrip_ok
+            }
+            Residual::SwrlRule => {
+                // §2.5 has no Rule: syntax; parse must fail.
+                !row.read_ok
+            }
+            Residual::BareNameNeedsPrefix => {
+                // Bare local name without default prefix is not lexable.
+                !row.read_ok
+            }
+            Residual::BareInverseUnsupported => {
+                // Bare `inverse R` (no parens) fails to parse.
+                !row.read_ok
+            }
+            Residual::NestedAnnotationDropped => {
+                // Parses successfully; nesting silently dropped (model limit).
+                row.read_ok
+            }
+            Residual::DataRestrictionAsObject => {
+                // Data restriction parsed as ObjectSomeValuesFrom and round-trips
+                // as that wrong type — read ok, no note failure, round-trip ok.
+                row.read_ok && row.note.is_empty() && row.roundtrip_ok
+            }
+            Residual::HasKeyObjectDataConflation => {
+                // HasKey with a data-property key conflates to object property;
+                // parses and round-trips (conflated but stable).
+                row.read_ok && row.roundtrip_ok
+            }
+            Residual::PropertyObjectDataConflation => {
+                // EquivalentProperties/DisjointProperties over data props parsed
+                // as object-property form — reads ok but does NOT round-trip.
+                row.read_ok && !row.roundtrip_ok
+            }
+            Residual::AnonSubjectWriterGap => {
+                // Anonymous-individual frame parses ok; writer routes to
+                // `# General axioms` (no named-individual key) → reader skips
+                // → round-trip fails.
+                row.read_ok && !row.roundtrip_ok
+            }
+            Residual::ComplexLhsGci => {
+                // The `# General axioms` block is skipped by the reader
+                // (returns Ok, warning printed).  Document parses, but the
+                // complex axiom is absent from components — demonstrated by
+                // `expect_debug_contains` not matching → note is non-empty.
+                row.read_ok && !row.note.is_empty()
+            }
         };
         if !ok {
             failures.push(format!("{:?}", row));
