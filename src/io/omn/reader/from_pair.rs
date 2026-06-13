@@ -271,26 +271,86 @@ impl<A: ForIRI> FromPair<A> for FacetRestriction<A> {
 
 // ---------------------------------------------------------------------------
 
-/// `DataRange = { DatatypeIRI ~ ( "[" ~ Facet ~ ( "," ~ Facet )* ~ "]" )? }`
+/// The §2.5 `dataRange` grammar, layered like the class-expression rules:
 ///
-/// No brackets → `DataRange::Datatype`; with brackets → `DataRange::DatatypeRestriction`.
-/// (Composite data ranges—`DataOneOf`, `DataIntersectionOf`, etc.—are not in the
-/// Manchester grammar and are therefore not handled here.)
+/// ```text
+/// DataRange       = DataConjunction ( OrKw  DataConjunction )*
+/// DataConjunction = DataPrimary     ( AndKw DataPrimary )*
+/// DataPrimary     = NotKw? DataAtomic
+/// DataAtomic      = DataOneOf | DatatypeRestriction | "(" DataRange ")" | DatatypeIRI
+/// ```
+///
+/// `RULE` is the top `or` layer (`DataRange`). The `OrKw`/`AndKw`/`NotKw` keyword
+/// rules emit pairs that the helpers filter/skip.
 impl<A: ForIRI> FromPair<A> for DataRange<A> {
     const RULE: Rule = Rule::DataRange;
     fn from_pair_unchecked(pair: Pair<Rule>, ctx: &Context<'_, A>) -> Result<Self> {
-        let mut inner = pair.into_inner();
-        let dt_pair = inner.next().unwrap();
-        let dt = Datatype::from_pair(dt_pair, ctx)?;
-        // Collect any Facet children
-        let facets: Result<Vec<FacetRestriction<A>>> =
-            inner.map(|p| FacetRestriction::from_pair(p, ctx)).collect();
-        let facets = facets?;
-        if facets.is_empty() {
-            Ok(DataRange::Datatype(dt))
+        // DataRange = DataConjunction (OrKw DataConjunction)*
+        let mut conjs: Vec<DataRange<A>> = pair
+            .into_inner()
+            .filter(|p| p.as_rule() == Rule::DataConjunction)
+            .map(|p| data_conjunction(p, ctx))
+            .collect::<Result<_>>()?;
+        Ok(if conjs.len() == 1 {
+            conjs.remove(0)
         } else {
+            DataRange::DataUnionOf(conjs)
+        })
+    }
+}
+
+fn data_conjunction<A: ForIRI>(pair: Pair<Rule>, ctx: &Context<'_, A>) -> Result<DataRange<A>> {
+    // DataConjunction = DataPrimary (AndKw DataPrimary)*
+    let mut prims: Vec<DataRange<A>> = pair
+        .into_inner()
+        .filter(|p| p.as_rule() == Rule::DataPrimary)
+        .map(|p| data_primary(p, ctx))
+        .collect::<Result<_>>()?;
+    Ok(if prims.len() == 1 {
+        prims.remove(0)
+    } else {
+        DataRange::DataIntersectionOf(prims)
+    })
+}
+
+fn data_primary<A: ForIRI>(pair: Pair<Rule>, ctx: &Context<'_, A>) -> Result<DataRange<A>> {
+    // DataPrimary = NotKw? DataAtomic
+    let mut it = pair.into_inner();
+    let mut first = it.next().unwrap();
+    let negated = first.as_rule() == Rule::NotKw;
+    if negated {
+        first = it.next().unwrap();
+    }
+    let atomic = data_atomic(first, ctx)?;
+    Ok(if negated {
+        DataRange::DataComplementOf(Box::new(atomic))
+    } else {
+        atomic
+    })
+}
+
+fn data_atomic<A: ForIRI>(pair: Pair<Rule>, ctx: &Context<'_, A>) -> Result<DataRange<A>> {
+    // DataAtomic = DataOneOf | DatatypeRestriction | "(" DataRange ")" | DatatypeIRI
+    let inner = pair.into_inner().next().unwrap();
+    match inner.as_rule() {
+        Rule::DataOneOf => {
+            let lits = inner
+                .into_inner()
+                .map(|p| Literal::from_pair(p, ctx))
+                .collect::<Result<_>>()?;
+            Ok(DataRange::DataOneOf(lits))
+        }
+        Rule::DatatypeRestriction => {
+            let mut parts = inner.into_inner();
+            let dt = Datatype::from_pair(parts.next().unwrap(), ctx)?;
+            let facets = parts
+                .map(|p| FacetRestriction::from_pair(p, ctx))
+                .collect::<Result<_>>()?;
             Ok(DataRange::DatatypeRestriction(dt, facets))
         }
+        Rule::DataRange => DataRange::from_pair(inner, ctx), // parenthesized
+        Rule::DatatypeIRI => Ok(DataRange::Datatype(Datatype::from_pair(inner, ctx)?)),
+        rule => unreachable!("unexpected data-atomic rule: {:?}", rule),
     }
 }
 
@@ -2594,6 +2654,92 @@ mod tests {
             orig,
             got,
             "import after version-less ontology IRI did not round-trip\n{}",
+            String::from_utf8_lossy(&buf)
+        );
+    }
+
+    #[test]
+    fn reads_compound_data_ranges_round_trip() {
+        use crate::io::omn::{read_with_build, write};
+        use crate::ontology::component_mapped::ComponentMappedOntology;
+        use crate::ontology::set::SetOntology;
+        use crate::vocab::Facet;
+        use std::io::BufReader;
+        let b = Build::new_rc();
+        let mut pm = PrefixMapping::default();
+        pm.add_prefix("ex", "http://ex/").unwrap();
+        pm.add_prefix("xsd", "http://www.w3.org/2001/XMLSchema#")
+            .unwrap();
+        let xsd_int =
+            || DataRange::Datatype(b.datatype("http://www.w3.org/2001/XMLSchema#integer"));
+        let restr = DataRange::DatatypeRestriction(
+            b.datatype("http://www.w3.org/2001/XMLSchema#integer"),
+            vec![FacetRestriction {
+                f: Facet::MinInclusive,
+                l: Literal::Datatype {
+                    literal: "0".into(),
+                    datatype_iri: b.iri("http://www.w3.org/2001/XMLSchema#integer"),
+                },
+            }],
+        );
+        let mut o = SetOntology::new_rc();
+        o.insert(DeclareDataProperty(b.data_property("http://ex/p")));
+        o.insert(DeclareClass(b.class("http://ex/A")));
+        // Range: p ( (xsd:integer and [≥0]) or not {"x"} )
+        //
+        // NOTE: the plan wrapped this DataRange in a `DataSomeValuesFrom` carrier
+        // (`p some <dr>`), but that form is unreachable on read — the pre-existing,
+        // out-of-scope object/data-property `some` ambiguity (omn.pest P2 dead
+        // productions) commits `p some <dt>` to the OBJECT arm before the data-range
+        // grammar is reached. `DataPropertyRange` (`Range:` clause) routes through
+        // `DataRangeList → DataRange::from_pair`, exercising the identical
+        // or/and/not/oneOf code Task 2 added.
+        o.insert(DataPropertyRange {
+            dp: b.data_property("http://ex/p"),
+            dr: DataRange::DataUnionOf(vec![
+                DataRange::DataIntersectionOf(vec![xsd_int(), restr]),
+                DataRange::DataComplementOf(Box::new(DataRange::DataOneOf(vec![
+                    Literal::Simple {
+                        literal: "x".into(),
+                    },
+                ]))),
+            ]),
+        });
+        // and-over-or: forces the writer to emit parentheses around the inner `or`
+        // (`xsd:integer and ( xsd:string or xsd:integer )`), exercising the
+        // `DataAtomic = "(" ~ DataRange ~ ")"` reader branch.
+        o.insert(DeclareDataProperty(b.data_property("http://ex/q")));
+        o.insert(DataPropertyRange {
+            dp: b.data_property("http://ex/q"),
+            dr: DataRange::DataIntersectionOf(vec![
+                xsd_int(),
+                DataRange::DataUnionOf(vec![
+                    DataRange::Datatype(b.datatype("http://www.w3.org/2001/XMLSchema#string")),
+                    xsd_int(),
+                ]),
+            ]),
+        });
+        type TestOnt = ComponentMappedOntology<
+            std::rc::Rc<str>,
+            std::rc::Rc<AnnotatedComponent<std::rc::Rc<str>>>,
+        >;
+        let amo: TestOnt = o.clone().into();
+        let mut buf = Vec::<u8>::new();
+        write(&mut buf, &amo, Some(&pm)).unwrap();
+        let s = String::from_utf8(buf.clone()).unwrap();
+        assert!(
+            s.contains('('),
+            "expected parenthesized data range in writer output:\n{s}"
+        );
+        let (parsed, _): (SetOntology<_>, PrefixMapping) =
+            read_with_build(BufReader::new(&buf[..]), &b).unwrap();
+        let orig: std::collections::BTreeSet<_> = o.iter().map(|ac| ac.component.clone()).collect();
+        let got: std::collections::BTreeSet<_> =
+            parsed.iter().map(|ac| ac.component.clone()).collect();
+        assert_eq!(
+            orig,
+            got,
+            "compound data range did not round-trip\n{}",
             String::from_utf8_lossy(&buf)
         );
     }
