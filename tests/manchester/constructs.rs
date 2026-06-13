@@ -22,10 +22,6 @@ pub enum Residual {
     ComplexLhsGci,
     /// Nested annotations are parsed and silently dropped (model limit).
     NestedAnnotationDropped,
-    /// Data-property restrictions in class expressions parse as
-    /// `ObjectSomeValuesFrom` (data vs object props are lexically
-    /// identical in Manchester).  Parses and round-trips as the wrong type.
-    DataRestrictionAsObject,
     /// `HasKey:` with a data-property key cannot distinguish object from
     /// data property keys; parses and round-trips (conflated).
     HasKeyObjectDataConflation,
@@ -709,17 +705,34 @@ pub const CASES: &[Case] = &[
         omn: "Prefix: : <http://e/>\nIndividual: _:b1\n    Types: :A\n",
     },
     // -----------------------------------------------------------------------
-    // DataProperty restriction-as-object residual
-    // `dp some xsd:integer` inside a class expression is parsed as
-    // ObjectSomeValuesFrom (data and object props are lexically identical).
+    // DataProperty restriction: known-datatype filler → DataSomeValuesFrom
+    // (filler-shape heuristic: known xsd:/rdf:/rdfs:/owl: prefix ⇒ data restriction)
     // -----------------------------------------------------------------------
     Case {
-        id: "residual.datarestriction",
-        residual: Residual::DataRestrictionAsObject,
-        expect_debug_contains: "ObjectSomeValuesFrom",
+        id: "dr.restriction.known_datatype",
+        residual: Residual::None,
+        expect_debug_contains: "DataSomeValuesFrom",
         omn: "Prefix: : <http://e/>\n\
               Prefix: xsd: <http://www.w3.org/2001/XMLSchema#>\n\
               Class: :A\n    SubClassOf: :p some xsd:integer\n",
+    },
+    // DataProperty restriction: faceted filler → DataSomeValuesFrom
+    // (filler-shape heuristic: facet bracket `dt[…]` ⇒ data restriction)
+    Case {
+        id: "dr.restriction.faceted",
+        residual: Residual::None,
+        expect_debug_contains: "DataSomeValuesFrom",
+        omn: "Prefix: : <http://e/>\n\
+              Prefix: xsd: <http://www.w3.org/2001/XMLSchema#>\n\
+              Class: :A\n    SubClassOf: :p some xsd:double[>= \"0.0\"^^xsd:double]\n",
+    },
+    // Object restriction with plain class-IRI filler MUST stay ObjectSomeValuesFrom
+    // (regression guard: the heuristic must NOT capture plain class IRIs as data)
+    Case {
+        id: "dr.restriction.object_guard",
+        residual: Residual::None,
+        expect_debug_contains: "ObjectSomeValuesFrom",
+        omn: "Prefix: : <http://e/>\nClass: :A\n    SubClassOf: :r some :B\n",
     },
     // -----------------------------------------------------------------------
     // HasKey object/data conflation residual
@@ -975,11 +988,6 @@ fn construct_matrix_has_no_unexpected_failures() {
             Residual::NestedAnnotationDropped => {
                 // Parses successfully; nesting silently dropped (model limit).
                 row.read_ok
-            }
-            Residual::DataRestrictionAsObject => {
-                // Data restriction parsed as ObjectSomeValuesFrom and round-trips
-                // as that wrong type — read ok, no note failure, round-trip ok.
-                row.read_ok && row.note.is_empty() && row.roundtrip_ok
             }
             Residual::HasKeyObjectDataConflation => {
                 // HasKey with a data-property key conflates to object property;

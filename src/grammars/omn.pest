@@ -96,11 +96,62 @@ Atomic = { ObjectOneOf | "(" ~ Description ~ ")" | ClassIRI }
 ObjectOneOf = { "{" ~ Individual ~ ( "," ~ Individual )* ~ "}" }
 
 // ---- restrictions -----------------------------------------------------------
-// Object-property arms first; data-property arms after.
-// Within each group: some/only/value/Self before min/max/exactly.
+// Filler-shape heuristic: a restriction whose filler is UNAMBIGUOUSLY data-shaped
+// — i.e. faceted (`dt[…]`) or a well-known datatype IRI (`xsd:`, `rdf:`, `rdfs:`
+// abbreviated or full-IRI form) — is parsed as a DATA restriction.
+// A plain class-IRI filler (`:B`, `<http://e/B>`, bare local name) stays OBJECT.
+// owl: is excluded from the known prefixes — owl:Thing/Nothing are classes, and the
+// owl: datatypes (owl:real, owl:rational) are rare enough to accept as a residual.
+// Bare user-declared custom datatypes (no known prefix, no facet) are still parsed
+// as object restrictions — declaration-aware two-pass disambiguation is out of scope.
+//
+// Implementation: `&DataShaped` is a NON-CONSUMING lookahead (PEG predicate).
+// It confirms the shape without advancing the cursor; the real `DataRange` rule
+// then parses and emits the filler pair.  For `:B`, `DataShaped` fails → PEG
+// backtracks to the object arm.  Order within the data group mirrors the object
+// group (some/only/value before min/max/exactly).
+
+// KnownDatatypeIRI matches a well-known datatype IRI in abbreviated (`xsd:integer`)
+// or full (`<http://www.w3.org/2001/XMLSchema#integer>`) form.
+// Prefixes: xsd: / rdf: / rdfs: only.  owl: is intentionally excluded: owl:Thing,
+// owl:Nothing, owl:topObjectProperty are classes/properties, and the only owl:
+// datatypes (owl:real, owl:rational) are vanishingly rare; including owl: would
+// misidentify object-restriction fillers like `:r min 1 owl:Thing` as data-shaped.
+KnownDatatypeIRI = {
+      ("xsd:" | "rdf:" | "rdfs:") ~ SPARQL_PnLocal
+    | "<" ~ ("http://www.w3.org/2001/XMLSchema#"
+            | "http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+            | "http://www.w3.org/2000/01/rdf-schema#"
+            ) ~ (!(">" | " ") ~ ANY)* ~ ">"
+}
+
+// DataShapedParenthesized: a parenthesised data range is data-shaped when its
+// FIRST token after `(` is a known-datatype IRI (`xsd:integer`) or a DataOneOf
+// literal (`{"x", ...}`).  This catches `(xsd:integer and not {"x"})` without
+// swallowing `(:B and :C)` (object filler, `:B` doesn't match KnownDatatypeIRI
+// or DataOneOf).  The `(` is checked but not consumed — the overall lookahead
+// is `&DataShaped`, which wraps this predicate.
+DataShapedParenthesized = _{ "(" ~ (KnownDatatypeIRI | DataOneOf) }
+
+// DataShaped: silent predicate — the filler is unambiguously data.
+// Matches a faceted datatype restriction (`anyIRI[…]`), a known-prefix IRI, or
+// a parenthesised expression that starts with a known-datatype/DataOneOf.
+// Used only as a lookahead `&DataShaped` guard; never emits a pair.
+DataShaped = _{ DatatypeRestriction | KnownDatatypeIRI | DataShapedParenthesized }
 
 Restriction = {
-      ope ~ SomeKw    ~ Primary
+    // --- DATA restriction arms (data-shaped filler) --------------------------
+    // Placed BEFORE the object arms so they win on `dp some xsd:integer`,
+    // `dp some xsd:double[…]`, `dp only rdfs:Literal`, etc.
+    // `&DataShaped` is a lookahead: confirms data-shaped filler, then resets;
+    // `DataRange` parses and emits the actual filler pair.
+      DataPropertyIRI ~ SomeKw    ~ &DataShaped ~ DataRange
+    | DataPropertyIRI ~ OnlyKw    ~ &DataShaped ~ DataRange
+    | DataPropertyIRI ~ MinKw     ~ Cardinality ~ &DataShaped ~ DataRange
+    | DataPropertyIRI ~ MaxKw     ~ Cardinality ~ &DataShaped ~ DataRange
+    | DataPropertyIRI ~ ExactlyKw ~ Cardinality ~ &DataShaped ~ DataRange
+    // --- OBJECT restriction arms (all remaining fillers) ---------------------
+    | ope ~ SomeKw    ~ Primary
     | ope ~ OnlyKw    ~ Primary
     // Data value arm BEFORE object value arm: a Literal operand (quoted string,
     // typed literal, number, or bare boolean) wins over the object arm, whose
@@ -112,17 +163,6 @@ Restriction = {
     | ope ~ MinKw     ~ Cardinality ~ Primary?
     | ope ~ MaxKw     ~ Cardinality ~ Primary?
     | ope ~ ExactlyKw ~ Cardinality ~ Primary?
-    // NOTE (P2): the five arms below are currently DEAD PRODUCTIONS.
-    // `DataPropertyIRI` is defined as `{ IRI }`, identical to `ObjectPropertyIRI`,
-    // so PEG always commits to one of the object-property arms above and never
-    // backtracks here.  A bare `dp some xsd:integer` is silently captured as an
-    // object restriction; a faceted form errors at EOI.  Disambiguation is deferred
-    // to a future phase that introduces a distinct lexical class for data properties.
-    | DataPropertyIRI ~ SomeKw    ~ DataRange
-    | DataPropertyIRI ~ OnlyKw    ~ DataRange
-    | DataPropertyIRI ~ MinKw     ~ Cardinality ~ DataRange?
-    | DataPropertyIRI ~ MaxKw     ~ Cardinality ~ DataRange?
-    | DataPropertyIRI ~ ExactlyKw ~ Cardinality ~ DataRange?
 }
 
 // object-property expression: plain IRI or inverse(IRI)
