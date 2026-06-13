@@ -15,6 +15,10 @@
 //! - **datatype definitions** (`Datatype: D EquivalentTo: <dataRange>`);
 //! - **full data ranges** (`and` / `or` / `not` / `{ oneOf }` / parenthesised /
 //!   facet `[ … ]` restrictions), not just bare datatypes + a single facet;
+//! - **all six §2.5 literal forms** — typed (`"v"^^dt`), string (with/without
+//!   language tag), and the bare numeric forms `integerLiteral` / `decimalLiteral`
+//!   / `floatingPointLiteral` (the latter requires the §2.5 `f`/`F` suffix),
+//!   typed respectively as `xsd:integer` / `xsd:decimal` / `xsd:float`;
 //! - the top-level **misc axiom section** (`EquivalentClasses:`,
 //!   `DisjointClasses:`, `EquivalentProperties:`, `DisjointProperties:`,
 //!   `SameIndividual:`, `DifferentIndividuals:`) over arbitrary expressions;
@@ -40,11 +44,15 @@
 //! - **Nested annotations are parsed but dropped.** The horned-owl model has no
 //!   `ann` field on `Annotation`, so annotation-on-annotation cannot be stored;
 //!   both the OFN and OMN readers discard the nesting. Model limit.
-//! - **Writer follow-ups (round-trip only):** anonymous-subject assertions are
+//! - **Writer normalisation (round-trip only):** the reader reads §2.5
+//!   `annotatedList`s correctly — a leading clause-level annotation binds the
+//!   FIRST list item only, and each post-comma `Annotations:` binds the
+//!   following item only. The *writer*, however, emits one clause per axiom, so
+//!   a multi-item annotated list is re-serialised as separate single-item
+//!   clauses. This is lossless (every axiom + its own annotations is preserved),
+//!   just structurally normalised. Anonymous-subject assertions are likewise
 //!   still emitted to the misc block by the writer (the reader accepts them when
-//!   present), and a leading per-item annotation on a comma-list is applied
-//!   clause-wide on emission. The reader handles both forms on input; only the
-//!   *writer* round-trip is incomplete here.
+//!   present).
 //! - Frame headers conflate declaration and reference: every frame yields a
 //!   `Declare*` axiom, so an entity used without an explicit declaration gains
 //!   one on round-trip. Declarations are non-logical (entailment-neutral).
