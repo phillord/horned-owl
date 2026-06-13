@@ -264,6 +264,20 @@ pub const CASES: &[Case] = &[
         expect_debug_contains: "ObjectHasValue",
         omn: "Prefix: : <http://e/>\nClass: :A\n    SubClassOf: :r value :x\n",
     },
+    // OWL-API/Protégé emit bare `true`/`false` as xsd:boolean DataHasValue.
+    // Must parse as DataHasValue, NOT ObjectHasValue over a bare-name IRI.
+    Case {
+        id: "dp.value.boolean.true",
+        residual: Residual::None,
+        expect_debug_contains: "DataHasValue",
+        omn: "Prefix: : <http://e/>\nClass: :A\n    SubClassOf: :p value true\n",
+    },
+    Case {
+        id: "dp.value.boolean.false",
+        residual: Residual::None,
+        expect_debug_contains: "DataHasValue",
+        omn: "Prefix: : <http://e/>\nClass: :A\n    SubClassOf: :p value false\n",
+    },
     Case {
         id: "ce.self",
         residual: Residual::None,
@@ -779,6 +793,105 @@ pub const CASES: &[Case] = &[
               SubClassOf(ObjectIntersectionOf(<http://e/A> <http://e/B>) <http://e/C>)\n",
     },
 ];
+
+// ---------------------------------------------------------------------------
+// Boolean DataHasValue exact-type assertion
+// ---------------------------------------------------------------------------
+
+/// Verify `p value true` and `p value false` produce `DataHasValue` with the
+/// EXACT typed literal `"true"^^xsd:boolean` / `"false"^^xsd:boolean`,
+/// and that `r value :x` still produces `ObjectHasValue`.
+#[test]
+fn dp_value_boolean_exact_literal() {
+    use horned_owl::model::{ClassExpression, Component, Literal, SubClassOf};
+
+    let xsd_boolean = "http://www.w3.org/2001/XMLSchema#boolean";
+
+    for (label, src, expected_value) in [
+        (
+            "true",
+            "Prefix: : <http://e/>\nClass: :A\n    SubClassOf: :p value true\n",
+            "true",
+        ),
+        (
+            "false",
+            "Prefix: : <http://e/>\nClass: :A\n    SubClassOf: :p value false\n",
+            "false",
+        ),
+    ] {
+        let (ont, _) =
+            read_str(src).unwrap_or_else(|e| panic!("dp.value.boolean.{label}: parse failed: {e}"));
+
+        // Find the SubClassOf axiom with a non-named filler.
+        let found = ont.iter().find_map(|ac| {
+            if let Component::SubClassOf(SubClassOf { sup, .. }) = &ac.component {
+                if let ClassExpression::DataHasValue { dp: _, l } = sup {
+                    return Some(l.clone());
+                }
+            }
+            None
+        });
+
+        let lit = found.unwrap_or_else(|| {
+            let debug: Vec<_> = ont.iter().map(|ac| format!("{:?}", ac.component)).collect();
+            panic!(
+                "dp.value.boolean.{label}: expected DataHasValue, got:\n{}",
+                debug.join("\n")
+            )
+        });
+
+        match &lit {
+            Literal::Datatype {
+                literal,
+                datatype_iri,
+            } => {
+                assert_eq!(
+                    literal, expected_value,
+                    "dp.value.boolean.{label}: literal text mismatch"
+                );
+                let dt_str: &str = datatype_iri;
+                assert_eq!(
+                    dt_str, xsd_boolean,
+                    "dp.value.boolean.{label}: datatype IRI mismatch (expected xsd:boolean)"
+                );
+            }
+            other => panic!("dp.value.boolean.{label}: expected Literal::Datatype, got {other:?}"),
+        }
+    }
+
+    // Sanity: `r value :x` must still be ObjectHasValue.
+    let obj_src = "Prefix: : <http://e/>\nClass: :A\n    SubClassOf: :r value :x\n";
+    let (obj_ont, _) = read_str(obj_src).unwrap_or_else(|e| panic!("ce.value sanity: {e}"));
+    let has_object_has_value = obj_ont.iter().any(|ac| {
+        matches!(&ac.component, Component::SubClassOf(SubClassOf { sup, .. })
+            if matches!(sup, ClassExpression::ObjectHasValue { .. }))
+    });
+    assert!(
+        has_object_has_value,
+        "ce.value sanity: expected ObjectHasValue for ':r value :x', got:\n{}",
+        obj_ont
+            .iter()
+            .map(|ac| format!("{:?}", ac.component))
+            .collect::<Vec<_>>()
+            .join("\n")
+    );
+
+    // Sanity: typed integer `p value "5"^^xsd:integer` still → DataHasValue.
+    let int_src = concat!(
+        "Prefix: : <http://e/>\n",
+        "Prefix: xsd: <http://www.w3.org/2001/XMLSchema#>\n",
+        "Class: :A\n    SubClassOf: :p value \"5\"^^xsd:integer\n"
+    );
+    let (int_ont, _) = read_str(int_src).unwrap_or_else(|e| panic!("dp.value.int sanity: {e}"));
+    let has_data_has_value_int = int_ont.iter().any(|ac| {
+        matches!(&ac.component, Component::SubClassOf(SubClassOf { sup, .. })
+            if matches!(sup, ClassExpression::DataHasValue { .. }))
+    });
+    assert!(
+        has_data_has_value_int,
+        "dp.value.int sanity: expected DataHasValue for '\"5\"^^xsd:integer'"
+    );
+}
 
 // ---------------------------------------------------------------------------
 // Matrix runner

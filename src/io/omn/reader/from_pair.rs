@@ -219,6 +219,11 @@ impl<A: ForIRI> FromPair<A> for Literal<A> {
                 literal: inner.as_str().to_string(),
                 datatype_iri: ctx.build.iri("http://www.w3.org/2001/XMLSchema#float"),
             }),
+            // OWL-API/Protégé compat: bare `true`/`false` → xsd:boolean typed literal.
+            Rule::BooleanLiteral => Ok(Literal::Datatype {
+                literal: inner.as_str().to_string(),
+                datatype_iri: ctx.build.iri("http://www.w3.org/2001/XMLSchema#boolean"),
+            }),
             rule => unreachable!("unexpected rule in Literal::from_pair: {:?}", rule),
         }
     }
