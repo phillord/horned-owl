@@ -850,9 +850,28 @@ fn insert_class_frame<A: ForIRI, O: MutableOntology<A>>(
     ctx: &Context<'_, A>,
     ont: &mut O,
 ) -> Result<()> {
-    let (subject, clauses) = frame_subject_and_clauses(frame, ctx)?;
-    let subject_ce = ClassExpression::Class(Class(subject.clone()));
-    ont.insert(DeclareClass(Class(subject.clone())));
+    let mut inner = frame.into_inner();
+    // The first child is now `ClassFrameSubject = { Description }` — parse its
+    // inner `Description` as a ClassExpression to support complex subjects.
+    // OWL-API/Protégé/ROBOT emit general class axioms (GCIs) as `Class: <expr>`
+    // frames; strict §2.5 requires a classIRI subject, but we accept leniently.
+    let subj_pair = inner.next().unwrap(); // ClassFrameSubject
+    let desc_pair = subj_pair.into_inner().next().unwrap(); // Description
+    let subject_ce = ClassExpression::from_pair_unchecked(desc_pair, ctx)?;
+    let clauses = inner; // remaining pairs are ClassClause*
+
+    // Determine whether the subject is a plain named class (atomic) or a
+    // compound expression (GCI path).
+    let atomic_iri: Option<IRI<A>> = if let ClassExpression::Class(Class(ref iri)) = subject_ce {
+        Some(iri.clone())
+    } else {
+        None
+    };
+
+    // For atomic subjects only: declare the class (existing behaviour).
+    if let Some(ref iri) = atomic_iri {
+        ont.insert(DeclareClass(Class(iri.clone())));
+    }
 
     for clause in clauses {
         let kw = clause_keyword(&clause);
@@ -871,12 +890,16 @@ fn insert_class_frame<A: ForIRI, O: MutableOntology<A>>(
         let body = first;
         match kw.as_str() {
             "annotations" => {
-                // `body` is the inner `Annotations` pair (AnnotationEntry items).
-                for ann_item in parse_annotations(body, ctx)? {
-                    ont.insert(AnnotationAssertion {
-                        subject: AnnotationSubject::IRI(subject.clone()),
-                        ann: ann_item,
-                    });
+                // For complex subjects the annotation subject must be a
+                // named IRI; only emit AnnotationAssertion for atomic subjects.
+                if let Some(ref iri) = atomic_iri {
+                    // `body` is the inner `Annotations` pair (AnnotationEntry items).
+                    for ann_item in parse_annotations(body, ctx)? {
+                        ont.insert(AnnotationAssertion {
+                            subject: AnnotationSubject::IRI(iri.clone()),
+                            ann: ann_item,
+                        });
+                    }
                 }
             }
             "subclassof" => {
@@ -909,35 +932,45 @@ fn insert_class_frame<A: ForIRI, O: MutableOntology<A>>(
                 });
             }
             "disjointunionof" => {
-                let mut items = Vec::new();
-                merge_list_ann(&mut ann, parse_description_list(body, ctx)?, &mut items);
-                ont.insert(AnnotatedComponent {
-                    component: Component::DisjointUnion(DisjointUnion(
-                        Class(subject.clone()),
-                        items,
-                    )),
-                    ann,
-                });
+                // DisjointUnionOf requires a named class subject; only valid for
+                // atomic subjects.  Silently skip on a complex subject (ROBOT
+                // does not emit DisjointUnionOf for complex-LHS frames).
+                if let Some(ref iri) = atomic_iri {
+                    let mut items = Vec::new();
+                    merge_list_ann(&mut ann, parse_description_list(body, ctx)?, &mut items);
+                    ont.insert(AnnotatedComponent {
+                        component: Component::DisjointUnion(DisjointUnion(
+                            Class(iri.clone()),
+                            items,
+                        )),
+                        ann,
+                    });
+                }
             }
             "haskey" => {
-                // body is a PropertyExprList of `ope`. Manchester HasKey: does NOT
-                // lexically distinguish object vs data properties — they are all bare
-                // property IRIs. The reader therefore reconstructs every key as an
-                // ObjectPropertyExpression. See Task 7 for the limitation note.
-                let mut vpe = Vec::new();
-                for p in body.into_inner() {
-                    if p.as_rule() == Rule::ope {
-                        let ope = ObjectPropertyExpression::from_pair(p, ctx)?;
-                        vpe.push(PropertyExpression::ObjectPropertyExpression(ope));
+                // HasKey requires a named class subject; only valid for atomic
+                // subjects.  Silently skip on a complex subject (ROBOT does not
+                // emit HasKey for complex-LHS frames).
+                if let Some(ref iri) = atomic_iri {
+                    // body is a PropertyExprList of `ope`. Manchester HasKey: does NOT
+                    // lexically distinguish object vs data properties — they are all bare
+                    // property IRIs. The reader therefore reconstructs every key as an
+                    // ObjectPropertyExpression. See Task 7 for the limitation note.
+                    let mut vpe = Vec::new();
+                    for p in body.into_inner() {
+                        if p.as_rule() == Rule::ope {
+                            let ope = ObjectPropertyExpression::from_pair(p, ctx)?;
+                            vpe.push(PropertyExpression::ObjectPropertyExpression(ope));
+                        }
                     }
+                    ont.insert(AnnotatedComponent {
+                        component: Component::HasKey(HasKey {
+                            ce: ClassExpression::Class(Class(iri.clone())),
+                            vpe,
+                        }),
+                        ann,
+                    });
                 }
-                ont.insert(AnnotatedComponent {
-                    component: Component::HasKey(HasKey {
-                        ce: ClassExpression::Class(Class(subject.clone())),
-                        vpe,
-                    }),
-                    ann,
-                });
             }
             other => unreachable!("unexpected class clause keyword: {other}"),
         }
@@ -2728,6 +2761,128 @@ mod tests {
             parsed
                 .iter()
                 .any(|ac| matches!(&ac.component, Component::DeclareClass(_)))
+        );
+    }
+
+    /// Complex-LHS `Class:` frame parsed as a general class axiom (GCI).
+    /// OWL-API/Protégé/ROBOT emit frames like:
+    ///   Class: :r some :C
+    ///       SubClassOf: :D
+    /// The subject is a compound ClassExpression, not a plain classIRI.
+    /// The reader must parse this as SubClassOf(ObjectSomeValuesFrom(:r,:C), :D)
+    /// with NO DeclareClass for the complex subject.
+    #[test]
+    fn reads_complex_lhs_class_frame_as_gci_subclassof() {
+        use crate::io::omn::reader::read_with_build;
+        use crate::ontology::set::SetOntology;
+        use std::io::BufReader;
+
+        let b = Build::new_rc();
+        let src = "Prefix: : <http://e/>\nClass: :r some :C\n    SubClassOf: :D\n";
+        let (ont, _): (SetOntology<_>, PrefixMapping) =
+            read_with_build(BufReader::new(src.as_bytes()), &b)
+                .unwrap_or_else(|e| panic!("complex-LHS GCI should parse: {e}"));
+
+        // Must contain SubClassOf(ObjectSomeValuesFrom(:r, :C), :D).
+        let expected_sub = ClassExpression::ObjectSomeValuesFrom {
+            ope: ObjectPropertyExpression::ObjectProperty(b.object_property("http://e/r")),
+            bce: Box::new(ClassExpression::Class(b.class("http://e/C"))),
+        };
+        let expected_sup = ClassExpression::Class(b.class("http://e/D"));
+        let found = ont.iter().find(|ac| {
+            matches!(
+                &ac.component,
+                Component::SubClassOf(SubClassOf { sub, sup })
+                    if *sub == expected_sub && *sup == expected_sup
+            )
+        });
+        assert!(
+            found.is_some(),
+            "expected SubClassOf(ObjectSomeValuesFrom(:r,:C), :D), components:\n{}",
+            ont.iter()
+                .map(|ac| format!("{:?}", ac.component))
+                .collect::<Vec<_>>()
+                .join("\n")
+        );
+
+        // Must NOT have a DeclareClass for the complex subject (it has no IRI).
+        let has_declare_for_some = ont.iter().any(|ac| {
+            matches!(
+                &ac.component,
+                Component::DeclareClass(DeclareClass(c))
+                    if c.0.as_ref().contains("/r") || c.0.as_ref().contains("/C")
+            )
+        });
+        assert!(
+            !has_declare_for_some,
+            "complex-LHS GCI must NOT declare the complex subject as a class"
+        );
+    }
+
+    /// Regression guard: atomic `Class: :A SubClassOf: :B` still emits
+    /// `DeclareClass(:A)` + `SubClassOf(:A, :B)` (behaviour must be byte-identical).
+    #[test]
+    fn reads_atomic_class_frame_unchanged() {
+        use crate::io::omn::reader::read_with_build;
+        use crate::ontology::set::SetOntology;
+        use std::io::BufReader;
+
+        let b = Build::new_rc();
+        let src = "Prefix: : <http://e/>\nClass: :A\n    SubClassOf: :B\n";
+        let (ont, _): (SetOntology<_>, PrefixMapping) =
+            read_with_build(BufReader::new(src.as_bytes()), &b)
+                .unwrap_or_else(|e| panic!("atomic class frame should parse: {e}"));
+
+        // Must have DeclareClass(:A).
+        let has_declare = ont.iter().any(|ac| {
+            matches!(&ac.component, Component::DeclareClass(DeclareClass(c)) if c.0.as_ref() == "http://e/A")
+        });
+        assert!(has_declare, "atomic subject must yield DeclareClass");
+
+        // Must have SubClassOf(:A, :B).
+        let has_sub = ont.iter().any(|ac| {
+            matches!(
+                &ac.component,
+                Component::SubClassOf(SubClassOf { sub, sup })
+                    if matches!(sub, ClassExpression::Class(c) if c.0.as_ref() == "http://e/A")
+                    && matches!(sup, ClassExpression::Class(c) if c.0.as_ref() == "http://e/B")
+            )
+        });
+        assert!(has_sub, "atomic subject must yield SubClassOf(:A,:B)");
+    }
+
+    /// Complex-LHS `EquivalentTo:` parsed as `EquivalentClasses(complexCE, X)`.
+    #[test]
+    fn reads_complex_lhs_class_frame_equivalentto() {
+        use crate::io::omn::reader::read_with_build;
+        use crate::ontology::set::SetOntology;
+        use std::io::BufReader;
+
+        let b = Build::new_rc();
+        let src = "Prefix: : <http://e/>\nClass: :r some :C\n    EquivalentTo: :D\n";
+        let (ont, _): (SetOntology<_>, PrefixMapping) =
+            read_with_build(BufReader::new(src.as_bytes()), &b)
+                .unwrap_or_else(|e| panic!("complex-LHS EquivalentTo should parse: {e}"));
+
+        let some_rc = ClassExpression::ObjectSomeValuesFrom {
+            ope: ObjectPropertyExpression::ObjectProperty(b.object_property("http://e/r")),
+            bce: Box::new(ClassExpression::Class(b.class("http://e/C"))),
+        };
+        let d = ClassExpression::Class(b.class("http://e/D"));
+        let found = ont.iter().find(|ac| {
+            matches!(
+                &ac.component,
+                Component::EquivalentClasses(EquivalentClasses(v))
+                    if v.contains(&some_rc) && v.contains(&d)
+            )
+        });
+        assert!(
+            found.is_some(),
+            "expected EquivalentClasses(ObjectSomeValuesFrom(:r,:C), :D), components:\n{}",
+            ont.iter()
+                .map(|ac| format!("{:?}", ac.component))
+                .collect::<Vec<_>>()
+                .join("\n")
         );
     }
 

@@ -15,11 +15,18 @@ pub enum Residual {
     None,
     /// Manchester §2.5 has no `Rule:` syntax; parse fails by design.
     SwrlRule,
-    /// Complex-LHS GCI has no §2.5 frame form; writer emits to the
-    /// `# General axioms` functional-syntax block which the reader skips
-    /// with a warning.  The document parses (`read_ok`), but the axiom is
-    /// absent from the component set (visible via `note`).
+    /// Complex-LHS GCI expressed as a `# General axioms` functional-syntax
+    /// block.  The reader skips that block with a warning; the document parses
+    /// (`read_ok`), but the axiom is absent from the component set (visible
+    /// via `note`).
     ComplexLhsGci,
+    /// Complex-LHS GCI expressed as a `Class: <complexExpr>` frame (the
+    /// OWL-API/Protégé/ROBOT extension).  The reader now parses the frame and
+    /// emits the GCI axiom, so `read_ok` is true and `note` is empty (axiom
+    /// present).  Round-trip does NOT hold: the writer emits the GCI to the
+    /// `# General axioms` functional-syntax block, which the reader skips on
+    /// re-read — so the axiom is lost after one write+read cycle.
+    ComplexLhsGciFrameNoRoundtrip,
     /// Nested annotations are parsed and silently dropped (model limit).
     NestedAnnotationDropped,
     /// `HasKey:` with a data-property key cannot distinguish object from
@@ -805,6 +812,22 @@ pub const CASES: &[Case] = &[
               # General axioms\n\
               SubClassOf(ObjectIntersectionOf(<http://e/A> <http://e/B>) <http://e/C>)\n",
     },
+    // -----------------------------------------------------------------------
+    // Complex-LHS GCI as a `Class:` frame — OWL-API/Protégé/ROBOT extension.
+    // The reader now accepts `Class: <complexExpr> SubClassOf: ...` leniently
+    // and emits the GCI axiom (read_ok + axiom present → note empty).
+    // Round-trip does NOT hold: the writer emits GCIs to the `# General axioms`
+    // functional-syntax block, which the reader skips on re-read.
+    // -----------------------------------------------------------------------
+    Case {
+        id: "class.complexgci.frame",
+        residual: Residual::ComplexLhsGciFrameNoRoundtrip,
+        // The GCI is parsed → ObjectSomeValuesFrom must appear in a component.
+        expect_debug_contains: "ObjectSomeValuesFrom",
+        omn: "Prefix: : <http://e/>\n\
+              Class: :r some :C\n\
+                  SubClassOf: :D\n",
+    },
 ];
 
 // ---------------------------------------------------------------------------
@@ -1005,6 +1028,12 @@ fn construct_matrix_has_no_unexpected_failures() {
                 // complex axiom is absent from components — demonstrated by
                 // `expect_debug_contains` not matching → note is non-empty.
                 row.read_ok && !row.note.is_empty()
+            }
+            Residual::ComplexLhsGciFrameNoRoundtrip => {
+                // `Class: <complexExpr>` frame: now PARSES as a GCI (axiom
+                // present → note empty).  Writer emits to functional block
+                // which is reader-skipped → no round-trip.
+                row.read_ok && row.note.is_empty() && !row.roundtrip_ok
             }
         };
         if !ok {
