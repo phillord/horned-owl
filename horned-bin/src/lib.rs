@@ -35,6 +35,7 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: StdWrite>(
     match format {
         "owx" => horned_owl::io::owx::writer::write(write, ont, None),
         "ofn" => horned_owl::io::ofn::writer::write(write, ont, None),
+        "omn" => horned_owl::io::omn::write(write, ont, None),
         "owl" | "ttl" => horned_owl::io::rdf::writer::write_to_rdf_format(write, ont, format),
 
         _ => Err(HornedError::CommandError(format!(
@@ -47,6 +48,7 @@ pub fn path_type(path: &Path) -> Option<ResourceType> {
     match path.extension().and_then(|s| s.to_str()) {
         Some("ofn") => Some(ResourceType::OFN),
         Some("owx") => Some(ResourceType::OWX),
+        Some("omn") => Some(ResourceType::OMN),
         Some("owl") => Some(ResourceType::RDF),
         _ => None,
     }
@@ -66,6 +68,11 @@ pub fn parse_path(
             let file = File::open(path)?;
             let mut bufreader = BufReader::new(file);
             ParserOutput::owx(horned_owl::io::owx::reader::read(&mut bufreader, config)?)
+        }
+        Some(ResourceType::OMN) => {
+            let file = File::open(path)?;
+            let mut bufreader = BufReader::new(file);
+            ParserOutput::omn(horned_owl::io::omn::read(&mut bufreader, config)?)
         }
         Some(ResourceType::RDF) => {
             let b = Build::new();
@@ -93,6 +100,10 @@ pub fn parse_imports(
         }
         Some(ResourceType::OWX) => {
             ParserOutput::owx(horned_owl::io::owx::reader::read(&mut bufreader, config)?)
+        }
+        Some(ResourceType::OMN) => {
+            // Manchester has no imports-only parse; read the whole document.
+            ParserOutput::omn(horned_owl::io::omn::read(&mut bufreader, config)?)
         }
         Some(ResourceType::RDF) => {
             let b = Build::new();
