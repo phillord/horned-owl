@@ -882,16 +882,17 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
         let subject_display = {
             let iri_str: &str = &frame.subject_iri;
             if iri_str.starts_with("_:") {
+                // Anonymous-individual keys must be emitted verbatim; running
+                // them through render_iri_to_string would produce `<_:label>`
+                // (a named individual), which is the wrong type on re-read.
                 iri_str.to_string()
-            } else if let Ok(curie) = mapping.shrink_iri(iri_str) {
-                let s = curie.to_string();
-                if let Some(local) = s.strip_prefix(':') {
-                    local.to_string()
-                } else {
-                    s
-                }
             } else {
-                format!("<{}>", frame.subject_iri)
+                // Delegate to the canonical IRI renderer: only abbreviates when
+                // the local name is a valid Manchester PnLocal-ish name, else
+                // emits the full `<iri>` form.  This is the same check used by
+                // the clause-operand path (write_iri / render_iri_to_string), so
+                // frame subjects and clause operands now behave identically.
+                as_manchester::render_iri_to_string(iri_str, Some(mapping))
             }
         };
 
@@ -1078,6 +1079,79 @@ mod tests {
         assert!(s.contains("xsd:"), "got:\n{s}");
         // With default prefix, class A should be abbreviated as bare local name
         assert!(s.contains("Class: A"), "got:\n{s}");
+    }
+
+    /// Frame subjects whose default-prefix namespace lacks a name separator (no
+    /// trailing `#` or `/`) must be emitted as full `<IRI>` rather than an
+    /// invalid local such as `#Animal`.  That local is not a valid Manchester
+    /// PnLocal and makes the writer's own output unparseable.
+    ///
+    /// Regression guard: when the namespace DOES end with a separator, the
+    /// frame subject is still abbreviated to the bare local name.
+    #[test]
+    fn frame_subject_no_separator_namespace_emits_full_iri() {
+        let b = Build::new_rc();
+        // Default namespace WITHOUT a trailing separator — mimics koala.owl.
+        let mut pm = PrefixMapping::default();
+        pm.add_prefix("", "http://e/onto").unwrap(); // no trailing '#' or '/'
+        let mut o = SetOntology::new_rc();
+        // Class IRI = "http://e/onto#A" — local part is "#A" (starts with '#')
+        o.insert(DeclareClass(b.class("http://e/onto#A")));
+        o.insert(SubClassOf {
+            sub: ClassExpression::Class(b.class("http://e/onto#A")),
+            sup: ClassExpression::Class(b.class("http://e/onto#B")),
+        });
+        let amo = into_amo(o.clone());
+        let mut out = Vec::<u8>::new();
+        write(&mut out, &amo, Some(&pm)).unwrap();
+        let s = String::from_utf8(out.clone()).unwrap();
+
+        // The frame subject must be the full IRI, not the invalid local "#A".
+        assert!(
+            s.contains("Class: <http://e/onto#A>"),
+            "expected full IRI frame subject, got:\n{s}"
+        );
+        assert!(
+            !s.contains("Class: #A"),
+            "invalid local '#A' must not appear as a frame subject, got:\n{s}"
+        );
+
+        // The writer's output must re-parse without error.
+        use crate::io::omn::read_with_build;
+        use std::io::BufReader;
+        let (parsed, _): (crate::ontology::set::SetOntology<_>, PrefixMapping) =
+            read_with_build(BufReader::new(&out[..]), &b)
+                .unwrap_or_else(|e| panic!("re-parse of writer output failed: {e}\n---\n{s}"));
+        let orig: std::collections::BTreeSet<_> = o.iter().map(|ac| ac.component.clone()).collect();
+        let got: std::collections::BTreeSet<_> =
+            parsed.iter().map(|ac| ac.component.clone()).collect();
+        assert_eq!(
+            orig, got,
+            "round-trip mismatch for no-separator namespace\n{s}"
+        );
+    }
+
+    /// Regression: when the namespace DOES end with a separator, frame subjects
+    /// are still abbreviated to the bare local name (e.g. `Class: A`, not `Class: <http://t/A>`).
+    #[test]
+    fn frame_subject_separator_namespace_still_abbreviates() {
+        let b = Build::new_rc();
+        let mut pm = PrefixMapping::default();
+        pm.add_prefix("", "http://t/").unwrap(); // has trailing '/'
+        let mut o = SetOntology::new_rc();
+        o.insert(DeclareClass(b.class("http://t/A")));
+        let amo = into_amo(o);
+        let mut out = Vec::<u8>::new();
+        write(&mut out, &amo, Some(&pm)).unwrap();
+        let s = String::from_utf8(out).unwrap();
+        assert!(
+            s.contains("Class: A"),
+            "expected abbreviated 'Class: A' for separator-namespace, got:\n{s}"
+        );
+        assert!(
+            !s.contains("Class: <http://t/A>"),
+            "should abbreviate when local is valid, got:\n{s}"
+        );
     }
 
     /// An AnnotationAssertion whose annotation VALUE is an AnonymousIndividual

@@ -32,51 +32,67 @@ where
     }
 }
 
+/// Return true iff `local` is a valid Manchester PnLocal-ish name:
+/// non-empty, first char is non-digit name char, every char is alphanumeric
+/// or one of `_`, `-`, `.`, and it does not end with `.`.
+///
+/// This mirrors the guard used in `write_iri` / `render_iri_to_string` and
+/// must be kept in sync with both sites.
+#[inline]
+fn is_valid_manchester_local(local: &str) -> bool {
+    local.chars().next().is_some_and(|c| !c.is_ascii_digit())
+        && local
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '.'))
+        && !local.ends_with('.')
+}
+
+/// Render an IRI to a `String`: abbreviated `prefix:local` (or bare `local`
+/// for the default prefix) if a prefix matches AND the local name is a valid
+/// Manchester PnLocal-ish name; otherwise `<full-iri>`.
+///
+/// This is the single canonical abbreviation logic shared by all IRI rendering
+/// sites: the `Display` path (`write_iri`), the `String`-building path
+/// (`write_iri_to_string`), and the frame-subject renderer in `mod.rs`.
+pub(crate) fn render_iri_to_string(iri: &str, pm: Option<&PrefixMapping>) -> String {
+    if let Some(pm) = pm
+        && let Ok(curie) = pm.shrink_iri(iri)
+    {
+        let s = curie.to_string();
+        // The local name is everything after the first ':' (curie prefixes never
+        // contain a ':').
+        let local = s.split_once(':').map_or(s.as_str(), |(_, l)| l);
+        // Only abbreviate when the local name is a valid Manchester local name.
+        // A version IRI like `http://ex/o/1.0.0` shrinks to `ex:o/1.0.0`, whose
+        // `/` is NOT valid — emitting that abbreviation produces output the reader
+        // cannot re-parse.  A namespace without a name separator (e.g.
+        // `http://e/onto`) shrinks `http://e/onto#A` to `#A`, which is also
+        // invalid — emit the full `<iri>` form instead.
+        if is_valid_manchester_local(local) {
+            // `add_prefix("", ns)` stores "" in the prefix *mapping* (not the
+            // default slot), so `shrink_iri` returns a `Curie { prefix: Some(""), .. }`
+            // which `Display` formats as ":local". Strip the leading ':' to get the
+            // bare local name for the default prefix.
+            return if let Some(stripped) = s.strip_prefix(':') {
+                stripped.to_owned()
+            } else {
+                s
+            };
+        }
+        // else: invalid local (digit-leading, empty, contains '#'/'/'/…, ends with '.')
+        // — fall through to the full IRI form.
+    }
+    format!("<{iri}>")
+}
+
 /// Render an IRI: abbreviated `prefix:local` if a prefix matches, else `<iri>`.
-/// When the prefix is empty (default namespace) the CURIE Display produces `:local`;
-/// we strip the leading colon so Manchester gets bare local names.
+/// Delegates to `render_iri_to_string` for the canonical validity check.
 fn write_iri(
     iri: &str,
     prefix: Option<&PrefixMapping>,
     f: &mut Formatter<'_>,
 ) -> Result<(), Error> {
-    if let Some(pm) = prefix
-        && let Ok(curie) = pm.shrink_iri(iri)
-    {
-        let s = curie.to_string();
-        // The local name is everything after the first ':' (curie prefixes never
-        // contain a ':'). OWL-API's Manchester lexer tokenizes a digit-leading
-        // local (e.g. `EC:2.5.1.30`) as a number and cannot re-parse such a
-        // CURIE, so it emits a full IRI instead — match that, and only abbreviate
-        // when the local name begins with a (non-digit) name char.
-        let local = s.split_once(':').map_or(s.as_str(), |(_, l)| l);
-        // Only abbreviate when the local name is a valid Manchester local name
-        // (SPARQL PN_LOCAL-ish: no `/`, `#`, etc.). The first char must be a
-        // non-digit name char, and every char must be a name char; PN_LOCAL also
-        // cannot end in `.`. A version IRI like `http://ex/o/1.0.0` shrinks to
-        // `ex:o/1.0.0`, whose `/` is NOT a valid local char — emitting that
-        // abbreviation produces output the reader cannot re-parse, so fall
-        // through to the always-parseable full `<iri>` form instead.
-        if local.chars().next().is_some_and(|c| !c.is_ascii_digit())
-            && local
-                .chars()
-                .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '.'))
-            && !local.ends_with('.')
-        {
-            // `add_prefix("", ns)` stores "" in the prefix *mapping* (not the
-            // default slot), so `shrink_iri` returns a `Curie { prefix: Some(""), .. }`
-            // which `Display` formats as ":local". curie 0.1.4's `reference` field
-            // is private (no clean accessor), so strip the leading ':' to get the
-            // bare local name.
-            return if let Some(stripped) = s.strip_prefix(':') {
-                write!(f, "{stripped}")
-            } else {
-                write!(f, "{s}")
-            };
-        }
-        // else: digit-leading or empty local — fall through to the full IRI form.
-    }
-    write!(f, "<{iri}>")
+    f.write_str(&render_iri_to_string(iri, prefix))
 }
 
 impl<A: ForIRI> Display for Manchester<'_, IRI<A>, A> {
@@ -802,23 +818,9 @@ pub(crate) fn annotation_to_manchester<A: ForIRI>(
 }
 
 /// Render an IRI string to a String using prefix abbreviation.
+/// Delegates to `render_iri_to_string` for the canonical validity check.
 fn write_iri_to_string(iri: &str, pm: Option<&PrefixMapping>) -> String {
-    use std::fmt::Write as _;
-    let mut s = String::new();
-    // Reuse the same logic as write_iri but collect into a String.
-    if let Some(pm) = pm
-        && let Ok(curie) = pm.shrink_iri(iri)
-    {
-        let curie_s = curie.to_string();
-        if let Some(local) = curie_s.strip_prefix(':') {
-            let _ = write!(s, "{local}");
-        } else {
-            let _ = write!(s, "{curie_s}");
-        }
-        return s;
-    }
-    let _ = write!(s, "<{iri}>");
-    s
+    render_iri_to_string(iri, pm)
 }
 
 // ---------------------------------------------------------------------------
