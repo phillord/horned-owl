@@ -1151,8 +1151,12 @@ fn insert_object_property_frame<A: ForIRI, O: MutableOntology<A>>(
                 }
             }
             "characteristics" => {
-                for ch in body.into_inner() {
-                    insert_object_characteristic(ch.as_str(), &subject_ope, &ann, ont)?;
+                // §2.5 objectPropertyCharacteristicAnnotatedList: a LEADING
+                // clause-level annotation binds the FIRST item only.
+                let empty = BTreeSet::new();
+                for (i, ch) in body.into_inner().enumerate() {
+                    let item_ann = if i == 0 { &ann } else { &empty };
+                    insert_object_characteristic(ch.as_str(), &subject_ope, item_ann, ont)?;
                 }
             }
             other => unreachable!("unexpected object-property clause keyword: {other}"),
@@ -1293,14 +1297,17 @@ fn insert_data_property_frame<A: ForIRI, O: MutableOntology<A>>(
                 }
             }
             "characteristics" => {
-                for ch in body.into_inner() {
+                // §2.5: leading clause-level annotation binds the FIRST item only.
+                let empty = BTreeSet::new();
+                for (i, ch) in body.into_inner().enumerate() {
+                    let item_ann = if i == 0 { &ann } else { &empty };
                     // Only Functional is valid on a data property.
                     if ch.as_str().eq_ignore_ascii_case("functional") {
                         ont.insert(AnnotatedComponent {
                             component: Component::FunctionalDataProperty(FunctionalDataProperty(
                                 DataProperty(subject.clone()),
                             )),
-                            ann: ann.clone(),
+                            ann: item_ann.clone(),
                         });
                     } else {
                         return Err(HornedError::invalid(
@@ -1442,8 +1449,11 @@ fn insert_individual_frame<A: ForIRI, O: MutableOntology<A>>(
                 }
             }
             "facts" => {
-                for fact in body.into_inner() {
-                    insert_fact(fact, ctx, &subject_ind, &ann, ont)?;
+                // §2.5 factAnnotatedList: leading annotation binds the FIRST item only.
+                let empty = BTreeSet::new();
+                for (i, fact) in body.into_inner().enumerate() {
+                    let item_ann = if i == 0 { &ann } else { &empty };
+                    insert_fact(fact, ctx, &subject_ind, item_ann, ont)?;
                 }
             }
             "sameas" => {
@@ -3291,6 +3301,108 @@ mod tests {
         assert!(
             !got.contains(&bad_c),
             "leading annotation must NOT spread to A ⊑ C, got:\n{got:#?}"
+        );
+    }
+
+    /// §2.5: `Characteristics:` (objectPropertyCharacteristicAnnotatedList) and
+    /// `Facts:` (factAnnotatedList) are annotatedLists — a LEADING clause-level
+    /// annotation binds the FIRST list item only, not the whole comma-list.
+    #[test]
+    fn leading_annotation_on_characteristics_and_facts_binds_first_only() {
+        use crate::io::omn::reader::read_with_build;
+        use crate::ontology::set::SetOntology;
+        use std::collections::BTreeSet;
+        use std::io::BufReader;
+        let b = Build::new_rc();
+        let doc = "Prefix: : <http://ex/>\n\
+                   Prefix: ex: <http://ex/>\n\
+                   Ontology:\n\
+                   ObjectProperty: ex:r\n    \
+                   Characteristics: Annotations: ex:note \"n\" Functional, Transitive\n\
+                   Individual: ex:a\n    \
+                   Facts: Annotations: ex:note \"f\" ex:r ex:b, ex:r ex:c\n";
+        let (parsed, _): (SetOntology<_>, PrefixMapping) =
+            read_with_build(BufReader::new(doc.as_bytes()), &b).unwrap();
+        let got: BTreeSet<_> = parsed.iter().cloned().collect();
+
+        let mk_ann = |val: &str| {
+            let mut s = BTreeSet::new();
+            s.insert(Annotation {
+                ap: b.annotation_property("http://ex/note"),
+                av: AnnotationValue::Literal(Literal::Simple {
+                    literal: val.to_string(),
+                }),
+            });
+            s
+        };
+        let r_ope = ObjectPropertyExpression::ObjectProperty(b.object_property("http://ex/r"));
+
+        // --- Characteristics: Functional (first) annotated, Transitive (rest) plain.
+        let functional_annotated = AnnotatedComponent {
+            component: Component::FunctionalObjectProperty(FunctionalObjectProperty(r_ope.clone())),
+            ann: mk_ann("n"),
+        };
+        let transitive_plain = AnnotatedComponent {
+            component: Component::TransitiveObjectProperty(TransitiveObjectProperty(r_ope.clone())),
+            ann: BTreeSet::new(),
+        };
+        // Bug shape: Transitive carrying the leading annotation.
+        let transitive_bad = AnnotatedComponent {
+            component: Component::TransitiveObjectProperty(TransitiveObjectProperty(r_ope.clone())),
+            ann: mk_ann("n"),
+        };
+        assert!(
+            got.contains(&functional_annotated),
+            "expected Functional(r) with ex:note \"n\", got:\n{got:#?}"
+        );
+        assert!(
+            got.contains(&transitive_plain),
+            "expected UNANNOTATED Transitive(r), got:\n{got:#?}"
+        );
+        assert!(
+            !got.contains(&transitive_bad),
+            "leading annotation must NOT spread to Transitive(r), got:\n{got:#?}"
+        );
+
+        // --- Facts: r a b (first) annotated, r a c (rest) plain.
+        let ind_a = Individual::Named(b.named_individual("http://ex/a"));
+        let ind_b = Individual::Named(b.named_individual("http://ex/b"));
+        let ind_c = Individual::Named(b.named_individual("http://ex/c"));
+        let fact_ab_annotated = AnnotatedComponent {
+            component: Component::ObjectPropertyAssertion(ObjectPropertyAssertion {
+                ope: r_ope.clone(),
+                from: ind_a.clone(),
+                to: ind_b,
+            }),
+            ann: mk_ann("f"),
+        };
+        let fact_ac_plain = AnnotatedComponent {
+            component: Component::ObjectPropertyAssertion(ObjectPropertyAssertion {
+                ope: r_ope.clone(),
+                from: ind_a.clone(),
+                to: ind_c.clone(),
+            }),
+            ann: BTreeSet::new(),
+        };
+        let fact_ac_bad = AnnotatedComponent {
+            component: Component::ObjectPropertyAssertion(ObjectPropertyAssertion {
+                ope: r_ope,
+                from: ind_a,
+                to: ind_c,
+            }),
+            ann: mk_ann("f"),
+        };
+        assert!(
+            got.contains(&fact_ab_annotated),
+            "expected r(a,b) with ex:note \"f\", got:\n{got:#?}"
+        );
+        assert!(
+            got.contains(&fact_ac_plain),
+            "expected UNANNOTATED r(a,c), got:\n{got:#?}"
+        );
+        assert!(
+            !got.contains(&fact_ac_bad),
+            "leading annotation must NOT spread to r(a,c), got:\n{got:#?}"
         );
     }
 
