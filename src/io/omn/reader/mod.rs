@@ -129,9 +129,11 @@ pub fn read_with_build<A: ForIRI, O: MutableOntology<A> + Ontology<A> + Default,
         match child.as_rule() {
             Rule::PrefixDeclaration | Rule::EOI => {}
             Rule::OntologyHeader => {
-                // OntologyHeader = { ^"Ontology:" ~ IRI? ~ ImportDeclaration* ~ Annotations* }
-                // Iterate children: optional IRI, then zero or more ImportDeclaration,
-                // then zero or more Annotations (ontology annotations).
+                // OntologyHeader = { ^"Ontology:" ~ ( OntologyIRI ~ VersionIRI? )?
+                //                    ~ ImportDeclaration* ~ Annotations* }
+                // Iterate children: optional OntologyIRI then optional VersionIRI,
+                // then zero or more ImportDeclaration, then zero or more
+                // Annotations (ontology annotations).
                 // GATE: insert OntologyID only when an IRI/version was present —
                 // NOT merely because the `Ontology:` keyword appeared. A bare
                 // `Ontology:` (emitted to host imports/annotations when there is no
@@ -140,8 +142,14 @@ pub fn read_with_build<A: ForIRI, O: MutableOntology<A> + Ontology<A> + Default,
                 let mut has_id = false;
                 for h in child.into_inner() {
                     match h.as_rule() {
-                        Rule::IRI => {
-                            oid.iri = Some(crate::model::IRI::from_pair(h, &ctx)?);
+                        Rule::OntologyIRI => {
+                            let iri_pair = h.into_inner().next().unwrap();
+                            oid.iri = Some(crate::model::IRI::from_pair(iri_pair, &ctx)?);
+                            has_id = true;
+                        }
+                        Rule::VersionIRI => {
+                            let iri_pair = h.into_inner().next().unwrap();
+                            oid.viri = Some(crate::model::IRI::from_pair(iri_pair, &ctx)?);
                             has_id = true;
                         }
                         Rule::ImportDeclaration => {

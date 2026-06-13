@@ -2524,4 +2524,77 @@ mod tests {
         let got: BTreeSet<_> = parsed.iter().map(|ac| ac.component.clone()).collect();
         assert_eq!(orig, got, "bare-name round-trip failed\n{s}");
     }
+
+    #[test]
+    fn reads_version_iri_round_trip() {
+        use crate::io::omn::{read_with_build, write};
+        use crate::ontology::component_mapped::ComponentMappedOntology;
+        use crate::ontology::set::SetOntology;
+        use std::io::BufReader;
+        let b = Build::new_rc();
+        let mut pm = PrefixMapping::default();
+        pm.add_prefix("ex", "http://ex/").unwrap();
+        let mut o = SetOntology::new_rc();
+        let mut oid = OntologyID::default();
+        oid.iri = Some(b.iri("http://ex/o"));
+        oid.viri = Some(b.iri("http://ex/o/1.0.0"));
+        o.insert(oid);
+        o.insert(DeclareClass(b.class("http://ex/A")));
+        type TestOnt = ComponentMappedOntology<
+            std::rc::Rc<str>,
+            std::rc::Rc<AnnotatedComponent<std::rc::Rc<str>>>,
+        >;
+        let amo: TestOnt = o.clone().into();
+        let mut buf = Vec::<u8>::new();
+        write(&mut buf, &amo, Some(&pm)).unwrap();
+        let s = String::from_utf8(buf.clone()).unwrap();
+        assert!(
+            s.contains("Ontology: ex:o ex:o/1.0.0")
+                || s.contains("Ontology: ex:o <http://ex/o/1.0.0>"),
+            "expected version IRI in header, got:\n{s}"
+        );
+        let (parsed, _): (SetOntology<_>, PrefixMapping) =
+            read_with_build(BufReader::new(&buf[..]), &b).unwrap();
+        let orig: std::collections::BTreeSet<_> = o.iter().map(|ac| ac.component.clone()).collect();
+        let got: std::collections::BTreeSet<_> =
+            parsed.iter().map(|ac| ac.component.clone()).collect();
+        assert_eq!(orig, got, "version IRI did not round-trip\n{s}");
+    }
+
+    #[test]
+    fn ontology_iri_then_import_no_version_iri() {
+        // Guard: the optional VersionIRI must NOT greedily grab a following Import.
+        // `Ontology: ex:o` (no version) then `Import: ex:i` must round-trip the Import.
+        use crate::io::omn::{read_with_build, write};
+        use crate::ontology::component_mapped::ComponentMappedOntology;
+        use crate::ontology::set::SetOntology;
+        use std::io::BufReader;
+        let b = Build::new_rc();
+        let mut pm = PrefixMapping::default();
+        pm.add_prefix("ex", "http://ex/").unwrap();
+        let mut o = SetOntology::new_rc();
+        let mut oid = OntologyID::default();
+        oid.iri = Some(b.iri("http://ex/o"));
+        o.insert(oid);
+        o.insert(Import(b.iri("http://ex/i")));
+        o.insert(DeclareClass(b.class("http://ex/A")));
+        type TestOnt = ComponentMappedOntology<
+            std::rc::Rc<str>,
+            std::rc::Rc<AnnotatedComponent<std::rc::Rc<str>>>,
+        >;
+        let amo: TestOnt = o.clone().into();
+        let mut buf = Vec::<u8>::new();
+        write(&mut buf, &amo, Some(&pm)).unwrap();
+        let (parsed, _): (SetOntology<_>, PrefixMapping) =
+            read_with_build(BufReader::new(&buf[..]), &b).unwrap();
+        let orig: std::collections::BTreeSet<_> = o.iter().map(|ac| ac.component.clone()).collect();
+        let got: std::collections::BTreeSet<_> =
+            parsed.iter().map(|ac| ac.component.clone()).collect();
+        assert_eq!(
+            orig,
+            got,
+            "import after version-less ontology IRI did not round-trip\n{}",
+            String::from_utf8_lossy(&buf)
+        );
+    }
 }

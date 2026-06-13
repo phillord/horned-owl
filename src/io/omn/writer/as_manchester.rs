@@ -50,7 +50,19 @@ fn write_iri(
         // CURIE, so it emits a full IRI instead — match that, and only abbreviate
         // when the local name begins with a (non-digit) name char.
         let local = s.split_once(':').map_or(s.as_str(), |(_, l)| l);
-        if local.chars().next().is_some_and(|c| !c.is_ascii_digit()) {
+        // Only abbreviate when the local name is a valid Manchester local name
+        // (SPARQL PN_LOCAL-ish: no `/`, `#`, etc.). The first char must be a
+        // non-digit name char, and every char must be a name char; PN_LOCAL also
+        // cannot end in `.`. A version IRI like `http://ex/o/1.0.0` shrinks to
+        // `ex:o/1.0.0`, whose `/` is NOT a valid local char — emitting that
+        // abbreviation produces output the reader cannot re-parse, so fall
+        // through to the always-parseable full `<iri>` form instead.
+        if local.chars().next().is_some_and(|c| !c.is_ascii_digit())
+            && local
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '.'))
+            && !local.ends_with('.')
+        {
             // `add_prefix("", ns)` stores "" in the prefix *mapping* (not the
             // default slot), so `shrink_iri` returns a `Curie { prefix: Some(""), .. }`
             // which `Display` formats as ":local". curie 0.1.4's `reference` field
@@ -836,6 +848,21 @@ mod tests {
         let mut pm = curie::PrefixMapping::default();
         pm.add_prefix("ex", "http://example.org/").unwrap();
         assert_eq!(c.as_manchester_with_prefixes(&pm).to_string(), "ex:Dog");
+    }
+
+    #[test]
+    fn slash_in_local_falls_back_to_full_iri() {
+        // A local name containing `/` (e.g. a version IRI) is NOT a valid
+        // Manchester local name, so it must render as a full `<iri>` rather
+        // than an unreadable `ex:a/b` abbreviation.
+        let b = Build::new_rc();
+        let c = b.class("http://ex/a/b");
+        let mut pm = curie::PrefixMapping::default();
+        pm.add_prefix("ex", "http://ex/").unwrap();
+        assert_eq!(
+            c.as_manchester_with_prefixes(&pm).to_string(),
+            "<http://ex/a/b>"
+        );
     }
 
     #[test]

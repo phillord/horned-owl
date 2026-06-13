@@ -95,14 +95,17 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
     //    AnnotationTarget = { Literal | IRI }). Route those to misc instead.
     // -----------------------------------------------------------------------
     {
-        let header_iri: Option<crate::model::IRI<A>> = {
+        let (header_iri, header_viri): (
+            Option<crate::model::IRI<A>>,
+            Option<crate::model::IRI<A>>,
+        ) = {
             let mut id_iter = ont.i().component_for_kind(ComponentKind::OntologyID);
             if let Some(ac) = id_iter.next()
                 && let Component::OntologyID(oid) = &ac.component
             {
-                oid.iri.clone()
+                (oid.iri.clone(), oid.viri.clone())
             } else {
-                None
+                (None, None)
             }
         };
         let imports: Vec<crate::model::IRI<A>> = ont
@@ -138,11 +141,19 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
         if header_iri.is_some() || !imports.is_empty() || !conformant_ont_anns.is_empty() {
             writeln!(write)?;
             match &header_iri {
-                Some(iri) => writeln!(
-                    write,
-                    "Ontology: {}",
-                    iri.as_manchester_with_prefixes(mapping)
-                )?,
+                Some(iri) => match &header_viri {
+                    Some(viri) => writeln!(
+                        write,
+                        "Ontology: {} {}",
+                        iri.as_manchester_with_prefixes(mapping),
+                        viri.as_manchester_with_prefixes(mapping)
+                    )?,
+                    None => writeln!(
+                        write,
+                        "Ontology: {}",
+                        iri.as_manchester_with_prefixes(mapping)
+                    )?,
+                },
                 None => writeln!(write, "Ontology:")?,
             }
             for imp in &imports {
