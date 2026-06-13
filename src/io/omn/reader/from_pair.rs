@@ -645,7 +645,15 @@ impl<A: ForIRI> FromPair<A> for Annotation<A> {
     const RULE: Rule = Rule::AnnotationEntry;
     fn from_pair_unchecked(pair: Pair<Rule>, ctx: &Context<'_, A>) -> Result<Self> {
         let mut inner = pair.into_inner();
-        let ap = AnnotationProperty(IRI::from_pair(inner.next().unwrap(), ctx)?);
+        let mut next = inner.next().unwrap();
+        // The annotation entry may itself be annotated (§2.5 `annotationAnnotatedList`).
+        // horned-owl's model has no nested-annotation slot, so parse-and-drop the nested
+        // `Annotations:` (matching the ofn reader's `_annotations` discard).
+        if next.as_rule() == Rule::Annotations {
+            parse_annotations(next, ctx)?; // validate it parses, then discard
+            next = inner.next().unwrap();
+        }
+        let ap = AnnotationProperty(IRI::from_pair(next, ctx)?);
         let av = AnnotationValue::from_pair(inner.next().unwrap(), ctx)?;
         Ok(Annotation { ap, av })
     }
@@ -3149,6 +3157,25 @@ mod tests {
             got,
             "per-item annotated list did not round-trip\n{}",
             String::from_utf8_lossy(&buf)
+        );
+    }
+
+    #[test]
+    fn parses_and_drops_nested_annotation() {
+        use crate::io::omn::read_with_build;
+        use crate::ontology::set::SetOntology;
+        use std::io::BufReader;
+        let b = Build::new_rc();
+        // `Annotations: Annotations: ex:meta "m" ex:label "L"` — the inner annotates the outer.
+        let doc = "Prefix: ex: <http://ex/>\nOntology: <http://ex/o>\nClass: ex:A\n    Annotations: Annotations: ex:meta \"m\" ex:label \"L\"\n";
+        let (parsed, _): (SetOntology<_>, PrefixMapping) =
+            read_with_build(BufReader::new(doc.as_bytes()), &b).unwrap();
+        // parses without error; the outer ex:label "L" annotation on ex:A is recovered.
+        assert!(
+            parsed
+                .iter()
+                .any(|ac| matches!(&ac.component, Component::AnnotationAssertion(_))),
+            "expected the outer annotation to survive (nested dropped)"
         );
     }
 }

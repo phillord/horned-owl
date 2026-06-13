@@ -169,7 +169,7 @@ VersionIRI        = { IRI }
 
 // Annotation clauses (entity annotations inside frames; ontology annotations in header)
 Annotations     = { ^"Annotations:" ~ AnnotationEntry ~ ( "," ~ AnnotationEntry )* }
-AnnotationEntry = { IRI ~ AnnotationTarget }
+AnnotationEntry = { Annotations? ~ IRI ~ AnnotationTarget }
 AnnotationTarget = { Literal | IRI }
 
 // ---- frames -----------------------------------------------------------------
