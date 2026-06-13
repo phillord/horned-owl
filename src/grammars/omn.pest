@@ -119,7 +119,12 @@ Individual        = { IRI }
 
 // ---- data ranges ------------------------------------------------------------
 
-DataRange  = { DatatypeIRI ~ ( "[" ~ Facet ~ ( "," ~ Facet )* ~ "]" )? }
+DataRange       = { DataConjunction ~ ( OrKw  ~ DataConjunction )* }
+DataConjunction = { DataPrimary     ~ ( AndKw ~ DataPrimary )* }
+DataPrimary     = { NotKw? ~ DataAtomic }
+DataAtomic      = { DataOneOf | DatatypeRestriction | "(" ~ DataRange ~ ")" | DatatypeIRI }
+DataOneOf       = { "{" ~ Literal ~ ( "," ~ Literal )* ~ "}" }
+DatatypeRestriction = { DatatypeIRI ~ "[" ~ Facet ~ ( "," ~ Facet )* ~ "]" }
 DatatypeIRI = { IRI }
 Facet       = { FacetSymbol ~ Literal }
 LengthKw         = ${ ^"length"         ~ NameBoundary }
