@@ -201,6 +201,16 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
         }};
     }
 
+    // Helper: produce the frame-key string for an individual subject.
+    // Named individuals use their IRI string; anonymous individuals use `_:<label>`
+    // (matching the Manchester syntax the reader expects when re-parsing the frame).
+    fn individual_subject_key<A: ForIRI>(i: &crate::model::Individual<A>) -> String {
+        match i {
+            crate::model::Individual::Named(ni) => ni.0.as_ref().to_string(),
+            crate::model::Individual::Anonymous(ai) => format!("_:{}", ai.0.as_ref()),
+        }
+    }
+
     // Helper: extract the raw-property IRI from a simple ObjectPropertyExpression,
     // returning None for InverseObjectProperty (which falls to misc).
     fn ope_iri<A: ForIRI>(ope: &ObjectPropertyExpression<A>) -> Option<&str> {
@@ -629,68 +639,64 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
 
                 // ---- Assertion axioms ----
                 Component::ClassAssertion(ax) => {
-                    if let crate::model::Individual::Named(ni) = &ax.i {
-                        let clause = format!(
-                            "Types: {}{}",
-                            ann_prefix(&ac.ann, pm),
-                            ax.ce.as_manchester_with_prefixes(pm)
-                        );
-                        push_clause!(FrameKind::Individual, ni.0.as_ref(), clause);
-                    } else {
-                        misc.push(ac.component.as_manchester_with_prefixes(pm).to_string());
-                    }
+                    let clause = format!(
+                        "Types: {}{}",
+                        ann_prefix(&ac.ann, pm),
+                        ax.ce.as_manchester_with_prefixes(pm)
+                    );
+                    push_clause!(FrameKind::Individual, individual_subject_key(&ax.i), clause);
                 }
                 Component::ObjectPropertyAssertion(ax) => {
-                    if let crate::model::Individual::Named(ni) = &ax.from {
-                        let clause = format!(
-                            "Facts: {}{} {}",
-                            ann_prefix(&ac.ann, pm),
-                            ax.ope.as_manchester_with_prefixes(pm),
-                            ax.to.as_manchester_with_prefixes(pm)
-                        );
-                        push_clause!(FrameKind::Individual, ni.0.as_ref(), clause);
-                    } else {
-                        misc.push(ac.component.as_manchester_with_prefixes(pm).to_string());
-                    }
+                    let clause = format!(
+                        "Facts: {}{} {}",
+                        ann_prefix(&ac.ann, pm),
+                        ax.ope.as_manchester_with_prefixes(pm),
+                        ax.to.as_manchester_with_prefixes(pm)
+                    );
+                    push_clause!(
+                        FrameKind::Individual,
+                        individual_subject_key(&ax.from),
+                        clause
+                    );
                 }
                 Component::NegativeObjectPropertyAssertion(ax) => {
-                    if let crate::model::Individual::Named(ni) = &ax.from {
-                        let clause = format!(
-                            "Facts: {}not {} {}",
-                            ann_prefix(&ac.ann, pm),
-                            ax.ope.as_manchester_with_prefixes(pm),
-                            ax.to.as_manchester_with_prefixes(pm)
-                        );
-                        push_clause!(FrameKind::Individual, ni.0.as_ref(), clause);
-                    } else {
-                        misc.push(ac.component.as_manchester_with_prefixes(pm).to_string());
-                    }
+                    let clause = format!(
+                        "Facts: {}not {} {}",
+                        ann_prefix(&ac.ann, pm),
+                        ax.ope.as_manchester_with_prefixes(pm),
+                        ax.to.as_manchester_with_prefixes(pm)
+                    );
+                    push_clause!(
+                        FrameKind::Individual,
+                        individual_subject_key(&ax.from),
+                        clause
+                    );
                 }
                 Component::DataPropertyAssertion(ax) => {
-                    if let crate::model::Individual::Named(ni) = &ax.from {
-                        let clause = format!(
-                            "Facts: {}{} {}",
-                            ann_prefix(&ac.ann, pm),
-                            ax.dp.as_manchester_with_prefixes(pm),
-                            ax.to.as_manchester_with_prefixes(pm)
-                        );
-                        push_clause!(FrameKind::Individual, ni.0.as_ref(), clause);
-                    } else {
-                        misc.push(ac.component.as_manchester_with_prefixes(pm).to_string());
-                    }
+                    let clause = format!(
+                        "Facts: {}{} {}",
+                        ann_prefix(&ac.ann, pm),
+                        ax.dp.as_manchester_with_prefixes(pm),
+                        ax.to.as_manchester_with_prefixes(pm)
+                    );
+                    push_clause!(
+                        FrameKind::Individual,
+                        individual_subject_key(&ax.from),
+                        clause
+                    );
                 }
                 Component::NegativeDataPropertyAssertion(ax) => {
-                    if let crate::model::Individual::Named(ni) = &ax.from {
-                        let clause = format!(
-                            "Facts: {}not {} {}",
-                            ann_prefix(&ac.ann, pm),
-                            ax.dp.as_manchester_with_prefixes(pm),
-                            ax.to.as_manchester_with_prefixes(pm)
-                        );
-                        push_clause!(FrameKind::Individual, ni.0.as_ref(), clause);
-                    } else {
-                        misc.push(ac.component.as_manchester_with_prefixes(pm).to_string());
-                    }
+                    let clause = format!(
+                        "Facts: {}not {} {}",
+                        ann_prefix(&ac.ann, pm),
+                        ax.dp.as_manchester_with_prefixes(pm),
+                        ax.to.as_manchester_with_prefixes(pm)
+                    );
+                    push_clause!(
+                        FrameKind::Individual,
+                        individual_subject_key(&ax.from),
+                        clause
+                    );
                 }
                 Component::SameIndividual(ax) => {
                     if let Some(crate::model::Individual::Named(ni)) = ax.0.first() {
@@ -870,9 +876,14 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
 
     for ((_fk, _iri), frame) in &frames {
         // Render the subject IRI with prefix abbreviation.
+        // Anonymous-individual keys start with `_:` and must be emitted verbatim
+        // (`_:label`), not run through `shrink_iri` (which would produce `<_:label>`
+        // — a named individual, wrong type on re-read).
         let subject_display = {
             let iri_str: &str = &frame.subject_iri;
-            if let Ok(curie) = mapping.shrink_iri(iri_str) {
+            if iri_str.starts_with("_:") {
+                iri_str.to_string()
+            } else if let Ok(curie) = mapping.shrink_iri(iri_str) {
                 let s = curie.to_string();
                 if let Some(local) = s.strip_prefix(':') {
                     local.to_string()
