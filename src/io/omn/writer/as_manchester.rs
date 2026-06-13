@@ -299,32 +299,32 @@ impl<A: ForIRI> Display for Manchester<'_, DataRange<A>, A> {
 impl<A: ForIRI> AsManchester<A> for DataRange<A> {}
 
 // ---------------------------------------------------------------------------
-// ClassExpression — Manchester operator precedence
+// ClassExpression — Manchester operand parenthesization
 //
-// Tightest → loosest: atoms / `not` / restrictions (prec 3) > `and` (2) > `or` (1).
-// A sub-expression is parenthesized when its precedence is STRICTLY LOWER than
-// the minimum precedence required by the context.
+// We parenthesize EVERY operand that is not a bare atomic class — matching
+// OWL-API's own Manchester renderer (`and (not (r some C))`, `and ({…})`,
+// `r some (D and E)`). OWL-API's Manchester PARSER desyncs on real ontologies
+// when compound operands are left unparenthesized (e.g. an `ObjectOneOf {…}` or
+// `not (r some C)` as an `and` operand), even though each construct parses in
+// isolation — so we conservatively bracket non-atoms. Parentheses are
+// structurally transparent on read, so this preserves the round-trip.
 
-fn ce_prec<A: ForIRI>(ce: &ClassExpression<A>) -> u8 {
-    match ce {
-        ClassExpression::ObjectUnionOf(_) => 1,
-        ClassExpression::ObjectIntersectionOf(_) => 2,
-        _ => 3,
-    }
+/// An operand needs no parentheses only when it is a bare named class.
+fn ce_is_atom<A: ForIRI>(ce: &ClassExpression<A>) -> bool {
+    matches!(ce, ClassExpression::Class(_))
 }
 
-/// Render `inner` as an operand under a context requiring at least `need` precedence.
-/// Parenthesizes when `inner` binds looser than `need`.
+/// Render `inner` as a sub-expression operand, bracketing it unless it is a
+/// bare atomic class (OWL-API-compatible parenthesization).
 fn ce_operand<A: ForIRI>(
     inner: &ClassExpression<A>,
-    need: u8,
     pm: Option<&PrefixMapping>,
     f: &mut Formatter<'_>,
 ) -> Result<(), Error> {
-    if ce_prec(inner) < need {
-        write!(f, "({})", Manchester(inner, pm, PhantomData::<A>))
-    } else {
+    if ce_is_atom(inner) {
         write!(f, "{}", Manchester(inner, pm, PhantomData::<A>))
+    } else {
+        write!(f, "({})", Manchester(inner, pm, PhantomData::<A>))
     }
 }
 
@@ -342,7 +342,7 @@ impl<A: ForIRI> Display for Manchester<'_, ClassExpression<A>, A> {
                         write!(f, " and ")?;
                     }
                     first = false;
-                    ce_operand(ce, 2, pm, f)?;
+                    ce_operand(ce, pm, f)?;
                 }
                 Ok(())
             }
@@ -354,14 +354,14 @@ impl<A: ForIRI> Display for Manchester<'_, ClassExpression<A>, A> {
                         write!(f, " or ")?;
                     }
                     first = false;
-                    ce_operand(ce, 1, pm, f)?;
+                    ce_operand(ce, pm, f)?;
                 }
                 Ok(())
             }
 
             ObjectComplementOf(bce) => {
                 write!(f, "not ")?;
-                ce_operand(bce.as_ref(), 3, pm, f)
+                ce_operand(bce.as_ref(), pm, f)
             }
 
             ObjectOneOf(individuals) => {
@@ -379,12 +379,12 @@ impl<A: ForIRI> Display for Manchester<'_, ClassExpression<A>, A> {
 
             ObjectSomeValuesFrom { ope, bce } => {
                 write!(f, "{} some ", Manchester(ope, pm, PhantomData::<A>))?;
-                ce_operand(bce.as_ref(), 3, pm, f)
+                ce_operand(bce.as_ref(), pm, f)
             }
 
             ObjectAllValuesFrom { ope, bce } => {
                 write!(f, "{} only ", Manchester(ope, pm, PhantomData::<A>))?;
-                ce_operand(bce.as_ref(), 3, pm, f)
+                ce_operand(bce.as_ref(), pm, f)
             }
 
             ObjectHasValue { ope, i } => {
@@ -402,12 +402,12 @@ impl<A: ForIRI> Display for Manchester<'_, ClassExpression<A>, A> {
 
             ObjectMinCardinality { n, ope, bce } => {
                 write!(f, "{} min {} ", Manchester(ope, pm, PhantomData::<A>), n)?;
-                ce_operand(bce.as_ref(), 3, pm, f)
+                ce_operand(bce.as_ref(), pm, f)
             }
 
             ObjectMaxCardinality { n, ope, bce } => {
                 write!(f, "{} max {} ", Manchester(ope, pm, PhantomData::<A>), n)?;
-                ce_operand(bce.as_ref(), 3, pm, f)
+                ce_operand(bce.as_ref(), pm, f)
             }
 
             ObjectExactCardinality { n, ope, bce } => {
@@ -417,7 +417,7 @@ impl<A: ForIRI> Display for Manchester<'_, ClassExpression<A>, A> {
                     Manchester(ope, pm, PhantomData::<A>),
                     n
                 )?;
-                ce_operand(bce.as_ref(), 3, pm, f)
+                ce_operand(bce.as_ref(), pm, f)
             }
 
             DataSomeValuesFrom { dp, dr } => {
@@ -1025,11 +1025,13 @@ mod tests {
             "not A"
         );
 
-        // and binds tighter than or → no parens on the and-operand inside or
+        // every non-atomic operand is parenthesized (OWL-API-compatible), so the
+        // `and` sub-expression under `or` is bracketed even though precedence
+        // would not strictly require it.
         let cd = ClassExpression::ObjectIntersectionOf(vec![c.clone(), d.clone()]);
         assert_eq!(
             m(&ClassExpression::ObjectUnionOf(vec![a.clone(), cd])),
-            "A or C and D"
+            "A or (C and D)"
         );
         // or under and → MUST parenthesize
         let ac = ClassExpression::ObjectUnionOf(vec![a.clone(), c.clone()]);
