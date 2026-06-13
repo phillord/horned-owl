@@ -115,7 +115,11 @@ Cardinality = @{ ASCII_DIGIT+ }
 ClassIRI          = { IRI }
 ObjectPropertyIRI = { IRI }
 DataPropertyIRI   = { IRI }
-Individual        = { IRI }
+// `_:` is reserved for blank nodes, so the anon arm is tried FIRST: it can
+// never shadow a legitimate IRI, and putting it first sidesteps any PEG
+// ordered-choice ambiguity with `SimpleIRI`/`AbbreviatedIRI` on a `_:`-prefix.
+AnonymousIndividual = { SPARQL_BlankNodeLabel }
+Individual        = { AnonymousIndividual | IRI }
 
 // ---- data ranges ------------------------------------------------------------
 
@@ -170,7 +174,7 @@ VersionIRI        = { IRI }
 // Annotation clauses (entity annotations inside frames; ontology annotations in header)
 Annotations     = { ^"Annotations:" ~ AnnotationEntry ~ ( "," ~ AnnotationEntry )* }
 AnnotationEntry = { Annotations? ~ IRI ~ AnnotationTarget }
-AnnotationTarget = { Literal | IRI }
+AnnotationTarget = { Literal | AnonymousIndividual | IRI }
 
 // ---- frames -----------------------------------------------------------------
 
@@ -243,7 +247,7 @@ AnnotationPropertyClause = {
     | ^"Range:"         ~ Annotations? ~ IriList
 }
 
-IndividualFrame = { ^"Individual:" ~ FrameSubject ~ IndividualClause* }
+IndividualFrame = { ^"Individual:" ~ Individual ~ IndividualClause* }
 IndividualClause = {
       Annotations
     | ^"Types:"         ~ Annotations? ~ DescriptionList

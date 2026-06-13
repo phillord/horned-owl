@@ -158,8 +158,20 @@ impl<A: ForIRI> FromPair<A> for IRI<A> {
 impl<A: ForIRI> FromPair<A> for Individual<A> {
     const RULE: Rule = Rule::Individual;
     fn from_pair_unchecked(pair: Pair<Rule>, ctx: &Context<'_, A>) -> Result<Self> {
-        let iri = IRI::from_pair(pair.into_inner().next().unwrap(), ctx)?;
-        Ok(Individual::Named(NamedIndividual(iri)))
+        let inner = pair.into_inner().next().unwrap();
+        match inner.as_rule() {
+            // `AnonymousIndividual = { SPARQL_BlankNodeLabel }`; the label's
+            // `as_str()` is `_:label` — strip the `_:` prefix to get the id.
+            Rule::AnonymousIndividual => {
+                let label = inner.as_str();
+                let id = label.strip_prefix("_:").unwrap_or(label);
+                Ok(Individual::Anonymous(ctx.build.anon(id)))
+            }
+            _ => {
+                let iri = IRI::from_pair(inner, ctx)?;
+                Ok(Individual::Named(NamedIndividual(iri)))
+            }
+        }
     }
 }
 
@@ -636,6 +648,11 @@ impl<A: ForIRI> FromPair<A> for AnnotationValue<A> {
         match inner.as_rule() {
             Rule::Literal => Ok(AnnotationValue::Literal(Literal::from_pair(inner, ctx)?)),
             Rule::IRI => Ok(AnnotationValue::IRI(IRI::from_pair(inner, ctx)?)),
+            Rule::AnonymousIndividual => {
+                let label = inner.as_str();
+                let id = label.strip_prefix("_:").unwrap_or(label);
+                Ok(AnnotationValue::AnonymousIndividual(ctx.build.anon(id)))
+            }
             rule => unreachable!("unexpected annotation target: {:?}", rule),
         }
     }
@@ -1347,9 +1364,20 @@ fn insert_individual_frame<A: ForIRI, O: MutableOntology<A>>(
     ctx: &Context<'_, A>,
     ont: &mut O,
 ) -> Result<()> {
-    let (subject, clauses) = frame_subject_and_clauses(frame, ctx)?;
-    let subject_ind = Individual::Named(NamedIndividual(subject.clone()));
-    ont.insert(DeclareNamedIndividual(NamedIndividual(subject.clone())));
+    // The subject is an `Individual` (named OR anonymous `_:id`), not a
+    // FrameSubject IRI: an anonymous individual may head a frame (§2.5).
+    let mut inner = frame.into_inner();
+    let subject_ind = Individual::from_pair(inner.next().unwrap(), ctx)?;
+    let clauses = inner;
+    // Anonymous individuals are NOT declared (no DeclareNamedIndividual); only a
+    // named subject gets a declaration. The clauses use the subject either way.
+    let anno_subject = match &subject_ind {
+        Individual::Named(ni) => {
+            ont.insert(DeclareNamedIndividual(ni.clone()));
+            AnnotationSubject::IRI(ni.0.clone())
+        }
+        Individual::Anonymous(ai) => AnnotationSubject::AnonymousIndividual(ai.clone()),
+    };
 
     for clause in clauses {
         let kw = clause_keyword(&clause);
@@ -1365,7 +1393,7 @@ fn insert_individual_frame<A: ForIRI, O: MutableOntology<A>>(
             "annotations" => {
                 for ann_item in parse_annotations(body, ctx)? {
                     ont.insert(AnnotationAssertion {
-                        subject: AnnotationSubject::IRI(subject.clone()),
+                        subject: anno_subject.clone(),
                         ann: ann_item,
                     });
                 }
@@ -3177,5 +3205,42 @@ mod tests {
                 .any(|ac| matches!(&ac.component, Component::AnnotationAssertion(_))),
             "expected the outer annotation to survive (nested dropped)"
         );
+    }
+
+    #[test]
+    fn reads_anonymous_individuals_round_trip() {
+        use crate::io::omn::{read_with_build, write};
+        use crate::ontology::component_mapped::ComponentMappedOntology;
+        use crate::ontology::set::SetOntology;
+        use std::io::BufReader;
+        let b = Build::new_rc();
+        let mut pm = PrefixMapping::default();
+        pm.add_prefix("ex", "http://ex/").unwrap();
+        let mut o = SetOntology::new_rc();
+        o.insert(DeclareNamedIndividual(b.named_individual("http://ex/a")));
+        o.insert(DeclareObjectProperty(b.object_property("http://ex/r")));
+        o.insert(ObjectPropertyAssertion {
+            ope: ObjectPropertyExpression::ObjectProperty(b.object_property("http://ex/r")),
+            from: Individual::Named(b.named_individual("http://ex/a")),
+            to: Individual::Anonymous(b.anon("genid1")),
+        });
+        type TestOnt = ComponentMappedOntology<
+            std::rc::Rc<str>,
+            std::rc::Rc<AnnotatedComponent<std::rc::Rc<str>>>,
+        >;
+        let amo: TestOnt = o.clone().into();
+        let mut buf = Vec::<u8>::new();
+        write(&mut buf, &amo, Some(&pm)).unwrap();
+        let s = String::from_utf8(buf.clone()).unwrap();
+        assert!(
+            s.contains("_:genid1"),
+            "expected blank-node rendering, got:\n{s}"
+        );
+        let (parsed, _): (SetOntology<_>, PrefixMapping) =
+            read_with_build(BufReader::new(&buf[..]), &b).unwrap();
+        let orig: std::collections::BTreeSet<_> = o.iter().map(|ac| ac.component.clone()).collect();
+        let got: std::collections::BTreeSet<_> =
+            parsed.iter().map(|ac| ac.component.clone()).collect();
+        assert_eq!(orig, got, "anonymous individual did not round-trip\n{s}");
     }
 }

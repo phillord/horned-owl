@@ -773,12 +773,9 @@ impl<A: ForIRI> AsManchester<A> for Component<A> {}
 
 /// Render a single `Annotation` as `<ap-iri> <value>` for Manchester syntax.
 ///
-/// Callers MUST ensure the annotation value is `Literal` or `IRI` before
-/// calling this function.  `AnonymousIndividual` annotation values are NOT
-/// expressible in Manchester (`AnnotationTarget = { Literal | IRI }`) and
-/// MUST be routed to the misc / functional-syntax fallback section instead.
-/// The `AnonymousIndividual` arm is `unreachable!()` here to document that
-/// invariant — the guards in `mod.rs` enforce it before this function is reached.
+/// Renders any §2.5 annotation value: `Literal`, `IRI`, or
+/// `AnonymousIndividual` (`AnnotationTarget = { Literal | IRI |
+/// AnonymousIndividual }`). Anonymous values render as `_:label`.
 pub(crate) fn annotation_to_manchester<A: ForIRI>(
     ann: &Annotation<A>,
     pm: &PrefixMapping,
@@ -794,14 +791,11 @@ pub(crate) fn annotation_to_manchester<A: ForIRI>(
         // OWL-API's own renderer does the same. (The property in `ap_str` keeps
         // its abbreviation — only the value position is affected.)
         AnnotationValue::IRI(iri) => format!("<{}>", iri.as_ref()),
-        // SAFETY INVARIANT: callers in mod.rs guard against AnonymousIndividual
-        // values before reaching this function.  If this arm fires, there is a
-        // bug in the calling code.
-        AnnotationValue::AnonymousIndividual(_) => {
-            unreachable!(
-                "annotation_to_manchester called with AnonymousIndividual value; \
-                 callers must route these to misc before calling this function"
-            )
+        // §2.5 `AnnotationTarget = { Literal | IRI | AnonymousIndividual }`:
+        // render an anonymous-individual value as `_:label` (the
+        // `AnonymousIndividual` Display already produces `_:id`).
+        AnnotationValue::AnonymousIndividual(ai) => {
+            Manchester(ai, Some(pm), PhantomData::<A>).to_string()
         }
     };
     format!("{ap_str} {av_str}")

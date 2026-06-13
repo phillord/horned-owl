@@ -6,7 +6,6 @@ use curie::PrefixMapping;
 use crate::error::HornedError;
 use crate::model::Annotation;
 use crate::model::AnnotationSubject;
-use crate::model::AnnotationValue;
 use crate::model::Component;
 use crate::model::ComponentKind;
 use crate::model::ForIRI;
@@ -94,11 +93,9 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
     // -----------------------------------------------------------------------
     // 2. Conformant Ontology: header (IRI + nested Import: + Annotations:)
     //    W3C Manchester puts imports and ontology annotations INSIDE the
-    //    Ontology: frame, not at top level.
-    //
-    //    Guard: OntologyAnnotation whose value is AnonymousIndividual cannot be
-    //    rendered in Manchester `Annotations:` syntax (the grammar's
-    //    AnnotationTarget = { Literal | IRI }). Route those to misc instead.
+    //    Ontology: frame, not at top level. §2.5's AnnotationTarget admits
+    //    Literal | IRI | AnonymousIndividual, so anon-valued annotations
+    //    render natively (`_:label`).
     // -----------------------------------------------------------------------
     {
         let (header_iri, header_viri): (
@@ -125,25 +122,19 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
                 }
             })
             .collect();
-        // Separate conformant (Literal/IRI) from anon-valued ontology annotations.
-        let mut conformant_ont_anns: Vec<Annotation<A>> = Vec::new();
-        for ac in ont
+        // §2.5 AnnotationTarget admits Literal | IRI | AnonymousIndividual, so
+        // every ontology annotation (anon values included) renders natively.
+        let conformant_ont_anns: Vec<Annotation<A>> = ont
             .i()
             .component_for_kind(ComponentKind::OntologyAnnotation)
-        {
-            if let Component::OntologyAnnotation(oa) = &ac.component {
-                if matches!(oa.0.av, AnnotationValue::AnonymousIndividual(_)) {
-                    // Anon values are not expressible in Manchester AnnotationTarget.
-                    misc.push(
-                        ac.component
-                            .as_manchester_with_prefixes(mapping)
-                            .to_string(),
-                    );
+            .filter_map(|ac| {
+                if let Component::OntologyAnnotation(oa) = &ac.component {
+                    Some(oa.0.clone())
                 } else {
-                    conformant_ont_anns.push(oa.0.clone());
+                    None
                 }
-            }
-        }
+            })
+            .collect();
         if header_iri.is_some() || !imports.is_empty() || !conformant_ont_anns.is_empty() {
             writeln!(write)?;
             match &header_iri {
@@ -831,40 +822,31 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
         .component_for_kind(ComponentKind::AnnotationAssertion)
     {
         if let Component::AnnotationAssertion(aa) = &ac.component {
-            // Guard: the Manchester grammar's AnnotationTarget = { Literal | IRI }
-            // cannot represent an AnonymousIndividual annotation VALUE.  Route the
-            // whole component to misc rather than emitting an unparseable `_:id` clause.
-            let anon_value = matches!(aa.ann.av, AnnotationValue::AnonymousIndividual(_));
+            // §2.5 AnnotationTarget admits anon VALUES (`_:label`), so the value
+            // is always renderable. An anon SUBJECT, however, is not re-emitted
+            // as a frame here (scoped follow-up) → route to misc.
             if let AnnotationSubject::IRI(subj_iri) = &aa.subject {
-                if anon_value {
-                    // Anon value → not expressible in Manchester; route to misc.
+                let clause = format!(
+                    "Annotations: {}",
+                    as_manchester::annotation_to_manchester(&aa.ann, mapping)
+                );
+                // Attach to the existing frame whose subject_iri matches.
+                if let Some(frame) = frames
+                    .values_mut()
+                    .find(|fr| fr.subject_iri == subj_iri.as_ref())
+                {
+                    frame.clauses.push(clause);
+                } else {
+                    // Orphan: no frame heads this IRI → not Manchester-expressible.
                     misc.push(
                         ac.component
                             .as_manchester_with_prefixes(mapping)
                             .to_string(),
                     );
-                } else {
-                    let clause = format!(
-                        "Annotations: {}",
-                        as_manchester::annotation_to_manchester(&aa.ann, mapping)
-                    );
-                    // Attach to the existing frame whose subject_iri matches.
-                    if let Some(frame) = frames
-                        .values_mut()
-                        .find(|fr| fr.subject_iri == subj_iri.as_ref())
-                    {
-                        frame.clauses.push(clause);
-                    } else {
-                        // Orphan: no frame heads this IRI → not Manchester-expressible.
-                        misc.push(
-                            ac.component
-                                .as_manchester_with_prefixes(mapping)
-                                .to_string(),
-                        );
-                    }
                 }
             } else {
-                // AnonymousIndividual subject → misc.
+                // AnonymousIndividual subject → misc (anon-subject emission is a
+                // documented follow-up; the reader accepts anon subjects).
                 misc.push(
                     ac.component
                         .as_manchester_with_prefixes(mapping)
@@ -1088,12 +1070,15 @@ mod tests {
     }
 
     /// An AnnotationAssertion whose annotation VALUE is an AnonymousIndividual
-    /// MUST NOT produce an inline `Annotations: … _:id` clause (which the reader
-    /// grammar cannot parse).  The component must instead appear in the
-    /// `# General axioms` misc section.
+    /// (with a NAMED subject) renders natively as an inline `Annotations: … _:id`
+    /// clause under the subject's frame (§2.5 AnnotationTarget admits anon values).
     #[test]
-    fn anon_annotation_value_routes_to_misc_not_inline() {
+    fn anon_annotation_value_renders_inline_natively() {
         let b = Build::new_rc();
+        let mut pm = PrefixMapping::default();
+        pm.add_prefix("ex", "http://ex/").unwrap();
+        pm.add_prefix("rdfs", "http://www.w3.org/2000/01/rdf-schema#")
+            .unwrap();
         let mut o = SetOntology::new_rc();
         // Declare a class so a frame for ex:A exists.
         o.insert(DeclareClass(b.class("http://ex/A")));
@@ -1104,34 +1089,30 @@ mod tests {
             subject: AnnotationSubject::IRI(b.iri("http://ex/A")),
             ann: Annotation {
                 ap,
-                av: AnnotationValue::AnonymousIndividual(anon_val),
+                av: crate::model::AnnotationValue::AnonymousIndividual(anon_val),
             },
         });
-        let amo = into_amo(o);
+        let amo = into_amo(o.clone());
         let mut out = Vec::<u8>::new();
-        write(&mut out, &amo, None).unwrap();
-        let s = String::from_utf8(out).unwrap();
+        write(&mut out, &amo, Some(&pm)).unwrap();
+        let s = String::from_utf8(out.clone()).unwrap();
 
-        // The anon value must NOT appear as an inline Annotations: clause.
-        // Specifically, no line should be both an Annotations: clause AND contain `_:`.
-        for line in s.lines() {
-            let trimmed = line.trim();
-            if trimmed.starts_with("Annotations:") {
-                assert!(
-                    !trimmed.contains("_:"),
-                    "found inline `_:` in an Annotations: clause — should have been routed to misc.\nFull output:\n{s}"
-                );
-            }
-        }
+        // The anon value renders natively as an inline `Annotations: … _:anon_x`
+        // clause under the ex:A class frame.
+        assert!(
+            s.lines()
+                .any(|l| l.trim().starts_with("Annotations:") && l.contains("_:anon_x")),
+            "expected an inline `Annotations: … _:anon_x` clause, got:\n{s}"
+        );
 
-        // The component must appear in the # General axioms misc section.
-        assert!(
-            s.contains("# General axioms"),
-            "expected misc section for anon-value annotation, got:\n{s}"
-        );
-        assert!(
-            s.contains("anon_x"),
-            "expected anon individual id in misc section, got:\n{s}"
-        );
+        // End-to-end: the reader must consume the natively-rendered anon value.
+        use crate::io::omn::read_with_build;
+        use std::io::BufReader;
+        let (parsed, _): (SetOntology<_>, PrefixMapping) =
+            read_with_build(BufReader::new(&out[..]), &b).unwrap();
+        let orig: std::collections::BTreeSet<_> = o.iter().map(|ac| ac.component.clone()).collect();
+        let got: std::collections::BTreeSet<_> =
+            parsed.iter().map(|ac| ac.component.clone()).collect();
+        assert_eq!(orig, got, "anon annotation value did not round-trip\n{s}");
     }
 }
