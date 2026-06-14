@@ -14,17 +14,17 @@ hand-estimated.
 
 ## Conformance (compliance-report.md)
 
-- **§2.5 construct matrix (A1):** **99 constructs** pass read + write +
-  round-trip; **7 documented residuals** (down from 89/10 after the eight
-  2026-06-13 fixes below). Each residual row asserts its *specific* documented
+- **§2.5 construct matrix (A1):** **103 constructs** pass read + write +
+  round-trip; **5 documented residuals** (down from 89/10 after the nine
+  2026-06-13/14 fixes below). Each residual row asserts its *specific* documented
   behavior (compiler-exhaustive `match` — no rubber-stamp). Remaining residual
-  kinds (6, all genuine §2.5/model limits): `SwrlRule` (no §2.5 rule syntax),
+  kinds (5, all genuine §2.5/model limits): `SwrlRule` (no §2.5 rule syntax),
   `BareNameNeedsPrefix`, `ComplexLhsGci` (a GCI in a `# General axioms`
   functional block — distinct from the now-supported `Class: <expr>` frame
   form), `NestedAnnotationDropped` (model has no nested-annotation slot),
-  `HasKeyObjectDataConflation`, `PropertyObjectDataConflation`
-  (Equivalent/DisjointProperties over data properties — the Misc-list object/data
-  ambiguity, no filler-shape signal, needs declaration context).
+  `HasKeyObjectDataConflation` (now only the **undeclared-key** tail — a HasKey
+  key whose property is never declared in the document defaults to object; the
+  declared-data case is resolved by the FIX-9 pre-pass).
 - **Corpus parse + round-trip (A2)** (source → ROBOT/OWL-API → `.omn` → our
   reader → our writer → re-parse): **all four ontologies now PARSE and
   ROUND-TRIP** — koala (83), sio (12 116), obi-core (54 232), hp (346 381),
@@ -94,6 +94,16 @@ Six reader/writer gaps closed:
   with byte-offset slicing, corrupting literals with multibyte chars before an
   escaped `"`/`\`; fixed via `char_indices()`. **Closed obi-core's round-trip.**
   `35218ee`
+- **Declaration pre-pass (object/data property resolution)** — an order-independent
+  pass over the buffered frames collects `DataProperty:`/`Datatype:` declarations,
+  so `HasKey:` keys, Misc `Equivalent/DisjointProperties:` lists, and bare-IRI
+  restriction fillers now resolve to the DATA form when declared-data, instead of
+  defaulting to object. Sound by construction (OWL 2 DL object/data disjointness;
+  only a positive data declaration flips; undeclared/object/annotation stay
+  object). Closed the `HasKeyObjectDataConflation` (general case) and
+  `PropertyObjectDataConflation` residuals. Corpus-blind (no data-property HasKey
+  in the corpus), so 13 negatives-first canaries — opus-reviewed, keying proven
+  identical with teeth — are the safety net. `aefd329`/`6ca9e1a`/`f0d3fa9`
 
 ## Residual limitations (authoritative)
 
@@ -103,24 +113,24 @@ Complex-LHS GCIs now round-trip via `Class: <expr>` frames (FIX-5/FIX-7); the
 `ComplexLhsGci` residual that remains is only the alternate `# General axioms`
 functional-block form, which the reader still skips.
 
-**Reader gap remaining (the data-vs-object disambiguation tail):** the filler-shape
-heuristic (FIX-4) closes the common case — a faceted (`dt[…]`) or known-datatype
-(`xsd:`/`rdf:`/`rdfs:`) filler ⇒ data restriction, which unblocked **sio**. The
-residual tail is a **bare user-declared-datatype** filler (no facet, no known
-prefix) used in a `some`/`only`/etc. restriction, and the same object/data
-ambiguity in the Misc `EquivalentProperties:`/`DisjointProperties:` lists
-(`PropertyObjectDataConflation`) — both need declaration-aware (two-pass) parsing,
-deferred as a documented follow-up.
+**Object/data property disambiguation — now resolved by declarations.** The
+filler-shape heuristic (FIX-4: faceted / `xsd:` etc. ⇒ data) plus the declaration
+pre-pass (FIX-9: `DataProperty:`/`Datatype:` frames) together resolve `HasKey:`
+keys, Misc `Equivalent/DisjointProperties:` lists, and restriction fillers to the
+correct object-or-data form. The only remaining tail is a property/filler that is
+**never declared anywhere in the document** (allowed in OWL — declarations are
+optional, or the entity is imported): with no local signal it defaults to object.
+For ROBOT/Protégé-emitted documents, which declare every entity, this tail is
+empty.
 
 **Model limits:** nested annotation-on-annotation is parsed but the inner nesting
 is dropped (the horned-owl model has no nested-annotation slot — the OFN reader
-does the same); `HasKey:` cannot lexically distinguish object vs data keys, so
-data-property keys round-trip as object keys.
+does the same).
 
 ## Bottom line
 
 The writer is OWL-API-conformant on the corpus and the reader is a fast,
-general §2.5 parser (99 constructs clean; ~11× faster than omny; competitive
+general §2.5 parser (103 constructs clean; ~11× faster than omny; competitive
 with the other Rust impl) that now **parses and round-trips all four real-corpus
 ontologies** (koala/sio/obi-core/hp). The conformance harness
 pins this with assertions and surfaces a small, well-characterized set of
