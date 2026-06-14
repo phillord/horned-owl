@@ -1433,3 +1433,43 @@ fn decl_prepass_haskey_data_roundtrip() {
         hk2.vpe[0]
     );
 }
+
+/// Canary I (guard): unqualified data-cardinality (`:p min 1`, no filler) with a
+/// declared DataProperty does NOT flip to DataMinCardinality — the no-filler case
+/// keeps ObjectMinCardinality with the default `owl:Thing` filler.  Flipping would
+/// produce a wrong filler (`owl:Thing` instead of `rdfs:Literal`).
+#[test]
+fn decl_prepass_restriction_unqualified_card_not_flipped() {
+    use horned_owl::model::{ClassExpression, Component, SubClassOf};
+
+    let src = concat!(
+        "Prefix: : <http://e/>\n",
+        "DataProperty: :p\n",
+        "Class: :A\n",
+        "    SubClassOf: :p min 1\n",
+    );
+    let (ont, _) = read_str(src).unwrap_or_else(|e| {
+        panic!("decl_prepass_restriction_unqualified_card_not_flipped: parse failed: {e}")
+    });
+
+    let ce = ont.iter().find_map(|ac| {
+        if let Component::SubClassOf(SubClassOf { sup, .. }) = &ac.component {
+            Some(sup.clone())
+        } else {
+            None
+        }
+    });
+
+    match ce {
+        Some(ClassExpression::ObjectMinCardinality { .. }) => {} // correct
+        Some(ClassExpression::DataMinCardinality { .. }) => {
+            panic!(
+                "decl_prepass_restriction_unqualified_card_not_flipped: \
+                 unqualified :p min 1 was wrongly flipped to DataMinCardinality \
+                 — this would use owl:Thing as the data range, which is wrong"
+            );
+        }
+        Some(other) => panic!("unexpected CE: {other:?}"),
+        None => panic!("no SubClassOf found"),
+    }
+}
