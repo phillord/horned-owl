@@ -694,42 +694,49 @@ impl<A: ForIRI> FromPair<A> for ClassExpression<A> {
                             let n: u32 = card_pair.as_str().parse().map_err(|_| {
                                 HornedError::invalid_at("invalid cardinality", card_pair.as_span())
                             })?;
-                            let bce_opt =
-                                children.next().map(|p| Self::from_pair_unchecked(p, ctx));
-                            let bce = match bce_opt {
-                                Some(r) => Box::new(r?),
-                                None => Box::new(ClassExpression::Class(Class(
-                                    ctx.build.iri(OWL::Thing),
-                                ))),
-                            };
-                            // Flip to data cardinality when property is declared data
-                            // and the filler is a bare declared-datatype IRI.
-                            if (prop_is_data || bare_datatype_iri(&bce).is_some())
-                                && matches!(*bce, ClassExpression::Class(_))
-                            {
-                                let dt_iri = match *bce {
-                                    ClassExpression::Class(Class(iri)) => iri,
-                                    _ => unreachable!(),
-                                };
-                                let dp = match &ope {
-                                    ObjectPropertyExpression::ObjectProperty(ObjectProperty(
-                                        iri,
-                                    )) => DataProperty(iri.clone()),
-                                    _ => {
-                                        // Inverse + data declared: can't flip — return error
-                                        return Err(HornedError::invalid_at(
-                                            "data property cannot be inverse",
-                                            r_span,
-                                        ));
+                            let filler_pair = children.next();
+                            // Flip to data cardinality ONLY when there is an EXPLICIT filler
+                            // that is a bare declared-Datatype IRI, or when the property is
+                            // declared data and the filler is a bare class.  The no-filler
+                            // (unqualified) case is NOT flipped — the injected default is
+                            // `owl:Thing` (object) not `rdfs:Literal` (data), and we cannot
+                            // distinguish user intent without a filler.
+                            match filler_pair {
+                                Some(fp) => {
+                                    let bce = Box::new(Self::from_pair_unchecked(fp, ctx)?);
+                                    if (prop_is_data || bare_datatype_iri(&bce).is_some())
+                                        && matches!(*bce, ClassExpression::Class(_))
+                                    {
+                                        let dt_iri = match *bce {
+                                            ClassExpression::Class(Class(iri)) => iri,
+                                            _ => unreachable!(),
+                                        };
+                                        let dp = match &ope {
+                                            ObjectPropertyExpression::ObjectProperty(
+                                                ObjectProperty(iri),
+                                            ) => DataProperty(iri.clone()),
+                                            _ => {
+                                                return Err(HornedError::invalid_at(
+                                                    "data property cannot be inverse",
+                                                    r_span,
+                                                ));
+                                            }
+                                        };
+                                        Ok(ClassExpression::DataMinCardinality {
+                                            n,
+                                            dp,
+                                            dr: DataRange::Datatype(Datatype(dt_iri)),
+                                        })
+                                    } else {
+                                        Ok(ClassExpression::ObjectMinCardinality { n, ope, bce })
                                     }
-                                };
-                                Ok(ClassExpression::DataMinCardinality {
-                                    n,
-                                    dp,
-                                    dr: DataRange::Datatype(Datatype(dt_iri)),
-                                })
-                            } else {
-                                Ok(ClassExpression::ObjectMinCardinality { n, ope, bce })
+                                }
+                                None => {
+                                    let bce = Box::new(ClassExpression::Class(Class(
+                                        ctx.build.iri(OWL::Thing),
+                                    )));
+                                    Ok(ClassExpression::ObjectMinCardinality { n, ope, bce })
+                                }
                             }
                         }
                         "max" => {
@@ -737,39 +744,43 @@ impl<A: ForIRI> FromPair<A> for ClassExpression<A> {
                             let n: u32 = card_pair.as_str().parse().map_err(|_| {
                                 HornedError::invalid_at("invalid cardinality", card_pair.as_span())
                             })?;
-                            let bce_opt =
-                                children.next().map(|p| Self::from_pair_unchecked(p, ctx));
-                            let bce = match bce_opt {
-                                Some(r) => Box::new(r?),
-                                None => Box::new(ClassExpression::Class(Class(
-                                    ctx.build.iri(OWL::Thing),
-                                ))),
-                            };
-                            if (prop_is_data || bare_datatype_iri(&bce).is_some())
-                                && matches!(*bce, ClassExpression::Class(_))
-                            {
-                                let dt_iri = match *bce {
-                                    ClassExpression::Class(Class(iri)) => iri,
-                                    _ => unreachable!(),
-                                };
-                                let dp = match &ope {
-                                    ObjectPropertyExpression::ObjectProperty(ObjectProperty(
-                                        iri,
-                                    )) => DataProperty(iri.clone()),
-                                    _ => {
-                                        return Err(HornedError::invalid_at(
-                                            "data property cannot be inverse",
-                                            r_span,
-                                        ));
+                            let filler_pair = children.next();
+                            match filler_pair {
+                                Some(fp) => {
+                                    let bce = Box::new(Self::from_pair_unchecked(fp, ctx)?);
+                                    if (prop_is_data || bare_datatype_iri(&bce).is_some())
+                                        && matches!(*bce, ClassExpression::Class(_))
+                                    {
+                                        let dt_iri = match *bce {
+                                            ClassExpression::Class(Class(iri)) => iri,
+                                            _ => unreachable!(),
+                                        };
+                                        let dp = match &ope {
+                                            ObjectPropertyExpression::ObjectProperty(
+                                                ObjectProperty(iri),
+                                            ) => DataProperty(iri.clone()),
+                                            _ => {
+                                                return Err(HornedError::invalid_at(
+                                                    "data property cannot be inverse",
+                                                    r_span,
+                                                ));
+                                            }
+                                        };
+                                        Ok(ClassExpression::DataMaxCardinality {
+                                            n,
+                                            dp,
+                                            dr: DataRange::Datatype(Datatype(dt_iri)),
+                                        })
+                                    } else {
+                                        Ok(ClassExpression::ObjectMaxCardinality { n, ope, bce })
                                     }
-                                };
-                                Ok(ClassExpression::DataMaxCardinality {
-                                    n,
-                                    dp,
-                                    dr: DataRange::Datatype(Datatype(dt_iri)),
-                                })
-                            } else {
-                                Ok(ClassExpression::ObjectMaxCardinality { n, ope, bce })
+                                }
+                                None => {
+                                    let bce = Box::new(ClassExpression::Class(Class(
+                                        ctx.build.iri(OWL::Thing),
+                                    )));
+                                    Ok(ClassExpression::ObjectMaxCardinality { n, ope, bce })
+                                }
                             }
                         }
                         "exactly" => {
@@ -777,39 +788,43 @@ impl<A: ForIRI> FromPair<A> for ClassExpression<A> {
                             let n: u32 = card_pair.as_str().parse().map_err(|_| {
                                 HornedError::invalid_at("invalid cardinality", card_pair.as_span())
                             })?;
-                            let bce_opt =
-                                children.next().map(|p| Self::from_pair_unchecked(p, ctx));
-                            let bce = match bce_opt {
-                                Some(r) => Box::new(r?),
-                                None => Box::new(ClassExpression::Class(Class(
-                                    ctx.build.iri(OWL::Thing),
-                                ))),
-                            };
-                            if (prop_is_data || bare_datatype_iri(&bce).is_some())
-                                && matches!(*bce, ClassExpression::Class(_))
-                            {
-                                let dt_iri = match *bce {
-                                    ClassExpression::Class(Class(iri)) => iri,
-                                    _ => unreachable!(),
-                                };
-                                let dp = match &ope {
-                                    ObjectPropertyExpression::ObjectProperty(ObjectProperty(
-                                        iri,
-                                    )) => DataProperty(iri.clone()),
-                                    _ => {
-                                        return Err(HornedError::invalid_at(
-                                            "data property cannot be inverse",
-                                            r_span,
-                                        ));
+                            let filler_pair = children.next();
+                            match filler_pair {
+                                Some(fp) => {
+                                    let bce = Box::new(Self::from_pair_unchecked(fp, ctx)?);
+                                    if (prop_is_data || bare_datatype_iri(&bce).is_some())
+                                        && matches!(*bce, ClassExpression::Class(_))
+                                    {
+                                        let dt_iri = match *bce {
+                                            ClassExpression::Class(Class(iri)) => iri,
+                                            _ => unreachable!(),
+                                        };
+                                        let dp = match &ope {
+                                            ObjectPropertyExpression::ObjectProperty(
+                                                ObjectProperty(iri),
+                                            ) => DataProperty(iri.clone()),
+                                            _ => {
+                                                return Err(HornedError::invalid_at(
+                                                    "data property cannot be inverse",
+                                                    r_span,
+                                                ));
+                                            }
+                                        };
+                                        Ok(ClassExpression::DataExactCardinality {
+                                            n,
+                                            dp,
+                                            dr: DataRange::Datatype(Datatype(dt_iri)),
+                                        })
+                                    } else {
+                                        Ok(ClassExpression::ObjectExactCardinality { n, ope, bce })
                                     }
-                                };
-                                Ok(ClassExpression::DataExactCardinality {
-                                    n,
-                                    dp,
-                                    dr: DataRange::Datatype(Datatype(dt_iri)),
-                                })
-                            } else {
-                                Ok(ClassExpression::ObjectExactCardinality { n, ope, bce })
+                                }
+                                None => {
+                                    let bce = Box::new(ClassExpression::Class(Class(
+                                        ctx.build.iri(OWL::Thing),
+                                    )));
+                                    Ok(ClassExpression::ObjectExactCardinality { n, ope, bce })
+                                }
                             }
                         }
                         kw => Err(HornedError::invalid_at(
