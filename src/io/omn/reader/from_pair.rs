@@ -2,6 +2,7 @@ use curie::Curie;
 use curie::PrefixMapping;
 use pest::iterators::Pair;
 use std::collections::BTreeSet;
+use std::collections::HashSet;
 
 use crate::error::HornedError;
 use crate::model::*;
@@ -15,15 +16,78 @@ type Result<T> = std::result::Result<T, HornedError>;
 
 // ---------------------------------------------------------------------------
 
-/// Shared parsing context: carries the `Build` and prefix mapping.
+/// Property/datatype declarations collected in the pre-pass (pass 1.5).
+///
+/// Only `DataProperty:` and `Datatype:` frame subjects are stored — object
+/// properties are the default and do not need to be tracked explicitly.
+/// Keys are fully-resolved, interned `IRI<A>` values (same `build.iri()` path
+/// used by the main pass), so `HashSet` lookup is pointer-equality-fast on
+/// reference-counted IRI types.
+pub struct Declarations<A: ForIRI> {
+    /// Subjects of `DataProperty:` frames.
+    pub(crate) data_props: HashSet<IRI<A>>,
+    /// Subjects of `Datatype:` frames.
+    pub(crate) datatypes: HashSet<IRI<A>>,
+}
+
+impl<A: ForIRI> Declarations<A> {
+    fn new() -> Self {
+        Self {
+            data_props: HashSet::new(),
+            datatypes: HashSet::new(),
+        }
+    }
+}
+
+/// Shared parsing context: carries the `Build`, prefix mapping, and
+/// (optionally) the pre-pass declaration set.
 pub struct Context<'a, A: ForIRI> {
     pub(crate) build: &'a Build<A>,
     pub(crate) prefixes: &'a PrefixMapping,
+    /// Declaration set from the pre-pass.  `None` means "no declarations
+    /// available" — every bare IRI defaults to object property (the pre-pass
+    /// path is disabled; all existing callers that use `Context::new` keep
+    /// today's behaviour unchanged).
+    pub(crate) decls: Option<&'a Declarations<A>>,
 }
 
 impl<'a, A: ForIRI> Context<'a, A> {
+    /// Standard constructor — no declarations (object-property default for all
+    /// bare IRIs).  Used by every call site outside the whole-document reader.
     pub fn new(build: &'a Build<A>, prefixes: &'a PrefixMapping) -> Self {
-        Self { build, prefixes }
+        Self {
+            build,
+            prefixes,
+            decls: None,
+        }
+    }
+
+    /// Constructor with a pre-pass declaration set.  Used by
+    /// `read_with_build` after the pre-pass has been run so that bare property
+    /// IRIs in HasKey / Misc / Restriction contexts can be correctly typed.
+    pub fn with_decls(
+        build: &'a Build<A>,
+        prefixes: &'a PrefixMapping,
+        decls: &'a Declarations<A>,
+    ) -> Self {
+        Self {
+            build,
+            prefixes,
+            decls: Some(decls),
+        }
+    }
+
+    /// Returns `true` iff `iri` was declared as a data property in the
+    /// pre-pass.  Always `false` when `decls` is `None` (object-default path).
+    #[inline]
+    pub(crate) fn is_data_prop(&self, iri: &IRI<A>) -> bool {
+        self.decls.is_some_and(|d| d.data_props.contains(iri))
+    }
+
+    /// Returns `true` iff `iri` was declared as a datatype in the pre-pass.
+    #[inline]
+    pub(crate) fn is_datatype(&self, iri: &IRI<A>) -> bool {
+        self.decls.is_some_and(|d| d.datatypes.contains(iri))
     }
 }
 
@@ -522,16 +586,102 @@ impl<A: ForIRI> FromPair<A> for ClassExpression<A> {
 
                 if is_object {
                     let ope = ObjectPropertyExpression::from_pair(prop_pair, ctx)?;
+
+                    // Declaration-based flip: if this OPE is a plain (non-inverse)
+                    // property declared as a data property, and the filler (where
+                    // applicable) is a BARE class IRI that was declared as a
+                    // `Datatype:` frame subject, rewrite to the data restriction
+                    // form.  Compound fillers (intersections, etc.) are left as-is;
+                    // `value` and `Self` have no ClassExpression filler so are
+                    // excluded by construction.
+                    let prop_is_data = matches!(&ope,
+                        ObjectPropertyExpression::ObjectProperty(ObjectProperty(iri))
+                            if ctx.is_data_prop(iri));
+
+                    // Helper: given a ClassExpression, extract a bare-datatype IRI if
+                    // the filler is a plain `Class(iri)` whose IRI was declared as a
+                    // `Datatype:` frame subject; otherwise `None`.
+                    let bare_datatype_iri = |bce: &ClassExpression<A>| -> Option<IRI<A>> {
+                        if let ClassExpression::Class(Class(filler_iri)) = bce {
+                            if ctx.is_datatype(filler_iri) {
+                                return Some(filler_iri.clone());
+                            }
+                        }
+                        None
+                    };
+
                     match keyword.as_str() {
                         "some" => {
                             let filler = children.next().unwrap();
                             let bce = Box::new(Self::from_pair_unchecked(filler, ctx)?);
-                            Ok(ClassExpression::ObjectSomeValuesFrom { ope, bce })
+                            // Flip to data form if:
+                            //   (a) property declared as data, OR
+                            //   (b) filler is a declared Datatype IRI.
+                            if let Some(dt_iri) = bare_datatype_iri(&bce) {
+                                let dp = DataProperty(match &ope {
+                                    ObjectPropertyExpression::ObjectProperty(ObjectProperty(
+                                        iri,
+                                    )) => iri.clone(),
+                                    _ => unreachable!("inverse has no datatype filler"),
+                                });
+                                Ok(ClassExpression::DataSomeValuesFrom {
+                                    dp,
+                                    dr: DataRange::Datatype(Datatype(dt_iri)),
+                                })
+                            } else if prop_is_data {
+                                // Property declared data but filler is not a bare
+                                // declared Datatype — only flip if filler is a bare
+                                // Class; leave compound fillers alone.
+                                if let ClassExpression::Class(Class(filler_iri)) = *bce {
+                                    let dp = match &ope {
+                                        ObjectPropertyExpression::ObjectProperty(
+                                            ObjectProperty(iri),
+                                        ) => DataProperty(iri.clone()),
+                                        _ => unreachable!(),
+                                    };
+                                    Ok(ClassExpression::DataSomeValuesFrom {
+                                        dp,
+                                        dr: DataRange::Datatype(Datatype(filler_iri)),
+                                    })
+                                } else {
+                                    Ok(ClassExpression::ObjectSomeValuesFrom { ope, bce })
+                                }
+                            } else {
+                                Ok(ClassExpression::ObjectSomeValuesFrom { ope, bce })
+                            }
                         }
                         "only" => {
                             let filler = children.next().unwrap();
                             let bce = Box::new(Self::from_pair_unchecked(filler, ctx)?);
-                            Ok(ClassExpression::ObjectAllValuesFrom { ope, bce })
+                            if let Some(dt_iri) = bare_datatype_iri(&bce) {
+                                let dp = match &ope {
+                                    ObjectPropertyExpression::ObjectProperty(ObjectProperty(
+                                        iri,
+                                    )) => DataProperty(iri.clone()),
+                                    _ => unreachable!("inverse has no datatype filler"),
+                                };
+                                Ok(ClassExpression::DataAllValuesFrom {
+                                    dp,
+                                    dr: DataRange::Datatype(Datatype(dt_iri)),
+                                })
+                            } else if prop_is_data {
+                                if let ClassExpression::Class(Class(filler_iri)) = *bce {
+                                    let dp = match &ope {
+                                        ObjectPropertyExpression::ObjectProperty(
+                                            ObjectProperty(iri),
+                                        ) => DataProperty(iri.clone()),
+                                        _ => unreachable!(),
+                                    };
+                                    Ok(ClassExpression::DataAllValuesFrom {
+                                        dp,
+                                        dr: DataRange::Datatype(Datatype(filler_iri)),
+                                    })
+                                } else {
+                                    Ok(ClassExpression::ObjectAllValuesFrom { ope, bce })
+                                }
+                            } else {
+                                Ok(ClassExpression::ObjectAllValuesFrom { ope, bce })
+                            }
                         }
                         "value" => {
                             let ind = children.next().unwrap();
@@ -544,39 +694,123 @@ impl<A: ForIRI> FromPair<A> for ClassExpression<A> {
                             let n: u32 = card_pair.as_str().parse().map_err(|_| {
                                 HornedError::invalid_at("invalid cardinality", card_pair.as_span())
                             })?;
-                            let bce = match children.next() {
-                                Some(p) => Box::new(Self::from_pair_unchecked(p, ctx)?),
+                            let bce_opt =
+                                children.next().map(|p| Self::from_pair_unchecked(p, ctx));
+                            let bce = match bce_opt {
+                                Some(r) => Box::new(r?),
                                 None => Box::new(ClassExpression::Class(Class(
                                     ctx.build.iri(OWL::Thing),
                                 ))),
                             };
-                            Ok(ClassExpression::ObjectMinCardinality { n, ope, bce })
+                            // Flip to data cardinality when property is declared data
+                            // and the filler is a bare declared-datatype IRI.
+                            if (prop_is_data || bare_datatype_iri(&bce).is_some())
+                                && matches!(*bce, ClassExpression::Class(_))
+                            {
+                                let dt_iri = match *bce {
+                                    ClassExpression::Class(Class(iri)) => iri,
+                                    _ => unreachable!(),
+                                };
+                                let dp = match &ope {
+                                    ObjectPropertyExpression::ObjectProperty(ObjectProperty(
+                                        iri,
+                                    )) => DataProperty(iri.clone()),
+                                    _ => {
+                                        // Inverse + data declared: can't flip — return error
+                                        return Err(HornedError::invalid_at(
+                                            "data property cannot be inverse",
+                                            r_span,
+                                        ));
+                                    }
+                                };
+                                Ok(ClassExpression::DataMinCardinality {
+                                    n,
+                                    dp,
+                                    dr: DataRange::Datatype(Datatype(dt_iri)),
+                                })
+                            } else {
+                                Ok(ClassExpression::ObjectMinCardinality { n, ope, bce })
+                            }
                         }
                         "max" => {
                             let card_pair = children.next().unwrap();
                             let n: u32 = card_pair.as_str().parse().map_err(|_| {
                                 HornedError::invalid_at("invalid cardinality", card_pair.as_span())
                             })?;
-                            let bce = match children.next() {
-                                Some(p) => Box::new(Self::from_pair_unchecked(p, ctx)?),
+                            let bce_opt =
+                                children.next().map(|p| Self::from_pair_unchecked(p, ctx));
+                            let bce = match bce_opt {
+                                Some(r) => Box::new(r?),
                                 None => Box::new(ClassExpression::Class(Class(
                                     ctx.build.iri(OWL::Thing),
                                 ))),
                             };
-                            Ok(ClassExpression::ObjectMaxCardinality { n, ope, bce })
+                            if (prop_is_data || bare_datatype_iri(&bce).is_some())
+                                && matches!(*bce, ClassExpression::Class(_))
+                            {
+                                let dt_iri = match *bce {
+                                    ClassExpression::Class(Class(iri)) => iri,
+                                    _ => unreachable!(),
+                                };
+                                let dp = match &ope {
+                                    ObjectPropertyExpression::ObjectProperty(ObjectProperty(
+                                        iri,
+                                    )) => DataProperty(iri.clone()),
+                                    _ => {
+                                        return Err(HornedError::invalid_at(
+                                            "data property cannot be inverse",
+                                            r_span,
+                                        ));
+                                    }
+                                };
+                                Ok(ClassExpression::DataMaxCardinality {
+                                    n,
+                                    dp,
+                                    dr: DataRange::Datatype(Datatype(dt_iri)),
+                                })
+                            } else {
+                                Ok(ClassExpression::ObjectMaxCardinality { n, ope, bce })
+                            }
                         }
                         "exactly" => {
                             let card_pair = children.next().unwrap();
                             let n: u32 = card_pair.as_str().parse().map_err(|_| {
                                 HornedError::invalid_at("invalid cardinality", card_pair.as_span())
                             })?;
-                            let bce = match children.next() {
-                                Some(p) => Box::new(Self::from_pair_unchecked(p, ctx)?),
+                            let bce_opt =
+                                children.next().map(|p| Self::from_pair_unchecked(p, ctx));
+                            let bce = match bce_opt {
+                                Some(r) => Box::new(r?),
                                 None => Box::new(ClassExpression::Class(Class(
                                     ctx.build.iri(OWL::Thing),
                                 ))),
                             };
-                            Ok(ClassExpression::ObjectExactCardinality { n, ope, bce })
+                            if (prop_is_data || bare_datatype_iri(&bce).is_some())
+                                && matches!(*bce, ClassExpression::Class(_))
+                            {
+                                let dt_iri = match *bce {
+                                    ClassExpression::Class(Class(iri)) => iri,
+                                    _ => unreachable!(),
+                                };
+                                let dp = match &ope {
+                                    ObjectPropertyExpression::ObjectProperty(ObjectProperty(
+                                        iri,
+                                    )) => DataProperty(iri.clone()),
+                                    _ => {
+                                        return Err(HornedError::invalid_at(
+                                            "data property cannot be inverse",
+                                            r_span,
+                                        ));
+                                    }
+                                };
+                                Ok(ClassExpression::DataExactCardinality {
+                                    n,
+                                    dp,
+                                    dr: DataRange::Datatype(Datatype(dt_iri)),
+                                })
+                            } else {
+                                Ok(ClassExpression::ObjectExactCardinality { n, ope, bce })
+                            }
                         }
                         kw => Err(HornedError::invalid_at(
                             format!("unknown object restriction keyword: {kw}"),
@@ -738,6 +972,57 @@ pub(crate) fn prefixes_from_decls<'a>(
         }
     }
     Ok(prefixes)
+}
+
+/// Pre-pass (pass 1.5): collect `DataProperty:` and `Datatype:` frame subjects
+/// from the already-buffered document children.
+///
+/// Iterates the buffered `children` (cloned pairs — pass 2 still owns the
+/// originals) and inserts fully-resolved `IRI<A>` values into the returned
+/// `Declarations`.  Both sides of every subsequent lookup use the SAME
+/// `build.iri()` interning path so that `HashSet` membership is reliable.
+///
+/// A `Context` built from `build` + `prefixes` (with `decls: None`) is used
+/// here — declaration IRIs don't themselves require a declaration table, and
+/// we must avoid a circular dependency.
+pub(crate) fn declarations_from_frames<'a, A: ForIRI>(
+    children: impl Iterator<Item = pest::iterators::Pair<'a, Rule>>,
+    build: &Build<A>,
+    prefixes: &PrefixMapping,
+) -> Declarations<A> {
+    // A no-decls context is sufficient for IRI resolution.
+    let ctx = Context::new(build, prefixes);
+    let mut decls = Declarations::new();
+    for child in children {
+        if child.as_rule() != Rule::Frame {
+            continue;
+        }
+        let inner = child.into_inner().next().unwrap();
+        let (rule, subject_iri) = match inner.as_rule() {
+            Rule::DataPropertyFrame | Rule::DatatypeFrame => {
+                let rule = inner.as_rule();
+                // Both frames start with FrameSubject = { IRI }.
+                let mut pairs = inner.into_inner();
+                let subject_pair = pairs.next().unwrap(); // FrameSubject
+                let iri_pair = subject_pair.into_inner().next().unwrap(); // IRI
+                match IRI::from_pair(iri_pair, &ctx) {
+                    Ok(iri) => (rule, iri),
+                    Err(_) => continue, // skip on resolution error (will error again in pass 2)
+                }
+            }
+            _ => continue,
+        };
+        match rule {
+            Rule::DataPropertyFrame => {
+                decls.data_props.insert(subject_iri);
+            }
+            Rule::DatatypeFrame => {
+                decls.datatypes.insert(subject_iri);
+            }
+            _ => unreachable!(),
+        }
+    }
+    decls
 }
 
 /// Dispatch a single `Frame` pair to the matching sub-function, inserting the
@@ -954,13 +1239,25 @@ fn insert_class_frame<A: ForIRI, O: MutableOntology<A>>(
                 if let Some(ref iri) = atomic_iri {
                     // body is a PropertyExprList of `ope`. Manchester HasKey: does NOT
                     // lexically distinguish object vs data properties — they are all bare
-                    // property IRIs. The reader therefore reconstructs every key as an
-                    // ObjectPropertyExpression. See Task 7 for the limitation note.
+                    // property IRIs. The grammar always parses each key as an `ope` (object
+                    // property expression). With the pre-pass declaration table we can flip
+                    // plain (non-inverse) keys that were declared as `DataProperty:` to
+                    // `PropertyExpression::DataProperty`. Inverse-form keys are never data
+                    // properties in OWL 2 DL, so they always stay object.
                     let mut vpe = Vec::new();
                     for p in body.into_inner() {
                         if p.as_rule() == Rule::ope {
-                            let ope = ObjectPropertyExpression::from_pair(p, ctx)?;
-                            vpe.push(PropertyExpression::ObjectPropertyExpression(ope));
+                            let ope = ObjectPropertyExpression::from_pair(p.clone(), ctx)?;
+                            let pe = match &ope {
+                                ObjectPropertyExpression::ObjectProperty(ObjectProperty(
+                                    key_iri,
+                                )) if ctx.is_data_prop(key_iri) => {
+                                    // Declared as data — flip to data-property key.
+                                    PropertyExpression::DataProperty(DataProperty(key_iri.clone()))
+                                }
+                                _ => PropertyExpression::ObjectPropertyExpression(ope),
+                            };
+                            vpe.push(pe);
                         }
                     }
                     ont.insert(AnnotatedComponent {
@@ -990,6 +1287,29 @@ fn parse_iri_list<A: ForIRI>(
     ctx: &Context<'_, A>,
 ) -> Result<Vec<AnnItem<A, IRI<A>>>> {
     parse_annotated_list(list, ctx, IRI::from_pair)
+}
+
+/// Returns `Some(Vec<DataProperty>)` iff EVERY OPE in `opes` is a plain
+/// (non-inverse) `ObjectProperty` whose IRI was declared as a data property
+/// in the pre-pass.  Returns `None` for mixed lists, empty lists, or when
+/// any member is an inverse expression (data properties have no inverse).
+fn all_as_data_props<A: ForIRI>(
+    ctx: &Context<'_, A>,
+    opes: &[ObjectPropertyExpression<A>],
+) -> Option<Vec<DataProperty<A>>> {
+    if opes.is_empty() {
+        return None;
+    }
+    opes.iter()
+        .map(|ope| match ope {
+            ObjectPropertyExpression::ObjectProperty(ObjectProperty(iri))
+                if ctx.is_data_prop(iri) =>
+            {
+                Some(DataProperty(iri.clone()))
+            }
+            _ => None,
+        })
+        .collect()
 }
 
 fn parse_individual_list<A: ForIRI>(
@@ -1029,14 +1349,26 @@ pub(crate) fn insert_misc<A: ForIRI, O: MutableOntology<A>>(
             Component::DisjointClasses(DisjointClasses(v))
         }
         "equivalentproperties" => {
-            let mut v = Vec::new();
-            merge_list_ann(&mut ann, parse_ope_list(body, ctx)?, &mut v);
-            Component::EquivalentObjectProperties(EquivalentObjectProperties(v))
+            let mut opes = Vec::new();
+            merge_list_ann(&mut ann, parse_ope_list(body, ctx)?, &mut opes);
+            // If ALL members are plain (non-inverse) OPEs declared as data
+            // properties, emit EquivalentDataProperties; otherwise fall back
+            // to EquivalentObjectProperties (includes mixed / undeclared lists).
+            if let Some(dps) = all_as_data_props(ctx, &opes) {
+                Component::EquivalentDataProperties(EquivalentDataProperties(dps))
+            } else {
+                Component::EquivalentObjectProperties(EquivalentObjectProperties(opes))
+            }
         }
         "disjointproperties" => {
-            let mut v = Vec::new();
-            merge_list_ann(&mut ann, parse_ope_list(body, ctx)?, &mut v);
-            Component::DisjointObjectProperties(DisjointObjectProperties(v))
+            let mut opes = Vec::new();
+            merge_list_ann(&mut ann, parse_ope_list(body, ctx)?, &mut opes);
+            // Same logic as equivalentproperties.
+            if let Some(dps) = all_as_data_props(ctx, &opes) {
+                Component::DisjointDataProperties(DisjointDataProperties(dps))
+            } else {
+                Component::DisjointObjectProperties(DisjointObjectProperties(opes))
+            }
         }
         "sameindividual" => {
             let mut v = Vec::new();
