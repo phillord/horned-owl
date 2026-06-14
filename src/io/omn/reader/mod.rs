@@ -148,8 +148,16 @@ pub fn read_with_build<A: ForIRI, O: MutableOntology<A> + Ontology<A> + Default,
             .cloned(),
     )?;
 
-    // Pass 2: build the ontology under a prefix-aware context.
-    let ctx = Context::new(build, &prefixes);
+    // Pass 1.5: collect DataProperty / Datatype declarations so that HasKey
+    // keys, Misc EquivalentProperties/DisjointProperties lists, and bare-IRI
+    // restriction fillers can be typed correctly in pass 2.  We clone the
+    // pairs (pass 2 owns the originals); IRI resolution uses the prefix
+    // mapping built above.
+    let declarations =
+        from_pair::declarations_from_frames(children.iter().cloned(), build, &prefixes);
+
+    // Pass 2: build the ontology under a prefix-aware, declaration-aware context.
+    let ctx = Context::with_decls(build, &prefixes, &declarations);
     let mut ontology: O = Default::default();
 
     for child in children {

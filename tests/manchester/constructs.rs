@@ -22,13 +22,13 @@ pub enum Residual {
     ComplexLhsGci,
     /// Nested annotations are parsed and silently dropped (model limit).
     NestedAnnotationDropped,
-    /// `HasKey:` with a data-property key cannot distinguish object from
-    /// data property keys; parses and round-trips (conflated).
+    /// `HasKey:` with a data-property key when the key IRI has no `DataProperty:`
+    /// declaration in the document — the reader cannot determine the property
+    /// type and defaults to `ObjectPropertyExpression`.  Parses and round-trips
+    /// stably (as an object key), but the round-trip axiom differs from the
+    /// intended data-property form.  Resolved when a `DataProperty:` declaration
+    /// is present (see `haskey.data.declared`).
     HasKeyObjectDataConflation,
-    /// `EquivalentProperties:`/`DisjointProperties:` over data properties
-    /// in the Misc section are parsed as the object-property form — a
-    /// lexical ambiguity.  Parses but does NOT round-trip correctly.
-    PropertyObjectDataConflation,
     /// A bare local name with no declared default prefix is not lexable.
     BareNameNeedsPrefix,
 }
@@ -759,8 +759,7 @@ pub const CASES: &[Case] = &[
         omn: "Prefix: : <http://e/>\nClass: :A\n    SubClassOf: :r some :B\n",
     },
     // -----------------------------------------------------------------------
-    // HasKey object/data conflation residual
-    // A HasKey list has no lexical distinction between object and data keys.
+    // HasKey object/data conflation — now resolved via declaration pre-pass.
     // -----------------------------------------------------------------------
     Case {
         id: "residual.haskey.objonly",
@@ -768,29 +767,51 @@ pub const CASES: &[Case] = &[
         expect_debug_contains: "HasKey",
         omn: "Prefix: : <http://e/>\nClass: :A\n    HasKey: :r , :s\n",
     },
+    // Declared data-property key — pre-pass flips to PropertyExpression::DataProperty.
+    // Round-trip re-reads the document which now has a `DataProperty: :p` declaration
+    // → key survives as DataProperty through the re-read.
     Case {
-        id: "residual.haskey.dataconflation",
+        id: "haskey.data.declared",
+        residual: Residual::None,
+        expect_debug_contains: "DataProperty",
+        omn: "Prefix: : <http://e/>\n\
+              DataProperty: :p\n\
+              Class: :A\n    HasKey: :p\n",
+    },
+    // Undeclared key — no declaration, falls back to ObjectPropertyExpression.
+    // This is the documented residual tail: undeclared → stays object.
+    Case {
+        id: "residual.haskey.undeclared",
         residual: Residual::HasKeyObjectDataConflation,
         expect_debug_contains: "HasKey",
         omn: "Prefix: : <http://e/>\nClass: :A\n    HasKey: :p\n",
     },
     // -----------------------------------------------------------------------
     // EquivalentProperties/DisjointProperties over data properties in the
-    // Misc section: lexically ambiguous — parsed as ObjectProperties.
+    // Misc section — now resolved via declaration pre-pass.
     // -----------------------------------------------------------------------
     Case {
         id: "residual.misc.equivdp",
-        residual: Residual::PropertyObjectDataConflation,
-        expect_debug_contains: "EquivalentObjectProperties",
+        residual: Residual::None,
+        expect_debug_contains: "EquivalentDataProperties",
         omn: "Prefix: : <http://e/>\n\
               DataProperty: :p\nDataProperty: :q\nEquivalentProperties: :p , :q\n",
     },
     Case {
         id: "residual.misc.disjdp",
-        residual: Residual::PropertyObjectDataConflation,
-        expect_debug_contains: "DisjointObjectProperties",
+        residual: Residual::None,
+        expect_debug_contains: "DisjointDataProperties",
         omn: "Prefix: : <http://e/>\n\
               DataProperty: :p\nDataProperty: :q\nDisjointProperties: :p , :q\n",
+    },
+    // Undeclared / mixed property lists stay as object-property form
+    // (regression guard: object properties without DataProperty: declaration).
+    Case {
+        id: "misc.equivprops.obj.undeclared",
+        residual: Residual::None,
+        expect_debug_contains: "EquivalentObjectProperties",
+        omn: "Prefix: : <http://e/>\n\
+              ObjectProperty: :r\nObjectProperty: :s\nEquivalentProperties: :r , :s\n",
     },
     // -----------------------------------------------------------------------
     // SWRL Rule — Manchester §2.5 has no rule syntax; parse fails.
@@ -1029,14 +1050,10 @@ fn construct_matrix_has_no_unexpected_failures() {
                 row.read_ok
             }
             Residual::HasKeyObjectDataConflation => {
-                // HasKey with a data-property key conflates to object property;
-                // parses and round-trips (conflated but stable).
+                // HasKey key IRI without a DataProperty: declaration — falls back
+                // to ObjectPropertyExpression; parses and round-trips stably
+                // (as an object key, which is the documented undeclared tail).
                 row.read_ok && row.roundtrip_ok
-            }
-            Residual::PropertyObjectDataConflation => {
-                // EquivalentProperties/DisjointProperties over data props parsed
-                // as object-property form — reads ok but does NOT round-trip.
-                row.read_ok && !row.roundtrip_ok
             }
             Residual::ComplexLhsGci => {
                 // The `# General axioms` block is skipped by the reader
@@ -1054,5 +1071,365 @@ fn construct_matrix_has_no_unexpected_failures() {
         failures.is_empty(),
         "unexpected construct failures:\n{}",
         failures.join("\n")
+    );
+}
+
+// ---------------------------------------------------------------------------
+// FIX-9: declaration pre-pass canaries
+//
+// These tests verify that the pre-pass actually flips the correct types,
+// not merely that a document "parses" (silent no-op guard).
+// ---------------------------------------------------------------------------
+
+/// Canary A: declared data-property key flips to PropertyExpression::DataProperty.
+/// NEGATIVES-FIRST: would fail if the lookup used a different IRI form (keying mismatch).
+#[test]
+fn decl_prepass_haskey_data_key_flips() {
+    use horned_owl::model::{Component, DataProperty, PropertyExpression};
+
+    let src = concat!(
+        "Prefix: : <http://e/>\n",
+        "DataProperty: :p\n",
+        "Class: :A\n",
+        "    HasKey: :p\n",
+    );
+    let (ont, _) = read_str(src)
+        .unwrap_or_else(|e| panic!("decl_prepass_haskey_data_key_flips: parse failed: {e}"));
+
+    let key_iri = "http://e/p";
+
+    // There must be a HasKey component.
+    let haskey = ont
+        .iter()
+        .find_map(|ac| {
+            if let Component::HasKey(hk) = &ac.component {
+                Some(hk.clone())
+            } else {
+                None
+            }
+        })
+        .unwrap_or_else(|| {
+            let debug: Vec<_> = ont.iter().map(|ac| format!("{:?}", ac.component)).collect();
+            panic!(
+                "decl_prepass_haskey_data_key_flips: no HasKey component:\n{}",
+                debug.join("\n")
+            )
+        });
+
+    // The key MUST be a DataProperty, NOT an ObjectPropertyExpression.
+    assert_eq!(haskey.vpe.len(), 1, "expected exactly 1 key");
+    match &haskey.vpe[0] {
+        PropertyExpression::DataProperty(DataProperty(iri)) => {
+            let iri_str: &str = iri;
+            assert_eq!(iri_str, key_iri, "data key IRI mismatch (keying error?)");
+        }
+        PropertyExpression::ObjectPropertyExpression(ope) => {
+            panic!(
+                "decl_prepass_haskey_data_key_flips: key was ObjectPropertyExpression({ope:?}), \
+                 expected DataProperty — likely a keying mismatch in the pre-pass lookup"
+            );
+        }
+        other => panic!("unexpected property expression: {other:?}"),
+    }
+}
+
+/// Canary B (guard): undeclared key stays ObjectPropertyExpression.
+#[test]
+fn decl_prepass_haskey_undeclared_stays_object() {
+    use horned_owl::model::{Component, PropertyExpression};
+
+    let src = "Prefix: : <http://e/>\nClass: :A\n    HasKey: :p\n";
+    let (ont, _) = read_str(src).unwrap_or_else(|e| {
+        panic!("decl_prepass_haskey_undeclared_stays_object: parse failed: {e}")
+    });
+
+    let hk = ont
+        .iter()
+        .find_map(|ac| {
+            if let Component::HasKey(hk) = &ac.component {
+                Some(hk.clone())
+            } else {
+                None
+            }
+        })
+        .expect("expected a HasKey");
+
+    assert!(
+        matches!(&hk.vpe[0], PropertyExpression::ObjectPropertyExpression(_)),
+        "undeclared key must stay ObjectPropertyExpression, got {:?}",
+        hk.vpe[0]
+    );
+}
+
+/// Canary B2 (guard): declared ObjectProperty key stays ObjectPropertyExpression.
+#[test]
+fn decl_prepass_haskey_declared_object_stays_object() {
+    use horned_owl::model::{Component, PropertyExpression};
+
+    let src = concat!(
+        "Prefix: : <http://e/>\n",
+        "ObjectProperty: :q\n",
+        "Class: :A\n",
+        "    HasKey: :q\n",
+    );
+    let (ont, _) = read_str(src).unwrap_or_else(|e| {
+        panic!("decl_prepass_haskey_declared_object_stays_object: parse failed: {e}")
+    });
+
+    let hk = ont
+        .iter()
+        .find_map(|ac| {
+            if let Component::HasKey(hk) = &ac.component {
+                Some(hk.clone())
+            } else {
+                None
+            }
+        })
+        .expect("expected a HasKey");
+
+    assert!(
+        matches!(&hk.vpe[0], PropertyExpression::ObjectPropertyExpression(_)),
+        "ObjectProperty-declared key must stay ObjectPropertyExpression, got {:?}",
+        hk.vpe[0]
+    );
+}
+
+/// Canary C: EquivalentProperties over two declared data properties → EquivalentDataProperties.
+#[test]
+fn decl_prepass_misc_equiv_data_props_flips() {
+    use horned_owl::model::Component;
+
+    let src = concat!(
+        "Prefix: : <http://e/>\n",
+        "DataProperty: :p\n",
+        "DataProperty: :q\n",
+        "EquivalentProperties: :p , :q\n",
+    );
+    let (ont, _) = read_str(src)
+        .unwrap_or_else(|e| panic!("decl_prepass_misc_equiv_data_props_flips: parse failed: {e}"));
+
+    let has_equiv_dp = ont
+        .iter()
+        .any(|ac| matches!(&ac.component, Component::EquivalentDataProperties(_)));
+    let has_equiv_op = ont
+        .iter()
+        .any(|ac| matches!(&ac.component, Component::EquivalentObjectProperties(_)));
+
+    assert!(
+        has_equiv_dp,
+        "expected EquivalentDataProperties, not present"
+    );
+    assert!(
+        !has_equiv_op,
+        "EquivalentObjectProperties must NOT be present when all members are declared data"
+    );
+}
+
+/// Canary D: DisjointProperties over two declared data properties → DisjointDataProperties.
+#[test]
+fn decl_prepass_misc_disjoint_data_props_flips() {
+    use horned_owl::model::Component;
+
+    let src = concat!(
+        "Prefix: : <http://e/>\n",
+        "DataProperty: :p\n",
+        "DataProperty: :q\n",
+        "DisjointProperties: :p , :q\n",
+    );
+    let (ont, _) = read_str(src).unwrap_or_else(|e| {
+        panic!("decl_prepass_misc_disjoint_data_props_flips: parse failed: {e}")
+    });
+
+    let has_disj_dp = ont
+        .iter()
+        .any(|ac| matches!(&ac.component, Component::DisjointDataProperties(_)));
+    let has_disj_op = ont
+        .iter()
+        .any(|ac| matches!(&ac.component, Component::DisjointObjectProperties(_)));
+
+    assert!(has_disj_dp, "expected DisjointDataProperties, not present");
+    assert!(
+        !has_disj_op,
+        "DisjointObjectProperties must NOT be present when all members are declared data"
+    );
+}
+
+/// Canary E (guard): mixed list (one data, one undeclared) stays EquivalentObjectProperties.
+#[test]
+fn decl_prepass_misc_mixed_list_stays_object() {
+    use horned_owl::model::Component;
+
+    let src = concat!(
+        "Prefix: : <http://e/>\n",
+        "DataProperty: :p\n",
+        // :r is NOT declared → mixed list → stays object
+        "EquivalentProperties: :p , :r\n",
+    );
+    let (ont, _) = read_str(src)
+        .unwrap_or_else(|e| panic!("decl_prepass_misc_mixed_list_stays_object: parse failed: {e}"));
+
+    let has_equiv_op = ont
+        .iter()
+        .any(|ac| matches!(&ac.component, Component::EquivalentObjectProperties(_)));
+
+    assert!(
+        has_equiv_op,
+        "mixed list must stay EquivalentObjectProperties, not flip"
+    );
+}
+
+/// Canary F: restriction with declared-DataProperty property + declared-Datatype filler
+/// → DataSomeValuesFrom.  The critical canary: proves type ACTUALLY FLIPS.
+#[test]
+fn decl_prepass_restriction_data_prop_declared_datatype_filler() {
+    use horned_owl::model::{ClassExpression, Component, SubClassOf};
+
+    let src = concat!(
+        "Prefix: : <http://e/>\n",
+        "DataProperty: :p\n",
+        "Datatype: :MyDt\n",
+        "Class: :A\n",
+        "    SubClassOf: :p some :MyDt\n",
+    );
+    let (ont, _) = read_str(src).unwrap_or_else(|e| {
+        panic!("decl_prepass_restriction_data_prop_declared_datatype_filler: parse failed: {e}")
+    });
+
+    let ce = ont.iter().find_map(|ac| {
+        if let Component::SubClassOf(SubClassOf { sup, .. }) = &ac.component {
+            Some(sup.clone())
+        } else {
+            None
+        }
+    });
+
+    match ce {
+        Some(ClassExpression::DataSomeValuesFrom { .. }) => {} // correct
+        Some(ClassExpression::ObjectSomeValuesFrom { .. }) => {
+            panic!(
+                "decl_prepass_restriction_data_prop_declared_datatype_filler: \
+                 got ObjectSomeValuesFrom — pre-pass flip did not fire (keying error?)"
+            );
+        }
+        Some(other) => panic!("unexpected CE: {other:?}"),
+        None => panic!("no SubClassOf found"),
+    }
+}
+
+/// Canary G (guard): restriction with declared-ObjectProperty + plain class filler
+/// stays ObjectSomeValuesFrom.
+#[test]
+fn decl_prepass_restriction_declared_object_stays_object() {
+    use horned_owl::model::{ClassExpression, Component, SubClassOf};
+
+    let src = concat!(
+        "Prefix: : <http://e/>\n",
+        "ObjectProperty: :r\n",
+        "Class: :A\n",
+        "    SubClassOf: :r some :B\n",
+    );
+    let (ont, _) = read_str(src).unwrap_or_else(|e| {
+        panic!("decl_prepass_restriction_declared_object_stays_object: parse failed: {e}")
+    });
+
+    let ce = ont.iter().find_map(|ac| {
+        if let Component::SubClassOf(SubClassOf { sup, .. }) = &ac.component {
+            Some(sup.clone())
+        } else {
+            None
+        }
+    });
+
+    match ce {
+        Some(ClassExpression::ObjectSomeValuesFrom { .. }) => {} // correct
+        Some(ClassExpression::DataSomeValuesFrom { .. }) => {
+            panic!(
+                "decl_prepass_restriction_declared_object_stays_object: \
+                 got DataSomeValuesFrom — declared-object restriction was wrongly flipped"
+            );
+        }
+        Some(other) => panic!("unexpected CE: {other:?}"),
+        None => panic!("no SubClassOf found"),
+    }
+}
+
+/// Canary H (guard): compound filler `:p some (:B and :C)` with declared DataProperty
+/// stays ObjectSomeValuesFrom (compound fillers are never flipped).
+#[test]
+fn decl_prepass_restriction_compound_filler_not_flipped() {
+    use horned_owl::model::{ClassExpression, Component, SubClassOf};
+
+    let src = concat!(
+        "Prefix: : <http://e/>\n",
+        "DataProperty: :p\n",
+        "Class: :A\n",
+        "    SubClassOf: :p some (:B and :C)\n",
+    );
+    let (ont, _) = read_str(src).unwrap_or_else(|e| {
+        panic!("decl_prepass_restriction_compound_filler_not_flipped: parse failed: {e}")
+    });
+
+    // The compound filler (:B and :C) is an ObjectIntersectionOf.
+    // The result should be ObjectSomeValuesFrom — the restriction filler
+    // is not a bare class IRI, so it cannot be a DataRange.
+    let ce = ont.iter().find_map(|ac| {
+        if let Component::SubClassOf(SubClassOf { sup, .. }) = &ac.component {
+            Some(sup.clone())
+        } else {
+            None
+        }
+    });
+
+    match ce {
+        Some(ClassExpression::ObjectSomeValuesFrom { .. }) => {} // correct
+        Some(ClassExpression::DataSomeValuesFrom { .. }) => {
+            panic!(
+                "decl_prepass_restriction_compound_filler_not_flipped: \
+                 compound filler was wrongly flipped to DataSomeValuesFrom"
+            );
+        }
+        Some(other) => panic!("unexpected CE: {other:?}"),
+        None => panic!("no SubClassOf found"),
+    }
+}
+
+/// HasKey read→write→read round-trip: the `DataProperty: :p` declaration must be
+/// re-emitted by the writer so the re-read can flip the key back to DataProperty.
+#[test]
+fn decl_prepass_haskey_data_roundtrip() {
+    use horned_owl::model::{Component, PropertyExpression};
+
+    let src = concat!(
+        "Prefix: : <http://e/>\n",
+        "DataProperty: :p\n",
+        "Class: :A\n",
+        "    HasKey: :p\n",
+    );
+    let (ont, pm) = read_str(src)
+        .unwrap_or_else(|e| panic!("decl_prepass_haskey_data_roundtrip (pass 1): {e}"));
+
+    // Write back to Manchester text.
+    let text = write_str(&ont, &pm);
+
+    // Re-read.
+    let (ont2, _) = read_str(&text)
+        .unwrap_or_else(|e| panic!("decl_prepass_haskey_data_roundtrip (pass 2): {e}"));
+
+    // The re-read must also have a DataProperty key (not ObjectPropertyExpression).
+    let hk2 = ont2
+        .iter()
+        .find_map(|ac| {
+            if let Component::HasKey(hk) = &ac.component {
+                Some(hk.clone())
+            } else {
+                None
+            }
+        })
+        .expect("no HasKey after round-trip");
+
+    assert!(
+        matches!(&hk2.vpe[0], PropertyExpression::DataProperty(_)),
+        "after round-trip, key must still be DataProperty; got {:?}",
+        hk2.vpe[0]
     );
 }
