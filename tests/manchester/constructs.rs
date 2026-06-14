@@ -1473,3 +1473,129 @@ fn decl_prepass_restriction_unqualified_card_not_flipped() {
         None => panic!("no SubClassOf found"),
     }
 }
+
+// ---------------------------------------------------------------------------
+// Isolating canaries for is_datatype (declared-Datatype filler, undeclared prop)
+// ---------------------------------------------------------------------------
+
+/// Canary I: `:r some :MyDt` where `:r` is NOT declared (prop_is_data = false)
+/// but `:MyDt` IS declared as a Datatype.  The `is_datatype` path in the
+/// restriction handler is the SOLE trigger: `prop_is_data` cannot mask it.
+///
+/// Asserts:
+///   - result is `DataSomeValuesFrom`
+///   - `dr` is `Datatype(:MyDt)` (the IRI payload is correct, not just the variant)
+///
+/// This canary was added because the existing
+/// `decl_prepass_restriction_data_prop_declared_datatype_filler` canary also
+/// declares `:p` as a DataProperty, so a broken `is_datatype` is masked by the
+/// `prop_is_data` fallback.  Here, there is no such fallback.
+#[test]
+fn decl_prepass_restriction_datatype_filler_undeclared_prop() {
+    use horned_owl::model::{ClassExpression, Component, DataRange, Datatype, SubClassOf};
+
+    let src = concat!(
+        "Prefix: : <http://e/>\n",
+        "Datatype: :MyDt\n",
+        "Class: :A\n",
+        "    SubClassOf: :r some :MyDt\n",
+    );
+    // :r is intentionally NOT declared — prop_is_data stays false.
+    let (ont, _) = read_str(src).unwrap_or_else(|e| {
+        panic!("decl_prepass_restriction_datatype_filler_undeclared_prop: parse failed: {e}")
+    });
+
+    let ce = ont.iter().find_map(|ac| {
+        if let Component::SubClassOf(SubClassOf { sup, .. }) = &ac.component {
+            Some(sup.clone())
+        } else {
+            None
+        }
+    });
+
+    match ce {
+        Some(ClassExpression::DataSomeValuesFrom { dr, .. }) => {
+            // Strong assertion: the datatype IRI payload must be :MyDt.
+            assert!(
+                matches!(&dr, DataRange::Datatype(Datatype(iri)) if iri.as_ref() == "http://e/MyDt"),
+                "decl_prepass_restriction_datatype_filler_undeclared_prop: \
+                 DataSomeValuesFrom has wrong dr: {dr:?} (expected Datatype(http://e/MyDt))"
+            );
+        }
+        Some(ClassExpression::ObjectSomeValuesFrom { .. }) => {
+            panic!(
+                "decl_prepass_restriction_datatype_filler_undeclared_prop: \
+                 got ObjectSomeValuesFrom — is_datatype did not fire (is_datatype broken?)"
+            );
+        }
+        Some(other) => panic!(
+            "decl_prepass_restriction_datatype_filler_undeclared_prop: unexpected CE: {other:?}"
+        ),
+        None => {
+            panic!("decl_prepass_restriction_datatype_filler_undeclared_prop: no SubClassOf found")
+        }
+    }
+}
+
+/// Canary I2: `:r exactly 1 :MyDt` where `:r` is NOT declared (prop_is_data = false)
+/// but `:MyDt` IS declared as a Datatype.  The `exactly` cardinality arm uses the
+/// same `bare_datatype_iri` path — this is an independent witness that `is_datatype`
+/// is the sole trigger for qualified-cardinality flipping too.
+///
+/// Asserts:
+///   - result is `DataExactCardinality { n: 1, .. }`
+///   - `dr` is `Datatype(:MyDt)`
+#[test]
+fn decl_prepass_restriction_datatype_filler_undeclared_prop_exact_card() {
+    use horned_owl::model::{ClassExpression, Component, DataRange, Datatype, SubClassOf};
+
+    let src = concat!(
+        "Prefix: : <http://e/>\n",
+        "Datatype: :MyDt\n",
+        "Class: :A\n",
+        "    SubClassOf: :r exactly 1 :MyDt\n",
+    );
+    // :r is intentionally NOT declared.
+    let (ont, _) = read_str(src).unwrap_or_else(|e| {
+        panic!(
+            "decl_prepass_restriction_datatype_filler_undeclared_prop_exact_card: parse failed: {e}"
+        )
+    });
+
+    let ce = ont.iter().find_map(|ac| {
+        if let Component::SubClassOf(SubClassOf { sup, .. }) = &ac.component {
+            Some(sup.clone())
+        } else {
+            None
+        }
+    });
+
+    match ce {
+        Some(ClassExpression::DataExactCardinality { n, dr, .. }) => {
+            assert_eq!(
+                n, 1,
+                "decl_prepass_restriction_datatype_filler_undeclared_prop_exact_card: \
+                 expected cardinality 1, got {n}"
+            );
+            assert!(
+                matches!(&dr, DataRange::Datatype(Datatype(iri)) if iri.as_ref() == "http://e/MyDt"),
+                "decl_prepass_restriction_datatype_filler_undeclared_prop_exact_card: \
+                 DataExactCardinality has wrong dr: {dr:?} (expected Datatype(http://e/MyDt))"
+            );
+        }
+        Some(ClassExpression::ObjectExactCardinality { .. }) => {
+            panic!(
+                "decl_prepass_restriction_datatype_filler_undeclared_prop_exact_card: \
+                 got ObjectExactCardinality — is_datatype did not fire (is_datatype broken?)"
+            );
+        }
+        Some(other) => panic!(
+            "decl_prepass_restriction_datatype_filler_undeclared_prop_exact_card: \
+             unexpected CE: {other:?}"
+        ),
+        None => panic!(
+            "decl_prepass_restriction_datatype_filler_undeclared_prop_exact_card: \
+             no SubClassOf found"
+        ),
+    }
+}
