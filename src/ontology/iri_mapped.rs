@@ -222,11 +222,13 @@ impl<A: ForIRI, AA: ForIndex<A>> OntologyIndex<A, AA> for IRIMappedIndex<A, AA> 
 
     #[allow(clippy::unnecessary_fold)]
     fn index_remove(&mut self, cmp: &AnnotatedComponent<A>) -> bool {
-        Self::iris_from_component(cmp)
-            .iter()
-            .fold(false, |val, iri| {
-                self.mut_set_for_iri(iri).remove(cmp) || val
-            })
+        // Remove `cmp` from the set of every IRI it mentions; must visit all of
+        // them (no short-circuit), returning whether any set actually changed.
+        let mut removed = false;
+        for iri in Self::iris_from_component(cmp).iter() {
+            removed = self.mut_set_for_iri(iri).remove(cmp) || removed;
+        }
+        removed
     }
 }
 
