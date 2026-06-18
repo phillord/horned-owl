@@ -602,10 +602,10 @@ impl<A: ForIRI> FromPair<A> for ClassExpression<A> {
                     // the filler is a plain `Class(iri)` whose IRI was declared as a
                     // `Datatype:` frame subject; otherwise `None`.
                     let bare_datatype_iri = |bce: &ClassExpression<A>| -> Option<IRI<A>> {
-                        if let ClassExpression::Class(Class(filler_iri)) = bce {
-                            if ctx.is_datatype(filler_iri) {
-                                return Some(filler_iri.clone());
-                            }
+                        if let ClassExpression::Class(Class(filler_iri)) = bce
+                            && ctx.is_datatype(filler_iri)
+                        {
+                            return Some(filler_iri.clone());
                         }
                         None
                     };

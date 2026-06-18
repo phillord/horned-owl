@@ -946,7 +946,7 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
     //     for the same reason.
     // -----------------------------------------------------------------------
     for block in &complex_gci_frames {
-        write!(write, "{block}\n")?;
+        writeln!(write, "{block}")?;
     }
 
     // -----------------------------------------------------------------------
