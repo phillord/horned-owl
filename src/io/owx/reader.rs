@@ -449,6 +449,7 @@ fn axiom_from_start<A: ForIRI, R: BufRead>(
         b"Annotation" => OntologyAnnotation(Annotation {
             ap: from_start(r, e)?,
             av: from_next(r)?,
+            ann: Default::default(),
         })
         .into(),
         b"Declaration" => {
@@ -571,7 +572,11 @@ fn axiom_from_start<A: ForIRI, R: BufRead>(
 
             AnnotationAssertion {
                 subject,
-                ann: Annotation { ap, av },
+                ann: Annotation {
+                    ap,
+                    av,
+                    ann: Default::default(),
+                },
             }
             .into()
         }
@@ -1123,6 +1128,7 @@ from_xml! {
 
         let mut ap:Option<AnnotationProperty<_>> = None;
         let mut av:Option<AnnotationValue<_>> = None;
+        let mut ann:BTreeSet<Annotation<_>> = BTreeSet::new();
         let mut buf = Vec::new();
 
         loop {
@@ -1136,6 +1142,9 @@ from_xml! {
                     match e.local_name().as_ref() {
                         b"AnnotationProperty" =>
                             ap = Some(from_start(r, e)?),
+                        b"Annotation" => {
+                            ann.insert(Annotation::from_xml(r, b"Annotation")?);
+                        }
                         _ =>
                             av = Some(from_start(r, e)?),
                     }
@@ -1148,7 +1157,8 @@ from_xml! {
                     }
                     return Ok(Annotation{
                         ap:ap.unwrap(),
-                        av:av.unwrap()
+                        av:av.unwrap(),
+                        ann,
                     });
                 },
                 (_, Event::Eof) => {
@@ -1732,6 +1742,47 @@ pub mod test {
             .component_for_kind(ComponentKind::AnnotationAssertion);
         let ann: &AnnotatedComponent<_> = ann_i.next().unwrap();
         assert_eq!(ann.ann.len(), 1);
+    }
+
+    // https://github.com/phillord/horned-owl/issues/175
+    // Annotation lacks an `ann` field for annotationAnnotations (OWL 2 spec).
+    // The OWX reader fails entirely on a nested <Annotation> inside <Annotation>
+    // ("Unexpected tag: found Annotation"), rather than just silently dropping it.
+    #[test]
+    fn test_nested_annotation_on_annotation() {
+        let ont_s = include_str!("../../ont/owl-xml/nested-annotation-on-annotation.owx");
+        let (ont, _) = read_ok(&mut ont_s.as_bytes());
+
+        assert_eq!(ont.i().declare_class().count(), 1);
+
+        let annotated_component = ont
+            .i()
+            .component_for_kind(ComponentKind::AnnotationAssertion)
+            .next()
+            .unwrap();
+
+        // The AnnotationAssertion carries one axiom annotation
+        assert_eq!(annotated_component.ann.len(), 1);
+
+        let axiom_ann = annotated_component.ann.iter().next().unwrap();
+        assert_eq!(
+            axiom_ann.av,
+            crate::model::AnnotationValue::Literal(crate::model::Literal::Language {
+                literal: "Comment on Comment".to_string(),
+                lang: "en".to_string(),
+            })
+        );
+
+        // The axiom annotation has one nested annotation
+        assert_eq!(axiom_ann.ann.len(), 1);
+        let nested_ann = axiom_ann.ann.iter().next().unwrap();
+        assert_eq!(
+            nested_ann.av,
+            crate::model::AnnotationValue::Literal(crate::model::Literal::Language {
+                literal: "Nested Comment".to_string(),
+                lang: "en".to_string(),
+            })
+        );
     }
 
     #[test]

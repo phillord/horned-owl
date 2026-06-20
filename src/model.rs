@@ -1704,6 +1704,7 @@ impl<A: ForIRI> Literal<A> {
 pub struct Annotation<A> {
     pub ap: AnnotationProperty<A>,
     pub av: AnnotationValue<A>,
+    pub ann: BTreeSet<Annotation<A>>,
 }
 
 /// The value of an annotation
@@ -2336,6 +2337,7 @@ mod test {
         let ann = Annotation {
             ap: b.annotation_property("http://www.example.com/ap"),
             av: b.iri("http://www.example.com/av").into(),
+            ann: Default::default(),
         };
 
         let mut decl1: AnnotatedComponent<_> =

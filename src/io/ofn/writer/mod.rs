@@ -119,4 +119,28 @@ mod test {
         assert_eq!(prefixes, prefixes2, "prefix mapping differ");
         assert_eq!(ont, ont2, "ontologies differ");
     }
+
+    // Regression test for https://github.com/phillord/horned-owl/issues/175
+    // Annotations on Annotation (annotationAnnotations in OWL 2 spec) are
+    // silently discarded because Annotation lacks an `ann` field. A round-trip
+    // ont==ont2 comparison would pass (both drops are identical), so we check
+    // the written string directly instead.
+    #[test]
+    fn roundtrip_nested_annotation_on_annotation() {
+        let resource = "src/ont/owl-functional/manual/nested-annotation-on-annotation.ofn";
+        let reader = std::fs::File::open(resource)
+            .map(std::io::BufReader::new)
+            .unwrap();
+        let (ont, prefixes): (ComponentMappedOntology<RcStr, AnnotatedComponent<RcStr>>, _) =
+            crate::io::ofn::reader::read(reader, Default::default()).unwrap();
+
+        let mut writer = Vec::new();
+        crate::io::ofn::writer::write(&mut writer, &ont, Some(&prefixes)).unwrap();
+        let output = String::from_utf8(writer).unwrap();
+
+        assert!(
+            output.contains("Annotation(Annotation("),
+            "nested annotation was lost in round-trip:\n{output}"
+        );
+    }
 }

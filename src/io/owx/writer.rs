@@ -830,7 +830,7 @@ render! {
 render! {
     Annotation, self, w, m,
     {
-        (&self.ap, &self.av).within(w, m, "Annotation")?;
+        (&self.ann, &self.ap, &self.av).within(w, m, "Annotation")?;
 
         Ok(())
     }
