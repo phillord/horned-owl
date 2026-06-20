@@ -561,6 +561,9 @@ impl<A: ForIRI, V: Visit<A>> Walk<A, V> {
 
     pub fn annotation(&mut self, e: &Annotation<A>) {
         self.0.visit_annotation(e);
+        for a in &e.ann {
+            self.annotation(a);
+        }
         self.annotation_property(&e.ap);
         self.annotation_value(&e.av);
     }

@@ -188,6 +188,7 @@ vocabulary_type! {
         (OWL, AnnotatedProperty, true),
         (OWL, AnnotatedSource, true),
         (OWL, AnnotatedTarget, true),
+        (OWL, Annotation, false),
         (OWL, AnnotationProperty, false),
         (OWL, AssertionProperty, true),
         (OWL, AsymmetricProperty, false),

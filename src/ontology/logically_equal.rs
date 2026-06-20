@@ -154,6 +154,7 @@ mod test {
         let ann = Annotation {
             ap: b.annotation_property("http://www.example.com/ap"),
             av: b.iri("http://www.example.com/av").into(),
+            ann: Default::default(),
         };
 
         let decl1: AnnotatedComponent<_> = DeclareClass(b.class("http://www.example.com#a")).into();
@@ -191,6 +192,7 @@ mod test {
             dec.ann.insert(Annotation {
                 ap: b.annotation_property("http://www.example.com/p1"),
                 av: b.iri("http://www.example.com/a1").into(),
+                ann: Default::default(),
             });
 
             let ne: NamedOWLEntity<_> = b.class("http://www.example.com").into();
@@ -200,6 +202,7 @@ mod test {
             dec2.ann.insert(Annotation {
                 ap: b.annotation_property("http://www.example.com/p1"),
                 av: b.iri("http://www.example.com/a2").into(),
+                ann: Default::default(),
             });
 
             o.insert(dec);
@@ -215,6 +218,7 @@ mod test {
             dec.ann.insert(Annotation {
                 ap: b.annotation_property("http://www.example.com/p1"),
                 av: b.iri("http://www.example.com/a1").into(),
+                ann: Default::default(),
             });
 
             let ne: NamedOWLEntity<_> = b.class("http://www.example.com").into();
@@ -223,6 +227,7 @@ mod test {
             dec2.ann.insert(Annotation {
                 ap: b.annotation_property("http://www.example.com/p1"),
                 av: b.iri("http://www.example.com/a2").into(),
+                ann: Default::default(),
             });
 
             o.insert(dec);

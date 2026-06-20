@@ -535,23 +535,26 @@ render! {
         let bn = ng.this_bn().ok_or_else(|| invalid!("{}", "No bnode available"))?;
         ng.keep_this_bn(bn.clone());
 
-        Ok(
-            match &self.av {
-                AnnotationValue::Literal(l) => {
-                    let obj = l.render(f, ng)?;
+        let obj: PTerm<A> = match &self.av {
+            AnnotationValue::Literal(l) => l.render(f, ng)?,
+            AnnotationValue::IRI(iri) => iri.into(),
+            AnnotationValue::AnonymousIndividual(an) => an.into(),
+        };
 
-                    triple!(f, bn, &self.ap.0, obj)
-                }
-                AnnotationValue::IRI(iri) => {
-                    triple!(
-                        f, bn, &self.ap.0, iri
-                    )
-                }
-                AnnotationValue::AnonymousIndividual(an) => {
-                    triple!(f, bn, &self.ap.0, an)
-                }
-            }
-        )
+        if !self.ann.is_empty() {
+            let ann_bn = ng.bn();
+            triples!(
+                f,
+                ann_bn.clone(), ng.nn(RDF::Type), ng.nn(OWL::Annotation),
+                ann_bn.clone(), ng.nn(OWL::AnnotatedSource), bn.clone(),
+                ann_bn.clone(), ng.nn(OWL::AnnotatedProperty), &self.ap.0,
+                ann_bn.clone(), ng.nn(OWL::AnnotatedTarget), obj.clone()
+            );
+            ng.keep_this_bn(ann_bn);
+            self.ann.render(f, ng)?;
+        }
+
+        Ok(triple!(f, bn, &self.ap.0, obj))
     }
 }
 

@@ -583,6 +583,14 @@ impl<A: ForIRI, V: VisitMut<A>> WalkMut<A, V> {
 
     pub fn annotation(&mut self, e: &mut Annotation<A>) {
         self.0.visit_annotation(e);
+        let nested = std::mem::take(&mut e.ann);
+        e.ann = nested
+            .into_iter()
+            .map(|mut a| {
+                self.annotation(&mut a);
+                a
+            })
+            .collect();
         self.annotation_property(&mut e.ap);
         self.annotation_value(&mut e.av);
     }
@@ -873,6 +881,7 @@ mod test {
                     literal: "hello".to_string(),
                 }
                 .into(),
+                ann: Default::default(),
             })
         }
     }

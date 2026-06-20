@@ -289,7 +289,28 @@ macro_rules! derive_axiom {
     };
 }
 
-derive_axiom!(A, Annotation<A>, Annotation(ap, av));
+impl<'a, A: ForIRI> Display for Functional<'a, Annotation<A>, A> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
+        if self.0.ann.is_empty() {
+            write!(
+                f,
+                "Annotation({} {})",
+                Functional(&self.0.ap, self.1, None),
+                Functional(&self.0.av, self.1, None),
+            )
+        } else {
+            write!(
+                f,
+                "Annotation({} {} {})",
+                Functional(&self.0.ann, self.1, None),
+                Functional(&self.0.ap, self.1, None),
+                Functional(&self.0.av, self.1, None),
+            )
+        }
+    }
+}
+
+impl<A: ForIRI> AsFunctional<A> for Annotation<A> {}
 derive_axiom!(
     A,
     AnnotationPropertyRange<A>,
@@ -1157,6 +1178,7 @@ mod tests {
                 av: AnnotationValue::Literal(Literal::Simple {
                     literal: "http://api.hymao.org/api/ref/67791".into(),
                 }),
+                ann: Default::default(),
             }]),
         };
 

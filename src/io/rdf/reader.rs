@@ -797,17 +797,20 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
             [_, Iri(p), ob @ Term::Literal(_)] => Ok(Annotation {
                 ap: AnnotationProperty(p.clone()),
                 av: self.convert_to_literal(ob).unwrap().into(),
+                ann: Default::default(),
             }),
             [_, Iri(p), Iri(ob)] => {
                 // IRI annotation value
                 Ok(Annotation {
                     ap: AnnotationProperty(p.clone()),
                     av: ob.clone().into(),
+                    ann: Default::default(),
                 })
             }
             [_, Iri(p), Term::BNode(_)] => Ok(Annotation {
                 ap: AnnotationProperty(p.clone()),
                 av: self.b.anon_renumbered().into(),
+                ann: Default::default(),
             }),
             all => Err(HornedError::invalid(format!(
                 "Invalid annotation found {:?}",
@@ -823,6 +826,8 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
 
     /// Process axiom annotations.
     fn axiom_annotations(&mut self) -> Result<(), HornedError> {
+        let mut bnode_to_key: HashMap<BNode<A>, [Term<A>; 3]> = HashMap::new();
+
         for (k, v) in std::mem::take(&mut self.bnode) {
             match v.as_slice() {
                 [
@@ -832,17 +837,49 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                     [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Axiom)],
                     ann @ ..,
                 ] => {
-                    self.ann_map.insert(
-                        // The original axiom that this annotation
-                        // sits on will have it's IRIs convert to
-                        // OWL/RDF vocab, so we must do this here or
-                        // they will not match the key of the
-                        // annotation.
-                        self.b.substitute_term([sb.clone(), p.clone(), ob.clone()]),
-                        self.parse_annotations(ann)?,
-                    );
+                    // The original axiom that this annotation
+                    // sits on will have it's IRIs convert to
+                    // OWL/RDF vocab, so we must do this here or
+                    // they will not match the key of the
+                    // annotation.
+                    let key = self.b.substitute_term([sb.clone(), p.clone(), ob.clone()]);
+                    bnode_to_key.insert(k, key.clone());
+                    let annotations = self.parse_annotations(ann)?;
+                    self.ann_map.insert(key, annotations);
                 }
 
+                _ => {
+                    self.bnode.insert(k, v);
+                }
+            }
+        }
+
+        // Second pass: owl:Annotation bnodes attach nested annotations
+        // to the annotation identified by (annotatedSource bnode,
+        // annotatedProperty, annotatedTarget).
+        for (k, v) in std::mem::take(&mut self.bnode) {
+            match v.as_slice() {
+                [
+                    [_, Term::OWL(VOWL::AnnotatedProperty), p],
+                    [_, Term::OWL(VOWL::AnnotatedSource), Term::BNode(sb_bnode)],
+                    [_, Term::OWL(VOWL::AnnotatedTarget), ob],
+                    [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Annotation)],
+                    nested_ann @ ..,
+                ] => {
+                    if let Some(ann_key) = bnode_to_key.get(sb_bnode).cloned() {
+                        let ref_ann =
+                            self.annotation(&[Term::BNode(k.clone()), p.clone(), ob.clone()])?;
+                        let nested = self.parse_annotations(nested_ann)?;
+                        if let Some(ann_set) = self.ann_map.get_mut(&ann_key)
+                            && let Some(mut target) = ann_set.take(&ref_ann)
+                        {
+                            target.ann = nested;
+                            ann_set.insert(target);
+                        }
+                    } else {
+                        self.bnode.insert(k, v);
+                    }
+                }
                 _ => {
                     self.bnode.insert(k, v);
                 }
