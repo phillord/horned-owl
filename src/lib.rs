@@ -749,8 +749,7 @@ where
     }
 
     pub fn accept_or_push_back(&mut self, t: PTriple<A>) {
-        let subj = t.subject.clone();
-        if let Some(entry) = self.store.get_mut(&subj) {
+        if let Some(entry) = self.store.get_mut(&t.subject) {
             if let Some(mt) = &mut entry.0 {
                 mt.accept(t);
                 return;
