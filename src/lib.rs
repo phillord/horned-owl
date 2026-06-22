@@ -621,24 +621,17 @@ where
     }
 }
 
+#[derive(Clone, Debug)]
+enum PExpandedTripleKind {
+    Multi,
+    Seq,
+}
+
 /// A set of triple like objects that represents a coherent chunk
-///
-/// Current invariants:
-///   - each subject should appear only once (i.e. all subjects are
-///   grouped in PMultiTriple, or AsRefSeq)
-///   - if a subject appears it represents all appearances of the node
-///   as a subject in the document of which this is a chunk
-///   - if BNodes appear as subjects, they appear after any
-///   apperance as an object (TODO: Not implemented yet!)
 #[derive(Debug)]
 pub struct PChunk<A: AsRef<str>> {
-    // Ordered list of triples
-    v: VecDeque<PExpandedTriple<A>>,
-    // Fast lookup by subject
-    // Nodes with the same bnode should be on either or both of a single PMultitriple, or PTripleSeq
-    by_sub: HashMap<PNamedOrBlankNode<A>, (Option<PMultiTriple<A>>, Option<PTripleSeq<A>>)>,
-    // bnode object count -- we need to know how many times a bnode appears as an object
-    // because if it occurs more than once we cannot elide it
+    queue: VecDeque<(PNamedOrBlankNode<A>, PExpandedTripleKind)>,
+    store: HashMap<PNamedOrBlankNode<A>, (Option<PMultiTriple<A>>, Option<PTripleSeq<A>>)>,
     bnode_object_count: HashMap<PBlankNode<A>, usize>,
 }
 
@@ -705,70 +698,45 @@ where
             }
         }
 
-        let etv: VecDeque<PExpandedTriple<A>> = etv
-            .into_iter()
-            .map(|(_k, v)| v.into())
-            .chain(seq.into_iter().map(|s| PExpandedTriple::PTripleSeq(s)))
-            .collect();
-
         let mut chk = PChunk {
-            v: etv,
-            by_sub: HashMap::new(),
+            queue: VecDeque::new(),
+            store: HashMap::new(),
             bnode_object_count,
         };
-        chk.subject_reindex();
+
+        for (_k, mt) in etv {
+            chk.push_back(PExpandedTriple::PMultiTriple(mt));
+        }
+        for s in seq {
+            chk.push_back(PExpandedTriple::PTripleSeq(s));
+        }
 
         chk
     }
 
-    // Associated function rather than method to work around partial move issues
-    fn subject_insert(
-        by_sub: &mut HashMap<
-            PNamedOrBlankNode<A>,
-            (Option<PMultiTriple<A>>, Option<PTripleSeq<A>>),
-        >,
-        et: &PExpandedTriple<A>,
-    ) {
-        let e = by_sub.entry(et.subject().clone()).or_insert((None, None));
-        match et {
-            PExpandedTriple::PMultiTriple(mt) => (*e).0 = Some(mt.clone()),
-            PExpandedTriple::PTripleSeq(seq) => (*e).1 = Some(seq.clone()),
-        }
-    }
-
-    fn subject_remove(&mut self, et: &PExpandedTriple<A>) {
-        let e = self
-            .by_sub
-            .entry(et.subject().clone())
-            .or_insert((None, None));
-        match et {
-            PExpandedTriple::PMultiTriple(_) => (*e).0 = None,
-            PExpandedTriple::PTripleSeq(_) => (*e).1 = None,
-        }
-    }
-
-    fn subject_reindex(&mut self) {
-        self.by_sub.clear();
-        for i in self.v.iter() {
-            Self::subject_insert(&mut self.by_sub, i);
-        }
-    }
-
     pub fn empty() -> Self {
         PChunk {
-            v: vec![].into(),
-            by_sub: HashMap::new(),
+            queue: VecDeque::new(),
+            store: HashMap::new(),
             bnode_object_count: HashMap::new(),
         }
     }
 
     // I don't think we ever need this function
     pub fn sort(&mut self) {
-        let _ = &self.v.make_contiguous().sort_by(|a, b| match (a, b) {
-            (PExpandedTriple::PMultiTriple(_), PExpandedTriple::PTripleSeq(_)) => Ordering::Less,
-            (PExpandedTriple::PTripleSeq(_), PExpandedTriple::PMultiTriple(_)) => Ordering::Greater,
-            (PExpandedTriple::PMultiTriple(amt), PExpandedTriple::PMultiTriple(bmt)) => {
-                match (amt.subject(), bmt.subject()) {
+        self.queue
+            .make_contiguous()
+            .sort_by(|(a_subj, a_kind), (b_subj, b_kind)| {
+                match (a_kind, b_kind) {
+                    (PExpandedTripleKind::Multi, PExpandedTripleKind::Seq) => {
+                        return Ordering::Less;
+                    }
+                    (PExpandedTripleKind::Seq, PExpandedTripleKind::Multi) => {
+                        return Ordering::Greater;
+                    }
+                    _ => {}
+                }
+                match (a_subj, b_subj) {
                     (PNamedOrBlankNode::NamedNode(_), PNamedOrBlankNode::BlankNode(_)) => {
                         Ordering::Less
                     }
@@ -777,55 +745,71 @@ where
                     }
                     _ => Ordering::Equal,
                 }
-            }
-            _ => Ordering::Equal,
-        });
-
-        self.subject_reindex();
+            });
     }
 
     pub fn accept_or_push_back(&mut self, t: PTriple<A>) {
-        let mut t = t;
-        for i in self.v.iter_mut() {
-            if let Some(t1) = i.accept(t) {
-                t = t1;
-            } else {
-                // We need to update the subject index, because it has a clone of i
-                Self::subject_insert(&mut self.by_sub, &i.clone());
+        let subj = t.subject.clone();
+        if let Some(entry) = self.store.get_mut(&subj) {
+            if let Some(mt) = &mut entry.0 {
+                mt.accept(t);
                 return;
             }
         }
-        self.push_back(t.into());
+        self.push_back(PExpandedTriple::PMultiTriple(t.into()));
     }
 
     pub fn push_back(&mut self, et: PExpandedTriple<A>) {
-        Self::subject_insert(&mut self.by_sub, &et);
-        self.v.push_back(et);
+        let (subj, kind) = match et {
+            PExpandedTriple::PMultiTriple(mt) => {
+                let subj = mt.subject().clone();
+                self.store.entry(subj.clone()).or_insert((None, None)).0 = Some(mt);
+                (subj, PExpandedTripleKind::Multi)
+            }
+            PExpandedTriple::PTripleSeq(seq) => {
+                let subj = seq.subject().clone();
+                self.store.entry(subj.clone()).or_insert((None, None)).1 = Some(seq);
+                (subj, PExpandedTripleKind::Seq)
+            }
+        };
+        self.queue.push_back((subj, kind));
     }
 
     pub fn pop_front(&mut self) -> Option<PExpandedTriple<A>> {
-        let et = self.v.pop_front();
-        if let Some(ref et) = et {
-            self.subject_remove(et);
+        loop {
+            let (subj, kind) = self.queue.pop_front()?;
+            let (result, now_empty) = match self.store.get_mut(&subj) {
+                None => (None, false),
+                Some(entry) => {
+                    let result = match kind {
+                        PExpandedTripleKind::Multi => {
+                            entry.0.take().map(PExpandedTriple::PMultiTriple)
+                        }
+                        PExpandedTripleKind::Seq => {
+                            entry.1.take().map(PExpandedTriple::PTripleSeq)
+                        }
+                    };
+                    let now_empty = entry.0.is_none() && entry.1.is_none();
+                    (result, now_empty)
+                }
+            };
+            if now_empty {
+                self.store.remove(&subj);
+            }
+            if result.is_some() {
+                return result;
+            }
+            // None means tombstone; continue to next queue entry
         }
-        et
     }
 
-    fn remove(&mut self, et: &PExpandedTriple<A>) {
-        if let Some(pos) = self.v.iter().position(|n| n == et) {
-            self.v.remove(pos);
-            self.subject_remove(et)
-        }
-    }
-
-    fn find_subject(
+    fn take_subject(
         &mut self,
         bn: &PBlankNode<A>,
     ) -> (Option<PMultiTriple<A>>, Option<PTripleSeq<A>>) {
-        self.by_sub
-            .get(&bn.clone().into())
-            .cloned()
-            .unwrap_or((None, None))
+        let key = PNamedOrBlankNode::BlankNode(bn.clone());
+        // Queue entries for this subject become tombstones, cleaned up lazily by pop_front
+        self.store.remove(&key).unwrap_or((None, None))
     }
 
     fn object_count(&self, bn: &PBlankNode<A>) -> usize {
@@ -1079,18 +1063,13 @@ where
             }
             PTerm::BlankNode(bn) => {
                 if chunk.object_count(bn) == 1 {
-                    match chunk.find_subject(bn) {
+                    match chunk.take_subject(bn) {
                         (None, Some(seq)) => {
-                            // The logic here also appears in the
-                            // format_seq -- perhaps we should be able
-                            // to pass the open tag into seq.
                             if !seq.has_literal() {
                                 property_open.push_attribute(("rdf:parseType", "Collection"));
                             }
                             self.write_start(Event::Start(property_open))
                                 .map_err(map_err)?;
-
-                            chunk.remove(&seq.clone().into());
                             if seq.has_literal() {
                                 self.format_seq_longhand(&seq, chunk)?;
                             } else {
@@ -1101,20 +1080,15 @@ where
                         (Some(mt), None) => {
                             self.write_start(Event::Start(property_open))
                                 .map_err(map_err)?;
-
-                            chunk.remove(&mt.clone().into());
                             self.format_multi(&mt, chunk)?;
                             return Ok(());
                         }
-                        (Some(_mt), Some(seq)) => {
+                        (Some(mt), Some(seq)) => {
                             self.write_start(Event::Start(property_open))
                                 .map_err(map_err)?;
-
-                            // We should not need to format the mt
-                            // because it will be formatted in the
-                            // next step when we format the sequence
-                            // long hand.
-                            chunk.remove(&seq.clone().into());
+                            // Put MT back so format_seq_longhand can merge the seq triples
+                            // into it (preserving the rdf:type shorthand element name).
+                            chunk.push_back(PExpandedTriple::PMultiTriple(mt));
                             self.format_seq_longhand(&seq, chunk)?;
                             return Ok(());
                         }
@@ -1186,10 +1160,11 @@ where
         }
 
         if let PNamedOrBlankNode::BlankNode(n) = subj {
-            return match chunk.find_subject(&n) {
-                (Some(mt), None) => self.format_expanded(&mt.clone().into(), chunk),
+            return match chunk.take_subject(&n) {
+                (Some(mt), None) => {
+                    self.format_removed_expanded(&PExpandedTriple::PMultiTriple(mt), chunk)
+                }
                 (None, Some(_seq)) => {
-                    // This should not happen because we have amalgameted the seq into a MT
                     todo!("We shouldn't get here");
                 }
                 (Some(_mt), Some(_seq)) => {
@@ -1213,19 +1188,21 @@ where
             if let Some(ref triple) = tup.1 {
                 match &triple.object {
                     // Just render in place
-                    PTerm::BlankNode(bn) => match chunk.find_subject(bn) {
-                        (Some(mt), None) => {
-                            self.format_expanded(&mt.clone().into(), chunk)?;
+                    PTerm::BlankNode(bn) => {
+                        let (mt_opt, seq_opt) = chunk.take_subject(bn);
+                        if let Some(mt) = mt_opt {
+                            self.format_removed_expanded(
+                                &PExpandedTriple::PMultiTriple(mt),
+                                chunk,
+                            )?;
                         }
-                        (None, Some(seq)) => {
-                            self.format_expanded(&seq.clone().into(), chunk)?;
+                        if let Some(seq) = seq_opt {
+                            self.format_removed_expanded(
+                                &PExpandedTriple::PTripleSeq(seq),
+                                chunk,
+                            )?;
                         }
-                        (Some(mt), Some(seq)) => {
-                            self.format_expanded(&mt.clone().into(), chunk)?;
-                            self.format_expanded(&seq.clone().into(), chunk)?;
-                        }
-                        _ => {}
-                    },
+                    }
                     // render the object, but not the property which
                     // is the collection joiner
                     PTerm::NamedNode(_) => {
@@ -1260,19 +1237,6 @@ where
         Ok(())
     }
 
-    fn format_expanded(
-        &mut self,
-        expanded: &PExpandedTriple<A>,
-        chunk: &mut PChunk<A>,
-    ) -> Result<(), io::Error> {
-        chunk.remove(expanded);
-        self.format_removed_expanded(expanded, chunk)
-    }
-
-    /// Format an PExpandedTriple that we know has already been removed from the PChunk.
-    ///
-    /// This is needed over format_expanded because the removal runs
-    /// in linear time, so to be avoided if not necessary
     fn format_removed_expanded(
         &mut self,
         expanded: &PExpandedTriple<A>,
@@ -1515,14 +1479,14 @@ mod test {
     pub fn simple_chunk() {
         let chk = PChunk::normalize(vec![tnn()]);
 
-        assert_eq!(chk.v.len(), 1);
+        assert_eq!(chk.queue.len(), 1);
     }
 
     #[test]
     pub fn multi_chunk() {
         let chk = PChunk::normalize(vec![tnn(), tnn(), tnn()]);
 
-        assert_eq!(chk.v.len(), 1);
+        assert_eq!(chk.queue.len(), 1);
     }
 
     #[test]
@@ -1570,7 +1534,7 @@ mod test {
     pub fn multi_chunk_find_subject_with_seq() {
         let mut chk = some_seq();
 
-        let sub = chk.find_subject(&PBlankNode::new("seq0".to_string()));
+        let sub = chk.take_subject(&PBlankNode::new("seq0".to_string()));
 
         assert!(matches! {
             sub,
