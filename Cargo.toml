@@ -25,6 +25,7 @@ indexmap={workspace=true}
 oxiri={workspace=true}
 pest = "2.7.8"
 pest_derive = "2.7.8"
+rustc-hash = "2"
 pretty_rdf={workspace=true}
 oxrdf={workspace=true}
 oxrdfio={workspace=true}

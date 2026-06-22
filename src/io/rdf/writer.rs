@@ -496,6 +496,17 @@ impl<A: ForIRI, F: RdfFormatter<A, W>, W: Write> Render<A, F, (), W> for Annotat
         };
 
         if !self.ann.is_empty() {
+            // A SWRL rule (`swrl:Imp`) carries its annotations directly on the rule
+            // node — OWLAPI/ROBOT do not reify rule annotations via `owl:Axiom`
+            // (and reifying the `rdf:type swrl:Imp` triple does not round-trip: the
+            // annotation is lost and the body-atom order is mangled on re-read).
+            if matches!(self.component, Component::Rule(_)) {
+                if let Annotatable::Main(t) = cmp {
+                    ng.keep_this_bn(t.subject);
+                    let _ = self.ann.render(f, ng);
+                }
+                return Ok(());
+            }
             match cmp {
                 Annotatable::Main(t) => {
                     r(t)?;
@@ -1212,6 +1223,53 @@ fn data_cardinality<A: ForIRI, F: RdfFormatter<A, W>, W: Write>(
     ))
 }
 
+/// Object-property-expression component of a canonical sort key.
+fn ope_key<A: ForIRI>(o: &ObjectPropertyExpression<A>) -> String {
+    match o {
+        ObjectPropertyExpression::ObjectProperty(p) => format!("a{}", p.0),
+        ObjectPropertyExpression::InverseObjectProperty(p) => format!("b{}", p.0),
+    }
+}
+
+/// A canonical, order-independent sort key for a class expression, used to make
+/// the RDF rdf:List serialization of `ObjectIntersectionOf`/`ObjectUnionOf`
+/// deterministic (named classes first, then existentials/universals by
+/// property then filler). Mirrors the OWL API's class-expression ordering closely
+/// enough that order-sensitive SPARQL collection patterns match.
+fn ce_sort_key<A: ForIRI>(ce: &ClassExpression<A>) -> String {
+    use ClassExpression::*;
+    match ce {
+        Class(c) => format!("01\u{1}{}", c.0),
+        ObjectIntersectionOf(_) => "02".to_string(),
+        ObjectUnionOf(_) => "03".to_string(),
+        ObjectComplementOf(b) => format!("04\u{1}{}", ce_sort_key(b)),
+        ObjectOneOf(_) => "05".to_string(),
+        ObjectSomeValuesFrom { ope, bce } => {
+            format!("06\u{1}{}\u{1}{}", ope_key(ope), ce_sort_key(bce))
+        }
+        ObjectAllValuesFrom { ope, bce } => {
+            format!("07\u{1}{}\u{1}{}", ope_key(ope), ce_sort_key(bce))
+        }
+        ObjectHasValue { ope, .. } => format!("08\u{1}{}", ope_key(ope)),
+        ObjectHasSelf(ope) => format!("09\u{1}{}", ope_key(ope)),
+        ObjectMinCardinality { n, ope, bce } => {
+            format!("10\u{1}{:020}\u{1}{}\u{1}{}", n, ope_key(ope), ce_sort_key(bce))
+        }
+        ObjectMaxCardinality { n, ope, bce } => {
+            format!("11\u{1}{:020}\u{1}{}\u{1}{}", n, ope_key(ope), ce_sort_key(bce))
+        }
+        ObjectExactCardinality { n, ope, bce } => {
+            format!("12\u{1}{:020}\u{1}{}\u{1}{}", n, ope_key(ope), ce_sort_key(bce))
+        }
+        DataSomeValuesFrom { dp, .. } => format!("13\u{1}{}", dp.0),
+        DataAllValuesFrom { dp, .. } => format!("14\u{1}{}", dp.0),
+        DataHasValue { dp, .. } => format!("15\u{1}{}", dp.0),
+        DataMinCardinality { dp, n, .. } => format!("16\u{1}{:020}\u{1}{}", n, dp.0),
+        DataMaxCardinality { dp, n, .. } => format!("17\u{1}{:020}\u{1}{}", n, dp.0),
+        DataExactCardinality { dp, n, .. } => format!("18\u{1}{:020}\u{1}{}", n, dp.0),
+    }
+}
+
 render_to_node! {
     ClassExpression, self, f, ng,
     {
@@ -1220,7 +1278,16 @@ render_to_node! {
                 Self::Class(cl) => (&cl.0).into(),
                 Self::ObjectIntersectionOf(v)=>{
                     let bn = ng.bn();
-                    let node_seq = render_vec_subject(v, f, ng)?;
+                    // Canonically order the operands (named classes first, then by
+                    // property/filler) so the emitted rdf:List is deterministic and
+                    // matches the OWL API's serialization. OWL intersection is
+                    // order-independent, but the rdf:List is order-SENSITIVE, and
+                    // SPARQL collection patterns (e.g. MONDO's cross-species
+                    // `intersectionOf ( genus restriction restriction )` inject)
+                    // only match the canonical order.
+                    let mut v = v.clone();
+                    v.sort_by(|a, b| ce_sort_key(a).cmp(&ce_sort_key(b)));
+                    let node_seq = render_vec_subject(&v, f, ng)?;
 
                     triples_to_node!(
                          f,
@@ -1230,7 +1297,9 @@ render_to_node! {
                 }
                 Self::ObjectUnionOf(v) => {
                     let bn = ng.bn();
-                    let node_seq = render_vec_subject(v, f, ng)?;
+                    let mut v = v.clone();
+                    v.sort_by(|a, b| ce_sort_key(a).cmp(&ce_sort_key(b)));
+                    let node_seq = render_vec_subject(&v, f, ng)?;
 
                     triples_to_node!(
                         f,
@@ -1441,8 +1510,16 @@ render_to_node! {
 render_to_vec! {
     DisjointClasses, self, f, ng,
     {
-        let pred = ng.nn(OWL::DisjointWith);
-        nary(f, ng, &self.0, pred)
+        // Per the OWL2 RDF mapping, two classes use `owl:disjointWith`
+        // while three or more require an `owl:AllDisjointClasses` node with
+        // an `owl:members` sequence. The previous `nary` rendering emitted a
+        // star of `owl:disjointWith` triples for n > 2, which is both
+        // semantically wrong (it omits the non-first pairs) and fails to
+        // round-trip back into a single n-ary axiom.
+        members(f, ng,
+                OWL::DisjointWith,
+                OWL::AllDisjointClasses,
+                &self.0)
     }
 }
 
@@ -1471,9 +1548,14 @@ render_to_vec! {
 render! {
     InverseObjectProperties, self, f, ng, PTriple,
     {
+        // Either side may be an inverse expression (rendered as a bnode), so
+        // render each ObjectPropertyExpression to a node rather than assuming a
+        // named property.
+        let node_a: PNamedOrBlankNode<_> = self.0.render(f, ng)?;
+        let node_b: PTerm<_> = self.1.render(f, ng)?.into();
         Ok(
             triple!(
-                f, &self.0.0, ng.nn(OWL::InverseOf), &self.1.0
+                f, node_a, ng.nn(OWL::InverseOf), node_b
             )
         )
     }

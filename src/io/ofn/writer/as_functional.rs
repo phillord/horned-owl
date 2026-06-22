@@ -13,14 +13,18 @@ use crate::vocab::Facet;
 /// Write a string literal while escaping `"` and `\` characters.
 fn quote(mut s: &str, f: &mut Formatter<'_>) -> Result<(), Error> {
     f.write_str("\"")?;
-    while let Some((i, c)) = s.chars().enumerate().find(|(_, c)| *c == '\\' || *c == '"') {
+    // `char_indices` yields *byte* offsets, so slicing stays on char
+    // boundaries even when the string contains multi-byte UTF-8 characters.
+    // (Using `chars().enumerate()` here gives a char index and panics when a
+    // multi-byte char precedes a `"`/`\\`, e.g. Greek letters in a definition.)
+    while let Some((i, c)) = s.char_indices().find(|(_, c)| *c == '\\' || *c == '"') {
         f.write_str(&s[..i])?;
         match c {
             '\\' => f.write_str("\\\\")?,
             '"' => f.write_str("\\\"")?,
             _ => unreachable!(),
         }
-        s = &s[i + 1..];
+        s = &s[i + c.len_utf8()..];
     }
     f.write_str(s)?;
     f.write_str("\"")
@@ -144,6 +148,7 @@ derive_tuple2!(A, Class<A>, Vec<ClassExpression<A>>);
 derive_tuple2!(A, Datatype<A>, DataRange<A>);
 derive_tuple2!(A, ClassExpression<A>, Individual<A>);
 derive_tuple2!(A, ObjectProperty<A>, ObjectProperty<A>);
+derive_tuple2!(A, ObjectPropertyExpression<A>, ObjectPropertyExpression<A>);
 derive_tuple2!(A, ObjectPropertyExpression<A>, ClassExpression<A>);
 derive_tuple2!(A, AnnotationProperty<A>, AnnotationValue<A>);
 derive_tuple2!(A, AnnotationProperty<A>, IRI<A>);

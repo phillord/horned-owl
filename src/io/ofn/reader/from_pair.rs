@@ -192,8 +192,8 @@ impl<A: ForIRI> FromPair<A> for AnnotatedComponent<A> {
             Rule::InverseObjectProperties => {
                 let mut inner = pair.into_inner();
                 let annotations = FromPair::from_pair(inner.next().unwrap(), ctx)?;
-                let r1 = ObjectProperty::from_pair(inner.next().unwrap(), ctx)?;
-                let r2 = ObjectProperty::from_pair(inner.next().unwrap(), ctx)?;
+                let r1 = ObjectPropertyExpression::from_pair(inner.next().unwrap(), ctx)?;
+                let r2 = ObjectPropertyExpression::from_pair(inner.next().unwrap(), ctx)?;
                 Ok(Self::new(InverseObjectProperties(r1, r2), annotations))
             }
             Rule::FunctionalObjectProperty => {

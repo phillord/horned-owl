@@ -23,7 +23,7 @@ use crate::{
 };
 
 use std::collections::BTreeSet;
-use std::collections::HashMap;
+use rustc_hash::FxHashMap as HashMap;
 use std::fmt::Debug;
 use std::io::Cursor;
 use std::{io::BufRead, marker::PhantomData};
@@ -353,6 +353,20 @@ impl<A: ForIRI, AA: ForIndex<A>> From<ConcreteRDFOntology<A, AA>> for SetOntolog
     }
 }
 
+impl ConcreteRDFOntology<RcStr, crate::model::RcAnnotatedComponent> {
+    /// Fast conversion into a `SetOntology`: drop the declaration/equality
+    /// indexes first (releasing their shared `Rc` references) so the remaining
+    /// component `Rc`s are uniquely held, then MOVE the components out instead of
+    /// deep-cloning them. The naive `From` clones all ~5.5M components on a large
+    /// ontology; this avoids that half of the conversion cost.
+    pub fn into_set_ontology_fast(self) -> SetOntology<RcStr> {
+        let (set_index, decl, equal) = self.index();
+        drop(decl);
+        drop(equal);
+        set_index.into_set_ontology_moving()
+    }
+}
+
 impl<A: ForIRI, AA: ForIndex<A>> From<ConcreteRDFOntology<A, AA>>
     for ComponentMappedOntology<A, AA>
 {
@@ -419,7 +433,11 @@ pub struct IncompleteParse<A: ForIRI> {
 
     /// Annotations that are otherwise unconnected to other parts of
     /// the Ontology
-    pub ann_map: HashMap<[Term<A>; 3], BTreeSet<Annotation<A>>>,
+    // A base triple may be reified by several `owl:Axiom` blocks, each
+    // carrying a different annotation set (e.g. one synonym with two separate
+    // xref provenances). Keep them all so every annotated axiom is recovered;
+    // a single `BTreeSet` here silently dropped all but one (nondeterministic).
+    pub ann_map: HashMap<[Term<A>; 3], Vec<BTreeSet<Annotation<A>>>>,
 }
 
 impl<A: ForIRI> IncompleteParse<A> {
@@ -534,8 +552,8 @@ pub struct OntologyParser<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>>
     class_expression: HashMap<BNode<A>, ClassExpression<A>>,
     object_property_expression: HashMap<BNode<A>, ObjectPropertyExpression<A>>,
     data_range: HashMap<BNode<A>, DataRange<A>>,
-    // Annotations mapped to Triples
-    ann_map: HashMap<[Term<A>; 3], BTreeSet<Annotation<A>>>,
+    // Annotations mapped to Triples (one entry per reifying owl:Axiom block).
+    ann_map: HashMap<[Term<A>; 3], Vec<BTreeSet<Annotation<A>>>>,
     atom: HashMap<Term<A>, Atom<A>>,
     variable: HashMap<IRI<A>, Variable<A>>,
 
@@ -657,64 +675,88 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
     }
 
     /// Find and group all triples on a sequence.
-    fn stitch_seqs_1(&mut self) {
-        let mut extended = false;
-
-        for (k, v) in std::mem::take(&mut self.bnode) {
-            match v.as_slice() {
-                [
-                    [_, Term::RDF(VRDF::First), val],
-                    [_, Term::RDF(VRDF::Rest), Term::BNode(bnode_id)],
-                    // Some sequences have a Type List, some do not,
-                    // so do not use this as part of the lookup
-                    ..,
-                ] => {
-                    // Only put sequence triples on bnode_seq if they
-                    // are next in line for a sequence already on
-                    // there, so we grow from the end backward.
-                    let some_seq = self.bnode_seq.remove(bnode_id);
-                    if let Some(mut seq) = some_seq {
-                        seq.push(val.clone());
-                        self.bnode_seq.insert(k.clone(), seq);
-                        extended = true;
-                    } else {
-                        self.bnode.insert(k, v);
-                    }
-                }
-                _ => {
-                    self.bnode.insert(k, v);
-                }
-            };
-        }
-
-        if extended && !self.bnode.is_empty() {
-            self.stitch_seqs_1()
-        }
-    }
-
-    /// Find and group all triples on a sequence.
+    /// Find and group all triples on a sequence (RDF list).
+    ///
+    /// Each list cell is a bnode `c` with `c rdf:first val; c rdf:rest next`
+    /// (`next` another bnode or `rdf:nil`). The previous implementation grew
+    /// each list one element per full re-scan of *every* bnode and recursed
+    /// until no list grew — O(list-length × bnode-count), ~97s on phenio. This
+    /// instead indexes the cells once and walks each list head-to-tail following
+    /// the `rest` pointers directly: O(total list cells). Output is identical:
+    /// `bnode_seq[head]` is the list's values in order, and incomplete (non
+    /// nil-terminated) or non-list bnodes are left untouched in `self.bnode`.
     fn stitch_seqs(&mut self) {
+        use rustc_hash::{FxHashMap as HashMap, FxHashSet as HashSet};
+        // Pull out the list cells, keeping non-list bnodes in place. For each
+        // cell record (first value, rest target) and remember which bnodes are
+        // pointed at by some `rest` (so the remainder are list heads).
+        let mut cells: HashMap<BNode<A>, (Term<A>, Option<BNode<A>>, VPosTriple<A>)> = HashMap::default();
+        let mut pointed: HashSet<BNode<A>> = HashSet::default();
         for (k, v) in std::mem::take(&mut self.bnode) {
-            match v.as_slice() {
-                // Find the end of the list
+            let parsed: Option<(Term<A>, Option<BNode<A>>)> = match v.as_slice() {
                 [
                     [_, Term::RDF(VRDF::First), val],
                     [_, Term::RDF(VRDF::Rest), Term::Iri(iri)],
-                    // Lists may or may not have a "list" RDF type
                     ..,
-                ] if **iri == **VRDF::Nil => {
-                    self.bnode_seq.insert(k.clone(), vec![val.clone()]);
+                ] if **iri == **VRDF::Nil => Some((val.clone(), None)),
+                [
+                    [_, Term::RDF(VRDF::First), val],
+                    [_, Term::RDF(VRDF::Rest), Term::BNode(id)],
+                    ..,
+                ] => Some((val.clone(), Some(id.clone()))),
+                _ => None,
+            };
+            match parsed {
+                Some((val, rest)) => {
+                    if let Some(ref id) = rest {
+                        pointed.insert(id.clone());
+                    }
+                    cells.insert(k, (val, rest, v));
                 }
-                _ => {
+                None => {
                     self.bnode.insert(k, v);
                 }
-            };
+            }
         }
 
-        self.stitch_seqs_1();
+        // Walk each head (a cell not pointed at by any `rest`) to its tail,
+        // collecting values in order. Only nil-terminated chains become seqs.
+        let heads: Vec<BNode<A>> = cells.keys().filter(|k| !pointed.contains(*k)).cloned().collect();
+        let mut consumed: HashSet<BNode<A>> = HashSet::default();
+        for head in heads {
+            let mut chain: Vec<BNode<A>> = Vec::new();
+            let mut vals: Vec<Term<A>> = Vec::new();
+            let mut cur = head.clone();
+            let mut terminated = false;
+            loop {
+                match cells.get(&cur) {
+                    Some((val, rest, _)) if !consumed.contains(&cur) && !chain.contains(&cur) => {
+                        chain.push(cur.clone());
+                        vals.push(val.clone());
+                        match rest {
+                            None => {
+                                terminated = true;
+                                break;
+                            }
+                            Some(next) => cur = next.clone(),
+                        }
+                    }
+                    _ => break, // dangling / cyclic / already consumed
+                }
+            }
+            if terminated {
+                for b in &chain {
+                    consumed.insert(b.clone());
+                }
+                self.bnode_seq.insert(head, vals);
+            }
+        }
 
-        for (_, v) in self.bnode_seq.iter_mut() {
-            v.reverse();
+        // Incomplete-list cells (never part of a nil-terminated chain) go back.
+        for (k, (_, _, v)) in cells {
+            if !consumed.contains(&k) {
+                self.bnode.insert(k, v);
+            }
         }
     }
 
@@ -821,6 +863,15 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
         update_or_insert_logically_equal_component(&mut self.o, cmp);
     }
 
+    /// Insert an annotated component directly, WITHOUT merging it onto a
+    /// logically-equal axiom. Used where each component is a distinct intended
+    /// axiom — e.g. several `owl:Axiom` blocks reify the same base triple with
+    /// different annotation sets (NCIT-style multi-source synonyms). Merging
+    /// would union those annotation sets and collapse them into one axiom.
+    fn insert_distinct<IAA: Into<AnnotatedComponent<A>>>(&mut self, cmp: IAA) {
+        self.o.insert(cmp.into());
+    }
+
     /// Process axiom annotations.
     fn axiom_annotations(&mut self) -> Result<(), HornedError> {
         for (k, v) in std::mem::take(&mut self.bnode) {
@@ -832,15 +883,28 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                     [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Axiom)],
                     ann @ ..,
                 ] => {
-                    self.ann_map.insert(
-                        // The original axiom that this annotation
-                        // sits on will have it's IRIs convert to
-                        // OWL/RDF vocab, so we must do this here or
-                        // they will not match the key of the
-                        // annotation.
-                        self.b.substitute_term([sb.clone(), p.clone(), ob.clone()]),
-                        self.parse_annotations(ann)?,
-                    );
+                    // The original axiom that this annotation sits on will
+                    // have its IRIs converted to OWL/RDF vocab, so we must do
+                    // this here or they will not match the key of the
+                    // annotation. Push (don't overwrite): several owl:Axiom
+                    // blocks may reify the same base triple with distinct
+                    // annotation sets, each a separate annotated axiom.
+                    let mut key = self.b.substitute_term([sb.clone(), p.clone(), ob.clone()]);
+                    // A property-chain reification often points `annotatedTarget`
+                    // at a SEPARATE Collection bnode that is structurally equal
+                    // to — but a distinct node from — the chain's own list (e.g.
+                    // ENVO serializes both as `parseType="Collection"`). Key such
+                    // annotations by the list's content so they match the axiom
+                    // regardless of which bnode carries the list.
+                    if matches!(key[1], Term::OWL(VOWL::PropertyChainAxiom)) {
+                        if let Term::BNode(ref b) = key[2] {
+                            if let Some(members) = self.bnode_seq.get(b) {
+                                key[2] = Self::canon_list_term(members);
+                            }
+                        }
+                    }
+                    let anns = self.parse_annotations(ann)?;
+                    self.ann_map.entry(key).or_default().push(anns);
                 }
 
                 _ => {
@@ -850,6 +914,30 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
         }
 
         Ok(())
+    }
+
+    /// A content-based key term for an RDF list (the members of a property
+    /// chain). Used so a reification whose `annotatedTarget` is a distinct but
+    /// structurally-equal Collection bnode still matches the axiom built from a
+    /// different list bnode of the same content.
+    fn canon_list_term(members: &[Term<A>]) -> Term<A> {
+        let s: String = members
+            .iter()
+            .map(|t| format!("{t:?}"))
+            .collect::<Vec<_>>()
+            .join("\u{1}");
+        Term::BNode(BNode(format!("__chain__\u{1}{s}").into()))
+    }
+
+    /// Take the reified annotation sets recorded for a base triple. Returns one
+    /// empty set when there were none (so the bare, unannotated axiom is still
+    /// emitted); otherwise one set per reifying `owl:Axiom` block, so each
+    /// distinct annotated axiom is recovered rather than silently dropped.
+    fn take_anns(&mut self, t: &[Term<A>; 3]) -> Vec<BTreeSet<Annotation<A>>> {
+        match self.ann_map.remove(t) {
+            Some(v) if !v.is_empty() => v,
+            _ => vec![BTreeSet::new()],
+        }
     }
 
     /// Process named entity declaration axioms
@@ -872,12 +960,16 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
             };
 
             if let Some(entity) = entity {
-                let ann = self.ann_map.remove(t.triple()).unwrap_or_default();
                 let ne: NamedOWLEntity<_> = entity;
-                self.merge(AnnotatedComponent {
-                    component: ne.into(),
-                    ann,
-                });
+                // Each reifying owl:Axiom block over this base triple is a
+                // distinct annotated axiom; insert each directly rather than
+                // merging (which would union their annotation sets).
+                for ann in self.take_anns(t.triple()) {
+                    self.insert_distinct(AnnotatedComponent {
+                        component: ne.clone().into(),
+                        ann,
+                    });
+                }
             } else {
                 self.simple.push(t);
             }
@@ -887,7 +979,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
     /// Process data ranges
     fn data_ranges(&mut self) -> Result<(), HornedError> {
         let data_range_len = self.data_range.len();
-        let mut facet_map: HashMap<Term<A>, PosTriple<A>> = HashMap::new();
+        let mut facet_map: HashMap<Term<A>, PosTriple<A>> = HashMap::default();
 
         for (k, v) in std::mem::take(&mut self.bnode) {
             match v.as_slice() {
@@ -1065,7 +1157,14 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
     /// Convert a Term to a ClassExpression or retrieve it if it is a BNode
     fn retrieve_to_ce(&mut self, tce: &Term<A>) -> Option<ClassExpression<A>> {
         match tce {
-            Term::BNode(id) => self.class_expression.remove(id),
+            // Non-destructive: a blank-node class expression may be referenced by
+            // more than one axiom. ROBOT's RDF/XML writer shares one restriction
+            // bnode between, e.g., an `equivalentClass` intersection and the
+            // `subClassOf` axioms `relax` derives from it; removing the CE on first
+            // use silently dropped every later reference (and its axiom). Cloning
+            // leaves it available; any genuinely unconsumed CE is still reported via
+            // IncompleteParse and never enters the ontology.
+            Term::BNode(id) => self.class_expression.get(id).cloned(),
             _ => self.convert_to_iri(tce).map(Into::into),
         }
     }
@@ -1678,6 +1777,16 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                 },
                 [
                     [_, Term::OWL(VOWL::Members), Term::BNode(bnodeid)], //:
+                    [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::AllDisjointClasses)],
+                ] => {
+                    ok_some! {
+                        DisjointClasses (
+                            self.retrieve_to_ce_seq(bnodeid)?
+                        ).into()
+                    }
+                }
+                [
+                    [_, Term::OWL(VOWL::Members), Term::BNode(bnodeid)], //:
                     [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::AllDifferent)],
                 ] => {
                     ok_some! {
@@ -1789,10 +1898,18 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                         ).into()
                     }
                 }
-                [Term::Iri(p), Term::OWL(VOWL::InverseOf), Term::Iri(r)] => Ok(Some(
-                    InverseObjectProperties(ObjectProperty(p.clone()), ObjectProperty(r.clone()))
-                        .into(),
-                )),
+                // `P owl:inverseOf Q` is an InverseObjectProperties axiom. The
+                // bnode-subject form (`_:x owl:inverseOf R`, defining the inverse
+                // expression ObjectInverseOf(R)) is consumed earlier in
+                // `object_property_expressions`, so a triple reaching here with a
+                // named subject is a genuine axiom; either side may itself be an
+                // inverse expression (a bnode), so resolve both via retrieve_to_ope.
+                [p @ Term::Iri(_), Term::OWL(VOWL::InverseOf), r] => ok_some! {
+                    InverseObjectProperties(
+                        self.retrieve_to_ope(p)?,
+                        self.retrieve_to_ope(r)?
+                    ).into()
+                },
                 [
                     pr,
                     Term::RDF(VRDF::Type),
@@ -1893,6 +2010,26 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                     Term::OWL(VOWL::PropertyChainAxiom),
                     Term::BNode(id),
                 ] => {
+                    // If a property-chain reification stored its annotations under
+                    // the list's content key (because its annotatedTarget was a
+                    // distinct Collection bnode), relocate them onto this base
+                    // triple's key so the generic take_anns below attaches them.
+                    if let Some(members) = self.bnode_seq.get(id) {
+                        let canon = Self::canon_list_term(members);
+                        let canon_key = [
+                            Term::Iri(pr.clone()),
+                            Term::OWL(VOWL::PropertyChainAxiom),
+                            canon,
+                        ];
+                        if let Some(anns) = self.ann_map.remove(&canon_key) {
+                            let base_key = [
+                                Term::Iri(pr.clone()),
+                                Term::OWL(VOWL::PropertyChainAxiom),
+                                Term::BNode(id.clone()),
+                            ];
+                            self.ann_map.entry(base_key).or_default().extend(anns);
+                        }
+                    }
                     ok_some! {
                         SubObjectPropertyOf {
                             sub: SubObjectPropertyExpression::ObjectPropertyChain(
@@ -2000,31 +2137,66 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                 [Term::Iri(i), Term::OWL(VOWL::DifferentFrom), Term::Iri(j)] => {
                     Ok(Some(DifferentIndividuals(vec![i.into(), j.into()]).into()))
                 }
-                [Term::Iri(sub), Term::Iri(pred), t @ Term::Literal(_)] => ok_some! {
-                    DataPropertyAssertion {
-                        dp: pred.clone().into(),
-                        from: sub.into(),
-                        to: self.convert_to_literal(t)?
-                    }.into()
-                },
-                [Term::Iri(sub), Term::Iri(pred), Term::Iri(obj)] => Ok(Some(
-                    ObjectPropertyAssertion {
-                        ope: ObjectProperty(pred.clone()).into(),
-                        from: sub.into(),
-                        to: obj.into(),
+                [Term::Iri(sub), Term::Iri(pred), lit @ Term::Literal(_)] => {
+                    // A `subject predicate "literal"` triple is a DataPropertyAssertion
+                    // only when `predicate` is a *declared* data property; otherwise it
+                    // is an AnnotationAssertion — matching OWLAPI/ROBOT, which default an
+                    // undeclared property used with a literal to an annotation property.
+                    if <O as AsRef<DeclarationMappedIndex<A, AA>>>::as_ref(&self.o)
+                        .is_declaration_kind(pred, NamedOWLEntityKind::DataProperty)
+                    {
+                        ok_some! {
+                            DataPropertyAssertion {
+                                dp: pred.clone().into(),
+                                from: sub.into(),
+                                to: self.convert_to_literal(lit)?
+                            }.into()
+                        }
+                    } else {
+                        self.annotation(t.triple())
+                            .map(|ann| Some(AnnotationAssertion { subject: sub.into(), ann }.into()))
                     }
-                    .into(),
-                )),
+                }
+                [Term::Iri(sub), Term::Iri(pred), Term::Iri(obj)] => {
+                    // A `subject predicate object` triple (all IRIs) is an
+                    // ObjectPropertyAssertion, EXCEPT when `predicate` is a *declared*
+                    // annotation property, in which case it is an IRI-valued
+                    // AnnotationAssertion — matching OWLAPI/ROBOT (a declared annotation
+                    // property is never an object property, so the triple annotates
+                    // `subject` rather than asserting an object-property edge). Without
+                    // this guard every annotation like `obo:IAO_0000231 rdf:resource=…`
+                    // (term-replaced-by, has-curation-status, …) is mis-read as a logical
+                    // object-property assertion, polluting the ABox handed to the reasoner.
+                    if <O as AsRef<DeclarationMappedIndex<A, AA>>>::as_ref(&self.o)
+                        .is_declaration_kind(pred, NamedOWLEntityKind::AnnotationProperty)
+                    {
+                        self.annotation(t.triple())
+                            .map(|ann| Some(AnnotationAssertion { subject: sub.into(), ann }.into()))
+                    } else {
+                        Ok(Some(
+                            ObjectPropertyAssertion {
+                                ope: ObjectProperty(pred.clone()).into(),
+                                from: sub.into(),
+                                to: obj.into(),
+                            }
+                            .into(),
+                        ))
+                    }
+                }
                 _ => Ok(None),
             };
 
             match axiom? {
                 Some(axiom) => {
-                    let ann = self.ann_map.remove(t.triple()).unwrap_or_default();
-                    self.merge(AnnotatedComponent {
-                        component: axiom,
-                        ann,
-                    })
+                    let axiom: Component<A> = axiom;
+                    // Distinct reifications of the same base triple are distinct
+                    // annotated axioms; insert each rather than merging.
+                    for ann in self.take_anns(t.triple()) {
+                        self.insert_distinct(AnnotatedComponent {
+                            component: axiom.clone(),
+                            ann,
+                        });
+                    }
                 }
                 _ => self.simple.push(t),
             }
@@ -2161,29 +2333,44 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
         // now identfy the rules using "imp" over the bnodes, we
         // should have everything else in place by then to build the
         // entire rule
-        for (bnode, triple) in std::mem::take(&mut self.bnode) {
-            let rule: Result<_, HornedError> = match triple.as_slice() {
-                [
-                    [_, Term::RDF(VRDF::Type), Term::SWRL(VSWRL::Imp)],
-                    [_, Term::SWRL(VSWRL::Body), Term::BNode(body_bn)],
-                    [_, Term::SWRL(VSWRL::Head), Term::BNode(head_bn)],
-                ] => {
-                    ok_some! {
-                        Rule {
-                            head: self.retrieve_to_atom_seq(head_bn)?,
-                            body: self.retrieve_to_atom_seq(body_bn)?,
-                        }
-                    }
+        for (bnode, triples) in std::mem::take(&mut self.bnode) {
+            // Identify a SWRL rule bnode: `rdf:type swrl:Imp` plus `swrl:body`
+            // and `swrl:head`. An annotated rule (rdfs:comment/label on the Imp
+            // bnode) carries extra triples, so scan for the required parts
+            // position-independently and treat every other triple as an axiom
+            // annotation rather than requiring an exact 3-triple match (which
+            // silently dropped all annotated rules).
+            let mut is_imp = false;
+            let mut body_bn = None;
+            let mut head_bn = None;
+            let mut ann_triples: Vec<[Term<A>; 3]> = Vec::new();
+            for t in triples.as_slice() {
+                match t {
+                    [_, Term::RDF(VRDF::Type), Term::SWRL(VSWRL::Imp)] => is_imp = true,
+                    [_, Term::SWRL(VSWRL::Body), Term::BNode(b)] => body_bn = Some(b.clone()),
+                    [_, Term::SWRL(VSWRL::Head), Term::BNode(h)] => head_bn = Some(h.clone()),
+                    other => ann_triples.push(other.clone()),
                 }
-                _ => Ok(None),
+            }
+
+            let built = match (is_imp, &body_bn, &head_bn) {
+                (true, Some(body_bn), Some(head_bn)) => (|| {
+                    Some(Rule {
+                        head: self.retrieve_to_atom_seq(head_bn)?,
+                        body: self.retrieve_to_atom_seq(body_bn)?,
+                    })
+                })(),
+                _ => None,
             };
 
-            match rule? {
+            match built {
                 Some(rule) => {
-                    self.merge(rule);
+                    let ann = self.parse_annotations(&ann_triples)?;
+                    let cmp: Component<A> = rule.into();
+                    self.insert_distinct(AnnotatedComponent { component: cmp, ann });
                 }
-                _ => {
-                    self.bnode.insert(bnode, triple);
+                None => {
+                    self.bnode.insert(bnode, triples);
                 }
             }
         }
@@ -2196,15 +2383,22 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
         for t in std::mem::take(&mut self.simple) {
             let firi =
                 |s: &mut OntologyParser<_, _, _>, t, iri: &IRI<_>| -> Result<(), HornedError> {
-                    let ann = s.ann_map.remove(t).unwrap_or_default();
-                    s.merge(AnnotatedComponent {
-                        component: AnnotationAssertion {
-                            subject: iri.into(),
-                            ann: s.annotation(t)?,
-                        }
-                        .into(),
-                        ann,
-                    });
+                    let base = s.annotation(t)?;
+                    // Several owl:Axiom blocks may reify the same base triple
+                    // with distinct annotation sets (e.g. NCIT synonyms with
+                    // different source annotations) — each is a separate
+                    // annotated axiom. Insert each directly; merging would union
+                    // their annotation sets and collapse them into one.
+                    for ann in s.take_anns(t) {
+                        s.insert_distinct(AnnotatedComponent {
+                            component: AnnotationAssertion {
+                                subject: iri.into(),
+                                ann: base.clone(),
+                            }
+                            .into(),
+                            ann,
+                        });
+                    }
                     Ok(())
                 };
 
@@ -2235,16 +2429,19 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
         for (k, v) in std::mem::take(&mut self.bnode) {
             let fbnode =
                 |s: &mut OntologyParser<_, _, _>, t, _: &BNode<A>| -> Result<_, HornedError> {
-                    let ann = s.ann_map.remove(t).unwrap_or_default();
                     let ind: AnonymousIndividual<A> = s.b.anon_renumbered();
-                    s.merge(AnnotatedComponent {
-                        component: AnnotationAssertion {
-                            subject: ind.into(),
-                            ann: s.annotation(t)?,
-                        }
-                        .into(),
-                        ann,
-                    });
+                    let base = s.annotation(t)?;
+                    // As above: distinct reifications stay distinct axioms.
+                    for ann in s.take_anns(t) {
+                        s.insert_distinct(AnnotatedComponent {
+                            component: AnnotationAssertion {
+                                subject: ind.clone().into(),
+                                ann: base.clone(),
+                            }
+                            .into(),
+                            ann,
+                        });
+                    }
                     Ok(())
                 };
 
@@ -2274,19 +2471,30 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
     pub fn parse_imports(&mut self) -> Result<Vec<IRI<A>>, HornedError> {
         match self.state {
             OntologyParserState::New => {
+                let timing = std::env::var("OWLMAKE_TIMING").is_ok();
+                macro_rules! step {
+                    ($name:expr, $body:expr) => {{
+                        let t = std::time::Instant::now();
+                        let r = $body;
+                        if timing {
+                            eprintln!("    imports/{} {:.1}s", $name, t.elapsed().as_secs_f64());
+                        }
+                        r
+                    }};
+                }
                 let triple = std::mem::take(&mut self.triple);
-                Self::group_triples(triple, &mut self.simple, &mut self.bnode);
+                step!("group_triples", Self::group_triples(triple, &mut self.simple, &mut self.bnode));
 
                 // sort the triples, so that I can get a dependable order
-                for (_, vec) in self.bnode.iter_mut() {
+                step!("bnode_sort", for (_, vec) in self.bnode.iter_mut() {
                     vec.sort();
-                }
+                });
 
-                self.stitch_seqs();
+                step!("stitch_seqs", self.stitch_seqs());
 
                 // Table 10
-                self.axiom_annotations()?;
-                let v = self.resolve_imports();
+                step!("axiom_annotations", self.axiom_annotations()?);
+                let v = step!("resolve_imports", self.resolve_imports());
                 self.state = OntologyParserState::Imports;
 
                 Ok(v)
@@ -2364,25 +2572,37 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
     /// ontologies do not need to be completely parsed, but will be
     /// relied on to resolve declarations.
     pub fn finish_parse(&mut self, ic: &[&O]) -> Result<(), HornedError> {
+        let timing = std::env::var("OWLMAKE_TIMING").is_ok();
+        macro_rules! phase {
+            ($name:expr, $body:expr) => {{
+                let t = std::time::Instant::now();
+                let r = $body;
+                if timing {
+                    eprintln!(
+                        "  rdf-map: {} {:.1}s (simple={}, bnode={})",
+                        $name,
+                        t.elapsed().as_secs_f64(),
+                        self.simple.len(),
+                        self.bnode.len(),
+                    );
+                }
+                r
+            }};
+        }
         // Table 10
-        self.simple_annotations(false)?;
-
-        self.data_ranges()?;
-
+        phase!("simple_annotations", self.simple_annotations(false)?);
+        phase!("data_ranges", self.data_ranges()?);
         // Table 8:
-        self.object_property_expressions();
-
+        phase!("object_property_expressions", self.object_property_expressions());
         // Table 13: Parsing of Class Expressions
-        self.class_expressions(ic)?;
-
+        phase!("class_expressions", self.class_expressions(ic)?);
         // Table 16: Axioms without annotations
-        self.axioms(ic)?;
-
+        phase!("axioms", self.axioms(ic)?);
         // SWRL rules
-        self.swrl()?;
+        phase!("swrl", self.swrl()?);
 
         if self.config.rdf.lax {
-            self.simple_annotations(true)?;
+            phase!("simple_annotations(lax)", self.simple_annotations(true)?);
         }
         self.state = OntologyParserState::Parse;
         Ok(())
@@ -2390,15 +2610,29 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
 
     /// Parse an Ontology or return an Error if this fails.
     pub fn parse(mut self) -> Result<(O, IncompleteParse<A>), HornedError> {
+        let timing = std::env::var("OWLMAKE_TIMING").is_ok();
         match self.state {
             OntologyParserState::New => {
                 // Ditch the vec that this might return as we don't
                 // need it!
+                let t = std::time::Instant::now();
                 self.parse_imports().and(Ok(()))?;
+                if timing {
+                    eprintln!("  rdf-read: parse_imports {:.1}s", t.elapsed().as_secs_f64());
+                }
                 self.parse()
             }
             OntologyParserState::Imports => {
+                let t = std::time::Instant::now();
                 self.parse_declarations()?;
+                if timing {
+                    eprintln!(
+                        "  rdf-read: parse_declarations {:.1}s (simple={}, bnode={})",
+                        t.elapsed().as_secs_f64(),
+                        self.simple.len(),
+                        self.bnode.len()
+                    );
+                }
                 self.parse()
             }
             OntologyParserState::Declarations => {

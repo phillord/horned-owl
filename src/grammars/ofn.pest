@@ -272,7 +272,7 @@ IrreflexiveObjectProperty       = { LIT_IRREFLEXIVE_OBJECT_PROPERTY ~ LBRACKET ~
 SymmetricObjectProperty         = { LIT_SYMMETRIC_OBJECT_PROPERTY ~ LBRACKET ~ AxiomAnnotations ~ ObjectPropertyExpression ~ RBRACKET }
 AsymmetricObjectProperty        = { LIT_ASYMMETRIC_OBJECT_PROPERTY ~ LBRACKET ~ AxiomAnnotations ~ ObjectPropertyExpression ~ RBRACKET }
 TransitiveObjectProperty        = { LIT_TRANSITIVE_OBJECT_PROPERTY ~ LBRACKET ~ AxiomAnnotations ~ ObjectPropertyExpression ~ RBRACKET }
-InverseObjectProperties         = { LIT_INVERSE_OBJECT_PROPERTIES ~ LBRACKET ~ AxiomAnnotations ~ ObjectProperty{2} ~ RBRACKET }
+InverseObjectProperties         = { LIT_INVERSE_OBJECT_PROPERTIES ~ LBRACKET ~ AxiomAnnotations ~ ObjectPropertyExpression{2} ~ RBRACKET }
 
 DataPropertyAxiom = _{ SubDataPropertyOf | EquivalentDataProperties | DisjointDataProperties | DataPropertyDomain | DataPropertyRange | FunctionalDataProperty }
 

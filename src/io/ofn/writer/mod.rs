@@ -70,9 +70,22 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
         }
     }
 
+    // Imports must be written before axioms in OWL functional syntax (the
+    // parser rejects `Import(...)` once axioms have started).
+    {
+        let mut imports = ont.i().component_for_kind(ComponentKind::Import).collect::<Vec<_>>();
+        imports.sort();
+        for component in imports {
+            writeln!(write, "    {}", component.as_functional_with_prefixes(mapping))?;
+        }
+    }
+
     // Write axioms in order
     for kind in ComponentKind::all_kinds() {
-        if kind != ComponentKind::OntologyID && kind != ComponentKind::DocIRI {
+        if kind != ComponentKind::OntologyID
+            && kind != ComponentKind::DocIRI
+            && kind != ComponentKind::Import
+        {
             let mut components = ont.i().component_for_kind(kind).collect::<Vec<_>>();
             components.sort();
             for component in components {

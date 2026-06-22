@@ -8,8 +8,8 @@ use crate::model::{
 use super::indexed::ForIndex;
 use super::indexed::OntologyIndex;
 
-use std::collections::HashMap;
-use std::collections::HashSet;
+use rustc_hash::FxHashMap as HashMap;
+use rustc_hash::FxHashSet as HashSet;
 use std::marker::PhantomData;
 
 #[derive(Debug)]

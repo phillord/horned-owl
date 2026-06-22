@@ -1,5 +1,13 @@
 //! Rapid, simple, in-memory `Ontology` and `OntologyIndex`
-use std::{collections::HashSet, hash::Hash, iter::FusedIterator, rc::Rc};
+use std::{hash::Hash, iter::FusedIterator, rc::Rc};
+
+// The component set is hashed on the deep, structural hash of every
+// `AnnotatedComponent` -- the dominant cost of loading/round-tripping large
+// ontologies. The default `RandomState` (SipHash) is a cryptographic hash and far
+// too slow for this; `FxHashSet` (the rustc hasher) is ~3-5x faster per byte and
+// the set is sorted before any serialization, so iteration order (and thus output)
+// is unaffected.
+use rustc_hash::FxHashSet as HashSet;
 
 use super::indexed::ForIndex;
 use super::indexed::{OneIndexedOntology, OntologyIndex};
@@ -63,15 +71,49 @@ impl<A: ForIRI> SetOntology<A> {
 
 impl<A: ForIRI> Ontology<A> for SetOntology<A> {}
 
+impl SetIndex<RcStr, crate::model::RcAnnotatedComponent> {
+    /// Convert into a `SetOntology` by MOVING each component out of its `Rc`
+    /// (via `Rc::try_unwrap`) rather than deep-cloning it. Sound only when each
+    /// `Rc` is uniquely held — the caller must have dropped every other index
+    /// that shared these components first. Avoids ~5.5M deep clones on a large
+    /// ontology (half the cost of the naive `From`, the other half being the
+    /// unavoidable re-hash into the destination set).
+    pub fn into_set_ontology_moving(self) -> SetOntology<RcStr> {
+        let dbg = std::env::var("OWLMAKE_TIMING").is_ok();
+        let t0 = std::time::Instant::now();
+        let n = self.0.len();
+        let moved: Vec<AnnotatedComponent<RcStr>> = self
+            .0
+            .into_iter()
+            .map(|rc| Rc::try_unwrap(rc).unwrap_or_else(|rc| (*rc).clone()))
+            .collect();
+        let t1 = std::time::Instant::now();
+        let mut hs: HashSet<AnnotatedComponent<RcStr>> = HashSet::with_capacity_and_hasher(n, Default::default());
+        hs.extend(moved);
+        if dbg {
+            eprintln!(
+                "  set-build: unwrap(move) {:.1}s, hash {:.1}s",
+                (t1 - t0).as_secs_f64(),
+                t1.elapsed().as_secs_f64(),
+            );
+        }
+        SetOntology::from_index(SetIndex(hs, std::marker::PhantomData))
+    }
+}
+
 impl<A: ForIRI, AA: ForIndex<A>> From<SetIndex<A, AA>> for SetOntology<A> {
     fn from(index: SetIndex<A, AA>) -> Self {
-        // Unpack ForIndex'd entities by unwrapping and turn them into
-        // direct references for SetOntology.
-        let mut so = SetOntology::new();
-        for c in index.into_iter() {
-            so.insert(c.unwrap());
+        // Unpack ForIndex'd entities by unwrapping and turn them into direct
+        // references for SetOntology. Pre-size the target HashSet to the source
+        // length: growing from empty triggers ~log2(n) resizes, and hashbrown
+        // recomputes every element's (deep, structural) hash on each resize —
+        // roughly doubling the hashing of a multi-million-component ontology
+        // (the dominant cost of loading large RDF/XML, e.g. ~160s on phenio).
+        let mut hs: HashSet<AnnotatedComponent<A>> = HashSet::with_capacity_and_hasher(index.0.len(), Default::default());
+        for c in index.0.into_iter() {
+            hs.insert(c.unwrap());
         }
-        so
+        SetOntology::from_index(SetIndex(hs, std::marker::PhantomData))
     }
 }
 
