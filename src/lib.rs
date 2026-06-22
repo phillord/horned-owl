@@ -526,13 +526,7 @@ where
     fn triples(&self) -> Vec<&PTriple<A>> {
         self.list_seq
             .iter()
-            .flat_map(|(_, ot, t)| {
-                if let Some(first_t) = ot {
-                    vec![first_t, t]
-                } else {
-                    vec![t]
-                }
-            })
+            .flat_map(|(_, ot, t)| ot.iter().chain(std::iter::once(t)))
             .collect()
     }
 }
