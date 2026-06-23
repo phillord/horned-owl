@@ -358,7 +358,9 @@ where
     fn find_typed(&self) -> Option<&PTriple<A>>;
 
     /// Return all triples
-    fn triples(&self) -> Vec<&PTriple<A>>;
+    fn triples<'a>(&'a self) -> impl Iterator<Item = &'a PTriple<A>> + 'a
+    where
+        A: 'a;
 }
 
 /// A multi-triple contains multiple triples with the same shared subject
@@ -413,8 +415,11 @@ where
         self.vec.iter().find(|et| et.is_type())
     }
 
-    fn triples(&self) -> Vec<&PTriple<A>> {
-        self.vec.iter().collect()
+    fn triples<'a>(&'a self) -> impl Iterator<Item = &'a PTriple<A>> + 'a
+    where
+        A: 'a,
+    {
+        self.vec.iter()
     }
 }
 
@@ -522,11 +527,13 @@ where
         None
     }
 
-    fn triples(&self) -> Vec<&PTriple<A>> {
+    fn triples<'a>(&'a self) -> impl Iterator<Item = &'a PTriple<A>> + 'a
+    where
+        A: 'a,
+    {
         self.list_seq
             .iter()
             .flat_map(|(_, ot, t)| ot.iter().chain(std::iter::once(t)))
-            .collect()
     }
 }
 
@@ -611,11 +618,15 @@ where
         }
     }
 
-    fn triples(&self) -> Vec<&PTriple<A>> {
-        match self {
-            Self::PMultiTriple(mt) => mt.triples(),
-            Self::PTripleSeq(seq) => seq.triples(),
-        }
+    fn triples<'a>(&'a self) -> impl Iterator<Item = &'a PTriple<A>> + 'a
+    where
+        A: 'a,
+    {
+        let boxed: Box<dyn Iterator<Item = &'a PTriple<A>> + 'a> = match self {
+            Self::PMultiTriple(mt) => Box::new(mt.triples()),
+            Self::PTripleSeq(seq) => Box::new(seq.triples()),
+        };
+        boxed
     }
 }
 
@@ -1150,9 +1161,7 @@ where
         // to do long hand
         //if seq.has_literal() {
         let subj = seq.subject().clone();
-        // Turn it into a set of triples
-        let v: Vec<&PTriple<A>> = seq.triples();
-        for i in v {
+        for i in seq.triples() {
             chunk.accept_or_push_back(i.clone())
         }
 
