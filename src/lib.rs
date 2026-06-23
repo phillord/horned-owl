@@ -692,20 +692,20 @@ where
             }
         }
 
-        let mut chk = PChunk {
-            queue: VecDeque::new(),
-            store: HashMap::new(),
-            bnode_object_count,
-        };
+        let mut queue = VecDeque::with_capacity(etv.len() + seq.len());
+        let mut store = HashMap::with_capacity(etv.len() + seq.len());
 
-        for (_k, mt) in etv {
-            chk.push_back(PExpandedTriple::PMultiTriple(mt));
+        for (subj, mt) in etv {
+            queue.push_back((subj.clone(), PExpandedTripleKind::Multi));
+            store.insert(subj, (Some(mt), None));
         }
         for s in seq {
-            chk.push_back(PExpandedTriple::PTripleSeq(s));
+            let subj = s.subject().clone();
+            store.entry(subj.clone()).or_insert((None, None)).1 = Some(s);
+            queue.push_back((subj, PExpandedTripleKind::Seq));
         }
 
-        chk
+        PChunk { queue, store, bnode_object_count }
     }
 
     pub fn empty() -> Self {
