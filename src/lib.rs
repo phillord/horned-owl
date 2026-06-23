@@ -43,3 +43,14 @@ pub mod ontology;
 pub mod resolve;
 pub mod visitor;
 pub mod vocab;
+
+/// `Instant` that also works on wasm (where the std clock would trap), via
+/// `web-time`; plain `std::time` everywhere else. Used for the optional perf
+/// timing in the RDF reader / SetOntology build so those paths don't abort the
+/// wasm module merely by reading the clock.
+pub(crate) mod time {
+    #[cfg(target_arch = "wasm32")]
+    pub use web_time::Instant;
+    #[cfg(not(target_arch = "wasm32"))]
+    pub use std::time::Instant;
+}

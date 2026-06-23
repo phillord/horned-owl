@@ -64,3 +64,8 @@ debug = true
 name = "horned"
 harness = false
 
+
+# web-time: a drop-in `std::time::Instant` that works on wasm (where the std
+# clock traps). Used via the `crate::time` shim (src/lib.rs).
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+web-time = "1"

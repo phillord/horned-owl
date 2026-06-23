@@ -80,14 +80,14 @@ impl SetIndex<RcStr, crate::model::RcAnnotatedComponent> {
     /// unavoidable re-hash into the destination set).
     pub fn into_set_ontology_moving(self) -> SetOntology<RcStr> {
         let dbg = std::env::var("OWLMAKE_TIMING").is_ok();
-        let t0 = std::time::Instant::now();
+        let t0 = crate::time::Instant::now();
         let n = self.0.len();
         let moved: Vec<AnnotatedComponent<RcStr>> = self
             .0
             .into_iter()
             .map(|rc| Rc::try_unwrap(rc).unwrap_or_else(|rc| (*rc).clone()))
             .collect();
-        let t1 = std::time::Instant::now();
+        let t1 = crate::time::Instant::now();
         let mut hs: HashSet<AnnotatedComponent<RcStr>> = HashSet::with_capacity_and_hasher(n, Default::default());
         hs.extend(moved);
         if dbg {

@@ -2474,7 +2474,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                 let timing = std::env::var("OWLMAKE_TIMING").is_ok();
                 macro_rules! step {
                     ($name:expr, $body:expr) => {{
-                        let t = std::time::Instant::now();
+                        let t = crate::time::Instant::now();
                         let r = $body;
                         if timing {
                             eprintln!("    imports/{} {:.1}s", $name, t.elapsed().as_secs_f64());
@@ -2575,7 +2575,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
         let timing = std::env::var("OWLMAKE_TIMING").is_ok();
         macro_rules! phase {
             ($name:expr, $body:expr) => {{
-                let t = std::time::Instant::now();
+                let t = crate::time::Instant::now();
                 let r = $body;
                 if timing {
                     eprintln!(
@@ -2615,7 +2615,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
             OntologyParserState::New => {
                 // Ditch the vec that this might return as we don't
                 // need it!
-                let t = std::time::Instant::now();
+                let t = crate::time::Instant::now();
                 self.parse_imports().and(Ok(()))?;
                 if timing {
                     eprintln!("  rdf-read: parse_imports {:.1}s", t.elapsed().as_secs_f64());
@@ -2623,7 +2623,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                 self.parse()
             }
             OntologyParserState::Imports => {
-                let t = std::time::Instant::now();
+                let t = crate::time::Instant::now();
                 self.parse_declarations()?;
                 if timing {
                     eprintln!(
