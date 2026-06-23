@@ -1126,7 +1126,7 @@ where
         rendered_in_head: &Vec<&PTriple<A>>,
         chunk: &mut PChunk<A>,
     ) -> Result<(), io::Error> {
-        if rendered_in_head.contains(&triple) {
+        if rendered_in_head.iter().any(|r| std::ptr::eq(*r, triple)) {
             return Ok(());
         }
 
