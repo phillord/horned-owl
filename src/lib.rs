@@ -350,7 +350,9 @@ where
     fn subject(&self) -> &PNamedOrBlankNode<A>;
 
     /// Return all triples that have a literal as object
-    fn literal_objects(&self) -> Vec<&PTriple<A>>;
+    fn literal_objects<'a>(&'a self) -> impl Iterator<Item = &'a PTriple<A>> + 'a
+    where
+        A: 'a;
 
     /// Return all types
     fn find_typed(&self) -> Option<&PTriple<A>>;
@@ -398,11 +400,13 @@ where
         &self.vec[0].subject
     }
 
-    fn literal_objects(&self) -> Vec<&PTriple<A>> {
+    fn literal_objects<'a>(&'a self) -> impl Iterator<Item = &'a PTriple<A>> + 'a
+    where
+        A: 'a,
+    {
         self.vec
             .iter()
             .filter(|t| matches!(t.object, PTerm::Literal(_)))
-            .collect()
     }
 
     fn find_typed(&self) -> Option<&PTriple<A>> {
@@ -507,8 +511,11 @@ where
         &self.list_seq[0].0
     }
 
-    fn literal_objects(&self) -> Vec<&PTriple<A>> {
-        vec![]
+    fn literal_objects<'a>(&'a self) -> impl Iterator<Item = &'a PTriple<A>> + 'a
+    where
+        A: 'a,
+    {
+        std::iter::empty()
     }
 
     fn find_typed(&self) -> Option<&PTriple<A>> {
@@ -585,11 +592,16 @@ where
         }
     }
 
-    fn literal_objects(&self) -> Vec<&PTriple<A>> {
+    fn literal_objects<'a>(&'a self) -> impl Iterator<Item = &'a PTriple<A>> + 'a
+    where
+        A: 'a,
+    {
         match self {
-            Self::PMultiTriple(mt) => mt.literal_objects(),
-            Self::PTripleSeq(seq) => seq.literal_objects(),
+            Self::PMultiTriple(mt) => Some(mt.literal_objects()),
+            Self::PTripleSeq(_) => None,
         }
+        .into_iter()
+        .flatten()
     }
 
     fn find_typed(&self) -> Option<&PTriple<A>> {
