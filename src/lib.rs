@@ -10,7 +10,7 @@ use oxrdf::{LiteralRef, NamedOrBlankNodeRef, TermRef, TripleRef};
 
 use std::{
     self,
-    cell::RefCell,
+    cell::Cell,
     fmt,
     hash::{Hash, Hasher},
     io::{self, Write},
@@ -81,18 +81,15 @@ fn map_err(error: quick_xml::Error) -> io::Error {
 #[derive(Ord, PartialOrd, Clone)]
 pub struct PNamedNode<A: AsRef<str>> {
     pub iri: A,
-    // true if we have previously split iri
-    position_cache: RefCell<bool>,
-    // position at which the fragment occurs
-    position_split: RefCell<Option<usize>>,
+    // (computed, split_position): false = not yet computed; true+None = no split; true+Some(n) = split at n
+    split_cache: Cell<(bool, Option<usize>)>,
 }
 
 impl<A: AsRef<str>> PNamedNode<A> {
     pub fn new(iri: A) -> Self {
         PNamedNode {
             iri,
-            position_cache: RefCell::new(false),
-            position_split: RefCell::new(None),
+            split_cache: Cell::new((false, None)),
         }
     }
 }
@@ -102,8 +99,7 @@ impl<A: Debug + AsRef<str>> Debug for PNamedNode<A> {
         match *self {
             PNamedNode {
                 ref iri,
-                position_cache: _,
-                position_split: _,
+                split_cache: _,
             } => {
                 let mut debug_trait_builder = f.debug_struct("PNamedNode");
                 let _ = debug_trait_builder.field("iri", &&(*iri));
@@ -131,24 +127,20 @@ impl<A: AsRef<str>> PNamedNode<A> {
     fn split_iri(&self) -> (&str, &str) {
         let iri = self.iri.as_ref();
 
-        let mut position_cache = self.position_cache.borrow_mut();
-        let mut position_split = self.position_split.borrow_mut();
-        let position_base;
-        let position_add;
+        let (computed, split) = self.split_cache.get();
+        let split = if computed {
+            split
+        } else {
+            let position_base = iri.rfind(|c| !is_name_char(c) || c == ':');
+            let split = position_base.and_then(|pb| {
+                iri[pb..].find(|c| is_name_start_char(c) && c != ':').map(|pa| pb + pa)
+            });
+            self.split_cache.set((true, split));
+            split
+        };
 
-        if !*position_cache {
-            *position_cache = true;
-            position_base = iri.rfind(|c| !is_name_char(c) || c == ':');
-            if let Some(position_base) = position_base {
-                position_add = iri[position_base..].find(|c| is_name_start_char(c) && c != ':');
-                if let Some(position_add) = position_add {
-                    *position_split = Some(position_base + position_add);
-                }
-            }
-        }
-
-        if let Some(position_split) = *position_split {
-            (&iri[..position_split], &iri[position_split..])
+        if let Some(n) = split {
+            (&iri[..n], &iri[n..])
         } else {
             (iri, "")
         }
