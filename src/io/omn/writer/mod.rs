@@ -1302,6 +1302,7 @@ mod tests {
             ann: Annotation {
                 ap,
                 av: crate::model::AnnotationValue::AnonymousIndividual(anon_val),
+                ann: Default::default(),
             },
         });
         let amo = into_amo(o.clone());
