@@ -7,6 +7,7 @@ use quick_xml::{
 };
 
 use oxrdf::{LiteralRef, NamedOrBlankNodeRef, TermRef, TripleRef};
+use rustc_hash::FxHashMap;
 
 use std::{
     self,
@@ -17,7 +18,7 @@ use std::{
 };
 use std::{
     cmp::Ordering,
-    collections::{HashMap, VecDeque},
+    collections::VecDeque,
     fmt::{Debug, Formatter},
 };
 
@@ -640,8 +641,8 @@ enum PExpandedTripleKind {
 #[derive(Debug)]
 pub struct PChunk<A: AsRef<str>> {
     queue: VecDeque<(PNamedOrBlankNode<A>, PExpandedTripleKind)>,
-    store: HashMap<PNamedOrBlankNode<A>, (Option<PMultiTriple<A>>, Option<PTripleSeq<A>>)>,
-    bnode_object_count: HashMap<PBlankNode<A>, usize>,
+    store: FxHashMap<PNamedOrBlankNode<A>, (Option<PMultiTriple<A>>, Option<PTripleSeq<A>>)>,
+    bnode_object_count: FxHashMap<PBlankNode<A>, usize>,
 }
 
 impl<A> PChunk<A>
@@ -652,9 +653,9 @@ where
     pub fn normalize(v: Vec<PTriple<A>>) -> Self {
         let mut etv: IndexMap<PNamedOrBlankNode<A>, PMultiTriple<A>> = Default::default();
         let mut seq: Vec<PTripleSeq<A>> = vec![];
-        let mut seq_rest: HashMap<PNamedOrBlankNode<A>, PTriple<A>> = Default::default();
-        let mut seq_first: HashMap<PNamedOrBlankNode<A>, PTriple<A>> = Default::default();
-        let mut bnode_object_count: HashMap<PBlankNode<A>, usize> = Default::default();
+        let mut seq_rest: FxHashMap<PNamedOrBlankNode<A>, PTriple<A>> = Default::default();
+        let mut seq_first: FxHashMap<PNamedOrBlankNode<A>, PTriple<A>> = Default::default();
+        let mut bnode_object_count: FxHashMap<PBlankNode<A>, usize> = Default::default();
 
         'top: for t in v {
             if let PTerm::BlankNode(ref bn) = &t.object {
@@ -708,7 +709,7 @@ where
         }
 
         let mut queue = VecDeque::with_capacity(etv.len() + seq.len());
-        let mut store = HashMap::with_capacity(etv.len() + seq.len());
+        let mut store = FxHashMap::with_capacity_and_hasher(etv.len() + seq.len(), Default::default());
 
         for (subj, mt) in etv {
             queue.push_back((subj.clone(), PExpandedTripleKind::Multi));
@@ -726,8 +727,8 @@ where
     pub fn empty() -> Self {
         PChunk {
             queue: VecDeque::new(),
-            store: HashMap::new(),
-            bnode_object_count: HashMap::new(),
+            store: FxHashMap::default(),
+            bnode_object_count: FxHashMap::default(),
         }
     }
 
