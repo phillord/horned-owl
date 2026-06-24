@@ -38,7 +38,7 @@ default-members=[".", "horned-bin"]
 indexmap="1.0.2"
 oxiri="0.2.11"
 ##pretty_rdf={path="./pretty_rdf"}
-pretty_rdf="0.11.0"
+pretty_rdf="0.12.0"
 oxrdf="0.3.0"
 oxrdfio="0.2.0"
 
