@@ -819,7 +819,20 @@ pub(crate) fn annotation_to_manchester<A: ForIRI>(
             Manchester(ai, Some(pm), PhantomData::<A>).to_string()
         }
     };
-    format!("{ap_str} {av_str}")
+    // §2.5 `AnnotationEntry = { Annotations? annotationProperty annotationTarget }`:
+    // an annotation may itself be annotated (OWL 2 annotated annotations), rendered
+    // as a leading `Annotations: <nested entries>` before this entry's `ap av`.
+    if ann.ann.is_empty() {
+        format!("{ap_str} {av_str}")
+    } else {
+        let nested = ann
+            .ann
+            .iter()
+            .map(|a| annotation_to_manchester(a, pm))
+            .collect::<Vec<_>>()
+            .join(", ");
+        format!("Annotations: {nested} {ap_str} {av_str}")
+    }
 }
 
 /// Render an IRI string to a String using prefix abbreviation.

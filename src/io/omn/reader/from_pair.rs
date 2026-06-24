@@ -932,16 +932,18 @@ impl<A: ForIRI> FromPair<A> for Annotation<A> {
     fn from_pair_unchecked(pair: Pair<Rule>, ctx: &Context<'_, A>) -> Result<Self> {
         let mut inner = pair.into_inner();
         let mut next = inner.next().unwrap();
-        // The annotation entry may itself be annotated (§2.5 `annotationAnnotatedList`).
-        // horned-owl's model has no nested-annotation slot, so parse-and-drop the nested
-        // `Annotations:` (matching the ofn reader's `_annotations` discard).
-        if next.as_rule() == Rule::Annotations {
-            parse_annotations(next, ctx)?; // validate it parses, then discard
+        // The annotation entry may itself be annotated (§2.5 `annotationAnnotatedList`);
+        // store the nested `Annotations:` in `ann` (OWL 2 annotated annotations).
+        let ann: BTreeSet<Annotation<A>> = if next.as_rule() == Rule::Annotations {
+            let nested = parse_annotations(next, ctx)?.into_iter().collect();
             next = inner.next().unwrap();
-        }
+            nested
+        } else {
+            BTreeSet::new()
+        };
         let ap = AnnotationProperty(IRI::from_pair(next, ctx)?);
         let av = AnnotationValue::from_pair(inner.next().unwrap(), ctx)?;
-        Ok(Annotation { ap, av })
+        Ok(Annotation { ap, av, ann })
     }
 }
 
@@ -2972,6 +2974,7 @@ mod tests {
                 av: AnnotationValue::Literal(Literal::Simple {
                     literal: val.to_string(),
                 }),
+                ann: Default::default(),
             });
             s
         };
@@ -3053,6 +3056,7 @@ mod tests {
             av: AnnotationValue::Literal(Literal::Simple {
                 literal: "an ontology".to_string(),
             }),
+            ann: Default::default(),
         }));
         o.insert(DeclareClass(b.class("http://ex/A")));
         o.insert(AnnotationAssertion {
@@ -3062,6 +3066,7 @@ mod tests {
                 av: AnnotationValue::Literal(Literal::Simple {
                     literal: "the A class".to_string(),
                 }),
+                ann: Default::default(),
             },
         });
         // an IRI-valued entity annotation too
@@ -3070,6 +3075,7 @@ mod tests {
             ann: Annotation {
                 ap: b.annotation_property("http://ex/seeAlso"),
                 av: AnnotationValue::IRI(b.iri("http://ex/B")),
+                ann: Default::default(),
             },
         });
 
@@ -3270,6 +3276,7 @@ mod tests {
             av: AnnotationValue::Literal(Literal::Simple {
                 literal: "capstone ontology".to_string(),
             }),
+            ann: Default::default(),
         }));
 
         // declarations
@@ -3289,6 +3296,7 @@ mod tests {
                 av: AnnotationValue::Literal(Literal::Simple {
                     literal: "Class A".to_string(),
                 }),
+                ann: Default::default(),
             },
         });
 
@@ -3316,6 +3324,7 @@ mod tests {
             av: AnnotationValue::Literal(Literal::Simple {
                 literal: "inferred".to_string(),
             }),
+            ann: Default::default(),
         });
         o.insert(AnnotatedComponent {
             component: Component::SubClassOf(SubClassOf {
@@ -3725,6 +3734,7 @@ mod tests {
             av: AnnotationValue::Literal(Literal::Simple {
                 literal: "x".to_string(),
             }),
+            ann: Default::default(),
         });
         let annotated = AnnotatedComponent {
             component: Component::SubClassOf(SubClassOf {
@@ -3771,6 +3781,7 @@ mod tests {
             av: AnnotationValue::Literal(Literal::Simple {
                 literal: "x".to_string(),
             }),
+            ann: Default::default(),
         });
         let annotated_b = AnnotatedComponent {
             component: Component::SubClassOf(SubClassOf {
@@ -3839,6 +3850,7 @@ mod tests {
                 av: AnnotationValue::Literal(Literal::Simple {
                     literal: val.to_string(),
                 }),
+                ann: Default::default(),
             });
             s
         };
@@ -3940,6 +3952,7 @@ mod tests {
             av: AnnotationValue::Literal(Literal::Simple {
                 literal: "x".into(),
             }),
+            ann: Default::default(),
         });
         o.insert(AnnotatedComponent {
             component: Component::SubClassOf(SubClassOf {
@@ -3968,7 +3981,7 @@ mod tests {
     }
 
     #[test]
-    fn parses_and_drops_nested_annotation() {
+    fn parses_nested_annotation_on_annotation() {
         use crate::io::omn::read_with_build;
         use crate::ontology::set::SetOntology;
         use std::io::BufReader;
@@ -3977,13 +3990,59 @@ mod tests {
         let doc = "Prefix: ex: <http://ex/>\nOntology: <http://ex/o>\nClass: ex:A\n    Annotations: Annotations: ex:meta \"m\" ex:label \"L\"\n";
         let (parsed, _): (SetOntology<_>, PrefixMapping) =
             read_with_build(BufReader::new(doc.as_bytes()), &b).unwrap();
-        // parses without error; the outer ex:label "L" annotation on ex:A is recovered.
-        assert!(
-            parsed
-                .iter()
-                .any(|ac| matches!(&ac.component, Component::AnnotationAssertion(_))),
-            "expected the outer annotation to survive (nested dropped)"
+        // The outer `ex:label "L"` annotation on ex:A is recovered as an AnnotationAssertion,
+        // and its nested `ex:meta "m"` annotation is now preserved (OWL 2 annotated annotations).
+        let outer = parsed
+            .iter()
+            .find_map(|ac| match &ac.component {
+                Component::AnnotationAssertion(aa) => Some(aa.ann.clone()),
+                _ => None,
+            })
+            .expect("expected the outer annotation to survive");
+        assert_eq!(outer.ann.len(), 1, "expected the nested annotation preserved");
+        assert_eq!(
+            outer.ann.iter().next().unwrap().ap,
+            AnnotationProperty(b.iri("http://ex/meta"))
         );
+    }
+
+    #[test]
+    fn nested_annotation_on_annotation_round_trips() {
+        use crate::io::omn::{read_with_build, write};
+        use crate::ontology::component_mapped::ComponentMappedOntology;
+        use crate::ontology::set::SetOntology;
+        use std::io::BufReader;
+        let b = Build::new_rc();
+        let doc = "Prefix: ex: <http://ex/>\nOntology: <http://ex/o>\nClass: ex:A\n    Annotations: Annotations: ex:meta \"m\" ex:label \"L\"\n";
+        let (parsed, pm): (SetOntology<_>, PrefixMapping) =
+            read_with_build(BufReader::new(doc.as_bytes()), &b).unwrap();
+
+        // Write it back out: the nested form must appear as `Annotations: Annotations:`.
+        let amo: ComponentMappedOntology<
+            std::rc::Rc<str>,
+            AnnotatedComponent<std::rc::Rc<str>>,
+        > = parsed.clone().into();
+        let mut out = Vec::<u8>::new();
+        write(&mut out, &amo, Some(&pm)).unwrap();
+        let s = String::from_utf8(out).unwrap();
+        assert!(
+            s.contains("Annotations: Annotations:"),
+            "expected nested `Annotations: Annotations:` in output, got:\n{s}"
+        );
+
+        // And it survives a full re-read (semantic round-trip).
+        let (reparsed, _): (SetOntology<_>, PrefixMapping) =
+            read_with_build(BufReader::new(s.as_bytes()), &b).unwrap();
+        let nested_len = |o: &SetOntology<_>| {
+            o.iter()
+                .find_map(|ac| match &ac.component {
+                    Component::AnnotationAssertion(aa) => Some(aa.ann.ann.len()),
+                    _ => None,
+                })
+                .unwrap_or(0)
+        };
+        assert_eq!(nested_len(&parsed), 1);
+        assert_eq!(nested_len(&reparsed), 1, "nested annotation lost on round-trip");
     }
 
     #[test]
@@ -4125,13 +4184,13 @@ DisjointClasses: ex:r some ex:A, ex:r some ex:B
             )),
             "expected a top-level DisjointClasses over ObjectSomeValuesFrom members"
         );
-        // Nested annotation-on-annotation: the inner is dropped, the OUTER
-        // (ex:label \"L\") survives as an AnnotationAssertion.
+        // Nested annotation-on-annotation: the OUTER (ex:label "L") survives as
+        // an AnnotationAssertion, and its nested annotation is preserved.
         assert!(
             comps
                 .iter()
                 .any(|c| matches!(c, Component::AnnotationAssertion(_))),
-            "expected the outer annotation to survive (nested dropped)"
+            "expected the outer annotation to survive"
         );
     }
 }
