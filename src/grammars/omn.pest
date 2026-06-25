@@ -248,9 +248,29 @@ Frame = {
     | AnnotationPropertyFrame
     | IndividualFrame
     | DatatypeFrame
+    | RuleFrame
 }
 
 FrameSubject = { IRI }
+
+// ---- SWRL rules (§ Manchester DL-rule extension) ----------------------------
+// `Rule: <body atoms> -> <head atoms>` where each side is a comma-separated
+// list of atoms. Atom shapes are positional; the reader disambiguates
+// class/datarange and object/data-property atoms using the declaration pre-pass.
+RuleFrame    = { ^"Rule:" ~ Annotations? ~ SwrlAtomList ~ "->" ~ SwrlAtomList }
+SwrlAtomList = { SwrlAtom ~ ( "," ~ SwrlAtom )* }
+SwrlAtom     = { SwrlSameAs | SwrlDifferentFrom | SwrlNary | SwrlUnary }
+SameAsKw          = ${ ^"SameAs" ~ NameBoundary }
+DifferentFromKw   = ${ ^"DifferentFrom" ~ NameBoundary }
+SwrlSameAs        = { SameAsKw ~ "(" ~ SwrlIObj ~ "," ~ SwrlIObj ~ ")" }
+SwrlDifferentFrom = { DifferentFromKw ~ "(" ~ SwrlIObj ~ "," ~ SwrlIObj ~ ")" }
+// Nary first (requires >=2 args); Unary is the single-argument fallback.
+SwrlNary  = { AtomPred ~ "(" ~ SwrlArg ~ ( "," ~ SwrlArg )+ ~ ")" }
+SwrlUnary = { AtomPred ~ "(" ~ SwrlArg ~ ")" }
+AtomPred  = { Description }
+SwrlArg   = { Variable | Literal | Individual }
+SwrlIObj  = { Variable | Individual }
+Variable  = { "?" ~ IRI }
 
 // ---- top-level misc axioms (§2.5 `misc`) ------------------------------------
 // n-ary equivalence/disjointness/same/different axioms whose members are not all
@@ -280,7 +300,7 @@ Misc = {
 // widening the subject grammar here does NOT affect ObjectProperty / DataProperty
 // / AnnotationProperty / Datatype frames (which keep the IRI-only subject).
 ClassFrameSubject = { Description }
-ClassFrame = { ^"Class:" ~ ClassFrameSubject ~ ClassClause* }
+ClassFrame = { ^"Class:" ~ Annotations? ~ ClassFrameSubject ~ ClassClause* }
 ClassClause = {
       Annotations
     | ^"SubClassOf:"      ~ Annotations? ~ DescriptionList
@@ -290,7 +310,7 @@ ClassClause = {
     | ^"HasKey:"          ~ Annotations? ~ PropertyExprList
 }
 
-ObjectPropertyFrame = { ^"ObjectProperty:" ~ FrameSubject ~ ObjectPropertyClause* }
+ObjectPropertyFrame = { ^"ObjectProperty:" ~ ope ~ ObjectPropertyClause* }
 ObjectPropertyClause = {
       Annotations
     | ^"SubPropertyChain:" ~ Annotations? ~ PropertyChain
