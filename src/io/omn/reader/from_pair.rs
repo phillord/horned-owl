@@ -1057,6 +1057,7 @@ pub(crate) fn insert_frame<A: ForIRI, O: MutableOntology<A>>(
         Rule::AnnotationPropertyFrame => insert_annotation_property_frame(inner, ctx, ont),
         Rule::IndividualFrame => insert_individual_frame(inner, ctx, ont),
         Rule::DatatypeFrame => insert_datatype_frame(inner, ctx, ont),
+        Rule::RuleFrame => insert_rule_frame(inner, ctx, ont),
         rule => unreachable!("unexpected frame rule: {:?}", rule),
     }
 }
@@ -1153,11 +1154,19 @@ fn insert_class_frame<A: ForIRI, O: MutableOntology<A>>(
     ont: &mut O,
 ) -> Result<()> {
     let mut inner = frame.into_inner();
-    // The first child is now `ClassFrameSubject = { Description }` — parse its
-    // inner `Description` as a ClassExpression to support complex subjects.
+    // A leading `Annotations?` (before the subject) annotates the *declaration*
+    // axiom — OWL-API renders an annotated `Declaration(Class(C))` this way.
+    let mut first = inner.next().unwrap();
+    let mut decl_ann: BTreeSet<Annotation<A>> = BTreeSet::new();
+    if first.as_rule() == Rule::Annotations {
+        decl_ann = parse_annotations(first, ctx)?.into_iter().collect();
+        first = inner.next().unwrap();
+    }
+    // The subject is `ClassFrameSubject = { Description }` — parse its inner
+    // `Description` as a ClassExpression to support complex subjects.
     // OWL-API/Protégé/ROBOT emit general class axioms (GCIs) as `Class: <expr>`
     // frames; strict §2.5 requires a classIRI subject, but we accept leniently.
-    let subj_pair = inner.next().unwrap(); // ClassFrameSubject
+    let subj_pair = first; // ClassFrameSubject
     let desc_pair = subj_pair.into_inner().next().unwrap(); // Description
     let subject_ce = ClassExpression::from_pair_unchecked(desc_pair, ctx)?;
     let clauses = inner; // remaining pairs are ClassClause*
@@ -1170,9 +1179,13 @@ fn insert_class_frame<A: ForIRI, O: MutableOntology<A>>(
         None
     };
 
-    // For atomic subjects only: declare the class (existing behaviour).
+    // For atomic subjects only: declare the class (existing behaviour), carrying
+    // any declaration annotations.
     if let Some(ref iri) = atomic_iri {
-        ont.insert(DeclareClass(Class(iri.clone())));
+        ont.insert(AnnotatedComponent {
+            component: Component::DeclareClass(DeclareClass(Class(iri.clone()))),
+            ann: decl_ann,
+        });
     }
 
     for clause in clauses {
@@ -1417,9 +1430,18 @@ fn insert_object_property_frame<A: ForIRI, O: MutableOntology<A>>(
     ctx: &Context<'_, A>,
     ont: &mut O,
 ) -> Result<()> {
-    let (subject, clauses) = frame_subject_and_clauses(frame, ctx)?;
-    let subject_ope = ObjectPropertyExpression::ObjectProperty(ObjectProperty(subject.clone()));
-    ont.insert(DeclareObjectProperty(ObjectProperty(subject.clone())));
+    // The frame subject is an `ope` — a named property or `inverse(...)`.
+    let mut inner = frame.into_inner();
+    let subject_ope = ObjectPropertyExpression::from_pair(inner.next().unwrap(), ctx)?;
+    let clauses = inner;
+    // A single named-property IRI, when the subject is plain (not inverse).
+    let subject: Option<IRI<A>> = match &subject_ope {
+        ObjectPropertyExpression::ObjectProperty(ObjectProperty(iri)) => Some(iri.clone()),
+        _ => None,
+    };
+    if let Some(iri) = &subject {
+        ont.insert(DeclareObjectProperty(ObjectProperty(iri.clone())));
+    }
 
     for clause in clauses {
         let kw = clause_keyword(&clause);
@@ -1433,11 +1455,15 @@ fn insert_object_property_frame<A: ForIRI, O: MutableOntology<A>>(
         let body = first;
         match kw.as_str() {
             "annotations" => {
-                for ann_item in parse_annotations(body, ctx)? {
-                    ont.insert(AnnotationAssertion {
-                        subject: AnnotationSubject::IRI(subject.clone()),
-                        ann: ann_item,
-                    });
+                // Entity annotations require a named subject; inverse-headed
+                // frames have none, so there is nothing to attach them to.
+                if let Some(iri) = &subject {
+                    for ann_item in parse_annotations(body, ctx)? {
+                        ont.insert(AnnotationAssertion {
+                            subject: AnnotationSubject::IRI(iri.clone()),
+                            ann: ann_item,
+                        });
+                    }
                 }
             }
             "subpropertychain" => {
@@ -1496,18 +1522,20 @@ fn insert_object_property_frame<A: ForIRI, O: MutableOntology<A>>(
                 for (item_ann, inv) in list {
                     // InverseObjectProperties takes ObjectProperty, not OPE;
                     // the writer only emits a plain property here.
-                    if let ObjectPropertyExpression::ObjectProperty(p) = inv {
-                        ont.insert(AnnotatedComponent {
-                            component: Component::InverseObjectProperties(InverseObjectProperties(
-                                ObjectProperty(subject.clone()),
-                                p,
-                            )),
-                            ann: item_ann,
-                        });
-                    } else {
-                        return Err(HornedError::invalid(
-                            "InverseOf: expected a named object property",
-                        ));
+                    match (&subject, inv) {
+                        (Some(subj_iri), ObjectPropertyExpression::ObjectProperty(p)) => {
+                            ont.insert(AnnotatedComponent {
+                                component: Component::InverseObjectProperties(
+                                    InverseObjectProperties(ObjectProperty(subj_iri.clone()), p),
+                                ),
+                                ann: item_ann,
+                            });
+                        }
+                        _ => {
+                            return Err(HornedError::invalid(
+                                "InverseOf: expected named object properties on both sides",
+                            ));
+                        }
                     }
                 }
             }
@@ -1596,6 +1624,186 @@ fn insert_object_characteristic<A: ForIRI, O: MutableOntology<A>>(
             )));
         }
     };
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// SWRL rules (`Rule:` frame).
+// ---------------------------------------------------------------------------
+
+/// A parsed SWRL argument before it is coerced to an `IArgument`/`DArgument`
+/// (the coercion depends on the atom kind the argument appears in).
+enum SwrlArgKind<A: ForIRI> {
+    Var(Variable<A>),
+    Lit(Literal<A>),
+    Ind(Individual<A>),
+}
+
+fn swrl_arg_kind<A: ForIRI>(arg: Pair<Rule>, ctx: &Context<'_, A>) -> Result<SwrlArgKind<A>> {
+    let inner = arg.into_inner().next().unwrap();
+    Ok(match inner.as_rule() {
+        // `Variable = { "?" ~ IRI }`
+        Rule::Variable => {
+            SwrlArgKind::Var(Variable(IRI::from_pair(inner.into_inner().next().unwrap(), ctx)?))
+        }
+        Rule::Literal => SwrlArgKind::Lit(Literal::from_pair(inner, ctx)?),
+        Rule::Individual => SwrlArgKind::Ind(Individual::from_pair(inner, ctx)?),
+        rule => unreachable!("unexpected SWRL argument: {:?}", rule),
+    })
+}
+
+fn swrl_iarg<A: ForIRI>(k: &SwrlArgKind<A>) -> Result<IArgument<A>> {
+    match k {
+        SwrlArgKind::Var(v) => Ok(IArgument::Variable(v.clone())),
+        SwrlArgKind::Ind(i) => Ok(IArgument::Individual(i.clone())),
+        SwrlArgKind::Lit(_) => Err(HornedError::invalid(
+            "SWRL: expected an individual or variable argument, found a literal",
+        )),
+    }
+}
+
+fn swrl_darg<A: ForIRI>(k: &SwrlArgKind<A>) -> Result<DArgument<A>> {
+    match k {
+        SwrlArgKind::Var(v) => Ok(DArgument::Variable(v.clone())),
+        SwrlArgKind::Lit(l) => Ok(DArgument::Literal(l.clone())),
+        SwrlArgKind::Ind(_) => Err(HornedError::invalid(
+            "SWRL: expected a data value or variable argument, found an individual",
+        )),
+    }
+}
+
+/// Parse a `SwrlIObj = { Variable | Individual }` into an `IArgument`.
+fn swrl_iobj<A: ForIRI>(pair: Pair<Rule>, ctx: &Context<'_, A>) -> Result<IArgument<A>> {
+    swrl_iarg(&swrl_arg_kind(pair, ctx)?)
+}
+
+/// Parse one `SwrlAtom`. Atom shapes are positional in Manchester syntax, so
+/// class-vs-datarange and object-vs-data-property are disambiguated by argument
+/// arity/type and the declaration pre-pass (`is_datatype` / `is_data_prop`).
+fn parse_swrl_atom<A: ForIRI>(atom: Pair<Rule>, ctx: &Context<'_, A>) -> Result<Atom<A>> {
+    let inner = atom.into_inner().next().unwrap();
+    match inner.as_rule() {
+        Rule::SwrlSameAs | Rule::SwrlDifferentFrom => {
+            let is_same = inner.as_rule() == Rule::SwrlSameAs;
+            let objs: Vec<_> = inner
+                .into_inner()
+                .filter(|p| p.as_rule() == Rule::SwrlIObj)
+                .collect();
+            let i1 = swrl_iobj(objs[0].clone(), ctx)?;
+            let i2 = swrl_iobj(objs[1].clone(), ctx)?;
+            Ok(if is_same {
+                Atom::SameIndividualAtom(i1, i2)
+            } else {
+                Atom::DifferentIndividualsAtom(i1, i2)
+            })
+        }
+        Rule::SwrlUnary | Rule::SwrlNary => {
+            let mut pred_ce = None;
+            let mut arg_pairs = Vec::new();
+            for p in inner.into_inner() {
+                match p.as_rule() {
+                    Rule::AtomPred => {
+                        pred_ce = Some(ClassExpression::from_pair_unchecked(
+                            p.into_inner().next().unwrap(),
+                            ctx,
+                        )?)
+                    }
+                    Rule::SwrlArg => arg_pairs.push(p),
+                    _ => {}
+                }
+            }
+            let pred_ce = pred_ce.unwrap();
+            let pred_iri: Option<IRI<A>> = match &pred_ce {
+                ClassExpression::Class(Class(iri)) => Some(iri.clone()),
+                _ => None,
+            };
+            let kinds: Vec<SwrlArgKind<A>> = arg_pairs
+                .into_iter()
+                .map(|p| swrl_arg_kind(p, ctx))
+                .collect::<Result<_>>()?;
+            let bare = || -> Result<IRI<A>> {
+                pred_iri.clone().ok_or_else(|| {
+                    HornedError::invalid("SWRL: this atom requires a named-IRI predicate")
+                })
+            };
+
+            if kinds.len() == 1 {
+                match &kinds[0] {
+                    // datatype(lit) -> DataRangeAtom
+                    SwrlArgKind::Lit(l) => Ok(Atom::DataRangeAtom {
+                        pred: DataRange::Datatype(Datatype(bare()?)),
+                        arg: DArgument::Literal(l.clone()),
+                    }),
+                    // datatype(?v) when pred was declared a datatype -> DataRangeAtom
+                    SwrlArgKind::Var(v)
+                        if pred_iri.as_ref().is_some_and(|i| ctx.is_datatype(i)) =>
+                    {
+                        Ok(Atom::DataRangeAtom {
+                            pred: DataRange::Datatype(Datatype(bare()?)),
+                            arg: DArgument::Variable(v.clone()),
+                        })
+                    }
+                    // otherwise a ClassAtom over a (possibly complex) class expression
+                    other => Ok(Atom::ClassAtom {
+                        pred: pred_ce,
+                        arg: swrl_iarg(other)?,
+                    }),
+                }
+            } else {
+                let first_is_lit = matches!(kinds[0], SwrlArgKind::Lit(_));
+                let second_is_lit = matches!(kinds[1], SwrlArgKind::Lit(_));
+                if first_is_lit || kinds.len() > 2 {
+                    // n-ary, or data-valued first arg -> built-in atom
+                    Ok(Atom::BuiltInAtom {
+                        pred: bare()?,
+                        args: kinds.iter().map(swrl_darg).collect::<Result<_>>()?,
+                    })
+                } else if second_is_lit || pred_iri.as_ref().is_some_and(|i| ctx.is_data_prop(i)) {
+                    Ok(Atom::DataPropertyAtom {
+                        pred: DataProperty(bare()?),
+                        args: (swrl_darg(&kinds[0])?, swrl_darg(&kinds[1])?),
+                    })
+                } else {
+                    Ok(Atom::ObjectPropertyAtom {
+                        pred: ObjectPropertyExpression::ObjectProperty(ObjectProperty(bare()?)),
+                        args: (swrl_iarg(&kinds[0])?, swrl_iarg(&kinds[1])?),
+                    })
+                }
+            }
+        }
+        rule => unreachable!("unexpected SWRL atom: {:?}", rule),
+    }
+}
+
+fn parse_swrl_atom_list<A: ForIRI>(
+    list: Pair<Rule>,
+    ctx: &Context<'_, A>,
+) -> Result<Vec<Atom<A>>> {
+    list.into_inner()
+        .filter(|p| p.as_rule() == Rule::SwrlAtom)
+        .map(|a| parse_swrl_atom(a, ctx))
+        .collect()
+}
+
+/// `Rule: <body> -> <head>` — note Manchester writes body (antecedent) first.
+fn insert_rule_frame<A: ForIRI, O: MutableOntology<A>>(
+    frame: Pair<Rule>,
+    ctx: &Context<'_, A>,
+    ont: &mut O,
+) -> Result<()> {
+    let mut inner = frame.into_inner();
+    let mut first = inner.next().unwrap();
+    let mut ann: BTreeSet<Annotation<A>> = BTreeSet::new();
+    if first.as_rule() == Rule::Annotations {
+        ann = parse_annotations(first, ctx)?.into_iter().collect();
+        first = inner.next().unwrap();
+    }
+    let body = parse_swrl_atom_list(first, ctx)?;
+    let head = parse_swrl_atom_list(inner.next().unwrap(), ctx)?;
+    ont.insert(AnnotatedComponent {
+        component: Component::Rule(crate::model::Rule { head, body }),
+        ann,
+    });
     Ok(())
 }
 
@@ -3978,6 +4186,104 @@ mod tests {
             "per-item annotated list did not round-trip\n{}",
             String::from_utf8_lossy(&buf)
         );
+    }
+
+    #[test]
+    fn parses_swrl_rule() {
+        use crate::io::omn::read_with_build;
+        use crate::ontology::set::SetOntology;
+        use std::io::BufReader;
+        let b = Build::new_rc();
+        // Body and head are object-property atoms; `o:r(?x, ?y) -> o:s(?x, ?y)`.
+        let doc = "Prefix: o: <http://ex/>\nOntology: <http://ex/o>\nRule: \n    o:r(?<http://ex/x>, ?<http://ex/y>) -> o:s(?<http://ex/x>, ?<http://ex/y>)\n";
+        let (parsed, _): (SetOntology<_>, PrefixMapping) =
+            read_with_build(BufReader::new(doc.as_bytes()), &b).unwrap();
+        let rule = parsed
+            .iter()
+            .find_map(|ac| match &ac.component {
+                Component::Rule(r) => Some(r.clone()),
+                _ => None,
+            })
+            .expect("expected a SWRL Rule component");
+        assert_eq!(rule.body.len(), 1);
+        assert_eq!(rule.head.len(), 1);
+        assert!(matches!(rule.body[0], Atom::ObjectPropertyAtom { .. }));
+        assert!(matches!(rule.head[0], Atom::ObjectPropertyAtom { .. }));
+    }
+
+    #[test]
+    fn parses_swrl_atom_kinds() {
+        // Disambiguation: data-property (literal 2nd arg), built-in (literal
+        // 1st arg), datarange (datatype pred + literal), same-individual.
+        use crate::io::omn::read_with_build;
+        use crate::ontology::set::SetOntology;
+        use std::io::BufReader;
+        let b = Build::new_rc();
+        let doc = concat!(
+            "Prefix: o: <http://ex/>\nPrefix: xsd: <http://www.w3.org/2001/XMLSchema#>\n",
+            "Ontology: <http://ex/o>\n",
+            "Rule: o:d(?<http://ex/x>, \"v\") -> <http://ex/bi>(\"a\", \"b\")\n",
+            "Rule: xsd:integer(\"1\") -> SameAs(o:I, o:J)\n",
+        );
+        let (parsed, _): (SetOntology<_>, PrefixMapping) =
+            read_with_build(BufReader::new(doc.as_bytes()), &b).unwrap();
+        let mut seen = std::collections::BTreeSet::new();
+        for ac in parsed.iter() {
+            if let Component::Rule(r) = &ac.component {
+                for a in r.body.iter().chain(r.head.iter()) {
+                    seen.insert(match a {
+                        Atom::DataPropertyAtom { .. } => "dp",
+                        Atom::BuiltInAtom { .. } => "builtin",
+                        Atom::DataRangeAtom { .. } => "datarange",
+                        Atom::SameIndividualAtom(..) => "same",
+                        _ => "other",
+                    });
+                }
+            }
+        }
+        for kind in ["dp", "builtin", "datarange", "same"] {
+            assert!(seen.contains(kind), "missing atom kind {kind}; got {seen:?}");
+        }
+    }
+
+    #[test]
+    fn parses_inverse_object_property_frame_subject() {
+        use crate::io::omn::read_with_build;
+        use crate::ontology::set::SetOntology;
+        use std::io::BufReader;
+        let b = Build::new_rc();
+        // `ObjectProperty: inverse(o:r) Characteristics: Transitive`
+        let doc = "Prefix: o: <http://ex/>\nOntology: <http://ex/o>\nObjectProperty: o:r\nObjectProperty: inverse (o:r)\n    Characteristics: Transitive\n";
+        let (parsed, _): (SetOntology<_>, PrefixMapping) =
+            read_with_build(BufReader::new(doc.as_bytes()), &b).unwrap();
+        let t = parsed
+            .iter()
+            .find_map(|ac| match &ac.component {
+                Component::TransitiveObjectProperty(t) => Some(t.0.clone()),
+                _ => None,
+            })
+            .expect("expected a TransitiveObjectProperty");
+        assert!(matches!(t, ObjectPropertyExpression::InverseObjectProperty(_)));
+    }
+
+    #[test]
+    fn parses_annotated_class_declaration() {
+        use crate::io::omn::read_with_build;
+        use crate::ontology::set::SetOntology;
+        use std::io::BufReader;
+        let b = Build::new_rc();
+        // Leading `Annotations:` before the subject annotates the Declaration.
+        let doc = "Prefix: o: <http://ex/>\nPrefix: rdfs: <http://www.w3.org/2000/01/rdf-schema#>\nOntology: <http://ex/o>\nClass: \n    Annotations: rdfs:comment \"c\"\n  o:C\n";
+        let (parsed, _): (SetOntology<_>, PrefixMapping) =
+            read_with_build(BufReader::new(doc.as_bytes()), &b).unwrap();
+        let decl_ann = parsed
+            .iter()
+            .find_map(|ac| match &ac.component {
+                Component::DeclareClass(_) => Some(ac.ann.clone()),
+                _ => None,
+            })
+            .expect("expected a DeclareClass");
+        assert_eq!(decl_ann.len(), 1, "expected one declaration annotation");
     }
 
     #[test]

@@ -1038,8 +1038,11 @@ fn construct_matrix_has_no_unexpected_failures() {
                 row.read_ok && row.note.is_empty() && row.roundtrip_ok
             }
             Residual::SwrlRule => {
-                // §2.5 has no Rule: syntax; parse must fail.
-                !row.read_ok
+                // SWRL `Rule:` now parses into a Rule component (body -> head).
+                // The writer still emits rules via the functional
+                // `# General axioms` fallback, so they do not yet round-trip as
+                // native Manchester.
+                row.read_ok && !row.roundtrip_ok
             }
             Residual::BareNameNeedsPrefix => {
                 // Bare local name without default prefix is not lexable.

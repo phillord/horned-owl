@@ -24,8 +24,14 @@
 //!   `SameIndividual:`, `DifferentIndividuals:`) over arbitrary expressions;
 //! - full per-item `annotatedList`s (each comma-list element may carry its own
 //!   leading `Annotations:`);
-//! - nested annotation-on-annotation (parsed; the inner nesting is **dropped** —
-//!   the model has no nested-annotation slot — matching the OFN reader);
+//! - nested annotation-on-annotation (parsed and **preserved** in
+//!   `Annotation::ann`, matching the OFN reader);
+//! - **SWRL `Rule:`** rules (`body -> head`), with class / object-property /
+//!   data-property / data-range / built-in / same- and different-individual
+//!   atoms (atom kinds disambiguated by arity/type and the declaration pre-pass);
+//! - **inverse object-property frame subjects** (`ObjectProperty: inverse(p)`);
+//! - **annotated declarations** (a leading `Annotations:` before a frame subject
+//!   annotates the declaration axiom);
 //! - **anonymous (blank-node) individuals** `_:id` as frame subjects, `Facts:`
 //!   targets, list members, and annotation values;
 //! - bare local names as frame subjects / IRIs.
@@ -34,16 +40,14 @@
 //!
 //! All residuals are either inherent (no §2.5 form exists), a horned-owl model
 //! limit, or a writer follow-up — none is a §2.5 reader gap:
-//! - **SWRL `Rule:`** — Manchester §2.5 has no rule syntax; the `Rule:` keyword
-//!   is OWL-API's non-standard extension. A document containing one cannot be
-//!   parsed past it (this is what blocks `ro` in the corpus). Inherent.
+//! - **SWRL `Rule:` writing** — rules are now *read* into `Rule` components, but
+//!   the writer still emits them via the trailing `# General axioms`
+//!   functional-syntax block rather than native `Rule:` syntax, so they parse
+//!   but do not yet round-trip as Manchester. Writer follow-up.
 //! - **Complex-LHS general class axioms** — a `SubClassOf` whose subject is a
 //!   complex expression has no §2.5 frame form; the writer emits it to the
 //!   trailing `# General axioms` functional-syntax block, which the reader
 //!   **skips with a warning**. Inherent (no §2.5 form).
-//! - **Nested annotations are parsed but dropped.** The horned-owl model has no
-//!   `ann` field on `Annotation`, so annotation-on-annotation cannot be stored;
-//!   both the OFN and OMN readers discard the nesting. Model limit.
 //! - **Writer normalisation (round-trip only):** the reader reads §2.5
 //!   `annotatedList`s correctly — a leading clause-level annotation binds the
 //!   FIRST list item only, and each post-comma `Annotations:` binds the
