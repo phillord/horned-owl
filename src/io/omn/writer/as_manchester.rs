@@ -33,14 +33,20 @@ where
 }
 
 /// Return true iff `local` is a valid Manchester PnLocal-ish name:
-/// non-empty, first char is non-digit name char, every char is alphanumeric
-/// or one of `_`, `-`, `.`, and it does not end with `.`.
+/// non-empty, first char is a letter or `_` (a PN_LOCAL start char — NOT a
+/// digit, `-`, or `.`), every char is alphanumeric or one of `_`, `-`, `.`,
+/// and it does not end with `.`.
 ///
 /// This mirrors the guard used in `write_iri` / `render_iri_to_string` and
-/// must be kept in sync with both sites.
+/// must be kept in sync with both sites. Rejecting a leading `-`/`.` matters:
+/// e.g. a version IRI ending `…/o-viri` shrinks to a bare `-viri`, which the
+/// reader cannot re-parse — emit the full `<iri>` form instead.
 #[inline]
 fn is_valid_manchester_local(local: &str) -> bool {
-    local.chars().next().is_some_and(|c| !c.is_ascii_digit())
+    local
+        .chars()
+        .next()
+        .is_some_and(|c| c.is_ascii_alphabetic() || c == '_')
         && local
             .chars()
             .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '.'))

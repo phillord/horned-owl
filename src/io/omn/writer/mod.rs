@@ -992,6 +992,7 @@ mod tests {
     use crate::model::*;
     use crate::ontology::component_mapped::ComponentMappedOntology;
     use crate::ontology::set::SetOntology;
+    use test_generator::test_resources;
 
     type TestOnt = ComponentMappedOntology<
         std::rc::Rc<str>,
@@ -1000,6 +1001,51 @@ mod tests {
 
     fn into_amo(o: SetOntology<std::rc::Rc<str>>) -> TestOnt {
         o.into()
+    }
+
+    // Conventional read -> write -> read round-trip over a corpus of OWL-API /
+    // Tawny-OWL generated Manchester fixtures (matching the `roundtrip_resource`
+    // tests in the ofn / owx / rdf writers): the re-parsed ontology and prefix
+    // mapping must equal the originals.
+    #[test_resources("src/ont/owl-manchester/*.omn")]
+    fn roundtrip_resource(resource: &str) {
+        let reader = std::fs::File::open(resource)
+            .map(std::io::BufReader::new)
+            .unwrap();
+        let (ont, prefixes): (ComponentMappedOntology<RcStr, AnnotatedComponent<RcStr>>, _) =
+            crate::io::omn::reader::read(reader, Default::default()).unwrap();
+
+        let mut writer = Vec::new();
+        crate::io::omn::write(&mut writer, &ont, Some(&prefixes)).unwrap();
+
+        let (ont2, prefixes2): (ComponentMappedOntology<RcStr, AnnotatedComponent<RcStr>>, _) =
+            crate::io::omn::reader::read(std::io::Cursor::new(&writer), Default::default()).unwrap();
+
+        assert_eq!(prefixes, prefixes2, "prefix mapping differ");
+        assert_eq!(ont, ont2, "ontologies differ");
+    }
+
+    // Constructs that PARSE but do not yet round-trip losslessly: SWRL rules are
+    // emitted via the functional `# General axioms` fallback (no native `Rule:`
+    // output), and inverse-headed property frames, annotated declarations and
+    // anonymous annotation values are not yet re-emitted in native Manchester.
+    // We assert only that the writer's output re-parses without error
+    // (parse-stability), pinning these as writer follow-ups rather than reader
+    // gaps. (Mirrors owx's `roundtrip_nonround_resource`.)
+    #[test_resources("src/ont/owl-manchester/nonround/*.omn")]
+    fn roundtrip_nonround_resource(resource: &str) {
+        let reader = std::fs::File::open(resource)
+            .map(std::io::BufReader::new)
+            .unwrap();
+        let (ont, prefixes): (ComponentMappedOntology<RcStr, AnnotatedComponent<RcStr>>, _) =
+            crate::io::omn::reader::read(reader, Default::default()).unwrap();
+
+        let mut writer = Vec::new();
+        crate::io::omn::write(&mut writer, &ont, Some(&prefixes)).unwrap();
+
+        let _: (ComponentMappedOntology<RcStr, AnnotatedComponent<RcStr>>, _) =
+            crate::io::omn::reader::read(std::io::Cursor::new(&writer), Default::default())
+                .expect("writer output must re-parse without error");
     }
 
     #[test]
