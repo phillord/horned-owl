@@ -6,6 +6,7 @@ use curie::PrefixMapping;
 use crate::error::HornedError;
 use crate::model::Annotation;
 use crate::model::AnnotationSubject;
+use crate::model::Atom;
 use crate::model::Component;
 use crate::model::ComponentKind;
 use crate::model::ForIRI;
@@ -829,8 +830,24 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
                     push_clause!(FrameKind::Datatype, ax.kind.0.as_ref(), clause);
                 }
 
+                // ---- SWRL rules: native `Rule: body -> head` ----
+                Component::Rule(rule) => {
+                    let atoms = |list: &[Atom<A>]| {
+                        list.iter()
+                            .map(|a| a.as_manchester_with_prefixes(pm).to_string())
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    };
+                    misc_axioms.push(format!(
+                        "Rule: {}{} -> {}",
+                        ann_prefix(&ac.ann, pm),
+                        atoms(&rule.body),
+                        atoms(&rule.head),
+                    ));
+                }
+
                 // ---- Misc / fallback ----
-                // SWRL rules, anonymous-subject axioms, etc.
+                // Anonymous-subject axioms, etc. (no native Manchester form yet).
                 _ => {
                     misc.push(ac.component.as_manchester_with_prefixes(pm).to_string());
                 }
