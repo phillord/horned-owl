@@ -41,6 +41,10 @@ struct Frame {
     subject_iri: String,
     /// Rendered clause strings, e.g. `"SubClassOf: <http://t/B>"`.
     clauses: Vec<String>,
+    /// Optional leading `Annotations: … ` prefix (with trailing space) emitted
+    /// before the frame subject when the *declaration* axiom is annotated
+    /// (e.g. `Class: Annotations: rdfs:comment "…" :C`). Empty in the common case.
+    decl_ann: String,
 }
 
 // ---------------------------------------------------------------------------
@@ -100,6 +104,12 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
     // subject) and emitted after all named-entity frames but BEFORE the
     // `# General axioms` block (GeneralAxiomBlock swallows to EOF).
     let mut complex_gci_frames: Vec<String> = Vec::new();
+
+    // Stand-alone frame texts for subjects with no named-IRI key: inverse-headed
+    // object-property frames (`ObjectProperty: inverse(p)`) and anonymous-subject
+    // annotation assertions (`Individual: _:id`). Fully rendered (incl. leading
+    // blank line), emitted as native frames before the `# General axioms` block.
+    let mut extra_frames: Vec<String> = Vec::new();
 
     // -----------------------------------------------------------------------
     // 2. Conformant Ontology: header (IRI + nested Import: + Annotations:)
@@ -195,6 +205,7 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
                 kind: $fkind,
                 subject_iri: $subject_iri.to_string(),
                 clauses: Vec::new(),
+                decl_ann: String::new(),
             });
             frame.clauses.push($clause);
         }};
@@ -208,7 +219,20 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
                 kind: $fkind,
                 subject_iri: $subject_iri.to_string(),
                 clauses: Vec::new(),
+                decl_ann: String::new(),
             });
+        }};
+    }
+
+    // Helper macro: emit a stand-alone `ObjectProperty: <ope>` frame for an
+    // inverse-headed (no named-IRI) subject, carrying a single clause line.
+    macro_rules! ope_frame {
+        ($ope:expr, $clause:expr) => {{
+            extra_frames.push(format!(
+                "\nObjectProperty: {}\n    {}",
+                $ope.as_manchester_with_prefixes(mapping),
+                $clause
+            ));
         }};
     }
 
@@ -265,6 +289,14 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
                 // ---- Declarations ----
                 Component::DeclareClass(ax) => {
                     ensure_frame!(FrameKind::Class, ax.0.0.as_ref());
+                    // An annotated declaration: the leading `Annotations:` before
+                    // the subject is read back as a declaration annotation.
+                    if !ac.ann.is_empty()
+                        && let Some(fr) =
+                            frames.get_mut(&(FrameKind::Class, ax.0.0.as_ref().to_string()))
+                    {
+                        fr.decl_ann = ann_prefix(&ac.ann, pm);
+                    }
                 }
                 Component::DeclareObjectProperty(ax) => {
                     ensure_frame!(FrameKind::ObjectProperty, ax.0.0.as_ref());
@@ -376,15 +408,15 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
                 // ---- Object property axioms ----
                 Component::SubObjectPropertyOf(ax) => match &ax.sub {
                     SubObjectPropertyExpression::ObjectPropertyExpression(ope) => {
+                        let clause = format!(
+                            "SubPropertyOf: {}{}",
+                            ann_prefix(&ac.ann, pm),
+                            ax.sup.as_manchester_with_prefixes(pm)
+                        );
                         if let Some(iri) = ope_iri(ope) {
-                            let clause = format!(
-                                "SubPropertyOf: {}{}",
-                                ann_prefix(&ac.ann, pm),
-                                ax.sup.as_manchester_with_prefixes(pm)
-                            );
                             push_clause!(FrameKind::ObjectProperty, iri, clause);
                         } else {
-                            misc.push(ac.component.as_manchester_with_prefixes(pm).to_string());
+                            ope_frame!(ope, clause);
                         }
                     }
                     SubObjectPropertyExpression::ObjectPropertyChain(chain) => {
@@ -484,107 +516,92 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
                     push_clause!(FrameKind::ObjectProperty, ax.0.0.as_ref(), clause);
                 }
                 Component::ObjectPropertyDomain(ax) => {
+                    let clause = format!(
+                        "Domain: {}{}",
+                        ann_prefix(&ac.ann, pm),
+                        ax.ce.as_manchester_with_prefixes(pm)
+                    );
                     if let Some(iri) = ope_iri(&ax.ope) {
-                        let clause = format!(
-                            "Domain: {}{}",
-                            ann_prefix(&ac.ann, pm),
-                            ax.ce.as_manchester_with_prefixes(pm)
-                        );
                         push_clause!(FrameKind::ObjectProperty, iri, clause);
                     } else {
-                        misc.push(ac.component.as_manchester_with_prefixes(pm).to_string());
+                        ope_frame!(&ax.ope, clause);
                     }
                 }
                 Component::ObjectPropertyRange(ax) => {
+                    let clause = format!(
+                        "Range: {}{}",
+                        ann_prefix(&ac.ann, pm),
+                        ax.ce.as_manchester_with_prefixes(pm)
+                    );
                     if let Some(iri) = ope_iri(&ax.ope) {
-                        let clause = format!(
-                            "Range: {}{}",
-                            ann_prefix(&ac.ann, pm),
-                            ax.ce.as_manchester_with_prefixes(pm)
-                        );
                         push_clause!(FrameKind::ObjectProperty, iri, clause);
                     } else {
-                        misc.push(ac.component.as_manchester_with_prefixes(pm).to_string());
+                        ope_frame!(&ax.ope, clause);
                     }
                 }
                 Component::FunctionalObjectProperty(ax) => {
+                    let clause =
+                        format!("Characteristics: {}Functional", ann_prefix(&ac.ann, pm));
                     if let Some(iri) = ope_iri(&ax.0) {
-                        push_clause!(
-                            FrameKind::ObjectProperty,
-                            iri,
-                            format!("Characteristics: {}Functional", ann_prefix(&ac.ann, pm))
-                        );
+                        push_clause!(FrameKind::ObjectProperty, iri, clause);
                     } else {
-                        misc.push(ac.component.as_manchester_with_prefixes(pm).to_string());
+                        ope_frame!(&ax.0, clause);
                     }
                 }
                 Component::InverseFunctionalObjectProperty(ax) => {
+                    let clause = format!(
+                        "Characteristics: {}InverseFunctional",
+                        ann_prefix(&ac.ann, pm)
+                    );
                     if let Some(iri) = ope_iri(&ax.0) {
-                        push_clause!(
-                            FrameKind::ObjectProperty,
-                            iri,
-                            format!(
-                                "Characteristics: {}InverseFunctional",
-                                ann_prefix(&ac.ann, pm)
-                            )
-                        );
+                        push_clause!(FrameKind::ObjectProperty, iri, clause);
                     } else {
-                        misc.push(ac.component.as_manchester_with_prefixes(pm).to_string());
+                        ope_frame!(&ax.0, clause);
                     }
                 }
                 Component::ReflexiveObjectProperty(ax) => {
+                    let clause =
+                        format!("Characteristics: {}Reflexive", ann_prefix(&ac.ann, pm));
                     if let Some(iri) = ope_iri(&ax.0) {
-                        push_clause!(
-                            FrameKind::ObjectProperty,
-                            iri,
-                            format!("Characteristics: {}Reflexive", ann_prefix(&ac.ann, pm))
-                        );
+                        push_clause!(FrameKind::ObjectProperty, iri, clause);
                     } else {
-                        misc.push(ac.component.as_manchester_with_prefixes(pm).to_string());
+                        ope_frame!(&ax.0, clause);
                     }
                 }
                 Component::IrreflexiveObjectProperty(ax) => {
+                    let clause =
+                        format!("Characteristics: {}Irreflexive", ann_prefix(&ac.ann, pm));
                     if let Some(iri) = ope_iri(&ax.0) {
-                        push_clause!(
-                            FrameKind::ObjectProperty,
-                            iri,
-                            format!("Characteristics: {}Irreflexive", ann_prefix(&ac.ann, pm))
-                        );
+                        push_clause!(FrameKind::ObjectProperty, iri, clause);
                     } else {
-                        misc.push(ac.component.as_manchester_with_prefixes(pm).to_string());
+                        ope_frame!(&ax.0, clause);
                     }
                 }
                 Component::SymmetricObjectProperty(ax) => {
+                    let clause =
+                        format!("Characteristics: {}Symmetric", ann_prefix(&ac.ann, pm));
                     if let Some(iri) = ope_iri(&ax.0) {
-                        push_clause!(
-                            FrameKind::ObjectProperty,
-                            iri,
-                            format!("Characteristics: {}Symmetric", ann_prefix(&ac.ann, pm))
-                        );
+                        push_clause!(FrameKind::ObjectProperty, iri, clause);
                     } else {
-                        misc.push(ac.component.as_manchester_with_prefixes(pm).to_string());
+                        ope_frame!(&ax.0, clause);
                     }
                 }
                 Component::AsymmetricObjectProperty(ax) => {
+                    let clause =
+                        format!("Characteristics: {}Asymmetric", ann_prefix(&ac.ann, pm));
                     if let Some(iri) = ope_iri(&ax.0) {
-                        push_clause!(
-                            FrameKind::ObjectProperty,
-                            iri,
-                            format!("Characteristics: {}Asymmetric", ann_prefix(&ac.ann, pm))
-                        );
+                        push_clause!(FrameKind::ObjectProperty, iri, clause);
                     } else {
-                        misc.push(ac.component.as_manchester_with_prefixes(pm).to_string());
+                        ope_frame!(&ax.0, clause);
                     }
                 }
                 Component::TransitiveObjectProperty(ax) => {
+                    let clause =
+                        format!("Characteristics: {}Transitive", ann_prefix(&ac.ann, pm));
                     if let Some(iri) = ope_iri(&ax.0) {
-                        push_clause!(
-                            FrameKind::ObjectProperty,
-                            iri,
-                            format!("Characteristics: {}Transitive", ann_prefix(&ac.ann, pm))
-                        );
+                        push_clause!(FrameKind::ObjectProperty, iri, clause);
                     } else {
-                        misc.push(ac.component.as_manchester_with_prefixes(pm).to_string());
+                        ope_frame!(&ax.0, clause);
                     }
                 }
 
@@ -888,14 +905,15 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
                             .to_string(),
                     );
                 }
-            } else {
-                // AnonymousIndividual subject → misc (anon-subject emission is a
-                // documented follow-up; the reader accepts anon subjects).
-                misc.push(
-                    ac.component
-                        .as_manchester_with_prefixes(mapping)
-                        .to_string(),
-                );
+            } else if let AnnotationSubject::AnonymousIndividual(anon) = &aa.subject {
+                // Anonymous subject → a stand-alone `Individual: _:id` frame whose
+                // `Annotations:` clause the reader maps back to an anon-subject
+                // AnnotationAssertion.
+                extra_frames.push(format!(
+                    "\nIndividual: {}\n    Annotations: {}",
+                    anon.as_manchester_with_prefixes(mapping),
+                    as_manchester::annotation_to_manchester(&aa.ann, mapping)
+                ));
             }
         }
     }
@@ -935,7 +953,12 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
         };
 
         writeln!(write)?;
-        writeln!(write, "{}: {subject_display}", frame_keyword(&frame.kind))?;
+        writeln!(
+            write,
+            "{}: {}{subject_display}",
+            frame_keyword(&frame.kind),
+            frame.decl_ann
+        )?;
         // Emit standalone entity `Annotations:` clauses FIRST, before the logical
         // clauses — matching OWL-API's canonical frame layout. OWL-API's Manchester
         // parser desyncs when a logical clause whose value ends in an ObjectOneOf
@@ -963,6 +986,12 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
     //     for the same reason.
     // -----------------------------------------------------------------------
     for block in &complex_gci_frames {
+        writeln!(write, "{block}")?;
+    }
+
+    // Stand-alone inverse-headed ObjectProperty frames and anonymous-subject
+    // Individual frames (native Manchester, before the `# General axioms` block).
+    for block in &extra_frames {
         writeln!(write, "{block}")?;
     }
 
@@ -1023,7 +1052,10 @@ mod tests {
     // Conventional read -> write -> read round-trip over a corpus of OWL-API /
     // Tawny-OWL generated Manchester fixtures (matching the `roundtrip_resource`
     // tests in the ofn / owx / rdf writers): the re-parsed ontology and prefix
-    // mapping must equal the originals.
+    // mapping must equal the originals. The whole corpus round-trips natively —
+    // SWRL rules, inverse-headed property frames, annotated declarations and
+    // anonymous-subject annotation assertions included — so there is no
+    // `nonround` bucket.
     #[test_resources("src/ont/owl-manchester/*.omn")]
     fn roundtrip_resource(resource: &str) {
         let reader = std::fs::File::open(resource)
@@ -1040,29 +1072,6 @@ mod tests {
 
         assert_eq!(prefixes, prefixes2, "prefix mapping differ");
         assert_eq!(ont, ont2, "ontologies differ");
-    }
-
-    // Constructs that PARSE but do not yet round-trip losslessly: SWRL rules are
-    // emitted via the functional `# General axioms` fallback (no native `Rule:`
-    // output), and inverse-headed property frames, annotated declarations and
-    // anonymous annotation values are not yet re-emitted in native Manchester.
-    // We assert only that the writer's output re-parses without error
-    // (parse-stability), pinning these as writer follow-ups rather than reader
-    // gaps. (Mirrors owx's `roundtrip_nonround_resource`.)
-    #[test_resources("src/ont/owl-manchester/nonround/*.omn")]
-    fn roundtrip_nonround_resource(resource: &str) {
-        let reader = std::fs::File::open(resource)
-            .map(std::io::BufReader::new)
-            .unwrap();
-        let (ont, prefixes): (ComponentMappedOntology<RcStr, AnnotatedComponent<RcStr>>, _) =
-            crate::io::omn::reader::read(reader, Default::default()).unwrap();
-
-        let mut writer = Vec::new();
-        crate::io::omn::write(&mut writer, &ont, Some(&prefixes)).unwrap();
-
-        let _: (ComponentMappedOntology<RcStr, AnnotatedComponent<RcStr>>, _) =
-            crate::io::omn::reader::read(std::io::Cursor::new(&writer), Default::default())
-                .expect("writer output must re-parse without error");
     }
 
     #[test]
