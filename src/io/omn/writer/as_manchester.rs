@@ -532,13 +532,88 @@ impl<A: ForIRI> AsManchester<A> for ClassExpression<A> {}
 // ---------------------------------------------------------------------------
 // Component — per-axiom Manchester rendering
 //
-// The ~20 common logical axioms get bespoke Manchester clauses; the rest
-// (structural/meta/annotation/SWRL) fall back to OWL FUNCTIONAL syntax via
+// The ~20 common logical axioms get bespoke Manchester clauses (SWRL rules are
+// emitted natively by the `write()` driver as `Rule:` lines); the rest
+// (structural/meta/annotation) fall back to OWL FUNCTIONAL syntax via
 // `AsFunctional`.  That fallback is NOT valid Manchester — it is a readable,
 // lossless stopgap for variants with no implemented Manchester form (Import,
-// HasKey, OntologyAnnotation, annotation axioms, SWRL Rule, …).  Native
-// Manchester for the common ones (Import:, header Annotations:) is a
-// pre-upstream-PR follow-up.
+// HasKey, OntologyAnnotation, annotation axioms, …).  Native Manchester for the
+// common ones (Import:, header Annotations:) is a pre-upstream-PR follow-up.
+
+// ---------------------------------------------------------------------------
+// SWRL atoms and arguments (for native `Rule:` output).
+// ---------------------------------------------------------------------------
+
+impl<A: ForIRI> Display for Manchester<'_, Variable<A>, A> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
+        write!(f, "?{}", Manchester(&self.0.0, self.1, PhantomData::<A>))
+    }
+}
+impl<A: ForIRI> AsManchester<A> for Variable<A> {}
+
+impl<A: ForIRI> Display for Manchester<'_, IArgument<A>, A> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
+        match self.0 {
+            IArgument::Variable(v) => write!(f, "{}", Manchester(v, self.1, PhantomData::<A>)),
+            IArgument::Individual(i) => write!(f, "{}", Manchester(i, self.1, PhantomData::<A>)),
+        }
+    }
+}
+impl<A: ForIRI> AsManchester<A> for IArgument<A> {}
+
+impl<A: ForIRI> Display for Manchester<'_, DArgument<A>, A> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
+        match self.0 {
+            DArgument::Variable(v) => write!(f, "{}", Manchester(v, self.1, PhantomData::<A>)),
+            DArgument::Literal(l) => write!(f, "{}", Manchester(l, self.1, PhantomData::<A>)),
+        }
+    }
+}
+impl<A: ForIRI> AsManchester<A> for DArgument<A> {}
+
+impl<A: ForIRI> Display for Manchester<'_, Atom<A>, A> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
+        let pm = self.1;
+        macro_rules! m {
+            ($e:expr) => {
+                Manchester($e, pm, PhantomData::<A>)
+            };
+        }
+        match self.0 {
+            // A compound class expression must be parenthesised so the trailing
+            // `(arg)` is not mis-bound — e.g. `(o:A and o:B)(?x)`.
+            Atom::ClassAtom { pred, arg } => {
+                if matches!(pred, ClassExpression::Class(_)) {
+                    write!(f, "{}({})", m!(pred), m!(arg))
+                } else {
+                    write!(f, "({})({})", m!(pred), m!(arg))
+                }
+            }
+            Atom::DataRangeAtom { pred, arg } => write!(f, "{}({})", m!(pred), m!(arg)),
+            Atom::ObjectPropertyAtom { pred, args } => {
+                write!(f, "{}({}, {})", m!(pred), m!(&args.0), m!(&args.1))
+            }
+            Atom::DataPropertyAtom { pred, args } => {
+                write!(f, "{}({}, {})", m!(pred), m!(&args.0), m!(&args.1))
+            }
+            Atom::BuiltInAtom { pred, args } => {
+                write!(f, "{}(", m!(pred))?;
+                for (i, a) in args.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{}", m!(a))?;
+                }
+                write!(f, ")")
+            }
+            Atom::SameIndividualAtom(a, b) => write!(f, "SameAs({}, {})", m!(a), m!(b)),
+            Atom::DifferentIndividualsAtom(a, b) => {
+                write!(f, "DifferentFrom({}, {})", m!(a), m!(b))
+            }
+        }
+    }
+}
+impl<A: ForIRI> AsManchester<A> for Atom<A> {}
 
 impl<A: ForIRI> Display for Manchester<'_, Component<A>, A> {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {

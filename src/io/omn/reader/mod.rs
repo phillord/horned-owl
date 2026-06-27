@@ -40,10 +40,11 @@
 //!
 //! All residuals are either inherent (no §2.5 form exists), a horned-owl model
 //! limit, or a writer follow-up — none is a §2.5 reader gap:
-//! - **SWRL `Rule:` writing** — rules are now *read* into `Rule` components, but
-//!   the writer still emits them via the trailing `# General axioms`
-//!   functional-syntax block rather than native `Rule:` syntax, so they parse
-//!   but do not yet round-trip as Manchester. Writer follow-up.
+//! - **Inverse-headed property frames & annotated declarations (writing)** —
+//!   `ObjectProperty: inverse(p)` frames and a declaration's own annotations are
+//!   *read*, but the writer does not yet re-emit them in native Manchester, so
+//!   they parse but do not round-trip. Writer follow-up. (SWRL `Rule:` is now
+//!   fully read *and* written natively.)
 //! - **Complex-LHS general class axioms** — a `SubClassOf` whose subject is a
 //!   complex expression has no §2.5 frame form; the writer emits it to the
 //!   trailing `# General axioms` functional-syntax block, which the reader
