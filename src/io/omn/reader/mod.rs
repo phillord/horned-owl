@@ -38,13 +38,11 @@
 //!
 //! ## Residual constructs the reader cannot represent
 //!
-//! All residuals are either inherent (no §2.5 form exists), a horned-owl model
-//! limit, or a writer follow-up — none is a §2.5 reader gap:
-//! - **Inverse-headed property frames & annotated declarations (writing)** —
-//!   `ObjectProperty: inverse(p)` frames and a declaration's own annotations are
-//!   *read*, but the writer does not yet re-emit them in native Manchester, so
-//!   they parse but do not round-trip. Writer follow-up. (SWRL `Rule:` is now
-//!   fully read *and* written natively.)
+//! All residuals are either inherent (no §2.5 form exists) or a horned-owl model
+//! limit — none is a §2.5 reader gap. SWRL `Rule:`, inverse-headed property
+//! frames (`ObjectProperty: inverse(p)`), annotated declarations, and
+//! anonymous-subject annotation assertions (`Individual: _:id`) are all fully
+//! read *and* written natively, so they round-trip.
 //! - **Complex-LHS general class axioms** — a `SubClassOf` whose subject is a
 //!   complex expression has no §2.5 frame form; the writer emits it to the
 //!   trailing `# General axioms` functional-syntax block, which the reader
@@ -55,9 +53,7 @@
 //!   following item only. The *writer*, however, emits one clause per axiom, so
 //!   a multi-item annotated list is re-serialised as separate single-item
 //!   clauses. This is lossless (every axiom + its own annotations is preserved),
-//!   just structurally normalised. Anonymous-subject assertions are likewise
-//!   still emitted to the misc block by the writer (the reader accepts them when
-//!   present).
+//!   just structurally normalised.
 //! - Frame headers conflate declaration and reference: every frame yields a
 //!   `Declare*` axiom, so an entity used without an explicit declaration gains
 //!   one on round-trip. Declarations are non-logical (entailment-neutral).
