@@ -36,7 +36,12 @@ members=["horned-bin"]
 default-members=[".", "horned-bin"]
 
 [workspace.dependencies]
-indexmap="1.0.2"
+# `features = ["std"]` is required for tier-3 wasm targets (e.g. wasm64-unknown-
+# unknown): indexmap 1.x has no default features and only exposes the RandomState
+# default + `IndexMap::new()` when its build script sees `CARGO_FEATURE_STD`;
+# otherwise it falls back to an autocfg sysroot probe that fails where there is no
+# prebuilt std, compiling no-std. Harmless elsewhere (std is on there anyway).
+indexmap = { version = "1.0.2", features = ["std"] }
 oxiri="0.2.11"
 ##pretty_rdf={path="./pretty_rdf"}
 pretty_rdf="0.11.0"
