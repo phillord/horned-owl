@@ -2209,6 +2209,7 @@ mod tests {
     use super::*;
     use crate::io::omn::reader::lexer::ManchesterLexer;
     use crate::model::{Build, RcStr};
+    use test_generator::test_resources;
 
     #[test]
     fn parses_iri_full_and_prefixed() {
@@ -4497,6 +4498,150 @@ DisjointClasses: ex:r some ex:A, ex:r some ex:B
                 .iter()
                 .any(|c| matches!(c, Component::AnnotationAssertion(_))),
             "expected the outer annotation to survive"
+        );
+    }
+
+    /// Fixtures whose OMN (Tawny-OWL) and OWX (OWL-API) serialisations encode
+    /// genuinely *different* ontologies, so `compare_to_owx` cannot equate them.
+    /// Each exclusion is a corpus/oracle artefact, NOT an OMN reader defect —
+    /// established by reading the two source files directly:
+    ///
+    /// * `equivalent_classes`, `complex-equivalent-classes`,
+    ///   `annotation-on-equivalent-classes` — the OWL-API splits one n-ary
+    ///   `EquivalentClasses(A,B,C,…)` into repeated pairwise axioms
+    ///   `EquivalentClasses(A,B)`, `EquivalentClasses(A,C)`, … (the per-class-frame
+    ///   split @b-gehrke noted). Logically equivalent to the OMN n-ary form, but
+    ///   not structurally equal.
+    /// * `annotation-with-annotation`, `annotation-with-non-builtin-annotation` —
+    ///   here the OMN reader is the *more* faithful one: it preserves the
+    ///   annotation-on-an-annotation, whereas horned-owl's OWX reader drops the
+    ///   nested annotation, so the oracle is weaker than the subject.
+    /// * `annotation_assertion` — the two sources name different subjects
+    ///   (`<http://www.example.com/i>` in the OWX vs `o:i` =
+    ///   `http://www.example.com/iri#i` in the OMN).
+    /// * `gci_and_other_class_relations` — the OWX carries `EquivalentClasses`
+    ///   and `DisjointClasses` GCIs over complex expressions that the Tawny OMN
+    ///   serialisation simply omits (it emits only the `SubClassOf` GCI).
+    const COMPARE_EXCLUSIONS: &[&str] = &[
+        "equivalent_classes",
+        "complex-equivalent-classes",
+        "annotation-on-equivalent-classes",
+        "annotation-with-annotation",
+        "annotation-with-non-builtin-annotation",
+        "annotation_assertion",
+        "gci_and_other_class_relations",
+    ];
+
+    /// Cross-format conformance: `compare(read(OWX), read(OMN))`.
+    ///
+    /// For every `owl-manchester/*.omn` fixture with a same-stem `owl-xml/*.owx`
+    /// twin (the OWL-API test corpus serialised both ways), read each through its
+    /// own reader and assert the ontologies are equal. This catches *systematic*
+    /// errors in the OMN reader/parser that a read→write→read round-trip cannot:
+    /// a round-trip only proves the OMN reader and writer agree with each other,
+    /// whereas this pins the OMN reader against the independent OWX oracle.
+    /// Mirrors the RDF reader's `compare_to_xml`.
+    ///
+    /// Two readings are compared modulo the differences between the Tawny-OWL and
+    /// OWL-API serialisation conventions that are not parser behaviour:
+    ///
+    /// * **Declarations** — Tawny emits explicit `Declaration`s for every entity
+    ///   (built-ins like `rdfs:label` / `rdf:langString` included) where the
+    ///   OWL-API omits them, so declarations are dropped before comparing. (OMN
+    ///   declaration fidelity is covered by `roundtrip_resource`.)
+    /// * **n-ary operand order** — operands of unordered axioms
+    ///   (`EquivalentClasses`, `SameIndividual`, SWRL rule atoms, …) are sorted,
+    ///   since the two writers emit them in different orders.
+    ///
+    /// 122 of the 127 OMN fixtures have an OWX twin (the 5 OMN-only fixtures are
+    /// skipped). A further [`COMPARE_EXCLUSIONS`] set covers fixtures whose two
+    /// serialisations encode genuinely different ontologies; see that constant.
+    #[test_resources("src/ont/owl-manchester/*.omn")]
+    fn compare_to_owx(resource: &str) {
+        use crate::model::{ComponentKind, Kinded};
+        use crate::normalize::normalize;
+        use crate::ontology::set::SetOntology;
+        use std::path::Path;
+
+        let stem = Path::new(resource)
+            .file_stem()
+            .unwrap()
+            .to_string_lossy()
+            .into_owned();
+        let owx_path = format!("src/ont/owl-xml/{stem}.owx");
+        if !Path::new(&owx_path).exists() {
+            // OMN-only fixture: no independent XML oracle to compare against.
+            return;
+        }
+        if COMPARE_EXCLUSIONS.contains(&stem.as_str()) {
+            // Sources encode different ontologies (see COMPARE_EXCLUSIONS).
+            return;
+        }
+
+        // Canonicalise to the logical/annotation content shared by both
+        // serialisation conventions: normalise (sort + reanonymise + drop
+        // DocIRI), drop declarations, and sort unordered n-ary operands.
+        let canon = |o: SetOntology<RcStr>| -> std::collections::BTreeSet<AnnotatedComponent<RcStr>> {
+            let mut v: Vec<AnnotatedComponent<RcStr>> = normalize(o.into_iter().collect())
+                .into_iter()
+                .filter(|c| {
+                    !matches!(
+                        c.kind(),
+                        ComponentKind::DeclareClass
+                            | ComponentKind::DeclareObjectProperty
+                            | ComponentKind::DeclareDataProperty
+                            | ComponentKind::DeclareAnnotationProperty
+                            | ComponentKind::DeclareNamedIndividual
+                            | ComponentKind::DeclareDatatype
+                    )
+                })
+                .collect();
+            for ac in v.iter_mut() {
+                match &mut ac.component {
+                    Component::EquivalentClasses(EquivalentClasses(x)) => x.sort(),
+                    Component::DisjointClasses(DisjointClasses(x)) => x.sort(),
+                    Component::EquivalentObjectProperties(EquivalentObjectProperties(x)) => {
+                        x.sort()
+                    }
+                    Component::DisjointObjectProperties(DisjointObjectProperties(x)) => x.sort(),
+                    Component::EquivalentDataProperties(EquivalentDataProperties(x)) => x.sort(),
+                    Component::DisjointDataProperties(DisjointDataProperties(x)) => x.sort(),
+                    Component::SameIndividual(SameIndividual(x)) => x.sort(),
+                    Component::DifferentIndividuals(DifferentIndividuals(x)) => x.sort(),
+                    Component::Rule(r) => {
+                        r.head.sort();
+                        r.body.sort();
+                    }
+                    Component::InverseObjectProperties(InverseObjectProperties(a, b)) => {
+                        if a > b {
+                            std::mem::swap(a, b);
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            v.into_iter().collect()
+        };
+
+        // Read the Manchester form through the OMN reader (the subject).
+        let omn_reader = std::fs::File::open(resource)
+            .map(std::io::BufReader::new)
+            .unwrap();
+        let (omn_ont, _): (SetOntology<RcStr>, _) =
+            crate::io::omn::reader::read(omn_reader, Default::default())
+                .unwrap_or_else(|e| panic!("OMN read failed for {resource}: {e:?}"));
+
+        // Read the OWL/XML form through the OWX reader (the oracle).
+        let owx_src = std::fs::read_to_string(&owx_path).unwrap();
+        let owx_ont: SetOntology<RcStr> =
+            crate::io::owx::reader::test::read_ok(&mut owx_src.as_bytes())
+                .0
+                .into();
+
+        assert_eq!(
+            canon(owx_ont),
+            canon(omn_ont),
+            "OMN reader output diverges from the OWX oracle for `{stem}`"
         );
     }
 }
