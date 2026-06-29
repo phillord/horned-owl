@@ -44,13 +44,55 @@ pub mod resolve;
 pub mod visitor;
 pub mod vocab;
 
-/// `Instant` that also works on wasm (where the std clock would trap), via
-/// `web-time`; plain `std::time` everywhere else. Used for the optional perf
-/// timing in the RDF reader / SetOntology build so those paths don't abort the
-/// wasm module merely by reading the clock.
+/// `Instant` that also works on wasm (where the std clock would trap). Used for
+/// the optional perf timing in the RDF reader / SetOntology build so those paths
+/// don't abort the wasm module merely by reading the clock. Three backends:
+///   - wasm32 (browser via JS, or wasip1 via WASI): `web-time`;
+///   - wasm64-unknown-unknown (wasmtime reactor: no WASI/JS, std clock traps): a
+///     clock imported from the metering host (`host.now_nanos`);
+///   - everything else (native): `std::time`.
 pub(crate) mod time {
+    #[cfg(target_arch = "wasm64")]
+    pub use self::host_clock::Instant;
     #[cfg(target_arch = "wasm32")]
     pub use web_time::Instant;
-    #[cfg(not(target_arch = "wasm32"))]
+    #[cfg(not(target_family = "wasm"))]
     pub use std::time::Instant;
+
+    /// A monotonic `Instant` for the wasm64 reactor, read from a host import
+    /// (`host.now_nanos() -> i64`, monotonic nanoseconds). The wasmtime host
+    /// supplies it; see semantic-mcp `engine.rs` (`make_linker`).
+    #[cfg(target_arch = "wasm64")]
+    mod host_clock {
+        pub use std::time::Duration;
+
+        #[link(wasm_import_module = "host")]
+        unsafe extern "C" {
+            fn now_nanos() -> i64;
+        }
+
+        #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+        pub struct Instant(i64);
+
+        impl Instant {
+            pub fn now() -> Self {
+                Instant(unsafe { now_nanos() })
+            }
+            pub fn elapsed(&self) -> Duration {
+                let now = unsafe { now_nanos() };
+                Duration::from_nanos(now.saturating_sub(self.0).max(0) as u64)
+            }
+            pub fn duration_since(&self, earlier: Instant) -> Duration {
+                Duration::from_nanos(self.0.saturating_sub(earlier.0).max(0) as u64)
+            }
+        }
+
+        // Match `std::time::Instant`: `later - earlier` yields the elapsed `Duration`.
+        impl std::ops::Sub for Instant {
+            type Output = Duration;
+            fn sub(self, earlier: Instant) -> Duration {
+                self.duration_since(earlier)
+            }
+        }
+    }
 }
