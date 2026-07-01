@@ -1779,7 +1779,8 @@ mod test {
 
     use oxrdfio::RdfSerializer;
     use pretty_rdf::ox::WriterQuadSerializerAdaptor;
-    use test_generator::test_resources;
+    use rstest::rstest;
+    use std::path::PathBuf;
     // use std::collections::HashMap;
 
     // use std::fs::File;
@@ -1862,10 +1863,15 @@ mod test {
         (ont_orig, ont_round)
     }
 
-    #[test_resources("src/ont/owl-rdf/*owl")]
-    #[test_resources("src/ont/owl-rdf/ambiguous/*.owl")]
-    fn roundtrip_rdf(resource: &str) {
-        let resource = &slurp::read_all_to_string(resource).unwrap();
+    #[rstest]
+    fn roundtrip_rdf(#[files("src/ont/owl-rdf/*.owl")] resource: PathBuf) {
+        let resource = &slurp::read_all_to_string(&resource).unwrap();
+        assert_round(resource);
+    }
+
+    #[rstest]
+    fn roundtrip_rdf_ambiguous(#[files("src/ont/owl-rdf/ambiguous/*.owl")] resource: PathBuf) {
+        let resource = &slurp::read_all_to_string(&resource).unwrap();
         assert_round(resource);
     }
 

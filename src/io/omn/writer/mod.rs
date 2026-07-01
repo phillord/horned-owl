@@ -1057,7 +1057,8 @@ mod tests {
     use crate::model::*;
     use crate::ontology::component_mapped::ComponentMappedOntology;
     use crate::ontology::set::SetOntology;
-    use test_generator::test_resources;
+    use rstest::rstest;
+    use std::path::PathBuf;
 
     type TestOnt = ComponentMappedOntology<
         std::rc::Rc<str>,
@@ -1075,9 +1076,9 @@ mod tests {
     // SWRL rules, inverse-headed property frames, annotated declarations and
     // anonymous-subject annotation assertions included — so there is no
     // `nonround` bucket.
-    #[test_resources("src/ont/owl-manchester/*.omn")]
-    fn roundtrip_resource(resource: &str) {
-        let reader = std::fs::File::open(resource)
+    #[rstest]
+    fn roundtrip_resource(#[files("src/ont/owl-manchester/*.omn")] resource: PathBuf) {
+        let reader = std::fs::File::open(&resource)
             .map(std::io::BufReader::new)
             .unwrap();
         let (ont, prefixes): (ComponentMappedOntology<RcStr, AnnotatedComponent<RcStr>>, _) =

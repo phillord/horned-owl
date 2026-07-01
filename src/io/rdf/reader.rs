@@ -2581,7 +2581,7 @@ mod test {
     use crate::normalize::normalize;
     use crate::ontology::component_mapped::RcComponentMappedOntology;
     use pretty_assertions::assert_eq;
-    use test_generator::test_resources;
+    use rstest::rstest;
 
     fn read_ok<R: BufRead>(
         bufread: &mut R,
@@ -2596,14 +2596,6 @@ mod test {
         dbg!(&ont, &incomp);
         assert!(incomp.is_complete());
         ont
-    }
-
-    fn compare(test: &str) {
-        let dot = test.rfind('.').unwrap();
-        let slash = test.rfind('/').unwrap();
-        let stem = &test[(slash + 1)..dot];
-
-        compare_two(stem, stem);
     }
 
     fn compare_two(testrdf: &str, testowl: &str) {
@@ -2653,15 +2645,15 @@ mod test {
     //     assert!(true);
     // }
 
-    #[test_resources("src/ont/owl-rdf/*.owl")]
-    fn compare_to_xml(resource: &str) {
-        compare(resource)
+    #[rstest]
+    fn compare_to_xml(#[files("src/ont/owl-rdf/*.owl")] resource: PathBuf) {
+        let stem = resource.file_stem().unwrap().to_str().unwrap();
+        compare_two(stem, stem);
     }
 
-    #[test_resources("src/ont/owl-rdf/ambiguous/*.owl")]
-    fn test_read_ok(resource: &str) {
-        let resource = &slurp::read_all_to_string(resource).unwrap();
-
+    #[rstest]
+    fn test_read_ok(#[files("src/ont/owl-rdf/ambiguous/*.owl")] resource: PathBuf) {
+        let resource = &slurp::read_all_to_string(&resource).unwrap();
         read_ok(&mut resource.as_bytes());
     }
 

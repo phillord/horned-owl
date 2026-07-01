@@ -54,7 +54,7 @@ criterion = "0.7.0"
 mktemp = "0.5.1"
 pretty_assertions = "1.0.0"
 slurp = "1.0.1"
-test-generator =  { version = "^0.3" }
+rstest = "0.23"
 horned-bin = {path="horned-bin"}
 
 [profile.release]
