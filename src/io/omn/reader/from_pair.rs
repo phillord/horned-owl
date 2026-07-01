@@ -947,6 +947,24 @@ impl<A: ForIRI> FromPair<A> for Annotation<A> {
     }
 }
 
+/// Build the `AnnotatedComponent` for an entity-frame annotation
+/// (`Class: A Annotations: …`, and the analogous property/individual/datatype
+/// frames). A nested `Annotations:` on the entry annotates the resulting
+/// `AnnotationAssertion` *axiom* — not its annotation value — so the nested set
+/// is lifted from the entry's own `ann` to the component's axiom annotations.
+/// This matches the ofn/owx readers (§2.5 `annotationAnnotatedList`): an
+/// annotation on a frame annotation is an annotation on the assertion it yields.
+fn entity_annotation_assertion<A: ForIRI>(
+    subject: AnnotationSubject<A>,
+    mut entry: Annotation<A>,
+) -> AnnotatedComponent<A> {
+    let axiom_ann = std::mem::take(&mut entry.ann);
+    AnnotatedComponent {
+        component: Component::AnnotationAssertion(AnnotationAssertion { subject, ann: entry }),
+        ann: axiom_ann,
+    }
+}
+
 /// Parse an `Annotations` clause pair into a `Vec<Annotation>`.
 /// The pair's inner children are `AnnotationEntry` items.
 pub(crate) fn parse_annotations<A: ForIRI>(
@@ -1210,10 +1228,10 @@ fn insert_class_frame<A: ForIRI, O: MutableOntology<A>>(
                 if let Some(ref iri) = atomic_iri {
                     // `body` is the inner `Annotations` pair (AnnotationEntry items).
                     for ann_item in parse_annotations(body, ctx)? {
-                        ont.insert(AnnotationAssertion {
-                            subject: AnnotationSubject::IRI(iri.clone()),
-                            ann: ann_item,
-                        });
+                        ont.insert(entity_annotation_assertion(
+                            AnnotationSubject::IRI(iri.clone()),
+                            ann_item,
+                        ));
                     }
                 }
             }
@@ -1459,10 +1477,10 @@ fn insert_object_property_frame<A: ForIRI, O: MutableOntology<A>>(
                 // frames have none, so there is nothing to attach them to.
                 if let Some(iri) = &subject {
                     for ann_item in parse_annotations(body, ctx)? {
-                        ont.insert(AnnotationAssertion {
-                            subject: AnnotationSubject::IRI(iri.clone()),
-                            ann: ann_item,
-                        });
+                        ont.insert(entity_annotation_assertion(
+                            AnnotationSubject::IRI(iri.clone()),
+                            ann_item,
+                        ));
                     }
                 }
             }
@@ -1828,10 +1846,10 @@ fn insert_data_property_frame<A: ForIRI, O: MutableOntology<A>>(
         match kw.as_str() {
             "annotations" => {
                 for ann_item in parse_annotations(body, ctx)? {
-                    ont.insert(AnnotationAssertion {
-                        subject: AnnotationSubject::IRI(subject.clone()),
-                        ann: ann_item,
-                    });
+                    ont.insert(entity_annotation_assertion(
+                        AnnotationSubject::IRI(subject.clone()),
+                        ann_item,
+                    ));
                 }
             }
             "subpropertyof" => {
@@ -1940,10 +1958,10 @@ fn insert_annotation_property_frame<A: ForIRI, O: MutableOntology<A>>(
         match kw.as_str() {
             "annotations" => {
                 for ann_item in parse_annotations(body, ctx)? {
-                    ont.insert(AnnotationAssertion {
-                        subject: AnnotationSubject::IRI(subject.clone()),
-                        ann: ann_item,
-                    });
+                    ont.insert(entity_annotation_assertion(
+                        AnnotationSubject::IRI(subject.clone()),
+                        ann_item,
+                    ));
                 }
             }
             "subpropertyof" => {
@@ -2024,10 +2042,7 @@ fn insert_individual_frame<A: ForIRI, O: MutableOntology<A>>(
         match kw.as_str() {
             "annotations" => {
                 for ann_item in parse_annotations(body, ctx)? {
-                    ont.insert(AnnotationAssertion {
-                        subject: anno_subject.clone(),
-                        ann: ann_item,
-                    });
+                    ont.insert(entity_annotation_assertion(anno_subject.clone(), ann_item));
                 }
             }
             "types" => {
@@ -2181,10 +2196,10 @@ fn insert_datatype_frame<A: ForIRI, O: MutableOntology<A>>(
         match kw.as_str() {
             "annotations" => {
                 for ann_item in parse_annotations(body, ctx)? {
-                    ont.insert(AnnotationAssertion {
-                        subject: AnnotationSubject::IRI(subject.clone()),
-                        ann: ann_item,
-                    });
+                    ont.insert(entity_annotation_assertion(
+                        AnnotationSubject::IRI(subject.clone()),
+                        ann_item,
+                    ));
                 }
             }
             "equivalentto" => {
@@ -4297,18 +4312,25 @@ mod tests {
         let doc = "Prefix: ex: <http://ex/>\nOntology: <http://ex/o>\nClass: ex:A\n    Annotations: Annotations: ex:meta \"m\" ex:label \"L\"\n";
         let (parsed, _): (SetOntology<_>, PrefixMapping) =
             read_with_build(BufReader::new(doc.as_bytes()), &b).unwrap();
-        // The outer `ex:label "L"` annotation on ex:A is recovered as an AnnotationAssertion,
-        // and its nested `ex:meta "m"` annotation is now preserved (OWL 2 annotated annotations).
-        let outer = parsed
+        // The outer `ex:label "L"` annotation on ex:A is recovered as an
+        // AnnotationAssertion, and its nested `ex:meta "m"` annotation annotates
+        // that assertion *axiom* — so it lands in the component's axiom
+        // annotations (`ac.ann`), matching the ofn/owx readers, not inside the
+        // assertion's own annotation value.
+        let aa_comp = parsed
             .iter()
-            .find_map(|ac| match &ac.component {
-                Component::AnnotationAssertion(aa) => Some(aa.ann.clone()),
-                _ => None,
-            })
-            .expect("expected the outer annotation to survive");
-        assert_eq!(outer.ann.len(), 1, "expected the nested annotation preserved");
+            .find(|ac| matches!(&ac.component, Component::AnnotationAssertion(_)))
+            .expect("expected the outer annotation to survive")
+            .clone();
+        let Component::AnnotationAssertion(aa) = &aa_comp.component else {
+            unreachable!()
+        };
+        // The assertion value carries no further (value-level) annotation …
+        assert_eq!(aa.ann.ann.len(), 0);
+        // … the nested `ex:meta "m"` is an annotation on the axiom.
+        assert_eq!(aa_comp.ann.len(), 1, "expected the nested annotation preserved");
         assert_eq!(
-            outer.ann.iter().next().unwrap().ap,
+            aa_comp.ann.iter().next().unwrap().ap,
             AnnotationProperty(b.iri("http://ex/meta"))
         );
     }
@@ -4340,16 +4362,18 @@ mod tests {
         // And it survives a full re-read (semantic round-trip).
         let (reparsed, _): (SetOntology<_>, PrefixMapping) =
             read_with_build(BufReader::new(s.as_bytes()), &b).unwrap();
-        let nested_len = |o: &SetOntology<_>| {
+        // The nested annotation is an annotation on the AnnotationAssertion
+        // *axiom* (`ac.ann`), so it must survive there across the round-trip.
+        let axiom_ann_len = |o: &SetOntology<_>| {
             o.iter()
                 .find_map(|ac| match &ac.component {
-                    Component::AnnotationAssertion(aa) => Some(aa.ann.ann.len()),
+                    Component::AnnotationAssertion(_) => Some(ac.ann.len()),
                     _ => None,
                 })
                 .unwrap_or(0)
         };
-        assert_eq!(nested_len(&parsed), 1);
-        assert_eq!(nested_len(&reparsed), 1, "nested annotation lost on round-trip");
+        assert_eq!(axiom_ann_len(&parsed), 1);
+        assert_eq!(axiom_ann_len(&reparsed), 1, "nested annotation lost on round-trip");
     }
 
     #[test]
@@ -4512,22 +4536,21 @@ DisjointClasses: ex:r some ex:A, ex:r some ex:B
     ///   `EquivalentClasses(A,B)`, `EquivalentClasses(A,C)`, … (the per-class-frame
     ///   split @b-gehrke noted). Logically equivalent to the OMN n-ary form, but
     ///   not structurally equal.
-    /// * `annotation-with-annotation`, `annotation-with-non-builtin-annotation` —
-    ///   here the OMN reader is the *more* faithful one: it preserves the
-    ///   annotation-on-an-annotation, whereas horned-owl's OWX reader drops the
-    ///   nested annotation, so the oracle is weaker than the subject.
     /// * `annotation_assertion` — the two sources name different subjects
     ///   (`<http://www.example.com/i>` in the OWX vs `o:i` =
     ///   `http://www.example.com/iri#i` in the OMN).
     /// * `gci_and_other_class_relations` — the OWX carries `EquivalentClasses`
     ///   and `DisjointClasses` GCIs over complex expressions that the Tawny OMN
     ///   serialisation simply omits (it emits only the `SubClassOf` GCI).
+    ///
+    /// (The `annotation-with-annotation` / `annotation-with-non-builtin-annotation`
+    /// fixtures were excluded until the compare test exposed a real OMN reader bug
+    /// — a nested frame annotation was attached to the annotation value rather
+    /// than the assertion axiom; now fixed, so they compare cleanly.)
     const COMPARE_EXCLUSIONS: &[&str] = &[
         "equivalent_classes",
         "complex-equivalent-classes",
         "annotation-on-equivalent-classes",
-        "annotation-with-annotation",
-        "annotation-with-non-builtin-annotation",
         "annotation_assertion",
         "gci_and_other_class_relations",
     ];

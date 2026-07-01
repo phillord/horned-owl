@@ -883,13 +883,24 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
         .component_for_kind(ComponentKind::AnnotationAssertion)
     {
         if let Component::AnnotationAssertion(aa) = &ac.component {
+            // An annotation on the assertion *axiom* (`ac.ann`) is expressed in a
+            // Manchester frame as a nested `Annotations:` on the entity annotation
+            // entry — the inverse of the reader lifting it up to the axiom. Fold
+            // the axiom annotations into the entry's own nested slot for rendering.
+            let entry = if ac.ann.is_empty() {
+                aa.ann.clone()
+            } else {
+                let mut e = aa.ann.clone();
+                e.ann.extend(ac.ann.iter().cloned());
+                e
+            };
             // §2.5 AnnotationTarget admits anon VALUES (`_:label`), so the value
             // is always renderable. An anon SUBJECT, however, is not re-emitted
             // as a frame here (scoped follow-up) → route to misc.
             if let AnnotationSubject::IRI(subj_iri) = &aa.subject {
                 let clause = format!(
                     "Annotations: {}",
-                    as_manchester::annotation_to_manchester(&aa.ann, mapping)
+                    as_manchester::annotation_to_manchester(&entry, mapping)
                 );
                 // Attach to the existing frame whose subject_iri matches.
                 if let Some(frame) = frames
@@ -912,7 +923,7 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
                 extra_frames.push(format!(
                     "\nIndividual: {}\n    Annotations: {}",
                     anon.as_manchester_with_prefixes(mapping),
-                    as_manchester::annotation_to_manchester(&aa.ann, mapping)
+                    as_manchester::annotation_to_manchester(&entry, mapping)
                 ));
             }
         }
