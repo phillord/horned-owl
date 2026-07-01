@@ -1124,7 +1124,8 @@ mod tests {
     use crate::io::ofn::reader::lexer::OwlFunctionalLexer;
     use crate::ontology::set::SetOntology;
 
-    use test_generator::test_resources;
+    use rstest::rstest;
+    use std::path::PathBuf;
 
     macro_rules! assert_parse_into {
         ($ty:ty, $rule:path, $build:ident, $prefixes:ident, $doc:expr, $expected:expr_2021) => {
@@ -1328,9 +1329,9 @@ mod tests {
         pretty_assertions::assert_eq!(actual, expected);
     }
 
-    #[test_resources("src/ont/owl-functional/*.ofn")]
-    fn from_pair_resource(resource: &str) {
-        let text = &slurp::read_all_to_string(resource).unwrap();
+    #[rstest]
+    fn from_pair_resource(#[files("src/ont/owl-functional/*.ofn")] resource: PathBuf) {
+        let text = &slurp::read_all_to_string(&resource).unwrap();
         let pair = match OwlFunctionalLexer::lex(Rule::OntologyDocument, text.trim()) {
             Err(e) => panic!("parser failed: {e}"),
             Ok(mut pairs) => {
@@ -1347,6 +1348,8 @@ mod tests {
             FromPair::from_pair(pair, &ctx).unwrap();
 
         let path = resource
+            .to_str()
+            .unwrap()
             .replace("owl-functional", "owl-xml")
             .replace(".ofn", ".owx");
         let owx = &slurp::read_all_to_string(path).unwrap();

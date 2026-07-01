@@ -29,11 +29,12 @@ impl OwlFunctionalLexer {
 pub mod test {
     use super::*;
 
-    use test_generator::test_resources;
+    use rstest::rstest;
+    use std::path::PathBuf;
 
-    #[test_resources("src/ont/owl-functional/*.ofn")]
-    fn lex_resource(resource: &str) {
-        let ont_s = slurp::read_all_to_string(resource).unwrap();
+    #[rstest]
+    fn lex_resource(#[files("src/ont/owl-functional/*.ofn")] resource: PathBuf) {
+        let ont_s = slurp::read_all_to_string(&resource).unwrap();
         match OwlFunctionalLexer::lex(Rule::OntologyDocument, ont_s.trim()) {
             Ok(mut pairs) => assert_eq!(pairs.next().unwrap().as_str(), ont_s.trim()),
             Err(e) => panic!("parser failed: {e}"),

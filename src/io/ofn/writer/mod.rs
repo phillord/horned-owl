@@ -99,11 +99,12 @@ mod test {
     use crate::model::RcStr;
 
     use pretty_assertions::assert_eq;
-    use test_generator::test_resources;
+    use rstest::rstest;
+    use std::path::PathBuf;
 
-    #[test_resources("src/ont/owl-functional/*.ofn")]
-    fn roundtrip_resource(resource: &str) {
-        let reader = std::fs::File::open(resource)
+    #[rstest]
+    fn roundtrip_resource(#[files("src/ont/owl-functional/*.ofn")] resource: PathBuf) {
+        let reader = std::fs::File::open(&resource)
             .map(std::io::BufReader::new)
             .unwrap();
         let (ont, prefixes): (ComponentMappedOntology<RcStr, AnnotatedComponent<RcStr>>, _) =

@@ -2309,7 +2309,7 @@ mod tests {
     use super::*;
     use crate::io::omn::reader::lexer::ManchesterLexer;
     use crate::model::{Build, RcStr};
-    use test_generator::test_resources;
+    use rstest::rstest;
 
     #[test]
     fn parses_iri_full_and_prefixed() {
@@ -4947,14 +4947,14 @@ DisjointClasses: ex:r some ex:A, ex:r some ex:B
     /// 122 of the 127 OMN fixtures have an OWX twin (the 5 OMN-only fixtures are
     /// skipped). A further [`COMPARE_EXCLUSIONS`] set covers fixtures whose two
     /// serialisations encode genuinely different ontologies; see that constant.
-    #[test_resources("src/ont/owl-manchester/*.omn")]
-    fn compare_to_owx(resource: &str) {
+    #[rstest]
+    fn compare_to_owx(#[files("src/ont/owl-manchester/*.omn")] resource: std::path::PathBuf) {
         use crate::model::{ComponentKind, Kinded};
         use crate::normalize::normalize;
         use crate::ontology::set::SetOntology;
         use std::path::Path;
 
-        let stem = Path::new(resource)
+        let stem = Path::new(&resource)
             .file_stem()
             .unwrap()
             .to_string_lossy()
@@ -5020,12 +5020,12 @@ DisjointClasses: ex:r some ex:A, ex:r some ex:B
             };
 
         // Read the Manchester form through the OMN reader (the subject).
-        let omn_reader = std::fs::File::open(resource)
+        let omn_reader = std::fs::File::open(&resource)
             .map(std::io::BufReader::new)
             .unwrap();
         let (omn_ont, _): (SetOntology<RcStr>, _) =
             crate::io::omn::reader::read(omn_reader, Default::default())
-                .unwrap_or_else(|e| panic!("OMN read failed for {resource}: {e:?}"));
+                .unwrap_or_else(|e| panic!("OMN read failed for {}: {e:?}", resource.display()));
 
         // Read the OWL/XML form through the OWX reader (the oracle).
         let owx_src = std::fs::read_to_string(&owx_path).unwrap();

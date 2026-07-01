@@ -980,7 +980,8 @@ mod test {
     use std::io::BufReader;
     use std::io::BufWriter;
 
-    use test_generator::test_resources;
+    use rstest::rstest;
+    use std::path::PathBuf;
 
     fn read_ok<R: BufRead>(bufread: &mut R) -> (RcComponentMappedOntology, PrefixMapping) {
         let r = read(bufread, ParserConfiguration::default());
@@ -1108,9 +1109,9 @@ mod test {
         assert_eq!(prefix_orig_map, prefix_round_map);
     }
 
-    #[test_resources("src/ont/owl-xml/*.owx")]
-    fn roundtrip_resource(resource: &str) {
-        let resource = &slurp::read_all_to_string(resource).unwrap();
+    #[rstest]
+    fn roundtrip_resource(#[files("src/ont/owl-xml/*.owx")] resource: PathBuf) {
+        let resource = &slurp::read_all_to_string(&resource).unwrap();
 
         let (ont_orig, _prefix_orig, ont_round, _prefix_round) = roundtrip(resource);
 
@@ -1119,9 +1120,9 @@ mod test {
         assert_eq!(ont_orig, ont_round);
     }
 
-    #[test_resources("src/ont/owl-xml/ambiguous/*.owx")]
-    fn roundtrip_nonround_resource(resource: &str) {
-        let resource = &slurp::read_all_to_string(resource).unwrap();
+    #[rstest]
+    fn roundtrip_nonround_resource(#[files("src/ont/owl-xml/ambiguous/*.owx")] resource: PathBuf) {
+        let resource = &slurp::read_all_to_string(&resource).unwrap();
         assert_round(resource);
     }
 
