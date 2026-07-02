@@ -339,20 +339,18 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
                     }
                 }
                 Component::EquivalentClasses(ax) => {
-                    if let Some(crate::model::ClassExpression::Class(c)) = ax.0.first() {
-                        let others: Vec<String> =
-                            ax.0.iter()
-                                .skip(1)
-                                .map(|ce| ce.as_manchester_with_prefixes(pm).to_string())
-                                .collect();
-                        if !others.is_empty() {
-                            let clause = format!(
-                                "EquivalentTo: {}{}",
-                                ann_prefix(&ac.ann, pm),
-                                others.join(", ")
-                            );
-                            push_clause!(FrameKind::Class, c.0.as_ref(), clause);
-                        }
+                    // A 2-member axiom with a named-class subject renders as an
+                    // `EquivalentTo:` frame clause (the reader reads that back as
+                    // exactly this binary axiom). A genuine n-ary axiom (3+ members)
+                    // must go to an `EquivalentClasses:` misc line — a frame clause
+                    // would be re-read as pairwise-with-subject binaries.
+                    if let [crate::model::ClassExpression::Class(c), other] = ax.0.as_slice() {
+                        let clause = format!(
+                            "EquivalentTo: {}{}",
+                            ann_prefix(&ac.ann, pm),
+                            other.as_manchester_with_prefixes(pm)
+                        );
+                        push_clause!(FrameKind::Class, c.0.as_ref(), clause);
                     } else if !ax.0.is_empty() {
                         let members: Vec<String> =
                             ax.0.iter()
@@ -366,20 +364,13 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
                     }
                 }
                 Component::DisjointClasses(ax) => {
-                    if let Some(crate::model::ClassExpression::Class(c)) = ax.0.first() {
-                        let others: Vec<String> =
-                            ax.0.iter()
-                                .skip(1)
-                                .map(|ce| ce.as_manchester_with_prefixes(pm).to_string())
-                                .collect();
-                        if !others.is_empty() {
-                            let clause = format!(
-                                "DisjointWith: {}{}",
-                                ann_prefix(&ac.ann, pm),
-                                others.join(", ")
-                            );
-                            push_clause!(FrameKind::Class, c.0.as_ref(), clause);
-                        }
+                    if let [crate::model::ClassExpression::Class(c), other] = ax.0.as_slice() {
+                        let clause = format!(
+                            "DisjointWith: {}{}",
+                            ann_prefix(&ac.ann, pm),
+                            other.as_manchester_with_prefixes(pm)
+                        );
+                        push_clause!(FrameKind::Class, c.0.as_ref(), clause);
                     } else if !ax.0.is_empty() {
                         let members: Vec<String> =
                             ax.0.iter()
@@ -441,70 +432,55 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
                     }
                 },
                 Component::EquivalentObjectProperties(ax) => {
-                    if let Some(ope) = ax.0.first() {
-                        if let Some(iri) = ope_iri(ope) {
-                            let others: Vec<String> =
-                                ax.0.iter()
-                                    .skip(1)
-                                    .map(|o| o.as_manchester_with_prefixes(pm).to_string())
-                                    .collect();
-                            if !others.is_empty() {
-                                let clause = format!(
-                                    "EquivalentTo: {}{}",
-                                    ann_prefix(&ac.ann, pm),
-                                    others.join(", ")
-                                );
-                                push_clause!(FrameKind::ObjectProperty, iri, clause);
-                            }
-                        } else {
-                            // First member not a named property → no frame subject.
-                            // Native `Misc` keyword is `EquivalentProperties:` (object form).
-                            let members: Vec<String> =
-                                ax.0.iter()
-                                    .map(|o| o.as_manchester_with_prefixes(pm).to_string())
-                                    .collect();
-                            misc_axioms.push(format!(
-                                "EquivalentProperties: {}{}",
-                                ann_prefix(&ac.ann, pm),
-                                members.join(", ")
-                            ));
-                        }
+                    // 2 members with a named-property subject → `EquivalentTo:`
+                    // frame clause; otherwise (3+, or a non-named subject) a native
+                    // `EquivalentProperties:` misc line, so it round-trips.
+                    let as_frame = match ax.0.as_slice() {
+                        [first, other] => ope_iri(first).map(|iri| (iri, other)),
+                        _ => None,
+                    };
+                    if let Some((iri, other)) = as_frame {
+                        let clause = format!(
+                            "EquivalentTo: {}{}",
+                            ann_prefix(&ac.ann, pm),
+                            other.as_manchester_with_prefixes(pm)
+                        );
+                        push_clause!(FrameKind::ObjectProperty, iri, clause);
+                    } else if !ax.0.is_empty() {
+                        let members: Vec<String> =
+                            ax.0.iter()
+                                .map(|o| o.as_manchester_with_prefixes(pm).to_string())
+                                .collect();
+                        misc_axioms.push(format!(
+                            "EquivalentProperties: {}{}",
+                            ann_prefix(&ac.ann, pm),
+                            members.join(", ")
+                        ));
                     }
-                    // empty member list (ax.0.first() == None) is vacuous → dropped,
-                    // matching the class/individual n-ary arms.
                 }
                 Component::DisjointObjectProperties(ax) => {
-                    if let Some(ope) = ax.0.first() {
-                        if let Some(iri) = ope_iri(ope) {
-                            let others: Vec<String> =
-                                ax.0.iter()
-                                    .skip(1)
-                                    .map(|o| o.as_manchester_with_prefixes(pm).to_string())
-                                    .collect();
-                            if !others.is_empty() {
-                                let clause = format!(
-                                    "DisjointWith: {}{}",
-                                    ann_prefix(&ac.ann, pm),
-                                    others.join(", ")
-                                );
-                                push_clause!(FrameKind::ObjectProperty, iri, clause);
-                            }
-                        } else {
-                            // First member not a named property → no frame subject.
-                            // Native `Misc` keyword is `DisjointProperties:` (object form).
-                            let members: Vec<String> =
-                                ax.0.iter()
-                                    .map(|o| o.as_manchester_with_prefixes(pm).to_string())
-                                    .collect();
-                            misc_axioms.push(format!(
-                                "DisjointProperties: {}{}",
-                                ann_prefix(&ac.ann, pm),
-                                members.join(", ")
-                            ));
-                        }
+                    let as_frame = match ax.0.as_slice() {
+                        [first, other] => ope_iri(first).map(|iri| (iri, other)),
+                        _ => None,
+                    };
+                    if let Some((iri, other)) = as_frame {
+                        let clause = format!(
+                            "DisjointWith: {}{}",
+                            ann_prefix(&ac.ann, pm),
+                            other.as_manchester_with_prefixes(pm)
+                        );
+                        push_clause!(FrameKind::ObjectProperty, iri, clause);
+                    } else if !ax.0.is_empty() {
+                        let members: Vec<String> =
+                            ax.0.iter()
+                                .map(|o| o.as_manchester_with_prefixes(pm).to_string())
+                                .collect();
+                        misc_axioms.push(format!(
+                            "DisjointProperties: {}{}",
+                            ann_prefix(&ac.ann, pm),
+                            members.join(", ")
+                        ));
                     }
-                    // empty member list (ax.0.first() == None) is vacuous → dropped,
-                    // matching the class/individual n-ary arms.
                 }
                 Component::InverseObjectProperties(ax) => {
                     // ax.0 and ax.1 are ObjectProperty (not expression).
@@ -615,41 +591,46 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
                     push_clause!(FrameKind::DataProperty, ax.sub.0.as_ref(), clause);
                 }
                 Component::EquivalentDataProperties(ax) => {
-                    if let Some(first) = ax.0.first() {
-                        let others: Vec<String> =
+                    // 2 members → `EquivalentTo:` frame clause; 3+ → native
+                    // `EquivalentProperties:` misc line (round-trips via the
+                    // reader's data-vs-object disambiguation on declared props).
+                    if let [first, other] = ax.0.as_slice() {
+                        let clause = format!(
+                            "EquivalentTo: {}{}",
+                            ann_prefix(&ac.ann, pm),
+                            other.as_manchester_with_prefixes(pm)
+                        );
+                        push_clause!(FrameKind::DataProperty, first.0.as_ref(), clause);
+                    } else if !ax.0.is_empty() {
+                        let members: Vec<String> =
                             ax.0.iter()
-                                .skip(1)
                                 .map(|dp| dp.as_manchester_with_prefixes(pm).to_string())
                                 .collect();
-                        if !others.is_empty() {
-                            let clause = format!(
-                                "EquivalentTo: {}{}",
-                                ann_prefix(&ac.ann, pm),
-                                others.join(", ")
-                            );
-                            push_clause!(FrameKind::DataProperty, first.0.as_ref(), clause);
-                        }
-                    } else {
-                        misc.push(ac.component.as_manchester_with_prefixes(pm).to_string());
+                        misc_axioms.push(format!(
+                            "EquivalentProperties: {}{}",
+                            ann_prefix(&ac.ann, pm),
+                            members.join(", ")
+                        ));
                     }
                 }
                 Component::DisjointDataProperties(ax) => {
-                    if let Some(first) = ax.0.first() {
-                        let others: Vec<String> =
+                    if let [first, other] = ax.0.as_slice() {
+                        let clause = format!(
+                            "DisjointWith: {}{}",
+                            ann_prefix(&ac.ann, pm),
+                            other.as_manchester_with_prefixes(pm)
+                        );
+                        push_clause!(FrameKind::DataProperty, first.0.as_ref(), clause);
+                    } else if !ax.0.is_empty() {
+                        let members: Vec<String> =
                             ax.0.iter()
-                                .skip(1)
                                 .map(|dp| dp.as_manchester_with_prefixes(pm).to_string())
                                 .collect();
-                        if !others.is_empty() {
-                            let clause = format!(
-                                "DisjointWith: {}{}",
-                                ann_prefix(&ac.ann, pm),
-                                others.join(", ")
-                            );
-                            push_clause!(FrameKind::DataProperty, first.0.as_ref(), clause);
-                        }
-                    } else {
-                        misc.push(ac.component.as_manchester_with_prefixes(pm).to_string());
+                        misc_axioms.push(format!(
+                            "DisjointProperties: {}{}",
+                            ann_prefix(&ac.ann, pm),
+                            members.join(", ")
+                        ));
                     }
                 }
                 Component::DataPropertyDomain(ax) => {
@@ -738,48 +719,65 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
                     );
                 }
                 Component::SameIndividual(ax) => {
-                    if let Some(crate::model::Individual::Named(ni)) = ax.0.first() {
-                        let others: Vec<String> =
-                            ax.0.iter()
-                                .skip(1)
-                                .map(|i| i.as_manchester_with_prefixes(pm).to_string())
-                                .collect();
-                        if !others.is_empty() {
-                            let clause =
-                                format!("SameAs: {}{}", ann_prefix(&ac.ann, pm), others.join(", "));
-                            push_clause!(FrameKind::Individual, ni.0.as_ref(), clause);
-                        }
-                    } else {
-                        // First member anonymous (no frame subject) or empty list.
-                        // The Manchester `Individual` rule cannot re-parse an
-                        // anonymous individual (`_:id`), so a native `SameIndividual:`
-                        // Misc line carrying one would FAIL on read. Keep the
-                        // functional `# General axioms` fallback (skip-and-warn).
-                        misc.push(ac.component.as_manchester_with_prefixes(pm).to_string());
-                    }
-                }
-                Component::DifferentIndividuals(ax) => {
-                    if let Some(crate::model::Individual::Named(ni)) = ax.0.first() {
-                        let others: Vec<String> =
-                            ax.0.iter()
-                                .skip(1)
-                                .map(|i| i.as_manchester_with_prefixes(pm).to_string())
-                                .collect();
-                        if !others.is_empty() {
+                    // 2 members, named subject → `SameAs:` frame clause (binary).
+                    // 3+ all-named → native `SameIndividual:` misc line. Anything
+                    // with an anonymous member can't be re-parsed in a Manchester
+                    // Individual list, so it keeps the functional fallback.
+                    match ax.0.as_slice() {
+                        [crate::model::Individual::Named(ni), other] => {
                             let clause = format!(
-                                "DifferentFrom: {}{}",
+                                "SameAs: {}{}",
                                 ann_prefix(&ac.ann, pm),
-                                others.join(", ")
+                                other.as_manchester_with_prefixes(pm)
                             );
                             push_clause!(FrameKind::Individual, ni.0.as_ref(), clause);
                         }
-                    } else {
-                        // First member anonymous (no frame subject) or empty list.
-                        // The Manchester `Individual` rule cannot re-parse an
-                        // anonymous individual (`_:id`), so a native
-                        // `DifferentIndividuals:` Misc line carrying one would FAIL
-                        // on read. Keep the functional `# General axioms` fallback.
-                        misc.push(ac.component.as_manchester_with_prefixes(pm).to_string());
+                        members
+                            if members.len() >= 2
+                                && members.iter().all(|i| {
+                                    matches!(i, crate::model::Individual::Named(_))
+                                }) =>
+                        {
+                            let rendered: Vec<String> = members
+                                .iter()
+                                .map(|i| i.as_manchester_with_prefixes(pm).to_string())
+                                .collect();
+                            misc_axioms.push(format!(
+                                "SameIndividual: {}{}",
+                                ann_prefix(&ac.ann, pm),
+                                rendered.join(", ")
+                            ));
+                        }
+                        _ => misc.push(ac.component.as_manchester_with_prefixes(pm).to_string()),
+                    }
+                }
+                Component::DifferentIndividuals(ax) => {
+                    match ax.0.as_slice() {
+                        [crate::model::Individual::Named(ni), other] => {
+                            let clause = format!(
+                                "DifferentFrom: {}{}",
+                                ann_prefix(&ac.ann, pm),
+                                other.as_manchester_with_prefixes(pm)
+                            );
+                            push_clause!(FrameKind::Individual, ni.0.as_ref(), clause);
+                        }
+                        members
+                            if members.len() >= 2
+                                && members.iter().all(|i| {
+                                    matches!(i, crate::model::Individual::Named(_))
+                                }) =>
+                        {
+                            let rendered: Vec<String> = members
+                                .iter()
+                                .map(|i| i.as_manchester_with_prefixes(pm).to_string())
+                                .collect();
+                            misc_axioms.push(format!(
+                                "DifferentIndividuals: {}{}",
+                                ann_prefix(&ac.ann, pm),
+                                rendered.join(", ")
+                            ));
+                        }
+                        _ => misc.push(ac.component.as_manchester_with_prefixes(pm).to_string()),
                     }
                 }
 

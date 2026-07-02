@@ -1249,20 +1249,36 @@ fn insert_class_frame<A: ForIRI, O: MutableOntology<A>>(
                 }
             }
             "equivalentto" => {
-                let mut all = vec![subject_ce.clone()];
-                merge_list_ann(&mut ann, parse_description_list(body, ctx)?, &mut all);
-                ont.insert(AnnotatedComponent {
-                    component: Component::EquivalentClasses(EquivalentClasses(all)),
-                    ann,
-                });
+                // A frame `EquivalentTo:` list pairs the subject with EACH item
+                // as a separate binary axiom (OWL 2 Manchester §2.4, matching the
+                // OWL-API / owx reader), not one fused n-ary axiom.
+                let mut list = parse_description_list(body, ctx)?;
+                bind_leading_to_first(ann, &mut list);
+                for (item_ann, ce) in list {
+                    ont.insert(AnnotatedComponent {
+                        component: Component::EquivalentClasses(EquivalentClasses(vec![
+                            subject_ce.clone(),
+                            ce,
+                        ])),
+                        ann: item_ann,
+                    });
+                }
             }
             "disjointwith" => {
-                let mut all = vec![subject_ce.clone()];
-                merge_list_ann(&mut ann, parse_description_list(body, ctx)?, &mut all);
-                ont.insert(AnnotatedComponent {
-                    component: Component::DisjointClasses(DisjointClasses(all)),
-                    ann,
-                });
+                // Per-item binary DisjointClasses(subject, item) — a fused n-ary
+                // axiom would also assert disjointness *between* the listed items,
+                // which the frame does not state.
+                let mut list = parse_description_list(body, ctx)?;
+                bind_leading_to_first(ann, &mut list);
+                for (item_ann, ce) in list {
+                    ont.insert(AnnotatedComponent {
+                        component: Component::DisjointClasses(DisjointClasses(vec![
+                            subject_ce.clone(),
+                            ce,
+                        ])),
+                        ann: item_ann,
+                    });
+                }
             }
             "disjointunionof" => {
                 // DisjointUnionOf requires a named class subject; only valid for
@@ -1517,22 +1533,30 @@ fn insert_object_property_frame<A: ForIRI, O: MutableOntology<A>>(
                 }
             }
             "equivalentto" => {
-                let mut all = vec![subject_ope.clone()];
-                merge_list_ann(&mut ann, parse_ope_list(body, ctx)?, &mut all);
-                ont.insert(AnnotatedComponent {
-                    component: Component::EquivalentObjectProperties(EquivalentObjectProperties(
-                        all,
-                    )),
-                    ann,
-                });
+                // Per-item binary EquivalentObjectProperties(subject, item), per
+                // OWL 2 Manchester §2.4 (matching the OWL-API / owx reader).
+                let mut list = parse_ope_list(body, ctx)?;
+                bind_leading_to_first(ann, &mut list);
+                for (item_ann, sup) in list {
+                    ont.insert(AnnotatedComponent {
+                        component: Component::EquivalentObjectProperties(
+                            EquivalentObjectProperties(vec![subject_ope.clone(), sup]),
+                        ),
+                        ann: item_ann,
+                    });
+                }
             }
             "disjointwith" => {
-                let mut all = vec![subject_ope.clone()];
-                merge_list_ann(&mut ann, parse_ope_list(body, ctx)?, &mut all);
-                ont.insert(AnnotatedComponent {
-                    component: Component::DisjointObjectProperties(DisjointObjectProperties(all)),
-                    ann,
-                });
+                let mut list = parse_ope_list(body, ctx)?;
+                bind_leading_to_first(ann, &mut list);
+                for (item_ann, sup) in list {
+                    ont.insert(AnnotatedComponent {
+                        component: Component::DisjointObjectProperties(DisjointObjectProperties(
+                            vec![subject_ope.clone(), sup],
+                        )),
+                        ann: item_ann,
+                    });
+                }
             }
             "inverseof" => {
                 let mut list = parse_ope_list(body, ctx)?;
@@ -1866,24 +1890,31 @@ fn insert_data_property_frame<A: ForIRI, O: MutableOntology<A>>(
                 }
             }
             "equivalentto" => {
-                let mut iris = Vec::new();
-                merge_list_ann(&mut ann, parse_iri_list(body, ctx)?, &mut iris);
-                let mut all = vec![DataProperty(subject.clone())];
-                all.extend(iris.into_iter().map(DataProperty));
-                ont.insert(AnnotatedComponent {
-                    component: Component::EquivalentDataProperties(EquivalentDataProperties(all)),
-                    ann,
-                });
+                // Per-item binary EquivalentDataProperties(subject, item), per
+                // OWL 2 Manchester §2.4 (matching the OWL-API / owx reader).
+                let mut list = parse_iri_list(body, ctx)?;
+                bind_leading_to_first(ann, &mut list);
+                for (item_ann, iri) in list {
+                    ont.insert(AnnotatedComponent {
+                        component: Component::EquivalentDataProperties(EquivalentDataProperties(
+                            vec![DataProperty(subject.clone()), DataProperty(iri)],
+                        )),
+                        ann: item_ann,
+                    });
+                }
             }
             "disjointwith" => {
-                let mut iris = Vec::new();
-                merge_list_ann(&mut ann, parse_iri_list(body, ctx)?, &mut iris);
-                let mut all = vec![DataProperty(subject.clone())];
-                all.extend(iris.into_iter().map(DataProperty));
-                ont.insert(AnnotatedComponent {
-                    component: Component::DisjointDataProperties(DisjointDataProperties(all)),
-                    ann,
-                });
+                let mut list = parse_iri_list(body, ctx)?;
+                bind_leading_to_first(ann, &mut list);
+                for (item_ann, iri) in list {
+                    ont.insert(AnnotatedComponent {
+                        component: Component::DisjointDataProperties(DisjointDataProperties(vec![
+                            DataProperty(subject.clone()),
+                            DataProperty(iri),
+                        ])),
+                        ann: item_ann,
+                    });
+                }
             }
             "domain" => {
                 let mut list = parse_description_list(body, ctx)?;
@@ -2067,20 +2098,35 @@ fn insert_individual_frame<A: ForIRI, O: MutableOntology<A>>(
                 }
             }
             "sameas" => {
-                let mut all = vec![subject_ind.clone()];
-                merge_list_ann(&mut ann, parse_individual_list(body, ctx)?, &mut all);
-                ont.insert(AnnotatedComponent {
-                    component: Component::SameIndividual(SameIndividual(all)),
-                    ann,
-                });
+                // Per-item binary SameIndividual(subject, item), per OWL 2
+                // Manchester §2.4 (matching the OWL-API / owx reader).
+                let mut list = parse_individual_list(body, ctx)?;
+                bind_leading_to_first(ann, &mut list);
+                for (item_ann, ind) in list {
+                    ont.insert(AnnotatedComponent {
+                        component: Component::SameIndividual(SameIndividual(vec![
+                            subject_ind.clone(),
+                            ind,
+                        ])),
+                        ann: item_ann,
+                    });
+                }
             }
             "differentfrom" => {
-                let mut all = vec![subject_ind.clone()];
-                merge_list_ann(&mut ann, parse_individual_list(body, ctx)?, &mut all);
-                ont.insert(AnnotatedComponent {
-                    component: Component::DifferentIndividuals(DifferentIndividuals(all)),
-                    ann,
-                });
+                // Per-item binary DifferentIndividuals(subject, item) — a fused
+                // n-ary axiom would also assert distinctness between the listed
+                // items, which the frame does not state.
+                let mut list = parse_individual_list(body, ctx)?;
+                bind_leading_to_first(ann, &mut list);
+                for (item_ann, ind) in list {
+                    ont.insert(AnnotatedComponent {
+                        component: Component::DifferentIndividuals(DifferentIndividuals(vec![
+                            subject_ind.clone(),
+                            ind,
+                        ])),
+                        ann: item_ann,
+                    });
+                }
             }
             other => unreachable!("unexpected individual clause keyword: {other}"),
         }
@@ -4530,12 +4576,6 @@ DisjointClasses: ex:r some ex:A, ex:r some ex:B
     /// Each exclusion is a corpus/oracle artefact, NOT an OMN reader defect —
     /// established by reading the two source files directly:
     ///
-    /// * `equivalent_classes`, `complex-equivalent-classes`,
-    ///   `annotation-on-equivalent-classes` — the OWL-API splits one n-ary
-    ///   `EquivalentClasses(A,B,C,…)` into repeated pairwise axioms
-    ///   `EquivalentClasses(A,B)`, `EquivalentClasses(A,C)`, … (the per-class-frame
-    ///   split @b-gehrke noted). Logically equivalent to the OMN n-ary form, but
-    ///   not structurally equal.
     /// * `annotation_assertion` — the two sources name different subjects
     ///   (`<http://www.example.com/i>` in the OWX vs `o:i` =
     ///   `http://www.example.com/iri#i` in the OMN).
@@ -4543,17 +4583,15 @@ DisjointClasses: ex:r some ex:A, ex:r some ex:B
     ///   and `DisjointClasses` GCIs over complex expressions that the Tawny OMN
     ///   serialisation simply omits (it emits only the `SubClassOf` GCI).
     ///
-    /// (The `annotation-with-annotation` / `annotation-with-non-builtin-annotation`
-    /// fixtures were excluded until the compare test exposed a real OMN reader bug
-    /// — a nested frame annotation was attached to the annotation value rather
-    /// than the assertion axiom; now fixed, so they compare cleanly.)
-    const COMPARE_EXCLUSIONS: &[&str] = &[
-        "equivalent_classes",
-        "complex-equivalent-classes",
-        "annotation-on-equivalent-classes",
-        "annotation_assertion",
-        "gci_and_other_class_relations",
-    ];
+    /// (The `equivalent_classes` / `complex-equivalent-classes` /
+    /// `annotation-on-equivalent-classes` fixtures were excluded until the reader
+    /// was changed to read a frame `EquivalentTo:` list as per-item binary axioms
+    /// — matching the OWL-API / owx — rather than one fused n-ary axiom; they now
+    /// compare cleanly. The `annotation-with-annotation` /
+    /// `annotation-with-non-builtin-annotation` fixtures were excluded until the
+    /// compare test exposed a real OMN reader bug — a nested frame annotation was
+    /// attached to the annotation value rather than the assertion axiom.)
+    const COMPARE_EXCLUSIONS: &[&str] = &["annotation_assertion", "gci_and_other_class_relations"];
 
     /// Cross-format conformance: `compare(read(OWX), read(OMN))`.
     ///
