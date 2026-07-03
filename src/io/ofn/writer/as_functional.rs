@@ -979,13 +979,13 @@ impl<A: ForIRI> Display for Functional<'_, Rule<A>, A> {
         }
 
         f.write_str("Body(")?;
-        for atom in self.0.body.iter().rev() {
+        for atom in self.0.body.iter() {
             Functional(&atom, self.1, None).fmt(f)?;
         }
         f.write_char(')')?;
 
         f.write_str("Head(")?;
-        for atom in self.0.head.iter().rev() {
+        for atom in self.0.head.iter() {
             Functional(&atom, self.1, None).fmt(f)?;
         }
         f.write_char(')')?;

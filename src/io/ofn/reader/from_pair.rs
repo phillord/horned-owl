@@ -435,14 +435,12 @@ impl<A: ForIRI> FromPair<A> for AnnotatedComponent<A> {
                     .next()
                     .unwrap()
                     .into_inner()
-                    .rev()
                     .map(|pair| FromPair::from_pair(pair, ctx))
                     .collect::<Result<Vec<_>>>()?;
                 let head = inner
                     .next()
                     .unwrap()
                     .into_inner()
-                    .rev()
                     .map(|pair| FromPair::from_pair(pair, ctx))
                     .collect::<Result<Vec<_>>>()?;
                 Ok(Self::new(crate::model::Rule::new(head, body), annotations))
