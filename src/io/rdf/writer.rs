@@ -1874,7 +1874,7 @@ mod test {
         use crate::io::rdf::writer::test::*;
         use crate::io::rdf::writer::write;
 
-        use std::fs::{File, create_dir_all, read_dir, remove_dir_all};
+        use std::fs::File;
         use std::io::{BufWriter, Write};
         use std::path::Path;
 
@@ -1895,35 +1895,7 @@ mod test {
 
         #[test]
         fn reparse_rdf() -> Result<(), Box<dyn std::error::Error>> {
-            create_dir_all("./tmp/owl-rdf")?;
-
-            for entry in read_dir("./src/ont/owl-rdf")? {
-                let entry = entry?;
-                let path = entry.path();
-                if path.is_file() {
-                    parse_then_output(&path);
-                }
-            }
-
-            let bubo = crate::io::tests::bubo_ensure();
-            let mut cmd = std::process::Command::new("java");
-            let output = cmd
-                // block stdout or it is piped to existing stdout
-                //.stdout(std::process::Stdio::null())
-                .arg("-jar")
-                // passed in my build.rs
-                .arg(bubo.into_os_string())
-                .arg("./dev/reparse-all.clj")
-                .arg("owl-rdf")
-                .output()?;
-
-            if !output.status.success() {
-                let out = String::from_utf8(output.stdout).unwrap();
-                assert!(false, "Bubo reparse failed: {out}");
-            }
-
-            remove_dir_all("./tmp/owl-rdf")?;
-            Ok(())
+            crate::io::tests::run_bubo_reparse("owl-rdf", |path| parse_then_output(path))
         }
     }
 

@@ -142,4 +142,40 @@ mod tests {
 
         local
     }
+
+    pub fn run_bubo_reparse<F>(format: &str, parse_fn: F) -> Result<(), Box<dyn std::error::Error>>
+    where
+        F: Fn(&std::path::Path),
+    {
+        use std::fs::{create_dir_all, read_dir, remove_dir_all};
+
+        let src_dir = format!("./src/ont/{format}");
+        let tmp_dir = format!("./tmp/{format}");
+
+        create_dir_all(&tmp_dir)?;
+
+        for entry in read_dir(&src_dir)? {
+            let entry = entry?;
+            let path = entry.path();
+            if path.is_file() {
+                parse_fn(&path);
+            }
+        }
+
+        let bubo = bubo_ensure();
+        let output = std::process::Command::new("java")
+            .arg("-jar")
+            .arg(bubo.into_os_string())
+            .arg("./dev/reparse-all.clj")
+            .arg(format)
+            .output()?;
+
+        if !output.status.success() {
+            let out = String::from_utf8(output.stdout).unwrap();
+            assert!(false, "Bubo reparse failed: {out}");
+        }
+
+        remove_dir_all(&tmp_dir)?;
+        Ok(())
+    }
 }
