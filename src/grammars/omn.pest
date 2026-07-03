@@ -140,8 +140,13 @@ DataShapedParenthesized = _{ "(" ~ (KnownDatatypeIRI | DataOneOf) }
 // a `Literal` can only be a `DataOneOf` (literals are never individuals), so it
 // unambiguously selects the data arm; an individual-member brace fails this
 // lookahead and falls through to the object arm's `ObjectOneOf`.
+// A leading `not` is looked through: a negated data-shaped filler
+// (`not xsd:float[…]`, `not (xsd:integer or …)`) is still unambiguously a data
+// range, so it must select the data arm too — otherwise the object arm parses
+// `not <datatype>` as an object complement and then hard-errors on a trailing
+// facet `[…]` (or silently mis-binds a bare/parenthesised negation).
 // Used only as a lookahead `&DataShaped` guard; never emits a pair.
-DataShaped = _{ DatatypeRestriction | KnownDatatypeIRI | DataShapedParenthesized | DataOneOf }
+DataShaped = _{ NotKw? ~ ( DatatypeRestriction | KnownDatatypeIRI | DataShapedParenthesized | DataOneOf ) }
 
 Restriction = {
     // --- DATA restriction arms (data-shaped filler) --------------------------
