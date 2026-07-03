@@ -4,8 +4,8 @@
 (defn parse-file [parse-file format]
   (try
     (let [documentsource (org.semanticweb.owlapi.io.FileDocumentSource. parse-file)
-          config (.get (org.semanticweb.owlapi.OWLAPIConfigProvider.))
-          config (.setMissingImportHandlingStrategy config org.semanticweb.owlapi.model.MissingImportHandlingStrategy/SILENT)
+          config (-> (org.semanticweb.owlapi.model.OWLOntologyLoaderConfiguration.)
+                     (.setMissingImportHandlingStrategy org.semanticweb.owlapi.model.MissingImportHandlingStrategy/SILENT))
           ontology
           (.createOntology
            (org.semanticweb.owlapi.apibinding.OWLManager/createOWLOntologyManager))
