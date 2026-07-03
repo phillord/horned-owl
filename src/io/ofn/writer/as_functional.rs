@@ -13,7 +13,10 @@ use crate::vocab::Facet;
 /// Write a string literal while escaping `"` and `\` characters.
 fn quote(mut s: &str, f: &mut Formatter<'_>) -> Result<(), Error> {
     f.write_str("\"")?;
-    while let Some((i, c)) = s.chars().enumerate().find(|(_, c)| *c == '\\' || *c == '"') {
+    // `char_indices` yields byte offsets so the slices below land on char
+    // boundaries even when earlier characters are multi-byte. `'"'` and `'\\'`
+    // are both single-byte ASCII, so `i + 1` is always a valid boundary too.
+    while let Some((i, c)) = s.char_indices().find(|(_, c)| *c == '\\' || *c == '"') {
         f.write_str(&s[..i])?;
         match c {
             '\\' => f.write_str("\\\\")?,
@@ -1101,6 +1104,24 @@ mod tests {
         };
         let ofn = format!("{}", lit.as_functional());
         assert_eq!(r#""test\\""#, &ofn);
+    }
+
+    #[test]
+    fn test_ofn_literal_multibyte_escape() {
+        // A multi-byte character preceding an escaped `"` or `\` must not cause
+        // a byte-vs-char index mismatch while slicing (regression: panicked at
+        // a non-char boundary, e.g. inside `é` or a combining mark).
+        let lit = Literal::<String>::Simple {
+            literal: String::from("café\""),
+        };
+        let ofn = format!("{}", lit.as_functional());
+        assert_eq!(r#""café\"""#, &ofn);
+
+        let lit = Literal::<String>::Simple {
+            literal: String::from("素面\\x"),
+        };
+        let ofn = format!("{}", lit.as_functional());
+        assert_eq!(r#""素面\\x""#, &ofn);
     }
 
     #[test]
