@@ -22,6 +22,13 @@ pub struct ClosureOntologyParser<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<
     // A map between the resolvable IRI of an Ontology and the
     // resolvable IRIs of any Ontology that it imports.
     import_map: HashMap<IRI<A>, Vec<IRI<A>>>,
+    // A map between an Ontology's plain IRI and the key it is
+    // actually stored under in `op`/`import_map` (its version IRI),
+    // for Ontologies that have both. An `owl:imports` statement may
+    // legally reference either the plain IRI or the version IRI of
+    // the Ontology it imports, so we need to be able to resolve
+    // either back to the same entry.
+    alias: HashMap<IRI<A>, IRI<A>>,
     b: &'a Build<A>,
     config: ParserConfiguration,
 }
@@ -32,6 +39,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> ClosureOntologyParse
             b,
             import_map: HashMap::new(),
             op: HashMap::new(),
+            alias: HashMap::new(),
             config,
         }
     }
@@ -108,9 +116,10 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> ClosureOntologyParse
 
         // Find the viri_or_iri
         let si: &SetIndex<A, AA> = o.as_ref();
+        let id = si.the_ontology_id_or_default();
 
         // Stuff the iri of this ontology, if we have one into a vec
-        let mut res = match si.the_ontology_id_or_default().viri_or_iri() {
+        let mut res = match id.clone().viri_or_iri() {
             Some(resolved_iri) => {
                 vec![resolved_iri]
             }
@@ -119,8 +128,17 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> ClosureOntologyParse
             }
         };
 
-        // Add the ontology that we have parsed into import_map
-        if let Some(resolved_iri) = si.the_ontology_id_or_default().viri_or_iri() {
+        // Add the ontology that we have parsed into import_map. An
+        // `owl:imports` statement may reference either the plain IRI
+        // or the version IRI of an Ontology, so if both are present
+        // and differ, record the plain IRI as an alias of the
+        // version IRI so that either can be used to find this entry.
+        if let Some(resolved_iri) = id.clone().viri_or_iri() {
+            if let (Some(iri), Some(viri)) = (id.iri, id.viri)
+                && iri != viri
+            {
+                self.alias.insert(iri, viri);
+            }
             self.import_map
                 .insert(resolved_iri.clone(), imports.clone());
             self.op.insert(resolved_iri, p);
@@ -148,12 +166,20 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> ClosureOntologyParse
         // of.
         let import_iris = self.import_map.get(iri).unwrap();
 
-        // Now we can get references to the actual ontologies.
+        // Now we can get references to the actual ontologies. An
+        // import may reference an Ontology by its plain IRI even
+        // though it is stored under its version IRI, so fall back to
+        // the alias map if a direct lookup fails.
         let import_closure: Result<Vec<_>, HornedError> = import_iris
             .iter()
             .map(|i| {
                 self.op
                     .get(i)
+                    .or_else(|| {
+                        self.alias
+                            .get(i)
+                            .and_then(|canonical| self.op.get(canonical))
+                    })
                     .ok_or_else(|| HornedError::ImportError(i.to_string()))
                     .map(|i| i.ontology_ref())
             })
