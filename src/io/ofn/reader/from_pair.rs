@@ -1146,6 +1146,50 @@ mod tests {
     }
 
     #[test]
+    fn language_tag_with_script_subtag() {
+        let build = Build::default();
+        let prefixes = PrefixMapping::default();
+
+        // Region subtags already parse; script subtags (4 alpha following a
+        // 2-3 alpha primary language) must not be swallowed by ExtLang.
+        assert_parse_into!(
+            Literal<String>,
+            Rule::Literal,
+            build,
+            prefixes,
+            r#""街道"@zh-Hans"#,
+            Literal::Language {
+                literal: String::from("街道"),
+                lang: String::from("zh-Hans"),
+            }
+        );
+
+        assert_parse_into!(
+            Literal<String>,
+            Rule::Literal,
+            build,
+            prefixes,
+            r#""grad"@sr-Latn"#,
+            Literal::Language {
+                literal: String::from("grad"),
+                lang: String::from("sr-Latn"),
+            }
+        );
+
+        assert_parse_into!(
+            Literal<String>,
+            Rule::Literal,
+            build,
+            prefixes,
+            r#""color"@en-US"#,
+            Literal::Language {
+                literal: String::from("color"),
+                lang: String::from("en-US"),
+            }
+        );
+    }
+
+    #[test]
     fn has_key() {
         let build = Build::default();
         let mut prefixes = PrefixMapping::default();
