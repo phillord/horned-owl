@@ -122,25 +122,33 @@ mod tests {
 
     // Ensure bubo exists in the dev location during tests
     pub fn bubo_ensure() -> std::path::PathBuf {
-        let local = PathBuf::from("dev/bubo-0.4.0");
+        use std::sync::OnceLock;
 
-        if !local.exists() {
-            println!("Downloading bubo 0.4.0 from GitHub...");
-            let status = std::process::Command::new("wget")
-                .args([
-                    "https://github.com/phillord/tawny-bubo/releases/download/0.4.0/bubo-0.4.0",
-                    "-O",
-                    "dev/bubo-0.4.0",
-                ])
-                .status()
-                .expect("failed to run wget");
-            assert!(status.success(), "failed to download bubo");
+        static BUBO_PATH: OnceLock<PathBuf> = OnceLock::new();
 
-            std::fs::set_permissions(&local, std::fs::Permissions::from_mode(0o755))
-                .expect("failed to set bubo executable");
-        }
+        BUBO_PATH
+            .get_or_init(|| {
+                let local = PathBuf::from("dev/bubo-0.4.0");
 
-        local
+                if !local.exists() {
+                    println!("Downloading bubo 0.4.0 from GitHub...");
+                    let status = std::process::Command::new("wget")
+                        .args([
+                            "https://github.com/phillord/tawny-bubo/releases/download/0.4.0/bubo-0.4.0",
+                            "-O",
+                            "dev/bubo-0.4.0",
+                        ])
+                        .status()
+                        .expect("failed to run wget");
+                    assert!(status.success(), "failed to download bubo");
+
+                    std::fs::set_permissions(&local, std::fs::Permissions::from_mode(0o755))
+                        .expect("failed to set bubo executable");
+                }
+
+                local
+            })
+            .clone()
     }
 
     pub fn run_bubo_reparse<F>(format: &str, parse_fn: F) -> Result<(), Box<dyn std::error::Error>>
