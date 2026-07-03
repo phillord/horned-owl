@@ -464,7 +464,16 @@ impl<A: ForIRI> AsFunctional<A> for AnnotationValue<A> {}
 
 impl<A: ForIRI> Display for Functional<'_, AnonymousIndividual<A>, A> {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
-        write!(f, "{}", self.0.0.borrow())
+        // Functional syntax requires the `_:` blank-node prefix. Generated
+        // labels (e.g. from the RDF reader) are bare, while labels parsed from
+        // functional/Manchester input already carry it, so add it only when
+        // absent to avoid double-prefixing.
+        let label = self.0.0.borrow();
+        if label.starts_with("_:") {
+            write!(f, "{}", label)
+        } else {
+            write!(f, "_:{}", label)
+        }
     }
 }
 
@@ -1122,6 +1131,22 @@ mod tests {
         };
         let ofn = format!("{}", lit.as_functional());
         assert_eq!(r#""素面\\x""#, &ofn);
+    }
+
+    #[test]
+    fn test_ofn_anonymous_individual_nodeid() {
+        let build = Build::new_arc();
+
+        // Generated anonymous individuals (e.g. from the RDF reader, via
+        // `anon_renumbered`) hold a BARE label; functional syntax requires the
+        // `_:` blank-node prefix, so it must be added.
+        let anon = build.anon("anon000007");
+        assert_eq!("_:anon000007", format!("{}", anon.as_functional()));
+
+        // A label that already carries `_:` (e.g. parsed from functional/
+        // Manchester input) must not be double-prefixed.
+        let anon = build.anon("_:x1");
+        assert_eq!("_:x1", format!("{}", anon.as_functional()));
     }
 
     #[test]
