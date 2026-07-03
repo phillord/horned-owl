@@ -2659,6 +2659,72 @@ mod tests {
         );
     }
 
+    /// A `not`-negated data-shaped filler after `some`/`only` is unambiguously a
+    /// data restriction over a `DataComplementOf` (an object complement cannot
+    /// carry a datatype facet). Previously the data-arm lookahead did not see
+    /// through the leading `not`, so a faceted case (`dp some not xsd:float[…]`)
+    /// hard-errored on the `[`, and bare/parenthesised cases silently mis-parsed
+    /// as object complements.
+    #[test]
+    fn parses_negated_data_range_restriction() {
+        use crate::model::*;
+        let b = Build::new_rc();
+        let pm = curie::PrefixMapping::default();
+        let p =
+            |s: &str| crate::io::omn::reader::parse_class_expression::<RcStr>(s, &pm, &b).unwrap();
+        let dp = b.data_property("http://t/dp");
+        let xsd_int = "http://www.w3.org/2001/XMLSchema#integer";
+        let xsd_float = "http://www.w3.org/2001/XMLSchema#float";
+
+        // bare negated known datatype
+        assert_eq!(
+            p(&format!("<http://t/dp> some not <{xsd_int}>")),
+            ClassExpression::DataSomeValuesFrom {
+                dp: dp.clone(),
+                dr: DataRange::DataComplementOf(Box::new(DataRange::Datatype(b.datatype(xsd_int)))),
+            }
+        );
+
+        // negated FACETED datatype — the case that hard-errored (PACO).
+        let parsed = p(&format!(
+            r#"<http://t/dp> some not <{xsd_float}>[> "1.0"^^<{xsd_float}>]"#
+        ));
+        match parsed {
+            ClassExpression::DataSomeValuesFrom { dp: d, dr } => {
+                assert_eq!(d, dp);
+                assert!(
+                    matches!(&dr, DataRange::DataComplementOf(inner)
+                        if matches!(**inner, DataRange::DatatypeRestriction(_, _))),
+                    "expected DataComplementOf(DatatypeRestriction), got {dr:?}"
+                );
+            }
+            other => panic!("expected DataSomeValuesFrom, got {other:?}"),
+        }
+
+        // negated parenthesised data range
+        assert_eq!(
+            p(&format!("<http://t/dp> only not (<{xsd_int}> or <{xsd_float}>)")),
+            ClassExpression::DataAllValuesFrom {
+                dp: dp.clone(),
+                dr: DataRange::DataComplementOf(Box::new(DataRange::DataUnionOf(vec![
+                    DataRange::Datatype(b.datatype(xsd_int)),
+                    DataRange::Datatype(b.datatype(xsd_float)),
+                ]))),
+            }
+        );
+
+        // Control: a negated bare CLASS filler stays an object restriction.
+        assert_eq!(
+            p("<http://t/r> some not <http://t/SomeClass>"),
+            ClassExpression::ObjectSomeValuesFrom {
+                ope: ObjectPropertyExpression::ObjectProperty(b.object_property("http://t/r")),
+                bce: Box::new(ClassExpression::ObjectComplementOf(Box::new(
+                    ClassExpression::Class(b.class("http://t/SomeClass"))
+                ))),
+            }
+        );
+    }
+
     /// Regression test for the boundary-safe inverse detection fix.
     ///
     /// Before the fix, `ObjectPropertyExpression::from_pair_unchecked` used the raw
