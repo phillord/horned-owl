@@ -107,6 +107,8 @@ impl<A: ForIRI, AA: ForIndex<A>> From<ParserOutput<A, AA>> for ComponentMappedOn
 
 #[cfg(test)]
 mod tests {
+    use std::{os::unix::fs::PermissionsExt, path::PathBuf};
+
     #[test]
     fn omn_parser_output_constructs_and_decomposes() {
         use super::*;
@@ -116,5 +118,28 @@ mod tests {
         let pm = curie::PrefixMapping::default();
         let out: ParserOutput<std::rc::Rc<str>, Idx> = ParserOutput::omn((o, pm));
         assert!(matches!(out, ParserOutput::OMNParser(_, _)));
+    }
+
+    // Ensure bubo exists in the dev location during tests
+    pub fn bubo_ensure() -> std::path::PathBuf {
+        let local = PathBuf::from("dev/bubo-0.4.0");
+
+        if !local.exists() {
+            println!("Downloading bubo 0.4.0 from GitHub...");
+            let status = std::process::Command::new("wget")
+                .args([
+                    "https://github.com/phillord/tawny-bubo/releases/download/0.4.0/bubo-0.4.0",
+                    "-O",
+                    "dev/bubo-0.4.0",
+                ])
+                .status()
+                .expect("failed to run wget");
+            assert!(status.success(), "failed to download bubo");
+
+            std::fs::set_permissions(&local, std::fs::Permissions::from_mode(0o755))
+                .expect("failed to set bubo executable");
+        }
+
+        local
     }
 }

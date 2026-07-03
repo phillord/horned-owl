@@ -1905,13 +1905,14 @@ mod test {
                 }
             }
 
+            let bubo = crate::io::tests::bubo_ensure();
             let mut cmd = std::process::Command::new("java");
             let output = cmd
                 // block stdout or it is piped to existing stdout
                 //.stdout(std::process::Stdio::null())
                 .arg("-jar")
                 // passed in my build.rs
-                .arg(option_env!("BUBO_LOCATION").unwrap())
+                .arg(bubo.into_os_string())
                 .arg("./dev/reparse-all.clj")
                 .arg("owl-rdf")
                 .output()?;
