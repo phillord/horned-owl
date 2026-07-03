@@ -2,7 +2,6 @@ use std::os::unix::fs::PermissionsExt;
 
 fn main() {
     println!("cargo::rerun-if-changed=build.rs");
-    println!("cargo::rerun-if-changed=dev/bubo-0.4.0");
 
     let local = std::path::Path::new("dev/bubo-0.4.0");
     if !local.exists() {
