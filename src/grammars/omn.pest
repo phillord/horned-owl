@@ -134,10 +134,14 @@ KnownDatatypeIRI = {
 DataShapedParenthesized = _{ "(" ~ (KnownDatatypeIRI | DataOneOf) }
 
 // DataShaped: silent predicate — the filler is unambiguously data.
-// Matches a faceted datatype restriction (`anyIRI[…]`), a known-prefix IRI, or
-// a parenthesised expression that starts with a known-datatype/DataOneOf.
+// Matches a faceted datatype restriction (`anyIRI[…]`), a known-prefix IRI, a
+// parenthesised expression that starts with a known-datatype/DataOneOf, or a
+// bare literal enumeration `{"x", ...}`.  A brace filler whose first member is
+// a `Literal` can only be a `DataOneOf` (literals are never individuals), so it
+// unambiguously selects the data arm; an individual-member brace fails this
+// lookahead and falls through to the object arm's `ObjectOneOf`.
 // Used only as a lookahead `&DataShaped` guard; never emits a pair.
-DataShaped = _{ DatatypeRestriction | KnownDatatypeIRI | DataShapedParenthesized }
+DataShaped = _{ DatatypeRestriction | KnownDatatypeIRI | DataShapedParenthesized | DataOneOf }
 
 Restriction = {
     // --- DATA restriction arms (data-shaped filler) --------------------------
@@ -221,10 +225,13 @@ FacetSymbol = {
 // is [PrefixDeclaration*, OntologyHeader?, Frame*].
 
 // Opaque trailing block: everything from the `# General axioms` marker to
-// end-of-input is consumed as a single node so the reader can skip-and-warn
-// rather than hard-erroring at EOI.  The marker must be kept in exact sync
-// with the writer's `writeln!(write, "# General axioms")` literal.
-GeneralAxiomBlock  = { "# General axioms" ~ ANY* }
+// end-of-input is captured verbatim as a single node, which the reader hands
+// to the functional-syntax parser.  The marker must be kept in exact sync with
+// the writer's `writeln!(write, "# General axioms")` literal.  ATOMIC (`@`):
+// implicit `COMMENT`/`WHITESPACE` skipping must NOT apply here, or `#`-bearing
+// content (e.g. `rdfs:label`'s `...rdf-schema#label` IRI) would be eaten as a
+// comment and truncated out of the captured span.
+GeneralAxiomBlock  = @{ "# General axioms" ~ ANY* }
 ManchesterDocument = { SOI ~ PrefixDeclaration* ~ OntologyHeader? ~ ( Frame | Misc )* ~ GeneralAxiomBlock? ~ EOI }
 ImportDeclaration  = { ^"Import:" ~ IRI }
 

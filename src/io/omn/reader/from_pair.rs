@@ -2612,6 +2612,53 @@ mod tests {
         // }
     }
 
+    /// A restriction whose filler is a bare literal enumeration `{ "a", "b" }`
+    /// is unambiguously a data restriction (literals cannot be individuals), so
+    /// it must parse as `DataSomeValuesFrom`/`DataAllValuesFrom` over a
+    /// `DataOneOf` rather than failing with "expected Individual" against the
+    /// object-arm `ObjectOneOf`.
+    #[test]
+    fn parses_literal_enumeration_data_restriction() {
+        use crate::model::*;
+        let b = Build::new_rc();
+        let pm = curie::PrefixMapping::default();
+        let p =
+            |s: &str| crate::io::omn::reader::parse_class_expression::<RcStr>(s, &pm, &b).unwrap();
+
+        let dp = b.data_property("http://t/dp");
+        let one_of = DataRange::DataOneOf(vec![
+            Literal::Simple {
+                literal: "A".to_string(),
+            },
+            Literal::Simple {
+                literal: "B".to_string(),
+            },
+        ]);
+
+        assert_eq!(
+            p(r#"<http://t/dp> only { "A", "B" }"#),
+            ClassExpression::DataAllValuesFrom {
+                dp: dp.clone(),
+                dr: one_of.clone(),
+            }
+        );
+        assert_eq!(
+            p(r#"<http://t/dp> some { "A", "B" }"#),
+            ClassExpression::DataSomeValuesFrom { dp, dr: one_of }
+        );
+
+        // An individual-member brace must still parse as ObjectOneOf.
+        assert_eq!(
+            p("<http://t/r> only { <http://t/i> }"),
+            ClassExpression::ObjectAllValuesFrom {
+                ope: ObjectPropertyExpression::ObjectProperty(b.object_property("http://t/r")),
+                bce: Box::new(ClassExpression::ObjectOneOf(vec![Individual::Named(
+                    b.named_individual("http://t/i")
+                )])),
+            }
+        );
+    }
+
     /// Regression test for the boundary-safe inverse detection fix.
     ///
     /// Before the fix, `ObjectPropertyExpression::from_pair_unchecked` used the raw
@@ -3370,16 +3417,68 @@ mod tests {
     }
 
     #[test]
-    fn skips_general_axioms_block_without_error() {
+    fn reads_general_axioms_block() {
         use crate::io::omn::reader::read_with_build;
         use crate::ontology::set::SetOntology;
         use std::io::BufReader;
         let b = Build::new_rc();
-        // a document with a frame + a trailing non-Manchester block
-        let doc = "Prefix: ex: <http://ex/>\n\nClass: ex:A\n\n# General axioms\nSubClassOf(ObjectIntersectionOf(<http://ex/A> <http://ex/B>) <http://ex/C>)\n";
+        // A frame plus a trailing functional-syntax `# General axioms` block
+        // holding a GCI and an annotation assertion on an undeclared subject
+        // (the shape that previously caused silent, large-scale loss).
+        let doc = "Prefix: ex: <http://ex/>\n\nClass: ex:A\n\n# General axioms\n\
+                   SubClassOf(ObjectIntersectionOf(<http://ex/A> <http://ex/B>) <http://ex/C>)\n\
+                   AnnotationAssertion(<http://ex/p> <http://ex/CHEBI_1> \"tyramine\")\n";
         let (parsed, _): (SetOntology<_>, PrefixMapping) =
             read_with_build(BufReader::new(doc.as_bytes()), &b).unwrap();
-        // the frame parsed; the misc block was skipped (not errored)
+
+        // the frame parsed
+        assert!(
+            parsed
+                .iter()
+                .any(|ac| matches!(&ac.component, Component::DeclareClass(_)))
+        );
+
+        // the GCI in the block is now read back (not skipped)
+        let expected_sub = ClassExpression::ObjectIntersectionOf(vec![
+            ClassExpression::Class(b.class("http://ex/A")),
+            ClassExpression::Class(b.class("http://ex/B")),
+        ]);
+        let expected_sup = ClassExpression::Class(b.class("http://ex/C"));
+        assert!(
+            parsed.iter().any(|ac| matches!(
+                &ac.component,
+                Component::SubClassOf(SubClassOf { sub, sup })
+                    if *sub == expected_sub && *sup == expected_sup
+            )),
+            "general-axiom SubClassOf GCI should be read back"
+        );
+
+        // the annotation assertion on an undeclared subject is preserved
+        let expected_subject = b.iri("http://ex/CHEBI_1");
+        assert!(
+            parsed.iter().any(|ac| matches!(
+                &ac.component,
+                Component::AnnotationAssertion(aa)
+                    if matches!(&aa.subject, AnnotationSubject::IRI(i) if *i == expected_subject)
+            )),
+            "general-axiom annotation assertion should be read back"
+        );
+    }
+
+    #[test]
+    fn general_axioms_block_parse_failure_is_skipped_not_errored() {
+        use crate::io::omn::reader::read_with_build;
+        use crate::ontology::set::SetOntology;
+        use std::io::BufReader;
+        let b = Build::new_rc();
+        // A `# General axioms` block the functional-syntax reader cannot parse
+        // must degrade to warn-and-skip (the pre-delegation behaviour), never a
+        // hard error — so the rest of the document still reads.
+        let doc = "Prefix: ex: <http://ex/>\n\nClass: ex:A\n\n# General axioms\n\
+                   NotARealAxiom(@@@ broken)\n";
+        let (parsed, _): (SetOntology<_>, PrefixMapping) =
+            read_with_build(BufReader::new(doc.as_bytes()), &b)
+                .expect("unparseable general-axioms block must not error the read");
         assert!(
             parsed
                 .iter()

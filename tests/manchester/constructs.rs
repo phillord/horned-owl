@@ -15,11 +15,6 @@ pub enum Residual {
     None,
     /// Manchester §2.5 has no `Rule:` syntax; parse fails by design.
     SwrlRule,
-    /// Complex-LHS GCI expressed as a `# General axioms` functional-syntax
-    /// block.  The reader skips that block with a warning; the document parses
-    /// (`read_ok`), but the axiom is absent from the component set (visible
-    /// via `note`).
-    ComplexLhsGci,
     /// Nested annotations are parsed and silently dropped (model limit).
     NestedAnnotationDropped,
     /// `HasKey:` with a data-property key when the key IRI has no `DataProperty:`
@@ -832,19 +827,17 @@ pub const CASES: &[Case] = &[
         omn: "Class: Foo\n",
     },
     // -----------------------------------------------------------------------
-    // Complex-LHS GCI — no §2.5 frame form.  The writer emits it to the
-    // `# General axioms` functional-syntax block; the reader skips that block
-    // (returns Ok, prints a warning).  Document parses cleanly (`read_ok`),
-    // but the complex-subject axiom is absent from the component set —
-    // demonstrated by asserting `expect_debug_contains` yields a non-empty
-    // `note` (the axiom was not found).
+    // `# General axioms` block round-trip.  A complex-LHS GCI has no plain
+    // §2.5 classIRI frame form, so the writer emits it as full-IRI OWL
+    // functional syntax under a `# General axioms` marker.  The reader
+    // delegates that block back to the functional-syntax reader, so the axiom
+    // is read back (present in components) and round-trips.
     // -----------------------------------------------------------------------
     Case {
-        id: "residual.complexgci",
-        residual: Residual::ComplexLhsGci,
-        // The complex SubClassOf axiom's subject is an intersection; if the
-        // axiom were present we'd see "ObjectIntersectionOf" in a component.
-        // Since the block is skipped it will be absent → note populated.
+        id: "generalaxioms.block",
+        residual: Residual::None,
+        // The complex SubClassOf axiom's subject is an intersection; reading the
+        // block back yields an "ObjectIntersectionOf" component.
         expect_debug_contains: "ObjectIntersectionOf",
         omn: "Prefix: : <http://e/>\n\
               # General axioms\n\
@@ -1056,13 +1049,6 @@ fn construct_matrix_has_no_unexpected_failures() {
                 // to ObjectPropertyExpression; parses and round-trips stably
                 // (as an object key, which is the documented undeclared tail).
                 row.read_ok && row.roundtrip_ok
-            }
-            Residual::ComplexLhsGci => {
-                // The `# General axioms` block is skipped by the reader
-                // (returns Ok, warning printed).  Document parses, but the
-                // complex axiom is absent from components — demonstrated by
-                // `expect_debug_contains` not matching → note is non-empty.
-                row.read_ok && !row.note.is_empty()
             }
         };
         if !ok {
