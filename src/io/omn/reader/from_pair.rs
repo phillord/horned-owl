@@ -610,6 +610,36 @@ impl<A: ForIRI> FromPair<A> for ClassExpression<A> {
                         None
                     };
 
+                    // Helper: `not <D>` where `<D>` is a bare `Class(iri)` that is a
+                    // declared `Datatype:` (or sits under a declared data property).
+                    // The grammar routes `not <customType>` (no xsd prefix, no facet)
+                    // to the object arm as `ObjectComplementOf`, so this recovers the
+                    // intended `DataComplementOf` filler; `None` keeps the object form.
+                    let negated_datatype = |bce: &ClassExpression<A>| -> Option<IRI<A>> {
+                        if let ClassExpression::ObjectComplementOf(inner) = bce
+                            && let ClassExpression::Class(Class(filler_iri)) = &**inner
+                            && (prop_is_data || ctx.is_datatype(filler_iri))
+                        {
+                            return Some(filler_iri.clone());
+                        }
+                        None
+                    };
+
+                    // Combined data-range filler for a cardinality qualifier: a bare
+                    // declared datatype/class (→ `Datatype`) or a `not`-negation of one
+                    // (→ `DataComplementOf`), when declarations indicate a data
+                    // restriction; `None` keeps the object form.
+                    let data_range_filler = |bce: &ClassExpression<A>| -> Option<DataRange<A>> {
+                        if let ClassExpression::Class(Class(iri)) = bce
+                            && (prop_is_data || ctx.is_datatype(iri))
+                        {
+                            return Some(DataRange::Datatype(Datatype(iri.clone())));
+                        }
+                        negated_datatype(bce).map(|iri| {
+                            DataRange::DataComplementOf(Box::new(DataRange::Datatype(Datatype(iri))))
+                        })
+                    };
+
                     match keyword.as_str() {
                         "some" => {
                             let filler = children.next().unwrap();
@@ -628,6 +658,18 @@ impl<A: ForIRI> FromPair<A> for ClassExpression<A> {
                                     dp,
                                     dr: DataRange::Datatype(Datatype(dt_iri)),
                                 })
+                            } else if let Some(dt_iri) = negated_datatype(&bce) {
+                                match &ope {
+                                    ObjectPropertyExpression::ObjectProperty(ObjectProperty(
+                                        iri,
+                                    )) => Ok(ClassExpression::DataSomeValuesFrom {
+                                        dp: DataProperty(iri.clone()),
+                                        dr: DataRange::DataComplementOf(Box::new(
+                                            DataRange::Datatype(Datatype(dt_iri)),
+                                        )),
+                                    }),
+                                    _ => Ok(ClassExpression::ObjectSomeValuesFrom { ope, bce }),
+                                }
                             } else if prop_is_data {
                                 // Property declared data but filler is not a bare
                                 // declared Datatype — only flip if filler is a bare
@@ -664,6 +706,18 @@ impl<A: ForIRI> FromPair<A> for ClassExpression<A> {
                                     dp,
                                     dr: DataRange::Datatype(Datatype(dt_iri)),
                                 })
+                            } else if let Some(dt_iri) = negated_datatype(&bce) {
+                                match &ope {
+                                    ObjectPropertyExpression::ObjectProperty(ObjectProperty(
+                                        iri,
+                                    )) => Ok(ClassExpression::DataAllValuesFrom {
+                                        dp: DataProperty(iri.clone()),
+                                        dr: DataRange::DataComplementOf(Box::new(
+                                            DataRange::Datatype(Datatype(dt_iri)),
+                                        )),
+                                    }),
+                                    _ => Ok(ClassExpression::ObjectAllValuesFrom { ope, bce }),
+                                }
                             } else if prop_is_data {
                                 if let ClassExpression::Class(Class(filler_iri)) = *bce {
                                     let dp = match &ope {
@@ -704,31 +758,23 @@ impl<A: ForIRI> FromPair<A> for ClassExpression<A> {
                             match filler_pair {
                                 Some(fp) => {
                                     let bce = Box::new(Self::from_pair_unchecked(fp, ctx)?);
-                                    if (prop_is_data || bare_datatype_iri(&bce).is_some())
-                                        && matches!(*bce, ClassExpression::Class(_))
-                                    {
-                                        let dt_iri = match *bce {
-                                            ClassExpression::Class(Class(iri)) => iri,
-                                            _ => unreachable!(),
-                                        };
-                                        let dp = match &ope {
+                                    match data_range_filler(&bce) {
+                                        Some(dr) => match &ope {
                                             ObjectPropertyExpression::ObjectProperty(
                                                 ObjectProperty(iri),
-                                            ) => DataProperty(iri.clone()),
-                                            _ => {
-                                                return Err(HornedError::invalid_at(
-                                                    "data property cannot be inverse",
-                                                    r_span,
-                                                ));
-                                            }
-                                        };
-                                        Ok(ClassExpression::DataMinCardinality {
-                                            n,
-                                            dp,
-                                            dr: DataRange::Datatype(Datatype(dt_iri)),
-                                        })
-                                    } else {
-                                        Ok(ClassExpression::ObjectMinCardinality { n, ope, bce })
+                                            ) => Ok(ClassExpression::DataMinCardinality {
+                                                n,
+                                                dp: DataProperty(iri.clone()),
+                                                dr,
+                                            }),
+                                            _ => Err(HornedError::invalid_at(
+                                                "data property cannot be inverse",
+                                                r_span,
+                                            )),
+                                        },
+                                        None => {
+                                            Ok(ClassExpression::ObjectMinCardinality { n, ope, bce })
+                                        }
                                     }
                                 }
                                 None => {
@@ -748,31 +794,23 @@ impl<A: ForIRI> FromPair<A> for ClassExpression<A> {
                             match filler_pair {
                                 Some(fp) => {
                                     let bce = Box::new(Self::from_pair_unchecked(fp, ctx)?);
-                                    if (prop_is_data || bare_datatype_iri(&bce).is_some())
-                                        && matches!(*bce, ClassExpression::Class(_))
-                                    {
-                                        let dt_iri = match *bce {
-                                            ClassExpression::Class(Class(iri)) => iri,
-                                            _ => unreachable!(),
-                                        };
-                                        let dp = match &ope {
+                                    match data_range_filler(&bce) {
+                                        Some(dr) => match &ope {
                                             ObjectPropertyExpression::ObjectProperty(
                                                 ObjectProperty(iri),
-                                            ) => DataProperty(iri.clone()),
-                                            _ => {
-                                                return Err(HornedError::invalid_at(
-                                                    "data property cannot be inverse",
-                                                    r_span,
-                                                ));
-                                            }
-                                        };
-                                        Ok(ClassExpression::DataMaxCardinality {
-                                            n,
-                                            dp,
-                                            dr: DataRange::Datatype(Datatype(dt_iri)),
-                                        })
-                                    } else {
-                                        Ok(ClassExpression::ObjectMaxCardinality { n, ope, bce })
+                                            ) => Ok(ClassExpression::DataMaxCardinality {
+                                                n,
+                                                dp: DataProperty(iri.clone()),
+                                                dr,
+                                            }),
+                                            _ => Err(HornedError::invalid_at(
+                                                "data property cannot be inverse",
+                                                r_span,
+                                            )),
+                                        },
+                                        None => {
+                                            Ok(ClassExpression::ObjectMaxCardinality { n, ope, bce })
+                                        }
                                     }
                                 }
                                 None => {
@@ -792,31 +830,25 @@ impl<A: ForIRI> FromPair<A> for ClassExpression<A> {
                             match filler_pair {
                                 Some(fp) => {
                                     let bce = Box::new(Self::from_pair_unchecked(fp, ctx)?);
-                                    if (prop_is_data || bare_datatype_iri(&bce).is_some())
-                                        && matches!(*bce, ClassExpression::Class(_))
-                                    {
-                                        let dt_iri = match *bce {
-                                            ClassExpression::Class(Class(iri)) => iri,
-                                            _ => unreachable!(),
-                                        };
-                                        let dp = match &ope {
+                                    match data_range_filler(&bce) {
+                                        Some(dr) => match &ope {
                                             ObjectPropertyExpression::ObjectProperty(
                                                 ObjectProperty(iri),
-                                            ) => DataProperty(iri.clone()),
-                                            _ => {
-                                                return Err(HornedError::invalid_at(
-                                                    "data property cannot be inverse",
-                                                    r_span,
-                                                ));
-                                            }
-                                        };
-                                        Ok(ClassExpression::DataExactCardinality {
+                                            ) => Ok(ClassExpression::DataExactCardinality {
+                                                n,
+                                                dp: DataProperty(iri.clone()),
+                                                dr,
+                                            }),
+                                            _ => Err(HornedError::invalid_at(
+                                                "data property cannot be inverse",
+                                                r_span,
+                                            )),
+                                        },
+                                        None => Ok(ClassExpression::ObjectExactCardinality {
                                             n,
-                                            dp,
-                                            dr: DataRange::Datatype(Datatype(dt_iri)),
-                                        })
-                                    } else {
-                                        Ok(ClassExpression::ObjectExactCardinality { n, ope, bce })
+                                            ope,
+                                            bce,
+                                        }),
                                     }
                                 }
                                 None => {
@@ -2722,6 +2754,115 @@ mod tests {
                     ClassExpression::Class(b.class("http://t/SomeClass"))
                 ))),
             }
+        );
+    }
+
+    /// A negated CUSTOM datatype is only knowable from a declaration: the
+    /// grammar can't see `not :MyType` is data-shaped (not `xsd:`/faceted), so
+    /// it lands on the object arm as `ObjectComplementOf`. When the property is
+    /// a declared `DataProperty:` or the negated IRI is a declared `Datatype:`,
+    /// the reader must flip it to a data restriction over `DataComplementOf`.
+    #[test]
+    fn flips_negated_declared_datatype_to_data_restriction() {
+        use crate::io::omn::reader::read_with_build;
+        use crate::model::*;
+        use crate::ontology::set::SetOntology;
+        use std::io::BufReader;
+
+        let has_sup = |ont: &SetOntology<RcStr>, want: &ClassExpression<RcStr>| {
+            ont.iter().any(|ac| {
+                matches!(&ac.component,
+                    Component::SubClassOf(SubClassOf { sup, .. }) if sup == want)
+            })
+        };
+
+        // (1) flip via a `Datatype:` declaration on the negated IRI.
+        let b = Build::new_rc();
+        let doc = "Prefix: : <http://e/>\nDatatype: :MyType\nClass: :C\n    SubClassOf: :p some not :MyType\n";
+        let (ont, _): (SetOntology<_>, PrefixMapping) =
+            read_with_build(BufReader::new(doc.as_bytes()), &b).unwrap();
+        assert!(
+            has_sup(
+                &ont,
+                &ClassExpression::DataSomeValuesFrom {
+                    dp: b.data_property("http://e/p"),
+                    dr: DataRange::DataComplementOf(Box::new(DataRange::Datatype(
+                        b.datatype("http://e/MyType")
+                    ))),
+                }
+            ),
+            "Datatype-declared negation should flip: {:?}",
+            ont.iter().map(|a| a.component.clone()).collect::<Vec<_>>()
+        );
+
+        // (2) flip via a `DataProperty:` declaration on the property.
+        let b2 = Build::new_rc();
+        let doc2 = "Prefix: : <http://e/>\nDataProperty: :p\nClass: :C\n    SubClassOf: :p only not :X\n";
+        let (ont2, _): (SetOntology<_>, PrefixMapping) =
+            read_with_build(BufReader::new(doc2.as_bytes()), &b2).unwrap();
+        assert!(has_sup(
+            &ont2,
+            &ClassExpression::DataAllValuesFrom {
+                dp: b2.data_property("http://e/p"),
+                dr: DataRange::DataComplementOf(Box::new(DataRange::Datatype(
+                    b2.datatype("http://e/X")
+                ))),
+            }
+        ));
+
+        // (3) no declaration anywhere: irreducibly ambiguous, stays object.
+        let b3 = Build::new_rc();
+        let doc3 = "Prefix: : <http://e/>\nClass: :C\n    SubClassOf: :p some not :Y\n";
+        let (ont3, _): (SetOntology<_>, PrefixMapping) =
+            read_with_build(BufReader::new(doc3.as_bytes()), &b3).unwrap();
+        assert!(ont3.iter().any(|ac| matches!(
+            &ac.component,
+            Component::SubClassOf(SubClassOf {
+                sup: ClassExpression::ObjectSomeValuesFrom { .. },
+                ..
+            })
+        )));
+    }
+
+    /// The negated declared-datatype flip also applies to qualified cardinality
+    /// restrictions (`min`/`max`/`exactly`): `p min 2 not :MyType` over a
+    /// declared `Datatype:` becomes `DataMinCardinality` with a
+    /// `DataComplementOf` range.
+    #[test]
+    fn flips_negated_datatype_in_cardinality() {
+        use crate::io::omn::reader::read_with_build;
+        use crate::model::*;
+        use crate::ontology::set::SetOntology;
+        use std::io::BufReader;
+
+        let b = Build::new_rc();
+        let doc = "Prefix: : <http://e/>\nDatatype: :MyType\nClass: :C\n    \
+                   SubClassOf: :p min 2 not :MyType\n    SubClassOf: :q exactly 1 not :MyType\n";
+        let (ont, _): (SetOntology<_>, PrefixMapping) =
+            read_with_build(BufReader::new(doc.as_bytes()), &b).unwrap();
+        let cx = ont
+            .iter()
+            .filter_map(|ac| match &ac.component {
+                Component::SubClassOf(SubClassOf { sup, .. }) => Some(sup.clone()),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        let neg = DataRange::DataComplementOf(Box::new(DataRange::Datatype(b.datatype("http://e/MyType"))));
+        assert!(
+            cx.contains(&ClassExpression::DataMinCardinality {
+                n: 2,
+                dp: b.data_property("http://e/p"),
+                dr: neg.clone(),
+            }),
+            "min → DataMinCardinality(DataComplementOf); got {cx:?}"
+        );
+        assert!(
+            cx.contains(&ClassExpression::DataExactCardinality {
+                n: 1,
+                dp: b.data_property("http://e/q"),
+                dr: neg,
+            }),
+            "exactly → DataExactCardinality(DataComplementOf)"
         );
     }
 
