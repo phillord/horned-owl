@@ -20,7 +20,7 @@ Declaration(ObjectProperty(o:r))
 #   Classes
 ############################
 
-# Class: o:A (o:A)
+# Class: <http://www.example.com/iri#A> (<http://www.example.com/iri#A>)
 
 EquivalentClasses(o:A ObjectSomeValuesFrom(o:r o:B))
 EquivalentClasses(o:A ObjectSomeValuesFrom(o:r o:C))

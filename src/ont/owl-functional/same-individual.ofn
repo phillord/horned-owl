@@ -16,7 +16,7 @@ Declaration(NamedIndividual(o:s))
 #   Named Individuals
 ############################
 
-# Individual: o:r (o:r)
+# Individual: <http://www.example.com/iri#r> (<http://www.example.com/iri#r>)
 
 SameIndividual(o:r o:s)
 

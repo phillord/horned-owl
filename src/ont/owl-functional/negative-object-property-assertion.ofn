@@ -18,7 +18,7 @@ Declaration(NamedIndividual(o:J))
 #   Named Individuals
 ############################
 
-# Individual: o:I (o:I)
+# Individual: <http://www.example.com/iri#I> (<http://www.example.com/iri#I>)
 
 NegativeObjectPropertyAssertion(o:r o:I o:J)
 

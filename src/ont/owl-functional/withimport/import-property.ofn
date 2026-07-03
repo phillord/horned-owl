@@ -19,7 +19,7 @@ Declaration(Class(o:B))
 #   Classes
 ############################
 
-# Class: o:B (o:B)
+# Class: <http://www.example.com/iri#B> (<http://www.example.com/iri#B>)
 
 SubClassOf(o:B ObjectSomeValuesFrom(other:other-o o:A))
 

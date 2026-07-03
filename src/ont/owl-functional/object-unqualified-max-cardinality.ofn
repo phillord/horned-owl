@@ -17,7 +17,7 @@ Declaration(ObjectProperty(o:r))
 #   Classes
 ############################
 
-# Class: o:C (o:C)
+# Class: <http://www.example.com/iri#C> (<http://www.example.com/iri#C>)
 
 SubClassOf(o:C ObjectMaxCardinality(1 o:r))
 

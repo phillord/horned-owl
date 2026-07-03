@@ -16,7 +16,7 @@ Declaration(ObjectProperty(o:s))
 #   Object Properties
 ############################
 
-# Object Property: o:r (o:r)
+# Object Property: <http://www.example.com/iri#r> (<http://www.example.com/iri#r>)
 
 EquivalentObjectProperties(o:r o:s)
 

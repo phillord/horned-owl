@@ -16,7 +16,7 @@ Declaration(DataProperty(o:dp1))
 #   Data Properties
 ############################
 
-# Data Property: o:dp (o:dp)
+# Data Property: <http://www.example.com/iri#dp> (<http://www.example.com/iri#dp>)
 
 EquivalentDataProperties(o:dp o:dp1)
 

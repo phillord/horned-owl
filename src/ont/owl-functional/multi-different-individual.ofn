@@ -17,13 +17,13 @@ Declaration(NamedIndividual(o:K))
 #   Named Individuals
 ############################
 
-# Individual: o:I (o:I)
+# Individual: <http://www.example.com/iri#I> (<http://www.example.com/iri#I>)
 
 
-# Individual: o:J (o:J)
+# Individual: <http://www.example.com/iri#J> (<http://www.example.com/iri#J>)
 
 
-# Individual: o:K (o:K)
+# Individual: <http://www.example.com/iri#K> (<http://www.example.com/iri#K>)
 
 
 

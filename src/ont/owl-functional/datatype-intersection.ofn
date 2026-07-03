@@ -15,7 +15,7 @@ Declaration(Datatype(o:D))
 #   Datatypes
 ############################
 
-# Datatype: o:D (o:D)
+# Datatype: <http://www.example.com/iri#D> (<http://www.example.com/iri#D>)
 
 DatatypeDefinition(o:D DataIntersectionOf(owl:rational owl:real))
 

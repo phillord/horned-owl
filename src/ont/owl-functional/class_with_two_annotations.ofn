@@ -17,7 +17,7 @@ Declaration(Class(o:C))
 #   Classes
 ############################
 
-# Class: o:C (Label on C)
+# Class: <http://www.example.com/iri#C> (Label on C)
 
 AnnotationAssertion(rdfs:comment o:C "Comment on Declaration"@en)
 AnnotationAssertion(rdfs:label o:C "Label on C"@en)

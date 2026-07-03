@@ -19,7 +19,7 @@ Declaration(NamedIndividual(o:J))
 #   Named Individuals
 ############################
 
-# Individual: o:J (o:J)
+# Individual: <http://www.example.com/iri#J> (<http://www.example.com/iri#J>)
 
 ClassAssertion(ObjectMinCardinality(2 o:r o:P) o:J)
 

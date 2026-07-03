@@ -18,7 +18,7 @@ Declaration(ObjectProperty(o:r))
 #   Classes
 ############################
 
-# Class: o:B (o:B)
+# Class: <http://www.example.com/iri#B> (<http://www.example.com/iri#B>)
 
 SubClassOf(o:B ObjectSomeValuesFrom(o:r o:A))
 

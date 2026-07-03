@@ -15,7 +15,7 @@ Declaration(AnnotationProperty(o:a))
 #   Annotation Properties
 ############################
 
-# Annotation Property: o:a (o:a)
+# Annotation Property: <http://www.example.com/iri#a> (<http://www.example.com/iri#a>)
 
 AnnotationPropertyDomain(o:a <http://www.example.com/d>)
 

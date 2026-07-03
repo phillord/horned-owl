@@ -20,7 +20,7 @@ Declaration(ObjectProperty(o:r))
 #   Classes
 ############################
 
-# Class: o:B (o:B)
+# Class: <http://www.example.com/iri#B> (<http://www.example.com/iri#B>)
 
 SubClassOf(Annotation(rdfs:comment "Annotation on subclass axiom"@en) o:B ObjectSomeValuesFrom(o:r o:A))
 

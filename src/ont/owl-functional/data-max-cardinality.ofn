@@ -18,7 +18,7 @@ Declaration(DataProperty(o:d))
 #   Classes
 ############################
 
-# Class: o:C (o:C)
+# Class: <http://www.example.com/iri#C> (<http://www.example.com/iri#C>)
 
 SubClassOf(o:C DataMaxCardinality(1 o:d xsd:integer))
 
