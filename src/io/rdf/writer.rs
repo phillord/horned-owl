@@ -1869,7 +1869,7 @@ mod test {
         assert_round(resource);
     }
 
-    #[cfg(all(test, bubo))]
+    #[cfg(test)]
     mod bubo_test {
         use crate::io::rdf::writer::test::*;
         use crate::io::rdf::writer::write;

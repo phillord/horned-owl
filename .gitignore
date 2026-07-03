@@ -13,6 +13,7 @@ Cargo.lock
 
 # Mac OS X
 .DS_Store
+/dev/bubo-0.4.0
 /flamegraph.svg
 /perf.data
 /perf.data.old

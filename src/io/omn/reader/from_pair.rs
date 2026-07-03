@@ -636,7 +636,9 @@ impl<A: ForIRI> FromPair<A> for ClassExpression<A> {
                             return Some(DataRange::Datatype(Datatype(iri.clone())));
                         }
                         negated_datatype(bce).map(|iri| {
-                            DataRange::DataComplementOf(Box::new(DataRange::Datatype(Datatype(iri))))
+                            DataRange::DataComplementOf(Box::new(DataRange::Datatype(Datatype(
+                                iri,
+                            ))))
                         })
                     };
 
@@ -772,9 +774,11 @@ impl<A: ForIRI> FromPair<A> for ClassExpression<A> {
                                                 r_span,
                                             )),
                                         },
-                                        None => {
-                                            Ok(ClassExpression::ObjectMinCardinality { n, ope, bce })
-                                        }
+                                        None => Ok(ClassExpression::ObjectMinCardinality {
+                                            n,
+                                            ope,
+                                            bce,
+                                        }),
                                     }
                                 }
                                 None => {
@@ -808,9 +812,11 @@ impl<A: ForIRI> FromPair<A> for ClassExpression<A> {
                                                 r_span,
                                             )),
                                         },
-                                        None => {
-                                            Ok(ClassExpression::ObjectMaxCardinality { n, ope, bce })
-                                        }
+                                        None => Ok(ClassExpression::ObjectMaxCardinality {
+                                            n,
+                                            ope,
+                                            bce,
+                                        }),
                                     }
                                 }
                                 None => {
@@ -992,7 +998,10 @@ fn entity_annotation_assertion<A: ForIRI>(
 ) -> AnnotatedComponent<A> {
     let axiom_ann = std::mem::take(&mut entry.ann);
     AnnotatedComponent {
-        component: Component::AnnotationAssertion(AnnotationAssertion { subject, ann: entry }),
+        component: Component::AnnotationAssertion(AnnotationAssertion {
+            subject,
+            ann: entry,
+        }),
         ann: axiom_ann,
     }
 }
@@ -1717,9 +1726,10 @@ fn swrl_arg_kind<A: ForIRI>(arg: Pair<Rule>, ctx: &Context<'_, A>) -> Result<Swr
     let inner = arg.into_inner().next().unwrap();
     Ok(match inner.as_rule() {
         // `Variable = { "?" ~ IRI }`
-        Rule::Variable => {
-            SwrlArgKind::Var(Variable(IRI::from_pair(inner.into_inner().next().unwrap(), ctx)?))
-        }
+        Rule::Variable => SwrlArgKind::Var(Variable(IRI::from_pair(
+            inner.into_inner().next().unwrap(),
+            ctx,
+        )?)),
         Rule::Literal => SwrlArgKind::Lit(Literal::from_pair(inner, ctx)?),
         Rule::Individual => SwrlArgKind::Ind(Individual::from_pair(inner, ctx)?),
         rule => unreachable!("unexpected SWRL argument: {:?}", rule),
@@ -1849,10 +1859,7 @@ fn parse_swrl_atom<A: ForIRI>(atom: Pair<Rule>, ctx: &Context<'_, A>) -> Result<
     }
 }
 
-fn parse_swrl_atom_list<A: ForIRI>(
-    list: Pair<Rule>,
-    ctx: &Context<'_, A>,
-) -> Result<Vec<Atom<A>>> {
+fn parse_swrl_atom_list<A: ForIRI>(list: Pair<Rule>, ctx: &Context<'_, A>) -> Result<Vec<Atom<A>>> {
     list.into_inner()
         .filter(|p| p.as_rule() == Rule::SwrlAtom)
         .map(|a| parse_swrl_atom(a, ctx))
@@ -2735,7 +2742,9 @@ mod tests {
 
         // negated parenthesised data range
         assert_eq!(
-            p(&format!("<http://t/dp> only not (<{xsd_int}> or <{xsd_float}>)")),
+            p(&format!(
+                "<http://t/dp> only not (<{xsd_int}> or <{xsd_float}>)"
+            )),
             ClassExpression::DataAllValuesFrom {
                 dp: dp.clone(),
                 dr: DataRange::DataComplementOf(Box::new(DataRange::DataUnionOf(vec![
@@ -2797,7 +2806,8 @@ mod tests {
 
         // (2) flip via a `DataProperty:` declaration on the property.
         let b2 = Build::new_rc();
-        let doc2 = "Prefix: : <http://e/>\nDataProperty: :p\nClass: :C\n    SubClassOf: :p only not :X\n";
+        let doc2 =
+            "Prefix: : <http://e/>\nDataProperty: :p\nClass: :C\n    SubClassOf: :p only not :X\n";
         let (ont2, _): (SetOntology<_>, PrefixMapping) =
             read_with_build(BufReader::new(doc2.as_bytes()), &b2).unwrap();
         assert!(has_sup(
@@ -2847,7 +2857,9 @@ mod tests {
                 _ => None,
             })
             .collect::<Vec<_>>();
-        let neg = DataRange::DataComplementOf(Box::new(DataRange::Datatype(b.datatype("http://e/MyType"))));
+        let neg = DataRange::DataComplementOf(Box::new(DataRange::Datatype(
+            b.datatype("http://e/MyType"),
+        )));
         assert!(
             cx.contains(&ClassExpression::DataMinCardinality {
                 n: 2,
@@ -4610,7 +4622,10 @@ mod tests {
             }
         }
         for kind in ["dp", "builtin", "datarange", "same"] {
-            assert!(seen.contains(kind), "missing atom kind {kind}; got {seen:?}");
+            assert!(
+                seen.contains(kind),
+                "missing atom kind {kind}; got {seen:?}"
+            );
         }
     }
 
@@ -4631,7 +4646,10 @@ mod tests {
                 _ => None,
             })
             .expect("expected a TransitiveObjectProperty");
-        assert!(matches!(t, ObjectPropertyExpression::InverseObjectProperty(_)));
+        assert!(matches!(
+            t,
+            ObjectPropertyExpression::InverseObjectProperty(_)
+        ));
     }
 
     #[test]
@@ -4680,7 +4698,11 @@ mod tests {
         // The assertion value carries no further (value-level) annotation …
         assert_eq!(aa.ann.ann.len(), 0);
         // … the nested `ex:meta "m"` is an annotation on the axiom.
-        assert_eq!(aa_comp.ann.len(), 1, "expected the nested annotation preserved");
+        assert_eq!(
+            aa_comp.ann.len(),
+            1,
+            "expected the nested annotation preserved"
+        );
         assert_eq!(
             aa_comp.ann.iter().next().unwrap().ap,
             AnnotationProperty(b.iri("http://ex/meta"))
@@ -4699,10 +4721,8 @@ mod tests {
             read_with_build(BufReader::new(doc.as_bytes()), &b).unwrap();
 
         // Write it back out: the nested form must appear as `Annotations: Annotations:`.
-        let amo: ComponentMappedOntology<
-            std::rc::Rc<str>,
-            AnnotatedComponent<std::rc::Rc<str>>,
-        > = parsed.clone().into();
+        let amo: ComponentMappedOntology<std::rc::Rc<str>, AnnotatedComponent<std::rc::Rc<str>>> =
+            parsed.clone().into();
         let mut out = Vec::<u8>::new();
         write(&mut out, &amo, Some(&pm)).unwrap();
         let s = String::from_utf8(out).unwrap();
@@ -4725,7 +4745,11 @@ mod tests {
                 .unwrap_or(0)
         };
         assert_eq!(axiom_ann_len(&parsed), 1);
-        assert_eq!(axiom_ann_len(&reparsed), 1, "nested annotation lost on round-trip");
+        assert_eq!(
+            axiom_ann_len(&reparsed),
+            1,
+            "nested annotation lost on round-trip"
+        );
     }
 
     #[test]
@@ -4948,47 +4972,52 @@ DisjointClasses: ex:r some ex:A, ex:r some ex:B
         // Canonicalise to the logical/annotation content shared by both
         // serialisation conventions: normalise (sort + reanonymise + drop
         // DocIRI), drop declarations, and sort unordered n-ary operands.
-        let canon = |o: SetOntology<RcStr>| -> std::collections::BTreeSet<AnnotatedComponent<RcStr>> {
-            let mut v: Vec<AnnotatedComponent<RcStr>> = normalize(o.into_iter().collect())
-                .into_iter()
-                .filter(|c| {
-                    !matches!(
-                        c.kind(),
-                        ComponentKind::DeclareClass
-                            | ComponentKind::DeclareObjectProperty
-                            | ComponentKind::DeclareDataProperty
-                            | ComponentKind::DeclareAnnotationProperty
-                            | ComponentKind::DeclareNamedIndividual
-                            | ComponentKind::DeclareDatatype
-                    )
-                })
-                .collect();
-            for ac in v.iter_mut() {
-                match &mut ac.component {
-                    Component::EquivalentClasses(EquivalentClasses(x)) => x.sort(),
-                    Component::DisjointClasses(DisjointClasses(x)) => x.sort(),
-                    Component::EquivalentObjectProperties(EquivalentObjectProperties(x)) => {
-                        x.sort()
-                    }
-                    Component::DisjointObjectProperties(DisjointObjectProperties(x)) => x.sort(),
-                    Component::EquivalentDataProperties(EquivalentDataProperties(x)) => x.sort(),
-                    Component::DisjointDataProperties(DisjointDataProperties(x)) => x.sort(),
-                    Component::SameIndividual(SameIndividual(x)) => x.sort(),
-                    Component::DifferentIndividuals(DifferentIndividuals(x)) => x.sort(),
-                    Component::Rule(r) => {
-                        r.head.sort();
-                        r.body.sort();
-                    }
-                    Component::InverseObjectProperties(InverseObjectProperties(a, b)) => {
-                        if a > b {
-                            std::mem::swap(a, b);
+        let canon =
+            |o: SetOntology<RcStr>| -> std::collections::BTreeSet<AnnotatedComponent<RcStr>> {
+                let mut v: Vec<AnnotatedComponent<RcStr>> = normalize(o.into_iter().collect())
+                    .into_iter()
+                    .filter(|c| {
+                        !matches!(
+                            c.kind(),
+                            ComponentKind::DeclareClass
+                                | ComponentKind::DeclareObjectProperty
+                                | ComponentKind::DeclareDataProperty
+                                | ComponentKind::DeclareAnnotationProperty
+                                | ComponentKind::DeclareNamedIndividual
+                                | ComponentKind::DeclareDatatype
+                        )
+                    })
+                    .collect();
+                for ac in v.iter_mut() {
+                    match &mut ac.component {
+                        Component::EquivalentClasses(EquivalentClasses(x)) => x.sort(),
+                        Component::DisjointClasses(DisjointClasses(x)) => x.sort(),
+                        Component::EquivalentObjectProperties(EquivalentObjectProperties(x)) => {
+                            x.sort()
                         }
+                        Component::DisjointObjectProperties(DisjointObjectProperties(x)) => {
+                            x.sort()
+                        }
+                        Component::EquivalentDataProperties(EquivalentDataProperties(x)) => {
+                            x.sort()
+                        }
+                        Component::DisjointDataProperties(DisjointDataProperties(x)) => x.sort(),
+                        Component::SameIndividual(SameIndividual(x)) => x.sort(),
+                        Component::DifferentIndividuals(DifferentIndividuals(x)) => x.sort(),
+                        Component::Rule(r) => {
+                            r.head.sort();
+                            r.body.sort();
+                        }
+                        Component::InverseObjectProperties(InverseObjectProperties(a, b)) => {
+                            if a > b {
+                                std::mem::swap(a, b);
+                            }
+                        }
+                        _ => {}
                     }
-                    _ => {}
                 }
-            }
-            v.into_iter().collect()
-        };
+                v.into_iter().collect()
+            };
 
         // Read the Manchester form through the OMN reader (the subject).
         let omn_reader = std::fs::File::open(resource)

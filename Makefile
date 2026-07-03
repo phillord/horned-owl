@@ -117,4 +117,8 @@ clippy:
 install:
 	cargo install --path horned-bin
 
+fetch_bubo:
+	wget https://github.com/phillord/tawny-bubo/releases/download/0.4.0/bubo-0.4.0 -O dev/bubo-0.4.0
+	chmod +x dev/bubo-0.4.0
+
 -include makefile-local

@@ -1097,7 +1097,6 @@ mod test {
     }
 
     #[test]
-    #[cfg(bubo)]
     fn round_one_ont_prefix() {
         let (_ont_orig, prefix_orig, _ont_round, prefix_round) =
             roundtrip(include_str!("../../ont/owl-xml/ont.owx"));
@@ -1143,7 +1142,7 @@ mod test {
         assert_round(include_str!("../../ont/owl-xml/manual/family.owx"));
     }
 
-    #[cfg(all(test, bubo))]
+    #[cfg(test)]
     mod bubo_test {
         use crate::io::owx::writer::test::*;
         use crate::io::owx::writer::write;

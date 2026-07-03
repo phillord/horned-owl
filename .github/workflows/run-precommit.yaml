@@ -17,10 +17,7 @@ jobs:
         with:
           distribution: 'zulu' # See 'Supported distributions' for available options
           java-version: '21'
-      - run: |
-          mkdir --parents $HOME/.local/bin
-          wget https://github.com/phillord/tawny-bubo/releases/download/0.3.2/bubo -O $HOME/.local/bin/bubo
-          chmod +x $HOME/.local/bin/bubo
+      - run: make fetch_bubo
         shell: bash
       - run: python -m pip install pre-commit
         shell: bash

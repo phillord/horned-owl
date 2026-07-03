@@ -1,18 +1,28 @@
+use std::os::unix::fs::PermissionsExt;
+
 fn main() {
     println!("cargo::rerun-if-changed=build.rs");
+    println!("cargo::rerun-if-changed=dev/bubo-0.4.0");
 
-    println!("cargo::rustc-check-cfg=cfg(bubo)");
+    let local = std::path::Path::new("dev/bubo-0.4.0");
+    if !local.exists() {
+        println!("cargo::warning=Downloading bubo 0.4.0 from GitHub...");
+        let status = std::process::Command::new("wget")
+            .args([
+                "https://github.com/phillord/tawny-bubo/releases/download/0.4.0/bubo-0.4.0",
+                "-O",
+                "dev/bubo-0.4.0",
+            ])
+            .status()
+            .expect("failed to run wget");
+        assert!(status.success(), "failed to download bubo");
 
-    let mut bubo_which = std::process::Command::new("which");
-    let bubo_which_mut = bubo_which.arg("bubo");
-    match bubo_which_mut.status() {
-        Ok(s) if s.success() => {
-            println!("cargo::rustc-cfg=bubo");
-            let out = bubo_which_mut.output().unwrap();
-            let out = String::from_utf8(out.stdout).unwrap();
-
-            println!("cargo::rustc-env=BUBO_LOCATION={}", out);
-        }
-        _ => {}
+        std::fs::set_permissions(local, std::fs::Permissions::from_mode(0o755))
+            .expect("failed to set bubo executable");
     }
+
+    println!(
+        "cargo::rustc-env=BUBO_LOCATION={}",
+        local.canonicalize().unwrap().display()
+    );
 }

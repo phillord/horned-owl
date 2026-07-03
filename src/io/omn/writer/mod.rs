@@ -516,8 +516,7 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
                     }
                 }
                 Component::FunctionalObjectProperty(ax) => {
-                    let clause =
-                        format!("Characteristics: {}Functional", ann_prefix(&ac.ann, pm));
+                    let clause = format!("Characteristics: {}Functional", ann_prefix(&ac.ann, pm));
                     if let Some(iri) = ope_iri(&ax.0) {
                         push_clause!(FrameKind::ObjectProperty, iri, clause);
                     } else {
@@ -536,8 +535,7 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
                     }
                 }
                 Component::ReflexiveObjectProperty(ax) => {
-                    let clause =
-                        format!("Characteristics: {}Reflexive", ann_prefix(&ac.ann, pm));
+                    let clause = format!("Characteristics: {}Reflexive", ann_prefix(&ac.ann, pm));
                     if let Some(iri) = ope_iri(&ax.0) {
                         push_clause!(FrameKind::ObjectProperty, iri, clause);
                     } else {
@@ -545,8 +543,7 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
                     }
                 }
                 Component::IrreflexiveObjectProperty(ax) => {
-                    let clause =
-                        format!("Characteristics: {}Irreflexive", ann_prefix(&ac.ann, pm));
+                    let clause = format!("Characteristics: {}Irreflexive", ann_prefix(&ac.ann, pm));
                     if let Some(iri) = ope_iri(&ax.0) {
                         push_clause!(FrameKind::ObjectProperty, iri, clause);
                     } else {
@@ -554,8 +551,7 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
                     }
                 }
                 Component::SymmetricObjectProperty(ax) => {
-                    let clause =
-                        format!("Characteristics: {}Symmetric", ann_prefix(&ac.ann, pm));
+                    let clause = format!("Characteristics: {}Symmetric", ann_prefix(&ac.ann, pm));
                     if let Some(iri) = ope_iri(&ax.0) {
                         push_clause!(FrameKind::ObjectProperty, iri, clause);
                     } else {
@@ -563,8 +559,7 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
                     }
                 }
                 Component::AsymmetricObjectProperty(ax) => {
-                    let clause =
-                        format!("Characteristics: {}Asymmetric", ann_prefix(&ac.ann, pm));
+                    let clause = format!("Characteristics: {}Asymmetric", ann_prefix(&ac.ann, pm));
                     if let Some(iri) = ope_iri(&ax.0) {
                         push_clause!(FrameKind::ObjectProperty, iri, clause);
                     } else {
@@ -572,8 +567,7 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
                     }
                 }
                 Component::TransitiveObjectProperty(ax) => {
-                    let clause =
-                        format!("Characteristics: {}Transitive", ann_prefix(&ac.ann, pm));
+                    let clause = format!("Characteristics: {}Transitive", ann_prefix(&ac.ann, pm));
                     if let Some(iri) = ope_iri(&ax.0) {
                         push_clause!(FrameKind::ObjectProperty, iri, clause);
                     } else {
@@ -734,9 +728,9 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
                         }
                         members
                             if members.len() >= 2
-                                && members.iter().all(|i| {
-                                    matches!(i, crate::model::Individual::Named(_))
-                                }) =>
+                                && members
+                                    .iter()
+                                    .all(|i| matches!(i, crate::model::Individual::Named(_))) =>
                         {
                             let rendered: Vec<String> = members
                                 .iter()
@@ -751,35 +745,33 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
                         _ => misc.push(ac.component.as_manchester_with_prefixes(pm).to_string()),
                     }
                 }
-                Component::DifferentIndividuals(ax) => {
-                    match ax.0.as_slice() {
-                        [crate::model::Individual::Named(ni), other] => {
-                            let clause = format!(
-                                "DifferentFrom: {}{}",
-                                ann_prefix(&ac.ann, pm),
-                                other.as_manchester_with_prefixes(pm)
-                            );
-                            push_clause!(FrameKind::Individual, ni.0.as_ref(), clause);
-                        }
-                        members
-                            if members.len() >= 2
-                                && members.iter().all(|i| {
-                                    matches!(i, crate::model::Individual::Named(_))
-                                }) =>
-                        {
-                            let rendered: Vec<String> = members
-                                .iter()
-                                .map(|i| i.as_manchester_with_prefixes(pm).to_string())
-                                .collect();
-                            misc_axioms.push(format!(
-                                "DifferentIndividuals: {}{}",
-                                ann_prefix(&ac.ann, pm),
-                                rendered.join(", ")
-                            ));
-                        }
-                        _ => misc.push(ac.component.as_manchester_with_prefixes(pm).to_string()),
+                Component::DifferentIndividuals(ax) => match ax.0.as_slice() {
+                    [crate::model::Individual::Named(ni), other] => {
+                        let clause = format!(
+                            "DifferentFrom: {}{}",
+                            ann_prefix(&ac.ann, pm),
+                            other.as_manchester_with_prefixes(pm)
+                        );
+                        push_clause!(FrameKind::Individual, ni.0.as_ref(), clause);
                     }
-                }
+                    members
+                        if members.len() >= 2
+                            && members
+                                .iter()
+                                .all(|i| matches!(i, crate::model::Individual::Named(_))) =>
+                    {
+                        let rendered: Vec<String> = members
+                            .iter()
+                            .map(|i| i.as_manchester_with_prefixes(pm).to_string())
+                            .collect();
+                        misc_axioms.push(format!(
+                            "DifferentIndividuals: {}{}",
+                            ann_prefix(&ac.ann, pm),
+                            rendered.join(", ")
+                        ));
+                    }
+                    _ => misc.push(ac.component.as_manchester_with_prefixes(pm).to_string()),
+                },
 
                 // ---- Annotation property axioms ----
                 Component::SubAnnotationPropertyOf(ax) => {
@@ -1077,7 +1069,8 @@ mod tests {
         crate::io::omn::write(&mut writer, &ont, Some(&prefixes)).unwrap();
 
         let (ont2, prefixes2): (ComponentMappedOntology<RcStr, AnnotatedComponent<RcStr>>, _) =
-            crate::io::omn::reader::read(std::io::Cursor::new(&writer), Default::default()).unwrap();
+            crate::io::omn::reader::read(std::io::Cursor::new(&writer), Default::default())
+                .unwrap();
 
         assert_eq!(prefixes, prefixes2, "prefix mapping differ");
         assert_eq!(ont, ont2, "ontologies differ");
