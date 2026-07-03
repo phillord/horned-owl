@@ -211,17 +211,57 @@ pub fn read_with_build<A: ForIRI, O: MutableOntology<A> + Ontology<A> + Default,
             Rule::Frame => from_pair::insert_frame(child, &ctx, &mut ontology)?,
             Rule::Misc => from_pair::insert_misc(child, &ctx, &mut ontology)?,
             Rule::GeneralAxiomBlock => {
+                // The writer emits genuinely-inexpressible components (SWRL
+                // rules, anonymous-subject class axioms, annotation assertions
+                // on undeclared subjects, ...) as full-IRI OWL functional-syntax
+                // lines under a `# General axioms` marker. Delegate them back to
+                // the functional-syntax reader — sharing our IRI `build` so IRIs
+                // intern consistently — rather than dropping them, so the block
+                // round-trips instead of silently losing axioms.
                 let body = child.as_str();
-                let n = body
-                    .lines()
-                    .filter(|l| {
-                        !l.trim().is_empty() && !l.trim_start().starts_with("# General axioms")
-                    })
-                    .count();
-                eprintln!(
-                    "warning: omn reader skipped {n} axiom(s) in the non-Manchester \
-                     `# General axioms` block (components with no Manchester form)"
-                );
+                let axioms = body.strip_prefix("# General axioms").unwrap_or(body).trim();
+                if !axioms.is_empty() {
+                    // Wrap the bare axiom lines in a minimal anonymous
+                    // `Ontology(...)` document. The fallback is always rendered
+                    // with fully-qualified IRIs, so no prefix declarations are
+                    // needed.
+                    let wrapped = format!("Ontology(\n{axioms}\n)");
+                    let parsed: Result<(crate::ontology::set::SetOntology<A>, _), _> =
+                        crate::io::ofn::reader::read_with_build(
+                            std::io::Cursor::new(wrapped.into_bytes()),
+                            build,
+                        );
+                    match parsed {
+                        Ok((block_ont, _)) => {
+                            for ac in block_ont {
+                                // The synthetic `Ontology(...)` wrapper yields an
+                                // empty `OntologyID`/`DocIRI`; the block carries
+                                // only axioms, so drop any ontology-identity
+                                // component it introduces.
+                                if matches!(
+                                    ac.component,
+                                    crate::model::Component::OntologyID(_)
+                                        | crate::model::Component::DocIRI(_)
+                                ) {
+                                    continue;
+                                }
+                                ontology.insert(ac);
+                            }
+                        }
+                        // Never turn a previously-readable document into a hard
+                        // error: if the fallback block cannot be parsed (e.g. it
+                        // contains functional syntax the writer emitted but the
+                        // reader cannot yet round-trip), warn and skip it, the
+                        // pre-delegation behaviour.
+                        Err(e) => {
+                            let n = axioms.lines().filter(|l| !l.trim().is_empty()).count();
+                            eprintln!(
+                                "warning: omn reader could not parse the {n}-line \
+                                 `# General axioms` block ({e}); skipping it"
+                            );
+                        }
+                    }
+                }
             }
             rule => unreachable!("unexpected document child: {:?}", rule),
         }
