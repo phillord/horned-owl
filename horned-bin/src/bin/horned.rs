@@ -51,7 +51,7 @@ fn matcher(matches: ArgMatches) -> Result<(), HornedError> {
             "triples" => horned_triples::matcher(submatches),
             "unparsed" => horned_unparsed::matcher(submatches),
             "validate" => horned_validate::matcher(submatches),
-            _ => todo!(),
+            _ => unreachable!("clap guarantees name is one of the registered subcommands"),
         }
     } else {
         Ok(())

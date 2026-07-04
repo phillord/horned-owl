@@ -250,8 +250,10 @@ pub fn strict_resolve_iri<A: ForIRI>(iri: &IRI<A>) -> Result<String, HornedError
 }
 
 #[cfg(not(feature = "remote"))]
-pub fn strict_resolve_iri<A: ForIRI>(_iri: &IRI<A>) -> Result<String, HornedError> {
-    todo!("fail")
+pub fn strict_resolve_iri<A: ForIRI>(iri: &IRI<A>) -> Result<String, HornedError> {
+    Err(HornedError::ImportError(format!(
+        "cannot resolve IRI {iri} remotely: the 'remote' feature is not enabled"
+    )))
 }
 
 #[cfg(test)]

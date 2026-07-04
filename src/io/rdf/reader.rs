@@ -2357,7 +2357,10 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
 
                 Ok(v)
             }
-            _ => todo!(),
+            _ => panic!(
+                "parse_imports called out of order: expected OntologyParserState::New, got {:?}",
+                self.state
+            ),
         }
     }
 
@@ -2418,9 +2421,10 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                 self.state = OntologyParserState::Declarations;
                 Ok(())
             }
-            _ => {
-                todo!();
-            }
+            _ => panic!(
+                "parse_declarations called out of order: expected OntologyParserState::Imports, got {:?}",
+                self.state
+            ),
         }
     }
 
