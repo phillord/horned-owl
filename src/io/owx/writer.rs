@@ -1147,27 +1147,18 @@ mod test {
         use crate::io::owx::writer::test::*;
         use crate::io::owx::writer::write;
 
-        use std::fs::File;
-        use std::io::{BufWriter, Write};
         use std::path::Path;
 
-        fn parse_then_output(in_file: &Path) {
+        fn parse_then_output(in_file: &Path, out: &mut dyn std::io::Write) {
             let ont = &slurp::read_all_to_string(in_file).unwrap();
             let (ont_orig, prefix_orig) = read_ok(&mut ont.as_bytes());
 
-            let file = File::create(Path::new("./tmp/owl-xml").join(in_file.file_name().unwrap()))
-                .unwrap();
-            let mut buf_writer = BufWriter::new(&file);
-
-            write(&mut buf_writer, &ont_orig, Some(&prefix_orig))
-                .ok()
-                .unwrap();
-            buf_writer.flush().ok();
+            write(out, &ont_orig, Some(&prefix_orig)).ok().unwrap();
         }
 
         #[test]
         fn reparse_owx() -> Result<(), Box<dyn std::error::Error>> {
-            crate::io::tests::run_bubo_reparse("owl-xml", |path| parse_then_output(path))
+            crate::io::tests::run_bubo_reparse("owl-xml", parse_then_output)
         }
     }
 }
