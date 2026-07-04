@@ -47,16 +47,17 @@
 ;;   `Class: Annotations: ... o:C` (annotation before the frame subject
 ;;   IRI), which OWL API's parser also rejects (it expects the IRI
 ;;   immediately after the frame keyword).
-;; - swrl_built_in.omn / swrl_data_range.omn: our `Rule:` frame renders
-;;   built-in and data-range SWRL atoms with a generic `iri(args...)` call
-;;   syntax, which OWL API's Manchester `Rule:` grammar does not accept
-;;   for those atom kinds.
+;; - swrl_data_range.omn: the data-range SWRL atom has a *literal* argument
+;;   (`xsd:integer("literal1")`), but OWL API's Manchester `Rule:` grammar
+;;   only accepts a variable (`?x`) there, so the reference parser rejects it.
+;;   (swrl_built_in.omn is no longer excluded: our writer now renders a
+;;   built-in atom's predicate as a full `<IRI>` rather than a CURIE, which
+;;   OWL API accepts.)
 (def known-parser-limitations
   ["anon-subobjectproperty.omn"
    "declaration-with-annotation.omn"
    "declaration-with-two-annotation.omn"
    "inverse-transitive.omn"
-   "swrl_built_in.omn"
    "swrl_data_range.omn"
    "swrl_individual.ofn"
    "swrl_individual.omn"
