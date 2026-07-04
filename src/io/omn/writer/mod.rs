@@ -1467,4 +1467,27 @@ mod tests {
             parsed.iter().map(|ac| ac.component.clone()).collect();
         assert_eq!(orig, got, "anon annotation value did not round-trip\n{s}");
     }
+
+    #[cfg(test)]
+    mod bubo_test {
+        use crate::io::omn::writer::tests::*;
+        use crate::io::omn::writer::write;
+
+        use std::fs::File;
+        use std::io::BufReader;
+        use std::path::Path;
+
+        fn parse_then_output(in_file: &Path, out: &mut dyn std::io::Write) {
+            let reader = BufReader::new(File::open(in_file).unwrap());
+            let (ont, prefixes): (ComponentMappedOntology<RcStr, AnnotatedComponent<RcStr>>, _) =
+                crate::io::omn::reader::read(reader, Default::default()).unwrap();
+
+            write(out, &ont, Some(&prefixes)).ok().unwrap();
+        }
+
+        #[test]
+        fn reparse_omn() -> Result<(), Box<dyn std::error::Error>> {
+            crate::io::tests::run_bubo_reparse("owl-manchester", parse_then_output)
+        }
+    }
 }
