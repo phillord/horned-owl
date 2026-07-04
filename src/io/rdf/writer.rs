@@ -1874,28 +1874,21 @@ mod test {
         use crate::io::rdf::writer::test::*;
         use crate::io::rdf::writer::write;
 
-        use std::fs::File;
-        use std::io::{BufWriter, Write};
         use std::path::Path;
 
-        fn parse_then_output(in_file: &Path) {
+        fn parse_then_output(in_file: &Path, out: &mut dyn std::io::Write) {
             let ont = &slurp::read_all_to_string(in_file).unwrap();
             let ont_orig = read_ok(&mut ont.as_bytes());
 
-            let file = File::create(Path::new("./tmp/owl-rdf").join(in_file.file_name().unwrap()))
-                .unwrap();
-            let mut buf_writer = BufWriter::new(&file);
-
             let amo: ComponentMappedOntology<RcStr, Rc<AnnotatedComponent<RcStr>>> =
-                ont_orig.clone().into();
+                ont_orig.into();
 
-            write(&mut buf_writer, &amo).ok().unwrap();
-            buf_writer.flush().ok();
+            write(out, &amo).ok().unwrap();
         }
 
         #[test]
         fn reparse_rdf() -> Result<(), Box<dyn std::error::Error>> {
-            crate::io::tests::run_bubo_reparse("owl-rdf", |path| parse_then_output(path))
+            crate::io::tests::run_bubo_reparse("owl-rdf", parse_then_output)
         }
     }
 

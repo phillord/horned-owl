@@ -153,9 +153,11 @@ mod tests {
 
     pub fn run_bubo_reparse<F>(format: &str, parse_fn: F) -> Result<(), Box<dyn std::error::Error>>
     where
-        F: Fn(&std::path::Path),
+        F: Fn(&std::path::Path, &mut dyn std::io::Write),
     {
-        use std::fs::{create_dir_all, read_dir, remove_dir_all};
+        use std::fs::{File, create_dir_all, read_dir, remove_dir_all};
+        use std::io::{BufWriter, Write};
+        use std::path::Path;
 
         let src_dir = format!("./src/ont/{format}");
         let tmp_dir = format!("./tmp/{format}");
@@ -166,7 +168,10 @@ mod tests {
             let entry = entry?;
             let path = entry.path();
             if path.is_file() {
-                parse_fn(&path);
+                let out_file = File::create(Path::new(&tmp_dir).join(path.file_name().unwrap()))?;
+                let mut buf_writer = BufWriter::new(out_file);
+                parse_fn(&path, &mut buf_writer);
+                buf_writer.flush()?;
             }
         }
 

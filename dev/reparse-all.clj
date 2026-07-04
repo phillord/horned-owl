@@ -14,6 +14,7 @@
           (case format
             "owl-xml" (org.semanticweb.owlapi.owlxml.parser.OWLXMLParser.)
             "owl-rdf" (org.semanticweb.owlapi.rdf.rdfxml.parser.RDFXMLParser.)
+            "owl-functional" (org.semanticweb.owlapi.functional.parser.OWLFunctionalSyntaxOWLParser.)
             )]
       (.parse parser documentsource ontology config))
     (catch Exception e
@@ -30,12 +31,13 @@
  (map
   #(parse-file %1 format-kind)
   (filter #(and
-            ;; For some reason swrl_individual.owx cannot be parsed by
-            ;; OWL API even when it is produced by the OWL API. So,
+            ;; For some reason swrl_individual cannot be parsed by
+            ;; OWL API even when it is produced by the OWL API (in
+            ;; owl-xml or owl-functional syntax; the anonymous
+            ;; individual in the SWRL atom is not valid there). So,
             ;; filter this out for the moment.
             (not
-             (.equals "swrl_individual.owx"
-                      (.getName %)))
+             (.startsWith (.getName %) "swrl_individual."))
             (.isFile %))
           file-list)))
 

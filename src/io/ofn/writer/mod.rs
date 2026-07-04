@@ -143,4 +143,27 @@ mod test {
             "nested annotation was lost in round-trip:\n{output}"
         );
     }
+
+    #[cfg(test)]
+    mod bubo_test {
+        use crate::io::ofn::writer::test::*;
+        use crate::io::ofn::writer::write;
+
+        use std::fs::File;
+        use std::io::BufReader;
+        use std::path::Path;
+
+        fn parse_then_output(in_file: &Path, out: &mut dyn std::io::Write) {
+            let reader = BufReader::new(File::open(in_file).unwrap());
+            let (ont, prefixes): (ComponentMappedOntology<RcStr, AnnotatedComponent<RcStr>>, _) =
+                crate::io::ofn::reader::read(reader, Default::default()).unwrap();
+
+            write(out, &ont, Some(&prefixes)).ok().unwrap();
+        }
+
+        #[test]
+        fn reparse_ofn() -> Result<(), Box<dyn std::error::Error>> {
+            crate::io::tests::run_bubo_reparse("owl-functional", parse_then_output)
+        }
+    }
 }
