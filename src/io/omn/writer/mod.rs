@@ -892,12 +892,30 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
                     "Annotations: {}",
                     as_manchester::annotation_to_manchester(&entry, mapping)
                 );
-                // Attach to the existing frame whose subject_iri matches.
-                if let Some(frame) = frames
-                    .values_mut()
-                    .find(|fr| fr.subject_iri == subj_iri.as_ref())
-                {
-                    frame.clauses.push(clause);
+                // Attach to the existing frame headed by this IRI. An IRI heads
+                // at most one entity frame, so probe the (few) frame kinds by
+                // key — O(log n) each — instead of scanning every frame, which
+                // made this pass O(annotation assertions × frames) and the whole
+                // writer quadratic on annotation-heavy ontologies. Kinds are
+                // tried in `FrameKind` order to match the previous
+                // BTreeMap-iteration first-match under (rare) punning.
+                let subj = subj_iri.as_ref();
+                let target_kind = [
+                    FrameKind::Class,
+                    FrameKind::ObjectProperty,
+                    FrameKind::DataProperty,
+                    FrameKind::AnnotationProperty,
+                    FrameKind::Individual,
+                    FrameKind::Datatype,
+                ]
+                .into_iter()
+                .find(|fk| frames.contains_key(&(fk.clone(), subj.to_string())));
+                if let Some(fk) = target_kind {
+                    frames
+                        .get_mut(&(fk, subj.to_string()))
+                        .expect("frame presence just confirmed by contains_key")
+                        .clauses
+                        .push(clause);
                 } else {
                     // Orphan: no frame heads this IRI → not Manchester-expressible.
                     misc.push(
@@ -1261,6 +1279,53 @@ mod tests {
         assert!(s.contains("Types:"), "got:\n{s}");
         assert!(s.contains("http://t/a"), "got:\n{s}");
         assert!(s.contains("http://t/A"), "got:\n{s}");
+    }
+
+    #[test]
+    fn entity_annotations_attach_to_non_class_frames() {
+        // An AnnotationAssertion whose subject is an ObjectProperty / DataProperty
+        // / Individual (not a Class) must attach as an `Annotations:` clause in
+        // that entity's frame, not leak to the `# General axioms` block. Guards
+        // the multi-`FrameKind` lookup in the entity-annotation post-pass.
+        let b = Build::new_rc();
+        let label = b.annotation_property("http://www.w3.org/2000/01/rdf-schema#label");
+        let ann = |iri: &str, txt: &str| {
+            AnnotationAssertion::new(
+                b.iri(iri).into(),
+                Annotation {
+                    ap: label.clone(),
+                    av: AnnotationValue::Literal(Literal::Simple {
+                        literal: txt.to_string(),
+                    }),
+                    ann: Default::default(),
+                },
+            )
+        };
+        let mut o = SetOntology::new_rc();
+        o.insert(DeclareObjectProperty(b.object_property("http://t/r")));
+        o.insert(DeclareDataProperty(b.data_property("http://t/p")));
+        o.insert(DeclareNamedIndividual(b.named_individual("http://t/a")));
+        o.insert(ann("http://t/r", "rel-label"));
+        o.insert(ann("http://t/p", "dp-label"));
+        o.insert(ann("http://t/a", "ind-label"));
+
+        let amo = into_amo(o);
+        let mut out = Vec::<u8>::new();
+        write(&mut out, &amo, None).unwrap();
+        let s = String::from_utf8(out).unwrap();
+
+        assert!(
+            !s.contains("# General axioms"),
+            "entity annotations leaked to the general-axioms block:\n{s}"
+        );
+        for (kw, txt) in [
+            ("ObjectProperty:", "rel-label"),
+            ("DataProperty:", "dp-label"),
+            ("Individual:", "ind-label"),
+        ] {
+            assert!(s.contains(kw), "missing {kw} frame:\n{s}");
+            assert!(s.contains(txt), "annotation {txt:?} not in its frame:\n{s}");
+        }
     }
 
     #[test]
