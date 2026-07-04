@@ -13,7 +13,10 @@ use crate::vocab::Facet;
 /// Write a string literal while escaping `"` and `\` characters.
 fn quote(mut s: &str, f: &mut Formatter<'_>) -> Result<(), Error> {
     f.write_str("\"")?;
-    while let Some((i, c)) = s.chars().enumerate().find(|(_, c)| *c == '\\' || *c == '"') {
+    // `char_indices` yields byte offsets so the slices below land on char
+    // boundaries even when earlier characters are multi-byte. `'"'` and `'\\'`
+    // are both single-byte ASCII, so `i + 1` is always a valid boundary too.
+    while let Some((i, c)) = s.char_indices().find(|(_, c)| *c == '\\' || *c == '"') {
         f.write_str(&s[..i])?;
         match c {
             '\\' => f.write_str("\\\\")?,
@@ -461,7 +464,16 @@ impl<A: ForIRI> AsFunctional<A> for AnnotationValue<A> {}
 
 impl<A: ForIRI> Display for Functional<'_, AnonymousIndividual<A>, A> {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
-        write!(f, "{}", self.0.0.borrow())
+        // Functional syntax requires the `_:` blank-node prefix. Generated
+        // labels (e.g. from the RDF reader) are bare, while labels parsed from
+        // functional/Manchester input already carry it, so add it only when
+        // absent to avoid double-prefixing.
+        let label = self.0.0.borrow();
+        if label.starts_with("_:") {
+            write!(f, "{}", label)
+        } else {
+            write!(f, "_:{}", label)
+        }
     }
 }
 
@@ -1101,6 +1113,40 @@ mod tests {
         };
         let ofn = format!("{}", lit.as_functional());
         assert_eq!(r#""test\\""#, &ofn);
+    }
+
+    #[test]
+    fn test_ofn_literal_multibyte_escape() {
+        // A multi-byte character preceding an escaped `"` or `\` must not cause
+        // a byte-vs-char index mismatch while slicing (regression: panicked at
+        // a non-char boundary, e.g. inside `é` or a combining mark).
+        let lit = Literal::<String>::Simple {
+            literal: String::from("café\""),
+        };
+        let ofn = format!("{}", lit.as_functional());
+        assert_eq!(r#""café\"""#, &ofn);
+
+        let lit = Literal::<String>::Simple {
+            literal: String::from("素面\\x"),
+        };
+        let ofn = format!("{}", lit.as_functional());
+        assert_eq!(r#""素面\\x""#, &ofn);
+    }
+
+    #[test]
+    fn test_ofn_anonymous_individual_nodeid() {
+        let build = Build::new_arc();
+
+        // Generated anonymous individuals (e.g. from the RDF reader, via
+        // `anon_renumbered`) hold a BARE label; functional syntax requires the
+        // `_:` blank-node prefix, so it must be added.
+        let anon = build.anon("anon000007");
+        assert_eq!("_:anon000007", format!("{}", anon.as_functional()));
+
+        // A label that already carries `_:` (e.g. parsed from functional/
+        // Manchester input) must not be double-prefixed.
+        let anon = build.anon("_:x1");
+        assert_eq!("_:x1", format!("{}", anon.as_functional()));
     }
 
     #[test]
