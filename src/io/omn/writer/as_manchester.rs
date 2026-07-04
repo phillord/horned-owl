@@ -597,7 +597,13 @@ impl<A: ForIRI> Display for Manchester<'_, Atom<A>, A> {
                 write!(f, "{}({}, {})", m!(pred), m!(&args.0), m!(&args.1))
             }
             Atom::BuiltInAtom { pred, args } => {
-                write!(f, "{}(", m!(pred))?;
+                // OWL API's Manchester `Rule:` grammar accepts a prefixed name
+                // only for a *known* swrlb built-in; an arbitrary built-in IRI is
+                // rejected as a CURIE (e.g. `o:y(...)`) and must be written in
+                // full `<IRI>` form. Render the predicate with no prefix mapping
+                // so it is always the full IRI, which the reference parser also
+                // accepts for the standard swrlb built-ins.
+                write!(f, "{}(", Manchester(pred, None, PhantomData::<A>))?;
                 for (i, a) in args.iter().enumerate() {
                     if i > 0 {
                         write!(f, ", ")?;
