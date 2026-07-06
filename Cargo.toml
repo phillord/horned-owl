@@ -36,6 +36,7 @@ default-members=[".", "horned-bin"]
 
 [workspace.dependencies]
 indexmap="1.0.2"
+mktemp="0.5.1"
 oxiri="0.2.11"
 ##pretty_rdf={path="./pretty_rdf"}
 pretty_rdf="0.12.0"
@@ -51,7 +52,7 @@ encoding = ["quick-xml/encoding"]
 proptest = "1"
 horned-owl = {path=".", features = ["remote"]}
 criterion = "0.7.0"
-mktemp = "0.5.1"
+mktemp = {workspace = true}
 pretty_assertions = "1.0.0"
 slurp = "1.0.1"
 rstest = "0.23"

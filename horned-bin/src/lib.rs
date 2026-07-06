@@ -27,6 +27,19 @@ pub mod error {
     }
 }
 
+/// The `oxrdfio::RdfFormat` that `extension` denotes, if any. `"owl"`
+/// is horned-owl's own long-standing alias for RDF/XML; every other
+/// extension is whatever [`oxrdfio::RdfFormat::from_extension`]
+/// recognises (`ttl`, `nt`, `nq`, `trig`, `json`/`jsonld`, `n3`,
+/// `rdf`, `xml`).
+fn rdf_format_for_extension(extension: &str) -> Option<oxrdfio::RdfFormat> {
+    if extension == "owl" {
+        Some(oxrdfio::RdfFormat::RdfXml)
+    } else {
+        oxrdfio::RdfFormat::from_extension(extension)
+    }
+}
+
 pub fn write<A: ForIRI, AA: ForIndex<A>, W: StdWrite>(
     format: &str,
     write: W,
@@ -36,11 +49,7 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: StdWrite>(
         "owx" => horned_owl::io::owx::writer::write(write, ont, None),
         "ofn" => horned_owl::io::ofn::writer::write(write, ont, None),
         "omn" => horned_owl::io::omn::write(write, ont, None),
-        "owl" | "ttl" => horned_owl::io::rdf::writer::write_to_rdf_format(write, ont, format),
-
-        _ => Err(HornedError::CommandError(format!(
-            "Format is unknown: {format}"
-        ))),
+        _ => horned_owl::io::rdf::writer::write_to_rdf_format(write, ont, format),
     }
 }
 
@@ -49,7 +58,7 @@ pub fn path_type(path: &Path) -> Option<ResourceType> {
         Some("ofn") => Some(ResourceType::OFN),
         Some("owx") => Some(ResourceType::OWX),
         Some("omn") => Some(ResourceType::OMN),
-        Some("owl") => Some(ResourceType::RDF),
+        Some(ext) if rdf_format_for_extension(ext).is_some() => Some(ResourceType::RDF),
         _ => None,
     }
 }
@@ -77,7 +86,10 @@ pub fn parse_path(
         Some(ResourceType::RDF) => {
             let b = Build::new();
             let iri = horned_owl::resolve::path_to_file_iri(&b, path);
-            ParserOutput::rdf(horned_owl::io::rdf::closure_reader::read(&iri, config)?)
+            ParserOutput::rdf(horned_owl::io::rdf::closure_reader::read(
+                &iri,
+                with_detected_rdf_format(path, config),
+            )?)
         }
         None => {
             return Err(HornedError::CommandError(format!(
@@ -85,6 +97,18 @@ pub fn parse_path(
             )));
         }
     })
+}
+
+/// Fill in `config.rdf.format` from `path`'s extension, unless the
+/// caller already set one explicitly.
+fn with_detected_rdf_format(path: &Path, mut config: ParserConfiguration) -> ParserConfiguration {
+    if config.rdf.format.is_none() {
+        config.rdf.format = path
+            .extension()
+            .and_then(|s| s.to_str())
+            .and_then(rdf_format_for_extension);
+    }
+    config
 }
 
 /// Parse but only as far as the imports, if that makes sense.
@@ -107,6 +131,7 @@ pub fn parse_imports(
         }
         Some(ResourceType::RDF) => {
             let b = Build::new();
+            let config = with_detected_rdf_format(path, config);
             let mut p = horned_owl::io::rdf::reader::parser_with_build(&mut bufreader, &b, config);
             p.parse_imports()?;
             ParserOutput::rdf(p.as_ontology_and_incomplete())

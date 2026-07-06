@@ -25,6 +25,7 @@ oxrdfio={workspace=true}
 
 [dev-dependencies]
 assert_cmd = "2.1.1"
+mktemp = {workspace = true}
 predicates = "2.1.0"
 
 
@@ -39,6 +40,10 @@ path = "src/bin/horned_big.rs"
 [[bin]]
 name = "horned-compare"
 path = "src/bin/horned_compare.rs"
+
+[[bin]]
+name = "horned-convert"
+path = "src/bin/horned_convert.rs"
 
 [[bin]]
 name = "horned-dump"
