@@ -5,6 +5,7 @@ use horned_owl::error::HornedError;
 
 mod horned_big;
 mod horned_compare;
+mod horned_convert;
 mod horned_dump;
 mod horned_materialize;
 mod horned_parse;
@@ -28,6 +29,7 @@ fn app() -> App<'static> {
         .arg_required_else_help(true)
         .subcommand(horned_big::app("big"))
         .subcommand(horned_compare::app("compare"))
+        .subcommand(horned_convert::app("convert"))
         .subcommand(horned_dump::app("dump"))
         .subcommand(horned_materialize::app("materialize"))
         .subcommand(horned_parse::app("parse"))
@@ -43,6 +45,7 @@ fn matcher(matches: ArgMatches) -> Result<(), HornedError> {
         match name {
             "big" => horned_big::matcher(submatches),
             "compare" => horned_compare::matcher(submatches),
+            "convert" => horned_convert::matcher(submatches),
             "dump" => horned_dump::matcher(submatches),
             "materialize" => horned_materialize::matcher(submatches),
             "parse" => horned_parse::matcher(submatches),

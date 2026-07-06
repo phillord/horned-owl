@@ -36,6 +36,11 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
     write_to_rdf_formatter(ont, f)
 }
 
+/// Write a component mapped ontology as RDF in the format named by
+/// `format`, which is either `"owl"` (horned-owl's own alias for
+/// RDF/XML) or any extension recognised by
+/// [`oxrdfio::RdfFormat::from_extension`] (`ttl`, `nt`, `nq`, `trig`,
+/// `json`/`jsonld`, `n3`, `rdf`, `xml`).
 pub fn write_to_rdf_format<A: ForIRI, AA: ForIndex<A>, W: Write>(
     write: W,
     ont: &ComponentMappedOntology<A, AA>,
@@ -45,12 +50,19 @@ pub fn write_to_rdf_format<A: ForIRI, AA: ForIndex<A>, W: Write>(
         WriterQuadSerializerAdaptor::new(RdfSerializer::from_format(format).for_writer(write))
     };
 
-    match format {
-        "owl" => crate::io::rdf::writer::write(write, ont),
-        "ttl" => write_to_rdf_formatter(ont, serial(write, oxrdfio::RdfFormat::NTriples)),
-        _ => Err(HornedError::CommandError(format!(
-            "Format is unknown: {format}"
-        ))),
+    // "owl" is horned-owl's own long-standing extension for RDF/XML;
+    // oxrdfio::RdfFormat::from_extension doesn't recognise it (it
+    // only knows "rdf"/"xml" for RdfXml), so special-case it here.
+    let rdf_format = if format == "owl" {
+        oxrdfio::RdfFormat::RdfXml
+    } else {
+        oxrdfio::RdfFormat::from_extension(format)
+            .ok_or_else(|| HornedError::CommandError(format!("Format is unknown: {format}")))?
+    };
+
+    match rdf_format {
+        oxrdfio::RdfFormat::RdfXml => crate::io::rdf::writer::write(write, ont),
+        other => write_to_rdf_formatter(ont, serial(write, other)),
     }
 }
 
