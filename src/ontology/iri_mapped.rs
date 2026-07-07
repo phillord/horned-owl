@@ -216,7 +216,7 @@ impl<A: ForIRI, AA: ForIndex<A>> OntologyIndex<A, AA> for IRIMappedIndex<A, AA> 
             .fold(None, |val, iri| {
                 self.mut_set_for_iri(iri)
                     .take(cmp)
-                    .map_or(val, |c| Some(c.unwrap()))
+                    .map_or(val, |c| Some(c.into_component()))
             })
     }
 
@@ -327,7 +327,7 @@ impl ArcIRIMappedOntology {
 /// An owning iterator over the annotated axioms of an `Ontology`.
 impl<A: ForIRI, AA: ForIndex<A>> IntoIterator for IRIMappedOntology<A, AA> {
     type Item = AnnotatedComponent<A>;
-    type IntoIter = std::vec::IntoIter<AnnotatedComponent<A>>;
+    type IntoIter = <SetIndex<A, AA> as IntoIterator>::IntoIter;
     fn into_iter(self) -> Self::IntoIter {
         self.0.index().0.into_iter()
     }

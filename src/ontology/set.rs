@@ -74,11 +74,10 @@ impl<A: ForIRI> Ontology<A> for SetOntology<A> {
 
 impl<A: ForIRI, AA: ForIndex<A>> From<SetIndex<A, AA>> for SetOntology<A> {
     fn from(index: SetIndex<A, AA>) -> Self {
-        // Unpack ForIndex'd entities by unwrapping and turn them into
-        // direct references for SetOntology.
+        // SetIndex::into_iter already yields owned AnnotatedComponents.
         let mut so = SetOntology::new();
         for c in index.into_iter() {
-            so.insert(c.unwrap());
+            so.insert(c);
         }
         so
     }
@@ -118,7 +117,13 @@ impl<'a, A: ForIRI> IntoIterator for &'a SetOntology<A> {
 }
 
 /// An owning iterator over the annotated components of an `Ontology`.
-pub struct SetIntoIter<A: ForIRI>(std::vec::IntoIter<AnnotatedComponent<A>>);
+#[allow(clippy::type_complexity)]
+pub struct SetIntoIter<A: ForIRI>(
+    std::iter::Map<
+        std::collections::hash_set::IntoIter<AnnotatedComponent<A>>,
+        fn(AnnotatedComponent<A>) -> AnnotatedComponent<A>,
+    >,
+);
 
 impl<A: ForIRI> Iterator for SetIntoIter<A> {
     type Item = AnnotatedComponent<A>;
@@ -259,11 +264,10 @@ impl SetIndex<RcStr, Rc<AnnotatedComponent<RcStr>>> {
 
 impl<A: ForIRI, AA: ForIndex<A>> IntoIterator for SetIndex<A, AA> {
     type Item = AnnotatedComponent<A>;
-    type IntoIter = std::vec::IntoIter<AnnotatedComponent<A>>;
+    type IntoIter =
+        std::iter::Map<std::collections::hash_set::IntoIter<AA>, fn(AA) -> AnnotatedComponent<A>>;
     fn into_iter(self) -> Self::IntoIter {
-        #[allow(clippy::needless_collect)]
-        let v: Vec<AnnotatedComponent<_>> = self.0.into_iter().map(|fi| fi.unwrap()).collect();
-        v.into_iter()
+        self.0.into_iter().map(AA::into_component)
     }
 }
 

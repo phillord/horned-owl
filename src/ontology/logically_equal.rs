@@ -98,7 +98,7 @@ where
         //dbg!(Rc::strong_count(&rc));
 
         // Un-rc
-        let mut logical_axiom = fi.unwrap();
+        let mut logical_axiom = fi.into_component();
         // Extend it
         logical_axiom.ann.append(&mut cmp.ann);
         // Insert it

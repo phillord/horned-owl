@@ -346,7 +346,7 @@ impl<A: ForIRI, AA: ForIndex<A>> Ontology<A> for ConcreteRDFOntology<A, AA> {
 
 impl<A: ForIRI, AA: ForIndex<A>> IntoIterator for ConcreteRDFOntology<A, AA> {
     type Item = AnnotatedComponent<A>;
-    type IntoIter = std::vec::IntoIter<AnnotatedComponent<A>>;
+    type IntoIter = <SetIndex<A, AA> as IntoIterator>::IntoIter;
 
     fn into_iter(self) -> Self::IntoIter {
         let (i, _, _) = self.index();
