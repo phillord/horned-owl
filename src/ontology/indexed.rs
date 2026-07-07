@@ -37,22 +37,36 @@ pub trait ForIndex<A: ForIRI>:
     + PartialEq
     + PartialOrd
 {
-    fn unwrap(&self) -> AnnotatedComponent<A> {
+    fn to_component(&self) -> AnnotatedComponent<A> {
         (*self.borrow()).clone()
+    }
+
+    /// Consume `self`, reusing the underlying storage instead of cloning
+    /// it when this happens to be the only reference to it.
+    fn into_component(self) -> AnnotatedComponent<A>
+    where
+        Self: Sized,
+    {
+        self.to_component()
     }
 }
 
-impl<A: ForIRI, T> ForIndex<A> for T where
-    T: Borrow<AnnotatedComponent<A>>
-        + Clone
-        + Debug
-        + Eq
-        + From<AnnotatedComponent<A>>
-        + Hash
-        + Ord
-        + PartialEq
-        + PartialOrd
-{
+impl<A: ForIRI> ForIndex<A> for AnnotatedComponent<A> {
+    fn into_component(self) -> AnnotatedComponent<A> {
+        self
+    }
+}
+
+impl<A: ForIRI> ForIndex<A> for Rc<AnnotatedComponent<A>> {
+    fn into_component(self) -> AnnotatedComponent<A> {
+        Rc::try_unwrap(self).unwrap_or_else(|rc| (*rc).clone())
+    }
+}
+
+impl<A: ForIRI> ForIndex<A> for Arc<AnnotatedComponent<A>> {
+    fn into_component(self) -> AnnotatedComponent<A> {
+        Arc::try_unwrap(self).unwrap_or_else(|arc| (*arc).clone())
+    }
 }
 
 /// An `OntologyIndex` object.
