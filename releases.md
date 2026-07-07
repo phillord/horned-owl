@@ -1,8 +1,17 @@
 Version 2 (Next)
 =============
 
+Features:
+- Manchester Syntax is now supported
+
 Enhancements:
 - The ForIRI interface has been updated to avoid an allocation which results in 5-10% performance gains.
+- Other performance enchancements, including several in pretty_rdf.
+
+Contributors:
+- Michel Dumontier
+- Phillip Lord
+- Jim Balhoff
 
 
 
