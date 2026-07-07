@@ -61,7 +61,16 @@ impl<A: ForIRI> SetOntology<A> {
     }
 }
 
-impl<A: ForIRI> Ontology<A> for SetOntology<A> {}
+impl<A: ForIRI> Ontology<A> for SetOntology<A> {
+    type ComponentIter<'c>
+        = SetIter<'c, A>
+    where
+        A: 'c;
+
+    fn iter(&self) -> Self::ComponentIter<'_> {
+        SetOntology::iter(self)
+    }
+}
 
 impl<A: ForIRI, AA: ForIndex<A>> From<SetIndex<A, AA>> for SetOntology<A> {
     fn from(index: SetIndex<A, AA>) -> Self {
@@ -326,6 +335,16 @@ mod test {
         let mut it = SetOntology::new_rc().into_iter();
         assert_eq!(it.next(), None);
         assert_eq!(it.next(), None);
+    }
+
+    #[test]
+    fn test_iterable_ontology_iter() {
+        let build = Build::new_rc();
+        let mut o = SetOntology::new();
+        o.insert(DeclareClass(build.class("http://www.example.com#a")));
+        o.insert(DeclareClass(build.class("http://www.example.com#b")));
+
+        assert_eq!(Ontology::iter(&o).count(), 2);
     }
 
     #[test]

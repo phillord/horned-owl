@@ -848,7 +848,7 @@ mod test {
         assert_eq!(ont.i().annotation_assertion().count(), 1);
 
         let mut walk = super::WalkMut::new(LabeltoFred);
-        let mut vec = ont.into_iter().collect();
+        let mut vec: Vec<_> = ont.into_iter().collect();
         walk.ontology_vec(&mut vec);
 
         match &vec[2] {

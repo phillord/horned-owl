@@ -20,7 +20,7 @@ use std::{
 use super::component_mapped::ComponentMappedIndex;
 use super::declaration_mapped::DeclarationMappedIndex;
 use super::indexed::{FourIndexedOntology, OntologyIndex};
-use super::set::SetIndex;
+use super::set::{SetIndex, SetIndexIter};
 
 use std::collections::HashSet;
 
@@ -245,7 +245,17 @@ pub struct IRIMappedOntology<A: ForIRI, AA: ForIndex<A>>(
 pub type RcIRIMappedOntology = IRIMappedOntology<RcStr, Rc<AnnotatedComponent<RcStr>>>;
 pub type ArcIRIMappedOntology = IRIMappedOntology<ArcStr, Arc<AnnotatedComponent<ArcStr>>>;
 
-impl<A: ForIRI, AA: ForIndex<A>> Ontology<A> for IRIMappedOntology<A, AA> {}
+impl<A: ForIRI, AA: ForIndex<A>> Ontology<A> for IRIMappedOntology<A, AA> {
+    type ComponentIter<'c>
+        = SetIndexIter<'c, A, AA>
+    where
+        Self: 'c,
+        A: 'c;
+
+    fn iter(&self) -> Self::ComponentIter<'_> {
+        self.0.i().into_iter()
+    }
+}
 
 impl<A: ForIRI, AA: ForIndex<A>> MutableOntology<A> for IRIMappedOntology<A, AA> {
     fn insert<IAA>(&mut self, cmp: IAA) -> bool
@@ -355,6 +365,16 @@ mod test {
         let mut it = IRIMappedOntology::new_arc().into_iter();
         assert_eq!(it.next(), None);
         assert_eq!(it.next(), None);
+    }
+
+    #[test]
+    fn test_iterable_ontology_iter() {
+        let build = Build::new_rc();
+        let mut o = IRIMappedOntology::new_rc();
+        o.insert(DeclareClass(build.class("http://www.example.com#a")));
+        o.insert(DeclareClass(build.class("http://www.example.com#b")));
+
+        assert_eq!(Ontology::iter(&o).count(), 2);
     }
 
     #[test]
