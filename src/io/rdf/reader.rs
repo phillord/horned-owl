@@ -16,7 +16,7 @@ use crate::{
         declaration_mapped::DeclarationMappedIndex,
         indexed::ThreeIndexedOntology,
         logically_equal::{LogicallyEqualIndex, update_or_insert_logically_equal_component},
-        set::{SetIndex, SetOntology},
+        set::{SetIndex, SetIndexIter, SetOntology},
     },
     resolve::strict_resolve_iri,
     vocab::RDFS as VRDFS,
@@ -332,7 +332,27 @@ impl<A: ForIRI, AA: ForIndex<A>> ConcreteRDFOntology<A, AA> {
     }
 }
 
-impl<A: ForIRI, AA: ForIndex<A>> Ontology<A> for ConcreteRDFOntology<A, AA> {}
+impl<A: ForIRI, AA: ForIndex<A>> Ontology<A> for ConcreteRDFOntology<A, AA> {
+    type ComponentIter<'c>
+        = SetIndexIter<'c, A, AA>
+    where
+        Self: 'c,
+        A: 'c;
+
+    fn iter(&self) -> Self::ComponentIter<'_> {
+        self.i().into_iter()
+    }
+}
+
+impl<A: ForIRI, AA: ForIndex<A>> IntoIterator for ConcreteRDFOntology<A, AA> {
+    type Item = AnnotatedComponent<A>;
+    type IntoIter = std::vec::IntoIter<AnnotatedComponent<A>>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        let (i, _, _) = self.index();
+        i.into_iter()
+    }
+}
 
 impl<A: ForIRI, AA: ForIndex<A>> MutableOntology<A> for ConcreteRDFOntology<A, AA> {
     fn insert<IAA>(&mut self, cmp: IAA) -> bool
@@ -2643,6 +2663,26 @@ mod test {
         dbg!(&xmlont);
         dbg!(&rdfont);
         assert_eq!(rdfont, xmlont);
+    }
+
+    #[test]
+    fn test_iterable_ontology_iter() {
+        let mut o: ConcreteRDFOntology<RcStr, Rc<AnnotatedComponent<RcStr>>> = Default::default();
+        let build = Build::new_rc();
+        o.insert(DeclareClass(build.class("http://www.example.com#a")));
+        o.insert(DeclareClass(build.class("http://www.example.com#b")));
+
+        assert_eq!(Ontology::iter(&o).count(), 2);
+    }
+
+    #[test]
+    fn test_iterable_ontology_into_iter() {
+        let mut o: ConcreteRDFOntology<RcStr, Rc<AnnotatedComponent<RcStr>>> = Default::default();
+        let build = Build::new_rc();
+        o.insert(DeclareClass(build.class("http://www.example.com#a")));
+        o.insert(DeclareClass(build.class("http://www.example.com#b")));
+
+        assert_eq!(o.into_iter().count(), 2);
     }
 
     // #[test]

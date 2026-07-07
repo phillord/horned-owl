@@ -278,7 +278,17 @@ impl<A: ForIRI, AA: ForIndex<A>> Default for ComponentMappedOntology<A, AA> {
     }
 }
 
-impl<A: ForIRI, AA: ForIndex<A>> Ontology<A> for ComponentMappedOntology<A, AA> {}
+impl<A: ForIRI, AA: ForIndex<A>> Ontology<A> for ComponentMappedOntology<A, AA> {
+    type ComponentIter<'c>
+        = ComponentMappedIter<'c, A, AA>
+    where
+        Self: 'c,
+        A: 'c;
+
+    fn iter(&self) -> Self::ComponentIter<'_> {
+        self.i().into_iter()
+    }
+}
 
 impl<A: ForIRI, AA: ForIndex<A>> MutableOntology<A> for ComponentMappedOntology<A, AA> {
     fn insert<IAA>(&mut self, cmp: IAA) -> bool
@@ -421,6 +431,16 @@ mod test {
         let mut it = ComponentMappedOntology::new_rc().into_iter();
         assert_eq!(it.next(), None);
         assert_eq!(it.next(), None);
+    }
+
+    #[test]
+    fn test_iterable_ontology_iter() {
+        let build = Build::new_rc();
+        let mut o = ComponentMappedOntology::new_rc();
+        o.insert(DeclareClass(build.class("http://www.example.com#a")));
+        o.insert(DeclareClass(build.class("http://www.example.com#b")));
+
+        assert_eq!(Ontology::iter(&o).count(), 2);
     }
 
     #[test]

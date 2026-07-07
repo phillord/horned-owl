@@ -67,7 +67,7 @@ impl<A: ForIRI, T> ForIndex<A> for T where
 /// A given `OntologyIndex` object is not bound to keep references to
 /// all `Rc<AnnotatedComponent>` that are inserted into it, although at
 /// least one `OntologyIndex` object for an `IndexedOntology` should
-/// do, or the it will be dropped entirely. The `SetIndex` is a simple
+/// do, or it will be dropped entirely. The `SetIndex` is a simple
 /// way to achieving this.
 pub trait OntologyIndex<A: ForIRI, AA: ForIndex<A>> {
     /// Potentially insert an AnnotatedComponent to the index.
@@ -157,13 +157,49 @@ impl<A: ForIRI, AA: ForIndex<A>, I: Clone> Clone for OneIndexedOntology<A, AA, I
     }
 }
 
-impl<A: ForIRI, AA: ForIndex<A>, I: OntologyIndex<A, AA>> Ontology<A>
-    for OneIndexedOntology<A, AA, I>
+// Only slot `I` needs to be iterable: every concrete ontology in this
+// crate shares the same components across its indexes (via Rc/Arc), so
+// index slot 1 alone is always a complete iteration of the ontology.
+impl<A, AA, I> Ontology<A> for OneIndexedOntology<A, AA, I>
+where
+    A: ForIRI,
+    AA: ForIndex<A>,
+    I: OntologyIndex<A, AA>,
+    for<'c> &'c I: IntoIterator<Item = &'c AnnotatedComponent<A>>,
+    I: IntoIterator<Item = AnnotatedComponent<A>>,
 {
+    type ComponentIter<'c>
+        = <&'c I as IntoIterator>::IntoIter
+    where
+        Self: 'c,
+        A: 'c;
+
+    fn iter(&self) -> Self::ComponentIter<'_> {
+        self.i().into_iter()
+    }
 }
 
-impl<A: ForIRI, AA: ForIndex<A>, I: OntologyIndex<A, AA>> MutableOntology<A>
-    for OneIndexedOntology<A, AA, I>
+impl<A, AA, I> IntoIterator for OneIndexedOntology<A, AA, I>
+where
+    A: ForIRI,
+    AA: ForIndex<A>,
+    I: OntologyIndex<A, AA> + IntoIterator<Item = AnnotatedComponent<A>>,
+{
+    type Item = AnnotatedComponent<A>;
+    type IntoIter = <I as IntoIterator>::IntoIter;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.index().into_iter()
+    }
+}
+
+impl<A, AA, I> MutableOntology<A> for OneIndexedOntology<A, AA, I>
+where
+    A: ForIRI,
+    AA: ForIndex<A>,
+    I: OntologyIndex<A, AA>,
+    for<'c> &'c I: IntoIterator<Item = &'c AnnotatedComponent<A>>,
+    I: IntoIterator<Item = AnnotatedComponent<A>>,
 {
     fn insert<IAA: Into<AnnotatedComponent<A>>>(&mut self, cmp: IAA) -> bool {
         let cmp = cmp.into();
@@ -212,13 +248,50 @@ impl<A, AA, I: Default, J: Default> Default for TwoIndexedOntology<A, AA, I, J> 
     }
 }
 
-impl<A: ForIRI, AA: ForIndex<A>, I: OntologyIndex<A, AA>, J: OntologyIndex<A, AA>> Ontology<A>
-    for TwoIndexedOntology<A, AA, I, J>
+// See the comment on `OneIndexedOntology`'s impl: only slot `I` needs to be iterable.
+impl<A, AA, I, J> Ontology<A> for TwoIndexedOntology<A, AA, I, J>
+where
+    A: ForIRI,
+    AA: ForIndex<A>,
+    I: OntologyIndex<A, AA>,
+    J: OntologyIndex<A, AA>,
+    for<'c> &'c I: IntoIterator<Item = &'c AnnotatedComponent<A>>,
+    I: IntoIterator<Item = AnnotatedComponent<A>>,
 {
+    type ComponentIter<'c>
+        = <&'c I as IntoIterator>::IntoIter
+    where
+        Self: 'c,
+        A: 'c;
+
+    fn iter(&self) -> Self::ComponentIter<'_> {
+        self.i().into_iter()
+    }
 }
 
-impl<A: ForIRI, AA: ForIndex<A>, I: OntologyIndex<A, AA>, J: OntologyIndex<A, AA>>
-    MutableOntology<A> for TwoIndexedOntology<A, AA, I, J>
+impl<A, AA, I, J> IntoIterator for TwoIndexedOntology<A, AA, I, J>
+where
+    A: ForIRI,
+    AA: ForIndex<A>,
+    I: OntologyIndex<A, AA> + IntoIterator<Item = AnnotatedComponent<A>>,
+    J: OntologyIndex<A, AA>,
+{
+    type Item = AnnotatedComponent<A>;
+    type IntoIter = <I as IntoIterator>::IntoIter;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.index().0.into_iter()
+    }
+}
+
+impl<A, AA, I, J> MutableOntology<A> for TwoIndexedOntology<A, AA, I, J>
+where
+    A: ForIRI,
+    AA: ForIndex<A>,
+    I: OntologyIndex<A, AA>,
+    J: OntologyIndex<A, AA>,
+    for<'c> &'c I: IntoIterator<Item = &'c AnnotatedComponent<A>>,
+    I: IntoIterator<Item = AnnotatedComponent<A>>,
 {
     fn insert<IAA: Into<AnnotatedComponent<A>>>(&mut self, cmp: IAA) -> bool {
         let cmp = cmp.into();
@@ -293,23 +366,53 @@ impl<A, AA, I: Default, J: Default, K: Default> Default for ThreeIndexedOntology
     }
 }
 
-impl<
+// See the comment on `OneIndexedOntology`'s impl: only slot `I` needs to be iterable.
+impl<A, AA, I, J, K> Ontology<A> for ThreeIndexedOntology<A, AA, I, J, K>
+where
     A: ForIRI,
     AA: ForIndex<A>,
     I: OntologyIndex<A, AA>,
     J: OntologyIndex<A, AA>,
     K: OntologyIndex<A, AA>,
-> Ontology<A> for ThreeIndexedOntology<A, AA, I, J, K>
+    for<'c> &'c I: IntoIterator<Item = &'c AnnotatedComponent<A>>,
+    I: IntoIterator<Item = AnnotatedComponent<A>>,
 {
+    type ComponentIter<'c>
+        = <&'c I as IntoIterator>::IntoIter
+    where
+        Self: 'c,
+        A: 'c;
+
+    fn iter(&self) -> Self::ComponentIter<'_> {
+        self.i().into_iter()
+    }
 }
 
-impl<
+impl<A, AA, I, J, K> IntoIterator for ThreeIndexedOntology<A, AA, I, J, K>
+where
+    A: ForIRI,
+    AA: ForIndex<A>,
+    I: OntologyIndex<A, AA> + IntoIterator<Item = AnnotatedComponent<A>>,
+    J: OntologyIndex<A, AA>,
+    K: OntologyIndex<A, AA>,
+{
+    type Item = AnnotatedComponent<A>;
+    type IntoIter = <I as IntoIterator>::IntoIter;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.index().0.into_iter()
+    }
+}
+
+impl<A, AA, I, J, K> MutableOntology<A> for ThreeIndexedOntology<A, AA, I, J, K>
+where
     A: ForIRI,
     AA: ForIndex<A>,
     I: OntologyIndex<A, AA>,
     J: OntologyIndex<A, AA>,
     K: OntologyIndex<A, AA>,
-> MutableOntology<A> for ThreeIndexedOntology<A, AA, I, J, K>
+    for<'c> &'c I: IntoIterator<Item = &'c AnnotatedComponent<A>>,
+    I: IntoIterator<Item = AnnotatedComponent<A>>,
 {
     fn insert<IAA: Into<AnnotatedComponent<A>>>(&mut self, cmp: IAA) -> bool {
         self.0.insert(cmp)
@@ -395,25 +498,56 @@ impl<A, AA, I: Default, J: Default, K: Default, L: Default> Default
     }
 }
 
-impl<
+// See the comment on `OneIndexedOntology`'s impl: only slot `I` needs to be iterable.
+impl<A, AA, I, J, K, L> Ontology<A> for FourIndexedOntology<A, AA, I, J, K, L>
+where
     A: ForIRI,
     AA: ForIndex<A>,
     I: OntologyIndex<A, AA>,
     J: OntologyIndex<A, AA>,
     K: OntologyIndex<A, AA>,
     L: OntologyIndex<A, AA>,
-> Ontology<A> for FourIndexedOntology<A, AA, I, J, K, L>
+    for<'c> &'c I: IntoIterator<Item = &'c AnnotatedComponent<A>>,
+    I: IntoIterator<Item = AnnotatedComponent<A>>,
 {
+    type ComponentIter<'c>
+        = <&'c I as IntoIterator>::IntoIter
+    where
+        Self: 'c,
+        A: 'c;
+
+    fn iter(&self) -> Self::ComponentIter<'_> {
+        self.i().into_iter()
+    }
 }
 
-impl<
+impl<A, AA, I, J, K, L> IntoIterator for FourIndexedOntology<A, AA, I, J, K, L>
+where
+    A: ForIRI,
+    AA: ForIndex<A>,
+    I: OntologyIndex<A, AA> + IntoIterator<Item = AnnotatedComponent<A>>,
+    J: OntologyIndex<A, AA>,
+    K: OntologyIndex<A, AA>,
+    L: OntologyIndex<A, AA>,
+{
+    type Item = AnnotatedComponent<A>;
+    type IntoIter = <I as IntoIterator>::IntoIter;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.index().0.into_iter()
+    }
+}
+
+impl<A, AA, I, J, K, L> MutableOntology<A> for FourIndexedOntology<A, AA, I, J, K, L>
+where
     A: ForIRI,
     AA: ForIndex<A>,
     I: OntologyIndex<A, AA>,
     J: OntologyIndex<A, AA>,
     K: OntologyIndex<A, AA>,
     L: OntologyIndex<A, AA>,
-> MutableOntology<A> for FourIndexedOntology<A, AA, I, J, K, L>
+    for<'c> &'c I: IntoIterator<Item = &'c AnnotatedComponent<A>>,
+    I: IntoIterator<Item = AnnotatedComponent<A>>,
 {
     fn insert<IAA: Into<AnnotatedComponent<A>>>(&mut self, cmp: IAA) -> bool {
         self.0.insert(cmp)
@@ -432,7 +566,7 @@ mod test {
         TwoIndexedOntology,
     };
     use crate::{
-        model::{AnnotatedComponent, Build, MutableOntology, NamedOWLEntity, RcStr},
+        model::{AnnotatedComponent, Build, MutableOntology, NamedOWLEntity, Ontology, RcStr},
         ontology::set::SetIndex,
     };
 
@@ -485,6 +619,28 @@ mod test {
     }
 
     #[test]
+    fn one_iterable() {
+        let mut o = OneIndexedOntology::new_rc(SetIndex::new());
+        let e = stuff();
+        o.insert(e.0);
+        o.insert(e.1);
+        o.insert(e.2);
+
+        assert_eq!(Ontology::iter(&o).count(), 3);
+    }
+
+    #[test]
+    fn one_into_iter() {
+        let mut o = OneIndexedOntology::new_rc(SetIndex::new());
+        let e = stuff();
+        o.insert(e.0);
+        o.insert(e.1);
+        o.insert(e.2);
+
+        assert_eq!(o.into_iter().count(), 3);
+    }
+
+    #[test]
     fn two_cons() {
         let _o = TwoIndexedOntology::new(SetIndex::new_rc(), SetIndex::new());
 
@@ -526,6 +682,28 @@ mod test {
     }
 
     #[test]
+    fn two_iterable() {
+        let mut o = TwoIndexedOntology::new(SetIndex::new_rc(), SetIndex::new());
+        let e = stuff();
+        o.insert(e.0);
+        o.insert(e.1);
+        o.insert(e.2);
+
+        assert_eq!(Ontology::iter(&o).count(), 3);
+    }
+
+    #[test]
+    fn two_into_iter() {
+        let mut o = TwoIndexedOntology::new(SetIndex::new_rc(), SetIndex::new());
+        let e = stuff();
+        o.insert(e.0);
+        o.insert(e.1);
+        o.insert(e.2);
+
+        assert_eq!(o.into_iter().count(), 3);
+    }
+
+    #[test]
     fn three_remove() {
         let mut o = ThreeIndexedOntology::new(SetIndex::new_rc(), SetIndex::new(), SetIndex::new());
 
@@ -546,6 +724,28 @@ mod test {
 
         assert_eq!(o.i(), o.j());
         assert_eq!(o.i(), o.k());
+    }
+
+    #[test]
+    fn three_iterable() {
+        let mut o = ThreeIndexedOntology::new(SetIndex::new_rc(), SetIndex::new(), SetIndex::new());
+        let e = stuff();
+        o.insert(e.0);
+        o.insert(e.1);
+        o.insert(e.2);
+
+        assert_eq!(Ontology::iter(&o).count(), 3);
+    }
+
+    #[test]
+    fn three_into_iter() {
+        let mut o = ThreeIndexedOntology::new(SetIndex::new_rc(), SetIndex::new(), SetIndex::new());
+        let e = stuff();
+        o.insert(e.0);
+        o.insert(e.1);
+        o.insert(e.2);
+
+        assert_eq!(o.into_iter().count(), 3);
     }
 
     #[test]
@@ -575,5 +775,37 @@ mod test {
         assert_eq!(o.i(), o.j());
         assert_eq!(o.i(), o.k());
         assert_eq!(o.i(), o.l());
+    }
+
+    #[test]
+    fn four_iterable() {
+        let mut o = FourIndexedOntology::new(
+            SetIndex::new_rc(),
+            SetIndex::new(),
+            SetIndex::new(),
+            SetIndex::new(),
+        );
+        let e = stuff();
+        o.insert(e.0);
+        o.insert(e.1);
+        o.insert(e.2);
+
+        assert_eq!(Ontology::iter(&o).count(), 3);
+    }
+
+    #[test]
+    fn four_into_iter() {
+        let mut o = FourIndexedOntology::new(
+            SetIndex::new_rc(),
+            SetIndex::new(),
+            SetIndex::new(),
+            SetIndex::new(),
+        );
+        let e = stuff();
+        o.insert(e.0);
+        o.insert(e.1);
+        o.insert(e.2);
+
+        assert_eq!(o.into_iter().count(), 3);
     }
 }
