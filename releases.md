@@ -1,4 +1,4 @@
-Version 2 (Next)
+Version 2.0.0
 =============
 
 Features:
