@@ -357,23 +357,19 @@ pub mod config {
     use clap::ArgAction;
     use clap::ArgMatches;
     use horned_owl::io::ParserConfiguration;
-    use horned_owl::io::RDFParserConfiguration;
 
     pub fn parser_app(app: App<'static>) -> App<'static> {
         app.arg(
             clap::arg!(--"lax")
                 .required(false)
                 .action(ArgAction::SetTrue)
-                .help("Parse RDF in a lax manner"),
+                .help("Parse in a lax manner"),
         )
     }
 
     pub fn parser_config(matches: &ArgMatches) -> ParserConfiguration {
         ParserConfiguration {
-            rdf: RDFParserConfiguration {
-                lax: *matches.get_one::<bool>("lax").unwrap_or(&false),
-                format: None,
-            },
+            lax: *matches.get_one::<bool>("lax").unwrap_or(&false),
             ..Default::default()
         }
     }

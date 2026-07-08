@@ -1291,7 +1291,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                 Some(NamedOWLEntityKind::ObjectProperty) => {
                     Some(PropertyExpression::ObjectPropertyExpression(iri.into()))
                 }
-                _ if self.config.rdf.lax => {
+                _ if self.config.lax => {
                     Some(PropertyExpression::ObjectPropertyExpression(iri.into()))
                 }
                 _ => None,
@@ -1321,7 +1321,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
             (Some(ope), Some(NamedOWLEntityKind::ObjectProperty)) | (Some(ope), None) => {
                 Ok(Some((ope.into(), ObjectProperty(b.clone()).into())))
             }
-            (Some(ope), _any) if self.config.rdf.lax => {
+            (Some(ope), _any) if self.config.lax => {
                 Ok(Some((ope.into(), ObjectProperty(b.clone()).into())))
             }
             _ => Err(HornedError::invalid(format!(
@@ -1385,15 +1385,15 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                 AnnotationProperty(a.clone()).into(),
                 AnnotationProperty(b.clone()).into(),
             ))),
-            (Some(NEK::ObjectProperty), _) if self.config.rdf.lax => Ok(Some((
+            (Some(NEK::ObjectProperty), _) if self.config.lax => Ok(Some((
                 ObjectProperty(a.clone()).into(),
                 ObjectProperty(b.clone()).into(),
             ))),
-            (Some(NEK::DataProperty), _) if self.config.rdf.lax => Ok(Some((
+            (Some(NEK::DataProperty), _) if self.config.lax => Ok(Some((
                 DataProperty(a.clone()).into(),
                 DataProperty(b.clone()).into(),
             ))),
-            (Some(NEK::AnnotationProperty), _) if self.config.rdf.lax => Ok(Some((
+            (Some(NEK::AnnotationProperty), _) if self.config.lax => Ok(Some((
                 AnnotationProperty(a.clone()).into(),
                 AnnotationProperty(b.clone()).into(),
             ))),
@@ -2451,7 +2451,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
         // SWRL rules
         self.swrl()?;
 
-        if self.config.rdf.lax {
+        if self.config.lax {
             self.simple_annotations(true)?;
         }
         self.state = OntologyParserState::Parse;

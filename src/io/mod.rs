@@ -50,7 +50,14 @@ impl<A: ForIRI, AA: ForIndex<A>> ParserOutput<A, AA> {
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct ParserConfiguration {
-    // Shared Config will go here
+    /// In lax mode, parsers tolerate content that would otherwise be a
+    /// parse error -- see individual readers for exactly what this
+    /// relaxes -- instead of rejecting it.
+    ///
+    /// Currently only the RDF and OWX readers consult this flag; the
+    /// OFN and OMN readers do not yet have a lax mode, so setting it
+    /// has no effect on those formats.
+    pub lax: bool,
     pub rdf: RDFParserConfiguration,
     pub owx: OWXParserConfiguration,
 }
@@ -60,7 +67,6 @@ pub struct OWXParserConfiguration {}
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct RDFParserConfiguration {
-    pub lax: bool,
     pub format: Option<oxrdfio::RdfFormat>,
 }
 

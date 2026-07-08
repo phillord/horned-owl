@@ -865,7 +865,7 @@ mod test {
     }
 
     pub fn read_ok<R: BufRead>(bufread: &mut R) -> SetOntology<String> {
-        let r = read_with_build(bufread, &Build::new_string());
+        let r = read_with_build(bufread, &Build::new_string(), Default::default());
         assert!(r.is_ok(), "Expected ontology, got failure:{:?}", r.err());
         let (o, _) = r.ok().unwrap();
 

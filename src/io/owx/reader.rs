@@ -27,19 +27,21 @@ where
     build: &'a Build<A>,
     mapping: PrefixMapping,
     reader: NsReader<R>,
+    config: ParserConfiguration,
 }
 
 pub fn read<A: ForIRI, O: MutableOntology<A> + Default, R: BufRead>(
     bufread: &mut R,
-    _config: ParserConfiguration,
+    config: ParserConfiguration,
 ) -> Result<(O, PrefixMapping), HornedError> {
     let b = Build::new();
-    read_with_build(bufread, &b)
+    read_with_build(bufread, &b, config)
 }
 
 pub fn read_with_build<A: ForIRI, O: MutableOntology<A> + Default, R: BufRead>(
     bufread: R,
     build: &Build<A>,
+    config: ParserConfiguration,
 ) -> Result<(O, PrefixMapping), HornedError> {
     let reader: NsReader<R> = NsReader::from_reader(bufread);
     let mut ont: O = Default::default();
@@ -50,6 +52,7 @@ pub fn read_with_build<A: ForIRI, O: MutableOntology<A> + Default, R: BufRead>(
         reader,
         build,
         mapping,
+        config,
     };
 
     loop {
@@ -100,6 +103,12 @@ pub fn read_with_build<A: ForIRI, O: MutableOntology<A> + Default, R: BufRead>(
             // this initially was in `read_event`.
             (_, Event::Eof) => {
                 return Err(error_eof(&r));
+            }
+            (_, Event::Text(ref t)) if !is_blank(t) && !r.config.lax => {
+                return Err(error_unexpected_text(&mut r));
+            }
+            (_, Event::CData(ref t)) if !is_blank(t) && !r.config.lax => {
+                return Err(error_unexpected_text(&mut r));
             }
             _ => {}
         }
@@ -297,6 +306,19 @@ fn error_missing_element<A: ForIRI, R: BufRead>(tag: &[u8], r: &mut Read<A, R>) 
         },
         Err(e) => e,
     }
+}
+
+fn error_unexpected_text<A: ForIRI, R: BufRead>(r: &mut Read<A, R>) -> HornedError {
+    invalid! {
+        "Unexpected text content at {}", r.reader.buffer_position()
+    }
+}
+
+// Insignificant whitespace between elements is normal, valid XML
+// formatting; anything else appearing where only child elements are
+// expected is malformed and was previously silently dropped (#72).
+fn is_blank(bytes: &[u8]) -> bool {
+    bytes.iter().all(u8::is_ascii_whitespace)
 }
 
 fn is_owl(res: &ResolveResult) -> bool {
@@ -650,6 +672,12 @@ fn till_end_with<A: ForIRI, R: BufRead, T: FromStart<A> + std::fmt::Debug>(
             }
             (_, Event::Eof) => {
                 return Err(error_eof(r));
+            }
+            (_, Event::Text(ref t)) if !is_blank(t) && !r.config.lax => {
+                return Err(error_unexpected_text(r));
+            }
+            (_, Event::CData(ref t)) if !is_blank(t) && !r.config.lax => {
+                return Err(error_unexpected_text(r));
             }
             _ => {}
         }
@@ -1164,6 +1192,12 @@ from_xml! {
                 (_, Event::Eof) => {
                     return Err(error_eof(r));
                 },
+                (_, Event::Text(ref t)) if !is_blank(t) && !r.config.lax => {
+                    return Err(error_unexpected_text(r));
+                },
+                (_, Event::CData(ref t)) if !is_blank(t) && !r.config.lax => {
+                    return Err(error_unexpected_text(r));
+                },
                 _ =>{}
             }
         }
@@ -1181,6 +1215,12 @@ fn from_next<A: ForIRI, R: BufRead, T: FromStart<A>>(r: &mut Read<A, R>) -> Resu
             }
             (_, Event::Eof) => {
                 return Err(error_eof(r));
+            }
+            (_, Event::Text(ref t)) if !is_blank(t) && !r.config.lax => {
+                return Err(error_unexpected_text(r));
+            }
+            (_, Event::CData(ref t)) if !is_blank(t) && !r.config.lax => {
+                return Err(error_unexpected_text(r));
             }
             _ => {}
         }
@@ -1382,7 +1422,7 @@ pub mod test {
         HornedError,
     > {
         let b = Build::new();
-        read_with_build(bufread, &b)
+        read_with_build(bufread, &b, Default::default())
     }
 
     pub fn read_ok<R: BufRead>(
@@ -2459,5 +2499,50 @@ pub mod test {
         let r = read(&mut ont_s.as_bytes());
 
         assert!(r.is_err());
+    }
+
+    // https://github.com/phillord/horned-owl/issues/72 -- stray free text
+    // between elements was silently dropped instead of being rejected.
+    const BROKEN_OWX: &str = r##"<?xml version="1.0"?>
+<Ontology xmlns="http://www.w3.org/2002/07/owl#"
+     ontologyIRI="http://www.example.com/iri">
+    I am broken
+    <Declaration>
+        <Class IRI="#C"/>
+    </Declaration>
+</Ontology>"##;
+
+    #[test]
+    fn stray_text_is_rejected_by_default() {
+        let r: Result<
+            (
+                ComponentMappedOntology<RcStr, RcAnnotatedComponent>,
+                PrefixMapping,
+            ),
+            HornedError,
+        > = read_with_build(
+            &mut BROKEN_OWX.as_bytes(),
+            &Build::new(),
+            Default::default(),
+        );
+
+        assert!(r.is_err(), "Expected a parse error, got {r:?}");
+    }
+
+    #[test]
+    fn stray_text_is_ignored_in_lax_mode() {
+        let config = ParserConfiguration {
+            lax: true,
+            ..Default::default()
+        };
+        let r: Result<
+            (
+                ComponentMappedOntology<RcStr, RcAnnotatedComponent>,
+                PrefixMapping,
+            ),
+            HornedError,
+        > = read_with_build(&mut BROKEN_OWX.as_bytes(), &Build::new(), config);
+
+        assert!(r.is_ok(), "Expected ontology, got failure: {:?}", r.err());
     }
 }
