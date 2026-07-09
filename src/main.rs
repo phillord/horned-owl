@@ -75,6 +75,19 @@ fn timestamp() -> String {
         .unwrap_or_else(|_| "0".to_string())
 }
 
+/// A `Source` record for a file skipped by the `--max-bytes` cap.
+fn skipped_record(name: String, len: u64, cap: u64) -> Record {
+    Record::Source(SourceReadReport {
+        ontology: name,
+        source_format: Format::Unknown,
+        outcome: Outcome::Skipped,
+        is_complete: false,
+        incomplete: None,
+        error: Some(format!("skipped: {len} bytes exceeds --max-bytes {cap}")),
+        read_us: None,
+    })
+}
+
 fn main() -> anyhow::Result<()> {
     match Cli::parse().cmd {
         Cmd::Run {
@@ -106,44 +119,47 @@ fn main() -> anyhow::Result<()> {
                 corpus: dir.to_string_lossy().to_string(),
                 started: timestamp(),
             });
-            let recs: Vec<Record> = {
+            // Stream records to disk as each file completes, under a locked
+            // writer. This keeps memory flat over a large corpus (each file's
+            // records are written and dropped, never accumulated) and makes
+            // partial progress durable if the sweep is interrupted or OOMs.
+            let writer =
+                std::sync::Mutex::new(std::io::BufWriter::new(std::fs::File::create(&out)?));
+            {
+                let mut w = writer.lock().unwrap();
+                writeln!(w, "{}", serde_json::to_string(&header)?)?;
+            }
+            {
                 use rayon::prelude::*;
-                paths
-                    .par_iter()
-                    .flat_map(|p| {
-                        let name = p
-                            .file_stem()
-                            .unwrap_or_default()
-                            .to_string_lossy()
-                            .to_string();
+                paths.par_iter().try_for_each(|p| -> anyhow::Result<()> {
+                    let name = p
+                        .file_stem()
+                        .unwrap_or_default()
+                        .to_string_lossy()
+                        .to_string();
+                    // Pre-read size gate: skip oversized files WITHOUT reading
+                    // them into memory (a multi-hundred-MB ontology would spike
+                    // RAM even if only to discard it). read_bytes still guards
+                    // against a small gzip that inflates past the cap.
+                    let over_cap_on_disk = match (max_bytes, std::fs::metadata(p)) {
+                        (Some(cap), Ok(meta)) if meta.len() > cap => Some((meta.len(), cap)),
+                        _ => None,
+                    };
+                    let recs: Vec<Record> = if let Some((len, cap)) = over_cap_on_disk {
+                        vec![skipped_record(name, len, cap)]
+                    } else {
                         match corpus::read_bytes(p) {
-                            Ok(bytes) => {
-                                if let Some(cap) = max_bytes {
-                                    let len = bytes.len() as u64;
-                                    if len > cap {
-                                        return vec![Record::Source(SourceReadReport {
-                                            ontology: name,
-                                            source_format: Format::Unknown,
-                                            outcome: Outcome::Skipped,
-                                            is_complete: false,
-                                            incomplete: None,
-                                            error: Some(format!(
-                                                "skipped: {len} bytes exceeds --max-bytes {cap}"
-                                            )),
-                                            read_us: None,
-                                        })];
-                                    }
+                            Ok(bytes) => match max_bytes {
+                                Some(cap) if bytes.len() as u64 > cap => {
+                                    vec![skipped_record(name, bytes.len() as u64, cap)]
                                 }
-                                // catch_unwind scope: a panic inside
-                                // run_bytes (which includes canonicalize/
-                                // diff/categorize, all of which run outside
-                                // run_bytes's own internal catch_unwind
-                                // calls) must not abort the whole
-                                // par_iter().collect() -- record it as a
-                                // single Outcome::Panic Source instead.
-                                match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                                    roundtrip::run_bytes(&name, &bytes, &fmts)
-                                })) {
+                                // A panic inside run_bytes (canonicalize/diff/
+                                // categorize run outside run_bytes's own
+                                // catch_unwind) must not abort the sweep --
+                                // record it as one Outcome::Panic Source.
+                                _ => match std::panic::catch_unwind(std::panic::AssertUnwindSafe(
+                                    || roundtrip::run_bytes(&name, &bytes, &fmts),
+                                )) {
                                     Ok(recs) => recs,
                                     Err(_) => vec![Record::Source(SourceReadReport {
                                         ontology: name,
@@ -154,18 +170,21 @@ fn main() -> anyhow::Result<()> {
                                         error: Some("panic during processing".into()),
                                         read_us: None,
                                     })],
-                                }
-                            }
+                                },
+                            },
                             Err(_) => vec![],
                         }
-                    })
-                    .collect()
-            };
-            let mut f = std::fs::File::create(&out)?;
-            writeln!(f, "{}", serde_json::to_string(&header)?)?;
-            for r in &recs {
-                writeln!(f, "{}", serde_json::to_string(r)?)?;
+                    };
+                    if !recs.is_empty() {
+                        let mut w = writer.lock().unwrap();
+                        for r in &recs {
+                            writeln!(w, "{}", serde_json::to_string(r)?)?;
+                        }
+                    }
+                    Ok(())
+                })?;
             }
+            writer.lock().unwrap().flush()?;
         }
         Cmd::Report { input, out_dir } => {
             let text = std::fs::read_to_string(&input)?;
