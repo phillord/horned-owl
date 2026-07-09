@@ -84,14 +84,19 @@ fn item(side: Side, c: &AnnotatedComponent<RcStr>, category: Category) -> DiffIt
     }
 }
 
-/// Rule 4: any component that still mentions an anonymous individual after
-/// rules 1-3 have failed to match is a canonicalization residual, not a
-/// genuine defect. Detected pragmatically via the `Anonymous(` marker that
-/// `AnonymousIndividual`'s derived `Debug` always emits (as
-/// `Individual::Anonymous(AnonymousIndividual(..))`,
-/// `AnnotationValue::AnonymousIndividual(..)`, etc.).
+/// Rule 4: any component (including its annotations) that still mentions an
+/// anonymous individual after rules 1-3 have failed to match is a
+/// canonicalization residual, not a genuine defect. Detected pragmatically
+/// via the `AnonymousIndividual(` marker that the `AnonymousIndividual`
+/// wrapper struct's derived `Debug` always emits, regardless of position:
+/// individual operand (`Individual::Anonymous(AnonymousIndividual(..))`) or
+/// annotation value/subject
+/// (`AnnotationValue::AnonymousIndividual(AnonymousIndividual(..))`,
+/// `AnnotationSubject::AnonymousIndividual(AnonymousIndividual(..))`).
 fn fallback_category(c: &AnnotatedComponent<RcStr>) -> Category {
-    if format!("{:?}", c.component).contains("Anonymous(") {
+    // Check both component and annotations for anonymous individuals
+    let debug_str = format!("{:?}", c);
+    if debug_str.contains("AnonymousIndividual(") {
         Category::BlankNodeRelabel
     } else {
         Category::Unknown
@@ -263,6 +268,31 @@ mod tests {
         let src = "Prefix(:=<http://ex/>)\nOntology(<http://ex/o>\nSameIndividual(<http://ex/A> _:b0)\nDeclaration(NamedIndividual(<http://ex/A>))\n)";
         let rt  = "Prefix(:=<http://ex/>)\nOntology(<http://ex/o>\nSameIndividual(<http://ex/A> _:b1)\nDeclaration(NamedIndividual(<http://ex/A>))\n)";
         let cs = cats(src, rt);
+        assert!(!cs.is_empty());
+        assert!(cs.iter().all(|c| *c == Category::BlankNodeRelabel));
+        assert!(!cs.contains(&Category::Unknown));
+    }
+
+    #[test]
+    fn anonymous_individual_in_annotation_value_is_blank_node_relabel() {
+        // Anonymous individual appears only as an annotation VALUE (not as an
+        // individual operand). Such items must be tagged BlankNodeRelabel, not
+        // Unknown. This test verifies that the fallback_category function
+        // correctly detects anonymous individuals in annotation positions
+        // (AnnotationValue::AnonymousIndividual), which render as
+        // `AnonymousIndividual(AnonymousIndividual("..."))` and match the
+        // `AnonymousIndividual(` marker.
+        //
+        // We create an axiom that differs in structure (ObjectPropertyAssertion
+        // vs SubClassOf) so rule 1 doesn't match on annotation stripping alone.
+        // The rt version has an anonymous individual only in an annotation value.
+        let src = "Prefix(:=<http://ex/>)\nOntology(<http://ex/o>\nSubClassOf(<http://ex/A> <http://ex/B>)\n)";
+        let rt  = "Prefix(:=<http://ex/>)\nOntology(<http://ex/o>\nSubClassOf(<http://ex/A> <http://ex/B>)\nObjectPropertyAssertion(Annotation(<http://ex/p> _:b0) <http://ex/r> <http://ex/x> <http://ex/y>)\n)";
+        let s = read_source(Format::Ofn, src.as_bytes()).unwrap().model;
+        let r = read_source(Format::Ofn, rt.as_bytes()).unwrap().model;
+        let d = diff(&s, &r);
+        let items = categorize(d, &s, &r);
+        let cs: Vec<Category> = items.iter().map(|x| x.category).collect();
         assert!(!cs.is_empty());
         assert!(cs.iter().all(|c| *c == Category::BlankNodeRelabel));
         assert!(!cs.contains(&Category::Unknown));
