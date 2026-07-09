@@ -1,10 +1,15 @@
 //! Diff categorization: classify each `RawDiff` item into a benign bucket
 //! (`AnnotationNormalization`, `InferredDeclaration`, `NaryReshape`,
-//! `BlankNodeRelabel`) or `Unknown` — the real-defect signal.
+//! `BlankNodeRelabel`) or a reported-defect bucket (`AnnotationLoss`,
+//! `Unknown`) — the real-defect signal.
 //!
 //! Rules are applied in order, first match wins per item:
-//! 1. `AnnotationNormalization` — a lost item and a gained item share a
-//!    component-minus-annotations key (same `.component`, differing `.ann`).
+//! 1. A lost item and a gained item share a component-minus-annotations key
+//!    (same `.component`). If their `.ann` sets are also equal, the pairing
+//!    is a spurious/degenerate match and both items are tagged
+//!    `AnnotationNormalization` (benign). If the `.ann` sets differ, the
+//!    round-trip genuinely changed or dropped an annotation, so both items
+//!    are tagged `AnnotationLoss` (a reported, non-benign difference).
 //! 2. `InferredDeclaration` — a gained `Declare*` whose declared entity is
 //!    used, with a matching entity kind, by some non-declaration component
 //!    already present in `src`.
@@ -40,18 +45,21 @@ pub fn categorize(d: RawDiff, src: &SetOntology<RcStr>, _rt: &SetOntology<RcStr>
     let key = |c: &AnnotatedComponent<RcStr>| format!("{:?}", c.component);
 
     for g in &d.only_in_roundtrip {
-        // Rule 1: AnnotationNormalization — pair with an unpaired lost item
-        // that shares the annotation-stripped key.
+        // Rule 1: pair with an unpaired lost item that shares the
+        // annotation-stripped key. Equal `.ann` sets -> benign
+        // AnnotationNormalization; differing `.ann` sets -> a real
+        // AnnotationLoss.
         if let Some(i) = (0..d.only_in_source.len())
             .find(|&i| !lost_paired[i] && key(&d.only_in_source[i]) == key(g))
         {
             lost_paired[i] = true;
-            out.push(item(Side::RoundTrip, g, Category::AnnotationNormalization));
-            out.push(item(
-                Side::Source,
-                &d.only_in_source[i],
-                Category::AnnotationNormalization,
-            ));
+            let cat = if d.only_in_source[i].ann == g.ann {
+                Category::AnnotationNormalization
+            } else {
+                Category::AnnotationLoss
+            };
+            out.push(item(Side::RoundTrip, g, cat));
+            out.push(item(Side::Source, &d.only_in_source[i], cat));
             continue;
         }
         // Rule 2: InferredDeclaration.
@@ -249,13 +257,13 @@ mod tests {
     }
 
     #[test]
-    fn annotation_change_pairs_as_normalization() {
-        // same axiom, annotation present in src, dropped in rt -> paired
+    fn dropped_annotation_is_annotation_loss() {
+        // same axiom, annotation present in src, dropped in rt -> paired, but
+        // since the .ann sets differ (one has the annotation, the other
+        // doesn't) this is a real AnnotationLoss, not benign normalization.
         let src = "Prefix(:=<http://ex/>)\nOntology(<http://ex/o>\nSubClassOf(Annotation(<http://ex/p> \"x\") <http://ex/A> <http://ex/B>)\n)";
         let rt  = "Prefix(:=<http://ex/>)\nOntology(<http://ex/o>\nSubClassOf(<http://ex/A> <http://ex/B>)\n)";
-        assert!(cats(src, rt)
-            .iter()
-            .all(|c| *c == Category::AnnotationNormalization));
+        assert!(cats(src, rt).iter().all(|c| *c == Category::AnnotationLoss));
     }
 
     #[test]

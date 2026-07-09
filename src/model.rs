@@ -28,6 +28,7 @@ pub enum Category {
     InferredDeclaration,
     NaryReshape,
     AnnotationNormalization,
+    AnnotationLoss,
     BlankNodeRelabel,
     Unknown,
 }
