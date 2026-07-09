@@ -34,6 +34,7 @@ pub fn report(records: &[Record], out_dir: &Path) -> anyhow::Result<()> {
         "benign_inferred_decl",
         "benign_nary",
         "benign_annotation",
+        "annotation_loss",
         "benign_blanknode",
         "n_unknown",
         "write_us",
@@ -75,6 +76,7 @@ pub fn report(records: &[Record], out_dir: &Path) -> anyhow::Result<()> {
                 cc(Category::InferredDeclaration).to_string(),
                 cc(Category::NaryReshape).to_string(),
                 cc(Category::AnnotationNormalization).to_string(),
+                cc(Category::AnnotationLoss).to_string(),
                 cc(Category::BlankNodeRelabel).to_string(),
                 cc(Category::Unknown).to_string(),
                 opt(c.write_us),
@@ -126,6 +128,7 @@ fn cat_str(c: Category) -> &'static str {
         Category::InferredDeclaration => "inferred_declaration",
         Category::NaryReshape => "nary_reshape",
         Category::AnnotationNormalization => "annotation_normalization",
+        Category::AnnotationLoss => "annotation_loss",
         Category::BlankNodeRelabel => "blank_node_relabel",
         Category::Unknown => "unknown",
     }
@@ -138,9 +141,33 @@ fn n_unknown(c: &CaseResult) -> usize {
         .unwrap_or(0)
 }
 
+fn n_annotation_loss(c: &CaseResult) -> usize {
+    c.category_counts
+        .get(&Category::AnnotationLoss)
+        .copied()
+        .unwrap_or(0)
+}
+
+/// `Unknown` and `AnnotationLoss` are both real, reported findings (as
+/// opposed to the benign buckets) -- combine them for the "cases to
+/// investigate" ranking in `report.md`.
+fn n_investigate(c: &CaseResult) -> usize {
+    n_unknown(c) + n_annotation_loss(c)
+}
+
 fn cases(records: &[Record]) -> impl Iterator<Item = &CaseResult> {
     records.iter().filter_map(|r| match r {
         Record::Case(c) => Some(c),
+        _ => None,
+    })
+}
+
+/// The run's `RunHeader`, if the records include one (it's written first by
+/// `main`'s `run` subcommand, but `report()` is a pure function of whatever
+/// slice it's handed, so callers -- and tests -- may omit it).
+fn header(records: &[Record]) -> Option<&RunHeader> {
+    records.iter().find_map(|r| match r {
+        Record::Header(h) => Some(h),
         _ => None,
     })
 }
@@ -222,6 +249,21 @@ fn top_unknown(records: &[Record]) -> Vec<&CaseResult> {
     v
 }
 
+/// Cases with `n_investigate() > 0` (i.e. any `Unknown` or `AnnotationLoss`
+/// diff -- both are real, reported findings, not benign), worst first (ties
+/// broken by ontology name for determinism), capped at `TOP_N`. Used by
+/// `report.md`'s "Cases to Investigate" section.
+fn top_investigate(records: &[Record]) -> Vec<&CaseResult> {
+    let mut v: Vec<&CaseResult> = cases(records).filter(|c| n_investigate(c) > 0).collect();
+    v.sort_by(|a, b| {
+        n_investigate(b)
+            .cmp(&n_investigate(a))
+            .then(a.ontology.cmp(&b.ontology))
+    });
+    v.truncate(TOP_N);
+    v
+}
+
 fn summarize(records: &[Record]) -> serde_json::Value {
     let mut by_pair = serde_json::Map::new();
     for ((sf, tf), s) in by_format_pair(records) {
@@ -267,6 +309,7 @@ fn summarize(records: &[Record]) -> serde_json::Value {
         Category::InferredDeclaration,
         Category::NaryReshape,
         Category::AnnotationNormalization,
+        Category::AnnotationLoss,
         Category::BlankNodeRelabel,
         Category::Unknown,
     ] {
@@ -301,6 +344,13 @@ fn summarize(records: &[Record]) -> serde_json::Value {
 fn render_md(records: &[Record]) -> String {
     let mut s = String::new();
     s.push_str("# Round-Trip Report\n\n");
+
+    if let Some(h) = header(records) {
+        s.push_str(&format!(
+            "horned-owl rev: `{}` | corpus: `{}` | started: {}\n\n",
+            h.horned_owl_rev, h.corpus, h.started
+        ));
+    }
 
     let total = cases(records).count();
     s.push_str(&format!("Total cases: {total}\n\n"));
@@ -350,27 +400,47 @@ fn render_md(records: &[Record]) -> String {
     }
     s.push('\n');
 
-    s.push_str("## Top Unknown-Diff Cases\n\n");
-    let tu = top_unknown(records);
+    s.push_str(
+        "> **Note:** `BlankNodeRelabel` is a mixed bucket -- it covers both harmless \
+         blank-node canonicalization artifacts (residual ordering differences the \
+         canonicalizer couldn't fully resolve) *and* possible real blank-node defects. \
+         It is reported as benign by default, but is worth manual spot-checking rather \
+         than assuming every case in it is harmless.\n\n",
+    );
+
+    s.push_str("## Cases to Investigate (Unknown + AnnotationLoss)\n\n");
+    s.push_str(
+        "Both `Unknown` and `AnnotationLoss` diffs are real, reported findings -- \
+         unlike the benign buckets (`InferredDeclaration`, `NaryReshape`, \
+         `AnnotationNormalization`, `BlankNodeRelabel`), they are not explained away \
+         by canonicalization or reshaping and warrant manual inspection.\n\n",
+    );
+    let tu = top_investigate(records);
     if tu.is_empty() {
         s.push_str("None. \n\n");
     } else {
         for (i, c) in tu.iter().enumerate() {
             s.push_str(&format!(
-                "{}. **{}** ({} -> {}): n_unknown={}\n",
+                "{}. **{}** ({} -> {}): n_unknown={}, n_annotation_loss={}\n",
                 i + 1,
                 c.ontology,
                 fmt(c.source_format),
                 fmt(c.target_format),
                 n_unknown(c),
+                n_annotation_loss(c),
             ));
             for d in c
                 .diffs
                 .iter()
-                .filter(|d| d.category == Category::Unknown)
+                .filter(|d| {
+                    d.category == Category::Unknown || d.category == Category::AnnotationLoss
+                })
                 .take(2)
             {
-                s.push_str(&format!("   - `{:?} {}`\n", d.side, d.debug));
+                s.push_str(&format!(
+                    "   - `{:?} {:?} {}`\n",
+                    d.side, d.category, d.debug
+                ));
             }
         }
         s.push('\n');
@@ -450,17 +520,22 @@ mod tests {
         report(&recs, &dir).unwrap();
 
         let csv = std::fs::read_to_string(dir.join("cases.csv")).unwrap();
+        let header = csv.lines().next().unwrap();
+        assert_eq!(
+            header,
+            "ontology,source_format,target_format,outcome,source_complete,exact,\
+n_lost,n_gained,benign_inferred_decl,benign_nary,benign_annotation,\
+annotation_loss,benign_blanknode,n_unknown,write_us,reread_us"
+        );
         let data_line = csv.lines().nth(1).unwrap();
-        // ontology,source_format,target_format,outcome,source_complete,exact,
-        // n_lost,n_gained,benign_inferred_decl,benign_nary,benign_annotation,
-        // benign_blanknode,n_unknown,write_us,reread_us
         let cols: Vec<&str> = data_line.split(',').collect();
         assert_eq!(cols[0], "unk-onto");
         assert_eq!(cols[1], "rdf_xml");
         assert_eq!(cols[2], "ofn");
         assert_eq!(cols[6], "0"); // n_lost
         assert_eq!(cols[7], "1"); // n_gained
-        assert_eq!(cols[12], "1"); // n_unknown
+        assert_eq!(cols[11], "0"); // annotation_loss
+        assert_eq!(cols[13], "1"); // n_unknown
 
         let summary: serde_json::Value =
             serde_json::from_str(&std::fs::read_to_string(dir.join("summary.json")).unwrap())
