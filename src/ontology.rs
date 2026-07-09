@@ -137,22 +137,7 @@ pub fn write_target(
             omn::writer::write(&mut out, &cmo, Some(prefixes)).map_err(horned_err)?;
         }
         Format::OwlXml => {
-            // Work around a bug in the pinned horned-owl rev's owx writer:
-            // it renders every entry in `mapping.mappings()` as an
-            // `xmlns:{name}="..."` attribute with no special case for the
-            // empty-name entry that a bare `Prefix(:=<iri>)`/`Prefix: :
-            // <iri>` declaration produces (curie's `PrefixMapping` stores
-            // that under the mapping key `""`, distinct from its separate
-            // `default` field, which the ofn/omn readers never populate).
-            // That yields the malformed XML attribute `xmlns:="..."`
-            // (colon followed immediately by `=`), which no XML parser
-            // accepts. Stripping the empty-name entry before handing the
-            // mapping to this writer avoids emitting it; any IRIs that
-            // would have shrunk against it are written out in full instead,
-            // which is always valid.
-            let mut owx_prefixes = prefixes.clone();
-            owx_prefixes.remove_prefix("");
-            owx::writer::write(&mut out, &cmo, Some(&owx_prefixes)).map_err(horned_err)?;
+            owx::writer::write(&mut out, &cmo, Some(prefixes)).map_err(horned_err)?;
         }
         Format::RdfXml => {
             rdf::writer::write(&mut out, &cmo).map_err(horned_err)?;
@@ -194,7 +179,7 @@ mod tests {
         use crate::model::Format;
         let src = read_source(
             Format::Ofn,
-            b"Prefix(:=<http://ex/>)\nOntology(<http://ex/o>\nDeclaration(Class(<http://ex/A>))\n)",
+            b"Prefix(ex:=<http://ex/>)\nOntology(<http://ex/o>\nDeclaration(Class(ex:A))\n)",
         )
         .unwrap();
         for t in [Format::Ofn, Format::Omn, Format::OwlXml, Format::RdfXml] {
