@@ -1,6 +1,6 @@
 use anyhow::Context;
 use clap::{Parser, Subcommand};
-use horned_roundtrip::model::{Format, Record, RunHeader};
+use horned_roundtrip::model::{Format, Outcome, Record, RunHeader, SourceReadReport};
 use horned_roundtrip::{corpus, fetch, report, roundtrip};
 use std::io::Write;
 use std::path::PathBuf;
@@ -29,6 +29,10 @@ enum Cmd {
         formats: String,
         #[arg(long)]
         jobs: Option<usize>,
+        /// Skip any corpus file whose byte length exceeds this cap, recording
+        /// it as `Outcome::Skipped` instead of running it through the engine.
+        #[arg(long = "max-bytes")]
+        max_bytes: Option<u64>,
     },
     /// Aggregate a run's JSONL output into a report directory.
     Report {
@@ -78,6 +82,7 @@ fn main() -> anyhow::Result<()> {
             out,
             formats,
             jobs,
+            max_bytes,
         } => {
             // catch_unwind in roundtrip::run_bytes recovers from per-file panics, but
             // the default panic hook still writes a message to stderr for each one.
@@ -112,7 +117,45 @@ fn main() -> anyhow::Result<()> {
                             .to_string_lossy()
                             .to_string();
                         match corpus::read_bytes(p) {
-                            Ok(bytes) => roundtrip::run_bytes(&name, &bytes, &fmts),
+                            Ok(bytes) => {
+                                if let Some(cap) = max_bytes {
+                                    let len = bytes.len() as u64;
+                                    if len > cap {
+                                        return vec![Record::Source(SourceReadReport {
+                                            ontology: name,
+                                            source_format: Format::Unknown,
+                                            outcome: Outcome::Skipped,
+                                            is_complete: false,
+                                            incomplete: None,
+                                            error: Some(format!(
+                                                "skipped: {len} bytes exceeds --max-bytes {cap}"
+                                            )),
+                                            read_us: None,
+                                        })];
+                                    }
+                                }
+                                // catch_unwind scope: a panic inside
+                                // run_bytes (which includes canonicalize/
+                                // diff/categorize, all of which run outside
+                                // run_bytes's own internal catch_unwind
+                                // calls) must not abort the whole
+                                // par_iter().collect() -- record it as a
+                                // single Outcome::Panic Source instead.
+                                match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                                    roundtrip::run_bytes(&name, &bytes, &fmts)
+                                })) {
+                                    Ok(recs) => recs,
+                                    Err(_) => vec![Record::Source(SourceReadReport {
+                                        ontology: name,
+                                        source_format: Format::Unknown,
+                                        outcome: Outcome::Panic,
+                                        is_complete: false,
+                                        incomplete: None,
+                                        error: Some("panic during processing".into()),
+                                        read_us: None,
+                                    })],
+                                }
+                            }
                             Err(_) => vec![],
                         }
                     })
@@ -145,4 +188,34 @@ fn main() -> anyhow::Result<()> {
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::HORNED_OWL_REV;
+
+    /// Guards against reproducibility drift: `Cargo.toml`'s pinned
+    /// horned-owl `rev` and this binary's `HORNED_OWL_REV` constant (recorded
+    /// in every run's header) must always agree, or reports would claim a
+    /// commit that isn't actually what was built against.
+    #[test]
+    fn horned_owl_rev_matches_cargo_toml() {
+        let manifest_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("Cargo.toml");
+        let manifest = std::fs::read_to_string(&manifest_path)
+            .unwrap_or_else(|e| panic!("reading {manifest_path:?}: {e}"));
+        let rev_line = manifest
+            .lines()
+            .find(|l| l.contains("horned-owl") && l.contains("rev ="))
+            .unwrap_or_else(|| panic!("no horned-owl rev = \"...\" line found in Cargo.toml"));
+        let rev = rev_line
+            .split("rev = \"")
+            .nth(1)
+            .and_then(|s| s.split('"').next())
+            .unwrap_or_else(|| panic!("could not parse rev from line: {rev_line}"));
+        assert_eq!(
+            rev, HORNED_OWL_REV,
+            "Cargo.toml's horned-owl rev ({rev}) no longer matches HORNED_OWL_REV \
+             ({HORNED_OWL_REV}) in src/main.rs -- update the constant"
+        );
+    }
 }

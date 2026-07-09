@@ -6,7 +6,7 @@ pub fn detect(bytes: &[u8]) -> Format {
     let s = s.strip_prefix('\u{feff}').unwrap_or(&s);
     let trimmed = s.trim_start();
 
-    if trimmed.starts_with("<?xml") || trimmed.starts_with('<') {
+    if trimmed.starts_with('<') {
         // Find the first XML element name after prologue / comments / doctype.
         if let Some(root) = first_xml_element(trimmed) {
             let local = root.rsplit(':').next().unwrap_or(root);

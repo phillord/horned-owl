@@ -26,9 +26,12 @@ use std::time::Duration;
 /// BioPortal REST API base URL.
 const BASE_URL: &str = "https://data.bioontology.org";
 
-/// Build the URL for the authenticated `/ontologies` list endpoint.
+/// Build the URL for the authenticated `/ontologies` list endpoint. Includes
+/// `include=all` (matching the Python reference implementation) so the list
+/// response embeds each ontology's full attributes rather than a bare
+/// summary.
 pub fn ontology_list_url(base: &str, key: &str) -> String {
-    format!("{base}/ontologies?apikey={key}")
+    format!("{base}/ontologies?include=all&apikey={key}")
 }
 
 /// Decide whether an HTTP response should be retried, and if so, how long to
@@ -221,7 +224,7 @@ mod tests {
     fn builds_list_url_with_key() {
         assert_eq!(
             ontology_list_url("https://data.bioontology.org", "K"),
-            "https://data.bioontology.org/ontologies?apikey=K"
+            "https://data.bioontology.org/ontologies?include=all&apikey=K"
         );
     }
     #[test]

@@ -1,3 +1,4 @@
+use horned_roundtrip::model::Record;
 use std::process::Command;
 #[test]
 fn run_then_report_over_tiny_corpus() {
@@ -19,6 +20,23 @@ fn run_then_report_over_tiny_corpus() {
         .success();
     assert!(ok);
     assert!(jsonl.exists());
+
+    let text = std::fs::read_to_string(&jsonl).unwrap();
+    let first_line = text
+        .lines()
+        .next()
+        .expect("jsonl should have a header line");
+    let first_rec: Record = serde_json::from_str(first_line).unwrap();
+    match first_rec {
+        Record::Header(h) => {
+            assert_eq!(
+                h.horned_owl_rev, "0a9debdbf85243350d3d6edc0dcd617f0ed47d97",
+                "run header should carry the pinned horned-owl rev"
+            );
+        }
+        other => panic!("expected first jsonl line to be Record::Header, got {other:?}"),
+    }
+
     let ok2 = Command::new(env!("CARGO_BIN_EXE_horned-roundtrip"))
         .args(["report", "--in"])
         .arg(&jsonl)
