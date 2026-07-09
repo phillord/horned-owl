@@ -5,4 +5,5 @@ pub mod detect;
 pub mod diff;
 pub mod model;
 pub mod ontology;
+pub mod report;
 pub mod roundtrip;
