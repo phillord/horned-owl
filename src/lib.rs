@@ -3,6 +3,7 @@ pub mod categorize;
 pub mod corpus;
 pub mod detect;
 pub mod diff;
+pub mod fetch;
 pub mod model;
 pub mod ontology;
 pub mod report;

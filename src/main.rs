@@ -1,6 +1,7 @@
+use anyhow::Context;
 use clap::{Parser, Subcommand};
 use horned_roundtrip::model::{Format, Record, RunHeader};
-use horned_roundtrip::{corpus, report, roundtrip};
+use horned_roundtrip::{corpus, fetch, report, roundtrip};
 use std::io::Write;
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -35,6 +36,16 @@ enum Cmd {
         input: PathBuf,
         #[arg(long = "out-dir")]
         out_dir: PathBuf,
+    },
+    /// Download a corpus of ontologies from BioPortal.
+    Fetch {
+        #[arg(long)]
+        out: PathBuf,
+        /// BioPortal API key; falls back to the BIOPORTAL_API_KEY env var.
+        #[arg(long = "api-key")]
+        api_key: Option<String>,
+        #[arg(long)]
+        limit: Option<usize>,
     },
 }
 
@@ -121,6 +132,16 @@ fn main() -> anyhow::Result<()> {
                 .map(serde_json::from_str)
                 .collect::<Result<_, _>>()?;
             report::report(&recs, &out_dir)?;
+        }
+        Cmd::Fetch {
+            out,
+            api_key,
+            limit,
+        } => {
+            let key = api_key
+                .or_else(|| std::env::var("BIOPORTAL_API_KEY").ok())
+                .context("BioPortal API key required: pass --api-key or set BIOPORTAL_API_KEY")?;
+            fetch::fetch(&out, &key, limit)?;
         }
     }
     Ok(())
