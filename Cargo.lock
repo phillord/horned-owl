@@ -491,6 +491,7 @@ dependencies = [
  "anyhow",
  "clap",
  "csv",
+ "curie",
  "flate2",
  "horned-owl",
  "rayon",
