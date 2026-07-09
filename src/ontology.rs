@@ -17,7 +17,7 @@
 use crate::model::{Format, IncompleteSummary};
 use curie::PrefixMapping;
 use horned_owl::error::HornedError;
-use horned_owl::io::{ofn, omn, owx, rdf, ParserOutput};
+use horned_owl::io::{ofn, omn, owx, rdf, ParserConfiguration, ParserOutput};
 use horned_owl::model::{RcAnnotatedComponent, RcStr};
 use horned_owl::ontology::component_mapped::ComponentMappedOntology;
 use horned_owl::ontology::set::SetOntology;
@@ -99,6 +99,16 @@ pub fn read_source(fmt: Format, bytes: &[u8]) -> anyhow::Result<ReadOk> {
                 .map_err(horned_err)?;
             Output::rdf(rop).decompose()
         }
+        Format::Turtle => {
+            // Same oxrdfio-backed RDF reader, but tell it the input syntax is
+            // Turtle (the config defaults to RdfXml otherwise). N-Triples is a
+            // Turtle subset, so this parses both. IncompleteParse handling is
+            // identical to the RdfXml path.
+            let mut config = ParserConfiguration::default();
+            config.rdf.format = Some(oxrdfio::RdfFormat::Turtle);
+            let rop = rdf::reader::read(&mut Cursor::new(bytes), config).map_err(horned_err)?;
+            Output::rdf(rop).decompose()
+        }
         Format::Unknown => anyhow::bail!("unknown format"),
     };
 
@@ -142,6 +152,9 @@ pub fn write_target(
         Format::RdfXml => {
             rdf::writer::write(&mut out, &cmo).map_err(horned_err)?;
         }
+        // Turtle is a read-only (source) format — horned-owl has no Turtle
+        // writer, so it never appears as a round-trip target.
+        Format::Turtle => anyhow::bail!("cannot write turtle (read-only source format)"),
         Format::Unknown => anyhow::bail!("cannot write unknown format"),
     }
     Ok(out)
@@ -151,6 +164,19 @@ pub fn write_target(
 mod tests {
     use super::*;
     use crate::model::Format;
+
+    #[test]
+    fn reads_turtle_source() {
+        // A Turtle document declaring one class; the oxrdfio-backed RDF reader
+        // (told format=Turtle) should parse it into at least one component.
+        let ttl = b"@prefix owl: <http://www.w3.org/2002/07/owl#> .\n\
+                    <http://ex/A> a owl:Class .\n";
+        let r = read_source(Format::Turtle, ttl).expect("read turtle");
+        assert!(
+            r.model.iter().count() >= 1,
+            "expected >=1 component from turtle"
+        );
+    }
 
     #[test]
     fn reads_functional_source() {

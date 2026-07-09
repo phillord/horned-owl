@@ -10,6 +10,11 @@ horned-owl = { git = "https://github.com/phillord/horned-owl.git", rev = "0a9deb
 # `horned_owl::io::PrefixMapping`. Depend on the same `curie` crate directly
 # (pinned to the version horned-owl's Cargo.lock resolves) to name the type.
 curie = "0.1.4"
+# horned-owl's RDF reader takes the input syntax via
+# `ParserConfiguration.rdf.format: Option<oxrdfio::RdfFormat>` (defaults to
+# RdfXml). Depend on the same oxrdfio to name `RdfFormat::Turtle` so we can
+# route Turtle/N-Triples sources through the (oxrdfio-backed) RDF reader.
+oxrdfio = "0.2"
 clap = { version = "4", features = ["derive"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

@@ -494,6 +494,7 @@ dependencies = [
  "curie",
  "flate2",
  "horned-owl",
+ "oxrdfio",
  "rayon",
  "reqwest",
  "serde",

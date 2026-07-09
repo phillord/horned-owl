@@ -7,6 +7,17 @@ pub fn detect(bytes: &[u8]) -> Format {
     let trimmed = s.trim_start();
 
     if trimmed.starts_with('<') {
+        // N-Triples / IRI-subject Turtle: a full-IRI subject and predicate on
+        // the first line (`<...> <...>`). Checked before XML disambiguation
+        // because it also starts with `<`. RDF/XML never matches: it opens
+        // with `<?xml` / `<!…` or a single root element tag, not two
+        // space-separated angle-bracket IRIs.
+        if !trimmed.starts_with("<?")
+            && !trimmed.starts_with("<!")
+            && trimmed.lines().next().is_some_and(|l| l.contains("> <"))
+        {
+            return Format::Turtle;
+        }
         // Find the first XML element name after prologue / comments / doctype.
         if let Some(root) = first_xml_element(trimmed) {
             let local = root.rsplit(':').next().unwrap_or(root);
@@ -19,11 +30,24 @@ pub fn detect(bytes: &[u8]) -> Format {
         }
         return Format::Unknown;
     }
-    // Text syntaxes: first significant line.
+    // First significant line drives text-syntax detection (skip blanks and
+    // `#` comments, which Turtle/OFN/OMN all allow).
     for line in trimmed.lines() {
         let l = line.trim_start();
         if l.is_empty() || l.starts_with('#') {
             continue;
+        }
+        // Turtle / N3: `@prefix`/`@base` directives (case-insensitive keyword).
+        let lower = l.to_ascii_lowercase();
+        if lower.starts_with("@prefix") || lower.starts_with("@base") {
+            return Format::Turtle;
+        }
+        // N-Triples / IRI-subject Turtle: a full-IRI subject followed by a
+        // full-IRI predicate on the first line (`<...> <...>`). RDF/XML never
+        // matches this: it opens with `<?xml`/`<!`/`<rdf:RDF …>` (a single
+        // element tag), not two space-separated angle-bracket IRIs.
+        if l.starts_with('<') && !l.starts_with("<?") && !l.starts_with("<!") && l.contains("> <") {
+            return Format::Turtle;
         }
         if l.starts_with("Prefix:") || l.starts_with("Ontology:") {
             return Format::Omn;
@@ -87,6 +111,34 @@ mod tests {
         );
         assert_eq!(detect(b"format-version: 1.4\n[Term]"), Format::Unknown);
     }
+    #[test]
+    fn sniffs_turtle_and_ntriples() {
+        // @prefix / @base directives
+        assert_eq!(
+            detect(b"@prefix skos: <http://www.w3.org/2004/02/skos/core#> .\n"),
+            Format::Turtle
+        );
+        assert_eq!(
+            detect(b"@base <http://ex/> .\n:A a owl:Class ."),
+            Format::Turtle
+        );
+        // N-Triples: full-IRI subject + predicate (starts with `<`)
+        assert_eq!(
+            detect(b"<http://ex/s> <http://ex/p> <http://ex/o> .\n"),
+            Format::Turtle
+        );
+        // Turtle content behind a lying .owl extension is still detected by content
+        assert_eq!(
+            detect(b"# a comment\n@prefix : <http://ex/> ."),
+            Format::Turtle
+        );
+        // RDF/XML must NOT be misread as Turtle
+        assert_eq!(
+            detect(b"<?xml version=\"1.0\"?>\n<rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\">"),
+            Format::RdfXml
+        );
+    }
+
     #[test]
     fn handles_bom_and_comments() {
         assert_eq!(

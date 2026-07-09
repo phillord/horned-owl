@@ -101,6 +101,7 @@ fn fmt(f: Format) -> &'static str {
         Format::OwlXml => "owl_xml",
         Format::Ofn => "ofn",
         Format::Omn => "omn",
+        Format::Turtle => "turtle",
         Format::Unknown => "unknown",
     }
 }
