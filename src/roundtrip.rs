@@ -271,4 +271,61 @@ mod tests {
         let cases = recs.iter().filter(|r| matches!(r, Record::Case(_))).count();
         assert_eq!(cases, 1);
     }
+
+    #[test]
+    fn covers_write_fail_branch() {
+        // Tests the write failure path: attempt to write to Format::Unknown
+        // format, which deterministically fails with a clear error.
+        // The source read succeeds, but the write fails, so no reread is
+        // attempted.
+        let ofn =
+            b"Prefix(:=<http://ex/>)\nOntology(<http://ex/o>\nDeclaration(Class(<http://ex/A>))\n)";
+        let recs = run_bytes("t", ofn, &[Format::Unknown]);
+        assert_eq!(recs.len(), 2, "expected source + case records");
+
+        // Verify source record is Ok
+        match &recs[0] {
+            Record::Source(r) => {
+                assert_eq!(r.outcome, Outcome::Ok, "source read should succeed");
+            }
+            other => panic!("expected Record::Source at index 0, got {other:?}"),
+        }
+
+        // Verify case record shows WriteFail outcome
+        match &recs[1] {
+            Record::Case(c) => {
+                assert_eq!(c.outcome, Outcome::WriteFail);
+                assert!(c.error.is_some(), "WriteFail should have an error message");
+                assert!(!c.exact, "WriteFail cannot be exact");
+                assert!(c.diffs.is_empty(), "WriteFail should have no diffs");
+                assert_eq!(
+                    c.reread_us, None,
+                    "reread should not have run after write failure"
+                );
+            }
+            other => panic!("expected Record::Case at index 1, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn covers_source_read_fail_skip_round_trips() {
+        // Tests the source ReadFail path: garbage input that detect maps to
+        // Format::Unknown, and read_source(Unknown, garbage) fails. No Case
+        // records are produced because the source read failed -- round-trips
+        // are skipped entirely.
+        let recs = run_bytes("t", b"garbage not an ontology", &[Format::Ofn, Format::Omn]);
+        assert_eq!(
+            recs.len(),
+            1,
+            "expected only source record when source read fails; no cases should be produced"
+        );
+
+        // Verify single record is a failed source read
+        match &recs[0] {
+            Record::Source(r) => {
+                assert_eq!(r.outcome, Outcome::ReadFail);
+            }
+            other => panic!("expected Record::Source with ReadFail, got {other:?}"),
+        }
+    }
 }
