@@ -19,6 +19,7 @@ use curie::PrefixMapping;
 use horned_owl::error::HornedError;
 use horned_owl::io::{ofn, omn, owx, rdf, ParserOutput};
 use horned_owl::model::{RcAnnotatedComponent, RcStr};
+use horned_owl::ontology::component_mapped::ComponentMappedOntology;
 use horned_owl::ontology::set::SetOntology;
 use std::io::Cursor;
 
@@ -111,6 +112,56 @@ pub fn read_source(fmt: Format, bytes: &[u8]) -> anyhow::Result<ReadOk> {
     })
 }
 
+/// Serialize `model` into `fmt`'s byte representation.
+///
+/// Every horned-owl writer (ofn/omn/owx/rdf) takes a
+/// `&ComponentMappedOntology<A, AA>`, not a `&SetOntology`, so `model` is
+/// converted via `.into()` first. The ofn/omn/owx writers additionally take
+/// an `Option<&PrefixMapping>` to control prefix-qualified output; the rdf
+/// writer takes no such parameter at all -- it always emits full/absolute
+/// IRIs plus a small fixed prefix set (rdf/owl/swrl) hardcoded internally
+/// (see `tests/smoke.rs`'s API notes) -- so the `RdfXml` arm must not pass
+/// `prefixes` to it.
+pub fn write_target(
+    fmt: Format,
+    model: &SetOntology<RcStr>,
+    prefixes: &PrefixMapping,
+) -> anyhow::Result<Vec<u8>> {
+    let cmo: ComponentMappedOntology<RcStr, RcAnnotatedComponent> = model.clone().into();
+    let mut out: Vec<u8> = Vec::new();
+    match fmt {
+        Format::Ofn => {
+            ofn::writer::write(&mut out, &cmo, Some(prefixes)).map_err(horned_err)?;
+        }
+        Format::Omn => {
+            omn::writer::write(&mut out, &cmo, Some(prefixes)).map_err(horned_err)?;
+        }
+        Format::OwlXml => {
+            // Work around a bug in the pinned horned-owl rev's owx writer:
+            // it renders every entry in `mapping.mappings()` as an
+            // `xmlns:{name}="..."` attribute with no special case for the
+            // empty-name entry that a bare `Prefix(:=<iri>)`/`Prefix: :
+            // <iri>` declaration produces (curie's `PrefixMapping` stores
+            // that under the mapping key `""`, distinct from its separate
+            // `default` field, which the ofn/omn readers never populate).
+            // That yields the malformed XML attribute `xmlns:="..."`
+            // (colon followed immediately by `=`), which no XML parser
+            // accepts. Stripping the empty-name entry before handing the
+            // mapping to this writer avoids emitting it; any IRIs that
+            // would have shrunk against it are written out in full instead,
+            // which is always valid.
+            let mut owx_prefixes = prefixes.clone();
+            owx_prefixes.remove_prefix("");
+            owx::writer::write(&mut out, &cmo, Some(&owx_prefixes)).map_err(horned_err)?;
+        }
+        Format::RdfXml => {
+            rdf::writer::write(&mut out, &cmo).map_err(horned_err)?;
+        }
+        Format::Unknown => anyhow::bail!("cannot write unknown format"),
+    }
+    Ok(out)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -136,5 +187,21 @@ mod tests {
     fn unknown_format_is_rejected() {
         let r = read_source(Format::Unknown, b"");
         assert!(r.is_err());
+    }
+
+    #[test]
+    fn writes_and_rereads_each_target() {
+        use crate::model::Format;
+        let src = read_source(
+            Format::Ofn,
+            b"Prefix(:=<http://ex/>)\nOntology(<http://ex/o>\nDeclaration(Class(<http://ex/A>))\n)",
+        )
+        .unwrap();
+        for t in [Format::Ofn, Format::Omn, Format::OwlXml, Format::RdfXml] {
+            let bytes = write_target(t, &src.model, &src.prefixes).expect("write");
+            assert!(!bytes.is_empty(), "empty output for {t:?}");
+            let back = read_source(t, &bytes).expect("reread");
+            assert!(back.model.iter().count() >= 1, "lost content for {t:?}");
+        }
     }
 }
