@@ -102,4 +102,4 @@ horned-roundtrip report --in results.jsonl --out-dir report/
 
 ## License
 
-Not yet chosen — add a `LICENSE` file before relying on this in other projects.
+[MIT](LICENSE) © 2026 Michel Dumontier.
