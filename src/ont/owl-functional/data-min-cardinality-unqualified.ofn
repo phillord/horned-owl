@@ -10,18 +10,17 @@ Prefix(rdfs:=<http://www.w3.org/2000/01/rdf-schema#>)
 Ontology(<http://www.example.com/iri>
 <http://www.example.com/viri>
 
-Declaration(Class(o:P))
-Declaration(ObjectProperty(o:r))
-Declaration(NamedIndividual(o:J))
+Declaration(Class(o:C))
+Declaration(DataProperty(o:d))
 
 
 ############################
-#   Named Individuals
+#   Classes
 ############################
 
-# Individual: <http://www.example.com/iri#J> (<http://www.example.com/iri#J>)
+# Class: <http://www.example.com/iri#C> (<http://www.example.com/iri#C>)
 
-ClassAssertion(ObjectExactCardinality(2 o:r) o:J)
+SubClassOf(o:C DataMinCardinality(1 o:d))
 
 
 )

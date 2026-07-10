@@ -14,20 +14,17 @@
     <Prefix name="xsd" IRI="http://www.w3.org/2001/XMLSchema#"/>
     <Prefix name="rdfs" IRI="http://www.w3.org/2000/01/rdf-schema#"/>
     <Declaration>
-        <Class IRI="#P"/>
+        <Class IRI="#C"/>
     </Declaration>
     <Declaration>
         <ObjectProperty IRI="#r"/>
     </Declaration>
-    <Declaration>
-        <NamedIndividual IRI="#J"/>
-    </Declaration>
-    <ClassAssertion>
-        <ObjectExactCardinality cardinality="2">
+    <SubClassOf>
+        <Class IRI="#C"/>
+        <ObjectMinCardinality cardinality="1">
             <ObjectProperty IRI="#r"/>
-        </ObjectExactCardinality>
-        <NamedIndividual IRI="#J"/>
-    </ClassAssertion>
+        </ObjectMinCardinality>
+    </SubClassOf>
 </Ontology>
 
 

@@ -44,36 +44,17 @@
     
 
 
-    <!-- http://www.example.com/iri#P -->
+    <!-- http://www.example.com/iri#C -->
 
 
-    <owl:Class rdf:about="http://www.example.com/iri#P"/>
-    
-
-
-    <!-- 
-    ///////////////////////////////////////////////////////////////////////////////////////
-    //
-    // Individuals
-    //
-    ///////////////////////////////////////////////////////////////////////////////////////
-     -->
-
-
-    
-
-
-    <!-- http://www.example.com/iri#J -->
-
-
-    <owl:NamedIndividual rdf:about="http://www.example.com/iri#J">
-        <rdf:type>
+    <owl:Class rdf:about="http://www.example.com/iri#C">
+        <rdfs:subClassOf>
             <owl:Restriction>
                 <owl:onProperty rdf:resource="http://www.example.com/iri#r"/>
-                <owl:minCardinality rdf:datatype="http://www.w3.org/2001/XMLSchema#nonNegativeInteger">2</owl:minCardinality>
+                <owl:minCardinality rdf:datatype="http://www.w3.org/2001/XMLSchema#nonNegativeInteger">1</owl:minCardinality>
             </owl:Restriction>
-        </rdf:type>
-    </owl:NamedIndividual>
+        </rdfs:subClassOf>
+    </owl:Class>
 </rdf:RDF>
 
 

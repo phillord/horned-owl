@@ -16,15 +16,12 @@ Ontology: <http://www.example.com/iri>
 ObjectProperty: o:r
 
     
-Class: o:P
+Class: o:C
 
+    SubClassOf: 
+        o:r min 1 owl:Thing
+    
     
 Class: owl:Thing
 
-    
-Individual: o:J
-
-    Types: 
-        o:r exactly 2 owl:Thing
-    
     
