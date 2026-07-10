@@ -615,7 +615,10 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
     ) -> OntologyParser<'a, A, AA, O> {
         OntologyParser::from_bufread(
             b,
-            &mut Cursor::new(strict_resolve_iri(iri).expect("the IRI should resolve successfully")),
+            &mut Cursor::new(
+                strict_resolve_iri(iri, config.remote_body_limit)
+                    .expect("the IRI should resolve successfully"),
+            ),
             config,
         )
     }
