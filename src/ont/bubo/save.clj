@@ -17,4 +17,5 @@
   (save-one "owl-rdf" ".owl" :rdf)
   (save-one "owl-xml" ".owx" :owl)
   (save-one "owl-ttl" ".ttl" :ttl)
-  (save-one "owl-functional" ".ofn" (FunctionalSyntaxDocumentFormat.)))
+  (save-one "owl-functional" ".ofn" (FunctionalSyntaxDocumentFormat.))
+  (save-one "owl-manchester" ".omn" :omn))
