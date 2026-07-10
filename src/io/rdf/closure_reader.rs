@@ -77,7 +77,8 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> ClosureOntologyParse
         source_iri: &IRI<A>,
         relative_doc_iri: Option<&IRI<A>>,
     ) -> Result<Vec<IRI<A>>, HornedError> {
-        let (new_doc_iri, s) = resolve_iri(source_iri, relative_doc_iri)?;
+        let (new_doc_iri, s) =
+            resolve_iri(source_iri, relative_doc_iri, self.config.remote_body_limit)?;
         self.parse_content_from_iri(s, relative_doc_iri, new_doc_iri)
     }
 

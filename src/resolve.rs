@@ -179,11 +179,16 @@ pub fn localize_iri_favored<'a, A: ForIRI + 'a, IO: Into<Option<&'a IRI<A>>>>(
 ///
 /// Should the local resolution fail, remote access is used instead.
 ///
+/// `remote_body_limit` bounds the number of bytes read from a remote
+/// response if resolution falls back to a network fetch -- see
+/// [strict_resolve_iri].
+///
 /// Returns the doc IRI from which it was resolved, the content or an
 /// error.
 pub fn resolve_iri<'a, A: ForIRI + 'a, IO: Into<Option<&'a IRI<A>>>>(
     iri: &IRI<A>,
     doc_iri: IO,
+    remote_body_limit: u64,
 ) -> Result<(IRI<A>, String), HornedError> {
     let b = Build::new();
 
@@ -235,7 +240,7 @@ pub fn resolve_iri<'a, A: ForIRI + 'a, IO: Into<Option<&'a IRI<A>>>>(
     }
 
     // All attempts to resolve it locally have failed, so try remote
-    Ok((iri.clone(), strict_resolve_iri(iri)?))
+    Ok((iri.clone(), strict_resolve_iri(iri, remote_body_limit)?))
 }
 
 /// Resolve the contents of the IRI as a String.
@@ -243,14 +248,29 @@ pub fn resolve_iri<'a, A: ForIRI + 'a, IO: Into<Option<&'a IRI<A>>>>(
 /// This functions only over "http(s)" IRIs and will not resolve any
 /// other form of IRI.
 ///
+/// `remote_body_limit` caps the number of bytes read from the
+/// response body; use `u64::MAX` for no limit.
+///
 /// Fails with panic if the `remote` feature is not enabled.
 #[cfg(feature = "remote")]
-pub fn strict_resolve_iri<A: ForIRI>(iri: &IRI<A>) -> Result<String, HornedError> {
-    ureq::get(iri).call()?.into_string().map_err(|e| e.into())
+pub fn strict_resolve_iri<A: ForIRI>(
+    iri: &IRI<A>,
+    remote_body_limit: u64,
+) -> Result<String, HornedError> {
+    ureq::get(iri.as_ref())
+        .call()?
+        .body_mut()
+        .with_config()
+        .limit(remote_body_limit)
+        .read_to_string()
+        .map_err(|e| e.into())
 }
 
 #[cfg(not(feature = "remote"))]
-pub fn strict_resolve_iri<A: ForIRI>(iri: &IRI<A>) -> Result<String, HornedError> {
+pub fn strict_resolve_iri<A: ForIRI>(
+    iri: &IRI<A>,
+    _remote_body_limit: u64,
+) -> Result<String, HornedError> {
     Err(HornedError::ImportError(format!(
         "cannot resolve IRI {iri} remotely: the 'remote' feature is not enabled"
     )))
@@ -374,7 +394,7 @@ mod test {
 
         // This does network access (to example.com). This cannot be
         // guaranteed to succeed. Perhaps we don't need this test at all.
-        assert!(strict_resolve_iri(&i).is_ok());
+        assert!(strict_resolve_iri(&i, u64::MAX).is_ok());
     }
 
     #[test]
@@ -384,7 +404,7 @@ mod test {
         let doc_iri = b.iri("file://Cargo.toml");
 
         let bikepath_str = ::std::fs::read_to_string("bikepath.md").unwrap();
-        let (_, iri_str) = resolve_iri(&i, &doc_iri).unwrap();
+        let (_, iri_str) = resolve_iri(&i, &doc_iri, u64::MAX).unwrap();
         assert_eq!(bikepath_str, iri_str);
     }
 
@@ -393,8 +413,12 @@ mod test {
         let b = Build::new_rc();
         let tester = |iri, resolve_to, doc_iri| {
             let read_str = ::std::fs::read_to_string(format!("dev/resolve/{resolve_to}")).unwrap();
-            let (_, iri_str) =
-                resolve_iri(&b.iri(iri), &b.iri(format!("file://dev/resolve/{doc_iri}"))).unwrap();
+            let (_, iri_str) = resolve_iri(
+                &b.iri(iri),
+                &b.iri(format!("file://dev/resolve/{doc_iri}")),
+                u64::MAX,
+            )
+            .unwrap();
             assert_eq!(read_str, iri_str);
         };
 

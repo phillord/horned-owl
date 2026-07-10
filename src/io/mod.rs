@@ -48,7 +48,7 @@ impl<A: ForIRI, AA: ForIndex<A>> ParserOutput<A, AA> {
     }
 }
 
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Copy, Debug)]
 pub struct ParserConfiguration {
     /// In lax mode, parsers tolerate content that would otherwise be a
     /// parse error -- see individual readers for exactly what this
@@ -58,8 +58,26 @@ pub struct ParserConfiguration {
     /// OFN and OMN readers do not yet have a lax mode, so setting it
     /// has no effect on those formats.
     pub lax: bool,
+    /// The maximum number of bytes to read from a single remote
+    /// (`http`/`https`) IRI resolution, such as when following an
+    /// `owl:imports` closure. Defaults to `u64::MAX` (no limit),
+    /// matching the unbounded behaviour of pre-3.x `ureq`. Lower this
+    /// if resolving IRIs from untrusted sources where an oversized
+    /// response could exhaust memory.
+    pub remote_body_limit: u64,
     pub rdf: RDFParserConfiguration,
     pub owx: OWXParserConfiguration,
+}
+
+impl Default for ParserConfiguration {
+    fn default() -> Self {
+        ParserConfiguration {
+            lax: false,
+            remote_body_limit: u64::MAX,
+            rdf: RDFParserConfiguration::default(),
+            owx: OWXParserConfiguration::default(),
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Default)]

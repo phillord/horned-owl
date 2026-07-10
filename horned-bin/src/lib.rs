@@ -159,7 +159,7 @@ pub fn materialize(
     // Can we just do this with parse_iri method from OxIri?
 
     let file_pathbuf = match parsed {
-        Result::Ok(_) => ensure_local(&b.iri(file_or_iri), None)?,
+        Result::Ok(_) => ensure_local(&b.iri(file_or_iri), None, config.remote_body_limit)?,
         Result::Err(_) => PathBuf::from_str(file_or_iri).expect("Result is infallable"),
     };
 
@@ -170,12 +170,13 @@ pub fn materialize(
 fn ensure_local(
     iri: &IRI<RcStr>,
     relative_doc_iri: Option<&IRI<RcStr>>,
+    remote_body_limit: u64,
 ) -> Result<PathBuf, HornedError> {
     let local_path = localize_iri_favored(iri, relative_doc_iri);
 
     if !local_path.exists() {
         println!("Retrieving Ontology: {}", iri);
-        let imported_data = strict_resolve_iri(iri)?;
+        let imported_data = strict_resolve_iri(iri, remote_body_limit)?;
         println!("Saving to {}", local_path.display());
         let mut file = File::create(&local_path)?;
         file.write_all(imported_data.as_bytes())?;
@@ -201,7 +202,7 @@ fn materialize_1<'a>(
     for i in import {
         if !done.contains(&i.0) {
             done.push(i.0.clone());
-            let local_path = ensure_local(&i.0, Some(&doc_iri))?;
+            let local_path = ensure_local(&i.0, Some(&doc_iri), config.remote_body_limit)?;
 
             if recurse {
                 materialize_1(&local_path, config, done, true)?;
