@@ -2024,7 +2024,7 @@ pub mod test {
 
     #[test]
     fn test_unqualified_cardinality() {
-        let ont_s = include_str!("../../ont/owl-xml/object-unqualified-max-cardinality.owx");
+        let ont_s = include_str!("../../ont/owl-xml/object-max-cardinality-unqualified.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
         assert_eq!(ont.i().sub_class_of().count(), 1);
@@ -2199,7 +2199,7 @@ pub mod test {
 
     #[test]
     fn data_unqualified_cardinality() {
-        let ont_s = include_str!("../../ont/owl-xml/data-unqualified-exact.owx");
+        let ont_s = include_str!("../../ont/owl-xml/data-exact-cardinality-unqualified.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
         let cl = &ont.i().sub_class_of().next().unwrap().sup;
         assert_eq!(ont.i().sub_class_of().count(), 1);
@@ -2314,6 +2314,21 @@ pub mod test {
     #[test]
     fn type_individual_datatype() {
         let ont_s = include_str!("../../ont/owl-xml/type-individual-datatype.owx");
+        let (ont, _) = read_ok(&mut ont_s.as_bytes());
+
+        assert_eq!(1, ont.i().class_assertion().count());
+        let ca = ont.i().class_assertion().next().unwrap();
+
+        assert! {
+            matches!{
+                &ca.ce, ClassExpression::ObjectMinCardinality{n:_, ope:_, bce:_}
+            }
+        };
+    }
+
+    #[test]
+    fn type_individual_datatype_unqualified() {
+        let ont_s = include_str!("../../ont/owl-xml/type-individual-datatype-unqualified.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
         assert_eq!(1, ont.i().class_assertion().count());

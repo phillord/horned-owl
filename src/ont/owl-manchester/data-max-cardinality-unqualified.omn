@@ -13,18 +13,15 @@ Prefix: : <http://www.example.com/iri>
 Ontology: <http://www.example.com/iri>
 <http://www.example.com/viri>
 
-ObjectProperty: o:r
+Datatype: rdfs:Literal
 
     
-Class: o:P
+DataProperty: o:d
 
     
-Class: owl:Thing
+Class: o:C
 
-    
-Individual: o:J
-
-    Types: 
-        o:r min 2 owl:Thing
+    SubClassOf: 
+        o:d max 1 rdfs:Literal
     
     

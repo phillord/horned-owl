@@ -1603,19 +1603,26 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                     }
                 }
                 [
-                    [_, Term::OWL(VOWL::MinCardinality), literal],   //:
-                    [_, Term::OWL(VOWL::OnProperty), Term::Iri(pr)], //:
+                    [_, Term::OWL(VOWL::MinCardinality), literal], //:
+                    [_, Term::OWL(VOWL::OnProperty), pr],          //:
                     [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Restriction)],
-                ] => {
-                    ok_some! {
-                        ClassExpression::ObjectMinCardinality
-                        {
-                            n:self.convert_to_u32(literal)?,
-                            ope: pr.into(),
+                ] => match self.distinguish_retrieve_property_kind(pr, ic) {
+                    Some(PropertyExpression::ObjectPropertyExpression(ope)) => {
+                        ok_some!(ClassExpression::ObjectMinCardinality {
+                            n: self.convert_to_u32(literal)?,
+                            ope,
                             bce: self.b.class(VOWL::Thing).into()
-                        }
+                        })
                     }
-                }
+                    Some(PropertyExpression::DataProperty(dp)) => {
+                        ok_some!(ClassExpression::DataMinCardinality {
+                            n: self.convert_to_u32(literal)?,
+                            dp,
+                            dr: self.b.datatype(OWL2Datatype::Literal).into(),
+                        })
+                    }
+                    any => Self::error_or_none_on_annotation(any, v.position()),
+                },
                 [
                     [_, Term::OWL(VOWL::MinQualifiedCardinality), literal], //:
                     [_, Term::OWL(VOWL::OnClass), tce],                     //:
@@ -1632,19 +1639,26 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                     }
                 }
                 [
-                    [_, Term::OWL(VOWL::MaxCardinality), literal],   //:
-                    [_, Term::OWL(VOWL::OnProperty), Term::Iri(pr)], //:
+                    [_, Term::OWL(VOWL::MaxCardinality), literal], //:
+                    [_, Term::OWL(VOWL::OnProperty), pr],          //:
                     [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Restriction)],
-                ] => {
-                    ok_some! {
-                        ClassExpression::ObjectMaxCardinality
-                        {
-                            n:self.convert_to_u32(literal)?,
-                            ope: pr.into(),
+                ] => match self.distinguish_retrieve_property_kind(pr, ic) {
+                    Some(PropertyExpression::ObjectPropertyExpression(ope)) => {
+                        ok_some!(ClassExpression::ObjectMaxCardinality {
+                            n: self.convert_to_u32(literal)?,
+                            ope,
                             bce: self.b.class(VOWL::Thing).into()
-                        }
+                        })
                     }
-                }
+                    Some(PropertyExpression::DataProperty(dp)) => {
+                        ok_some!(ClassExpression::DataMaxCardinality {
+                            n: self.convert_to_u32(literal)?,
+                            dp,
+                            dr: self.b.datatype(OWL2Datatype::Literal).into(),
+                        })
+                    }
+                    any => Self::error_or_none_on_annotation(any, v.position()),
+                },
                 [
                     [_, Term::OWL(VOWL::MaxQualifiedCardinality), literal], //:
                     [_, Term::OWL(VOWL::OnClass), tce],                     //:
