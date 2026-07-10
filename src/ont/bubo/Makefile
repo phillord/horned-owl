@@ -6,10 +6,10 @@
 BUBO=$(wildcard ../../../dev/bubo-*)
 
 define build_template
-  ../owl-rdf/$(1).owl ../owl-xml/$(1).owx ../owl-ttl/$1.ttl ../owl-functional/$(1).ofn&: $1.clj
+  ../owl-rdf/$(1).owl ../owl-xml/$(1).owx ../owl-ttl/$1.ttl ../owl-functional/$(1).ofn ../owl-manchester/$(1).omn&: $1.clj
 	$(BUBO) $1.clj
 
-  $(2)+=../owl-rdf/$(1).owl ../owl-xml/$(1).owx ../owl-ttl/$(1).ttl ../owl-functional/$(1).ofn
+  $(2)+=../owl-rdf/$(1).owl ../owl-xml/$(1).owx ../owl-ttl/$(1).ttl ../owl-functional/$(1).ofn ../owl-manchester/$(1).omn
 endef
 
 ## Exclude these because they will be generated when something else imports them
