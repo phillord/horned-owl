@@ -35,7 +35,6 @@ bench-prepare:
 ## `cargo test` always sees current fixtures.
 just-bubo:
 	$(MAKE) -C src/ont/bubo
-	cargo clean
 
 bubo: just-bubo test
 
