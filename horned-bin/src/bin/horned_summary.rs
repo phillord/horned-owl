@@ -5,12 +5,7 @@ use clap::App;
 use clap::Arg;
 use clap::ArgMatches;
 
-use horned_bin::{
-    config::{parser_app, parser_config},
-    naming::name,
-    parse_path,
-    summary::summarize,
-};
+use horned_bin::{config::parser_config, naming::name, parse_path, summary::summarize};
 
 use horned_owl::error::HornedError;
 
@@ -23,17 +18,15 @@ fn main() -> Result<(), HornedError> {
 }
 
 pub(crate) fn app(name: &str) -> App<'static> {
-    parser_app(
-        App::new(name)
-            .version("0.1")
-            .about("Summary Statistics for an OWL file.")
-            .author("Phillip Lord")
-            .arg(
-                Arg::with_name("INPUT")
-                    .help("Sets the input file to use")
-                    .required(true),
-            ),
-    )
+    App::new(name)
+        .version("0.1")
+        .about("Summary Statistics for an OWL file.")
+        .author("Phillip Lord")
+        .arg(
+            Arg::with_name("INPUT")
+                .help("Sets the input file to use")
+                .required(true),
+        )
 }
 
 pub(crate) fn matcher(matches: &ArgMatches) -> Result<(), HornedError> {

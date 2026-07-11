@@ -65,6 +65,13 @@ pub struct ParserConfiguration {
     /// if resolving IRIs from untrusted sources where an oversized
     /// response could exhaust memory.
     pub remote_body_limit: u64,
+    /// If set, no network access is attempted at all during parsing --
+    /// resolving an IRI (e.g. following an `owl:imports` closure) that
+    /// isn't available locally fails with an error instead of falling
+    /// back to a remote fetch. `remote_body_limit` still bounds a fetch
+    /// in size if one happens; this instead prevents one happening at
+    /// all. Defaults to `false`.
+    pub local_only: bool,
     pub rdf: RDFParserConfiguration,
     pub owx: OWXParserConfiguration,
 }
@@ -74,6 +81,7 @@ impl Default for ParserConfiguration {
         ParserConfiguration {
             lax: false,
             remote_body_limit: u64::MAX,
+            local_only: false,
             rdf: RDFParserConfiguration::default(),
             owx: OWXParserConfiguration::default(),
         }

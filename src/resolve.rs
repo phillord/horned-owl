@@ -177,7 +177,8 @@ pub fn localize_iri_favored<'a, A: ForIRI + 'a, IO: Into<Option<&'a IRI<A>>>>(
 /// same as the content at `iri`. This is done relative to `doc_iri`
 /// which will normally be the Document IRI of an importing ontology.
 ///
-/// Should the local resolution fail, remote access is used instead.
+/// Should the local resolution fail, remote access is used instead,
+/// unless `local_only` is set -- see [strict_resolve_iri].
 ///
 /// `remote_body_limit` bounds the number of bytes read from a remote
 /// response if resolution falls back to a network fetch -- see
@@ -189,6 +190,7 @@ pub fn resolve_iri<'a, A: ForIRI + 'a, IO: Into<Option<&'a IRI<A>>>>(
     iri: &IRI<A>,
     doc_iri: IO,
     remote_body_limit: u64,
+    local_only: bool,
 ) -> Result<(IRI<A>, String), HornedError> {
     let b = Build::new();
 
@@ -240,7 +242,10 @@ pub fn resolve_iri<'a, A: ForIRI + 'a, IO: Into<Option<&'a IRI<A>>>>(
     }
 
     // All attempts to resolve it locally have failed, so try remote
-    Ok((iri.clone(), strict_resolve_iri(iri, remote_body_limit)?))
+    Ok((
+        iri.clone(),
+        strict_resolve_iri(iri, remote_body_limit, local_only)?,
+    ))
 }
 
 /// Resolve the contents of the IRI as a String.
@@ -249,14 +254,24 @@ pub fn resolve_iri<'a, A: ForIRI + 'a, IO: Into<Option<&'a IRI<A>>>>(
 /// other form of IRI.
 ///
 /// `remote_body_limit` caps the number of bytes read from the
-/// response body; use `u64::MAX` for no limit.
+/// response body; use `u64::MAX` for no limit. If `local_only` is set,
+/// no network access is attempted at all -- this is the single point
+/// through which every remote fetch in this crate goes, so setting it
+/// is a hard guarantee, not just a best-effort default.
 ///
 /// Fails with panic if the `remote` feature is not enabled.
 #[cfg(feature = "remote")]
 pub fn strict_resolve_iri<A: ForIRI>(
     iri: &IRI<A>,
     remote_body_limit: u64,
+    local_only: bool,
 ) -> Result<String, HornedError> {
+    if local_only {
+        return Err(HornedError::ImportError(format!(
+            "cannot resolve IRI {iri} remotely: local-only mode is enabled"
+        )));
+    }
+
     ureq::get(iri.as_ref())
         .call()?
         .body_mut()
@@ -270,6 +285,7 @@ pub fn strict_resolve_iri<A: ForIRI>(
 pub fn strict_resolve_iri<A: ForIRI>(
     iri: &IRI<A>,
     _remote_body_limit: u64,
+    _local_only: bool,
 ) -> Result<String, HornedError> {
     Err(HornedError::ImportError(format!(
         "cannot resolve IRI {iri} remotely: the 'remote' feature is not enabled"
@@ -394,7 +410,17 @@ mod test {
 
         // This does network access (to example.com). This cannot be
         // guaranteed to succeed. Perhaps we don't need this test at all.
-        assert!(strict_resolve_iri(&i, u64::MAX).is_ok());
+        assert!(strict_resolve_iri(&i, u64::MAX, false).is_ok());
+    }
+
+    #[test]
+    fn local_only_blocks_remote_resolution() {
+        let b = Build::new_rc();
+        // A deliberately unroutable address (RFC 5737 TEST-NET-1): if
+        // local_only did not short-circuit before the network call, this
+        // would hang/time out rather than fail fast.
+        let i: IRI<_> = b.iri("http://192.0.2.1/does-not-matter.owl");
+        assert!(strict_resolve_iri(&i, u64::MAX, true).is_err());
     }
 
     #[test]
@@ -404,7 +430,7 @@ mod test {
         let doc_iri = b.iri("file://Cargo.toml");
 
         let bikepath_str = ::std::fs::read_to_string("bikepath.md").unwrap();
-        let (_, iri_str) = resolve_iri(&i, &doc_iri, u64::MAX).unwrap();
+        let (_, iri_str) = resolve_iri(&i, &doc_iri, u64::MAX, false).unwrap();
         assert_eq!(bikepath_str, iri_str);
     }
 
@@ -417,6 +443,7 @@ mod test {
                 &b.iri(iri),
                 &b.iri(format!("file://dev/resolve/{doc_iri}")),
                 u64::MAX,
+                false,
             )
             .unwrap();
             assert_eq!(read_str, iri_str);

@@ -5,10 +5,7 @@ use clap::App;
 use clap::Arg;
 use clap::ArgMatches;
 
-use horned_bin::{
-    config::{parser_app, parser_config},
-    parse_path, write,
-};
+use horned_bin::{config::parser_config, parse_path, write};
 
 use horned_owl::error::HornedError;
 use horned_owl::ontology::component_mapped::RcComponentMappedOntology;
@@ -22,34 +19,32 @@ fn main() -> Result<(), HornedError> {
 }
 
 pub(crate) fn app(name: &str) -> App<'static> {
-    parser_app(
-        App::new(name)
-            .version("0.1")
-            .about("Convert an OWL Ontology between formats")
-            .author("Phillip Lord")
-            .arg(
-                Arg::with_name("INPUT")
-                    .help("Sets the input file to use")
-                    .required(true)
-                    .index(1),
-            )
-            .arg(
-                Arg::with_name("to")
-                    .long("to")
-                    .takes_value(true)
-                    .required(true)
-                    .help(
-                        "The format to convert to: owx, ofn, omn, owl, \
-                         or any RDF syntax oxrdfio supports (ttl, nt, nq, trig, jsonld, n3)",
-                    ),
-            )
-            .arg(
-                Arg::with_name("to-file")
-                    .long("to-file")
-                    .takes_value(true)
-                    .help("Write the converted output to this file instead of stdout"),
-            ),
-    )
+    App::new(name)
+        .version("0.1")
+        .about("Convert an OWL Ontology between formats")
+        .author("Phillip Lord")
+        .arg(
+            Arg::with_name("INPUT")
+                .help("Sets the input file to use")
+                .required(true)
+                .index(1),
+        )
+        .arg(
+            Arg::with_name("to")
+                .long("to")
+                .takes_value(true)
+                .required(true)
+                .help(
+                    "The format to convert to: owx, ofn, omn, owl, \
+                     or any RDF syntax oxrdfio supports (ttl, nt, nq, trig, jsonld, n3)",
+                ),
+        )
+        .arg(
+            Arg::with_name("to-file")
+                .long("to-file")
+                .takes_value(true)
+                .help("Write the converted output to this file instead of stdout"),
+        )
 }
 
 pub(crate) fn matcher(matches: &ArgMatches) -> Result<(), HornedError> {
