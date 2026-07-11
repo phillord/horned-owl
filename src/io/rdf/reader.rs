@@ -616,7 +616,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
         OntologyParser::from_bufread(
             b,
             &mut Cursor::new(
-                strict_resolve_iri(iri, config.remote_body_limit)
+                strict_resolve_iri(iri, config.remote_body_limit, config.local_only)
                     .expect("the IRI should resolve successfully"),
             ),
             config,
@@ -716,7 +716,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
 
         self.stitch_seqs_1();
 
-        for (_, v) in self.bnode_seq.iter_mut() {
+        for v in self.bnode_seq.values_mut() {
             v.reverse();
         }
     }
@@ -2361,7 +2361,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                 Self::group_triples(triple, &mut self.simple, &mut self.bnode);
 
                 // sort the triples, so that I can get a dependable order
-                for (_, vec) in self.bnode.iter_mut() {
+                for vec in self.bnode.values_mut() {
                     vec.sort();
                 }
 

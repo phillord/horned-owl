@@ -159,7 +159,12 @@ pub fn materialize(
     // Can we just do this with parse_iri method from OxIri?
 
     let file_pathbuf = match parsed {
-        Result::Ok(_) => ensure_local(&b.iri(file_or_iri), None, config.remote_body_limit)?,
+        Result::Ok(_) => ensure_local(
+            &b.iri(file_or_iri),
+            None,
+            config.remote_body_limit,
+            config.local_only,
+        )?,
         Result::Err(_) => PathBuf::from_str(file_or_iri).expect("Result is infallable"),
     };
 
@@ -171,12 +176,13 @@ fn ensure_local(
     iri: &IRI<RcStr>,
     relative_doc_iri: Option<&IRI<RcStr>>,
     remote_body_limit: u64,
+    local_only: bool,
 ) -> Result<PathBuf, HornedError> {
     let local_path = localize_iri_favored(iri, relative_doc_iri);
 
     if !local_path.exists() {
         println!("Retrieving Ontology: {}", iri);
-        let imported_data = strict_resolve_iri(iri, remote_body_limit)?;
+        let imported_data = strict_resolve_iri(iri, remote_body_limit, local_only)?;
         println!("Saving to {}", local_path.display());
         let mut file = File::create(&local_path)?;
         file.write_all(imported_data.as_bytes())?;
@@ -202,13 +208,18 @@ fn materialize_1<'a>(
     for i in import {
         if !done.contains(&i.0) {
             done.push(i.0.clone());
-            let local_path = ensure_local(&i.0, Some(&doc_iri), config.remote_body_limit)?;
+            let local_path = ensure_local(
+                &i.0,
+                Some(&doc_iri),
+                config.remote_body_limit,
+                config.local_only,
+            )?;
 
             if recurse {
                 materialize_1(&local_path, config, done, true)?;
             }
         } else {
-            println!("Already materialized: {}", &i.0);
+            println!("Already materialized: {}", i.0);
         }
     }
 
@@ -359,18 +370,73 @@ pub mod config {
     use clap::ArgMatches;
     use horned_owl::io::ParserConfiguration;
 
-    pub fn parser_app(app: App<'static>) -> App<'static> {
+    /// Add parser-config options as *global* args on the unified `horned`
+    /// binary's top-level App (see `horned.rs`) -- with `global(true)`,
+    /// clap makes them available on every subcommand's own `ArgMatches`
+    /// regardless of whether the flag is given before or after the
+    /// subcommand name. Not called by the standalone single-subcommand
+    /// binaries (`horned-parse` etc): almost every subcommand parses
+    /// something, so these options belong on the shared `horned
+    /// <subcommand>` front door rather than duplicated per binary --
+    /// mirrors how `git` only offers most flags on `git <subcommand>`,
+    /// not on the individual `git-<subcommand>` binaries.
+    pub fn parser_app_global(app: App<'static>) -> App<'static> {
         app.arg(
             clap::arg!(--"lax")
                 .required(false)
+                .global(true)
                 .action(ArgAction::SetTrue)
                 .help("Parse in a lax manner"),
         )
+        .arg(
+            clap::arg!(--"remote-body-limit" <BYTES>)
+                .required(false)
+                .global(true)
+                .value_parser(clap::value_parser!(u64))
+                .help(
+                    "Maximum bytes to read from a remote IRI resolution \
+                     (e.g. while following owl:imports); unbounded if not given",
+                ),
+        )
+        .arg(
+            clap::arg!(--"local-only")
+                .required(false)
+                .global(true)
+                .action(ArgAction::SetTrue)
+                .help(
+                    "Never access the network -- fail instead of resolving \
+                     an IRI (e.g. an owl:imports target) remotely",
+                ),
+        )
     }
 
+    /// `lax`/`remote-body-limit`/`local-only` are only registered on the
+    /// unified `horned` binary (see `parser_app_global`), not on the
+    /// standalone `horned-*` binaries -- so on those, `matches` won't have
+    /// these arg ids defined at all. `try_get_one` reports that as `Err`,
+    /// same as "not provided" reports `Ok(None)`; either way we fall back
+    /// to the off/unbounded default, whereas `get_one` panics on an
+    /// undefined id.
     pub fn parser_config(matches: &ArgMatches) -> ParserConfiguration {
         ParserConfiguration {
-            lax: *matches.get_one::<bool>("lax").unwrap_or(&false),
+            lax: matches
+                .try_get_one::<bool>("lax")
+                .ok()
+                .flatten()
+                .copied()
+                .unwrap_or(false),
+            remote_body_limit: matches
+                .try_get_one::<u64>("remote-body-limit")
+                .ok()
+                .flatten()
+                .copied()
+                .unwrap_or(u64::MAX),
+            local_only: matches
+                .try_get_one::<bool>("local-only")
+                .ok()
+                .flatten()
+                .copied()
+                .unwrap_or(false),
             ..Default::default()
         }
     }

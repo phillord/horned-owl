@@ -21,23 +21,25 @@ fn main() -> Result<(), HornedError> {
 }
 
 fn app() -> App<'static> {
-    App::new("horned")
-        .version("0.2")
-        .about("Command Line tools for OWL Ontologies")
-        .author("Filippo De Bortoli <filippo.de_bortoli@tu-dresden.de>")
-        .subcommand_required(true)
-        .arg_required_else_help(true)
-        .subcommand(horned_big::app("big"))
-        .subcommand(horned_compare::app("compare"))
-        .subcommand(horned_convert::app("convert"))
-        .subcommand(horned_dump::app("dump"))
-        .subcommand(horned_materialize::app("materialize"))
-        .subcommand(horned_parse::app("parse"))
-        .subcommand(horned_round::app("round"))
-        .subcommand(horned_summary::app("summary"))
-        .subcommand(horned_triples::app("triples"))
-        .subcommand(horned_unparsed::app("unparsed"))
-        .subcommand(horned_validate::app("validate"))
+    horned_bin::config::parser_app_global(
+        App::new("horned")
+            .version("0.3")
+            .about("Command Line tools for OWL Ontologies")
+            .author("Filippo De Bortoli <filippo.de_bortoli@tu-dresden.de>,\nPhillip Lord <phillip.lord@newcastle.ac.uk ")
+            .subcommand_required(true)
+            .arg_required_else_help(true),
+    )
+    .subcommand(horned_big::app("big"))
+    .subcommand(horned_compare::app("compare"))
+    .subcommand(horned_convert::app("convert"))
+    .subcommand(horned_dump::app("dump"))
+    .subcommand(horned_materialize::app("materialize"))
+    .subcommand(horned_parse::app("parse"))
+    .subcommand(horned_round::app("round"))
+    .subcommand(horned_summary::app("summary"))
+    .subcommand(horned_triples::app("triples"))
+    .subcommand(horned_unparsed::app("unparsed"))
+    .subcommand(horned_validate::app("validate"))
 }
 
 fn matcher(matches: ArgMatches) -> Result<(), HornedError> {
