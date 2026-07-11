@@ -50,6 +50,10 @@ enum Cmd {
         api_key: Option<String>,
         #[arg(long)]
         limit: Option<usize>,
+        /// Per-request timeout in seconds (applies to the ontology list,
+        /// each submission lookup, and each download).
+        #[arg(long, default_value_t = 180)]
+        timeout: u64,
     },
 }
 
@@ -199,11 +203,12 @@ fn main() -> anyhow::Result<()> {
             out,
             api_key,
             limit,
+            timeout,
         } => {
             let key = api_key
                 .or_else(|| std::env::var("BIOPORTAL_API_KEY").ok())
                 .context("BioPortal API key required: pass --api-key or set BIOPORTAL_API_KEY")?;
-            fetch::fetch(&out, &key, limit)?;
+            fetch::fetch(&out, &key, limit, timeout)?;
         }
     }
     Ok(())

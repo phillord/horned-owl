@@ -185,9 +185,16 @@ fn fetch_one(
 /// writing one `<acronym>.gz` per ontology plus a `manifest.json` describing
 /// what was stored. Per-ontology failures are logged to stderr and skipped;
 /// only failure to reach the `/ontologies` list itself is fatal.
-pub fn fetch(out_dir: &Path, api_key: &str, limit: Option<usize>) -> Result<()> {
+///
+/// `timeout_secs` bounds every request (list, submission lookup, download):
+/// reqwest::blocking's default is 30s (unlike the async client, which has
+/// none), and even the `include=all` ontology list alone is a multi-MB
+/// response that routinely exceeds that against BioPortal.
+pub fn fetch(out_dir: &Path, api_key: &str, limit: Option<usize>, timeout_secs: u64) -> Result<()> {
     std::fs::create_dir_all(out_dir)?;
-    let client = reqwest::blocking::Client::builder().build()?;
+    let client = reqwest::blocking::Client::builder()
+        .timeout(Duration::from_secs(timeout_secs))
+        .build()?;
     let list: Value = get_with_retry(&client, &ontology_list_url(BASE_URL, api_key))?.json()?;
     let ontologies = list.as_array().cloned().unwrap_or_default();
 
