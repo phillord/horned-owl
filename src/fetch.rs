@@ -14,12 +14,14 @@
 //! propagated, so one bad ontology never aborts the whole run.
 
 use anyhow::{Context, Result};
+use flate2::read::GzDecoder;
 use flate2::write::GzEncoder;
 use flate2::Compression;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
-use std::io::Write;
+use std::collections::HashMap;
+use std::io::{Read, Write};
 use std::path::Path;
 use std::time::Duration;
 
@@ -47,7 +49,7 @@ pub fn should_retry(status: u16, attempt: u32) -> Option<Duration> {
 }
 
 /// One entry in `manifest.json`: what was downloaded for a single ontology.
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
 struct ManifestEntry {
     acronym: String,
     submission_id: Option<i64>,
@@ -181,6 +183,38 @@ fn fetch_one(
     })
 }
 
+/// Rebuild a `<acronym>.gz` already on disk into a `ManifestEntry` without
+/// any network access, so `--skip-existing` can skip a re-download while
+/// still producing an accurate manifest. `submission_id`/`reported_language`
+/// are carried over from `prior` (that ontology's entry in the manifest from
+/// a previous run) when available, since recovering them requires the
+/// submission-lookup request this path is meant to avoid.
+fn manifest_entry_from_disk(
+    acronym: &str,
+    stored_path: &Path,
+    prior: Option<&ManifestEntry>,
+) -> Result<ManifestEntry> {
+    let file = std::fs::File::open(stored_path)
+        .with_context(|| format!("{acronym}: opening existing {stored_path:?}"))?;
+    let mut bytes = Vec::new();
+    GzDecoder::new(file)
+        .read_to_end(&mut bytes)
+        .with_context(|| format!("{acronym}: decompressing existing {stored_path:?}"))?;
+
+    let mut hasher = Sha256::new();
+    hasher.update(&bytes);
+    let sha256 = format!("{:x}", hasher.finalize());
+
+    Ok(ManifestEntry {
+        acronym: acronym.to_string(),
+        submission_id: prior.and_then(|p| p.submission_id),
+        reported_language: prior.and_then(|p| p.reported_language.clone()),
+        stored_path: stored_path.to_string_lossy().into_owned(),
+        bytes: bytes.len() as u64,
+        sha256,
+    })
+}
+
 /// Download up to `limit` public ontologies from BioPortal into `out_dir`,
 /// writing one `<acronym>.gz` per ontology plus a `manifest.json` describing
 /// what was stored. Per-ontology failures are logged to stderr and skipped;
@@ -190,11 +224,32 @@ fn fetch_one(
 /// reqwest::blocking's default is 30s (unlike the async client, which has
 /// none), and even the `include=all` ontology list alone is a multi-MB
 /// response that routinely exceeds that against BioPortal.
-pub fn fetch(out_dir: &Path, api_key: &str, limit: Option<usize>, timeout_secs: u64) -> Result<()> {
+///
+/// When `skip_existing` is set, any ontology whose `<acronym>.gz` already
+/// exists in `out_dir` is reused as-is (see `manifest_entry_from_disk`)
+/// instead of re-fetched, so a rerun only downloads what's missing.
+pub fn fetch(
+    out_dir: &Path,
+    api_key: &str,
+    limit: Option<usize>,
+    timeout_secs: u64,
+    skip_existing: bool,
+) -> Result<()> {
     std::fs::create_dir_all(out_dir)?;
     let client = reqwest::blocking::Client::builder()
         .timeout(Duration::from_secs(timeout_secs))
         .build()?;
+
+    let prior_manifest: HashMap<String, ManifestEntry> = if skip_existing {
+        std::fs::read(out_dir.join("manifest.json"))
+            .ok()
+            .and_then(|bytes| serde_json::from_slice::<Vec<ManifestEntry>>(&bytes).ok())
+            .map(|entries| entries.into_iter().map(|e| (e.acronym.clone(), e)).collect())
+            .unwrap_or_default()
+    } else {
+        HashMap::new()
+    };
+
     let list: Value = get_with_retry(&client, &ontology_list_url(BASE_URL, api_key))?.json()?;
     let ontologies = list.as_array().cloned().unwrap_or_default();
 
@@ -205,15 +260,26 @@ pub fn fetch(out_dir: &Path, api_key: &str, limit: Option<usize>, timeout_secs: 
                 break;
             }
         }
+        let acronym = ontology
+            .get("acronym")
+            .and_then(|v| v.as_str())
+            .unwrap_or("<unknown>");
+        let stored_path = out_dir.join(format!("{acronym}.gz"));
+
+        if skip_existing && stored_path.exists() {
+            match manifest_entry_from_disk(acronym, &stored_path, prior_manifest.get(acronym)) {
+                Ok(entry) => {
+                    eprintln!("skipping {acronym}: already downloaded (--skip-existing)");
+                    manifest.push(entry);
+                }
+                Err(err) => eprintln!("skipping {acronym}: {err:#}"),
+            }
+            continue;
+        }
+
         match fetch_one(&client, api_key, ontology, out_dir) {
             Ok(entry) => manifest.push(entry),
-            Err(err) => {
-                let acronym = ontology
-                    .get("acronym")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("<unknown>");
-                eprintln!("skipping {acronym}: {err:#}");
-            }
+            Err(err) => eprintln!("skipping {acronym}: {err:#}"),
         }
     }
 

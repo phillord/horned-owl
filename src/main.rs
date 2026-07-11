@@ -54,6 +54,10 @@ enum Cmd {
         /// each submission lookup, and each download).
         #[arg(long, default_value_t = 180)]
         timeout: u64,
+        /// Skip re-downloading any ontology whose `<acronym>.gz` already
+        /// exists in `out`, reusing its manifest entry instead.
+        #[arg(long = "skip-existing")]
+        skip_existing: bool,
     },
 }
 
@@ -204,11 +208,12 @@ fn main() -> anyhow::Result<()> {
             api_key,
             limit,
             timeout,
+            skip_existing,
         } => {
             let key = api_key
                 .or_else(|| std::env::var("BIOPORTAL_API_KEY").ok())
                 .context("BioPortal API key required: pass --api-key or set BIOPORTAL_API_KEY")?;
-            fetch::fetch(&out, &key, limit, timeout)?;
+            fetch::fetch(&out, &key, limit, timeout, skip_existing)?;
         }
     }
     Ok(())
