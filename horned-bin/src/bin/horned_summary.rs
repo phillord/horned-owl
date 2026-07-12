@@ -5,7 +5,10 @@ use clap::App;
 use clap::Arg;
 use clap::ArgMatches;
 
-use horned_bin::{config::parser_config, naming::name, parse_path, summary::summarize};
+use horned_bin::{
+    config::parser_config, naming::name, parse_path, summary::summarize, with_detected_rdf_format,
+};
+use horned_owl::io::ResourceType;
 
 use horned_owl::error::HornedError;
 
@@ -35,7 +38,12 @@ pub(crate) fn matcher(matches: &ArgMatches) -> Result<(), HornedError> {
         .ok_or_else(|| HornedError::CommandError("A file name must be specified".to_string()))?;
 
     let config = parser_config(matches);
-    let (ont, p, i) = parse_path(Path::new(input), config)?.decompose();
+    let parsed = parse_path(Path::new(input), config)?;
+    let resource_type = parsed.resource_type();
+    let rdf_format = with_detected_rdf_format(Path::new(input), config)
+        .rdf
+        .format;
+    let (ont, p, i) = parsed.decompose();
 
     let summary = summarize(ont);
     println!("Ontology has:");
@@ -71,5 +79,24 @@ pub(crate) fn matcher(matches: &ArgMatches) -> Result<(), HornedError> {
         println!("\tAnnotations: {}", i.ann_map.len())
     }
 
+    let (english, mime) = format_names(&resource_type, rdf_format);
+    println!("\nParse Format: {english}");
+    println!("Mime Type: {mime}");
+
     Ok(())
+}
+
+fn format_names(
+    resource_type: &ResourceType,
+    rdf_format: Option<oxrdfio::RdfFormat>,
+) -> (&'static str, &'static str) {
+    match resource_type {
+        ResourceType::OFN => ("OWL Functional Syntax", "text/owl-functional"),
+        ResourceType::OWX => ("OWL/XML", "application/owl+xml"),
+        ResourceType::OMN => ("Manchester Syntax", "text/owl-manchester"),
+        ResourceType::RDF => match rdf_format {
+            Some(f) => (f.name(), f.media_type()),
+            None => ("RDF/XML", "application/rdf+xml"),
+        },
+    }
 }

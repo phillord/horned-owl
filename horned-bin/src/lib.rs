@@ -2,7 +2,7 @@
 
 use horned_owl::{
     error::HornedError,
-    io::{ParserConfiguration, ParserOutput, ResourceType},
+    io::{InputFormat, ParserConfiguration, ParserOutput, ResourceType},
     model::{Build, ForIRI, IRI, MutableOntology, OntologyID, RcAnnotatedComponent, RcStr},
     ontology::{
         component_mapped::{ComponentMappedOntology, RcComponentMappedOntology},
@@ -53,7 +53,15 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: StdWrite>(
     }
 }
 
-pub fn path_type(path: &Path) -> Option<ResourceType> {
+pub fn path_type(path: &Path, config: &ParserConfiguration) -> Option<ResourceType> {
+    match config.input_format {
+        Some(InputFormat::OFN) => return Some(ResourceType::OFN),
+        Some(InputFormat::OWX) => return Some(ResourceType::OWX),
+        Some(InputFormat::OMN) => return Some(ResourceType::OMN),
+        Some(InputFormat::Rdf(_)) => return Some(ResourceType::RDF),
+        Some(InputFormat::Guess) => return detect_from_path(path).map(|(rt, _)| rt),
+        None => {}
+    }
     match path.extension().and_then(|s| s.to_str()) {
         Some("ofn") => Some(ResourceType::OFN),
         Some("owx") => Some(ResourceType::OWX),
@@ -76,7 +84,7 @@ pub fn parse_path(
     path: &Path,
     config: ParserConfiguration,
 ) -> Result<ParserOutput<RcStr, RcAnnotatedComponent>, HornedError> {
-    Ok(match path_type(path) {
+    Ok(match path_type(path, &config) {
         Some(ResourceType::OFN) => {
             let file = File::open(path)?;
             let mut bufreader = BufReader::new(file);
@@ -108,15 +116,22 @@ pub fn parse_path(
     })
 }
 
-/// Fill in `config.rdf.format` from `path`'s extension, unless the
+/// Fill in `config.rdf.format` from `path`'s extension or content, unless the
 /// caller already set one explicitly.
-fn with_detected_rdf_format(path: &Path, mut config: ParserConfiguration) -> ParserConfiguration {
+pub fn with_detected_rdf_format(
+    path: &Path,
+    mut config: ParserConfiguration,
+) -> ParserConfiguration {
     if config.rdf.format.is_none() {
-        config.rdf.format = path
-            .extension()
-            .and_then(|s| s.to_str())
-            .and_then(rdf_format_for_extension)
-            .or_else(|| detect_from_path(path).and_then(|(_, fmt)| fmt));
+        config.rdf.format = match config.input_format {
+            Some(InputFormat::Rdf(fmt)) => fmt,
+            Some(InputFormat::Guess) => detect_from_path(path).and_then(|(_, fmt)| fmt),
+            _ => path
+                .extension()
+                .and_then(|s| s.to_str())
+                .and_then(rdf_format_for_extension)
+                .or_else(|| detect_from_path(path).and_then(|(_, fmt)| fmt)),
+        };
     }
     config
 }
@@ -128,7 +143,7 @@ pub fn parse_imports(
 ) -> Result<ParserOutput<RcStr, RcAnnotatedComponent>, HornedError> {
     let file = File::open(path)?;
     let mut bufreader = BufReader::new(file);
-    Ok(match path_type(path) {
+    Ok(match path_type(path, &config) {
         Some(ResourceType::OFN) => {
             ParserOutput::ofn(horned_owl::io::owx::reader::read(&mut bufreader, config)?)
         }
@@ -378,7 +393,7 @@ pub mod config {
     use clap::App;
     use clap::ArgAction;
     use clap::ArgMatches;
-    use horned_owl::io::ParserConfiguration;
+    use horned_owl::io::{InputFormat, ParserConfiguration};
 
     /// Add parser-config options as *global* args on the unified `horned`
     /// binary's top-level App (see `horned.rs`) -- with `global(true)`,
@@ -418,6 +433,17 @@ pub mod config {
                      an IRI (e.g. an owl:imports target) remotely",
                 ),
         )
+        .arg(
+            clap::arg!(--"input-format" <FORMAT>)
+                .required(false)
+                .global(true)
+                .help(
+                    "Override input format detection. Accepted values: \
+                     owl, rdf, xml (RDF/XML), ttl (Turtle), nt (N-Triples), \
+                     owx (OWL/XML), ofn (Functional Syntax), omn (Manchester), \
+                     guess (detect from content)",
+                ),
+        )
     }
 
     /// `lax`/`remote-body-limit`/`local-only` are only registered on the
@@ -447,6 +473,11 @@ pub mod config {
                 .flatten()
                 .copied()
                 .unwrap_or(false),
+            input_format: matches
+                .try_get_one::<String>("input-format")
+                .ok()
+                .flatten()
+                .and_then(|s| s.parse::<InputFormat>().ok()),
             ..Default::default()
         }
     }
