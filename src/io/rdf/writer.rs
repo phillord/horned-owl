@@ -10,11 +10,11 @@ use crate::ontology::indexed::ForIndex;
 
 use indexmap::indexmap;
 
-use oxrdfio::RdfSerializer;
 use horned_pretty_rdf::{
     ChunkedRdfXmlFormatterConfig, PBlankNode, PLiteral, PNamedNode, PNamedOrBlankNode, PTerm,
     PTriple, PrettyRdfXmlFormatter, RdfFormatter, ox::WriterQuadSerializerAdaptor,
 };
+use oxrdfio::RdfSerializer;
 use std::{
     collections::{BTreeSet, HashSet},
     fmt::Debug,
@@ -1789,8 +1789,8 @@ mod test {
     use super::*;
     use crate::{model::Build, ontology::set::SetOntology};
 
-    use oxrdfio::RdfSerializer;
     use horned_pretty_rdf::ox::WriterQuadSerializerAdaptor;
+    use oxrdfio::RdfSerializer;
     use rstest::rstest;
     use std::path::PathBuf;
     // use std::collections::HashMap;

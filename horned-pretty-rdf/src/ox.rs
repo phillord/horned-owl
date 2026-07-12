@@ -1,7 +1,8 @@
 use super::*;
-use oxrdf::{BlankNodeRef, LiteralRef, Quad, QuadRef, NamedNodeRef, NamedOrBlankNodeRef, TermRef, TripleRef};
+use oxrdf::{
+    BlankNodeRef, LiteralRef, NamedNodeRef, NamedOrBlankNodeRef, Quad, QuadRef, TermRef, TripleRef,
+};
 use oxrdfio::WriterQuadSerializer;
-
 
 impl<'a, A: AsRef<str>> From<&'a PNamedNode<A>> for NamedNodeRef<'a> {
     fn from(arnn: &'a PNamedNode<A>) -> Self {
@@ -50,19 +51,19 @@ impl From<LiteralRef<'_>> for PLiteral<String> {
         if let Some(lang) = l.language() {
             return PLiteral::LanguageTaggedString {
                 value: l.value().to_string(),
-                language: lang.to_string()
-            }
+                language: lang.to_string(),
+            };
         }
 
         if l.datatype().as_str() == "http://www.w3.org/2001/XMLSchema#string" {
             return PLiteral::Simple {
-                value: l.value().to_string()
-            }
+                value: l.value().to_string(),
+            };
         }
 
-        return PLiteral::Typed {
+        PLiteral::Typed {
             value: l.value().to_string(),
-            datatype: l.datatype().into()
+            datatype: l.datatype().into(),
         }
     }
 }
@@ -127,7 +128,7 @@ impl From<TripleRef<'_>> for PTriple<String> {
 
 impl From<QuadRef<'_>> for PTriple<String> {
     fn from(q: QuadRef<'_>) -> Self {
-        let t:TripleRef<'_> = q.into();
+        let t: TripleRef<'_> = q.into();
         t.into()
     }
 }
@@ -139,12 +140,12 @@ impl From<Quad> for PTriple<String> {
 }
 
 pub struct WriterQuadSerializerAdaptor<W: Write> {
-    writer: WriterQuadSerializer<W>
+    writer: WriterQuadSerializer<W>,
 }
 
-impl<W:Write> WriterQuadSerializerAdaptor<W> {
-    pub fn new(writer: WriterQuadSerializer<W>) -> WriterQuadSerializerAdaptor<W>{
-        Self{writer}
+impl<W: Write> WriterQuadSerializerAdaptor<W> {
+    pub fn new(writer: WriterQuadSerializer<W>) -> WriterQuadSerializerAdaptor<W> {
+        Self { writer }
     }
 }
 
@@ -173,14 +174,16 @@ mod test {
 
         let sink = vec![];
         let mut f = WriterQuadSerializerAdaptor::new(
-            RdfSerializer::from_format(oxrdfio::RdfFormat::NTriples).for_writer(sink)
+            RdfSerializer::from_format(oxrdfio::RdfFormat::NTriples).for_writer(sink),
         );
 
         for t in source {
             f.format(t).unwrap()
         }
 
-        let w:Vec<u8> = <WriterQuadSerializerAdaptor<Vec<u8>> as RdfFormatter<String, Vec<u8>>>::finish(f).unwrap();
+        let w: Vec<u8> =
+            <WriterQuadSerializerAdaptor<Vec<u8>> as RdfFormatter<String, Vec<u8>>>::finish(f)
+                .unwrap();
         let s = String::from_utf8(w).unwrap();
 
         assert_eq!(s, nt);

@@ -2,8 +2,8 @@ pub mod ox;
 
 use indexmap::IndexMap;
 use quick_xml::{
-    events::{BytesDecl, BytesEnd, BytesStart, BytesText, Event},
     Writer,
+    events::{BytesDecl, BytesEnd, BytesStart, BytesText, Event},
 };
 
 use oxrdf::{LiteralRef, NamedOrBlankNodeRef, TermRef, TripleRef};
@@ -51,7 +51,7 @@ pub fn is_name_char(c: char) -> bool {
 }
 
 fn map_err(error: quick_xml::Error) -> io::Error {
-    io::Error::new(io::ErrorKind::Other, error)
+    io::Error::other(error)
 }
 
 // Begin RDF data model
@@ -77,7 +77,6 @@ fn map_err(error: quick_xml::Error) -> io::Error {
 
 // So we are stuck with two nearly identical implementations.
 
-
 /// An RDF IRI
 #[derive(Ord, PartialOrd, Clone)]
 pub struct PNamedNode<A: AsRef<str>> {
@@ -97,16 +96,13 @@ impl<A: AsRef<str>> PNamedNode<A> {
 
 impl<A: Debug + AsRef<str>> Debug for PNamedNode<A> {
     fn fmt(&self, f: &mut Formatter<'_>) -> ::core::fmt::Result {
-        match *self {
-            PNamedNode {
-                ref iri,
-                split_cache: _,
-            } => {
-                let mut debug_trait_builder = f.debug_struct("PNamedNode");
-                let _ = debug_trait_builder.field("iri", &&(*iri));
-                debug_trait_builder.finish()
-            }
-        }
+        let PNamedNode {
+            ref iri,
+            split_cache: _,
+        } = *self;
+        let mut debug_trait_builder = f.debug_struct("PNamedNode");
+        let _ = debug_trait_builder.field("iri", &iri);
+        debug_trait_builder.finish()
     }
 }
 
@@ -134,7 +130,9 @@ impl<A: AsRef<str>> PNamedNode<A> {
         } else {
             let position_base = iri.rfind(|c| !is_name_char(c) || c == ':');
             let split = position_base.and_then(|pb| {
-                iri[pb..].find(|c| is_name_start_char(c) && c != ':').map(|pa| pb + pa)
+                iri[pb..]
+                    .find(|c| is_name_start_char(c) && c != ':')
+                    .map(|pa| pb + pa)
             });
             self.split_cache.set((true, split));
             split
@@ -196,7 +194,6 @@ impl<A: AsRef<str>> fmt::Display for PLiteral<A> {
         write!(f, "{}", nn)
     }
 }
-
 
 #[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
 pub enum PNamedOrBlankNode<A: AsRef<str>> {
@@ -264,7 +261,7 @@ impl<A: AsRef<str>> From<PNamedOrBlankNode<A>> for PTerm<A> {
 
 impl<A: AsRef<str>> fmt::Display for PTerm<A> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        let t:TermRef<'_> = self.into();
+        let t: TermRef<'_> = self.into();
         write!(f, "{}", t)
     }
 }
@@ -310,11 +307,11 @@ impl<A: AsRef<str>> PTriple<A> {
     }
 
     pub fn is_collection_first(&self) -> bool {
-        &self.predicate.iri.as_ref() == &"http://www.w3.org/1999/02/22-rdf-syntax-ns#first"
+        self.predicate.iri.as_ref() == "http://www.w3.org/1999/02/22-rdf-syntax-ns#first"
     }
 
     pub fn is_collection_rest(&self) -> bool {
-        &self.predicate.iri.as_ref() == &"http://www.w3.org/1999/02/22-rdf-syntax-ns#rest"
+        self.predicate.iri.as_ref() == "http://www.w3.org/1999/02/22-rdf-syntax-ns#rest"
     }
 
     pub fn is_collection_end(&self) -> bool {
@@ -424,17 +421,15 @@ where
     }
 }
 
+/// A single entry of a `PTripleSeq`: the bnode of this section of the
+/// seq, the first triple (option, since it's filled in as we build
+/// from the rest triples), and the rest triple.
+type SeqEntry<A> = (PNamedOrBlankNode<A>, Option<PTriple<A>>, PTriple<A>);
+
 /// Contains a set of triples in a collection
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct PTripleSeq<A: AsRef<str>> {
-    list_seq: VecDeque<(
-        // the bnode of this section of the seq
-        PNamedOrBlankNode<A>,
-        // the first triple -- as we build from the rest triples this must be option
-        Option<PTriple<A>>,
-        // the rest triple
-        PTriple<A>,
-    )>,
+    list_seq: VecDeque<SeqEntry<A>>,
 }
 
 impl<A: AsRef<str> + Eq> From<PTripleSeq<A>> for Vec<PMultiTriple<A>> {
@@ -491,23 +486,23 @@ where
     A: AsRef<str> + Clone + Debug + Eq + PartialEq,
 {
     fn accept(&mut self, t: PTriple<A>) -> Option<PTriple<A>> {
-        if t.is_collection_first() {
-            if let Some(pos) = self.list_seq.iter().position(|tup| &tup.0 == &t.subject) {
-                if let Some(tuple) = self.list_seq.get_mut(pos) {
-                    (*tuple).1 = Some(t)
-                }
-
-                return None;
+        if t.is_collection_first()
+            && let Some(pos) = self.list_seq.iter().position(|tup| tup.0 == t.subject)
+        {
+            if let Some(tuple) = self.list_seq.get_mut(pos) {
+                tuple.1 = Some(t)
             }
+
+            return None;
         }
 
-        if let PTerm::BlankNode(bn) = &t.object {
-            if let &PNamedOrBlankNode::BlankNode(ref snn) = self.subject() {
-                if t.is_collection_rest() && snn == bn {
-                    self.list_seq.push_front((t.subject.clone(), None, t));
-                    return None;
-                }
-            }
+        if let PTerm::BlankNode(bn) = &t.object
+            && let PNamedOrBlankNode::BlankNode(snn) = self.subject()
+            && t.is_collection_rest()
+            && snn == bn
+        {
+            self.list_seq.push_front((t.subject.clone(), None, t));
+            return None;
         }
 
         Some(t)
@@ -637,11 +632,15 @@ enum PExpandedTripleKind {
     Seq,
 }
 
+/// The `PMultiTriple`/`PTripleSeq` (either, both, or neither) currently
+/// stored for a given subject.
+type SubjectEntry<A> = (Option<PMultiTriple<A>>, Option<PTripleSeq<A>>);
+
 /// A set of triple like objects that represents a coherent chunk
 #[derive(Debug)]
 pub struct PChunk<A: AsRef<str>> {
     queue: VecDeque<(PNamedOrBlankNode<A>, PExpandedTripleKind)>,
-    store: FxHashMap<PNamedOrBlankNode<A>, (Option<PMultiTriple<A>>, Option<PTripleSeq<A>>)>,
+    store: FxHashMap<PNamedOrBlankNode<A>, SubjectEntry<A>>,
     bnode_object_count: FxHashMap<PBlankNode<A>, usize>,
 }
 
@@ -653,7 +652,13 @@ where
     pub fn normalize(v: Vec<PTriple<A>>) -> Self {
         let mut etv: IndexMap<PNamedOrBlankNode<A>, PMultiTriple<A>> = Default::default();
         let mut seq: Vec<PTripleSeq<A>> = vec![];
+        // PNamedNode's Hash/Eq only ever consider `iri`, never the
+        // interior-mutable split-position cache, so it's safe as a key
+        // despite clippy::mutable_key_type's (correct in general, false
+        // positive here) concern.
+        #[allow(clippy::mutable_key_type)]
         let mut seq_rest: FxHashMap<PNamedOrBlankNode<A>, PTriple<A>> = Default::default();
+        #[allow(clippy::mutable_key_type)]
         let mut seq_first: FxHashMap<PNamedOrBlankNode<A>, PTriple<A>> = Default::default();
         let mut bnode_object_count: FxHashMap<PBlankNode<A>, usize> = Default::default();
 
@@ -709,7 +714,9 @@ where
         }
 
         let mut queue = VecDeque::with_capacity(etv.len() + seq.len());
-        let mut store = FxHashMap::with_capacity_and_hasher(etv.len() + seq.len(), Default::default());
+        #[allow(clippy::mutable_key_type)]
+        let mut store: FxHashMap<PNamedOrBlankNode<A>, SubjectEntry<A>> =
+            FxHashMap::with_capacity_and_hasher(etv.len() + seq.len(), Default::default());
 
         for (subj, mt) in etv {
             queue.push_back((subj.clone(), PExpandedTripleKind::Multi));
@@ -721,7 +728,11 @@ where
             queue.push_back((subj, PExpandedTripleKind::Seq));
         }
 
-        PChunk { queue, store, bnode_object_count }
+        PChunk {
+            queue,
+            store,
+            bnode_object_count,
+        }
     }
 
     pub fn empty() -> Self {
@@ -759,11 +770,11 @@ where
     }
 
     pub fn accept_or_push_back(&mut self, t: PTriple<A>) {
-        if let Some(entry) = self.store.get_mut(&t.subject) {
-            if let Some(mt) = &mut entry.0 {
-                mt.accept(t);
-                return;
-            }
+        if let Some(entry) = self.store.get_mut(&t.subject)
+            && let Some(mt) = &mut entry.0
+        {
+            mt.accept(t);
+            return;
         }
         self.push_back(PExpandedTriple::PMultiTriple(t.into()));
     }
@@ -794,9 +805,7 @@ where
                         PExpandedTripleKind::Multi => {
                             entry.0.take().map(PExpandedTriple::PMultiTriple)
                         }
-                        PExpandedTripleKind::Seq => {
-                            entry.1.take().map(PExpandedTriple::PTripleSeq)
-                        }
+                        PExpandedTripleKind::Seq => entry.1.take().map(PExpandedTriple::PTripleSeq),
                     };
                     let now_empty = entry.0.is_none() && entry.1.is_none();
                     (result, now_empty)
@@ -812,10 +821,7 @@ where
         }
     }
 
-    fn take_subject(
-        &mut self,
-        bn: &PBlankNode<A>,
-    ) -> (Option<PMultiTriple<A>>, Option<PTripleSeq<A>>) {
+    fn take_subject(&mut self, bn: &PBlankNode<A>) -> SubjectEntry<A> {
         let key = PNamedOrBlankNode::BlankNode(bn.clone());
         // Queue entries for this subject become tombstones, cleaned up lazily by pop_front
         self.store.remove(&key).unwrap_or((None, None))
@@ -908,7 +914,7 @@ where
             rdf_open.push_attribute(("xmlns", &base[..]));
         }
         for i in &self.config.prefix {
-            let ns = format!("xmlns:{}", &i.1);
+            let ns = format!("xmlns:{}", i.1);
             rdf_open.push_attribute((&ns[..], &i.0[..]));
         }
 
@@ -945,10 +951,10 @@ where
     }
 
     fn write_close(&mut self) -> Result<(), io::Error> {
-        let close = self.open_tag_stack.pop().ok_or(io::Error::new(
-            io::ErrorKind::Other,
-            "close when no close is available",
-        ))?;
+        let close = self
+            .open_tag_stack
+            .pop()
+            .ok_or(io::Error::other("close when no close is available"))?;
 
         //  println!("\nwrite_close:");
         if let Some(empty) = self.last_open_tag.take() {
@@ -962,7 +968,7 @@ where
     fn bytes_start_iri<'a>(&mut self, nn: &'a PNamedNode<A>) -> BytesStart<'a> {
         let (iri_protocol_and_host, iri_qname) = nn.split_iri();
         if let Some(iri_ns_prefix) = &self.config.prefix.get(iri_protocol_and_host) {
-            BytesStart::new(format!("{}:{}", &iri_ns_prefix, &iri_qname))
+            BytesStart::new(format!("{}:{}", iri_ns_prefix, iri_qname))
         } else {
             let mut bs = BytesStart::new(iri_qname);
             bs.push_attribute(("xmlns", iri_protocol_and_host));
@@ -981,10 +987,10 @@ where
             if let PTerm::NamedNode(nn) = &typ.object {
                 triples_rendered.push(typ);
                 let mut bs = self.bytes_start_iri(nn);
-                if let PNamedOrBlankNode::BlankNode(bn) = &typ.subject {
-                    if chunk.object_count(bn) > 1 {
-                        bs.push_attribute(("rdf:nodeID", bn.as_ref()));
-                    }
+                if let PNamedOrBlankNode::BlankNode(bn) = &typ.subject
+                    && chunk.object_count(bn) > 1
+                {
+                    bs.push_attribute(("rdf:nodeID", bn.as_ref()));
                 }
                 Some(bs)
             } else {
@@ -1015,6 +1021,7 @@ where
         // first is folded here; the rest are left out of
         // `triples_rendered` so `format_multi` renders them as ordinary
         // nested property elements instead.
+        #[allow(clippy::mutable_key_type)]
         let mut folded_predicates: HashSet<&PNamedNode<A>> = HashSet::new();
         for literal_t in mt.literal_objects() {
             if let PTerm::Literal(l) = &literal_t.object {
@@ -1023,14 +1030,13 @@ where
                         let (iri_protocol_and_host, iri_qname) = literal_t.predicate.split_iri();
 
                         if let Some(iri_ns_prefix) = &self.config.prefix.get(iri_protocol_and_host)
+                            && folded_predicates.insert(&literal_t.predicate)
                         {
-                            if folded_predicates.insert(&literal_t.predicate) {
-                                description_open.push_attribute((
-                                    &format!("{}:{}", &iri_ns_prefix, &iri_qname)[..],
-                                    value.as_ref(),
-                                ));
-                                triples_rendered.push(literal_t);
-                            }
+                            description_open.push_attribute((
+                                &format!("{}:{}", iri_ns_prefix, iri_qname)[..],
+                                value.as_ref(),
+                            ));
+                            triples_rendered.push(literal_t);
                         }
                     }
                     PLiteral::LanguageTaggedString {
@@ -1138,7 +1144,7 @@ where
                 };
                 self.write_start(Event::Start(property_open))
                     .map_err(map_err)?;
-                self.write_event(Event::Text(BytesText::new(&content.as_ref())))
+                self.write_event(Event::Text(BytesText::new(content.as_ref())))
                     .map_err(map_err)?;
             }
         };
@@ -1177,7 +1183,7 @@ where
         }
 
         if let PNamedOrBlankNode::BlankNode(n) = subj {
-            return match chunk.take_subject(&n) {
+            match chunk.take_subject(&n) {
                 (Some(mt), None) => {
                     self.format_removed_expanded(&PExpandedTriple::PMultiTriple(mt), chunk)
                 }
@@ -1190,7 +1196,7 @@ where
                 _ => {
                     todo!("We shouldn't get here");
                 }
-            };
+            }
         } else {
             todo!("We shouldn't get here")
         }
@@ -1214,10 +1220,7 @@ where
                             )?;
                         }
                         if let Some(seq) = seq_opt {
-                            self.format_removed_expanded(
-                                &PExpandedTriple::PTripleSeq(seq),
-                                chunk,
-                            )?;
+                            self.format_removed_expanded(&PExpandedTriple::PTripleSeq(seq), chunk)?;
                         }
                     }
                     // render the object, but not the property which
@@ -1406,7 +1409,7 @@ where
 
 #[cfg(test)]
 mod test {
-    use indexmap::{indexmap, IndexMap};
+    use indexmap::{IndexMap, indexmap};
 
     use oxrdf::{NamedNodeRef, TripleRef};
     use oxrdfio::RdfParser;
@@ -1420,7 +1423,7 @@ mod test {
     fn tnn() -> PTriple<String> {
         PTriple {
             subject: PNamedNode::new("http://example.com/s".to_string()).into(),
-            predicate: PNamedNode::new("http://example.com/p".to_string()).into(),
+            predicate: PNamedNode::new("http://example.com/p".to_string()),
             object: PNamedNode::new("http://example.com/o".to_string()).into(),
         }
     }
@@ -1428,7 +1431,7 @@ mod test {
     fn tnn1() -> PTriple<String> {
         PTriple {
             subject: PNamedNode::new("http://example.com/s1".to_string()).into(),
-            predicate: PNamedNode::new("http://example.com/p1".to_string()).into(),
+            predicate: PNamedNode::new("http://example.com/p1".to_string()),
             object: PNamedNode::new("http://example.com/o1".to_string()).into(),
         }
     }
@@ -1436,7 +1439,7 @@ mod test {
     fn bnn() -> PTriple<String> {
         PTriple {
             subject: PBlankNode::new("hello_id".to_string()).into(),
-            predicate: PNamedNode::new("http://example.com/p".to_string()).into(),
+            predicate: PNamedNode::new("http://example.com/p".to_string()),
             object: PNamedNode::new("http://example.com/o".to_string()).into(),
         }
     }
@@ -1445,24 +1448,20 @@ mod test {
         PChunk::normalize(vec![
             PTriple {
                 subject: PBlankNode::new("seq0".to_string()).into(),
-                predicate: PNamedNode::new("http://example.com/p".to_string()).into(),
+                predicate: PNamedNode::new("http://example.com/p".to_string()),
                 object: PNamedNode::new("http://example.com/o".to_string()).into(),
             },
             PTriple {
                 subject: PBlankNode::new("seq0".to_string()).into(),
                 predicate: PNamedNode::new(
-                    "http://www.w3.org/1999/02/22-rdf-syntax-ns#first"
-                        .to_string()
-                        .into(),
+                    "http://www.w3.org/1999/02/22-rdf-syntax-ns#first".to_string(),
                 ),
                 object: PBlankNode::new("seq1".to_string()).into(),
             },
             PTriple {
                 subject: PBlankNode::new("seq0".to_string()).into(),
                 predicate: PNamedNode::new(
-                    "http://www.w3.org/1999/02/22-rdf-syntax-ns#rest"
-                        .to_string()
-                        .into(),
+                    "http://www.w3.org/1999/02/22-rdf-syntax-ns#rest".to_string(),
                 ),
                 object: PNamedNode::new(
                     "http://www.w3.org/1999/02/22-rdf-syntax-ns#nil".to_string(),
@@ -1479,7 +1478,7 @@ mod test {
         // possible.
         let _: PTriple<String> = TripleRef {
             subject: NamedNodeRef::new_unchecked("http://example.com/foo").into(),
-            predicate: NamedNodeRef::new_unchecked("http://schema.org/sameAs").into(),
+            predicate: NamedNodeRef::new_unchecked("http://schema.org/sameAs"),
             object: NamedNodeRef::new_unchecked("http://example.com/foo").into(),
         }
         .into();
@@ -1624,12 +1623,11 @@ mod test {
         xml_to: &str,
         prefix: Option<IndexMap<&str, &str>>,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        let source: Vec<PTriple<String>> =
-            RdfParser::from_format(oxrdfio::RdfFormat::RdfXml)
-                .for_reader(xml_from.as_bytes())
-                .map(Result::unwrap)
-                .map(Into::into)
-                .collect();
+        let source: Vec<PTriple<String>> = RdfParser::from_format(oxrdfio::RdfFormat::RdfXml)
+            .for_reader(xml_from.as_bytes())
+            .map(Result::unwrap)
+            .map(Into::into)
+            .collect();
 
         let sink = vec![];
 

@@ -1,9 +1,9 @@
-use criterion::{black_box, criterion_group, criterion_main, BatchSize, BenchmarkId, Criterion};
-use oxrdfio::{RdfFormat, RdfParser};
+use criterion::{BatchSize, BenchmarkId, Criterion, black_box, criterion_group, criterion_main};
 use horned_pretty_rdf::{
     ChunkedRdfXmlFormatter, ChunkedRdfXmlFormatterConfig, PBlankNode, PChunk, PNamedNode,
     PNamedOrBlankNode, PTerm, PTriple,
 };
+use oxrdfio::{RdfFormat, RdfParser};
 
 fn triple(s: PNamedOrBlankNode<String>, p: &str, o: PTerm<String>) -> PTriple<String> {
     PTriple::new(s, PNamedNode::new(p.to_string()), o)
@@ -24,7 +24,8 @@ fn many_subjects(n: usize) -> Vec<PTriple<String>> {
 
 /// n triples all sharing one subject — maximum PMultiTriple grouping
 fn single_subject(n: usize) -> Vec<PTriple<String>> {
-    let subj: PNamedOrBlankNode<String> = PNamedNode::new("http://example.com/s".to_string()).into();
+    let subj: PNamedOrBlankNode<String> =
+        PNamedNode::new("http://example.com/s".to_string()).into();
     (0..n)
         .map(|i| {
             triple(
@@ -171,5 +172,11 @@ fn bench_owl_format(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(benches, bench_hello_world, bench_normalize, bench_format, bench_owl_format);
+criterion_group!(
+    benches,
+    bench_hello_world,
+    bench_normalize,
+    bench_format,
+    bench_owl_format
+);
 criterion_main!(benches);
