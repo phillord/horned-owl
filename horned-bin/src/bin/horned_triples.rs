@@ -8,8 +8,8 @@ use clap::ArgMatches;
 
 use horned_owl::error::HornedError;
 
+use horned_pretty_rdf::{PTriple, RdfFormatter};
 use oxrdfio::RdfParser;
-use pretty_rdf::{PTriple, RdfFormatter};
 
 use std::io::BufReader;
 use std::{fs::File, io::stdout};
@@ -103,10 +103,10 @@ pub(crate) fn matcher(matches: &ArgMatches) -> Result<(), HornedError> {
             "rdfs".to_string(),
         );
 
-        let mut f: pretty_rdf::PrettyRdfXmlFormatter<String, _> =
-            pretty_rdf::PrettyRdfXmlFormatter::new(
+        let mut f: horned_pretty_rdf::PrettyRdfXmlFormatter<String, _> =
+            horned_pretty_rdf::PrettyRdfXmlFormatter::new(
                 b,
-                pretty_rdf::ChunkedRdfXmlFormatterConfig::all(),
+                horned_pretty_rdf::ChunkedRdfXmlFormatterConfig::all(),
             )?;
         //let mut f = rio_xml::RdfXmlFormatter::with_indentation(&b, 4)?;
         let file = File::open(input)?;

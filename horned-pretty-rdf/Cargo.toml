@@ -1,8 +1,8 @@
 [package]
-name = "pretty_rdf"
+name = "horned-pretty-rdf"
 version = "0.13.0"
 authors = ["Phillip Lord"]
-repository = "https://github.com/phillord/pretty_rdf"
+repository = "https://github.com/phillord/horned-owl"
 description = "RDF/XML Pretty Formatting"
 
 edition = "2018"

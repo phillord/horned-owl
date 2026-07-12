@@ -19,7 +19,7 @@ clap = "3.2.2"
 horned-owl={path="../", version= "2.0.0" }
 indexmap={workspace=true}
 oxiri={workspace=true}
-pretty_rdf={workspace=true}
+horned-pretty-rdf={workspace=true}
 oxrdf={workspace=true}
 oxrdfio={workspace=true}
 
