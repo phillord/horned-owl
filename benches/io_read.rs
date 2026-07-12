@@ -7,7 +7,7 @@ use std::fs::{File, create_dir_all};
 use std::io::BufReader;
 use std::time::Duration;
 
-fn io_read(c: &mut Criterion) {
+fn bench_io_read(c: &mut Criterion) {
     let mut group = c.benchmark_group("io_read");
     group.plot_config(PlotConfiguration::default().summary_scale(AxisScale::Logarithmic));
 
@@ -70,9 +70,9 @@ fn io_read(c: &mut Criterion) {
 }
 
 criterion_group! {
-    name = io;
+    name = io_read;
     config = Criterion::default()
     .sample_size(50)
     .measurement_time(Duration::from_secs(20));
-    targets = io_read
+    targets = bench_io_read
 }
