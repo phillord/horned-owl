@@ -1,5 +1,5 @@
-Pretty RDF/XML
-==============
+Horned Pretty RDF/XML
+=====================
 
 This library allows writing of [XML
 RDF](https://www.w3.org/TR/rdf12-xml/). It is similar to the
