@@ -137,9 +137,155 @@ impl<A: ForIRI, AA: ForIndex<A>> From<ParserOutput<A, AA>> for ComponentMappedOn
     }
 }
 
+/// Detect the serialization format of an OWL document from its content.
+///
+/// The detection logic is adapted from
+/// [`horned-roundtrip`](https://github.com/micheldumontier/horned-roundtrip)
+/// by Michel Dumontier et al., used under the MIT licence.
+///
+/// Returns `(ResourceType, rdf_format)` where `rdf_format` is set for RDF
+/// variants (RDF/XML, Turtle, N-Triples) and `None` for OWX, OFN, and OMN.
+/// Returns `None` when the format cannot be determined from the content.
+pub fn detect_format(bytes: &[u8]) -> Option<(ResourceType, Option<oxrdfio::RdfFormat>)> {
+    let s = String::from_utf8_lossy(bytes);
+    let s = s.strip_prefix('\u{feff}').unwrap_or(&s);
+    let trimmed = s.trim_start();
+
+    if trimmed.starts_with('<') {
+        // N-Triples / full-IRI-subject Turtle: `<iri> <iri>` on the first line.
+        if !trimmed.starts_with("<?")
+            && !trimmed.starts_with("<!")
+            && trimmed.lines().next().is_some_and(|l| l.contains("> <"))
+        {
+            return Some((ResourceType::RDF, Some(oxrdfio::RdfFormat::Turtle)));
+        }
+        // XML: sniff the root element name.
+        if let Some(root) = first_xml_element(trimmed) {
+            let local = root.rsplit(':').next().unwrap_or(root);
+            if local.eq_ignore_ascii_case("RDF") {
+                return Some((ResourceType::RDF, Some(oxrdfio::RdfFormat::RdfXml)));
+            }
+            if local.eq_ignore_ascii_case("Ontology") {
+                return Some((ResourceType::OWX, None));
+            }
+        }
+        return None;
+    }
+
+    // Text-syntax formats: skip blank lines and `#` comments.
+    for line in trimmed.lines() {
+        let l = line.trim_start();
+        if l.is_empty() || l.starts_with('#') {
+            continue;
+        }
+        let lower = l.to_ascii_lowercase();
+        if lower.starts_with("@prefix") || lower.starts_with("@base") {
+            return Some((ResourceType::RDF, Some(oxrdfio::RdfFormat::Turtle)));
+        }
+        if l.starts_with('<') && !l.starts_with("<?") && !l.starts_with("<!") && l.contains("> <") {
+            return Some((ResourceType::RDF, Some(oxrdfio::RdfFormat::Turtle)));
+        }
+        if l.starts_with("Prefix:") || l.starts_with("Ontology:") {
+            return Some((ResourceType::OMN, None));
+        }
+        if l.starts_with("Prefix(") || l.starts_with("Ontology(") {
+            return Some((ResourceType::OFN, None));
+        }
+        break;
+    }
+    None
+}
+
+fn first_xml_element(s: &str) -> Option<&str> {
+    let mut rest = s;
+    loop {
+        let lt = rest.find('<')?;
+        rest = &rest[lt..];
+        if rest.starts_with("<?") {
+            rest = &rest[rest.find("?>")? + 2..];
+            continue;
+        }
+        if rest.starts_with("<!--") {
+            rest = &rest[rest.find("-->")? + 3..];
+            continue;
+        }
+        if rest.starts_with("<!") {
+            rest = &rest[rest.find('>')? + 1..];
+            continue;
+        }
+        let name = rest[1..]
+            .split(|c: char| c.is_whitespace() || c == '>' || c == '/')
+            .next()?;
+        return Some(name);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::{os::unix::fs::PermissionsExt, path::PathBuf};
+
+    #[test]
+    fn detect_format_rdf_xml() {
+        let (rt, fmt) = super::detect_format(b"<?xml version=\"1.0\"?>\n<rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\">").unwrap();
+        assert!(matches!(rt, super::ResourceType::RDF));
+        assert_eq!(fmt, Some(oxrdfio::RdfFormat::RdfXml));
+    }
+
+    #[test]
+    fn detect_format_owl_xml() {
+        let (rt, fmt) = super::detect_format(
+            b"<?xml version=\"1.0\"?>\n<Ontology xmlns=\"http://www.w3.org/2002/07/owl#\">",
+        )
+        .unwrap();
+        assert!(matches!(rt, super::ResourceType::OWX));
+        assert_eq!(fmt, None);
+    }
+
+    #[test]
+    fn detect_format_turtle() {
+        let (rt, fmt) =
+            super::detect_format(b"@prefix owl: <http://www.w3.org/2002/07/owl#> .\n").unwrap();
+        assert!(matches!(rt, super::ResourceType::RDF));
+        assert_eq!(fmt, Some(oxrdfio::RdfFormat::Turtle));
+    }
+
+    #[test]
+    fn detect_format_ntriples() {
+        let (rt, fmt) =
+            super::detect_format(b"<http://ex/s> <http://ex/p> <http://ex/o> .\n").unwrap();
+        assert!(matches!(rt, super::ResourceType::RDF));
+        assert_eq!(fmt, Some(oxrdfio::RdfFormat::Turtle));
+    }
+
+    #[test]
+    fn detect_format_ofn() {
+        let (rt, fmt) =
+            super::detect_format(b"Prefix(:=<http://ex/>)\nOntology(<http://ex/o>)").unwrap();
+        assert!(matches!(rt, super::ResourceType::OFN));
+        assert_eq!(fmt, None);
+    }
+
+    #[test]
+    fn detect_format_omn() {
+        let (rt, fmt) =
+            super::detect_format(b"Prefix: : <http://ex/>\nOntology: <http://ex/o>").unwrap();
+        assert!(matches!(rt, super::ResourceType::OMN));
+        assert_eq!(fmt, None);
+    }
+
+    #[test]
+    fn detect_format_bom_and_comments() {
+        let (rt, _) = super::detect_format("\u{feff}Ontology: <http://ex/o>".as_bytes()).unwrap();
+        assert!(matches!(rt, super::ResourceType::OMN));
+
+        let (rt, _) = super::detect_format(b"# a comment\n@prefix : <http://ex/> .").unwrap();
+        assert!(matches!(rt, super::ResourceType::RDF));
+    }
+
+    #[test]
+    fn detect_format_unknown() {
+        assert!(super::detect_format(b"format-version: 1.4\n[Term]").is_none());
+    }
 
     #[test]
     fn omn_parser_output_constructs_and_decomposes() {
