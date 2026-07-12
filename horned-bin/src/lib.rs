@@ -132,7 +132,7 @@ pub fn parse_imports(
         Some(ResourceType::RDF) => {
             let b = Build::new();
             let config = with_detected_rdf_format(path, config);
-            let mut p = horned_owl::io::rdf::reader::parser_with_build(&mut bufreader, &b, config);
+            let mut p = horned_owl::io::rdf::reader::parser_with_build(&mut bufreader, &b, config)?;
             p.parse_imports()?;
             ParserOutput::rdf(p.as_ontology_and_incomplete())
         }
