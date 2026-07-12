@@ -59,8 +59,17 @@ pub fn path_type(path: &Path) -> Option<ResourceType> {
         Some("owx") => Some(ResourceType::OWX),
         Some("omn") => Some(ResourceType::OMN),
         Some(ext) if rdf_format_for_extension(ext).is_some() => Some(ResourceType::RDF),
-        _ => None,
+        _ => detect_from_path(path).map(|(rt, _)| rt),
     }
+}
+
+/// Peek at the first 512 bytes of a file and use content sniffing as a
+/// fallback when the extension is missing or unrecognised.
+fn detect_from_path(path: &Path) -> Option<(ResourceType, Option<oxrdfio::RdfFormat>)> {
+    use std::io::Read;
+    let mut buf = [0u8; 512];
+    let n = File::open(path).ok()?.read(&mut buf).ok()?;
+    horned_owl::io::detect_format(&buf[..n])
 }
 
 pub fn parse_path(
@@ -106,7 +115,8 @@ fn with_detected_rdf_format(path: &Path, mut config: ParserConfiguration) -> Par
         config.rdf.format = path
             .extension()
             .and_then(|s| s.to_str())
-            .and_then(rdf_format_for_extension);
+            .and_then(rdf_format_for_extension)
+            .or_else(|| detect_from_path(path).and_then(|(_, fmt)| fmt));
     }
     config
 }
