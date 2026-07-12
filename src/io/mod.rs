@@ -22,6 +22,38 @@ pub enum ResourceType {
     OMN,
 }
 
+/// The input format to use when parsing an ontology file.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum InputFormat {
+    /// Detect the format from file content, ignoring the extension.
+    Guess,
+    OFN,
+    OWX,
+    OMN,
+    /// An RDF-family format. `None` means detect the sub-format from the
+    /// extension; `Some` pins a specific serialization.
+    Rdf(Option<oxrdfio::RdfFormat>),
+}
+
+impl std::str::FromStr for InputFormat {
+    type Err = ();
+
+    /// Accepts `"guess"`, `"ofn"`, `"owx"`, `"omn"`, and any extension
+    /// recognised by [`oxrdfio::RdfFormat::from_extension`] plus `"owl"`.
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "guess" => Ok(Self::Guess),
+            "ofn" => Ok(Self::OFN),
+            "owx" => Ok(Self::OWX),
+            "omn" => Ok(Self::OMN),
+            "owl" => Ok(Self::Rdf(Some(oxrdfio::RdfFormat::RdfXml))),
+            other => oxrdfio::RdfFormat::from_extension(other)
+                .map(|f| Self::Rdf(Some(f)))
+                .ok_or(()),
+        }
+    }
+}
+
 #[allow(clippy::large_enum_variant)]
 pub enum ParserOutput<A: ForIRI, AA: ForIndex<A>> {
     OFNParser(SetOntology<A>, PrefixMapping),
@@ -31,6 +63,15 @@ pub enum ParserOutput<A: ForIRI, AA: ForIndex<A>> {
 }
 
 impl<A: ForIRI, AA: ForIndex<A>> ParserOutput<A, AA> {
+    pub fn resource_type(&self) -> ResourceType {
+        match self {
+            ParserOutput::OFNParser(..) => ResourceType::OFN,
+            ParserOutput::OWXParser(..) => ResourceType::OWX,
+            ParserOutput::RDFParser(..) => ResourceType::RDF,
+            ParserOutput::OMNParser(..) => ResourceType::OMN,
+        }
+    }
+
     pub fn ofn(sop: (SetOntology<A>, PrefixMapping)) -> ParserOutput<A, AA> {
         ParserOutput::OFNParser(sop.0, sop.1)
     }
@@ -74,6 +115,9 @@ pub struct ParserConfiguration {
     pub local_only: bool,
     pub rdf: RDFParserConfiguration,
     pub owx: OWXParserConfiguration,
+    /// Override format detection. When set, this takes precedence over the
+    /// file extension. `InputFormat::Guess` triggers content sniffing.
+    pub input_format: Option<InputFormat>,
 }
 
 impl Default for ParserConfiguration {
@@ -84,6 +128,7 @@ impl Default for ParserConfiguration {
             local_only: false,
             rdf: RDFParserConfiguration::default(),
             owx: OWXParserConfiguration::default(),
+            input_format: None,
         }
     }
 }
