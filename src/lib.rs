@@ -18,7 +18,7 @@ use std::{
 };
 use std::{
     cmp::Ordering,
-    collections::VecDeque,
+    collections::{HashSet, VecDeque},
     fmt::{Debug, Formatter},
 };
 
@@ -1007,7 +1007,15 @@ where
         }
 
         // TODO: Shares lots of code with format_property
-        // TODO: check all properties unique!!
+        //
+        // A predicate can only be folded into an XML attribute once per
+        // element -- XML forbids duplicate attribute names. If the same
+        // subject has more than one value for the same attribute-eligible
+        // predicate (e.g. two owl:versionInfo annotations), only the
+        // first is folded here; the rest are left out of
+        // `triples_rendered` so `format_multi` renders them as ordinary
+        // nested property elements instead.
+        let mut folded_predicates: HashSet<&PNamedNode<A>> = HashSet::new();
         for literal_t in mt.literal_objects() {
             if let PTerm::Literal(l) = &literal_t.object {
                 match l {
@@ -1016,11 +1024,13 @@ where
 
                         if let Some(iri_ns_prefix) = &self.config.prefix.get(iri_protocol_and_host)
                         {
-                            description_open.push_attribute((
-                                &format!("{}:{}", &iri_ns_prefix, &iri_qname)[..],
-                                value.as_ref(),
-                            ));
-                            triples_rendered.push(literal_t);
+                            if folded_predicates.insert(&literal_t.predicate) {
+                                description_open.push_attribute((
+                                    &format!("{}:{}", &iri_ns_prefix, &iri_qname)[..],
+                                    value.as_ref(),
+                                ));
+                                triples_rendered.push(literal_t);
+                            }
                         }
                     }
                     PLiteral::LanguageTaggedString {
@@ -2165,5 +2175,37 @@ r###"<?xml version="1.0" encoding="UTF-8"?>
                 ]
             )
         ).unwrap()
+    }
+
+    #[test]
+    fn duplicate_literal_annotation_is_not_folded_into_duplicate_attribute() {
+        // Reproduces horned-owl issue #205 (found on the AMINO-ACID
+        // ontology): a subject with two plain-literal values for the
+        // same attribute-eligible predicate (e.g. owl:versionInfo) must
+        // not have both folded onto the same element as an XML
+        // attribute -- `<owl:Ontology ... owl:versionInfo="first"
+        // owl:versionInfo="second">` is invalid XML (duplicate
+        // attribute) and cannot be re-parsed.
+        let xml = from_nt_prefix(
+            r###"<http://www.example.com/iri> <http://www.w3.org/2002/07/owl#versionInfo> "first" .
+<http://www.example.com/iri> <http://www.w3.org/2002/07/owl#versionInfo> "second" .
+"###,
+            indexmap![
+                "http://www.w3.org/1999/02/22-rdf-syntax-ns#" => "rdf",
+                "http://www.w3.org/2002/07/owl#" => "owl"
+            ],
+        )
+        .unwrap();
+
+        let reparsed: Result<Vec<_>, _> = RdfParser::from_format(oxrdfio::RdfFormat::RdfXml)
+            .for_reader(xml.as_bytes())
+            .collect();
+
+        assert!(
+            reparsed.is_ok(),
+            "generated XML was not valid/re-parseable:\n{xml}\nerror: {:?}",
+            reparsed.err()
+        );
+        assert_eq!(reparsed.unwrap().len(), 2);
     }
 }
