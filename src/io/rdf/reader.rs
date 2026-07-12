@@ -598,7 +598,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
         b: &'a Build<A>,
         bufread: &'b mut R,
         config: ParserConfiguration,
-    ) -> OntologyParser<'a, A, AA, O> {
+    ) -> Result<OntologyParser<'a, A, AA, O>, HornedError> {
         Self::from_bufread_with_format(
             b,
             bufread,
@@ -612,19 +612,22 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
         bufread: &'b mut R,
         config: ParserConfiguration,
         format: oxrdfio::RdfFormat,
-    ) -> OntologyParser<'a, A, AA, O> {
+    ) -> Result<OntologyParser<'a, A, AA, O>, HornedError> {
         let parser = oxrdfio::RdfParser::from_format(format);
         let mut triples = vec![];
         let last_pos = std::cell::Cell::new(0);
 
         for ox_quad in parser.for_reader(bufread) {
-            // TODO!
-            let ox_triple = ox_quad.unwrap().into();
+            let ox_triple = ox_quad
+                .map_err(|e| {
+                    HornedError::ParserError(Box::new(e), crate::error::Location::Unknown)
+                })?
+                .into();
             triples.push(b.convert_substitute_triple(ox_triple, last_pos.get()));
             //last_pos.set(parser.buffer_position().try_into().unwrap());
         }
 
-        OntologyParser::new(b, triples, config)
+        Ok(OntologyParser::new(b, triples, config))
     }
 
     /// Return an new OntologyParser taking all triples in RDF-XML from the given IRI.
@@ -632,13 +635,14 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
         b: &'a Build<A>,
         iri: &IRI<A>,
         config: ParserConfiguration,
-    ) -> OntologyParser<'a, A, AA, O> {
+    ) -> Result<OntologyParser<'a, A, AA, O>, HornedError> {
         OntologyParser::from_bufread(
             b,
-            &mut Cursor::new(
-                strict_resolve_iri(iri, config.remote_body_limit, config.local_only)
-                    .expect("the IRI should resolve successfully"),
-            ),
+            &mut Cursor::new(strict_resolve_iri(
+                iri,
+                config.remote_body_limit,
+                config.local_only,
+            )?),
             config,
         )
     }
@@ -2582,7 +2586,7 @@ pub fn parser_with_build<'b, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, 
     bufread: &mut R,
     build: &'b Build<A>,
     config: ParserConfiguration,
-) -> OntologyParser<'b, A, AA, O> {
+) -> Result<OntologyParser<'b, A, AA, O>, HornedError> {
     OntologyParser::from_bufread(build, bufread, config)
 }
 
@@ -2591,7 +2595,7 @@ pub fn read_with_build<A: ForIRI, AA: ForIndex<A>, R: BufRead>(
     build: &Build<A>,
     config: ParserConfiguration,
 ) -> Result<(ConcreteRDFOntology<A, AA>, IncompleteParse<A>), HornedError> {
-    parser_with_build(bufread, build, config).parse()
+    parser_with_build(bufread, build, config)?.parse()
 }
 
 pub fn read<R: BufRead>(
@@ -2764,7 +2768,8 @@ mod test {
                 &mut slurp_rdfont("import").as_bytes(),
                 &b,
                 Default::default(),
-            );
+            )
+            .unwrap();
         p.parse_imports().unwrap();
 
         let rdfont = p.as_ontology();
@@ -2782,7 +2787,8 @@ mod test {
                 &mut slurp_rdfont("class").as_bytes(),
                 &b,
                 Default::default(),
-            );
+            )
+            .unwrap();
         let _ = p.parse_declarations();
 
         let rdfont = p.as_ontology();
@@ -2799,7 +2805,7 @@ mod test {
                 &mut slurp_rdfont("withimport/other-property").as_bytes(),
                 &b,
                 Default::default(),
-            );
+            )?;
         let (family_other, incomplete) = p.parse()?;
         assert!(incomplete.is_complete());
 
@@ -2807,7 +2813,7 @@ mod test {
             &mut slurp_rdfont("withimport/import-property").as_bytes(),
             &b,
             Default::default(),
-        );
+        )?;
         p.parse_imports()?;
         p.parse_declarations()?;
         p.finish_parse(vec![&family_other].as_slice())?;
@@ -2841,6 +2847,26 @@ mod test {
         assert!(matches! {err, HornedError::ValidityError(_,_)})
     }
 
+    #[test]
+    fn error_not_panic_on_malformed_rdf_xml() {
+        // Issue #205: malformed RDF/XML (here, an invalid duplicate XML
+        // attribute -- oxrdfio's underlying `quick-xml` parser rejects
+        // this) used to panic via an unchecked `unwrap()` on the
+        // underlying oxrdfio parser's error. It should be a recoverable
+        // `HornedError` instead, regardless of what produced the
+        // malformed input.
+        let xml = r#"<?xml version="1.0"?>
+<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+     xmlns:owl="http://www.w3.org/2002/07/owl#">
+    <owl:Ontology rdf:about="http://www.example.com/iri"
+                  owl:versionInfo="first" owl:versionInfo="second"/>
+</rdf:RDF>"#;
+
+        let err = read(&mut xml.as_bytes(), Default::default()).unwrap_err();
+
+        assert!(matches! {err, HornedError::ParserError(_,_)})
+    }
+
     fn read_from_format<R: BufRead>(
         bufread: &mut R,
         config: ParserConfiguration,
@@ -2848,6 +2874,7 @@ mod test {
     ) {
         let (ont, incomp): (ConcreteRDFOntology<RcStr, Rc<AnnotatedComponent<RcStr>>>, _) =
             OntologyParser::from_bufread_with_format(&Build::new_rc(), bufread, config, format)
+                .unwrap()
                 .parse()
                 .unwrap();
 

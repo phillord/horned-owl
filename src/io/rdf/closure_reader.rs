@@ -111,7 +111,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> ClosureOntologyParse
         new_doc_iri: IRI<A>,
     ) -> Result<Vec<IRI<A>>, HornedError> {
         // Parse the contents of the string
-        let mut p = parser_with_build(&mut s.as_bytes(), self.b, self.config);
+        let mut p = parser_with_build(&mut s.as_bytes(), self.b, self.config)?;
         let imports = p.parse_imports().unwrap();
         p.parse_declarations()?;
 
