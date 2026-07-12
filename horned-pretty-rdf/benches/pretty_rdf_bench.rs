@@ -1,6 +1,6 @@
 use criterion::{black_box, criterion_group, criterion_main, BatchSize, BenchmarkId, Criterion};
 use oxrdfio::{RdfFormat, RdfParser};
-use pretty_rdf::{
+use horned_pretty_rdf::{
     ChunkedRdfXmlFormatter, ChunkedRdfXmlFormatterConfig, PBlankNode, PChunk, PNamedNode,
     PNamedOrBlankNode, PTerm, PTriple,
 };

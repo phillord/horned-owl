@@ -658,7 +658,7 @@ where
         let mut bnode_object_count: FxHashMap<PBlankNode<A>, usize> = Default::default();
 
         'top: for t in v {
-            if let PTerm::BlankNode(ref bn) = &t.object {
+            if let PTerm::BlankNode(bn) = &t.object {
                 bnode_object_count
                     .entry(bn.clone())
                     .and_modify(|e| *e += 1)
@@ -673,7 +673,7 @@ where
 
             // We have a collection part. Remember for later
             if t.is_collection_rest() {
-                if let PTerm::BlankNode(ref bn) = &t.object {
+                if let PTerm::BlankNode(bn) = &t.object {
                     seq_rest.insert(PNamedOrBlankNode::BlankNode(bn.clone()), t);
                 }
                 continue 'top;
@@ -978,10 +978,10 @@ where
         let mut triples_rendered = vec![];
         // oh dearie, dearie me! This is hideous
         let description_open = if let Some(typ) = mt.find_typed() {
-            if let PTerm::NamedNode(ref nn) = &typ.object {
+            if let PTerm::NamedNode(nn) = &typ.object {
                 triples_rendered.push(typ);
                 let mut bs = self.bytes_start_iri(nn);
-                if let PNamedOrBlankNode::BlankNode(ref bn) = &typ.subject {
+                if let PNamedOrBlankNode::BlankNode(bn) = &typ.subject {
                     if chunk.object_count(bn) > 1 {
                         bs.push_attribute(("rdf:nodeID", bn.as_ref()));
                     }
@@ -998,7 +998,7 @@ where
             description_open.unwrap_or_else(|| BytesStart::new("rdf:Description"));
 
         match mt.subject() {
-            PNamedOrBlankNode::NamedNode(ref n) => {
+            PNamedOrBlankNode::NamedNode(n) => {
                 description_open.push_attribute(("rdf:about", n.iri.as_ref()))
             }
             PNamedOrBlankNode::BlankNode(_) => {
@@ -1260,10 +1260,10 @@ where
         chunk: &mut PChunk<A>,
     ) -> Result<(), io::Error> {
         match expanded {
-            PExpandedTriple::PMultiTriple(ref mt) => {
+            PExpandedTriple::PMultiTriple(mt) => {
                 self.format_multi(mt, chunk)?;
             }
-            PExpandedTriple::PTripleSeq(ref seq) => {
+            PExpandedTriple::PTripleSeq(seq) => {
                 self.format_seq_longhand(seq, chunk)?;
             }
         }
