@@ -28,6 +28,7 @@ where
     mapping: PrefixMapping,
     reader: NsReader<R>,
     config: ParserConfiguration,
+    base_iri: Option<String>,
 }
 
 pub fn read<A: ForIRI, O: MutableOntology<A> + Default, R: BufRead>(
@@ -53,6 +54,7 @@ pub fn read_with_build<A: ForIRI, O: MutableOntology<A> + Default, R: BufRead>(
         build,
         mapping,
         config,
+        base_iri: None,
     };
 
     loop {
@@ -63,6 +65,7 @@ pub fn read_with_build<A: ForIRI, O: MutableOntology<A> + Default, R: BufRead>(
                         let s = get_attr_value_str(&mut r.reader, e, b"ontologyIRI")?;
                         if let Some(s) = s {
                             r.mapping.set_default(&s);
+                            r.base_iri = Some(s);
                         }
 
                         ont.insert(OntologyID {
@@ -200,11 +203,22 @@ fn get_iri_value<A: ForIRI, R: BufRead>(
     r: &mut Read<A, R>,
     event: &BytesStart,
 ) -> Result<Option<IRI<A>>, HornedError> {
-    let iri = get_iri_value_for(r, event, b"IRI")?;
-    if iri.is_none() {
-        get_iri_value_for(r, event, b"abbreviatedIRI")
+    if let Some(raw) = get_attr_value_str(&mut r.reader, event, b"IRI")? {
+        // Fragment-relative IRIs (starting with '#') must be resolved against the
+        // ontology base IRI, not the CURIE default: the empty prefix may end with '#',
+        // which would produce a doubled '##' when concatenated with a '#local' fragment.
+        let base_iri = r.base_iri.clone();
+        let resolved: Cow<str> = if raw.starts_with('#') {
+            match base_iri {
+                Some(base) => Cow::Owned(format!("{base}{raw}")),
+                None => expand_curie_maybe(r, Cow::Owned(raw)),
+            }
+        } else {
+            expand_curie_maybe(r, Cow::Owned(raw))
+        };
+        Ok(Some(r.build.iri(resolved)))
     } else {
-        Ok(iri)
+        get_iri_value_for(r, event, b"abbreviatedIRI")
     }
 }
 
@@ -2559,5 +2573,26 @@ pub mod test {
         > = read_with_build(&mut BROKEN_OWX.as_bytes(), &Build::new(), config);
 
         assert!(r.is_ok(), "Expected ontology, got failure: {:?}", r.err());
+    }
+
+    // Regression test: when a <Prefix name="" IRI="...#"/> declaration is present, an
+    // IRI="#local" attribute must expand to ontologyIRI + "#local", not
+    // prefixIRI + "#local" (which would yield a doubled ##).
+    #[test]
+    fn relative_iri_with_empty_prefix_no_double_hash() {
+        let owx = r##"<?xml version="1.0"?>
+<Ontology xmlns="http://www.w3.org/2002/07/owl#"
+     xml:base="http://ontriscal"
+     ontologyIRI="http://ontriscal">
+    <Prefix name="" IRI="http://ontriscal#"/>
+    <Declaration>
+        <Class IRI="#MyClass"/>
+    </Declaration>
+</Ontology>"##;
+        let b = Build::new_rc();
+        let (ont, _): (ComponentMappedOntology<RcStr, RcAnnotatedComponent>, _) =
+            read_with_build(&mut owx.as_bytes(), &b, Default::default()).unwrap();
+        let dc = ont.i().declare_class().next().unwrap();
+        assert_eq!(dc.0.0.to_string(), "http://ontriscal#MyClass");
     }
 }
