@@ -257,7 +257,7 @@ fn error_missing_end_tag<A: ForIRI, R: BufRead>(
     pos: u64,
 ) -> HornedError {
     match decode_tag(tag, r) {
-        Ok(tag) => invalid! {"Missing End Tag: expected {tag} after {pos}"},
+        Ok(tag) => invalid_at! {pos, "Missing End Tag: expected {tag}"},
         Err(e) => e,
     }
 }
@@ -268,31 +268,23 @@ fn error_missing_attribute<A: ForIRI, AT: Into<String>, R: BufRead>(
 ) -> HornedError {
     let attribute = attribute.into();
     let pos = r.reader.buffer_position();
-    invalid! {
-        "Missing Attribute: expected {attribute} at {pos}"
-    }
+    invalid_at! {pos, "Missing Attribute: expected {attribute}"}
 }
 
 fn error_eof<A: ForIRI, R: BufRead>(r: &Read<A, R>) -> HornedError {
-    invalid! {
-        "Unexpected EoF at {}", r.reader.buffer_position()
-    }
+    invalid_at! {r.reader.buffer_position(), "Unexpected EoF"}
 }
 
 fn error_unexpected_tag<A: ForIRI, R: BufRead>(tag: &[u8], r: &mut Read<A, R>) -> HornedError {
     match decode_tag(tag, r) {
-        Ok(tag) => invalid! {
-            "Unexpected tag: found {tag} at {}", r.reader.buffer_position()
-        },
+        Ok(tag) => invalid_at! {r.reader.buffer_position(), "Unexpected tag: found {tag}"},
         Err(e) => e,
     }
 }
 
 fn error_unexpected_end_tag<A: ForIRI, R: BufRead>(tag: &[u8], r: &mut Read<A, R>) -> HornedError {
     match decode_tag(tag, r) {
-        Ok(tag) => invalid! {
-            "Unexpected end tag: expected {tag} at {}", r.reader.buffer_position()
-        },
+        Ok(tag) => invalid_at! {r.reader.buffer_position(), "Unexpected end tag: expected {tag}"},
         Err(e) => e,
     }
 }
@@ -303,29 +295,22 @@ fn error_unknown_entity<A: ForIRI, AA: Into<String>, R: BufRead>(
     r: &mut Read<A, R>,
 ) -> HornedError {
     match decode_tag(found, r) {
-        Ok(found) => invalid! {
-            "Unknown Entity: expected kind of {}, found {found} at {}",
-            kind.into(),
-            r.reader.buffer_position()
-        },
+        Ok(found) => {
+            invalid_at! {r.reader.buffer_position(), "Unknown Entity: expected kind of {}, found {found}", kind.into()}
+        }
         Err(e) => e,
     }
 }
 
 fn error_missing_element<A: ForIRI, R: BufRead>(tag: &[u8], r: &mut Read<A, R>) -> HornedError {
     match decode_tag(tag, r) {
-        Ok(tag) => invalid! {
-            "Missing Element: expected {tag} at {}",
-                r.reader.buffer_position()
-        },
+        Ok(tag) => invalid_at! {r.reader.buffer_position(), "Missing Element: expected {tag}"},
         Err(e) => e,
     }
 }
 
 fn error_unexpected_text<A: ForIRI, R: BufRead>(r: &mut Read<A, R>) -> HornedError {
-    invalid! {
-        "Unexpected text content at {}", r.reader.buffer_position()
-    }
+    invalid_at! {r.reader.buffer_position(), "Unexpected text content"}
 }
 
 // Insignificant whitespace between elements is normal, valid XML
@@ -437,7 +422,7 @@ from_start! {
                     if **datatype_iri == *"http://www.w3.org/1999/02/22-rdf-syntax-ns#PlainLiteral"
                     => Literal::Language{literal:literal.to_string(), lang:lang.to_string()},
                 (Some(_), Some(_), _)
-                    => return Err(invalid!("Broken literal at {}", r.reader.buffer_position())),
+                    => return Err(invalid_at!(r.reader.buffer_position(), "Broken literal")),
                 (Some(datatype_iri), None, literal)
                     => Literal::Datatype{literal, datatype_iri},
             })
@@ -2556,6 +2541,33 @@ pub mod test {
         );
 
         assert!(r.is_err(), "Expected a parse error, got {r:?}");
+    }
+
+    // Regression test for #22: parse errors in the OWX reader should carry a
+    // byte position, not Location::Unknown.
+    #[test]
+    fn parse_error_carries_position() {
+        let r: Result<
+            (
+                ComponentMappedOntology<RcStr, RcAnnotatedComponent>,
+                PrefixMapping,
+            ),
+            HornedError,
+        > = read_with_build(
+            &mut BROKEN_OWX.as_bytes(),
+            &Build::new(),
+            Default::default(),
+        );
+
+        match r {
+            Err(HornedError::ValidityError(_, location)) => {
+                assert!(
+                    !matches!(location, crate::error::Location::Unknown),
+                    "expected a byte position in the error location, got Unknown"
+                );
+            }
+            other => panic!("expected a ValidityError, got {other:?}"),
+        }
     }
 
     #[test]
