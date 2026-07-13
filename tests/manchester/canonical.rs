@@ -15,12 +15,12 @@
 //!
 //! A "missing" entry (in ofn-truth, absent from omn-candidate) can be:
 //! - **(a) Reshuffle noise** — balanced missing≈extra on equiv/disjoint/same axioms;
-//!    cancelled by using `nary_member_pairs` as the secondary signal.
+//!   cancelled by using `nary_member_pairs` as the secondary signal.
 //! - **(b) OWL-API Manchester lossiness** — ROBOT genuinely cannot serialise some
-//!    axioms in Manchester; they are absent from the .omn text.  One-sided missing,
-//!    not the reader's fault.
+//!   axioms in Manchester; they are absent from the .omn text.  One-sided missing,
+//!   not the reader's fault.
 //! - **(c) Genuine omn-reader gap** — axiom present in .omn text but dropped or
-//!    mangled by the horned-owl Manchester reader.  Also one-sided missing.
+//!   mangled by the horned-owl Manchester reader.  Also one-sided missing.
 //!
 //! The flat `canonical` diff cannot separate (b) from (c) without inspecting the
 //! .omn source text.  Report both; note whether the diffs are balanced (→ noise)

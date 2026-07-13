@@ -288,8 +288,8 @@ fn food_to_vec() -> Vec<u8> {
     std::fs::read("./benches/ont/food.owl").unwrap()
 }
 
-fn read_vec<A: ForIRI, AA: ForIndex<A>>(v: &Vec<u8>, b: Build<A>) -> ConcreteRDFOntology<A, AA> {
-    let mut c = Cursor::new(v.clone());
+fn read_vec<A: ForIRI, AA: ForIndex<A>>(v: &[u8], b: Build<A>) -> ConcreteRDFOntology<A, AA> {
+    let mut c = Cursor::new(v.to_owned());
     horned_owl::io::rdf::reader::read_with_build(&mut c, &b, Default::default())
         .unwrap()
         .0

@@ -2439,7 +2439,7 @@ pub mod test {
                 }
             }
         } else {
-            assert!(false);
+            panic!();
         }
     }
 

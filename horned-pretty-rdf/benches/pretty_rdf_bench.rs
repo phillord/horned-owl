@@ -162,11 +162,7 @@ fn bench_owl_format(c: &mut Criterion) {
     for (name, src) in files {
         let triples = parse_owl(src);
         group.bench_function(*name, |b| {
-            b.iter_batched(
-                || triples.clone(),
-                |t| format_triples(t),
-                BatchSize::SmallInput,
-            )
+            b.iter_batched(|| triples.clone(), format_triples, BatchSize::SmallInput)
         });
     }
     group.finish();

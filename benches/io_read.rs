@@ -58,7 +58,6 @@ fn bench_io_read(c: &mut Criterion) {
                     ParserConfiguration {
                         rdf: RDFParserConfiguration {
                             format: Some(oxrdfio::RdfFormat::Turtle),
-                            ..Default::default()
                         },
                         ..Default::default()
                     },

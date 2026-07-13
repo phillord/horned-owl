@@ -2908,8 +2908,6 @@ o:C rdf:type owl:Class .
             Default::default(),
             oxrdfio::RdfFormat::Turtle,
         );
-
-        assert!(true);
     }
 
     #[test]

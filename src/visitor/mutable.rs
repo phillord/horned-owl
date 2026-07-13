@@ -817,7 +817,6 @@ impl<A: ForIRI, V: VisitMut<A>> WalkMut<A, V> {
 }
 
 #[cfg(test)]
-
 mod test {
     use super::*;
     use crate::io::owx::reader::test::read_ok;
@@ -867,7 +866,7 @@ mod test {
                 assert_eq!(literal, &"fred".to_string());
             }
             _ => {
-                assert!(false);
+                panic!();
             }
         }
     }

@@ -299,7 +299,6 @@ mod test {
     #[test]
     fn test_ontology_cons() {
         let _ = SetOntology::new_rc();
-        assert!(true);
     }
 
     #[test]
@@ -498,7 +497,6 @@ mod test {
     #[test]
     fn test_index_cons() {
         let _ = SetIndex::new_rc();
-        assert!(true);
     }
 
     #[test]

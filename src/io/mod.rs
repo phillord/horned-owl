@@ -408,7 +408,7 @@ mod tests {
 
         if !output.status.success() {
             let out = String::from_utf8(output.stdout).unwrap();
-            assert!(false, "Bubo reparse failed: {out}");
+            panic!("Bubo reparse failed: {out}");
         }
 
         remove_dir_all(&tmp_dir)?;

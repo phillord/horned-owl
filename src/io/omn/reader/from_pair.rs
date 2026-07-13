@@ -3403,9 +3403,10 @@ mod tests {
 
         let mut o = SetOntology::new_rc();
         // ontology header
-        let mut oid = OntologyID::default();
-        oid.iri = Some(b.iri("http://ex/onto"));
-        o.insert(oid);
+        o.insert(OntologyID {
+            iri: Some(b.iri("http://ex/onto")),
+            ..Default::default()
+        });
         // declarations
         for c in ["A", "B", "C", "D"] {
             o.insert(DeclareClass(b.class(format!("http://ex/{c}"))));
@@ -3582,9 +3583,10 @@ mod tests {
             .unwrap();
 
         let mut o = SetOntology::new_rc();
-        let mut oid = OntologyID::default();
-        oid.iri = Some(b.iri("http://ex/o"));
-        o.insert(oid);
+        o.insert(OntologyID {
+            iri: Some(b.iri("http://ex/o")),
+            ..Default::default()
+        });
         // an import too — validates the conformant header hosts iri+import+annotations together
         o.insert(Import(b.iri("http://ex/imported")));
         o.insert(OntologyAnnotation(Annotation {
@@ -3851,9 +3853,10 @@ mod tests {
         let mut o = SetOntology::new_rc();
 
         // ontology header
-        let mut oid = OntologyID::default();
-        oid.iri = Some(b.iri("http://ex/onto"));
-        o.insert(oid);
+        o.insert(OntologyID {
+            iri: Some(b.iri("http://ex/onto")),
+            ..Default::default()
+        });
 
         // Import
         o.insert(Import(b.iri("http://ex/imported")));
@@ -3955,9 +3958,10 @@ mod tests {
         pm.add_prefix("", "http://ex/").unwrap(); // default prefix → bare names
 
         let mut o = SetOntology::new_rc();
-        let mut oid = OntologyID::default();
-        oid.iri = Some(b.iri("http://ex/o"));
-        o.insert(oid);
+        o.insert(OntologyID {
+            iri: Some(b.iri("http://ex/o")),
+            ..Default::default()
+        });
         o.insert(DeclareClass(b.class("http://ex/Ancestor")));
         o.insert(DeclareClass(b.class("http://ex/Person")));
         o.insert(SubClassOf {
@@ -3995,10 +3999,10 @@ mod tests {
         let mut pm = PrefixMapping::default();
         pm.add_prefix("ex", "http://ex/").unwrap();
         let mut o = SetOntology::new_rc();
-        let mut oid = OntologyID::default();
-        oid.iri = Some(b.iri("http://ex/o"));
-        oid.viri = Some(b.iri("http://ex/o/1.0.0"));
-        o.insert(oid);
+        o.insert(OntologyID {
+            iri: Some(b.iri("http://ex/o")),
+            viri: Some(b.iri("http://ex/o/1.0.0")),
+        });
         o.insert(DeclareClass(b.class("http://ex/A")));
         type TestOnt = ComponentMappedOntology<
             std::rc::Rc<str>,
@@ -4033,9 +4037,10 @@ mod tests {
         let mut pm = PrefixMapping::default();
         pm.add_prefix("ex", "http://ex/").unwrap();
         let mut o = SetOntology::new_rc();
-        let mut oid = OntologyID::default();
-        oid.iri = Some(b.iri("http://ex/o"));
-        o.insert(oid);
+        o.insert(OntologyID {
+            iri: Some(b.iri("http://ex/o")),
+            ..Default::default()
+        });
         o.insert(Import(b.iri("http://ex/i")));
         o.insert(DeclareClass(b.class("http://ex/A")));
         type TestOnt = ComponentMappedOntology<
