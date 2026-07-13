@@ -890,10 +890,10 @@ fn dp_value_boolean_exact_literal() {
 
         // Find the SubClassOf axiom with a non-named filler.
         let found = ont.iter().find_map(|ac| {
-            if let Component::SubClassOf(SubClassOf { sup, .. }) = &ac.component {
-                if let ClassExpression::DataHasValue { dp: _, l } = sup {
-                    return Some(l.clone());
-                }
+            if let Component::SubClassOf(SubClassOf { sup, .. }) = &ac.component
+                && let ClassExpression::DataHasValue { dp: _, l } = sup
+            {
+                return Some(l.clone());
             }
             None
         });

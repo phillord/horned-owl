@@ -1482,14 +1482,10 @@ mod test {
             object: NamedNodeRef::new_unchecked("http://example.com/foo").into(),
         }
         .into();
-
-        assert!(true);
     }
 
     #[test]
-    pub fn chunk_hello_world() {
-        assert!(true)
-    }
+    pub fn chunk_hello_world() {}
 
     #[test]
     pub fn simple_chunk() {

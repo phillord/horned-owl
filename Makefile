@@ -119,7 +119,7 @@ triples-round-all:
 	done
 
 clippy:
-	cargo clippy
+	cargo clippy --workspace --all-targets
 
 install:
 	cargo install --path horned-bin

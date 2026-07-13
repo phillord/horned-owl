@@ -121,7 +121,6 @@ mod test {
     #[test]
     fn cons() {
         let _lei = LogicallyEqualIndex::new_rc();
-        assert!(true);
     }
 
     #[test]
