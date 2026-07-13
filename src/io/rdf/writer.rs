@@ -915,9 +915,7 @@ fn members<
     // DifferentIndividuals( a1 ... an ), n > 2 _:x rdf:type owl:AllDifferent .
     // _:x owl:members T(SEQ a1 ... an) .
     match members.len() {
-        1 => panic!(
-            "A members axiom needs at least two members, and I should know how to make errors"
-        ),
+        0 => Ok(vec![]),
         2 => {
             let a: PNamedOrBlankNode<_> = members[0].render(f, ng)?;
             let b: PTerm<_> = members[1].render(f, ng)?.into();
@@ -1947,5 +1945,21 @@ mod test {
 <http://www.example.com/iri#C> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/2002/07/owl#Class> .
 "#
         );
+    }
+
+    #[test]
+    fn single_member_different_individuals_does_not_panic() {
+        let b = Build::new_rc();
+        let mut ont = ComponentMappedOntology::new_rc();
+        ont.insert(DifferentIndividuals(vec![Individual::Named(
+            NamedIndividual(b.iri("http://example.org/a")),
+        )]));
+        let sink = Vec::new();
+        let formatter = WriterQuadSerializerAdaptor::new(
+            RdfSerializer::from_format(oxrdfio::RdfFormat::NTriples).for_writer(sink),
+        );
+        // Should not panic; writes owl:AllDifferent with a single-element list (matching OWL-API behaviour)
+        let out = write_to_rdf_formatter(&ont, formatter).unwrap();
+        assert!(!out.is_empty());
     }
 }
