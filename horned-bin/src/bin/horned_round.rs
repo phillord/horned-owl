@@ -49,6 +49,10 @@ pub(crate) fn matcher(matches: &ArgMatches) -> Result<(), HornedError> {
             let amo: RcComponentMappedOntology = so.into();
             horned_owl::io::omn::write(stdout(), &amo, Some(&pm))
         }
+        horned_owl::io::ParserOutput::OBOParser(so, pm) => {
+            let amo: RcComponentMappedOntology = so.into();
+            horned_owl::io::obo::write(stdout(), &amo, Some(&pm))
+        }
         horned_owl::io::ParserOutput::RDFParser(rdfo, _ip) => {
             horned_owl::io::rdf::writer::write(stdout(), &rdfo.into())
         }
