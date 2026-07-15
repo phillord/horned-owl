@@ -31,13 +31,22 @@ pub fn docker_available() -> bool {
 /// Corpus ontologies, absolute paths to RDF/XML sources readable by ROBOT.
 /// Ordered smallest → largest so failures in big ontologies don't hide small ones.
 ///
+/// The corpus directory is taken from the `HORNED_CORPUS_DIR` environment
+/// variable and is expected to contain `<name>.rdfxml` for each ontology below.
+/// When the variable is unset or the files are absent, this returns an empty
+/// vec and the dependent tests skip gracefully (see `docker_available` gating).
+///
 /// NOTE: doid (27 MB RDF/XML) is intentionally excluded — ROBOT's Manchester
 /// serialisation takes >2 minutes on it, exceeding the per-ontology ROBOT timeout.
 /// hp (73 MB RDF/XML) converts in ~12 s (ROBOT handles it efficiently).
 pub fn corpus_paths() -> Vec<PathBuf> {
+    let Some(dir) = std::env::var_os("HORNED_CORPUS_DIR") else {
+        return Vec::new();
+    };
+    let dir = PathBuf::from(dir);
     ["koala", "sio", "obi-core", "hp"]
         .iter()
-        .map(|n| PathBuf::from(format!("/data/dumontier/pymos/bench/data/{n}.rdfxml")))
+        .map(|n| dir.join(format!("{n}.rdfxml")))
         .filter(|p| p.exists())
         .collect()
 }
@@ -234,6 +243,14 @@ pub fn run_corpus() -> Vec<CorpusRow> {
 fn corpus_parses_or_documents_blocker() {
     if !docker_available() {
         eprintln!("SKIPPED A2: docker/ROBOT not available");
+        return;
+    }
+    if corpus_paths().is_empty() {
+        eprintln!(
+            "SKIPPED A2: no corpus fixtures found \
+             (set HORNED_CORPUS_DIR to a directory containing \
+             koala/sio/obi-core/hp .rdfxml)"
+        );
         return;
     }
     let rows = run_corpus();
