@@ -2078,21 +2078,43 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                 [Term::Iri(i), Term::OWL(VOWL::DifferentFrom), Term::Iri(j)] => {
                     Ok(Some(DifferentIndividuals(vec![i.into(), j.into()]).into()))
                 }
-                [Term::Iri(sub), Term::Iri(pred), t @ Term::Literal(_)] => ok_some! {
-                    DataPropertyAssertion {
-                        dp: pred.clone().into(),
-                        from: sub.into(),
-                        to: self.convert_to_literal(t)?
-                    }.into()
-                },
-                [Term::Iri(sub), Term::Iri(pred), Term::Iri(obj)] => Ok(Some(
-                    ObjectPropertyAssertion {
-                        ope: ObjectProperty(pred.clone()).into(),
-                        from: sub.into(),
-                        to: obj.into(),
+                [Term::Iri(sub), Term::Iri(pred), t @ Term::Literal(_)] => {
+                    if self.config.lax
+                        || matches!(
+                            self.distinguish_declaration_kind(pred, ic),
+                            Some(NamedOWLEntityKind::DataProperty)
+                        )
+                    {
+                        ok_some! {
+                            DataPropertyAssertion {
+                                dp: pred.clone().into(),
+                                from: sub.into(),
+                                to: self.convert_to_literal(t)?
+                            }.into()
+                        }
+                    } else {
+                        Ok(None)
                     }
-                    .into(),
-                )),
+                }
+                [Term::Iri(sub), Term::Iri(pred), Term::Iri(obj)] => {
+                    if self.config.lax
+                        || matches!(
+                            self.distinguish_declaration_kind(pred, ic),
+                            Some(NamedOWLEntityKind::ObjectProperty)
+                        )
+                    {
+                        Ok(Some(
+                            ObjectPropertyAssertion {
+                                ope: ObjectProperty(pred.clone()).into(),
+                                from: sub.into(),
+                                to: obj.into(),
+                            }
+                            .into(),
+                        ))
+                    } else {
+                        Ok(None)
+                    }
+                }
                 _ => Ok(None),
             };
 
