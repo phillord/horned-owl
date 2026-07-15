@@ -2976,4 +2976,36 @@ o:C rdf:type owl:Class .
     // fn family() {
     //     compare("family");
     // }
+
+    #[test]
+    fn rdfs_class_does_not_produce_class_assertion() {
+        // rdfs:Class is the RDFS metaclass, not a valid OWL class expression.
+        // A triple <X> rdf:type rdfs:Class should NOT become a ClassAssertion
+        // (ClassAssertion(Class(rdfs:Class), X) is meaningless in OWL DL).
+        // The triple should be left in the incomplete parse instead.
+        let xml = r#"<?xml version="1.0"?>
+<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+         xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"
+         xmlns:owl="http://www.w3.org/2002/07/owl#">
+    <owl:Ontology rdf:about="http://www.example.com/iri"/>
+    <rdfs:Class rdf:about="http://www.example.com/iri#C"/>
+</rdf:RDF>"#;
+
+        let (ont, incomplete): (ConcreteRDFOntology<RcStr, Rc<AnnotatedComponent<RcStr>>>, _) =
+            read(&mut xml.as_bytes(), Default::default()).unwrap();
+
+        let ont: SetOntology<_> = ont.into();
+        let class_assertions: Vec<_> = ont
+            .iter()
+            .filter(|ac| matches!(ac.component, Component::ClassAssertion(_)))
+            .collect();
+        assert!(
+            class_assertions.is_empty(),
+            "rdfs:Class should not produce ClassAssertion axioms, got: {class_assertions:?}"
+        );
+        assert!(
+            !incomplete.is_complete(),
+            "rdfs:Class triple should remain in the incomplete parse"
+        );
+    }
 }
