@@ -49,6 +49,7 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: StdWrite>(
         "owx" => horned_owl::io::owx::writer::write(write, ont, None),
         "ofn" => horned_owl::io::ofn::writer::write(write, ont, None),
         "omn" => horned_owl::io::omn::write(write, ont, None),
+        "obo" => horned_owl::io::obo::write(write, ont, None),
         _ => horned_owl::io::rdf::writer::write_to_rdf_format(write, ont, format),
     }
 }
@@ -58,6 +59,7 @@ pub fn path_type(path: &Path, config: &ParserConfiguration) -> Option<ResourceTy
         Some(InputFormat::OFN) => return Some(ResourceType::OFN),
         Some(InputFormat::OWX) => return Some(ResourceType::OWX),
         Some(InputFormat::OMN) => return Some(ResourceType::OMN),
+        Some(InputFormat::OBO) => return Some(ResourceType::OBO),
         Some(InputFormat::Rdf(_)) => return Some(ResourceType::RDF),
         Some(InputFormat::Guess) => return detect_from_path(path).map(|(rt, _)| rt),
         None => {}
@@ -66,6 +68,7 @@ pub fn path_type(path: &Path, config: &ParserConfiguration) -> Option<ResourceTy
         Some("ofn") => Some(ResourceType::OFN),
         Some("owx") => Some(ResourceType::OWX),
         Some("omn") => Some(ResourceType::OMN),
+        Some("obo") => Some(ResourceType::OBO),
         Some(ext) if rdf_format_for_extension(ext).is_some() => Some(ResourceType::RDF),
         _ => detect_from_path(path).map(|(rt, _)| rt),
     }
@@ -99,6 +102,11 @@ pub fn parse_path(
             let file = File::open(path)?;
             let mut bufreader = BufReader::new(file);
             ParserOutput::omn(horned_owl::io::omn::read(&mut bufreader, config)?)
+        }
+        Some(ResourceType::OBO) => {
+            let file = File::open(path)?;
+            let mut bufreader = BufReader::new(file);
+            ParserOutput::obo(horned_owl::io::obo::read(&mut bufreader, config)?)
         }
         Some(ResourceType::RDF) => {
             let b = Build::new();
@@ -153,6 +161,10 @@ pub fn parse_imports(
         Some(ResourceType::OMN) => {
             // Manchester has no imports-only parse; read the whole document.
             ParserOutput::omn(horned_owl::io::omn::read(&mut bufreader, config)?)
+        }
+        Some(ResourceType::OBO) => {
+            // OBO has no imports-only parse; read the whole document.
+            ParserOutput::obo(horned_owl::io::obo::read(&mut bufreader, config)?)
         }
         Some(ResourceType::RDF) => {
             let b = Build::new();

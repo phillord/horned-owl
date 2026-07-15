@@ -1,6 +1,7 @@
 //! Parsers and renderers for several of the ontology formats listed in the
 //! [W3C recommendation](https://www.w3.org/TR/owl2-overview/#Syntaxes).
 
+pub mod obo;
 pub mod ofn;
 pub mod omn;
 pub mod owx;
@@ -20,6 +21,7 @@ pub enum ResourceType {
     OWX,
     RDF,
     OMN,
+    OBO,
 }
 
 /// The input format to use when parsing an ontology file.
@@ -30,6 +32,7 @@ pub enum InputFormat {
     OFN,
     OWX,
     OMN,
+    OBO,
     /// An RDF-family format. `None` means detect the sub-format from the
     /// extension; `Some` pins a specific serialization.
     Rdf(Option<oxrdfio::RdfFormat>),
@@ -38,7 +41,7 @@ pub enum InputFormat {
 impl std::str::FromStr for InputFormat {
     type Err = ();
 
-    /// Accepts `"guess"`, `"ofn"`, `"owx"`, `"omn"`, and any extension
+    /// Accepts `"guess"`, `"ofn"`, `"owx"`, `"omn"`, `"obo"`, and any extension
     /// recognised by [`oxrdfio::RdfFormat::from_extension`] plus `"owl"`.
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
@@ -46,6 +49,7 @@ impl std::str::FromStr for InputFormat {
             "ofn" => Ok(Self::OFN),
             "owx" => Ok(Self::OWX),
             "omn" => Ok(Self::OMN),
+            "obo" => Ok(Self::OBO),
             "owl" => Ok(Self::Rdf(Some(oxrdfio::RdfFormat::RdfXml))),
             other => oxrdfio::RdfFormat::from_extension(other)
                 .map(|f| Self::Rdf(Some(f)))
@@ -60,6 +64,7 @@ pub enum ParserOutput<A: ForIRI, AA: ForIndex<A>> {
     OWXParser(SetOntology<A>, PrefixMapping),
     RDFParser(ConcreteRDFOntology<A, AA>, IncompleteParse<A>),
     OMNParser(SetOntology<A>, PrefixMapping),
+    OBOParser(SetOntology<A>, PrefixMapping),
 }
 
 impl<A: ForIRI, AA: ForIndex<A>> ParserOutput<A, AA> {
@@ -69,6 +74,7 @@ impl<A: ForIRI, AA: ForIndex<A>> ParserOutput<A, AA> {
             ParserOutput::OWXParser(..) => ResourceType::OWX,
             ParserOutput::RDFParser(..) => ResourceType::RDF,
             ParserOutput::OMNParser(..) => ResourceType::OMN,
+            ParserOutput::OBOParser(..) => ResourceType::OBO,
         }
     }
 
@@ -86,6 +92,10 @@ impl<A: ForIRI, AA: ForIndex<A>> ParserOutput<A, AA> {
 
     pub fn omn(sop: (SetOntology<A>, PrefixMapping)) -> ParserOutput<A, AA> {
         ParserOutput::OMNParser(sop.0, sop.1)
+    }
+
+    pub fn obo(sop: (SetOntology<A>, PrefixMapping)) -> ParserOutput<A, AA> {
+        ParserOutput::OBOParser(sop.0, sop.1)
     }
 }
 
@@ -156,6 +166,7 @@ impl<A: ForIRI, AA: ForIndex<A>> ParserOutput<A, AA> {
                 (o.into(), None, if i.is_complete() { None } else { Some(i) })
             }
             ParserOutput::OMNParser(o, m) => (o, Some(m), None),
+            ParserOutput::OBOParser(o, m) => (o, Some(m), None),
         }
     }
 }
@@ -167,6 +178,7 @@ impl<A: ForIRI, AA: ForIndex<A>> From<ParserOutput<A, AA>> for SetOntology<A> {
             ParserOutput::OWXParser(so, _) => so,
             ParserOutput::RDFParser(rdfo, _) => rdfo.into(),
             ParserOutput::OMNParser(so, _) => so,
+            ParserOutput::OBOParser(so, _) => so,
         }
     }
 }
@@ -178,6 +190,7 @@ impl<A: ForIRI, AA: ForIndex<A>> From<ParserOutput<A, AA>> for ComponentMappedOn
             ParserOutput::OWXParser(so, _) => so.into(),
             ParserOutput::RDFParser(rdfo, _) => rdfo.into(),
             ParserOutput::OMNParser(so, _) => so.into(),
+            ParserOutput::OBOParser(so, _) => so.into(),
         }
     }
 }
@@ -189,7 +202,7 @@ impl<A: ForIRI, AA: ForIndex<A>> From<ParserOutput<A, AA>> for ComponentMappedOn
 /// by Michel Dumontier et al., used under the MIT licence.
 ///
 /// Returns `(ResourceType, rdf_format)` where `rdf_format` is set for RDF
-/// variants (RDF/XML, Turtle, N-Triples) and `None` for OWX, OFN, and OMN.
+/// variants (RDF/XML, Turtle, N-Triples) and `None` for OWX, OFN, OMN, and OBO.
 /// Returns `None` when the format cannot be determined from the content.
 pub fn detect_format(bytes: &[u8]) -> Option<(ResourceType, Option<oxrdfio::RdfFormat>)> {
     let s = String::from_utf8_lossy(bytes);
@@ -235,6 +248,15 @@ pub fn detect_format(bytes: &[u8]) -> Option<(ResourceType, Option<oxrdfio::RdfF
         }
         if l.starts_with("Prefix(") || l.starts_with("Ontology(") {
             return Some((ResourceType::OFN, None));
+        }
+        // OBO flat-file: the conventional first line is `format-version:`, but a
+        // header-less document may open directly with a stanza header.
+        if l.starts_with("format-version:")
+            || l.starts_with("[Term]")
+            || l.starts_with("[Typedef]")
+            || l.starts_with("[Instance]")
+        {
+            return Some((ResourceType::OBO, None));
         }
         break;
     }
@@ -328,8 +350,19 @@ mod tests {
     }
 
     #[test]
+    fn detect_format_obo() {
+        let (rt, fmt) = super::detect_format(b"format-version: 1.4\n[Term]").unwrap();
+        assert!(matches!(rt, super::ResourceType::OBO));
+        assert_eq!(fmt, None);
+
+        // A header-less document opening on a stanza is still OBO.
+        let (rt, _) = super::detect_format(b"[Term]\nid: GO:0008150\n").unwrap();
+        assert!(matches!(rt, super::ResourceType::OBO));
+    }
+
+    #[test]
     fn detect_format_unknown() {
-        assert!(super::detect_format(b"format-version: 1.4\n[Term]").is_none());
+        assert!(super::detect_format(b"lorem ipsum dolor\n").is_none());
     }
 
     #[test]
