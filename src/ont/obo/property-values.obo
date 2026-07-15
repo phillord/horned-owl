@@ -1,0 +1,7 @@
+format-version: 1.2
+ontology: test
+
+[Term]
+id: GO:0001
+property_value: RO:0002211 GO:0002
+property_value: ex:height "12.5" xsd:float

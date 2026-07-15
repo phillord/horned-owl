@@ -1,0 +1,15 @@
+format-version: 1.2
+ontology: test
+
+[Term]
+id: GO:0001
+name: regulation
+intersection_of: GO:0002
+intersection_of: part_of GO:0003
+
+[Term]
+id: GO:0010
+equivalent_to: GO:0011
+disjoint_from: GO:0012
+union_of: GO:0013
+union_of: GO:0014

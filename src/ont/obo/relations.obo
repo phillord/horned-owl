@@ -1,0 +1,14 @@
+format-version: 1.2
+ontology: test
+
+[Typedef]
+id: RO:0002211
+name: regulates
+namespace: external
+def: "A regulates B." [GOC:x]
+is_transitive: true
+is_symmetric: false
+domain: GO:0008150
+range: GO:0008150
+inverse_of: RO:0002212
+is_a: RO:0002211

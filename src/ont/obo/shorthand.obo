@@ -1,0 +1,11 @@
+format-version: 1.2
+ontology: test
+
+[Typedef]
+id: part_of
+name: part of
+xref: BFO:0000050
+
+[Term]
+id: GO:0001
+relationship: part_of GO:0002
