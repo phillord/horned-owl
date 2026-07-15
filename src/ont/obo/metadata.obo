@@ -1,0 +1,11 @@
+format-version: 1.2
+ontology: t
+
+[Typedef]
+id: mytag
+name: my tag
+is_metadata_tag: true
+
+[Term]
+id: GO:0001
+relationship: mytag GO:0003
