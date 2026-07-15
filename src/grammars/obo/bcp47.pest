@@ -1,0 +1,54 @@
+// Annex III: Language Tag Grammar from BCP 47
+// (source: https://www.rfc-editor.org/bcp/bcp47.txt)
+
+BCP47_LanguageTag = ${ BCP47_LangTag | BCP47_PrivateUse | BCP47_GrandFathered }
+BCP47_LangTag     = ${
+    BCP47_Language ~ ("-" ~ BCP47_Script)? ~ ("-" ~ BCP47_Region)? ~ ("-" ~ BCP47_Variant)* ~ ("-" ~ BCP47_Extension)* ~ ("-" ~ BCP47_PrivateUse)?
+}
+
+BCP47_Language = ${
+    ASCII_ALPHA{2, 3} ~ ("-" ~ BCP47_ExtLang)?
+  | ASCII_ALPHA{4}
+  | ASCII_ALPHA{5}
+}
+
+BCP47_ExtLang       = ${ ASCII_ALPHA{3} ~ ("-" ~ ASCII_ALPHA{3}){,2} }
+BCP47_Script        = ${ ASCII_ALPHA{4} }
+BCP47_Region        = ${ ASCII_ALPHA{2} | ASCII_DIGIT{3} }
+BCP47_Variant       = ${ ASCII_ALPHANUMERIC{5, 8} | ASCII_DIGIT ~ ASCII_ALPHANUMERIC{3} }
+BCP47_Extension     = ${ BCP47_Singleton ~ ("-" ~ ASCII_ALPHANUMERIC{2, 8})+ }
+BCP47_Singleton     = @{ ASCII_DIGIT | '\u{41}'..'\u{57}' | '\u{59}'..'\u{5A}' | '\u{61}'..'\u{77}' | '\u{79}'..'\u{7A}' }
+BCP47_PrivateUse    = ${ "x" ~ ("-" ~ ASCII_ALPHANUMERIC{1, 8})+ }
+BCP47_GrandFathered = ${ BCP47_Irregular | BCP47_Regular }
+
+BCP47_Irregular = ${
+    "en-GB-oed"
+  | "i-ami"
+  | "i-bnn"
+  | "i-default"
+  | "i-enochian"
+  | "i-hak"
+  | "i-klingon"
+  | "i-lux"
+  | "i-mingo"
+  | "i-navajo"
+  | "i-pwn"
+  | "i-tao"
+  | "i-tay"
+  | "i-tsu"
+  | "sgn-BE-FR"
+  | "sgn-BE-NL"
+  | "sgn-CH-DE"
+}
+
+BCP47_Regular = ${
+    "art-lojban"
+  | "cel-gaulish"
+  | "no-bok"
+  | "no-nyn"
+  | "zh-guoyu"
+  | "zh-hakka"
+  | "zh-min"
+  | "zh-min-nan"
+  | "zh-xiang"
+}
