@@ -160,6 +160,7 @@ vocabulary_type! {
 
 vocabulary_type! {
     RDFS, IRI<String>, METARDFS, [
+        (RDFS, Class, false),
         (RDFS, Comment, true),
         (RDFS, Datatype, false),
         (RDFS, Domain, true),
@@ -541,6 +542,10 @@ mod tests {
 
     #[test]
     fn test_meta_rdfs() {
+        assert_eq!(
+            RDFS::Class.as_ref(),
+            "http://www.w3.org/2000/01/rdf-schema#Class"
+        );
         assert_eq!(
             RDFS::Comment.as_ref(),
             "http://www.w3.org/2000/01/rdf-schema#comment"
