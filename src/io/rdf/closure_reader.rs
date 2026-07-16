@@ -123,14 +123,18 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> ClosureOntologyParse
         let si: &SetIndex<A, AA> = o.as_ref();
         let id = si.the_ontology_id_or_default();
 
+        // Use the declared ontology IRI (or version IRI) as the storage key;
+        // fall back to the document IRI for anonymous ontologies so they are
+        // still stored and can be returned by `as_ontology_vec_and_incomplete`.
+        let storage_iri = id
+            .clone()
+            .viri_or_iri()
+            .unwrap_or_else(|| new_doc_iri.clone());
+
         // Stuff the iri of this ontology, if we have one into a vec
         let mut res = match id.clone().viri_or_iri() {
-            Some(resolved_iri) => {
-                vec![resolved_iri]
-            }
-            _ => {
-                vec![]
-            }
+            Some(resolved_iri) => vec![resolved_iri],
+            _ => vec![],
         };
 
         // Add the ontology that we have parsed into import_map. An
@@ -138,16 +142,13 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> ClosureOntologyParse
         // or the version IRI of an Ontology, so if both are present
         // and differ, record the plain IRI as an alias of the
         // version IRI so that either can be used to find this entry.
-        if let Some(resolved_iri) = id.clone().viri_or_iri() {
-            if let (Some(iri), Some(viri)) = (id.iri, id.viri)
-                && iri != viri
-            {
-                self.alias.insert(iri, viri);
-            }
-            self.import_map
-                .insert(resolved_iri.clone(), imports.clone());
-            self.op.insert(resolved_iri, p);
+        if let (Some(iri), Some(viri)) = (id.iri, id.viri)
+            && iri != viri
+        {
+            self.alias.insert(iri, viri);
         }
+        self.import_map.insert(storage_iri.clone(), imports.clone());
+        self.op.insert(storage_iri, p);
 
         // Now parse all of the imported ontologies as well
         for import in imports {
@@ -243,7 +244,12 @@ pub fn read<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>>(
     }
 
     let res = c.as_ontology_vec_and_incomplete();
-    Ok(res.into_iter().next().unwrap())
+    res.into_iter().next().ok_or_else(|| {
+        HornedError::ValidityError(
+            "RDF document contains no named owl:Ontology".to_string(),
+            crate::error::Location::Unknown,
+        )
+    })
 }
 
 // Returns the import closure of an Ontology and IncompleteParse
