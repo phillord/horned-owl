@@ -43,3 +43,8 @@ pub mod ontology;
 pub mod resolve;
 pub mod visitor;
 pub mod vocab;
+
+/// The version of this horned-owl library crate, baked in at compile
+/// time. Exposed so consumers (notably the `horned-bin` CLIs) can report
+/// exactly which horned-owl source a binary was compiled from.
+pub const VERSION: &str = env!("CARGO_PKG_VERSION");
