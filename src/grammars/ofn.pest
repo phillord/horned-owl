@@ -82,9 +82,25 @@ CARET    = _{ "^" }
 
 //
 NonNegativeInteger = @{ ASCII_DIGIT+ }
-LanguageTag        = ${ "@" ~ BCP47_LanguageTag }
+// The concrete-syntax LANGTAG production shared by Turtle/SPARQL/OWL 2 FS:
+// `@ [a-zA-Z]+ ('-' [a-zA-Z0-9]+)*`. The full BCP47 grammar is not used here
+// because, as a PEG, its optional 3-alpha `extlang` subtag greedily eats the
+// first three letters of a 4-alpha `script` subtag — mis-parsing well-formed
+// tags like `zh-hans` as `zh-han` + stray `s`. BCP47 well-formedness is a
+// semantic constraint on the tag, not part of this lexical production.
+LanguageTag        = ${ "@" ~ ASCII_ALPHA+ ~ ("-" ~ ASCII_ALPHANUMERIC+)* }
 QuotedString       = ${ "\"" ~ (!"\"" ~ ("\\\\" | "\\\"" | ANY))* ~ "\"" }
-NodeID             = _{ SPARQL_BlankNodeLabel }
+// A node id is the spec's `_:`-prefixed blank node label, or the bare form
+// OWLAPI/ROBOT emit for anonymous individuals (e.g. `anon000001`). `NodeID` is
+// only reached in anonymous-individual positions (annotation subject/value,
+// individual), where a colon-free token is unambiguous: abbreviated IRIs always
+// contain `:` (excluded by the `!":"` guard) and full IRIs are `<>`-delimited.
+NodeID             = _{ SPARQL_BlankNodeLabel | OwlapiNodeID }
+// The trailing `!("(" | ":")` keeps this bare form from swallowing a following
+// `:` (an abbreviated IRI) or a functional keyword used in individual position
+// (e.g. `Variable(...)`, `ObjectSomeValuesFrom(...)`): a real node id is only
+// ever followed by whitespace or `)`, never by `(` or `:`.
+OwlapiNodeID       = @{ ASCII_ALPHA ~ ASCII_ALPHANUMERIC* ~ !("(" | ":") }
 
 //
 
