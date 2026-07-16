@@ -30,8 +30,8 @@ use horned_owl::model::{
     AnnotatedComponent, AnnotationProperty, Class, Component, DataProperty, Datatype,
     DeclareAnnotationProperty, DeclareClass, DeclareDataProperty, DeclareDatatype,
     DeclareNamedIndividual, DeclareObjectProperty, DifferentIndividuals, DisjointClasses,
-    AnonymousIndividual, EquivalentClasses, NamedIndividual, ObjectProperty, RcStr,
-    SameIndividual, IRI,
+    AnonymousIndividual, ClassExpression, EquivalentClasses, Individual, NamedIndividual,
+    ObjectProperty, RcStr, SameIndividual, IRI,
 };
 use horned_owl::ontology::set::SetOntology;
 use horned_owl::visitor::immutable::{Visit, Walk};
@@ -41,9 +41,10 @@ pub fn categorize(d: RawDiff, src: &SetOntology<RcStr>, _rt: &SetOntology<RcStr>
     let mut out = Vec::new();
     let mut lost_paired = vec![false; d.only_in_source.len()];
 
-    // Built once, up front: rule 2 consults this for every gained
-    // declaration, so it must not be recomputed per item.
+    // Built once, up front: rules 2 and 3 consult these for every gained
+    // item, so they must not be recomputed per item.
     let used = used_entities(src);
+    let nary = nary_members(src);
 
     // Rule 1 pairing index: component (annotations stripped — two
     // `AnnotatedComponent`s with the same `.component` but different
@@ -76,7 +77,7 @@ pub fn categorize(d: RawDiff, src: &SetOntology<RcStr>, _rt: &SetOntology<RcStr>
             continue;
         }
         // Rule 3: NaryReshape.
-        if is_nary_reshape(g, src) {
+        if is_nary_reshape(g, &nary) {
             out.push(item(Side::RoundTrip, g, Category::NaryReshape));
             continue;
         }
@@ -215,47 +216,66 @@ fn is_inferred_declaration(gained: &AnnotatedComponent<RcStr>, used: &UsedEntiti
     }
 }
 
-/// If `c` is one of the four binary-capable n-ary axiom kinds, return a
-/// variant tag plus the `Debug` string of each member (used as a
-/// content-equality key that is robust to member ordering).
-fn nary_key_and_members(c: &Component<RcStr>) -> Option<(&'static str, Vec<String>)> {
-    match c {
-        Component::EquivalentClasses(EquivalentClasses(v)) => Some((
-            "EquivalentClasses",
-            v.iter().map(|x| format!("{x:?}")).collect(),
-        )),
-        Component::DisjointClasses(DisjointClasses(v)) => Some((
-            "DisjointClasses",
-            v.iter().map(|x| format!("{x:?}")).collect(),
-        )),
-        Component::SameIndividual(SameIndividual(v)) => Some((
-            "SameIndividual",
-            v.iter().map(|x| format!("{x:?}")).collect(),
-        )),
-        Component::DifferentIndividuals(DifferentIndividuals(v)) => Some((
-            "DifferentIndividuals",
-            v.iter().map(|x| format!("{x:?}")).collect(),
-        )),
-        _ => None,
+/// The member sets of every n-ary axiom in the source ontology, bucketed
+/// by variant. Built once per `categorize` call; rule 3 then answers each
+/// gained binary axiom with two `contains` probes per source axiom of the
+/// same variant, instead of re-Debug-formatting the whole ontology.
+#[derive(Default)]
+struct NaryMembers<'a> {
+    equivalent_classes: Vec<BTreeSet<&'a ClassExpression<RcStr>>>,
+    disjoint_classes: Vec<BTreeSet<&'a ClassExpression<RcStr>>>,
+    same_individual: Vec<BTreeSet<&'a Individual<RcStr>>>,
+    different_individuals: Vec<BTreeSet<&'a Individual<RcStr>>>,
+}
+
+fn nary_members(src: &SetOntology<RcStr>) -> NaryMembers<'_> {
+    let mut n = NaryMembers::default();
+    for c in src.iter() {
+        match &c.component {
+            Component::EquivalentClasses(EquivalentClasses(v)) => {
+                n.equivalent_classes.push(v.iter().collect())
+            }
+            Component::DisjointClasses(DisjointClasses(v)) => {
+                n.disjoint_classes.push(v.iter().collect())
+            }
+            Component::SameIndividual(SameIndividual(v)) => {
+                n.same_individual.push(v.iter().collect())
+            }
+            Component::DifferentIndividuals(DifferentIndividuals(v)) => {
+                n.different_individuals.push(v.iter().collect())
+            }
+            _ => {}
+        }
     }
+    n
+}
+
+/// True iff `v` has exactly 2 members and some source member set of the
+/// same variant contains both.
+fn binary_subset<T: Ord>(v: &[T], sets: &[BTreeSet<&T>]) -> bool {
+    if v.len() != 2 {
+        return false;
+    }
+    sets.iter().any(|s| s.contains(&v[0]) && s.contains(&v[1]))
 }
 
 /// Rule 3: `gained` is a binary EquivalentClasses/DisjointClasses/
 /// SameIndividual/DifferentIndividuals axiom whose 2 members are a subset
 /// of a same-variant axiom already in `src`.
-fn is_nary_reshape(gained: &AnnotatedComponent<RcStr>, src: &SetOntology<RcStr>) -> bool {
-    let Some((kind, members)) = nary_key_and_members(&gained.component) else {
-        return false;
-    };
-    if members.len() != 2 {
-        return false;
+fn is_nary_reshape(gained: &AnnotatedComponent<RcStr>, nary: &NaryMembers) -> bool {
+    match &gained.component {
+        Component::EquivalentClasses(EquivalentClasses(v)) => {
+            binary_subset(v, &nary.equivalent_classes)
+        }
+        Component::DisjointClasses(DisjointClasses(v)) => {
+            binary_subset(v, &nary.disjoint_classes)
+        }
+        Component::SameIndividual(SameIndividual(v)) => binary_subset(v, &nary.same_individual),
+        Component::DifferentIndividuals(DifferentIndividuals(v)) => {
+            binary_subset(v, &nary.different_individuals)
+        }
+        _ => false,
     }
-    let gained_set: BTreeSet<String> = members.into_iter().collect();
-    src.iter().any(|s| {
-        nary_key_and_members(&s.component)
-            .map(|(k, m)| k == kind && gained_set.is_subset(&m.into_iter().collect()))
-            .unwrap_or(false)
-    })
 }
 
 #[cfg(test)]
