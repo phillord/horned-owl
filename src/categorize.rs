@@ -30,28 +30,40 @@ use horned_owl::model::{
     AnnotatedComponent, AnnotationProperty, Class, Component, DataProperty, Datatype,
     DeclareAnnotationProperty, DeclareClass, DeclareDataProperty, DeclareDatatype,
     DeclareNamedIndividual, DeclareObjectProperty, DifferentIndividuals, DisjointClasses,
-    EquivalentClasses, NamedIndividual, ObjectProperty, RcStr, SameIndividual,
+    EquivalentClasses, NamedIndividual, ObjectProperty, RcStr, SameIndividual, IRI,
 };
 use horned_owl::ontology::set::SetOntology;
-use std::collections::BTreeSet;
+use horned_owl::visitor::immutable::{Visit, Walk};
+use std::collections::{BTreeSet, HashMap, HashSet, VecDeque};
 
 pub fn categorize(d: RawDiff, src: &SetOntology<RcStr>, _rt: &SetOntology<RcStr>) -> Vec<DiffItem> {
     let mut out = Vec::new();
     let mut lost_paired = vec![false; d.only_in_source.len()];
+
+    // Built once, up front: rule 2 consults this for every gained
+    // declaration, so it must not be recomputed per item.
+    let used = used_entities(src);
 
     // key = component with its annotations stripped (Debug of component
     // sans ann set). Two `AnnotatedComponent`s with the same `.component`
     // but different `.ann` share a key.
     let key = |c: &AnnotatedComponent<RcStr>| format!("{:?}", c.component);
 
+    // Rule 1 pairing index: key -> lost-item indices with that key, in
+    // index order, consumed front-to-back as gained items pair with them.
+    // Each key is formatted exactly once per item; the old per-comparison
+    // `find` reformatted both sides for every (gained, lost) pair.
+    let mut lost_by_key: HashMap<String, VecDeque<usize>> = HashMap::new();
+    for (i, s) in d.only_in_source.iter().enumerate() {
+        lost_by_key.entry(key(s)).or_default().push_back(i);
+    }
+
     for g in &d.only_in_roundtrip {
         // Rule 1: pair with an unpaired lost item that shares the
         // annotation-stripped key. Equal `.ann` sets -> benign
         // AnnotationNormalization; differing `.ann` sets -> a real
         // AnnotationLoss.
-        if let Some(i) = (0..d.only_in_source.len())
-            .find(|&i| !lost_paired[i] && key(&d.only_in_source[i]) == key(g))
-        {
+        if let Some(i) = lost_by_key.get_mut(&key(g)).and_then(|q| q.pop_front()) {
             lost_paired[i] = true;
             let cat = if d.only_in_source[i].ann == g.ann {
                 Category::AnnotationNormalization
@@ -63,7 +75,7 @@ pub fn categorize(d: RawDiff, src: &SetOntology<RcStr>, _rt: &SetOntology<RcStr>
             continue;
         }
         // Rule 2: InferredDeclaration.
-        if is_inferred_declaration(g, src) {
+        if is_inferred_declaration(g, &used) {
             out.push(item(Side::RoundTrip, g, Category::InferredDeclaration));
             continue;
         }
@@ -124,58 +136,81 @@ fn is_declaration(c: &Component<RcStr>) -> bool {
     )
 }
 
-/// If `c` is a `Declare*` axiom, extract the declared entity's IRI string
-/// plus the Rust type name of its entity wrapper ("Class", "ObjectProperty",
-/// ...) — that name doubles as the *matching-kind* marker used by
-/// `is_inferred_declaration` because horned-owl's derived `Debug` nests the
-/// wrapper's own name around the IRI (e.g. `Class(Class(IRI("...")))` for a
-/// `ClassExpression::Class`).
-fn declared_entity(c: &Component<RcStr>) -> Option<(String, &'static str)> {
-    match c {
-        Component::DeclareClass(DeclareClass(Class(iri))) => {
-            Some((iri.as_ref().to_string(), "Class"))
-        }
-        Component::DeclareObjectProperty(DeclareObjectProperty(ObjectProperty(iri))) => {
-            Some((iri.as_ref().to_string(), "ObjectProperty"))
-        }
-        Component::DeclareAnnotationProperty(DeclareAnnotationProperty(AnnotationProperty(
-            iri,
-        ))) => Some((iri.as_ref().to_string(), "AnnotationProperty")),
-        Component::DeclareDataProperty(DeclareDataProperty(DataProperty(iri))) => {
-            Some((iri.as_ref().to_string(), "DataProperty"))
-        }
-        Component::DeclareNamedIndividual(DeclareNamedIndividual(NamedIndividual(iri))) => {
-            Some((iri.as_ref().to_string(), "NamedIndividual"))
-        }
-        Component::DeclareDatatype(DeclareDatatype(Datatype(iri))) => {
-            Some((iri.as_ref().to_string(), "Datatype"))
-        }
-        _ => None,
+/// The set of IRIs used, per entity kind, by non-declaration components in
+/// the source ontology. Built with a single `Walk` pass over `src`; each
+/// gained declaration is then a constant-time lookup. This replaces a
+/// per-declaration Debug-string scan over the whole source ontology, which
+/// went quadratic on inputs that gain a declaration per entity on
+/// round-trip (RDFS-heavy ontologies like GEXO: ~166K gained declarations
+/// x ~1M source components).
+#[derive(Default)]
+struct UsedEntities {
+    class: HashSet<IRI<RcStr>>,
+    object_property: HashSet<IRI<RcStr>>,
+    annotation_property: HashSet<IRI<RcStr>>,
+    data_property: HashSet<IRI<RcStr>>,
+    named_individual: HashSet<IRI<RcStr>>,
+    datatype: HashSet<IRI<RcStr>>,
+}
+
+impl Visit<RcStr> for UsedEntities {
+    fn visit_class(&mut self, c: &Class<RcStr>) {
+        self.class.insert(c.0.clone());
+    }
+    fn visit_object_property(&mut self, p: &ObjectProperty<RcStr>) {
+        self.object_property.insert(p.0.clone());
+    }
+    fn visit_annotation_property(&mut self, p: &AnnotationProperty<RcStr>) {
+        self.annotation_property.insert(p.0.clone());
+    }
+    fn visit_data_property(&mut self, p: &DataProperty<RcStr>) {
+        self.data_property.insert(p.0.clone());
+    }
+    fn visit_named_individual(&mut self, i: &NamedIndividual<RcStr>) {
+        self.named_individual.insert(i.0.clone());
+    }
+    fn visit_datatype(&mut self, d: &Datatype<RcStr>) {
+        self.datatype.insert(d.0.clone());
     }
 }
 
+/// Walk every non-declaration component in `src` (component only, not its
+/// annotations — a use inside an axiom annotation doesn't justify a
+/// declaration) and collect the entity IRIs it uses, in their typed
+/// positions, into per-kind sets.
+fn used_entities(src: &SetOntology<RcStr>) -> UsedEntities {
+    let mut walk = Walk::new(UsedEntities::default());
+    for c in src.iter() {
+        if !is_declaration(&c.component) {
+            walk.component(&c.component);
+        }
+    }
+    walk.into_visit()
+}
+
 /// Rule 2: `gained` is a `Declare*` whose declared entity is used, with a
-/// matching entity kind, by some non-declaration component in `src`.
-///
-/// "Used with a matching kind" is checked pragmatically: horned-owl's
-/// derived `Debug` renders every occurrence of an entity in its typed
-/// position as `<Kind>(IRI("<iri>"))` (e.g. a class used in a
-/// `SubClassOf` appears as `Class(Class(IRI("...")))`, which contains the
-/// substring `Class(IRI("..."))`; a `NamedIndividual` used in a
-/// `ClassAssertion` appears as `Named(NamedIndividual(IRI("...")))`, which
-/// contains `NamedIndividual(IRI("..."))`). Searching for that
-/// kind-qualified substring across `src`'s non-declaration components thus
-/// finds "used with matching kind" occurrences and naturally excludes a
-/// punning/kind-mismatch (the substring for the *wrong* kind wrapper never
-/// appears) as well as declarations already present in `src` (excluded by
-/// the `is_declaration` filter — a declaration is not a use).
-fn is_inferred_declaration(gained: &AnnotatedComponent<RcStr>, src: &SetOntology<RcStr>) -> bool {
-    let Some((iri, kind)) = declared_entity(&gained.component) else {
-        return false;
-    };
-    let needle = format!("{kind}(IRI({iri:?}))");
-    src.iter()
-        .any(|c| !is_declaration(&c.component) && format!("{:?}", c.component).contains(&needle))
+/// matching entity kind, by some non-declaration component in `src`. The
+/// per-kind sets keep a punning/kind-mismatch out: an IRI used only as a
+/// Class never appears in `named_individual`, so a gained
+/// `DeclareNamedIndividual` for it is not treated as inferred.
+fn is_inferred_declaration(gained: &AnnotatedComponent<RcStr>, used: &UsedEntities) -> bool {
+    match &gained.component {
+        Component::DeclareClass(DeclareClass(Class(iri))) => used.class.contains(iri),
+        Component::DeclareObjectProperty(DeclareObjectProperty(ObjectProperty(iri))) => {
+            used.object_property.contains(iri)
+        }
+        Component::DeclareAnnotationProperty(DeclareAnnotationProperty(AnnotationProperty(
+            iri,
+        ))) => used.annotation_property.contains(iri),
+        Component::DeclareDataProperty(DeclareDataProperty(DataProperty(iri))) => {
+            used.data_property.contains(iri)
+        }
+        Component::DeclareNamedIndividual(DeclareNamedIndividual(NamedIndividual(iri))) => {
+            used.named_individual.contains(iri)
+        }
+        Component::DeclareDatatype(DeclareDatatype(Datatype(iri))) => used.datatype.contains(iri),
+        _ => false,
+    }
 }
 
 /// If `c` is one of the four binary-capable n-ary axiom kinds, return a
