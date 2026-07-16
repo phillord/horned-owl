@@ -45,18 +45,13 @@ pub fn categorize(d: RawDiff, src: &SetOntology<RcStr>, _rt: &SetOntology<RcStr>
     // declaration, so it must not be recomputed per item.
     let used = used_entities(src);
 
-    // key = component with its annotations stripped (Debug of component
-    // sans ann set). Two `AnnotatedComponent`s with the same `.component`
-    // but different `.ann` share a key.
-    let key = |c: &AnnotatedComponent<RcStr>| format!("{:?}", c.component);
-
-    // Rule 1 pairing index: key -> lost-item indices with that key, in
+    // Rule 1 pairing index: component (annotations stripped — two
+    // `AnnotatedComponent`s with the same `.component` but different
+    // `.ann` share a key) -> lost-item indices with that component, in
     // index order, consumed front-to-back as gained items pair with them.
-    // Each key is formatted exactly once per item; the old per-comparison
-    // `find` reformatted both sides for every (gained, lost) pair.
-    let mut lost_by_key: HashMap<String, VecDeque<usize>> = HashMap::new();
+    let mut lost_by_key: HashMap<&Component<RcStr>, VecDeque<usize>> = HashMap::new();
     for (i, s) in d.only_in_source.iter().enumerate() {
-        lost_by_key.entry(key(s)).or_default().push_back(i);
+        lost_by_key.entry(&s.component).or_default().push_back(i);
     }
 
     for g in &d.only_in_roundtrip {
@@ -64,7 +59,7 @@ pub fn categorize(d: RawDiff, src: &SetOntology<RcStr>, _rt: &SetOntology<RcStr>
         // annotation-stripped key. Equal `.ann` sets -> benign
         // AnnotationNormalization; differing `.ann` sets -> a real
         // AnnotationLoss.
-        if let Some(i) = lost_by_key.get_mut(&key(g)).and_then(|q| q.pop_front()) {
+        if let Some(i) = lost_by_key.get_mut(&g.component).and_then(|q| q.pop_front()) {
             lost_paired[i] = true;
             let cat = if d.only_in_source[i].ann == g.ann {
                 Category::AnnotationNormalization
