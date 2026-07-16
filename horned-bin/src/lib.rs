@@ -27,6 +27,22 @@ pub mod error {
     }
 }
 
+/// This binary's version, combined with the horned-owl library version it
+/// was compiled against -- e.g. `"2.0.0 (horned-owl 2.0.0)"`. Used as the
+/// `clap::App::version` for every horned-bin binary so `--version` reports
+/// something meaningful instead of a stale hardcoded literal (see
+/// https://github.com/phillord/horned-owl/issues/219).
+pub fn version_string() -> &'static str {
+    static VERSION: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+    VERSION.get_or_init(|| {
+        format!(
+            "{} (horned-owl {})",
+            env!("CARGO_PKG_VERSION"),
+            horned_owl::VERSION
+        )
+    })
+}
+
 /// The `oxrdfio::RdfFormat` that `extension` denotes, if any. `"owl"`
 /// is horned-owl's own long-standing alias for RDF/XML; every other
 /// extension is whatever [`oxrdfio::RdfFormat::from_extension`]

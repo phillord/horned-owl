@@ -23,7 +23,7 @@ fn main() -> Result<(), HornedError> {
 fn app() -> App<'static> {
     horned_bin::config::parser_app_global(
         App::new("horned")
-            .version("0.3")
+            .version(horned_bin::version_string())
             .about("Command Line tools for OWL Ontologies")
             .author("Filippo De Bortoli <filippo.de_bortoli@tu-dresden.de>,\nPhillip Lord <phillip.lord@newcastle.ac.uk ")
             .subcommand_required(true)

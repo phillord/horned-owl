@@ -19,7 +19,7 @@ fn main() -> Result<(), HornedError> {
 
 pub(crate) fn app(name: &str) -> App<'static> {
     App::new(name)
-        .version("0.1")
+        .version(horned_bin::version_string())
         .about("Parse an OWL File")
         .author("Phillip Lord")
         .arg(

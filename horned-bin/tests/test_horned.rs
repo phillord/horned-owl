@@ -59,3 +59,35 @@ fn integration_local_only_not_available_on_standalone_binary()
 
     Ok(())
 }
+
+#[test]
+fn integration_version_reports_horned_owl_version() -> Result<(), Box<dyn std::error::Error>> {
+    let mut cmd = Command::new(cargo::cargo_bin!("horned"));
+    cmd.arg("--version");
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("horned-owl"))
+        .stdout(predicate::str::contains(env!("CARGO_PKG_VERSION")));
+
+    Ok(())
+}
+
+#[test]
+fn integration_version_reports_on_standalone_binary_and_subcommand()
+-> Result<(), Box<dyn std::error::Error>> {
+    let mut standalone = Command::new(cargo::cargo_bin!("horned-parse"));
+    standalone.arg("--version");
+    standalone
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("horned-owl"));
+
+    let mut subcommand = Command::new(cargo::cargo_bin!("horned"));
+    subcommand.arg("big").arg("--version");
+    subcommand
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("horned-owl"));
+
+    Ok(())
+}
