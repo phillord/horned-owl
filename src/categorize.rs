@@ -30,7 +30,8 @@ use horned_owl::model::{
     AnnotatedComponent, AnnotationProperty, Class, Component, DataProperty, Datatype,
     DeclareAnnotationProperty, DeclareClass, DeclareDataProperty, DeclareDatatype,
     DeclareNamedIndividual, DeclareObjectProperty, DifferentIndividuals, DisjointClasses,
-    EquivalentClasses, NamedIndividual, ObjectProperty, RcStr, SameIndividual, IRI,
+    AnonymousIndividual, EquivalentClasses, NamedIndividual, ObjectProperty, RcStr,
+    SameIndividual, IRI,
 };
 use horned_owl::ontology::set::SetOntology;
 use horned_owl::visitor::immutable::{Visit, Walk};
@@ -104,19 +105,25 @@ fn item(side: Side, c: &AnnotatedComponent<RcStr>, category: Category) -> DiffIt
     }
 }
 
+/// `Visit` that flags whether the walk reached an `AnonymousIndividual`
+/// anywhere — as an individual operand, nested inside a class expression,
+/// or as an annotation subject/value.
+#[derive(Default)]
+struct HasAnon(bool);
+
+impl Visit<RcStr> for HasAnon {
+    fn visit_anonymous_individual(&mut self, _: &AnonymousIndividual<RcStr>) {
+        self.0 = true;
+    }
+}
+
 /// Rule 4: any component (including its annotations) that still mentions an
 /// anonymous individual after rules 1-3 have failed to match is a
-/// canonicalization residual, not a genuine defect. Detected pragmatically
-/// via the `AnonymousIndividual(` marker that the `AnonymousIndividual`
-/// wrapper struct's derived `Debug` always emits, regardless of position:
-/// individual operand (`Individual::Anonymous(AnonymousIndividual(..))`) or
-/// annotation value/subject
-/// (`AnnotationValue::AnonymousIndividual(AnonymousIndividual(..))`,
-/// `AnnotationSubject::AnonymousIndividual(AnonymousIndividual(..))`).
+/// canonicalization residual, not a genuine defect.
 fn fallback_category(c: &AnnotatedComponent<RcStr>) -> Category {
-    // Check both component and annotations for anonymous individuals
-    let debug_str = format!("{:?}", c);
-    if debug_str.contains("AnonymousIndividual(") {
+    let mut walk = Walk::new(HasAnon::default());
+    walk.annotated_component(c);
+    if walk.into_visit().0 {
         Category::BlankNodeRelabel
     } else {
         Category::Unknown
