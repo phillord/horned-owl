@@ -321,10 +321,17 @@ fn is_blank(bytes: &[u8]) -> bool {
 }
 
 fn is_owl(res: &ResolveResult) -> bool {
-    if let Bound(ns) = res {
-        ns.as_ref() == OWL.as_bytes()
-    } else {
-        false
+    match res {
+        Bound(ns) => ns.as_ref() == OWL.as_bytes(),
+        // No `xmlns` was declared anywhere in scope for this unprefixed
+        // element -- assume OWL rather than rejecting the document, since
+        // that's what every real-world OWL/XML document that omits the
+        // (redundant, given `<Ontology>` is unambiguously OWL) default
+        // namespace declaration means in practice. `Unknown` (an explicit
+        // but undeclared prefix) is left unrecognised, since that's a
+        // genuine error rather than an omission.
+        ResolveResult::Unbound => true,
+        ResolveResult::Unknown(_) => false,
     }
 }
 
@@ -2513,6 +2520,41 @@ pub mod test {
         let r = read(&mut ont_s.as_bytes());
 
         assert!(r.is_err());
+    }
+
+    // https://github.com/phillord/horned-owl/issues/49 -- a document with no
+    // `xmlns` declared anywhere (so unprefixed elements resolve to
+    // `ResolveResult::Unbound`, not `Bound(OWL)`) used to be silently skipped
+    // in its entirety, failing with an "Unexpected EoF" error instead of
+    // being read as OWL/XML.
+    #[test]
+    fn missing_default_namespace_assumes_owl() {
+        let ont_s = r##"<?xml version="1.0"?>
+<Ontology ontologyIRI="http://example.org/tea.owl">
+    <Prefix name="owl" IRI="http://www.w3.org/2002/07/owl#"/>
+    <Declaration>
+        <Class IRI="Tea"/>
+    </Declaration>
+</Ontology>"##;
+        let (ont, _) = read_ok(&mut ont_s.as_bytes());
+
+        assert_eq!(ont.i().declare_class().count(), 1);
+    }
+
+    // An explicit but undeclared prefix is a genuine error, not an omission
+    // -- it should not be assumed to be OWL the way a fully-unbound
+    // (no-xmlns-at-all) element is.
+    #[test]
+    fn unknown_prefix_is_still_an_error() {
+        let ont_s = r##"<?xml version="1.0"?>
+<foo:Ontology xmlns:foo="http://example.com/not-owl#" ontologyIRI="http://example.org/tea.owl">
+    <foo:Declaration>
+        <foo:Class IRI="Tea"/>
+    </foo:Declaration>
+</foo:Ontology>"##;
+        let r = read(&mut ont_s.as_bytes());
+
+        assert!(r.is_err(), "Expected a parse error, got {r:?}");
     }
 
     // https://github.com/phillord/horned-owl/issues/72 -- stray free text
