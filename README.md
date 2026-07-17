@@ -34,7 +34,7 @@ To use the latest version of the library in your Rust project, add the following
 ```toml
 [dependencies]
 ...
-horned-owl = "2.0.0"
+horned-owl = "2.1.0"
 ```
 
 
