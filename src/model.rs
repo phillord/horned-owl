@@ -276,7 +276,7 @@ impl<A: ForIRI> IRI<A> {
 /// different instances can be combined within a single ontology
 /// without consequences except for increased memory use.
 #[derive(Debug, Default)]
-pub struct Build<A: ForIRI>(
+pub struct Build<A>(
     RefCell<BTreeSet<IRI<A>>>,
     RefCell<BTreeSet<AnonymousIndividual<A>>>,
     // Last anon individual
