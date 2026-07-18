@@ -1,0 +1,10 @@
+error: ofn!: invalid syntax: Parsing Error:  --> 1:44
+         |
+       1 | Ontology(<http://example.org/> Declaration(
+         |                                            ^---
+         |
+         = expected Entity or Annotation
+ --> tests/ui/ofn_bad_syntax.rs:7:46
+  |
+7 |     let _onto: SetOntology<RcStr> = ofn!(&b, "Ontology(<http://example.org/> Declaration(");
+  |                                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
