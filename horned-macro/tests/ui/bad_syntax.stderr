@@ -1,0 +1,10 @@
+error: omn!: invalid syntax: Parsing Error:  --> 1:12
+         |
+       1 | Class: Foo SubClassOf
+         |            ^---
+         |
+         = expected EOI, OrKw, AndKw, SomeKw, OnlyKw, ValueKw, SelfKw, MinKw, MaxKw, ExactlyKw, GeneralAxiomBlock, Annotations, Frame, or Misc
+ --> tests/ui/bad_syntax.rs:7:46
+  |
+7 |     let _onto: SetOntology<RcStr> = omn!(&b, "Class: Foo SubClassOf");
+  |                                              ^^^^^^^^^^^^^^^^^^^^^^^
