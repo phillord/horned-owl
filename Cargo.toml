@@ -26,19 +26,21 @@ oxiri={workspace=true}
 pest = "2.7.8"
 pest_derive = "2.7.8"
 horned-pretty-rdf={workspace=true}
+horned-catalog={workspace=true}
 oxrdf={workspace=true}
 oxrdfio={workspace=true}
 ureq={version="3.3.0", optional=true}
 
 [workspace]
-members=["horned-bin", "horned-pretty-rdf"]
-default-members=[".", "horned-bin", "horned-pretty-rdf"]
+members=["horned-bin", "horned-pretty-rdf", "horned-catalog"]
+default-members=[".", "horned-bin", "horned-pretty-rdf", "horned-catalog"]
 
 [workspace.dependencies]
 indexmap="1.0.2"
 mktemp="0.5.1"
 oxiri="0.2.11"
 horned-pretty-rdf={path="./horned-pretty-rdf", version="2.0.0"}
+horned-catalog={path="./horned-catalog", version="0.1.0"}
 oxrdf="0.3.0"
 oxrdfio="0.2.0"
 

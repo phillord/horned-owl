@@ -75,6 +75,10 @@ pub enum HornedError {
     /// Import Error
     #[error("Cannot import IRI: {0}")]
     ImportError(String),
+
+    /// An error parsing or resolving against an XML catalog file
+    #[error("Catalog Error: {0}")]
+    CatalogError(#[from] horned_catalog::CatalogError),
 }
 
 macro_rules! invalid {
