@@ -191,6 +191,7 @@ pub fn resolve_iri<'a, A: ForIRI + 'a, IO: Into<Option<&'a IRI<A>>>>(
     doc_iri: IO,
     remote_body_limit: u64,
     local_only: bool,
+    catalog: Option<&horned_catalog::Catalog>,
 ) -> Result<(IRI<A>, String), HornedError> {
     let b = Build::new();
 
@@ -209,6 +210,23 @@ pub fn resolve_iri<'a, A: ForIRI + 'a, IO: Into<Option<&'a IRI<A>>>>(
         return Err(HornedError::IOError(std::io::Error::from(
             std::io::ErrorKind::NotFound,
         )));
+    }
+
+    // An explicit catalog mapping is a stronger signal than either the
+    // path-guessing below or a remote fetch, so it's consulted first.
+    // Unlike a guessed path, a catalog entry that doesn't pan out is a
+    // real error (a misconfigured catalog), not silently skipped.
+    if let Some(catalog) = catalog
+        && let Some(mapped) = catalog.resolve(iri.as_ref())
+    {
+        if !mapped.try_exists()? {
+            return Err(HornedError::ImportError(format!(
+                "catalog maps {iri} to {}, which does not exist",
+                mapped.display()
+            )));
+        }
+        let result = ::std::fs::read_to_string(&mapped)?;
+        return Ok((path_to_file_iri(&b, &mapped), result));
     }
 
     // Attempt to determine potential local locations if there is a `doc_iri`
@@ -430,8 +448,38 @@ mod test {
         let doc_iri = b.iri("file://Cargo.toml");
 
         let bikepath_str = ::std::fs::read_to_string("bikepath.md").unwrap();
-        let (_, iri_str) = resolve_iri(&i, &doc_iri, u64::MAX, false).unwrap();
+        let (_, iri_str) = resolve_iri(&i, &doc_iri, u64::MAX, false, None).unwrap();
         assert_eq!(bikepath_str, iri_str);
+    }
+
+    #[test]
+    fn test_resolve_iri_via_catalog() {
+        let b = Build::new_rc();
+        let i: IRI<_> = b.iri("http://www.example.com/bikepath.md");
+        let doc_iri = b.iri("file://Cargo.toml");
+
+        let bikepath_str = ::std::fs::read_to_string("bikepath.md").unwrap();
+        let catalog_xml = r#"<?xml version="1.0"?>
+<catalog xmlns="urn:oasis:names:tc:entity:xmlns:xml:catalog">
+  <uri name="http://www.example.com/bikepath.md" uri="bikepath.md"/>
+</catalog>"#;
+        let catalog = horned_catalog::Catalog::from_str(catalog_xml, ".").unwrap();
+
+        // Resolves via the catalog even with no doc_iri to guess
+        // against, and even though the path-guessing heuristic below
+        // would also have found it -- the point is the catalog is
+        // consulted, not that it's the only route that works here.
+        let (_, iri_str) = resolve_iri(&i, None, u64::MAX, false, Some(&catalog)).unwrap();
+        assert_eq!(bikepath_str, iri_str);
+
+        // A catalog entry pointing at a nonexistent file is an error,
+        // not a silent fall-through to the heuristic/remote path.
+        let broken_catalog_xml = r#"<?xml version="1.0"?>
+<catalog xmlns="urn:oasis:names:tc:entity:xmlns:xml:catalog">
+  <uri name="http://www.example.com/bikepath.md" uri="no-such-file.md"/>
+</catalog>"#;
+        let broken_catalog = horned_catalog::Catalog::from_str(broken_catalog_xml, ".").unwrap();
+        assert!(resolve_iri(&i, Some(&doc_iri), u64::MAX, false, Some(&broken_catalog)).is_err());
     }
 
     #[test]
@@ -444,6 +492,7 @@ mod test {
                 &b.iri(format!("file://dev/resolve/{doc_iri}")),
                 u64::MAX,
                 false,
+                None,
             )
             .unwrap();
             assert_eq!(read_str, iri_str);

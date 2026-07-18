@@ -38,7 +38,7 @@ pub(crate) fn matcher(matches: &ArgMatches) -> Result<(), HornedError> {
         .ok_or_else(|| HornedError::CommandError("A file name must be specified".to_string()))?;
 
     let config = parser_config(matches);
-    let parsed = parse_path(Path::new(input), config)?;
+    let parsed = parse_path(Path::new(input), config.clone())?;
     let resource_type = parsed.resource_type();
     let rdf_format = with_detected_rdf_format(Path::new(input), config)
         .rdf

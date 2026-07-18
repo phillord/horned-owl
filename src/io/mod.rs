@@ -89,7 +89,7 @@ impl<A: ForIRI, AA: ForIndex<A>> ParserOutput<A, AA> {
     }
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub struct ParserConfiguration {
     /// In lax mode, parsers tolerate content that would otherwise be a
     /// parse error -- see individual readers for exactly what this
@@ -118,6 +118,19 @@ pub struct ParserConfiguration {
     /// Override format detection. When set, this takes precedence over the
     /// file extension. `InputFormat::Guess` triggers content sniffing.
     pub input_format: Option<InputFormat>,
+    /// An OASIS XML Catalog (see the [`horned_catalog`] crate) to
+    /// consult when resolving an IRI to local content, such as when
+    /// following an `owl:imports` closure. Checked before the
+    /// heuristic path-guessing in [`crate::resolve::localize_iri`] and
+    /// before any remote fallback -- an explicit catalog mapping is a
+    /// stronger signal than either. `None` (the default) disables
+    /// catalog-based resolution entirely.
+    ///
+    /// This is an `Rc` rather than a plain `&Catalog` reference so that
+    /// `ParserConfiguration` doesn't need a lifetime parameter --
+    /// it's cloned (a cheap refcount bump) each time a parse recurses
+    /// into an import.
+    pub catalog: Option<std::rc::Rc<horned_catalog::Catalog>>,
 }
 
 impl Default for ParserConfiguration {
@@ -129,6 +142,7 @@ impl Default for ParserConfiguration {
             rdf: RDFParserConfiguration::default(),
             owx: OWXParserConfiguration::default(),
             input_format: None,
+            catalog: None,
         }
     }
 }

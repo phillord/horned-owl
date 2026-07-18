@@ -240,7 +240,8 @@ fn materialize_1<'a>(
     recurse: bool,
 ) -> Result<&'a mut Vec<IRI<RcStr>>, HornedError> {
     println!("Parsing: {}", file_location.display());
-    let amont: RcComponentMappedOntology = parse_imports(Path::new(file_location), config)?.into();
+    let amont: RcComponentMappedOntology =
+        parse_imports(Path::new(file_location), config.clone())?.into();
     let import = amont.i().import();
 
     let b = Build::new_rc();
@@ -257,7 +258,7 @@ fn materialize_1<'a>(
             )?;
 
             if recurse {
-                materialize_1(&local_path, config, done, true)?;
+                materialize_1(&local_path, config.clone(), done, true)?;
             }
         } else {
             println!("Already materialized: {}", i.0);

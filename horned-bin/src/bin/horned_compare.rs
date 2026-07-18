@@ -46,7 +46,7 @@ pub(crate) fn matcher(matches: &ArgMatches) -> Result<(), HornedError> {
         .value_of("INPUT-B")
         .ok_or_else(|| HornedError::CommandError("A file name must be specified".to_string()))?;
 
-    let (ont_a, p_a, i_a) = parse_path(Path::new(input_a), config)?.decompose();
+    let (ont_a, p_a, i_a) = parse_path(Path::new(input_a), config.clone())?.decompose();
     let (ont_b, p_b, i_b) = parse_path(Path::new(input_b), config)?.decompose();
 
     let summary_a = summarize(ont_a);

@@ -45,11 +45,20 @@ $(foreach p,$(WITHIMPORT_STEM),$(eval $(call build_template,$(p),WITHIMPORT)))
 
 withimport:$(WITHIMPORT)
 
-all: $(TARGETS) ambig withimport
+## withcatalog/generate-catalog.clj doesn't fit build_template -- it
+## doesn't call save-all, and it produces one real OWLZipSaver-generated
+## catalog-v001.xml (not five parallel OWL-format files), so it gets its
+## own explicit rule rather than being folded into the WITHIMPORT loop.
+../owl-rdf/withcatalog/catalog-v001.xml: withcatalog/generate-catalog.clj withimport/other-property.clj
+	$(BUBO) script withcatalog/generate-catalog.clj
+
+withcatalog: ../owl-rdf/withcatalog/catalog-v001.xml
+
+all: $(TARGETS) ambig withimport withcatalog
 
 .DEFAULT_GOAL=all
 
 clean:
-	-rm $(TARGETS) $(AMBIG) $(WITHIMPORT)
+	-rm $(TARGETS) $(AMBIG) $(WITHIMPORT) ../owl-rdf/withcatalog/catalog-v001.xml
 
-.PHONY: all clean
+.PHONY: all clean withcatalog
