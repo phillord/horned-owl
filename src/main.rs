@@ -42,27 +42,38 @@ fn resolve_horned_owl_rev(manifest_dir: &std::path::Path, cli_override: Option<&
 fn detect_horned_owl_rev(manifest_dir: &std::path::Path) -> Option<String> {
     let manifest_path = manifest_dir.join("Cargo.toml");
     let manifest = std::fs::read_to_string(&manifest_path).ok()?;
-    let dep_line = manifest
-        .lines()
-        .find(|l| l.contains("horned-owl") && (l.contains("path =") || l.contains("rev =")))?;
 
-    if let Some(path) = extract_quoted(dep_line, "path = \"") {
-        let dep_dir = manifest_dir.join(&path);
-        let output = std::process::Command::new("git")
-            .arg("-C")
-            .arg(&dep_dir)
-            .args(["rev-parse", "HEAD"])
-            .output()
-            .ok()?;
-        if !output.status.success() {
-            return None;
+    // Only active (non-commented) horned-owl dependency lines. A
+    // commented-out `path = ...` line (the local-dev toggle in Cargo.toml)
+    // must never shadow the real pinned `rev = ...` line below it, and a
+    // `path` dep whose checkout can't be resolved must fall through to any
+    // usable `rev` line rather than give up.
+    for dep_line in manifest.lines().filter(|l| {
+        !l.trim_start().starts_with('#')
+            && l.contains("horned-owl")
+            && (l.contains("path =") || l.contains("rev ="))
+    }) {
+        if let Some(path) = extract_quoted(dep_line, "path = \"") {
+            let dep_dir = manifest_dir.join(&path);
+            if let Ok(output) = std::process::Command::new("git")
+                .arg("-C")
+                .arg(&dep_dir)
+                .args(["rev-parse", "HEAD"])
+                .output()
+            {
+                if output.status.success() {
+                    if let Ok(s) = String::from_utf8(output.stdout) {
+                        return Some(s.trim().to_string());
+                    }
+                }
+            }
+            continue; // path unresolved -> keep scanning for a rev line
         }
-        return String::from_utf8(output.stdout)
-            .ok()
-            .map(|s| s.trim().to_string());
+        if let Some(rev) = extract_quoted(dep_line, "rev = \"") {
+            return Some(rev);
+        }
     }
-
-    extract_quoted(dep_line, "rev = \"")
+    None
 }
 
 fn extract_quoted(line: &str, marker: &str) -> Option<String> {
@@ -377,5 +388,22 @@ mod tests {
         let dir = temp_dir("fallback");
         // No Cargo.toml, no override.
         assert_eq!(resolve_horned_owl_rev(&dir, None), "unknown");
+    }
+
+    #[test]
+    fn commented_path_line_does_not_shadow_real_rev() {
+        // Mirrors the real Cargo.toml: a commented-out `path = ...` dev line
+        // directly above the pinned `git + rev` line. The commented line
+        // must not be selected, and its unresolvable path must not suppress
+        // detection of the real rev below it.
+        let dir = temp_dir("commented-path");
+        std::fs::write(
+            dir.join("Cargo.toml"),
+            "[dependencies]\n\
+             # horned-owl = { path = \"./horned-owl\" }  # uncomment for local dev\n\
+             horned-owl = { git = \"https://x/horned-owl.git\", rev = \"abc123\" }\n",
+        )
+        .unwrap();
+        assert_eq!(detect_horned_owl_rev(&dir), Some("abc123".to_string()));
     }
 }
