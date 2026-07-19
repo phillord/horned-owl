@@ -242,8 +242,15 @@ where
     let id = o.i().the_ontology_id_or_default();
     iri_maybe(&mut elem, "xml:base", &id.iri);
 
-    // Render XML Namespaces.
+    // Render XML Namespaces. The empty/default CURIE prefix (`name=""`) has
+    // no valid `xmlns:`-attribute spelling -- `xmlns:` with no local name
+    // is not legal XML -- and the default namespace is already bound to OWL
+    // above, so skip it here; it's still available for CURIE expansion via
+    // the `<Prefix name="" IRI="..."/>` element rendered separately below.
     for pre in m.mappings() {
+        if pre.0.is_empty() {
+            continue;
+        }
         elem.push_attribute((format!("xmlns:{}", pre.0).as_bytes(), pre.1.as_bytes()));
     }
     iri_maybe(&mut elem, "ontologyIRI", &id.iri);
@@ -1084,6 +1091,25 @@ mod test {
         let s = roundtrip_to_string(include_str!("../../ont/owl-xml/ont.owx"));
 
         assert!(s.contains("xmlns:xsd"));
+    }
+
+    // Regression test for #227: an ontology with an empty/default CURIE
+    // prefix (`<Prefix name="" IRI="..."/>`) used to be written back out
+    // with an invalid `xmlns:="..."` namespace-declaration attribute
+    // (colon with no local name), which is not legal XML and made the
+    // written file fail to reread. Assert the writer no longer emits that
+    // attribute, and that the file survives a full write-then-reread
+    // round trip.
+    #[test]
+    fn test_empty_prefix_no_invalid_xmlns_attribute() {
+        let s = roundtrip_to_string(include_str!("../../ont/owl-xml/manual/empty-prefix.owx"));
+
+        assert!(
+            !s.contains("xmlns:=\""),
+            "writer emitted an invalid xmlns:=\"...\" attribute: {s}"
+        );
+
+        assert_round(include_str!("../../ont/owl-xml/manual/empty-prefix.owx"));
     }
 
     #[test]
