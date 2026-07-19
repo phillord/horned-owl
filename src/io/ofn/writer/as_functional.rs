@@ -10,6 +10,64 @@ use enum_meta::Meta;
 use crate::model::*;
 use crate::vocab::Facet;
 
+/// Check whether `c` is a `SPARQL_PnCharsBase` character, as defined by
+/// `src/grammars/sparql.pest` (mirrors the SPARQL 1.0 `PN_CHARS_BASE`
+/// production that OFN's `AbbreviatedIRI` local names are built on).
+fn is_pn_chars_base(c: char) -> bool {
+    c.is_ascii_alphabetic()
+        || ('\u{00C0}'..='\u{00D6}').contains(&c)
+        || ('\u{00D8}'..='\u{00F6}').contains(&c)
+        || ('\u{00F8}'..='\u{02FF}').contains(&c)
+        || ('\u{0370}'..='\u{037D}').contains(&c)
+        || ('\u{037F}'..='\u{1FFF}').contains(&c)
+        || ('\u{200C}'..='\u{200D}').contains(&c)
+        || ('\u{2070}'..='\u{218F}').contains(&c)
+        || ('\u{2C00}'..='\u{2FEF}').contains(&c)
+        || ('\u{3001}'..='\u{D7FF}').contains(&c)
+        || ('\u{F900}'..='\u{FDCF}').contains(&c)
+        || ('\u{FDF0}'..='\u{FFFD}').contains(&c)
+        || ('\u{10000}'..='\u{EFFFF}').contains(&c)
+}
+
+/// `SPARQL_PnCharsU`: `SPARQL_PnCharsBase` plus `_`.
+fn is_pn_chars_u(c: char) -> bool {
+    is_pn_chars_base(c) || c == '_'
+}
+
+/// `SPARQL_PnChars`: `SPARQL_PnCharsU` plus `-`, ASCII digits, and a handful
+/// of extra code points the grammar allows mid-name.
+fn is_pn_chars(c: char) -> bool {
+    is_pn_chars_u(c)
+        || c == '-'
+        || c.is_ascii_digit()
+        || c == '\u{00B7}'
+        || ('\u{0300}'..='\u{036F}').contains(&c)
+        || ('\u{203F}'..='\u{2040}').contains(&c)
+}
+
+/// Check whether `s` is usable as an OFN `AbbreviatedIRI` local name (the
+/// `SPARQL_PnLocal` production: a leading `PnCharsU`/digit followed by any
+/// number of `PnChars` or `.`, and not ending in `.`).
+///
+/// This is conservative rather than a byte-for-byte match of the grammar
+/// (e.g. it allows consecutive `.` characters mid-name, which the grammar's
+/// `("." ~ PnChars)*` repetition technically doesn't); false negatives here
+/// just mean an abbreviation opportunity is missed in favour of the always-
+/// correct `<full IRI>` form, whereas a false positive would write out an
+/// unparseable `AbbreviatedIRI`, so erring conservative in that direction
+/// would be the wrong trade-off.
+fn is_valid_pn_local(s: &str) -> bool {
+    let mut chars = s.chars();
+    match chars.next() {
+        Some(c) if is_pn_chars_u(c) || c.is_ascii_digit() => {}
+        _ => return false,
+    }
+    if s.ends_with('.') {
+        return false;
+    }
+    chars.all(|c| is_pn_chars(c) || c == '.')
+}
+
 /// Write a string literal while escaping `"` and `\` characters.
 fn quote(mut s: &str, f: &mut Formatter<'_>) -> Result<(), Error> {
     f.write_str("\"")?;
@@ -900,7 +958,28 @@ impl<A: ForIRI> Display for Functional<'_, IRI<A>, A> {
         if let Some(prefixes) = self.1.as_ref() {
             match prefixes.shrink_iri(self.0) {
                 Err(_) => write!(f, "<{}>", self.0),
-                Ok(curie) => write!(f, "{curie}"),
+                Ok(curie) => {
+                    // `curie::Curie` doesn't expose its `prefix`/`reference`
+                    // parts other than through `Display`, so recover the
+                    // local-name part from the rendered string: this
+                    // grammar's `PN_CHARS` doesn't include `:`, so the first
+                    // `:` (if any) reliably separates prefix from local name
+                    // (a colon-less rendering, e.g. the `curie` crate's
+                    // "default prefix" fast path, means the whole string is
+                    // the local name). Only trust the abbreviation if that
+                    // local name is actually a legal OFN `PN_LOCAL` --
+                    // otherwise fall back to the always-valid `<full IRI>`
+                    // form, same as the `Err(_)` branch above.
+                    let rendered = curie.to_string();
+                    let local = rendered
+                        .split_once(':')
+                        .map_or(rendered.as_str(), |(_, local)| local);
+                    if is_valid_pn_local(local) {
+                        f.write_str(&rendered)
+                    } else {
+                        write!(f, "<{}>", self.0)
+                    }
+                }
             }
         } else {
             write!(f, "<{}>", self.0)
@@ -1199,6 +1278,33 @@ mod tests {
             "Declaration(Class(<http://xmlns.com/foaf/0.1/Person>))",
             ofn
         );
+    }
+
+    // Regression test for https://github.com/phillord/horned-owl/issues/231
+    //
+    // A local name that matches a registered prefix but contains a
+    // character illegal in OFN's PN_LOCAL (here a literal `/`) must not be
+    // abbreviated -- the abbreviated form would not be valid OFN and would
+    // fail to reread. It must fall back to the `<full IRI>` form instead,
+    // exactly as if no prefix had matched at all.
+    #[test]
+    fn test_ofn_curie_invalid_pn_local_falls_back_to_full_iri() {
+        let build = Build::new_arc();
+        let mut prefixes = curie::PrefixMapping::default();
+        prefixes.add_prefix("", "http://example.org/mini#").ok();
+
+        let decl = DeclareClass(build.class("http://example.org/mini#Direct/Indirect"));
+        let ofn = format!("{}", decl.as_functional_with_prefixes(&prefixes));
+        assert_eq!(
+            "Declaration(Class(<http://example.org/mini#Direct/Indirect>))",
+            ofn
+        );
+
+        // A local name with only legal PN_LOCAL characters is unaffected
+        // and is still abbreviated as before.
+        let decl = DeclareClass(build.class("http://example.org/mini#Direct"));
+        let ofn = format!("{}", decl.as_functional_with_prefixes(&prefixes));
+        assert_eq!("Declaration(Class(:Direct))", ofn);
     }
 
     #[test]
