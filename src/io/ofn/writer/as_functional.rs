@@ -671,12 +671,31 @@ impl<A: ForIRI> Display for Functional<'_, ClassExpression<A>, A> {
         }
         match self.0 {
             Class(exp) => Functional(exp, self.1, None).fmt(f),
+            // `ObjectIntersectionOf`/`ObjectUnionOf` require at least two
+            // operands in the OWL 2 Functional-Style Syntax grammar
+            // (`ClassExpression{2, }` in `src/grammars/ofn.pest`, matching
+            // the OWL 2 spec: https://www.w3.org/TR/owl2-syntax/#Class_Expressions).
+            // `ClassExpression` itself is an unconstrained `Vec`, and
+            // horned-owl's RDF reader is lenient about (real-world, if
+            // technically malformed) `owl:intersectionOf`/`owl:unionOf` RDF
+            // lists with only one member, building a single-operand variant
+            // (see https://github.com/phillord/horned-owl/issues/235).
+            // Writing that out verbatim as `ObjectIntersectionOf(x)`
+            // produces OFN our own reader then rejects. An
+            // intersection/union of a single set is that set, so degrade to
+            // writing the sole operand directly instead.
+            ObjectIntersectionOf(classes) if classes.len() == 1 => {
+                Functional(&classes[0], self.1, None).fmt(f)
+            }
             ObjectIntersectionOf(classes) => {
                 write!(
                     f,
                     "ObjectIntersectionOf({})",
                     Functional(classes, self.1, None)
                 )
+            }
+            ObjectUnionOf(classes) if classes.len() == 1 => {
+                Functional(&classes[0], self.1, None).fmt(f)
             }
             ObjectUnionOf(classes) => {
                 write!(f, "ObjectUnionOf({})", Functional(classes, self.1, None))

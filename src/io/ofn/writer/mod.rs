@@ -145,6 +145,64 @@ mod test {
         );
     }
 
+    // Regression test for https://github.com/phillord/horned-owl/issues/235
+    // `ObjectIntersectionOf`/`ObjectUnionOf` require at least two operands in
+    // the OFN grammar (`ClassExpression{2, }` in `src/grammars/ofn.pest`),
+    // but `ClassExpression::ObjectIntersectionOf`/`ObjectUnionOf` are plain
+    // `Vec`s with no arity check, and horned-owl's RDF reader is lenient
+    // about real-world (if technically malformed) single-member
+    // `owl:intersectionOf`/`owl:unionOf` RDF lists -- see the `BCS7` corpus
+    // ontology's `owl:intersectionOf ( cst:M1 )`. Such a degenerate
+    // single-operand `ObjectIntersectionOf`/`ObjectUnionOf` can't be built
+    // by parsing OFN (the reader enforces the grammar's minimum), so it's
+    // constructed directly via the model API here, matching how the RDF
+    // reader would produce it.
+    #[test]
+    fn roundtrip_degenerate_single_operand_intersection_and_union() {
+        use crate::model::Build;
+        use crate::model::ClassExpression;
+        use crate::model::MutableOntology;
+        use crate::model::SubClassOf;
+
+        let build = Build::<RcStr>::new();
+        let mut ont: ComponentMappedOntology<RcStr, AnnotatedComponent<RcStr>> =
+            ComponentMappedOntology::new();
+        ont.insert(SubClassOf {
+            sub: ClassExpression::Class(build.class("http://example.com/Sub")),
+            sup: ClassExpression::ObjectIntersectionOf(vec![ClassExpression::Class(
+                build.class("http://example.com/One"),
+            )]),
+        });
+        ont.insert(SubClassOf {
+            sub: ClassExpression::Class(build.class("http://example.com/Sub2")),
+            sup: ClassExpression::ObjectUnionOf(vec![ClassExpression::Class(
+                build.class("http://example.com/Two"),
+            )]),
+        });
+
+        let mut writer = Vec::new();
+        crate::io::ofn::writer::write(&mut writer, &ont, None).unwrap();
+        let output = String::from_utf8(writer).unwrap();
+
+        assert!(
+            !output.contains("ObjectIntersectionOf("),
+            "a single-operand ObjectIntersectionOf must be unwrapped, not \
+             written invalid:\n{output}"
+        );
+        assert!(
+            !output.contains("ObjectUnionOf("),
+            "a single-operand ObjectUnionOf must be unwrapped, not written \
+             invalid:\n{output}"
+        );
+
+        // The written output must be re-readable by our own OFN reader --
+        // this is the actual `horned-roundtrip` failure mode this test
+        // guards against.
+        let (_, _): (ComponentMappedOntology<RcStr, AnnotatedComponent<RcStr>>, _) =
+            crate::io::ofn::reader::read(std::io::Cursor::new(&output), Default::default())
+                .expect("written output must be re-parseable as OFN");
+    }
+
     #[cfg(test)]
     mod bubo_test {
         use crate::io::ofn::writer::test::*;
