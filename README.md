@@ -48,8 +48,10 @@ but demoted.
 
 ## Build
 
-Requires a Rust toolchain. horned-owl is a **git dependency pinned to a specific commit**
-(recorded in each run's report header for reproducibility).
+Requires a Rust toolchain. horned-owl is a **git dependency pinned to a specific commit**.
+That commit is auto-detected from `Cargo.toml` at build/run time and recorded in each run's
+report header for reproducibility; override it with `run --horned-owl-rev <sha>` if
+auto-detection can't be trusted (e.g. a dirty local checkout).
 
 ```sh
 cargo build --release
@@ -72,13 +74,23 @@ horned-roundtrip report --in results.jsonl --out-dir report/
 Fetch a fresh BioPortal corpus first (requires a [BioPortal API key](https://bioportal.bioontology.org/account)):
 
 ```sh
-export BIOPORTAL_API_KEY=...        # or pass --api-key
+export BIOPORTAL_API_KEY=...        # or pass --api-key, or `cp .env.example .env` and source it
 horned-roundtrip fetch --out ./corpus            # stores <acronym>.gz + manifest.json
 horned-roundtrip run   --corpus ./corpus --out results.jsonl --max-bytes 20000000 --jobs 3
 horned-roundtrip report --in results.jsonl --out-dir report/
 ```
 
+The key is read from `--api-key` or the `BIOPORTAL_API_KEY` env var. A `.env.example`
+template is included; the binary does **not** load `.env` automatically, so source it first
+(`set -a; source .env; set +a`) or export the variable.
+
 - `run --formats rdf,owx,ofn,omn` restricts which target formats to write (default: all four).
+- `fetch --timeout <secs>` bounds every request (default `180`). BioPortal's `include=all`
+  ontology list alone is multi-MB and routinely exceeds reqwest's 30s default, so a timeout
+  is effectively required for `fetch` to complete.
+- `fetch --skip-existing` reuses any `<acronym>.gz` already in `--out` (rebuilding its
+  manifest entry from disk) and only downloads what's missing, so an interrupted run can
+  resume. A corrupt/truncated existing file is re-downloaded rather than skipped.
 - The corpus is **not** included in this repo (size + mixed licensing) — `fetch` downloads
   your own copy, or bring your own directory.
 
@@ -95,10 +107,10 @@ horned-roundtrip report --in results.jsonl --out-dir report/
 
 - **No OBO** — horned-owl has no OBO reader, so `.obo` files are reported as `unknown`.
 - **Turtle is read-only** — there is no Turtle writer, so Turtle is a source format only.
-- **Blank-node canonicalization is a deterministic first cut** (sort-by-debug), not full
-  RDF graph canonicalization; residual blank-node ordering differences are routed to
-  `blank_node_relabel` rather than polluting the `unknown` signal, so they under-report
-  genuine blank-node defects rather than inventing false ones.
+- **Blank-node canonicalization is a deterministic first cut** (structural sort + a
+  visitor-based relabeling pass), not full RDF graph canonicalization; residual blank-node
+  ordering differences are routed to `blank_node_relabel` rather than polluting the `unknown`
+  signal, so they under-report genuine blank-node defects rather than inventing false ones.
 
 ## License
 
