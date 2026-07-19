@@ -133,22 +133,94 @@ impl<A: ForIRI> NodeGenerator<A> {
     }
 }
 
+/// Percent-encode characters that are never legal, unescaped, inside an
+/// IRI per RFC 3987 -- regardless of where in the IRI they occur -- but
+/// which horned-owl's readers (in particular the lenient OWL/XML reader)
+/// will happily accept verbatim from "wild" real-world ontologies.
+///
+/// Left untouched: anything already valid unescaped in an IRI (ASCII
+/// unreserved/gen-delims/sub-delims characters, existing `%XX` escapes,
+/// and non-ASCII `ucschar`/`iprivate` code points, which RFC 3987 permits
+/// directly). `[` and `]` are technically valid only inside an IPv6
+/// `IP-literal` host, a case essentially never seen in ontology IRIs, so
+/// they are unconditionally escaped here along with the other characters
+/// that RFC 3987 never permits unescaped anywhere.
+///
+/// Without this, an IRI such as `.../untitled-ontology-11#KB-CH[R]-8-5Cell`
+/// (see issue #232, found in a real corpus ontology) is written unescaped
+/// into `rdf:about`/`rdf:resource` attributes. The result is syntactically
+/// valid XML (attribute values aren't IRI-checked by XML itself) but not a
+/// valid IRI, so strict RDF/XML parsers -- including the oxrdfio-backed
+/// reader horned-owl itself uses to reread its own output -- reject it,
+/// breaking the read/write/reread round trip.
+fn escape_invalid_iri_chars(s: &str) -> std::borrow::Cow<'_, str> {
+    fn needs_escaping(c: char) -> bool {
+        matches!(
+            c,
+            '\u{0}'
+                ..='\u{1F}'
+                    | '\u{7F}'
+                    | ' '
+                    | '"'
+                    | '<'
+                    | '>'
+                    | '\\'
+                    | '^'
+                    | '`'
+                    | '{'
+                    | '|'
+                    | '}'
+                    | '['
+                    | ']'
+        )
+    }
+
+    if !s.contains(needs_escaping) {
+        return std::borrow::Cow::Borrowed(s);
+    }
+
+    let mut out = String::with_capacity(s.len());
+    for c in s.chars() {
+        if needs_escaping(c) {
+            let mut buf = [0u8; 4];
+            for byte in c.encode_utf8(&mut buf).as_bytes() {
+                out.push('%');
+                out.push_str(&format!("{byte:02X}"));
+            }
+        } else {
+            out.push(c);
+        }
+    }
+    std::borrow::Cow::Owned(out)
+}
+
+/// Build a [`PNamedNode`] from a horned-owl [`IRI`], percent-encoding any
+/// characters that would otherwise make the serialized IRI invalid (see
+/// [`escape_invalid_iri_chars`]).
+fn escaped_named_node<A: ForIRI>(iri: &IRI<A>) -> PNamedNode<A> {
+    let raw = iri.underlying();
+    match escape_invalid_iri_chars(&raw) {
+        std::borrow::Cow::Borrowed(_) => PNamedNode::new(raw),
+        std::borrow::Cow::Owned(escaped) => PNamedNode::new(A::from_str(&escaped)),
+    }
+}
+
 /// Convertors from Pretty RDF components and equivalent Horned-OWL model
 impl<A: ForIRI> From<&IRI<A>> for PTerm<A> {
     fn from(iri: &IRI<A>) -> Self {
-        PNamedNode::new(iri.underlying()).into()
+        escaped_named_node(iri).into()
     }
 }
 
 impl<A: ForIRI> From<&IRI<A>> for PNamedNode<A> {
     fn from(iri: &IRI<A>) -> Self {
-        PNamedNode::new(iri.underlying())
+        escaped_named_node(iri)
     }
 }
 
 impl<A: ForIRI> From<&IRI<A>> for PNamedOrBlankNode<A> {
     fn from(iri: &IRI<A>) -> Self {
-        let nn = PNamedNode::new(iri.underlying());
+        let nn = escaped_named_node(iri);
         nn.into()
     }
 }
@@ -1944,6 +2016,42 @@ mod test {
 <http://www.example.com/iri> <http://www.w3.org/2002/07/owl#versionIRI> <http://www.example.com/viri> .
 <http://www.example.com/iri#C> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/2002/07/owl#Class> .
 "#
+        );
+    }
+
+    #[test]
+    fn iri_with_rfc3987_invalid_chars_round_trips() {
+        // Real-world ontologies (e.g. corpus file `MCCL`, see issue #232) can
+        // contain IRIs with characters, like `[` and `]`, that are never
+        // legal unescaped in an IRI per RFC 3987. horned-owl's OWL/XML
+        // reader is lenient and accepts such text verbatim, so the writer
+        // must percent-encode it to produce valid, rereadable RDF/XML.
+        //
+        // Note the recovered IRI is percent-encoded (`%5B`/`%5D`) rather
+        // than byte-identical to the original raw `[`/`]` text -- that's
+        // expected and correct: `[`/`]` are gen-delims, so a compliant IRI
+        // reader must not silently decode their percent-encoded form back
+        // to the literal bracket, as that would change the IRI's syntactic
+        // structure. What matters is that the reread no longer fails.
+        let b = Build::new_rc();
+        let mut ont_orig = SetOntology::new_rc();
+        ont_orig.insert(DeclareClass(Class(
+            b.iri("http://example.com/o#KB-CH[R]-8-5Cell"),
+        )));
+
+        let amo: ComponentMappedOntology<RcStr, Rc<AnnotatedComponent<RcStr>>> = ont_orig.into();
+        let mut buf = Vec::new();
+        write(&mut buf, &amo).expect("write should not fail on an invalid-IRI-char class");
+
+        let ont_round = read_ok(&mut &buf[..]);
+        let expected_class = Class(b.iri("http://example.com/o#KB-CH%5BR%5D-8-5Cell"));
+        assert!(
+            ont_round.iter().any(|ac| matches!(
+                &ac.component,
+                Component::DeclareClass(DeclareClass(c)) if *c == expected_class
+            )),
+            "rereading the written RDF/XML should recover the class declaration \
+             (percent-encoded), got: {ont_round:#?}"
         );
     }
 
