@@ -1469,6 +1469,61 @@ mod tests {
         assert_eq!(orig, got, "anon annotation value did not round-trip\n{s}");
     }
 
+    // Regression test for https://github.com/phillord/horned-owl/issues/236
+    // `en-scotland` (language `en` + the 8-alphanumeric variant subtag
+    // `scotland`, no script/region present) is a real BCP-47 language tag
+    // found in the FOODON corpus ontology, on an
+    // `oboInOwl:hasExactSynonym "neep"@en-scotland` annotation. The
+    // `bcp47.pest` grammar's `BCP47_Script`/`BCP47_Region` productions used
+    // to greedily consume the first four letters of `scotland` (`scot`) as
+    // if it were a script subtag, stranding `land` with no leading `-` and
+    // making the tag unparseable -- the writer emits the tag verbatim, so
+    // its own reader then rejected its own output (the real-world symptom:
+    // a `horned-roundtrip` `reread_fail`).
+    #[test]
+    fn language_tag_with_long_unhyphenated_variant_subtag_roundtrips() {
+        use crate::io::omn::read_with_build;
+        use std::io::BufReader;
+
+        let b = Build::new_rc();
+        let mut pm = PrefixMapping::default();
+        pm.add_prefix("ex", "http://ex/").unwrap();
+        pm.add_prefix("rdfs", "http://www.w3.org/2000/01/rdf-schema#")
+            .unwrap();
+        let mut o = SetOntology::new_rc();
+        o.insert(AnnotationAssertion {
+            subject: AnnotationSubject::IRI(b.iri("http://ex/A")),
+            ann: Annotation {
+                ap: b.annotation_property("http://www.w3.org/2000/01/rdf-schema#label"),
+                av: AnnotationValue::Literal(Literal::Language {
+                    literal: "neep".to_string(),
+                    lang: "en-scotland".to_string(),
+                }),
+                ann: Default::default(),
+            },
+        });
+        let amo = into_amo(o.clone());
+        let mut out = Vec::<u8>::new();
+        write(&mut out, &amo, Some(&pm)).unwrap();
+        let s = String::from_utf8(out.clone()).unwrap();
+        assert!(
+            s.contains("\"neep\"@en-scotland"),
+            "expected the language tag to be written verbatim, got:\n{s}"
+        );
+
+        // The written output must be re-readable by our own OMN reader --
+        // this is the actual `horned-roundtrip` failure mode this test
+        // guards against.
+        let (parsed, _): (SetOntology<_>, PrefixMapping) =
+            read_with_build(BufReader::new(&out[..]), &b).unwrap_or_else(|e| {
+                panic!("written OMN with @en-scotland must reread cleanly: {e}\n{s}")
+            });
+        let orig: std::collections::BTreeSet<_> = o.iter().map(|ac| ac.component.clone()).collect();
+        let got: std::collections::BTreeSet<_> =
+            parsed.iter().map(|ac| ac.component.clone()).collect();
+        assert_eq!(orig, got, "language tag did not round-trip\n{s}");
+    }
+
     #[cfg(test)]
     mod bubo_test {
         use crate::io::omn::writer::tests::*;

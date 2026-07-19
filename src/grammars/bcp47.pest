@@ -17,8 +17,18 @@ BCP47_Language = ${
 // script subtag (e.g. `zh-Hans` -> `zh` + extlang `Han`, stranding `s`); the
 // guards force extlang to yield so the script subtag can match.
 BCP47_ExtLang       = ${ ASCII_ALPHA{3} ~ !ASCII_ALPHA ~ ("-" ~ ASCII_ALPHA{3} ~ !ASCII_ALPHA){,2} }
-BCP47_Script        = ${ ASCII_ALPHA{4} }
-BCP47_Region        = ${ ASCII_ALPHA{2} | ASCII_DIGIT{3} }
+// Script and region are fixed-length subtags (4 alpha / 2 alpha or 3
+// digit), but that length is only a *minimum* match for a PEG engine --
+// without a trailing `!ASCII_ALPHANUMERIC` guard, a longer, unhyphenated
+// variant subtag right after the language (e.g. the 8-alphanumeric variant
+// in `en-scotland`) gets wrongly truncated: `scot` matches `BCP47_Script`
+// and the remaining `land` is left stranded with no `-` before it, so the
+// whole tag fails to parse
+// (https://github.com/phillord/horned-owl/issues/236). The guards force
+// script/region to yield to the longer variant match, mirroring the
+// extlang guards above.
+BCP47_Script        = ${ ASCII_ALPHA{4} ~ !ASCII_ALPHANUMERIC }
+BCP47_Region        = ${ (ASCII_ALPHA{2} | ASCII_DIGIT{3}) ~ !ASCII_ALPHANUMERIC }
 BCP47_Variant       = ${ ASCII_ALPHANUMERIC{5, 8} | ASCII_DIGIT ~ ASCII_ALPHANUMERIC{3} }
 BCP47_Extension     = ${ BCP47_Singleton ~ ("-" ~ ASCII_ALPHANUMERIC{2, 8})+ }
 BCP47_Singleton     = @{ ASCII_DIGIT | '\u{41}'..'\u{57}' | '\u{59}'..'\u{5A}' | '\u{61}'..'\u{77}' | '\u{79}'..'\u{7A}' }
