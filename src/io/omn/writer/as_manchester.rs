@@ -75,11 +75,16 @@ pub(crate) fn render_iri_to_string(iri: &str, pm: Option<&PrefixMapping>) -> Str
         // `http://e/onto`) shrinks `http://e/onto#A` to `#A`, which is also
         // invalid — emit the full `<iri>` form instead.
         if is_valid_manchester_local(local) {
-            // `add_prefix("", ns)` stores "" in the prefix *mapping* (not the
-            // default slot), so `shrink_iri` returns a `Curie { prefix: Some(""), .. }`
-            // which `Display` formats as ":local". Strip the leading ':' to get the
-            // bare local name for the default prefix.
+            if !s.contains(':') {
+                // `shrink_iri` matched curie's separate `set_default()` slot
+                // (issue #233), not a named mapping-table entry -- there's no
+                // backing `Prefix: : <iri>` line, so a bare SimpleIRI here
+                // would be unresolvable. Fall back to the full <iri> form.
+                return format!("<{iri}>");
+            }
+            // A named entry, backed by a real `Prefix:` header line.
             return if let Some(stripped) = s.strip_prefix(':') {
+                // Empty name -- Display gives ":local"; strip the leading ':'.
                 stripped.to_owned()
             } else {
                 s
@@ -963,6 +968,31 @@ mod tests {
         assert_eq!(
             c.as_manchester_with_prefixes(&pm).to_string(),
             "<http://ex/a/b>"
+        );
+    }
+
+    #[test]
+    fn default_slot_without_named_empty_prefix_falls_back_to_full_iri() {
+        // `set_default` (the `curie` crate's separate "default slot", e.g.
+        // what `owx::reader` derives from an `ontologyIRI` attribute with no
+        // explicit `<Prefix name="" .../>`) is a DIFFERENT mechanism from
+        // `add_prefix("", ns)` (a genuine, enumerable "" entry in the prefix
+        // mapping). `shrink_iri` matches the default slot first and yields a
+        // bare local name with no leading ':' -- indistinguishable in isolation
+        // from a real Manchester `SimpleIRI`, but with no `Prefix: : <iri>`
+        // declaration to back it (the writer's header loop only iterates
+        // `mapping.mappings()`, which a `set_default`-only entry never joins).
+        // Emitting the bare name here would produce output the reader cannot
+        // resolve (issue #233) -- it must fall back to the full `<iri>` form,
+        // exactly like the `renders_named_class` (no prefix mapping at all)
+        // case above.
+        let b = Build::new_rc();
+        let c = b.class("http://ex.org/onto#Widget");
+        let mut pm = curie::PrefixMapping::default();
+        pm.set_default("http://ex.org/onto#");
+        assert_eq!(
+            c.as_manchester_with_prefixes(&pm).to_string(),
+            "<http://ex.org/onto#Widget>"
         );
     }
 
