@@ -5,6 +5,7 @@ edition = "2021"
 license = "MIT"
 
 [dependencies]
+# horned-owl = { path = "./horned-owl" }  # uncomment for local dev
 horned-owl = { git = "https://github.com/phillord/horned-owl.git", rev = "0a9debdbf85243350d3d6edc0dcd617f0ed47d97" }
 # horned_owl::io re-exports PrefixMapping only via a private `use curie::
 # PrefixMapping;` (see io/mod.rs), so it is not reachable as

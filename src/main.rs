@@ -6,10 +6,79 @@ use std::io::Write;
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-/// The horned-owl git rev this crate is pinned to (see Cargo.toml). Recorded in
-/// every run's header so a report can be traced back to the exact horned-owl
-/// commit that produced it.
-const HORNED_OWL_REV: &str = "0a9debdbf85243350d3d6edc0dcd617f0ed47d97";
+/// Determine the horned-owl commit this build was made against, for
+/// provenance in the run header. Priority:
+///   1. `--horned-owl-rev` on the CLI, if given -- a manual override for
+///      when auto-detection can't find a real commit, or you want to
+///      record something else on purpose.
+///   2. Cargo.toml's `horned-owl = { path = "..." }`: run `git -C <path>
+///      rev-parse HEAD` against that checkout directly. This is what
+///      actually got built, unlike a hand-maintained constant that can
+///      silently drift out of sync with Cargo.toml.
+///   3. Cargo.toml's `horned-owl = { git = "...", rev = "..." }`: use the
+///      pinned rev directly.
+///   4. If none of the above resolve, "unknown" (with a warning to
+///      stderr) rather than failing the run outright.
+fn resolve_horned_owl_rev(manifest_dir: &std::path::Path, cli_override: Option<&str>) -> String {
+    if let Some(r) = cli_override {
+        return r.to_string();
+    }
+    match detect_horned_owl_rev(manifest_dir) {
+        Some(r) => r,
+        None => {
+            eprintln!(
+                "warning: could not determine the horned-owl commit this build used \
+                 (no path or git+rev horned-owl dependency found in Cargo.toml, or \
+                 `git rev-parse` failed) -- recording \"unknown\"; pass --horned-owl-rev \
+                 to set it by hand"
+            );
+            "unknown".to_string()
+        }
+    }
+}
+
+/// Cargo.toml-driven half of [`resolve_horned_owl_rev`], kept separate (and
+/// CLI-override-free) so it's directly testable.
+fn detect_horned_owl_rev(manifest_dir: &std::path::Path) -> Option<String> {
+    let manifest_path = manifest_dir.join("Cargo.toml");
+    let manifest = std::fs::read_to_string(&manifest_path).ok()?;
+
+    // Only active (non-commented) horned-owl dependency lines. A
+    // commented-out `path = ...` line (the local-dev toggle in Cargo.toml)
+    // must never shadow the real pinned `rev = ...` line below it, and a
+    // `path` dep whose checkout can't be resolved must fall through to any
+    // usable `rev` line rather than give up.
+    for dep_line in manifest.lines().filter(|l| {
+        !l.trim_start().starts_with('#')
+            && l.contains("horned-owl")
+            && (l.contains("path =") || l.contains("rev ="))
+    }) {
+        if let Some(path) = extract_quoted(dep_line, "path = \"") {
+            let dep_dir = manifest_dir.join(&path);
+            if let Ok(output) = std::process::Command::new("git")
+                .arg("-C")
+                .arg(&dep_dir)
+                .args(["rev-parse", "HEAD"])
+                .output()
+            {
+                if output.status.success() {
+                    if let Ok(s) = String::from_utf8(output.stdout) {
+                        return Some(s.trim().to_string());
+                    }
+                }
+            }
+            continue; // path unresolved -> keep scanning for a rev line
+        }
+        if let Some(rev) = extract_quoted(dep_line, "rev = \"") {
+            return Some(rev);
+        }
+    }
+    None
+}
+
+fn extract_quoted(line: &str, marker: &str) -> Option<String> {
+    line.split(marker).nth(1)?.split('"').next().map(String::from)
+}
 
 #[derive(Parser)]
 struct Cli {
@@ -33,6 +102,13 @@ enum Cmd {
         /// it as `Outcome::Skipped` instead of running it through the engine.
         #[arg(long = "max-bytes")]
         max_bytes: Option<u64>,
+        /// Override the horned-owl commit recorded in the run header.
+        /// Auto-detected by default (see `resolve_horned_owl_rev`); pass this
+        /// to set it by hand when auto-detection can't or shouldn't be
+        /// trusted -- e.g. a `path = "..."` dependency whose checkout is
+        /// dirty/ahead of what you actually want recorded.
+        #[arg(long = "horned-owl-rev")]
+        horned_owl_rev: Option<String>,
     },
     /// Aggregate a run's JSONL output into a report directory.
     Report {
@@ -104,6 +180,7 @@ fn main() -> anyhow::Result<()> {
             formats,
             jobs,
             max_bytes,
+            horned_owl_rev,
         } => {
             // catch_unwind in roundtrip::run_bytes recovers from per-file panics, but
             // the default panic hook still writes a message to stderr for each one.
@@ -122,8 +199,9 @@ fn main() -> anyhow::Result<()> {
             }
             let fmts = parse_formats(&formats);
             let paths = corpus::entries(&dir)?;
+            let manifest_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
             let header = Record::Header(RunHeader {
-                horned_owl_rev: HORNED_OWL_REV.to_string(),
+                horned_owl_rev: resolve_horned_owl_rev(manifest_dir, horned_owl_rev.as_deref()),
                 corpus: dir.to_string_lossy().to_string(),
                 started: timestamp(),
             });
@@ -188,6 +266,7 @@ fn main() -> anyhow::Result<()> {
                         for r in &recs {
                             writeln!(w, "{}", serde_json::to_string(r)?)?;
                         }
+                        w.flush()?;
                     }
                     Ok(())
                 })?;
@@ -221,30 +300,120 @@ fn main() -> anyhow::Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::HORNED_OWL_REV;
+    use super::*;
+    use std::path::Path;
+    use std::process::Command;
 
-    /// Guards against reproducibility drift: `Cargo.toml`'s pinned
-    /// horned-owl `rev` and this binary's `HORNED_OWL_REV` constant (recorded
-    /// in every run's header) must always agree, or reports would claim a
-    /// commit that isn't actually what was built against.
+    fn temp_dir(name: &str) -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!(
+            "hrt-rev-test-{name}-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    fn write_manifest(dir: &Path, dep_line: &str) {
+        std::fs::write(
+            dir.join("Cargo.toml"),
+            format!("[package]\nname = \"x\"\n[dependencies]\n{dep_line}\n"),
+        )
+        .unwrap();
+    }
+
     #[test]
-    fn horned_owl_rev_matches_cargo_toml() {
-        let manifest_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("Cargo.toml");
-        let manifest = std::fs::read_to_string(&manifest_path)
-            .unwrap_or_else(|e| panic!("reading {manifest_path:?}: {e}"));
-        let rev_line = manifest
-            .lines()
-            .find(|l| l.contains("horned-owl") && l.contains("rev ="))
-            .unwrap_or_else(|| panic!("no horned-owl rev = \"...\" line found in Cargo.toml"));
-        let rev = rev_line
-            .split("rev = \"")
-            .nth(1)
-            .and_then(|s| s.split('"').next())
-            .unwrap_or_else(|| panic!("could not parse rev from line: {rev_line}"));
+    fn cli_override_wins_over_detection() {
+        // No Cargo.toml here at all -- proves the override short-circuits
+        // detection entirely rather than merely taking priority when both work.
+        let dir = temp_dir("override");
         assert_eq!(
-            rev, HORNED_OWL_REV,
-            "Cargo.toml's horned-owl rev ({rev}) no longer matches HORNED_OWL_REV \
-             ({HORNED_OWL_REV}) in src/main.rs -- update the constant"
+            resolve_horned_owl_rev(&dir, Some("deadbeef")),
+            "deadbeef"
         );
+    }
+
+    #[test]
+    fn detects_rev_from_git_style_dependency() {
+        let dir = temp_dir("git-dep");
+        write_manifest(
+            &dir,
+            r#"horned-owl = { git = "https://example.com/horned-owl.git", rev = "abc123" }"#,
+        );
+        assert_eq!(detect_horned_owl_rev(&dir), Some("abc123".to_string()));
+    }
+
+    #[test]
+    fn detects_rev_from_path_dependency_via_git_rev_parse() {
+        let dir = temp_dir("path-dep");
+        let sub = dir.join("horned-owl");
+        std::fs::create_dir_all(&sub).unwrap();
+        let git = |args: &[&str]| {
+            assert!(
+                Command::new("git")
+                    .arg("-C")
+                    .arg(&sub)
+                    .args(args)
+                    .status()
+                    .unwrap()
+                    .success(),
+                "git {args:?} failed"
+            );
+        };
+        git(&["init", "-q"]);
+        git(&["config", "user.email", "test@example.com"]);
+        git(&["config", "user.name", "test"]);
+        std::fs::write(sub.join("f"), "x").unwrap();
+        git(&["add", "f"]);
+        git(&["commit", "-q", "-m", "c"]);
+        let expected = String::from_utf8(
+            Command::new("git")
+                .arg("-C")
+                .arg(&sub)
+                .args(["rev-parse", "HEAD"])
+                .output()
+                .unwrap()
+                .stdout,
+        )
+        .unwrap()
+        .trim()
+        .to_string();
+
+        write_manifest(&dir, r#"horned-owl = { path = "./horned-owl" }"#);
+        assert_eq!(detect_horned_owl_rev(&dir), Some(expected));
+    }
+
+    #[test]
+    fn no_horned_owl_dependency_line_detects_nothing() {
+        let dir = temp_dir("no-dep");
+        write_manifest(&dir, r#"serde = "1""#);
+        assert_eq!(detect_horned_owl_rev(&dir), None);
+    }
+
+    #[test]
+    fn resolve_falls_back_to_unknown_when_detection_fails() {
+        let dir = temp_dir("fallback");
+        // No Cargo.toml, no override.
+        assert_eq!(resolve_horned_owl_rev(&dir, None), "unknown");
+    }
+
+    #[test]
+    fn commented_path_line_does_not_shadow_real_rev() {
+        // Mirrors the real Cargo.toml: a commented-out `path = ...` dev line
+        // directly above the pinned `git + rev` line. The commented line
+        // must not be selected, and its unresolvable path must not suppress
+        // detection of the real rev below it.
+        let dir = temp_dir("commented-path");
+        std::fs::write(
+            dir.join("Cargo.toml"),
+            "[dependencies]\n\
+             # horned-owl = { path = \"./horned-owl\" }  # uncomment for local dev\n\
+             horned-owl = { git = \"https://x/horned-owl.git\", rev = \"abc123\" }\n",
+        )
+        .unwrap();
+        assert_eq!(detect_horned_owl_rev(&dir), Some("abc123".to_string()));
     }
 }
