@@ -5,7 +5,9 @@ use curie::PrefixMapping;
 use crate::error::HornedError;
 use crate::model::Component;
 use crate::model::ComponentKind;
+use crate::model::DifferentIndividuals;
 use crate::model::ForIRI;
+use crate::model::SameIndividual;
 use crate::ontology::component_mapped::ComponentMappedOntology;
 use crate::ontology::indexed::ForIndex;
 
@@ -13,6 +15,32 @@ mod as_functional;
 
 pub use self::as_functional::AsFunctional;
 pub use self::as_functional::Functional;
+
+/// Whether `component` has enough operands to be legal OWL Functional-Style
+/// Syntax.
+///
+/// `SameIndividual` and `DifferentIndividuals` both require two or more
+/// individuals in the OWL 2 structural grammar
+/// (<https://www.w3.org/TR/owl2-syntax/#Individual_Equality>,
+/// <https://www.w3.org/TR/owl2-syntax/#Individual_Inequality>) --
+/// `src/grammars/ofn.pest`'s `SameIndividual`/`DifferentIndividuals`
+/// productions require `Individual{2, }` accordingly. Real-world RDF/XML has
+/// been observed (see
+/// [#214](https://github.com/phillord/horned-owl/issues/214)) to contain an
+/// `owl:AllDifferent` with a single `owl:distinctMembers` entry -- horned-
+/// owl's RDF reader accepts this leniently into the model as a one-member
+/// `DifferentIndividuals`. Such an axiom asserts nothing (there is no second
+/// individual to differ from), so it is semantically vacuous, but writing it
+/// out verbatim as OFN produces `DifferentIndividuals(<one IRI>)`, which the
+/// grammar's own reader then rejects. Skip writing these degenerate axioms
+/// rather than emit syntax our own reader can't parse back.
+fn has_writable_arity<A: ForIRI>(component: &Component<A>) -> bool {
+    match component {
+        Component::SameIndividual(SameIndividual(v)) => v.len() >= 2,
+        Component::DifferentIndividuals(DifferentIndividuals(v)) => v.len() >= 2,
+        _ => true,
+    }
+}
 
 /// Write an Ontology to `write`, using the given `PrefixMapping`.
 ///
@@ -99,6 +127,9 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
         let mut components = ont.i().component_for_kind(kind).collect::<Vec<_>>();
         components.sort();
         for component in components {
+            if !has_writable_arity(&component.component) {
+                continue;
+            }
             writeln!(
                 write,
                 "    {}",
@@ -206,6 +237,58 @@ mod test {
             _,
         >(std::io::Cursor::new(&writer), Default::default())
         .expect("written OFN with both Import and ontology Annotation must reread cleanly");
+    }
+
+    // Regression test for https://github.com/phillord/horned-owl/issues/214
+    // Real-world RDF/XML (e.g. the ACGT-MO ontology from the BioPortal
+    // corpus) has been observed to contain an `owl:AllDifferent` with a
+    // single `owl:distinctMembers` entry. Horned-owl's RDF reader accepts
+    // this leniently, producing a one-member `DifferentIndividuals` axiom in
+    // the model -- but the OFN grammar requires `Individual{2, }`, so writing
+    // it out verbatim produced `DifferentIndividuals(<one IRI>)`, which the
+    // writer's own reader then rejected (the real-world symptom: a
+    // `horned-roundtrip` `reread_fail`). Since such an axiom asserts nothing,
+    // the writer now drops it instead. A well-formed (2+ member)
+    // `DifferentIndividuals` must still be written normally.
+    #[test]
+    fn degenerate_different_individuals_is_dropped_not_written_invalid() {
+        use crate::model::Build;
+        use crate::model::DifferentIndividuals;
+        use crate::model::MutableOntology;
+
+        let build = Build::<RcStr>::new();
+        let mut ont: ComponentMappedOntology<RcStr, AnnotatedComponent<RcStr>> =
+            ComponentMappedOntology::new();
+        ont.insert(DifferentIndividuals(vec![
+            build
+                .named_individual("http://example.com/HERATrial")
+                .into(),
+        ]));
+        ont.insert(DifferentIndividuals(vec![
+            build.named_individual("http://example.com/A").into(),
+            build.named_individual("http://example.com/B").into(),
+        ]));
+
+        let mut writer = Vec::new();
+        crate::io::ofn::writer::write(&mut writer, &ont, None).unwrap();
+        let output = String::from_utf8(writer).unwrap();
+
+        assert!(
+            !output.contains("HERATrial"),
+            "degenerate single-member DifferentIndividuals should have been \
+             dropped, but was written:\n{output}"
+        );
+        assert!(
+            output.contains("DifferentIndividuals(<http://example.com/A> <http://example.com/B>)"),
+            "well-formed DifferentIndividuals should still be written:\n{output}"
+        );
+
+        // The written output must be re-readable by our own OFN reader --
+        // this is the actual `horned-roundtrip` failure mode this test
+        // guards against.
+        let (_, _): (ComponentMappedOntology<RcStr, AnnotatedComponent<RcStr>>, _) =
+            crate::io::ofn::reader::read(std::io::Cursor::new(&output), Default::default())
+                .expect("written output must be re-parseable as OFN");
     }
 
     #[cfg(test)]
