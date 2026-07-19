@@ -215,6 +215,28 @@ fn manifest_entry_from_disk(
     })
 }
 
+/// Under `--skip-existing`, decide whether the on-disk `<acronym>.gz` can be
+/// reused: `Some(entry)` to reuse it, `None` to re-fetch. `None` covers both
+/// "no file yet" and "file present but unreadable/truncated" (e.g. left by a
+/// run killed mid-write) -- the latter must be re-downloaded, not skipped
+/// forever, since an interrupted run is exactly when the last file is corrupt.
+fn reusable_entry(
+    acronym: &str,
+    stored_path: &Path,
+    prior: Option<&ManifestEntry>,
+) -> Option<ManifestEntry> {
+    if !stored_path.exists() {
+        return None;
+    }
+    match manifest_entry_from_disk(acronym, stored_path, prior) {
+        Ok(entry) => Some(entry),
+        Err(err) => {
+            eprintln!("{acronym}: existing file unusable ({err:#}), re-downloading");
+            None
+        }
+    }
+}
+
 /// Download up to `limit` public ontologies from BioPortal into `out_dir`,
 /// writing one `<acronym>.gz` per ontology plus a `manifest.json` describing
 /// what was stored. Per-ontology failures are logged to stderr and skipped;
@@ -266,15 +288,13 @@ pub fn fetch(
             .unwrap_or("<unknown>");
         let stored_path = out_dir.join(format!("{acronym}.gz"));
 
-        if skip_existing && stored_path.exists() {
-            match manifest_entry_from_disk(acronym, &stored_path, prior_manifest.get(acronym)) {
-                Ok(entry) => {
-                    eprintln!("skipping {acronym}: already downloaded (--skip-existing)");
-                    manifest.push(entry);
-                }
-                Err(err) => eprintln!("skipping {acronym}: {err:#}"),
+        if skip_existing {
+            if let Some(entry) = reusable_entry(acronym, &stored_path, prior_manifest.get(acronym)) {
+                eprintln!("skipping {acronym}: already downloaded (--skip-existing)");
+                manifest.push(entry);
+                continue;
             }
-            continue;
+            // else: no usable file on disk -- fall through and (re-)download.
         }
 
         match fetch_one(&client, api_key, ontology, out_dir) {
@@ -305,5 +325,79 @@ mod tests {
         assert!(should_retry(429, 0).is_some());
         assert!(should_retry(200, 0).is_none());
         assert!(should_retry(429, 10).is_none()); // give up after max attempts
+    }
+
+    fn tmp() -> std::path::PathBuf {
+        let d = std::env::temp_dir().join(format!(
+            "hrt-fetch-test-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&d).unwrap();
+        d
+    }
+
+    fn write_gz(path: &Path, contents: &[u8]) {
+        let f = std::fs::File::create(path).unwrap();
+        let mut enc = GzEncoder::new(f, Compression::default());
+        enc.write_all(contents).unwrap();
+        enc.finish().unwrap();
+    }
+
+    #[test]
+    fn manifest_entry_from_disk_reads_valid_gz_and_carries_prior() {
+        let dir = tmp();
+        let p = dir.join("FOO.gz");
+        write_gz(&p, b"hello ontology");
+        let prior = ManifestEntry {
+            acronym: "FOO".into(),
+            submission_id: Some(42),
+            reported_language: Some("OWL".into()),
+            stored_path: "old".into(),
+            bytes: 0,
+            sha256: "old".into(),
+        };
+        let e = manifest_entry_from_disk("FOO", &p, Some(&prior)).unwrap();
+        assert_eq!(e.bytes, b"hello ontology".len() as u64);
+        // sha256 is of the *uncompressed* bytes, matching fetch_one.
+        let mut h = Sha256::new();
+        h.update(b"hello ontology");
+        assert_eq!(e.sha256, format!("{:x}", h.finalize()));
+        assert_eq!(e.submission_id, Some(42)); // carried from prior
+        assert_eq!(e.reported_language.as_deref(), Some("OWL"));
+    }
+
+    #[test]
+    fn manifest_entry_from_disk_errors_on_truncated_gz() {
+        // The exact failure an interrupted run leaves behind: bytes that
+        // aren't a valid gzip stream. This is what makes a naive
+        // skip-existing branch skip the file forever instead of repairing it.
+        let dir = tmp();
+        let p = dir.join("BAR.gz");
+        std::fs::write(&p, b"not a gzip stream").unwrap();
+        assert!(manifest_entry_from_disk("BAR", &p, None).is_err());
+    }
+
+    #[test]
+    fn reusable_entry_routes_missing_and_corrupt_to_refetch() {
+        let dir = tmp();
+
+        // Missing file -> None (nothing to reuse; must fetch).
+        let missing = dir.join("NONE.gz");
+        assert!(reusable_entry("NONE", &missing, None).is_none());
+
+        // Valid file -> Some (reuse, no re-download).
+        let ok = dir.join("OK.gz");
+        write_gz(&ok, b"content");
+        assert!(reusable_entry("OK", &ok, None).is_some());
+
+        // Corrupt/truncated file -> None. An interrupted run's leftover is
+        // routed to re-fetch instead of skipped forever.
+        let bad = dir.join("BAD.gz");
+        std::fs::write(&bad, b"truncated").unwrap();
+        assert!(reusable_entry("BAD", &bad, None).is_none());
     }
 }
