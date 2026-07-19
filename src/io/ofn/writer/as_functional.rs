@@ -895,12 +895,65 @@ impl<A: ForIRI> AsFunctional<A> for IArgument<A> {}
 
 // ---------------------------------------------------------------------------
 
+/// Whether `s` is usable, as-is, as an OFN `AbbreviatedIRI` local part
+/// (`SPARQL_PnLocal` in `src/grammars/sparql.pest`: a `PN_CHARS_U`/digit,
+/// followed by any run of `PN_CHARS`/`.`/`-`/`_`). This is a conservative
+/// approximation of the real grammar -- it rejects some strings the full
+/// grammar would accept (e.g. it doesn't special-case interior dots the way
+/// the grammar's `("." ~ PN_CHARS)*` alternation does) -- but that only
+/// costs an occasional missed abbreviation, never invalid output: callers
+/// fall back to the always-valid full `<IRI>` form when this returns
+/// `false`.
+fn is_valid_ofn_local_part(s: &str) -> bool {
+    let mut chars = s.chars();
+    match chars.next() {
+        Some(c) if c.is_alphanumeric() || c == '_' => {}
+        _ => return false,
+    }
+    s.chars()
+        .all(|c| c.is_alphanumeric() || c == '_' || c == '-' || c == '.')
+}
+
+/// Abbreviate `iri` against `prefixes` as `prefix:local`, if possible.
+///
+/// This does not delegate to `curie::PrefixMapping::shrink_iri` because that
+/// method special-cases a match against the mapping's "default" IRI (set via
+/// `PrefixMapping::set_default`, as the OWL/XML reader does for an
+/// empty-name `<Prefix name="" IRI="..."/>`) by returning a `Curie` with
+/// `prefix: None` -- and `curie::Curie`'s `Display` renders that as the bare
+/// local part with **no colon at all**, which is not a valid OFN
+/// `AbbreviatedIRI` (`SPARQL_PnameLn` always requires the colon, even for an
+/// empty prefix name, i.e. `:local`). It can also hand back a local part
+/// that starts with `#` (when the matched prefix IRI has no trailing `/`/`#`
+/// but the full IRI does), which is never valid in this position either way.
+/// See https://github.com/phillord/horned-owl/issues/230.
+///
+/// Instead this walks `prefixes.mappings()` directly (the same
+/// insertion-ordered, first-match-wins semantics `shrink_iri` itself uses
+/// for its non-default branch) and only accepts a match whose local part
+/// passes [`is_valid_ofn_local_part`], always emitting the colon -- so an
+/// empty-name prefix match correctly becomes `:local`, not `local`. A
+/// mapping that was only ever `set_default`-ed, with no corresponding
+/// `add_prefix("", ...)`, is not visible via `mappings()` and so is never
+/// abbreviated by this function; such IRIs are written out in full instead,
+/// which is always valid, if slightly more verbose.
+fn shrink_iri_for_ofn<'a>(prefixes: &'a PrefixMapping, iri: &str) -> Option<(&'a str, String)> {
+    for (name, value) in prefixes.mappings() {
+        if let Some(local) = iri.strip_prefix(value.as_str())
+            && is_valid_ofn_local_part(local)
+        {
+            return Some((name.as_str(), local.to_string()));
+        }
+    }
+    None
+}
+
 impl<A: ForIRI> Display for Functional<'_, IRI<A>, A> {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
         if let Some(prefixes) = self.1.as_ref() {
-            match prefixes.shrink_iri(self.0) {
-                Err(_) => write!(f, "<{}>", self.0),
-                Ok(curie) => write!(f, "{curie}"),
+            match shrink_iri_for_ofn(prefixes, self.0) {
+                Some((name, local)) => write!(f, "{name}:{local}"),
+                None => write!(f, "<{}>", self.0),
             }
         } else {
             write!(f, "<{}>", self.0)
@@ -1197,6 +1250,47 @@ mod tests {
         let ofn = format!("{}", decl.as_functional_with_prefixes(&prefixes));
         assert_eq!(
             "Declaration(Class(<http://xmlns.com/foaf/0.1/Person>))",
+            ofn
+        );
+    }
+
+    // Regression test for https://github.com/phillord/horned-owl/issues/230
+    // An empty/default CURIE prefix (as the OWL/XML reader creates via
+    // `add_prefix("", iri)` + `set_default(iri)` for a `<Prefix name=""
+    // IRI="..."/>` element) must still abbreviate with the leading colon
+    // `:local` -- not the bare `local` that `curie::Curie`'s own `Display`
+    // produces for a `prefix: None` match, which isn't a valid OFN
+    // `AbbreviatedIRI` at all.
+    #[test]
+    fn test_ofn_curie_empty_prefix() {
+        let build = Build::new_arc();
+        let mut prefixes = curie::PrefixMapping::default();
+        prefixes.add_prefix("", "http://identifiers.org/mamo#").ok();
+        prefixes.set_default("http://identifiers.org/mamo#");
+
+        let decl = DeclareClass(build.class("http://identifiers.org/mamo#MAMO_0000207"));
+        let ofn = format!("{}", decl.as_functional_with_prefixes(&prefixes));
+        assert_eq!("Declaration(Class(:MAMO_0000207))", ofn);
+    }
+
+    // Same bug, but for the shape seen in the `MAMO` corpus ontology itself:
+    // the default-prefix IRI has no trailing `/` or `#` separator, so the
+    // leftover local part starts with `#` (from the entity IRI's own
+    // fragment separator). `#` is not a legal `PN_LOCAL` character in OFN's
+    // grammar, so this must fall back to the full `<IRI>` form rather than
+    // emit `:#MAMO_0000207` (still invalid) or the pre-fix `#MAMO_0000207`
+    // (invalid for a second, independent reason -- no colon at all).
+    #[test]
+    fn test_ofn_curie_empty_prefix_no_separator_falls_back_to_full_iri() {
+        let build = Build::new_arc();
+        let mut prefixes = curie::PrefixMapping::default();
+        prefixes.add_prefix("", "http://identifiers.org/mamo").ok();
+        prefixes.set_default("http://identifiers.org/mamo");
+
+        let decl = DeclareClass(build.class("http://identifiers.org/mamo#MAMO_0000207"));
+        let ofn = format!("{}", decl.as_functional_with_prefixes(&prefixes));
+        assert_eq!(
+            "Declaration(Class(<http://identifiers.org/mamo#MAMO_0000207>))",
             ofn
         );
     }
