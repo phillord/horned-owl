@@ -1965,6 +1965,21 @@ pub mod test {
         assert_eq!(ont.i().import().count(), 1);
     }
 
+    // Regression test for https://github.com/phillord/horned-owl/issues/229.
+    // The bug itself was in the OFN writer, not the OWX reader, but an
+    // ontology with both an Import and an ontology-level Annotation is the
+    // trigger shape -- worth an explicit check here too, since (unlike the
+    // other three formats' readers) this one has no #[files(...)]-based
+    // resource test to pick new fixtures up automatically.
+    #[test]
+    fn test_import_and_ontology_annotation() {
+        let ont_s = include_str!("../../ont/owl-xml/import-and-annotation.owx");
+        let (ont, _) = read_ok(&mut ont_s.as_bytes());
+
+        assert_eq!(ont.i().import().count(), 1);
+        assert_eq!(ont.i().ontology_annotation().count(), 1);
+    }
+
     #[test]
     fn test_datatype() {
         let ont_s = include_str!("../../ont/owl-xml/datatype.owx");
