@@ -150,6 +150,28 @@ impl<A: ForIRI, AA: ForIndex<A>> OntologyIndex<A, AA> for DeclarationMappedIndex
                     return None;
                 }
 
+                // AnnotationProperty/ObjectProperty (or DataProperty)
+                // punning is not legal in OWL 2 DL, but appears in
+                // real-world ontologies. Unlike the Class/NamedIndividual
+                // case above (which is tracked via `puns`, consumed by
+                // `kind_prefer_punned_individual`), there is no separate
+                // "prefer" accessor for this combination, so without a
+                // fixed priority here, declaration_kind() resolution
+                // would depend on insertion order -- which itself
+                // depends on incidental detail such as the order axioms
+                // appear in a source document, and does not survive a
+                // write/read round trip. Give ObjectProperty/DataProperty
+                // priority over AnnotationProperty so the same IRI always
+                // resolves the same way regardless of insertion order.
+                if ne == NamedEntityKind::AnnotationProperty
+                    && matches!(
+                        self.kinds.get(&iri),
+                        Some(NamedEntityKind::ObjectProperty) | Some(NamedEntityKind::DataProperty)
+                    )
+                {
+                    return None;
+                }
+
                 // Save the kind
                 let s = self.kinds.insert(iri.clone(), ne);
 
@@ -298,6 +320,77 @@ mod test {
         assert_eq!(
             d.declaration_kind_prefer_punned_individual(&iri),
             Some(NamedOWLEntityKind::NamedIndividual)
+        );
+    }
+
+    // Regression test for https://github.com/phillord/horned-owl/issues/228
+    //
+    // An IRI declared as both AnnotationProperty and ObjectProperty (illegal
+    // punning under OWL 2 DL, but seen in real-world ontologies) must
+    // resolve to the same declaration_kind() regardless of which
+    // declaration was inserted first -- otherwise round-tripping through a
+    // writer that reorders the declarations changes the resolved kind and
+    // breaks reread.
+    #[test]
+    fn test_annotation_object_property_pun_order_independent() {
+        let b = Build::new_rc();
+        let iri = b.iri("http://www.example.com/p");
+        let ap: AnnotatedComponent<_> = {
+            let ap: NamedOWLEntity<_> = b.annotation_property("http://www.example.com/p").into();
+            ap.into()
+        };
+        let op: AnnotatedComponent<_> = {
+            let op: NamedOWLEntity<_> = b.object_property("http://www.example.com/p").into();
+            op.into()
+        };
+
+        // AnnotationProperty declared first, ObjectProperty second.
+        let mut d = DeclarationMappedIndex::new_rc();
+        d.index_insert(ap.clone().into());
+        d.index_insert(op.clone().into());
+        assert_eq!(
+            d.declaration_kind(&iri),
+            Some(NamedOWLEntityKind::ObjectProperty)
+        );
+
+        // ObjectProperty declared first, AnnotationProperty second.
+        let mut d = DeclarationMappedIndex::new_rc();
+        d.index_insert(op.into());
+        d.index_insert(ap.into());
+        assert_eq!(
+            d.declaration_kind(&iri),
+            Some(NamedOWLEntityKind::ObjectProperty)
+        );
+    }
+
+    // Same as above but for DataProperty rather than ObjectProperty.
+    #[test]
+    fn test_annotation_data_property_pun_order_independent() {
+        let b = Build::new_rc();
+        let iri = b.iri("http://www.example.com/p");
+        let ap: AnnotatedComponent<_> = {
+            let ap: NamedOWLEntity<_> = b.annotation_property("http://www.example.com/p").into();
+            ap.into()
+        };
+        let dp: AnnotatedComponent<_> = {
+            let dp: NamedOWLEntity<_> = b.data_property("http://www.example.com/p").into();
+            dp.into()
+        };
+
+        let mut d = DeclarationMappedIndex::new_rc();
+        d.index_insert(ap.clone().into());
+        d.index_insert(dp.clone().into());
+        assert_eq!(
+            d.declaration_kind(&iri),
+            Some(NamedOWLEntityKind::DataProperty)
+        );
+
+        let mut d = DeclarationMappedIndex::new_rc();
+        d.index_insert(dp.into());
+        d.index_insert(ap.into());
+        assert_eq!(
+            d.declaration_kind(&iri),
+            Some(NamedOWLEntityKind::DataProperty)
         );
     }
 }
