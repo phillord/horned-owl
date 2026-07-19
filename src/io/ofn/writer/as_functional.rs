@@ -895,12 +895,43 @@ impl<A: ForIRI> AsFunctional<A> for IArgument<A> {}
 
 // ---------------------------------------------------------------------------
 
+/// Whether `s` is usable, as-is, as an OFN `AbbreviatedIRI` local part.
+///
+/// A conservative approximation of the grammar -- under-approximating is
+/// safe, since callers fall back to the full `<IRI>` form on `false`.
+fn is_valid_ofn_local_part(s: &str) -> bool {
+    let mut chars = s.chars();
+    match chars.next() {
+        Some(c) if c.is_alphanumeric() || c == '_' => {}
+        _ => return false,
+    }
+    s.chars()
+        .all(|c| c.is_alphanumeric() || c == '_' || c == '-' || c == '.')
+}
+
+/// Abbreviate `iri` against `prefixes` as `prefix:local`, if possible.
+///
+/// Doesn't use `curie::PrefixMapping::shrink_iri`: its `Display` for a
+/// default-prefix match omits the colon OFN's grammar requires (#230).
+/// Falls back to the full `<IRI>` form when no mapping gives a valid
+/// local part.
+fn shrink_iri_for_ofn<'a>(prefixes: &'a PrefixMapping, iri: &str) -> Option<(&'a str, String)> {
+    for (name, value) in prefixes.mappings() {
+        if let Some(local) = iri.strip_prefix(value.as_str())
+            && is_valid_ofn_local_part(local)
+        {
+            return Some((name.as_str(), local.to_string()));
+        }
+    }
+    None
+}
+
 impl<A: ForIRI> Display for Functional<'_, IRI<A>, A> {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
         if let Some(prefixes) = self.1.as_ref() {
-            match prefixes.shrink_iri(self.0) {
-                Err(_) => write!(f, "<{}>", self.0),
-                Ok(curie) => write!(f, "{curie}"),
+            match shrink_iri_for_ofn(prefixes, self.0) {
+                Some((name, local)) => write!(f, "{name}:{local}"),
+                None => write!(f, "<{}>", self.0),
             }
         } else {
             write!(f, "<{}>", self.0)
@@ -1197,6 +1228,38 @@ mod tests {
         let ofn = format!("{}", decl.as_functional_with_prefixes(&prefixes));
         assert_eq!(
             "Declaration(Class(<http://xmlns.com/foaf/0.1/Person>))",
+            ofn
+        );
+    }
+
+    // Regression test for #230: an empty/default CURIE prefix must still
+    // abbreviate with the leading colon (`:local`, not bare `local`).
+    #[test]
+    fn test_ofn_curie_empty_prefix() {
+        let build = Build::new_arc();
+        let mut prefixes = curie::PrefixMapping::default();
+        prefixes.add_prefix("", "http://identifiers.org/mamo#").ok();
+        prefixes.set_default("http://identifiers.org/mamo#");
+
+        let decl = DeclareClass(build.class("http://identifiers.org/mamo#MAMO_0000207"));
+        let ofn = format!("{}", decl.as_functional_with_prefixes(&prefixes));
+        assert_eq!("Declaration(Class(:MAMO_0000207))", ofn);
+    }
+
+    // Regression test for #230: a leftover local part starting with `#`
+    // (no trailing separator on the default-prefix IRI) falls back to the
+    // full `<IRI>` form instead of emitting an invalid local part.
+    #[test]
+    fn test_ofn_curie_empty_prefix_no_separator_falls_back_to_full_iri() {
+        let build = Build::new_arc();
+        let mut prefixes = curie::PrefixMapping::default();
+        prefixes.add_prefix("", "http://identifiers.org/mamo").ok();
+        prefixes.set_default("http://identifiers.org/mamo");
+
+        let decl = DeclareClass(build.class("http://identifiers.org/mamo#MAMO_0000207"));
+        let ofn = format!("{}", decl.as_functional_with_prefixes(&prefixes));
+        assert_eq!(
+            "Declaration(Class(<http://identifiers.org/mamo#MAMO_0000207>))",
             ofn
         );
     }
