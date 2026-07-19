@@ -142,7 +142,7 @@ fn decode_expand_curie_maybe<'a, A: ForIRI, R: BufRead>(
     #[cfg(not(feature = "encoding"))]
     match r.reader.decoder().decode(val) {
         Ok(curie) => {
-            let cur = expand_curie_maybe(r, curie);
+            let cur = expand_curie_or_base_maybe(r, curie);
             Ok(cur)
         }
         Err(e) => Err(HornedError::from(e)),
@@ -159,6 +159,29 @@ fn expand_curie_maybe<'a, A: ForIRI, R: BufRead>(
         Ok(n) => Cow::Owned(n),
         // Else assume it's a complete URI
         Err(_e) => val,
+    }
+}
+
+/// Like [`expand_curie_maybe`], except a fragment-only value (starting
+/// with `#`) is resolved against the ontology's base IRI rather than the
+/// CURIE default prefix. Mirrors the identical guard in `get_iri_value`
+/// (issue #212): the default/empty prefix may itself already end in
+/// `#`, which would otherwise double up when concatenated with a
+/// `#fragment` value (`prefix#` + `#fragment` = `prefix##fragment`).
+/// `get_iri_value` special-cases this for the `IRI="..."` *attribute*
+/// form; this does the same for the `<IRI>text</IRI>` *element content*
+/// form (see issue #226 -- the attribute path was fixed, this sibling
+/// path wasn't).
+fn expand_curie_or_base_maybe<'a, A: ForIRI, R: BufRead>(
+    r: &mut Read<A, R>,
+    val: Cow<'a, str>,
+) -> Cow<'a, str> {
+    if val.starts_with('#')
+        && let Some(base) = r.base_iri.clone()
+    {
+        Cow::Owned(format!("{base}{val}"))
+    } else {
+        expand_curie_maybe(r, val)
     }
 }
 
@@ -2648,5 +2671,35 @@ pub mod test {
             read_with_build(&mut owx.as_bytes(), &b, Default::default()).unwrap();
         let dc = ont.i().declare_class().next().unwrap();
         assert_eq!(dc.0.0.to_string(), "http://ontriscal#MyClass");
+    }
+
+    // Regression test for #226: the same doubled-## bug as #212
+    // (relative_iri_with_empty_prefix_no_double_hash above), but for a
+    // fragment-only IRI given as <IRI>#local</IRI> *element content*
+    // (e.g. an AnnotationAssertion subject) rather than an IRI="#local"
+    // *attribute*. The #212 fix only covered the attribute form.
+    #[test]
+    fn relative_iri_element_content_with_empty_prefix_no_double_hash() {
+        let owx = r##"<?xml version="1.0"?>
+<Ontology xmlns="http://www.w3.org/2002/07/owl#"
+     xml:base="http://ontriscal"
+     xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"
+     ontologyIRI="http://ontriscal">
+    <Prefix name="" IRI="http://ontriscal#"/>
+    <Prefix name="rdfs" IRI="http://www.w3.org/2000/01/rdf-schema#"/>
+    <Declaration>
+        <Class IRI="#MyClass"/>
+    </Declaration>
+    <AnnotationAssertion>
+        <AnnotationProperty abbreviatedIRI="rdfs:comment"/>
+        <IRI>#MyClass</IRI>
+        <Literal>a comment</Literal>
+    </AnnotationAssertion>
+</Ontology>"##;
+        let b = Build::new_rc();
+        let (ont, _): (ComponentMappedOntology<RcStr, RcAnnotatedComponent>, _) =
+            read_with_build(&mut owx.as_bytes(), &b, Default::default()).unwrap();
+        let assertion = ont.i().annotation_assertion().next().unwrap();
+        assert_eq!(assertion.subject.to_string(), "http://ontriscal#MyClass");
     }
 }
