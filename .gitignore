@@ -7,3 +7,6 @@
 # local path dependency symlink -- points at a machine-specific worktree,
 # not portable; see Cargo.toml's horned-owl = { path = "./horned-owl" }
 /horned-owl
+
+# local secrets: real API key lives in .env (tracked template is .env.example)
+/.env
