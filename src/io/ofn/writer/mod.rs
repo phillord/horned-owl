@@ -70,18 +70,40 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
         }
     }
 
-    // Write axioms in order
-    for kind in ComponentKind::all_kinds() {
-        if kind != ComponentKind::OntologyID && kind != ComponentKind::DocIRI {
-            let mut components = ont.i().component_for_kind(kind).collect::<Vec<_>>();
-            components.sort();
-            for component in components {
-                writeln!(
-                    write,
-                    "    {}",
-                    component.as_functional_with_prefixes(mapping)
-                )?;
-            }
+    // The OWL 2 Functional-Style Syntax grammar fixes the order of an
+    // `Ontology(...)` body: `directlyImportsDocuments` (`Import(...)`)
+    // must precede `ontologyAnnotations` (`Annotation(...)`), which in
+    // turn must precede the axioms
+    // (https://www.w3.org/TR/owl2-syntax/#Ontologies -- see also
+    // `Ontology` in `src/grammars/ofn.pest`, which encodes the same
+    // order and rejects anything else). `ComponentKind::all_kinds()`
+    // does not honour this -- `OntologyAnnotation` is declared before
+    // `Import` in the `components!` macro invocation in `model.rs`, so
+    // the naive loop below would write annotations before imports and
+    // produce unparseable output (see
+    // https://github.com/phillord/horned-owl/issues/229). Write
+    // `Import` then `OntologyAnnotation` up front, then fall through to
+    // every other kind in their `all_kinds()` order.
+    let mut other_kinds = ComponentKind::all_kinds();
+    other_kinds.retain(|k| {
+        *k != ComponentKind::OntologyID
+            && *k != ComponentKind::DocIRI
+            && *k != ComponentKind::Import
+            && *k != ComponentKind::OntologyAnnotation
+    });
+    let ordered_kinds = [ComponentKind::Import, ComponentKind::OntologyAnnotation]
+        .into_iter()
+        .chain(other_kinds);
+
+    for kind in ordered_kinds {
+        let mut components = ont.i().component_for_kind(kind).collect::<Vec<_>>();
+        components.sort();
+        for component in components {
+            writeln!(
+                write,
+                "    {}",
+                component.as_functional_with_prefixes(mapping)
+            )?;
         }
     }
 
@@ -143,6 +165,47 @@ mod test {
             output.contains("Annotation(Annotation("),
             "nested annotation was lost in round-trip:\n{output}"
         );
+    }
+
+    // Regression test for https://github.com/phillord/horned-owl/issues/229
+    // The OFN grammar (and OWL 2 spec) requires `Import(...)` statements to
+    // precede ontology `Annotation(...)`s in an `Ontology(...)` body, but the
+    // writer used to walk `ComponentKind::all_kinds()` in `components!`
+    // macro declaration order, which puts `OntologyAnnotation` before
+    // `Import` -- producing output the reader itself then rejects. Check
+    // both that a written `Import` textually precedes a written
+    // `Annotation`, and that the written bytes reread successfully (the
+    // real-world symptom: a `horned-roundtrip` `reread_fail`).
+    #[test]
+    fn roundtrip_import_before_ontology_annotation() {
+        let resource = "src/ont/owl-functional/manual/import-and-annotation.ofn";
+        let reader = std::fs::File::open(resource)
+            .map(std::io::BufReader::new)
+            .unwrap();
+        let (ont, prefixes): (ComponentMappedOntology<RcStr, AnnotatedComponent<RcStr>>, _) =
+            crate::io::ofn::reader::read(reader, Default::default()).unwrap();
+
+        let mut writer = Vec::new();
+        crate::io::ofn::writer::write(&mut writer, &ont, Some(&prefixes)).unwrap();
+        let output = String::from_utf8(writer.clone()).unwrap();
+
+        let import_pos = output
+            .find("Import(")
+            .expect("Import(...) missing from written output");
+        let annotation_pos = output
+            .find("Annotation(rdfs:label")
+            .expect("ontology Annotation(...) missing from written output");
+        assert!(
+            import_pos < annotation_pos,
+            "Import must precede the ontology Annotation in OFN output:\n{output}"
+        );
+
+        crate::io::ofn::reader::read::<
+            RcStr,
+            ComponentMappedOntology<RcStr, AnnotatedComponent<RcStr>>,
+            _,
+        >(std::io::Cursor::new(&writer), Default::default())
+        .expect("written OFN with both Import and ontology Annotation must reread cleanly");
     }
 
     #[cfg(test)]
