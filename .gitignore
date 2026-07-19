@@ -3,3 +3,6 @@
 # generated run artifacts
 /results.jsonl
 /report/
+
+# local secrets: real API key lives in .env (tracked template is .env.example)
+/.env
