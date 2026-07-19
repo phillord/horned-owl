@@ -75,13 +75,34 @@ pub(crate) fn render_iri_to_string(iri: &str, pm: Option<&PrefixMapping>) -> Str
         // `http://e/onto`) shrinks `http://e/onto#A` to `#A`, which is also
         // invalid — emit the full `<iri>` form instead.
         if is_valid_manchester_local(local) {
-            // `add_prefix("", ns)` stores "" in the prefix *mapping* (not the
-            // default slot), so `shrink_iri` returns a `Curie { prefix: Some(""), .. }`
-            // which `Display` formats as ":local". Strip the leading ':' to get the
-            // bare local name for the default prefix.
+            if !s.contains(':') {
+                // No ':' anywhere in `s` means `shrink_iri` matched the `curie`
+                // crate's *separate* "default slot" (`set_default`, e.g. what
+                // the OWL/XML reader derives from a bare `ontologyIRI`
+                // attribute with no explicit `<Prefix name="" .../>`), which
+                // yields `Curie { prefix: None, .. }` — `Display` writes only
+                // the bare reference, with no colon at all. That's
+                // indistinguishable in isolation from a genuine Manchester
+                // `SimpleIRI`, but there is no corresponding `Prefix: : <iri>`
+                // declaration to back it: `curie` exposes no getter for the
+                // default slot, so the writer's header loop (which only
+                // iterates `mapping.mappings()`) can never see it. Emitting
+                // the bare local name here would produce a `SimpleIRI` the
+                // reader cannot resolve (issue #233) — fall back to the full
+                // `<iri>` form instead, same as the other unrenderable shapes
+                // below.
+                return format!("<{iri}>");
+            }
+            // `s` contains a ':', so `shrink_iri` matched a genuine *named*
+            // mapping-table entry (`Curie { prefix: Some(_), .. }`), backed by
+            // a real `Prefix: name: <iri>` header line from `mapping.mappings()`.
             return if let Some(stripped) = s.strip_prefix(':') {
+                // Empty name (`add_prefix("", ns)`, e.g. an explicit
+                // `Prefix: : <iri>`) — Display gives ":local"; strip the
+                // leading ':' for the bare Manchester SimpleIRI form.
                 stripped.to_owned()
             } else {
+                // Non-empty name, e.g. "ex:Dog" — already the correct form.
                 s
             };
         }
@@ -963,6 +984,31 @@ mod tests {
         assert_eq!(
             c.as_manchester_with_prefixes(&pm).to_string(),
             "<http://ex/a/b>"
+        );
+    }
+
+    #[test]
+    fn default_slot_without_named_empty_prefix_falls_back_to_full_iri() {
+        // `set_default` (the `curie` crate's separate "default slot", e.g.
+        // what `owx::reader` derives from an `ontologyIRI` attribute with no
+        // explicit `<Prefix name="" .../>`) is a DIFFERENT mechanism from
+        // `add_prefix("", ns)` (a genuine, enumerable "" entry in the prefix
+        // mapping). `shrink_iri` matches the default slot first and yields a
+        // bare local name with no leading ':' -- indistinguishable in isolation
+        // from a real Manchester `SimpleIRI`, but with no `Prefix: : <iri>`
+        // declaration to back it (the writer's header loop only iterates
+        // `mapping.mappings()`, which a `set_default`-only entry never joins).
+        // Emitting the bare name here would produce output the reader cannot
+        // resolve (issue #233) -- it must fall back to the full `<iri>` form,
+        // exactly like the `renders_named_class` (no prefix mapping at all)
+        // case above.
+        let b = Build::new_rc();
+        let c = b.class("http://ex.org/onto#Widget");
+        let mut pm = curie::PrefixMapping::default();
+        pm.set_default("http://ex.org/onto#");
+        assert_eq!(
+            c.as_manchester_with_prefixes(&pm).to_string(),
+            "<http://ex.org/onto#Widget>"
         );
     }
 
