@@ -142,7 +142,12 @@ fn decode_expand_curie_maybe<'a, A: ForIRI, R: BufRead>(
     #[cfg(not(feature = "encoding"))]
     match r.reader.decoder().decode(val) {
         Ok(curie) => {
-            let cur = expand_curie_or_base_maybe(r, curie);
+            // As with `get_attr_value_str`, decoding alone doesn't resolve
+            // XML entity/character references (e.g. `&#39;`) -- unescape
+            // before expanding, same as issue #239's other call site.
+            let unescaped = unescape(&curie)
+                .map_err(|e| HornedError::ParserError(Box::new(e), Location::Unknown))?;
+            let cur = expand_curie_or_base_maybe(r, Cow::Owned(unescaped.into_owned()));
             Ok(cur)
         }
         Err(e) => Err(HornedError::from(e)),
@@ -213,12 +218,23 @@ fn get_attr_value_str<R: BufRead>(
     // First, get the byte slice containing the attribute value
     get_attr_value_bytes(event, attr_key)?
         .as_ref()
-        .map(|val|
-        // Next, decode it to obtain a `str`.
-        reader.decoder().decode(val)
-        .map_err(|err| HornedError::ParserError(Box::new(err), Location::Unknown)))
+        .map(|val| {
+            // Next, decode it to obtain a `str`.
+            let decoded = reader
+                .decoder()
+                .decode(val)
+                .map_err(|err| HornedError::ParserError(Box::new(err), Location::Unknown))?;
+            // Decoding alone is not sufficient: it only resolves the byte
+            // encoding, not XML entity/character references, so e.g.
+            // `Alzheimer&#39;s_Disease` would otherwise survive with the
+            // literal `&#39;` still in it rather than becoming `Alzheimer's_Disease`
+            // (see issue #239). Mirrors the same two-step handling `<Literal>`
+            // text already does below.
+            unescape(&decoded)
+                .map(|s| s.to_string())
+                .map_err(|err| HornedError::ParserError(Box::new(err), Location::Unknown))
+        })
         .transpose()
-        .map(|opt| opt.map(|s| s.to_string()))
 }
 
 /// Returns, if present, the IRI for the given opening tag.
@@ -2701,5 +2717,52 @@ pub mod test {
             read_with_build(&mut owx.as_bytes(), &b, Default::default()).unwrap();
         let assertion = ont.i().annotation_assertion().next().unwrap();
         assert_eq!(assertion.subject.to_string(), "http://ontriscal#MyClass");
+    }
+
+    // Regression test for #239: an XML numeric character reference (e.g.
+    // `&#39;` for an apostrophe) in an `IRI="..."` attribute must be
+    // unescaped, not carried through raw. Real corpus ontologies (e.g.
+    // APADISORDERS) use this for apostrophes in class-name fragments, like
+    // `#Alzheimer&#39;s_Disease`.
+    #[test]
+    fn iri_attribute_unescapes_xml_entity() {
+        let owx = r##"<?xml version="1.0"?>
+<Ontology xmlns="http://www.w3.org/2002/07/owl#" ontologyIRI="http://ex.com/o">
+    <Declaration>
+        <Class IRI="http://ex.com/o#Alzheimer&#39;s_Disease"/>
+    </Declaration>
+</Ontology>"##;
+        let b = Build::new_rc();
+        let (ont, _): (ComponentMappedOntology<RcStr, RcAnnotatedComponent>, _) =
+            read_with_build(&mut owx.as_bytes(), &b, Default::default()).unwrap();
+        let dc = ont.i().declare_class().next().unwrap();
+        assert_eq!(dc.0.0.to_string(), "http://ex.com/o#Alzheimer's_Disease");
+    }
+
+    // Same bug, but for the <IRI>text</IRI> *element content* form (e.g. an
+    // AnnotationAssertion subject) rather than the IRI="..." attribute.
+    #[test]
+    fn iri_element_content_unescapes_xml_entity() {
+        let owx = r##"<?xml version="1.0"?>
+<Ontology xmlns="http://www.w3.org/2002/07/owl#"
+     xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"
+     ontologyIRI="http://ex.com/o">
+    <Declaration>
+        <Class IRI="http://ex.com/o#Alzheimer's_Disease"/>
+    </Declaration>
+    <AnnotationAssertion>
+        <AnnotationProperty abbreviatedIRI="rdfs:comment"/>
+        <IRI>http://ex.com/o#Alzheimer&#39;s_Disease</IRI>
+        <Literal>a comment</Literal>
+    </AnnotationAssertion>
+</Ontology>"##;
+        let b = Build::new_rc();
+        let (ont, _): (ComponentMappedOntology<RcStr, RcAnnotatedComponent>, _) =
+            read_with_build(&mut owx.as_bytes(), &b, Default::default()).unwrap();
+        let assertion = ont.i().annotation_assertion().next().unwrap();
+        assert_eq!(
+            assertion.subject.to_string(),
+            "http://ex.com/o#Alzheimer's_Disease"
+        );
     }
 }
