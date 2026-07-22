@@ -28,6 +28,7 @@ This is a list of maintainers for crates, directories or files
 | `src/grammars/ofn.pest` | Martin Larralde | |
 | `src/grammars/omn.pest` | Michel Dumontier | |
 | `src/grammars/{bcp47,rfc3987,sparql}.pest` | shared | Foundational IRI/literal grammars used by both OFN and OMN |
+| `src/io/obo/` | Michel Dumontier | OBO Flat File Format support (#181/#217) |
 
 ## Other regular contributors
 
