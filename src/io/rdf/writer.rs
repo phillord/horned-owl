@@ -2043,6 +2043,49 @@ mod test {
         );
     }
 
+    // Regression test for https://github.com/phillord/horned-owl/issues/251:
+    // a `_:`-prefixed anonymous individual (see `nodeid_attr_value` in
+    // horned-pretty-rdf) referenced more than once, forcing an explicit
+    // `rdf:nodeID` attribute.
+    #[test]
+    fn shared_anonymous_individual_with_underscore_prefix_round_trips() {
+        let b = Build::new_rc();
+        let mut ont = ComponentMappedOntology::new_rc();
+        let anon = b.anon("_:genid1");
+        ont.insert(ObjectPropertyAssertion {
+            ope: b.object_property("http://example.com/p1").into(),
+            from: b.named_individual("http://example.com/s1").into(),
+            to: anon.clone().into(),
+        });
+        ont.insert(ObjectPropertyAssertion {
+            ope: b.object_property("http://example.com/p2").into(),
+            from: b.named_individual("http://example.com/s2").into(),
+            to: anon.into(),
+        });
+
+        let mut buf = Vec::new();
+        write(&mut buf, &ont).expect("write should not fail");
+        let s = String::from_utf8(buf.clone()).unwrap();
+        assert!(
+            !s.contains("nodeID=\"_:"),
+            "rdf:nodeID must never contain a colon, got:\n{s}"
+        );
+
+        // The written output must be re-readable -- this is the actual
+        // horned-roundtrip failure mode this test guards against. (Not
+        // using `read_ok` here: it also asserts the parse is *complete* in
+        // the OWL-axiom-mapping sense, which is a separate concern from
+        // this test -- a bare shared blank node with no type declaration
+        // isn't guaranteed to map back to a recognised axiom shape. What
+        // matters here is that the RDF/XML syntax itself is valid.)
+        let result = crate::io::rdf::reader::read(&mut &buf[..], Default::default());
+        assert!(
+            result.is_ok(),
+            "written RDF/XML must be syntactically valid to reread, got: {:?}",
+            result.err()
+        );
+    }
+
     #[test]
     fn single_member_different_individuals_does_not_panic() {
         let b = Build::new_rc();

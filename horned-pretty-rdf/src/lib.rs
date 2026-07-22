@@ -965,6 +965,12 @@ where
         }
     }
 
+    /// Strip a blank node label's leading `_:`, if present, for use as an
+    /// `rdf:nodeID` attribute value (issue #251).
+    fn nodeid_attr_value(bn: &PBlankNode<A>) -> &str {
+        bn.as_ref().strip_prefix("_:").unwrap_or(bn.as_ref())
+    }
+
     fn bytes_start_iri<'a>(&mut self, nn: &'a PNamedNode<A>) -> BytesStart<'a> {
         let (iri_protocol_and_host, iri_qname) = nn.split_iri();
         if let Some(iri_ns_prefix) = &self.config.prefix.get(iri_protocol_and_host) {
@@ -990,7 +996,7 @@ where
                 if let PNamedOrBlankNode::BlankNode(bn) = &typ.subject
                     && chunk.object_count(bn) > 1
                 {
-                    bs.push_attribute(("rdf:nodeID", bn.as_ref()));
+                    bs.push_attribute(("rdf:nodeID", Self::nodeid_attr_value(bn)));
                 }
                 Some(bs)
             } else {
@@ -1120,7 +1126,7 @@ where
                         (None, None) => {}
                     }
                 }
-                property_open.push_attribute(("rdf:nodeID", bn.as_ref()));
+                property_open.push_attribute(("rdf:nodeID", Self::nodeid_attr_value(bn)));
                 self.write_start(Event::Start(property_open))
                     .map_err(map_err)?;
             }
