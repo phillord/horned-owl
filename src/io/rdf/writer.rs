@@ -3,10 +3,11 @@ use crate::{
     error::invalid,
     model::*,
     ontology::component_mapped::ComponentMappedOntology,
-    vocab::{OWL, RDF, RDFS, SWRL, Vocab, XSD},
+    vocab::{Namespace, OWL, RDF, RDFS, SWRL, Vocab, XSD},
 };
 
 use crate::ontology::indexed::ForIndex;
+use crate::visitor::immutable::{Visit, Walk};
 
 use indexmap::indexmap;
 
@@ -459,8 +460,157 @@ impl<A: ForIRI, AA: ForIndex<A>, F: RdfFormatter<A, W>, W: Write> Render<A, F, (
             cmp.render(f, ng)?;
         }
 
+        // Emitted last so that entities which already occur as a subject keep
+        // their position in the document and merely gain their `rdf:type`
+        // property; only entities that appear nowhere as a subject (mentioned
+        // solely inside a class expression, say) are appended as fresh blocks.
+        for (iri, kind) in undeclared_signature(self) {
+            let ty = match kind {
+                NamedOWLEntityKind::Class => ng.nn(OWL::Class),
+                NamedOWLEntityKind::Datatype => ng.nn(RDFS::Datatype),
+                NamedOWLEntityKind::ObjectProperty => ng.nn(OWL::ObjectProperty),
+                NamedOWLEntityKind::DataProperty => ng.nn(OWL::DatatypeProperty),
+                NamedOWLEntityKind::AnnotationProperty => ng.nn(OWL::AnnotationProperty),
+                NamedOWLEntityKind::NamedIndividual => ng.nn(OWL::NamedIndividual),
+            };
+            triples!(f, &iri, ng.nn(RDF::Type), ty);
+        }
+
         Ok(())
     }
+}
+
+/// Gathers an ontology's entity signature alongside the entities that a
+/// `Declaration` component already types, so the writer can emit the difference
+/// (see [`undeclared_signature`]).
+struct SignatureCollect<A: ForIRI> {
+    /// Every (entity, kind) pair mentioned anywhere, in first-encounter order.
+    used: Vec<(IRI<A>, NamedOWLEntityKind)>,
+    seen: HashSet<(IRI<A>, NamedOWLEntityKind)>,
+    /// The subset carrying an explicit `Declaration`. Keyed on the pair rather
+    /// than the IRI alone so that punning still works: an IRI declared as a
+    /// class but *used* as an object property needs both type triples.
+    declared: HashSet<(IRI<A>, NamedOWLEntityKind)>,
+}
+
+impl<A: ForIRI> SignatureCollect<A> {
+    fn new() -> Self {
+        SignatureCollect {
+            used: vec![],
+            seen: HashSet::new(),
+            declared: HashSet::new(),
+        }
+    }
+
+    fn used(&mut self, iri: &IRI<A>, kind: NamedOWLEntityKind) {
+        let e = (iri.clone(), kind);
+        if self.seen.insert(e.clone()) {
+            self.used.push(e);
+        }
+    }
+}
+
+impl<A: ForIRI> Visit<A> for SignatureCollect<A> {
+    fn visit_class(&mut self, e: &Class<A>) {
+        self.used(&e.0, NamedOWLEntityKind::Class)
+    }
+    fn visit_datatype(&mut self, e: &Datatype<A>) {
+        self.used(&e.0, NamedOWLEntityKind::Datatype)
+    }
+    fn visit_object_property(&mut self, e: &ObjectProperty<A>) {
+        self.used(&e.0, NamedOWLEntityKind::ObjectProperty)
+    }
+    fn visit_data_property(&mut self, e: &DataProperty<A>) {
+        self.used(&e.0, NamedOWLEntityKind::DataProperty)
+    }
+    fn visit_annotation_property(&mut self, e: &AnnotationProperty<A>) {
+        self.used(&e.0, NamedOWLEntityKind::AnnotationProperty)
+    }
+    fn visit_named_individual(&mut self, e: &NamedIndividual<A>) {
+        self.used(&e.0, NamedOWLEntityKind::NamedIndividual)
+    }
+
+    // `Walk` descends from each `Declare*` into the entity it declares, so the
+    // visits above already record these as *used*; here we note that they are
+    // also *declared*, and hence rendered by the `render_triple!` impls below.
+    fn visit_declare_class(&mut self, e: &DeclareClass<A>) {
+        self.declared
+            .insert(((e.0).0.clone(), NamedOWLEntityKind::Class));
+    }
+    fn visit_declare_datatype(&mut self, e: &DeclareDatatype<A>) {
+        self.declared
+            .insert(((e.0).0.clone(), NamedOWLEntityKind::Datatype));
+    }
+    fn visit_declare_object_property(&mut self, e: &DeclareObjectProperty<A>) {
+        self.declared
+            .insert(((e.0).0.clone(), NamedOWLEntityKind::ObjectProperty));
+    }
+    fn visit_declare_data_property(&mut self, e: &DeclareDataProperty<A>) {
+        self.declared
+            .insert(((e.0).0.clone(), NamedOWLEntityKind::DataProperty));
+    }
+    fn visit_declare_annotation_property(&mut self, e: &DeclareAnnotationProperty<A>) {
+        self.declared
+            .insert(((e.0).0.clone(), NamedOWLEntityKind::AnnotationProperty));
+    }
+    fn visit_declare_named_individual(&mut self, e: &DeclareNamedIndividual<A>) {
+        self.declared
+            .insert(((e.0).0.clone(), NamedOWLEntityKind::NamedIndividual));
+    }
+}
+
+/// True for IRIs in the OWL/RDF/RDFS/XSD/SWRL vocabularies, whose entity type is
+/// fixed by the specification rather than by the document (`owl:Thing`,
+/// `rdfs:label`, `xsd:string`, …). OWLAPI never writes a declaration triple for
+/// these, and neither do we — doing so would add `Declaration` axioms to every
+/// re-read of an otherwise unremarkable file.
+fn is_builtin_entity<A: ForIRI>(iri: &IRI<A>) -> bool {
+    let iri: &str = iri.as_ref();
+    [
+        Namespace::OWL,
+        Namespace::RDF,
+        Namespace::RDFS,
+        Namespace::XSD,
+        Namespace::SWRL,
+    ]
+    .iter()
+    .any(|ns| iri.starts_with(ns.as_ref()))
+}
+
+/// The entities an ontology *uses* but never `Declaration`s, paired with the
+/// entity kind their usage implies.
+///
+/// In RDF an entity's type survives only as its `rdf:type` triple, and the sole
+/// component that renders one is `Declaration`. OWL does not require a
+/// declaration, however: OWLAPI (hence ROBOT) infers an entity's kind from the
+/// axioms it occurs in, so functional syntax such as CL's
+/// `EquivalentClasses(obo:GO_0051932 ObjectIntersectionOf(…))` — with no
+/// `Declaration(Class(obo:GO_0051932))` anywhere in `cl-edit.owl` — is
+/// perfectly legal. Rendered with no type triple that subject came out as a
+/// bare `<rdf:Description rdf:about="…GO_0051932">`, leaving the reverse
+/// mapping nothing to work from: reading CL's `tmp/cl-preprocess.owl` back
+/// failed with "Unknown entity in equivalent class statement", i.e. we wrote a
+/// file we could not read, silently breaking the CL release build.
+///
+/// OWLAPI's RDF renderer avoids this by emitting a declaration triple for every
+/// entity in the ontology signature regardless of whether a `Declaration` axiom
+/// exists; restricting that to the undeclared ones yields exactly the same set
+/// of triples, since the declared ones are rendered by `render_triple!` anyway.
+fn undeclared_signature<A: ForIRI, AA: ForIndex<A>>(
+    ont: &ComponentMappedOntology<A, AA>,
+) -> Vec<(IRI<A>, NamedOWLEntityKind)> {
+    let mut walk = Walk::new(SignatureCollect::new());
+    for cmp in ont.i().iter() {
+        // The annotated form, not just the component: annotation properties used
+        // only on an axiom annotation are part of the signature too.
+        walk.annotated_component(cmp);
+    }
+
+    let sig = walk.into_visit();
+    let SignatureCollect { used, declared, .. } = sig;
+    used.into_iter()
+        .filter(|e| !declared.contains(e) && !is_builtin_entity(&e.0))
+        .collect()
 }
 
 impl<A: ForIRI, F: RdfFormatter<A, W>, W: Write> Render<A, F, (), W> for AnnotatedComponent<A> {

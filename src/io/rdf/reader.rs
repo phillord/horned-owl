@@ -1305,6 +1305,41 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
         }
     }
 
+    /// As [`Self::distinguish_term_kind`], but for the subject of an
+    /// `owl:equivalentClass` triple, which is either a class (giving an
+    /// `EquivalentClasses` axiom) or a datatype (giving a `DatatypeDefinition`).
+    ///
+    /// A `Declaration` is the only evidence `distinguish_term_kind` can consult,
+    /// and OWL does not require one: OWLAPI/ROBOT type an entity from the axioms
+    /// it occurs in, so
+    /// `EquivalentClasses(obo:GO_0051932 ObjectIntersectionOf(…))` with no
+    /// `Declaration(Class(obo:GO_0051932))` — exactly what CL's `cl-edit.owl`
+    /// contains — is legal, yet we rejected any serialization of it with
+    /// "Unknown entity in equivalent class statement". Fall back to the kind the
+    /// axiom position implies, using the object as the tie-breaker: an object
+    /// that parsed as a data range means a datatype definition, anything else (a
+    /// named class, a class-expression bnode) means a class.
+    fn distinguish_equivalence_kind(
+        &mut self,
+        sub: &Term<A>,
+        obj: &Term<A>,
+        ic: &[&O],
+    ) -> Option<NamedOWLEntityKind> {
+        if let Some(kind) = self.distinguish_term_kind(sub, ic) {
+            return Some(kind);
+        }
+
+        match obj {
+            Term::BNode(id) if self.data_range.contains_key(id) => {
+                Some(NamedOWLEntityKind::Datatype)
+            }
+            Term::Iri(iri) if crate::vocab::is_xsd_datatype(iri) => {
+                Some(NamedOWLEntityKind::Datatype)
+            }
+            _ => Some(NamedOWLEntityKind::Class),
+        }
+    }
+
     /// Given an IRI work out its declaration kind, as defined in
     /// either this Ontology or any Ontology in the import closure.
     ///
@@ -1838,7 +1873,8 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                 // TODO: We need to check whether these
                 // EquivalentClasses have any other EquivalentClasses
                 // and add to that axiom
-                [a, Term::OWL(VOWL::EquivalentClass), b] => match self.distinguish_term_kind(a, ic)
+                [a, Term::OWL(VOWL::EquivalentClass), b] => match self
+                    .distinguish_equivalence_kind(a, b, ic)
                 {
                     Some(NamedOWLEntityKind::Class) => ok_some! {
                         EquivalentClasses(
