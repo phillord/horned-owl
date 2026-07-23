@@ -5,6 +5,7 @@ use std::io::Write;
 use curie::PrefixMapping;
 
 use crate::error::HornedError;
+use crate::model::AnnotatedComponent;
 use crate::model::AnnotationSubject;
 use crate::model::AnnotationValue;
 use crate::model::ClassExpression;
@@ -49,9 +50,31 @@ const SECTIONS: [(&str, &str); 6] = [
 /// each entity introduced by a `# Class: <IRI> (label)` comment followed by its
 /// axioms. This makes owlmake output byte-comparable with ROBOT's.
 pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
+    write: W,
+    ont: &ComponentMappedOntology<A, AA>,
+    mapping: Option<&PrefixMapping>,
+) -> Result<W, HornedError> {
+    write_with_labels(write, ont, mapping, None, None)
+}
+
+/// Like [`write`], but with two extras that let a caller reproduce ROBOT's output
+/// for an import-bearing edit file without merging the closure:
+///
+/// * `extra_labels` — an external `entity IRI → label` map consulted for the
+///   `# Class: … (label)` banner comments when the ontology itself carries no
+///   `rdfs:label` for an entity (OWLAPI resolves banner labels across the whole
+///   closure while serialising only the root).
+/// * `import_order` — the import IRIs in the order they should be written. The
+///   in-memory ontology is an unordered set, so it cannot preserve the document's
+///   import order on its own; a caller that knows it (e.g. from the source file)
+///   passes it here. Imports absent from the list keep their default (sorted)
+///   order after the listed ones.
+pub fn write_with_labels<A: ForIRI, AA: ForIndex<A>, W: Write>(
     mut write: W,
     ont: &ComponentMappedOntology<A, AA>,
     mapping: Option<&PrefixMapping>,
+    extra_labels: Option<&HashMap<String, String>>,
+    import_order: Option<&[String]>,
 ) -> Result<W, HornedError> {
     // Ensure we have a prefix mapping; the default is a no-op and
     // it's easier than checking every time.
@@ -98,25 +121,39 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
     // Imports first (functional syntax requires them before axioms), then the
     // ontology annotations, each on its own line.
     {
-        let mut imports = ont
+        // The ontology is an unordered set, so `component_for_kind` yields imports
+        // in IRI order. When the caller supplies the document's `import_order`,
+        // reorder to match it (ROBOT preserves the source order); otherwise keep
+        // the default order.
+        let mut imports: Vec<(String, String)> = ont
             .i()
             .component_for_kind(ComponentKind::Import)
-            .map(|c| c.as_functional_with_prefixes(mapping).to_string())
-            .collect::<Vec<_>>();
-        imports.sort();
-        for i in &imports {
-            writeln!(write, "{i}")?;
+            .filter_map(|c| match &c.component {
+                Component::Import(imp) => {
+                    Some((imp.0.as_ref().to_string(), c.as_functional_with_prefixes(mapping).to_string()))
+                }
+                _ => None,
+            })
+            .collect();
+        if let Some(order) = import_order {
+            imports.sort_by_key(|(iri, _)| order.iter().position(|x| x == iri).unwrap_or(usize::MAX));
+        }
+        for (_, rendered) in &imports {
+            writeln!(write, "{rendered}")?;
         }
     }
     {
-        let mut annos = ont
+        // OWLAPI writes the ontology annotations in `compareTo` order (by full
+        // property IRI, then value) — NOT by rendered CURIE, so e.g. `obo:` (which
+        // expands to purl.obolibrary.org) sorts before `dc:` (purl.org). Sorting
+        // the components by their natural `Ord` reproduces that.
+        let mut annos: Vec<&AnnotatedComponent<A>> = ont
             .i()
             .component_for_kind(ComponentKind::OntologyAnnotation)
-            .map(|c| c.as_functional_with_prefixes(mapping).to_string())
-            .collect::<Vec<_>>();
+            .collect();
         annos.sort();
         for a in &annos {
-            writeln!(write, "{a}")?;
+            writeln!(write, "{}", a.as_functional_with_prefixes(mapping))?;
         }
     }
     // Blank line separating the header from the body.
@@ -151,12 +188,35 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
         writeln!(write, "{rendered}")?;
     }
 
+    // Which entity-type sections have a non-empty *signature*. OWLAPI's
+    // `writeSortedEntities` emits a trailing blank line for every type whose
+    // signature is non-empty — even one with no banner (no entity carrying
+    // axioms), e.g. datatypes that appear only inside typed literals. Ranks:
+    // Class=0, OP=1, DataProp=2, AP=3, Datatype=4, Individual=5.
+    let mut sig_nonempty = [false; 6];
+    for &rank in entity_rank.values() {
+        sig_nonempty[rank] = true;
+    }
+    if !sig_nonempty[4] {
+        // A typed literal anywhere puts its datatype (≥ xsd:string) in the
+        // signature, so the Datatypes section is non-empty even without a
+        // datatype declaration.
+        for ac in ont.iter() {
+            if let Component::AnnotationAssertion(aa) = &ac.component {
+                if matches!(aa.ann.av, AnnotationValue::Literal(_)) {
+                    sig_nonempty[4] = true;
+                    break;
+                }
+            }
+        }
+    }
+
     // --- Pass 2: route each non-declaration axiom to its owning entity ---
     // Annotation-assertion blocks are keyed by (rank, entity IRI); logical-axiom
     // blocks likewise. Both are sorted on their rendering before emission.
-    let mut ann_blocks: HashMap<(usize, String), Vec<(String, String)>> = HashMap::new();
-    let mut axiom_blocks: HashMap<(usize, String), Vec<String>> = HashMap::new();
-    let mut leftover: Vec<String> = Vec::new();
+    let mut ann_blocks: HashMap<(usize, String), Vec<&AnnotatedComponent<A>>> = HashMap::new();
+    let mut axiom_blocks: HashMap<(usize, String), Vec<&AnnotatedComponent<A>>> = HashMap::new();
+    let mut leftover: Vec<&AnnotatedComponent<A>> = Vec::new();
 
     for ac in ont.iter() {
         match &ac.component {
@@ -168,32 +228,53 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
             _ if declaration_info(&ac.component).is_some() => {}
 
             Component::AnnotationAssertion(aa) => {
-                let rendered = ac.as_functional_with_prefixes(mapping).to_string();
                 if let AnnotationSubject::IRI(subj) = &aa.subject {
                     let subj = subj.as_ref().to_string();
                     if let Some(&rank) = entity_rank.get(&subj) {
-                        ann_blocks
-                            .entry((rank, subj))
-                            .or_default()
-                            .push((aa.ann.ap.0.as_ref().to_string(), rendered));
+                        ann_blocks.entry((rank, subj)).or_default().push(ac);
                         continue;
                     }
                 }
-                leftover.push(rendered);
+                leftover.push(ac);
             }
 
-            other => {
-                let rendered = ac.as_functional_with_prefixes(mapping).to_string();
-                match axiom_owner(other) {
-                    Some(key) => axiom_blocks.entry(key).or_default().push(rendered),
-                    None => leftover.push(rendered),
-                }
-            }
+            // OWLAPI writes n-ary DisjointClasses (>2 operands) and
+            // DifferentIndividuals as general axioms at the end, not under an
+            // entity (writeEntity2 skips them).
+            Component::DisjointClasses(d) if d.0.len() > 2 => leftover.push(ac),
+            Component::DifferentIndividuals(_) => leftover.push(ac),
+
+            other => match axiom_owner(other) {
+                // Store the component itself, not its rendering, so the block can
+                // be ordered by OWLAPI's structural axiom order (below) rather than
+                // lexically by rendered string.
+                Some(key) => axiom_blocks.entry(key).or_default().push(ac),
+                None => leftover.push(ac),
+            },
         }
     }
 
+    // Any entity that carries axioms is in the signature too, even without its
+    // own declaration — so its section must not be skipped (which would drop the
+    // axioms). Mark those ranks non-empty now that the blocks are built.
+    for (r, _) in ann_blocks.keys().chain(axiom_blocks.keys()) {
+        sig_nonempty[*r] = true;
+    }
+
     // --- Emit each non-empty entity section ---
-    for (rank, (section, label)) in SECTIONS.iter().enumerate() {
+    // OWLAPI's FunctionalSyntaxObjectRenderer writes the axiom sections in the
+    // order Annotation Properties, Object Properties, Data Properties, Datatypes,
+    // Classes, Named Individuals — NOT the rank order used for the leading
+    // Declaration block (Classes first). `SECTION_EMIT_ORDER` maps emission
+    // position → section rank (Class=0, OP=1, DataProp=2, AP=3, Datatype=4, Ind=5).
+    const SECTION_EMIT_ORDER: [usize; 6] = [3, 1, 2, 4, 0, 5];
+    for &rank in SECTION_EMIT_ORDER.iter() {
+        // OWLAPI's `writeSortedEntities` does nothing for a type with an empty
+        // signature, and emits a trailing blank line for one that is non-empty.
+        if !sig_nonempty[rank] {
+            continue;
+        }
+        let (section, label) = SECTIONS[rank];
         let mut iris: BTreeSet<&str> = BTreeSet::new();
         for (r, iri) in ann_blocks.keys() {
             if *r == rank {
@@ -205,83 +286,120 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
                 iris.insert(iri.as_str());
             }
         }
-        if iris.is_empty() {
-            continue;
-        }
 
-        write!(
-            write,
-            "\n\n\n############################\n#   {section}\n############################\n"
-        )?;
+        // The banner + entities are written only when some entity of this type
+        // carries axioms; a signature-only type (e.g. Datatypes) emits no banner.
+        if !iris.is_empty() {
+            // Banner with a single trailing blank line, no leading blanks.
+            write!(
+                write,
+                "############################\n#   {section}\n############################\n\n"
+            )?;
 
-        for iri in iris {
-            write!(write, "\n# {label}: <{iri}>")?;
-            if let Some(lbl) = labels.get(iri) {
-                write!(write, " ({lbl})")?;
-            }
-            writeln!(write)?;
-            writeln!(write)?;
+            for iri in iris {
+                // OWLAPI banner: `# Class: <curie> (<label-or-curie>)`, then a blank.
+                let short = short_form(mapping, iri);
+                let display = labels
+                    .get(iri)
+                    .or_else(|| extra_labels.and_then(|m| m.get(iri)))
+                    .cloned()
+                    .unwrap_or_else(|| short.clone());
+                writeln!(write, "# {label}: {short} ({display})")?;
+                writeln!(write)?;
 
-            let key = (rank, iri.to_string());
-            if let Some(anns) = ann_blocks.get(&key) {
-                let mut anns = anns.clone();
-                anns.sort();
-                for (_, rendered) in &anns {
-                    writeln!(write, "{rendered}")?;
+                let key = (rank, iri.to_string());
+                if let Some(anns) = ann_blocks.get(&key) {
+                    // OWLAPI writes an entity's annotation assertions before its
+                    // logical axioms, sorted by `compareTo` (property, then value,
+                    // then the assertion's own annotations).
+                    let mut anns = anns.clone();
+                    anns.sort_by(owlapi_axiom_cmp);
+                    for ac in &anns {
+                        let rendered = ac.as_functional_with_prefixes(mapping).to_string();
+                        writeln!(write, "{rendered}")?;
+                    }
                 }
-            }
-            if let Some(axs) = axiom_blocks.get(&key) {
-                let mut axs = axs.clone();
-                axs.sort();
-                for rendered in &axs {
-                    writeln!(write, "{rendered}")?;
+                if let Some(axs) = axiom_blocks.get(&key) {
+                    // OWLAPI orders an entity's axioms by axiom-type index, then
+                    // structurally (a named superclass before an anonymous
+                    // restriction, etc.) — NOT lexically.
+                    let mut axs = axs.clone();
+                    axs.sort_by(owlapi_axiom_cmp);
+                    for ac in &axs {
+                        let rendered = ac.as_functional_with_prefixes(mapping).to_string();
+                        writeln!(write, "{rendered}")?;
+                    }
                 }
+                // Trailing blank line after every entity.
+                writeln!(write)?;
             }
         }
-    }
-
-    // --- Anything we could not attribute to an entity (does not happen for OBO
-    // pattern files) is written verbatim before the close so no axiom is lost.
-    if !leftover.is_empty() {
-        leftover.sort();
+        // `writeSortedEntities` trailing blank line (for every non-empty-signature
+        // type, whether or not it produced a banner).
         writeln!(write)?;
-        for rendered in &leftover {
-            writeln!(write, "{rendered}")?;
-        }
     }
 
-    // Close the ontology (matching OWLAPI's trailing blank lines, no final EOL).
-    write!(write, "\n\n)")?;
+    // --- Remaining axioms: general class axioms (GCIs), n-ary DisjointClasses and
+    //     DifferentIndividuals — everything not attributed to an entity — sorted
+    //     structurally, then the closing bracket immediately (no trailing blank). ---
+    leftover.sort_by(owlapi_axiom_cmp);
+    for ac in &leftover {
+        let rendered = ac.as_functional_with_prefixes(mapping).to_string();
+        writeln!(write, "{rendered}")?;
+    }
+
+    write!(write, ")")?;
 
     Ok(write)
 }
 
-/// Emit the `Prefix(...)` block in OWLAPI's canonical order: the default `:`
-/// prefix first, then `owl`, `rdf`, `xml`, `xsd`, `rdfs`, then any remaining
-/// prefixes sorted by name. Every prefix present in `mapping` is emitted, so
-/// round-tripping through the reader preserves the prefix set.
+/// Emit the `Prefix(...)` block in the mapping's own order. The reader records
+/// prefixes in document order (`curie::PrefixMapping` is insertion-ordered), and
+/// OWLAPI/ROBOT preserve that order on a convert round-trip, so emitting the
+/// mapping verbatim reproduces the source document's prefix block.
 fn write_prefixes<W: Write>(write: &mut W, mapping: &PrefixMapping) -> Result<(), HornedError> {
-    const CANONICAL: [&str; 6] = ["", "owl", "rdf", "xml", "xsd", "rdfs"];
-    let entries: Vec<(&str, &str)> = mapping
-        .mappings()
-        .map(|(k, v)| (k.as_str(), v.as_str()))
-        .collect();
-
-    for name in CANONICAL {
-        if let Some((_, value)) = entries.iter().find(|(k, _)| *k == name) {
-            writeln!(write, "Prefix({name}:=<{value}>)")?;
-        }
-    }
-    let mut rest: Vec<(&str, &str)> = entries
-        .iter()
-        .copied()
-        .filter(|(k, _)| !CANONICAL.contains(k))
-        .collect();
-    rest.sort();
-    for (name, value) in rest {
+    for (name, value) in mapping.mappings() {
         writeln!(write, "Prefix({name}:=<{value}>)")?;
     }
     Ok(())
+}
+
+/// Abbreviate `iri` to `(prefix, local)` using the LONGEST declared namespace
+/// that is a prefix of `iri` and leaves a valid CURIE local part. This is OWLAPI
+/// semantics — the most specific prefix wins, independent of declaration order
+/// (`curie::shrink_iri` returns the *first* declared match, which is not the same
+/// thing). The empty-string prefix renders the default `:local`. Returns `None`
+/// when no declared prefix yields a valid CURIE, so the caller writes `<IRI>`.
+pub(crate) fn shrink_valid<'a>(mapping: &'a PrefixMapping, iri: &'a str) -> Option<(&'a str, &'a str)> {
+    let mut best: Option<(&str, &str)> = None;
+    for (prefix, ns) in mapping.mappings() {
+        if let Some(local) = iri.strip_prefix(ns.as_str()) {
+            if is_valid_curie_local(local)
+                && best.map_or(true, |(_, blocal)| local.len() < blocal.len())
+            {
+                best = Some((prefix.as_str(), local));
+            }
+        }
+    }
+    best
+}
+
+/// The banner/short form of `iri`: its CURIE if one is available, else the full
+/// IRI (no angle brackets), matching OWLAPI's `# Class: obo:CL_0000000` headers.
+pub(crate) fn short_form(mapping: &PrefixMapping, iri: &str) -> String {
+    match shrink_valid(mapping, iri) {
+        Some((prefix, local)) => format!("{prefix}:{local}"),
+        None => iri.to_string(),
+    }
+}
+
+/// Whether `local` is a legal CURIE local part (PNAME_LN, conservatively): no
+/// characters that would break re-parsing and no leading `-`/`.`.
+pub(crate) fn is_valid_curie_local(local: &str) -> bool {
+    !local.is_empty()
+        && !local.contains(['/', '#', ' ', ':'])
+        && !local.starts_with('-')
+        && !local.starts_with('.')
 }
 
 /// The literal's lexical form (dropping any language tag / datatype).
@@ -304,6 +422,66 @@ fn declaration_info<A: ForIRI>(comp: &Component<A>) -> Option<(usize, String)> {
         Component::DeclareNamedIndividual(e) => (5, e.0 .0.as_ref().to_string()),
         _ => return None,
     })
+}
+
+/// OWLAPI's `AxiomType.getIndex()` for a component — the primary key OWLAPI uses
+/// to order the axioms within an entity (and the general axioms at the end):
+/// EquivalentClasses (1) before SubClassOf (2), etc. horned-owl's own `Component`
+/// variant order differs, so this table restores OWLAPI's order. Declarations and
+/// ontology-meta components never reach the axiom-ordering path.
+fn owlapi_axiom_index<A: ForIRI>(comp: &Component<A>) -> u8 {
+    use Component::*;
+    match comp {
+        EquivalentClasses(_) => 1,
+        SubClassOf(_) => 2,
+        DisjointClasses(_) => 3,
+        DisjointUnion(_) => 4,
+        ClassAssertion(_) => 5,
+        SameIndividual(_) => 6,
+        DifferentIndividuals(_) => 7,
+        ObjectPropertyAssertion(_) => 8,
+        NegativeObjectPropertyAssertion(_) => 9,
+        DataPropertyAssertion(_) => 10,
+        NegativeDataPropertyAssertion(_) => 11,
+        EquivalentObjectProperties(_) => 12,
+        SubObjectPropertyOf(ax) => match &ax.sub {
+            SubObjectPropertyExpression::ObjectPropertyChain(_) => 25,
+            SubObjectPropertyExpression::ObjectPropertyExpression(_) => 13,
+        },
+        InverseObjectProperties(_) => 14,
+        FunctionalObjectProperty(_) => 15,
+        InverseFunctionalObjectProperty(_) => 16,
+        SymmetricObjectProperty(_) => 17,
+        AsymmetricObjectProperty(_) => 18,
+        TransitiveObjectProperty(_) => 19,
+        ReflexiveObjectProperty(_) => 20,
+        IrreflexiveObjectProperty(_) => 21,
+        ObjectPropertyDomain(_) => 22,
+        ObjectPropertyRange(_) => 23,
+        DisjointObjectProperties(_) => 24,
+        EquivalentDataProperties(_) => 26,
+        SubDataPropertyOf(_) => 27,
+        FunctionalDataProperty(_) => 28,
+        DataPropertyDomain(_) => 29,
+        DataPropertyRange(_) => 30,
+        DisjointDataProperties(_) => 31,
+        HasKey(_) => 32,
+        AnnotationAssertion(_) => 34,
+        SubAnnotationPropertyOf(_) => 35,
+        AnnotationPropertyRange(_) => 36,
+        AnnotationPropertyDomain(_) => 37,
+        DatatypeDefinition(_) => 38,
+        _ => 0,
+    }
+}
+
+/// Order two axioms as OWLAPI's `compareTo` does: by axiom-type index first, then
+/// by structural content (for which horned-owl's derived `Ord` already matches —
+/// e.g. a named superclass sorts before an anonymous class expression).
+fn owlapi_axiom_cmp<A: ForIRI>(a: &&AnnotatedComponent<A>, b: &&AnnotatedComponent<A>) -> std::cmp::Ordering {
+    owlapi_axiom_index(&a.component)
+        .cmp(&owlapi_axiom_index(&b.component))
+        .then_with(|| a.cmp(b))
 }
 
 fn ce_class<A: ForIRI>(ce: &ClassExpression<A>) -> Option<String> {

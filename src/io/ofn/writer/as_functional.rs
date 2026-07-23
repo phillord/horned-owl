@@ -186,14 +186,42 @@ derive_tuple3!(A, ObjectPropertyExpression<A>, Individual<A>, Individual<A>);
 
 impl<A: ForIRI> Display for Functional<'_, BTreeSet<Annotation<A>>, A> {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
-        for (i, x) in self.0.iter().enumerate() {
+        // OWLAPI renders an axiom's/entity's annotations in `compareTo` order, not
+        // the model's `BTreeSet` order. The only place the two diverge for OBO
+        // content is the annotation *value*: OWLAPI's type index orders IRI (0) <
+        // anonymous individual (1007) < literal (4008), whereas horned-owl's
+        // `AnnotationValue` enum orders literal first. Re-sort with the OWLAPI key
+        // so e.g. `Annotation(hasDbXref <orcid>)` precedes `Annotation(hasDbXref
+        // "PMID:…")`, matching ROBOT.
+        let mut anns: Vec<&Annotation<A>> = self.0.iter().collect();
+        anns.sort_by(owlapi_annotation_cmp);
+        for (i, x) in anns.iter().enumerate() {
             if i != 0 {
                 f.write_str(" ")?;
             }
-            write!(f, "{}", Functional(x, self.1, None))?;
+            write!(f, "{}", Functional(*x, self.1, None))?;
         }
         Ok(())
     }
+}
+
+/// OWLAPI's annotation-value type index: IRI < anonymous individual < literal.
+fn annotation_value_rank<A: ForIRI>(v: &AnnotationValue<A>) -> u8 {
+    match v {
+        AnnotationValue::IRI(_) => 0,
+        AnnotationValue::AnonymousIndividual(_) => 1,
+        AnnotationValue::Literal(_) => 2,
+    }
+}
+
+/// Compare two annotations the way OWLAPI's `OWLAnnotation.compareTo` does:
+/// property first, then value (by value-type index, then value content). Within a
+/// single value type, horned-owl's natural order already matches (IRIs and
+/// literals compare by their content).
+fn owlapi_annotation_cmp<A: ForIRI>(a: &&Annotation<A>, b: &&Annotation<A>) -> std::cmp::Ordering {
+    a.ap.0.as_ref().cmp(b.ap.0.as_ref())
+        .then_with(|| annotation_value_rank(&a.av).cmp(&annotation_value_rank(&b.av)))
+        .then_with(|| a.av.cmp(&b.av))
 }
 
 // ---------------------------------------------------------------------------
@@ -870,13 +898,16 @@ impl<A: ForIRI> AsFunctional<A> for IArgument<A> {}
 impl<A: ForIRI> Display for Functional<'_, IRI<A>, A> {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
         if let Some(prefixes) = self.1.as_ref() {
-            match prefixes.shrink_iri(self.0) {
-                Err(_) => write!(f, "<{}>", self.0),
-                Ok(curie) => write!(f, "{curie}"),
+            // Longest-valid-match abbreviation (OWLAPI semantics), not
+            // `curie::shrink_iri`'s first-declared match — so `obo:` and a more
+            // specific `uberon:` can both be declared and each IRI abbreviates to
+            // its most specific valid CURIE, falling back to the full IRI when
+            // none is valid.
+            if let Some((prefix, local)) = super::shrink_valid(prefixes, self.0.as_ref()) {
+                return write!(f, "{prefix}:{local}");
             }
-        } else {
-            write!(f, "<{}>", self.0)
         }
+        write!(f, "<{}>", self.0)
     }
 }
 

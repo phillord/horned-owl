@@ -1710,9 +1710,14 @@ pub struct Annotation<A> {
 /// The value of an annotation
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum AnnotationValue<A> {
-    Literal(Literal<A>),
+    // Variant order matches OWLAPI's annotation-value type index (IRI 0 <
+    // anonymous individual 1007 < literal 4008), so the derived `Ord` — used to
+    // order annotations in the functional-syntax writer — reproduces OWLAPI's
+    // `compareTo`. Reordering only affects sort/`BTreeSet` iteration order, not
+    // equality or construction (variants are built by name).
     IRI(IRI<A>),
     AnonymousIndividual(AnonymousIndividual<A>),
+    Literal(Literal<A>),
 }
 
 impl<A: ForIRI> From<Literal<A>> for AnnotationValue<A> {
