@@ -611,7 +611,14 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
         config: ParserConfiguration,
         format: oxrdfio::RdfFormat,
     ) -> OntologyParser<'a, A, AA, O> {
+        // In lax mode (OWLAPI/ROBOT's default), parse leniently: oxrdf otherwise
+        // hard-errors on inputs OWLAPI accepts — e.g. an invalid BCP47 language
+        // tag such as `xml:lang="e"` (a real typo in GSSO) — and the `unwrap`
+        // below would then panic on the whole document. Lenient mode keeps the
+        // raw language tag / IRI instead of validating it, matching how OWLAPI
+        // preserves such literals verbatim.
         let parser = oxrdfio::RdfParser::from_format(format);
+        let parser = if config.rdf.lax { parser.lenient() } else { parser };
         let mut triples = vec![];
         let last_pos = std::cell::Cell::new(0);
 
@@ -2136,9 +2143,22 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                             "Annotation properties cannot be disjoint: {:?}, {:?}",
                             r, s
                         ))),
-                        Ok(None) => Err(HornedError::invalid(
-                            "Cannot distinguish the types of {r} and {s}",
-                        )),
+                        // owlready2 emits `owl:equivalentProperty` /
+                        // `owl:propertyDisjointWith` with a literal object (and may
+                        // even declare the predicate an annotation property, as GSSO
+                        // does). Such a triple cannot be a property relation, so
+                        // OWLAPI reads it as an annotation assertion. In lax mode do
+                        // the same rather than failing the whole document.
+                        Ok(None) => match r {
+                            Term::Iri(sub) if self.config.rdf.lax => self
+                                .annotation(t.triple())
+                                .map(|ann| {
+                                    Some(AnnotationAssertion { subject: sub.into(), ann }.into())
+                                }),
+                            _ => Err(HornedError::invalid(
+                                "Cannot distinguish the types of {r} and {s}",
+                            )),
+                        },
                         Err(err) => Err(err),
                         _ => unreachable!("Unexpected error in disjoint property matching"),
                     }
@@ -2160,9 +2180,22 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                             "Annotation properties cannot be equivalent: {:?}, {:?}",
                             r, s
                         ))),
-                        Ok(None) => Err(HornedError::invalid(
-                            "Cannot distinguish the types of {r} and {s}",
-                        )),
+                        // owlready2 emits `owl:equivalentProperty` /
+                        // `owl:propertyDisjointWith` with a literal object (and may
+                        // even declare the predicate an annotation property, as GSSO
+                        // does). Such a triple cannot be a property relation, so
+                        // OWLAPI reads it as an annotation assertion. In lax mode do
+                        // the same rather than failing the whole document.
+                        Ok(None) => match r {
+                            Term::Iri(sub) if self.config.rdf.lax => self
+                                .annotation(t.triple())
+                                .map(|ann| {
+                                    Some(AnnotationAssertion { subject: sub.into(), ann }.into())
+                                }),
+                            _ => Err(HornedError::invalid(
+                                "Cannot distinguish the types of {r} and {s}",
+                            )),
+                        },
                         Err(err) => Err(err),
                         _ => unreachable!("Unexpected error in equivalent property matching"),
                     }
