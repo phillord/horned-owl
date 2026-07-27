@@ -57,6 +57,43 @@ struct ManifestEntry {
     stored_path: String,
     bytes: u64,
     sha256: String,
+    /// When this ontology's bytes were actually last fetched from BioPortal
+    /// (seconds since the Unix epoch) -- for calculating which files are
+    /// stale later (e.g. `now - fetched_at > threshold`). This is the
+    /// fetch time, not the time this manifest was written: a
+    /// `--skip-existing` run that reuses an on-disk file (see
+    /// `manifest_entry_from_disk`) carries the *original* fetch time
+    /// forward rather than resetting it to now, so staleness tracking
+    /// survives any number of skip-existing reruns. `#[serde(default)]`
+    /// so a `manifest.json` written before this field existed still
+    /// deserializes (as `None`); a fresh fetch or the mtime fallback in
+    /// `manifest_entry_from_disk` backfills it going forward.
+    #[serde(default)]
+    fetched_at: Option<u64>,
+}
+
+/// Seconds since the Unix epoch, right now. Matches `main.rs`'s
+/// `timestamp()` convention (plain epoch seconds, no `chrono` dependency)
+/// -- kept as a separate small helper here rather than shared across the
+/// bin/lib boundary, since it's a one-liner either way.
+fn now_secs() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
+}
+
+/// `path`'s last-modified time, in epoch seconds -- the best available
+/// staleness signal for a file with no prior manifest entry to carry a
+/// `fetched_at` from at all (e.g. a corpus downloaded before this field
+/// existed, since backfilled from disk once, not perfect but far better
+/// than leaving `fetched_at` unknown forever).
+fn mtime_secs(path: &Path) -> Option<u64> {
+    std::fs::metadata(path)
+        .and_then(|m| m.modified())
+        .ok()
+        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|d| d.as_secs())
 }
 
 /// Append `apikey=<key>` to `url`, respecting any existing query string.
@@ -180,6 +217,7 @@ fn fetch_one(
         stored_path: stored_path.to_string_lossy().into_owned(),
         bytes: bytes.len() as u64,
         sha256,
+        fetched_at: Some(now_secs()),
     })
 }
 
@@ -189,6 +227,13 @@ fn fetch_one(
 /// are carried over from `prior` (that ontology's entry in the manifest from
 /// a previous run) when available, since recovering them requires the
 /// submission-lookup request this path is meant to avoid.
+///
+/// `fetched_at` is carried over from `prior` too, and deliberately *not*
+/// reset to now -- this file wasn't actually re-fetched, so its real fetch
+/// time is whatever `prior` already recorded. When there's no `prior` entry
+/// to carry a timestamp from at all (e.g. a corpus downloaded before this
+/// field existed, manifest lost/rebuilt), falls back to the file's own
+/// mtime as the best available signal.
 fn manifest_entry_from_disk(
     acronym: &str,
     stored_path: &Path,
@@ -205,6 +250,10 @@ fn manifest_entry_from_disk(
     hasher.update(&bytes);
     let sha256 = format!("{:x}", hasher.finalize());
 
+    let fetched_at = prior
+        .and_then(|p| p.fetched_at)
+        .or_else(|| mtime_secs(stored_path));
+
     Ok(ManifestEntry {
         acronym: acronym.to_string(),
         submission_id: prior.and_then(|p| p.submission_id),
@@ -212,6 +261,7 @@ fn manifest_entry_from_disk(
         stored_path: stored_path.to_string_lossy().into_owned(),
         bytes: bytes.len() as u64,
         sha256,
+        fetched_at,
     })
 }
 
@@ -365,6 +415,7 @@ mod tests {
             stored_path: "old".into(),
             bytes: 0,
             sha256: "old".into(),
+            fetched_at: Some(1_000_000),
         };
         let e = manifest_entry_from_disk("FOO", &p, Some(&prior)).unwrap();
         assert_eq!(e.bytes, b"hello ontology".len() as u64);
@@ -374,6 +425,62 @@ mod tests {
         assert_eq!(e.sha256, format!("{:x}", h.finalize()));
         assert_eq!(e.submission_id, Some(42)); // carried from prior
         assert_eq!(e.reported_language.as_deref(), Some("OWL"));
+    }
+
+    // The whole point of carrying fetched_at forward: reusing an on-disk
+    // file under --skip-existing must not look like a fresh fetch just
+    // because manifest_entry_from_disk ran again.
+    #[test]
+    fn manifest_entry_from_disk_preserves_original_fetched_at_not_now() {
+        let dir = tmp();
+        let p = dir.join("FOO.gz");
+        write_gz(&p, b"hello ontology");
+        let long_ago = 1_000_000; // 1970-01-12 -- nowhere near "now"
+        let prior = ManifestEntry {
+            acronym: "FOO".into(),
+            submission_id: None,
+            reported_language: None,
+            stored_path: "old".into(),
+            bytes: 0,
+            sha256: "old".into(),
+            fetched_at: Some(long_ago),
+        };
+        let e = manifest_entry_from_disk("FOO", &p, Some(&prior)).unwrap();
+        assert_eq!(e.fetched_at, Some(long_ago));
+    }
+
+    // With no prior entry to carry a timestamp from at all (e.g. a corpus
+    // predating this field, or a lost manifest), fall back to the file's
+    // own mtime rather than leaving fetched_at unknown.
+    #[test]
+    fn manifest_entry_from_disk_falls_back_to_mtime_with_no_prior() {
+        let dir = tmp();
+        let p = dir.join("FOO.gz");
+        write_gz(&p, b"hello ontology");
+        let e = manifest_entry_from_disk("FOO", &p, None).unwrap();
+        assert!(e.fetched_at.is_some());
+        // Just-written file -> mtime should be very recent, not zero/bogus.
+        let now = now_secs();
+        let ts = e.fetched_at.unwrap();
+        assert!(
+            now.saturating_sub(ts) < 60,
+            "expected a recent mtime, got {ts} vs now {now}"
+        );
+    }
+
+    // fetch_one's success path (exercised indirectly, since fetch_one
+    // itself needs real network access) is that fetched_at is a fresh
+    // "now" timestamp, not carried from anywhere -- confirmed here for
+    // now_secs itself, since fetch_one's own network-dependent test would
+    // need the manual smoke test path documented in the module doc.
+    #[test]
+    fn now_secs_is_plausible_epoch_seconds() {
+        // Sanity bound: some time after this was written (2026-ish), and
+        // not an obviously-wrong value like 0 or something in the far
+        // future from a unit mixup (e.g. accidentally returning millis).
+        let ts = now_secs();
+        assert!(ts > 1_700_000_000, "suspiciously small epoch seconds: {ts}");
+        assert!(ts < 4_000_000_000, "suspiciously large epoch seconds: {ts}");
     }
 
     #[test]
