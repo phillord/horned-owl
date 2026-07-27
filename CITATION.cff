@@ -1,0 +1,52 @@
+cff-version: 1.2.0
+title: "horned-owl"
+message: "If you use this software, please cite it using the preferred citation."
+authors:
+  - given-names: "Phillip"
+    family-names: "Lord"
+    orcid: "https://orcid.org/0000-0002-4699-6769"
+  - given-names: "Martin"
+    family-names: "Larralde"
+    orcid: "https://orcid.org/0000-0002-3947-4444"
+  - given-names: "Michel"
+    family-names: "Dumontier"
+    orcid: "https://orcid.org/0000-0003-4727-9435"
+  - given-names: "Filippo"
+    family-names: "De Bortoli"
+    orcid: "https://orcid.org/0000-0002-8623-6465"
+  - given-names: "Konrad"
+    family-names: "Höffner"
+    orcid: "https://orcid.org/0000-0001-7358-3217"
+preferred-citation:
+  type: article
+  title: "Horned-OWL: Flying Further and Faster with Ontologies"
+  authors:
+    - given-names: "Phillip"
+      family-names: "Lord"
+      orcid: "https://orcid.org/0000-0002-4699-6769"
+    - given-names: "Björn"
+      family-names: "Gehrke"
+      orcid: "https://orcid.org/0009-0007-7488-0257"
+    - given-names: "Martin"
+      family-names: "Larralde"
+      orcid: "https://orcid.org/0000-0002-3947-4444"
+    - given-names: "Janna"
+      family-names: "Hastings"
+      orcid: "https://orcid.org/0000-0002-3469-4923"
+    - given-names: "Filippo"
+      family-names: "De Bortoli"
+      orcid: "https://orcid.org/0000-0002-8623-6465"
+    - given-names: "James A."
+      family-names: "Overton"
+      orcid: "https://orcid.org/0000-0001-5139-5557"
+    - given-names: "James P."
+      family-names: "Balhoff"
+      orcid: "https://orcid.org/0000-0002-8688-6599"
+    - given-names: "Jennifer"
+      family-names: "Warrender"
+  journal: "Transactions on Graph Data and Knowledge"
+  volume: 2
+  issue: 2
+  start: 9
+  end: 1
+  year: 2024
