@@ -82,7 +82,13 @@ pub fn robot_verdicts(
             .stderr(std::process::Stdio::null())
             .status()?;
         let report = std::fs::read_to_string(&report_path).unwrap_or_default();
-        out.insert(rp, parse_robot_report(&report, status.success()));
+        if let Some(verdict) = parse_robot_report(&report, status.success()) {
+            out.insert(rp, verdict);
+        }
+        // else: ROBOT couldn't check this profile at all (e.g. an
+        // unresolvable owl:imports) -- leave it out of the map entirely
+        // rather than guessing, so `check`'s agreement computation skips
+        // it instead of silently comparing against a fabricated verdict.
     }
     let _ = std::fs::remove_dir_all(&dir);
     Ok(out)
@@ -92,24 +98,40 @@ pub fn robot_verdicts(
 /// single line ends "... [Ontology and imports closure in profile]"; a
 /// non-conformant one starts "... NOT in profile. The following violations
 /// are present:" followed by one line per violation.
-fn parse_robot_report(report: &str, exit_success: bool) -> ProfileVerdict {
+///
+/// Returns `None` when ROBOT couldn't produce a report at all -- a failing
+/// exit with an *empty* report, distinct from a failing exit with a real
+/// "NOT in profile" report. Found via full-corpus cross-validation: ROBOT
+/// (unlike horned-profile, which never follows imports) tries to resolve
+/// `owl:imports` and throws `UnloadableImportException` when it can't
+/// (e.g. PVONTO, FDSAJFAHSJK -- both reference import IRIs that don't
+/// resolve), producing no report file. The earlier version of this
+/// function defaulted that case to "1 violation", conflating "couldn't
+/// check this at all" with "checked it and found exactly one problem" --
+/// misleading both directions (undercounts if there were really more
+/// violations to find past the import resolution step, and wrongly
+/// implicates horned-profile in a "disagreement" that's actually just the
+/// two tools handling imports completely differently, not comparable).
+fn parse_robot_report(report: &str, exit_success: bool) -> Option<ProfileVerdict> {
     if exit_success && !report.contains("NOT in profile") {
-        return ProfileVerdict {
+        return Some(ProfileVerdict {
             conformant: true,
             violation_count: 0,
-        };
+        });
+    }
+    if report.trim().is_empty() {
+        return None;
     }
     let violation_count = report
         .lines()
         .skip(1) // the "NOT in profile" header line itself
         .filter(|l| !l.trim().is_empty())
-        .count();
-    ProfileVerdict {
+        .count()
+        .max(1);
+    Some(ProfileVerdict {
         conformant: false,
-        // A malformed/empty report on a failing exit still means "not
-        // conformant" even if no violation lines could be parsed out.
-        violation_count: violation_count.max(1),
-    }
+        violation_count,
+    })
 }
 
 /// A unique scratch directory for one `robot_verdicts` call.
@@ -241,7 +263,8 @@ mod tests {
         let v = parse_robot_report(
             "OWL 2 DL Profile Report: [Ontology and imports closure in profile]",
             true,
-        );
+        )
+        .expect("a real report should parse to Some");
         assert!(v.conformant);
         assert_eq!(v.violation_count, 0);
     }
@@ -249,8 +272,19 @@ mod tests {
     #[test]
     fn parse_robot_report_reads_violations() {
         let report = "OWL 2 EL Profile Report: Ontology and imports closure NOT in profile. The following violations are present:\nClass expressions not allowed in profile: DataMaxCardinality [...]";
-        let v = parse_robot_report(report, false);
+        let v = parse_robot_report(report, false).expect("a real report should parse to Some");
         assert!(!v.conformant);
         assert_eq!(v.violation_count, 1);
+    }
+
+    // The actual bug this Option<_> return type fixes: ROBOT failing to
+    // load the ontology at all (e.g. UnloadableImportException) produces a
+    // failing exit status with no report file written -- an empty string
+    // here, not a real "NOT in profile" report. Must be None, not a
+    // fabricated "1 violation".
+    #[test]
+    fn parse_robot_report_returns_none_for_empty_report_on_failure() {
+        assert!(parse_robot_report("", false).is_none());
+        assert!(parse_robot_report("   \n", false).is_none());
     }
 }
