@@ -77,7 +77,11 @@ fn detect_horned_owl_rev(manifest_dir: &std::path::Path) -> Option<String> {
 }
 
 fn extract_quoted(line: &str, marker: &str) -> Option<String> {
-    line.split(marker).nth(1)?.split('"').next().map(String::from)
+    line.split(marker)
+        .nth(1)?
+        .split('"')
+        .next()
+        .map(String::from)
 }
 
 #[derive(Parser)]
@@ -109,6 +113,19 @@ enum Cmd {
         /// dirty/ahead of what you actually want recorded.
         #[arg(long = "horned-owl-rev")]
         horned_owl_rev: Option<String>,
+        /// Check every ontology against the OWL 2 EL/QL/RL/DL profiles
+        /// (horned-profile), recorded as a `Record::Profile` per ontology.
+        /// Cheap (pure Rust) -- safe to leave on by default for a full
+        /// corpus sweep.
+        #[arg(long = "check-profiles")]
+        check_profiles: bool,
+        /// Additionally cross-validate every profile check against ROBOT's
+        /// `validate-profile` (the OWL API's real checker) -- implies
+        /// `--check-profiles`. Expensive: four `robot` process spawns (each
+        /// forking a JVM) per ontology, so this is meant for a sample run,
+        /// not a routine full-corpus sweep -- see `profile` module doc.
+        #[arg(long = "robot-ground-truth")]
+        robot_ground_truth: bool,
     },
     /// Aggregate a run's JSONL output into a report directory.
     Report {
@@ -181,7 +198,16 @@ fn main() -> anyhow::Result<()> {
             jobs,
             max_bytes,
             horned_owl_rev,
+            check_profiles,
+            robot_ground_truth,
         } => {
+            let profile_mode = if robot_ground_truth {
+                horned_roundtrip::model::ProfileCheckMode::HornedAndRobot
+            } else if check_profiles {
+                horned_roundtrip::model::ProfileCheckMode::Horned
+            } else {
+                horned_roundtrip::model::ProfileCheckMode::Off
+            };
             // catch_unwind in roundtrip::run_bytes recovers from per-file panics, but
             // the default panic hook still writes a message to stderr for each one.
             // Across ~1200 corpus files that floods the terminal, so install a no-op
@@ -244,7 +270,7 @@ fn main() -> anyhow::Result<()> {
                                 // catch_unwind) must not abort the sweep --
                                 // record it as one Outcome::Panic Source.
                                 _ => match std::panic::catch_unwind(std::panic::AssertUnwindSafe(
-                                    || roundtrip::run_bytes(&name, &bytes, &fmts),
+                                    || roundtrip::run_bytes(&name, &bytes, &fmts, profile_mode),
                                 )) {
                                     Ok(recs) => recs,
                                     Err(_) => vec![Record::Source(SourceReadReport {
@@ -330,10 +356,7 @@ mod tests {
         // No Cargo.toml here at all -- proves the override short-circuits
         // detection entirely rather than merely taking priority when both work.
         let dir = temp_dir("override");
-        assert_eq!(
-            resolve_horned_owl_rev(&dir, Some("deadbeef")),
-            "deadbeef"
-        );
+        assert_eq!(resolve_horned_owl_rev(&dir, Some("deadbeef")), "deadbeef");
     }
 
     #[test]

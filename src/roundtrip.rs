@@ -23,15 +23,38 @@ use std::collections::BTreeMap;
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::time::Instant;
 
+/// File extension to hand ROBOT/the OWL API for `sfmt`'s bytes, so it
+/// dispatches to the same syntax horned-owl's own reader used. `Unknown`
+/// has no sensible extension -- callers must not reach ROBOT with it (see
+/// `run_bytes`, which only attempts the profile check on a successful
+/// source read, and a successful read never reports `Format::Unknown`).
+fn robot_ext(fmt: Format) -> &'static str {
+    match fmt {
+        Format::RdfXml => "rdf",
+        Format::OwlXml => "owx",
+        Format::Ofn => "ofn",
+        Format::Omn => "omn",
+        Format::Turtle => "ttl",
+        Format::Unknown => "owl",
+    }
+}
+
 /// Run the full read -> {write -> reread -> diff}* pipeline for one
-/// ontology's raw bytes against every format in `formats`.
+/// ontology's raw bytes against every format in `formats`, plus (per
+/// `profile_mode`) a profile-conformance check.
 ///
-/// Returns exactly one `Record::Source` (the source-read report) followed by
-/// one `Record::Case` per entry in `formats`, in `formats` order. If the
-/// source read fails or panics, only the `Record::Source` is returned and no
-/// `Record::Case`s are produced -- there is nothing to round-trip without a
+/// Returns exactly one `Record::Source` (the source-read report), optionally
+/// one `Record::Profile`, followed by one `Record::Case` per entry in
+/// `formats`, in `formats` order. If the source read fails or panics, only
+/// the `Record::Source` is returned and no `Record::Profile`/`Record::Case`s
+/// are produced -- there is nothing to round-trip or profile-check without a
 /// model.
-pub fn run_bytes(ontology: &str, bytes: &[u8], formats: &[Format]) -> Vec<Record> {
+pub fn run_bytes(
+    ontology: &str,
+    bytes: &[u8],
+    formats: &[Format],
+    profile_mode: ProfileCheckMode,
+) -> Vec<Record> {
     let mut recs = Vec::new();
     let sfmt = detect(bytes);
 
@@ -73,6 +96,18 @@ pub fn run_bytes(ontology: &str, bytes: &[u8], formats: &[Format]) -> Vec<Record
             return recs;
         }
     };
+
+    if profile_mode != ProfileCheckMode::Off {
+        let with_robot = profile_mode == ProfileCheckMode::HornedAndRobot;
+        let ext = robot_ext(sfmt);
+        let result = catch_unwind(AssertUnwindSafe(|| {
+            crate::profile::check(ontology, &src.model, bytes, ext, with_robot)
+        }));
+        match result {
+            Ok(r) => recs.push(Record::Profile(r)),
+            Err(_) => eprintln!("warning: profile check panicked for {ontology}"),
+        }
+    }
 
     let src_canon = canonicalize(src.model.clone());
     for &t in formats {
@@ -230,7 +265,7 @@ mod tests {
     fn produces_source_and_case_records() {
         let ofn =
             b"Prefix(:=<http://ex/>)\nOntology(<http://ex/o>\nDeclaration(Class(<http://ex/A>))\n)";
-        let recs = run_bytes("t", ofn, &[Format::Ofn, Format::Omn]);
+        let recs = run_bytes("t", ofn, &[Format::Ofn, Format::Omn], ProfileCheckMode::Off);
         assert!(matches!(recs[0], Record::Source(_)));
         let cases = recs.iter().filter(|r| matches!(r, Record::Case(_))).count();
         assert_eq!(cases, 2);
@@ -259,7 +294,7 @@ mod tests {
   <owl:Ontology rdf:about="http://ex/o"/>
   <owl:Class rdf:about="http://ex/A"/>
 </rdf:RDF>"#;
-        let recs = run_bytes("rdf-t", rdf, &[Format::RdfXml]);
+        let recs = run_bytes("rdf-t", rdf, &[Format::RdfXml], ProfileCheckMode::Off);
         match &recs[0] {
             Record::Source(r) => {
                 assert_eq!(r.source_format, Format::RdfXml);
@@ -280,7 +315,7 @@ mod tests {
         // attempted.
         let ofn =
             b"Prefix(:=<http://ex/>)\nOntology(<http://ex/o>\nDeclaration(Class(<http://ex/A>))\n)";
-        let recs = run_bytes("t", ofn, &[Format::Unknown]);
+        let recs = run_bytes("t", ofn, &[Format::Unknown], ProfileCheckMode::Off);
         assert_eq!(recs.len(), 2, "expected source + case records");
 
         // Verify source record is Ok
@@ -313,7 +348,12 @@ mod tests {
         // Format::Unknown, and read_source(Unknown, garbage) fails. No Case
         // records are produced because the source read failed -- round-trips
         // are skipped entirely.
-        let recs = run_bytes("t", b"garbage not an ontology", &[Format::Ofn, Format::Omn]);
+        let recs = run_bytes(
+            "t",
+            b"garbage not an ontology",
+            &[Format::Ofn, Format::Omn],
+            ProfileCheckMode::Off,
+        );
         assert_eq!(
             recs.len(),
             1,

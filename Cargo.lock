@@ -464,12 +464,21 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2304e00983f87ffb38b55b444b5e3b60a884b5d30c0fca7d82fe33449bbe55ea"
 
 [[package]]
+name = "horned-catalog"
+version = "0.1.0"
+dependencies = [
+ "quick-xml 0.37.5",
+ "thiserror 1.0.69",
+]
+
+[[package]]
 name = "horned-owl"
-version = "2.0.0"
-source = "git+https://github.com/phillord/horned-owl.git?rev=0a9debdbf85243350d3d6edc0dcd617f0ed47d97#0a9debdbf85243350d3d6edc0dcd617f0ed47d97"
+version = "2.1.0"
 dependencies = [
  "curie",
  "enum_meta",
+ "horned-catalog",
+ "horned-pretty-rdf",
  "indexmap 1.9.3",
  "lazy_static",
  "log",
@@ -478,10 +487,27 @@ dependencies = [
  "oxrdfio",
  "pest",
  "pest_derive",
- "pretty_rdf",
  "quick-xml 0.37.5",
  "thiserror 1.0.69",
  "ureq",
+]
+
+[[package]]
+name = "horned-pretty-rdf"
+version = "2.0.0"
+dependencies = [
+ "indexmap 1.9.3",
+ "oxrdf",
+ "oxrdfio",
+ "quick-xml 0.31.0",
+ "rustc-hash 1.1.0",
+]
+
+[[package]]
+name = "horned-profile"
+version = "0.1.0"
+dependencies = [
+ "horned-owl",
 ]
 
 [[package]]
@@ -494,6 +520,7 @@ dependencies = [
  "curie",
  "flate2",
  "horned-owl",
+ "horned-profile",
  "oxrdfio",
  "rayon",
  "reqwest",
@@ -574,7 +601,7 @@ dependencies = [
  "tokio",
  "tokio-rustls",
  "tower-service",
- "webpki-roots 1.0.8",
+ "webpki-roots",
 ]
 
 [[package]]
@@ -979,19 +1006,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "pretty_rdf"
-version = "0.12.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "defcb9c77404660c4e01a78a0674c6617f2060f272f6629998f46444d190ab1b"
-dependencies = [
- "indexmap 1.9.3",
- "oxrdf",
- "oxrdfio",
- "quick-xml 0.31.0",
- "rustc-hash 1.1.0",
-]
-
-[[package]]
 name = "proc-macro2"
 version = "1.0.106"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1207,7 +1221,7 @@ dependencies = [
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",
- "webpki-roots 1.0.8",
+ "webpki-roots",
 ]
 
 [[package]]
@@ -1624,18 +1638,31 @@ checksum = "8ecb6da28b8a351d773b68d5825ac39017e680750f980f3a1a85cd8dd28a47c1"
 
 [[package]]
 name = "ureq"
-version = "2.12.1"
+version = "3.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "02d1a66277ed75f640d608235660df48c8e3c19f3b4edb6a263315626cc3c01d"
+checksum = "dea7109cdcd5864d4eeb1b58a1648dc9bf520360d7af16ec26d0a9354bafcfc0"
 dependencies = [
  "base64",
  "flate2",
  "log",
- "once_cell",
+ "percent-encoding",
  "rustls",
  "rustls-pki-types",
- "url",
- "webpki-roots 0.26.11",
+ "ureq-proto",
+ "utf8-zero",
+ "webpki-roots",
+]
+
+[[package]]
+name = "ureq-proto"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e994ba84b0bd1b1b0cf92878b7ef898a5c1760108fe7b6010327e274917a808c"
+dependencies = [
+ "base64",
+ "http",
+ "httparse",
+ "log",
 ]
 
 [[package]]
@@ -1649,6 +1676,12 @@ dependencies = [
  "percent-encoding",
  "serde",
 ]
+
+[[package]]
+name = "utf8-zero"
+version = "0.8.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b8c0a043c9540bae7c578c88f91dda8bd82e59ae27c21baca69c8b191aaf5a6e"
 
 [[package]]
 name = "utf8_iter"
@@ -1765,15 +1798,6 @@ checksum = "5a6580f308b1fad9207618087a65c04e7a10bc77e02c8e84e9b00dd4b12fa0bb"
 dependencies = [
  "js-sys",
  "wasm-bindgen",
-]
-
-[[package]]
-name = "webpki-roots"
-version = "0.26.11"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "521bc38abb08001b01866da9f51eb7c5d647a19260e00054a8c7fd5f9e57f7a9"
-dependencies = [
- "webpki-roots 1.0.8",
 ]
 
 [[package]]

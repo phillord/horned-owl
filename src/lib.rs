@@ -6,5 +6,6 @@ pub mod diff;
 pub mod fetch;
 pub mod model;
 pub mod ontology;
+pub mod profile;
 pub mod report;
 pub mod roundtrip;

@@ -5,8 +5,20 @@ edition = "2021"
 license = "MIT"
 
 [dependencies]
-# horned-owl = { path = "./horned-owl" }  # uncomment for local dev
-horned-owl = { git = "https://github.com/phillord/horned-owl.git", rev = "0a9debdbf85243350d3d6edc0dcd617f0ed47d97" }
+# Both horned-owl and horned-profile point at the same on-disk checkout
+# (feature/horned-profile, since horned-profile isn't merged to devel yet)
+# via the *same literal path string* -- deliberately not the usual
+# ./horned-owl symlink-to-devel convention right now. Cargo identifies path
+# packages by their literal path, not a canonicalized realpath: reaching the
+# same physical package (e.g. horned-catalog, a horned-owl workspace member)
+# via a symlink on one edge and directly on another produces two "different"
+# packages with identical name+version and a lockfile collision. Once
+# horned-profile is merged to devel, revert horned-owl to
+# `{ path = "./horned-owl" }` (the symlink) and horned-profile to a matching
+# `./horned-owl/horned-profile`-style path through it.
+horned-owl = { path = "/home/phillord/src/rust/horned-owl/feature/horned-profile" }
+# horned-owl = { git = "https://github.com/phillord/horned-owl.git", rev = "0a9debdbf85243350d3d6edc0dcd617f0ed47d97" }
+horned-profile = { path = "/home/phillord/src/rust/horned-owl/feature/horned-profile/horned-profile" }
 # horned_owl::io re-exports PrefixMapping only via a private `use curie::
 # PrefixMapping;` (see io/mod.rs), so it is not reachable as
 # `horned_owl::io::PrefixMapping`. Depend on the same `curie` crate directly
