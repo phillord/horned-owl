@@ -32,8 +32,8 @@ oxrdfio={workspace=true}
 ureq={version="3.3.0", optional=true}
 
 [workspace]
-members=["horned-bin", "horned-pretty-rdf", "horned-catalog", "horned-macro"]
-default-members=[".", "horned-bin", "horned-pretty-rdf", "horned-catalog", "horned-macro"]
+members=["horned-bin", "horned-pretty-rdf", "horned-catalog", "horned-macro", "horned-profile"]
+default-members=[".", "horned-bin", "horned-pretty-rdf", "horned-catalog", "horned-macro", "horned-profile"]
 
 [workspace.dependencies]
 indexmap="1.0.2"
@@ -42,6 +42,7 @@ oxiri="0.2.11"
 horned-pretty-rdf={path="./horned-pretty-rdf", version="2.0.0"}
 horned-catalog={path="./horned-catalog", version="0.1.0"}
 horned-macro={path="./horned-macro", version="0.1.0"}
+horned-profile={path="./horned-profile", version="0.1.0"}
 oxrdf="0.3.0"
 oxrdfio="0.2.0"
 
