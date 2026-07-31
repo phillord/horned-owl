@@ -351,6 +351,66 @@ pub fn is_xsd_datatype<A: AsRef<str>>(iri: A) -> bool {
     iri.as_ref().starts_with(Namespace::XSD.as_ref())
 }
 
+/// Every built-in XSD 1.0/1.1 datatype, per the W3C XML Schema spec --
+/// unlike [`is_xsd_datatype`], which only checks the namespace prefix, this
+/// checks the local name against the fixed, canonical list, so it's `false`
+/// for an IRI that merely looks like an XSD datatype (e.g. a misspelling,
+/// or real XSD *facet* vocabulary such as `xsd:minInclusive`, which is a
+/// constraint on a datatype, not a datatype itself).
+pub fn is_known_xsd_datatype<A: AsRef<str>>(iri: A) -> bool {
+    let Some(local) = iri.as_ref().strip_prefix(Namespace::XSD.as_ref()) else {
+        return false;
+    };
+    const XSD_DATATYPES: [&str; 45] = [
+        "anyURI",
+        "base64Binary",
+        "boolean",
+        "byte",
+        "date",
+        "dateTime",
+        "dateTimeStamp",
+        "decimal",
+        "double",
+        "duration",
+        "ENTITIES",
+        "ENTITY",
+        "float",
+        "gDay",
+        "gMonth",
+        "gMonthDay",
+        "gYear",
+        "gYearMonth",
+        "hexBinary",
+        "ID",
+        "IDREF",
+        "IDREFS",
+        "int",
+        "integer",
+        "language",
+        "long",
+        "Name",
+        "NCName",
+        "negativeInteger",
+        "NMTOKEN",
+        "NMTOKENS",
+        "nonNegativeInteger",
+        "nonPositiveInteger",
+        "normalizedString",
+        "NOTATION",
+        "positiveInteger",
+        "QName",
+        "short",
+        "string",
+        "time",
+        "token",
+        "unsignedByte",
+        "unsignedInt",
+        "unsignedLong",
+        "unsignedShort",
+    ];
+    XSD_DATATYPES.contains(&local)
+}
+
 vocabulary_type! {
     SWRL, IRI<String>, METASWRL, [
         (SWRL, Argument1, true),
@@ -951,6 +1011,28 @@ mod tests {
             "http://www.w3.org/2001/XMLSchemaaa#nonNegativeInteger"
         ));
         assert!(!is_xsd_datatype("http://www.w3.org/2001/XMLSchema.pdf"));
+    }
+
+    #[test]
+    fn test_is_known_xsd_datatype() {
+        assert!(is_known_xsd_datatype(
+            "http://www.w3.org/2001/XMLSchema#nonNegativeInteger"
+        ));
+        assert!(is_known_xsd_datatype(
+            "http://www.w3.org/2001/XMLSchema#string"
+        ));
+        // A real XSD term, but facet vocabulary (a constraint on a
+        // datatype), not a datatype itself.
+        assert!(!is_known_xsd_datatype(
+            "http://www.w3.org/2001/XMLSchema#minInclusive"
+        ));
+        // A misspelling/invented local name in the XSD namespace.
+        assert!(!is_known_xsd_datatype(
+            "http://www.w3.org/2001/XMLSchema#datetimestamp"
+        ));
+        assert!(!is_known_xsd_datatype(
+            "http://www.w3.org/2001/XMLSchemaaa#nonNegativeInteger"
+        ));
     }
 
     #[test]
