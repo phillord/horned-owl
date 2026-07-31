@@ -20,6 +20,7 @@ horned-owl={path="../", version= "2.0.0" }
 indexmap={workspace=true}
 oxiri={workspace=true}
 horned-pretty-rdf={workspace=true}
+horned-profile={workspace=true}
 oxrdf={workspace=true}
 oxrdfio={workspace=true}
 
@@ -76,3 +77,7 @@ path = "src/bin/horned_unparsed.rs"
 [[bin]]
 name = "horned-validate"
 path = "src/bin/horned_validate.rs"
+
+[[bin]]
+name = "horned-profile-check"
+path = "src/bin/horned_profile_check.rs"
