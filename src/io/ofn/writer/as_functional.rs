@@ -10,6 +10,41 @@ use enum_meta::Meta;
 use crate::model::*;
 use crate::vocab::Facet;
 
+/// Whether `c` must be percent-encoded before it can appear inside an OFN
+/// `<...>` full IRI.
+///
+/// A conservative, position-independent subset of RFC 3987's illegal
+/// characters (gen-delims/unwise chars plus controls) -- under-flagging is
+/// safe here, since it only leaves already-broken input broken; the real
+/// risk is flagging too much and mangling a valid IRI. See #234.
+fn needs_iri_percent_encoding(c: char) -> bool {
+    matches!(
+        c,
+        '[' | ']' | '<' | '>' | '"' | ' ' | '\\' | '`' | '^' | '{' | '|' | '}'
+    ) || c.is_control()
+}
+
+/// Percent-encodes every character [`needs_iri_percent_encoding`] flags in
+/// `s`, leaving the rest untouched.
+fn percent_encode_iri(s: &str) -> std::borrow::Cow<'_, str> {
+    if !s.chars().any(needs_iri_percent_encoding) {
+        return std::borrow::Cow::Borrowed(s);
+    }
+    let mut out = String::with_capacity(s.len());
+    let mut buf = [0u8; 4];
+    for c in s.chars() {
+        if needs_iri_percent_encoding(c) {
+            for b in c.encode_utf8(&mut buf).as_bytes() {
+                out.push('%');
+                out.push_str(&format!("{b:02X}"));
+            }
+        } else {
+            out.push(c);
+        }
+    }
+    std::borrow::Cow::Owned(out)
+}
+
 /// Write a string literal while escaping `"` and `\` characters.
 fn quote(mut s: &str, f: &mut Formatter<'_>) -> Result<(), Error> {
     f.write_str("\"")?;
@@ -931,10 +966,10 @@ impl<A: ForIRI> Display for Functional<'_, IRI<A>, A> {
         if let Some(prefixes) = self.1.as_ref() {
             match shrink_iri_for_ofn(prefixes, self.0) {
                 Some((name, local)) => write!(f, "{name}:{local}"),
-                None => write!(f, "<{}>", self.0),
+                None => write!(f, "<{}>", percent_encode_iri(self.0)),
             }
         } else {
-            write!(f, "<{}>", self.0)
+            write!(f, "<{}>", percent_encode_iri(self.0))
         }
     }
 }
@@ -1073,7 +1108,7 @@ impl<A: ForIRI> AsFunctional<A> for Variable<A> {}
 impl<A: ForIRI> Display for Functional<'_, curie::PrefixMapping, A> {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
         for (name, value) in self.0.mappings() {
-            writeln!(f, "Prefix({name}:=<{value}>)")?;
+            writeln!(f, "Prefix({name}:=<{}>)", percent_encode_iri(value))?;
         }
         Ok(())
     }
@@ -1261,6 +1296,44 @@ mod tests {
         assert_eq!(
             "Declaration(Class(<http://identifiers.org/mamo#MAMO_0000207>))",
             ofn
+        );
+    }
+
+    // Regression test for #234: a literal '[' or ']' (legal in an XML
+    // attribute, so real-world OWL/XML ontologies contain it, but not legal
+    // unescaped in OFN's <...> FullIRI) must be percent-encoded, in both the
+    // full-IRI form and a Prefix(name:=<...>) declaration line.
+    #[test]
+    fn test_ofn_iri_with_illegal_characters_is_percent_encoded() {
+        let build = Build::new_arc();
+
+        let decl = DeclareClass(build.class("http://example.org/KB-CH[R]-8-5"));
+        let ofn = format!("{}", decl.as_functional());
+        assert_eq!(
+            "Declaration(Class(<http://example.org/KB-CH%5BR%5D-8-5>))",
+            ofn
+        );
+
+        let reparsed: Result<(crate::ontology::set::SetOntology<RcStr>, _), _> =
+            crate::io::ofn::reader::read(
+                std::io::Cursor::new(format!(
+                    "Prefix(:=<http://ex/>)\nOntology(<http://ex/o>\n{ofn}\n)"
+                )),
+                Default::default(),
+            );
+        assert!(reparsed.is_ok(), "reparse failed: {reparsed:?}");
+
+        let mut prefixes = curie::PrefixMapping::default();
+        prefixes
+            .add_prefix("R", "http://example.org/KB-CH[R]-8-5")
+            .ok();
+        let rendered = format!(
+            "{}",
+            Functional::<curie::PrefixMapping, RcStr>(&prefixes, None, None)
+        );
+        assert_eq!(
+            "Prefix(R:=<http://example.org/KB-CH%5BR%5D-8-5>)\n",
+            rendered
         );
     }
 
