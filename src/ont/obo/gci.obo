@@ -1,0 +1,7 @@
+format-version: 1.2
+ontology: t
+
+[Term]
+id: GO:0001
+name: c
+relationship: part_of GO:0004 {gci_relation="part_of", gci_filler="GO:0003"}

@@ -20,15 +20,15 @@ Declaration(Class(o:D))
 #   Classes
 ############################
 
-# Class: o:A (o:A)
+# Class: <http://www.example.com/iri#A> (<http://www.example.com/iri#A>)
 
 EquivalentClasses(Annotation(rdfs:comment "This is an annotation on an axiom"@en) o:A o:D)
 
-# Class: o:B (o:B)
+# Class: <http://www.example.com/iri#B> (<http://www.example.com/iri#B>)
 
 EquivalentClasses(Annotation(rdfs:comment "This is an annotation on an axiom"@en) o:B o:D)
 
-# Class: o:C (o:C)
+# Class: <http://www.example.com/iri#C> (<http://www.example.com/iri#C>)
 
 EquivalentClasses(Annotation(rdfs:comment "This is an annotation on an axiom"@en) o:C o:D)
 

@@ -18,7 +18,7 @@ Declaration(DataProperty(o:r))
 #   Classes
 ############################
 
-# Class: o:C (o:C)
+# Class: <http://www.example.com/iri#C> (<http://www.example.com/iri#C>)
 
 SubClassOf(o:C DataSomeValuesFrom(o:r DatatypeRestriction(xsd:integer xsd:minExclusive "10"^^xsd:integer)))
 

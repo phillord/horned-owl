@@ -22,6 +22,13 @@ pub struct ClosureOntologyParser<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<
     // A map between the resolvable IRI of an Ontology and the
     // resolvable IRIs of any Ontology that it imports.
     import_map: HashMap<IRI<A>, Vec<IRI<A>>>,
+    // A map between an Ontology's plain IRI and the key it is
+    // actually stored under in `op`/`import_map` (its version IRI),
+    // for Ontologies that have both. An `owl:imports` statement may
+    // legally reference either the plain IRI or the version IRI of
+    // the Ontology it imports, so we need to be able to resolve
+    // either back to the same entry.
+    alias: HashMap<IRI<A>, IRI<A>>,
     b: &'a Build<A>,
     config: ParserConfiguration,
 }
@@ -32,6 +39,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> ClosureOntologyParse
             b,
             import_map: HashMap::new(),
             op: HashMap::new(),
+            alias: HashMap::new(),
             config,
         }
     }
@@ -69,7 +77,13 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> ClosureOntologyParse
         source_iri: &IRI<A>,
         relative_doc_iri: Option<&IRI<A>>,
     ) -> Result<Vec<IRI<A>>, HornedError> {
-        let (new_doc_iri, s) = resolve_iri(source_iri, relative_doc_iri)?;
+        let (new_doc_iri, s) = resolve_iri(
+            source_iri,
+            relative_doc_iri,
+            self.config.remote_body_limit,
+            self.config.local_only,
+            self.config.catalog.as_deref(),
+        )?;
         self.parse_content_from_iri(s, relative_doc_iri, new_doc_iri)
     }
 
@@ -98,7 +112,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> ClosureOntologyParse
         new_doc_iri: IRI<A>,
     ) -> Result<Vec<IRI<A>>, HornedError> {
         // Parse the contents of the string
-        let mut p = parser_with_build(&mut s.as_bytes(), self.b, self.config);
+        let mut p = parser_with_build(&mut s.as_bytes(), self.b, self.config.clone())?;
         let imports = p.parse_imports().unwrap();
         p.parse_declarations()?;
 
@@ -108,23 +122,34 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> ClosureOntologyParse
 
         // Find the viri_or_iri
         let si: &SetIndex<A, AA> = o.as_ref();
+        let id = si.the_ontology_id_or_default();
+
+        // Use the declared ontology IRI (or version IRI) as the storage key;
+        // fall back to the document IRI for anonymous ontologies so they are
+        // still stored and can be returned by `as_ontology_vec_and_incomplete`.
+        let storage_iri = id
+            .clone()
+            .viri_or_iri()
+            .unwrap_or_else(|| new_doc_iri.clone());
 
         // Stuff the iri of this ontology, if we have one into a vec
-        let mut res = match si.the_ontology_id_or_default().viri_or_iri() {
-            Some(resolved_iri) => {
-                vec![resolved_iri]
-            }
-            _ => {
-                vec![]
-            }
+        let mut res = match id.clone().viri_or_iri() {
+            Some(resolved_iri) => vec![resolved_iri],
+            _ => vec![],
         };
 
-        // Add the ontology that we have parsed into import_map
-        if let Some(resolved_iri) = si.the_ontology_id_or_default().viri_or_iri() {
-            self.import_map
-                .insert(resolved_iri.clone(), imports.clone());
-            self.op.insert(resolved_iri, p);
+        // Add the ontology that we have parsed into import_map. An
+        // `owl:imports` statement may reference either the plain IRI
+        // or the version IRI of an Ontology, so if both are present
+        // and differ, record the plain IRI as an alias of the
+        // version IRI so that either can be used to find this entry.
+        if let (Some(iri), Some(viri)) = (id.iri, id.viri)
+            && iri != viri
+        {
+            self.alias.insert(iri, viri);
         }
+        self.import_map.insert(storage_iri.clone(), imports.clone());
+        self.op.insert(storage_iri, p);
 
         // Now parse all of the imported ontologies as well
         for import in imports {
@@ -148,12 +173,20 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> ClosureOntologyParse
         // of.
         let import_iris = self.import_map.get(iri).unwrap();
 
-        // Now we can get references to the actual ontologies.
+        // Now we can get references to the actual ontologies. An
+        // import may reference an Ontology by its plain IRI even
+        // though it is stored under its version IRI, so fall back to
+        // the alias map if a direct lookup fails.
         let import_closure: Result<Vec<_>, HornedError> = import_iris
             .iter()
             .map(|i| {
                 self.op
                     .get(i)
+                    .or_else(|| {
+                        self.alias
+                            .get(i)
+                            .and_then(|canonical| self.op.get(canonical))
+                    })
                     .ok_or_else(|| HornedError::ImportError(i.to_string()))
                     .map(|i| i.ontology_ref())
             })
@@ -212,7 +245,12 @@ pub fn read<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>>(
     }
 
     let res = c.as_ontology_vec_and_incomplete();
-    Ok(res.into_iter().next().unwrap())
+    res.into_iter().next().ok_or_else(|| {
+        HornedError::ValidityError(
+            "RDF document contains no named owl:Ontology".to_string(),
+            crate::error::Location::Unknown,
+        )
+    })
 }
 
 // Returns the import closure of an Ontology and IncompleteParse
@@ -269,6 +307,77 @@ mod test {
             })
             .collect();
 
+        assert_eq!(v.len(), 2);
+    }
+
+    // `withcatalog/` reuses the exact same bubo/OWL-API-generated content
+    // as `withimport/import-property.owl` + `other-property.owl` (bubo is
+    // just a Clojure front end to the OWL API -- these files are real OWL
+    // API output, not hand-written), but with the imported file moved into
+    // an `imports/` subdirectory. `localize_iri`'s heuristic never looks
+    // in subdirectories, so this setup is a genuine, real-shape case
+    // (an import IRI whose physical file has moved relative to where a
+    // naive same-directory guess would look) -- not a synthetic one.
+    //
+    // `withcatalog/catalog-v001.xml` is itself real OWL API output too,
+    // not hand-typed: generated by calling the actual
+    // `OWLZipSaver.catalogIndex()` method (the same code Protege's own
+    // catalog files are generated by, or something sharing its template
+    // -- the `<group id="Folder Repository, ...">` wrapper matches real
+    // Protege-generated catalogs found on disk in ~/src/knowledge/
+    // ontology-clj byte for byte) via Java interop from a bubo script --
+    // see `src/ont/bubo/withcatalog/generate-catalog.clj`. Only the
+    // entry's *path* (`imports/other-property.owl`) is supplied by that
+    // script, via `OWLZipSaver`'s own `setEntryPath` customisation hook
+    // (its default just returns the ontology IRI verbatim, confirmed by
+    // reading `OWLZipSaver.java` -- not meant for filesystem redirects
+    // out of the box); the XML structure/escaping is 100% real
+    // `catalogIndex()` output.
+    #[test]
+    fn test_read_closure_relocated_import_fails_without_catalog() {
+        let path = Path::new("src/ont/owl-rdf/withcatalog/import-property.owl");
+        let b = Build::new_rc();
+        let iri = path_to_file_iri(&b, path);
+
+        // local_only means no network fallback can silently paper over
+        // the heuristic's failure to find the relocated file.
+        let config = ParserConfiguration {
+            local_only: true,
+            ..Default::default()
+        };
+        let result: Result<Vec<(ConcreteRcRDFOntology, _)>, _> = read_closure(&b, &iri, config);
+        assert!(
+            result.is_err(),
+            "expected resolution to fail without a catalog, since the import was moved out of \
+             reach of the same-directory heuristic"
+        );
+    }
+
+    #[test]
+    fn test_read_closure_relocated_import_succeeds_with_catalog() {
+        let path = Path::new("src/ont/owl-rdf/withcatalog/import-property.owl");
+        let catalog_path = Path::new("src/ont/owl-rdf/withcatalog/catalog-v001.xml");
+        let b = Build::new_rc();
+        let iri = path_to_file_iri(&b, path);
+
+        let catalog = horned_catalog::Catalog::from_path(catalog_path).unwrap();
+        let config = ParserConfiguration {
+            local_only: true,
+            catalog: Some(std::rc::Rc::new(catalog)),
+            ..Default::default()
+        };
+
+        let v: Vec<(ConcreteRcRDFOntology, _)> = read_closure(&b, &iri, config).unwrap();
+        let v: Vec<SetOntology<_>> = v
+            .into_iter()
+            .map(|(rdfo, ic)| {
+                assert!(ic.is_complete());
+                rdfo.into()
+            })
+            .collect();
+
+        // Same shape as the un-relocated withimport/ case: the importing
+        // ontology plus the one it imports.
         assert_eq!(v.len(), 2);
     }
 

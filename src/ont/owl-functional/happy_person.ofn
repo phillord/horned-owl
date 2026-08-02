@@ -17,7 +17,7 @@ Declaration(ObjectProperty(o:hasChild))
 #   Object Properties
 ############################
 
-# Object Property: o:hasChild (o:hasChild)
+# Object Property: <http://www.example.com/iri#hasChild> (<http://www.example.com/iri#hasChild>)
 
 AsymmetricObjectProperty(o:hasChild)
 
@@ -26,7 +26,7 @@ AsymmetricObjectProperty(o:hasChild)
 #   Classes
 ############################
 
-# Class: o:HappyPerson (o:HappyPerson)
+# Class: <http://www.example.com/iri#HappyPerson> (<http://www.example.com/iri#HappyPerson>)
 
 EquivalentClasses(o:HappyPerson ObjectIntersectionOf(ObjectSomeValuesFrom(o:hasChild o:HappyPerson) ObjectAllValuesFrom(o:hasChild o:HappyPerson)))
 

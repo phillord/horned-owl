@@ -2,7 +2,7 @@
 
 use horned_owl::{
     error::HornedError,
-    io::{ParserConfiguration, ParserOutput, ResourceType},
+    io::{InputFormat, ParserConfiguration, ParserOutput, ResourceType},
     model::{Build, ForIRI, IRI, MutableOntology, OntologyID, RcAnnotatedComponent, RcStr},
     ontology::{
         component_mapped::{ComponentMappedOntology, RcComponentMappedOntology},
@@ -27,6 +27,35 @@ pub mod error {
     }
 }
 
+/// This binary's version, combined with the horned-owl library version it
+/// was compiled against -- e.g. `"2.0.0 (horned-owl 2.0.0)"`. Used as the
+/// `clap::App::version` for every horned-bin binary so `--version` reports
+/// something meaningful instead of a stale hardcoded literal (see
+/// https://github.com/phillord/horned-owl/issues/219).
+pub fn version_string() -> &'static str {
+    static VERSION: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+    VERSION.get_or_init(|| {
+        format!(
+            "{} (horned-owl {})",
+            env!("CARGO_PKG_VERSION"),
+            horned_owl::VERSION
+        )
+    })
+}
+
+/// The `oxrdfio::RdfFormat` that `extension` denotes, if any. `"owl"`
+/// is horned-owl's own long-standing alias for RDF/XML; every other
+/// extension is whatever [`oxrdfio::RdfFormat::from_extension`]
+/// recognises (`ttl`, `nt`, `nq`, `trig`, `json`/`jsonld`, `n3`,
+/// `rdf`, `xml`).
+fn rdf_format_for_extension(extension: &str) -> Option<oxrdfio::RdfFormat> {
+    if extension == "owl" {
+        Some(oxrdfio::RdfFormat::RdfXml)
+    } else {
+        oxrdfio::RdfFormat::from_extension(extension)
+    }
+}
+
 pub fn write<A: ForIRI, AA: ForIndex<A>, W: StdWrite>(
     format: &str,
     write: W,
@@ -35,28 +64,46 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: StdWrite>(
     match format {
         "owx" => horned_owl::io::owx::writer::write(write, ont, None),
         "ofn" => horned_owl::io::ofn::writer::write(write, ont, None),
-        "owl" | "ttl" => horned_owl::io::rdf::writer::write_to_rdf_format(write, ont, format),
-
-        _ => Err(HornedError::CommandError(format!(
-            "Format is unknown: {format}"
-        ))),
+        "omn" => horned_owl::io::omn::write(write, ont, None),
+        "obo" => horned_owl::io::obo::write(write, ont, None),
+        _ => horned_owl::io::rdf::writer::write_to_rdf_format(write, ont, format),
     }
 }
 
-pub fn path_type(path: &Path) -> Option<ResourceType> {
+pub fn path_type(path: &Path, config: &ParserConfiguration) -> Option<ResourceType> {
+    match config.input_format {
+        Some(InputFormat::OFN) => return Some(ResourceType::OFN),
+        Some(InputFormat::OWX) => return Some(ResourceType::OWX),
+        Some(InputFormat::OMN) => return Some(ResourceType::OMN),
+        Some(InputFormat::OBO) => return Some(ResourceType::OBO),
+        Some(InputFormat::Rdf(_)) => return Some(ResourceType::RDF),
+        Some(InputFormat::Guess) => return detect_from_path(path).map(|(rt, _)| rt),
+        None => {}
+    }
     match path.extension().and_then(|s| s.to_str()) {
         Some("ofn") => Some(ResourceType::OFN),
         Some("owx") => Some(ResourceType::OWX),
-        Some("owl") => Some(ResourceType::RDF),
-        _ => None,
+        Some("omn") => Some(ResourceType::OMN),
+        Some("obo") => Some(ResourceType::OBO),
+        Some(ext) if rdf_format_for_extension(ext).is_some() => Some(ResourceType::RDF),
+        _ => detect_from_path(path).map(|(rt, _)| rt),
     }
+}
+
+/// Peek at the first 512 bytes of a file and use content sniffing as a
+/// fallback when the extension is missing or unrecognised.
+fn detect_from_path(path: &Path) -> Option<(ResourceType, Option<oxrdfio::RdfFormat>)> {
+    use std::io::Read;
+    let mut buf = [0u8; 512];
+    let n = File::open(path).ok()?.read(&mut buf).ok()?;
+    horned_owl::io::detect_format(&buf[..n])
 }
 
 pub fn parse_path(
     path: &Path,
     config: ParserConfiguration,
 ) -> Result<ParserOutput<RcStr, RcAnnotatedComponent>, HornedError> {
-    Ok(match path_type(path) {
+    Ok(match path_type(path, &config) {
         Some(ResourceType::OFN) => {
             let file = File::open(path)?;
             let mut bufreader = BufReader::new(file);
@@ -67,10 +114,23 @@ pub fn parse_path(
             let mut bufreader = BufReader::new(file);
             ParserOutput::owx(horned_owl::io::owx::reader::read(&mut bufreader, config)?)
         }
+        Some(ResourceType::OMN) => {
+            let file = File::open(path)?;
+            let mut bufreader = BufReader::new(file);
+            ParserOutput::omn(horned_owl::io::omn::read(&mut bufreader, config)?)
+        }
+        Some(ResourceType::OBO) => {
+            let file = File::open(path)?;
+            let mut bufreader = BufReader::new(file);
+            ParserOutput::obo(horned_owl::io::obo::read(&mut bufreader, config)?)
+        }
         Some(ResourceType::RDF) => {
             let b = Build::new();
             let iri = horned_owl::resolve::path_to_file_iri(&b, path);
-            ParserOutput::rdf(horned_owl::io::rdf::closure_reader::read(&iri, config)?)
+            ParserOutput::rdf(horned_owl::io::rdf::closure_reader::read(
+                &iri,
+                with_detected_rdf_format(path, config),
+            )?)
         }
         None => {
             return Err(HornedError::CommandError(format!(
@@ -80,6 +140,26 @@ pub fn parse_path(
     })
 }
 
+/// Fill in `config.rdf.format` from `path`'s extension or content, unless the
+/// caller already set one explicitly.
+pub fn with_detected_rdf_format(
+    path: &Path,
+    mut config: ParserConfiguration,
+) -> ParserConfiguration {
+    if config.rdf.format.is_none() {
+        config.rdf.format = match config.input_format {
+            Some(InputFormat::Rdf(fmt)) => fmt,
+            Some(InputFormat::Guess) => detect_from_path(path).and_then(|(_, fmt)| fmt),
+            _ => path
+                .extension()
+                .and_then(|s| s.to_str())
+                .and_then(rdf_format_for_extension)
+                .or_else(|| detect_from_path(path).and_then(|(_, fmt)| fmt)),
+        };
+    }
+    config
+}
+
 /// Parse but only as far as the imports, if that makes sense.
 pub fn parse_imports(
     path: &Path,
@@ -87,16 +167,25 @@ pub fn parse_imports(
 ) -> Result<ParserOutput<RcStr, RcAnnotatedComponent>, HornedError> {
     let file = File::open(path)?;
     let mut bufreader = BufReader::new(file);
-    Ok(match path_type(path) {
+    Ok(match path_type(path, &config) {
         Some(ResourceType::OFN) => {
             ParserOutput::ofn(horned_owl::io::owx::reader::read(&mut bufreader, config)?)
         }
         Some(ResourceType::OWX) => {
             ParserOutput::owx(horned_owl::io::owx::reader::read(&mut bufreader, config)?)
         }
+        Some(ResourceType::OMN) => {
+            // Manchester has no imports-only parse; read the whole document.
+            ParserOutput::omn(horned_owl::io::omn::read(&mut bufreader, config)?)
+        }
+        Some(ResourceType::OBO) => {
+            // OBO has no imports-only parse; read the whole document.
+            ParserOutput::obo(horned_owl::io::obo::read(&mut bufreader, config)?)
+        }
         Some(ResourceType::RDF) => {
             let b = Build::new();
-            let mut p = horned_owl::io::rdf::reader::parser_with_build(&mut bufreader, &b, config);
+            let config = with_detected_rdf_format(path, config);
+            let mut p = horned_owl::io::rdf::reader::parser_with_build(&mut bufreader, &b, config)?;
             p.parse_imports()?;
             ParserOutput::rdf(p.as_ontology_and_incomplete())
         }
@@ -123,7 +212,12 @@ pub fn materialize(
     // Can we just do this with parse_iri method from OxIri?
 
     let file_pathbuf = match parsed {
-        Result::Ok(_) => ensure_local(&b.iri(file_or_iri), None)?,
+        Result::Ok(_) => ensure_local(
+            &b.iri(file_or_iri),
+            None,
+            config.remote_body_limit,
+            config.local_only,
+        )?,
         Result::Err(_) => PathBuf::from_str(file_or_iri).expect("Result is infallable"),
     };
 
@@ -134,12 +228,14 @@ pub fn materialize(
 fn ensure_local(
     iri: &IRI<RcStr>,
     relative_doc_iri: Option<&IRI<RcStr>>,
+    remote_body_limit: u64,
+    local_only: bool,
 ) -> Result<PathBuf, HornedError> {
     let local_path = localize_iri_favored(iri, relative_doc_iri);
 
     if !local_path.exists() {
         println!("Retrieving Ontology: {}", iri);
-        let imported_data = strict_resolve_iri(iri)?;
+        let imported_data = strict_resolve_iri(iri, remote_body_limit, local_only)?;
         println!("Saving to {}", local_path.display());
         let mut file = File::create(&local_path)?;
         file.write_all(imported_data.as_bytes())?;
@@ -156,7 +252,8 @@ fn materialize_1<'a>(
     recurse: bool,
 ) -> Result<&'a mut Vec<IRI<RcStr>>, HornedError> {
     println!("Parsing: {}", file_location.display());
-    let amont: RcComponentMappedOntology = parse_imports(Path::new(file_location), config)?.into();
+    let amont: RcComponentMappedOntology =
+        parse_imports(Path::new(file_location), config.clone())?.into();
     let import = amont.i().import();
 
     let b = Build::new_rc();
@@ -165,13 +262,18 @@ fn materialize_1<'a>(
     for i in import {
         if !done.contains(&i.0) {
             done.push(i.0.clone());
-            let local_path = ensure_local(&i.0, Some(&doc_iri))?;
+            let local_path = ensure_local(
+                &i.0,
+                Some(&doc_iri),
+                config.remote_body_limit,
+                config.local_only,
+            )?;
 
             if recurse {
-                materialize_1(&local_path, config, done, true)?;
+                materialize_1(&local_path, config.clone(), done, true)?;
             }
         } else {
-            println!("Already materialized: {}", &i.0);
+            println!("Already materialized: {}", i.0);
         }
     }
 
@@ -320,24 +422,91 @@ pub mod config {
     use clap::App;
     use clap::ArgAction;
     use clap::ArgMatches;
-    use horned_owl::io::ParserConfiguration;
-    use horned_owl::io::RDFParserConfiguration;
+    use horned_owl::io::{InputFormat, ParserConfiguration};
 
-    pub fn parser_app(app: App<'static>) -> App<'static> {
+    /// Add parser-config options as *global* args on the unified `horned`
+    /// binary's top-level App (see `horned.rs`) -- with `global(true)`,
+    /// clap makes them available on every subcommand's own `ArgMatches`
+    /// regardless of whether the flag is given before or after the
+    /// subcommand name. Not called by the standalone single-subcommand
+    /// binaries (`horned-parse` etc): almost every subcommand parses
+    /// something, so these options belong on the shared `horned
+    /// <subcommand>` front door rather than duplicated per binary --
+    /// mirrors how `git` only offers most flags on `git <subcommand>`,
+    /// not on the individual `git-<subcommand>` binaries.
+    pub fn parser_app_global(app: App<'static>) -> App<'static> {
         app.arg(
             clap::arg!(--"lax")
                 .required(false)
+                .global(true)
                 .action(ArgAction::SetTrue)
-                .help("Parse RDF in a lax manner"),
+                .help("Parse in a lax manner"),
+        )
+        .arg(
+            clap::arg!(--"remote-body-limit" <BYTES>)
+                .required(false)
+                .global(true)
+                .value_parser(clap::value_parser!(u64))
+                .help(
+                    "Maximum bytes to read from a remote IRI resolution \
+                     (e.g. while following owl:imports); unbounded if not given",
+                ),
+        )
+        .arg(
+            clap::arg!(--"local-only")
+                .required(false)
+                .global(true)
+                .action(ArgAction::SetTrue)
+                .help(
+                    "Never access the network -- fail instead of resolving \
+                     an IRI (e.g. an owl:imports target) remotely",
+                ),
+        )
+        .arg(
+            clap::arg!(--"input-format" <FORMAT>)
+                .required(false)
+                .global(true)
+                .help(
+                    "Override input format detection. Accepted values: \
+                     owl, rdf, xml (RDF/XML), ttl (Turtle), nt (N-Triples), \
+                     owx (OWL/XML), ofn (Functional Syntax), omn (Manchester), \
+                     guess (detect from content)",
+                ),
         )
     }
 
+    /// `lax`/`remote-body-limit`/`local-only` are only registered on the
+    /// unified `horned` binary (see `parser_app_global`), not on the
+    /// standalone `horned-*` binaries -- so on those, `matches` won't have
+    /// these arg ids defined at all. `try_get_one` reports that as `Err`,
+    /// same as "not provided" reports `Ok(None)`; either way we fall back
+    /// to the off/unbounded default, whereas `get_one` panics on an
+    /// undefined id.
     pub fn parser_config(matches: &ArgMatches) -> ParserConfiguration {
         ParserConfiguration {
-            rdf: RDFParserConfiguration {
-                lax: *matches.get_one::<bool>("lax").unwrap_or(&false),
-                format: None,
-            },
+            lax: matches
+                .try_get_one::<bool>("lax")
+                .ok()
+                .flatten()
+                .copied()
+                .unwrap_or(false),
+            remote_body_limit: matches
+                .try_get_one::<u64>("remote-body-limit")
+                .ok()
+                .flatten()
+                .copied()
+                .unwrap_or(u64::MAX),
+            local_only: matches
+                .try_get_one::<bool>("local-only")
+                .ok()
+                .flatten()
+                .copied()
+                .unwrap_or(false),
+            input_format: matches
+                .try_get_one::<String>("input-format")
+                .ok()
+                .flatten()
+                .and_then(|s| s.parse::<InputFormat>().ok()),
             ..Default::default()
         }
     }

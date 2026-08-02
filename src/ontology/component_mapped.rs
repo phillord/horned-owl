@@ -200,19 +200,26 @@ impl<A, AA> Default for ComponentMappedIndex<A, AA> {
 }
 
 /// An owning iterator over the annotated components of an `Ontology`.
+pub type ComponentMappedIntoIter<A, AA> = std::iter::Map<
+    std::iter::FlatMap<
+        std::collections::btree_map::IntoValues<ComponentKind, BTreeSet<AA>>,
+        std::collections::btree_set::IntoIter<AA>,
+        fn(BTreeSet<AA>) -> std::collections::btree_set::IntoIter<AA>,
+    >,
+    fn(AA) -> AnnotatedComponent<A>,
+>;
+
 impl<A: ForIRI, AA: ForIndex<A>> IntoIterator for ComponentMappedIndex<A, AA> {
     type Item = AnnotatedComponent<A>;
-    type IntoIter = std::vec::IntoIter<AnnotatedComponent<A>>;
+    type IntoIter = ComponentMappedIntoIter<A, AA>;
     fn into_iter(self) -> Self::IntoIter {
-        // The collect switches the type which shows up in the API. Blegh.
-        let v: Vec<AnnotatedComponent<A>> = self
-            .component
+        self.component
             .into_values()
-            .flat_map(BTreeSet::into_iter)
-            .map(|fi| fi.unwrap())
-            .collect();
-
-        v.into_iter()
+            .flat_map(
+                BTreeSet::into_iter
+                    as fn(BTreeSet<AA>) -> std::collections::btree_set::IntoIter<AA>,
+            )
+            .map(AA::into_component)
     }
 }
 
@@ -278,7 +285,17 @@ impl<A: ForIRI, AA: ForIndex<A>> Default for ComponentMappedOntology<A, AA> {
     }
 }
 
-impl<A: ForIRI, AA: ForIndex<A>> Ontology<A> for ComponentMappedOntology<A, AA> {}
+impl<A: ForIRI, AA: ForIndex<A>> Ontology<A> for ComponentMappedOntology<A, AA> {
+    type ComponentIter<'c>
+        = ComponentMappedIter<'c, A, AA>
+    where
+        Self: 'c,
+        A: 'c;
+
+    fn iter(&self) -> Self::ComponentIter<'_> {
+        self.i().into_iter()
+    }
+}
 
 impl<A: ForIRI, AA: ForIndex<A>> MutableOntology<A> for ComponentMappedOntology<A, AA> {
     fn insert<IAA>(&mut self, cmp: IAA) -> bool
@@ -358,7 +375,7 @@ impl ArcComponentMappedOntology {
 /// An owning iterator over the annotated axioms of an `Ontology`.
 impl<A: ForIRI, AA: ForIndex<A>> IntoIterator for ComponentMappedOntology<A, AA> {
     type Item = AnnotatedComponent<A>;
-    type IntoIter = std::vec::IntoIter<AnnotatedComponent<A>>;
+    type IntoIter = ComponentMappedIntoIter<A, AA>;
     fn into_iter(self) -> Self::IntoIter {
         self.index().into_iter()
     }
@@ -421,6 +438,16 @@ mod test {
         let mut it = ComponentMappedOntology::new_rc().into_iter();
         assert_eq!(it.next(), None);
         assert_eq!(it.next(), None);
+    }
+
+    #[test]
+    fn test_iterable_ontology_iter() {
+        let build = Build::new_rc();
+        let mut o = ComponentMappedOntology::new_rc();
+        o.insert(DeclareClass(build.class("http://www.example.com#a")));
+        o.insert(DeclareClass(build.class("http://www.example.com#b")));
+
+        assert_eq!(Ontology::iter(&o).count(), 2);
     }
 
     #[test]

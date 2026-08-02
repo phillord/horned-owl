@@ -18,7 +18,7 @@ Declaration(AnnotationProperty(o:a))
 #   Classes
 ############################
 
-# Class: o:A (o:A)
+# Class: <http://www.example.com/iri#A> (<http://www.example.com/iri#A>)
 
 AnnotationAssertion(o:a o:A "annotation")
 

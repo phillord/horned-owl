@@ -1,8 +1,56 @@
-Version 2 (Next)
+Version 2.1.0
 =============
 
+Features:
+- New `--input-format` CLI option, with automatic content-sniffing as
+  a fallback when a file's extension doesn't indicate its format.
+- The `horned` CLI gained `--lax`, `--remote-body-limit`, and
+  `--local-only` (guarantees no network access) as global options.
+- `Ontology` now guarantees an `Iterator` which was previously by
+  convention.
+- pretty_rdf is now bundled directly as the `horned-pretty-rdf`
+  workspace subcrate (previously a separate crate).
+
 Enhancements:
-- The ForIRI interface has been updated to avoid an allocation which results in 5-10% performance gains.
+- `horned-bin` binaries now report the horned-owl version they were
+  compiled against in `--version` output.
+- `ureq` updated to 3.3.0, with a configurable remote body size limit.
+- OWL/XML reader errors now report byte positions.
+
+Bugs:
+- Several RDF/XML round-trip panics fixed (duplicate annotations,
+  single-member DifferentIndividuals, malformed input now errors
+  instead of panicking).
+- `rdfs:Class` is now recognised in the RDFS vocabulary, fixing
+  mis-parsing of RDFS-only ontologies (e.g. GEXO) as spurious class
+  assertions.
+- Fixed doubled-hash IRIs when an empty prefix ends with '#' in the
+  OWL/XML reader.
+- Unqualified `owl:minCardinality`/`owl:maxCardinality` now dispatch
+  correctly on the property's declared kind.
+- Stray text in OWL/XML input is now rejected by default (opt out with
+  the new `lax` flag).
+
+Contributors:
+- Phillip Lord
+
+
+
+Version 2.0.0
+=============
+
+Features:
+- Manchester Syntax is now supported
+
+Enhancements:
+- The ForIRI interface has been updated to avoid an allocation which
+  results in 5-10% performance gains.
+- Other performance enchancements, including several in pretty_rdf.
+
+Contributors:
+- Michel Dumontier
+- Phillip Lord
+- Jim Balhoff
 
 
 

@@ -242,8 +242,15 @@ where
     let id = o.i().the_ontology_id_or_default();
     iri_maybe(&mut elem, "xml:base", &id.iri);
 
-    // Render XML Namespaces.
+    // Render XML Namespaces. The empty/default CURIE prefix (`name=""`) has
+    // no valid `xmlns:`-attribute spelling -- `xmlns:` with no local name
+    // is not legal XML -- and the default namespace is already bound to OWL
+    // above, so skip it here; it's still available for CURIE expansion via
+    // the `<Prefix name="" IRI="..."/>` element rendered separately below.
     for pre in m.mappings() {
+        if pre.0.is_empty() {
+            continue;
+        }
         elem.push_attribute((format!("xmlns:{}", pre.0).as_bytes(), pre.1.as_bytes()));
     }
     iri_maybe(&mut elem, "ontologyIRI", &id.iri);
@@ -830,7 +837,7 @@ render! {
 render! {
     Annotation, self, w, m,
     {
-        (&self.ap, &self.av).within(w, m, "Annotation")?;
+        (&self.ann, &self.ap, &self.av).within(w, m, "Annotation")?;
 
         Ok(())
     }
@@ -980,7 +987,8 @@ mod test {
     use std::io::BufReader;
     use std::io::BufWriter;
 
-    use test_generator::test_resources;
+    use rstest::rstest;
+    use std::path::PathBuf;
 
     fn read_ok<R: BufRead>(bufread: &mut R) -> (RcComponentMappedOntology, PrefixMapping) {
         let r = read(bufread, ParserConfiguration::default());
@@ -1085,6 +1093,25 @@ mod test {
         assert!(s.contains("xmlns:xsd"));
     }
 
+    // Regression test for #227: an ontology with an empty/default CURIE
+    // prefix (`<Prefix name="" IRI="..."/>`) used to be written back out
+    // with an invalid `xmlns:="..."` namespace-declaration attribute
+    // (colon with no local name), which is not legal XML and made the
+    // written file fail to reread. Assert the writer no longer emits that
+    // attribute, and that the file survives a full write-then-reread
+    // round trip.
+    #[test]
+    fn test_empty_prefix_no_invalid_xmlns_attribute() {
+        let s = roundtrip_to_string(include_str!("../../ont/owl-xml/manual/empty-prefix.owx"));
+
+        assert!(
+            !s.contains("xmlns:=\""),
+            "writer emitted an invalid xmlns:=\"...\" attribute: {s}"
+        );
+
+        assert_round(include_str!("../../ont/owl-xml/manual/empty-prefix.owx"));
+    }
+
     #[test]
     fn round_one_ont() {
         let (ont_orig, _prefix_orig, ont_round, _prefix_round) =
@@ -1097,7 +1124,6 @@ mod test {
     }
 
     #[test]
-    #[cfg(bubo)]
     fn round_one_ont_prefix() {
         let (_ont_orig, prefix_orig, _ont_round, prefix_round) =
             roundtrip(include_str!("../../ont/owl-xml/ont.owx"));
@@ -1109,9 +1135,9 @@ mod test {
         assert_eq!(prefix_orig_map, prefix_round_map);
     }
 
-    #[test_resources("src/ont/owl-xml/*.owx")]
-    fn roundtrip_resource(resource: &str) {
-        let resource = &slurp::read_all_to_string(resource).unwrap();
+    #[rstest]
+    fn roundtrip_resource(#[files("src/ont/owl-xml/*.owx")] resource: PathBuf) {
+        let resource = &slurp::read_all_to_string(&resource).unwrap();
 
         let (ont_orig, _prefix_orig, ont_round, _prefix_round) = roundtrip(resource);
 
@@ -1120,9 +1146,9 @@ mod test {
         assert_eq!(ont_orig, ont_round);
     }
 
-    #[test_resources("src/ont/owl-xml/ambiguous/*.owx")]
-    fn roundtrip_nonround_resource(resource: &str) {
-        let resource = &slurp::read_all_to_string(resource).unwrap();
+    #[rstest]
+    fn roundtrip_nonround_resource(#[files("src/ont/owl-xml/ambiguous/*.owx")] resource: PathBuf) {
+        let resource = &slurp::read_all_to_string(&resource).unwrap();
         assert_round(resource);
     }
 
@@ -1143,59 +1169,23 @@ mod test {
         assert_round(include_str!("../../ont/owl-xml/manual/family.owx"));
     }
 
-    #[cfg(all(test, bubo))]
+    #[cfg(test)]
     mod bubo_test {
         use crate::io::owx::writer::test::*;
         use crate::io::owx::writer::write;
 
-        use std::fs::{File, create_dir_all, read_dir, remove_dir_all};
-        use std::io::{BufWriter, Write};
         use std::path::Path;
 
-        fn parse_then_output(in_file: &Path) {
+        fn parse_then_output(in_file: &Path, out: &mut dyn std::io::Write) {
             let ont = &slurp::read_all_to_string(in_file).unwrap();
             let (ont_orig, prefix_orig) = read_ok(&mut ont.as_bytes());
 
-            let file = File::create(Path::new("./tmp/owl-xml").join(in_file.file_name().unwrap()))
-                .unwrap();
-            let mut buf_writer = BufWriter::new(&file);
-
-            write(&mut buf_writer, &ont_orig, Some(&prefix_orig))
-                .ok()
-                .unwrap();
-            buf_writer.flush().ok();
+            write(out, &ont_orig, Some(&prefix_orig)).ok().unwrap();
         }
 
         #[test]
         fn reparse_owx() -> Result<(), Box<dyn std::error::Error>> {
-            create_dir_all("./tmp/owl-xml")?;
-
-            for entry in read_dir("./src/ont/owl-xml")? {
-                let entry = entry?;
-                let path = entry.path();
-                if path.is_file() {
-                    parse_then_output(&path);
-                }
-            }
-
-            let mut cmd = std::process::Command::new("java");
-            let output = cmd
-                // block stdout or it is piped to existing stdout
-                //.stdout(std::process::Stdio::null())
-                .arg("-jar")
-                // passed in my build.rs
-                .arg(option_env!("BUBO_LOCATION").unwrap())
-                .arg("./dev/reparse-all.clj")
-                .arg("owl-xml")
-                .output()?;
-
-            if !output.status.success() {
-                let out = String::from_utf8(output.stdout).unwrap();
-                assert!(false, "Bubo reparse failed: {out}");
-            }
-
-            remove_dir_all("./tmp/owl-xml")?;
-            Ok(())
+            crate::io::tests::run_bubo_reparse("owl-xml", parse_then_output)
         }
     }
 }

@@ -16,7 +16,7 @@ Declaration(ObjectProperty(o:s))
 #   Object Properties
 ############################
 
-# Object Property: o:s (o:s)
+# Object Property: <http://www.example.com/iri#s> (<http://www.example.com/iri#s>)
 
 SubObjectPropertyOf(o:s o:r)
 

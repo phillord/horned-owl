@@ -20,7 +20,7 @@ Declaration(ObjectProperty(o:r))
 #   Classes
 ############################
 
-# Class: o:A (o:A)
+# Class: <http://www.example.com/iri#A> (<http://www.example.com/iri#A>)
 
 SubClassOf(o:A ObjectIntersectionOf(o:D ObjectSomeValuesFrom(o:r o:B) ObjectAllValuesFrom(o:r o:C)))
 

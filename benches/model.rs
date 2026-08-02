@@ -8,7 +8,7 @@ use horned_owl::model::*;
 use horned_owl::ontology::component_mapped::ComponentMappedOntology;
 use horned_owl::ontology::declaration_mapped::DeclarationMappedIndex;
 use horned_owl::ontology::indexed::{
-    ForIndex, FourIndexedOntology, OneIndexedOntology, TwoIndexedOntology,
+    ForIndex, FourIndexedOntology, OneIndexedOntology, OntologyIndex, TwoIndexedOntology,
 };
 use horned_owl::ontology::iri_mapped::IRIMappedIndex;
 use horned_owl::ontology::logically_equal::LogicallyEqualIndex;
@@ -74,6 +74,58 @@ fn create_tree_0<A: ForIRI, O: MutableOntology<A>>(
         }
     }
     create_tree_0(b, o, next, remaining);
+}
+
+// A handful of index types used below (DeclarationMappedIndex,
+// LogicallyEqualIndex, IRIMappedIndex) aren't iterable on their own, so
+// can't stand alone as a full Ontology/MutableOntology. These benchmarks
+// deliberately isolate a single index's raw insert cost, so they drive
+// `OntologyIndex::index_insert` directly rather than going through
+// `create_tree`.
+fn create_tree_index<A: ForIRI, AA: ForIndex<A>, I: OntologyIndex<A, AA>>(
+    b: &Build<A>,
+    o: &mut I,
+    n: isize,
+) {
+    let i = b.iri(format!("http://example.com/a{n}"));
+    let c = b.class(i);
+    create_tree_index_0(b, o, vec![c], n);
+}
+
+fn create_tree_index_0<A: ForIRI, AA: ForIndex<A>, I: OntologyIndex<A, AA>>(
+    b: &Build<A>,
+    o: &mut I,
+    current: Vec<Class<A>>,
+    mut remaining: isize,
+) {
+    let mut next = vec![];
+
+    for curr in current.into_iter() {
+        let i = b.iri(format!("http://example.com/a{remaining}"));
+        let c = b.class(i);
+        remaining -= 1;
+        let i = b.iri(format!("http://example.com/a{remaining}"));
+        let d = b.class(i);
+        remaining -= 1;
+
+        next.push(c.clone());
+        next.push(d.clone());
+
+        let cmp: AnnotatedComponent<A> = SubClassOf::new(
+            ClassExpression::Class(curr.clone()),
+            ClassExpression::Class(c),
+        )
+        .into();
+        o.index_insert(cmp.into());
+        let cmp: AnnotatedComponent<A> =
+            SubClassOf::new(ClassExpression::Class(curr), ClassExpression::Class(d)).into();
+        o.index_insert(cmp.into());
+
+        if remaining < 0 {
+            return;
+        }
+    }
+    create_tree_index_0(b, o, next, remaining);
 }
 
 // Now test to see what impact the pointer and caching of strings has
@@ -175,9 +227,9 @@ fn multi_index_tree(c: &mut Criterion) {
                     // This is not normally the right way to use
                     // DeclarationMappedIndex as it does not guarantee to
                     // store all axioms
-                    let mut o: OneIndexedOntology<_, Rc<AnnotatedComponent<_>>, _> =
-                        OneIndexedOntology::new(DeclarationMappedIndex::default());
-                    create_tree(&b, &mut o, n);
+                    let mut o: DeclarationMappedIndex<_, Rc<AnnotatedComponent<_>>> =
+                        DeclarationMappedIndex::default();
+                    create_tree_index(&b, &mut o, n);
                 })
             },
         );
@@ -202,18 +254,17 @@ fn multi_index_tree(c: &mut Criterion) {
         group.bench_with_input(BenchmarkId::new("LogicallyEqualOntology", n), n, |b, &n| {
             b.iter(|| {
                 let b = Build::new_rc();
-                let mut o: OneIndexedOntology<_, Rc<AnnotatedComponent<_>>, _> =
-                    OneIndexedOntology::new(LogicallyEqualIndex::new());
-                create_tree(&b, &mut o, n);
+                let mut o: LogicallyEqualIndex<_, Rc<AnnotatedComponent<_>>> =
+                    LogicallyEqualIndex::new();
+                create_tree_index(&b, &mut o, n);
             })
         });
 
         group.bench_with_input(BenchmarkId::new("IRIMappedOntology", n), n, |b, &n| {
             b.iter(|| {
                 let b = Build::new_rc();
-                let mut o: OneIndexedOntology<_, Rc<AnnotatedComponent<_>>, _> =
-                    OneIndexedOntology::new(IRIMappedIndex::new());
-                create_tree(&b, &mut o, n);
+                let mut o: IRIMappedIndex<_, Rc<AnnotatedComponent<_>>> = IRIMappedIndex::new();
+                create_tree_index(&b, &mut o, n);
             })
         });
 
@@ -237,8 +288,8 @@ fn food_to_vec() -> Vec<u8> {
     std::fs::read("./benches/ont/food.owl").unwrap()
 }
 
-fn read_vec<A: ForIRI, AA: ForIndex<A>>(v: &Vec<u8>, b: Build<A>) -> ConcreteRDFOntology<A, AA> {
-    let mut c = Cursor::new(v.clone());
+fn read_vec<A: ForIRI, AA: ForIndex<A>>(v: &[u8], b: Build<A>) -> ConcreteRDFOntology<A, AA> {
+    let mut c = Cursor::new(v.to_owned());
     horned_owl::io::rdf::reader::read_with_build(&mut c, &b, Default::default())
         .unwrap()
         .0

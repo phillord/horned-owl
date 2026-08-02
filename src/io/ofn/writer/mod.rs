@@ -389,18 +389,39 @@ pub(crate) fn shrink_valid<'a>(mapping: &'a PrefixMapping, iri: &'a str) -> Opti
 pub(crate) fn short_form(mapping: &PrefixMapping, iri: &str) -> String {
     match shrink_valid(mapping, iri) {
         Some((prefix, local)) => format!("{prefix}:{local}"),
-        None => iri.to_string(),
+        // OWLAPI's banner renders the IRI exactly as the body does, and a full IRI
+        // there is angle-bracketed. A document whose format carries no prefixes —
+        // anything ROBOT built with `query --update` — has a full IRI in EVERY
+        // banner, e.g. `# Class: <http://…> (label)`.
+        None => format!("<{iri}>"),
     }
 }
 
 /// Whether `local` is a legal CURIE local part (PNAME_LN, conservatively): no
 /// characters that would break re-parsing and no leading `-`/`.`.
+///
+/// OWLAPI decides this with `XMLUtils.getNCNameSuffix`: an IRI is abbreviated only
+/// when its tail is a valid NCName, so anything carrying a delimiter — e.g. ENVO's
+/// `http://en.wikipedia.org/wiki/Front_(oceanography)` — is written out in full
+/// even with `wikipedia:` declared. Abbreviating it here produced
+/// `wikipedia:Front_(oceanography)`, whose `(` closes the enclosing
+/// `AnnotationAssertion(` and leaves a document no functional-syntax parser can
+/// read back.
 pub(crate) fn is_valid_curie_local(local: &str) -> bool {
     !local.is_empty()
         && !local.contains(['/', '#', ' ', ':'])
+        && !local.contains(|c: char| c.is_whitespace() || NON_NCNAME.contains(&c))
         && !local.starts_with('-')
         && !local.starts_with('.')
 }
+
+/// Delimiters and punctuation that are not NCName characters, so OWLAPI never
+/// leaves one inside an abbreviated IRI. `%` is included: it is legal in a SPARQL
+/// PN_LOCAL escape but not in an NCName, so OWLAPI writes those IRIs in full too.
+const NON_NCNAME: &[char] = &[
+    '(', ')', '[', ']', '{', '}', '<', '>', '"', '\'', '`', '\\', ',', ';', '|', '^', '?', '=',
+    '&', '@', '!', '*', '~', '+', '$', '%',
+];
 
 /// The literal's lexical form (dropping any language tag / datatype).
 fn literal_text<A: ForIRI>(lit: &Literal<A>) -> String {
@@ -575,11 +596,12 @@ mod test {
     use crate::model::RcStr;
 
     use pretty_assertions::assert_eq;
-    use test_generator::test_resources;
+    use rstest::rstest;
+    use std::path::PathBuf;
 
-    #[test_resources("src/ont/owl-functional/*.ofn")]
-    fn roundtrip_resource(resource: &str) {
-        let reader = std::fs::File::open(resource)
+    #[rstest]
+    fn roundtrip_resource(#[files("src/ont/owl-functional/*.ofn")] resource: PathBuf) {
+        let reader = std::fs::File::open(&resource)
             .map(std::io::BufReader::new)
             .unwrap();
         let (ont, prefixes): (ComponentMappedOntology<RcStr, AnnotatedComponent<RcStr>>, _) =
@@ -594,5 +616,52 @@ mod test {
 
         assert_eq!(prefixes, prefixes2, "prefix mapping differ");
         assert_eq!(ont, ont2, "ontologies differ");
+    }
+
+    // Regression test for https://github.com/phillord/horned-owl/issues/175
+    // Annotations on Annotation (annotationAnnotations in OWL 2 spec) are
+    // silently discarded because Annotation lacks an `ann` field. A round-trip
+    // ont==ont2 comparison would pass (both drops are identical), so we check
+    // the written string directly instead.
+    #[test]
+    fn roundtrip_nested_annotation_on_annotation() {
+        let resource = "src/ont/owl-functional/manual/nested-annotation-on-annotation.ofn";
+        let reader = std::fs::File::open(resource)
+            .map(std::io::BufReader::new)
+            .unwrap();
+        let (ont, prefixes): (ComponentMappedOntology<RcStr, AnnotatedComponent<RcStr>>, _) =
+            crate::io::ofn::reader::read(reader, Default::default()).unwrap();
+
+        let mut writer = Vec::new();
+        crate::io::ofn::writer::write(&mut writer, &ont, Some(&prefixes)).unwrap();
+        let output = String::from_utf8(writer).unwrap();
+
+        assert!(
+            output.contains("Annotation(Annotation("),
+            "nested annotation was lost in round-trip:\n{output}"
+        );
+    }
+
+    #[cfg(test)]
+    mod bubo_test {
+        use crate::io::ofn::writer::test::*;
+        use crate::io::ofn::writer::write;
+
+        use std::fs::File;
+        use std::io::BufReader;
+        use std::path::Path;
+
+        fn parse_then_output(in_file: &Path, out: &mut dyn std::io::Write) {
+            let reader = BufReader::new(File::open(in_file).unwrap());
+            let (ont, prefixes): (ComponentMappedOntology<RcStr, AnnotatedComponent<RcStr>>, _) =
+                crate::io::ofn::reader::read(reader, Default::default()).unwrap();
+
+            write(out, &ont, Some(&prefixes)).ok().unwrap();
+        }
+
+        #[test]
+        fn reparse_ofn() -> Result<(), Box<dyn std::error::Error>> {
+            crate::io::tests::run_bubo_reparse("owl-functional", parse_then_output)
+        }
     }
 }

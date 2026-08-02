@@ -15,7 +15,7 @@ with millions of terms.
   + [x] RDF/XML
   + [x] OWL/XML
   + [x] Functional Syntax
-  + [ ] Manchester Syntax
+  + [x] Manchester Syntax
 + A [visitor](https://en.wikipedia.org/wiki/Visitor_pattern) trait to navigate and manipulate ontologies
 + Traits and implementations for several types of ontologies
 
@@ -34,7 +34,7 @@ To use the latest version of the library in your Rust project, add the following
 ```toml
 [dependencies]
 ...
-horned-owl = "1.0.0"
+horned-owl = "2.1.0"
 ```
 
 

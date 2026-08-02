@@ -583,6 +583,14 @@ impl<A: ForIRI, V: VisitMut<A>> WalkMut<A, V> {
 
     pub fn annotation(&mut self, e: &mut Annotation<A>) {
         self.0.visit_annotation(e);
+        let nested = std::mem::take(&mut e.ann);
+        e.ann = nested
+            .into_iter()
+            .map(|mut a| {
+                self.annotation(&mut a);
+                a
+            })
+            .collect();
         self.annotation_property(&mut e.ap);
         self.annotation_value(&mut e.av);
     }
@@ -809,7 +817,6 @@ impl<A: ForIRI, V: VisitMut<A>> WalkMut<A, V> {
 }
 
 #[cfg(test)]
-
 mod test {
     use super::*;
     use crate::io::owx::reader::test::read_ok;
@@ -840,7 +847,7 @@ mod test {
         assert_eq!(ont.i().annotation_assertion().count(), 1);
 
         let mut walk = super::WalkMut::new(LabeltoFred);
-        let mut vec = ont.into_iter().collect();
+        let mut vec: Vec<_> = ont.into_iter().collect();
         walk.ontology_vec(&mut vec);
 
         match &vec[2] {
@@ -859,7 +866,7 @@ mod test {
                 assert_eq!(literal, &"fred".to_string());
             }
             _ => {
-                assert!(false);
+                panic!();
             }
         }
     }
@@ -873,6 +880,7 @@ mod test {
                     literal: "hello".to_string(),
                 }
                 .into(),
+                ann: Default::default(),
             })
         }
     }

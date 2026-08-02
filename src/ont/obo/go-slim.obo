@@ -1,0 +1,18 @@
+format-version: 1.2
+ontology: go
+
+[Term]
+id: GO:0008150
+name: biological_process
+namespace: biological_process
+def: "A biological process." [GOC:isa]
+synonym: "biological process" EXACT [GOC:x]
+xref: Wikipedia:Biological_process "the wikipedia page"
+is_a: GO:0003674 ! molecular_function
+relationship: part_of GO:0005575
+
+[Term]
+id: GO:0003674
+name: molecular_function
+is_obsolete: true
+replaced_by: GO:0008150

@@ -561,6 +561,9 @@ impl<A: ForIRI, V: Visit<A>> Walk<A, V> {
 
     pub fn annotation(&mut self, e: &Annotation<A>) {
         self.0.visit_annotation(e);
+        for a in &e.ann {
+            self.annotation(a);
+        }
         self.annotation_property(&e.ap);
         self.annotation_value(&e.av);
     }
@@ -857,12 +860,10 @@ mod test {
     use std::io::BufRead;
 
     #[test]
-    fn it_works() {
-        assert!(true)
-    }
+    fn it_works() {}
 
     pub fn read_ok<R: BufRead>(bufread: &mut R) -> SetOntology<String> {
-        let r = read_with_build(bufread, &Build::new_string());
+        let r = read_with_build(bufread, &Build::new_string(), Default::default());
         assert!(r.is_ok(), "Expected ontology, got failure:{:?}", r.err());
         let (o, _) = r.ok().unwrap();
 

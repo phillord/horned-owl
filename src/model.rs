@@ -1705,6 +1705,7 @@ impl<A: ForIRI> Literal<A> {
 pub struct Annotation<A> {
     pub ap: AnnotationProperty<A>,
     pub av: AnnotationValue<A>,
+    pub ann: BTreeSet<Annotation<A>>,
 }
 
 /// The value of an annotation
@@ -2099,8 +2100,37 @@ pub enum DArgument<A> {
     Variable(Variable<A>),
 }
 
-/// Access or change the `OntologyID` of an `Ontology`
-pub trait Ontology<A> {}
+/// An `Ontology` is a collection of [`AnnotatedComponent`]s.
+///
+/// Borrowing iteration (`iter`) is deliberately expressed with a GAT rather
+/// than a boxed or `impl Trait` return, so that generic code over
+/// `O: Ontology<A>` gets a concrete, zero-cost iterator type for every
+/// implementor. Owning iteration is just the standard [`IntoIterator`],
+/// required as a supertrait rather than duplicated here.
+///
+/// # Examples
+/// ```
+/// # use horned_owl::model::*;
+/// # use horned_owl::ontology::set::SetOntology;
+/// fn count<A: ForIRI, O: Ontology<A>>(o: &O) -> usize {
+///     o.iter().count()
+/// }
+///
+/// let mut o = SetOntology::new_rc();
+/// let b = Build::new();
+/// o.insert(DeclareClass(b.class("http://www.example.com/a")));
+///
+/// assert_eq!(count(&o), 1);
+/// assert_eq!(o.into_iter().count(), 1);
+/// ```
+pub trait Ontology<A>: IntoIterator<Item = AnnotatedComponent<A>> {
+    type ComponentIter<'c>: Iterator<Item = &'c AnnotatedComponent<A>>
+    where
+        Self: 'c,
+        A: 'c;
+
+    fn iter(&self) -> Self::ComponentIter<'_>;
+}
 
 /// Add or remove axioms to an `MutableOntology`
 pub trait MutableOntology<A>: Ontology<A> {
@@ -2195,6 +2225,24 @@ mod test {
         let iri = build.iri("http://www.example.com");
 
         assert_eq!(String::from(iri), "http://www.example.com");
+    }
+
+    #[test]
+    fn test_iterable_ontology_generic() {
+        fn count_components<A: ForIRI, O: Ontology<A>>(o: &O) -> usize {
+            o.iter().count()
+        }
+
+        let build = Build::new_rc();
+
+        let mut so = SetOntology::new();
+        so.insert(DeclareClass(build.class("http://www.example.com#a")));
+        assert_eq!(count_components(&so), 1);
+
+        let mut cmo = ComponentMappedOntology::new_rc();
+        cmo.insert(DeclareClass(build.class("http://www.example.com#a")));
+        cmo.insert(DeclareClass(build.class("http://www.example.com#b")));
+        assert_eq!(count_components(&cmo), 2);
     }
 
     #[test]
@@ -2342,6 +2390,7 @@ mod test {
         let ann = Annotation {
             ap: b.annotation_property("http://www.example.com/ap"),
             av: b.iri("http://www.example.com/av").into(),
+            ann: Default::default(),
         };
 
         let mut decl1: AnnotatedComponent<_> =

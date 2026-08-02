@@ -1,0 +1,18 @@
+## This file was created by Tawny-OWL
+## It should not be edited by hand
+Prefix: other: <http://www.example.com/other-property#>
+Prefix: owl: <http://www.w3.org/2002/07/owl#>
+Prefix: rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+Prefix: rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+Prefix: xml: <http://www.w3.org/XML/1998/namespace>
+Prefix: xsd: <http://www.w3.org/2001/XMLSchema#>
+Prefix: : <http://www.example.com/other-property>
+
+
+
+Ontology: <http://www.example.com/other-property>
+<http://www.example.com/other-property-viri>
+
+ObjectProperty: other:other-o
+
+    

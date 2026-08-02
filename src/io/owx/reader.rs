@@ -27,19 +27,22 @@ where
     build: &'a Build<A>,
     mapping: PrefixMapping,
     reader: NsReader<R>,
+    config: ParserConfiguration,
+    base_iri: Option<String>,
 }
 
 pub fn read<A: ForIRI, O: MutableOntology<A> + Default, R: BufRead>(
     bufread: &mut R,
-    _config: ParserConfiguration,
+    config: ParserConfiguration,
 ) -> Result<(O, PrefixMapping), HornedError> {
     let b = Build::new();
-    read_with_build(bufread, &b)
+    read_with_build(bufread, &b, config)
 }
 
 pub fn read_with_build<A: ForIRI, O: MutableOntology<A> + Default, R: BufRead>(
     bufread: R,
     build: &Build<A>,
+    config: ParserConfiguration,
 ) -> Result<(O, PrefixMapping), HornedError> {
     let reader: NsReader<R> = NsReader::from_reader(bufread);
     let mut ont: O = Default::default();
@@ -50,6 +53,8 @@ pub fn read_with_build<A: ForIRI, O: MutableOntology<A> + Default, R: BufRead>(
         reader,
         build,
         mapping,
+        config,
+        base_iri: None,
     };
 
     loop {
@@ -60,6 +65,7 @@ pub fn read_with_build<A: ForIRI, O: MutableOntology<A> + Default, R: BufRead>(
                         let s = get_attr_value_str(&mut r.reader, e, b"ontologyIRI")?;
                         if let Some(s) = s {
                             r.mapping.set_default(&s);
+                            r.base_iri = Some(s);
                         }
 
                         ont.insert(OntologyID {
@@ -101,6 +107,12 @@ pub fn read_with_build<A: ForIRI, O: MutableOntology<A> + Default, R: BufRead>(
             (_, Event::Eof) => {
                 return Err(error_eof(&r));
             }
+            (_, Event::Text(ref t)) if !is_blank(t) && !r.config.lax => {
+                return Err(error_unexpected_text(&mut r));
+            }
+            (_, Event::CData(ref t)) if !is_blank(t) && !r.config.lax => {
+                return Err(error_unexpected_text(&mut r));
+            }
             _ => {}
         }
     }
@@ -130,7 +142,12 @@ fn decode_expand_curie_maybe<'a, A: ForIRI, R: BufRead>(
     #[cfg(not(feature = "encoding"))]
     match r.reader.decoder().decode(val) {
         Ok(curie) => {
-            let cur = expand_curie_maybe(r, curie);
+            // As with `get_attr_value_str`, decoding alone doesn't resolve
+            // XML entity/character references (e.g. `&#39;`) -- unescape
+            // before expanding, same as issue #239's other call site.
+            let unescaped = unescape(&curie)
+                .map_err(|e| HornedError::ParserError(Box::new(e), Location::Unknown))?;
+            let cur = expand_curie_or_base_maybe(r, Cow::Owned(unescaped.into_owned()));
             Ok(cur)
         }
         Err(e) => Err(HornedError::from(e)),
@@ -147,6 +164,29 @@ fn expand_curie_maybe<'a, A: ForIRI, R: BufRead>(
         Ok(n) => Cow::Owned(n),
         // Else assume it's a complete URI
         Err(_e) => val,
+    }
+}
+
+/// Like [`expand_curie_maybe`], except a fragment-only value (starting
+/// with `#`) is resolved against the ontology's base IRI rather than the
+/// CURIE default prefix. Mirrors the identical guard in `get_iri_value`
+/// (issue #212): the default/empty prefix may itself already end in
+/// `#`, which would otherwise double up when concatenated with a
+/// `#fragment` value (`prefix#` + `#fragment` = `prefix##fragment`).
+/// `get_iri_value` special-cases this for the `IRI="..."` *attribute*
+/// form; this does the same for the `<IRI>text</IRI>` *element content*
+/// form (see issue #226 -- the attribute path was fixed, this sibling
+/// path wasn't).
+fn expand_curie_or_base_maybe<'a, A: ForIRI, R: BufRead>(
+    r: &mut Read<A, R>,
+    val: Cow<'a, str>,
+) -> Cow<'a, str> {
+    if val.starts_with('#')
+        && let Some(base) = r.base_iri.clone()
+    {
+        Cow::Owned(format!("{base}{val}"))
+    } else {
+        expand_curie_maybe(r, val)
     }
 }
 
@@ -178,12 +218,23 @@ fn get_attr_value_str<R: BufRead>(
     // First, get the byte slice containing the attribute value
     get_attr_value_bytes(event, attr_key)?
         .as_ref()
-        .map(|val|
-        // Next, decode it to obtain a `str`.
-        reader.decoder().decode(val)
-        .map_err(|err| HornedError::ParserError(Box::new(err), Location::Unknown)))
+        .map(|val| {
+            // Next, decode it to obtain a `str`.
+            let decoded = reader
+                .decoder()
+                .decode(val)
+                .map_err(|err| HornedError::ParserError(Box::new(err), Location::Unknown))?;
+            // Decoding alone is not sufficient: it only resolves the byte
+            // encoding, not XML entity/character references, so e.g.
+            // `Alzheimer&#39;s_Disease` would otherwise survive with the
+            // literal `&#39;` still in it rather than becoming `Alzheimer's_Disease`
+            // (see issue #239). Mirrors the same two-step handling `<Literal>`
+            // text already does below.
+            unescape(&decoded)
+                .map(|s| s.to_string())
+                .map_err(|err| HornedError::ParserError(Box::new(err), Location::Unknown))
+        })
         .transpose()
-        .map(|opt| opt.map(|s| s.to_string()))
 }
 
 /// Returns, if present, the IRI for the given opening tag.
@@ -191,11 +242,22 @@ fn get_iri_value<A: ForIRI, R: BufRead>(
     r: &mut Read<A, R>,
     event: &BytesStart,
 ) -> Result<Option<IRI<A>>, HornedError> {
-    let iri = get_iri_value_for(r, event, b"IRI")?;
-    if iri.is_none() {
-        get_iri_value_for(r, event, b"abbreviatedIRI")
+    if let Some(raw) = get_attr_value_str(&mut r.reader, event, b"IRI")? {
+        // Fragment-relative IRIs (starting with '#') must be resolved against the
+        // ontology base IRI, not the CURIE default: the empty prefix may end with '#',
+        // which would produce a doubled '##' when concatenated with a '#local' fragment.
+        let base_iri = r.base_iri.clone();
+        let resolved: Cow<str> = if raw.starts_with('#') {
+            match base_iri {
+                Some(base) => Cow::Owned(format!("{base}{raw}")),
+                None => expand_curie_maybe(r, Cow::Owned(raw)),
+            }
+        } else {
+            expand_curie_maybe(r, Cow::Owned(raw))
+        };
+        Ok(Some(r.build.iri(resolved)))
     } else {
-        Ok(iri)
+        get_iri_value_for(r, event, b"abbreviatedIRI")
     }
 }
 
@@ -234,7 +296,7 @@ fn error_missing_end_tag<A: ForIRI, R: BufRead>(
     pos: u64,
 ) -> HornedError {
     match decode_tag(tag, r) {
-        Ok(tag) => invalid! {"Missing End Tag: expected {tag} after {pos}"},
+        Ok(tag) => invalid_at! {pos, "Missing End Tag: expected {tag}"},
         Err(e) => e,
     }
 }
@@ -245,31 +307,23 @@ fn error_missing_attribute<A: ForIRI, AT: Into<String>, R: BufRead>(
 ) -> HornedError {
     let attribute = attribute.into();
     let pos = r.reader.buffer_position();
-    invalid! {
-        "Missing Attribute: expected {attribute} at {pos}"
-    }
+    invalid_at! {pos, "Missing Attribute: expected {attribute}"}
 }
 
 fn error_eof<A: ForIRI, R: BufRead>(r: &Read<A, R>) -> HornedError {
-    invalid! {
-        "Unexpected EoF at {}", r.reader.buffer_position()
-    }
+    invalid_at! {r.reader.buffer_position(), "Unexpected EoF"}
 }
 
 fn error_unexpected_tag<A: ForIRI, R: BufRead>(tag: &[u8], r: &mut Read<A, R>) -> HornedError {
     match decode_tag(tag, r) {
-        Ok(tag) => invalid! {
-            "Unexpected tag: found {tag} at {}", r.reader.buffer_position()
-        },
+        Ok(tag) => invalid_at! {r.reader.buffer_position(), "Unexpected tag: found {tag}"},
         Err(e) => e,
     }
 }
 
 fn error_unexpected_end_tag<A: ForIRI, R: BufRead>(tag: &[u8], r: &mut Read<A, R>) -> HornedError {
     match decode_tag(tag, r) {
-        Ok(tag) => invalid! {
-            "Unexpected end tag: expected {tag} at {}", r.reader.buffer_position()
-        },
+        Ok(tag) => invalid_at! {r.reader.buffer_position(), "Unexpected end tag: expected {tag}"},
         Err(e) => e,
     }
 }
@@ -280,30 +334,43 @@ fn error_unknown_entity<A: ForIRI, AA: Into<String>, R: BufRead>(
     r: &mut Read<A, R>,
 ) -> HornedError {
     match decode_tag(found, r) {
-        Ok(found) => invalid! {
-            "Unknown Entity: expected kind of {}, found {found} at {}",
-            kind.into(),
-            r.reader.buffer_position()
-        },
+        Ok(found) => {
+            invalid_at! {r.reader.buffer_position(), "Unknown Entity: expected kind of {}, found {found}", kind.into()}
+        }
         Err(e) => e,
     }
 }
 
 fn error_missing_element<A: ForIRI, R: BufRead>(tag: &[u8], r: &mut Read<A, R>) -> HornedError {
     match decode_tag(tag, r) {
-        Ok(tag) => invalid! {
-            "Missing Element: expected {tag} at {}",
-                r.reader.buffer_position()
-        },
+        Ok(tag) => invalid_at! {r.reader.buffer_position(), "Missing Element: expected {tag}"},
         Err(e) => e,
     }
 }
 
+fn error_unexpected_text<A: ForIRI, R: BufRead>(r: &mut Read<A, R>) -> HornedError {
+    invalid_at! {r.reader.buffer_position(), "Unexpected text content"}
+}
+
+// Insignificant whitespace between elements is normal, valid XML
+// formatting; anything else appearing where only child elements are
+// expected is malformed and was previously silently dropped (#72).
+fn is_blank(bytes: &[u8]) -> bool {
+    bytes.iter().all(u8::is_ascii_whitespace)
+}
+
 fn is_owl(res: &ResolveResult) -> bool {
-    if let Bound(ns) = res {
-        ns.as_ref() == OWL.as_bytes()
-    } else {
-        false
+    match res {
+        Bound(ns) => ns.as_ref() == OWL.as_bytes(),
+        // No `xmlns` was declared anywhere in scope for this unprefixed
+        // element -- assume OWL rather than rejecting the document, since
+        // that's what every real-world OWL/XML document that omits the
+        // (redundant, given `<Ontology>` is unambiguously OWL) default
+        // namespace declaration means in practice. `Unknown` (an explicit
+        // but undeclared prefix) is left unrecognised, since that's a
+        // genuine error rather than an omission.
+        ResolveResult::Unbound => true,
+        ResolveResult::Unknown(_) => false,
     }
 }
 
@@ -401,7 +468,7 @@ from_start! {
                     if **datatype_iri == *"http://www.w3.org/1999/02/22-rdf-syntax-ns#PlainLiteral"
                     => Literal::Language{literal:literal.to_string(), lang:lang.to_string()},
                 (Some(_), Some(_), _)
-                    => return Err(invalid!("Broken literal at {}", r.reader.buffer_position())),
+                    => return Err(invalid_at!(r.reader.buffer_position(), "Broken literal")),
                 (Some(datatype_iri), None, literal)
                     => Literal::Datatype{literal, datatype_iri},
             })
@@ -449,6 +516,7 @@ fn axiom_from_start<A: ForIRI, R: BufRead>(
         b"Annotation" => OntologyAnnotation(Annotation {
             ap: from_start(r, e)?,
             av: from_next(r)?,
+            ann: Default::default(),
         })
         .into(),
         b"Declaration" => {
@@ -571,7 +639,11 @@ fn axiom_from_start<A: ForIRI, R: BufRead>(
 
             AnnotationAssertion {
                 subject,
-                ann: Annotation { ap, av },
+                ann: Annotation {
+                    ap,
+                    av,
+                    ann: Default::default(),
+                },
             }
             .into()
         }
@@ -645,6 +717,12 @@ fn till_end_with<A: ForIRI, R: BufRead, T: FromStart<A> + std::fmt::Debug>(
             }
             (_, Event::Eof) => {
                 return Err(error_eof(r));
+            }
+            (_, Event::Text(ref t)) if !is_blank(t) && !r.config.lax => {
+                return Err(error_unexpected_text(r));
+            }
+            (_, Event::CData(ref t)) if !is_blank(t) && !r.config.lax => {
+                return Err(error_unexpected_text(r));
             }
             _ => {}
         }
@@ -1123,6 +1201,7 @@ from_xml! {
 
         let mut ap:Option<AnnotationProperty<_>> = None;
         let mut av:Option<AnnotationValue<_>> = None;
+        let mut ann:BTreeSet<Annotation<_>> = BTreeSet::new();
         let mut buf = Vec::new();
 
         loop {
@@ -1136,6 +1215,9 @@ from_xml! {
                     match e.local_name().as_ref() {
                         b"AnnotationProperty" =>
                             ap = Some(from_start(r, e)?),
+                        b"Annotation" => {
+                            ann.insert(Annotation::from_xml(r, b"Annotation")?);
+                        }
                         _ =>
                             av = Some(from_start(r, e)?),
                     }
@@ -1148,11 +1230,18 @@ from_xml! {
                     }
                     return Ok(Annotation{
                         ap:ap.unwrap(),
-                        av:av.unwrap()
+                        av:av.unwrap(),
+                        ann,
                     });
                 },
                 (_, Event::Eof) => {
                     return Err(error_eof(r));
+                },
+                (_, Event::Text(ref t)) if !is_blank(t) && !r.config.lax => {
+                    return Err(error_unexpected_text(r));
+                },
+                (_, Event::CData(ref t)) if !is_blank(t) && !r.config.lax => {
+                    return Err(error_unexpected_text(r));
                 },
                 _ =>{}
             }
@@ -1171,6 +1260,12 @@ fn from_next<A: ForIRI, R: BufRead, T: FromStart<A>>(r: &mut Read<A, R>) -> Resu
             }
             (_, Event::Eof) => {
                 return Err(error_eof(r));
+            }
+            (_, Event::Text(ref t)) if !is_blank(t) && !r.config.lax => {
+                return Err(error_unexpected_text(r));
+            }
+            (_, Event::CData(ref t)) if !is_blank(t) && !r.config.lax => {
+                return Err(error_unexpected_text(r));
             }
             _ => {}
         }
@@ -1372,7 +1467,7 @@ pub mod test {
         HornedError,
     > {
         let b = Build::new();
-        read_with_build(bufread, &b)
+        read_with_build(bufread, &b, Default::default())
     }
 
     pub fn read_ok<R: BufRead>(
@@ -1734,6 +1829,47 @@ pub mod test {
         assert_eq!(ann.ann.len(), 1);
     }
 
+    // https://github.com/phillord/horned-owl/issues/175
+    // Annotation lacks an `ann` field for annotationAnnotations (OWL 2 spec).
+    // The OWX reader fails entirely on a nested <Annotation> inside <Annotation>
+    // ("Unexpected tag: found Annotation"), rather than just silently dropping it.
+    #[test]
+    fn test_nested_annotation_on_annotation() {
+        let ont_s = include_str!("../../ont/owl-xml/nested-annotation-on-annotation.owx");
+        let (ont, _) = read_ok(&mut ont_s.as_bytes());
+
+        assert_eq!(ont.i().declare_class().count(), 1);
+
+        let annotated_component = ont
+            .i()
+            .component_for_kind(ComponentKind::AnnotationAssertion)
+            .next()
+            .unwrap();
+
+        // The AnnotationAssertion carries one axiom annotation
+        assert_eq!(annotated_component.ann.len(), 1);
+
+        let axiom_ann = annotated_component.ann.iter().next().unwrap();
+        assert_eq!(
+            axiom_ann.av,
+            crate::model::AnnotationValue::Literal(crate::model::Literal::Language {
+                literal: "Comment on Comment".to_string(),
+                lang: "en".to_string(),
+            })
+        );
+
+        // The axiom annotation has one nested annotation
+        assert_eq!(axiom_ann.ann.len(), 1);
+        let nested_ann = axiom_ann.ann.iter().next().unwrap();
+        assert_eq!(
+            nested_ann.av,
+            crate::model::AnnotationValue::Literal(crate::model::Literal::Language {
+                literal: "Nested Comment".to_string(),
+                lang: "en".to_string(),
+            })
+        );
+    }
+
     #[test]
     fn annotated_transitive() {
         let ont_s = include_str!("../../ont/owl-xml/annotation-on-transitive.owx");
@@ -1933,7 +2069,7 @@ pub mod test {
 
     #[test]
     fn test_unqualified_cardinality() {
-        let ont_s = include_str!("../../ont/owl-xml/object-unqualified-max-cardinality.owx");
+        let ont_s = include_str!("../../ont/owl-xml/object-max-cardinality-unqualified.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
 
         assert_eq!(ont.i().sub_class_of().count(), 1);
@@ -2108,7 +2244,7 @@ pub mod test {
 
     #[test]
     fn data_unqualified_cardinality() {
-        let ont_s = include_str!("../../ont/owl-xml/data-unqualified-exact.owx");
+        let ont_s = include_str!("../../ont/owl-xml/data-exact-cardinality-unqualified.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
         let cl = &ont.i().sub_class_of().next().unwrap().sup;
         assert_eq!(ont.i().sub_class_of().count(), 1);
@@ -2236,6 +2372,21 @@ pub mod test {
     }
 
     #[test]
+    fn type_individual_datatype_unqualified() {
+        let ont_s = include_str!("../../ont/owl-xml/type-individual-datatype-unqualified.owx");
+        let (ont, _) = read_ok(&mut ont_s.as_bytes());
+
+        assert_eq!(1, ont.i().class_assertion().count());
+        let ca = ont.i().class_assertion().next().unwrap();
+
+        assert! {
+            matches!{
+                &ca.ce, ClassExpression::ObjectMinCardinality{n:_, ope:_, bce:_}
+            }
+        };
+    }
+
+    #[test]
     fn gci_and_other_class_relations() {
         let ont_s = include_str!("../../ont/owl-xml/gci_and_other_class_relations.owx");
         let (ont, _) = read_ok(&mut ont_s.as_bytes());
@@ -2333,7 +2484,7 @@ pub mod test {
                 }
             }
         } else {
-            assert!(false);
+            panic!();
         }
     }
 
@@ -2408,5 +2559,210 @@ pub mod test {
         let r = read(&mut ont_s.as_bytes());
 
         assert!(r.is_err());
+    }
+
+    // https://github.com/phillord/horned-owl/issues/49 -- a document with no
+    // `xmlns` declared anywhere (so unprefixed elements resolve to
+    // `ResolveResult::Unbound`, not `Bound(OWL)`) used to be silently skipped
+    // in its entirety, failing with an "Unexpected EoF" error instead of
+    // being read as OWL/XML.
+    #[test]
+    fn missing_default_namespace_assumes_owl() {
+        let ont_s = r##"<?xml version="1.0"?>
+<Ontology ontologyIRI="http://example.org/tea.owl">
+    <Prefix name="owl" IRI="http://www.w3.org/2002/07/owl#"/>
+    <Declaration>
+        <Class IRI="Tea"/>
+    </Declaration>
+</Ontology>"##;
+        let (ont, _) = read_ok(&mut ont_s.as_bytes());
+
+        assert_eq!(ont.i().declare_class().count(), 1);
+    }
+
+    // An explicit but undeclared prefix is a genuine error, not an omission
+    // -- it should not be assumed to be OWL the way a fully-unbound
+    // (no-xmlns-at-all) element is.
+    #[test]
+    fn unknown_prefix_is_still_an_error() {
+        let ont_s = r##"<?xml version="1.0"?>
+<foo:Ontology xmlns:foo="http://example.com/not-owl#" ontologyIRI="http://example.org/tea.owl">
+    <foo:Declaration>
+        <foo:Class IRI="Tea"/>
+    </foo:Declaration>
+</foo:Ontology>"##;
+        let r = read(&mut ont_s.as_bytes());
+
+        assert!(r.is_err(), "Expected a parse error, got {r:?}");
+    }
+
+    // https://github.com/phillord/horned-owl/issues/72 -- stray free text
+    // between elements was silently dropped instead of being rejected.
+    const BROKEN_OWX: &str = r##"<?xml version="1.0"?>
+<Ontology xmlns="http://www.w3.org/2002/07/owl#"
+     ontologyIRI="http://www.example.com/iri">
+    I am broken
+    <Declaration>
+        <Class IRI="#C"/>
+    </Declaration>
+</Ontology>"##;
+
+    #[test]
+    fn stray_text_is_rejected_by_default() {
+        let r: Result<
+            (
+                ComponentMappedOntology<RcStr, RcAnnotatedComponent>,
+                PrefixMapping,
+            ),
+            HornedError,
+        > = read_with_build(
+            &mut BROKEN_OWX.as_bytes(),
+            &Build::new(),
+            Default::default(),
+        );
+
+        assert!(r.is_err(), "Expected a parse error, got {r:?}");
+    }
+
+    // Regression test for #22: parse errors in the OWX reader should carry a
+    // byte position, not Location::Unknown.
+    #[test]
+    fn parse_error_carries_position() {
+        let r: Result<
+            (
+                ComponentMappedOntology<RcStr, RcAnnotatedComponent>,
+                PrefixMapping,
+            ),
+            HornedError,
+        > = read_with_build(
+            &mut BROKEN_OWX.as_bytes(),
+            &Build::new(),
+            Default::default(),
+        );
+
+        match r {
+            Err(HornedError::ValidityError(_, location)) => {
+                assert!(
+                    !matches!(location, crate::error::Location::Unknown),
+                    "expected a byte position in the error location, got Unknown"
+                );
+            }
+            other => panic!("expected a ValidityError, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn stray_text_is_ignored_in_lax_mode() {
+        let config = ParserConfiguration {
+            lax: true,
+            ..Default::default()
+        };
+        let r: Result<
+            (
+                ComponentMappedOntology<RcStr, RcAnnotatedComponent>,
+                PrefixMapping,
+            ),
+            HornedError,
+        > = read_with_build(&mut BROKEN_OWX.as_bytes(), &Build::new(), config);
+
+        assert!(r.is_ok(), "Expected ontology, got failure: {:?}", r.err());
+    }
+
+    // Regression test: when a <Prefix name="" IRI="...#"/> declaration is present, an
+    // IRI="#local" attribute must expand to ontologyIRI + "#local", not
+    // prefixIRI + "#local" (which would yield a doubled ##).
+    #[test]
+    fn relative_iri_with_empty_prefix_no_double_hash() {
+        let owx = r##"<?xml version="1.0"?>
+<Ontology xmlns="http://www.w3.org/2002/07/owl#"
+     xml:base="http://ontriscal"
+     ontologyIRI="http://ontriscal">
+    <Prefix name="" IRI="http://ontriscal#"/>
+    <Declaration>
+        <Class IRI="#MyClass"/>
+    </Declaration>
+</Ontology>"##;
+        let b = Build::new_rc();
+        let (ont, _): (ComponentMappedOntology<RcStr, RcAnnotatedComponent>, _) =
+            read_with_build(&mut owx.as_bytes(), &b, Default::default()).unwrap();
+        let dc = ont.i().declare_class().next().unwrap();
+        assert_eq!(dc.0.0.to_string(), "http://ontriscal#MyClass");
+    }
+
+    // Regression test for #226: the same doubled-## bug as #212
+    // (relative_iri_with_empty_prefix_no_double_hash above), but for a
+    // fragment-only IRI given as <IRI>#local</IRI> *element content*
+    // (e.g. an AnnotationAssertion subject) rather than an IRI="#local"
+    // *attribute*. The #212 fix only covered the attribute form.
+    #[test]
+    fn relative_iri_element_content_with_empty_prefix_no_double_hash() {
+        let owx = r##"<?xml version="1.0"?>
+<Ontology xmlns="http://www.w3.org/2002/07/owl#"
+     xml:base="http://ontriscal"
+     xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"
+     ontologyIRI="http://ontriscal">
+    <Prefix name="" IRI="http://ontriscal#"/>
+    <Prefix name="rdfs" IRI="http://www.w3.org/2000/01/rdf-schema#"/>
+    <Declaration>
+        <Class IRI="#MyClass"/>
+    </Declaration>
+    <AnnotationAssertion>
+        <AnnotationProperty abbreviatedIRI="rdfs:comment"/>
+        <IRI>#MyClass</IRI>
+        <Literal>a comment</Literal>
+    </AnnotationAssertion>
+</Ontology>"##;
+        let b = Build::new_rc();
+        let (ont, _): (ComponentMappedOntology<RcStr, RcAnnotatedComponent>, _) =
+            read_with_build(&mut owx.as_bytes(), &b, Default::default()).unwrap();
+        let assertion = ont.i().annotation_assertion().next().unwrap();
+        assert_eq!(assertion.subject.to_string(), "http://ontriscal#MyClass");
+    }
+
+    // Regression test for #239: an XML numeric character reference (e.g.
+    // `&#39;` for an apostrophe) in an `IRI="..."` attribute must be
+    // unescaped, not carried through raw. Real corpus ontologies (e.g.
+    // APADISORDERS) use this for apostrophes in class-name fragments, like
+    // `#Alzheimer&#39;s_Disease`.
+    #[test]
+    fn iri_attribute_unescapes_xml_entity() {
+        let owx = r##"<?xml version="1.0"?>
+<Ontology xmlns="http://www.w3.org/2002/07/owl#" ontologyIRI="http://ex.com/o">
+    <Declaration>
+        <Class IRI="http://ex.com/o#Alzheimer&#39;s_Disease"/>
+    </Declaration>
+</Ontology>"##;
+        let b = Build::new_rc();
+        let (ont, _): (ComponentMappedOntology<RcStr, RcAnnotatedComponent>, _) =
+            read_with_build(&mut owx.as_bytes(), &b, Default::default()).unwrap();
+        let dc = ont.i().declare_class().next().unwrap();
+        assert_eq!(dc.0.0.to_string(), "http://ex.com/o#Alzheimer's_Disease");
+    }
+
+    // Same bug, but for the <IRI>text</IRI> *element content* form (e.g. an
+    // AnnotationAssertion subject) rather than the IRI="..." attribute.
+    #[test]
+    fn iri_element_content_unescapes_xml_entity() {
+        let owx = r##"<?xml version="1.0"?>
+<Ontology xmlns="http://www.w3.org/2002/07/owl#"
+     xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"
+     ontologyIRI="http://ex.com/o">
+    <Declaration>
+        <Class IRI="http://ex.com/o#Alzheimer's_Disease"/>
+    </Declaration>
+    <AnnotationAssertion>
+        <AnnotationProperty abbreviatedIRI="rdfs:comment"/>
+        <IRI>http://ex.com/o#Alzheimer&#39;s_Disease</IRI>
+        <Literal>a comment</Literal>
+    </AnnotationAssertion>
+</Ontology>"##;
+        let b = Build::new_rc();
+        let (ont, _): (ComponentMappedOntology<RcStr, RcAnnotatedComponent>, _) =
+            read_with_build(&mut owx.as_bytes(), &b, Default::default()).unwrap();
+        let assertion = ont.i().annotation_assertion().next().unwrap();
+        assert_eq!(
+            assertion.subject.to_string(),
+            "http://ex.com/o#Alzheimer's_Disease"
+        );
     }
 }

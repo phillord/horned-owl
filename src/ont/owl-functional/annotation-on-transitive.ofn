@@ -16,7 +16,7 @@ Declaration(ObjectProperty(o:t))
 #   Object Properties
 ############################
 
-# Object Property: o:t (o:t)
+# Object Property: <http://www.example.com/iri#t> (<http://www.example.com/iri#t>)
 
 TransitiveObjectProperty(Annotation(rdfs:label "Annotation on transitive"@en) o:t)
 

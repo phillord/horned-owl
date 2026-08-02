@@ -1,0 +1,23 @@
+// Annex I: ISO-8601 Grammar for DateTime w/ Timezone
+// (source: https://www.ietf.org/proceedings/53/I-D/draft-ietf-impp-datetime-05.txt)
+
+ISO8601_DateTime     = ${ ISO8601_Date ~ "T" ~ ISO8601_Time }
+
+ISO8601_Date    = ${ ISO8601_Year ~ ISO8601_DateSep? ~ ISO8601_Month ~ ISO8601_DateSep? ~ ISO8601_Day }
+ISO8601_DateSep = _{ "-" | "−" | "–" }
+ISO8601_Year    = @{ ASCII_DIGIT{4} }
+ISO8601_Month   = @{ ASCII_DIGIT{1,2} }
+ISO8601_Day     = @{ ASCII_DIGIT{1,2} }
+
+ISO8601_Time     = ${ ISO8601_Hour ~ ISO8601_TimeSep? ~ ISO8601_Minute ~ ISO8601_TimeSep? ~ ISO8601_Second ~ ISO8601_Fraction? ~ ISO8601_TimeZone? }
+ISO8601_TimeSep  = _{":"}
+ISO8601_DecSep   = _{"." | ","}
+ISO8601_Hour     = @{ (('0'..'1') ~ ('0'..'9')) | "2" ~ '0'..'4' }
+ISO8601_Minute   = @{ ('0'..'5') ~ ('0'..'9') }
+ISO8601_Second   = @{ (('0'..'5') ~ ('0'..'9')) | "60" }
+ISO8601_Fraction = @{ ISO8601_DecSep ~ ('0'..'9')+ }
+
+ISO8601_TimeZoneSign   = ${ "+" | "-" | "−" | "–" }
+ISO8601_TimeZoneUtc    = ${ "Z" }
+ISO8601_TimeZoneOffset = ${ ISO8601_TimeZoneSign ~ ISO8601_Hour ~ ISO8601_TimeSep? ~ ISO8601_Minute }
+ISO8601_TimeZone       = ${ ISO8601_TimeZoneUtc | ISO8601_TimeZoneOffset }

@@ -11,11 +11,11 @@ use crate::visitor::immutable::{Visit, Walk};
 
 use indexmap::indexmap;
 
-use oxrdfio::RdfSerializer;
-use pretty_rdf::{
+use horned_pretty_rdf::{
     ChunkedRdfXmlFormatterConfig, PBlankNode, PLiteral, PNamedNode, PNamedOrBlankNode, PTerm,
     PTriple, PrettyRdfXmlFormatter, RdfFormatter, ox::WriterQuadSerializerAdaptor,
 };
+use oxrdfio::RdfSerializer;
 use std::{
     collections::{BTreeSet, HashSet},
     fmt::Debug,
@@ -26,17 +26,47 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
     write: W,
     ont: &ComponentMappedOntology<A, AA>,
 ) -> Result<W, HornedError> {
-    let p = indexmap![
-                    "http://www.w3.org/1999/02/22-rdf-syntax-ns#" => "rdf",
-                    "http://www.w3.org/2002/07/owl#" => "owl",
-                    "http://www.w3.org/2003/11/swrl#" => "swrl"
+    write_with_prefixes(write, ont, None)
+}
+
+/// As [`write`], but declare `prefixes` (the document's `xmlns:` bindings) on
+/// the root `rdf:RDF` element in addition to the always-present `rdf`, `owl` and
+/// `swrl`. OWLAPI/ROBOT declare every document prefix up front (so a re-reader
+/// recovers the same `idspace:` set, and abbreviated IRIs stay abbreviated);
+/// horned-owl's default `write` declared only the three builtins, dropping the
+/// rest on a round-trip. A document prefix never overrides a builtin namespace.
+pub fn write_with_prefixes<A: ForIRI, AA: ForIndex<A>, W: Write>(
+    write: W,
+    ont: &ComponentMappedOntology<A, AA>,
+    prefixes: Option<&curie::PrefixMapping>,
+) -> Result<W, HornedError> {
+    // key = namespace IRI, value = prefix name (what pretty_rdf's config wants).
+    let mut p: indexmap::IndexMap<String, String> = indexmap![
+                    "http://www.w3.org/1999/02/22-rdf-syntax-ns#".to_string() => "rdf".to_string(),
+                    "http://www.w3.org/2002/07/owl#".to_string() => "owl".to_string(),
+                    "http://www.w3.org/2003/11/swrl#".to_string() => "swrl".to_string()
     ];
-    let p = p.into_iter().map(|(k, v)| (k.into(), v.into())).collect();
+    if let Some(pm) = prefixes {
+        for (name, ns) in pm.mappings() {
+            if name.is_empty() {
+                continue; // the default `xmlns=` is config.base's job, not here
+            }
+            // Keep the builtin binding for a namespace; add every other document
+            // prefix. First declaration of a namespace wins (matches OWLAPI's
+            // shortening choice for a namespace carrying multiple aliases).
+            p.entry(ns.to_string()).or_insert_with(|| name.to_string());
+        }
+    }
 
     let f = PrettyRdfXmlFormatter::new(write, ChunkedRdfXmlFormatterConfig::all().prefix(p))?;
     write_to_rdf_formatter(ont, f)
 }
 
+/// Write a component mapped ontology as RDF in the format named by
+/// `format`, which is either `"owl"` (horned-owl's own alias for
+/// RDF/XML) or any extension recognised by
+/// [`oxrdfio::RdfFormat::from_extension`] (`ttl`, `nt`, `nq`, `trig`,
+/// `json`/`jsonld`, `n3`, `rdf`, `xml`).
 pub fn write_to_rdf_format<A: ForIRI, AA: ForIndex<A>, W: Write>(
     write: W,
     ont: &ComponentMappedOntology<A, AA>,
@@ -46,12 +76,19 @@ pub fn write_to_rdf_format<A: ForIRI, AA: ForIndex<A>, W: Write>(
         WriterQuadSerializerAdaptor::new(RdfSerializer::from_format(format).for_writer(write))
     };
 
-    match format {
-        "owl" => crate::io::rdf::writer::write(write, ont),
-        "ttl" => write_to_rdf_formatter(ont, serial(write, oxrdfio::RdfFormat::NTriples)),
-        _ => Err(HornedError::CommandError(format!(
-            "Format is unknown: {format}"
-        ))),
+    // "owl" is horned-owl's own long-standing extension for RDF/XML;
+    // oxrdfio::RdfFormat::from_extension doesn't recognise it (it
+    // only knows "rdf"/"xml" for RdfXml), so special-case it here.
+    let rdf_format = if format == "owl" {
+        oxrdfio::RdfFormat::RdfXml
+    } else {
+        oxrdfio::RdfFormat::from_extension(format)
+            .ok_or_else(|| HornedError::CommandError(format!("Format is unknown: {format}")))?
+    };
+
+    match rdf_format {
+        oxrdfio::RdfFormat::RdfXml => crate::io::rdf::writer::write(write, ont),
+        other => write_to_rdf_formatter(ont, serial(write, other)),
     }
 }
 
@@ -122,22 +159,82 @@ impl<A: ForIRI> NodeGenerator<A> {
     }
 }
 
+/// Percent-encode characters RFC 3987 never permits unescaped in an IRI.
+///
+/// OWL/XML treats an `IRI="..."` attribute as an opaque string -- no IRI
+/// validation -- but RDF requires the value to actually be a legal IRI. A
+/// raw string like `...#KB-CH[R]-8-5Cell` (issue #232) survives OWL/XML
+/// unchanged but breaks RDF/XML's own reader on reread ("Invalid IRI code
+/// point '['"). Escape here, the last point horned-owl controls the bytes
+/// before a stricter reader sees them.
+fn escape_invalid_iri_chars(s: &str) -> std::borrow::Cow<'_, str> {
+    fn needs_escaping(c: char) -> bool {
+        matches!(
+            c,
+            '\u{0}'
+                ..='\u{1F}'
+                    | '\u{7F}'
+                    | ' '
+                    | '"'
+                    | '<'
+                    | '>'
+                    | '\\'
+                    | '^'
+                    | '`'
+                    | '{'
+                    | '|'
+                    | '}'
+                    | '['
+                    | ']'
+        )
+    }
+
+    if !s.contains(needs_escaping) {
+        return std::borrow::Cow::Borrowed(s);
+    }
+
+    let mut out = String::with_capacity(s.len());
+    for c in s.chars() {
+        if needs_escaping(c) {
+            let mut buf = [0u8; 4];
+            for byte in c.encode_utf8(&mut buf).as_bytes() {
+                out.push('%');
+                out.push_str(&format!("{byte:02X}"));
+            }
+        } else {
+            out.push(c);
+        }
+    }
+    std::borrow::Cow::Owned(out)
+}
+
+/// Build a [`PNamedNode`] from a horned-owl [`IRI`], percent-encoding any
+/// characters that would otherwise make the serialized IRI invalid (see
+/// [`escape_invalid_iri_chars`]).
+fn escaped_named_node<A: ForIRI>(iri: &IRI<A>) -> PNamedNode<A> {
+    let raw = iri.underlying();
+    match escape_invalid_iri_chars(&raw) {
+        std::borrow::Cow::Borrowed(_) => PNamedNode::new(raw),
+        std::borrow::Cow::Owned(escaped) => PNamedNode::new(A::from_str(&escaped)),
+    }
+}
+
 /// Convertors from Pretty RDF components and equivalent Horned-OWL model
 impl<A: ForIRI> From<&IRI<A>> for PTerm<A> {
     fn from(iri: &IRI<A>) -> Self {
-        PNamedNode::new(iri.underlying()).into()
+        escaped_named_node(iri).into()
     }
 }
 
 impl<A: ForIRI> From<&IRI<A>> for PNamedNode<A> {
     fn from(iri: &IRI<A>) -> Self {
-        PNamedNode::new(iri.underlying())
+        escaped_named_node(iri)
     }
 }
 
 impl<A: ForIRI> From<&IRI<A>> for PNamedOrBlankNode<A> {
     fn from(iri: &IRI<A>) -> Self {
-        let nn = PNamedNode::new(iri.underlying());
+        let nn = escaped_named_node(iri);
         nn.into()
     }
 }
@@ -696,23 +793,26 @@ render! {
         let bn = ng.this_bn().ok_or_else(|| invalid!("{}", "No bnode available"))?;
         ng.keep_this_bn(bn.clone());
 
-        Ok(
-            match &self.av {
-                AnnotationValue::Literal(l) => {
-                    let obj = l.render(f, ng)?;
+        let obj: PTerm<A> = match &self.av {
+            AnnotationValue::Literal(l) => l.render(f, ng)?,
+            AnnotationValue::IRI(iri) => iri.into(),
+            AnnotationValue::AnonymousIndividual(an) => an.into(),
+        };
 
-                    triple!(f, bn, &self.ap.0, obj)
-                }
-                AnnotationValue::IRI(iri) => {
-                    triple!(
-                        f, bn, &self.ap.0, iri
-                    )
-                }
-                AnnotationValue::AnonymousIndividual(an) => {
-                    triple!(f, bn, &self.ap.0, an)
-                }
-            }
-        )
+        if !self.ann.is_empty() {
+            let ann_bn = ng.bn();
+            triples!(
+                f,
+                ann_bn.clone(), ng.nn(RDF::Type), ng.nn(OWL::Annotation),
+                ann_bn.clone(), ng.nn(OWL::AnnotatedSource), bn.clone(),
+                ann_bn.clone(), ng.nn(OWL::AnnotatedProperty), &self.ap.0,
+                ann_bn.clone(), ng.nn(OWL::AnnotatedTarget), obj.clone()
+            );
+            ng.keep_this_bn(ann_bn);
+            self.ann.render(f, ng)?;
+        }
+
+        Ok(triple!(f, bn, &self.ap.0, obj))
     }
 }
 
@@ -1061,9 +1161,7 @@ fn members<
     // DifferentIndividuals( a1 ... an ), n > 2 _:x rdf:type owl:AllDifferent .
     // _:x owl:members T(SEQ a1 ... an) .
     match members.len() {
-        1 => panic!(
-            "A members axiom needs at least two members, and I should know how to make errors"
-        ),
+        0 => Ok(vec![]),
         2 => {
             let a: PNamedOrBlankNode<_> = members[0].render(f, ng)?;
             let b: PTerm<_> = members[1].render(f, ng)?.into();
@@ -2006,9 +2104,10 @@ mod test {
     use super::*;
     use crate::{model::Build, ontology::set::SetOntology};
 
+    use horned_pretty_rdf::ox::WriterQuadSerializerAdaptor;
     use oxrdfio::RdfSerializer;
-    use pretty_rdf::ox::WriterQuadSerializerAdaptor;
-    use test_generator::test_resources;
+    use rstest::rstest;
+    use std::path::PathBuf;
     // use std::collections::HashMap;
 
     // use std::fs::File;
@@ -2091,67 +2190,38 @@ mod test {
         (ont_orig, ont_round)
     }
 
-    #[test_resources("src/ont/owl-rdf/*owl")]
-    #[test_resources("src/ont/owl-rdf/ambiguous/*.owl")]
-    fn roundtrip_rdf(resource: &str) {
-        let resource = &slurp::read_all_to_string(resource).unwrap();
+    #[rstest]
+    fn roundtrip_rdf(#[files("src/ont/owl-rdf/*.owl")] resource: PathBuf) {
+        let resource = &slurp::read_all_to_string(&resource).unwrap();
         assert_round(resource);
     }
 
-    #[cfg(all(test, bubo))]
+    #[rstest]
+    fn roundtrip_rdf_ambiguous(#[files("src/ont/owl-rdf/ambiguous/*.owl")] resource: PathBuf) {
+        let resource = &slurp::read_all_to_string(&resource).unwrap();
+        assert_round(resource);
+    }
+
+    #[cfg(test)]
     mod bubo_test {
         use crate::io::rdf::writer::test::*;
         use crate::io::rdf::writer::write;
 
-        use std::fs::{File, create_dir_all, read_dir, remove_dir_all};
-        use std::io::{BufWriter, Write};
         use std::path::Path;
 
-        fn parse_then_output(in_file: &Path) {
+        fn parse_then_output(in_file: &Path, out: &mut dyn std::io::Write) {
             let ont = &slurp::read_all_to_string(in_file).unwrap();
             let ont_orig = read_ok(&mut ont.as_bytes());
 
-            let file = File::create(Path::new("./tmp/owl-rdf").join(in_file.file_name().unwrap()))
-                .unwrap();
-            let mut buf_writer = BufWriter::new(&file);
-
             let amo: ComponentMappedOntology<RcStr, Rc<AnnotatedComponent<RcStr>>> =
-                ont_orig.clone().into();
+                ont_orig.into();
 
-            write(&mut buf_writer, &amo).ok().unwrap();
-            buf_writer.flush().ok();
+            write(out, &amo).ok().unwrap();
         }
 
         #[test]
         fn reparse_rdf() -> Result<(), Box<dyn std::error::Error>> {
-            create_dir_all("./tmp/owl-rdf")?;
-
-            for entry in read_dir("./src/ont/owl-rdf")? {
-                let entry = entry?;
-                let path = entry.path();
-                if path.is_file() {
-                    parse_then_output(&path);
-                }
-            }
-
-            let mut cmd = std::process::Command::new("java");
-            let output = cmd
-                // block stdout or it is piped to existing stdout
-                //.stdout(std::process::Stdio::null())
-                .arg("-jar")
-                // passed in my build.rs
-                .arg(option_env!("BUBO_LOCATION").unwrap())
-                .arg("./dev/reparse-all.clj")
-                .arg("owl-rdf")
-                .output()?;
-
-            if !output.status.success() {
-                let out = String::from_utf8(output.stdout).unwrap();
-                assert!(false, "Bubo reparse failed: {out}");
-            }
-
-            remove_dir_all("./tmp/owl-rdf")?;
-            Ok(())
+            crate::io::tests::run_bubo_reparse("owl-rdf", parse_then_output)
         }
     }
 
@@ -2192,5 +2262,100 @@ mod test {
 <http://www.example.com/iri#C> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/2002/07/owl#Class> .
 "#
         );
+    }
+
+    #[test]
+    fn iri_with_rfc3987_invalid_chars_round_trips() {
+        // Real-world ontologies (e.g. corpus file `MCCL`, see issue #232) can
+        // contain IRIs with characters, like `[` and `]`, that are never
+        // legal unescaped in an IRI per RFC 3987. horned-owl's OWL/XML
+        // reader is lenient and accepts such text verbatim, so the writer
+        // must percent-encode it to produce valid, rereadable RDF/XML.
+        //
+        // Note the recovered IRI is percent-encoded (`%5B`/`%5D`) rather
+        // than byte-identical to the original raw `[`/`]` text -- that's
+        // expected and correct: `[`/`]` are gen-delims, so a compliant IRI
+        // reader must not silently decode their percent-encoded form back
+        // to the literal bracket, as that would change the IRI's syntactic
+        // structure. What matters is that the reread no longer fails.
+        let b = Build::new_rc();
+        let mut ont_orig = SetOntology::new_rc();
+        ont_orig.insert(DeclareClass(Class(
+            b.iri("http://example.com/o#KB-CH[R]-8-5Cell"),
+        )));
+
+        let amo: ComponentMappedOntology<RcStr, Rc<AnnotatedComponent<RcStr>>> = ont_orig.into();
+        let mut buf = Vec::new();
+        write(&mut buf, &amo).expect("write should not fail on an invalid-IRI-char class");
+
+        let ont_round = read_ok(&mut &buf[..]);
+        let expected_class = Class(b.iri("http://example.com/o#KB-CH%5BR%5D-8-5Cell"));
+        assert!(
+            ont_round.iter().any(|ac| matches!(
+                &ac.component,
+                Component::DeclareClass(DeclareClass(c)) if *c == expected_class
+            )),
+            "rereading the written RDF/XML should recover the class declaration \
+             (percent-encoded), got: {ont_round:#?}"
+        );
+    }
+
+    // Regression test for https://github.com/phillord/horned-owl/issues/251:
+    // a `_:`-prefixed anonymous individual (see `nodeid_attr_value` in
+    // horned-pretty-rdf) referenced more than once, forcing an explicit
+    // `rdf:nodeID` attribute.
+    #[test]
+    fn shared_anonymous_individual_with_underscore_prefix_round_trips() {
+        let b = Build::new_rc();
+        let mut ont = ComponentMappedOntology::new_rc();
+        let anon = b.anon("_:genid1");
+        ont.insert(ObjectPropertyAssertion {
+            ope: b.object_property("http://example.com/p1").into(),
+            from: b.named_individual("http://example.com/s1").into(),
+            to: anon.clone().into(),
+        });
+        ont.insert(ObjectPropertyAssertion {
+            ope: b.object_property("http://example.com/p2").into(),
+            from: b.named_individual("http://example.com/s2").into(),
+            to: anon.into(),
+        });
+
+        let mut buf = Vec::new();
+        write(&mut buf, &ont).expect("write should not fail");
+        let s = String::from_utf8(buf.clone()).unwrap();
+        assert!(
+            !s.contains("nodeID=\"_:"),
+            "rdf:nodeID must never contain a colon, got:\n{s}"
+        );
+
+        // The written output must be re-readable -- this is the actual
+        // horned-roundtrip failure mode this test guards against. (Not
+        // using `read_ok` here: it also asserts the parse is *complete* in
+        // the OWL-axiom-mapping sense, which is a separate concern from
+        // this test -- a bare shared blank node with no type declaration
+        // isn't guaranteed to map back to a recognised axiom shape. What
+        // matters here is that the RDF/XML syntax itself is valid.)
+        let result = crate::io::rdf::reader::read(&mut &buf[..], Default::default());
+        assert!(
+            result.is_ok(),
+            "written RDF/XML must be syntactically valid to reread, got: {:?}",
+            result.err()
+        );
+    }
+
+    #[test]
+    fn single_member_different_individuals_does_not_panic() {
+        let b = Build::new_rc();
+        let mut ont = ComponentMappedOntology::new_rc();
+        ont.insert(DifferentIndividuals(vec![Individual::Named(
+            NamedIndividual(b.iri("http://example.org/a")),
+        )]));
+        let sink = Vec::new();
+        let formatter = WriterQuadSerializerAdaptor::new(
+            RdfSerializer::from_format(oxrdfio::RdfFormat::NTriples).for_writer(sink),
+        );
+        // Should not panic; writes owl:AllDifferent with a single-element list (matching OWL-API behaviour)
+        let out = write_to_rdf_formatter(&ont, formatter).unwrap();
+        assert!(!out.is_empty());
     }
 }

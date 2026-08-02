@@ -25,15 +25,16 @@ indexmap={workspace=true}
 oxiri={workspace=true}
 pest = "2.7.8"
 pest_derive = "2.7.8"
+horned-pretty-rdf={workspace=true}
+horned-catalog={workspace=true}
 rustc-hash = "2"
-pretty_rdf={workspace=true}
 oxrdf={workspace=true}
 oxrdfio={workspace=true}
-ureq={version="2.1.1", optional=true}
+ureq={version="3.3.0", optional=true}
 
 [workspace]
-members=["horned-bin"]
-default-members=[".", "horned-bin"]
+members=["horned-bin", "horned-pretty-rdf", "horned-catalog", "horned-macro"]
+default-members=[".", "horned-bin", "horned-pretty-rdf", "horned-catalog", "horned-macro"]
 
 [workspace.dependencies]
 # `features = ["std"]` is required for tier-3 wasm targets (e.g. wasm64-unknown-
@@ -42,9 +43,11 @@ default-members=[".", "horned-bin"]
 # otherwise it falls back to an autocfg sysroot probe that fails where there is no
 # prebuilt std, compiling no-std. Harmless elsewhere (std is on there anyway).
 indexmap = { version = "1.0.2", features = ["std"] }
+mktemp="0.5.1"
 oxiri="0.2.11"
-##pretty_rdf={path="./pretty_rdf"}
-pretty_rdf="0.11.0"
+horned-pretty-rdf={path="./horned-pretty-rdf", version="2.0.0"}
+horned-catalog={path="./horned-catalog", version="0.1.0"}
+horned-macro={path="./horned-macro", version="0.1.0"}
 oxrdf="0.3.0"
 oxrdfio="0.2.0"
 
@@ -54,13 +57,15 @@ remote = ["ureq"]
 encoding = ["quick-xml/encoding"]
 
 [dev-dependencies]
+proptest = "1"
 horned-owl = {path=".", features = ["remote"]}
 criterion = "0.7.0"
-mktemp = "0.5.1"
+mktemp = {workspace = true}
 pretty_assertions = "1.0.0"
 slurp = "1.0.1"
-test-generator =  { version = "^0.3" }
+rstest = "0.23"
 horned-bin = {path="horned-bin"}
+horned-macro = {workspace = true}
 
 [profile.release]
 debug = true

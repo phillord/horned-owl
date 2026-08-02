@@ -26,10 +26,17 @@ bench-prepare:
 
 
 ## Build the Unit test Ontology code
+##
+## `test_resources` (the test-generator proc-macro driving src/ont/*
+## fixture discovery) globs those directories at compile time with
+## nothing telling Cargo to invalidate the build when files there
+## change, so a stale test binary can silently miss new/changed/removed
+## fixtures. `cargo clean` unconditionally after bubo runs so the next
+## `cargo test` always sees current fixtures.
 just-bubo:
 	$(MAKE) -C src/ont/bubo
 
-bubo: just-bubo clean test
+bubo: just-bubo test
 
 clean:
 	cargo clean
@@ -112,9 +119,13 @@ triples-round-all:
 	done
 
 clippy:
-	cargo clippy
+	cargo clippy --workspace --all-targets
 
 install:
 	cargo install --path horned-bin
+
+fetch_bubo:
+	wget https://github.com/phillord/tawny-bubo/releases/download/0.4.0/bubo-0.4.0 -O dev/bubo-0.4.0
+	chmod +x dev/bubo-0.4.0
 
 -include makefile-local

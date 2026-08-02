@@ -19,7 +19,7 @@ Declaration(NamedIndividual(o:J))
 #   Classes
 ############################
 
-# Class: o:C (o:C)
+# Class: <http://www.example.com/iri#C> (<http://www.example.com/iri#C>)
 
 SubClassOf(o:C ObjectOneOf(o:I o:J))
 

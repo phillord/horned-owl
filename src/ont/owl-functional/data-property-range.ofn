@@ -16,7 +16,7 @@ Declaration(Datatype(xsd:real))
 #   Data Properties
 ############################
 
-# Data Property: o:dp (o:dp)
+# Data Property: <http://www.example.com/iri#dp> (<http://www.example.com/iri#dp>)
 
 DataPropertyRange(o:dp xsd:real)
 

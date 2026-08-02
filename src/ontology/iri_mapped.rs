@@ -20,7 +20,7 @@ use std::{
 use super::component_mapped::ComponentMappedIndex;
 use super::declaration_mapped::DeclarationMappedIndex;
 use super::indexed::{FourIndexedOntology, OntologyIndex};
-use super::set::SetIndex;
+use super::set::{SetIndex, SetIndexIter};
 
 use std::collections::HashSet;
 
@@ -216,7 +216,7 @@ impl<A: ForIRI, AA: ForIndex<A>> OntologyIndex<A, AA> for IRIMappedIndex<A, AA> 
             .fold(None, |val, iri| {
                 self.mut_set_for_iri(iri)
                     .take(cmp)
-                    .map_or(val, |c| Some(c.unwrap()))
+                    .map_or(val, |c| Some(c.into_component()))
             })
     }
 
@@ -245,7 +245,17 @@ pub struct IRIMappedOntology<A: ForIRI, AA: ForIndex<A>>(
 pub type RcIRIMappedOntology = IRIMappedOntology<RcStr, Rc<AnnotatedComponent<RcStr>>>;
 pub type ArcIRIMappedOntology = IRIMappedOntology<ArcStr, Arc<AnnotatedComponent<ArcStr>>>;
 
-impl<A: ForIRI, AA: ForIndex<A>> Ontology<A> for IRIMappedOntology<A, AA> {}
+impl<A: ForIRI, AA: ForIndex<A>> Ontology<A> for IRIMappedOntology<A, AA> {
+    type ComponentIter<'c>
+        = SetIndexIter<'c, A, AA>
+    where
+        Self: 'c,
+        A: 'c;
+
+    fn iter(&self) -> Self::ComponentIter<'_> {
+        self.0.i().into_iter()
+    }
+}
 
 impl<A: ForIRI, AA: ForIndex<A>> MutableOntology<A> for IRIMappedOntology<A, AA> {
     fn insert<IAA>(&mut self, cmp: IAA) -> bool
@@ -317,7 +327,7 @@ impl ArcIRIMappedOntology {
 /// An owning iterator over the annotated axioms of an `Ontology`.
 impl<A: ForIRI, AA: ForIndex<A>> IntoIterator for IRIMappedOntology<A, AA> {
     type Item = AnnotatedComponent<A>;
-    type IntoIter = std::vec::IntoIter<AnnotatedComponent<A>>;
+    type IntoIter = <SetIndex<A, AA> as IntoIterator>::IntoIter;
     fn into_iter(self) -> Self::IntoIter {
         self.0.index().0.into_iter()
     }
@@ -355,6 +365,16 @@ mod test {
         let mut it = IRIMappedOntology::new_arc().into_iter();
         assert_eq!(it.next(), None);
         assert_eq!(it.next(), None);
+    }
+
+    #[test]
+    fn test_iterable_ontology_iter() {
+        let build = Build::new_rc();
+        let mut o = IRIMappedOntology::new_rc();
+        o.insert(DeclareClass(build.class("http://www.example.com#a")));
+        o.insert(DeclareClass(build.class("http://www.example.com#b")));
+
+        assert_eq!(Ontology::iter(&o).count(), 2);
     }
 
     #[test]

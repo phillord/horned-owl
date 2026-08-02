@@ -10,8 +10,10 @@ Prefix(rdfs:=<http://www.w3.org/2000/01/rdf-schema#>)
 Ontology(<http://www.example.com/iri>
 <http://www.example.com/viri>
 
+Declaration(ObjectProperty(owl:differentFrom))
 Declaration(NamedIndividual(o:I))
 Declaration(NamedIndividual(o:J))
+
 
 DLSafeRule(Body(DifferentIndividualsAtom(o:I o:J))Head(DifferentIndividualsAtom(o:J o:I)))
 )

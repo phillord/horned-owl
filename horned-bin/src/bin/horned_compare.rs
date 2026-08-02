@@ -5,12 +5,7 @@ use clap::App;
 use clap::Arg;
 use clap::ArgMatches;
 
-use horned_bin::{
-    config::{parser_app, parser_config},
-    naming::name,
-    parse_path,
-    summary::summarize,
-};
+use horned_bin::{config::parser_config, naming::name, parse_path, summary::summarize};
 use horned_owl::error::HornedError;
 
 use std::path::Path;
@@ -22,24 +17,22 @@ fn main() -> Result<(), HornedError> {
 }
 
 pub(crate) fn app(name: &str) -> App<'static> {
-    parser_app(
-        App::new(name)
-            .version("0.1")
-            .about("Compare two OWL files")
-            .author("Phillip Lord")
-            .arg(
-                Arg::with_name("INPUT-A")
-                    .help("Sets the input file to use")
-                    .required(true)
-                    .index(1),
-            )
-            .arg(
-                Arg::with_name("INPUT-B")
-                    .help("Sets the input file to use")
-                    .required(true)
-                    .index(2),
-            ),
-    )
+    App::new(name)
+        .version(horned_bin::version_string())
+        .about("Compare two OWL files")
+        .author("Phillip Lord")
+        .arg(
+            Arg::with_name("INPUT-A")
+                .help("Sets the input file to use")
+                .required(true)
+                .index(1),
+        )
+        .arg(
+            Arg::with_name("INPUT-B")
+                .help("Sets the input file to use")
+                .required(true)
+                .index(2),
+        )
 }
 
 pub(crate) fn matcher(matches: &ArgMatches) -> Result<(), HornedError> {
@@ -53,7 +46,7 @@ pub(crate) fn matcher(matches: &ArgMatches) -> Result<(), HornedError> {
         .value_of("INPUT-B")
         .ok_or_else(|| HornedError::CommandError("A file name must be specified".to_string()))?;
 
-    let (ont_a, p_a, i_a) = parse_path(Path::new(input_a), config)?.decompose();
+    let (ont_a, p_a, i_a) = parse_path(Path::new(input_a), config.clone())?.decompose();
     let (ont_b, p_b, i_b) = parse_path(Path::new(input_b), config)?.decompose();
 
     let summary_a = summarize(ont_a);

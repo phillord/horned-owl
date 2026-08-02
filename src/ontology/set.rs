@@ -69,7 +69,16 @@ impl<A: ForIRI> SetOntology<A> {
     }
 }
 
-impl<A: ForIRI> Ontology<A> for SetOntology<A> {}
+impl<A: ForIRI> Ontology<A> for SetOntology<A> {
+    type ComponentIter<'c>
+        = SetIter<'c, A>
+    where
+        A: 'c;
+
+    fn iter(&self) -> Self::ComponentIter<'_> {
+        SetOntology::iter(self)
+    }
+}
 
 impl SetIndex<RcStr, crate::model::RcAnnotatedComponent> {
     /// Convert into a `SetOntology` by MOVING each component out of its `Rc`
@@ -111,7 +120,7 @@ impl<A: ForIRI, AA: ForIndex<A>> From<SetIndex<A, AA>> for SetOntology<A> {
         // (the dominant cost of loading large RDF/XML, e.g. ~160s on phenio).
         let mut hs: HashSet<AnnotatedComponent<A>> = HashSet::with_capacity_and_hasher(index.0.len(), Default::default());
         for c in index.0.into_iter() {
-            hs.insert(c.unwrap());
+            hs.insert(c.into_component());
         }
         SetOntology::from_index(SetIndex(hs, std::marker::PhantomData))
     }
@@ -151,7 +160,13 @@ impl<'a, A: ForIRI> IntoIterator for &'a SetOntology<A> {
 }
 
 /// An owning iterator over the annotated components of an `Ontology`.
-pub struct SetIntoIter<A: ForIRI>(std::vec::IntoIter<AnnotatedComponent<A>>);
+#[allow(clippy::type_complexity)]
+pub struct SetIntoIter<A: ForIRI>(
+    std::iter::Map<
+        std::collections::hash_set::IntoIter<AnnotatedComponent<A>>,
+        fn(AnnotatedComponent<A>) -> AnnotatedComponent<A>,
+    >,
+);
 
 impl<A: ForIRI> Iterator for SetIntoIter<A> {
     type Item = AnnotatedComponent<A>;
@@ -292,11 +307,10 @@ impl SetIndex<RcStr, Rc<AnnotatedComponent<RcStr>>> {
 
 impl<A: ForIRI, AA: ForIndex<A>> IntoIterator for SetIndex<A, AA> {
     type Item = AnnotatedComponent<A>;
-    type IntoIter = std::vec::IntoIter<AnnotatedComponent<A>>;
+    type IntoIter =
+        std::iter::Map<std::collections::hash_set::IntoIter<AA>, fn(AA) -> AnnotatedComponent<A>>;
     fn into_iter(self) -> Self::IntoIter {
-        #[allow(clippy::needless_collect)]
-        let v: Vec<AnnotatedComponent<_>> = self.0.into_iter().map(|fi| fi.unwrap()).collect();
-        v.into_iter()
+        self.0.into_iter().map(AA::into_component)
     }
 }
 
@@ -328,7 +342,6 @@ mod test {
     #[test]
     fn test_ontology_cons() {
         let _ = SetOntology::new_rc();
-        assert!(true);
     }
 
     #[test]
@@ -368,6 +381,16 @@ mod test {
         let mut it = SetOntology::new_rc().into_iter();
         assert_eq!(it.next(), None);
         assert_eq!(it.next(), None);
+    }
+
+    #[test]
+    fn test_iterable_ontology_iter() {
+        let build = Build::new_rc();
+        let mut o = SetOntology::new();
+        o.insert(DeclareClass(build.class("http://www.example.com#a")));
+        o.insert(DeclareClass(build.class("http://www.example.com#b")));
+
+        assert_eq!(Ontology::iter(&o).count(), 2);
     }
 
     #[test]
@@ -517,7 +540,6 @@ mod test {
     #[test]
     fn test_index_cons() {
         let _ = SetIndex::new_rc();
-        assert!(true);
     }
 
     #[test]

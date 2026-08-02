@@ -18,7 +18,7 @@ Declaration(NamedIndividual(o:I))
 #   Named Individuals
 ############################
 
-# Individual: o:I (o:I)
+# Individual: <http://www.example.com/iri#I> (<http://www.example.com/iri#I>)
 
 DataPropertyAssertion(o:dp o:I "A literal")
 

@@ -322,7 +322,28 @@ macro_rules! derive_axiom {
     };
 }
 
-derive_axiom!(A, Annotation<A>, Annotation(ap, av));
+impl<'a, A: ForIRI> Display for Functional<'a, Annotation<A>, A> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
+        if self.0.ann.is_empty() {
+            write!(
+                f,
+                "Annotation({} {})",
+                Functional(&self.0.ap, self.1, None),
+                Functional(&self.0.av, self.1, None),
+            )
+        } else {
+            write!(
+                f,
+                "Annotation({} {} {})",
+                Functional(&self.0.ann, self.1, None),
+                Functional(&self.0.ap, self.1, None),
+                Functional(&self.0.av, self.1, None),
+            )
+        }
+    }
+}
+
+impl<A: ForIRI> AsFunctional<A> for Annotation<A> {}
 derive_axiom!(
     A,
     AnnotationPropertyRange<A>,
@@ -473,7 +494,16 @@ impl<A: ForIRI> AsFunctional<A> for AnnotationValue<A> {}
 
 impl<A: ForIRI> Display for Functional<'_, AnonymousIndividual<A>, A> {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
-        write!(f, "{}", self.0.0.borrow())
+        // Functional syntax requires the `_:` blank-node prefix. Generated
+        // labels (e.g. from the RDF reader) are bare, while labels parsed from
+        // functional/Manchester input already carry it, so add it only when
+        // absent to avoid double-prefixing.
+        let label = self.0.0.borrow();
+        if label.starts_with("_:") {
+            write!(f, "{}", label)
+        } else {
+            write!(f, "_:{}", label)
+        }
     }
 }
 
@@ -994,13 +1024,13 @@ impl<A: ForIRI> Display for Functional<'_, Rule<A>, A> {
         }
 
         f.write_str("Body(")?;
-        for atom in self.0.body.iter().rev() {
+        for atom in self.0.body.iter() {
             Functional(&atom, self.1, None).fmt(f)?;
         }
         f.write_char(')')?;
 
         f.write_str("Head(")?;
-        for atom in self.0.head.iter().rev() {
+        for atom in self.0.head.iter() {
             Functional(&atom, self.1, None).fmt(f)?;
         }
         f.write_char(')')?;
@@ -1119,6 +1149,40 @@ mod tests {
     }
 
     #[test]
+    fn test_ofn_literal_multibyte_escape() {
+        // A multi-byte character preceding an escaped `"` or `\` must not cause
+        // a byte-vs-char index mismatch while slicing (regression: panicked at
+        // a non-char boundary, e.g. inside `é` or a combining mark).
+        let lit = Literal::<String>::Simple {
+            literal: String::from("café\""),
+        };
+        let ofn = format!("{}", lit.as_functional());
+        assert_eq!(r#""café\"""#, &ofn);
+
+        let lit = Literal::<String>::Simple {
+            literal: String::from("素面\\x"),
+        };
+        let ofn = format!("{}", lit.as_functional());
+        assert_eq!(r#""素面\\x""#, &ofn);
+    }
+
+    #[test]
+    fn test_ofn_anonymous_individual_nodeid() {
+        let build = Build::new_arc();
+
+        // Generated anonymous individuals (e.g. from the RDF reader, via
+        // `anon_renumbered`) hold a BARE label; functional syntax requires the
+        // `_:` blank-node prefix, so it must be added.
+        let anon = build.anon("anon000007");
+        assert_eq!("_:anon000007", format!("{}", anon.as_functional()));
+
+        // A label that already carries `_:` (e.g. parsed from functional/
+        // Manchester input) must not be double-prefixed.
+        let anon = build.anon("_:x1");
+        assert_eq!("_:x1", format!("{}", anon.as_functional()));
+    }
+
+    #[test]
     fn test_ofn_literal_language() {
         let lit = Literal::<String>::Language {
             literal: String::from("hello"),
@@ -1193,6 +1257,7 @@ mod tests {
                 av: AnnotationValue::Literal(Literal::Simple {
                     literal: "http://api.hymao.org/api/ref/67791".into(),
                 }),
+                ann: Default::default(),
             }]),
         };
 

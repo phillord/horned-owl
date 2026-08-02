@@ -16,7 +16,7 @@ Declaration(DataProperty(o:dp1))
 #   Data Properties
 ############################
 
-# Data Property: o:dp1 (o:dp1)
+# Data Property: <http://www.example.com/iri#dp1> (<http://www.example.com/iri#dp1>)
 
 SubDataPropertyOf(o:dp1 o:dp)
 

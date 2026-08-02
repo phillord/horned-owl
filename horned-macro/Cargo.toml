@@ -1,0 +1,20 @@
+[package]
+name = "horned-macro"
+version = "0.1.0"
+authors = ["Phillip Lord"]
+description = "Write Manchester Syntax (and, later, OWL Functional Syntax) directly in Rust source, checked at compile time"
+repository = "https://github.com/phillord/horned-owl"
+edition = "2024"
+license = "LGPL-3.0"
+
+[lib]
+proc-macro = true
+
+[dependencies]
+horned-owl = { path = "..", version = "2.1.0" }
+syn = { version = "2", features = ["full"] }
+quote = "1"
+proc-macro2 = "1"
+
+[dev-dependencies]
+trybuild = "1"

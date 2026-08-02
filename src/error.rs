@@ -75,6 +75,10 @@ pub enum HornedError {
     /// Import Error
     #[error("Cannot import IRI: {0}")]
     ImportError(String),
+
+    /// An error parsing or resolving against an XML catalog file
+    #[error("Catalog Error: {0}")]
+    CatalogError(#[from] horned_catalog::CatalogError),
 }
 
 macro_rules! invalid {
@@ -83,7 +87,14 @@ macro_rules! invalid {
     }
 }
 
+macro_rules! invalid_at {
+    ($pos:expr, $($arg:tt)*) => {
+        HornedError::ValidityError(format!($($arg)*), crate::error::Location::BytePosition($pos))
+    }
+}
+
 pub(crate) use invalid;
+pub(crate) use invalid_at;
 
 impl HornedError {
     pub fn invalid_at<S: Into<String>, L: Into<Location>>(s: S, l: L) -> HornedError {

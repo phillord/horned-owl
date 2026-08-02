@@ -4,6 +4,6 @@
 (defoproperty r)
 (defindividual J
   :type
-  (exactly 2 r))
+  (at-least 2 r))
 
 (save-all)

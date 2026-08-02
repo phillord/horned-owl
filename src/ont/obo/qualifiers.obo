@@ -1,0 +1,8 @@
+format-version: 1.2
+ontology: test
+
+[Term]
+id: GO:0001
+name: c
+is_a: GO:0002 {source="PMID:1"}
+relationship: part_of GO:0003 {source="PMID:2"}

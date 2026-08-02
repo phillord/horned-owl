@@ -10,12 +10,11 @@ use crate::model::MutableOntology;
 use crate::model::Ontology;
 
 mod from_pair;
-mod lexer;
+pub mod lexer;
 
 use self::from_pair::FromPair;
 use self::from_pair::MutableOntologyWrapper;
-use self::lexer::OwlFunctionalLexer;
-use self::lexer::Rule;
+pub use self::lexer::{OwlFunctionalLexer, Rule};
 
 struct Context<'a, A: ForIRI> {
     build: &'a Build<A>,

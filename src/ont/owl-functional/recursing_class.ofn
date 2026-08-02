@@ -17,7 +17,7 @@ Declaration(ObjectProperty(o:r))
 #   Classes
 ############################
 
-# Class: o:X (o:X)
+# Class: <http://www.example.com/iri#X> (<http://www.example.com/iri#X>)
 
 EquivalentClasses(o:X ObjectSomeValuesFrom(o:r o:X))
 

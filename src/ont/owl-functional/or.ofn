@@ -18,7 +18,7 @@ Declaration(Class(o:D))
 #   Classes
 ############################
 
-# Class: o:A (o:A)
+# Class: <http://www.example.com/iri#A> (<http://www.example.com/iri#A>)
 
 SubClassOf(o:A ObjectUnionOf(o:B o:C o:D))
 

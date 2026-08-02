@@ -16,7 +16,7 @@ use crate::{
         declaration_mapped::DeclarationMappedIndex,
         indexed::ThreeIndexedOntology,
         logically_equal::{LogicallyEqualIndex, update_or_insert_logically_equal_component},
-        set::{SetIndex, SetOntology},
+        set::{SetIndex, SetIndexIter, SetOntology},
     },
     resolve::strict_resolve_iri,
     vocab::RDFS as VRDFS,
@@ -332,7 +332,27 @@ impl<A: ForIRI, AA: ForIndex<A>> ConcreteRDFOntology<A, AA> {
     }
 }
 
-impl<A: ForIRI, AA: ForIndex<A>> Ontology<A> for ConcreteRDFOntology<A, AA> {}
+impl<A: ForIRI, AA: ForIndex<A>> Ontology<A> for ConcreteRDFOntology<A, AA> {
+    type ComponentIter<'c>
+        = SetIndexIter<'c, A, AA>
+    where
+        Self: 'c,
+        A: 'c;
+
+    fn iter(&self) -> Self::ComponentIter<'_> {
+        self.i().into_iter()
+    }
+}
+
+impl<A: ForIRI, AA: ForIndex<A>> IntoIterator for ConcreteRDFOntology<A, AA> {
+    type Item = AnnotatedComponent<A>;
+    type IntoIter = <SetIndex<A, AA> as IntoIterator>::IntoIter;
+
+    fn into_iter(self) -> Self::IntoIter {
+        let (i, _, _) = self.index();
+        i.into_iter()
+    }
+}
 
 impl<A: ForIRI, AA: ForIndex<A>> MutableOntology<A> for ConcreteRDFOntology<A, AA> {
     fn insert<IAA>(&mut self, cmp: IAA) -> bool
@@ -596,13 +616,9 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
         b: &'a Build<A>,
         bufread: &'b mut R,
         config: ParserConfiguration,
-    ) -> OntologyParser<'a, A, AA, O> {
-        Self::from_bufread_with_format(
-            b,
-            bufread,
-            config,
-            config.rdf.format.unwrap_or(oxrdfio::RdfFormat::RdfXml),
-        )
+    ) -> Result<OntologyParser<'a, A, AA, O>, HornedError> {
+        let format = config.rdf.format.unwrap_or(oxrdfio::RdfFormat::RdfXml);
+        Self::from_bufread_with_format(b, bufread, config, format)
     }
 
     pub fn from_bufread_with_format<'b, R: BufRead>(
@@ -610,26 +626,29 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
         bufread: &'b mut R,
         config: ParserConfiguration,
         format: oxrdfio::RdfFormat,
-    ) -> OntologyParser<'a, A, AA, O> {
+    ) -> Result<OntologyParser<'a, A, AA, O>, HornedError> {
         // In lax mode (OWLAPI/ROBOT's default), parse leniently: oxrdf otherwise
         // hard-errors on inputs OWLAPI accepts — e.g. an invalid BCP47 language
-        // tag such as `xml:lang="e"` (a real typo in GSSO) — and the `unwrap`
-        // below would then panic on the whole document. Lenient mode keeps the
+        // tag such as `xml:lang="e"` (a real typo in GSSO) — and the parse
+        // would then fail on the whole document. Lenient mode keeps the
         // raw language tag / IRI instead of validating it, matching how OWLAPI
         // preserves such literals verbatim.
         let parser = oxrdfio::RdfParser::from_format(format);
-        let parser = if config.rdf.lax { parser.lenient() } else { parser };
+        let parser = if config.lax { parser.lenient() } else { parser };
         let mut triples = vec![];
         let last_pos = std::cell::Cell::new(0);
 
         for ox_quad in parser.for_reader(bufread) {
-            // TODO!
-            let ox_triple = ox_quad.unwrap().into();
+            let ox_triple = ox_quad
+                .map_err(|e| {
+                    HornedError::ParserError(Box::new(e), crate::error::Location::Unknown)
+                })?
+                .into();
             triples.push(b.convert_substitute_triple(ox_triple, last_pos.get()));
             //last_pos.set(parser.buffer_position().try_into().unwrap());
         }
 
-        OntologyParser::new(b, triples, config)
+        Ok(OntologyParser::new(b, triples, config))
     }
 
     /// Return an new OntologyParser taking all triples in RDF-XML from the given IRI.
@@ -637,10 +656,14 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
         b: &'a Build<A>,
         iri: &IRI<A>,
         config: ParserConfiguration,
-    ) -> OntologyParser<'a, A, AA, O> {
+    ) -> Result<OntologyParser<'a, A, AA, O>, HornedError> {
         OntologyParser::from_bufread(
             b,
-            &mut Cursor::new(strict_resolve_iri(iri).expect("the IRI should resolve successfully")),
+            &mut Cursor::new(strict_resolve_iri(
+                iri,
+                config.remote_body_limit,
+                config.local_only,
+            )?),
             config,
         )
     }
@@ -846,17 +869,20 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
             [_, Iri(p), ob @ Term::Literal(_)] => Ok(Annotation {
                 ap: AnnotationProperty(p.clone()),
                 av: self.convert_to_literal(ob).unwrap().into(),
+                ann: Default::default(),
             }),
             [_, Iri(p), Iri(ob)] => {
                 // IRI annotation value
                 Ok(Annotation {
                     ap: AnnotationProperty(p.clone()),
                     av: ob.clone().into(),
+                    ann: Default::default(),
                 })
             }
             [_, Iri(p), Term::BNode(_)] => Ok(Annotation {
                 ap: AnnotationProperty(p.clone()),
                 av: self.b.anon_renumbered().into(),
+                ann: Default::default(),
             }),
             all => Err(HornedError::invalid(format!(
                 "Invalid annotation found {:?}",
@@ -881,6 +907,8 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
 
     /// Process axiom annotations.
     fn axiom_annotations(&mut self) -> Result<(), HornedError> {
+        let mut bnode_to_key: HashMap<BNode<A>, [Term<A>; 3]> = HashMap::default();
+
         for (k, v) in std::mem::take(&mut self.bnode) {
             match v.as_slice() {
                 [
@@ -910,10 +938,52 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                             }
                         }
                     }
+                    // Record the bnode → axiom-key mapping so a nested
+                    // annotation (owl:Annotation whose annotatedSource is THIS
+                    // reification bnode) can find the axiom it refines.
+                    bnode_to_key.insert(k, key.clone());
                     let anns = self.parse_annotations(ann)?;
                     self.ann_map.entry(key).or_default().push(anns);
                 }
 
+                _ => {
+                    self.bnode.insert(k, v);
+                }
+            }
+        }
+
+        // Second pass: owl:Annotation bnodes attach nested annotations
+        // to the annotation identified by (annotatedSource bnode,
+        // annotatedProperty, annotatedTarget).
+        for (k, v) in std::mem::take(&mut self.bnode) {
+            match v.as_slice() {
+                [
+                    [_, Term::OWL(VOWL::AnnotatedProperty), p],
+                    [_, Term::OWL(VOWL::AnnotatedSource), Term::BNode(sb_bnode)],
+                    [_, Term::OWL(VOWL::AnnotatedTarget), ob],
+                    [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Annotation)],
+                    nested_ann @ ..,
+                ] => {
+                    if let Some(ann_key) = bnode_to_key.get(sb_bnode).cloned() {
+                        let ref_ann =
+                            self.annotation(&[Term::BNode(k.clone()), p.clone(), ob.clone()])?;
+                        let nested = self.parse_annotations(nested_ann)?;
+                        // `ann_map` is keyed to a Vec of annotation sets (several
+                        // owl:Axiom blocks may reify the same base triple); refine
+                        // the reified annotation wherever it appears.
+                        if let Some(ann_sets) = self.ann_map.get_mut(&ann_key) {
+                            for ann_set in ann_sets.iter_mut() {
+                                if let Some(mut target) = ann_set.take(&ref_ann) {
+                                    target.ann = nested.clone();
+                                    ann_set.insert(target);
+                                    break;
+                                }
+                            }
+                        }
+                    } else {
+                        self.bnode.insert(k, v);
+                    }
+                }
                 _ => {
                     self.bnode.insert(k, v);
                 }
@@ -1395,7 +1465,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                 Some(NamedOWLEntityKind::ObjectProperty) => {
                     Some(PropertyExpression::ObjectPropertyExpression(iri.into()))
                 }
-                _ if self.config.rdf.lax => {
+                _ if self.config.lax => {
                     Some(PropertyExpression::ObjectPropertyExpression(iri.into()))
                 }
                 _ => None,
@@ -1425,7 +1495,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
             (Some(ope), Some(NamedOWLEntityKind::ObjectProperty)) | (Some(ope), None) => {
                 Ok(Some((ope.into(), ObjectProperty(b.clone()).into())))
             }
-            (Some(ope), _any) if self.config.rdf.lax => {
+            (Some(ope), _any) if self.config.lax => {
                 Ok(Some((ope.into(), ObjectProperty(b.clone()).into())))
             }
             _ => Err(HornedError::invalid(format!(
@@ -1489,15 +1559,15 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                 AnnotationProperty(a.clone()).into(),
                 AnnotationProperty(b.clone()).into(),
             ))),
-            (Some(NEK::ObjectProperty), _) if self.config.rdf.lax => Ok(Some((
+            (Some(NEK::ObjectProperty), _) if self.config.lax => Ok(Some((
                 ObjectProperty(a.clone()).into(),
                 ObjectProperty(b.clone()).into(),
             ))),
-            (Some(NEK::DataProperty), _) if self.config.rdf.lax => Ok(Some((
+            (Some(NEK::DataProperty), _) if self.config.lax => Ok(Some((
                 DataProperty(a.clone()).into(),
                 DataProperty(b.clone()).into(),
             ))),
-            (Some(NEK::AnnotationProperty), _) if self.config.rdf.lax => Ok(Some((
+            (Some(NEK::AnnotationProperty), _) if self.config.lax => Ok(Some((
                 AnnotationProperty(a.clone()).into(),
                 AnnotationProperty(b.clone()).into(),
             ))),
@@ -1707,19 +1777,26 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                     }
                 }
                 [
-                    [_, Term::OWL(VOWL::MinCardinality), literal],   //:
-                    [_, Term::OWL(VOWL::OnProperty), Term::Iri(pr)], //:
+                    [_, Term::OWL(VOWL::MinCardinality), literal], //:
+                    [_, Term::OWL(VOWL::OnProperty), pr],          //:
                     [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Restriction)],
-                ] => {
-                    ok_some! {
-                        ClassExpression::ObjectMinCardinality
-                        {
-                            n:self.convert_to_u32(literal)?,
-                            ope: pr.into(),
+                ] => match self.distinguish_retrieve_property_kind(pr, ic) {
+                    Some(PropertyExpression::ObjectPropertyExpression(ope)) => {
+                        ok_some!(ClassExpression::ObjectMinCardinality {
+                            n: self.convert_to_u32(literal)?,
+                            ope,
                             bce: self.b.class(VOWL::Thing).into()
-                        }
+                        })
                     }
-                }
+                    Some(PropertyExpression::DataProperty(dp)) => {
+                        ok_some!(ClassExpression::DataMinCardinality {
+                            n: self.convert_to_u32(literal)?,
+                            dp,
+                            dr: self.b.datatype(OWL2Datatype::Literal).into(),
+                        })
+                    }
+                    any => Self::error_or_none_on_annotation(any, v.position()),
+                },
                 [
                     [_, Term::OWL(VOWL::MinQualifiedCardinality), literal], //:
                     [_, Term::OWL(VOWL::OnClass), tce],                     //:
@@ -1736,19 +1813,26 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                     }
                 }
                 [
-                    [_, Term::OWL(VOWL::MaxCardinality), literal],   //:
-                    [_, Term::OWL(VOWL::OnProperty), Term::Iri(pr)], //:
+                    [_, Term::OWL(VOWL::MaxCardinality), literal], //:
+                    [_, Term::OWL(VOWL::OnProperty), pr],          //:
                     [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Restriction)],
-                ] => {
-                    ok_some! {
-                        ClassExpression::ObjectMaxCardinality
-                        {
-                            n:self.convert_to_u32(literal)?,
-                            ope: pr.into(),
+                ] => match self.distinguish_retrieve_property_kind(pr, ic) {
+                    Some(PropertyExpression::ObjectPropertyExpression(ope)) => {
+                        ok_some!(ClassExpression::ObjectMaxCardinality {
+                            n: self.convert_to_u32(literal)?,
+                            ope,
                             bce: self.b.class(VOWL::Thing).into()
-                        }
+                        })
                     }
-                }
+                    Some(PropertyExpression::DataProperty(dp)) => {
+                        ok_some!(ClassExpression::DataMaxCardinality {
+                            n: self.convert_to_u32(literal)?,
+                            dp,
+                            dr: self.b.datatype(OWL2Datatype::Literal).into(),
+                        })
+                    }
+                    any => Self::error_or_none_on_annotation(any, v.position()),
+                },
                 [
                     [_, Term::OWL(VOWL::MaxQualifiedCardinality), literal], //:
                     [_, Term::OWL(VOWL::OnClass), tce],                     //:
@@ -2150,7 +2234,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                         // OWLAPI reads it as an annotation assertion. In lax mode do
                         // the same rather than failing the whole document.
                         Ok(None) => match r {
-                            Term::Iri(sub) if self.config.rdf.lax => self
+                            Term::Iri(sub) if self.config.lax => self
                                 .annotation(t.triple())
                                 .map(|ann| {
                                     Some(AnnotationAssertion { subject: sub.into(), ann }.into())
@@ -2187,7 +2271,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                         // OWLAPI reads it as an annotation assertion. In lax mode do
                         // the same rather than failing the whole document.
                         Ok(None) => match r {
-                            Term::Iri(sub) if self.config.rdf.lax => self
+                            Term::Iri(sub) if self.config.lax => self
                                 .annotation(t.triple())
                                 .map(|ann| {
                                     Some(AnnotationAssertion { subject: sub.into(), ann }.into())
@@ -2228,20 +2312,19 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                 }
                 [Term::Iri(sub), Term::Iri(pred), Term::Iri(obj)] => {
                     // A `subject predicate object` triple (all IRIs) is an
-                    // ObjectPropertyAssertion, EXCEPT when `predicate` is a *declared*
-                    // annotation property, in which case it is an IRI-valued
-                    // AnnotationAssertion — matching OWLAPI/ROBOT (a declared annotation
-                    // property is never an object property, so the triple annotates
-                    // `subject` rather than asserting an object-property edge). Without
-                    // this guard every annotation like `obo:IAO_0000231 rdf:resource=…`
-                    // (term-replaced-by, has-curation-status, …) is mis-read as a logical
-                    // object-property assertion, polluting the ABox handed to the reasoner.
+                    // ObjectPropertyAssertion only when `predicate` is a *declared object
+                    // property*; otherwise it is an IRI-valued AnnotationAssertion —
+                    // matching OWLAPI/ROBOT, which default an *undeclared* IRI-predicate
+                    // (e.g. bare `MONDO_x skos:exactMatch mesh:y` mapping triples, or a
+                    // declared annotation property like `obo:IAO_0000231`) to an
+                    // annotation property rather than an object-property edge. This is the
+                    // IRI-object twin of the literal-object rule above (declared data
+                    // property → DataPropertyAssertion, else AnnotationAssertion), and
+                    // stops undeclared mapping properties polluting the ABox handed to the
+                    // reasoner (MONDO's ~111k skos mappings).
                     if <O as AsRef<DeclarationMappedIndex<A, AA>>>::as_ref(&self.o)
-                        .is_declaration_kind(pred, NamedOWLEntityKind::AnnotationProperty)
+                        .is_declaration_kind(pred, NamedOWLEntityKind::ObjectProperty)
                     {
-                        self.annotation(t.triple())
-                            .map(|ann| Some(AnnotationAssertion { subject: sub.into(), ann }.into()))
-                    } else {
                         Ok(Some(
                             ObjectPropertyAssertion {
                                 ope: ObjectProperty(pred.clone()).into(),
@@ -2250,6 +2333,9 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                             }
                             .into(),
                         ))
+                    } else {
+                        self.annotation(t.triple())
+                            .map(|ann| Some(AnnotationAssertion { subject: sub.into(), ann }.into()))
                     }
                 }
                 _ => Ok(None),
@@ -2434,7 +2520,19 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
 
             match built {
                 Some(rule) => {
-                    let ann = self.parse_annotations(&ann_triples)?;
+                    // Annotations attached directly to the Imp node (OWLAPI /
+                    // Protégé style), plus any reified (owl:Axiom) annotations
+                    // collected earlier — the form Horned-OWL's own RDF writer
+                    // produces. `ann_map` is Vec-valued, so drain every set.
+                    let mut ann = self.parse_annotations(&ann_triples)?;
+                    let key = self.b.substitute_term([
+                        Term::BNode(bnode.clone()),
+                        Term::RDF(VRDF::Type),
+                        Term::SWRL(VSWRL::Imp),
+                    ]);
+                    for set in self.ann_map.remove(&key).unwrap_or_default() {
+                        ann.extend(set);
+                    }
                     let cmp: Component<A> = rule.into();
                     self.insert_distinct(AnnotatedComponent { component: cmp, ann });
                 }
@@ -2554,6 +2652,19 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                 let triple = std::mem::take(&mut self.triple);
                 step!("group_triples", Self::group_triples(triple, &mut self.simple, &mut self.bnode));
 
+                // Identical RDF triples denote the same triple (RDF is a set). A
+                // writer that reifies N annotated axioms sharing one base triple
+                // may serialise that base N times (owlmake's does, one per
+                // annotated synonym/xref); without dedup the first occurrence
+                // consumes the reifications from `ann_map` and each duplicate then
+                // re-emits as a spurious *unannotated* axiom. Drop exact duplicate
+                // simple triples, preserving first-seen order.
+                step!("dedup_simple", {
+                    let mut seen: rustc_hash::FxHashSet<[Term<A>; 3]> =
+                        rustc_hash::FxHashSet::default();
+                    self.simple.retain(|t| seen.insert(t.triple().clone()));
+                });
+
                 // sort the triples, so that I can get a dependable order
                 step!("bnode_sort", for (_, vec) in self.bnode.iter_mut() {
                     vec.sort();
@@ -2568,7 +2679,10 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
 
                 Ok(v)
             }
-            _ => todo!(),
+            _ => panic!(
+                "parse_imports called out of order: expected OntologyParserState::New, got {:?}",
+                self.state
+            ),
         }
     }
 
@@ -2629,9 +2743,10 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                 self.state = OntologyParserState::Declarations;
                 Ok(())
             }
-            _ => {
-                todo!();
-            }
+            _ => panic!(
+                "parse_declarations called out of order: expected OntologyParserState::Imports, got {:?}",
+                self.state
+            ),
         }
     }
 
@@ -2670,7 +2785,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
         // SWRL rules
         phase!("swrl", self.swrl()?);
 
-        if self.config.rdf.lax {
+        if self.config.lax {
             phase!("simple_annotations(lax)", self.simple_annotations(true)?);
         }
         self.state = OntologyParserState::Parse;
@@ -2778,7 +2893,7 @@ pub fn parser_with_build<'b, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, 
     bufread: &mut R,
     build: &'b Build<A>,
     config: ParserConfiguration,
-) -> OntologyParser<'b, A, AA, O> {
+) -> Result<OntologyParser<'b, A, AA, O>, HornedError> {
     OntologyParser::from_bufread(build, bufread, config)
 }
 
@@ -2787,7 +2902,7 @@ pub fn read_with_build<A: ForIRI, AA: ForIndex<A>, R: BufRead>(
     build: &Build<A>,
     config: ParserConfiguration,
 ) -> Result<(ConcreteRDFOntology<A, AA>, IncompleteParse<A>), HornedError> {
-    parser_with_build(bufread, build, config).parse()
+    parser_with_build(bufread, build, config)?.parse()
 }
 
 pub fn read<R: BufRead>(
@@ -2814,7 +2929,7 @@ mod test {
     use crate::normalize::normalize;
     use crate::ontology::component_mapped::RcComponentMappedOntology;
     use pretty_assertions::assert_eq;
-    use test_generator::test_resources;
+    use rstest::rstest;
 
     fn read_ok<R: BufRead>(
         bufread: &mut R,
@@ -2829,14 +2944,6 @@ mod test {
         dbg!(&ont, &incomp);
         assert!(incomp.is_complete());
         ont
-    }
-
-    fn compare(test: &str) {
-        let dot = test.rfind('.').unwrap();
-        let slash = test.rfind('/').unwrap();
-        let stem = &test[(slash + 1)..dot];
-
-        compare_two(stem, stem);
     }
 
     fn compare_two(testrdf: &str, testowl: &str) {
@@ -2869,6 +2976,26 @@ mod test {
         assert_eq!(rdfont, xmlont);
     }
 
+    #[test]
+    fn test_iterable_ontology_iter() {
+        let mut o: ConcreteRDFOntology<RcStr, Rc<AnnotatedComponent<RcStr>>> = Default::default();
+        let build = Build::new_rc();
+        o.insert(DeclareClass(build.class("http://www.example.com#a")));
+        o.insert(DeclareClass(build.class("http://www.example.com#b")));
+
+        assert_eq!(Ontology::iter(&o).count(), 2);
+    }
+
+    #[test]
+    fn test_iterable_ontology_into_iter() {
+        let mut o: ConcreteRDFOntology<RcStr, Rc<AnnotatedComponent<RcStr>>> = Default::default();
+        let build = Build::new_rc();
+        o.insert(DeclareClass(build.class("http://www.example.com#a")));
+        o.insert(DeclareClass(build.class("http://www.example.com#b")));
+
+        assert_eq!(o.into_iter().count(), 2);
+    }
+
     // #[test]
     // fn read_iri() {
     //     let dir_path_buf = PathBuf::from(file!());
@@ -2886,15 +3013,15 @@ mod test {
     //     assert!(true);
     // }
 
-    #[test_resources("src/ont/owl-rdf/*.owl")]
-    fn compare_to_xml(resource: &str) {
-        compare(resource)
+    #[rstest]
+    fn compare_to_xml(#[files("src/ont/owl-rdf/*.owl")] resource: PathBuf) {
+        let stem = resource.file_stem().unwrap().to_str().unwrap();
+        compare_two(stem, stem);
     }
 
-    #[test_resources("src/ont/owl-rdf/ambiguous/*.owl")]
-    fn test_read_ok(resource: &str) {
-        let resource = &slurp::read_all_to_string(resource).unwrap();
-
+    #[rstest]
+    fn test_read_ok(#[files("src/ont/owl-rdf/ambiguous/*.owl")] resource: PathBuf) {
+        let resource = &slurp::read_all_to_string(&resource).unwrap();
         read_ok(&mut resource.as_bytes());
     }
 
@@ -2948,7 +3075,8 @@ mod test {
                 &mut slurp_rdfont("import").as_bytes(),
                 &b,
                 Default::default(),
-            );
+            )
+            .unwrap();
         p.parse_imports().unwrap();
 
         let rdfont = p.as_ontology();
@@ -2966,7 +3094,8 @@ mod test {
                 &mut slurp_rdfont("class").as_bytes(),
                 &b,
                 Default::default(),
-            );
+            )
+            .unwrap();
         let _ = p.parse_declarations();
 
         let rdfont = p.as_ontology();
@@ -2983,7 +3112,7 @@ mod test {
                 &mut slurp_rdfont("withimport/other-property").as_bytes(),
                 &b,
                 Default::default(),
-            );
+            )?;
         let (family_other, incomplete) = p.parse()?;
         assert!(incomplete.is_complete());
 
@@ -2991,7 +3120,7 @@ mod test {
             &mut slurp_rdfont("withimport/import-property").as_bytes(),
             &b,
             Default::default(),
-        );
+        )?;
         p.parse_imports()?;
         p.parse_declarations()?;
         p.finish_parse(vec![&family_other].as_slice())?;
@@ -3025,6 +3154,26 @@ mod test {
         assert!(matches! {err, HornedError::ValidityError(_,_)})
     }
 
+    #[test]
+    fn error_not_panic_on_malformed_rdf_xml() {
+        // Issue #205: malformed RDF/XML (here, an invalid duplicate XML
+        // attribute -- oxrdfio's underlying `quick-xml` parser rejects
+        // this) used to panic via an unchecked `unwrap()` on the
+        // underlying oxrdfio parser's error. It should be a recoverable
+        // `HornedError` instead, regardless of what produced the
+        // malformed input.
+        let xml = r#"<?xml version="1.0"?>
+<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+     xmlns:owl="http://www.w3.org/2002/07/owl#">
+    <owl:Ontology rdf:about="http://www.example.com/iri"
+                  owl:versionInfo="first" owl:versionInfo="second"/>
+</rdf:RDF>"#;
+
+        let err = read(&mut xml.as_bytes(), Default::default()).unwrap_err();
+
+        assert!(matches! {err, HornedError::ParserError(_,_)})
+    }
+
     fn read_from_format<R: BufRead>(
         bufread: &mut R,
         config: ParserConfiguration,
@@ -3032,6 +3181,7 @@ mod test {
     ) {
         let (ont, incomp): (ConcreteRDFOntology<RcStr, Rc<AnnotatedComponent<RcStr>>>, _) =
             OntologyParser::from_bufread_with_format(&Build::new_rc(), bufread, config, format)
+                .unwrap()
                 .parse()
                 .unwrap();
 
@@ -3065,8 +3215,6 @@ o:C rdf:type owl:Class .
             Default::default(),
             oxrdfio::RdfFormat::Turtle,
         );
-
-        assert!(true);
     }
 
     #[test]
@@ -3135,4 +3283,36 @@ o:C rdf:type owl:Class .
     // fn family() {
     //     compare("family");
     // }
+
+    #[test]
+    fn rdfs_class_does_not_produce_class_assertion() {
+        // rdfs:Class is the RDFS metaclass, not a valid OWL class expression.
+        // A triple <X> rdf:type rdfs:Class should NOT become a ClassAssertion
+        // (ClassAssertion(Class(rdfs:Class), X) is meaningless in OWL DL).
+        // The triple should be left in the incomplete parse instead.
+        let xml = r#"<?xml version="1.0"?>
+<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+         xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"
+         xmlns:owl="http://www.w3.org/2002/07/owl#">
+    <owl:Ontology rdf:about="http://www.example.com/iri"/>
+    <rdfs:Class rdf:about="http://www.example.com/iri#C"/>
+</rdf:RDF>"#;
+
+        let (ont, incomplete): (ConcreteRDFOntology<RcStr, Rc<AnnotatedComponent<RcStr>>>, _) =
+            read(&mut xml.as_bytes(), Default::default()).unwrap();
+
+        let ont: SetOntology<_> = ont.into();
+        let class_assertions: Vec<_> = ont
+            .iter()
+            .filter(|ac| matches!(ac.component, Component::ClassAssertion(_)))
+            .collect();
+        assert!(
+            class_assertions.is_empty(),
+            "rdfs:Class should not produce ClassAssertion axioms, got: {class_assertions:?}"
+        );
+        assert!(
+            !incomplete.is_complete(),
+            "rdfs:Class triple should remain in the incomplete parse"
+        );
+    }
 }

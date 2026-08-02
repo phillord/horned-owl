@@ -386,7 +386,14 @@ impl<A: ForIRI> FromPair<A> for AnnotatedComponent<A> {
                 let subject = AnnotationSubject::from_pair(inner.next().unwrap(), ctx)?;
                 let av = AnnotationValue::from_pair(inner.next().unwrap(), ctx)?;
                 Ok(Self::new(
-                    AnnotationAssertion::new(subject, Annotation { ap, av }),
+                    AnnotationAssertion::new(
+                        subject,
+                        Annotation {
+                            ap,
+                            av,
+                            ann: Default::default(),
+                        },
+                    ),
                     annotations,
                 ))
             }
@@ -428,14 +435,12 @@ impl<A: ForIRI> FromPair<A> for AnnotatedComponent<A> {
                     .next()
                     .unwrap()
                     .into_inner()
-                    .rev()
                     .map(|pair| FromPair::from_pair(pair, ctx))
                     .collect::<Result<Vec<_>>>()?;
                 let head = inner
                     .next()
                     .unwrap()
                     .into_inner()
-                    .rev()
                     .map(|pair| FromPair::from_pair(pair, ctx))
                     .collect::<Result<Vec<_>>>()?;
                 Ok(Self::new(crate::model::Rule::new(head, body), annotations))
@@ -452,12 +457,12 @@ impl<A: ForIRI> FromPair<A> for Annotation<A> {
     const RULE: Rule = Rule::Annotation;
     fn from_pair_unchecked(pair: Pair<Rule>, ctx: &Context<'_, A>) -> Result<Self> {
         let mut inner = pair.into_inner();
-        let _annotations: BTreeSet<Annotation<A>> =
-            FromPair::from_pair(inner.next().unwrap(), ctx)?;
+        let ann: BTreeSet<Annotation<A>> = FromPair::from_pair(inner.next().unwrap(), ctx)?;
 
         Ok(Annotation {
             ap: FromPair::from_pair(inner.next().unwrap(), ctx)?,
             av: FromPair::from_pair(inner.next().unwrap(), ctx)?,
+            ann,
         })
     }
 }
@@ -1119,7 +1124,8 @@ mod tests {
     use crate::io::ofn::reader::lexer::OwlFunctionalLexer;
     use crate::ontology::set::SetOntology;
 
-    use test_generator::test_resources;
+    use rstest::rstest;
+    use std::path::PathBuf;
 
     macro_rules! assert_parse_into {
         ($ty:ty, $rule:path, $build:ident, $prefixes:ident, $doc:expr, $expected:expr_2021) => {
@@ -1138,6 +1144,50 @@ mod tests {
                 ),
             }
         };
+    }
+
+    #[test]
+    fn language_tag_with_script_subtag() {
+        let build = Build::default();
+        let prefixes = PrefixMapping::default();
+
+        // Region subtags already parse; script subtags (4 alpha following a
+        // 2-3 alpha primary language) must not be swallowed by ExtLang.
+        assert_parse_into!(
+            Literal<String>,
+            Rule::Literal,
+            build,
+            prefixes,
+            r#""街道"@zh-Hans"#,
+            Literal::Language {
+                literal: String::from("街道"),
+                lang: String::from("zh-Hans"),
+            }
+        );
+
+        assert_parse_into!(
+            Literal<String>,
+            Rule::Literal,
+            build,
+            prefixes,
+            r#""grad"@sr-Latn"#,
+            Literal::Language {
+                literal: String::from("grad"),
+                lang: String::from("sr-Latn"),
+            }
+        );
+
+        assert_parse_into!(
+            Literal<String>,
+            Rule::Literal,
+            build,
+            prefixes,
+            r#""color"@en-US"#,
+            Literal::Language {
+                literal: String::from("color"),
+                lang: String::from("en-US"),
+            }
+        );
     }
 
     #[test]
@@ -1279,9 +1329,9 @@ mod tests {
         pretty_assertions::assert_eq!(actual, expected);
     }
 
-    #[test_resources("src/ont/owl-functional/*.ofn")]
-    fn from_pair_resource(resource: &str) {
-        let text = &slurp::read_all_to_string(resource).unwrap();
+    #[rstest]
+    fn from_pair_resource(#[files("src/ont/owl-functional/*.ofn")] resource: PathBuf) {
+        let text = &slurp::read_all_to_string(&resource).unwrap();
         let pair = match OwlFunctionalLexer::lex(Rule::OntologyDocument, text.trim()) {
             Err(e) => panic!("parser failed: {e}"),
             Ok(mut pairs) => {
@@ -1298,6 +1348,8 @@ mod tests {
             FromPair::from_pair(pair, &ctx).unwrap();
 
         let path = resource
+            .to_str()
+            .unwrap()
             .replace("owl-functional", "owl-xml")
             .replace(".ofn", ".owx");
         let owx = &slurp::read_all_to_string(path).unwrap();

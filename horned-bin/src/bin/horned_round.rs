@@ -5,10 +5,7 @@ use clap::App;
 use clap::Arg;
 use clap::ArgMatches;
 
-use horned_bin::{
-    config::{parser_app, parser_config},
-    parse_path,
-};
+use horned_bin::{config::parser_config, parse_path};
 
 use horned_owl::error::HornedError;
 use horned_owl::ontology::component_mapped::RcComponentMappedOntology;
@@ -22,18 +19,16 @@ fn main() -> Result<(), HornedError> {
 }
 
 pub(crate) fn app(name: &str) -> App<'static> {
-    parser_app(
-        App::new(name)
-            .version("0.1")
-            .about("Parse and Render an OWL Ontology")
-            .author("Phillip Lord")
-            .arg(
-                Arg::with_name("INPUT")
-                    .help("Sets the input file to use")
-                    .required(true)
-                    .index(1),
-            ),
-    )
+    App::new(name)
+        .version(horned_bin::version_string())
+        .about("Parse and Render an OWL Ontology")
+        .author("Phillip Lord")
+        .arg(
+            Arg::with_name("INPUT")
+                .help("Sets the input file to use")
+                .required(true)
+                .index(1),
+        )
 }
 
 pub(crate) fn matcher(matches: &ArgMatches) -> Result<(), HornedError> {
@@ -49,6 +44,14 @@ pub(crate) fn matcher(matches: &ArgMatches) -> Result<(), HornedError> {
         horned_owl::io::ParserOutput::OWXParser(so, pm) => {
             let amo: RcComponentMappedOntology = so.into();
             horned_owl::io::owx::writer::write(stdout(), &amo, Some(&pm))
+        }
+        horned_owl::io::ParserOutput::OMNParser(so, pm) => {
+            let amo: RcComponentMappedOntology = so.into();
+            horned_owl::io::omn::write(stdout(), &amo, Some(&pm))
+        }
+        horned_owl::io::ParserOutput::OBOParser(so, pm) => {
+            let amo: RcComponentMappedOntology = so.into();
+            horned_owl::io::obo::write(stdout(), &amo, Some(&pm))
         }
         horned_owl::io::ParserOutput::RDFParser(rdfo, _ip) => {
             horned_owl::io::rdf::writer::write(stdout(), &rdfo.into())

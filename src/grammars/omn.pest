@@ -1,0 +1,411 @@
+// OWL Manchester Syntax — class-expression sub-grammar
+// Terminals from bcp47.pest (BCP47_LanguageTag), rfc3987.pest (RFC3987_Iri),
+// and sparql.pest (SPARQL_PnameLn / SPARQL_PnameNs).
+
+WHITESPACE = _{ " " | "\t" | "\n" | "\r" }
+// COMMENT must NOT consume the `# General axioms` sentinel: that exact marker
+// must remain visible to GeneralAxiomBlock at the end of the document.
+COMMENT    = _{ !"# General axioms" ~ "#" ~ (!"\n" ~ !"\r" ~ ANY)* }
+
+// ---- terminal building-blocks -----------------------------------------------
+
+QuotedString   = ${ "\"" ~ (!"\"" ~ ("\\\\" | "\\\"" | ANY))* ~ "\"" }
+LanguageTag    = ${ "@" ~ BCP47_LanguageTag }
+FullIRI        = ${ "<" ~ RFC3987_Iri ~ ">" }
+AbbreviatedIRI =  { SPARQL_PnameLn }
+// A bare local name (no prefix), resolved against the DEFAULT (empty) prefix.
+// Tried LAST: `prefix:local` and `:local` match AbbreviatedIRI first; only a
+// colon-less name reaches SimpleIRI. Writers (ours, OWL-API, Protégé) emit bare
+// names for default-namespace entities (`Class: Ancestor`), so the reader must
+// accept them for round-trip + interop. (A bare name that is exactly a keyword
+// — e.g. a class literally named `not` — remains ambiguous; the maximal-munch
+// keyword guards resolve all non-keyword names.)
+// Atomic + `!":"` so a bare name is NOT matched when immediately followed by a
+// colon — otherwise the optional IRI in e.g. `Ontology: IRI?` would greedily eat
+// the `Import`/`Class`/… keyword (or a CURIE prefix) as a bare name. A genuine
+// bare local name is followed by whitespace/operator/`)`/EOI, never an abutting `:`.
+SimpleIRI      = @{ SPARQL_PnLocal ~ !":" }
+IRI            =  { FullIRI | AbbreviatedIRI | SimpleIRI }
+
+// §2.5 literal ::= typedLiteral | stringLiteralNoLanguage | stringLiteralWithLanguage
+//                | integerLiteral | decimalLiteral | floatingPointLiteral
+// The quoted/typed/lang forms all start with `"` and are first-char-disjoint
+// from the numeric forms (a leading sign or digit), so order between the two
+// groups is irrelevant. WITHIN the numeric group, ordered-choice requires
+// float → decimal → integer: an integer is a prefix of a decimal is a prefix of
+// a float, so the most specific must be tried first (else `2.5` matches `2` as
+// an IntegerLiteral and orphans `.5`). FloatingPointLiteral requires the §2.5
+// `f`/`F` suffix; DecimalLiteral requires a `.`; IntegerLiteral is bare digits.
+// OWL-API/Protégé compat: bare true/false as xsd:boolean (not strict §2.5)
+BooleanLiteral            = ${ ("true" | "false") ~ NameBoundary }
+Literal                   =  { TypedLiteral | StringLiteralWithLanguage | StringLiteralNoLanguage | BooleanLiteral | FloatingPointLiteral | DecimalLiteral | IntegerLiteral }
+TypedLiteral              =  { QuotedString ~ "^^" ~ DatatypeIRI }
+StringLiteralWithLanguage =  { QuotedString ~ LanguageTag }
+StringLiteralNoLanguage   =  { QuotedString }
+// Atomic so `as_str()` yields the full lexical text. A trailing `!`-boundary on
+// the integer form keeps it from matching the integer prefix of a decimal/float
+// (ordered-choice already handles that, but the guard documents intent and is
+// cheap). Exponent uses `e`/`E`; float suffix is `f`/`F`.
+Exponent              = @{ ("e" | "E") ~ ("+" | "-")? ~ ASCII_DIGIT+ }
+FloatingPointLiteral  = @{ ("+" | "-")? ~ ( ASCII_DIGIT+ ~ ("." ~ ASCII_DIGIT+)? | "." ~ ASCII_DIGIT+ ) ~ Exponent? ~ ("f" | "F") }
+DecimalLiteral        = @{ ("+" | "-")? ~ ASCII_DIGIT+ ~ "." ~ ASCII_DIGIT+ }
+IntegerLiteral        = @{ ("+" | "-")? ~ ASCII_DIGIT+ }
+
+// ---- entry point ------------------------------------------------------------
+
+ClassExpressionDocument = _{ SOI ~ Description ~ EOI }
+
+// Compound-atomic keyword guards: in a ${ } rule, WHITESPACE is NOT implicitly
+// consumed between tokens, so the `!(SPARQL_PnChars|":")` lookahead fires at
+// the character IMMEDIATELY after the keyword text — before any whitespace.
+// This closes `notation:Foo` (letter follows `not`) and `not:Foo` (`:` follows).
+// Being compound-atomic, each rule emits ONE pair (the keyword span); the reader
+// is updated to skip these keyword pairs where needed.
+// Note: `_$` (silent compound-atomic) is NOT valid pest syntax; these are non-
+// silent but their spans equal exactly the keyword text (zero-width lookahead).
+NameBoundary   = _{ !( SPARQL_PnChars | ":" ) }   // used only inside ${ } helpers
+OrKw           = ${ ^"or"      ~ NameBoundary }
+AndKw          = ${ ^"and"     ~ NameBoundary }
+NotKw          = ${ ^"not"     ~ NameBoundary }
+SomeKw         = ${ ^"some"    ~ NameBoundary }
+OnlyKw         = ${ ^"only"    ~ NameBoundary }
+ValueKw        = ${ ^"value"   ~ NameBoundary }
+SelfKw         = ${ ^"Self"    ~ NameBoundary }
+MinKw          = ${ ^"min"     ~ NameBoundary }
+MaxKw          = ${ ^"max"     ~ NameBoundary }
+ExactlyKw      = ${ ^"exactly" ~ NameBoundary }
+InverseKw      = ${ ^"inverse" ~ NameBoundary }
+
+// ---- class-expression precedence --------------------------------------------
+// lowest precedence: "or"
+
+Description = { Conjunction ~ ( OrKw ~ Conjunction )* }
+
+// next: "and"
+
+Conjunction = { Primary ~ ( AndKw ~ Primary )* }
+
+// highest: "not" prefix + restriction/atomic
+
+Primary = { NotKw? ~ ( Restriction | Atomic ) }
+
+// ---- atomic -----------------------------------------------------------------
+
+Atomic = { ObjectOneOf | "(" ~ Description ~ ")" | ClassIRI }
+
+ObjectOneOf = { "{" ~ Individual ~ ( "," ~ Individual )* ~ "}" }
+
+// ---- restrictions -----------------------------------------------------------
+// Filler-shape heuristic: a restriction whose filler is UNAMBIGUOUSLY data-shaped
+// — i.e. faceted (`dt[…]`) or a well-known datatype IRI (`xsd:`, `rdf:`, `rdfs:`
+// abbreviated or full-IRI form) — is parsed as a DATA restriction.
+// A plain class-IRI filler (`:B`, `<http://e/B>`, bare local name) stays OBJECT.
+// owl: is excluded from the known prefixes — owl:Thing/Nothing are classes, and the
+// owl: datatypes (owl:real, owl:rational) are rare enough to accept as a residual.
+// Bare user-declared custom datatypes (no known prefix, no facet) are still parsed
+// as object restrictions — declaration-aware two-pass disambiguation is out of scope.
+//
+// Implementation: `&DataShaped` is a NON-CONSUMING lookahead (PEG predicate).
+// It confirms the shape without advancing the cursor; the real `DataRange` rule
+// then parses and emits the filler pair.  For `:B`, `DataShaped` fails → PEG
+// backtracks to the object arm.  Order within the data group mirrors the object
+// group (some/only/value before min/max/exactly).
+
+// KnownDatatypeIRI matches a well-known datatype IRI in abbreviated (`xsd:integer`)
+// or full (`<http://www.w3.org/2001/XMLSchema#integer>`) form.
+// Prefixes: xsd: / rdf: / rdfs: only.  owl: is intentionally excluded: owl:Thing,
+// owl:Nothing, owl:topObjectProperty are classes/properties, and the only owl:
+// datatypes (owl:real, owl:rational) are vanishingly rare; including owl: would
+// misidentify object-restriction fillers like `:r min 1 owl:Thing` as data-shaped.
+KnownDatatypeIRI = {
+      ("xsd:" | "rdf:" | "rdfs:") ~ SPARQL_PnLocal
+    | "<" ~ ("http://www.w3.org/2001/XMLSchema#"
+            | "http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+            | "http://www.w3.org/2000/01/rdf-schema#"
+            ) ~ (!(">" | " ") ~ ANY)* ~ ">"
+}
+
+// DataShapedParenthesized: a parenthesised data range is data-shaped when its
+// FIRST token after `(` is a known-datatype IRI (`xsd:integer`) or a DataOneOf
+// literal (`{"x", ...}`).  This catches `(xsd:integer and not {"x"})` without
+// swallowing `(:B and :C)` (object filler, `:B` doesn't match KnownDatatypeIRI
+// or DataOneOf).  The `(` is checked but not consumed — the overall lookahead
+// is `&DataShaped`, which wraps this predicate.
+DataShapedParenthesized = _{ "(" ~ (KnownDatatypeIRI | DataOneOf) }
+
+// DataShaped: silent predicate — the filler is unambiguously data.
+// Matches a faceted datatype restriction (`anyIRI[…]`), a known-prefix IRI, a
+// parenthesised expression that starts with a known-datatype/DataOneOf, or a
+// bare literal enumeration `{"x", ...}`.  A brace filler whose first member is
+// a `Literal` can only be a `DataOneOf` (literals are never individuals), so it
+// unambiguously selects the data arm; an individual-member brace fails this
+// lookahead and falls through to the object arm's `ObjectOneOf`.
+// A leading `not` is looked through: a negated data-shaped filler
+// (`not xsd:float[…]`, `not (xsd:integer or …)`) is still unambiguously a data
+// range, so it must select the data arm too — otherwise the object arm parses
+// `not <datatype>` as an object complement and then hard-errors on a trailing
+// facet `[…]` (or silently mis-binds a bare/parenthesised negation).
+// Used only as a lookahead `&DataShaped` guard; never emits a pair.
+DataShaped = _{ NotKw? ~ ( DatatypeRestriction | KnownDatatypeIRI | DataShapedParenthesized | DataOneOf ) }
+
+Restriction = {
+    // --- DATA restriction arms (data-shaped filler) --------------------------
+    // Placed BEFORE the object arms so they win on `dp some xsd:integer`,
+    // `dp some xsd:double[…]`, `dp only rdfs:Literal`, etc.
+    // `&DataShaped` is a lookahead: confirms data-shaped filler, then resets;
+    // `DataRange` parses and emits the actual filler pair.
+      DataPropertyIRI ~ SomeKw    ~ &DataShaped ~ DataRange
+    | DataPropertyIRI ~ OnlyKw    ~ &DataShaped ~ DataRange
+    | DataPropertyIRI ~ MinKw     ~ Cardinality ~ &DataShaped ~ DataRange
+    | DataPropertyIRI ~ MaxKw     ~ Cardinality ~ &DataShaped ~ DataRange
+    | DataPropertyIRI ~ ExactlyKw ~ Cardinality ~ &DataShaped ~ DataRange
+    // --- OBJECT restriction arms (all remaining fillers) ---------------------
+    | ope ~ SomeKw    ~ Primary
+    | ope ~ OnlyKw    ~ Primary
+    // Data value arm BEFORE object value arm: a Literal operand (quoted string,
+    // typed literal, number, or bare boolean) wins over the object arm, whose
+    // Individual filler would otherwise silently consume bare `true`/`false` as IRIs.
+    // Backtracking is safe: if the operand is not a Literal the object arm is tried.
+    | DataPropertyIRI ~ ValueKw   ~ Literal
+    | ope ~ ValueKw   ~ Individual
+    | ope ~ SelfKw
+    | ope ~ MinKw     ~ Cardinality ~ Primary?
+    | ope ~ MaxKw     ~ Cardinality ~ Primary?
+    | ope ~ ExactlyKw ~ Cardinality ~ Primary?
+}
+
+// object-property expression: plain IRI or inverse(IRI)
+
+ope = { ( InverseKw ~ "(" ~ ObjectPropertyIRI ~ ")" ) | ( InverseKw ~ ObjectPropertyIRI ) | ObjectPropertyIRI }
+
+// atomic cardinality integer (no embedded whitespace)
+
+Cardinality = @{ ASCII_DIGIT+ }
+
+// ---- IRI wrappers -----------------------------------------------------------
+
+ClassIRI          = { IRI }
+ObjectPropertyIRI = { IRI }
+DataPropertyIRI   = { IRI }
+// `_:` is reserved for blank nodes, so the anon arm is tried FIRST: it can
+// never shadow a legitimate IRI, and putting it first sidesteps any PEG
+// ordered-choice ambiguity with `SimpleIRI`/`AbbreviatedIRI` on a `_:`-prefix.
+AnonymousIndividual = { SPARQL_BlankNodeLabel }
+Individual        = { AnonymousIndividual | IRI }
+
+// ---- data ranges ------------------------------------------------------------
+
+DataRange       = { DataConjunction ~ ( OrKw  ~ DataConjunction )* }
+DataConjunction = { DataPrimary     ~ ( AndKw ~ DataPrimary )* }
+DataPrimary     = { NotKw? ~ DataAtomic }
+DataAtomic      = { DataOneOf | DatatypeRestriction | "(" ~ DataRange ~ ")" | DatatypeIRI }
+DataOneOf       = { "{" ~ Literal ~ ( "," ~ Literal )* ~ "}" }
+DatatypeRestriction = { DatatypeIRI ~ "[" ~ Facet ~ ( "," ~ Facet )* ~ "]" }
+DatatypeIRI = { IRI }
+Facet       = { FacetSymbol ~ Literal }
+LengthKw         = ${ ^"length"         ~ NameBoundary }
+MinLengthKw      = ${ ^"minLength"      ~ NameBoundary }
+MaxLengthKw      = ${ ^"maxLength"      ~ NameBoundary }
+PatternKw        = ${ ^"pattern"        ~ NameBoundary }
+LangRangeKw      = ${ ^"langRange"      ~ NameBoundary }
+TotalDigitsKw    = ${ ^"totalDigits"    ~ NameBoundary }
+FractionDigitsKw = ${ ^"fractionDigits" ~ NameBoundary }
+
+FacetSymbol = {
+      ">="
+    | "<="
+    | ">"
+    | "<"
+    | LengthKw
+    | MinLengthKw
+    | MaxLengthKw
+    | PatternKw
+    | LangRangeKw
+    | TotalDigitsKw
+    | FractionDigitsKw
+}
+
+// ---- whole-ontology document ------------------------------------------------
+// Non-silent wrapper so from_pair gets one ManchesterDocument node whose inner
+// is [PrefixDeclaration*, OntologyHeader?, Frame*].
+
+// Opaque trailing block: everything from the `# General axioms` marker to
+// end-of-input is captured verbatim as a single node, which the reader hands
+// to the functional-syntax parser.  The marker must be kept in exact sync with
+// the writer's `writeln!(write, "# General axioms")` literal.  ATOMIC (`@`):
+// implicit `COMMENT`/`WHITESPACE` skipping must NOT apply here, or `#`-bearing
+// content (e.g. `rdfs:label`'s `...rdf-schema#label` IRI) would be eaten as a
+// comment and truncated out of the captured span.
+GeneralAxiomBlock  = @{ "# General axioms" ~ ANY* }
+ManchesterDocument = { SOI ~ PrefixDeclaration* ~ OntologyHeader? ~ ( Frame | Misc )* ~ GeneralAxiomBlock? ~ EOI }
+ImportDeclaration  = { ^"Import:" ~ IRI }
+
+PrefixDeclaration = { ^"Prefix:" ~ PrefixName ~ FullIRI }
+PrefixName        = { SPARQL_PnameNs }          // matches "ex:" and ":"
+OntologyHeader    = { ^"Ontology:" ~ ( OntologyIRI ~ VersionIRI? )? ~ ImportDeclaration* ~ Annotations* }
+OntologyIRI       = { IRI }
+VersionIRI        = { IRI }
+
+// Annotation clauses (entity annotations inside frames; ontology annotations in header)
+Annotations     = { ^"Annotations:" ~ AnnotationEntry ~ ( "," ~ AnnotationEntry )* }
+AnnotationEntry = { Annotations? ~ IRI ~ AnnotationTarget }
+AnnotationTarget = { Literal | AnonymousIndividual | IRI }
+
+// ---- frames -----------------------------------------------------------------
+
+Frame = {
+      ClassFrame
+    | ObjectPropertyFrame
+    | DataPropertyFrame
+    | AnnotationPropertyFrame
+    | IndividualFrame
+    | DatatypeFrame
+    | RuleFrame
+}
+
+FrameSubject = { IRI }
+
+// ---- SWRL rules (§ Manchester DL-rule extension) ----------------------------
+// `Rule: <body atoms> -> <head atoms>` where each side is a comma-separated
+// list of atoms. Atom shapes are positional; the reader disambiguates
+// class/datarange and object/data-property atoms using the declaration pre-pass.
+RuleFrame    = { ^"Rule:" ~ Annotations? ~ SwrlAtomList ~ "->" ~ SwrlAtomList }
+SwrlAtomList = { SwrlAtom ~ ( "," ~ SwrlAtom )* }
+SwrlAtom     = { SwrlSameAs | SwrlDifferentFrom | SwrlNary | SwrlUnary }
+SameAsKw          = ${ ^"SameAs" ~ NameBoundary }
+DifferentFromKw   = ${ ^"DifferentFrom" ~ NameBoundary }
+SwrlSameAs        = { SameAsKw ~ "(" ~ SwrlIObj ~ "," ~ SwrlIObj ~ ")" }
+SwrlDifferentFrom = { DifferentFromKw ~ "(" ~ SwrlIObj ~ "," ~ SwrlIObj ~ ")" }
+// Nary first (requires >=2 args); Unary is the single-argument fallback.
+SwrlNary  = { AtomPred ~ "(" ~ SwrlArg ~ ( "," ~ SwrlArg )+ ~ ")" }
+SwrlUnary = { AtomPred ~ "(" ~ SwrlArg ~ ")" }
+AtomPred  = { Description }
+SwrlArg   = { Variable | Literal | Individual }
+SwrlIObj  = { Variable | Individual }
+Variable  = { "?" ~ IRI }
+
+// ---- top-level misc axioms (§2.5 `misc`) ------------------------------------
+// n-ary equivalence/disjointness/same/different axioms whose members are not all
+// named (so they cannot be expressed under a frame).  `EquivalentProperties:` /
+// `DisjointProperties:` are object-vs-data ambiguous in Manchester; the list is
+// parsed as `OpeList` (object properties), mirroring the existing object-vs-data
+// restriction ambiguity (data-property equivalence/disjointness over bare IRIs is
+// read as object-property axioms; the writer only emits the object form here).
+Misc = {
+      ^"EquivalentClasses:"    ~ Annotations? ~ DescriptionList
+    | ^"DisjointClasses:"      ~ Annotations? ~ DescriptionList
+    | ^"EquivalentProperties:" ~ Annotations? ~ OpeList
+    | ^"DisjointProperties:"   ~ Annotations? ~ OpeList
+    | ^"SameIndividual:"       ~ Annotations? ~ IndividualList
+    | ^"DifferentIndividuals:" ~ Annotations? ~ IndividualList
+}
+
+// OWL-API/Protégé/ROBOT emit general class axioms (GCIs) as a `Class:` frame
+// whose subject is a complex class expression, e.g.:
+//   Class: :r some :C
+//       SubClassOf: :D
+// Strict §2.5 requires a classIRI subject, but we accept leniently.  When the
+// subject parses as a compound ClassExpression (anything other than a bare
+// ClassIRI), the clauses are emitted as GCIs (SubClassOf / EquivalentClasses /
+// DisjointClasses over the expression) with NO DeclareClass.
+// `ClassFrameSubject` is separate from the shared `FrameSubject` rule so that
+// widening the subject grammar here does NOT affect ObjectProperty / DataProperty
+// / AnnotationProperty / Datatype frames (which keep the IRI-only subject).
+ClassFrameSubject = { Description }
+ClassFrame = { ^"Class:" ~ Annotations? ~ ClassFrameSubject ~ ClassClause* }
+ClassClause = {
+      Annotations
+    | ^"SubClassOf:"      ~ Annotations? ~ DescriptionList
+    | ^"EquivalentTo:"    ~ Annotations? ~ DescriptionList
+    | ^"DisjointWith:"    ~ Annotations? ~ DescriptionList
+    | ^"DisjointUnionOf:" ~ Annotations? ~ DescriptionList
+    | ^"HasKey:"          ~ Annotations? ~ PropertyExprList
+}
+
+ObjectPropertyFrame = { ^"ObjectProperty:" ~ ope ~ ObjectPropertyClause* }
+ObjectPropertyClause = {
+      Annotations
+    | ^"SubPropertyChain:" ~ Annotations? ~ PropertyChain
+    | ^"SubPropertyOf:"    ~ Annotations? ~ OpeList
+    | ^"EquivalentTo:"     ~ Annotations? ~ OpeList
+    | ^"DisjointWith:"     ~ Annotations? ~ OpeList
+    | ^"InverseOf:"        ~ Annotations? ~ OpeList
+    | ^"Domain:"           ~ Annotations? ~ DescriptionList
+    | ^"Range:"            ~ Annotations? ~ DescriptionList
+    | ^"Characteristics:"  ~ Annotations? ~ CharacteristicList
+}
+
+DataPropertyFrame = { ^"DataProperty:" ~ FrameSubject ~ DataPropertyClause* }
+DataPropertyClause = {
+      Annotations
+    | ^"SubPropertyOf:"   ~ Annotations? ~ IriList
+    | ^"EquivalentTo:"    ~ Annotations? ~ IriList
+    | ^"DisjointWith:"    ~ Annotations? ~ IriList
+    | ^"Domain:"          ~ Annotations? ~ DescriptionList
+    | ^"Range:"           ~ Annotations? ~ DataRangeList
+    | ^"Characteristics:" ~ Annotations? ~ CharacteristicList
+}
+
+AnnotationPropertyFrame = { ^"AnnotationProperty:" ~ FrameSubject ~ AnnotationPropertyClause* }
+AnnotationPropertyClause = {
+      Annotations
+    | ^"SubPropertyOf:" ~ Annotations? ~ IriList
+    | ^"Domain:"        ~ Annotations? ~ IriList
+    | ^"Range:"         ~ Annotations? ~ IriList
+}
+
+IndividualFrame = { ^"Individual:" ~ Individual ~ IndividualClause* }
+IndividualClause = {
+      Annotations
+    | ^"Types:"         ~ Annotations? ~ DescriptionList
+    | ^"Facts:"         ~ Annotations? ~ FactList
+    | ^"SameAs:"        ~ Annotations? ~ IndividualList
+    | ^"DifferentFrom:" ~ Annotations? ~ IndividualList
+}
+
+DatatypeFrame = { ^"Datatype:" ~ FrameSubject ~ DatatypeClause* }
+DatatypeClause = {
+      Annotations
+    | ^"EquivalentTo:" ~ Annotations? ~ DataRange
+}
+
+// ---- shared comma-separated lists -------------------------------------------
+
+// §2.5 annotatedList shape: each list item may be preceded by its own
+// `Annotations?`. The list's leading `Annotations?` is shadowed by the
+// clause-level `Annotations?` (PEG greediness), so only post-comma per-item
+// annotations actually fire; the reader folds each into the item's axiom.
+DescriptionList  = { Annotations? ~ Description ~ ( "," ~ Annotations? ~ Description )* }
+OpeList          = { Annotations? ~ ope ~ ( "," ~ Annotations? ~ ope )* }
+IriList          = { Annotations? ~ IRI ~ ( "," ~ Annotations? ~ IRI )* }
+DataRangeList    = { DataRange ~ ( "," ~ DataRange )* }
+IndividualList   = { Annotations? ~ Individual ~ ( "," ~ Annotations? ~ Individual )* }
+CharacteristicList = { Characteristic ~ ( "," ~ Characteristic )* }
+FunctionalKw        = ${ ^"Functional"        ~ NameBoundary }
+InverseFunctionalKw = ${ ^"InverseFunctional" ~ NameBoundary }
+ReflexiveKw         = ${ ^"Reflexive"         ~ NameBoundary }
+IrreflexiveKw       = ${ ^"Irreflexive"       ~ NameBoundary }
+SymmetricKw         = ${ ^"Symmetric"         ~ NameBoundary }
+AsymmetricKw        = ${ ^"Asymmetric"        ~ NameBoundary }
+TransitiveKw        = ${ ^"Transitive"        ~ NameBoundary }
+
+Characteristic = {
+      FunctionalKw
+    | InverseFunctionalKw
+    | ReflexiveKw
+    | IrreflexiveKw
+    | SymmetricKw
+    | AsymmetricKw
+    | TransitiveKw
+}
+
+FactList = { Fact ~ ( "," ~ Fact )* }
+Fact     = { NotKw? ~ ope ~ ( Literal | Individual ) }
+
+// ---- property chain and HasKey lists ----------------------------------------
+// The `o` chain-composition operator is a bare-word keyword. Use the same
+// ${ } compound-atomic keyword-rule idiom (from Task 1) so the NameBoundary
+// fires immediately after `o` with no preceding whitespace consumption.
+OKw              = ${ ^"o" ~ NameBoundary }
+PropertyChain    =  { ope ~ ( OKw ~ ope )+ }
+PropertyExprList =  { ope ~ ( "," ~ ope )* }
