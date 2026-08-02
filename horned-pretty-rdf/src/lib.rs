@@ -467,6 +467,16 @@ impl<A: AsRef<str> + Clone> PTripleSeq<A> {
         seq
     }
 
+    /// Is every member of this collection a NAMED node? Such a list can be
+    /// rendered more than once without consuming anything else from the chunk,
+    /// which is what makes inlining a shared list safe.
+    pub fn all_named_members(&self) -> bool {
+        self.list_seq.iter().all(|(_, t, _)| match t {
+            Some(PTriple { object: PTerm::NamedNode(_), .. }) => true,
+            _ => false,
+        })
+    }
+
     pub fn has_literal(&self) -> bool {
         self.list_seq.iter().any(|(_, t, _)| {
             matches!(
@@ -830,6 +840,25 @@ where
     fn object_count(&self, bn: &PBlankNode<A>) -> usize {
         self.bnode_object_count.get(bn).copied().unwrap_or(0)
     }
+
+    /// A CLONE of `bn`'s collection, leaving it in the store for the next
+    /// reference. Only yields a pure sequence — a subject that also carries
+    /// ordinary triples is left to the destructive path.
+    fn peek_seq(&self, bn: &PBlankNode<A>) -> Option<PTripleSeq<A>> {
+        let key = PNamedOrBlankNode::BlankNode(bn.clone());
+        match self.store.get(&key) {
+            Some((None, Some(seq))) => Some(seq.clone()),
+            _ => None,
+        }
+    }
+
+    /// Record that one of `bn`'s object references has been rendered, so the
+    /// LAST one takes the destructive path and empties the store.
+    fn dec_object_count(&mut self, bn: &PBlankNode<A>) {
+        if let Some(c) = self.bnode_object_count.get_mut(bn) {
+            *c = c.saturating_sub(1);
+        }
+    }
 }
 
 #[derive(Clone, Debug, Default)]
@@ -1093,6 +1122,28 @@ where
                     .map_err(map_err)?;
             }
             PTerm::BlankNode(bn) => {
+                // A collection referenced MORE THAN ONCE is rendered inline at
+                // every reference, exactly as ROBOT/OWLAPI does. Otherwise both
+                // sites fell through to a bare `rdf:nodeID` and the list was
+                // emitted nowhere, so re-reading the document LOST the axiom:
+                // RO's eight annotated property chains (whose list node is also
+                // the `owl:annotatedTarget` of an `owl:Axiom` reification)
+                // vanished on every RDF/XML round trip, 160 chains in and 152
+                // out. Restricted to all-named-member lists, which can be
+                // rendered repeatedly without consuming anything else from the
+                // chunk.
+                if chunk.object_count(bn) > 1 {
+                    if let Some(seq) = chunk.peek_seq(bn) {
+                        if !seq.has_literal() && seq.all_named_members() {
+                            chunk.dec_object_count(bn);
+                            property_open.push_attribute(("rdf:parseType", "Collection"));
+                            self.write_start(Event::Start(property_open))
+                                .map_err(map_err)?;
+                            self.format_seq_shorthand(&seq, chunk)?;
+                            return Ok(());
+                        }
+                    }
+                }
                 if chunk.object_count(bn) == 1 {
                     match chunk.take_subject(bn) {
                         (None, Some(seq)) => {
