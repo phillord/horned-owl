@@ -1,3 +1,4 @@
+use std::cmp::Ordering;
 use std::collections::BTreeSet;
 use std::collections::HashMap;
 use std::io::Write;
@@ -151,7 +152,7 @@ pub fn write_with_labels<A: ForIRI, AA: ForIndex<A>, W: Write>(
             .i()
             .component_for_kind(ComponentKind::OntologyAnnotation)
             .collect();
-        annos.sort();
+        annos.sort_by(owlapi_ont_annotation_cmp);
         for a in &annos {
             writeln!(write, "{}", a.as_functional_with_prefixes(mapping))?;
         }
@@ -176,14 +177,20 @@ pub fn write_with_labels<A: ForIRI, AA: ForIndex<A>, W: Write>(
                 if let (AnnotationSubject::IRI(subj), AnnotationValue::Literal(lit)) =
                     (&aa.subject, &aa.ann.av)
                 {
-                    labels
-                        .entry(subj.as_ref().to_string())
-                        .or_insert_with(|| literal_text(lit));
+                    // LAST label wins, as OWLAPI's short-form provider builds
+                    // its map by overwriting. GO_0051705 carries both
+                    // "multi-organism behavior" and "obsolete multi-organism
+                    // behavior", and ROBOT's banner shows the latter.
+                    labels.insert(subj.as_ref().to_string(), literal_text(lit));
                 }
             }
         }
     }
-    declarations.sort_by(|a, b| a.0.cmp(&b.0).then_with(|| a.1.cmp(&b.1)));
+    // OWLAPI orders entities by `IRI.compareTo` — NAMESPACE then remainder, not
+    // the whole string. `…/obo/MF#manifestationOf` has namespace `…/obo/MF#`,
+    // which sorts after the plain `…/obo/` shared by every `RO_…`/`GO_…`; a
+    // whole-string compare put it before them.
+    declarations.sort_by(|a, b| a.0.cmp(&b.0).then_with(|| owlapi_iri_cmp(&a.1, &b.1)));
     for (_, _, rendered) in &declarations {
         writeln!(write, "{rendered}")?;
     }
@@ -342,7 +349,7 @@ pub fn write_with_labels<A: ForIRI, AA: ForIndex<A>, W: Write>(
     // --- Remaining axioms: general class axioms (GCIs), n-ary DisjointClasses and
     //     DifferentIndividuals — everything not attributed to an entity — sorted
     //     structurally, then the closing bracket immediately (no trailing blank). ---
-    leftover.sort_by(owlapi_axiom_cmp);
+    leftover.sort_by(owlapi_general_cmp);
     for ac in &leftover {
         let rendered = ac.as_functional_with_prefixes(mapping).to_string();
         writeln!(write, "{rendered}")?;
@@ -499,6 +506,238 @@ fn owlapi_axiom_index<A: ForIRI>(comp: &Component<A>) -> u8 {
 /// Order two axioms as OWLAPI's `compareTo` does: by axiom-type index first, then
 /// by structural content (for which horned-owl's derived `Ord` already matches —
 /// e.g. a named superclass sorts before an anonymous class expression).
+
+/// OWLAPI's `OWLObjectTypeIndexProvider` index for a class expression:
+/// `CLASS_EXPRESSION_TYPE_INDEX_BASE` (3000) + the visitor's ordinal, and
+/// `ENTITY_TYPE_INDEX_BASE + 1` for a named class. Read off owlapi4's
+/// `OWLObjectTypeIndexProvider`, not guessed.
+fn owlapi_ce_index<A: ForIRI>(ce: &ClassExpression<A>) -> u32 {
+    use ClassExpression::*;
+    match ce {
+        Class(_) => 1001,
+        ObjectIntersectionOf(_) => 3001,
+        ObjectUnionOf(_) => 3002,
+        ObjectComplementOf(_) => 3003,
+        ObjectOneOf(_) => 3004,
+        ObjectSomeValuesFrom { .. } => 3005,
+        ObjectAllValuesFrom { .. } => 3006,
+        ObjectHasValue { .. } => 3007,
+        ObjectMinCardinality { .. } => 3008,
+        ObjectExactCardinality { .. } => 3009,
+        ObjectMaxCardinality { .. } => 3010,
+        ObjectHasSelf(_) => 3011,
+        DataSomeValuesFrom { .. } => 3012,
+        DataAllValuesFrom { .. } => 3013,
+        DataHasValue { .. } => 3014,
+        DataMinCardinality { .. } => 3015,
+        DataExactCardinality { .. } => 3016,
+        DataMaxCardinality { .. } => 3017,
+    }
+}
+
+/// OWLAPI's `IRI.compareTo`: namespace first, then remainder — NOT the whole
+/// string. The split is the NCName suffix, so `…/obo/GO_1` and `…/obo/GO_2`
+/// share a namespace and compare on the local part alone.
+fn owlapi_iri_cmp(a: &str, b: &str) -> Ordering {
+    let split = |s: &str| -> (usize, ) {
+        let idx = s
+            .rfind(|c: char| c == '/' || c == '#' || c == ':')
+            .map(|i| i + 1)
+            .unwrap_or(0);
+        (idx,)
+    };
+    let (ai,) = split(a);
+    let (bi,) = split(b);
+    a[..ai].cmp(&b[..bi]).then_with(|| a[ai..].cmp(&b[bi..]))
+}
+
+fn owlapi_ope_cmp<A: ForIRI>(
+    a: &ObjectPropertyExpression<A>,
+    b: &ObjectPropertyExpression<A>,
+) -> Ordering {
+    use ObjectPropertyExpression::*;
+    let idx = |o: &ObjectPropertyExpression<A>| match o {
+        ObjectProperty(_) => 1002u32,
+        InverseObjectProperty(_) => 1003,
+    };
+    idx(a).cmp(&idx(b)).then_with(|| match (a, b) {
+        (ObjectProperty(x), ObjectProperty(y)) => owlapi_iri_cmp(x.0.as_ref(), y.0.as_ref()),
+        (InverseObjectProperty(x), InverseObjectProperty(y)) => {
+            owlapi_iri_cmp(x.0.as_ref(), y.0.as_ref())
+        }
+        _ => Ordering::Equal,
+    })
+}
+
+/// OWLAPI's `compareSets`: both collections are sorted, compared element-wise,
+/// and the shorter one loses only if every shared element is equal.
+fn owlapi_ce_set_cmp<A: ForIRI>(a: &[ClassExpression<A>], b: &[ClassExpression<A>]) -> Ordering {
+    let mut xa: Vec<&ClassExpression<A>> = a.iter().collect();
+    let mut xb: Vec<&ClassExpression<A>> = b.iter().collect();
+    xa.sort_by(|p, q| owlapi_ce_cmp(p, q));
+    xb.sort_by(|p, q| owlapi_ce_cmp(p, q));
+    for (p, q) in xa.iter().zip(xb.iter()) {
+        let c = owlapi_ce_cmp(p, q);
+        if c != Ordering::Equal {
+            return c;
+        }
+    }
+    xa.len().cmp(&xb.len())
+}
+
+/// OWLAPI's `OWLObject.compareTo` restricted to class expressions: type index
+/// first, then `compareObjectOfSameType` — a quantified restriction compares its
+/// PROPERTY then its FILLER, an n-ary boolean compares its operand SET.
+fn owlapi_ce_cmp<A: ForIRI>(a: &ClassExpression<A>, b: &ClassExpression<A>) -> Ordering {
+    use ClassExpression::*;
+    let c = owlapi_ce_index(a).cmp(&owlapi_ce_index(b));
+    if c != Ordering::Equal {
+        return c;
+    }
+    match (a, b) {
+        (Class(x), Class(y)) => owlapi_iri_cmp(x.0.as_ref(), y.0.as_ref()),
+        (ObjectIntersectionOf(x), ObjectIntersectionOf(y))
+        | (ObjectUnionOf(x), ObjectUnionOf(y)) => owlapi_ce_set_cmp(x, y),
+        (ObjectComplementOf(x), ObjectComplementOf(y)) => owlapi_ce_cmp(x, y),
+        (
+            ObjectSomeValuesFrom { ope: p1, bce: f1 },
+            ObjectSomeValuesFrom { ope: p2, bce: f2 },
+        )
+        | (ObjectAllValuesFrom { ope: p1, bce: f1 }, ObjectAllValuesFrom { ope: p2, bce: f2 }) => {
+            owlapi_ope_cmp(p1, p2).then_with(|| owlapi_ce_cmp(f1, f2))
+        }
+        (
+            ObjectMinCardinality { n: n1, ope: p1, bce: f1 },
+            ObjectMinCardinality { n: n2, ope: p2, bce: f2 },
+        )
+        | (
+            ObjectMaxCardinality { n: n1, ope: p1, bce: f1 },
+            ObjectMaxCardinality { n: n2, ope: p2, bce: f2 },
+        )
+        | (
+            ObjectExactCardinality { n: n1, ope: p1, bce: f1 },
+            ObjectExactCardinality { n: n2, ope: p2, bce: f2 },
+        ) => owlapi_ope_cmp(p1, p2)
+            .then_with(|| n1.cmp(n2))
+            .then_with(|| owlapi_ce_cmp(f1, f2)),
+        (ObjectHasSelf(p1), ObjectHasSelf(p2)) => owlapi_ope_cmp(p1, p2),
+        // Anything else (individuals, data ranges, literals) keeps horned's own
+        // structural order — no MONDO general axiom reaches these arms.
+        _ => Ordering::Equal,
+    }
+}
+
+/// OWLAPI's ordering for the axioms that end up in the general (leftover)
+/// section: `SubClassOf` compares its SUBCLASS then its superclass, the n-ary
+/// class axioms compare their operand sets. Falls back to horned's derived
+/// order for anything else, which is what this used to do for everything —
+/// leaving MONDO's `imports/merged_import.owl` with ~200 lines of general class
+/// axioms in the wrong order once their content finally matched.
+fn owlapi_general_cmp<A: ForIRI>(
+    a: &&AnnotatedComponent<A>,
+    b: &&AnnotatedComponent<A>,
+) -> Ordering {
+    use Component::*;
+    let c = owlapi_axiom_index(&a.component).cmp(&owlapi_axiom_index(&b.component));
+    if c != Ordering::Equal {
+        return c;
+    }
+    match (&a.component, &b.component) {
+        (SubClassOf(x), SubClassOf(y)) => owlapi_ce_cmp(&x.sub, &y.sub)
+            .then_with(|| owlapi_ce_cmp(&x.sup, &y.sup))
+            .then_with(|| a.cmp(b)),
+        (EquivalentClasses(x), EquivalentClasses(y)) => {
+            owlapi_ce_set_cmp(&x.0, &y.0).then_with(|| a.cmp(b))
+        }
+        (DisjointClasses(x), DisjointClasses(y)) => {
+            owlapi_ce_set_cmp(&x.0, &y.0).then_with(|| a.cmp(b))
+        }
+        // `OWLSubPropertyChainOfAxiomImpl`: the CHAIN element-wise (in order —
+        // a chain is a list, not a set), then its length, then the super
+        // property. These reach the general section because a chain axiom has
+        // no named subject to file it under.
+        (SubObjectPropertyOf(x), SubObjectPropertyOf(y)) => {
+            use crate::model::SubObjectPropertyExpression as SOPE;
+            match (&x.sub, &y.sub) {
+                (SOPE::ObjectPropertyChain(c1), SOPE::ObjectPropertyChain(c2)) => {
+                    let mut o = Ordering::Equal;
+                    for (p, q) in c1.iter().zip(c2.iter()) {
+                        o = owlapi_ope_cmp(p, q);
+                        if o != Ordering::Equal {
+                            break;
+                        }
+                    }
+                    o.then_with(|| c1.len().cmp(&c2.len()))
+                        .then_with(|| owlapi_ope_cmp(&x.sup, &y.sup))
+                        .then_with(|| a.cmp(b))
+                }
+                _ => a.cmp(b),
+            }
+        }
+        _ => a.cmp(b),
+    }
+}
+
+/// OWLAPI's ordering for an ONTOLOGY annotation: property IRI, then value.
+/// `OWLAnnotationValue.compareTo` is `OWLObject.compareTo`, so the value's TYPE
+/// INDEX comes first — and `IRI` is index 0 while a literal is
+/// `DATA_TYPE_INDEX_BASE`+ — so every IRI-valued annotation sorts before every
+/// literal-valued one, whatever the strings say. horned's derived `Ord` compares
+/// the rendered value instead, which interleaved MONDO's `dc:source` IRIs with
+/// its `^^xsd:anyURI` literals.
+fn owlapi_ont_annotation_cmp<A: ForIRI>(
+    a: &&AnnotatedComponent<A>,
+    b: &&AnnotatedComponent<A>,
+) -> Ordering {
+    fn ann<A: ForIRI>(c: &AnnotatedComponent<A>) -> Option<&crate::model::Annotation<A>> {
+        match &c.component {
+            Component::OntologyAnnotation(oa) => Some(&oa.0),
+            _ => None,
+        }
+    }
+    let (Some(x), Some(y)) = (ann(a), ann(b)) else { return a.cmp(b) };
+    let vi = |v: &AnnotationValue<A>| match v {
+        AnnotationValue::IRI(_) => 0u32,
+        AnnotationValue::AnonymousIndividual(_) => 1007,
+        AnnotationValue::Literal(_) => 4000,
+    };
+    owlapi_iri_cmp(x.ap.0.as_ref(), y.ap.0.as_ref())
+        .then_with(|| vi(&x.av).cmp(&vi(&y.av)))
+        .then_with(|| match (&x.av, &y.av) {
+            (AnnotationValue::IRI(p), AnnotationValue::IRI(q)) => {
+                owlapi_iri_cmp(p.as_ref(), q.as_ref())
+            }
+            (AnnotationValue::Literal(p), AnnotationValue::Literal(q)) => owlapi_literal_cmp(p, q),
+            _ => a.cmp(b),
+        })
+        .then_with(|| a.cmp(b))
+}
+
+/// OWLAPI's `OWLLiteralImpl.compareObjectOfSameType`: the DATATYPE IRI first,
+/// then the lexical form. An untyped literal is `xsd:string` and a
+/// language-tagged one is `rdf:PlainLiteral`. Comparing the rendered text
+/// instead put MONDO's seven `^^xsd:anyURI` ontology sources after its plain
+/// ones, where `anyURI` < `string` puts them first.
+fn owlapi_literal_cmp<A: ForIRI>(a: &Literal<A>, b: &Literal<A>) -> Ordering {
+    const XSD_STRING: &str = "http://www.w3.org/2001/XMLSchema#string";
+    const RDF_PLAIN: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#PlainLiteral";
+    let dt = |l: &'_ Literal<A>| -> String {
+        match l {
+            Literal::Simple { .. } => XSD_STRING.to_string(),
+            Literal::Language { .. } => RDF_PLAIN.to_string(),
+            Literal::Datatype { datatype_iri, .. } => datatype_iri.as_ref().to_string(),
+        }
+    };
+    let lex = |l: &'_ Literal<A>| -> String {
+        match l {
+            Literal::Simple { literal }
+            | Literal::Language { literal, .. }
+            | Literal::Datatype { literal, .. } => literal.clone(),
+        }
+    };
+    owlapi_iri_cmp(&dt(a), &dt(b)).then_with(|| lex(a).cmp(&lex(b)))
+}
+
 fn owlapi_axiom_cmp<A: ForIRI>(a: &&AnnotatedComponent<A>, b: &&AnnotatedComponent<A>) -> std::cmp::Ordering {
     owlapi_axiom_index(&a.component)
         .cmp(&owlapi_axiom_index(&b.component))
