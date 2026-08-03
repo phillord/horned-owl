@@ -1983,7 +1983,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                 [
                     pr,
                     Term::RDF(VRDF::Type),
-                    Term::OWL(VOWL::AsymmetricProperty),
+                    Term::OWL(VOWL::AsymmetricProperty | VOWL::AntisymmetricProperty),
                 ] => Ok(self
                     .retrieve_to_ope(pr)
                     .map(AsymmetricObjectProperty)
@@ -3036,6 +3036,29 @@ mod test {
         assert_eq!(ont.i().declare_annotation_property().count(), 1);
         assert_eq!(ont.i().declare_object_property().count(), 1);
         assert_eq!(ont.i().symmetric_object_property().count(), 1);
+        assert_eq!(ont.i().class_assertion().count(), 0);
+    }
+
+    #[test]
+    fn legacy_antisymmetric_property_declaration() {
+        // https://github.com/phillord/horned-owl/issues/256
+        // owl:AntisymmetricProperty is the OWL 1.1 working-draft name for
+        // what became owl:AsymmetricProperty in the OWL 2 REC. It must be
+        // read as AsymmetricObjectProperty, not fall through to a spurious
+        // ClassAssertion. See spo_snippet.owl for provenance -- extracted
+        // from the real SPO (Multiscale Skin Physiology Ontology) corpus
+        // file, where ro:has_grain is typed both AntisymmetricProperty and
+        // IrreflexiveProperty.
+        let (ont, incomplete) = read(
+            &mut slurp_rdfont("manual/spo_snippet").as_bytes(),
+            Default::default(),
+        )
+        .unwrap();
+        assert!(incomplete.is_complete());
+
+        let ont: ComponentMappedOntology<_, RcAnnotatedComponent> = ont.into();
+        assert_eq!(ont.i().asymmetric_object_property().count(), 1);
+        assert_eq!(ont.i().irreflexive_object_property().count(), 1);
         assert_eq!(ont.i().class_assertion().count(), 0);
     }
 

@@ -192,6 +192,7 @@ vocabulary_type! {
         (OWL, AnnotatedTarget, true),
         (OWL, Annotation, false),
         (OWL, AnnotationProperty, false),
+        (OWL, AntisymmetricProperty, false),
         (OWL, AssertionProperty, true),
         (OWL, AsymmetricProperty, false),
         (OWL, Axiom, false),
@@ -615,6 +616,10 @@ mod tests {
         assert_eq!(
             OWL::AnnotationProperty.as_ref(),
             "http://www.w3.org/2002/07/owl#AnnotationProperty"
+        );
+        assert_eq!(
+            OWL::AntisymmetricProperty.as_ref(),
+            "http://www.w3.org/2002/07/owl#AntisymmetricProperty"
         );
         assert_eq!(
             OWL::AssertionProperty.as_ref(),
