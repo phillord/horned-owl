@@ -793,11 +793,72 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
         self.o.insert(OntologyID { iri, viri });
     }
 
-    /// We should process the backward compatability rules, but
-    /// currently do nothing here at all. I expect that there are not
-    /// many OWL1 ontologies that need processing in existence.
+    /// Table 5 and Table 6 (OWL 2 Mapping to RDF Graphs S3.1.2),
+    /// backward compatibility with OWL 1 DL, applied in the order the
+    /// spec prescribes -- Table 5 first, then Table 6.
     fn backward_compat(&mut self) {
-        // Table 5, Table 6
+        // Table 5: a redundant `x rdf:type rdf:Property` triple is
+        // removed when `x` also has one of the seven listed OWL
+        // property-type triples -- otherwise it survives into
+        // declaration processing and produces a spurious ClassAssertion.
+        let has_owl_property_type: HashSet<_> = self
+            .simple
+            .iter()
+            .filter_map(|t| match t.triple() {
+                [
+                    Term::Iri(s),
+                    Term::RDF(VRDF::Type),
+                    Term::OWL(
+                        VOWL::ObjectProperty
+                        | VOWL::DatatypeProperty
+                        | VOWL::AnnotationProperty
+                        | VOWL::OntologyProperty
+                        | VOWL::FunctionalProperty
+                        | VOWL::InverseFunctionalProperty
+                        | VOWL::TransitiveProperty,
+                    ),
+                ] => Some(s.clone()),
+                _ => None,
+            })
+            .collect();
+
+        self.simple.retain(|t| {
+            !matches!(
+                t.triple(),
+                [Term::Iri(s), Term::RDF(VRDF::Type), Term::RDF(VRDF::Property)]
+                    if has_owl_property_type.contains(s)
+            )
+        });
+
+        // Table 6: owl:OntologyProperty is reinterpreted as
+        // owl:AnnotationProperty; owl:InverseFunctionalProperty,
+        // owl:TransitiveProperty and owl:SymmetricProperty each
+        // additionally imply owl:ObjectProperty.
+        let mut new_triples = vec![];
+        self.simple.retain(|t| match t.triple() {
+            [s, Term::RDF(VRDF::Type), Term::OWL(VOWL::OntologyProperty)] => {
+                new_triples.push(
+                    [s.clone(), Term::RDF(VRDF::Type), Term::OWL(VOWL::AnnotationProperty)].into(),
+                );
+                false
+            }
+            [
+                s,
+                Term::RDF(VRDF::Type),
+                Term::OWL(
+                    VOWL::InverseFunctionalProperty
+                    | VOWL::TransitiveProperty
+                    | VOWL::SymmetricProperty,
+                ),
+            ] => {
+                new_triples.push(
+                    [s.clone(), Term::RDF(VRDF::Type), Term::OWL(VOWL::ObjectProperty)].into(),
+                );
+                true
+            }
+            _ => true,
+        });
+        self.simple.extend(new_triples);
     }
 
     fn parse_annotations(
@@ -2500,11 +2561,6 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                 // as we do in reader2? Transform them into a triple which we
                 // handle normally, then bung the annotation on later?
 
-                // Table 5: Backward compatibility -- skip this for now (maybe
-                // for ever)
-
-                // Table 6: Don't understand this
-
                 // Table 7: Declarations (this should be simple, if we have a
                 // generic solution for handling annotations, there is no
                 // handling of bnodes).
@@ -2921,6 +2977,66 @@ mod test {
         let ont: ComponentMappedOntology<_, RcAnnotatedComponent> = ont.into();
         assert_eq!(ont.i().sub_class_of().count(), 1);
         assert_eq!(ont.i().equivalent_class().count(), 1);
+    }
+
+    #[test]
+    fn legacy_rdf_property_declaration() {
+        // https://github.com/phillord/horned-owl/issues/255
+        // Table 5 (OWL 2 Mapping to RDF Graphs S3.1.2): an OWL 1-style
+        // `x rdf:type rdf:Property` triple, paired with an explicit
+        // `x rdf:type owl:AnnotationProperty`, must not survive to be
+        // read back as a spurious ClassAssertion(Class(rdf:Property), x).
+        // See ontokbcf_snippet.owl for provenance -- extracted from the
+        // real ONTOKBCF corpus file.
+        let (ont, incomplete) = read(
+            &mut slurp_rdfont("manual/ontokbcf_snippet").as_bytes(),
+            Default::default(),
+        )
+        .unwrap();
+        assert!(incomplete.is_complete());
+
+        let ont: ComponentMappedOntology<_, RcAnnotatedComponent> = ont.into();
+        assert_eq!(ont.i().declare_annotation_property().count(), 2);
+        assert_eq!(ont.i().class_assertion().count(), 0);
+    }
+
+    #[test]
+    fn table_6_rewrites() {
+        // https://github.com/phillord/horned-owl/issues/255
+        // Table 6 (OWL 2 Mapping to RDF Graphs S3.1.2): owl:OntologyProperty
+        // is rewritten to owl:AnnotationProperty; owl:SymmetricProperty
+        // (like owl:TransitiveProperty/owl:InverseFunctionalProperty)
+        // additionally implies owl:ObjectProperty.
+        let xml = r#"<?xml version="1.0"?>
+<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+         xmlns:owl="http://www.w3.org/2002/07/owl#"
+         xmlns="http://example.org/mini#"
+         xml:base="http://example.org/mini">
+  <owl:Ontology rdf:about="http://example.org/mini"/>
+
+  <rdf:Description rdf:about="http://example.org/mini#p1">
+    <rdf:type rdf:resource="http://www.w3.org/2002/07/owl#OntologyProperty"/>
+  </rdf:Description>
+
+  <!-- SymmetricProperty is not itself a Table 5 trigger, and Table 5 runs
+       before Table 6 per spec, so this bare rdf:Property triple is *not*
+       cleaned up even though Table 6 goes on to add owl:ObjectProperty for
+       the same subject -- deliberately asserted below, not a bug. -->
+  <rdf:Property rdf:ID="p2">
+    <rdf:type rdf:resource="http://www.w3.org/2002/07/owl#SymmetricProperty"/>
+  </rdf:Property>
+</rdf:RDF>"#;
+
+        let (ont, incomplete): (ConcreteRDFOntology<RcStr, Rc<AnnotatedComponent<RcStr>>>, _) =
+            read(&mut xml.as_bytes(), Default::default()).unwrap();
+        assert!(!incomplete.is_complete());
+        assert_eq!(incomplete.simple.len(), 1);
+
+        let ont: ComponentMappedOntology<_, RcAnnotatedComponent> = ont.into();
+        assert_eq!(ont.i().declare_annotation_property().count(), 1);
+        assert_eq!(ont.i().declare_object_property().count(), 1);
+        assert_eq!(ont.i().symmetric_object_property().count(), 1);
+        assert_eq!(ont.i().class_assertion().count(), 0);
     }
 
     #[test]
