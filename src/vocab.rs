@@ -148,11 +148,12 @@ lazy_meta! {
 }
 
 vocabulary_type! {
-    /// RDF Collections vocabulary.
+    /// RDF Collections vocabulary, plus rdf:Property.
     RDF, IRI<String>, METARDF, [
         (RDF, List, false),
         (RDF, First, true),
         (RDF, Nil, true),
+        (RDF, Property, false),
         (RDF, Rest, true),
         (RDF, Type, true)
     ]
@@ -229,6 +230,7 @@ vocabulary_type! {
         (OWL, OneOf, true),
         (OWL, OnProperty, true),
         (OWL, Ontology, false),
+        (OWL, OntologyProperty, false),
         (OWL, QualifiedCardinality, true),
         (OWL, PropertyChainAxiom, true),
         (OWL, PropertyDisjointWith, true),
