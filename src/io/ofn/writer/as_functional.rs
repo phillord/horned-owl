@@ -10,6 +10,9 @@ use enum_meta::Meta;
 use crate::model::*;
 use crate::vocab::Facet;
 
+/// The datatype a bare quoted literal already denotes in OWL 2.
+const XSD_STRING: &str = "http://www.w3.org/2001/XMLSchema#string";
+
 /// Write a string literal while escaping `"` and `\` characters.
 fn quote(mut s: &str, f: &mut Formatter<'_>) -> Result<(), Error> {
     f.write_str("\"")?;
@@ -989,7 +992,17 @@ impl<A: ForIRI> Display for Functional<'_, Literal<A>, A> {
                 datatype_iri,
             } => {
                 quote(literal, f)?;
-                write!(f, "^^{}", Functional(datatype_iri, self.1, None))
+                // `xsd:string` is the datatype a bare quoted literal already
+                // denotes in OWL 2, and OWLAPI's functional renderer leaves it
+                // implicit — ROBOT's own functional output of an OBO-parsed
+                // ontology, whose literals are all `OWLLiteralImplString`, carries
+                // no `^^xsd:string` at all. Writing it out would also preserve a
+                // distinction across the file that OWLAPI loses there, which is
+                // not the same document.
+                if datatype_iri.as_ref() != XSD_STRING {
+                    write!(f, "^^{}", Functional(datatype_iri, self.1, None))?;
+                }
+                Ok(())
             }
         }
     }
