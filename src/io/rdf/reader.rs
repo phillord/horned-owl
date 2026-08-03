@@ -2035,21 +2035,30 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                         ]).into()
                 },
                 [pr, Term::RDFS(VRDFS::SubPropertyOf), spr] => {
+                    // If spr's kind can't be determined on its own (e.g. an
+                    // undeclared external property), fall back to pr's --
+                    // rdfs:subPropertyOf necessarily relates two properties
+                    // of the same kind, so a known sub-property is evidence
+                    // for its otherwise-unknown super-property's kind, not
+                    // just an unfounded guess.
                     ok_some! {
-                        match self.distinguish_retrieve_property_kind(spr, ic)? {
-                            PropertyExpression::ObjectPropertyExpression(ope) =>
+                        match self
+                            .distinguish_retrieve_property_kind(spr, ic)
+                            .or_else(|| self.distinguish_retrieve_property_kind(pr, ic))?
+                        {
+                            PropertyExpression::ObjectPropertyExpression(_) =>
                                 SubObjectPropertyOf {
-                                    sup: ope,
+                                    sup: self.retrieve_to_ope(spr)?,
                                     sub: self.retrieve_to_sope(pr)?,
                                 }.into(),
-                            PropertyExpression::DataProperty(dp) =>
+                            PropertyExpression::DataProperty(_) =>
                                 SubDataPropertyOf {
-                                    sup: dp,
+                                    sup: self.convert_to_dp(spr)?,
                                     sub: self.convert_to_dp(pr)?
                                 }.into(),
-                            PropertyExpression::AnnotationProperty(ap) =>
+                            PropertyExpression::AnnotationProperty(_) =>
                                 SubAnnotationPropertyOf {
-                                    sup: ap,
+                                    sup: self.convert_to_ap(spr)?,
                                     sub: self.convert_to_ap(pr)?
                                 }.into(),
                         }
@@ -3060,6 +3069,26 @@ mod test {
         assert_eq!(ont.i().asymmetric_object_property().count(), 1);
         assert_eq!(ont.i().irreflexive_object_property().count(), 1);
         assert_eq!(ont.i().class_assertion().count(), 0);
+    }
+
+    #[test]
+    fn sub_property_of_infers_kind_from_known_sibling() {
+        // https://github.com/phillord/horned-owl/issues/257
+        // rdfs:subPropertyOf necessarily relates two properties of the same
+        // kind, so if the super-property's kind can't be determined on its
+        // own (here, dc:terms:alternative is external and never declared),
+        // fall back to the sub-property's known kind instead of dropping
+        // the triple. See edam_bioimaging_snippet.owl for provenance --
+        // extracted from the real EDAM-BIOIMAGING corpus file.
+        let (ont, incomplete) = read(
+            &mut slurp_rdfont("manual/edam_bioimaging_snippet").as_bytes(),
+            Default::default(),
+        )
+        .unwrap();
+        assert!(incomplete.is_complete());
+
+        let ont: ComponentMappedOntology<_, RcAnnotatedComponent> = ont.into();
+        assert_eq!(ont.i().sub_annotation_property_of().count(), 1);
     }
 
     #[test]
