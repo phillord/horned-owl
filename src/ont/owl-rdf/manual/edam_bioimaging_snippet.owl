@@ -1,0 +1,23 @@
+<?xml version="1.0"?>
+<!--
+  Minimal subset of the EDAM-BIOIMAGING ontology, extracted by hand from a
+  copy retrieved via the horned-roundtrip corpus (corpus/EDAM-BIOIMAGING.gz).
+  Reproduces issue #257: edam:abbreviation is declared owl:AnnotationProperty
+  and is rdfs:subPropertyOf dc:terms:alternative, which is never declared as
+  anything in this file (it is defined externally, in Dublin Core Terms, and
+  not imported). The sub-property's known kind is evidence for the otherwise
+  undeclared super-property's kind. Node names and the triples themselves are
+  copied verbatim from EDAM-BIOIMAGING.gz; only the surrounding unrelated
+  axioms have been cut.
+-->
+<rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xml:base="http://edamontology.org">
+  <owl:Ontology rdf:about=""/>
+
+  <owl:AnnotationProperty rdf:about="http://edamontology.org/abbreviation">
+    <rdfs:subPropertyOf rdf:resource="http://purl.org/dc/terms/alternative"/>
+  </owl:AnnotationProperty>
+</rdf:RDF>
