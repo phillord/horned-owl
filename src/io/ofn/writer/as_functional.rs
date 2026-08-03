@@ -13,6 +13,21 @@ use crate::vocab::Facet;
 /// The datatype a bare quoted literal already denotes in OWL 2.
 const XSD_STRING: &str = "http://www.w3.org/2001/XMLSchema#string";
 
+/// Whether `^^xsd:string` is written out explicitly. OWLAPI leaves it implicit
+/// (see the `Literal::Datatype` arm below), which is what ROBOT's output shows —
+/// but the OWLAPI bundled by some other tools does render it, and reproducing
+/// such a tool's file byte for byte needs the explicit form. Off by default.
+static WRITE_XSD_STRING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Set whether the functional writer renders `^^xsd:string` explicitly.
+pub fn set_write_xsd_string(on: bool) {
+    WRITE_XSD_STRING.store(on, std::sync::atomic::Ordering::Relaxed);
+}
+
+fn write_xsd_string() -> bool {
+    WRITE_XSD_STRING.load(std::sync::atomic::Ordering::Relaxed)
+}
+
 /// Write a string literal while escaping `"` and `\` characters.
 fn quote(mut s: &str, f: &mut Formatter<'_>) -> Result<(), Error> {
     f.write_str("\"")?;
@@ -999,7 +1014,7 @@ impl<A: ForIRI> Display for Functional<'_, Literal<A>, A> {
                 // no `^^xsd:string` at all. Writing it out would also preserve a
                 // distinction across the file that OWLAPI loses there, which is
                 // not the same document.
-                if datatype_iri.as_ref() != XSD_STRING {
+                if datatype_iri.as_ref() != XSD_STRING || write_xsd_string() {
                     write!(f, "^^{}", Functional(datatype_iri, self.1, None))?;
                 }
                 Ok(())

@@ -22,6 +22,7 @@ use crate::ontology::indexed::ForIndex;
 
 mod as_functional;
 
+pub use self::as_functional::set_write_xsd_string;
 pub use self::as_functional::AsFunctional;
 pub use self::as_functional::Functional;
 
