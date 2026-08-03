@@ -24,6 +24,7 @@ use crate::{
 
 use std::collections::BTreeSet;
 use std::collections::HashMap;
+use std::collections::HashSet;
 use std::fmt::Debug;
 use std::io::Cursor;
 use std::{io::BufRead, marker::PhantomData};
@@ -554,6 +555,11 @@ pub struct OntologyParser<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>>
     class_expression: HashMap<BNode<A>, ClassExpression<A>>,
     object_property_expression: HashMap<BNode<A>, ObjectPropertyExpression<A>>,
     data_range: HashMap<BNode<A>, DataRange<A>>,
+    // Bnodes from the three maps above that have been retrieved at least
+    // once. Entries there are looked up, not removed, because the same
+    // bnode can legitimately be referenced from more than one place (e.g.
+    // a restriction shared by two rdf:List members) -- see #254.
+    used_bnode: HashSet<BNode<A>>,
     // Annotations mapped to Triples
     ann_map: HashMap<[Term<A>; 3], BTreeSet<Annotation<A>>>,
     atom: HashMap<Term<A>, Atom<A>>,
@@ -584,6 +590,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
             class_expression: d!(),
             object_property_expression: d!(),
             data_range: d!(),
+            used_bnode: d!(),
             ann_map: d!(),
             atom: d!(),
             variable: d!(),
@@ -1077,6 +1084,23 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
         }
     }
 
+    /// Look up a bnode in one of the resolved-object maps
+    /// (`class_expression`, `object_property_expression`, `data_range`)
+    /// without removing it, recording it in `used_bnode` on success so
+    /// that a genuinely unreferenced entry can still be told apart from
+    /// one that has been (possibly repeatedly) retrieved.
+    fn get_used<V: Clone>(
+        map: &HashMap<BNode<A>, V>,
+        used_bnode: &mut HashSet<BNode<A>>,
+        id: &BNode<A>,
+    ) -> Option<V> {
+        let v = map.get(id).cloned();
+        if v.is_some() {
+            used_bnode.insert(id.clone());
+        }
+        v
+    }
+
     // The following are a set of methods which move between RDF types
     // and OWL types. We use a standard naming scheme, with "convert"
     // where the change is stateless (except for `Build` caching),
@@ -1105,7 +1129,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
     fn retrieve_to_ope(&mut self, t: &Term<A>) -> Option<ObjectPropertyExpression<A>> {
         if let Term::BNode(id) = t {
             // If it is a BNode then extract
-            self.object_property_expression.remove(id)
+            Self::get_used(&self.object_property_expression, &mut self.used_bnode, id)
         } else {
             // Else convert it to an ObjectProperty
             self.convert_to_iri(t).map(Into::into)
@@ -1125,7 +1149,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
     /// Convert a Term to a ClassExpression or retrieve it if it is a BNode
     fn retrieve_to_ce(&mut self, tce: &Term<A>) -> Option<ClassExpression<A>> {
         match tce {
-            Term::BNode(id) => self.class_expression.remove(id),
+            Term::BNode(id) => Self::get_used(&self.class_expression, &mut self.used_bnode, id),
             _ => self.convert_to_iri(tce).map(Into::into),
         }
     }
@@ -1206,7 +1230,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                 let dt: Datatype<_> = iri.into();
                 Some(dt.into())
             }
-            Term::BNode(id) => self.data_range.remove(id),
+            Term::BNode(id) => Self::get_used(&self.data_range, &mut self.used_bnode, id),
             _ => None,
         }
     }
@@ -1319,7 +1343,9 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                 }
                 _ => None,
             },
-            Term::BNode(id) => Some(self.object_property_expression.remove(id)?.into()),
+            Term::BNode(id) => Some(
+                Self::get_used(&self.object_property_expression, &mut self.used_bnode, id)?.into(),
+            ),
             _ => None,
         }
     }
@@ -1338,7 +1364,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
         ic: &[&O],
     ) -> Result<Option<(PropertyExpression<A>, PropertyExpression<A>)>, HornedError> {
         let mut mix_match = |a, b| match (
-            self.object_property_expression.remove(a),
+            Self::get_used(&self.object_property_expression, &mut self.used_bnode, a),
             self.distinguish_declaration_kind(b, ic),
         ) {
             (Some(ope), Some(NamedOWLEntityKind::ObjectProperty)) | (Some(ope), None) => {
@@ -1354,16 +1380,22 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
         };
 
         match (a, b) {
-            (Term::BNode(a), Term::BNode(b)) => Ok(self
-                .object_property_expression
-                .remove(a)
-                .zip(self.object_property_expression.remove(b))
-                .map(|(a, b)| {
-                    (
-                        PropertyExpression::ObjectPropertyExpression(a),
-                        PropertyExpression::ObjectPropertyExpression(b),
-                    )
-                })),
+            (Term::BNode(a), Term::BNode(b)) => {
+                Ok(
+                    Self::get_used(&self.object_property_expression, &mut self.used_bnode, a)
+                        .zip(Self::get_used(
+                            &self.object_property_expression,
+                            &mut self.used_bnode,
+                            b,
+                        ))
+                        .map(|(a, b)| {
+                            (
+                                PropertyExpression::ObjectPropertyExpression(a),
+                                PropertyExpression::ObjectPropertyExpression(b),
+                            )
+                        }),
+                )
+            }
             (Term::BNode(a), Term::Iri(b)) => mix_match(a, b),
             (Term::Iri(a), Term::BNode(b)) => {
                 let t = mix_match(b, a);
@@ -2579,10 +2611,29 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
 
         let bnode: Vec<_> = self.bnode.into_values().collect();
         let bnode_seq: Vec<_> = self.bnode_seq.into_values().collect();
-        let class_expression: Vec<_> = self.class_expression.into_values().collect();
-        let object_property_expression: Vec<_> =
-            self.object_property_expression.into_values().collect();
-        let data_range = self.data_range.into_values().collect();
+
+        // Entries in `used_bnode` were retrieved (possibly more than
+        // once, e.g. a restriction shared by two rdf:List members -- see
+        // #254) rather than removed, so they must be filtered out here
+        // to still be excluded from the incomplete-parse report.
+        let class_expression: Vec<_> = self
+            .class_expression
+            .into_iter()
+            .filter(|(k, _)| !self.used_bnode.contains(k))
+            .map(|(_, v)| v)
+            .collect();
+        let object_property_expression: Vec<_> = self
+            .object_property_expression
+            .into_iter()
+            .filter(|(k, _)| !self.used_bnode.contains(k))
+            .map(|(_, v)| v)
+            .collect();
+        let data_range: Vec<_> = self
+            .data_range
+            .into_iter()
+            .filter(|(k, _)| !self.used_bnode.contains(k))
+            .map(|(_, v)| v)
+            .collect();
 
         (
             self.o,
@@ -2851,6 +2902,75 @@ mod test {
         assert_eq!(ont.i().annotation_assertion().count(), 1);
 
         let _aa = ont.i().annotation_assertion().next();
+    }
+
+    #[test]
+    fn shared_restriction_bnode() {
+        // https://github.com/phillord/horned-owl/issues/254
+        // A class-expression blank node referenced from two separate
+        // rdf:List members must be resolved for both references, not just
+        // the first one to consume it. See galen_snippet.owl for
+        // provenance -- extracted from the real GALEN corpus file.
+        let (ont, incomplete) = read(
+            &mut slurp_rdfont("manual/galen_snippet").as_bytes(),
+            Default::default(),
+        )
+        .unwrap();
+        assert!(incomplete.is_complete());
+
+        let ont: ComponentMappedOntology<_, RcAnnotatedComponent> = ont.into();
+        assert_eq!(ont.i().sub_class_of().count(), 1);
+        assert_eq!(ont.i().equivalent_class().count(), 1);
+    }
+
+    #[test]
+    fn orphan_entries_reported_as_incomplete() {
+        // #254's fix changed class_expression/object_property_expression/
+        // data_range lookups from consuming (.remove()) to non-destructive,
+        // tracked via `used_bnode` -- an entry in any of the three maps
+        // that is fully parseable but never referenced by anything else
+        // must still be reported as incomplete, not silently treated as
+        // "used" just because it was resolved. One orphan per map, so a
+        // regression in any single map's filtering shows up on its own.
+        let xml = r#"<?xml version="1.0"?>
+<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+         xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"
+         xmlns:owl="http://www.w3.org/2002/07/owl#">
+    <owl:Ontology rdf:about="http://www.example.com/iri"/>
+    <owl:ObjectProperty rdf:about="http://www.example.com/iri#p"/>
+    <owl:ObjectProperty rdf:about="http://www.example.com/iri#q"/>
+    <owl:Class rdf:about="http://www.example.com/iri#B"/>
+
+    <!-- orphan ClassExpression -->
+    <rdf:Description rdf:nodeID="OrphanCE">
+        <rdf:type rdf:resource="http://www.w3.org/2002/07/owl#Restriction"/>
+        <owl:onProperty rdf:resource="http://www.example.com/iri#p"/>
+        <owl:someValuesFrom rdf:resource="http://www.example.com/iri#B"/>
+    </rdf:Description>
+
+    <!-- orphan ObjectPropertyExpression -->
+    <rdf:Description rdf:nodeID="OrphanOPE">
+        <owl:inverseOf rdf:resource="http://www.example.com/iri#q"/>
+    </rdf:Description>
+
+    <!-- orphan DataRange -->
+    <rdf:Description rdf:nodeID="OrphanDRList">
+        <rdf:first rdf:resource="http://www.w3.org/2001/XMLSchema#integer"/>
+        <rdf:rest rdf:resource="http://www.w3.org/1999/02/22-rdf-syntax-ns#nil"/>
+    </rdf:Description>
+    <rdf:Description rdf:nodeID="OrphanDR">
+        <rdf:type rdf:resource="http://www.w3.org/2000/01/rdf-schema#Datatype"/>
+        <owl:unionOf rdf:nodeID="OrphanDRList"/>
+    </rdf:Description>
+</rdf:RDF>"#;
+
+        let (_ont, incomplete): (ConcreteRDFOntology<RcStr, Rc<AnnotatedComponent<RcStr>>>, _) =
+            read(&mut xml.as_bytes(), Default::default()).unwrap();
+
+        assert!(!incomplete.is_complete());
+        assert_eq!(incomplete.class_expression.len(), 1);
+        assert_eq!(incomplete.object_property_expression.len(), 1);
+        assert_eq!(incomplete.data_range.len(), 1);
     }
 
     #[test]

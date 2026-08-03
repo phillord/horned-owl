@@ -1,0 +1,82 @@
+<?xml version="1.0"?>
+<!--
+  Minimal subset of the GALEN ontology
+  (http://www.co-ode.org/ontologies/galen), extracted by hand from a copy
+  of galen.owl retrieved via the horned-roundtrip corpus (corpus/GALEN.gz).
+  Trims galen.owl (450K+ lines) down to the one shared-blank-node pattern
+  that reproduces issue #254: the Restriction bnode A9475
+  ("actsSpecificallyOn some HipJoint") is defined once but reused, via
+  rdf:nodeID, as an rdf:first member of two unrelated rdf:List structures
+  (one under #Semimembranosus's subClassOf, one under #Anonymous-430's
+  equivalentClass) elsewhere in the file. All node IDs, class/property
+  names and axiom shapes below are copied verbatim from galen.owl; only
+  the surrounding unrelated axioms have been cut.
+-->
+<rdf:RDF
+    xmlns="http://www.co-ode.org/ontologies/galen#"
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xml:base="http://www.co-ode.org/ontologies/galen" >
+
+  <owl:Ontology rdf:about="http://www.co-ode.org/ontologies/galen"/>
+
+  <owl:ObjectProperty rdf:about="#actsSpecificallyOn"/>
+  <owl:ObjectProperty rdf:about="#hasFunction"/>
+
+  <owl:Class rdf:about="#HipJoint"/>
+  <owl:Class rdf:about="#Extension"/>
+  <owl:Class rdf:about="#Semimembranosus"/>
+  <owl:Class rdf:about="#Anonymous-430"/>
+
+  <!-- Shared restriction: "actsSpecificallyOn some HipJoint" -->
+  <rdf:Description rdf:nodeID="A9475">
+    <rdf:type rdf:resource="http://www.w3.org/2002/07/owl#Restriction"/>
+    <owl:onProperty rdf:resource="#actsSpecificallyOn"/>
+    <owl:someValuesFrom rdf:resource="#HipJoint"/>
+  </rdf:Description>
+
+  <!-- Chain 1: Semimembranosus subClassOf (hasFunction some
+       (actsSpecificallyOn some HipJoint) and Extension) -->
+  <rdf:Description rdf:about="#Semimembranosus">
+    <rdfs:subClassOf rdf:nodeID="A55591"/>
+    <rdf:type rdf:resource="http://www.w3.org/2002/07/owl#Class"/>
+  </rdf:Description>
+  <rdf:Description rdf:nodeID="A55591">
+    <rdf:type rdf:resource="http://www.w3.org/2002/07/owl#Restriction"/>
+    <owl:onProperty rdf:resource="#hasFunction"/>
+    <owl:someValuesFrom rdf:nodeID="A76382"/>
+  </rdf:Description>
+  <rdf:Description rdf:nodeID="A76382">
+    <owl:intersectionOf rdf:nodeID="A9474"/>
+    <rdf:type rdf:resource="http://www.w3.org/2002/07/owl#Class"/>
+  </rdf:Description>
+  <rdf:Description rdf:nodeID="A9474">
+    <rdf:first rdf:nodeID="A9475"/>
+    <rdf:rest rdf:nodeID="A9476"/>
+  </rdf:Description>
+  <rdf:Description rdf:nodeID="A9476">
+    <rdf:first rdf:resource="#Extension"/>
+    <rdf:rest rdf:resource="http://www.w3.org/1999/02/22-rdf-syntax-ns#nil"/>
+  </rdf:Description>
+
+  <!-- Chain 2: Anonymous-430 equivalentClass (actsSpecificallyOn some
+       HipJoint) and Extension) -- same A9475 bnode reused as rdf:first -->
+  <rdf:Description rdf:about="#Anonymous-430">
+    <owl:equivalentClass rdf:nodeID="A52219"/>
+    <rdf:type rdf:resource="http://www.w3.org/2002/07/owl#Class"/>
+  </rdf:Description>
+  <rdf:Description rdf:nodeID="A52219">
+    <rdf:type rdf:resource="http://www.w3.org/2002/07/owl#Class"/>
+    <owl:intersectionOf rdf:nodeID="A46428"/>
+  </rdf:Description>
+  <rdf:Description rdf:nodeID="A46428">
+    <rdf:first rdf:nodeID="A9475"/>
+    <rdf:rest rdf:nodeID="A5460"/>
+  </rdf:Description>
+  <rdf:Description rdf:nodeID="A5460">
+    <rdf:first rdf:resource="#Extension"/>
+    <rdf:rest rdf:resource="http://www.w3.org/1999/02/22-rdf-syntax-ns#nil"/>
+  </rdf:Description>
+
+</rdf:RDF>
