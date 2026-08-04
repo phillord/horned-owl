@@ -9,7 +9,7 @@ mod horned_convert;
 mod horned_dump;
 mod horned_materialize;
 mod horned_parse;
-mod horned_profile_check;
+mod horned_profile;
 mod horned_round;
 mod horned_summary;
 mod horned_triples;
@@ -36,7 +36,7 @@ fn app() -> App<'static> {
     .subcommand(horned_dump::app("dump"))
     .subcommand(horned_materialize::app("materialize"))
     .subcommand(horned_parse::app("parse"))
-    .subcommand(horned_profile_check::app("profile-check"))
+    .subcommand(horned_profile::app("profile"))
     .subcommand(horned_round::app("round"))
     .subcommand(horned_summary::app("summary"))
     .subcommand(horned_triples::app("triples"))
@@ -53,7 +53,7 @@ fn matcher(matches: ArgMatches) -> Result<(), HornedError> {
             "dump" => horned_dump::matcher(submatches),
             "materialize" => horned_materialize::matcher(submatches),
             "parse" => horned_parse::matcher(submatches),
-            "profile-check" => horned_profile_check::matcher(submatches),
+            "profile" => horned_profile::matcher(submatches),
             "round" => horned_round::matcher(submatches),
             "summary" => horned_summary::matcher(submatches),
             "triples" => horned_triples::matcher(submatches),
