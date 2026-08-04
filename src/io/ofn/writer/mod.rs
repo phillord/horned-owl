@@ -187,11 +187,26 @@ pub fn write_with_labels<A: ForIRI, AA: ForIndex<A>, W: Write>(
             }
         }
     }
+    // The Declaration block is `sortOptionally(ontology.getSignature())`, i.e.
+    // `OWLObject.compareTo`, which compares the TYPE INDEX before the structure.
+    // Those indices are not the section ranks: read off owlapi4's
+    // `OWLObjectTypeIndexProvider`, Class is 1001, ObjectProperty 1002,
+    // DataProperty 1004, NamedIndividual 1005, AnnotationProperty 1006 and
+    // Datatype 4001 — so individuals precede annotation properties and datatypes
+    // come last, where the rank order puts annotation properties third. OBA's
+    // `imports/merged_import.owl` is the file that shows it, being the one ODK
+    // artefact in functional syntax with both individuals and annotation
+    // properties in its signature.
+    const DECL_TYPE_INDEX: [u32; 6] = [1001, 1002, 1004, 1006, 4001, 1005];
     // OWLAPI orders entities by `IRI.compareTo` — NAMESPACE then remainder, not
     // the whole string. `…/obo/MF#manifestationOf` has namespace `…/obo/MF#`,
     // which sorts after the plain `…/obo/` shared by every `RO_…`/`GO_…`; a
     // whole-string compare put it before them.
-    declarations.sort_by(|a, b| a.0.cmp(&b.0).then_with(|| owlapi_iri_cmp(&a.1, &b.1)));
+    declarations.sort_by(|a, b| {
+        DECL_TYPE_INDEX[a.0]
+            .cmp(&DECL_TYPE_INDEX[b.0])
+            .then_with(|| owlapi_iri_cmp(&a.1, &b.1))
+    });
     for (_, _, rendered) in &declarations {
         writeln!(write, "{rendered}")?;
     }
