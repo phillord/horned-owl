@@ -23,7 +23,7 @@ use crate::{
 };
 
 use std::collections::BTreeSet;
-use rustc_hash::FxHashMap as HashMap;
+use rustc_hash::{FxHashMap as HashMap, FxHashSet as HashSet};
 use std::fmt::Debug;
 use std::io::Cursor;
 use std::{io::BufRead, marker::PhantomData};
@@ -570,6 +570,12 @@ pub struct OntologyParser<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>>
 
     // Parsed OWL Objects keyed on their bnode
     class_expression: HashMap<BNode<A>, ClassExpression<A>>,
+    // Which of those a `retrieve_to_ce` actually handed to an axiom. The map is
+    // read non-destructively (see `retrieve_to_ce`), so it cannot itself say what
+    // is left over; without this every blank-node class expression in the document
+    // was reported as unparsed, and `horned-validate` failed on files it had read
+    // perfectly — `src/ont/owl-rdf/and.owl` among them.
+    class_expression_used: HashSet<BNode<A>>,
     object_property_expression: HashMap<BNode<A>, ObjectPropertyExpression<A>>,
     data_range: HashMap<BNode<A>, DataRange<A>>,
     // Annotations mapped to Triples (one entry per reifying owl:Axiom block).
@@ -600,6 +606,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
             bnode: d!(),
             bnode_seq: d!(),
             class_expression: d!(),
+            class_expression_used: d!(),
             object_property_expression: d!(),
             data_range: d!(),
             ann_map: d!(),
@@ -1241,7 +1248,13 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
             // use silently dropped every later reference (and its axiom). Cloning
             // leaves it available; any genuinely unconsumed CE is still reported via
             // IncompleteParse and never enters the ontology.
-            Term::BNode(id) => self.class_expression.get(id).cloned(),
+            Term::BNode(id) => {
+                let ce = self.class_expression.get(id).cloned();
+                if ce.is_some() {
+                    self.class_expression_used.insert(id.clone());
+                }
+                ce
+            }
             _ => self.convert_to_iri(tce).map(Into::into),
         }
     }
@@ -2868,7 +2881,13 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
 
         let bnode: Vec<_> = self.bnode.into_values().collect();
         let bnode_seq: Vec<_> = self.bnode_seq.into_values().collect();
-        let class_expression: Vec<_> = self.class_expression.into_values().collect();
+        let used = std::mem::take(&mut self.class_expression_used);
+        let class_expression: Vec<_> = self
+            .class_expression
+            .into_iter()
+            .filter(|(id, _)| !used.contains(id))
+            .map(|(_, ce)| ce)
+            .collect();
         let object_property_expression: Vec<_> =
             self.object_property_expression.into_values().collect();
         let data_range = self.data_range.into_values().collect();
