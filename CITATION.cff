@@ -47,6 +47,7 @@ preferred-citation:
   journal: "Transactions on Graph Data and Knowledge"
   volume: 2
   issue: 2
-  start: 9
-  end: 1
+  number: 9
+  start: 1
+  end: 14
   year: 2024
