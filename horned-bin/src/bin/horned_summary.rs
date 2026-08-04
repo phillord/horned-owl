@@ -1,6 +1,3 @@
-extern crate clap;
-extern crate horned_owl;
-
 use clap::App;
 use clap::Arg;
 use clap::ArgMatches;
