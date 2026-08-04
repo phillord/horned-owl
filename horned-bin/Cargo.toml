@@ -79,5 +79,5 @@ name = "horned-validate"
 path = "src/bin/horned_validate.rs"
 
 [[bin]]
-name = "horned-profile-check"
-path = "src/bin/horned_profile_check.rs"
+name = "horned-profile"
+path = "src/bin/horned_profile.rs"
