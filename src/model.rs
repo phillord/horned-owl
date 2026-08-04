@@ -59,11 +59,11 @@
 //! - Rule 3:
 //! ```
 //! # use horned_owl::model::*;
-//! // InverseObjectProperty(ObjectProperty, ObjectProperty)
+//! // InverseObjectProperties(ObjectPropertyExpression, ObjectPropertyExpression)
 //! let b = Build::new_rc();
 //! let iop = InverseObjectProperties
-//!             (b.object_property("http://www.example.com/op1"),
-//!              b.object_property("http://www.example.com/op2"));
+//!             (b.object_property("http://www.example.com/op1").into(),
+//!              b.object_property("http://www.example.com/op2").into());
 //! ```
 //! - Rule 4:
 //! ```

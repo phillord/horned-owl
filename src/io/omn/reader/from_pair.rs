@@ -3031,10 +3031,7 @@ mod tests {
         o.insert(SymmetricObjectProperty(ope("http://ex/r")));
         o.insert(AsymmetricObjectProperty(ope("http://ex/r")));
         o.insert(TransitiveObjectProperty(ope("http://ex/r")));
-        o.insert(InverseObjectProperties(
-            b.object_property("http://ex/r"),
-            b.object_property("http://ex/t"),
-        ));
+        o.insert(InverseObjectProperties(ope("http://ex/r"), ope("http://ex/t")));
 
         let amo: TestOnt = o.clone().into();
         let mut buf = Vec::<u8>::new();
@@ -3439,10 +3436,7 @@ mod tests {
             ce: ce("http://ex/A"),
         });
         o.insert(FunctionalObjectProperty(ope("http://ex/r")));
-        o.insert(InverseObjectProperties(
-            b.object_property("http://ex/r"),
-            b.object_property("http://ex/t"),
-        ));
+        o.insert(InverseObjectProperties(ope("http://ex/r"), ope("http://ex/t")));
         // data property axioms
         o.insert(DataPropertyRange {
             dp: b.data_property("http://ex/p"),

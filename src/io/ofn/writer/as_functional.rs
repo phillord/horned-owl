@@ -1220,18 +1220,31 @@ mod tests {
         assert_eq!(r#""hello"@en"#, &ofn);
     }
 
+    /// `xsd:string` is the datatype a bare quoted literal already has, so the
+    /// writer leaves it implicit unless `set_write_xsd_string` turns it on. The
+    /// flag is process-global, so this asserts the default rather than toggling it
+    /// underneath whatever else the test binary is running in parallel.
     #[test]
-    fn test_ofn_literal_datatype() {
+    fn test_ofn_literal_datatype_xsd_string_is_implicit() {
         let build = Build::new_arc();
         let lit = Literal::Datatype {
             literal: String::from("hello"),
             datatype_iri: build.iri("http://www.w3.org/2001/XMLSchema#string"),
         };
         let ofn = format!("{}", lit.as_functional());
-        assert_eq!(
-            r#""hello"^^<http://www.w3.org/2001/XMLSchema#string>"#,
-            &ofn
-        );
+        assert_eq!(r#""hello""#, &ofn);
+    }
+
+    /// Every other datatype is still written out.
+    #[test]
+    fn test_ofn_literal_datatype() {
+        let build = Build::new_arc();
+        let lit = Literal::Datatype {
+            literal: String::from("42"),
+            datatype_iri: build.iri("http://www.w3.org/2001/XMLSchema#integer"),
+        };
+        let ofn = format!("{}", lit.as_functional());
+        assert_eq!(r#""42"^^<http://www.w3.org/2001/XMLSchema#integer>"#, &ofn);
     }
 
     #[test]
