@@ -1045,20 +1045,33 @@ impl<A: ForIRI> AsFunctional<A> for ObjectPropertyExpression<A> {}
 
 impl<A: ForIRI> Display for Functional<'_, Rule<A>, A> {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
+        // OWLAPI separates the rule's annotations and each atom with a space, and
+        // writes `Body(…)Head(…)` adjacent:
+        //
+        //     DLSafeRule(Annotation(…) Body(ClassAtom(…) ObjectPropertyAtom(…))Head(…))
+        //
+        // Everything here ran together, which put every SWRL rule in OBA's
+        // `imports/merged_import.owl` a byte off ROBOT's.
         if let Some(annotations) = self.2 {
-            write!(f, "DLSafeRule({}", Functional(annotations, self.1, None))?;
+            write!(f, "DLSafeRule({} ", Functional(annotations, self.1, None))?;
         } else {
             write!(f, "DLSafeRule(")?;
         }
 
         f.write_str("Body(")?;
-        for atom in self.0.body.iter() {
+        for (i, atom) in self.0.body.iter().enumerate() {
+            if i > 0 {
+                f.write_char(' ')?;
+            }
             Functional(&atom, self.1, None).fmt(f)?;
         }
         f.write_char(')')?;
 
         f.write_str("Head(")?;
-        for atom in self.0.head.iter() {
+        for (i, atom) in self.0.head.iter().enumerate() {
+            if i > 0 {
+                f.write_char(' ')?;
+            }
             Functional(&atom, self.1, None).fmt(f)?;
         }
         f.write_char(')')?;
