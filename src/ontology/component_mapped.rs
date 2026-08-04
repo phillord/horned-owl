@@ -383,22 +383,13 @@ impl<A: ForIRI, AA: ForIndex<A>> IntoIterator for ComponentMappedOntology<A, AA>
 
 impl<A: ForIRI, AA: ForIndex<A>> From<SetOntology<A>> for ComponentMappedOntology<A, AA> {
     fn from(so: SetOntology<A>) -> ComponentMappedOntology<A, AA> {
-        let mut amo = ComponentMappedOntology::new();
-        for cmp in so {
-            amo.insert(cmp);
-        }
-        amo
+        so.into_iter().collect::<MutableOntologyAdaptor<_>>().0
     }
 }
 
 impl<A: ForIRI, AA: ForIndex<A>> From<ComponentMappedOntology<A, AA>> for SetOntology<A> {
     fn from(amo: ComponentMappedOntology<A, AA>) -> SetOntology<A> {
-        let mut so = SetOntology::new();
-
-        for cmp in amo {
-            so.insert(cmp);
-        }
-        so
+        amo.into_iter().collect::<MutableOntologyAdaptor<_>>().0
     }
 }
 

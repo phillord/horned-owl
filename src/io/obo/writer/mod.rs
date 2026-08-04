@@ -669,7 +669,7 @@ mod tests {
     use std::fs::read_dir;
     use std::path::PathBuf;
 
-    use crate::model::{AnnotatedComponent, RcStr};
+    use crate::model::{AnnotatedComponent, Ontology, RcStr};
     use crate::ontology::component_mapped::ComponentMappedOntology;
     use crate::ontology::set::SetOntology;
 
@@ -682,7 +682,7 @@ mod tests {
         .0
     }
 
-    fn axioms(ont: &SetOntology<RcStr>) -> BTreeSet<String> {
+    fn axioms<O: Ontology<RcStr>>(ont: &O) -> BTreeSet<String> {
         ont.iter().map(|ac| format!("{ac:?}")).collect()
     }
 

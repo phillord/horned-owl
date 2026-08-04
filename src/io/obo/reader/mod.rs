@@ -134,7 +134,7 @@ mod tests {
 
     use crate::model::{
         AnnotationValue, ClassExpression, Component, Individual, Literal, ObjectPropertyExpression,
-        RcStr,
+        Ontology, RcStr,
     };
     use crate::ontology::set::SetOntology;
 
@@ -194,7 +194,7 @@ mod tests {
 
     /// Render the instance-relevant components in a compact, stable form for
     /// golden comparison.
-    fn render_set(ont: &SetOntology<RcStr>) -> BTreeSet<String> {
+    fn render_set<O: Ontology<RcStr>>(ont: &O) -> BTreeSet<String> {
         ont.iter()
             .map(|ac| match &ac.component {
                 Component::DeclareClass(d) => {
@@ -240,7 +240,7 @@ mod tests {
             .collect()
     }
 
-    fn has_label(ont: &SetOntology<RcStr>, subj: &str, value: &str) -> bool {
+    fn has_label<O: Ontology<RcStr>>(ont: &O, subj: &str, value: &str) -> bool {
         ont.iter().any(|ac| match &ac.component {
             Component::AnnotationAssertion(a) => {
                 matches!(&a.subject, crate::model::AnnotationSubject::IRI(i) if i.as_ref() == subj)
