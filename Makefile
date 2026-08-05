@@ -53,16 +53,20 @@ tmp:
 
 all-tests: integration-prepare integration-clean ./tmp/ont-with-bfo.owl
 	cargo test -- --include-ignored
-	cargo test --workspace integration -- --include-ignored
+	cargo test integration -- --include-ignored
 
 integration-prepare: tmp
 
 integration-clean:
-	- rm ./tmp/bfo.owl
+	rm -f ./tmp/bfo.owl
 
-## Main integration tests run as unit tests
+## horned-bin's CLI tests (test_horned_*.rs) are mostly plain #[test]s named
+## with an `integration_` prefix, not #[ignore]d, plus one genuinely
+## #[ignore]d test (integration_ont_with_bfo) that needs the ./tmp/ fixture
+## prepared above. `--include-ignored` (not bare `--ignored`, which would
+## exclude every non-ignored one) runs both in a single invocation.
 integration: integration-prepare integration-clean ./tmp/ont-with-bfo.owl
-	cargo test integration -- --ignored
+	cargo test integration -- --include-ignored
 
 
 ## A set of targets which run more interactive test
