@@ -1874,10 +1874,14 @@ r###"<?xml version="1.0" encoding="UTF-8"?>
             ).unwrap();
     }
 
-    /// I don't know if this is valid at all at the moment
-    /// nor what it should serialize as
+    /// A Collection member that also carries its own extra property (here
+    /// `rdf:value`) is valid: the formatter describes it as its own
+    /// top-level `rdf:Description`, and the Collection list just refers to
+    /// it by `rdf:about` -- no data loss, just spread across two places
+    /// instead of nested inline. (The original `rdf:datatype="string"` in
+    /// this test was itself an invalid IRI -- not a valid absolute IRI --
+    /// which is a separate, unrelated typo now fixed below.)
     #[test]
-    #[ignore]
     fn seq_longhand_with_literal() {
         xml_from_to(
                 r###"<?xml version="1.0" encoding="UTF-8"?>
@@ -1885,7 +1889,7 @@ r###"<?xml version="1.0" encoding="UTF-8"?>
     <rdf:Description rdf:about="http://example.org/basket">
         <ex:hasFruit rdf:parseType="Collection">
             <rdf:Description rdf:about="http://example.org/banana">
-                 <rdf:value rdf:datatype="string">Yellow</rdf:value>
+                 <rdf:value rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Yellow</rdf:value>
             </rdf:Description>
             <rdf:Description rdf:about="http://example.org/apple">
                  <rdf:value>Red</rdf:value>
@@ -1898,6 +1902,9 @@ r###"<?xml version="1.0" encoding="UTF-8"?>
 </rdf:RDF>"###,
         r###"<?xml version="1.0" encoding="UTF-8"?>
 <rdf:RDF xmlns="http://www.example.com/iri#" xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:ex="http://example.org/stuff/1.0/">
+    <rdf:Description rdf:about="http://example.org/banana" rdf:value="Yellow"/>
+    <rdf:Description rdf:about="http://example.org/apple" rdf:value="Red"/>
+    <rdf:Description rdf:about="http://example.org/pear" rdf:value="Green"/>
     <rdf:Description rdf:about="http://example.org/basket">
         <ex:hasFruit rdf:parseType="Collection">
             <rdf:Description rdf:about="http://example.org/banana"/>
@@ -2129,12 +2136,14 @@ r###"<?xml version="1.0" encoding="UTF-8"?>
         ).unwrap()
     }
 
-    /// I think the problem here is that the type AtomList triple is being rendered as a short cut
-    /// and when this happens the object pull in is not happening
+    /// The formatter's rdf:type-to-shorthand-element compaction (see
+    /// `example14_typed_nodes`) applies to swrl:-prefixed types too, so the
+    /// generic `rdf:Description`+`rdf:type` input compacts to `<swrl:Imp>`/
+    /// `<swrl:AtomList>`/`<swrl:ClassAtom>` on output -- a same-string
+    /// `xml_roundtrip` was never going to hold here. Not a formatter bug.
     #[test]
-    #[ignore]
     fn seq_with_pull_in_bnode() {
-        xml_roundtrip(
+        xml_from_to(
     r###"<?xml version="1.0" encoding="UTF-8"?>
 <rdf:RDF xmlns="http://www.example.com/iri#" xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#" xmlns:owl="http://www.w3.org/2002/07/owl#" xmlns:swrl="http://www.w3.org/2003/11/swrl#">
     <rdf:Description>
@@ -2165,6 +2174,32 @@ r###"<?xml version="1.0" encoding="UTF-8"?>
             </rdf:Description>
         </swrl:body>
      </rdf:Description>
+</rdf:RDF>"###,
+    r###"<?xml version="1.0" encoding="UTF-8"?>
+<rdf:RDF xmlns="http://www.example.com/iri#" xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#" xmlns:owl="http://www.w3.org/2002/07/owl#" xmlns:swrl="http://www.w3.org/2003/11/swrl#">
+    <swrl:Imp>
+        <swrl:body>
+            <swrl:AtomList>
+                <rdf:first>
+                    <swrl:ClassAtom>
+                        <swrl:classPredicate rdf:resource="http://www.example.com/iri#A1"/>
+                        <swrl:argument1 rdf:resource="http://www.example.com/iri#x"/>
+                    </swrl:ClassAtom>
+                </rdf:first>
+                <rdf:rest>
+                    <swrl:AtomList>
+                        <rdf:first>
+                            <swrl:ClassAtom>
+                                <swrl:classPredicate rdf:resource="http://www.example.com/iri#A"/>
+                                <swrl:argument1 rdf:resource="http://www.example.com/iri#x"/>
+                            </swrl:ClassAtom>
+                        </rdf:first>
+                        <rdf:rest rdf:resource="http://www.w3.org/1999/02/22-rdf-syntax-ns#nil"/>
+                    </swrl:AtomList>
+                </rdf:rest>
+            </swrl:AtomList>
+        </swrl:body>
+    </swrl:Imp>
 </rdf:RDF>"###,
             Some(
                 indexmap![
