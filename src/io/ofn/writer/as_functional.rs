@@ -706,12 +706,21 @@ impl<A: ForIRI> Display for Functional<'_, ClassExpression<A>, A> {
         }
         match self.0 {
             Class(exp) => Functional(exp, self.1, None).fmt(f),
+            // A single-operand intersection/union is just that operand --
+            // the OFN grammar requires >= 2, so wrapping it verbatim would
+            // write output its own reader rejects (#235).
+            ObjectIntersectionOf(classes) if classes.len() == 1 => {
+                Functional(&classes[0], self.1, None).fmt(f)
+            }
             ObjectIntersectionOf(classes) => {
                 write!(
                     f,
                     "ObjectIntersectionOf({})",
                     Functional(classes, self.1, None)
                 )
+            }
+            ObjectUnionOf(classes) if classes.len() == 1 => {
+                Functional(&classes[0], self.1, None).fmt(f)
             }
             ObjectUnionOf(classes) => {
                 write!(f, "ObjectUnionOf({})", Functional(classes, self.1, None))
@@ -1335,6 +1344,44 @@ mod tests {
             "Prefix(R:=<http://example.org/KB-CH%5BR%5D-8-5>)\n",
             rendered
         );
+    }
+
+    #[test]
+    fn test_ofn_single_operand_intersection_and_union_degrade_to_operand() {
+        // https://github.com/phillord/horned-owl/issues/235
+        // ofn.pest's ClassExpression{2,} requires >= 2 operands, but the RDF
+        // reader can build a single-operand ObjectIntersectionOf/ObjectUnionOf
+        // from a real-world (if spec-invalid) owl:intersectionOf/unionOf RDF
+        // list with only one member -- e.g. the BCS7 corpus file (turtle) has
+        // `[] a owl:Class ; rdfs:subClassOf cst:R7_Stage_IV ;
+        // owl:intersectionOf ( cst:M1 ) .`. Writing that verbatim as
+        // `ObjectIntersectionOf(<...M1>)` produces output the OFN reader's
+        // own grammar then rejects. A single-operand intersection/union is
+        // just that operand, so the writer should degrade to it directly.
+        let build = Build::new_arc();
+        let m1 = ClassExpression::Class(build.class("http://ex/M1"));
+
+        let intersection = ClassExpression::ObjectIntersectionOf(vec![m1.clone()]);
+        let ofn = format!("{}", intersection.as_functional());
+        assert_eq!("<http://ex/M1>", ofn);
+
+        let union = ClassExpression::ObjectUnionOf(vec![m1]);
+        let ofn = format!("{}", union.as_functional());
+        assert_eq!("<http://ex/M1>", ofn);
+
+        let sub_class_of = SubClassOf {
+            sup: build.class("http://ex/R7_Stage_IV").into(),
+            sub: union,
+        };
+        let ofn = format!("{}", sub_class_of.as_functional());
+        let reparsed: Result<(crate::ontology::set::SetOntology<RcStr>, _), _> =
+            crate::io::ofn::reader::read(
+                std::io::Cursor::new(format!(
+                    "Prefix(:=<http://ex/>)\nOntology(<http://ex/o>\n{ofn}\n)"
+                )),
+                Default::default(),
+            );
+        assert!(reparsed.is_ok(), "reparse failed: {reparsed:?}");
     }
 
     #[test]
