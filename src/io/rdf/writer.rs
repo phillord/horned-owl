@@ -21,9 +21,37 @@ use std::{
     io::Write,
 };
 
+/// Configuration for the RDF writer.
+#[derive(Clone, Debug)]
+pub struct RDFWriterConfiguration {
+    /// In lax mode (the default, matching this writer's historical
+    /// behaviour), axioms that are technically invalid per the OWL 2 spec's
+    /// minimum-arity constraints -- e.g. a single-member `DifferentIndividuals`
+    /// (or `DisjointObjectProperties`/`DisjointDataProperties`), which OWL-API
+    /// itself has been observed to write into real-world ontologies -- are
+    /// still faithfully serialised. In strict mode, such axioms are silently
+    /// dropped instead.
+    pub lax: bool,
+}
+
+impl Default for RDFWriterConfiguration {
+    fn default() -> Self {
+        RDFWriterConfiguration { lax: true }
+    }
+}
+
 pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
     write: W,
     ont: &ComponentMappedOntology<A, AA>,
+) -> Result<W, HornedError> {
+    write_with_config(write, ont, RDFWriterConfiguration::default())
+}
+
+/// As [`write`], but with an explicit [`RDFWriterConfiguration`].
+pub fn write_with_config<A: ForIRI, AA: ForIndex<A>, W: Write>(
+    write: W,
+    ont: &ComponentMappedOntology<A, AA>,
+    config: RDFWriterConfiguration,
 ) -> Result<W, HornedError> {
     let p = indexmap![
                     "http://www.w3.org/1999/02/22-rdf-syntax-ns#" => "rdf",
@@ -33,7 +61,7 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
     let p = p.into_iter().map(|(k, v)| (k.into(), v.into())).collect();
 
     let f = PrettyRdfXmlFormatter::new(write, ChunkedRdfXmlFormatterConfig::all().prefix(p))?;
-    write_to_rdf_formatter(ont, f)
+    write_to_rdf_formatter_with_config(ont, f, config)
 }
 
 /// Write a component mapped ontology as RDF in the format named by
@@ -45,6 +73,16 @@ pub fn write_to_rdf_format<A: ForIRI, AA: ForIndex<A>, W: Write>(
     write: W,
     ont: &ComponentMappedOntology<A, AA>,
     format: &str,
+) -> Result<W, HornedError> {
+    write_to_rdf_format_with_config(write, ont, format, RDFWriterConfiguration::default())
+}
+
+/// As [`write_to_rdf_format`], but with an explicit [`RDFWriterConfiguration`].
+pub fn write_to_rdf_format_with_config<A: ForIRI, AA: ForIndex<A>, W: Write>(
+    write: W,
+    ont: &ComponentMappedOntology<A, AA>,
+    format: &str,
+    config: RDFWriterConfiguration,
 ) -> Result<W, HornedError> {
     let serial = |write, format| {
         WriterQuadSerializerAdaptor::new(RdfSerializer::from_format(format).for_writer(write))
@@ -61,19 +99,36 @@ pub fn write_to_rdf_format<A: ForIRI, AA: ForIndex<A>, W: Write>(
     };
 
     match rdf_format {
-        oxrdfio::RdfFormat::RdfXml => crate::io::rdf::writer::write(write, ont),
-        other => write_to_rdf_formatter(ont, serial(write, other)),
+        oxrdfio::RdfFormat::RdfXml => write_with_config(write, ont, config),
+        other => write_to_rdf_formatter_with_config(ont, serial(write, other), config),
     }
 }
 
 /// Write a component mapped ontology into RDF
 pub fn write_to_rdf_formatter<A: ForIRI, AA: ForIndex<A>, F: RdfFormatter<A, W>, W: Write>(
     ont: &ComponentMappedOntology<A, AA>,
+    formatter: F,
+) -> Result<W, HornedError> {
+    write_to_rdf_formatter_with_config(ont, formatter, RDFWriterConfiguration::default())
+}
+
+/// As [`write_to_rdf_formatter`], but with an explicit [`RDFWriterConfiguration`].
+pub fn write_to_rdf_formatter_with_config<
+    A: ForIRI,
+    AA: ForIndex<A>,
+    F: RdfFormatter<A, W>,
+    W: Write,
+>(
+    ont: &ComponentMappedOntology<A, AA>,
     mut formatter: F,
+    config: RDFWriterConfiguration,
 ) -> Result<W, HornedError> {
     // Entirely unsatisfying to set this randomly here, but we can't
     // access ns our parser yet
-    let mut bng = NodeGenerator::default();
+    let mut bng = NodeGenerator {
+        lax: config.lax,
+        ..NodeGenerator::default()
+    };
 
     ont.render(&mut formatter, &mut bng)?;
     // for i in f.triples() {
@@ -87,6 +142,7 @@ struct NodeGenerator<A: ForIRI> {
     i: u64,
     b: HashSet<A>,
     this_bn: Option<PNamedOrBlankNode<A>>,
+    lax: bool,
 }
 
 impl<A: ForIRI> Default for NodeGenerator<A> {
@@ -95,6 +151,7 @@ impl<A: ForIRI> Default for NodeGenerator<A> {
             i: 0,
             b: HashSet::new(),
             this_bn: None,
+            lax: true,
         }
     }
 }
@@ -976,6 +1033,12 @@ fn members<
     // _:x owl:members T(SEQ a1 ... an) .
     match members.len() {
         0 => Ok(vec![]),
+        // A single-member DifferentIndividuals/DisjointObjectProperties/
+        // DisjointDataProperties is invalid per the OWL 2 spec's minimum
+        // arity of 2, but OWL-API itself has been observed writing exactly
+        // this into real-world ontologies (#214). Strict mode drops it;
+        // lax mode (the default) preserves it faithfully, as before.
+        1 if !ng.lax => Ok(vec![]),
         2 => {
             let a: PNamedOrBlankNode<_> = members[0].render(f, ng)?;
             let b: PTerm<_> = members[1].render(f, ng)?.into();
@@ -2100,5 +2163,57 @@ mod test {
         // Should not panic; writes owl:AllDifferent with a single-element list (matching OWL-API behaviour)
         let out = write_to_rdf_formatter(&ont, formatter).unwrap();
         assert!(!out.is_empty());
+    }
+
+    #[test]
+    fn single_member_different_individuals_dropped_in_strict_mode() {
+        // https://github.com/phillord/horned-owl/issues/214
+        let b = Build::new_rc();
+        let mut ont = ComponentMappedOntology::new_rc();
+        ont.insert(DifferentIndividuals(vec![Individual::Named(
+            NamedIndividual(b.iri("http://example.org/a")),
+        )]));
+        let sink = Vec::new();
+        let formatter = WriterQuadSerializerAdaptor::new(
+            RdfSerializer::from_format(oxrdfio::RdfFormat::NTriples).for_writer(sink),
+        );
+        let out = write_to_rdf_formatter_with_config(
+            &ont,
+            formatter,
+            RDFWriterConfiguration { lax: false },
+        )
+        .unwrap();
+        assert!(out.is_empty());
+    }
+
+    #[test]
+    fn single_member_disjoint_object_properties_lax_vs_strict() {
+        // The same members() helper backs DisjointObjectProperties (and
+        // DisjointDataProperties) as DifferentIndividuals, so the lax/strict
+        // split applies uniformly (#214).
+        let b = Build::new_rc();
+        let mut ont = ComponentMappedOntology::new_rc();
+        ont.insert(DisjointObjectProperties(vec![
+            ObjectProperty(b.iri("http://example.org/p")).into(),
+        ]));
+
+        let lax_sink = Vec::new();
+        let lax_formatter = WriterQuadSerializerAdaptor::new(
+            RdfSerializer::from_format(oxrdfio::RdfFormat::NTriples).for_writer(lax_sink),
+        );
+        let lax_out = write_to_rdf_formatter(&ont, lax_formatter).unwrap();
+        assert!(!lax_out.is_empty());
+
+        let strict_sink = Vec::new();
+        let strict_formatter = WriterQuadSerializerAdaptor::new(
+            RdfSerializer::from_format(oxrdfio::RdfFormat::NTriples).for_writer(strict_sink),
+        );
+        let strict_out = write_to_rdf_formatter_with_config(
+            &ont,
+            strict_formatter,
+            RDFWriterConfiguration { lax: false },
+        )
+        .unwrap();
+        assert!(strict_out.is_empty());
     }
 }
