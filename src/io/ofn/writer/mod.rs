@@ -72,11 +72,32 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
 ///   passes it here. Imports absent from the list keep their default (sorted)
 ///   order after the listed ones.
 pub fn write_with_labels<A: ForIRI, AA: ForIndex<A>, W: Write>(
+    write: W,
+    ont: &ComponentMappedOntology<A, AA>,
+    mapping: Option<&PrefixMapping>,
+    extra_labels: Option<&HashMap<String, String>>,
+    import_order: Option<&[String]>,
+) -> Result<W, HornedError> {
+    write_full(write, ont, mapping, extra_labels, import_order, None)
+}
+
+/// Like [`write_with_labels`], plus `closure_declared`: the entity IRIs declared
+/// anywhere in the ontology's imports closure.
+///
+/// OWLAPI synthesises a `Declaration(...)` for every signature entity that has
+/// none of its own, but skips any entity `isDeclared(…, INCLUDED)` — declared in
+/// the closure. Serialising an import-bearing ontology therefore adds nothing,
+/// while serialising the same ontology with its imports stripped adds one
+/// declaration per entity that lost its declaring import. Pass the closure's
+/// declared entities to reproduce that exactly; pass `None` and no declarations
+/// are added to an ontology that still has imports.
+pub fn write_full<A: ForIRI, AA: ForIndex<A>, W: Write>(
     mut write: W,
     ont: &ComponentMappedOntology<A, AA>,
     mapping: Option<&PrefixMapping>,
     extra_labels: Option<&HashMap<String, String>>,
     import_order: Option<&[String]>,
+    closure_declared: Option<&std::collections::HashSet<String>>,
 ) -> Result<W, HornedError> {
     // Ensure we have a prefix mapping; the default is a no-op and
     // it's easier than checking every time.
@@ -164,10 +185,15 @@ pub fn write_with_labels<A: ForIRI, AA: ForIndex<A>, W: Write>(
     // --- Pass 1: declarations, entity ranks, and rdfs:labels ---
     let mut declarations: Vec<(usize, String, String)> = Vec::new();
     let mut entity_rank: HashMap<String, usize> = HashMap::new();
+    // Keyed by (rank, IRI), not IRI alone: OWLAPI declares per *entity*, so an IRI
+    // legally punned as both a class and an annotation property needs a
+    // declaration for whichever of the two it lacks.
+    let mut declared: std::collections::HashSet<(usize, String)> = std::collections::HashSet::new();
     let mut labels: HashMap<String, String> = HashMap::new();
     for ac in ont.iter() {
         if let Some((rank, iri)) = declaration_info(&ac.component) {
             entity_rank.insert(iri.clone(), rank);
+            declared.insert((rank, iri.clone()));
             declarations.push((
                 rank,
                 iri,
@@ -187,6 +213,69 @@ pub fn write_with_labels<A: ForIRI, AA: ForIndex<A>, W: Write>(
             }
         }
     }
+    // OWLAPI groups the output by SIGNATURE, not by declaration: an entity used
+    // in an axiom whose `Declaration(...)` lives in an imported ontology is still
+    // in `ontology.get<Kind>InSignature()`, so it still gets its own
+    // `# Object Property: <IRI> (label)` banner and carries its annotation
+    // assertions. HPO's `hp-edit.owl` is the case in point — it declares no
+    // object property at all (BFO/RO come from `merged_import.owl`), yet ROBOT's
+    // conversion of it opens a full `#   Object Properties` section.
+    let signature = signature_kinds(ont);
+    for (iri, kinds) in &signature {
+        if entity_rank.contains_key(iri) {
+            continue;
+        }
+        // An IRI used as more than one kind is punned; with no declaration to
+        // disambiguate, take the lowest-ranked kind so the entity still lands in
+        // a section rather than the leftover block.
+        if let Some(rank) = (0..6).find(|r| kinds & (1 << r) != 0) {
+            entity_rank.insert(iri.clone(), rank);
+        }
+    }
+
+    // `FunctionalSyntaxObjectRenderer.writeDeclarations` synthesises a
+    // `Declaration(...)` for any signature entity that has none of its own —
+    // unless the entity is built in, is illegally punned, or is declared
+    // somewhere in the imports closure. That last check is why converting an
+    // edit file adds nothing (its undeclared entities are declared in the
+    // imports) while merging the closure away and re-serialising adds one
+    // declaration per entity that lost its declaring import: `remove --select
+    // imports` on `hp-edit.owl` is followed by 2192 new declarations.
+    //
+    // `closure_declared` carries that closure when a caller has resolved it. With
+    // no closure supplied we cannot answer `isDeclared(entity, INCLUDED)` for an
+    // ontology that still has imports, so nothing is added there — matching ROBOT
+    // for every import-bearing file, and differing only for a signature entity
+    // declared in no ontology at all.
+    let has_imports = ont
+        .i()
+        .component_for_kind(ComponentKind::Import)
+        .next()
+        .is_some();
+    if !has_imports || closure_declared.is_some() {
+        let illegal = illegal_punnings(&signature);
+        for (iri, kinds) in &signature {
+            if illegal.contains(iri.as_str()) || closure_declared.is_some_and(|c| c.contains(iri)) {
+                continue;
+            }
+            for rank in 0..6 {
+                if kinds & (1 << rank) == 0
+                    || declared.contains(&(rank, iri.clone()))
+                    || is_builtin_entity(rank, iri)
+                {
+                    continue;
+                }
+                let abbreviated = match shrink_valid(mapping, iri) {
+                    Some((prefix, local)) => format!("{prefix}:{local}"),
+                    None => format!("<{iri}>"),
+                };
+                let rendered =
+                    format!("Declaration({}({abbreviated}))", DECL_KEYWORD[rank]);
+                declarations.push((rank, iri.clone(), rendered));
+            }
+        }
+    }
+
     // The Declaration block is `sortOptionally(ontology.getSignature())`, i.e.
     // `OWLObject.compareTo`, which compares the TYPE INDEX before the structure.
     // Those indices are not the section ranks: read off owlapi4's
@@ -217,8 +306,12 @@ pub fn write_with_labels<A: ForIRI, AA: ForIndex<A>, W: Write>(
     // axioms), e.g. datatypes that appear only inside typed literals. Ranks:
     // Class=0, OP=1, DataProp=2, AP=3, Datatype=4, Individual=5.
     let mut sig_nonempty = [false; 6];
-    for &rank in entity_rank.values() {
-        sig_nonempty[rank] = true;
+    for kinds in signature.values() {
+        for rank in 0..6 {
+            if kinds & (1 << rank) != 0 {
+                sig_nonempty[rank] = true;
+            }
+        }
     }
     if !sig_nonempty[4] {
         // A typed literal anywhere puts its datatype (≥ xsd:string) in the
@@ -456,6 +549,133 @@ fn literal_text<A: ForIRI>(lit: &Literal<A>) -> String {
 }
 
 /// If `comp` is an entity declaration, return its `(section rank, IRI)`.
+/// The `Declaration(...)` keyword for each section rank.
+const DECL_KEYWORD: [&str; 6] = [
+    "Class",
+    "ObjectProperty",
+    "DataProperty",
+    "AnnotationProperty",
+    "Datatype",
+    "NamedIndividual",
+];
+
+/// Every entity in the ontology's signature, mapped to a bitmask of the section
+/// ranks it occurs as (`1 << rank`). More than one bit set means the IRI is
+/// punned. Ontology annotations count: `hp-edit.owl` uses `dc:creator` only in
+/// its `Ontology(...)` header, and ROBOT declares it.
+fn signature_kinds<A: ForIRI, AA: ForIndex<A>>(
+    ont: &ComponentMappedOntology<A, AA>,
+) -> std::collections::BTreeMap<String, u8> {
+    use crate::model::{
+        AnnotationProperty, Class, DataProperty, Datatype, NamedIndividual, ObjectProperty,
+    };
+    use crate::visitor::immutable::{Visit, Walk};
+
+    #[derive(Default)]
+    struct Scan(std::collections::BTreeMap<String, u8>);
+    impl Scan {
+        fn mark(&mut self, iri: &str, rank: usize) {
+            *self.0.entry(iri.to_string()).or_insert(0) |= 1 << rank;
+        }
+    }
+    impl<A: ForIRI> Visit<A> for Scan {
+        fn visit_class(&mut self, e: &Class<A>) {
+            self.mark(e.0.as_ref(), 0)
+        }
+        fn visit_object_property(&mut self, e: &ObjectProperty<A>) {
+            self.mark(e.0.as_ref(), 1)
+        }
+        fn visit_data_property(&mut self, e: &DataProperty<A>) {
+            self.mark(e.0.as_ref(), 2)
+        }
+        fn visit_annotation_property(&mut self, e: &AnnotationProperty<A>) {
+            self.mark(e.0.as_ref(), 3)
+        }
+        fn visit_datatype(&mut self, e: &Datatype<A>) {
+            self.mark(e.0.as_ref(), 4)
+        }
+        fn visit_named_individual(&mut self, e: &NamedIndividual<A>) {
+            self.mark(e.0.as_ref(), 5)
+        }
+    }
+
+    let mut walk = Walk::new(Scan::default());
+    for ac in ont.iter() {
+        walk.annotated_component(ac);
+    }
+    walk.into_visit().0
+}
+
+/// OWLAPI's `OWLDocumentFormatImpl.determineIllegalPunnings`: an IRI used as both
+/// an object and an annotation property — or data/annotation, data/object, or
+/// datatype/class — is illegally punned, and the renderer adds no declaration for
+/// it. Individuals never make a punning illegal.
+fn illegal_punnings(
+    sig: &std::collections::BTreeMap<String, u8>,
+) -> std::collections::HashSet<&str> {
+    const CLASS: u8 = 1 << 0;
+    const OP: u8 = 1 << 1;
+    const DP: u8 = 1 << 2;
+    const AP: u8 = 1 << 3;
+    const DT: u8 = 1 << 4;
+    sig.iter()
+        .filter(|(_, k)| {
+            let k = **k;
+            (k & OP != 0 && k & AP != 0)
+                || (k & DP != 0 && k & AP != 0)
+                || (k & DP != 0 && k & OP != 0)
+                || (k & DT != 0 && k & CLASS != 0)
+        })
+        .map(|(iri, _)| iri.as_str())
+        .collect()
+}
+
+/// OWLAPI's `OWLEntity.isBuiltIn()`, which differs by entity kind: `owl:Thing`
+/// and `owl:Nothing` for classes, the top/bottom properties, a fixed list of
+/// annotation properties (`OWLRDFVocabulary.BUILT_IN_ANNOTATION_PROPERTY_IRIS`),
+/// and the OWL 2 datatype map for datatypes. Individuals are never built in.
+///
+/// The datatype case is taken as "in one of the four schema namespaces" rather
+/// than the enumerated `OWL2Datatype` map: every member of that map is in one of
+/// them, and a user-defined datatype minted inside them would be malformed.
+fn is_builtin_entity(rank: usize, iri: &str) -> bool {
+    const OWL: &str = "http://www.w3.org/2002/07/owl#";
+    const RDFS: &str = "http://www.w3.org/2000/01/rdf-schema#";
+    const RDF: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#";
+    const XSD: &str = "http://www.w3.org/2001/XMLSchema#";
+    match rank {
+        0 => iri == "http://www.w3.org/2002/07/owl#Thing"
+            || iri == "http://www.w3.org/2002/07/owl#Nothing",
+        1 => {
+            iri == "http://www.w3.org/2002/07/owl#topObjectProperty"
+                || iri == "http://www.w3.org/2002/07/owl#bottomObjectProperty"
+        }
+        2 => {
+            iri == "http://www.w3.org/2002/07/owl#topDataProperty"
+                || iri == "http://www.w3.org/2002/07/owl#bottomDataProperty"
+        }
+        3 => matches!(
+            iri,
+            "http://www.w3.org/2000/01/rdf-schema#label"
+                | "http://www.w3.org/2000/01/rdf-schema#comment"
+                | "http://www.w3.org/2000/01/rdf-schema#seeAlso"
+                | "http://www.w3.org/2000/01/rdf-schema#isDefinedBy"
+                | "http://www.w3.org/2002/07/owl#versionInfo"
+                | "http://www.w3.org/2002/07/owl#backwardCompatibleWith"
+                | "http://www.w3.org/2002/07/owl#priorVersion"
+                | "http://www.w3.org/2002/07/owl#incompatibleWith"
+                | "http://www.w3.org/2002/07/owl#deprecated"
+        ),
+        4 => {
+            iri.starts_with(XSD)
+                || iri.starts_with(RDF)
+                || iri.starts_with(RDFS)
+                || iri.starts_with(OWL)
+        }
+        _ => false,
+    }
+}
+
 fn declaration_info<A: ForIRI>(comp: &Component<A>) -> Option<(usize, String)> {
     Some(match comp {
         Component::DeclareClass(e) => (0, e.0 .0.as_ref().to_string()),
