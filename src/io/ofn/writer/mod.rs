@@ -1,5 +1,4 @@
 use std::cmp::Ordering;
-use std::collections::BTreeSet;
 use std::collections::HashMap;
 use std::io::Write;
 
@@ -316,13 +315,20 @@ pub fn write_full<A: ForIRI, AA: ForIndex<A>, W: Write>(
     if !sig_nonempty[4] {
         // A typed literal anywhere puts its datatype (≥ xsd:string) in the
         // signature, so the Datatypes section is non-empty even without a
-        // datatype declaration.
+        // datatype declaration. An ONTOLOGY annotation counts too: an otherwise
+        // empty `definitions.owl` carrying only `Annotation(owl:versionInfo …)`
+        // still gets the Datatypes blank line from that literal's xsd:string.
         for ac in ont.iter() {
-            if let Component::AnnotationAssertion(aa) = &ac.component {
-                if matches!(aa.ann.av, AnnotationValue::Literal(_)) {
-                    sig_nonempty[4] = true;
-                    break;
+            let lit = match &ac.component {
+                Component::AnnotationAssertion(aa) => matches!(aa.ann.av, AnnotationValue::Literal(_)),
+                Component::OntologyAnnotation(oa) => {
+                    matches!(oa.0.av, AnnotationValue::Literal(_))
                 }
+                _ => false,
+            };
+            if lit {
+                sig_nonempty[4] = true;
+                break;
             }
         }
     }
@@ -391,17 +397,19 @@ pub fn write_full<A: ForIRI, AA: ForIndex<A>, W: Write>(
             continue;
         }
         let (section, label) = SECTIONS[rank];
-        let mut iris: BTreeSet<&str> = BTreeSet::new();
-        for (r, iri) in ann_blocks.keys() {
+        // `writeSortedEntities` orders each section with `sortOptionally`, i.e.
+        // `OWLObject.compareTo` → `IRI.compareTo`, which compares NAMESPACE then
+        // remainder — not the whole string. So `…/obo/valid_for_gocam` (namespace
+        // `…/obo/`) precedes `…/obo/chebi/3_STAR` (namespace `…/obo/chebi/`)
+        // even though `c` < `v` lexically. A `BTreeSet<&str>` got that backwards.
+        let mut iris: Vec<&str> = Vec::new();
+        for (r, iri) in ann_blocks.keys().chain(axiom_blocks.keys()) {
             if *r == rank {
-                iris.insert(iri.as_str());
+                iris.push(iri.as_str());
             }
         }
-        for (r, iri) in axiom_blocks.keys() {
-            if *r == rank {
-                iris.insert(iri.as_str());
-            }
-        }
+        iris.sort_by(|a, b| owlapi_iri_cmp(a, b));
+        iris.dedup();
 
         // The banner + entities are written only when some entity of this type
         // carries axioms; a signature-only type (e.g. Datatypes) emits no banner.
