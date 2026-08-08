@@ -5,6 +5,10 @@ use std::io::Write;
 use curie::PrefixMapping;
 
 use crate::error::HornedError;
+use crate::model::Atom;
+use crate::model::DArgument;
+use crate::model::IArgument;
+use crate::model::Rule;
 use crate::model::AnnotatedComponent;
 use crate::model::AnnotationSubject;
 use crate::model::AnnotationValue;
@@ -188,10 +192,20 @@ pub fn write_full<A: ForIRI, AA: ForIndex<A>, W: Write>(
     // legally punned as both a class and an annotation property needs a
     // declaration for whichever of the two it lacks.
     let mut declared: std::collections::HashSet<(usize, String)> = std::collections::HashSet::new();
-    // Keyed by subject, holding the LITERAL so the winner can be chosen by
-    // OWLAPI's own literal order rather than by whichever happened to be visited
-    // last (this ontology is a set, so `iter()` order is arbitrary).
-    let mut label_lits: HashMap<String, &Literal<A>> = HashMap::new();
+    // The banner label of an entity with more than one `rdfs:label` is decided by
+    // OWLAPI's `AnnotationValueShortFormProvider`, which walks
+    // `getAnnotationAssertionAxioms(iri)` and keeps the FIRST label it sees:
+    // `AnnotationLanguageFilter.visit(OWLLiteral)` sets `lastLangMatchIndex = 0`
+    // with an empty preferred-language map, and the axiom visit is guarded by
+    // `lastLangMatchIndex > 0`, so every later assertion is skipped.
+    //
+    // That set is a `java.util.HashSet` of the subject's annotation assertions, so
+    // "first" is bucket order over the axiom `hashCode` — reproducible, not
+    // per-JVM: `robot convert` run twice over one file gives byte-identical
+    // banners. Collect every label per subject, plus how many annotation
+    // assertions the subject has (which sizes the table), and pick afterwards.
+    let mut label_lits: HashMap<String, Vec<(&Literal<A>, bool)>> = HashMap::new();
+    let mut subject_ann_count: HashMap<String, usize> = HashMap::new();
     for ac in ont.iter() {
         if let Some((rank, iri)) = declaration_info(&ac.component) {
             entity_rank.insert(iri.clone(), rank);
@@ -202,37 +216,26 @@ pub fn write_full<A: ForIRI, AA: ForIndex<A>, W: Write>(
                 ac.as_functional_with_prefixes(mapping).to_string(),
             ));
         } else if let Component::AnnotationAssertion(aa) = &ac.component {
-            if aa.ann.ap.0.as_ref() == RDFS_LABEL {
-                if let (AnnotationSubject::IRI(subj), AnnotationValue::Literal(lit)) =
-                    (&aa.subject, &aa.ann.av)
-                {
-                    // The FIRST label in OWLAPI's own literal order wins.
-                    //
-                    // OWLAPI really takes the first label out of
-                    // `getAnnotationAssertionAxioms(iri)`, a hash-ordered set
-                    // whose seed is per-JVM: `robot convert` run twice over one
-                    // unchanged file gives `oboInOwl:hasDbXref` the banner
-                    // `database_cross_reference` on some runs and
-                    // `has cross-reference` on others (6 of 20 here). So no rule
-                    // can match it every time. The closest deterministic proxy
-                    // for "the first one visited" is the first in OWLAPI's own
-                    // `compareTo` order, and it agrees with the reference on 6 of
-                    // the 7 entities in ECTO's merged import that carry more than
-                    // one label. (`RO_0002211` is the seventh: ROBOT calls it
-                    // `regulates (processual)` where this picks `regulates`.)
-                    let win = match label_lits.get(subj.as_ref()) {
-                        Some(prev) => owlapi_literal_cmp(prev, lit) == Ordering::Greater,
-                        None => true,
-                    };
-                    if win {
-                        label_lits.insert(subj.as_ref().to_string(), lit);
+            if let AnnotationSubject::IRI(subj) = &aa.subject {
+                *subject_ann_count.entry(subj.as_ref().to_string()).or_insert(0) += 1;
+                if aa.ann.ap.0.as_ref() == RDFS_LABEL {
+                    if let AnnotationValue::Literal(lit) = &aa.ann.av {
+                        label_lits
+                            .entry(subj.as_ref().to_string())
+                            .or_default()
+                            .push((lit, !ac.ann.is_empty()));
                     }
                 }
             }
         }
     }
-    let labels: HashMap<String, String> =
-        label_lits.iter().map(|(k, v)| (k.clone(), literal_text(v))).collect();
+    let labels: HashMap<String, String> = label_lits
+        .iter()
+        .filter_map(|(subj, lits)| {
+            let cap = owlapi_set_cap(subject_ann_count.get(subj).copied().unwrap_or(1).max(1));
+            pick_banner_label(subj, lits, cap).map(|l| (subj.clone(), literal_text(l)))
+        })
+        .collect();
     // OWLAPI groups the output by SIGNATURE, not by declaration: an entity used
     // in an axiom whose `Declaration(...)` lives in an imported ontology is still
     // in `ontology.get<Kind>InSignature()`, so it still gets its own
@@ -777,6 +780,11 @@ fn owlapi_axiom_index<A: ForIRI>(comp: &Component<A>) -> u8 {
         DataPropertyRange(_) => 30,
         DisjointDataProperties(_) => 31,
         HasKey(_) => 32,
+        // `AxiomType.SWRL_RULE` sits between `HAS_KEY` and `ANNOTATION_ASSERTION`,
+        // which is why ROBOT writes UBERON's three `DLSafeRule`s at the very end of
+        // the leftover block, after the property chains. Defaulting them to 0 put
+        // them at the front of it.
+        Rule(_) => 33,
         AnnotationAssertion(_) => 34,
         SubAnnotationPropertyOf(_) => 35,
         AnnotationPropertyRange(_) => 36,
@@ -816,6 +824,157 @@ fn owlapi_ce_index<A: ForIRI>(ce: &ClassExpression<A>) -> u32 {
         DataExactCardinality { .. } => 3016,
         DataMaxCardinality { .. } => 3017,
     }
+}
+
+/// `java.lang.String.hashCode` — over UTF-16 code units, so a non-BMP character
+/// contributes its two surrogates.
+fn java_hash(s: &str) -> i32 {
+    let mut h: i32 = 0;
+    for u in s.encode_utf16() {
+        h = h.wrapping_mul(31).wrapping_add(u as i32);
+    }
+    h
+}
+
+fn xml_name_start(c: u32) -> bool {
+    c == b':' as u32
+        || (b'A' as u32..=b'Z' as u32).contains(&c)
+        || c == b'_' as u32
+        || (b'a' as u32..=b'z' as u32).contains(&c)
+        || (0xC0..=0xD6).contains(&c)
+        || (0xD8..=0xF6).contains(&c)
+        || (0xF8..=0x2FF).contains(&c)
+        || (0x370..=0x37D).contains(&c)
+        || (0x37F..=0x1FFF).contains(&c)
+        || (0x200C..=0x200D).contains(&c)
+        || (0x2070..=0x218F).contains(&c)
+        || (0x2C00..=0x2FEF).contains(&c)
+        || (0x3001..=0xD7FF).contains(&c)
+        || (0xF900..=0xFDCF).contains(&c)
+        || (0xFDF0..=0xFFFD).contains(&c)
+        || (0x10000..=0xEFFFF).contains(&c)
+}
+
+fn xml_name_char(c: u32) -> bool {
+    xml_name_start(c)
+        || c == b'-' as u32
+        || c == b'.' as u32
+        || (b'0' as u32..=b'9' as u32).contains(&c)
+        || c == 0xB7
+        || (0x0300..=0x036F).contains(&c)
+        || (0x203F..=0x2040).contains(&c)
+}
+
+/// OWLAPI `XMLUtils.getNCNameSuffixIndex`: where the local part begins, or `None`
+/// when the whole string is the namespace.
+fn ncname_suffix_index(s: &str) -> Option<usize> {
+    let b = s.as_bytes();
+    if b.len() > 1 && b[0] == b'_' && b[1] == b':' {
+        return None;
+    }
+    let mut index = None;
+    for (i, ch) in s.char_indices().rev() {
+        let cp = ch as u32;
+        if cp != ':' as u32 && xml_name_start(cp) {
+            index = Some(i);
+        }
+        if !(cp != ':' as u32 && xml_name_char(cp)) {
+            break;
+        }
+    }
+    index
+}
+
+/// OWLAPI `IRI.hashCode` = `namespace.hashCode() + remainder.hashCode()`.
+fn owlapi_iri_hash(iri: &str) -> i32 {
+    match ncname_suffix_index(iri) {
+        Some(i) => java_hash(&iri[..i]).wrapping_add(java_hash(&iri[i..])),
+        None => java_hash(iri),
+    }
+}
+
+/// `OWLLiteralImplPlain.hashCode` — an untyped literal, with or without a
+/// language tag.
+fn owlapi_plain_literal_hash(value: &str, lang: &str) -> i32 {
+    let base = (3231644899u32 as i32).wrapping_add(java_hash(value).wrapping_mul(65536));
+    if lang.is_empty() {
+        base
+    } else {
+        base.wrapping_mul(37).wrapping_add(java_hash(lang))
+    }
+}
+
+/// `OWLAnnotationAssertionAxiomImpl.hashCode` for an UNANNOTATED `rdfs:label`
+/// assertion: the axiom-type seed, then subject, property, value, and the (empty)
+/// annotation collection.
+fn owlapi_label_axiom_hash(subj: &str, value: &str, lang: &str) -> i32 {
+    let mut h: i32 = 739;
+    h = h.wrapping_mul(31).wrapping_add(owlapi_iri_hash(subj));
+    h = h
+        .wrapping_mul(31)
+        .wrapping_add(owlapi_iri_hash(RDFS_LABEL).wrapping_add(188077));
+    h = h.wrapping_mul(31).wrapping_add(owlapi_plain_literal_hash(value, lang));
+    h.wrapping_mul(31)
+}
+
+/// Table size of a default `java.util.HashSet` after `n` incremental adds.
+fn owlapi_set_cap(n: usize) -> usize {
+    let mut cap = 16usize;
+    while n * 4 > cap * 3 {
+        cap <<= 1;
+    }
+    cap
+}
+
+/// `java.util.HashMap`'s bucket for a hash in a table of `cap`.
+fn owlapi_bucket(hash: i32, cap: usize) -> usize {
+    let h = hash as u32;
+    ((h ^ (h >> 16)) as usize) & (cap - 1)
+}
+
+/// The `rdfs:label` OWLAPI's short-form provider reaches first — the one whose
+/// assertion lands in the lowest bucket of the subject's annotation-assertion set.
+///
+/// The bucket rule is applied only when it is unambiguous: every label assertion
+/// is unannotated (so the annotation-collection hash is 0) and untyped (the only
+/// literal kind whose hash is reproduced here), and no two land in the same
+/// bucket — a within-bucket tie is broken by OWLAPI's parse-insertion order, which
+/// nothing here can recover. Otherwise fall back to the first in OWLAPI's own
+/// `compareTo` order, which is at least deterministic.
+fn pick_banner_label<'a, A: ForIRI>(
+    subj: &str,
+    lits: &[(&'a Literal<A>, bool)],
+    cap: usize,
+) -> Option<&'a Literal<A>> {
+    if lits.is_empty() {
+        return None;
+    }
+    if lits.len() == 1 {
+        return Some(lits[0].0);
+    }
+    fn plain<A: ForIRI>(l: &Literal<A>) -> Option<(&str, &str)> {
+        match l {
+            Literal::Simple { literal } => Some((literal.as_str(), "")),
+            Literal::Language { literal, lang } => Some((literal.as_str(), lang.as_str())),
+            Literal::Datatype { .. } => None,
+        }
+    }
+    if lits.iter().all(|(l, annotated)| !annotated && plain(l).is_some()) {
+        let mut ranked: Vec<(usize, &'a Literal<A>)> = lits
+            .iter()
+            .map(|(l, _)| {
+                let (v, lang) = plain(l).unwrap();
+                (owlapi_bucket(owlapi_label_axiom_hash(subj, v, lang), cap), *l)
+            })
+            .collect();
+        ranked.sort_by_key(|(b, _)| *b);
+        if ranked[0].0 != ranked[1].0 {
+            return Some(ranked[0].1);
+        }
+    }
+    lits.iter()
+        .map(|(l, _)| *l)
+        .min_by(|a, b| owlapi_literal_cmp(a, b))
 }
 
 /// OWLAPI's `IRI.compareTo`: namespace first, then remainder — NOT the whole
@@ -957,6 +1116,7 @@ fn owlapi_general_cmp<A: ForIRI>(
                 _ => a.cmp(b),
             }
         }
+        (Rule(x), Rule(y)) => owlapi_rule_cmp(x, y).then_with(|| a.cmp(b)),
         _ => a.cmp(b),
     }
 }
@@ -1091,7 +1251,118 @@ fn owlapi_literal_cmp<A: ForIRI>(a: &Literal<A>, b: &Literal<A>) -> Ordering {
 fn owlapi_axiom_cmp<A: ForIRI>(a: &&AnnotatedComponent<A>, b: &&AnnotatedComponent<A>) -> std::cmp::Ordering {
     owlapi_axiom_index(&a.component)
         .cmp(&owlapi_axiom_index(&b.component))
-        .then_with(|| a.cmp(b))
+        .then_with(|| match (&a.component, &b.component) {
+            (Component::Rule(x), Component::Rule(y)) => owlapi_rule_cmp(x, y),
+            _ => a.cmp(b),
+        })
+}
+
+/// `SWRLRuleImpl.compareObjectOfSameType`: the BODY atom sets first, then the
+/// HEAD atom sets — each `compareSets`, so sorted and compared element-wise. The
+/// rule's own annotations play no part, which is why RO's annotated rules
+/// interleave with its bare ones instead of grouping.
+fn owlapi_rule_cmp<A: ForIRI>(a: &Rule<A>, b: &Rule<A>) -> Ordering {
+    owlapi_atom_set_cmp(&a.body, &b.body).then_with(|| owlapi_atom_set_cmp(&a.head, &b.head))
+}
+
+fn owlapi_atom_set_cmp<A: ForIRI>(a: &[Atom<A>], b: &[Atom<A>]) -> Ordering {
+    let mut xa: Vec<&Atom<A>> = a.iter().collect();
+    let mut xb: Vec<&Atom<A>> = b.iter().collect();
+    xa.sort_by(|p, q| owlapi_atom_cmp(p, q));
+    xb.sort_by(|p, q| owlapi_atom_cmp(p, q));
+    for (p, q) in xa.iter().zip(xb.iter()) {
+        let c = owlapi_atom_cmp(p, q);
+        if c != Ordering::Equal {
+            return c;
+        }
+    }
+    xa.len().cmp(&xb.len())
+}
+
+/// `OWLObjectTypeIndexProvider`'s `RULE_OBJECT_TYPE_INDEX_BASE` (6000) plus the
+/// visitor ordinal. A class atom therefore sorts before an object-property atom,
+/// which is what puts RO's `ClassAtom(BFO_…)`-headed rules first.
+fn owlapi_atom_index<A: ForIRI>(atom: &Atom<A>) -> u32 {
+    use Atom::*;
+    match atom {
+        ClassAtom { .. } => 6001,
+        DataRangeAtom { .. } => 6002,
+        ObjectPropertyAtom { .. } => 6003,
+        DataPropertyAtom { .. } => 6004,
+        BuiltInAtom { .. } => 6005,
+        SameIndividualAtom(..) => 6009,
+        DifferentIndividualsAtom(..) => 6010,
+    }
+}
+
+fn owlapi_atom_cmp<A: ForIRI>(a: &Atom<A>, b: &Atom<A>) -> Ordering {
+    use Atom::*;
+    let c = owlapi_atom_index(a).cmp(&owlapi_atom_index(b));
+    if c != Ordering::Equal {
+        return c;
+    }
+    match (a, b) {
+        (ClassAtom { pred: p1, arg: a1 }, ClassAtom { pred: p2, arg: a2 }) => {
+            owlapi_ce_cmp(p1, p2).then_with(|| owlapi_iarg_cmp(a1, a2))
+        }
+        (
+            ObjectPropertyAtom { pred: p1, args: (x1, y1) },
+            ObjectPropertyAtom { pred: p2, args: (x2, y2) },
+        ) => owlapi_ope_cmp(p1, p2)
+            .then_with(|| owlapi_iarg_cmp(x1, x2))
+            .then_with(|| owlapi_iarg_cmp(y1, y2)),
+        (
+            DataPropertyAtom { pred: p1, args: (x1, y1) },
+            DataPropertyAtom { pred: p2, args: (x2, y2) },
+        ) => owlapi_iri_cmp(p1.0.as_ref(), p2.0.as_ref())
+            .then_with(|| owlapi_darg_cmp(x1, x2))
+            .then_with(|| owlapi_darg_cmp(y1, y2)),
+        (BuiltInAtom { pred: p1, args: v1 }, BuiltInAtom { pred: p2, args: v2 }) => {
+            let mut c = owlapi_iri_cmp(p1.as_ref(), p2.as_ref());
+            for (x, y) in v1.iter().zip(v2.iter()) {
+                if c != Ordering::Equal {
+                    return c;
+                }
+                c = owlapi_darg_cmp(x, y);
+            }
+            c.then_with(|| v1.len().cmp(&v2.len()))
+        }
+        (SameIndividualAtom(x1, y1), SameIndividualAtom(x2, y2))
+        | (DifferentIndividualsAtom(x1, y1), DifferentIndividualsAtom(x2, y2)) => {
+            owlapi_iarg_cmp(x1, x2).then_with(|| owlapi_iarg_cmp(y1, y2))
+        }
+        // A data-range predicate is the one shape whose OWLAPI comparator is not
+        // reproduced here; nothing in these ontologies uses one.
+        _ => a.cmp(b),
+    }
+}
+
+/// `SWRLVariable` is `RULE_OBJECT_TYPE_INDEX_BASE + 6` and
+/// `SWRLIndividualArgument` is `+ 7`, so a variable sorts before an individual.
+fn owlapi_iarg_cmp<A: ForIRI>(a: &IArgument<A>, b: &IArgument<A>) -> Ordering {
+    use IArgument::*;
+    let idx = |i: &IArgument<A>| match i {
+        Variable(_) => 6006u32,
+        Individual(_) => 6007,
+    };
+    idx(a).cmp(&idx(b)).then_with(|| match (a, b) {
+        (Variable(x), Variable(y)) => owlapi_iri_cmp(x.0.as_ref(), y.0.as_ref()),
+        _ => a.cmp(b),
+    })
+}
+
+/// `SWRLLiteralArgument` is `RULE_OBJECT_TYPE_INDEX_BASE + 8`, after the variable.
+fn owlapi_darg_cmp<A: ForIRI>(a: &DArgument<A>, b: &DArgument<A>) -> Ordering {
+    use DArgument::*;
+    let idx = |d: &DArgument<A>| match d {
+        Variable(_) => 6006u32,
+        Literal(_) => 6008,
+    };
+    idx(a).cmp(&idx(b)).then_with(|| match (a, b) {
+        (Variable(x), Variable(y)) => owlapi_iri_cmp(x.0.as_ref(), y.0.as_ref()),
+        (Literal(x), Literal(y)) => owlapi_literal_cmp(x, y),
+        _ => Ordering::Equal,
+    })
 }
 
 fn ce_class<A: ForIRI>(ce: &ClassExpression<A>) -> Option<String> {
