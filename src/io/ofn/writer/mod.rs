@@ -229,11 +229,17 @@ pub fn write_full<A: ForIRI, AA: ForIndex<A>, W: Write>(
             }
         }
     }
+    // Two label assertions can land in the SAME bucket of the subject's set, and
+    // then the winner is the one inserted first — which is the order the axioms
+    // were added to the ontology, i.e. the iteration order of the axiom set it was
+    // created from. That set is a `HashSet` too, so it is bucket order again, in a
+    // table sized for the whole ontology.
+    let ont_cap = owlapi_set_cap(ont.iter().count().max(1));
     let labels: HashMap<String, String> = label_lits
         .iter()
         .filter_map(|(subj, lits)| {
             let cap = owlapi_set_cap(subject_ann_count.get(subj).copied().unwrap_or(1).max(1));
-            pick_banner_label(subj, lits, cap).map(|l| (subj.clone(), literal_text(l)))
+            pick_banner_label(subj, lits, cap, ont_cap).map(|l| (subj.clone(), literal_text(l)))
         })
         .collect();
     // OWLAPI groups the output by SIGNATURE, not by declaration: an entity used
@@ -935,16 +941,25 @@ fn owlapi_bucket(hash: i32, cap: usize) -> usize {
 /// The `rdfs:label` OWLAPI's short-form provider reaches first — the one whose
 /// assertion lands in the lowest bucket of the subject's annotation-assertion set.
 ///
-/// The bucket rule is applied only when it is unambiguous: every label assertion
-/// is unannotated (so the annotation-collection hash is 0) and untyped (the only
-/// literal kind whose hash is reproduced here), and no two land in the same
-/// bucket — a within-bucket tie is broken by OWLAPI's parse-insertion order, which
-/// nothing here can recover. Otherwise fall back to the first in OWLAPI's own
-/// `compareTo` order, which is at least deterministic.
+/// The bucket rule is applied only when every label assertion is unannotated (so
+/// the annotation-collection hash is 0) and untyped — the only literal kind whose
+/// hash is reproduced here. Two assertions landing in the SAME bucket are decided
+/// by which was inserted first, and insertion order is the iteration order of the
+/// axiom set the ontology was created from: bucket order again, in a table sized
+/// for the whole ontology (`ont_cap`). That is what picks `data item` over `data
+/// entity` for `IAO_0000027` in `uberon_import.owl`, and `has cross-reference`
+/// over `database_cross_reference` for `oboInOwl:hasDbXref` in `ro_import.owl`.
+///
+/// `ont_cap` is sized from the ontology being WRITTEN, which stands in for the
+/// set it was created from — the same axioms less whatever a later `remove` took.
+/// Both land in the same power-of-two band for the modules this reproduces. A tie
+/// there too, or an annotated or typed label, falls back to the first in OWLAPI's
+/// own `compareTo` order, which is at least deterministic.
 fn pick_banner_label<'a, A: ForIRI>(
     subj: &str,
     lits: &[(&'a Literal<A>, bool)],
     cap: usize,
+    ont_cap: usize,
 ) -> Option<&'a Literal<A>> {
     if lits.is_empty() {
         return None;
@@ -960,11 +975,12 @@ fn pick_banner_label<'a, A: ForIRI>(
         }
     }
     if lits.iter().all(|(l, annotated)| !annotated && plain(l).is_some()) {
-        let mut ranked: Vec<(usize, &'a Literal<A>)> = lits
+        let mut ranked: Vec<((usize, usize), &'a Literal<A>)> = lits
             .iter()
             .map(|(l, _)| {
                 let (v, lang) = plain(l).unwrap();
-                (owlapi_bucket(owlapi_label_axiom_hash(subj, v, lang), cap), *l)
+                let h = owlapi_label_axiom_hash(subj, v, lang);
+                ((owlapi_bucket(h, cap), owlapi_bucket(h, ont_cap)), *l)
             })
             .collect();
         ranked.sort_by_key(|(b, _)| *b);
