@@ -956,18 +956,21 @@ fn is_valid_ofn_local_part(s: &str) -> bool {
 /// Abbreviate `iri` against `prefixes` as `prefix:local`, if possible.
 ///
 /// Doesn't use `curie::PrefixMapping::shrink_iri`: its `Display` for a
-/// default-prefix match omits the colon OFN's grammar requires (#230).
+/// default-prefix match omits the colon OFN's grammar requires (#230), and
+/// it picks whichever prefix was inserted first rather than the longest
+/// (most specific) matching one (#148).
+///
 /// Falls back to the full `<IRI>` form when no mapping gives a valid
 /// local part.
 fn shrink_iri_for_ofn<'a>(prefixes: &'a PrefixMapping, iri: &str) -> Option<(&'a str, String)> {
-    for (name, value) in prefixes.mappings() {
-        if let Some(local) = iri.strip_prefix(value.as_str())
-            && is_valid_ofn_local_part(local)
-        {
-            return Some((name.as_str(), local.to_string()));
-        }
-    }
-    None
+    prefixes
+        .mappings()
+        .filter_map(|(name, value)| {
+            let local = iri.strip_prefix(value.as_str())?;
+            is_valid_ofn_local_part(local).then(|| (name.as_str(), value.len(), local.to_string()))
+        })
+        .max_by_key(|(_, len, _)| *len)
+        .map(|(name, _, local)| (name, local))
 }
 
 impl<A: ForIRI> Display for Functional<'_, IRI<A>, A> {
@@ -1306,6 +1309,21 @@ mod tests {
             "Declaration(Class(<http://identifiers.org/mamo#MAMO_0000207>))",
             ofn
         );
+    }
+
+    // Regression test for #148: `eg` is inserted before `egc`, and both are
+    // valid OFN syntax, so the validity check alone can't save this --
+    // insertion-order-first-match would pick the wrong one.
+    #[test]
+    fn test_ofn_prefers_longest_matching_prefix() {
+        let build = Build::new_arc();
+        let mut prefixes = curie::PrefixMapping::default();
+        prefixes.add_prefix("eg", "http://example.com/AB").ok();
+        prefixes.add_prefix("egc", "http://example.com/ABC").ok();
+
+        let decl = DeclareClass(build.class("http://example.com/ABCDEF"));
+        let ofn = format!("{}", decl.as_functional_with_prefixes(&prefixes));
+        assert_eq!("Declaration(Class(egc:DEF))", ofn);
     }
 
     // Regression test for #234: a literal '[' or ']' (legal in an XML
