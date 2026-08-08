@@ -61,37 +61,27 @@ fn is_valid_manchester_local(local: &str) -> bool {
 /// sites: the `Display` path (`write_iri`), the `String`-building path
 /// (`write_iri_to_string`), and the frame-subject renderer in `mod.rs`.
 pub(crate) fn render_iri_to_string(iri: &str, pm: Option<&PrefixMapping>) -> String {
-    if let Some(pm) = pm
-        && let Ok(curie) = pm.shrink_iri(iri)
-    {
-        let s = curie.to_string();
-        // The local name is everything after the first ':' (curie prefixes never
-        // contain a ':').
-        let local = s.split_once(':').map_or(s.as_str(), |(_, l)| l);
-        // Only abbreviate when the local name is a valid Manchester local name.
-        // A version IRI like `http://ex/o/1.0.0` shrinks to `ex:o/1.0.0`, whose
-        // `/` is NOT valid — emitting that abbreviation produces output the reader
-        // cannot re-parse.  A namespace without a name separator (e.g.
-        // `http://e/onto`) shrinks `http://e/onto#A` to `#A`, which is also
-        // invalid — emit the full `<iri>` form instead.
-        if is_valid_manchester_local(local) {
-            if !s.contains(':') {
-                // `shrink_iri` matched curie's separate `set_default()` slot
-                // (issue #233), not a named mapping-table entry -- there's no
-                // backing `Prefix: : <iri>` line, so a bare SimpleIRI here
-                // would be unresolvable. Fall back to the full <iri> form.
-                return format!("<{iri}>");
-            }
-            // A named entry, backed by a real `Prefix:` header line.
-            return if let Some(stripped) = s.strip_prefix(':') {
-                // Empty name -- Display gives ":local"; strip the leading ':'.
-                stripped.to_owned()
+    if let Some(pm) = pm {
+        // Only named entries (`.mappings()`), never curie's default slot
+        // (#233) -- that has no backing header line, so a bare SimpleIRI
+        // would be unresolvable. Among valid matches, prefer the longest
+        // (most specific) prefix, not insertion order (#148).
+        let best = pm
+            .mappings()
+            .filter_map(|(name, value)| {
+                let local = iri.strip_prefix(value.as_str())?;
+                is_valid_manchester_local(local).then_some((name.as_str(), value.len(), local))
+            })
+            .max_by_key(|(_, len, _)| *len);
+
+        if let Some((name, _, local)) = best {
+            return if name.is_empty() {
+                local.to_owned()
             } else {
-                s
+                format!("{name}:{local}")
             };
         }
-        // else: invalid local (digit-leading, empty, contains '#'/'/'/…, ends with '.')
-        // — fall through to the full IRI form.
+        // else: no named prefix has a valid local name -- fall through to <iri>.
     }
     format!("<{iri}>")
 }
@@ -954,6 +944,19 @@ mod tests {
         let mut pm = curie::PrefixMapping::default();
         pm.add_prefix("ex", "http://example.org/").unwrap();
         assert_eq!(c.as_manchester_with_prefixes(&pm).to_string(), "ex:Dog");
+    }
+
+    #[test]
+    fn prefers_longest_matching_prefix() {
+        // Regression test for #148: `eg` is inserted before `egc`, and both
+        // are valid Manchester syntax, so the validity check alone can't save
+        // this -- insertion-order-first-match would pick the wrong one.
+        let b = Build::new_rc();
+        let c = b.class("http://example.com/ABCDEF");
+        let mut pm = curie::PrefixMapping::default();
+        pm.add_prefix("eg", "http://example.com/AB").unwrap();
+        pm.add_prefix("egc", "http://example.com/ABC").unwrap();
+        assert_eq!(c.as_manchester_with_prefixes(&pm).to_string(), "egc:DEF");
     }
 
     #[test]

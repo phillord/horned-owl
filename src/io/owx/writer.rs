@@ -1,6 +1,7 @@
 use curie::PrefixMapping;
 
 use crate::error::HornedError;
+use crate::io::shrink_iri_longest_match;
 use crate::model::*;
 use crate::ontology::component_mapped::ComponentMappedOntology;
 use crate::ontology::indexed::ForIndex;
@@ -58,12 +59,12 @@ where
 
 /// Add an IRI or AbbreviatedIRI attribute to elem
 fn iri_or_curie(mapping: &PrefixMapping, elem: &mut BytesStart, iri: &str) {
-    match mapping.shrink_iri(&(*iri)[..]) {
-        Ok(curie) => {
+    match shrink_iri_longest_match(mapping, iri) {
+        Some(curie) => {
             let curie = format!("{curie}");
             elem.push_attribute(("IRI", &curie[..]));
         }
-        Err(_) => elem.push_attribute(("IRI", iri)),
+        None => elem.push_attribute(("IRI", iri)),
     }
 }
 
@@ -363,9 +364,9 @@ render! {
     {
         let iri_st: String = self.into();
 
-        match m.shrink_iri(&iri_st[..]) {
-            Ok(curie) => curie.to_string().within(w, m, "IRI"),
-            Err(_) => iri_st.within(w, m, "IRI"),
+        match shrink_iri_longest_match(m, &iri_st[..]) {
+            Some(curie) => curie.to_string().within(w, m, "IRI"),
+            None => iri_st.within(w, m, "IRI"),
         }
     }
 }
@@ -1084,6 +1085,30 @@ mod test {
             assert_eq!(prefix_orig_map, prefix_round_map);
         }
         (ont_orig, prefix_orig, ont_round, prefix_round)
+    }
+
+    // Regression test for #148: `eg` is inserted before `egc` so
+    // insertion-order-first-match would pick the wrong (less specific) one.
+    #[test]
+    fn test_prefers_longest_matching_prefix() {
+        let mut ont = ComponentMappedOntology::new_rc();
+        let build = Build::new();
+        ont.declare(build.class("http://example.com/ABCDEF"));
+
+        let mut prefixes = PrefixMapping::default();
+        prefixes.add_prefix("eg", "http://example.com/AB").unwrap();
+        prefixes
+            .add_prefix("egc", "http://example.com/ABC")
+            .unwrap();
+
+        let mut buf = Vec::new();
+        write(&mut buf, &ont, Some(&prefixes)).unwrap();
+        let s = String::from_utf8(buf).unwrap();
+
+        assert!(
+            s.contains("IRI=\"egc:DEF\""),
+            "expected the longest-matching prefix egc:DEF, got: {s}"
+        );
     }
 
     #[test]

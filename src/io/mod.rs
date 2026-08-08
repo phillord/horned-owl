@@ -16,6 +16,28 @@ use crate::{
     ontology::{component_mapped::ComponentMappedOntology, set::SetOntology},
 };
 
+/// Shrink `iri` against `mapping`, preferring the *longest* matching named
+/// prefix, unlike [`curie::PrefixMapping::shrink_iri`]'s insertion-order
+/// first-match. Matches OWL API's convention (#148).
+///
+/// The default prefix's value isn't exposed by `curie::PrefixMapping`, so it
+/// can't be length-compared here; any named-prefix match wins over it, and
+/// it's used only as a fallback when no named prefix matches.
+pub(crate) fn shrink_iri_longest_match<'a>(
+    mapping: &'a PrefixMapping,
+    iri: &'a str,
+) -> Option<curie::Curie<'a>> {
+    mapping
+        .mappings()
+        .filter_map(|(name, value)| {
+            iri.strip_prefix(value.as_str())
+                .map(|local| (name.as_str(), value.len(), local))
+        })
+        .max_by_key(|(_, len, _)| *len)
+        .map(|(name, _, local)| curie::Curie::new(Some(name), local))
+        .or_else(|| mapping.shrink_iri(iri).ok())
+}
+
 pub enum ResourceType {
     OFN,
     OWX,
