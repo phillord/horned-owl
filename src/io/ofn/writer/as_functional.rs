@@ -1058,22 +1058,35 @@ impl<A: ForIRI> Display for Functional<'_, Rule<A>, A> {
             write!(f, "DLSafeRule(")?;
         }
 
-        f.write_str("Body(")?;
-        for (i, atom) in self.0.body.iter().enumerate() {
-            if i > 0 {
-                f.write_char(' ')?;
+        // `FunctionalSyntaxObjectRenderer.write(Collection)` has a special arm for a
+        // collection of EXACTLY TWO: it takes the first element, and unless that one
+        // IS the focused object (the entity whose block is being written) it writes
+        // the SECOND first. An SWRL atom is never the focused object, so a two-atom
+        // body or head always comes out in the opposite order to the one stored.
+        //
+        // UBERON's three rules are the visible case: the RDF list in `mirror/uberon.owl`
+        // runs `BFO_0000050(x,y)`, `BSPO_0000120(y,z)` and ROBOT writes
+        // `Body(BSPO_0000120(y,z) BFO_0000050(x,y))`. Reading that back and writing it
+        // again swaps it once more, which is exactly what `robot convert` does to its
+        // own output — the quirk lives in the renderer, not in the model.
+        let write_atoms = |f: &mut Formatter<'_>, atoms: &[crate::model::Atom<A>]| {
+            let order: Vec<usize> =
+                if atoms.len() == 2 { vec![1, 0] } else { (0..atoms.len()).collect() };
+            for (i, &ix) in order.iter().enumerate() {
+                if i > 0 {
+                    f.write_char(' ')?;
+                }
+                Functional(&atoms[ix], self.1, None).fmt(f)?;
             }
-            Functional(&atom, self.1, None).fmt(f)?;
-        }
+            Ok::<(), Error>(())
+        };
+
+        f.write_str("Body(")?;
+        write_atoms(f, &self.0.body)?;
         f.write_char(')')?;
 
         f.write_str("Head(")?;
-        for (i, atom) in self.0.head.iter().enumerate() {
-            if i > 0 {
-                f.write_char(' ')?;
-            }
-            Functional(&atom, self.1, None).fmt(f)?;
-        }
+        write_atoms(f, &self.0.head)?;
         f.write_char(')')?;
         f.write_char(')')
     }

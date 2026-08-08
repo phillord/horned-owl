@@ -1470,12 +1470,33 @@ mod test {
         let mut writer = Vec::new();
         crate::io::ofn::writer::write(&mut writer, &ont, Some(&prefixes)).unwrap();
 
-        let (ont2, prefixes2) =
+        let (ont2, prefixes2): (ComponentMappedOntology<RcStr, AnnotatedComponent<RcStr>>, _) =
             crate::io::ofn::reader::read(std::io::Cursor::new(&writer), Default::default())
                 .unwrap();
 
         assert_eq!(prefixes, prefixes2, "prefix mapping differ");
-        assert_eq!(ont, ont2, "ontologies differ");
+        // A rule's body and head are SETS in OWL — horned stores them as `Vec` to
+        // keep a document's order, and this writer permutes a two-atom one to match
+        // `FunctionalSyntaxObjectRenderer.write(Collection)`. That is a reordering
+        // of a set, not a loss, so compare rules by their atoms sorted.
+        assert_eq!(sorted_rules(&ont), sorted_rules(&ont2), "ontologies differ");
+    }
+
+    /// The ontology with every rule's body and head atoms sorted, so a rule can be
+    /// compared without depending on the order the two are written in.
+    fn sorted_rules(
+        ont: &ComponentMappedOntology<RcStr, AnnotatedComponent<RcStr>>,
+    ) -> std::collections::BTreeSet<AnnotatedComponent<RcStr>> {
+        ont.iter()
+            .map(|ac| {
+                let mut ac = ac.clone();
+                if let Component::Rule(r) = &mut ac.component {
+                    r.body.sort();
+                    r.head.sort();
+                }
+                ac
+            })
+            .collect()
     }
 
     // Regression test for https://github.com/phillord/horned-owl/issues/175
