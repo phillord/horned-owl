@@ -188,7 +188,10 @@ pub fn write_full<A: ForIRI, AA: ForIndex<A>, W: Write>(
     // legally punned as both a class and an annotation property needs a
     // declaration for whichever of the two it lacks.
     let mut declared: std::collections::HashSet<(usize, String)> = std::collections::HashSet::new();
-    let mut labels: HashMap<String, String> = HashMap::new();
+    // Keyed by subject, holding the LITERAL so the winner can be chosen by
+    // OWLAPI's own literal order rather than by whichever happened to be visited
+    // last (this ontology is a set, so `iter()` order is arbitrary).
+    let mut label_lits: HashMap<String, &Literal<A>> = HashMap::new();
     for ac in ont.iter() {
         if let Some((rank, iri)) = declaration_info(&ac.component) {
             entity_rank.insert(iri.clone(), rank);
@@ -203,15 +206,33 @@ pub fn write_full<A: ForIRI, AA: ForIndex<A>, W: Write>(
                 if let (AnnotationSubject::IRI(subj), AnnotationValue::Literal(lit)) =
                     (&aa.subject, &aa.ann.av)
                 {
-                    // LAST label wins, as OWLAPI's short-form provider builds
-                    // its map by overwriting. GO_0051705 carries both
-                    // "multi-organism behavior" and "obsolete multi-organism
-                    // behavior", and ROBOT's banner shows the latter.
-                    labels.insert(subj.as_ref().to_string(), literal_text(lit));
+                    // The FIRST label in OWLAPI's own literal order wins.
+                    //
+                    // OWLAPI really takes the first label out of
+                    // `getAnnotationAssertionAxioms(iri)`, a hash-ordered set
+                    // whose seed is per-JVM: `robot convert` run twice over one
+                    // unchanged file gives `oboInOwl:hasDbXref` the banner
+                    // `database_cross_reference` on some runs and
+                    // `has cross-reference` on others (6 of 20 here). So no rule
+                    // can match it every time. The closest deterministic proxy
+                    // for "the first one visited" is the first in OWLAPI's own
+                    // `compareTo` order, and it agrees with the reference on 6 of
+                    // the 7 entities in ECTO's merged import that carry more than
+                    // one label. (`RO_0002211` is the seventh: ROBOT calls it
+                    // `regulates (processual)` where this picks `regulates`.)
+                    let win = match label_lits.get(subj.as_ref()) {
+                        Some(prev) => owlapi_literal_cmp(prev, lit) == Ordering::Greater,
+                        None => true,
+                    };
+                    if win {
+                        label_lits.insert(subj.as_ref().to_string(), lit);
+                    }
                 }
             }
         }
     }
+    let labels: HashMap<String, String> =
+        label_lits.iter().map(|(k, v)| (k.clone(), literal_text(v))).collect();
     // OWLAPI groups the output by SIGNATURE, not by declaration: an entity used
     // in an axiom whose `Declaration(...)` lives in an imported ontology is still
     // in `ontology.get<Kind>InSignature()`, so it still gets its own
@@ -434,10 +455,9 @@ pub fn write_full<A: ForIRI, AA: ForIndex<A>, W: Write>(
                 let key = (rank, iri.to_string());
                 if let Some(anns) = ann_blocks.get(&key) {
                     // OWLAPI writes an entity's annotation assertions before its
-                    // logical axioms, sorted by `compareTo` (property, then value,
-                    // then the assertion's own annotations).
+                    // logical axioms, sorted by `compareTo`.
                     let mut anns = anns.clone();
-                    anns.sort_by(owlapi_axiom_cmp);
+                    anns.sort_by(owlapi_ann_assertion_cmp);
                     for ac in &anns {
                         let rendered = ac.as_functional_with_prefixes(mapping).to_string();
                         writeln!(write, "{rendered}")?;
@@ -532,11 +552,30 @@ pub(crate) fn short_form(mapping: &PrefixMapping, iri: &str) -> String {
 /// `AnnotationAssertion(` and leaves a document no functional-syntax parser can
 /// read back.
 pub(crate) fn is_valid_curie_local(local: &str) -> bool {
-    !local.is_empty()
-        && !local.contains(['/', '#', ' ', ':'])
-        && !local.contains(|c: char| c.is_whitespace() || NON_NCNAME.contains(&c))
-        && !local.starts_with('-')
-        && !local.starts_with('.')
+    // A QName, not an NCName. `DefaultPrefixManager.getPrefixIRIIgnoreQName`
+    // first looks the IRI's NAMESPACE up in the reverse map — the part before
+    // its longest NCName suffix, which never holds a colon — and only when that
+    // misses does it fall back to testing the tail after a declared namespace
+    // with `XMLUtils.isQName`. A QName is an NCName, or two NCNames joined by
+    // ONE colon, so an abbreviated local part may carry a single interior colon:
+    // FoodOn's `schema:image` provenance is `wikipedia:User:Lupin` in ROBOT's
+    // own functional output, and writing it out in full is a byte difference.
+    match local.split_once(':') {
+        // A second colon leaves a non-NCName on the right, which is `isQName`'s
+        // `if (foundColon) return false`.
+        Some((prefix, rest)) => is_ncname(prefix) && is_ncname(rest),
+        None => is_ncname(local),
+    }
+}
+
+/// Whether `s` is an NCName (conservatively): non-empty, no delimiter or
+/// punctuation XML forbids in a name, and no leading `-`/`.`.
+fn is_ncname(s: &str) -> bool {
+    !s.is_empty()
+        && !s.contains(['/', '#', ' ', ':'])
+        && !s.contains(|c: char| c.is_whitespace() || NON_NCNAME.contains(&c))
+        && !s.starts_with('-')
+        && !s.starts_with('.')
 }
 
 /// Delimiters and punctuation that are not NCName characters, so OWLAPI never
@@ -957,29 +996,96 @@ fn owlapi_ont_annotation_cmp<A: ForIRI>(
         .then_with(|| a.cmp(b))
 }
 
+/// OWLAPI's `OWLAnnotationAssertionAxiomImpl.compareObjectOfSameType`: the
+/// SUBJECT, then the PROPERTY, then the VALUE — and nothing else, so two
+/// assertions differing only in their own annotations compare equal and a stable
+/// sort leaves them where they were.
+///
+/// The derived `Ord` stood in for this and got the value wrong: it compares
+/// `Literal` by VARIANT (`Simple` before `Language`), where OWLAPI compares the
+/// literal's DATATYPE IRI first — and `rdf:PlainLiteral` (a language-tagged
+/// literal) sorts before `xsd:string` (an untyped one) because `…/1999/…` sorts
+/// before `…/2001/…`. So every entity carrying both an `@en` label and a plain
+/// one came out in the other order.
+fn owlapi_ann_assertion_cmp<A: ForIRI>(
+    a: &&AnnotatedComponent<A>,
+    b: &&AnnotatedComponent<A>,
+) -> Ordering {
+    fn aa<A: ForIRI>(c: &AnnotatedComponent<A>) -> Option<&crate::model::AnnotationAssertion<A>> {
+        match &c.component {
+            Component::AnnotationAssertion(aa) => Some(aa),
+            _ => None,
+        }
+    }
+    let (Some(x), Some(y)) = (aa(a), aa(b)) else { return owlapi_axiom_cmp(a, b) };
+    let subj = |s: &AnnotationSubject<A>| match s {
+        AnnotationSubject::IRI(i) => i.as_ref().to_string(),
+        AnnotationSubject::AnonymousIndividual(n) => n.0.as_ref().to_string(),
+    };
+    // `OWLAnnotationValue` is an `OWLObject`, so unequal types compare by type
+    // index before structure: IRI 0, anonymous individual 1007, literal 4000+.
+    let vi = |v: &AnnotationValue<A>| match v {
+        AnnotationValue::IRI(_) => 0u32,
+        AnnotationValue::AnonymousIndividual(_) => 1007,
+        AnnotationValue::Literal(_) => 4000,
+    };
+    owlapi_iri_cmp(&subj(&x.subject), &subj(&y.subject))
+        .then_with(|| owlapi_iri_cmp(x.ann.ap.0.as_ref(), y.ann.ap.0.as_ref()))
+        .then_with(|| vi(&x.ann.av).cmp(&vi(&y.ann.av)))
+        .then_with(|| match (&x.ann.av, &y.ann.av) {
+            (AnnotationValue::IRI(p), AnnotationValue::IRI(q)) => {
+                owlapi_iri_cmp(p.as_ref(), q.as_ref())
+            }
+            (AnnotationValue::Literal(p), AnnotationValue::Literal(q)) => owlapi_literal_cmp(p, q),
+            _ => Ordering::Equal,
+        })
+        // Deterministic tie-break where OWLAPI's comparator returns 0 (two
+        // assertions differing only in their own annotations); OWLAPI keeps the
+        // set's iteration order there, which is not reproducible.
+        .then_with(|| a.cmp(b))
+}
+
 /// OWLAPI's `OWLLiteralImpl.compareObjectOfSameType`: the DATATYPE IRI first,
 /// then the lexical form. An untyped literal is `xsd:string` and a
 /// language-tagged one is `rdf:PlainLiteral`. Comparing the rendered text
 /// instead put MONDO's seven `^^xsd:anyURI` ontology sources after its plain
 /// ones, where `anyURI` < `string` puts them first.
 fn owlapi_literal_cmp<A: ForIRI>(a: &Literal<A>, b: &Literal<A>) -> Ordering {
-    const XSD_STRING: &str = "http://www.w3.org/2001/XMLSchema#string";
     const RDF_PLAIN: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#PlainLiteral";
+    // An UNTYPED literal is `rdf:PlainLiteral`, with or without a language tag:
+    // OWLAPI's RDF parser builds `OWLLiteralImplPlain` for both, and every
+    // literal in these documents has been through RDF/XML (ROBOT writes the
+    // merged mirror as RDF/XML and reads it back, and an `xsd:string` survives
+    // that trip as a bare RDF 1.1 literal). Calling the untagged one `xsd:string`
+    // split each entity's synonyms into two runs, where ROBOT interleaves them:
+    // `"beef mince"`, `"beef mince"@en`, `"ground beef"@en`, `"hamburger meat"`.
+    // A literal carrying an EXPLICIT datatype keys as that datatype — including
+    // `xsd:string`, which reaches us only from a parser that really did type it
+    // (owlmake's OBO reader), and which must keep sorting after `xsd:anyURI`.
     let dt = |l: &'_ Literal<A>| -> String {
         match l {
-            Literal::Simple { .. } => XSD_STRING.to_string(),
-            Literal::Language { .. } => RDF_PLAIN.to_string(),
+            Literal::Simple { .. } | Literal::Language { .. } => RDF_PLAIN.to_string(),
             Literal::Datatype { datatype_iri, .. } => datatype_iri.as_ref().to_string(),
         }
     };
-    let lex = |l: &'_ Literal<A>| -> String {
+    fn lex<A: ForIRI>(l: &Literal<A>) -> &str {
         match l {
             Literal::Simple { literal }
             | Literal::Language { literal, .. }
-            | Literal::Datatype { literal, .. } => literal.clone(),
+            | Literal::Datatype { literal, .. } => literal.as_str(),
         }
-    };
-    owlapi_iri_cmp(&dt(a), &dt(b)).then_with(|| lex(a).cmp(&lex(b)))
+    }
+    // …then the lexical form, then the LANGUAGE — `OWLLiteralImplPlain`'s third
+    // key, which is what puts `"beef mince"` (no tag) before `"beef mince"@en`.
+    fn lang<A: ForIRI>(l: &Literal<A>) -> &str {
+        match l {
+            Literal::Language { lang, .. } => lang.as_str(),
+            _ => "",
+        }
+    }
+    owlapi_iri_cmp(&dt(a), &dt(b))
+        .then_with(|| lex(a).cmp(lex(b)))
+        .then_with(|| lang(a).cmp(lang(b)))
 }
 
 fn owlapi_axiom_cmp<A: ForIRI>(a: &&AnnotatedComponent<A>, b: &&AnnotatedComponent<A>) -> std::cmp::Ordering {

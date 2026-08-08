@@ -855,13 +855,14 @@ impl<A: ForIRI> FromPair<A> for IRI<A> {
         match inner.as_rule() {
             Rule::AbbreviatedIRI => {
                 let span = inner.as_span();
-                let mut pname = inner.into_inner().next().unwrap().into_inner();
-                let prefix = pname.next().unwrap().into_inner().next();
-                let local = pname.next().unwrap();
-                let curie = Curie::new(
-                    Some(prefix.map(|p| p.as_str()).unwrap_or_default()),
-                    local.as_str(),
-                );
+                // OWLAPI splits the token at its FIRST colon
+                // (`OWLFunctionalSyntaxParser.getIRI` is `s.indexOf(':')`), so
+                // everything after it — colons included — is the local part.
+                let (prefix, local) = inner
+                    .as_str()
+                    .split_once(':')
+                    .expect("an AbbreviatedIRI token holds a colon");
+                let curie = Curie::new(Some(prefix), local);
                 match ctx.mapping.expand_curie(&curie) {
                     Ok(s) => Ok(ctx.build.iri(s)),
                     Err(curie::ExpansionError::Invalid) => {

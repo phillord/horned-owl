@@ -106,7 +106,22 @@ OwlapiNodeID       = @{ ASCII_ALPHA ~ ASCII_ALPHANUMERIC* ~ !("(" | ":") }
 
 FullIRI        = ${ LCHEVRON ~ RFC3987_Iri ~ RCHEVRON }
 PrefixName     =  { SPARQL_PnameNs }
-AbbreviatedIRI =  { SPARQL_PnameLn }
+// NOT the spec's `PNAME_LN`. OWLAPI's functional-syntax reader does not tokenize
+// by the OWL 2 `PN_LOCAL` production: `CustomTokenizer.readTextualToken`
+// (owlapi 4.5.29) takes every character up to one of `= " ( ) < > @ ^` or
+// whitespace, calls the run a `PNAME_LN` whenever it holds a colon that is not
+// its last character (`_:`-prefixed runs are node ids instead), and
+// `OWLFunctionalSyntaxParser.getIRI` then splits it at the FIRST colon. So the
+// local part may hold colons, slashes, `?`, `%` — anything the terminator set
+// does not stop. This is what ROBOT itself writes: FoodOn's `schema:image`
+// provenance carries `wikipedia:User:Lupin`, which the spec production cannot
+// read back.
+AbbreviatedIRI = @{ !"_:" ~ OfnPrefixChar* ~ ":" ~ OfnLocalChar+ }
+OfnPrefixChar  = _{ !":" ~ OfnTokenChar }
+// A colon only continues the token when another token character follows it:
+// a run whose LAST character is the colon is OWLAPI's `PNAME_NS`, not an IRI.
+OfnLocalChar   = _{ (":" ~ &OfnTokenChar) | (!":" ~ OfnTokenChar) }
+OfnTokenChar   = _{ !("=" | "\"" | "(" | ")" | "<" | ">" | "@" | "^" | " " | "\t" | "\n" | "\r") ~ ANY }
 IRI            =  { FullIRI | AbbreviatedIRI }
 
 //
