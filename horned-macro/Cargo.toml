@@ -1,6 +1,6 @@
 [package]
 name = "horned-macro"
-version.workspace = true
+version = "3.0.0"
 authors = ["Phillip Lord"]
 description = "Write Manchester Syntax (and, later, OWL Functional Syntax) directly in Rust source, checked at compile time"
 repository = "https://github.com/phillord/horned-owl"

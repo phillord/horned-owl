@@ -3,7 +3,7 @@ version = "3.0.0"
 
 [package]
 name = "horned-owl"
-version.workspace = true
+version = "3.0.0"
 authors = ["Phillip Lord <phillip.lord@russet.org.uk>"]
 description = "Library for OWL Ontologies"
 
