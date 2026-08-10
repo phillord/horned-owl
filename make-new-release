@@ -1,0 +1,61 @@
+#!/usr/bin/env bash
+#
+# UNTRIED.  Written immediately after cutting 3.0.0 by hand, from what that
+# turned up.  It has only been dry-run, so the publishing path has never
+# actually run.  Read the dry-run output carefully before adding --execute,
+# and expect to fix this script during the next release.
+#
+# Releases horned-owl, horned-bin, horned-macro and horned-profile, which
+# share a version.  horned-pretty-rdf and horned-catalog have their own
+# versions and are released as and when they change:
+#
+#   cargo smart-release --update-crates-index --no-changelog horned-pretty-rdf
+#
+# Run from a worktree:
+#
+#   ./make-new-release              # dry run (the default)
+#   ./make-new-release --execute    # for real
+#
+# First, by hand:
+#   1. write the releases.md entry and bump README.md's install snippet
+#   2. set the new version in Cargo.toml, horned-bin/Cargo.toml,
+#      horned-macro/Cargo.toml and horned-profile/Cargo.toml, and update the
+#      matching requirements in [workspace.dependencies]
+#   3. commit, then fast-forward main from devel
+#
+# Setting the versions by hand is what keeps the four in step, and is not
+# avoidable by passing -b/-d instead.  smart-release treats any change to
+# horned-owl as breaking for its dependents and majors them regardless of
+# what you asked for: `-b minor -d minor` against 3.0.0 proposes horned-owl
+# 3.1.0 but horned-bin and horned-macro 4.0.0, and drops horned-profile
+# altogether as unchanged.  Where a manifest version is already right it is
+# reported "sufficient" and left alone, which is what we want.
+set -euo pipefail
+
+cd "$(dirname "${BASH_SOURCE[0]}")/../main"
+
+EXECUTE=()
+[[ "${1:-}" == "--execute" ]] && EXECUTE=(--execute)
+[[ ${#EXECUTE[@]} -eq 0 ]] && echo "*** DRY RUN -- add --execute when happy ***"
+
+# --auto-publish-of-stable-crates is what makes this cascade: all four are
+# >=1.0, and without it smart-release declines to publish them as dependents
+# ("Ignored stable crate ... despite being eligible") and releases only the
+# first one named.  It works out publish order itself, which matters --
+# horned-bin depends on horned-profile -- and waits for each crate to reach
+# the index before starting the next.
+cargo smart-release \
+    --update-crates-index --no-changelog --verbose \
+    --auto-publish-of-stable-crates \
+    "${EXECUTE[@]}" \
+    horned-owl horned-bin horned-macro horned-profile
+
+# Afterwards: check crates.io really has them (`cargo search horned-owl` --
+# the exit code is not proof, 2.0.0 sat unpublished for a week), fast-forward
+# devel from main and push, then create the GitHub release from the new tag
+# so Zenodo archives it.
+#
+# Note: horned-owl's horned-macro dev-dependency must stay versionless.
+# horned-macro depends on horned-owl, and cargo only strips a dev-dependency
+# from the published manifest when it has no version -- with one, that cycle
+# makes horned-owl unpublishable.
