@@ -63,7 +63,11 @@ pretty_assertions = "1.0.0"
 slurp = "1.0.1"
 rstest = "0.23"
 horned-bin = {path="horned-bin"}
-horned-macro = {workspace = true}
+# Path-only, deliberately no version: cargo strips a versionless
+# dev-dependency from the published manifest, which breaks the
+# horned-owl <-> horned-macro publish cycle (horned-macro depends on
+# horned-owl, so requiring it here at publish time is unresolvable).
+horned-macro = {path = "horned-macro"}
 
 [profile.release]
 debug = true
