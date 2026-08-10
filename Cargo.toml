@@ -1,5 +1,5 @@
 [workspace.package]
-version = "2.1.0"
+version = "3.0.0"
 
 [package]
 name = "horned-owl"
@@ -44,8 +44,8 @@ mktemp="0.5.1"
 oxiri="0.2.11"
 horned-pretty-rdf={path="./horned-pretty-rdf", version="2.0.1"}
 horned-catalog={path="./horned-catalog", version="1.0.0"}
-horned-macro={path="./horned-macro", version="2.1.0"}
-horned-profile={path="./horned-profile", version="2.1.0"}
+horned-macro={path="./horned-macro", version="3.0.0"}
+horned-profile={path="./horned-profile", version="3.0.0"}
 oxrdf="0.3.0"
 oxrdfio="0.2.0"
 
