@@ -1,6 +1,9 @@
+[workspace.package]
+version = "2.1.0"
+
 [package]
 name = "horned-owl"
-version = "2.1.0"
+version.workspace = true
 authors = ["Phillip Lord <phillip.lord@russet.org.uk>"]
 description = "Library for OWL Ontologies"
 
@@ -39,10 +42,11 @@ default-members=[".", "horned-bin", "horned-pretty-rdf", "horned-catalog", "horn
 indexmap="1.0.2"
 mktemp="0.5.1"
 oxiri="0.2.11"
-horned-pretty-rdf={path="./horned-pretty-rdf", version="2.0.0"}
-horned-catalog={path="./horned-catalog", version="0.1.0"}
-horned-macro={path="./horned-macro", version="0.1.0"}
-horned-profile={path="./horned-profile", version="0.1.0"}
+horned-owl={path=".", version="2.1.0"}
+horned-pretty-rdf={path="./horned-pretty-rdf", version="2.0.1"}
+horned-catalog={path="./horned-catalog", version="1.0.0"}
+horned-macro={path="./horned-macro", version="2.1.0"}
+horned-profile={path="./horned-profile", version="2.1.0"}
 oxrdf="0.3.0"
 oxrdfio="0.2.0"
 

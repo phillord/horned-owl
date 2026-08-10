@@ -1,6 +1,6 @@
 [package]
 name = "horned-profile"
-version = "0.1.0"
+version.workspace = true
 authors = ["Phillip Lord"]
 description = "OWL 2 profile (EL/QL/RL/DL) conformance checking for horned-owl ontologies"
 repository = "https://github.com/phillord/horned-owl"
@@ -8,4 +8,4 @@ edition = "2024"
 license = "LGPL-3.0"
 
 [dependencies]
-horned-owl = { path = "../", version = "2.1.0" }
+horned-owl = { workspace = true }
