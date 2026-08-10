@@ -1,3 +1,46 @@
+Version 3.0.0
+=============
+
+Features:
+- OBO 1.4 format support: a lenient-by-default reader and a
+  read/write-round-tripping writer
+- `horned-catalog`: OASIS XML Catalog support for resolving imports to
+  local, relocated files.
+- `horned-macro`: write Manchester and Functional Syntax directly in
+  Rust source via `omn!`/`ofn!` macros.
+- `horned-profile`: OWL 2 EL/QL/RL/DL profile conformance checking
+  both library and CLI support.
+- The RDF/XML reader now understands OWL 1 constructs
+
+Enhancements:
+- OWL/XML, Manchester, and Functional Syntax writers now prefer the
+  longest (most specific) matching prefix when abbreviating IRIs
+- The RDF writer gained a `lax`/`strict` configuration for
+  spec-invalid degenerate axioms (e.g. a single-member
+  `DifferentIndividuals`), matching real-world OWL API output in lax
+  mode (the default) while allowing strict mode to reject them.
+- The OFN writer now degrades a single-operand
+  `ObjectIntersectionOf`/`ObjectUnionOf` to its bare operand rather
+  than emitting unparseable syntax.
+- The `Ontology` interface is now used more widely replacing `SetOntolgy`
+- `horned` CLI exit-code semantics, including the parse-vs-validate
+  incomplete-parse distinction, are now documented.
+- Added `CITATION.cff` and `MAINTAINERS.md`.
+
+Bugs:
+- Fixed several RDF/XML and OWL/XML writer/reader issues found via
+  round-trip testing against a real-world ontology corpus.
+- RDF/XML and Functional Syntax writers now percent-encode characters
+  that are invalid in an IRI, so ontologies containing them can be
+  written and re-read without data loss.
+
+Contributors:
+- Phillip Lord
+- Michel Dumontier
+- Konrad Höffner
+
+
+
 Version 2.1.0
 =============
 
