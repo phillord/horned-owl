@@ -36,21 +36,15 @@ fn run_then_report_over_tiny_corpus() {
     assert!(ok);
     assert!(jsonl.exists());
 
-    // The rev is now auto-detected (see resolve_horned_owl_rev in
-    // src/main.rs) rather than a hardcoded constant, so this only checks
-    // shape (a real-looking git SHA came back), not a specific value --
-    // src/main.rs's own unit tests cover the detection logic itself.
+    // Checks shape, not a specific value: the header records
+    // `<version> (<short commit>)`, or a bare version outside a repository
+    // (see resolve_horned_owl_rev in src/main.rs, whose unit tests cover
+    // both branches).
     match header_of(&jsonl) {
         Record::Header(h) => {
-            assert_eq!(
-                h.horned_owl_rev.len(),
-                40,
-                "auto-detected rev should be a full git SHA, got {:?}",
-                h.horned_owl_rev
-            );
             assert!(
-                h.horned_owl_rev.chars().all(|c| c.is_ascii_hexdigit()),
-                "auto-detected rev should be hex, got {:?}",
+                h.horned_owl_rev.starts_with(horned_owl::VERSION),
+                "header should start with the horned-owl version, got {:?}",
                 h.horned_owl_rev
             );
         }

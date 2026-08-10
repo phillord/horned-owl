@@ -48,10 +48,15 @@ but demoted.
 
 ## Build
 
-Requires a Rust toolchain. horned-owl is a **git dependency pinned to a specific commit**.
-That commit is auto-detected from `Cargo.toml` at build/run time and recorded in each run's
-report header for reproducibility; override it with `run --horned-owl-rev <sha>` if
-auto-detection can't be trusted (e.g. a dirty local checkout).
+Requires a Rust toolchain. This crate is a member of the horned-owl workspace and builds
+against the horned-owl in the same checkout, so there is nothing to pin.
+
+Each run records what it tested in its report header, as `3.0.0 (2d20450)`: the version is
+`horned_owl::VERSION`, fixed at compile time from the crate that was actually linked, and the
+commit is the working tree's HEAD when the run started. Between releases the version alone
+can't tell two runs apart, which is why the commit is there too — but it is read at runtime,
+so build, commit, then run and it will be a commit ahead of the binary. Override the whole
+string with `run --horned-owl-rev <string>` when that isn't what you want recorded.
 
 ```sh
 cargo build --release

@@ -6,91 +6,49 @@ use std::io::Write;
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-/// Determine the horned-owl commit this build was made against, for
-/// provenance in the run header. Priority:
-///   1. `--horned-owl-rev` on the CLI, if given -- a manual override for
-///      when auto-detection can't find a real commit, or you want to
-///      record something else on purpose.
-///   2. Cargo.toml's `horned-owl = { path = "..." }`: run `git -C <path>
-///      rev-parse HEAD` against that checkout directly. This is what
-///      actually got built, unlike a hand-maintained constant that can
-///      silently drift out of sync with Cargo.toml.
-///   3. Cargo.toml's `horned-owl = { git = "...", rev = "..." }`: use the
-///      pinned rev directly.
-///   4. If none of the above resolve, "unknown" (with a warning to
-///      stderr) rather than failing the run outright.
+/// What horned-owl this run tested, for provenance in the run header:
+/// `"3.0.0 (2d20450)"`, or just `"3.0.0"` if the commit can't be read.
+/// `--horned-owl-rev` overrides the whole string.
+///
+/// The version comes from [`horned_owl::VERSION`], which is
+/// `CARGO_PKG_VERSION` of the crate that actually got linked, fixed at
+/// compile time. The commit is a *runtime* question about the working
+/// tree, so it can disagree with what was built -- build, commit, then run
+/// and the hash is one commit ahead of the binary. It's still worth having,
+/// because between releases the version alone doesn't change and cannot
+/// tell two corpus runs apart; treat the version as authoritative and the
+/// hash as a hint.
 fn resolve_horned_owl_rev(manifest_dir: &std::path::Path, cli_override: Option<&str>) -> String {
     if let Some(r) = cli_override {
         return r.to_string();
     }
-    match detect_horned_owl_rev(manifest_dir) {
-        Some(r) => r,
-        None => {
-            eprintln!(
-                "warning: could not determine the horned-owl commit this build used \
-                 (no path or git+rev horned-owl dependency found in Cargo.toml, or \
-                 `git rev-parse` failed) -- recording \"unknown\"; pass --horned-owl-rev \
-                 to set it by hand"
-            );
-            "unknown".to_string()
-        }
+    match head_commit(manifest_dir) {
+        Some(c) => format!("{} ({c})", horned_owl::VERSION),
+        None => horned_owl::VERSION.to_string(),
     }
 }
 
-/// Cargo.toml-driven half of [`resolve_horned_owl_rev`], kept separate (and
-/// CLI-override-free) so it's directly testable.
-fn detect_horned_owl_rev(manifest_dir: &std::path::Path) -> Option<String> {
-    let manifest_path = manifest_dir.join("Cargo.toml");
-    let manifest = std::fs::read_to_string(&manifest_path).ok()?;
-
-    // Only active (non-commented) horned-owl dependency lines. A
-    // commented-out `path = ...` line (the local-dev toggle in Cargo.toml)
-    // must never shadow the real pinned `rev = ...` line below it, and a
-    // `path` dep whose checkout can't be resolved must fall through to any
-    // usable `rev` line rather than give up.
-    for dep_line in manifest.lines().filter(|l| {
-        !l.trim_start().starts_with('#')
-            && l.contains("horned-owl")
-            && (l.contains("path =") || l.contains("rev ="))
-    }) {
-        if let Some(path) = extract_quoted(dep_line, "path = \"") {
-            let dep_dir = manifest_dir.join(&path);
-            // git exports GIT_DIR and friends to the processes it spawns for
-            // hooks. Left in place they override `-C`, so this would report
-            // the revision of whatever repo invoked us rather than the
-            // dependency's -- a silently wrong provenance record.
-            if let Ok(output) = std::process::Command::new("git")
-                .env_remove("GIT_DIR")
-                .env_remove("GIT_INDEX_FILE")
-                .env_remove("GIT_WORK_TREE")
-                .env_remove("GIT_PREFIX")
-                .env_remove("GIT_CONFIG")
-                .arg("-C")
-                .arg(&dep_dir)
-                .args(["rev-parse", "HEAD"])
-                .output()
-            {
-                if output.status.success() {
-                    if let Ok(s) = String::from_utf8(output.stdout) {
-                        return Some(s.trim().to_string());
-                    }
-                }
-            }
-            continue; // path unresolved -> keep scanning for a rev line
-        }
-        if let Some(rev) = extract_quoted(dep_line, "rev = \"") {
-            return Some(rev);
-        }
+/// Short HEAD hash of the repository containing `dir`, if it is one.
+fn head_commit(dir: &std::path::Path) -> Option<String> {
+    // git exports GIT_DIR and friends to the processes it spawns for hooks.
+    // Left in place they override `-C`, so under a hook this would report
+    // the invoking repository's HEAD rather than ours.
+    let output = std::process::Command::new("git")
+        .env_remove("GIT_DIR")
+        .env_remove("GIT_INDEX_FILE")
+        .env_remove("GIT_WORK_TREE")
+        .env_remove("GIT_PREFIX")
+        .env_remove("GIT_CONFIG")
+        .arg("-C")
+        .arg(dir)
+        .args(["rev-parse", "--short", "HEAD"])
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
     }
-    None
-}
-
-fn extract_quoted(line: &str, marker: &str) -> Option<String> {
-    line.split(marker)
-        .nth(1)?
-        .split('"')
-        .next()
-        .map(String::from)
+    let s = String::from_utf8(output.stdout).ok()?.trim().to_string();
+    (!s.is_empty()).then_some(s)
 }
 
 #[derive(Parser)]
@@ -115,11 +73,11 @@ enum Cmd {
         /// it as `Outcome::Skipped` instead of running it through the engine.
         #[arg(long = "max-bytes")]
         max_bytes: Option<u64>,
-        /// Override the horned-owl commit recorded in the run header.
-        /// Auto-detected by default (see `resolve_horned_owl_rev`); pass this
-        /// to set it by hand when auto-detection can't or shouldn't be
-        /// trusted -- e.g. a `path = "..."` dependency whose checkout is
-        /// dirty/ahead of what you actually want recorded.
+        /// Override the horned-owl version recorded in the run header.
+        /// Defaults to `horned_owl::VERSION` plus the current commit (see
+        /// `resolve_horned_owl_rev`); set it by hand when that isn't what
+        /// you want recorded -- e.g. a dirty tree, or a build made before
+        /// the commit the working tree is now on.
         #[arg(long = "horned-owl-rev")]
         horned_owl_rev: Option<String>,
         /// Check every ontology against the OWL 2 EL/QL/RL/DL profiles
@@ -336,12 +294,11 @@ fn main() -> anyhow::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::path::Path;
     use std::process::Command;
 
     fn temp_dir(name: &str) -> std::path::PathBuf {
         let dir = std::env::temp_dir().join(format!(
-            "hrt-rev-test-{name}-{}-{}",
+            "horned-corpus-rev-test-{name}-{}-{}",
             std::process::id(),
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
@@ -352,43 +309,26 @@ mod tests {
         dir
     }
 
-    fn write_manifest(dir: &Path, dep_line: &str) {
-        std::fs::write(
-            dir.join("Cargo.toml"),
-            format!("[package]\nname = \"x\"\n[dependencies]\n{dep_line}\n"),
-        )
-        .unwrap();
-    }
-
     #[test]
-    fn cli_override_wins_over_detection() {
-        // No Cargo.toml here at all -- proves the override short-circuits
-        // detection entirely rather than merely taking priority when both work.
+    fn cli_override_replaces_the_whole_string() {
+        // Not merely "takes priority": the override is recorded verbatim,
+        // with no version prefix bolted on.
         let dir = temp_dir("override");
         assert_eq!(resolve_horned_owl_rev(&dir, Some("deadbeef")), "deadbeef");
     }
 
     #[test]
-    fn detects_rev_from_git_style_dependency() {
-        let dir = temp_dir("git-dep");
-        write_manifest(
-            &dir,
-            r#"horned-owl = { git = "https://example.com/horned-owl.git", rev = "abc123" }"#,
-        );
-        assert_eq!(detect_horned_owl_rev(&dir), Some("abc123".to_string()));
+    fn falls_back_to_bare_version_outside_a_repository() {
+        let dir = temp_dir("no-repo");
+        assert_eq!(resolve_horned_owl_rev(&dir, None), horned_owl::VERSION);
     }
 
     #[test]
-    fn detects_rev_from_path_dependency_via_git_rev_parse() {
-        let dir = temp_dir("path-dep");
-        let sub = dir.join("horned-owl");
-        std::fs::create_dir_all(&sub).unwrap();
-        // git exports GIT_DIR/GIT_INDEX_FILE etc. into the processes it
-        // spawns for hooks, so when this test runs from a pre-commit hook
-        // those leak in and point every command below at the *outer* repo
-        // rather than the throwaway one -- which then runs the outer repo's
-        // hooks too. Clear them, and skip hooks outright, so the test is
-        // hermetic wherever it runs from.
+    fn reports_version_and_head_inside_a_repository() {
+        let dir = temp_dir("repo");
+        // git exports GIT_DIR and friends to hook subprocesses; left in
+        // place they point these commands at the outer repository rather
+        // than this throwaway one, and run its hooks too.
         let git = |args: &[&str]| {
             assert!(
                 Command::new("git")
@@ -398,7 +338,7 @@ mod tests {
                     .env_remove("GIT_PREFIX")
                     .env_remove("GIT_CONFIG")
                     .arg("-C")
-                    .arg(&sub)
+                    .arg(&dir)
                     .args(args)
                     .status()
                     .unwrap()
@@ -410,59 +350,14 @@ mod tests {
         git(&["config", "user.email", "test@example.com"]);
         git(&["config", "user.name", "test"]);
         git(&["config", "core.hooksPath", "/dev/null"]);
-        std::fs::write(sub.join("f"), "x").unwrap();
+        std::fs::write(dir.join("f"), "x").unwrap();
         git(&["add", "f"]);
         git(&["commit", "-q", "--no-verify", "-m", "c"]);
-        let expected = String::from_utf8(
-            Command::new("git")
-                .env_remove("GIT_DIR")
-                .env_remove("GIT_INDEX_FILE")
-                .env_remove("GIT_WORK_TREE")
-                .env_remove("GIT_PREFIX")
-                .env_remove("GIT_CONFIG")
-                .arg("-C")
-                .arg(&sub)
-                .args(["rev-parse", "HEAD"])
-                .output()
-                .unwrap()
-                .stdout,
-        )
-        .unwrap()
-        .trim()
-        .to_string();
 
-        write_manifest(&dir, r#"horned-owl = { path = "./horned-owl" }"#);
-        assert_eq!(detect_horned_owl_rev(&dir), Some(expected));
-    }
-
-    #[test]
-    fn no_horned_owl_dependency_line_detects_nothing() {
-        let dir = temp_dir("no-dep");
-        write_manifest(&dir, r#"serde = "1""#);
-        assert_eq!(detect_horned_owl_rev(&dir), None);
-    }
-
-    #[test]
-    fn resolve_falls_back_to_unknown_when_detection_fails() {
-        let dir = temp_dir("fallback");
-        // No Cargo.toml, no override.
-        assert_eq!(resolve_horned_owl_rev(&dir, None), "unknown");
-    }
-
-    #[test]
-    fn commented_path_line_does_not_shadow_real_rev() {
-        // Mirrors the real Cargo.toml: a commented-out `path = ...` dev line
-        // directly above the pinned `git + rev` line. The commented line
-        // must not be selected, and its unresolvable path must not suppress
-        // detection of the real rev below it.
-        let dir = temp_dir("commented-path");
-        std::fs::write(
-            dir.join("Cargo.toml"),
-            "[dependencies]\n\
-             # horned-owl = { path = \"./horned-owl\" }  # uncomment for local dev\n\
-             horned-owl = { git = \"https://x/horned-owl.git\", rev = \"abc123\" }\n",
-        )
-        .unwrap();
-        assert_eq!(detect_horned_owl_rev(&dir), Some("abc123".to_string()));
+        let head = head_commit(&dir).expect("HEAD should resolve in a fresh repo");
+        assert_eq!(
+            resolve_horned_owl_rev(&dir, None),
+            format!("{} ({head})", horned_owl::VERSION)
+        );
     }
 }
