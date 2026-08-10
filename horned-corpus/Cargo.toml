@@ -1,0 +1,43 @@
+[package]
+name = "horned-roundtrip"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+
+[dependencies]
+# Both horned-owl and horned-profile point at the same on-disk checkout
+# (feature/horned-profile, since horned-profile isn't merged to devel yet)
+# via the *same literal path string* -- deliberately not the usual
+# ./horned-owl symlink-to-devel convention right now. Cargo identifies path
+# packages by their literal path, not a canonicalized realpath: reaching the
+# same physical package (e.g. horned-catalog, a horned-owl workspace member)
+# via a symlink on one edge and directly on another produces two "different"
+# packages with identical name+version and a lockfile collision. Once
+# horned-profile is merged to devel, revert horned-owl to
+# `{ path = "./horned-owl" }` (the symlink) and horned-profile to a matching
+# `./horned-owl/horned-profile`-style path through it.
+horned-owl = { path = "/home/phillord/src/rust/horned-owl/feature/horned-profile" }
+# horned-owl = { git = "https://github.com/phillord/horned-owl.git", rev = "0a9debdbf85243350d3d6edc0dcd617f0ed47d97" }
+horned-profile = { path = "/home/phillord/src/rust/horned-owl/feature/horned-profile/horned-profile" }
+# horned_owl::io re-exports PrefixMapping only via a private `use curie::
+# PrefixMapping;` (see io/mod.rs), so it is not reachable as
+# `horned_owl::io::PrefixMapping`. Depend on the same `curie` crate directly
+# (pinned to the version horned-owl's Cargo.lock resolves) to name the type.
+curie = "0.1.4"
+# horned-owl's RDF reader takes the input syntax via
+# `ParserConfiguration.rdf.format: Option<oxrdfio::RdfFormat>` (defaults to
+# RdfXml). Depend on the same oxrdfio to name `RdfFormat::Turtle` so we can
+# route Turtle/N-Triples sources through the (oxrdfio-backed) RDF reader.
+oxrdfio = "0.2"
+clap = { version = "4", features = ["derive"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+csv = "1"
+anyhow = "1"
+flate2 = "1"
+rayon = "1"
+sha2 = "0.10"
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "rustls-tls", "json"] }
+
+[profile.release]
+panic = "unwind"
