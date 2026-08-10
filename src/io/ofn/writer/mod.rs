@@ -1210,8 +1210,28 @@ fn owlapi_ann_assertion_cmp<A: ForIRI>(
 /// language-tagged one is `rdf:PlainLiteral`. Comparing the rendered text
 /// instead put MONDO's seven `^^xsd:anyURI` ontology sources after its plain
 /// ones, where `anyURI` < `string` puts them first.
+/// Whether an untyped literal counts as `xsd:string` rather than
+/// `rdf:PlainLiteral` when ordering — see [`set_plain_literals_typed`].
+thread_local! {
+    static PLAIN_LITERALS_TYPED: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// Declare that this document's untyped literals are `xsd:string`.
+///
+/// OWLAPI has two classes for a literal written without a datatype:
+/// `OWLLiteralImplPlain` (`rdf:PlainLiteral`) and `OWLLiteralImplString`
+/// (`xsd:string`). They render identically and sort on opposite sides of
+/// `xsd:anyURI`, and WHICH one you have depends on where the ontology came from
+/// — a parse gives Plain, a Jena round trip (`robot query --update`) gives
+/// String. Only the caller knows, so the caller says; the default is Plain,
+/// which is every ordinary parse.
+pub fn set_plain_literals_typed(on: bool) {
+    PLAIN_LITERALS_TYPED.with(|c| c.set(on));
+}
+
 fn owlapi_literal_cmp<A: ForIRI>(a: &Literal<A>, b: &Literal<A>) -> Ordering {
     const RDF_PLAIN: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#PlainLiteral";
+    const XSD_STRING: &str = "http://www.w3.org/2001/XMLSchema#string";
     // An UNTYPED literal is `rdf:PlainLiteral`, with or without a language tag:
     // OWLAPI's RDF parser builds `OWLLiteralImplPlain` for both, and every
     // literal in these documents has been through RDF/XML (ROBOT writes the
@@ -1222,8 +1242,19 @@ fn owlapi_literal_cmp<A: ForIRI>(a: &Literal<A>, b: &Literal<A>) -> Ordering {
     // A literal carrying an EXPLICIT datatype keys as that datatype — including
     // `xsd:string`, which reaches us only from a parser that really did type it
     // (owlmake's OBO reader), and which must keep sorting after `xsd:anyURI`.
+    //
+    // …UNLESS the document has been through Jena, which is not the RDF/XML trip
+    // above but `robot query --update`: OWLAPI hands the updated model back with
+    // every untyped literal as `xsd:string`, and 2001#string sorts AFTER
+    // 2001#anyURI where 1999#PlainLiteral sorts before it. MONDO's
+    // `imports/merged_import.owl` ends `query --update x3` then `convert -f ofn`,
+    // and calling its untagged `dc:source` values PlainLiteral put all seven
+    // `xsd:anyURI` ontology annotations after the `ISBN:`/`PMID:` ones instead of
+    // before. A LANGUAGE-tagged literal is `OWLLiteralImplPlain` either way.
+    let plain_is_string = PLAIN_LITERALS_TYPED.with(|c| c.get());
     let dt = |l: &'_ Literal<A>| -> String {
         match l {
+            Literal::Simple { .. } if plain_is_string => XSD_STRING.to_string(),
             Literal::Simple { .. } | Literal::Language { .. } => RDF_PLAIN.to_string(),
             Literal::Datatype { datatype_iri, .. } => datatype_iri.as_ref().to_string(),
         }
