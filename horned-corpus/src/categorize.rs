@@ -24,14 +24,14 @@
 //!    individuals; those must not pollute the `Unknown` signal.
 //! 5. Everything else → `Unknown`.
 
-use crate::diff::{kind_of, RawDiff};
+use crate::diff::{RawDiff, kind_of};
 use crate::model::{Category, DiffItem, Side};
 use horned_owl::model::{
-    AnnotatedComponent, AnnotationProperty, Class, Component, DataProperty, Datatype,
-    DeclareAnnotationProperty, DeclareClass, DeclareDataProperty, DeclareDatatype,
-    DeclareNamedIndividual, DeclareObjectProperty, DifferentIndividuals, DisjointClasses,
-    AnonymousIndividual, ClassExpression, EquivalentClasses, Individual, NamedIndividual,
-    ObjectProperty, RcStr, SameIndividual, IRI,
+    AnnotatedComponent, AnnotationProperty, AnonymousIndividual, Class, ClassExpression, Component,
+    DataProperty, Datatype, DeclareAnnotationProperty, DeclareClass, DeclareDataProperty,
+    DeclareDatatype, DeclareNamedIndividual, DeclareObjectProperty, DifferentIndividuals,
+    DisjointClasses, EquivalentClasses, IRI, Individual, NamedIndividual, ObjectProperty, RcStr,
+    SameIndividual,
 };
 use horned_owl::ontology::set::SetOntology;
 use horned_owl::visitor::immutable::{Visit, Walk};
@@ -60,7 +60,10 @@ pub fn categorize(d: RawDiff, src: &SetOntology<RcStr>, _rt: &SetOntology<RcStr>
         // annotation-stripped key. Equal `.ann` sets -> benign
         // AnnotationNormalization; differing `.ann` sets -> a real
         // AnnotationLoss.
-        if let Some(i) = lost_by_key.get_mut(&g.component).and_then(|q| q.pop_front()) {
+        if let Some(i) = lost_by_key
+            .get_mut(&g.component)
+            .and_then(|q| q.pop_front())
+        {
             lost_paired[i] = true;
             let cat = if d.only_in_source[i].ann == g.ann {
                 Category::AnnotationNormalization
@@ -267,9 +270,7 @@ fn is_nary_reshape(gained: &AnnotatedComponent<RcStr>, nary: &NaryMembers) -> bo
         Component::EquivalentClasses(EquivalentClasses(v)) => {
             binary_subset(v, &nary.equivalent_classes)
         }
-        Component::DisjointClasses(DisjointClasses(v)) => {
-            binary_subset(v, &nary.disjoint_classes)
-        }
+        Component::DisjointClasses(DisjointClasses(v)) => binary_subset(v, &nary.disjoint_classes),
         Component::SameIndividual(SameIndividual(v)) => binary_subset(v, &nary.same_individual),
         Component::DifferentIndividuals(DifferentIndividuals(v)) => {
             binary_subset(v, &nary.different_individuals)
@@ -299,17 +300,19 @@ mod tests {
     fn inferred_declaration_is_benign() {
         // rt gains DeclareClass(A); A is used by a SubClassOf present in src
         let src = "Prefix(:=<http://ex/>)\nOntology(<http://ex/o>\nSubClassOf(<http://ex/A> <http://ex/B>)\n)";
-        let rt  = "Prefix(:=<http://ex/>)\nOntology(<http://ex/o>\nSubClassOf(<http://ex/A> <http://ex/B>)\nDeclaration(Class(<http://ex/A>))\n)";
-        assert!(cats(src, rt)
-            .iter()
-            .all(|c| *c == Category::InferredDeclaration));
+        let rt = "Prefix(:=<http://ex/>)\nOntology(<http://ex/o>\nSubClassOf(<http://ex/A> <http://ex/B>)\nDeclaration(Class(<http://ex/A>))\n)";
+        assert!(
+            cats(src, rt)
+                .iter()
+                .all(|c| *c == Category::InferredDeclaration)
+        );
     }
 
     #[test]
     fn punning_declaration_is_unknown() {
         // rt gains DeclareNamedIndividual(A) but A is used only as a Class in src
         let src = "Prefix(:=<http://ex/>)\nOntology(<http://ex/o>\nSubClassOf(<http://ex/A> <http://ex/B>)\n)";
-        let rt  = "Prefix(:=<http://ex/>)\nOntology(<http://ex/o>\nSubClassOf(<http://ex/A> <http://ex/B>)\nDeclaration(NamedIndividual(<http://ex/A>))\n)";
+        let rt = "Prefix(:=<http://ex/>)\nOntology(<http://ex/o>\nSubClassOf(<http://ex/A> <http://ex/B>)\nDeclaration(NamedIndividual(<http://ex/A>))\n)";
         assert!(cats(src, rt).contains(&Category::Unknown));
     }
 
@@ -319,7 +322,7 @@ mod tests {
         // since the .ann sets differ (one has the annotation, the other
         // doesn't) this is a real AnnotationLoss, not benign normalization.
         let src = "Prefix(:=<http://ex/>)\nOntology(<http://ex/o>\nSubClassOf(Annotation(<http://ex/p> \"x\") <http://ex/A> <http://ex/B>)\n)";
-        let rt  = "Prefix(:=<http://ex/>)\nOntology(<http://ex/o>\nSubClassOf(<http://ex/A> <http://ex/B>)\n)";
+        let rt = "Prefix(:=<http://ex/>)\nOntology(<http://ex/o>\nSubClassOf(<http://ex/A> <http://ex/B>)\n)";
         assert!(cats(src, rt).iter().all(|c| *c == Category::AnnotationLoss));
     }
 
@@ -331,7 +334,7 @@ mod tests {
         // other's members, so rule 3 does not apply either) — such a diff
         // item must be tagged BlankNodeRelabel, never Unknown.
         let src = "Prefix(:=<http://ex/>)\nOntology(<http://ex/o>\nSameIndividual(<http://ex/A> _:b0)\nDeclaration(NamedIndividual(<http://ex/A>))\n)";
-        let rt  = "Prefix(:=<http://ex/>)\nOntology(<http://ex/o>\nSameIndividual(<http://ex/A> _:b1)\nDeclaration(NamedIndividual(<http://ex/A>))\n)";
+        let rt = "Prefix(:=<http://ex/>)\nOntology(<http://ex/o>\nSameIndividual(<http://ex/A> _:b1)\nDeclaration(NamedIndividual(<http://ex/A>))\n)";
         let cs = cats(src, rt);
         assert!(!cs.is_empty());
         assert!(cs.iter().all(|c| *c == Category::BlankNodeRelabel));
@@ -352,7 +355,7 @@ mod tests {
         // vs SubClassOf) so rule 1 doesn't match on annotation stripping alone.
         // The rt version has an anonymous individual only in an annotation value.
         let src = "Prefix(:=<http://ex/>)\nOntology(<http://ex/o>\nSubClassOf(<http://ex/A> <http://ex/B>)\n)";
-        let rt  = "Prefix(:=<http://ex/>)\nOntology(<http://ex/o>\nSubClassOf(<http://ex/A> <http://ex/B>)\nObjectPropertyAssertion(Annotation(<http://ex/p> _:b0) <http://ex/r> <http://ex/x> <http://ex/y>)\n)";
+        let rt = "Prefix(:=<http://ex/>)\nOntology(<http://ex/o>\nSubClassOf(<http://ex/A> <http://ex/B>)\nObjectPropertyAssertion(Annotation(<http://ex/p> _:b0) <http://ex/r> <http://ex/x> <http://ex/y>)\n)";
         let s = read_source(Format::Ofn, src.as_bytes()).unwrap().model;
         let r = read_source(Format::Ofn, rt.as_bytes()).unwrap().model;
         let d = diff(&s, &r);

@@ -1,4 +1,4 @@
-use horned_roundtrip::model::Record;
+use horned_corpus::model::Record;
 use std::process::Command;
 
 fn tiny_corpus_dir(name: &str) -> std::path::PathBuf {
@@ -25,7 +25,7 @@ fn header_of(jsonl: &std::path::Path) -> Record {
 fn run_then_report_over_tiny_corpus() {
     let dir = tiny_corpus_dir("basic");
     let jsonl = dir.join("r.jsonl");
-    let ok = Command::new(env!("CARGO_BIN_EXE_horned-roundtrip"))
+    let ok = Command::new(env!("CARGO_BIN_EXE_horned-corpus"))
         .args(["run", "--corpus"])
         .arg(dir.join("corpus"))
         .arg("--out")
@@ -57,7 +57,7 @@ fn run_then_report_over_tiny_corpus() {
         other => panic!("expected first jsonl line to be Record::Header, got {other:?}"),
     }
 
-    let ok2 = Command::new(env!("CARGO_BIN_EXE_horned-roundtrip"))
+    let ok2 = Command::new(env!("CARGO_BIN_EXE_horned-corpus"))
         .args(["report", "--in"])
         .arg(&jsonl)
         .arg("--out-dir")
@@ -73,7 +73,7 @@ fn run_then_report_over_tiny_corpus() {
 fn run_with_explicit_horned_owl_rev_override() {
     let dir = tiny_corpus_dir("override");
     let jsonl = dir.join("r.jsonl");
-    let ok = Command::new(env!("CARGO_BIN_EXE_horned-roundtrip"))
+    let ok = Command::new(env!("CARGO_BIN_EXE_horned-corpus"))
         .args(["run", "--corpus"])
         .arg(dir.join("corpus"))
         .arg("--out")

@@ -1,4 +1,4 @@
-# horned-roundtrip
+# horned-corpus
 
 A round-trip **IO conformance harness** for [horned-owl](https://github.com/phillord/horned-owl).
 
@@ -64,20 +64,20 @@ Run over a directory of ontologies you already have (no API key needed):
 
 ```sh
 # read → write(×4) → read-back → diff → categorize, streaming to results.jsonl
-horned-roundtrip run --corpus /path/to/ontologies --out results.jsonl \
+horned-corpus run --corpus /path/to/ontologies --out results.jsonl \
     --jobs 3 --max-bytes 20000000
 
 # aggregate into cases.csv, summary.json, report.md
-horned-roundtrip report --in results.jsonl --out-dir report/
+horned-corpus report --in results.jsonl --out-dir report/
 ```
 
 Fetch a fresh BioPortal corpus first (requires a [BioPortal API key](https://bioportal.bioontology.org/account)):
 
 ```sh
 export BIOPORTAL_API_KEY=...        # or pass --api-key, or `cp .env.example .env` and source it
-horned-roundtrip fetch --out ./corpus            # stores <acronym>.gz + manifest.json
-horned-roundtrip run   --corpus ./corpus --out results.jsonl --max-bytes 20000000 --jobs 3
-horned-roundtrip report --in results.jsonl --out-dir report/
+horned-corpus fetch --out ./corpus            # stores <acronym>.gz + manifest.json
+horned-corpus run   --corpus ./corpus --out results.jsonl --max-bytes 20000000 --jobs 3
+horned-corpus report --in results.jsonl --out-dir report/
 ```
 
 The key is read from `--api-key` or the `BIOPORTAL_API_KEY` env var. A `.env.example`

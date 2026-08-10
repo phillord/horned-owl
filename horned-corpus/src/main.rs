@@ -1,7 +1,7 @@
 use anyhow::Context;
 use clap::{Parser, Subcommand};
-use horned_roundtrip::model::{Format, Outcome, Record, RunHeader, SourceReadReport};
-use horned_roundtrip::{corpus, fetch, report, roundtrip};
+use horned_corpus::model::{Format, Outcome, Record, RunHeader, SourceReadReport};
+use horned_corpus::{corpus, fetch, report, roundtrip};
 use std::io::Write;
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -55,7 +55,16 @@ fn detect_horned_owl_rev(manifest_dir: &std::path::Path) -> Option<String> {
     }) {
         if let Some(path) = extract_quoted(dep_line, "path = \"") {
             let dep_dir = manifest_dir.join(&path);
+            // git exports GIT_DIR and friends to the processes it spawns for
+            // hooks. Left in place they override `-C`, so this would report
+            // the revision of whatever repo invoked us rather than the
+            // dependency's -- a silently wrong provenance record.
             if let Ok(output) = std::process::Command::new("git")
+                .env_remove("GIT_DIR")
+                .env_remove("GIT_INDEX_FILE")
+                .env_remove("GIT_WORK_TREE")
+                .env_remove("GIT_PREFIX")
+                .env_remove("GIT_CONFIG")
                 .arg("-C")
                 .arg(&dep_dir)
                 .args(["rev-parse", "HEAD"])
@@ -202,11 +211,11 @@ fn main() -> anyhow::Result<()> {
             robot_ground_truth,
         } => {
             let profile_mode = if robot_ground_truth {
-                horned_roundtrip::model::ProfileCheckMode::HornedAndRobot
+                horned_corpus::model::ProfileCheckMode::HornedAndRobot
             } else if check_profiles {
-                horned_roundtrip::model::ProfileCheckMode::Horned
+                horned_corpus::model::ProfileCheckMode::Horned
             } else {
-                horned_roundtrip::model::ProfileCheckMode::Off
+                horned_corpus::model::ProfileCheckMode::Off
             };
             // catch_unwind in roundtrip::run_bytes recovers from per-file panics, but
             // the default panic hook still writes a message to stderr for each one.
@@ -374,9 +383,20 @@ mod tests {
         let dir = temp_dir("path-dep");
         let sub = dir.join("horned-owl");
         std::fs::create_dir_all(&sub).unwrap();
+        // git exports GIT_DIR/GIT_INDEX_FILE etc. into the processes it
+        // spawns for hooks, so when this test runs from a pre-commit hook
+        // those leak in and point every command below at the *outer* repo
+        // rather than the throwaway one -- which then runs the outer repo's
+        // hooks too. Clear them, and skip hooks outright, so the test is
+        // hermetic wherever it runs from.
         let git = |args: &[&str]| {
             assert!(
                 Command::new("git")
+                    .env_remove("GIT_DIR")
+                    .env_remove("GIT_INDEX_FILE")
+                    .env_remove("GIT_WORK_TREE")
+                    .env_remove("GIT_PREFIX")
+                    .env_remove("GIT_CONFIG")
                     .arg("-C")
                     .arg(&sub)
                     .args(args)
@@ -389,11 +409,17 @@ mod tests {
         git(&["init", "-q"]);
         git(&["config", "user.email", "test@example.com"]);
         git(&["config", "user.name", "test"]);
+        git(&["config", "core.hooksPath", "/dev/null"]);
         std::fs::write(sub.join("f"), "x").unwrap();
         git(&["add", "f"]);
-        git(&["commit", "-q", "-m", "c"]);
+        git(&["commit", "-q", "--no-verify", "-m", "c"]);
         let expected = String::from_utf8(
             Command::new("git")
+                .env_remove("GIT_DIR")
+                .env_remove("GIT_INDEX_FILE")
+                .env_remove("GIT_WORK_TREE")
+                .env_remove("GIT_PREFIX")
+                .env_remove("GIT_CONFIG")
                 .arg("-C")
                 .arg(&sub)
                 .args(["rev-parse", "HEAD"])

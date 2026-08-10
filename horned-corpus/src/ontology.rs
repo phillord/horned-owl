@@ -17,7 +17,7 @@
 use crate::model::{Format, IncompleteSummary};
 use curie::PrefixMapping;
 use horned_owl::error::HornedError;
-use horned_owl::io::{ofn, omn, owx, rdf, ParserConfiguration, ParserOutput};
+use horned_owl::io::{ParserConfiguration, ParserOutput, ofn, omn, owx, rdf};
 use horned_owl::model::{RcAnnotatedComponent, RcStr};
 use horned_owl::ontology::component_mapped::ComponentMappedOntology;
 use horned_owl::ontology::set::SetOntology;

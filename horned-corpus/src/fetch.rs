@@ -14,9 +14,9 @@
 //! propagated, so one bad ontology never aborts the whole run.
 
 use anyhow::{Context, Result};
+use flate2::Compression;
 use flate2::read::GzDecoder;
 use flate2::write::GzEncoder;
-use flate2::Compression;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
@@ -266,7 +266,12 @@ pub fn fetch(
         std::fs::read(out_dir.join("manifest.json"))
             .ok()
             .and_then(|bytes| serde_json::from_slice::<Vec<ManifestEntry>>(&bytes).ok())
-            .map(|entries| entries.into_iter().map(|e| (e.acronym.clone(), e)).collect())
+            .map(|entries| {
+                entries
+                    .into_iter()
+                    .map(|e| (e.acronym.clone(), e))
+                    .collect()
+            })
             .unwrap_or_default()
     } else {
         HashMap::new()
@@ -289,7 +294,8 @@ pub fn fetch(
         let stored_path = out_dir.join(format!("{acronym}.gz"));
 
         if skip_existing {
-            if let Some(entry) = reusable_entry(acronym, &stored_path, prior_manifest.get(acronym)) {
+            if let Some(entry) = reusable_entry(acronym, &stored_path, prior_manifest.get(acronym))
+            {
                 eprintln!("skipping {acronym}: already downloaded (--skip-existing)");
                 manifest.push(entry);
                 continue;

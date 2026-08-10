@@ -152,8 +152,7 @@ fn parse_robot_report(report: &str, exit_success: bool) -> Option<ProfileVerdict
 fn temp_dir() -> anyhow::Result<std::path::PathBuf> {
     static COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
     let n = COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-    let dir =
-        std::env::temp_dir().join(format!("horned-roundtrip-robot-{}-{n}", std::process::id(),));
+    let dir = std::env::temp_dir().join(format!("horned-corpus-robot-{}-{n}", std::process::id(),));
     std::fs::create_dir_all(&dir)?;
     Ok(dir)
 }

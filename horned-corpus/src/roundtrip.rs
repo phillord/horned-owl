@@ -16,11 +16,11 @@ use crate::categorize::categorize;
 use crate::detect::detect;
 use crate::diff::diff;
 use crate::model::*;
-use crate::ontology::{read_source, write_target, ReadOk};
+use crate::ontology::{ReadOk, read_source, write_target};
 use horned_owl::model::RcStr;
 use horned_owl::ontology::set::SetOntology;
 use std::collections::BTreeMap;
-use std::panic::{catch_unwind, AssertUnwindSafe};
+use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::time::Instant;
 
 /// File extension to hand ROBOT/the OWL API for `sfmt`'s bytes, so it
@@ -161,7 +161,7 @@ fn one_case(
                 e.to_string(),
                 write_us,
                 None,
-            )
+            );
         }
         Err(_) => {
             return case_fail(
@@ -172,7 +172,7 @@ fn one_case(
                 "panic".into(),
                 write_us,
                 None,
-            )
+            );
         }
     };
 
@@ -191,7 +191,7 @@ fn one_case(
                 e.to_string(),
                 write_us,
                 reread_us,
-            )
+            );
         }
         Err(_) => {
             return case_fail(
@@ -202,7 +202,7 @@ fn one_case(
                 "panic".into(),
                 write_us,
                 reread_us,
-            )
+            );
         }
     };
 
