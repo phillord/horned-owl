@@ -11,7 +11,7 @@ license = "LGPL-3.0"
 proc-macro = true
 
 [dependencies]
-horned-owl = { workspace = true }
+horned-owl = { path = "..", version = "2.1.0" }
 syn = { version = "2", features = ["full"] }
 quote = "1"
 proc-macro2 = "1"

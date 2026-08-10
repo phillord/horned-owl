@@ -42,7 +42,6 @@ default-members=[".", "horned-bin", "horned-pretty-rdf", "horned-catalog", "horn
 indexmap="1.0.2"
 mktemp="0.5.1"
 oxiri="0.2.11"
-horned-owl={path=".", version="2.1.0"}
 horned-pretty-rdf={path="./horned-pretty-rdf", version="2.0.1"}
 horned-catalog={path="./horned-catalog", version="1.0.0"}
 horned-macro={path="./horned-macro", version="2.1.0"}

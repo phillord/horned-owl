@@ -16,7 +16,7 @@ edition = "2024"
 
 [dependencies]
 clap = "3.2.2"
-horned-owl={workspace=true}
+horned-owl={path="../", version="2.1.0"}
 indexmap={workspace=true}
 oxiri={workspace=true}
 horned-pretty-rdf={workspace=true}

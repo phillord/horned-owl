@@ -8,4 +8,4 @@ edition = "2024"
 license = "LGPL-3.0"
 
 [dependencies]
-horned-owl = { workspace = true }
+horned-owl = { path = "../", version = "2.1.0" }
