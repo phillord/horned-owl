@@ -23,8 +23,9 @@ reason    each file ─► robot reason (ELK / HermiT / JFact) ─► outcome + 
 report    results.jsonl ─► cases.csv + summary.json + report.md
 ```
 
-`roundtrip`, `profile` and `reason` are independent sweeps over the same corpus, each writing its own
-JSONL; `report` aggregates either.
+`roundtrip`, `profile` and `reason` are independent sweeps over the same corpus, each writing its
+own JSONL. `report` aggregates any of them, rendering only the sections the records support — so a
+reasoning run gets a reasoning report, not a round-trip report full of zeroes.
 
 - **Format is detected by content, not extension** — real corpora mislabel files
   constantly (Turtle behind a `.owl` extension, etc.).
@@ -140,9 +141,14 @@ template is included; the binary does **not** load `.env` automatically, so sour
 - `cases.csv` — one row per (ontology × target format): outcome, exact-match flag, lost/gained
   counts, per-category counts, timings.
 - `summary.json` — per-format-pair exact/ok rates, outcome tallies, per-format
-  read-incompleteness rates, category totals, top ontologies by `unknown` count.
-- `report.md` — a human summary: headline rates, the run's pinned horned-owl commit, and a
-  ranked list of the `unknown` / `annotation_loss` cases to investigate.
+  read-incompleteness rates, category totals, top ontologies by `unknown` count, and per-reasoner
+  outcome counts and median time.
+- `report.md` — a human summary. For a round-trip run: headline rates, the horned-owl version
+  tested, and a ranked list of the `unknown` / `annotation_loss` cases to investigate. For a
+  reasoning run: per-reasoner outcomes and timings, the ontologies where two reasoners inferred
+  *different numbers of axioms* (they should agree, so each one is worth a look), and failures
+  grouped by cause. For a profile run: conformance rates per profile, plus agreement with ROBOT
+  when `--robot-ground-truth` was used.
 
 ## Limitations
 

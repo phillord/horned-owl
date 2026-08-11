@@ -3,9 +3,13 @@
 //! - `cases.csv` — one row per `Record::Case`, flat columns for spreadsheet
 //!   analysis.
 //! - `summary.json` — a machine-readable rollup (per-format-pair exact
-//!   rates, outcome tallies, source-incompleteness, category totals, and a
-//!   top-N list of the worst UNKNOWN-diff cases).
+//!   rates, outcome tallies, source-incompleteness, category totals, a
+//!   top-N list of the worst UNKNOWN-diff cases, and per-reasoner results).
 //! - `report.md` — the same rollup rendered as a scannable Markdown report.
+//!
+//! Handles all three sweeps. Which sections appear depends on what the
+//! records actually contain, so a `reason` or `profile` run gets a report
+//! about what it did rather than a round-trip report full of zeroes.
 //!
 //! `report()` is a pure function of `records`: no I/O beyond writing the
 //! three output files, no horned-owl, no network.
@@ -180,6 +184,96 @@ fn sources(records: &[Record]) -> impl Iterator<Item = &SourceReadReport> {
     })
 }
 
+fn reasonings(records: &[Record]) -> impl Iterator<Item = &ReasonResult> {
+    records.iter().filter_map(|r| match r {
+        Record::Reason(r) => Some(r),
+        _ => None,
+    })
+}
+
+fn profile_checks(records: &[Record]) -> impl Iterator<Item = &ProfileCheckResult> {
+    records.iter().filter_map(|r| match r {
+        Record::Profile(p) => Some(p),
+        _ => None,
+    })
+}
+
+/// Per-reasoner rollup over one run.
+#[derive(Default)]
+struct ReasonStats {
+    ok: usize,
+    inconsistent: usize,
+    timeout: usize,
+    failed: usize,
+    /// Elapsed times of the runs that completed, for a median. Failures and
+    /// timeouts are excluded: a timeout's elapsed is just the budget, and
+    /// averaging that in would say more about `--timeout` than the reasoner.
+    ok_ms: Vec<u64>,
+}
+
+impl ReasonStats {
+    fn total(&self) -> usize {
+        self.ok + self.inconsistent + self.timeout + self.failed
+    }
+
+    /// Median rather than mean: reasoning times are heavily skewed by a few
+    /// large ontologies, and a mean mostly reports those.
+    fn median_ok_ms(&self) -> Option<u64> {
+        if self.ok_ms.is_empty() {
+            return None;
+        }
+        let mut v = self.ok_ms.clone();
+        v.sort_unstable();
+        Some(v[v.len() / 2])
+    }
+}
+
+fn by_reasoner(records: &[Record]) -> BTreeMap<Reasoner, ReasonStats> {
+    let mut out: BTreeMap<Reasoner, ReasonStats> = BTreeMap::new();
+    for r in reasonings(records) {
+        let e = out.entry(r.reasoner).or_default();
+        match r.outcome {
+            ReasonOutcome::Ok => {
+                e.ok += 1;
+                e.ok_ms.push(r.elapsed_ms);
+            }
+            ReasonOutcome::Inconsistent => e.inconsistent += 1,
+            ReasonOutcome::Timeout => e.timeout += 1,
+            ReasonOutcome::Failed => e.failed += 1,
+        }
+    }
+    out
+}
+
+/// Ontologies where two reasoners both succeeded but inferred a different
+/// number of axioms.
+///
+/// This is the point of running more than one: they should agree, so a
+/// disagreement is either a bug in one of them or -- more usefully here --
+/// an ontology whose constructs they treat differently. Sorted by the size
+/// of the gap.
+fn axiom_disagreements(records: &[Record]) -> Vec<(String, BTreeMap<Reasoner, usize>)> {
+    let mut by_ont: BTreeMap<String, BTreeMap<Reasoner, usize>> = BTreeMap::new();
+    for r in reasonings(records) {
+        if let (ReasonOutcome::Ok, Some(n)) = (r.outcome, r.inferred_axioms) {
+            by_ont
+                .entry(r.ontology.clone())
+                .or_default()
+                .insert(r.reasoner, n);
+        }
+    }
+    let mut v: Vec<_> = by_ont
+        .into_iter()
+        .filter(|(_, counts)| counts.len() > 1 && counts.values().min() != counts.values().max())
+        .collect();
+    v.sort_by_key(|(ont, counts)| {
+        let spread = counts.values().max().unwrap() - counts.values().min().unwrap();
+        (std::cmp::Reverse(spread), ont.clone())
+    });
+    v.truncate(TOP_N);
+    v
+}
+
 /// Per-format-pair rollup: total cases, exact matches, `Outcome::Ok` count.
 struct PairStats {
     count: usize,
@@ -266,6 +360,21 @@ fn top_investigate(records: &[Record]) -> Vec<&CaseResult> {
 }
 
 fn summarize(records: &[Record]) -> serde_json::Value {
+    let mut reason = serde_json::Map::new();
+    for (r, st) in by_reasoner(records) {
+        reason.insert(
+            reasoner_name(r).to_string(),
+            serde_json::json!({
+                "total": st.total(),
+                "ok": st.ok,
+                "inconsistent": st.inconsistent,
+                "timeout": st.timeout,
+                "failed": st.failed,
+                "median_ok_ms": st.median_ok_ms(),
+            }),
+        );
+    }
+
     let mut by_pair = serde_json::Map::new();
     for ((sf, tf), s) in by_format_pair(records) {
         by_pair.insert(
@@ -339,18 +448,179 @@ fn summarize(records: &[Record]) -> serde_json::Value {
         "source_incomplete": source_incomplete,
         "category_totals": category_totals,
         "top_unknown": top,
+        "by_reasoner": reason,
     })
+}
+
+/// The reasoning half of a report: how each reasoner got on, and where two
+/// of them disagreed about an ontology.
+fn render_reason_md(records: &[Record], s: &mut String) {
+    s.push_str("## Reasoning\n\n");
+    s.push_str(
+        "Every reasoner here runs via ROBOT, so each ontology costs a JVM startup. \
+         Times include that fixed overhead and are only fair compared against each \
+         other.\n\n",
+    );
+    s.push_str("| Reasoner | Ontologies | OK | Inconsistent | Timeout | Failed | Median OK |\n");
+    s.push_str("|---|---|---|---|---|---|---|\n");
+    for (r, st) in by_reasoner(records) {
+        s.push_str(&format!(
+            "| {} | {} | {} | {} | {} | {} | {} |\n",
+            reasoner_name(r),
+            st.total(),
+            st.ok,
+            st.inconsistent,
+            st.timeout,
+            st.failed,
+            st.median_ok_ms()
+                .map(|ms| format!("{ms} ms"))
+                .unwrap_or_else(|| "-".to_string()),
+        ));
+    }
+    s.push('\n');
+
+    let dis = axiom_disagreements(records);
+    if !dis.is_empty() {
+        s.push_str("### Reasoners Disagreeing on Axiom Count\n\n");
+        s.push_str(
+            "Both reasoners completed but inferred a different number of axioms. \
+             They should agree, so each of these is either a defect in one of them or \
+             an ontology whose constructs they handle differently -- worth a look either \
+             way.\n\n",
+        );
+        s.push_str("| Ontology | Counts | Spread |\n|---|---|---|\n");
+        for (ont, counts) in dis {
+            let shown: Vec<String> = counts
+                .iter()
+                .map(|(r, n)| format!("{}: {n}", reasoner_name(*r)))
+                .collect();
+            let spread = counts.values().max().unwrap() - counts.values().min().unwrap();
+            s.push_str(&format!(
+                "| {} | {} | {} |\n",
+                ont,
+                shown.join(", "),
+                spread
+            ));
+        }
+        s.push('\n');
+    }
+
+    // Failures cluster on a few causes (unresolvable imports, files the OWL
+    // API won't parse), so the grouped counts say more than a per-ontology
+    // list would.
+    let mut causes: BTreeMap<&str, usize> = BTreeMap::new();
+    for r in reasonings(records) {
+        if let Some(e) = r.error.as_deref() {
+            *causes.entry(e).or_default() += 1;
+        }
+    }
+    if !causes.is_empty() {
+        let mut v: Vec<_> = causes.into_iter().collect();
+        v.sort_by_key(|(e, n)| (std::cmp::Reverse(*n), *e));
+        v.truncate(TOP_N);
+        s.push_str("### Failure Causes\n\n| Count | Message |\n|---|---|\n");
+        for (e, n) in v {
+            s.push_str(&format!("| {n} | {} |\n", e.replace('|', "\\|")));
+        }
+        s.push('\n');
+    }
+}
+
+/// The profile half of a report: how many ontologies fall in each OWL 2
+/// profile, and whether ROBOT agreed when it was asked.
+fn render_profile_md(records: &[Record], s: &mut String) {
+    s.push_str("## OWL 2 Profiles\n\n");
+    s.push_str("| Profile | Checked | Conformant | Conformant % |\n|---|---|---|---|\n");
+    for p in [Profile::El, Profile::Ql, Profile::Rl, Profile::Dl] {
+        let (checked, conformant) =
+            profile_checks(records).fold((0, 0), |(c, k), pc| match pc.horned.get(&p) {
+                Some(v) => (c + 1, k + usize::from(v.conformant)),
+                None => (c, k),
+            });
+        s.push_str(&format!(
+            "| {} | {checked} | {conformant} | {:.1}% |\n",
+            profile_name(p),
+            rate(conformant, checked) * 100.0,
+        ));
+    }
+    s.push('\n');
+
+    // Only meaningful when the run was given --robot-ground-truth; without
+    // it every `agreement` map is empty and this section is skipped.
+    let mut agree: BTreeMap<Profile, (usize, usize)> = BTreeMap::new();
+    for pc in profile_checks(records) {
+        for (p, ok) in &pc.agreement {
+            let e = agree.entry(*p).or_default();
+            e.0 += 1;
+            e.1 += usize::from(*ok);
+        }
+    }
+    if !agree.is_empty() {
+        s.push_str("### Agreement with ROBOT\n\n");
+        s.push_str(
+            "ROBOT wraps the OWL API's own profile checker, so it is independent \
+             ground truth rather than a second opinion from the same lineage. A \
+             disagreement is a horned-profile bug until shown otherwise.\n\n",
+        );
+        s.push_str("| Profile | Compared | Agreed | Agreed % |\n|---|---|---|---|\n");
+        for (p, (n, ok)) in agree {
+            s.push_str(&format!(
+                "| {} | {n} | {ok} | {:.1}% |\n",
+                profile_name(p),
+                rate(ok, n) * 100.0,
+            ));
+        }
+        s.push('\n');
+    }
+}
+
+fn reasoner_name(r: Reasoner) -> &'static str {
+    match r {
+        Reasoner::Elk => "ELK",
+        Reasoner::HermiT => "HermiT",
+        Reasoner::JFact => "JFact",
+    }
+}
+
+fn profile_name(p: Profile) -> &'static str {
+    match p {
+        Profile::El => "EL",
+        Profile::Ql => "QL",
+        Profile::Rl => "RL",
+        Profile::Dl => "DL",
+    }
 }
 
 fn render_md(records: &[Record]) -> String {
     let mut s = String::new();
-    s.push_str("# Round-Trip Report\n\n");
+    // One report type per sweep -- name it for what the records actually
+    // are, rather than calling a reasoning run a "Round-Trip Report".
+    let has_cases = cases(records).next().is_some();
+    let has_reason = reasonings(records).next().is_some();
+    let has_profile = profile_checks(records).next().is_some();
+    s.push_str(match (has_cases, has_reason, has_profile) {
+        (false, true, false) => "# Reasoning Report\n\n",
+        (false, false, true) => "# Profile Report\n\n",
+        _ => "# Corpus Report\n\n",
+    });
 
     if let Some(h) = header(records) {
         s.push_str(&format!(
             "horned-owl rev: `{}` | corpus: `{}` | started: {}\n\n",
             h.horned_owl_rev, h.corpus, h.started
         ));
+    }
+
+    if has_reason {
+        render_reason_md(records, &mut s);
+    }
+    if has_profile {
+        render_profile_md(records, &mut s);
+    }
+    // Everything below is round-trip specific; on a reason- or profile-only
+    // run it would be a page of zeroes and empty tables.
+    if !has_cases {
+        return s;
     }
 
     let total = cases(records).count();
@@ -472,6 +742,112 @@ fn render_md(records: &[Record]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn reason_rec(ont: &str, r: Reasoner, o: ReasonOutcome, ms: u64, ax: Option<usize>) -> Record {
+        Record::Reason(ReasonResult {
+            ontology: ont.into(),
+            reasoner: r,
+            outcome: o,
+            elapsed_ms: ms,
+            inferred_axioms: ax,
+            error: None,
+        })
+    }
+
+    #[test]
+    fn reasoning_run_gets_a_reasoning_report_not_an_empty_round_trip_one() {
+        // A reason-only run has no cases at all; the round-trip sections
+        // would be a page of zeroes, so they are skipped entirely.
+        let recs = vec![
+            reason_rec("a", Reasoner::Elk, ReasonOutcome::Ok, 100, Some(5)),
+            reason_rec("b", Reasoner::Elk, ReasonOutcome::Timeout, 300, None),
+        ];
+        let md = render_md(&recs);
+        assert!(md.starts_with("# Reasoning Report"), "{md}");
+        assert!(md.contains("| ELK | 2 | 1 | 0 | 1 | 0 |"), "{md}");
+        assert!(!md.contains("Exact-Match Rates"), "{md}");
+        assert!(!md.contains("Total cases"), "{md}");
+    }
+
+    #[test]
+    fn median_ignores_timeouts_and_failures() {
+        // A timeout's elapsed is just the budget, so counting it would
+        // describe --timeout rather than the reasoner.
+        let recs = vec![
+            reason_rec("a", Reasoner::HermiT, ReasonOutcome::Ok, 10, Some(1)),
+            reason_rec("b", Reasoner::HermiT, ReasonOutcome::Ok, 20, Some(1)),
+            reason_rec("c", Reasoner::HermiT, ReasonOutcome::Ok, 30, Some(1)),
+            reason_rec("d", Reasoner::HermiT, ReasonOutcome::Timeout, 300_000, None),
+        ];
+        let st = &by_reasoner(&recs)[&Reasoner::HermiT];
+        assert_eq!(st.median_ok_ms(), Some(20));
+        assert_eq!(st.total(), 4);
+    }
+
+    #[test]
+    fn axiom_disagreement_is_reported_and_agreement_is_not() {
+        let recs = vec![
+            // Same ontology, two reasoners, different counts -- a finding.
+            reason_rec("differs", Reasoner::Elk, ReasonOutcome::Ok, 1, Some(10)),
+            reason_rec("differs", Reasoner::HermiT, ReasonOutcome::Ok, 1, Some(14)),
+            // Same ontology, both agree -- not a finding.
+            reason_rec("agrees", Reasoner::Elk, ReasonOutcome::Ok, 1, Some(7)),
+            reason_rec("agrees", Reasoner::HermiT, ReasonOutcome::Ok, 1, Some(7)),
+            // Only one reasoner ran -- nothing to disagree with.
+            reason_rec("alone", Reasoner::Elk, ReasonOutcome::Ok, 1, Some(3)),
+        ];
+        let d = axiom_disagreements(&recs);
+        assert_eq!(d.len(), 1);
+        assert_eq!(d[0].0, "differs");
+
+        let md = render_md(&recs);
+        assert!(md.contains("Disagreeing on Axiom Count"), "{md}");
+        assert!(md.contains("| differs |"), "{md}");
+        assert!(!md.contains("| agrees |"), "{md}");
+    }
+
+    #[test]
+    fn a_timed_out_reasoner_contributes_no_axiom_count_to_compare() {
+        // Only completed runs are comparable; a timeout must not read as
+        // "inferred nothing" and manufacture a disagreement.
+        let recs = vec![
+            reason_rec("o", Reasoner::Elk, ReasonOutcome::Ok, 1, Some(9)),
+            reason_rec("o", Reasoner::HermiT, ReasonOutcome::Timeout, 300, None),
+        ];
+        assert!(axiom_disagreements(&recs).is_empty());
+    }
+
+    #[test]
+    fn profile_run_gets_a_profile_report() {
+        use std::collections::BTreeMap;
+        let mut horned = BTreeMap::new();
+        horned.insert(
+            Profile::El,
+            ProfileVerdict {
+                conformant: true,
+                violation_count: 0,
+            },
+        );
+        horned.insert(
+            Profile::Dl,
+            ProfileVerdict {
+                conformant: false,
+                violation_count: 3,
+            },
+        );
+        let recs = vec![Record::Profile(ProfileCheckResult {
+            ontology: "o".into(),
+            horned,
+            robot: None,
+            agreement: BTreeMap::new(),
+        })];
+        let md = render_md(&recs);
+        assert!(md.starts_with("# Profile Report"), "{md}");
+        assert!(md.contains("| EL | 1 | 1 | 100.0% |"), "{md}");
+        assert!(md.contains("| DL | 1 | 0 | 0.0% |"), "{md}");
+        // No --robot-ground-truth, so nothing to compare against.
+        assert!(!md.contains("Agreement with ROBOT"), "{md}");
+    }
 
     #[test]
     fn writes_three_artifacts() {
