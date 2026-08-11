@@ -1,6 +1,6 @@
 use anyhow::Context;
 use clap::{Parser, Subcommand};
-use horned_corpus::model::{Format, Outcome, Record, RunHeader, SourceReadReport};
+use horned_corpus::model::{Format, Outcome, Reasoner, Record, RunHeader, SourceReadReport};
 use horned_corpus::{corpus, fetch, report, roundtrip};
 use std::io::Write;
 use std::path::PathBuf;
@@ -112,6 +112,37 @@ enum Cmd {
         #[arg(long = "robot-ground-truth")]
         robot_ground_truth: bool,
     },
+    /// Reason over every ontology in a corpus, via ROBOT.
+    ///
+    /// Each ontology costs a JVM startup per reasoner, so this is much
+    /// slower than the other sweeps -- budget accordingly and use
+    /// --max-bytes.
+    Reason {
+        /// Directory of ontologies to sweep, as for `roundtrip`.
+        #[arg(long)]
+        corpus: PathBuf,
+        /// JSONL file to stream results into, one record per line.
+        #[arg(long)]
+        out: PathBuf,
+        /// Which reasoners to run, comma-separated: elk, hermit, jfact.
+        #[arg(long, default_value = "elk,hermit")]
+        reasoners: String,
+        /// Seconds each reasoner gets per ontology before being killed and
+        /// recorded as a timeout. The DL reasoners will not finish on the
+        /// larger ontologies; without this one of them stalls the sweep.
+        #[arg(long, default_value_t = 300)]
+        timeout: u64,
+        /// Worker threads (default: one per core). Each runs its own JVM,
+        /// so this multiplies memory use.
+        #[arg(long)]
+        jobs: Option<usize>,
+        /// Skip any corpus file whose byte length exceeds this cap.
+        #[arg(long = "max-bytes")]
+        max_bytes: Option<u64>,
+        /// Override the horned-owl version recorded in the run header.
+        #[arg(long = "horned-owl-rev")]
+        horned_owl_rev: Option<String>,
+    },
     /// Aggregate a run's JSONL output into a report directory.
     Report {
         /// JSONL file produced by `roundtrip` or `profile`.
@@ -139,6 +170,21 @@ enum Cmd {
         #[arg(long = "skip-existing")]
         skip_existing: bool,
     },
+}
+
+/// Parse `--reasoners`, rejecting unknown names rather than silently
+/// dropping them -- a typo that quietly reasoned with fewer reasoners than
+/// asked for would be invisible in the results.
+fn parse_reasoners(s: &str) -> anyhow::Result<Vec<Reasoner>> {
+    s.split(',')
+        .map(str::trim)
+        .filter(|r| !r.is_empty())
+        .map(|r| {
+            Reasoner::parse(r).ok_or_else(|| {
+                anyhow::anyhow!("unknown reasoner {r:?} (known: elk, hermit, jfact)")
+            })
+        })
+        .collect()
 }
 
 fn parse_formats(s: &str) -> Vec<Format> {
@@ -294,6 +340,26 @@ fn main() -> anyhow::Result<()> {
                 max_bytes,
                 horned_owl_rev.as_deref(),
                 |name, bytes| roundtrip::run_bytes(name, bytes, &fmts),
+            )?;
+        }
+        Cmd::Reason {
+            corpus: dir,
+            out,
+            reasoners,
+            timeout,
+            jobs,
+            max_bytes,
+            horned_owl_rev,
+        } => {
+            let rs = parse_reasoners(&reasoners)?;
+            let budget = std::time::Duration::from_secs(timeout);
+            sweep(
+                &dir,
+                &out,
+                jobs,
+                max_bytes,
+                horned_owl_rev.as_deref(),
+                |name, bytes| horned_corpus::reason::reason_bytes(name, bytes, &rs, budget),
             )?;
         }
         Cmd::Profile {

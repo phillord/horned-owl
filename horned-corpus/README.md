@@ -19,10 +19,11 @@ fetch     BioPortal API ──► gzipped corpus + manifest.json    (optional; n
 roundtrip each file ─► detect format ─► read ─► for each target format: write ─► read back
                        ─► canonicalize blank nodes ─► diff models ─► categorize ─► JSONL
 profile   each file ─► detect format ─► read ─► check against OWL 2 EL/QL/RL/DL ─► JSONL
+reason    each file ─► robot reason (ELK / HermiT / JFact) ─► outcome + timing ─► JSONL
 report    results.jsonl ─► cases.csv + summary.json + report.md
 ```
 
-`roundtrip` and `profile` are independent sweeps over the same corpus, each writing its own
+`roundtrip`, `profile` and `reason` are independent sweeps over the same corpus, each writing its own
 JSONL; `report` aggregates either.
 
 - **Format is detected by content, not extension** — real corpora mislabel files
@@ -85,6 +86,26 @@ Check the same corpus against the OWL 2 profiles instead (a separate sweep — n
 ```sh
 horned-corpus profile --corpus /path/to/ontologies --out profiles.jsonl --jobs 3
 ```
+
+Or reason over it:
+
+```sh
+horned-corpus reason --corpus /path/to/ontologies --out reasoned.jsonl \
+    --reasoners elk,hermit --timeout 300 --max-bytes 20000000
+```
+
+Each ontology costs a JVM startup *per reasoner*, so this is far slower than the other sweeps —
+`--timeout` bounds each one (the DL reasoners will not finish on the larger ontologies, and
+without it a single one stalls the sweep), and `--jobs` multiplies memory since each worker runs
+its own JVM. Results record outcome, wall-clock time and the axiom count of the reasoned output,
+so the reasoners can be compared against each other on the same ontology.
+
+Only ROBOT's reasoners — ELK, HermiT, JFact — are available today. The Rust ones can't be wired
+in yet: whelk-rs, rustdl and hermit-rs all pin `horned-owl ^1.4` while this workspace is on 3.0,
+so depending on one resolves a *second* copy of horned-owl rather than sharing ours, and
+`[patch.crates-io]` doesn't bridge it (cargo reports the patch "was not used in the crate graph"
+and silently builds against 1.4.0). When that closes, ELK is whelk-rs's counterpart and HermiT is
+rustdl's and hermit-rs's.
 
 `horned-profile`'s checker is pure Rust and cheap. Add `--robot-ground-truth` to cross-validate
 each verdict against ROBOT's `validate-profile` (the OWL API's real checker, so a genuine

@@ -28,7 +28,7 @@ use std::time::Instant;
 /// has no sensible extension -- callers must not reach ROBOT with it (see
 /// `run_bytes`, which only attempts the profile check on a successful
 /// source read, and a successful read never reports `Format::Unknown`).
-fn robot_ext(fmt: Format) -> &'static str {
+pub(crate) fn robot_ext(fmt: Format) -> &'static str {
     match fmt {
         Format::RdfXml => "rdf",
         Format::OwlXml => "owx",
@@ -46,7 +46,7 @@ fn robot_ext(fmt: Format) -> &'static str {
 /// panicked and the caller has nothing to work with -- the `Record::Source`
 /// describing why is already in `recs` either way.
 #[allow(clippy::result_unit_err)]
-fn read_for_sweep(
+pub(crate) fn read_for_sweep(
     ontology: &str,
     bytes: &[u8],
     sfmt: Format,

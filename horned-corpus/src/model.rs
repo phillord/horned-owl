@@ -125,6 +125,67 @@ pub struct ProfileCheckResult {
     pub agreement: BTreeMap<Profile, bool>,
 }
 
+/// A reasoner the `reason` sweep can run an ontology through.
+///
+/// All three are reached via ROBOT (so, the OWL API implementations). The
+/// Rust reasoners -- whelk-rs, rustdl, hermit-rs -- are not here yet: they
+/// all pin `horned-owl ^1.4` while this workspace is on 3.0, so depending on
+/// one pulls in a second, incompatible copy of horned-owl rather than
+/// sharing ours. Each has a natural counterpart below to compare against
+/// once that gap closes: whelk-rs against ELK, rustdl and hermit-rs against
+/// HermiT.
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[serde(rename_all = "snake_case")]
+pub enum Reasoner {
+    /// OWL 2 EL, the reasoner whelk-rs shares its algorithm lineage with.
+    Elk,
+    /// OWL 2 DL by hypertableau; what rustdl targets parity with, and what
+    /// hermit-rs is a port of.
+    // Named explicitly: deriving snake_case from `HermiT`/`JFact` yields
+    // `hermi_t`/`j_fact` in the results file.
+    #[serde(rename = "hermit")]
+    HermiT,
+    /// OWL 2 DL by tableau.
+    #[serde(rename = "jfact")]
+    JFact,
+}
+
+/// How one reasoner got on with one ontology.
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ReasonOutcome {
+    /// Reasoning completed and the ontology is consistent.
+    Ok,
+    /// The reasoner reported the ontology inconsistent, or classes
+    /// unsatisfiable. A genuine result about the ontology, not a failure.
+    Inconsistent,
+    /// Killed for exceeding the per-ontology time budget. Expected on the
+    /// larger ontologies for the DL reasoners, and the main reason a run
+    /// needs a timeout at all.
+    Timeout,
+    /// ROBOT could not reason at all -- unresolvable imports, a parse
+    /// failure, an unsupported construct.
+    Failed,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct ReasonResult {
+    pub ontology: String,
+    pub reasoner: Reasoner,
+    pub outcome: ReasonOutcome,
+    /// Wall-clock time for the reasoner process, including JVM startup --
+    /// which is a large fixed cost, so these are only fair compared against
+    /// each other, not against an in-process Rust reasoner.
+    pub elapsed_ms: u64,
+    /// Axioms in the reasoned output. `None` if reasoning didn't complete,
+    /// or if the output couldn't be read back. Comparable across reasoners
+    /// on the same ontology: a materially lower count from one of them is
+    /// worth looking at.
+    pub inferred_axioms: Option<usize>,
+    /// First line of ROBOT's error output, when it failed.
+    pub error: Option<String>,
+}
+
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 #[serde(tag = "record", rename_all = "snake_case")]
 pub enum Record {
@@ -132,6 +193,7 @@ pub enum Record {
     Source(SourceReadReport),
     Case(CaseResult),
     Profile(ProfileCheckResult),
+    Reason(ReasonResult),
 }
 
 #[cfg(test)]
