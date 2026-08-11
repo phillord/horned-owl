@@ -978,18 +978,20 @@ fn pick_banner_label<'a, A: ForIRI>(
 }
 
 /// OWLAPI's `IRI.compareTo`: namespace first, then remainder — NOT the whole
-/// string. The split is the NCName suffix, so `…/obo/GO_1` and `…/obo/GO_2`
-/// share a namespace and compare on the local part alone.
-fn owlapi_iri_cmp(a: &str, b: &str) -> Ordering {
-    let split = |s: &str| -> (usize, ) {
-        let idx = s
-            .rfind(|c: char| c == '/' || c == '#' || c == ':')
-            .map(|i| i + 1)
-            .unwrap_or(0);
-        (idx,)
-    };
-    let (ai,) = split(a);
-    let (bi,) = split(b);
+/// string. `IRI.create` splits at [`ncname_suffix_index`], which is the LAST
+/// position from which the rest of the string is a valid NCName, so `…/obo/GO_1`
+/// and `…/obo/GO_2` share a namespace and compare on the local part alone.
+///
+/// The split is not "after the last `/`, `#` or `:`": a local part that begins
+/// with a digit is not an NCName, so the boundary moves further right, past the
+/// digits. `…/10.1161/circ.105.9.e5` splits after `1161/` while
+/// `…/10.1161/01.CIR.0000132478.60674.D` splits after `1161/01.`, which is why
+/// the first sorts before the second where a naive split puts `01.CIR` first.
+/// RO's `skos:narrowMatch` targets in `identifiers.org/metacyc.reaction/` are the
+/// same shape.
+pub(super) fn owlapi_iri_cmp(a: &str, b: &str) -> Ordering {
+    let ai = ncname_suffix_index(a).unwrap_or(a.len());
+    let bi = ncname_suffix_index(b).unwrap_or(b.len());
     a[..ai].cmp(&b[..bi]).then_with(|| a[ai..].cmp(&b[bi..]))
 }
 
@@ -1229,7 +1231,7 @@ pub fn set_plain_literals_typed(on: bool) {
     PLAIN_LITERALS_TYPED.with(|c| c.set(on));
 }
 
-fn owlapi_literal_cmp<A: ForIRI>(a: &Literal<A>, b: &Literal<A>) -> Ordering {
+pub(super) fn owlapi_literal_cmp<A: ForIRI>(a: &Literal<A>, b: &Literal<A>) -> Ordering {
     const RDF_PLAIN: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#PlainLiteral";
     const XSD_STRING: &str = "http://www.w3.org/2001/XMLSchema#string";
     // An UNTYPED literal is `rdf:PlainLiteral`, with or without a language tag:

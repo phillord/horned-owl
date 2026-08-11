@@ -233,13 +233,21 @@ fn annotation_value_rank<A: ForIRI>(v: &AnnotationValue<A>) -> u8 {
 }
 
 /// Compare two annotations the way OWLAPI's `OWLAnnotation.compareTo` does:
-/// property first, then value (by value-type index, then value content). Within a
-/// single value type, horned-owl's natural order already matches (IRIs and
-/// literals compare by their content).
+/// property first, then value (by value-type index, then value content). Every
+/// leaf uses OWLAPI's own key — `IRI.compareTo` splits at the NCName suffix, and
+/// a literal compares on datatype before lexical form — so an annotation set
+/// orders the same way whether it hangs off an axiom or is an axiom itself.
 fn owlapi_annotation_cmp<A: ForIRI>(a: &&Annotation<A>, b: &&Annotation<A>) -> std::cmp::Ordering {
-    a.ap.0.as_ref().cmp(b.ap.0.as_ref())
+    use super::{owlapi_iri_cmp, owlapi_literal_cmp};
+    owlapi_iri_cmp(a.ap.0.as_ref(), b.ap.0.as_ref())
         .then_with(|| annotation_value_rank(&a.av).cmp(&annotation_value_rank(&b.av)))
-        .then_with(|| a.av.cmp(&b.av))
+        .then_with(|| match (&a.av, &b.av) {
+            (AnnotationValue::IRI(x), AnnotationValue::IRI(y)) => {
+                owlapi_iri_cmp(x.as_ref(), y.as_ref())
+            }
+            (AnnotationValue::Literal(x), AnnotationValue::Literal(y)) => owlapi_literal_cmp(x, y),
+            _ => a.av.cmp(&b.av),
+        })
 }
 
 // ---------------------------------------------------------------------------
