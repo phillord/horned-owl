@@ -199,16 +199,29 @@ pub fn write_full<A: ForIRI, AA: ForIndex<A>, W: Write>(
     // with an empty preferred-language map, and the axiom visit is guarded by
     // `lastLangMatchIndex > 0`, so every later assertion is skipped.
     //
-    // That set is a `java.util.HashSet` of the subject's annotation assertions, so
-    // "first" is bucket order over the axiom `hashCode` — reproducible, not
-    // per-JVM: `robot convert` run twice over one file gives byte-identical
-    // banners. Collect every label per subject, plus how many annotation
-    // assertions the subject has (which sizes the table), and pick afterwards.
+    // That set is a `java.util.HashSet` of the subject's annotation assertions
+    // (`OWLAxiomIndexImpl.getAnnotationAssertionAxioms` re-inserts the index's
+    // values into a fresh one), so "first" is bucket order over the axiom
+    // `hashCode` — a pure function of the axiom, reproduced below. Collect every
+    // label per subject, plus how many annotation assertions the subject has
+    // (which sizes the table), and pick afterwards.
     let mut label_lits: HashMap<String, Vec<(&Literal<A>, bool)>> = HashMap::new();
     let mut subject_ann_count: HashMap<String, usize> = HashMap::new();
     for ac in ont.iter() {
         if let Some((rank, iri)) = declaration_info(&ac.component) {
-            entity_rank.insert(iri.clone(), rank);
+            // An IRI declared as more than one kind is PUNNED, and OWLAPI writes
+            // its annotation assertions under whichever section comes first —
+            // `writeEntities` drops any axiom already in `writtenAxioms`, so the
+            // later section shows only what is left. `IAO_0000125` is declared
+            // both an annotation property and a named individual, and its three
+            // assertions belong to the Annotation Properties section, leaving the
+            // Individuals one with just its `ClassAssertion`.
+            match entity_rank.get(&iri) {
+                Some(&have) if emit_position(have) <= emit_position(rank) => {}
+                _ => {
+                    entity_rank.insert(iri.clone(), rank);
+                }
+            }
             declared.insert((rank, iri.clone()));
             declarations.push((
                 rank,
@@ -249,9 +262,9 @@ pub fn write_full<A: ForIRI, AA: ForIndex<A>, W: Write>(
             continue;
         }
         // An IRI used as more than one kind is punned; with no declaration to
-        // disambiguate, take the lowest-ranked kind so the entity still lands in
-        // a section rather than the leftover block.
-        if let Some(rank) = (0..6).find(|r| kinds & (1 << r) != 0) {
+        // disambiguate, take the kind whose section is emitted first, the same
+        // rule the declared case follows above.
+        if let Some(rank) = SECTION_EMIT_ORDER.iter().copied().find(|r| kinds & (1 << r) != 0) {
             entity_rank.insert(iri.clone(), rank);
         }
     }
@@ -407,13 +420,7 @@ pub fn write_full<A: ForIRI, AA: ForIndex<A>, W: Write>(
         sig_nonempty[*r] = true;
     }
 
-    // --- Emit each non-empty entity section ---
-    // OWLAPI's FunctionalSyntaxObjectRenderer writes the axiom sections in the
-    // order Annotation Properties, Object Properties, Data Properties, Datatypes,
-    // Classes, Named Individuals — NOT the rank order used for the leading
-    // Declaration block (Classes first). `SECTION_EMIT_ORDER` maps emission
-    // position → section rank (Class=0, OP=1, DataProp=2, AP=3, Datatype=4, Ind=5).
-    const SECTION_EMIT_ORDER: [usize; 6] = [3, 1, 2, 4, 0, 5];
+    // --- Emit each non-empty entity section, in `SECTION_EMIT_ORDER` ---
     for &rank in SECTION_EMIT_ORDER.iter() {
         // OWLAPI's `writeSortedEntities` does nothing for a type with an empty
         // signature, and emits a trailing blank line for one that is non-empty.
@@ -529,6 +536,18 @@ pub(crate) fn shrink_valid<'a>(mapping: &'a PrefixMapping, iri: &'a str) -> Opti
         }
     }
     best
+}
+
+/// The order `FunctionalSyntaxObjectRenderer` emits the entity sections in —
+/// Annotation Properties, Object Properties, Data Properties, Datatypes, Classes,
+/// Named Individuals — as section RANKS (Class=0, OP=1, DataProp=2, AP=3,
+/// Datatype=4, Individual=5). Not the rank order used for the leading
+/// `Declaration` block, which starts with Classes.
+const SECTION_EMIT_ORDER: [usize; 6] = [3, 1, 2, 4, 0, 5];
+
+/// Where a section rank falls in [`SECTION_EMIT_ORDER`].
+fn emit_position(rank: usize) -> usize {
+    SECTION_EMIT_ORDER.iter().position(|&r| r == rank).unwrap_or(usize::MAX)
 }
 
 /// The banner/short form of `iri`: its CURIE if one is available, else the full
@@ -938,9 +957,19 @@ fn owlapi_bucket(hash: i32, cap: usize) -> usize {
 /// The bucket rule is applied only when it is unambiguous: every label assertion
 /// is unannotated (so the annotation-collection hash is 0) and untyped (the only
 /// literal kind whose hash is reproduced here), and no two land in the same
-/// bucket — a within-bucket tie is broken by OWLAPI's parse-insertion order, which
-/// nothing here can recover. Otherwise fall back to the first in OWLAPI's own
-/// `compareTo` order, which is at least deterministic.
+/// bucket.
+///
+/// A within-bucket tie has NO reproducible answer. Order inside a
+/// `java.util.HashMap` bin is insertion order, and the insertion order is the
+/// order `Internals.annotationAssertionAxiomsBySubject` yields — which, once a
+/// subject carries more than three annotation assertions, is an HPPC-RT
+/// `ObjectHashSet` whose slot is `BitMixer.mix(hashCode, perturbation)` with
+/// `perturbation = Containers.randomSeed32()`, seeded from `System.nanoTime()`
+/// and an identity hash. It is redrawn per set instance per JVM run, so ROBOT
+/// itself is not stable here: six `robot convert` runs over one file give
+/// `oboInOwl:hasDbXref` the banner `(has cross-reference)` three times and
+/// `(database_cross_reference)` three times. Fall back to the first in OWLAPI's
+/// own `compareTo` order, which is at least deterministic.
 fn pick_banner_label<'a, A: ForIRI>(
     subj: &str,
     lits: &[(&'a Literal<A>, bool)],
