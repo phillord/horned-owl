@@ -164,7 +164,7 @@ fn cases(records: &[Record]) -> impl Iterator<Item = &CaseResult> {
 }
 
 /// The run's `RunHeader`, if the records include one (it's written first by
-/// `main`'s `run` subcommand, but `report()` is a pure function of whatever
+/// `main`'s `roundtrip` subcommand, but `report()` is a pure function of whatever
 /// slice it's handed, so callers -- and tests -- may omit it).
 fn header(records: &[Record]) -> Option<&RunHeader> {
     records.iter().find_map(|r| match r {

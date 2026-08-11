@@ -39,30 +39,24 @@ fn robot_ext(fmt: Format) -> &'static str {
     }
 }
 
-/// Run the full read -> {write -> reread -> diff}* pipeline for one
-/// ontology's raw bytes against every format in `formats`, plus (per
-/// `profile_mode`) a profile-conformance check.
+/// Read one ontology's raw bytes into a model, pushing the single
+/// `Record::Source` that every sweep emits for a file.
 ///
-/// Returns exactly one `Record::Source` (the source-read report), optionally
-/// one `Record::Profile`, followed by one `Record::Case` per entry in
-/// `formats`, in `formats` order. If the source read fails or panics, only
-/// the `Record::Source` is returned and no `Record::Profile`/`Record::Case`s
-/// are produced -- there is nothing to round-trip or profile-check without a
-/// model.
-pub fn run_bytes(
+/// `Ok(src)` means the model is usable; `Err` means the read failed or
+/// panicked and the caller has nothing to work with -- the `Record::Source`
+/// describing why is already in `recs` either way.
+#[allow(clippy::result_unit_err)]
+fn read_for_sweep(
     ontology: &str,
     bytes: &[u8],
-    formats: &[Format],
-    profile_mode: ProfileCheckMode,
-) -> Vec<Record> {
-    let mut recs = Vec::new();
-    let sfmt = detect(bytes);
-
+    sfmt: Format,
+    recs: &mut Vec<Record>,
+) -> Result<ReadOk, ()> {
     let t0 = Instant::now();
     let read = catch_unwind(AssertUnwindSafe(|| read_source(sfmt, bytes)));
     let read_us = Some(t0.elapsed().as_micros() as u64);
 
-    let src = match read {
+    match read {
         Ok(Ok(r)) => {
             recs.push(Record::Source(SourceReadReport {
                 ontology: ontology.into(),
@@ -73,7 +67,7 @@ pub fn run_bytes(
                 error: None,
                 read_us,
             }));
-            r
+            Ok(r)
         }
         Ok(Err(e)) => {
             recs.push(src_fail(
@@ -83,7 +77,7 @@ pub fn run_bytes(
                 e.to_string(),
                 read_us,
             ));
-            return recs;
+            Err(())
         }
         Err(_) => {
             recs.push(src_fail(
@@ -93,25 +87,52 @@ pub fn run_bytes(
                 "panic".into(),
                 read_us,
             ));
-            return recs;
-        }
-    };
-
-    if profile_mode != ProfileCheckMode::Off {
-        let with_robot = profile_mode == ProfileCheckMode::HornedAndRobot;
-        let ext = robot_ext(sfmt);
-        let result = catch_unwind(AssertUnwindSafe(|| {
-            crate::profile::check(ontology, &src.model, bytes, ext, with_robot)
-        }));
-        match result {
-            Ok(r) => recs.push(Record::Profile(r)),
-            Err(_) => eprintln!("warning: profile check panicked for {ontology}"),
+            Err(())
         }
     }
+}
+
+/// Run the full read -> {write -> reread -> diff}* pipeline for one
+/// ontology's raw bytes against every format in `formats`.
+///
+/// Returns exactly one `Record::Source` (the source-read report) followed by
+/// one `Record::Case` per entry in `formats`, in `formats` order. If the
+/// source read fails or panics, only the `Record::Source` is returned --
+/// there is nothing to round-trip without a model.
+pub fn run_bytes(ontology: &str, bytes: &[u8], formats: &[Format]) -> Vec<Record> {
+    let mut recs = Vec::new();
+    let sfmt = detect(bytes);
+    let Ok(src) = read_for_sweep(ontology, bytes, sfmt, &mut recs) else {
+        return recs;
+    };
 
     let src_canon = canonicalize(src.model.clone());
     for &t in formats {
         recs.push(Record::Case(one_case(ontology, sfmt, t, &src, &src_canon)));
+    }
+    recs
+}
+
+/// Read one ontology and check it against the OWL 2 profiles, without
+/// round-tripping it.
+///
+/// Returns one `Record::Source` followed by one `Record::Profile`. A profile
+/// check that panics is reported on stderr and simply yields no
+/// `Record::Profile`, on the same principle as the rest of the sweep: one bad
+/// ontology must not abort a run over thousands.
+pub fn profile_bytes(ontology: &str, bytes: &[u8], with_robot: bool) -> Vec<Record> {
+    let mut recs = Vec::new();
+    let sfmt = detect(bytes);
+    let Ok(src) = read_for_sweep(ontology, bytes, sfmt, &mut recs) else {
+        return recs;
+    };
+
+    let ext = robot_ext(sfmt);
+    match catch_unwind(AssertUnwindSafe(|| {
+        crate::profile::check(ontology, &src.model, bytes, ext, with_robot)
+    })) {
+        Ok(r) => recs.push(Record::Profile(r)),
+        Err(_) => eprintln!("warning: profile check panicked for {ontology}"),
     }
     recs
 }
@@ -265,7 +286,7 @@ mod tests {
     fn produces_source_and_case_records() {
         let ofn =
             b"Prefix(:=<http://ex/>)\nOntology(<http://ex/o>\nDeclaration(Class(<http://ex/A>))\n)";
-        let recs = run_bytes("t", ofn, &[Format::Ofn, Format::Omn], ProfileCheckMode::Off);
+        let recs = run_bytes("t", ofn, &[Format::Ofn, Format::Omn]);
         assert!(matches!(recs[0], Record::Source(_)));
         let cases = recs.iter().filter(|r| matches!(r, Record::Case(_))).count();
         assert_eq!(cases, 2);
@@ -294,7 +315,7 @@ mod tests {
   <owl:Ontology rdf:about="http://ex/o"/>
   <owl:Class rdf:about="http://ex/A"/>
 </rdf:RDF>"#;
-        let recs = run_bytes("rdf-t", rdf, &[Format::RdfXml], ProfileCheckMode::Off);
+        let recs = run_bytes("rdf-t", rdf, &[Format::RdfXml]);
         match &recs[0] {
             Record::Source(r) => {
                 assert_eq!(r.source_format, Format::RdfXml);
@@ -315,7 +336,7 @@ mod tests {
         // attempted.
         let ofn =
             b"Prefix(:=<http://ex/>)\nOntology(<http://ex/o>\nDeclaration(Class(<http://ex/A>))\n)";
-        let recs = run_bytes("t", ofn, &[Format::Unknown], ProfileCheckMode::Off);
+        let recs = run_bytes("t", ofn, &[Format::Unknown]);
         assert_eq!(recs.len(), 2, "expected source + case records");
 
         // Verify source record is Ok
@@ -348,12 +369,7 @@ mod tests {
         // Format::Unknown, and read_source(Unknown, garbage) fails. No Case
         // records are produced because the source read failed -- round-trips
         // are skipped entirely.
-        let recs = run_bytes(
-            "t",
-            b"garbage not an ontology",
-            &[Format::Ofn, Format::Omn],
-            ProfileCheckMode::Off,
-        );
+        let recs = run_bytes("t", b"garbage not an ontology", &[Format::Ofn, Format::Omn]);
         assert_eq!(
             recs.len(),
             1,

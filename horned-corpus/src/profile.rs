@@ -5,11 +5,11 @@
 //! independent ground truth -- not another Rust implementation that could
 //! share the same bugs.
 //!
-//! The ROBOT cross-check is opt-in (`--robot-ground-truth` on `run`): each
+//! The ROBOT cross-check is opt-in (`--robot-ground-truth` on `roundtrip`): each
 //! call to [`robot_verdicts`] spawns four `robot` processes (one per
 //! profile), and each spawn forks a JVM -- multiple seconds of wall time
 //! per *ontology*, not per corpus. Running it over a full multi-thousand
-//! file corpus by default would make every `run` impractically slow; treat
+//! file corpus by default would make every `roundtrip` impractically slow; treat
 //! it as a spot-check / cross-validation pass over a sample, not a routine
 //! part of every sweep.
 
@@ -136,7 +136,7 @@ fn parse_robot_report(report: &str, exit_success: bool) -> Option<ProfileVerdict
 
 /// A unique scratch directory for one `robot_verdicts` call.
 ///
-/// Deliberately an atomic counter, not a nanosecond timestamp: `run`
+/// Deliberately an atomic counter, not a nanosecond timestamp: `roundtrip`
 /// processes the corpus in parallel across rayon worker threads that all
 /// share one `std::process::id()`, and a timestamp-based name has a real
 /// collision window between two threads racing through this function at

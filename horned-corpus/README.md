@@ -15,17 +15,21 @@ Turtle writer).
 ## How it works
 
 ```
-fetch   BioPortal API ──► gzipped corpus + manifest.json      (optional; needs an API key)
-run     each file ─► detect format ─► read ─► for each target format: write ─► read back
-                     ─► canonicalize blank nodes ─► diff models ─► categorize ─► JSONL
-report  results.jsonl ─► cases.csv + summary.json + report.md
+fetch     BioPortal API ──► gzipped corpus + manifest.json    (optional; needs an API key)
+roundtrip each file ─► detect format ─► read ─► for each target format: write ─► read back
+                       ─► canonicalize blank nodes ─► diff models ─► categorize ─► JSONL
+profile   each file ─► detect format ─► read ─► check against OWL 2 EL/QL/RL/DL ─► JSONL
+report    results.jsonl ─► cases.csv + summary.json + report.md
 ```
+
+`roundtrip` and `profile` are independent sweeps over the same corpus, each writing its own
+JSONL; `report` aggregates either.
 
 - **Format is detected by content, not extension** — real corpora mislabel files
   constantly (Turtle behind a `.owl` extension, etc.).
 - Every horned-owl read/write is wrapped in `catch_unwind`, so one malformed ontology
   can never abort a sweep of thousands.
-- `run` streams each file's records to disk as it goes, so memory stays flat and partial
+- `roundtrip` streams each file's records to disk as it goes, so memory stays flat and partial
   progress survives an interruption. Oversized files are `--max-bytes`-capped and marked
   `Skipped` without being read into memory.
 - The RDF reader's `IncompleteParse` (triples it couldn't turn into axioms) is captured
@@ -56,7 +60,7 @@ Each run records what it tested in its report header, as `3.0.0 (2d20450)`: the 
 commit is the working tree's HEAD when the run started. Between releases the version alone
 can't tell two runs apart, which is why the commit is there too — but it is read at runtime,
 so build, commit, then run and it will be a commit ahead of the binary. Override the whole
-string with `run --horned-owl-rev <string>` when that isn't what you want recorded.
+string with `roundtrip --horned-owl-rev <string>` when that isn't what you want recorded.
 
 ```sh
 cargo build --release
@@ -69,19 +73,30 @@ Run over a directory of ontologies you already have (no API key needed):
 
 ```sh
 # read → write(×4) → read-back → diff → categorize, streaming to results.jsonl
-horned-corpus run --corpus /path/to/ontologies --out results.jsonl \
+horned-corpus roundtrip --corpus /path/to/ontologies --out results.jsonl \
     --jobs 3 --max-bytes 20000000
 
 # aggregate into cases.csv, summary.json, report.md
 horned-corpus report --in results.jsonl --out-dir report/
 ```
 
+Check the same corpus against the OWL 2 profiles instead (a separate sweep — no round-tripping):
+
+```sh
+horned-corpus profile --corpus /path/to/ontologies --out profiles.jsonl --jobs 3
+```
+
+`horned-profile`'s checker is pure Rust and cheap. Add `--robot-ground-truth` to cross-validate
+each verdict against ROBOT's `validate-profile` (the OWL API's real checker, so a genuine
+independent ground truth) — but that forks a JVM four times per *ontology*, so use it on a
+sample, not a full corpus.
+
 Fetch a fresh BioPortal corpus first (requires a [BioPortal API key](https://bioportal.bioontology.org/account)):
 
 ```sh
 export BIOPORTAL_API_KEY=...        # or pass --api-key, or `cp .env.example .env` and source it
 horned-corpus fetch --out ./corpus            # stores <acronym>.gz + manifest.json
-horned-corpus run   --corpus ./corpus --out results.jsonl --max-bytes 20000000 --jobs 3
+horned-corpus roundtrip --corpus ./corpus --out results.jsonl --max-bytes 20000000 --jobs 3
 horned-corpus report --in results.jsonl --out-dir report/
 ```
 
@@ -89,7 +104,7 @@ The key is read from `--api-key` or the `BIOPORTAL_API_KEY` env var. A `.env.exa
 template is included; the binary does **not** load `.env` automatically, so source it first
 (`set -a; source .env; set +a`) or export the variable.
 
-- `run --formats rdf,owx,ofn,omn` restricts which target formats to write (default: all four).
+- `roundtrip --formats rdf,owx,ofn,omn` restricts which target formats to write (default: all four).
 - `fetch --timeout <secs>` bounds every request (default `180`). BioPortal's `include=all`
   ontology list alone is multi-MB and routinely exceeds reqwest's 30s default, so a timeout
   is effectively required for `fetch` to complete.

@@ -60,13 +60,19 @@ struct Cli {
 #[derive(Subcommand)]
 enum Cmd {
     /// Round-trip every ontology in a corpus through the requested formats.
-    Run {
+    Roundtrip {
+        /// Directory of ontologies to sweep. Read one level deep, every
+        /// file tried; format is detected by content, not extension, and
+        /// gzipped files are decompressed transparently.
         #[arg(long)]
         corpus: PathBuf,
+        /// JSONL file to stream results into, one record per line.
         #[arg(long)]
         out: PathBuf,
+        /// Which formats to write and read back, comma-separated.
         #[arg(long, default_value = "rdf,owx,ofn,omn")]
         formats: String,
+        /// Worker threads (default: one per core).
         #[arg(long)]
         jobs: Option<usize>,
         /// Skip any corpus file whose byte length exceeds this cap, recording
@@ -74,30 +80,44 @@ enum Cmd {
         #[arg(long = "max-bytes")]
         max_bytes: Option<u64>,
         /// Override the horned-owl version recorded in the run header.
-        /// Defaults to `horned_owl::VERSION` plus the current commit (see
-        /// `resolve_horned_owl_rev`); set it by hand when that isn't what
-        /// you want recorded -- e.g. a dirty tree, or a build made before
-        /// the commit the working tree is now on.
+        /// Defaults to the linked horned-owl's version plus the current
+        /// commit; set it by hand when that isn't what you want recorded --
+        /// e.g. a dirty tree, or a build made before the commit the working
+        /// tree is now on.
         #[arg(long = "horned-owl-rev")]
         horned_owl_rev: Option<String>,
-        /// Check every ontology against the OWL 2 EL/QL/RL/DL profiles
-        /// (horned-profile), recorded as a `Record::Profile` per ontology.
-        /// Cheap (pure Rust) -- safe to leave on by default for a full
-        /// corpus sweep.
-        #[arg(long = "check-profiles")]
-        check_profiles: bool,
-        /// Additionally cross-validate every profile check against ROBOT's
-        /// `validate-profile` (the OWL API's real checker) -- implies
-        /// `--check-profiles`. Expensive: four `robot` process spawns (each
-        /// forking a JVM) per ontology, so this is meant for a sample run,
-        /// not a routine full-corpus sweep -- see `profile` module doc.
+    },
+    /// Check every ontology in a corpus against the OWL 2 profiles.
+    Profile {
+        /// Directory of ontologies to sweep, as for `roundtrip`.
+        #[arg(long)]
+        corpus: PathBuf,
+        /// JSONL file to stream results into, one record per line.
+        #[arg(long)]
+        out: PathBuf,
+        /// Worker threads (default: one per core).
+        #[arg(long)]
+        jobs: Option<usize>,
+        /// Skip any corpus file whose byte length exceeds this cap, recording
+        /// it as `Outcome::Skipped` instead of reading it.
+        #[arg(long = "max-bytes")]
+        max_bytes: Option<u64>,
+        /// Override the horned-owl version recorded in the run header.
+        #[arg(long = "horned-owl-rev")]
+        horned_owl_rev: Option<String>,
+        /// Additionally cross-validate every check against ROBOT's
+        /// `validate-profile` (the OWL API's real checker). Expensive: four
+        /// `robot` process spawns, each forking a JVM, per ontology -- meant
+        /// for a sample, not a routine full-corpus sweep.
         #[arg(long = "robot-ground-truth")]
         robot_ground_truth: bool,
     },
     /// Aggregate a run's JSONL output into a report directory.
     Report {
+        /// JSONL file produced by `roundtrip` or `profile`.
         #[arg(long = "in")]
         input: PathBuf,
+        /// Directory to write cases.csv, summary.json and report.md into.
         #[arg(long = "out-dir")]
         out_dir: PathBuf,
     },
@@ -156,115 +176,142 @@ fn skipped_record(name: String, len: u64, cap: u64) -> Record {
     })
 }
 
+/// Sweep every file in `dir`, applying `per_file` to each one's raw bytes
+/// and streaming the resulting records to `out` as JSONL.
+///
+/// Shared by `roundtrip` and `profile`, which differ only in what they do
+/// with each file. Records are written and dropped as each file completes
+/// rather than accumulated, so memory stays flat over a corpus of thousands
+/// and partial progress survives an interruption.
+fn sweep(
+    dir: &std::path::Path,
+    out: &std::path::Path,
+    jobs: Option<usize>,
+    max_bytes: Option<u64>,
+    horned_owl_rev: Option<&str>,
+    per_file: impl Fn(&str, &[u8]) -> Vec<Record> + Sync,
+) -> anyhow::Result<()> {
+    // catch_unwind inside the per-file work recovers from panics, but the
+    // default hook still writes a message to stderr for each one. Across
+    // ~1200 corpus files that floods the terminal, so install a no-op hook.
+    // Process-wide and not restored, which is fine for a one-shot CLI but
+    // would need scoping if this became reusable in a longer-lived process.
+    std::panic::set_hook(Box::new(|_| {}));
+
+    if let Some(j) = jobs {
+        rayon::ThreadPoolBuilder::new()
+            .num_threads(j)
+            .build_global()
+            .ok();
+    }
+    let paths = corpus::entries(dir)?;
+    let manifest_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+    let header = Record::Header(RunHeader {
+        horned_owl_rev: resolve_horned_owl_rev(manifest_dir, horned_owl_rev),
+        corpus: dir.to_string_lossy().to_string(),
+        started: timestamp(),
+    });
+
+    let writer = std::sync::Mutex::new(std::io::BufWriter::new(std::fs::File::create(out)?));
+    {
+        let mut w = writer.lock().unwrap();
+        writeln!(w, "{}", serde_json::to_string(&header)?)?;
+    }
+    {
+        use rayon::prelude::*;
+        paths.par_iter().try_for_each(|p| -> anyhow::Result<()> {
+            let name = p
+                .file_stem()
+                .unwrap_or_default()
+                .to_string_lossy()
+                .to_string();
+            // Pre-read size gate: skip oversized files WITHOUT reading them
+            // into memory (a multi-hundred-MB ontology would spike RAM even
+            // if only to discard it). read_bytes still guards against a small
+            // gzip that inflates past the cap.
+            let over_cap_on_disk = match (max_bytes, std::fs::metadata(p)) {
+                (Some(cap), Ok(meta)) if meta.len() > cap => Some((meta.len(), cap)),
+                _ => None,
+            };
+            let recs: Vec<Record> = if let Some((len, cap)) = over_cap_on_disk {
+                vec![skipped_record(name, len, cap)]
+            } else {
+                match corpus::read_bytes(p) {
+                    Ok(bytes) => match max_bytes {
+                        Some(cap) if bytes.len() as u64 > cap => {
+                            vec![skipped_record(name, bytes.len() as u64, cap)]
+                        }
+                        // A panic outside the per-file work's own
+                        // catch_unwind must not abort the sweep -- record it
+                        // as one Outcome::Panic Source.
+                        _ => match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                            per_file(&name, &bytes)
+                        })) {
+                            Ok(recs) => recs,
+                            Err(_) => vec![Record::Source(SourceReadReport {
+                                ontology: name,
+                                source_format: Format::Unknown,
+                                outcome: Outcome::Panic,
+                                is_complete: false,
+                                incomplete: None,
+                                error: Some("panic during processing".into()),
+                                read_us: None,
+                            })],
+                        },
+                    },
+                    Err(_) => vec![],
+                }
+            };
+            if !recs.is_empty() {
+                let mut w = writer.lock().unwrap();
+                for r in &recs {
+                    writeln!(w, "{}", serde_json::to_string(r)?)?;
+                }
+                w.flush()?;
+            }
+            Ok(())
+        })?;
+    }
+    writer.lock().unwrap().flush()?;
+    Ok(())
+}
+
 fn main() -> anyhow::Result<()> {
     match Cli::parse().cmd {
-        Cmd::Run {
+        Cmd::Roundtrip {
             corpus: dir,
             out,
             formats,
             jobs,
             max_bytes,
             horned_owl_rev,
-            check_profiles,
+        } => {
+            let fmts = parse_formats(&formats);
+            sweep(
+                &dir,
+                &out,
+                jobs,
+                max_bytes,
+                horned_owl_rev.as_deref(),
+                |name, bytes| roundtrip::run_bytes(name, bytes, &fmts),
+            )?;
+        }
+        Cmd::Profile {
+            corpus: dir,
+            out,
+            jobs,
+            max_bytes,
+            horned_owl_rev,
             robot_ground_truth,
         } => {
-            let profile_mode = if robot_ground_truth {
-                horned_corpus::model::ProfileCheckMode::HornedAndRobot
-            } else if check_profiles {
-                horned_corpus::model::ProfileCheckMode::Horned
-            } else {
-                horned_corpus::model::ProfileCheckMode::Off
-            };
-            // catch_unwind in roundtrip::run_bytes recovers from per-file panics, but
-            // the default panic hook still writes a message to stderr for each one.
-            // Across ~1200 corpus files that floods the terminal, so install a no-op
-            // hook for the duration of the run. This is process-wide and not restored
-            // (the process exits right after `run` completes), which is fine for a
-            // one-shot CLI binary but would need scoping if `run` ever became
-            // reusable within a longer-lived process.
-            std::panic::set_hook(Box::new(|_| {}));
-
-            if let Some(j) = jobs {
-                rayon::ThreadPoolBuilder::new()
-                    .num_threads(j)
-                    .build_global()
-                    .ok();
-            }
-            let fmts = parse_formats(&formats);
-            let paths = corpus::entries(&dir)?;
-            let manifest_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
-            let header = Record::Header(RunHeader {
-                horned_owl_rev: resolve_horned_owl_rev(manifest_dir, horned_owl_rev.as_deref()),
-                corpus: dir.to_string_lossy().to_string(),
-                started: timestamp(),
-            });
-            // Stream records to disk as each file completes, under a locked
-            // writer. This keeps memory flat over a large corpus (each file's
-            // records are written and dropped, never accumulated) and makes
-            // partial progress durable if the sweep is interrupted or OOMs.
-            let writer =
-                std::sync::Mutex::new(std::io::BufWriter::new(std::fs::File::create(&out)?));
-            {
-                let mut w = writer.lock().unwrap();
-                writeln!(w, "{}", serde_json::to_string(&header)?)?;
-            }
-            {
-                use rayon::prelude::*;
-                paths.par_iter().try_for_each(|p| -> anyhow::Result<()> {
-                    let name = p
-                        .file_stem()
-                        .unwrap_or_default()
-                        .to_string_lossy()
-                        .to_string();
-                    // Pre-read size gate: skip oversized files WITHOUT reading
-                    // them into memory (a multi-hundred-MB ontology would spike
-                    // RAM even if only to discard it). read_bytes still guards
-                    // against a small gzip that inflates past the cap.
-                    let over_cap_on_disk = match (max_bytes, std::fs::metadata(p)) {
-                        (Some(cap), Ok(meta)) if meta.len() > cap => Some((meta.len(), cap)),
-                        _ => None,
-                    };
-                    let recs: Vec<Record> = if let Some((len, cap)) = over_cap_on_disk {
-                        vec![skipped_record(name, len, cap)]
-                    } else {
-                        match corpus::read_bytes(p) {
-                            Ok(bytes) => match max_bytes {
-                                Some(cap) if bytes.len() as u64 > cap => {
-                                    vec![skipped_record(name, bytes.len() as u64, cap)]
-                                }
-                                // A panic inside run_bytes (canonicalize/diff/
-                                // categorize run outside run_bytes's own
-                                // catch_unwind) must not abort the sweep --
-                                // record it as one Outcome::Panic Source.
-                                _ => match std::panic::catch_unwind(std::panic::AssertUnwindSafe(
-                                    || roundtrip::run_bytes(&name, &bytes, &fmts, profile_mode),
-                                )) {
-                                    Ok(recs) => recs,
-                                    Err(_) => vec![Record::Source(SourceReadReport {
-                                        ontology: name,
-                                        source_format: Format::Unknown,
-                                        outcome: Outcome::Panic,
-                                        is_complete: false,
-                                        incomplete: None,
-                                        error: Some("panic during processing".into()),
-                                        read_us: None,
-                                    })],
-                                },
-                            },
-                            Err(_) => vec![],
-                        }
-                    };
-                    if !recs.is_empty() {
-                        let mut w = writer.lock().unwrap();
-                        for r in &recs {
-                            writeln!(w, "{}", serde_json::to_string(r)?)?;
-                        }
-                        w.flush()?;
-                    }
-                    Ok(())
-                })?;
-            }
-            writer.lock().unwrap().flush()?;
+            sweep(
+                &dir,
+                &out,
+                jobs,
+                max_bytes,
+                horned_owl_rev.as_deref(),
+                |name, bytes| roundtrip::profile_bytes(name, bytes, robot_ground_truth),
+            )?;
         }
         Cmd::Report { input, out_dir } => {
             let text = std::fs::read_to_string(&input)?;

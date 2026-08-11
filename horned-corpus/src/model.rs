@@ -134,21 +134,6 @@ pub enum Record {
     Profile(ProfileCheckResult),
 }
 
-/// How much profile-conformance checking `run_bytes` should do for a given
-/// ontology -- see `profile` module doc for why the ROBOT leg is opt-in.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum ProfileCheckMode {
-    /// No profile checking at all (the default, matching this tool's
-    /// behaviour before profile checking existed).
-    Off,
-    /// `horned-profile` only -- cheap, pure Rust, safe to run over a full
-    /// corpus by default.
-    Horned,
-    /// `horned-profile` plus ROBOT/OWL API ground truth -- expensive, see
-    /// `profile` module doc.
-    HornedAndRobot,
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

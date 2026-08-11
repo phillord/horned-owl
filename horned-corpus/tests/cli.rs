@@ -26,7 +26,7 @@ fn run_then_report_over_tiny_corpus() {
     let dir = tiny_corpus_dir("basic");
     let jsonl = dir.join("r.jsonl");
     let ok = Command::new(env!("CARGO_BIN_EXE_horned-corpus"))
-        .args(["run", "--corpus"])
+        .args(["roundtrip", "--corpus"])
         .arg(dir.join("corpus"))
         .arg("--out")
         .arg(&jsonl)
@@ -68,7 +68,7 @@ fn run_with_explicit_horned_owl_rev_override() {
     let dir = tiny_corpus_dir("override");
     let jsonl = dir.join("r.jsonl");
     let ok = Command::new(env!("CARGO_BIN_EXE_horned-corpus"))
-        .args(["run", "--corpus"])
+        .args(["roundtrip", "--corpus"])
         .arg(dir.join("corpus"))
         .arg("--out")
         .arg(&jsonl)
