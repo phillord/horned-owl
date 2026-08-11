@@ -5,7 +5,10 @@ authors = ["Phillip Lord", "Michel Dumontier"]
 description = "Round-trip and profile-conformance testing of horned-owl against a real-world ontology corpus"
 repository = "https://github.com/phillord/horned-owl"
 edition = "2024"
-license = "LGPL-3.0"
+# Dual licensed: MIT as originally released by Michel Dumontier in the
+# standalone horned-roundtrip repo, and LGPL-3.0 to match the rest of the
+# horned-owl workspace. Michel agreed to the LGPL addition.
+license = "MIT OR LGPL-3.0"
 # Internal testing tool, not part of the released crate set.
 publish = false
 

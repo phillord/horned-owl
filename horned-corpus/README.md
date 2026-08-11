@@ -134,4 +134,6 @@ template is included; the binary does **not** load `.env` automatically, so sour
 
 ## License
 
-[MIT](LICENSE) © 2026 Michel Dumontier.
+Dual licensed under [MIT](LICENSE-MIT) © 2026 Michel Dumontier, as originally released in the
+standalone `horned-roundtrip` repository, or LGPL-3.0 to match the rest of the horned-owl
+workspace, at your option.
