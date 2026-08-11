@@ -966,10 +966,9 @@ fn owlapi_bucket(hash: i32, cap: usize) -> usize {
 /// `ObjectHashSet` whose slot is `BitMixer.mix(hashCode, perturbation)` with
 /// `perturbation = Containers.randomSeed32()`, seeded from `System.nanoTime()`
 /// and an identity hash. It is redrawn per set instance per JVM run, so ROBOT
-/// itself is not stable here: six `robot convert` runs over one file give
-/// `oboInOwl:hasDbXref` the banner `(has cross-reference)` three times and
-/// `(database_cross_reference)` three times. Fall back to the first in OWLAPI's
-/// own `compareTo` order, which is at least deterministic.
+/// itself is not stable here — the same input gives `oboInOwl:hasDbXref` either
+/// `(has cross-reference)` or `(database_cross_reference)`. Fall back to the
+/// first in OWLAPI's own `compareTo` order, which is at least deterministic.
 fn pick_banner_label<'a, A: ForIRI>(
     subj: &str,
     lits: &[(&'a Literal<A>, bool)],
