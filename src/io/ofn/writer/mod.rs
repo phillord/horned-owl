@@ -1314,6 +1314,21 @@ fn owlapi_axiom_cmp<A: ForIRI>(a: &&AnnotatedComponent<A>, b: &&AnnotatedCompone
         .cmp(&owlapi_axiom_index(&b.component))
         .then_with(|| match (&a.component, &b.component) {
             (Component::Rule(x), Component::Rule(y)) => owlapi_rule_cmp(x, y),
+            // Class expressions compare on OWLAPI's type index, which is NOT
+            // horned-owl's variant order: `ObjectExactCardinality` precedes
+            // `ObjectMaxCardinality` there and follows it here. PRO's
+            // `PR_000050469` carries one of each over the same property and
+            // filler, so the derived order put its max-cardinality restriction
+            // three axioms early.
+            (Component::SubClassOf(x), Component::SubClassOf(y)) => {
+                owlapi_ce_cmp(&x.sub, &y.sub).then_with(|| owlapi_ce_cmp(&x.sup, &y.sup))
+            }
+            (Component::EquivalentClasses(x), Component::EquivalentClasses(y)) => {
+                owlapi_ce_set_cmp(&x.0, &y.0)
+            }
+            (Component::DisjointClasses(x), Component::DisjointClasses(y)) => {
+                owlapi_ce_set_cmp(&x.0, &y.0)
+            }
             _ => a.cmp(b),
         })
 }
