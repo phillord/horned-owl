@@ -332,10 +332,10 @@ pub fn fetch(
 
     let mut manifest = Vec::new();
     for (i, ontology) in ontologies.iter().enumerate() {
-        if let Some(l) = limit {
-            if i >= l {
-                break;
-            }
+        if let Some(l) = limit
+            && i >= l
+        {
+            break;
         }
         let acronym = ontology
             .get("acronym")
@@ -343,15 +343,14 @@ pub fn fetch(
             .unwrap_or("<unknown>");
         let stored_path = out_dir.join(format!("{acronym}.gz"));
 
-        if skip_existing {
-            if let Some(entry) = reusable_entry(acronym, &stored_path, prior_manifest.get(acronym))
-            {
-                eprintln!("skipping {acronym}: already downloaded (--skip-existing)");
-                manifest.push(entry);
-                continue;
-            }
-            // else: no usable file on disk -- fall through and (re-)download.
+        if skip_existing
+            && let Some(entry) = reusable_entry(acronym, &stored_path, prior_manifest.get(acronym))
+        {
+            eprintln!("skipping {acronym}: already downloaded (--skip-existing)");
+            manifest.push(entry);
+            continue;
         }
+        // else: no usable file on disk -- fall through and (re-)download.
 
         match fetch_one(&client, api_key, ontology, out_dir) {
             Ok(entry) => manifest.push(entry),
