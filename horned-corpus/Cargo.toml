@@ -1,0 +1,31 @@
+[package]
+name = "horned-corpus"
+version = "0.1.0"
+authors = ["Phillip Lord", "Michel Dumontier"]
+description = "Round-trip and profile-conformance testing of horned-owl against a real-world ontology corpus"
+repository = "https://github.com/phillord/horned-owl"
+edition = "2024"
+# Dual licensed: MIT as originally released by Michel Dumontier in the
+# standalone horned-roundtrip repo, and LGPL-3.0 to match the rest of the
+# horned-owl workspace. Michel agreed to the LGPL addition.
+license = "MIT OR LGPL-3.0"
+# Internal testing tool, not part of the released crate set.
+publish = false
+
+[dependencies]
+horned-owl = { path = "../", version = "3.0.0" }
+horned-profile = { workspace = true }
+oxrdfio = { workspace = true }
+# horned_owl::io re-exports PrefixMapping only via a private `use curie::
+# PrefixMapping;` (see io/mod.rs), so it is not reachable as
+# `horned_owl::io::PrefixMapping`. Depend on curie directly to name the type.
+curie = "0.1.4"
+clap = { version = "4", features = ["derive"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+csv = "1"
+anyhow = "1"
+flate2 = "1"
+rayon = "1"
+sha2 = "0.10"
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "rustls-tls", "json"] }

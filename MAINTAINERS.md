@@ -11,6 +11,8 @@ This is a list of maintainers for crates, directories or files
 | `horned-catalog` | Phillip Lord |
 | `horned-pretty-rdf` | Phillip Lord |
 | `horned-macro` | Phillip Lord |
+| `horned-profile` | Phillip Lord |
+| `horned-corpus` | Michel Dumontier |
 
 ## Modules within `horned-owl`
 
