@@ -1,10 +1,11 @@
 //! Reasoning over the corpus, via ROBOT's `reason` command.
 //!
-//! Every reasoner here is an OWL API implementation reached by spawning
-//! `robot`, so each ontology costs a JVM startup. That is a large fixed
-//! overhead, and it means the timings below are only fair *against each
-//! other* -- comparing them to an in-process Rust reasoner would be
-//! measuring the JVM as much as the reasoning.
+//! Every reasoner here is an OWL API implementation reached by spawning a
+//! pinned ROBOT release (see [`crate::robot`]), so each ontology costs a
+//! JVM startup. That is a large fixed overhead, and it means the timings
+//! below are only fair *against each other* -- comparing them to an
+//! in-process Rust reasoner would be measuring the JVM as much as the
+//! reasoning.
 //!
 //! The Rust reasoners are deliberately absent. whelk-rs, rustdl and
 //! hermit-rs all pin `horned-owl ^1.4` while this workspace is on 3.0, so
@@ -107,7 +108,7 @@ pub fn reason_one(
     // blocks writing, we block waiting, neither budges.
     let log = dir.join("robot.log");
     let t0 = Instant::now();
-    let mut child = std::process::Command::new("robot")
+    let mut child = crate::robot::robot_command()
         .arg("reason")
         .arg("-i")
         .arg(&input)

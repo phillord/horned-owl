@@ -9,4 +9,5 @@ pub mod ontology;
 pub mod profile;
 pub mod reason;
 pub mod report;
+pub mod robot;
 pub mod roundtrip;

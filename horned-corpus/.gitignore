@@ -12,3 +12,6 @@
 
 # local secrets: real API key lives in .env (tracked template is .env.example)
 /.env
+
+# pinned ROBOT release, downloaded on first use by robot::robot_ensure()
+/dev/robot-*.jar

@@ -70,7 +70,7 @@ pub fn robot_verdicts(
     let mut out = BTreeMap::new();
     for &(rp, _) in &PROFILES {
         let report_path = dir.join(format!("{}.txt", profile_flag(rp)));
-        let status = std::process::Command::new("robot")
+        let status = crate::robot::robot_command()
             .arg("validate-profile")
             .arg("-i")
             .arg(&input)
