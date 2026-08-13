@@ -3,6 +3,12 @@
 //! `bubo_ensure` (`src/io/mod.rs`): every `reason` / `--robot-ground-truth`
 //! run in this crate should be pinned to a known ROBOT version, not
 //! whatever (if anything) happens to be on `$PATH`.
+//!
+//! Downloads via `reqwest` (already a dependency, for `fetch`'s BioPortal
+//! calls) rather than shelling out to `wget` or `curl` -- neither is stock
+//! on Windows/macOS, and horned-corpus already pulls in one HTTP client
+//! directly plus `ureq` transitively via horned-owl's `remote` feature;
+//! reusing `reqwest` avoids adding a third.
 
 use std::path::PathBuf;
 use std::sync::OnceLock;
@@ -37,12 +43,24 @@ pub fn robot_ensure() -> PathBuf {
                 let url = format!(
                     "https://github.com/ontodev/robot/releases/download/v{ROBOT_VERSION}/robot.jar"
                 );
-                let status = std::process::Command::new("wget")
-                    .args(["-q", &url, "-O"])
-                    .arg(&local)
-                    .status()
-                    .expect("failed to run wget");
-                assert!(status.success(), "failed to download ROBOT {ROBOT_VERSION}");
+                let bytes = reqwest::blocking::Client::builder()
+                    .timeout(std::time::Duration::from_secs(120))
+                    .build()
+                    .and_then(|c| c.get(&url).send())
+                    .and_then(reqwest::blocking::Response::error_for_status)
+                    .and_then(|r| r.bytes())
+                    .unwrap_or_else(|e| panic!("failed to download ROBOT {ROBOT_VERSION}: {e}"));
+
+                // Written to a temp path and renamed into place, not written
+                // directly to `local`: a run killed mid-download would
+                // otherwise leave a truncated jar that the `local.exists()`
+                // check above treats as already-downloaded on every
+                // subsequent run.
+                let tmp = local.with_extension("jar.part");
+                std::fs::write(&tmp, &bytes)
+                    .unwrap_or_else(|e| panic!("failed to write ROBOT {ROBOT_VERSION}: {e}"));
+                std::fs::rename(&tmp, &local)
+                    .unwrap_or_else(|e| panic!("failed to finalize ROBOT {ROBOT_VERSION}: {e}"));
             }
 
             local

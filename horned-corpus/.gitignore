@@ -15,3 +15,4 @@
 
 # pinned ROBOT release, downloaded on first use by robot::robot_ensure()
 /dev/robot-*.jar
+/dev/robot-*.jar.part
