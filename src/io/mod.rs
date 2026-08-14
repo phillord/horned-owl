@@ -1,14 +1,20 @@
 //! Parsers and renderers for several of the ontology formats listed in the
 //! [W3C recommendation](https://www.w3.org/TR/owl2-overview/#Syntaxes).
 
+#[cfg(feature = "obo")]
 pub mod obo;
+#[cfg(feature = "ofn")]
 pub mod ofn;
+#[cfg(feature = "omn")]
 pub mod omn;
+#[cfg(feature = "owx")]
 pub mod owx;
+#[cfg(feature = "rdf")]
 pub mod rdf;
 
 use curie::PrefixMapping;
 
+#[cfg(feature = "rdf")]
 use self::rdf::reader::{ConcreteRDFOntology, IncompleteParse};
 use crate::ontology::indexed::ForIndex;
 use crate::{
@@ -39,10 +45,15 @@ pub(crate) fn shrink_iri_longest_match<'a>(
 }
 
 pub enum ResourceType {
+    #[cfg(feature = "ofn")]
     OFN,
+    #[cfg(feature = "owx")]
     OWX,
+    #[cfg(feature = "rdf")]
     RDF,
+    #[cfg(feature = "omn")]
     OMN,
+    #[cfg(feature = "obo")]
     OBO,
 }
 
@@ -51,12 +62,17 @@ pub enum ResourceType {
 pub enum InputFormat {
     /// Detect the format from file content, ignoring the extension.
     Guess,
+    #[cfg(feature = "ofn")]
     OFN,
+    #[cfg(feature = "owx")]
     OWX,
+    #[cfg(feature = "omn")]
     OMN,
+    #[cfg(feature = "obo")]
     OBO,
     /// An RDF-family format. `None` means detect the sub-format from the
     /// extension; `Some` pins a specific serialization.
+    #[cfg(feature = "rdf")]
     Rdf(Option<oxrdfio::RdfFormat>),
 }
 
@@ -64,58 +80,100 @@ impl std::str::FromStr for InputFormat {
     type Err = ();
 
     /// Accepts `"guess"`, `"ofn"`, `"owx"`, `"omn"`, `"obo"`, and any extension
-    /// recognised by [`oxrdfio::RdfFormat::from_extension`] plus `"owl"`.
+    /// recognised by [`oxrdfio::RdfFormat::from_extension`] plus `"owl"`
+    /// (whichever of these this build's features actually support).
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             "guess" => Ok(Self::Guess),
+            #[cfg(feature = "ofn")]
             "ofn" => Ok(Self::OFN),
+            #[cfg(feature = "owx")]
             "owx" => Ok(Self::OWX),
+            #[cfg(feature = "omn")]
             "omn" => Ok(Self::OMN),
+            #[cfg(feature = "obo")]
             "obo" => Ok(Self::OBO),
+            #[cfg(feature = "rdf")]
             "owl" => Ok(Self::Rdf(Some(oxrdfio::RdfFormat::RdfXml))),
+            #[cfg(feature = "rdf")]
             other => oxrdfio::RdfFormat::from_extension(other)
                 .map(|f| Self::Rdf(Some(f)))
                 .ok_or(()),
+            #[cfg(not(feature = "rdf"))]
+            _ => Err(()),
         }
     }
 }
 
 #[allow(clippy::large_enum_variant)]
 pub enum ParserOutput<A: ForIRI, AA: ForIndex<A>> {
+    #[cfg(feature = "ofn")]
     OFNParser(SetOntology<A>, PrefixMapping),
+    #[cfg(feature = "owx")]
     OWXParser(SetOntology<A>, PrefixMapping),
+    #[cfg(feature = "rdf")]
     RDFParser(ConcreteRDFOntology<A, AA>, IncompleteParse<A>),
+    #[cfg(feature = "omn")]
     OMNParser(SetOntology<A>, PrefixMapping),
+    #[cfg(feature = "obo")]
     OBOParser(SetOntology<A>, PrefixMapping),
+    // `AA` (the annotated-component index type) is otherwise only used by
+    // RDFParser -- without this, disabling "rdf" alone (or every format at
+    // once, the `PhantomData<A>` covering that degenerate case too) would
+    // leave a type parameter unused and the type wouldn't compile.
+    // Uninhabited (Infallible), so it adds nothing at runtime and can never
+    // actually be constructed or matched; it only exists to keep
+    // `ParserOutput<A, AA>`'s signature stable across every feature
+    // combination, so callers never need to be feature-aware about which
+    // formats are enabled.
+    #[cfg(not(feature = "rdf"))]
+    #[doc(hidden)]
+    __Phantom(
+        std::convert::Infallible,
+        std::marker::PhantomData<AA>,
+        std::marker::PhantomData<A>,
+    ),
 }
 
 impl<A: ForIRI, AA: ForIndex<A>> ParserOutput<A, AA> {
     pub fn resource_type(&self) -> ResourceType {
         match self {
+            #[cfg(feature = "ofn")]
             ParserOutput::OFNParser(..) => ResourceType::OFN,
+            #[cfg(feature = "owx")]
             ParserOutput::OWXParser(..) => ResourceType::OWX,
+            #[cfg(feature = "rdf")]
             ParserOutput::RDFParser(..) => ResourceType::RDF,
+            #[cfg(feature = "omn")]
             ParserOutput::OMNParser(..) => ResourceType::OMN,
+            #[cfg(feature = "obo")]
             ParserOutput::OBOParser(..) => ResourceType::OBO,
+            #[cfg(not(feature = "rdf"))]
+            ParserOutput::__Phantom(inf, ..) => match *inf {},
         }
     }
 
+    #[cfg(feature = "ofn")]
     pub fn ofn(sop: (SetOntology<A>, PrefixMapping)) -> ParserOutput<A, AA> {
         ParserOutput::OFNParser(sop.0, sop.1)
     }
 
+    #[cfg(feature = "owx")]
     pub fn owx(sop: (SetOntology<A>, PrefixMapping)) -> ParserOutput<A, AA> {
         ParserOutput::OWXParser(sop.0, sop.1)
     }
 
+    #[cfg(feature = "rdf")]
     pub fn rdf(rop: (ConcreteRDFOntology<A, AA>, IncompleteParse<A>)) -> ParserOutput<A, AA> {
         ParserOutput::RDFParser(rop.0, rop.1)
     }
 
+    #[cfg(feature = "omn")]
     pub fn omn(sop: (SetOntology<A>, PrefixMapping)) -> ParserOutput<A, AA> {
         ParserOutput::OMNParser(sop.0, sop.1)
     }
 
+    #[cfg(feature = "obo")]
     pub fn obo(sop: (SetOntology<A>, PrefixMapping)) -> ParserOutput<A, AA> {
         ParserOutput::OBOParser(sop.0, sop.1)
     }
@@ -145,6 +203,12 @@ pub struct ParserConfiguration {
     /// in size if one happens; this instead prevents one happening at
     /// all. Defaults to `false`.
     pub local_only: bool,
+    // Gated: `RDFParserConfiguration` names `oxrdfio::RdfFormat` directly,
+    // which doesn't exist as a type when "rdf" is off. `owx`'s config below
+    // stays unconditional -- it's an empty struct with no such coupling, so
+    // there's nothing to gain by threading a second conditional field
+    // through every `ParserConfiguration` construction site for symmetry.
+    #[cfg(feature = "rdf")]
     pub rdf: RDFParserConfiguration,
     pub owx: OWXParserConfiguration,
     /// Override format detection. When set, this takes precedence over the
@@ -171,6 +235,7 @@ impl Default for ParserConfiguration {
             lax: false,
             remote_body_limit: u64::MAX,
             local_only: false,
+            #[cfg(feature = "rdf")]
             rdf: RDFParserConfiguration::default(),
             owx: OWXParserConfiguration::default(),
             input_format: None,
@@ -182,10 +247,20 @@ impl Default for ParserConfiguration {
 #[derive(Clone, Copy, Debug, Default)]
 pub struct OWXParserConfiguration {}
 
+#[cfg(feature = "rdf")]
 #[derive(Clone, Copy, Debug, Default)]
 pub struct RDFParserConfiguration {
     pub format: Option<oxrdfio::RdfFormat>,
 }
+
+// `IncompleteParse` is genuinely RDF-specific (its fields are built from
+// rdf::reader's own `Term`/`PosTriple`/`Atom` types), but `decompose()`
+// below names it in a signature every format shares. This uninhabited stub
+// keeps that signature stable regardless of which formats are enabled: the
+// non-RDF match arms in `decompose()` already always return `None` for
+// this slot, so nothing ever needs to construct one.
+#[cfg(not(feature = "rdf"))]
+pub struct IncompleteParse<A: ForIRI>(std::marker::PhantomData<A>, std::convert::Infallible);
 
 impl<A: ForIRI, AA: ForIndex<A>> ParserOutput<A, AA> {
     pub fn decompose(
@@ -196,13 +271,20 @@ impl<A: ForIRI, AA: ForIndex<A>> ParserOutput<A, AA> {
         Option<IncompleteParse<A>>,
     ) {
         match self {
+            #[cfg(feature = "ofn")]
             ParserOutput::OFNParser(o, m) => (o, Some(m), None),
+            #[cfg(feature = "owx")]
             ParserOutput::OWXParser(o, m) => (o, Some(m), None),
+            #[cfg(feature = "rdf")]
             ParserOutput::RDFParser(o, i) => {
                 (o.into(), None, if i.is_complete() { None } else { Some(i) })
             }
+            #[cfg(feature = "omn")]
             ParserOutput::OMNParser(o, m) => (o, Some(m), None),
+            #[cfg(feature = "obo")]
             ParserOutput::OBOParser(o, m) => (o, Some(m), None),
+            #[cfg(not(feature = "rdf"))]
+            ParserOutput::__Phantom(inf, ..) => match inf {},
         }
     }
 }
@@ -210,11 +292,18 @@ impl<A: ForIRI, AA: ForIndex<A>> ParserOutput<A, AA> {
 impl<A: ForIRI, AA: ForIndex<A>> From<ParserOutput<A, AA>> for SetOntology<A> {
     fn from(p: ParserOutput<A, AA>) -> SetOntology<A> {
         match p {
+            #[cfg(feature = "ofn")]
             ParserOutput::OFNParser(so, _) => so,
+            #[cfg(feature = "owx")]
             ParserOutput::OWXParser(so, _) => so,
+            #[cfg(feature = "rdf")]
             ParserOutput::RDFParser(rdfo, _) => rdfo.into(),
+            #[cfg(feature = "omn")]
             ParserOutput::OMNParser(so, _) => so,
+            #[cfg(feature = "obo")]
             ParserOutput::OBOParser(so, _) => so,
+            #[cfg(not(feature = "rdf"))]
+            ParserOutput::__Phantom(inf, ..) => match inf {},
         }
     }
 }
@@ -222,11 +311,18 @@ impl<A: ForIRI, AA: ForIndex<A>> From<ParserOutput<A, AA>> for SetOntology<A> {
 impl<A: ForIRI, AA: ForIndex<A>> From<ParserOutput<A, AA>> for ComponentMappedOntology<A, AA> {
     fn from(p: ParserOutput<A, AA>) -> ComponentMappedOntology<A, AA> {
         match p {
+            #[cfg(feature = "ofn")]
             ParserOutput::OFNParser(so, _) => so.into(),
+            #[cfg(feature = "owx")]
             ParserOutput::OWXParser(so, _) => so.into(),
+            #[cfg(feature = "rdf")]
             ParserOutput::RDFParser(rdfo, _) => rdfo.into(),
+            #[cfg(feature = "omn")]
             ParserOutput::OMNParser(so, _) => so.into(),
+            #[cfg(feature = "obo")]
             ParserOutput::OBOParser(so, _) => so.into(),
+            #[cfg(not(feature = "rdf"))]
+            ParserOutput::__Phantom(inf, ..) => match inf {},
         }
     }
 }
@@ -239,14 +335,16 @@ impl<A: ForIRI, AA: ForIndex<A>> From<ParserOutput<A, AA>> for ComponentMappedOn
 ///
 /// Returns `(ResourceType, rdf_format)` where `rdf_format` is set for RDF
 /// variants (RDF/XML, Turtle, N-Triples) and `None` for OWX, OFN, OMN, and OBO.
-/// Returns `None` when the format cannot be determined from the content.
-pub fn detect_format(bytes: &[u8]) -> Option<(ResourceType, Option<oxrdfio::RdfFormat>)> {
+/// Returns `None` when the format cannot be determined from the content, or
+/// when it's recognised but this build's features don't support it.
+pub fn detect_format(bytes: &[u8]) -> Option<(ResourceType, Option<DetectedRdfFormat>)> {
     let s = String::from_utf8_lossy(bytes);
     let s = s.strip_prefix('\u{feff}').unwrap_or(&s);
     let trimmed = s.trim_start();
 
     if trimmed.starts_with('<') {
         // N-Triples / full-IRI-subject Turtle: `<iri> <iri>` on the first line.
+        #[cfg(feature = "rdf")]
         if !trimmed.starts_with("<?")
             && !trimmed.starts_with("<!")
             && trimmed.lines().next().is_some_and(|l| l.contains("> <"))
@@ -254,11 +352,14 @@ pub fn detect_format(bytes: &[u8]) -> Option<(ResourceType, Option<oxrdfio::RdfF
             return Some((ResourceType::RDF, Some(oxrdfio::RdfFormat::Turtle)));
         }
         // XML: sniff the root element name.
+        #[cfg(any(feature = "rdf", feature = "owx"))]
         if let Some(root) = first_xml_element(trimmed) {
             let local = root.rsplit(':').next().unwrap_or(root);
+            #[cfg(feature = "rdf")]
             if local.eq_ignore_ascii_case("RDF") {
                 return Some((ResourceType::RDF, Some(oxrdfio::RdfFormat::RdfXml)));
             }
+            #[cfg(feature = "owx")]
             if local.eq_ignore_ascii_case("Ontology") {
                 return Some((ResourceType::OWX, None));
             }
@@ -273,20 +374,25 @@ pub fn detect_format(bytes: &[u8]) -> Option<(ResourceType, Option<oxrdfio::RdfF
             continue;
         }
         let lower = l.to_ascii_lowercase();
+        #[cfg(feature = "rdf")]
         if lower.starts_with("@prefix") || lower.starts_with("@base") {
             return Some((ResourceType::RDF, Some(oxrdfio::RdfFormat::Turtle)));
         }
+        #[cfg(feature = "rdf")]
         if l.starts_with('<') && !l.starts_with("<?") && !l.starts_with("<!") && l.contains("> <") {
             return Some((ResourceType::RDF, Some(oxrdfio::RdfFormat::Turtle)));
         }
+        #[cfg(feature = "omn")]
         if l.starts_with("Prefix:") || l.starts_with("Ontology:") {
             return Some((ResourceType::OMN, None));
         }
+        #[cfg(feature = "ofn")]
         if l.starts_with("Prefix(") || l.starts_with("Ontology(") {
             return Some((ResourceType::OFN, None));
         }
         // OBO flat-file: the conventional first line is `format-version:`, but a
         // header-less document may open directly with a stanza header.
+        #[cfg(feature = "obo")]
         if l.starts_with("format-version:")
             || l.starts_with("[Term]")
             || l.starts_with("[Typedef]")
@@ -299,6 +405,17 @@ pub fn detect_format(bytes: &[u8]) -> Option<(ResourceType, Option<oxrdfio::RdfF
     None
 }
 
+/// The RDF sub-format slot in [`detect_format`]'s return type. A real
+/// `oxrdfio::RdfFormat` when "rdf" is enabled; otherwise an uninhabited
+/// stub, since nothing can ever detect an RDF sub-format without the RDF
+/// feature to begin with -- this just keeps `detect_format`'s signature
+/// stable across feature combinations rather than changing shape.
+#[cfg(feature = "rdf")]
+pub type DetectedRdfFormat = oxrdfio::RdfFormat;
+#[cfg(not(feature = "rdf"))]
+pub type DetectedRdfFormat = std::convert::Infallible;
+
+#[cfg(any(feature = "rdf", feature = "owx"))]
 fn first_xml_element(s: &str) -> Option<&str> {
     let mut rest = s;
     loop {

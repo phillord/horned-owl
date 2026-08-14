@@ -20,15 +20,19 @@ enum_meta = "0.6.0"
 thiserror = "1.0"
 lazy_static="1.4.0"
 log = {version="0.4.8"}
-quick-xml={version="0.37.5"}
+# Optional, one per format below -- gating these is the whole point of the
+# per-parser features: each is used by exactly one io::<format> module (see
+# that module's mod.rs), so a consumer that only needs e.g. functional
+# syntax doesn't pay for quick-xml, pest, or the RDF stack at all.
+quick-xml={version="0.37.5", optional=true}
 indexmap={workspace=true}
 oxiri={workspace=true}
-pest = "2.7.8"
-pest_derive = "2.7.8"
-horned-pretty-rdf={workspace=true}
+pest = {version = "2.7.8", optional = true}
+pest_derive = {version = "2.7.8", optional = true}
+horned-pretty-rdf={workspace=true, optional=true}
 horned-catalog={workspace=true}
-oxrdf={workspace=true}
-oxrdfio={workspace=true}
+oxrdf={workspace=true, optional=true}
+oxrdfio={workspace=true, optional=true}
 ureq={version="3.3.0", optional=true}
 
 [workspace]
@@ -47,9 +51,28 @@ oxrdf="0.3.0"
 oxrdfio="0.2.0"
 
 [features]
-default = ["remote"]
+# One feature per io::<format> module, all on by default so existing
+# consumers see no behaviour change. A consumer that only needs one or two
+# syntaxes -- e.g. an embedded/constrained target in Cowl's spirit, which
+# only supports functional syntax -- can opt out of the rest with
+# `default-features = false, features = ["ofn"]` and drop quick-xml, pest,
+# and/or the whole RDF stack (oxrdf/oxrdfio/horned-pretty-rdf) from the
+# build. horned-catalog is deliberately NOT gated per-format even though
+# only the rdf reader's import-closure-following consults it today: it's
+# small, and threading a catalog-shaped hole through the shared
+# ParserConfiguration for every format combination isn't worth it yet.
+default = ["remote", "rdf", "owx", "ofn", "omn", "obo"]
 remote = ["ureq"]
-encoding = ["quick-xml/encoding"]
+rdf = ["dep:oxrdf", "dep:oxrdfio", "dep:horned-pretty-rdf"]
+owx = ["dep:quick-xml"]
+ofn = ["dep:pest", "dep:pest_derive"]
+# Manchester's writer/reader fall back to functional syntax for constructs
+# it can't represent cleanly (structural/meta/annotation/SWRL axioms etc on
+# write; GCIs on read) -- a genuine runtime dependency, not just build-time.
+omn = ["dep:pest", "dep:pest_derive", "ofn"]
+obo = ["dep:pest", "dep:pest_derive"]
+# owx-only (io/owx/reader.rs is the only consumer of the "encoding" cfg).
+encoding = ["owx", "quick-xml/encoding"]
 
 [dev-dependencies]
 proptest = "1"
@@ -65,9 +88,6 @@ horned-bin = {path="horned-bin"}
 # horned-owl <-> horned-macro publish cycle (horned-macro depends on
 # horned-owl, so requiring it here at publish time is unresolvable).
 horned-macro = {path = "horned-macro"}
-
-[profile.release]
-debug = true
 
 [[bench]]
 name = "horned"

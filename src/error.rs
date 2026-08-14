@@ -2,6 +2,7 @@
 use std::fmt::{Display, Formatter};
 use std::ops::Range;
 
+#[cfg(any(feature = "ofn", feature = "omn", feature = "obo"))]
 use pest::RuleType;
 use thiserror::Error;
 
@@ -25,6 +26,7 @@ impl From<Range<u64>> for Location {
     }
 }
 
+#[cfg(any(feature = "ofn", feature = "omn", feature = "obo"))]
 impl From<pest::error::InputLocation> for Location {
     fn from(l: pest::error::InputLocation) -> Self {
         match l {
@@ -36,6 +38,7 @@ impl From<pest::error::InputLocation> for Location {
     }
 }
 
+#[cfg(any(feature = "ofn", feature = "omn", feature = "obo"))]
 impl<'i> From<pest::Span<'i>> for Location {
     fn from(span: pest::Span<'i>) -> Self {
         Location::ByteSpan(span.start().try_into().unwrap()..span.end().try_into().unwrap())
@@ -105,24 +108,28 @@ impl HornedError {
     }
 }
 
+#[cfg(feature = "owx")]
 impl From<quick_xml::Error> for HornedError {
     fn from(e: quick_xml::Error) -> Self {
         Self::ParserError(e.into(), Location::Unknown)
     }
 }
 
+#[cfg(feature = "owx")]
 impl From<quick_xml::encoding::EncodingError> for HornedError {
     fn from(e: quick_xml::encoding::EncodingError) -> Self {
         Self::ParserError(e.into(), Location::Unknown)
     }
 }
 
+#[cfg(feature = "rdf")]
 impl From<oxrdfio::RdfParseError> for HornedError {
     fn from(e: oxrdfio::RdfParseError) -> Self {
         Self::ParserError(e.into(), Location::Unknown)
     }
 }
 
+#[cfg(any(feature = "ofn", feature = "omn", feature = "obo"))]
 impl<R: RuleType + 'static> From<pest::error::Error<R>> for HornedError {
     fn from(e: pest::error::Error<R>) -> Self {
         let location = e.location.clone().into();

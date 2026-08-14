@@ -31,7 +31,6 @@
 //#[macro_use]
 extern crate indexmap;
 extern crate log;
-extern crate quick_xml;
 
 pub mod adaptor;
 pub mod curie;
