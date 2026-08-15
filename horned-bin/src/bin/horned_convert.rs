@@ -32,7 +32,7 @@ pub(crate) fn app(name: &str) -> App<'static> {
                 .takes_value(true)
                 .required(true)
                 .help(
-                    "The format to convert to: owx, ofn, omn, owl, \
+                    "The format to convert to: owx, ofn, omn, obo, owl, \
                      or any RDF syntax oxrdfio supports (ttl, nt, nq, trig, jsonld, n3)",
                 ),
         )
