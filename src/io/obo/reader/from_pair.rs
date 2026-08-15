@@ -35,6 +35,14 @@ use crate::model::{
 
 pub(crate) const OBO_BASE: &str = "http://purl.obolibrary.org/obo/";
 pub(crate) const OIO: &str = "http://www.geneontology.org/formats/oboInOwl#";
+
+/// Whether an OBO `ontology:` value is already an absolute `http(s)` IRI (used
+/// as-is) rather than a short id to expand under `OBO_BASE`. Testing a bare
+/// `http` prefix wrongly matched short ids like `httptest`/`httpfoo`, leaving a
+/// relative ontology IRI.
+fn is_http_iri(s: &str) -> bool {
+    s.starts_with("http://") || s.starts_with("https://")
+}
 const RDFS_LABEL: &str = "http://www.w3.org/2000/01/rdf-schema#label";
 const RDFS_COMMENT: &str = "http://www.w3.org/2000/01/rdf-schema#comment";
 const IAO_DEF: &str = "http://purl.obolibrary.org/obo/IAO_0000115";
@@ -356,7 +364,7 @@ pub fn scan_header<A: ForIRI>(
                 onto_ns = values
                     .first()
                     .map(|v| v.as_str().trim())
-                    .and_then(|o| (!o.starts_with("http")).then(|| format!("{OBO_BASE}{o}#")));
+                    .and_then(|o| (!is_http_iri(o)).then(|| format!("{OBO_BASE}{o}#")));
             }
             _ => {}
         }
@@ -381,7 +389,7 @@ pub fn header_to_components<A: ForIRI>(
         match tag {
             Rule::OntologyTag => {
                 if let Some(o) = val(0) {
-                    let iri = if o.starts_with("http") {
+                    let iri = if is_http_iri(o) {
                         o.to_string()
                     } else {
                         format!("{OBO_BASE}{o}.owl")

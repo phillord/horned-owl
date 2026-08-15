@@ -321,6 +321,27 @@ mod tests {
     }
 
     #[test]
+    fn ontology_short_id_starting_with_http_is_expanded() {
+        // Regression: an `ontology:` short id that merely starts with "http"
+        // (e.g. `httptest`) must still expand to the OBO PURL, not be treated as
+        // an already-absolute IRI and left relative (`<httptest>`).
+        let ont = read("ontology: httptest\n\n[Term]\nid: GO:0001\nname: x\n");
+        let want = "http://purl.obolibrary.org/obo/httptest.owl";
+        assert!(ont.iter().any(|ac| matches!(&ac.component,
+            Component::OntologyID(o) if o.iri.as_ref().map(|i| i.as_ref()) == Some(want))));
+    }
+
+    #[test]
+    fn ontology_absolute_iri_is_used_verbatim() {
+        // A real `http(s)://` IRI is used as-is, not re-expanded.
+        let want = "http://example.org/my-onto";
+        let doc = format!("ontology: {want}\n\n[Term]\nid: GO:0001\nname: x\n");
+        let ont = read(&doc);
+        assert!(ont.iter().any(|ac| matches!(&ac.component,
+            Component::OntologyID(o) if o.iri.as_ref().map(|i| i.as_ref()) == Some(want))));
+    }
+
+    #[test]
     fn synonym_scope_maps_to_property() {
         let doc = "[Term]\nid: GO:0008150\nsynonym: \"bp\" EXACT [GOC:x]\n";
         let ont = read(doc);
