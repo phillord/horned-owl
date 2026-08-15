@@ -16,6 +16,7 @@ with millions of terms.
   + [x] OWL/XML
   + [x] Functional Syntax
   + [x] Manchester Syntax
+  + [x] OBO Flat File
 + A [visitor](https://en.wikipedia.org/wiki/Visitor_pattern) trait to navigate and manipulate ontologies
 + Traits and implementations for several types of ontologies
 
