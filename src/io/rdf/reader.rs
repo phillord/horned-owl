@@ -1811,7 +1811,55 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
         Ok(())
     }
 
+    /// `DisjointClasses( CE1 ... CEn )` for n > 2:
+    ///
+    /// ```text
+    /// _:x rdf:type owl:AllDisjointClasses .
+    /// _:x owl:members T(SEQ CE1 ... CEn) .
+    /// ```
+    ///
+    /// Structurally this is the same shape as the `owl:AllDifferent` cases
+    /// handled by the match in [`Self::axioms`], and the obvious place for
+    /// it is an arm there.
+    ///
+    /// It is here instead for a build reason, not a design one. Adding any
+    /// further pattern to that match tips rustc over its default stack on
+    /// Windows: exit code `0xc0000005` (`STATUS_ACCESS_VIOLATION`) with no
+    /// diagnostic emitted. Clean `devel` builds in ~14s; the same tree with
+    /// one extra arm in that match does not build at all unless
+    /// `RUST_MIN_STACK` is raised. Consuming the matching bnodes in a small
+    /// standalone pass leaves `axioms`'s match byte-identical to what it
+    /// was, so this change costs it nothing.
+    ///
+    /// Runs before `axioms` and removes what it consumes, so the entries it
+    /// handles never reach that match.
+    fn all_disjoint_classes(&mut self) -> Result<(), HornedError> {
+        let mut unconsumed = HashMap::new();
+
+        for (bnode, v) in std::mem::take(&mut self.bnode) {
+            let seq = match v.as_slice() {
+                [
+                    [_, Term::OWL(VOWL::Members), Term::BNode(bnodeid)], //:
+                    [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::AllDisjointClasses)],
+                ] => Some(bnodeid.clone()),
+                _ => None,
+            };
+
+            match seq.and_then(|id| self.retrieve_to_ce_seq(&id)) {
+                Some(ces) => self.merge(DisjointClasses(ces)),
+                None => {
+                    unconsumed.insert(bnode, v);
+                }
+            }
+        }
+
+        self.bnode = unconsumed;
+        Ok(())
+    }
+
     fn axioms(&mut self, ic: &[&O]) -> Result<(), HornedError> {
+        self.all_disjoint_classes()?;
+
         let mut single_bnodes = vec![];
 
         for (this_bnode, v) in std::mem::take(&mut self.bnode) {
