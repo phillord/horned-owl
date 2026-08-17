@@ -14,5 +14,7 @@ pub mod writer;
 pub use reader::{read, read_with_build};
 pub use writer::write;
 
-#[cfg(test)]
+// Cross-validates against ROBOT's own OBO->OWL mapping by also reading a
+// ROBOT-converted .ofn of the same fixture, so it needs the ofn reader too.
+#[cfg(all(test, feature = "ofn"))]
 mod oracle;
