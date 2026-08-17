@@ -1577,8 +1577,20 @@ render_to_node! {
 render_to_vec! {
     DisjointClasses, self, f, ng,
     {
-        let pred = ng.nn(OWL::DisjointWith);
-        nary(f, ng, &self.0, pred)
+        // DisjointClasses( CE1 CE2 )      T(CE1) owl:disjointWith T(CE2) .
+        // DisjointClasses( CE1 ... CEn )  _:x rdf:type owl:AllDisjointClasses .
+        //   n > 2                         _:x owl:members T(SEQ CE1 ... CEn) .
+        //
+        // This must NOT go through `nary`, which emits a star from the
+        // first member (first-disjointWith-each-other). Disjointness is
+        // not transitive, so that star is logically WEAKER than the
+        // axiom: DisjointClasses(A B C) would lose "B disjoint from C".
+        // `members` handles both arities correctly, as it already does
+        // for DifferentIndividuals.
+        members(f, ng,
+                OWL::DisjointWith,
+                OWL::AllDisjointClasses,
+                &self.0)
     }
 }
 
