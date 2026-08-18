@@ -6,15 +6,22 @@ pub mod ofn;
 pub mod omn;
 pub mod owx;
 pub mod rdf;
+pub mod stream;
 
 use curie::PrefixMapping;
 
 use self::rdf::reader::{ConcreteRDFOntology, IncompleteParse};
+use crate::error::HornedError;
 use crate::ontology::indexed::ForIndex;
 use crate::{
     model::ForIRI,
     ontology::{component_mapped::ComponentMappedOntology, set::SetOntology},
 };
+
+pub use stream::{StreamComponent, StreamOntology};
+
+/// The result type every IO reader/writer in this module returns.
+pub type Result<T> = std::result::Result<T, HornedError>;
 
 /// Shrink `iri` against `mapping`, preferring the *longest* matching named
 /// prefix, unlike [`curie::PrefixMapping::shrink_iri`]'s insertion-order
@@ -65,7 +72,7 @@ impl std::str::FromStr for InputFormat {
 
     /// Accepts `"guess"`, `"ofn"`, `"owx"`, `"omn"`, `"obo"`, and any extension
     /// recognised by [`oxrdfio::RdfFormat::from_extension`] plus `"owl"`.
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
         match s {
             "guess" => Ok(Self::Guess),
             "ofn" => Ok(Self::OFN),
@@ -443,7 +450,10 @@ mod tests {
             .clone()
     }
 
-    pub fn run_bubo_reparse<F>(format: &str, parse_fn: F) -> Result<(), Box<dyn std::error::Error>>
+    pub fn run_bubo_reparse<F>(
+        format: &str,
+        parse_fn: F,
+    ) -> std::result::Result<(), Box<dyn std::error::Error>>
     where
         F: Fn(&std::path::Path, &mut dyn std::io::Write),
     {
