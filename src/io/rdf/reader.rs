@@ -2693,11 +2693,16 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                     Ok(())
                 };
 
-            // Whether a triple says something about an anonymous INDIVIDUAL rather
-            // than describing a structure: a type naming an ordinary class, or an
-            // annotation. Everything a blank node can be instead — a restriction, a
-            // list cell, a reification — states a built-in `owl:`/`rdf:` object here
-            // and has already been consumed by the time this runs.
+            // A blank node is an anonymous INDIVIDUAL because something types it by
+            // an ordinary class — `_:x rdf:type sssom:MappingSet`. Every other thing
+            // a blank node can be names a vocabulary term there (`owl:Restriction`,
+            // `rdf:List`, `owl:Axiom`), which is a different `Term` variant, so the
+            // type triple alone tells the two apart. Without one, a leftover group is
+            // structure this parse did not understand and is left where it is.
+            let typed_by_a_class = v.iter().any(|t| {
+                matches!(t, [Term::BNode(_), Term::RDF(VRDF::Type), Term::Iri(_)])
+            });
+            // …and the individual's other triples are its annotations.
             let states_an_individual = |s: &OntologyParser<_, _, _>, t: &[Term<A>; 3]| match t {
                 [Term::BNode(_), Term::RDF(VRDF::Type), Term::Iri(_)] => true,
                 [Term::BNode(_), Term::RDFS(rdfs), _] => rdfs.is_builtin(),
@@ -2726,7 +2731,10 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                 // itself — a type and its annotations, as an SSSOM mapping set
                 // does. The triples are ONE individual's, so they take one node id
                 // between them rather than one each.
-                _ if v.len() > 1 && v.iter().all(|t| states_an_individual(self, t)) => {
+                _ if v.len() > 1
+                    && typed_by_a_class
+                    && v.iter().all(|t| states_an_individual(self, t)) =>
+                {
                     let ind: AnonymousIndividual<A> = self.b.anon_renumbered();
                     for triple in v.iter() {
                         if let [_, Term::RDF(VRDF::Type), Term::Iri(cls)] = triple {
