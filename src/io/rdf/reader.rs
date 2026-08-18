@@ -1028,22 +1028,32 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
         }
         let mut stated: rustc_hash::FxHashSet<[Term<A>; 3]> =
             self.simple.iter().map(|t| t.triple().clone()).collect();
-        let mut restored = false;
+        let mut add: Vec<PosTriple<A>> = Vec::new();
         for (key, pos) in reified {
             if matches!(key[0], Term::BNode(_)) || matches!(key[2], Term::BNode(_)) {
                 continue;
             }
             if stated.insert(key.clone()) {
-                self.simple.push(PosTriple(key, pos));
-                restored = true;
+                add.push(PosTriple(key, pos));
             }
         }
-        // The rest of the parse reads `simple` in document order, which is
-        // ascending position; a restored triple takes the position of its block,
-        // so a stable sort merges it into the place the document put it.
-        if restored {
-            self.simple.sort_by_key(|t| t.position());
+        if add.is_empty() {
+            return;
         }
+        // A restored triple takes the position of the block that named it, and is
+        // merged in at that point. The existing entries keep the order they are
+        // in — the rest of the parse reads them in document order — so this is a
+        // merge into that sequence, not a sort of it.
+        add.sort_by_key(|t| t.position());
+        let old = std::mem::take(&mut self.simple);
+        let mut it = add.into_iter().peekable();
+        for t in old {
+            while it.peek().is_some_and(|n| n.position() <= t.position()) {
+                self.simple.push(it.next().expect("peeked"));
+            }
+            self.simple.push(t);
+        }
+        self.simple.extend(it);
     }
 
     /// A content-based key term for an RDF list (the members of a property
