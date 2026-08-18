@@ -915,8 +915,12 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
     /// Process axiom annotations.
     fn axiom_annotations(&mut self) -> Result<(), HornedError> {
         let mut bnode_to_key: HashMap<BNode<A>, [Term<A>; 3]> = HashMap::default();
+        // Every base triple a reification names, with the position of the block
+        // that named it, so one the document leaves unstated can be restored.
+        let mut reified: Vec<([Term<A>; 3], u64)> = Vec::new();
 
         for (k, v) in std::mem::take(&mut self.bnode) {
+            let pos = v.1;
             match v.as_slice() {
                 [
                     [_, Term::OWL(VOWL::AnnotatedProperty), p], //:
@@ -949,6 +953,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                     // annotation (owl:Annotation whose annotatedSource is THIS
                     // reification bnode) can find the axiom it refines.
                     bnode_to_key.insert(k, key.clone());
+                    reified.push((key.clone(), pos));
                     let anns = self.parse_annotations(ann)?;
                     self.ann_map.entry(key).or_default().push(anns);
                 }
@@ -997,7 +1002,48 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
             }
         }
 
+        self.restore_reified_triples(reified);
         Ok(())
+    }
+
+    /// Put back the base triple of a reification the document does not state.
+    ///
+    /// An `owl:Axiom` block names the axiom it annotates by subject, predicate
+    /// and object. A document that carries the block without stating that triple
+    /// still means the axiom, so it is restored here and the ordinary translation
+    /// builds it, carrying the block's annotations.
+    ///
+    /// An SSSOM mapping set in RDF is written exactly this way — every mapping is
+    /// an `owl:Axiom` block and no base triple is stated — and uPheno's
+    /// `components/upheno-mappings.owl` is a SPARQL update over those base
+    /// triples. Without this its 51,582 mappings reach the update as nothing but
+    /// anonymous individuals and the component comes out empty.
+    ///
+    /// Only a triple between named things is restored: a blank-node subject or
+    /// object belongs to a construct held elsewhere — a class expression, an RDF
+    /// list — which the translation reaches by its own route.
+    fn restore_reified_triples(&mut self, reified: Vec<([Term<A>; 3], u64)>) {
+        if reified.is_empty() {
+            return;
+        }
+        let mut stated: rustc_hash::FxHashSet<[Term<A>; 3]> =
+            self.simple.iter().map(|t| t.triple().clone()).collect();
+        let mut restored = false;
+        for (key, pos) in reified {
+            if matches!(key[0], Term::BNode(_)) || matches!(key[2], Term::BNode(_)) {
+                continue;
+            }
+            if stated.insert(key.clone()) {
+                self.simple.push(PosTriple(key, pos));
+                restored = true;
+            }
+        }
+        // The rest of the parse reads `simple` in document order, which is
+        // ascending position; a restored triple takes the position of its block,
+        // so a stable sort merges it into the place the document put it.
+        if restored {
+            self.simple.sort_by_key(|t| t.position());
+        }
     }
 
     /// A content-based key term for an RDF list (the members of a property
