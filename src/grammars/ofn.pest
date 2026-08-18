@@ -96,11 +96,15 @@ QuotedString       = ${ "\"" ~ (!"\"" ~ ("\\\\" | "\\\"" | ANY))* ~ "\"" }
 // individual), where a colon-free token is unambiguous: abbreviated IRIs always
 // contain `:` (excluded by the `!":"` guard) and full IRIs are `<>`-delimited.
 NodeID             = _{ SPARQL_BlankNodeLabel | OwlapiNodeID }
-// The trailing `!("(" | ":")` keeps this bare form from swallowing a following
-// `:` (an abbreviated IRI) or a functional keyword used in individual position
-// (e.g. `Variable(...)`, `ObjectSomeValuesFrom(...)`): a real node id is only
-// ever followed by whitespace or `)`, never by `(` or `:`.
-OwlapiNodeID       = @{ ASCII_ALPHA ~ ASCII_ALPHANUMERIC* ~ !("(" | ":") }
+// The trailing lookahead keeps this bare form from swallowing the head of a
+// longer token. A node id is a WHOLE token, so what follows it must end the
+// token: whitespace or one of the terminators. An abbreviated IRI whose prefix
+// holds a non-alphanumeric — `mp-edit:Europhenome_Terms` — stops the
+// alphanumeric run at `mp` with `-` still to come, and `-` continues the token,
+// so this must not match there. A functional keyword in individual position
+// (`Variable(...)`, `ObjectSomeValuesFrom(...)`) is excluded by the same test
+// plus `(`, which is a terminator rather than a token character.
+OwlapiNodeID       = @{ ASCII_ALPHA ~ ASCII_ALPHANUMERIC* ~ !("(" | OfnTokenChar) }
 
 //
 

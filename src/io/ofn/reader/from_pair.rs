@@ -1192,6 +1192,45 @@ mod tests {
     }
 
     #[test]
+    fn annotation_value_prefix_with_a_hyphen() {
+        let build = Build::default();
+        let mut prefixes = PrefixMapping::default();
+        prefixes
+            .add_prefix("oboInOwl", "http://www.geneontology.org/formats/oboInOwl#")
+            .unwrap();
+        prefixes.add_prefix("obo", "http://purl.obolibrary.org/obo/").unwrap();
+        prefixes
+            .add_prefix("mp-edit", "http://purl.obolibrary.org/obo/mp/mp-edit.owl#")
+            .unwrap();
+
+        // The VALUE position admits an anonymous individual, whose bare form is a
+        // colon-free token. `mp-edit:Europhenome_Terms` is not one: the leading
+        // alphanumeric run stops at the hyphen, and the token carries on. Reading
+        // `mp` as a node id there leaves `-edit:Europhenome_Terms` unconsumed and
+        // the axiom unparseable — which is what ROBOT's own OFN output for MP
+        // contains.
+        assert_parse_into!(
+            AnnotatedComponent<String>,
+            Rule::Axiom,
+            build,
+            prefixes,
+            "AnnotationAssertion(oboInOwl:inSubset obo:MP_0000013 mp-edit:Europhenome_Terms)",
+            AnnotatedComponent::from(AnnotationAssertion::new(
+                AnnotationSubject::IRI(build.iri("http://purl.obolibrary.org/obo/MP_0000013")),
+                Annotation {
+                    ap: build.annotation_property(
+                        "http://www.geneontology.org/formats/oboInOwl#inSubset"
+                    ),
+                    av: AnnotationValue::IRI(
+                        build.iri("http://purl.obolibrary.org/obo/mp/mp-edit.owl#Europhenome_Terms")
+                    ),
+                    ann: Default::default(),
+                },
+            ))
+        );
+    }
+
+    #[test]
     fn has_key() {
         let build = Build::default();
         let mut prefixes = PrefixMapping::default();
