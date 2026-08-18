@@ -136,13 +136,19 @@ pub fn write_full<A: ForIRI, AA: ForIndex<A>, W: Write>(
     write_prefixes(&mut write, mapping)?;
 
     // --- Ontology header ---
+    // The line break after `Ontology(` belongs to the ontology IRI, not to the
+    // header: an ANONYMOUS ontology writes `Ontology(` and goes straight on, so
+    // the blank line below is the one that ends the line. A tags file written by
+    // a species subset is such an ontology, and an unconditional break gave it a
+    // blank line no reader of the format writes.
     write!(write, "\n\nOntology(")?;
     if let Some(oi) = &ont_iri {
         write!(write, "<{oi}>")?;
-    }
-    writeln!(write)?;
-    if let Some(vi) = &version_iri {
-        writeln!(write, "<{vi}>")?;
+        if let Some(vi) = &version_iri {
+            writeln!(write)?;
+            write!(write, "<{vi}>")?;
+        }
+        writeln!(write)?;
     }
     // Imports first (functional syntax requires them before axioms), then the
     // ontology annotations, each on its own line.
