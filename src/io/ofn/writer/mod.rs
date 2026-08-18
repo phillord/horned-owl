@@ -518,24 +518,91 @@ fn write_prefixes<W: Write>(write: &mut W, mapping: &PrefixMapping) -> Result<()
     Ok(())
 }
 
-/// Abbreviate `iri` to `(prefix, local)` using the LONGEST declared namespace
-/// that is a prefix of `iri` and leaves a valid CURIE local part. This is OWLAPI
-/// semantics — the most specific prefix wins, independent of declaration order
-/// (`curie::shrink_iri` returns the *first* declared match, which is not the same
-/// thing). The empty-string prefix renders the default `:local`. Returns `None`
-/// when no declared prefix yields a valid CURIE, so the caller writes `<IRI>`.
+/// Abbreviate `iri` to `(prefix, local)`, or `None` when it has to be written
+/// out in full.
+///
+/// The IRI's own namespace decides first: everything before its longest XML
+/// NCName suffix, looked up EXACTLY. That split lands on the last delimiter, so
+/// the most specific declared prefix wins by construction — `obo:` and a more
+/// specific `uberon:` can both be declared and each IRI takes the closer one.
+///
+/// When that namespace is not declared, the longest declared namespace the IRI
+/// starts with is used instead, but only if what follows it is a QName: an
+/// NCName, or two NCNames joined by ONE colon. That is what keeps FoodOn's
+/// `wikipedia:User:Lupin` abbreviated while `eolife:584423` and
+/// `obo:FOODON:03415183` go out in full — an XML name may not begin with a
+/// digit, so neither local part is a QName.
+///
+/// The empty-string prefix renders the default `:local`.
 pub(crate) fn shrink_valid<'a>(mapping: &'a PrefixMapping, iri: &'a str) -> Option<(&'a str, &'a str)> {
+    let (ns, remainder) = match ncname_suffix_index(iri) {
+        Some(i) => (&iri[..i], &iri[i..]),
+        None => (iri, ""),
+    };
+    // A namespace may be declared under more than one prefix; the last
+    // declaration is the one that answers for it.
+    if let Some((prefix, _)) = mapping.mappings().filter(|(_, v)| v.as_str() == ns).last() {
+        // An IRI that IS a declared namespace has no local part, and a bare
+        // `prefix:` is not an entity name.
+        return if remainder.is_empty() { None } else { Some((prefix.as_str(), remainder)) };
+    }
     let mut best: Option<(&str, &str)> = None;
-    for (prefix, ns) in mapping.mappings() {
-        if let Some(local) = iri.strip_prefix(ns.as_str()) {
-            if is_valid_curie_local(local)
-                && best.map_or(true, |(_, blocal)| local.len() < blocal.len())
-            {
-                best = Some((prefix.as_str(), local));
-            }
+    let mut best_ns: Option<&str> = None;
+    for (prefix, ns2) in mapping.mappings() {
+        let Some(local) = iri.strip_prefix(ns2.as_str()) else { continue };
+        if !is_qname(local) {
+            continue;
+        }
+        let better = match best_ns {
+            None => true,
+            Some(b) => (ns2.len(), ns2.as_str()) >= (b.len(), b),
+        };
+        if better {
+            best = Some((prefix.as_str(), local));
+            best_ns = Some(ns2.as_str());
         }
     }
-    best
+    match best {
+        // `prefix:local:` is not a name either.
+        Some((_, local)) if local.ends_with(':') => None,
+        other => other,
+    }
+}
+
+/// Whether `s` is a QName: an NCName, or two NCNames joined by one colon.
+fn is_qname(s: &str) -> bool {
+    if s.is_empty() {
+        return false;
+    }
+    let mut found_colon = false;
+    let mut in_ncname = false;
+    for ch in s.chars() {
+        let cp = ch as u32;
+        if ch == ':' {
+            if found_colon || !in_ncname {
+                return false;
+            }
+            found_colon = true;
+            in_ncname = false;
+        } else if !in_ncname {
+            if !xml_name_start(cp) {
+                return false;
+            }
+            in_ncname = true;
+        } else if !xml_name_char(cp) {
+            return false;
+        }
+    }
+    true
+}
+
+/// The banner/short form of `iri`: its CURIE if one is available, else the full
+/// IRI in angle brackets, matching the `# Class: obo:CL_0000000` headers.
+pub(crate) fn short_form(mapping: &PrefixMapping, iri: &str) -> String {
+    match shrink_valid(mapping, iri) {
+        Some((prefix, local)) => format!("{prefix}:{local}"),
+        None => format!("<{iri}>"),
+    }
 }
 
 /// The order `FunctionalSyntaxObjectRenderer` emits the entity sections in —
@@ -548,65 +615,6 @@ const SECTION_EMIT_ORDER: [usize; 6] = [3, 1, 2, 4, 0, 5];
 /// Where a section rank falls in [`SECTION_EMIT_ORDER`].
 fn emit_position(rank: usize) -> usize {
     SECTION_EMIT_ORDER.iter().position(|&r| r == rank).unwrap_or(usize::MAX)
-}
-
-/// The banner/short form of `iri`: its CURIE if one is available, else the full
-/// IRI (no angle brackets), matching OWLAPI's `# Class: obo:CL_0000000` headers.
-pub(crate) fn short_form(mapping: &PrefixMapping, iri: &str) -> String {
-    match shrink_valid(mapping, iri) {
-        Some((prefix, local)) => format!("{prefix}:{local}"),
-        // OWLAPI's banner renders the IRI exactly as the body does, and a full IRI
-        // there is angle-bracketed. A document whose format carries no prefixes —
-        // anything ROBOT built with `query --update` — has a full IRI in EVERY
-        // banner, e.g. `# Class: <http://…> (label)`.
-        None => format!("<{iri}>"),
-    }
-}
-
-/// Whether `local` is a legal CURIE local part (PNAME_LN, conservatively): no
-/// characters that would break re-parsing and no leading `-`/`.`.
-///
-/// OWLAPI decides this with `XMLUtils.getNCNameSuffix`: an IRI is abbreviated only
-/// when its tail is a valid NCName, so anything carrying a delimiter — e.g. ENVO's
-/// `http://en.wikipedia.org/wiki/Front_(oceanography)` — is written out in full
-/// even with `wikipedia:` declared. Abbreviating it here produced
-/// `wikipedia:Front_(oceanography)`, whose `(` closes the enclosing
-/// `AnnotationAssertion(` and leaves a document no functional-syntax parser can
-/// read back.
-pub(crate) fn is_valid_curie_local(local: &str) -> bool {
-    // A QName, not an NCName. `DefaultPrefixManager.getPrefixIRIIgnoreQName`
-    // first looks the IRI's NAMESPACE up in the reverse map — the part before
-    // its longest NCName suffix, which never holds a colon — and only when that
-    // misses does it fall back to testing the tail after a declared namespace
-    // with `XMLUtils.isQName`. A QName is an NCName, or two NCNames joined by
-    // ONE colon, so an abbreviated local part may carry a single interior colon:
-    // FoodOn's `schema:image` provenance is `wikipedia:User:Lupin` in ROBOT's
-    // own functional output, and writing it out in full is a byte difference.
-    match local.split_once(':') {
-        // A second colon leaves a non-NCName on the right, which is `isQName`'s
-        // `if (foundColon) return false`.
-        Some((prefix, rest)) => is_ncname(prefix) && is_ncname(rest),
-        None => is_ncname(local),
-    }
-}
-
-/// Whether `s` is an NCName: an XML name start character that is not `:`,
-/// followed by XML name characters that are not `:`.
-///
-/// The start character is the part that is easy to miss and the part that
-/// decides real IRIs: a digit is a name character but NOT a name start
-/// character, so ChEBI's subset values — `…/obo/3_STAR`, `…/obo/1_STAR` — are
-/// not NCNames and are written out in full even though `obo:` is declared.
-/// The same rule excludes a leading `-` or `.`, and every delimiter or
-/// punctuation mark XML forbids in a name (`(`, `)`, `%`, a space, …) at any
-/// position.
-fn is_ncname(s: &str) -> bool {
-    let mut chars = s.chars();
-    match chars.next() {
-        None => false,
-        Some(c) if c == ':' || !xml_name_start(c as u32) => false,
-        Some(_) => chars.all(|c| c != ':' && xml_name_char(c as u32)),
-    }
 }
 
 /// The literal's lexical form (dropping any language tag / datatype).
@@ -637,7 +645,7 @@ fn signature_kinds<A: ForIRI, AA: ForIndex<A>>(
     ont: &ComponentMappedOntology<A, AA>,
 ) -> std::collections::BTreeMap<String, u8> {
     use crate::model::{
-        AnnotationProperty, Class, DataProperty, Datatype, NamedIndividual, ObjectProperty,
+        AnnotationProperty, Class, DataProperty, Datatype, Literal, NamedIndividual, ObjectProperty,
     };
     use crate::visitor::immutable::{Visit, Walk};
 
@@ -663,6 +671,14 @@ fn signature_kinds<A: ForIRI, AA: ForIndex<A>>(
         }
         fn visit_datatype(&mut self, e: &Datatype<A>) {
             self.mark(e.0.as_ref(), 4)
+        }
+        // A typed literal puts its datatype in the signature as surely as a
+        // `DataSomeValuesFrom` does. FoodOn's only `xsd:date` is the one on its
+        // `dcterms:date` provenance, and it is declared on that alone.
+        fn visit_literal(&mut self, e: &Literal<A>) {
+            if let Literal::Datatype { datatype_iri, .. } = e {
+                self.mark(datatype_iri.as_ref(), 4)
+            }
         }
         fn visit_named_individual(&mut self, e: &NamedIndividual<A>) {
             self.mark(e.0.as_ref(), 5)
@@ -704,15 +720,7 @@ fn illegal_punnings(
 /// and `owl:Nothing` for classes, the top/bottom properties, a fixed list of
 /// annotation properties (`OWLRDFVocabulary.BUILT_IN_ANNOTATION_PROPERTY_IRIS`),
 /// and the OWL 2 datatype map for datatypes. Individuals are never built in.
-///
-/// The datatype case is taken as "in one of the four schema namespaces" rather
-/// than the enumerated `OWL2Datatype` map: every member of that map is in one of
-/// them, and a user-defined datatype minted inside them would be malformed.
 fn is_builtin_entity(rank: usize, iri: &str) -> bool {
-    const OWL: &str = "http://www.w3.org/2002/07/owl#";
-    const RDFS: &str = "http://www.w3.org/2000/01/rdf-schema#";
-    const RDF: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#";
-    const XSD: &str = "http://www.w3.org/2001/XMLSchema#";
     match rank {
         0 => iri == "http://www.w3.org/2002/07/owl#Thing"
             || iri == "http://www.w3.org/2002/07/owl#Nothing",
@@ -736,12 +744,49 @@ fn is_builtin_entity(rank: usize, iri: &str) -> bool {
                 | "http://www.w3.org/2002/07/owl#incompatibleWith"
                 | "http://www.w3.org/2002/07/owl#deprecated"
         ),
-        4 => {
-            iri.starts_with(XSD)
-                || iri.starts_with(RDF)
-                || iri.starts_with(RDFS)
-                || iri.starts_with(OWL)
-        }
+        // The OWL 2 datatype map, and only it. `xsd:date` is not in it — nor are
+        // `xsd:time`, `xsd:duration` or the `gYear` family — so a document that
+        // uses one gets a `Declaration(Datatype(...))` of its own, where a
+        // namespace test would have swallowed it. FoodOn's `dcterms:date`
+        // provenance is the case.
+        4 => matches!(
+            iri,
+            "http://www.w3.org/1999/02/22-rdf-syntax-ns#XMLLiteral"
+                | "http://www.w3.org/1999/02/22-rdf-syntax-ns#PlainLiteral"
+                | "http://www.w3.org/1999/02/22-rdf-syntax-ns#langString"
+                | "http://www.w3.org/2000/01/rdf-schema#Literal"
+                | "http://www.w3.org/2002/07/owl#real"
+                | "http://www.w3.org/2002/07/owl#rational"
+                | "http://www.w3.org/2001/XMLSchema#string"
+                | "http://www.w3.org/2001/XMLSchema#normalizedString"
+                | "http://www.w3.org/2001/XMLSchema#token"
+                | "http://www.w3.org/2001/XMLSchema#language"
+                | "http://www.w3.org/2001/XMLSchema#Name"
+                | "http://www.w3.org/2001/XMLSchema#NCName"
+                | "http://www.w3.org/2001/XMLSchema#NMTOKEN"
+                | "http://www.w3.org/2001/XMLSchema#decimal"
+                | "http://www.w3.org/2001/XMLSchema#integer"
+                | "http://www.w3.org/2001/XMLSchema#nonNegativeInteger"
+                | "http://www.w3.org/2001/XMLSchema#nonPositiveInteger"
+                | "http://www.w3.org/2001/XMLSchema#positiveInteger"
+                | "http://www.w3.org/2001/XMLSchema#negativeInteger"
+                | "http://www.w3.org/2001/XMLSchema#long"
+                | "http://www.w3.org/2001/XMLSchema#int"
+                | "http://www.w3.org/2001/XMLSchema#short"
+                | "http://www.w3.org/2001/XMLSchema#byte"
+                | "http://www.w3.org/2001/XMLSchema#unsignedLong"
+                | "http://www.w3.org/2001/XMLSchema#unsignedInt"
+                | "http://www.w3.org/2001/XMLSchema#unsignedShort"
+                | "http://www.w3.org/2001/XMLSchema#unsignedByte"
+                | "http://www.w3.org/2001/XMLSchema#double"
+                | "http://www.w3.org/2001/XMLSchema#float"
+                | "http://www.w3.org/2001/XMLSchema#boolean"
+                | "http://www.w3.org/2001/XMLSchema#hexBinary"
+                | "http://www.w3.org/2001/XMLSchema#base64Binary"
+                | "http://www.w3.org/2001/XMLSchema#anyURI"
+                | "http://www.w3.org/2001/XMLSchema#dateTime"
+                | "http://www.w3.org/2001/XMLSchema#dateTimeStamp"
+        ),
         _ => false,
     }
 }
