@@ -1310,6 +1310,18 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
 
     /// Retrieve a Vec of DataRange or None.
     fn retrieve_to_dr_seq(&mut self, bnodeid: &BNode<A>) -> Option<Vec<DataRange<A>>> {
+        // As with `retrieve_to_ce_seq`: `data_ranges` fills `data_range` over
+        // repeated passes, so an anonymous member of this seq may not be a
+        // data range yet. Retrieving now would take the seq out of
+        // `bnode_seq` for good, and the pass that could complete it would
+        // find nothing left to read.
+        if !self.bnode_seq.get(bnodeid)?.iter().all(|tdr| match tdr {
+            Term::BNode(id) => self.data_range.contains_key(id),
+            _ => true,
+        }) {
+            return None;
+        }
+
         self.retrieve_to_seq(bnodeid, |slf, t| slf.retrieve_to_dr(t))
     }
 
