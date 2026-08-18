@@ -590,23 +590,24 @@ pub(crate) fn is_valid_curie_local(local: &str) -> bool {
     }
 }
 
-/// Whether `s` is an NCName (conservatively): non-empty, no delimiter or
-/// punctuation XML forbids in a name, and no leading `-`/`.`.
+/// Whether `s` is an NCName: an XML name start character that is not `:`,
+/// followed by XML name characters that are not `:`.
+///
+/// The start character is the part that is easy to miss and the part that
+/// decides real IRIs: a digit is a name character but NOT a name start
+/// character, so ChEBI's subset values — `…/obo/3_STAR`, `…/obo/1_STAR` — are
+/// not NCNames and are written out in full even though `obo:` is declared.
+/// The same rule excludes a leading `-` or `.`, and every delimiter or
+/// punctuation mark XML forbids in a name (`(`, `)`, `%`, a space, …) at any
+/// position.
 fn is_ncname(s: &str) -> bool {
-    !s.is_empty()
-        && !s.contains(['/', '#', ' ', ':'])
-        && !s.contains(|c: char| c.is_whitespace() || NON_NCNAME.contains(&c))
-        && !s.starts_with('-')
-        && !s.starts_with('.')
+    let mut chars = s.chars();
+    match chars.next() {
+        None => false,
+        Some(c) if c == ':' || !xml_name_start(c as u32) => false,
+        Some(_) => chars.all(|c| c != ':' && xml_name_char(c as u32)),
+    }
 }
-
-/// Delimiters and punctuation that are not NCName characters, so OWLAPI never
-/// leaves one inside an abbreviated IRI. `%` is included: it is legal in a SPARQL
-/// PN_LOCAL escape but not in an NCName, so OWLAPI writes those IRIs in full too.
-const NON_NCNAME: &[char] = &[
-    '(', ')', '[', ']', '{', '}', '<', '>', '"', '\'', '`', '\\', ',', ';', '|', '^', '?', '=',
-    '&', '@', '!', '*', '~', '+', '$', '%',
-];
 
 /// The literal's lexical form (dropping any language tag / datatype).
 fn literal_text<A: ForIRI>(lit: &Literal<A>) -> String {
