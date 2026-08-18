@@ -152,8 +152,6 @@ pub struct ParserConfiguration {
     /// in size if one happens; this instead prevents one happening at
     /// all. Defaults to `false`.
     pub local_only: bool,
-    pub rdf: RDFParserConfiguration,
-    pub owx: OWXParserConfiguration,
     /// Override format detection. When set, this takes precedence over the
     /// file extension. `InputFormat::Guess` triggers content sniffing.
     pub input_format: Option<InputFormat>,
@@ -178,20 +176,31 @@ impl Default for ParserConfiguration {
             lax: false,
             remote_body_limit: u64::MAX,
             local_only: false,
-            rdf: RDFParserConfiguration::default(),
-            owx: OWXParserConfiguration::default(),
             input_format: None,
             catalog: None,
         }
     }
 }
 
-#[derive(Clone, Copy, Debug, Default)]
-pub struct OWXParserConfiguration {}
-
-#[derive(Clone, Copy, Debug, Default)]
+/// RDF-specific parser settings, wrapping the settings shared by every
+/// format. Inverted from a `rdf: RDFParserConfiguration` field on
+/// [`ParserConfiguration`] -- RDF is the only format with a real
+/// format-specific setting, so it's the only one that needs a wrapper at
+/// all (contrast the now-deleted `OWXParserConfiguration {}`, which existed
+/// only for structural symmetry with this one, with nothing to configure).
+#[derive(Clone, Debug, Default)]
 pub struct RDFParserConfiguration {
+    pub common: ParserConfiguration,
     pub format: Option<oxrdfio::RdfFormat>,
+}
+
+impl From<ParserConfiguration> for RDFParserConfiguration {
+    fn from(common: ParserConfiguration) -> Self {
+        RDFParserConfiguration {
+            common,
+            format: None,
+        }
+    }
 }
 
 impl<A: ForIRI, AA: ForIndex<A>> ParserOutput<A, AA> {

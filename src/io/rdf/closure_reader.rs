@@ -1,6 +1,8 @@
 use crate::error::HornedError;
 use crate::io::IncompleteParse;
+#[cfg(test)]
 use crate::io::ParserConfiguration;
+use crate::io::RDFParserConfiguration;
 use crate::io::rdf::reader::OntologyParser;
 use crate::io::rdf::reader::RDFOntology;
 use crate::io::rdf::reader::parser_with_build;
@@ -30,11 +32,11 @@ pub struct ClosureOntologyParser<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<
     // either back to the same entry.
     alias: HashMap<IRI<A>, IRI<A>>,
     b: &'a Build<A>,
-    config: ParserConfiguration,
+    config: RDFParserConfiguration,
 }
 
 impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> ClosureOntologyParser<'a, A, AA, O> {
-    pub fn new(b: &'a Build<A>, config: ParserConfiguration) -> Self {
+    pub fn new(b: &'a Build<A>, config: RDFParserConfiguration) -> Self {
         ClosureOntologyParser {
             b,
             import_map: HashMap::new(),
@@ -80,9 +82,9 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> ClosureOntologyParse
         let (new_doc_iri, s) = resolve_iri(
             source_iri,
             relative_doc_iri,
-            self.config.remote_body_limit,
-            self.config.local_only,
-            self.config.catalog.as_deref(),
+            self.config.common.remote_body_limit,
+            self.config.common.local_only,
+            self.config.common.catalog.as_deref(),
         )?;
         self.parse_content_from_iri(s, relative_doc_iri, new_doc_iri)
     }
@@ -232,7 +234,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> ClosureOntologyParse
 #[allow(clippy::type_complexity)]
 pub fn read<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>>(
     iri: &IRI<A>,
-    config: ParserConfiguration,
+    config: RDFParserConfiguration,
 ) -> Result<(O, IncompleteParse<A>), HornedError> {
     // Do parse, then full parse of first, drop the rest
     let b = Build::new();
@@ -259,7 +261,7 @@ pub fn read<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>>(
 pub fn read_closure<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>>(
     b: &Build<A>,
     iri: &IRI<A>,
-    config: ParserConfiguration,
+    config: RDFParserConfiguration,
 ) -> Result<Vec<(O, IncompleteParse<A>)>, HornedError> {
     // Do parse, then full parse, then result the results
     let mut c = ClosureOntologyParser::new(b, config);
@@ -341,8 +343,11 @@ mod test {
 
         // local_only means no network fallback can silently paper over
         // the heuristic's failure to find the relocated file.
-        let config = ParserConfiguration {
-            local_only: true,
+        let config = RDFParserConfiguration {
+            common: ParserConfiguration {
+                local_only: true,
+                ..Default::default()
+            },
             ..Default::default()
         };
         let result: Result<Vec<(ConcreteRcRDFOntology, _)>, _> = read_closure(&b, &iri, config);
@@ -361,9 +366,12 @@ mod test {
         let iri = path_to_file_iri(&b, path);
 
         let catalog = horned_catalog::Catalog::from_path(catalog_path).unwrap();
-        let config = ParserConfiguration {
-            local_only: true,
-            catalog: Some(std::rc::Rc::new(catalog)),
+        let config = RDFParserConfiguration {
+            common: ParserConfiguration {
+                local_only: true,
+                catalog: Some(std::rc::Rc::new(catalog)),
+                ..Default::default()
+            },
             ..Default::default()
         };
 

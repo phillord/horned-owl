@@ -2,7 +2,7 @@
 
 use horned_owl::{
     error::HornedError,
-    io::{InputFormat, ParserConfiguration, ParserOutput, ResourceType},
+    io::{InputFormat, ParserConfiguration, ParserOutput, RDFParserConfiguration, ResourceType},
     model::{Build, ForIRI, IRI, MutableOntology, OntologyID, RcAnnotatedComponent, RcStr},
     ontology::{
         component_mapped::{ComponentMappedOntology, RcComponentMappedOntology},
@@ -129,7 +129,7 @@ pub fn parse_path(
             let iri = horned_owl::resolve::path_to_file_iri(&b, path);
             ParserOutput::rdf(horned_owl::io::rdf::closure_reader::read(
                 &iri,
-                with_detected_rdf_format(path, config),
+                with_detected_rdf_format(path, config.into()),
             )?)
         }
         None => {
@@ -140,14 +140,14 @@ pub fn parse_path(
     })
 }
 
-/// Fill in `config.rdf.format` from `path`'s extension or content, unless the
+/// Fill in `config.format` from `path`'s extension or content, unless the
 /// caller already set one explicitly.
 pub fn with_detected_rdf_format(
     path: &Path,
-    mut config: ParserConfiguration,
-) -> ParserConfiguration {
-    if config.rdf.format.is_none() {
-        config.rdf.format = match config.input_format {
+    mut config: RDFParserConfiguration,
+) -> RDFParserConfiguration {
+    if config.format.is_none() {
+        config.format = match config.common.input_format {
             Some(InputFormat::Rdf(fmt)) => fmt,
             Some(InputFormat::Guess) => detect_from_path(path).and_then(|(_, fmt)| fmt),
             _ => path
@@ -184,7 +184,7 @@ pub fn parse_imports(
         }
         Some(ResourceType::RDF) => {
             let b = Build::new();
-            let config = with_detected_rdf_format(path, config);
+            let config = with_detected_rdf_format(path, config.into());
             let mut p = horned_owl::io::rdf::reader::parser_with_build(&mut bufreader, &b, config)?;
             p.parse_imports()?;
             ParserOutput::rdf(p.as_ontology_and_incomplete())
