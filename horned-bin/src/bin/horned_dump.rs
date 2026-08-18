@@ -4,7 +4,7 @@ use clap::ArgMatches;
 
 use horned_bin::{config::parser_config, parse_path};
 
-use horned_owl::{error::HornedError, ontology::set::SetOntology};
+use horned_owl::{error::HornedError, model::Build, ontology::set::SetOntology};
 
 use std::{collections::HashMap, path::Path};
 
@@ -33,7 +33,8 @@ pub(crate) fn matcher(matches: &ArgMatches) -> Result<(), HornedError> {
         .value_of("INPUT")
         .ok_or_else(|| HornedError::CommandError("A file name must be specified".to_string()))?;
 
-    let r = parse_path(Path::new(input), parser_config(matches))?;
+    let b = Build::new();
+    let r = parse_path(Path::new(input), parser_config(matches, &b))?;
 
     match r {
         horned_owl::io::ParserOutput::OFNParser(ont, map) => {

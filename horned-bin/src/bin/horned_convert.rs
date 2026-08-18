@@ -5,6 +5,7 @@ use clap::ArgMatches;
 use horned_bin::{config::parser_config, parse_path, write};
 
 use horned_owl::error::HornedError;
+use horned_owl::model::Build;
 use horned_owl::ontology::component_mapped::RcComponentMappedOntology;
 
 use std::{fs::File, io::stdout, path::Path};
@@ -48,7 +49,8 @@ pub(crate) fn matcher(matches: &ArgMatches) -> Result<(), HornedError> {
     let input = matches.value_of("INPUT").unwrap();
     let to = matches.value_of("to").unwrap();
 
-    let res = parse_path(Path::new(input), parser_config(matches))?;
+    let b = Build::new();
+    let res = parse_path(Path::new(input), parser_config(matches, &b))?;
     let amo: RcComponentMappedOntology = res.into();
 
     match matches.value_of("to-file") {

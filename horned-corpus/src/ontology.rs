@@ -17,8 +17,10 @@
 use crate::model::{Format, IncompleteSummary};
 use curie::PrefixMapping;
 use horned_owl::error::HornedError;
-use horned_owl::io::{ParserOutput, RDFParserConfiguration, ofn, omn, owx, rdf};
-use horned_owl::model::{RcAnnotatedComponent, RcStr};
+use horned_owl::io::{
+    ParserConfiguration, ParserOutput, RDFParserConfiguration, ofn, omn, owx, rdf,
+};
+use horned_owl::model::{Build, RcAnnotatedComponent, RcStr};
 use horned_owl::ontology::component_mapped::ComponentMappedOntology;
 use horned_owl::ontology::set::SetOntology;
 use std::io::Cursor;
@@ -78,25 +80,30 @@ pub fn read_source(fmt: Format, bytes: &[u8]) -> anyhow::Result<ReadOk> {
     // return type uses.
     type Output = ParserOutput<RcStr, RcAnnotatedComponent>;
 
+    let build = Build::new_rc();
+
     let (model, prefixes, incomplete) = match fmt {
         Format::Ofn => {
-            let sop =
-                ofn::reader::read(Cursor::new(bytes), Default::default()).map_err(horned_err)?;
+            let sop = ofn::reader::read(Cursor::new(bytes), ParserConfiguration::new(&build))
+                .map_err(horned_err)?;
             Output::ofn(sop).decompose()
         }
         Format::Omn => {
-            let sop =
-                omn::reader::read(Cursor::new(bytes), Default::default()).map_err(horned_err)?;
+            let sop = omn::reader::read(Cursor::new(bytes), ParserConfiguration::new(&build))
+                .map_err(horned_err)?;
             Output::omn(sop).decompose()
         }
         Format::OwlXml => {
-            let sop = owx::reader::read(&mut Cursor::new(bytes), Default::default())
+            let sop = owx::reader::read(&mut Cursor::new(bytes), ParserConfiguration::new(&build))
                 .map_err(horned_err)?;
             Output::owx(sop).decompose()
         }
         Format::RdfXml => {
-            let rop = rdf::reader::read(&mut Cursor::new(bytes), Default::default())
-                .map_err(horned_err)?;
+            let rop = rdf::reader::read(
+                &mut Cursor::new(bytes),
+                ParserConfiguration::new(&build).into(),
+            )
+            .map_err(horned_err)?;
             Output::rdf(rop).decompose()
         }
         Format::Turtle => {
@@ -104,8 +111,10 @@ pub fn read_source(fmt: Format, bytes: &[u8]) -> anyhow::Result<ReadOk> {
             // Turtle (the config defaults to RdfXml otherwise). N-Triples is a
             // Turtle subset, so this parses both. IncompleteParse handling is
             // identical to the RdfXml path.
-            let mut config = RDFParserConfiguration::default();
-            config.format = Some(oxrdfio::RdfFormat::Turtle);
+            let config = RDFParserConfiguration {
+                format: Some(oxrdfio::RdfFormat::Turtle),
+                ..ParserConfiguration::new(&build).into()
+            };
             let rop = rdf::reader::read(&mut Cursor::new(bytes), config).map_err(horned_err)?;
             Output::rdf(rop).decompose()
         }

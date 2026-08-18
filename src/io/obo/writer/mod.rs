@@ -674,7 +674,7 @@ mod tests {
     use crate::ontology::set::SetOntology;
 
     fn read(s: &str) -> SetOntology<RcStr> {
-        crate::io::obo::reader::read::<RcStr, SetOntology<RcStr>, _>(
+        crate::io::obo::reader::read::<RcStr, _, SetOntology<RcStr>, _>(
             s.as_bytes(),
             Default::default(),
         )
@@ -696,9 +696,10 @@ mod tests {
                 continue;
             }
             let doc = std::fs::read_to_string(&path).unwrap();
-            let (a, prefixes) = crate::io::obo::reader::read::<RcStr, SetOntology<RcStr>, _>(
+            let b = crate::model::Build::new_rc();
+            let (a, prefixes) = crate::io::obo::reader::read::<RcStr, _, SetOntology<RcStr>, _>(
                 doc.as_bytes(),
-                Default::default(),
+                crate::io::ParserConfiguration::new(&b),
             )
             .unwrap();
             let cmo: ComponentMappedOntology<RcStr, AnnotatedComponent<RcStr>> = a.clone().into();

@@ -14,7 +14,7 @@ use self::rdf::reader::{ConcreteRDFOntology, IncompleteParse};
 use crate::error::HornedError;
 use crate::ontology::indexed::ForIndex;
 use crate::{
-    model::ForIRI,
+    model::{Build, ForIRI},
     ontology::{component_mapped::ComponentMappedOntology, set::SetOntology},
 };
 
@@ -128,8 +128,30 @@ impl<A: ForIRI, AA: ForIndex<A>> ParserOutput<A, AA> {
     }
 }
 
+/// Lets a `Build` be held by [`ParserConfiguration`] either by shared
+/// reference (`&Build<A>`, via the blanket `impl<T: AsRef<U>> AsRef<U> for
+/// &T`) or by value (`Build<A>` itself, via this impl) -- std has no
+/// blanket `impl<T> AsRef<T> for T`, so this is what makes the by-value
+/// case work.
+impl<A: ForIRI> AsRef<Build<A>> for Build<A> {
+    fn as_ref(&self) -> &Build<A> {
+        self
+    }
+}
+
 #[derive(Clone, Debug)]
-pub struct ParserConfiguration {
+pub struct ParserConfiguration<A: ForIRI, B: AsRef<Build<A>> = Build<A>> {
+    /// The `Build` used for all IRI creation during this parse. Generic
+    /// over how it's held: `&Build<A>` to share one interning table across
+    /// several parses (what every reader threads internally -- see
+    /// `OntologyParser`, `ClosureOntologyParser`), or an owned `Build<A>`
+    /// (the default, via `ParserConfiguration::default()`) for a one-off
+    /// parse with nothing to share it with. Only the `&Build<A>` form is
+    /// `Clone` -- `Build<A>` deliberately isn't, since cloning it would
+    /// silently duplicate its interning table rather than share it, so
+    /// anything that needs to clone its config (e.g. recursing through an
+    /// `owl:imports` closure) needs the shared-reference form anyway.
+    pub build: B,
     /// In lax mode, parsers tolerate content that would otherwise be a
     /// parse error -- see individual readers for exactly what this
     /// relaxes -- instead of rejecting it.
@@ -163,22 +185,38 @@ pub struct ParserConfiguration {
     /// stronger signal than either. `None` (the default) disables
     /// catalog-based resolution entirely.
     ///
-    /// This is an `Rc` rather than a plain `&Catalog` reference so that
-    /// `ParserConfiguration` doesn't need a lifetime parameter --
-    /// it's cloned (a cheap refcount bump) each time a parse recurses
-    /// into an import.
+    /// This is an `Rc` (cloned cheaply -- a refcount bump -- each time a
+    /// parse recurses into an import) rather than a borrow, unlike `build`
+    /// above: a `Catalog` is read-only reference data with no interning
+    /// identity to preserve, so there's no reason to force every recursive
+    /// parse to share the exact same borrow the way `Build` needs to.
     pub catalog: Option<std::rc::Rc<horned_catalog::Catalog>>,
+    _marker: std::marker::PhantomData<A>,
 }
 
-impl Default for ParserConfiguration {
-    fn default() -> Self {
+impl<A: ForIRI, B: AsRef<Build<A>>> ParserConfiguration<A, B> {
+    /// A `ParserConfiguration` using `build` and every other setting at its
+    /// default. `build` can be a shared `&Build<A>` or an owned `Build<A>`.
+    pub fn new(build: B) -> Self {
         ParserConfiguration {
+            build,
             lax: false,
             remote_body_limit: u64::MAX,
             local_only: false,
             input_format: None,
             catalog: None,
+            _marker: std::marker::PhantomData,
         }
+    }
+}
+
+impl<A: ForIRI + Default> Default for ParserConfiguration<A, Build<A>> {
+    /// A `ParserConfiguration` with a fresh, private `Build<A>` -- for a
+    /// one-off parse that has no `Build` to share. Use
+    /// [`ParserConfiguration::new`] with a `&Build<A>` instead when the
+    /// interning table needs to be shared with other parses.
+    fn default() -> Self {
+        ParserConfiguration::new(Build::default())
     }
 }
 
@@ -188,18 +226,26 @@ impl Default for ParserConfiguration {
 /// format-specific setting, so it's the only one that needs a wrapper at
 /// all (contrast the now-deleted `OWXParserConfiguration {}`, which existed
 /// only for structural symmetry with this one, with nothing to configure).
-#[derive(Clone, Debug, Default)]
-pub struct RDFParserConfiguration {
-    pub common: ParserConfiguration,
+#[derive(Clone, Debug)]
+pub struct RDFParserConfiguration<A: ForIRI, B: AsRef<Build<A>> = Build<A>> {
+    pub common: ParserConfiguration<A, B>,
     pub format: Option<oxrdfio::RdfFormat>,
 }
 
-impl From<ParserConfiguration> for RDFParserConfiguration {
-    fn from(common: ParserConfiguration) -> Self {
+impl<A: ForIRI, B: AsRef<Build<A>>> From<ParserConfiguration<A, B>>
+    for RDFParserConfiguration<A, B>
+{
+    fn from(common: ParserConfiguration<A, B>) -> Self {
         RDFParserConfiguration {
             common,
             format: None,
         }
+    }
+}
+
+impl<A: ForIRI + Default> Default for RDFParserConfiguration<A, Build<A>> {
+    fn default() -> Self {
+        ParserConfiguration::default().into()
     }
 }
 

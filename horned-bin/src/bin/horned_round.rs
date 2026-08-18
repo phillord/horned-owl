@@ -5,6 +5,7 @@ use clap::ArgMatches;
 use horned_bin::{config::parser_config, parse_path};
 
 use horned_owl::error::HornedError;
+use horned_owl::model::Build;
 use horned_owl::ontology::component_mapped::RcComponentMappedOntology;
 
 use std::{io::stdout, path::Path};
@@ -31,7 +32,8 @@ pub(crate) fn app(name: &str) -> App<'static> {
 pub(crate) fn matcher(matches: &ArgMatches) -> Result<(), HornedError> {
     let input = matches.value_of("INPUT").unwrap();
 
-    let res = parse_path(Path::new(input), parser_config(matches))?;
+    let b = Build::new();
+    let res = parse_path(Path::new(input), parser_config(matches, &b))?;
 
     match res {
         horned_owl::io::ParserOutput::OFNParser(so, pm) => {

@@ -5,6 +5,7 @@ use clap::ArgMatches;
 use horned_bin::{config::parser_config, materialize};
 
 use horned_owl::error::HornedError;
+use horned_owl::model::Build;
 
 #[allow(dead_code)]
 fn main() -> Result<(), HornedError> {
@@ -30,7 +31,8 @@ pub(crate) fn matcher(matches: &ArgMatches) -> Result<(), HornedError> {
         .value_of("INPUT")
         .ok_or_else(|| HornedError::CommandError("Command requires a file argument".to_string()))?;
 
-    let v = materialize(input, parser_config(matches))?;
+    let b = Build::new();
+    let v = materialize(input, parser_config(matches, &b))?;
 
     println!("Materialized");
     for i in v {

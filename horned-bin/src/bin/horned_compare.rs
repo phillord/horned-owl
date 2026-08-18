@@ -4,6 +4,7 @@ use clap::ArgMatches;
 
 use horned_bin::{config::parser_config, naming::name, parse_path, summary::summarize};
 use horned_owl::error::HornedError;
+use horned_owl::model::Build;
 
 use std::path::Path;
 
@@ -33,7 +34,8 @@ pub(crate) fn app(name: &str) -> App<'static> {
 }
 
 pub(crate) fn matcher(matches: &ArgMatches) -> Result<(), HornedError> {
-    let config = parser_config(matches);
+    let b = Build::new();
+    let config = parser_config(matches, &b);
 
     let input_a = matches
         .value_of("INPUT-A")

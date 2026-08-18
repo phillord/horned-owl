@@ -5,6 +5,7 @@ use clap::ArgMatches;
 use horned_bin::{config::parser_config, parse_path};
 
 use horned_owl::error::HornedError;
+use horned_owl::model::Build;
 
 use std::path::Path;
 
@@ -32,7 +33,8 @@ pub(crate) fn matcher(matches: &ArgMatches) -> Result<(), HornedError> {
         HornedError::CommandError("Command requires an INPUT parameter".to_string())
     })?;
 
-    parse_path(Path::new(input), parser_config(matches))?;
+    let b = Build::new();
+    parse_path(Path::new(input), parser_config(matches, &b))?;
 
     println!("Parse Complete: {input:?}");
     Ok(())

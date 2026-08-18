@@ -154,11 +154,8 @@ use horned_owl::io::ofn::reader::read as read_ofn;
 
 /// Parse a Functional-style OWL document string into a `SetOntology` + prefixes.
 pub fn read_ofn_str(s: &str) -> Result<(O, PrefixMapping), String> {
-    read_ofn::<Rc<str>, O, _>(
-        std::io::BufReader::new(s.as_bytes()),
-        horned_owl::io::ParserConfiguration::default(),
-    )
-    .map_err(|e| format!("{e}"))
+    read_ofn::<Rc<str>, _, O, _>(std::io::BufReader::new(s.as_bytes()), Default::default())
+        .map_err(|e| format!("{e}"))
 }
 
 // ---------------------------------------------------------------------------
