@@ -2141,7 +2141,11 @@ mod test {
         // this test -- a bare shared blank node with no type declaration
         // isn't guaranteed to map back to a recognised axiom shape. What
         // matters here is that the RDF/XML syntax itself is valid.)
-        let result = crate::io::rdf::reader::read(&mut &buf[..], Default::default());
+        let b = crate::model::Build::new_rc();
+        let result = crate::io::rdf::reader::read(
+            &mut &buf[..],
+            crate::io::ParserConfiguration::new(&b).into(),
+        );
         assert!(
             result.is_ok(),
             "written RDF/XML must be syntactically valid to reread, got: {:?}",

@@ -18,9 +18,14 @@ use crate::resolve::resolve_iri;
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-pub struct ClosureOntologyParser<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> {
+pub struct ClosureOntologyParser<
+    A: ForIRI,
+    AA: ForIndex<A>,
+    O: RDFOntology<A, AA>,
+    B: AsRef<Build<A>> = Build<A>,
+> {
     // A map between the resolvable IRI of an Ontology and an OntologyParser
-    op: HashMap<IRI<A>, OntologyParser<'a, A, AA, O>>,
+    op: HashMap<IRI<A>, OntologyParser<A, AA, O, B>>,
     // A map between the resolvable IRI of an Ontology and the
     // resolvable IRIs of any Ontology that it imports.
     import_map: HashMap<IRI<A>, Vec<IRI<A>>>,
@@ -31,14 +36,14 @@ pub struct ClosureOntologyParser<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<
     // the Ontology it imports, so we need to be able to resolve
     // either back to the same entry.
     alias: HashMap<IRI<A>, IRI<A>>,
-    b: &'a Build<A>,
-    config: RDFParserConfiguration,
+    config: RDFParserConfiguration<A, B>,
 }
 
-impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> ClosureOntologyParser<'a, A, AA, O> {
-    pub fn new(b: &'a Build<A>, config: RDFParserConfiguration) -> Self {
+impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>> + Clone>
+    ClosureOntologyParser<A, AA, O, B>
+{
+    pub fn new(config: RDFParserConfiguration<A, B>) -> Self {
         ClosureOntologyParser {
-            b,
             import_map: HashMap::new(),
             op: HashMap::new(),
             alias: HashMap::new(),
@@ -47,7 +52,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> ClosureOntologyParse
     }
 
     pub fn parse_path(&mut self, pb: &PathBuf) -> Result<Vec<IRI<A>>, HornedError> {
-        let file_iri = path_to_file_iri(self.b, pb);
+        let file_iri = path_to_file_iri(self.config.common.build.as_ref(), pb);
         let s = ::std::fs::read_to_string(pb)?;
 
         // We use the IRI that we try to parse, but we don't know that
@@ -114,7 +119,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> ClosureOntologyParse
         new_doc_iri: IRI<A>,
     ) -> Result<Vec<IRI<A>>, HornedError> {
         // Parse the contents of the string
-        let mut p = parser_with_build(&mut s.as_bytes(), self.b, self.config.clone())?;
+        let mut p = parser_with_build(&mut s.as_bytes(), self.config.clone())?;
         let imports = p.parse_imports().unwrap();
         p.parse_declarations()?;
 
@@ -232,13 +237,12 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> ClosureOntologyParse
 // Returns the an Ontology and an IncompleteParse report found at a
 // given IRI or an Error
 #[allow(clippy::type_complexity)]
-pub fn read<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>>(
+pub fn read<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>> + Clone>(
     iri: &IRI<A>,
-    config: RDFParserConfiguration,
+    config: RDFParserConfiguration<A, B>,
 ) -> Result<(O, IncompleteParse<A>), HornedError> {
     // Do parse, then full parse of first, drop the rest
-    let b = Build::new();
-    let mut c = ClosureOntologyParser::new(&b, config);
+    let mut c = ClosureOntologyParser::new(config);
     c.parse_iri(iri, None)?;
 
     let keys: Vec<_> = c.op.keys().cloned().collect();
@@ -258,13 +262,17 @@ pub fn read<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>>(
 // Returns the import closure of an Ontology and IncompleteParse
 // report found at a given IRI or an error
 #[allow(clippy::type_complexity)]
-pub fn read_closure<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>>(
-    b: &Build<A>,
+pub fn read_closure<
+    A: ForIRI,
+    AA: ForIndex<A>,
+    O: RDFOntology<A, AA>,
+    B: AsRef<Build<A>> + Clone,
+>(
     iri: &IRI<A>,
-    config: RDFParserConfiguration,
+    config: RDFParserConfiguration<A, B>,
 ) -> Result<Vec<(O, IncompleteParse<A>)>, HornedError> {
     // Do parse, then full parse, then result the results
-    let mut c = ClosureOntologyParser::new(b, config);
+    let mut c = ClosureOntologyParser::new(config);
     c.parse_iri(iri, None)?;
     let keys: Vec<_> = c.op.keys().cloned().collect();
     for i in keys {
@@ -287,7 +295,8 @@ mod test {
         let b = Build::new_rc();
         let iri = path_to_file_iri(&b, path);
 
-        let (_, ic): (ConcreteRcRDFOntology, _) = read(&iri, Default::default()).unwrap();
+        let (_, ic): (ConcreteRcRDFOntology, _) =
+            read(&iri, ParserConfiguration::new(&b).into()).unwrap();
         assert!(ic.is_complete());
     }
 
@@ -300,7 +309,7 @@ mod test {
         let iri = path_to_file_iri(&b, path);
 
         let v: Vec<(ConcreteRcRDFOntology, _)> =
-            read_closure(&b, &iri, Default::default()).unwrap();
+            read_closure(&iri, ParserConfiguration::new(&b).into()).unwrap();
         let v: Vec<SetOntology<_>> = v
             .into_iter()
             .map(|(rdfo, ic)| {
@@ -346,11 +355,11 @@ mod test {
         let config = RDFParserConfiguration {
             common: ParserConfiguration {
                 local_only: true,
-                ..Default::default()
+                ..ParserConfiguration::new(&b)
             },
-            ..Default::default()
+            format: None,
         };
-        let result: Result<Vec<(ConcreteRcRDFOntology, _)>, _> = read_closure(&b, &iri, config);
+        let result: Result<Vec<(ConcreteRcRDFOntology, _)>, _> = read_closure(&iri, config);
         assert!(
             result.is_err(),
             "expected resolution to fail without a catalog, since the import was moved out of \
@@ -370,12 +379,12 @@ mod test {
             common: ParserConfiguration {
                 local_only: true,
                 catalog: Some(std::rc::Rc::new(catalog)),
-                ..Default::default()
+                ..ParserConfiguration::new(&b)
             },
-            ..Default::default()
+            format: None,
         };
 
-        let v: Vec<(ConcreteRcRDFOntology, _)> = read_closure(&b, &iri, config).unwrap();
+        let v: Vec<(ConcreteRcRDFOntology, _)> = read_closure(&iri, config).unwrap();
         let v: Vec<SetOntology<_>> = v
             .into_iter()
             .map(|(rdfo, ic)| {
@@ -396,7 +405,7 @@ mod test {
         let iri = path_to_file_iri(&b, path);
 
         let v: Vec<(ConcreteRcRDFOntology, _)> =
-            read_closure(&b, &iri, Default::default()).unwrap();
+            read_closure(&iri, ParserConfiguration::new(&b).into()).unwrap();
         let v: Vec<SetOntology<_>> = v
             .into_iter()
             .map(|(rdfo, ic)| {

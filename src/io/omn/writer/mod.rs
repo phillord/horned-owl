@@ -1081,15 +1081,19 @@ mod tests {
         let reader = std::fs::File::open(&resource)
             .map(std::io::BufReader::new)
             .unwrap();
+        let b = crate::model::Build::new_rc();
         let (ont, prefixes): (ComponentMappedOntology<RcStr, AnnotatedComponent<RcStr>>, _) =
-            crate::io::omn::reader::read(reader, Default::default()).unwrap();
+            crate::io::omn::reader::read(reader, crate::io::ParserConfiguration::new(&b)).unwrap();
 
         let mut writer = Vec::new();
         crate::io::omn::write(&mut writer, &ont, Some(&prefixes)).unwrap();
 
         let (ont2, prefixes2): (ComponentMappedOntology<RcStr, AnnotatedComponent<RcStr>>, _) =
-            crate::io::omn::reader::read(std::io::Cursor::new(&writer), Default::default())
-                .unwrap();
+            crate::io::omn::reader::read(
+                std::io::Cursor::new(&writer),
+                crate::io::ParserConfiguration::new(&b),
+            )
+            .unwrap();
 
         assert_eq!(prefixes, prefixes2, "prefix mapping differ");
         assert_eq!(ont, ont2, "ontologies differ");

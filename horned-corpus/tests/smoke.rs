@@ -104,9 +104,10 @@
 //
 // If any of these calls do not compile, adjust src/ontology.rs (Task 4/5) to match
 // the pinned commit's real API before proceeding.
+use horned_owl::io::ParserConfiguration;
 use horned_owl::io::ofn;
 use horned_owl::io::omn;
-use horned_owl::model::{RcAnnotatedComponent, RcStr};
+use horned_owl::model::{Build, RcAnnotatedComponent, RcStr};
 use horned_owl::ontology::component_mapped::ComponentMappedOntology;
 use horned_owl::ontology::set::SetOntology;
 use std::io::Cursor;
@@ -116,9 +117,11 @@ const OFN: &str =
 
 #[test]
 fn ofn_read_to_omn_write_and_back() {
+    let build = Build::new_rc();
     // read functional
     let (so, prefixes): (SetOntology<RcStr>, _) =
-        ofn::reader::read(&mut Cursor::new(OFN), Default::default()).expect("read ofn");
+        ofn::reader::read(&mut Cursor::new(OFN), ParserConfiguration::new(&build))
+            .expect("read ofn");
     // SetOntology -> ComponentMappedOntology for writing
     let cmo: ComponentMappedOntology<RcStr, RcAnnotatedComponent> = so.clone().into();
     // write manchester
@@ -127,6 +130,7 @@ fn ofn_read_to_omn_write_and_back() {
     assert!(!out.is_empty());
     // read it back
     let (so2, _): (SetOntology<RcStr>, _) =
-        omn::reader::read(&mut Cursor::new(&out), Default::default()).expect("read omn");
+        omn::reader::read(&mut Cursor::new(&out), ParserConfiguration::new(&build))
+            .expect("read omn");
     assert!(so2.iter().count() >= 1);
 }

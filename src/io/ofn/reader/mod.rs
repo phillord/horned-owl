@@ -27,12 +27,16 @@ impl<'a, A: ForIRI> Context<'a, A> {
     }
 }
 
-pub fn read<A: ForIRI, O: MutableOntology<A> + Ontology<A> + Default, R: BufRead>(
+pub fn read<
+    A: ForIRI,
+    B: AsRef<Build<A>>,
+    O: MutableOntology<A> + Ontology<A> + Default,
+    R: BufRead,
+>(
     bufread: R,
-    _config: ParserConfiguration,
+    config: ParserConfiguration<A, B>,
 ) -> Result<(O, PrefixMapping), HornedError> {
-    let b = Build::new();
-    read_with_build(bufread, &b)
+    read_with_build(bufread, config.build.as_ref())
 }
 
 pub fn read_with_build<A: ForIRI, O: MutableOntology<A> + Ontology<A> + Default, R: BufRead>(

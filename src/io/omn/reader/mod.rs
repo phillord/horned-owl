@@ -118,12 +118,16 @@ pub fn parse_class_expression<A: ForIRI>(
 /// The `# General axioms` block emitted by the writer for components lacking a
 /// native Manchester form is skipped with a warning — see the limitations note
 /// in the module doc.
-pub fn read<A: ForIRI, O: MutableOntology<A> + Ontology<A> + Default, R: BufRead>(
+pub fn read<
+    A: ForIRI,
+    B: AsRef<Build<A>>,
+    O: MutableOntology<A> + Ontology<A> + Default,
+    R: BufRead,
+>(
     bufread: R,
-    _config: ParserConfiguration,
+    config: ParserConfiguration<A, B>,
 ) -> Result<(O, PrefixMapping), HornedError> {
-    let b = Build::new();
-    read_with_build(bufread, &b)
+    read_with_build(bufread, config.build.as_ref())
 }
 
 /// Read a whole ontology, interning IRIs into the supplied `build`.

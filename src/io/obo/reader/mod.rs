@@ -42,14 +42,18 @@ use crate::error::HornedError;
 use crate::io::ParserConfiguration;
 use crate::model::{Build, ForIRI, MutableOntology, Ontology};
 
-/// Read a whole ontology from an OBO document, using a fresh IRI `Build`.
-/// Mirrors [`crate::io::omn::reader::read`].
-pub fn read<A: ForIRI, O: MutableOntology<A> + Ontology<A> + Default, R: BufRead>(
+/// Read a whole ontology from an OBO document, interning IRIs into
+/// `config.build`. Mirrors [`crate::io::omn::reader::read`].
+pub fn read<
+    A: ForIRI,
+    B: AsRef<Build<A>>,
+    O: MutableOntology<A> + Ontology<A> + Default,
+    R: BufRead,
+>(
     bufread: R,
-    _config: ParserConfiguration,
+    config: ParserConfiguration<A, B>,
 ) -> Result<(O, PrefixMapping), HornedError> {
-    let b = Build::new();
-    read_with_build(bufread, &b)
+    read_with_build(bufread, config.build.as_ref())
 }
 
 /// Read a whole ontology, interning IRIs into the supplied `build`.
@@ -139,7 +143,7 @@ mod tests {
     use crate::ontology::set::SetOntology;
 
     fn read(s: &str) -> SetOntology<RcStr> {
-        super::read::<RcStr, SetOntology<RcStr>, _>(s.as_bytes(), Default::default())
+        super::read::<RcStr, _, SetOntology<RcStr>, _>(s.as_bytes(), Default::default())
             .unwrap()
             .0
     }

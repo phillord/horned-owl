@@ -25,24 +25,27 @@ where
     R: BufRead,
 {
     build: &'a Build<A>,
+    lax: bool,
     mapping: PrefixMapping,
     reader: NsReader<R>,
-    config: ParserConfiguration,
     base_iri: Option<String>,
 }
 
-pub fn read<A: ForIRI, O: MutableOntology<A> + Default, R: BufRead>(
+pub fn read<A: ForIRI, B: AsRef<Build<A>>, O: MutableOntology<A> + Default, R: BufRead>(
     bufread: &mut R,
-    config: ParserConfiguration,
+    config: ParserConfiguration<A, B>,
 ) -> Result<(O, PrefixMapping), HornedError> {
-    let b = Build::new();
-    read_with_build(bufread, &b, config)
+    read_with_build(bufread, config)
 }
 
-pub fn read_with_build<A: ForIRI, O: MutableOntology<A> + Default, R: BufRead>(
+pub fn read_with_build<
+    A: ForIRI,
+    B: AsRef<Build<A>>,
+    O: MutableOntology<A> + Default,
+    R: BufRead,
+>(
     bufread: R,
-    build: &Build<A>,
-    config: ParserConfiguration,
+    config: ParserConfiguration<A, B>,
 ) -> Result<(O, PrefixMapping), HornedError> {
     let reader: NsReader<R> = NsReader::from_reader(bufread);
     let mut ont: O = Default::default();
@@ -51,9 +54,9 @@ pub fn read_with_build<A: ForIRI, O: MutableOntology<A> + Default, R: BufRead>(
 
     let mut r = Read {
         reader,
-        build,
+        build: config.build.as_ref(),
+        lax: config.lax,
         mapping,
-        config,
         base_iri: None,
     };
 
@@ -107,10 +110,10 @@ pub fn read_with_build<A: ForIRI, O: MutableOntology<A> + Default, R: BufRead>(
             (_, Event::Eof) => {
                 return Err(error_eof(&r));
             }
-            (_, Event::Text(ref t)) if !is_blank(t) && !r.config.lax => {
+            (_, Event::Text(ref t)) if !is_blank(t) && !r.lax => {
                 return Err(error_unexpected_text(&mut r));
             }
-            (_, Event::CData(ref t)) if !is_blank(t) && !r.config.lax => {
+            (_, Event::CData(ref t)) if !is_blank(t) && !r.lax => {
                 return Err(error_unexpected_text(&mut r));
             }
             _ => {}
@@ -718,10 +721,10 @@ fn till_end_with<A: ForIRI, R: BufRead, T: FromStart<A> + std::fmt::Debug>(
             (_, Event::Eof) => {
                 return Err(error_eof(r));
             }
-            (_, Event::Text(ref t)) if !is_blank(t) && !r.config.lax => {
+            (_, Event::Text(ref t)) if !is_blank(t) && !r.lax => {
                 return Err(error_unexpected_text(r));
             }
-            (_, Event::CData(ref t)) if !is_blank(t) && !r.config.lax => {
+            (_, Event::CData(ref t)) if !is_blank(t) && !r.lax => {
                 return Err(error_unexpected_text(r));
             }
             _ => {}
@@ -1237,10 +1240,10 @@ from_xml! {
                 (_, Event::Eof) => {
                     return Err(error_eof(r));
                 },
-                (_, Event::Text(ref t)) if !is_blank(t) && !r.config.lax => {
+                (_, Event::Text(ref t)) if !is_blank(t) && !r.lax => {
                     return Err(error_unexpected_text(r));
                 },
-                (_, Event::CData(ref t)) if !is_blank(t) && !r.config.lax => {
+                (_, Event::CData(ref t)) if !is_blank(t) && !r.lax => {
                     return Err(error_unexpected_text(r));
                 },
                 _ =>{}
@@ -1261,10 +1264,10 @@ fn from_next<A: ForIRI, R: BufRead, T: FromStart<A>>(r: &mut Read<A, R>) -> Resu
             (_, Event::Eof) => {
                 return Err(error_eof(r));
             }
-            (_, Event::Text(ref t)) if !is_blank(t) && !r.config.lax => {
+            (_, Event::Text(ref t)) if !is_blank(t) && !r.lax => {
                 return Err(error_unexpected_text(r));
             }
-            (_, Event::CData(ref t)) if !is_blank(t) && !r.config.lax => {
+            (_, Event::CData(ref t)) if !is_blank(t) && !r.lax => {
                 return Err(error_unexpected_text(r));
             }
             _ => {}
@@ -1466,8 +1469,7 @@ pub mod test {
         ),
         HornedError,
     > {
-        let b = Build::new();
-        read_with_build(bufread, &b, Default::default())
+        read_with_build(bufread, Default::default())
     }
 
     pub fn read_ok<R: BufRead>(
@@ -2630,11 +2632,7 @@ pub mod test {
                 PrefixMapping,
             ),
             HornedError,
-        > = read_with_build(
-            &mut BROKEN_OWX.as_bytes(),
-            &Build::new(),
-            Default::default(),
-        );
+        > = read_with_build(&mut BROKEN_OWX.as_bytes(), Default::default());
 
         assert!(r.is_err(), "Expected a parse error, got {r:?}");
     }
@@ -2649,11 +2647,7 @@ pub mod test {
                 PrefixMapping,
             ),
             HornedError,
-        > = read_with_build(
-            &mut BROKEN_OWX.as_bytes(),
-            &Build::new(),
-            Default::default(),
-        );
+        > = read_with_build(&mut BROKEN_OWX.as_bytes(), Default::default());
 
         match r {
             Err(HornedError::ValidityError(_, location)) => {
@@ -2678,7 +2672,7 @@ pub mod test {
                 PrefixMapping,
             ),
             HornedError,
-        > = read_with_build(&mut BROKEN_OWX.as_bytes(), &Build::new(), config);
+        > = read_with_build(&mut BROKEN_OWX.as_bytes(), config);
 
         assert!(r.is_ok(), "Expected ontology, got failure: {:?}", r.err());
     }
@@ -2697,9 +2691,8 @@ pub mod test {
         <Class IRI="#MyClass"/>
     </Declaration>
 </Ontology>"##;
-        let b = Build::new_rc();
         let (ont, _): (ComponentMappedOntology<RcStr, RcAnnotatedComponent>, _) =
-            read_with_build(&mut owx.as_bytes(), &b, Default::default()).unwrap();
+            read_with_build(&mut owx.as_bytes(), Default::default()).unwrap();
         let dc = ont.i().declare_class().next().unwrap();
         assert_eq!(dc.0.0.to_string(), "http://ontriscal#MyClass");
     }
@@ -2727,9 +2720,8 @@ pub mod test {
         <Literal>a comment</Literal>
     </AnnotationAssertion>
 </Ontology>"##;
-        let b = Build::new_rc();
         let (ont, _): (ComponentMappedOntology<RcStr, RcAnnotatedComponent>, _) =
-            read_with_build(&mut owx.as_bytes(), &b, Default::default()).unwrap();
+            read_with_build(&mut owx.as_bytes(), Default::default()).unwrap();
         let assertion = ont.i().annotation_assertion().next().unwrap();
         assert_eq!(assertion.subject.to_string(), "http://ontriscal#MyClass");
     }
@@ -2747,9 +2739,8 @@ pub mod test {
         <Class IRI="http://ex.com/o#Alzheimer&#39;s_Disease"/>
     </Declaration>
 </Ontology>"##;
-        let b = Build::new_rc();
         let (ont, _): (ComponentMappedOntology<RcStr, RcAnnotatedComponent>, _) =
-            read_with_build(&mut owx.as_bytes(), &b, Default::default()).unwrap();
+            read_with_build(&mut owx.as_bytes(), Default::default()).unwrap();
         let dc = ont.i().declare_class().next().unwrap();
         assert_eq!(dc.0.0.to_string(), "http://ex.com/o#Alzheimer's_Disease");
     }
@@ -2771,9 +2762,8 @@ pub mod test {
         <Literal>a comment</Literal>
     </AnnotationAssertion>
 </Ontology>"##;
-        let b = Build::new_rc();
         let (ont, _): (ComponentMappedOntology<RcStr, RcAnnotatedComponent>, _) =
-            read_with_build(&mut owx.as_bytes(), &b, Default::default()).unwrap();
+            read_with_build(&mut owx.as_bytes(), Default::default()).unwrap();
         let assertion = ont.i().annotation_assertion().next().unwrap();
         assert_eq!(
             assertion.subject.to_string(),

@@ -539,11 +539,15 @@ impl<A: ForIRI> VPosTriple<A> {
 /// An ontology parser which takes a set of RDF triples and turns them
 /// into an RDFOntology.
 #[derive(Debug)]
-pub struct OntologyParser<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> {
+pub struct OntologyParser<
+    A: ForIRI,
+    AA: ForIndex<A>,
+    O: RDFOntology<A, AA>,
+    B: AsRef<Build<A>> = Build<A>,
+> {
     /// The ontology being populated
     o: O,
-    b: &'a Build<A>,
-    config: ParserConfiguration,
+    config: ParserConfiguration<A, B>,
 
     // A vector of the triples from which we are parsing
     triple: Vec<PosTriple<A>>,
@@ -575,16 +579,13 @@ pub struct OntologyParser<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>>
     p: PhantomData<AA>,
 }
 
-impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A, AA, O> {
+impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
+    OntologyParser<A, AA, O, B>
+{
     /// Return a new empty OntologyParser.
-    pub fn new(
-        b: &'a Build<A>,
-        triple: Vec<PosTriple<A>>,
-        config: ParserConfiguration,
-    ) -> OntologyParser<'a, A, AA, O> {
+    pub fn new(triple: Vec<PosTriple<A>>, config: ParserConfiguration<A, B>) -> Self {
         OntologyParser {
             o: d!(),
-            b,
             config,
 
             triple,
@@ -605,21 +606,19 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
 
     /// Return a new OntologyParser taking all triples from an BufRead
     /// in RDF-XML.
-    pub fn from_bufread<'b, R: BufRead>(
-        b: &'a Build<A>,
-        bufread: &'b mut R,
-        config: RDFParserConfiguration,
-    ) -> Result<OntologyParser<'a, A, AA, O>, HornedError> {
+    pub fn from_bufread<R: BufRead>(
+        bufread: &mut R,
+        config: RDFParserConfiguration<A, B>,
+    ) -> Result<Self, HornedError> {
         let format = config.format.unwrap_or(oxrdfio::RdfFormat::RdfXml);
-        Self::from_bufread_with_format(b, bufread, config.common, format)
+        Self::from_bufread_with_format(bufread, config.common, format)
     }
 
-    pub fn from_bufread_with_format<'b, R: BufRead>(
-        b: &'a Build<A>,
-        bufread: &'b mut R,
-        config: ParserConfiguration,
+    pub fn from_bufread_with_format<R: BufRead>(
+        bufread: &mut R,
+        config: ParserConfiguration<A, B>,
         format: oxrdfio::RdfFormat,
-    ) -> Result<OntologyParser<'a, A, AA, O>, HornedError> {
+    ) -> Result<Self, HornedError> {
         let parser = oxrdfio::RdfParser::from_format(format);
         let mut triples = vec![];
         let last_pos = std::cell::Cell::new(0);
@@ -630,21 +629,24 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                     HornedError::ParserError(Box::new(e), crate::error::Location::Unknown)
                 })?
                 .into();
-            triples.push(b.convert_substitute_triple(ox_triple, last_pos.get()));
+            triples.push(
+                config
+                    .build
+                    .as_ref()
+                    .convert_substitute_triple(ox_triple, last_pos.get()),
+            );
             //last_pos.set(parser.buffer_position().try_into().unwrap());
         }
 
-        Ok(OntologyParser::new(b, triples, config))
+        Ok(OntologyParser::new(triples, config))
     }
 
     /// Return an new OntologyParser taking all triples in RDF-XML from the given IRI.
     pub fn from_doc_iri(
-        b: &'a Build<A>,
         iri: &IRI<A>,
-        config: RDFParserConfiguration,
-    ) -> Result<OntologyParser<'a, A, AA, O>, HornedError> {
+        config: RDFParserConfiguration<A, B>,
+    ) -> Result<Self, HornedError> {
         OntologyParser::from_bufread(
-            b,
             &mut Cursor::new(strict_resolve_iri(
                 iri,
                 config.common.remote_body_limit,
@@ -882,11 +884,11 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
             // We assume that anything passed to here is an
             // annotation built in type
             [s, RDFS(rdfs), b] => {
-                let iri = self.b.iri(rdfs.as_ref());
+                let iri = self.config.build.as_ref().iri(rdfs.as_ref());
                 self.annotation(&[s.clone(), Term::Iri(iri), b.clone()])
             }
             [s, OWL(owl), b] => {
-                let iri = self.b.iri(owl.as_ref());
+                let iri = self.config.build.as_ref().iri(owl.as_ref());
                 self.annotation(&[s.clone(), Term::Iri(iri), b.clone()])
             }
             [_, Iri(p), ob @ Term::Literal(_)] => Ok(Annotation {
@@ -904,7 +906,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
             }
             [_, Iri(p), Term::BNode(_)] => Ok(Annotation {
                 ap: AnnotationProperty(p.clone()),
-                av: self.b.anon_renumbered().into(),
+                av: self.config.build.as_ref().anon_renumbered().into(),
                 ann: Default::default(),
             }),
             all => Err(HornedError::invalid(format!(
@@ -937,7 +939,11 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                     // OWL/RDF vocab, so we must do this here or
                     // they will not match the key of the
                     // annotation.
-                    let key = self.b.substitute_term([sb.clone(), p.clone(), ob.clone()]);
+                    let key = self.config.build.as_ref().substitute_term([
+                        sb.clone(),
+                        p.clone(),
+                        ob.clone(),
+                    ]);
                     bnode_to_key.insert(k, key.clone());
                     let annotations = self.parse_annotations(ann)?;
                     self.ann_map.insert(key, annotations);
@@ -1175,7 +1181,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
     /// Given a Term return an IRI if it can be converted to it
     fn convert_to_iri(&self, t: &Term<A>) -> Option<IRI<A>> {
         match t {
-            Term::OWL(vowl) => Some(self.b.iri(vowl.as_ref())),
+            Term::OWL(vowl) => Some(self.config.build.as_ref().iri(vowl.as_ref())),
             Term::Iri(iri) => Some(iri.clone()),
             _ => None,
         }
@@ -1319,7 +1325,9 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
     /// Convert to an IArgument or None
     fn retrieve_to_iargument(&mut self, t: &Term<A>) -> Option<IArgument<A>> {
         match t {
-            Term::BNode(_) => Some(IArgument::Individual(self.b.anon_renumbered().into())),
+            Term::BNode(_) => Some(IArgument::Individual(
+                self.config.build.as_ref().anon_renumbered().into(),
+            )),
             Term::Iri(iri) => self
                 // if it is a variable return it
                 .variable
@@ -1390,7 +1398,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
     ) -> Option<PropertyExpression<A>> {
         match term {
             Term::OWL(vowl) => {
-                let iri = self.b.iri(vowl.as_ref());
+                let iri = self.config.build.as_ref().iri(vowl.as_ref());
                 self.distinguish_retrieve_property_kind(&Term::Iri(iri), ic)
             }
             Term::Iri(iri) => match self.distinguish_declaration_kind(iri, ic) {
@@ -1695,14 +1703,19 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                         ok_some!(ClassExpression::ObjectExactCardinality {
                             n: self.convert_to_u32(literal)?,
                             ope,
-                            bce: self.b.class(VOWL::Thing).into()
+                            bce: self.config.build.as_ref().class(VOWL::Thing).into()
                         })
                     }
                     Some(PropertyExpression::DataProperty(dp)) => {
                         ok_some!(ClassExpression::DataExactCardinality {
                             n: self.convert_to_u32(literal)?,
                             dp,
-                            dr: self.b.datatype(OWL2Datatype::Literal).into(),
+                            dr: self
+                                .config
+                                .build
+                                .as_ref()
+                                .datatype(OWL2Datatype::Literal)
+                                .into(),
                         })
                     }
                     any => Self::error_or_none_on_annotation(any, v.position()),
@@ -1731,14 +1744,19 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                         ok_some!(ClassExpression::ObjectMinCardinality {
                             n: self.convert_to_u32(literal)?,
                             ope,
-                            bce: self.b.class(VOWL::Thing).into()
+                            bce: self.config.build.as_ref().class(VOWL::Thing).into()
                         })
                     }
                     Some(PropertyExpression::DataProperty(dp)) => {
                         ok_some!(ClassExpression::DataMinCardinality {
                             n: self.convert_to_u32(literal)?,
                             dp,
-                            dr: self.b.datatype(OWL2Datatype::Literal).into(),
+                            dr: self
+                                .config
+                                .build
+                                .as_ref()
+                                .datatype(OWL2Datatype::Literal)
+                                .into(),
                         })
                     }
                     any => Self::error_or_none_on_annotation(any, v.position()),
@@ -1767,14 +1785,19 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                         ok_some!(ClassExpression::ObjectMaxCardinality {
                             n: self.convert_to_u32(literal)?,
                             ope,
-                            bce: self.b.class(VOWL::Thing).into()
+                            bce: self.config.build.as_ref().class(VOWL::Thing).into()
                         })
                     }
                     Some(PropertyExpression::DataProperty(dp)) => {
                         ok_some!(ClassExpression::DataMaxCardinality {
                             n: self.convert_to_u32(literal)?,
                             dp,
-                            dr: self.b.datatype(OWL2Datatype::Literal).into(),
+                            dr: self
+                                .config
+                                .build
+                                .as_ref()
+                                .datatype(OWL2Datatype::Literal)
+                                .into(),
                         })
                     }
                     any => Self::error_or_none_on_annotation(any, v.position()),
@@ -2405,7 +2428,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                     // earlier by `axiom_annotations` (this is the form
                     // produced by Horned-OWL's own RDF writer).
                     let mut ann = self.parse_annotations(&ann_triples)?;
-                    let key = self.b.substitute_term([
+                    let key = self.config.build.as_ref().substitute_term([
                         Term::BNode(bnode),
                         Term::RDF(VRDF::Type),
                         Term::SWRL(VSWRL::Imp),
@@ -2426,7 +2449,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
         let ont_id = <O as AsRef<SetIndex<A, AA>>>::as_ref(&self.o).the_ontology_id_or_default();
         for t in std::mem::take(&mut self.simple) {
             let firi =
-                |s: &mut OntologyParser<_, _, _>, t, iri: &IRI<_>| -> Result<(), HornedError> {
+                |s: &mut OntologyParser<A, AA, O, B>, t, iri: &IRI<_>| -> Result<(), HornedError> {
                     let ann = s.ann_map.remove(t).unwrap_or_default();
                     s.merge(AnnotatedComponent {
                         component: AnnotationAssertion {
@@ -2465,9 +2488,9 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
         }
         for (k, v) in std::mem::take(&mut self.bnode) {
             let fbnode =
-                |s: &mut OntologyParser<_, _, _>, t, _: &BNode<A>| -> Result<_, HornedError> {
+                |s: &mut OntologyParser<A, AA, O, B>, t, _: &BNode<A>| -> Result<_, HornedError> {
                     let ann = s.ann_map.remove(t).unwrap_or_default();
-                    let ind: AnonymousIndividual<A> = s.b.anon_renumbered();
+                    let ind: AnonymousIndividual<A> = s.config.build.as_ref().anon_renumbered();
                     s.merge(AnnotatedComponent {
                         component: AnnotationAssertion {
                             subject: ind.into(),
@@ -2720,25 +2743,29 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
     }
 }
 
-pub fn parser_with_build<'b, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, R: BufRead>(
+pub fn parser_with_build<
+    A: ForIRI,
+    AA: ForIndex<A>,
+    O: RDFOntology<A, AA>,
+    B: AsRef<Build<A>>,
+    R: BufRead,
+>(
     bufread: &mut R,
-    build: &'b Build<A>,
-    config: RDFParserConfiguration,
-) -> Result<OntologyParser<'b, A, AA, O>, HornedError> {
-    OntologyParser::from_bufread(build, bufread, config)
+    config: RDFParserConfiguration<A, B>,
+) -> Result<OntologyParser<A, AA, O, B>, HornedError> {
+    OntologyParser::from_bufread(bufread, config)
 }
 
-pub fn read_with_build<A: ForIRI, AA: ForIndex<A>, R: BufRead>(
+pub fn read_with_build<A: ForIRI, AA: ForIndex<A>, B: AsRef<Build<A>>, R: BufRead>(
     bufread: &mut R,
-    build: &Build<A>,
-    config: RDFParserConfiguration,
+    config: RDFParserConfiguration<A, B>,
 ) -> Result<(ConcreteRDFOntology<A, AA>, IncompleteParse<A>), HornedError> {
-    parser_with_build(bufread, build, config)?.parse()
+    parser_with_build(bufread, config)?.parse()
 }
 
-pub fn read<R: BufRead>(
+pub fn read<B: AsRef<Build<RcStr>>, R: BufRead>(
     bufread: &mut R,
-    config: RDFParserConfiguration,
+    config: RDFParserConfiguration<RcStr, B>,
 ) -> Result<
     (
         ConcreteRDFOntology<RcStr, RcAnnotatedComponent>,
@@ -2746,8 +2773,7 @@ pub fn read<R: BufRead>(
     ),
     HornedError,
 > {
-    let b = Build::new_rc();
-    read_with_build(bufread, &b, config)
+    read_with_build(bufread, config)
 }
 
 #[cfg(test)]
@@ -2900,14 +2926,8 @@ mod test {
 
     #[test]
     fn import_with_partial_parse() {
-        let b = Build::new_rc();
-        let mut p: OntologyParser<_, Rc<AnnotatedComponent<RcStr>>, ConcreteRDFOntology<_, _>> =
-            parser_with_build(
-                &mut slurp_rdfont("import").as_bytes(),
-                &b,
-                Default::default(),
-            )
-            .unwrap();
+        let mut p: OntologyParser<_, Rc<AnnotatedComponent<RcStr>>, ConcreteRDFOntology<_, _>, _> =
+            parser_with_build(&mut slurp_rdfont("import").as_bytes(), Default::default()).unwrap();
         p.parse_imports().unwrap();
 
         let rdfont = p.as_ontology();
@@ -2918,15 +2938,8 @@ mod test {
 
     #[test]
     fn declaration_with_partial_parse() {
-        let b = Build::new_rc();
-
-        let mut p: OntologyParser<_, Rc<AnnotatedComponent<RcStr>>, ConcreteRDFOntology<_, _>> =
-            parser_with_build(
-                &mut slurp_rdfont("class").as_bytes(),
-                &b,
-                Default::default(),
-            )
-            .unwrap();
+        let mut p: OntologyParser<_, Rc<AnnotatedComponent<RcStr>>, ConcreteRDFOntology<_, _>, _> =
+            parser_with_build(&mut slurp_rdfont("class").as_bytes(), Default::default()).unwrap();
         let _ = p.parse_declarations();
 
         let rdfont = p.as_ontology();
@@ -2938,19 +2951,17 @@ mod test {
     #[test]
     fn import_property_in_bits() -> Result<(), HornedError> {
         let b = Build::new_rc();
-        let p: OntologyParser<_, Rc<AnnotatedComponent<RcStr>>, ConcreteRDFOntology<_, _>> =
+        let p: OntologyParser<_, Rc<AnnotatedComponent<RcStr>>, ConcreteRDFOntology<_, _>, _> =
             parser_with_build(
                 &mut slurp_rdfont("withimport/other-property").as_bytes(),
-                &b,
-                Default::default(),
+                ParserConfiguration::new(&b).into(),
             )?;
         let (family_other, incomplete) = p.parse()?;
         assert!(incomplete.is_complete());
 
         let mut p = parser_with_build(
             &mut slurp_rdfont("withimport/import-property").as_bytes(),
-            &b,
-            Default::default(),
+            ParserConfiguration::new(&b).into(),
         )?;
         p.parse_imports()?;
         p.parse_declarations()?;
@@ -3177,13 +3188,9 @@ mod test {
         assert!(matches! {err, HornedError::ParserError(_,_)})
     }
 
-    fn read_from_format<R: BufRead>(
-        bufread: &mut R,
-        config: ParserConfiguration,
-        format: oxrdfio::RdfFormat,
-    ) {
+    fn read_from_format<R: BufRead>(bufread: &mut R, format: oxrdfio::RdfFormat) {
         let (ont, incomp): (ConcreteRDFOntology<RcStr, Rc<AnnotatedComponent<RcStr>>>, _) =
-            OntologyParser::from_bufread_with_format(&Build::new_rc(), bufread, config, format)
+            OntologyParser::from_bufread_with_format(bufread, Default::default(), format)
                 .unwrap()
                 .parse()
                 .unwrap();
@@ -3213,11 +3220,7 @@ mod test {
 o:C rdf:type owl:Class .
 "#;
 
-        read_from_format(
-            &mut ont.as_bytes(),
-            Default::default(),
-            oxrdfio::RdfFormat::Turtle,
-        );
+        read_from_format(&mut ont.as_bytes(), oxrdfio::RdfFormat::Turtle);
     }
 
     #[test]
@@ -3252,7 +3255,6 @@ o:C rdf:type owl:Class .
 ]"#;
         read_from_format(
             &mut ont.as_bytes(),
-            Default::default(),
             oxrdfio::RdfFormat::JsonLd {
                 profile: oxrdfio::JsonLdProfileSet::empty(),
             },

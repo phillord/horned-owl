@@ -977,7 +977,6 @@ mod test {
 
     use self::mktemp::Temp;
     use super::*;
-    use crate::io::ParserConfiguration;
     use crate::io::owx::reader::*;
 
     use std::collections::HashMap;
@@ -992,7 +991,7 @@ mod test {
     use std::path::PathBuf;
 
     fn read_ok<R: BufRead>(bufread: &mut R) -> (RcComponentMappedOntology, PrefixMapping) {
-        let r = read(bufread, ParserConfiguration::default());
+        let r = read(bufread, Default::default());
         assert!(r.is_ok(), "Expected ontology, got failure:{:?}", r.err());
         let (o, m) = r.ok().unwrap();
         (o, m)
