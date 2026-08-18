@@ -37,9 +37,7 @@ pub(crate) fn matcher(matches: &ArgMatches) -> Result<(), HornedError> {
     let config = parser_config(matches);
     let parsed = parse_path(Path::new(input), config.clone())?;
     let resource_type = parsed.resource_type();
-    let rdf_format = with_detected_rdf_format(Path::new(input), config)
-        .rdf
-        .format;
+    let rdf_format = with_detected_rdf_format(Path::new(input), config.into()).format;
     let (ont, p, i) = parsed.decompose();
 
     let summary = summarize(ont);

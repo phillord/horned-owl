@@ -1,7 +1,11 @@
 use Term::*;
 use oxrdf::{BlankNode, NamedNode, NamedOrBlankNode, Triple};
 
-use crate::{error::HornedError, io::ParserConfiguration, vocab::Facet};
+use crate::{
+    error::HornedError,
+    io::{ParserConfiguration, RDFParserConfiguration},
+    vocab::Facet,
+};
 use crate::{model::Literal, ontology::component_mapped::ComponentMappedOntology};
 use crate::{model::*, vocab::Vocab};
 
@@ -604,10 +608,10 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
     pub fn from_bufread<'b, R: BufRead>(
         b: &'a Build<A>,
         bufread: &'b mut R,
-        config: ParserConfiguration,
+        config: RDFParserConfiguration,
     ) -> Result<OntologyParser<'a, A, AA, O>, HornedError> {
-        let format = config.rdf.format.unwrap_or(oxrdfio::RdfFormat::RdfXml);
-        Self::from_bufread_with_format(b, bufread, config, format)
+        let format = config.format.unwrap_or(oxrdfio::RdfFormat::RdfXml);
+        Self::from_bufread_with_format(b, bufread, config.common, format)
     }
 
     pub fn from_bufread_with_format<'b, R: BufRead>(
@@ -637,14 +641,14 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
     pub fn from_doc_iri(
         b: &'a Build<A>,
         iri: &IRI<A>,
-        config: ParserConfiguration,
+        config: RDFParserConfiguration,
     ) -> Result<OntologyParser<'a, A, AA, O>, HornedError> {
         OntologyParser::from_bufread(
             b,
             &mut Cursor::new(strict_resolve_iri(
                 iri,
-                config.remote_body_limit,
-                config.local_only,
+                config.common.remote_body_limit,
+                config.common.local_only,
             )?),
             config,
         )
@@ -2719,7 +2723,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
 pub fn parser_with_build<'b, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, R: BufRead>(
     bufread: &mut R,
     build: &'b Build<A>,
-    config: ParserConfiguration,
+    config: RDFParserConfiguration,
 ) -> Result<OntologyParser<'b, A, AA, O>, HornedError> {
     OntologyParser::from_bufread(build, bufread, config)
 }
@@ -2727,14 +2731,14 @@ pub fn parser_with_build<'b, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, 
 pub fn read_with_build<A: ForIRI, AA: ForIndex<A>, R: BufRead>(
     bufread: &mut R,
     build: &Build<A>,
-    config: ParserConfiguration,
+    config: RDFParserConfiguration,
 ) -> Result<(ConcreteRDFOntology<A, AA>, IncompleteParse<A>), HornedError> {
     parser_with_build(bufread, build, config)?.parse()
 }
 
 pub fn read<R: BufRead>(
     bufread: &mut R,
-    config: ParserConfiguration,
+    config: RDFParserConfiguration,
 ) -> Result<
     (
         ConcreteRDFOntology<RcStr, RcAnnotatedComponent>,

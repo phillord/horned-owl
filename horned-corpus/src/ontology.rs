@@ -17,7 +17,7 @@
 use crate::model::{Format, IncompleteSummary};
 use curie::PrefixMapping;
 use horned_owl::error::HornedError;
-use horned_owl::io::{ParserConfiguration, ParserOutput, ofn, omn, owx, rdf};
+use horned_owl::io::{ParserOutput, RDFParserConfiguration, ofn, omn, owx, rdf};
 use horned_owl::model::{RcAnnotatedComponent, RcStr};
 use horned_owl::ontology::component_mapped::ComponentMappedOntology;
 use horned_owl::ontology::set::SetOntology;
@@ -104,8 +104,8 @@ pub fn read_source(fmt: Format, bytes: &[u8]) -> anyhow::Result<ReadOk> {
             // Turtle (the config defaults to RdfXml otherwise). N-Triples is a
             // Turtle subset, so this parses both. IncompleteParse handling is
             // identical to the RdfXml path.
-            let mut config = ParserConfiguration::default();
-            config.rdf.format = Some(oxrdfio::RdfFormat::Turtle);
+            let mut config = RDFParserConfiguration::default();
+            config.format = Some(oxrdfio::RdfFormat::Turtle);
             let rop = rdf::reader::read(&mut Cursor::new(bytes), config).map_err(horned_err)?;
             Output::rdf(rop).decompose()
         }
