@@ -2693,6 +2693,23 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                     Ok(())
                 };
 
+            // Whether a triple says something about an anonymous INDIVIDUAL rather
+            // than describing a structure: a type naming an ordinary class, or an
+            // annotation. Everything a blank node can be instead — a restriction, a
+            // list cell, a reification — states a built-in `owl:`/`rdf:` object here
+            // and has already been consumed by the time this runs.
+            let states_an_individual = |s: &OntologyParser<_, _, _>, t: &[Term<A>; 3]| match t {
+                [Term::BNode(_), Term::RDF(VRDF::Type), Term::Iri(_)] => true,
+                [Term::BNode(_), Term::RDFS(rdfs), _] => rdfs.is_builtin(),
+                [Term::BNode(_), Term::Iri(ap), _] => {
+                    parse_all
+                        || <O as AsRef<DeclarationMappedIndex<A, AA>>>::as_ref(&s.o)
+                            .is_annotation_property(ap)
+                        || is_annotation_builtin(ap)
+                }
+                _ => false,
+            };
+
             match v.as_slice() {
                 [triple @ [Term::BNode(ind), Term::RDFS(rdfs), _]] if rdfs.is_builtin() => {
                     fbnode(self, triple, ind)?
@@ -2704,6 +2721,37 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                         || is_annotation_builtin(ap) =>
                 {
                     fbnode(self, triple, ind)?
+                }
+                // An anonymous individual that says more than one thing about
+                // itself — a type and its annotations, as an SSSOM mapping set
+                // does. The triples are ONE individual's, so they take one node id
+                // between them rather than one each.
+                _ if v.len() > 1 && v.iter().all(|t| states_an_individual(self, t)) => {
+                    let ind: AnonymousIndividual<A> = self.b.anon_renumbered();
+                    for triple in v.iter() {
+                        if let [_, Term::RDF(VRDF::Type), Term::Iri(cls)] = triple {
+                            self.merge(AnnotatedComponent {
+                                component: ClassAssertion {
+                                    ce: Class(cls.clone()).into(),
+                                    i: ind.clone().into(),
+                                }
+                                .into(),
+                                ann: BTreeSet::new(),
+                            });
+                            continue;
+                        }
+                        let base = self.annotation(triple)?;
+                        for ann in self.take_anns(triple) {
+                            self.insert_distinct(AnnotatedComponent {
+                                component: AnnotationAssertion {
+                                    subject: ind.clone().into(),
+                                    ann: base.clone(),
+                                }
+                                .into(),
+                                ann,
+                            });
+                        }
+                    }
                 }
                 _ => {
                     self.bnode.insert(k, v);
