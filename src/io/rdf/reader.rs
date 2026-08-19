@@ -583,6 +583,11 @@ pub struct OntologyParser<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>>
     atom: HashMap<Term<A>, Atom<A>>,
     variable: HashMap<IRI<A>, Variable<A>>,
 
+    // Blank nodes in the order this document first mentions them, and the
+    // anonymous individual each one turns out to name.
+    bnode_order: HashMap<A, usize>,
+    bnode_names: std::cell::RefCell<HashMap<A, AnonymousIndividual<A>>>,
+
     // How far through the parse have we got?
     state: OntologyParserState,
     // AA is otherwise unreferenced
@@ -596,10 +601,28 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
         triple: Vec<PosTriple<A>>,
         config: ParserConfiguration,
     ) -> OntologyParser<'a, A, AA, O> {
+        // A document's blank nodes are numbered as it is parsed: each node it
+        // declares takes one id, in the order the document first mentions it,
+        // and the individuals among them take the ids that follow. Both counts
+        // come off the `Build`, so documents parsed one after another for a
+        // merge keep their nodes apart.
+        let mut bnode_order: HashMap<A, usize> = HashMap::default();
+        for PosTriple(terms, _) in triple.iter() {
+            for t in terms {
+                if let Term::BNode(BNode(label)) = t {
+                    let next = bnode_order.len();
+                    bnode_order.entry(label.clone()).or_insert(next);
+                }
+            }
+        }
+        b.skip_bnode_labels(bnode_order.len());
+
         OntologyParser {
             o: d!(),
             b,
             config,
+            bnode_order,
+            bnode_names: d!(),
 
             triple,
             simple: d!(),
@@ -615,6 +638,26 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
             state: OntologyParserState::New,
             p: d!(),
         }
+    }
+
+    /// The anonymous individual a blank node names.
+    ///
+    /// A document's blank nodes are numbered as it is parsed: each node it
+    /// declares takes one id, and the individuals among them take the ids that
+    /// follow, in the order the document mentions them. So every triple about
+    /// one node meets one individual, and two documents parsed for one merge
+    /// keep their nodes apart. Where the document is not being numbered, a
+    /// fresh predictable name.
+    fn anon_for_bnode(&self, bn: &BNode<A>) -> AnonymousIndividual<A> {
+        if self.b.bnode_base().is_none() {
+            return self.b.anon_renumbered();
+        }
+        if let Some(i) = self.bnode_names.borrow().get(&bn.0) {
+            return i.clone();
+        }
+        let i = self.b.anon(self.b.next_bnode_label().unwrap());
+        self.bnode_names.borrow_mut().insert(bn.0.clone(), i.clone());
+        i
     }
 
     /// Return a new OntologyParser taking all triples from an BufRead
@@ -653,32 +696,6 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                 .into();
             triples.push(b.convert_substitute_triple(ox_triple, last_pos.get()));
             //last_pos.set(parser.buffer_position().try_into().unwrap());
-        }
-
-        // A document's blank nodes are its own, and their ids say which node is
-        // which — in the OFN this parse feeds, `_:genid…` is what a reader has to
-        // tell two anonymous individuals apart. The parse's raw labels are its
-        // internal bookkeeping and restart at every document, so two files merged
-        // together would name different nodes the same thing. Number them here,
-        // in the order the document first mentions each, from the count the
-        // caller set on the `Build` — one count across every document it parses.
-        if b.bnode_base().is_some() {
-            let mut given: HashMap<A, A> = HashMap::default();
-            for PosTriple(terms, _) in triples.iter_mut() {
-                for t in terms.iter_mut() {
-                    if let Term::BNode(BNode(label)) = t {
-                        let id: A = match given.get(label) {
-                            Some(id) => id.clone(),
-                            None => {
-                                let id: A = b.next_bnode_label().unwrap().into();
-                                given.insert(label.clone(), id.clone());
-                                id
-                            }
-                        };
-                        *t = Term::BNode(BNode(id));
-                    }
-                }
-            }
         }
 
         Ok(OntologyParser::new(b, triples, config))
@@ -914,7 +931,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
             }
             [_, Iri(p), Term::BNode(bn)] => Ok(Annotation {
                 ap: AnnotationProperty(p.clone()),
-                av: self.b.anon_for_bnode(bn.0.as_ref()).into(),
+                av: self.anon_for_bnode(bn).into(),
                 ann: Default::default(),
             }),
             all => Err(HornedError::invalid(format!(
@@ -1454,7 +1471,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
     fn retrieve_to_iargument(&mut self, t: &Term<A>) -> Option<IArgument<A>> {
         match t {
             Term::BNode(bn) => {
-                Some(IArgument::Individual(self.b.anon_for_bnode(bn.0.as_ref()).into()))
+                Some(IArgument::Individual(self.anon_for_bnode(bn).into()))
             }
             Term::Iri(iri) => self
                 // if it is a variable return it
@@ -2702,10 +2719,15 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                 }
             }
         }
-        for (k, v) in std::mem::take(&mut self.bnode) {
+        // The individuals among a document's blank nodes take their ids in the
+        // order the document mentions them, so the groups are visited that way
+        // rather than in whatever order they were collected.
+        let mut groups: Vec<_> = std::mem::take(&mut self.bnode).into_iter().collect();
+        groups.sort_by_key(|(k, _)| self.bnode_order.get(&k.0).copied().unwrap_or(usize::MAX));
+        for (k, v) in groups {
             let fbnode =
                 |s: &mut OntologyParser<_, _, _>, t, bn: &BNode<A>| -> Result<_, HornedError> {
-                    let ind: AnonymousIndividual<A> = s.b.anon_for_bnode(bn.0.as_ref());
+                    let ind: AnonymousIndividual<A> = s.anon_for_bnode(bn);
                     let base = s.annotation(t)?;
                     // As above: distinct reifications stay distinct axioms.
                     for ann in s.take_anns(t) {
@@ -2764,7 +2786,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                     && v.iter().all(|t| states_an_individual(self, t)) =>
                 {
                     let ind: AnonymousIndividual<A> = match v.first() {
-                        Some([Term::BNode(bn), ..]) => self.b.anon_for_bnode(bn.0.as_ref()),
+                        Some([Term::BNode(bn), ..]) => self.anon_for_bnode(bn),
                         _ => self.b.anon_renumbered(),
                     };
                     for triple in v.iter() {

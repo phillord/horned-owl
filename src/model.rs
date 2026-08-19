@@ -350,16 +350,12 @@ impl<A: ForIRI> Build<A> {
         Some(format!("genid{n}"))
     }
 
-    /// The anonymous individual a blank node names.
-    ///
-    /// With numbering on that is the node's own id, so every triple about one
-    /// node meets one individual and the id is the one the document was numbered
-    /// with. Without it, a fresh predictable name.
-    pub fn anon_for_bnode(&self, label: &str) -> AnonymousIndividual<A> {
-        if self.3.borrow().is_some() {
-            self.anon(label)
-        } else {
-            self.anon_renumbered()
+    /// Take `n` ids from the count without naming anything with them — the ids
+    /// a document's own blank nodes hold, which the individuals among them are
+    /// numbered after.
+    pub fn skip_bnode_labels(&self, n: usize) {
+        if let Some(base) = *self.3.borrow() {
+            self.3.replace(Some(base + n as i64));
         }
     }
 
