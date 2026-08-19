@@ -282,6 +282,10 @@ pub struct Build<A: ForIRI>(
     RefCell<FxHashSet<AnonymousIndividual<A>>>,
     // Last anon individual
     RefCell<i64>,
+    // The id the next blank node of a document being parsed takes, when that
+    // document's blank nodes are being numbered. `None` leaves a parse's own
+    // labels alone.
+    RefCell<Option<i64>>,
 );
 
 impl<A: ForIRI> Build<A> {
@@ -290,6 +294,7 @@ impl<A: ForIRI> Build<A> {
             RefCell::new(FxHashSet::default()),
             RefCell::new(FxHashSet::default()),
             RefCell::new(0),
+            RefCell::new(None),
         )
     }
 
@@ -308,6 +313,54 @@ impl<A: ForIRI> Build<A> {
     pub fn anon_renumbered(&self) -> AnonymousIndividual<A> {
         self.2.replace_with(|&mut old| old + 1);
         self.anon(format!("anon{:06}", self.2.borrow()))
+    }
+
+    /// Number the blank nodes of documents parsed with this `Build` from `n`.
+    ///
+    /// A blank node is then known by the id it is given here — `genid<n>`,
+    /// counting up in the order a parse first meets each node — and every
+    /// document parsed with this `Build` continues the same count, so nodes from
+    /// two documents merged together keep their separate identities.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use horned_owl::model::*;
+    /// let b = Build::new_rc();
+    /// b.set_bnode_base(2_147_483_648);
+    /// assert_eq!("genid2147483648", b.next_bnode_label().unwrap());
+    /// assert_eq!("genid2147483649", b.next_bnode_label().unwrap());
+    /// assert_eq!(2_147_483_650, b.bnode_base().unwrap());
+    /// ```
+    pub fn set_bnode_base(&self, n: i64) {
+        self.3.replace(Some(n));
+    }
+
+    /// How far the blank-node count has got, or `None` when documents parsed
+    /// with this `Build` keep their own labels.
+    pub fn bnode_base(&self) -> Option<i64> {
+        *self.3.borrow()
+    }
+
+    /// The label for the next blank node a parse meets, taking one value from
+    /// the count. `None` when numbering is off.
+    pub fn next_bnode_label(&self) -> Option<String> {
+        let n = (*self.3.borrow())?;
+        self.3.replace(Some(n + 1));
+        Some(format!("genid{n}"))
+    }
+
+    /// The anonymous individual a blank node names.
+    ///
+    /// With numbering on that is the node's own id, so every triple about one
+    /// node meets one individual and the id is the one the document was numbered
+    /// with. Without it, a fresh predictable name.
+    pub fn anon_for_bnode(&self, label: &str) -> AnonymousIndividual<A> {
+        if self.3.borrow().is_some() {
+            self.anon(label)
+        } else {
+            self.anon_renumbered()
+        }
     }
 
     /// Constructs a new `AnonymousIndividual`

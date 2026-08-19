@@ -655,6 +655,32 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
             //last_pos.set(parser.buffer_position().try_into().unwrap());
         }
 
+        // A document's blank nodes are its own, and their ids say which node is
+        // which — in the OFN this parse feeds, `_:genid…` is what a reader has to
+        // tell two anonymous individuals apart. The parse's raw labels are its
+        // internal bookkeeping and restart at every document, so two files merged
+        // together would name different nodes the same thing. Number them here,
+        // in the order the document first mentions each, from the count the
+        // caller set on the `Build` — one count across every document it parses.
+        if b.bnode_base().is_some() {
+            let mut given: HashMap<A, A> = HashMap::default();
+            for PosTriple(terms, _) in triples.iter_mut() {
+                for t in terms.iter_mut() {
+                    if let Term::BNode(BNode(label)) = t {
+                        let id: A = match given.get(label) {
+                            Some(id) => id.clone(),
+                            None => {
+                                let id: A = b.next_bnode_label().unwrap().into();
+                                given.insert(label.clone(), id.clone());
+                                id
+                            }
+                        };
+                        *t = Term::BNode(BNode(id));
+                    }
+                }
+            }
+        }
+
         Ok(OntologyParser::new(b, triples, config))
     }
 
@@ -886,9 +912,9 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                     ann: Default::default(),
                 })
             }
-            [_, Iri(p), Term::BNode(_)] => Ok(Annotation {
+            [_, Iri(p), Term::BNode(bn)] => Ok(Annotation {
                 ap: AnnotationProperty(p.clone()),
-                av: self.b.anon_renumbered().into(),
+                av: self.b.anon_for_bnode(bn.0.as_ref()).into(),
                 ann: Default::default(),
             }),
             all => Err(HornedError::invalid(format!(
@@ -1427,7 +1453,9 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
     /// Convert to an IArgument or None
     fn retrieve_to_iargument(&mut self, t: &Term<A>) -> Option<IArgument<A>> {
         match t {
-            Term::BNode(_) => Some(IArgument::Individual(self.b.anon_renumbered().into())),
+            Term::BNode(bn) => {
+                Some(IArgument::Individual(self.b.anon_for_bnode(bn.0.as_ref()).into()))
+            }
             Term::Iri(iri) => self
                 // if it is a variable return it
                 .variable
@@ -2676,8 +2704,8 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
         }
         for (k, v) in std::mem::take(&mut self.bnode) {
             let fbnode =
-                |s: &mut OntologyParser<_, _, _>, t, _: &BNode<A>| -> Result<_, HornedError> {
-                    let ind: AnonymousIndividual<A> = s.b.anon_renumbered();
+                |s: &mut OntologyParser<_, _, _>, t, bn: &BNode<A>| -> Result<_, HornedError> {
+                    let ind: AnonymousIndividual<A> = s.b.anon_for_bnode(bn.0.as_ref());
                     let base = s.annotation(t)?;
                     // As above: distinct reifications stay distinct axioms.
                     for ann in s.take_anns(t) {
@@ -2735,7 +2763,10 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                     && typed_by_a_class
                     && v.iter().all(|t| states_an_individual(self, t)) =>
                 {
-                    let ind: AnonymousIndividual<A> = self.b.anon_renumbered();
+                    let ind: AnonymousIndividual<A> = match v.first() {
+                        Some([Term::BNode(bn), ..]) => self.b.anon_for_bnode(bn.0.as_ref()),
+                        _ => self.b.anon_renumbered(),
+                    };
                     for triple in v.iter() {
                         if let [_, Term::RDF(VRDF::Type), Term::Iri(cls)] = triple {
                             self.merge(AnnotatedComponent {
