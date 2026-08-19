@@ -345,7 +345,7 @@ impl<A: ForIRI> Build<A> {
     /// The label for the next blank node a parse meets, taking one value from
     /// the count. `None` when numbering is off.
     pub fn next_bnode_label(&self) -> Option<String> {
-        let n = (*self.3.borrow())?;
+        let n = { (*self.3.borrow())? };
         self.3.replace(Some(n + 1));
         Some(format!("genid{n}"))
     }
@@ -354,7 +354,8 @@ impl<A: ForIRI> Build<A> {
     /// a document's own blank nodes hold, which the individuals among them are
     /// numbered after.
     pub fn skip_bnode_labels(&self, n: usize) {
-        if let Some(base) = *self.3.borrow() {
+        let base = { *self.3.borrow() };
+        if let Some(base) = base {
             self.3.replace(Some(base + n as i64));
         }
     }

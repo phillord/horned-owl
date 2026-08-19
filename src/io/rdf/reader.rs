@@ -652,8 +652,9 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
         if self.b.bnode_base().is_none() {
             return self.b.anon_renumbered();
         }
-        if let Some(i) = self.bnode_names.borrow().get(&bn.0) {
-            return i.clone();
+        let known = { self.bnode_names.borrow().get(&bn.0).cloned() };
+        if let Some(i) = known {
+            return i;
         }
         let i = self.b.anon(self.b.next_bnode_label().unwrap());
         self.bnode_names.borrow_mut().insert(bn.0.clone(), i.clone());
