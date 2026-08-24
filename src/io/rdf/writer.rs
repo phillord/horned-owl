@@ -1926,7 +1926,10 @@ mod test {
     // use std::io::BufWriter;
 
     fn read_ok<R: BufRead>(bufread: &mut R) -> SetOntology<RcStr> {
-        let r = crate::io::rdf::reader::read(bufread, Default::default());
+        let r = crate::io::rdf::reader::read::<RcStr, RcAnnotatedComponent, SetOntology<RcStr>, _, _>(
+            bufread,
+            Default::default(),
+        );
         assert!(r.is_ok(), "Expected ontology, got failure:{:?}", r.err());
         let (o, incomplete) = r.ok().unwrap();
 
@@ -1934,7 +1937,7 @@ mod test {
             incomplete.is_complete(),
             "Read Not Complete: {incomplete:#?}"
         );
-        o.into()
+        o
     }
 
     #[test]
@@ -2142,10 +2145,11 @@ mod test {
         // isn't guaranteed to map back to a recognised axiom shape. What
         // matters here is that the RDF/XML syntax itself is valid.)
         let b = crate::model::Build::new_rc();
-        let result = crate::io::rdf::reader::read(
-            &mut &buf[..],
-            crate::io::ParserConfiguration::new(&b).into(),
-        );
+        let result =
+            crate::io::rdf::reader::read::<RcStr, RcAnnotatedComponent, SetOntology<RcStr>, _, _>(
+                &mut &buf[..],
+                crate::io::ParserConfiguration::new(&b).into(),
+            );
         assert!(
             result.is_ok(),
             "written RDF/XML must be syntactically valid to reread, got: {:?}",

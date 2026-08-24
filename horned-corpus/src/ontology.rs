@@ -99,7 +99,7 @@ pub fn read_source(fmt: Format, bytes: &[u8]) -> anyhow::Result<ReadOk> {
             Output::owx(sop).decompose()
         }
         Format::RdfXml => {
-            let rop = rdf::reader::read(
+            let rop = rdf::reader::read_to_rdf_ontology(
                 &mut Cursor::new(bytes),
                 ParserConfiguration::new(&build).into(),
             )
@@ -115,7 +115,8 @@ pub fn read_source(fmt: Format, bytes: &[u8]) -> anyhow::Result<ReadOk> {
                 format: Some(oxrdfio::RdfFormat::Turtle),
                 ..ParserConfiguration::new(&build).into()
             };
-            let rop = rdf::reader::read(&mut Cursor::new(bytes), config).map_err(horned_err)?;
+            let rop = rdf::reader::read_to_rdf_ontology(&mut Cursor::new(bytes), config)
+                .map_err(horned_err)?;
             Output::rdf(rop).decompose()
         }
         Format::Unknown => anyhow::bail!("unknown format"),

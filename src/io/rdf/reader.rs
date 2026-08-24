@@ -2763,17 +2763,25 @@ pub fn read_to_rdf_ontology<A: ForIRI, AA: ForIndex<A>, B: AsRef<Build<A>>, R: B
     parser_with_build(bufread, config)?.parse()
 }
 
-pub fn read<B: AsRef<Build<RcStr>>, R: BufRead>(
+/// Read the whole of `bufread` into an `O`. Drains a [`read_to_rdf_ontology`]
+/// parse internally -- use `read_to_rdf_ontology` directly for the
+/// `ConcreteRDFOntology` it always parses into first.
+pub fn read<
+    A: ForIRI,
+    AA: ForIndex<A>,
+    O: MutableOntology<A> + Default,
+    B: AsRef<Build<A>>,
+    R: BufRead,
+>(
     bufread: &mut R,
-    config: RDFParserConfiguration<RcStr, B>,
-) -> Result<
-    (
-        ConcreteRDFOntology<RcStr, RcAnnotatedComponent>,
-        IncompleteParse<RcStr>,
-    ),
-    HornedError,
-> {
-    read_to_rdf_ontology(bufread, config)
+    config: RDFParserConfiguration<A, B>,
+) -> Result<(O, IncompleteParse<A>), HornedError> {
+    let (concrete, incomplete) = read_to_rdf_ontology::<A, AA, B, R>(bufread, config)?;
+    let mut ont: O = Default::default();
+    for ac in concrete {
+        ont.insert(ac);
+    }
+    Ok((ont, incomplete))
 }
 
 #[cfg(test)]
@@ -2791,7 +2799,7 @@ mod test {
     fn read_ok<R: BufRead>(
         bufread: &mut R,
     ) -> ConcreteRDFOntology<RcStr, Rc<AnnotatedComponent<RcStr>>> {
-        let r = read(bufread, Default::default());
+        let r = read_to_rdf_ontology(bufread, Default::default());
 
         if let Err(e) = r {
             panic!("Expected ontology, get failure: {e:?}",);
@@ -2801,6 +2809,24 @@ mod test {
         dbg!(&ont, &incomp);
         assert!(incomp.is_complete());
         ont
+    }
+
+    #[test]
+    fn read_drains_into_any_mutable_ontology() {
+        let concrete = read_ok(&mut slurp_rdfont("manual/galen_snippet").as_bytes());
+        let concrete: SetOntology<_> = concrete.into();
+
+        let (generic, incomplete): (SetOntology<RcStr>, _) =
+            read::<RcStr, RcAnnotatedComponent, _, _, _>(
+                &mut slurp_rdfont("manual/galen_snippet").as_bytes(),
+                Default::default(),
+            )
+            .unwrap();
+        assert!(incomplete.is_complete());
+
+        let concrete = normalize(concrete.into_iter().collect());
+        let generic = normalize(generic.into_iter().collect());
+        assert_eq!(concrete, generic);
     }
 
     fn compare_two(testrdf: &str, testowl: &str) {
@@ -2991,7 +3017,7 @@ mod test {
         // rdf:List members must be resolved for both references, not just
         // the first one to consume it. See galen_snippet.owl for
         // provenance -- extracted from the real GALEN corpus file.
-        let (ont, incomplete) = read(
+        let (ont, incomplete) = read_to_rdf_ontology::<RcStr, RcAnnotatedComponent, _, _>(
             &mut slurp_rdfont("manual/galen_snippet").as_bytes(),
             Default::default(),
         )
@@ -3012,7 +3038,7 @@ mod test {
         // read back as a spurious ClassAssertion(Class(rdf:Property), x).
         // See ontokbcf_snippet.owl for provenance -- extracted from the
         // real ONTOKBCF corpus file.
-        let (ont, incomplete) = read(
+        let (ont, incomplete) = read_to_rdf_ontology::<RcStr, RcAnnotatedComponent, _, _>(
             &mut slurp_rdfont("manual/ontokbcf_snippet").as_bytes(),
             Default::default(),
         )
@@ -3052,7 +3078,7 @@ mod test {
 </rdf:RDF>"#;
 
         let (ont, incomplete): (ConcreteRDFOntology<RcStr, Rc<AnnotatedComponent<RcStr>>>, _) =
-            read(&mut xml.as_bytes(), Default::default()).unwrap();
+            read_to_rdf_ontology(&mut xml.as_bytes(), Default::default()).unwrap();
         assert!(!incomplete.is_complete());
         assert_eq!(incomplete.simple.len(), 1);
 
@@ -3073,7 +3099,7 @@ mod test {
         // from the real SPO (Multiscale Skin Physiology Ontology) corpus
         // file, where ro:has_grain is typed both AntisymmetricProperty and
         // IrreflexiveProperty.
-        let (ont, incomplete) = read(
+        let (ont, incomplete) = read_to_rdf_ontology::<RcStr, RcAnnotatedComponent, _, _>(
             &mut slurp_rdfont("manual/spo_snippet").as_bytes(),
             Default::default(),
         )
@@ -3095,7 +3121,7 @@ mod test {
         // fall back to the sub-property's known kind instead of dropping
         // the triple. See edam_bioimaging_snippet.owl for provenance --
         // extracted from the real EDAM-BIOIMAGING corpus file.
-        let (ont, incomplete) = read(
+        let (ont, incomplete) = read_to_rdf_ontology::<RcStr, RcAnnotatedComponent, _, _>(
             &mut slurp_rdfont("manual/edam_bioimaging_snippet").as_bytes(),
             Default::default(),
         )
@@ -3148,7 +3174,7 @@ mod test {
 </rdf:RDF>"#;
 
         let (_ont, incomplete): (ConcreteRDFOntology<RcStr, Rc<AnnotatedComponent<RcStr>>>, _) =
-            read(&mut xml.as_bytes(), Default::default()).unwrap();
+            read_to_rdf_ontology(&mut xml.as_bytes(), Default::default()).unwrap();
 
         assert!(!incomplete.is_complete());
         assert_eq!(incomplete.class_expression.len(), 1);
@@ -3159,7 +3185,7 @@ mod test {
     #[test]
     fn error_on_some_broken() {
         // Check error handling on (some a c) where a is an annotation property
-        let err = read(
+        let err = read_to_rdf_ontology::<RcStr, RcAnnotatedComponent, _, _>(
             &mut slurp_rdfont("manual/some-broken").as_bytes(),
             Default::default(),
         )
@@ -3183,7 +3209,11 @@ mod test {
                   owl:versionInfo="first" owl:versionInfo="second"/>
 </rdf:RDF>"#;
 
-        let err = read(&mut xml.as_bytes(), Default::default()).unwrap_err();
+        let err = read_to_rdf_ontology::<RcStr, RcAnnotatedComponent, _, _>(
+            &mut xml.as_bytes(),
+            Default::default(),
+        )
+        .unwrap_err();
 
         assert!(matches! {err, HornedError::ParserError(_,_)})
     }
@@ -3304,7 +3334,7 @@ o:C rdf:type owl:Class .
 </rdf:RDF>"#;
 
         let (ont, incomplete): (ConcreteRDFOntology<RcStr, Rc<AnnotatedComponent<RcStr>>>, _) =
-            read(&mut xml.as_bytes(), Default::default()).unwrap();
+            read_to_rdf_ontology(&mut xml.as_bytes(), Default::default()).unwrap();
 
         let ont: SetOntology<_> = ont.into();
         let class_assertions: Vec<_> = ont
