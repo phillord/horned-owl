@@ -1038,6 +1038,7 @@ mod test {
 
     use self::mktemp::Temp;
     use super::*;
+    use crate::io::ParserConfiguration;
     use crate::io::owx::reader::*;
 
     use std::collections::HashMap;
@@ -1235,6 +1236,31 @@ mod test {
     fn roundtrip_nonround_resource(#[files("src/ont/owl-xml/ambiguous/*.owx")] resource: PathBuf) {
         let resource = &slurp::read_all_to_string(&resource).unwrap();
         assert_round(resource);
+    }
+
+    /// The streaming counterpart to `roundtrip_resource`: pipes
+    /// `read_to_stream` directly into `write_stream`, with no
+    /// `ComponentMappedOntology` materialized in between, and checks the
+    /// result is semantically identical to the plain `read`/`write`
+    /// round trip on the same file.
+    #[rstest]
+    fn roundtrip_resource_streamed(#[files("src/ont/owl-xml/*.owx")] resource: PathBuf) {
+        let resource = &slurp::read_all_to_string(&resource).unwrap();
+
+        let (ont_orig, _prefix_orig) = read_ok(&mut resource.as_bytes());
+
+        let b = Build::new_rc();
+        let mut buf = Vec::new();
+        write_stream(
+            &mut buf,
+            read_to_stream(resource.as_bytes(), ParserConfiguration::new(&b)),
+        )
+        .unwrap();
+
+        let (ont_streamed, _prefix_streamed): (RcComponentMappedOntology, _) =
+            read_ok(&mut &buf[..]);
+
+        assert_eq!(ont_orig, ont_streamed);
     }
 
     #[test]
