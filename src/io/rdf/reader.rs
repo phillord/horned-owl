@@ -2756,7 +2756,7 @@ pub fn parser_with_build<
     OntologyParser::from_bufread(bufread, config)
 }
 
-pub fn read_with_build<A: ForIRI, AA: ForIndex<A>, B: AsRef<Build<A>>, R: BufRead>(
+pub fn read_to_rdf_ontology<A: ForIRI, AA: ForIndex<A>, B: AsRef<Build<A>>, R: BufRead>(
     bufread: &mut R,
     config: RDFParserConfiguration<A, B>,
 ) -> Result<(ConcreteRDFOntology<A, AA>, IncompleteParse<A>), HornedError> {
@@ -2773,7 +2773,7 @@ pub fn read<B: AsRef<Build<RcStr>>, R: BufRead>(
     ),
     HornedError,
 > {
-    read_with_build(bufread, config)
+    read_to_rdf_ontology(bufread, config)
 }
 
 #[cfg(test)]
