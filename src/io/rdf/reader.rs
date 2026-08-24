@@ -2748,6 +2748,8 @@ pub fn parser_with_build<
     OntologyParser::from_bufread(bufread, config)
 }
 
+/// Read the whole of `bufread` into a `ConcreteRDFOntology`, along with
+/// whatever the parse couldn't map to OWL2 structures.
 pub fn read_to_rdf_ontology<A: ForIRI, AA: ForIndex<A>, B: AsRef<Build<A>>, R: BufRead>(
     bufread: &mut R,
     config: RDFParserConfiguration<A, B>,
@@ -2755,9 +2757,11 @@ pub fn read_to_rdf_ontology<A: ForIRI, AA: ForIndex<A>, B: AsRef<Build<A>>, R: B
     parser_with_build(bufread, config)?.parse()
 }
 
-/// Read the whole of `bufread` into an `O`. Drains a [`read_to_rdf_ontology`]
-/// parse internally -- use `read_to_rdf_ontology` directly for the
-/// `ConcreteRDFOntology` it always parses into first.
+/// Read the whole of `bufread` into an `O`.
+///
+/// This involves a complete iteration. Use `read_to_rdf_ontology` if
+/// there is a more efficient Into::into conversion from
+/// ConcreteRDFOntology.
 pub fn read<
     A: ForIRI,
     AA: ForIndex<A>,
