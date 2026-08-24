@@ -14,7 +14,7 @@ use self::rdf::reader::{ConcreteRDFOntology, IncompleteParse};
 use crate::error::HornedError;
 use crate::ontology::indexed::ForIndex;
 use crate::{
-    model::{Build, ForIRI},
+    model::{AnnotatedComponent, Build, ForIRI, IRI, Ontology},
     ontology::{component_mapped::ComponentMappedOntology, set::SetOntology},
 };
 
@@ -249,6 +249,66 @@ impl<A: ForIRI + Default> Default for RDFParserConfiguration<A, Build<A>> {
     }
 }
 
+/// Resolve `iri` to its content and wrap it as a `BufRead`, for a
+/// `from_doc_iri` constructor. Every format's `from_doc_iri` is a
+/// one-liner over this: `Self::from_bufread(&mut resolve_doc_iri(iri,
+/// &config)?, config)`.
+#[allow(dead_code)]
+pub(crate) fn resolve_doc_iri<A: ForIRI, B: AsRef<Build<A>>>(
+    iri: &IRI<A>,
+    config: &ParserConfiguration<A, B>,
+) -> Result<std::io::Cursor<String>> {
+    Ok(std::io::Cursor::new(crate::resolve::strict_resolve_iri(
+        iri,
+        config.remote_body_limit,
+        config.local_only,
+    )?))
+}
+
+/// Convert any `Ontology` into a `ComponentMappedOntology`, for the shared
+/// shape behind every format's generic `write(ont: &O, ...)` -- converts
+/// once, then hands the result to that format's `write_cmo`.
+#[allow(dead_code)]
+pub(crate) fn into_component_mapped<A: ForIRI, AA: ForIndex<A>, O: Ontology<A>>(
+    ont: &O,
+) -> ComponentMappedOntology<A, AA> {
+    let mut cmo = ComponentMappedOntology::new();
+    cmo.extend(ont.iter().cloned());
+    cmo
+}
+
+/// A `StreamComponent::Prefix` for every entry in `mapping`, for `write_cmo`
+/// implementations that derive from `write_stream` (see
+/// `component_stream` below). `AA` carries no data here -- it's a plain
+/// type parameter so the returned iterator's `Item` matches whatever
+/// `AA` the caller is chaining/composing with (typically
+/// `AnnotatedComponent<A>`, via `component_stream`).
+#[allow(dead_code)]
+pub(crate) fn prefix_stream<'a, A: ForIRI, AA: ForIndex<A>>(
+    mapping: &'a PrefixMapping,
+) -> impl Iterator<Item = Result<StreamComponent<AA>>> + 'a {
+    mapping
+        .mappings()
+        .map(|(name, iri)| Ok(StreamComponent::Prefix(name.to_string(), iri.to_string())))
+}
+
+/// `ont`'s components, in their already-correctly-kind-ordered
+/// `ComponentMappedOntology` iteration order (see "Fix the ordering bug"
+/// in the design notes), as a `StreamComponent` stream for `write_cmo`
+/// implementations that derive from `write_stream`. Fixed to
+/// `AnnotatedComponent<A>` regardless of the source ontology's own `AA`,
+/// matching `StreamComponent`'s "`AA = AnnotatedComponent<A>` for now"
+/// position -- each component is cloned out (`AnnotatedComponent<A>` is
+/// `Clone`) rather than yielded by reference.
+#[allow(dead_code)]
+pub(crate) fn component_stream<'a, A: ForIRI, AA: ForIndex<A>>(
+    ont: &'a ComponentMappedOntology<A, AA>,
+) -> impl Iterator<Item = Result<StreamComponent<AnnotatedComponent<A>>>> + 'a {
+    ont.iter()
+        .cloned()
+        .map(|ac| Ok(StreamComponent::Component(ac)))
+}
+
 impl<A: ForIRI, AA: ForIndex<A>> ParserOutput<A, AA> {
     pub fn decompose(
         self,
@@ -472,6 +532,71 @@ mod tests {
         let pm = curie::PrefixMapping::default();
         let out: ParserOutput<std::rc::Rc<str>, Idx> = ParserOutput::omn((o, pm));
         assert!(matches!(out, ParserOutput::OMNParser(_, _)));
+    }
+
+    #[test]
+    fn into_component_mapped_carries_every_component() {
+        use super::*;
+        use crate::model::{Build, DeclareClass, MutableOntology, RcStr};
+        use crate::ontology::set::SetOntology;
+
+        let b = Build::new_rc();
+        let mut so: SetOntology<RcStr> = SetOntology::new_rc();
+        so.insert(DeclareClass(b.class("http://example.com/A")));
+
+        let cmo: ComponentMappedOntology<RcStr, crate::model::RcAnnotatedComponent> =
+            into_component_mapped(&so);
+        assert_eq!(cmo.iter().count(), 1);
+    }
+
+    #[test]
+    fn prefix_stream_then_component_stream_matches_write_cmo_composition() {
+        use super::*;
+        use crate::model::{
+            AnnotatedComponent, Build, DeclareClass, MutableOntology, RcAnnotatedComponent, RcStr,
+        };
+        use crate::ontology::set::SetOntology;
+
+        let b = Build::new_rc();
+        let mut so: SetOntology<RcStr> = SetOntology::new_rc();
+        so.insert(DeclareClass(b.class("http://example.com/A")));
+        let cmo: ComponentMappedOntology<RcStr, RcAnnotatedComponent> = into_component_mapped(&so);
+
+        let mut mapping = curie::PrefixMapping::default();
+        mapping.add_prefix("ex", "http://example.com/").unwrap();
+
+        // OFN/OMN's composition order (Prefix before components); OWX
+        // instead splits component_stream around prefix_stream to put
+        // OntologyID first -- see the design notes. component_stream
+        // always yields plain AnnotatedComponent<A> (not the source
+        // ontology's own AA), so prefix_stream's own AA must match that
+        // to chain, not RcAnnotatedComponent.
+        let items: std::result::Result<Vec<_>, _> =
+            prefix_stream::<RcStr, AnnotatedComponent<RcStr>>(&mapping)
+                .chain(component_stream(&cmo))
+                .collect();
+        let items = items.unwrap();
+
+        assert!(
+            matches!(&items[0], StreamComponent::Prefix(p, i) if p == "ex" && i == "http://example.com/")
+        );
+        assert!(matches!(&items[1], StreamComponent::Component(_)));
+        assert_eq!(items.len(), 2);
+    }
+
+    #[test]
+    fn resolve_doc_iri_surfaces_the_underlying_resolve_error() {
+        use super::*;
+        use crate::model::Build;
+
+        let b = Build::new_rc();
+        let config = ParserConfiguration::new(&b);
+        let iri = b.iri("file:///no/such/path/does-not-exist.owl");
+
+        // Exercises the plumbing (remote_body_limit/local_only threaded
+        // through), not network access -- a nonexistent local path is
+        // enough to confirm the error surfaces rather than panicking.
+        assert!(resolve_doc_iri(&iri, &config).is_err());
     }
 
     // Ensure bubo exists in the dev location during tests
