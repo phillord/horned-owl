@@ -35,7 +35,7 @@ pub(crate) fn matcher(matches: &ArgMatches) -> Result<(), HornedError> {
 
     let b = Build::new();
     let (_ont, incomplete): (ConcreteRDFOntology<RcStr, RcAnnotatedComponent>, _) =
-        horned_owl::io::rdf::reader::read(
+        horned_owl::io::rdf::reader::read_to_rdf_ontology(
             &mut BufReader::new(File::open(Path::new(input))?),
             parser_config(matches, &b).into(),
         )?;
