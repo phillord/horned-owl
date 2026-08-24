@@ -262,7 +262,7 @@ pub fn read<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>
 // Returns the import closure of an Ontology and IncompleteParse
 // report found at a given IRI or an error
 #[allow(clippy::type_complexity)]
-pub fn read_closure<
+pub fn read_to_closure<
     A: ForIRI,
     AA: ForIndex<A>,
     O: RDFOntology<A, AA>,
@@ -303,13 +303,13 @@ mod test {
     // import-property.owl should parse completely with full parse so
     // is a good test.
     #[test]
-    fn test_read_closure() {
+    fn test_read_to_closure() {
         let path = Path::new("src/ont/owl-rdf/withimport/import-property.owl");
         let b = Build::new_rc();
         let iri = path_to_file_iri(&b, path);
 
         let v: Vec<(ConcreteRcRDFOntology, _)> =
-            read_closure(&iri, ParserConfiguration::new(&b).into()).unwrap();
+            read_to_closure(&iri, ParserConfiguration::new(&b).into()).unwrap();
         let v: Vec<SetOntology<_>> = v
             .into_iter()
             .map(|(rdfo, ic)| {
@@ -345,7 +345,7 @@ mod test {
     // out of the box); the XML structure/escaping is 100% real
     // `catalogIndex()` output.
     #[test]
-    fn test_read_closure_relocated_import_fails_without_catalog() {
+    fn test_read_to_closure_relocated_import_fails_without_catalog() {
         let path = Path::new("src/ont/owl-rdf/withcatalog/import-property.owl");
         let b = Build::new_rc();
         let iri = path_to_file_iri(&b, path);
@@ -359,7 +359,7 @@ mod test {
             },
             format: None,
         };
-        let result: Result<Vec<(ConcreteRcRDFOntology, _)>, _> = read_closure(&iri, config);
+        let result: Result<Vec<(ConcreteRcRDFOntology, _)>, _> = read_to_closure(&iri, config);
         assert!(
             result.is_err(),
             "expected resolution to fail without a catalog, since the import was moved out of \
@@ -368,7 +368,7 @@ mod test {
     }
 
     #[test]
-    fn test_read_closure_relocated_import_succeeds_with_catalog() {
+    fn test_read_to_closure_relocated_import_succeeds_with_catalog() {
         let path = Path::new("src/ont/owl-rdf/withcatalog/import-property.owl");
         let catalog_path = Path::new("src/ont/owl-rdf/withcatalog/catalog-v001.xml");
         let b = Build::new_rc();
@@ -384,7 +384,7 @@ mod test {
             format: None,
         };
 
-        let v: Vec<(ConcreteRcRDFOntology, _)> = read_closure(&iri, config).unwrap();
+        let v: Vec<(ConcreteRcRDFOntology, _)> = read_to_closure(&iri, config).unwrap();
         let v: Vec<SetOntology<_>> = v
             .into_iter()
             .map(|(rdfo, ic)| {
@@ -399,13 +399,13 @@ mod test {
     }
 
     #[test]
-    fn test_read_closure_with_viri() {
+    fn test_read_to_closure_with_viri() {
         let path = Path::new("src/ont/owl-rdf/withimport/import-property-by-viri.owl");
         let b = Build::new_rc();
         let iri = path_to_file_iri(&b, path);
 
         let v: Vec<(ConcreteRcRDFOntology, _)> =
-            read_closure(&iri, ParserConfiguration::new(&b).into()).unwrap();
+            read_to_closure(&iri, ParserConfiguration::new(&b).into()).unwrap();
         let v: Vec<SetOntology<_>> = v
             .into_iter()
             .map(|(rdfo, ic)| {
