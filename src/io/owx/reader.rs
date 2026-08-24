@@ -4,7 +4,7 @@ use quick_xml::name::ResolveResult;
 use quick_xml::name::ResolveResult::Bound;
 
 use crate::error::*;
-use crate::io::ParserConfiguration;
+use crate::io::{ParserConfiguration, StreamComponent};
 use crate::model::*;
 use crate::vocab::Facet;
 use crate::vocab::Namespace::*;
@@ -20,110 +20,174 @@ use quick_xml::events::BytesEnd;
 use quick_xml::events::BytesStart;
 use quick_xml::events::Event;
 
-struct Read<'a, A: ForIRI, R>
+struct Read<A: ForIRI, R, B: AsRef<Build<A>>>
 where
     R: BufRead,
 {
-    build: &'a Build<A>,
+    build: B,
     lax: bool,
     mapping: PrefixMapping,
     reader: NsReader<R>,
     base_iri: Option<String>,
+    _marker: std::marker::PhantomData<A>,
 }
 
+/// Streams an OWX document as `StreamComponent`s, one top-level `<Ontology>`
+/// child element at a time -- the streaming counterpart to [`read`]. Built
+/// directly on [`Read`]'s existing per-event parsing, just yielding at each
+/// point [`read`] used to call `ont.insert(...)`/loop again.
+pub struct Reader<A: ForIRI, R: BufRead, B: AsRef<Build<A>>> {
+    r: Read<A, R, B>,
+    buf: Vec<u8>,
+    done: bool,
+}
+
+impl<A: ForIRI, R: BufRead, B: AsRef<Build<A>>> Reader<A, R, B> {
+    /// A `Reader` over `bufread`. Does no I/O itself -- parsing starts on
+    /// the first call to `next()`.
+    pub fn new(bufread: R, config: ParserConfiguration<A, B>) -> Self {
+        Reader {
+            r: Read {
+                reader: NsReader::from_reader(bufread),
+                build: config.build,
+                lax: config.lax,
+                mapping: PrefixMapping::default(),
+                base_iri: None,
+                _marker: std::marker::PhantomData,
+            },
+            buf: Vec::new(),
+            done: false,
+        }
+    }
+
+    /// One pull's worth of work: read events until there's a `StreamComponent`
+    /// to yield, the `</Ontology>` close tag is reached (`Ok(None)`), or an
+    /// error occurs.
+    fn next_component(
+        &mut self,
+    ) -> Result<Option<StreamComponent<AnnotatedComponent<A>>>, HornedError> {
+        loop {
+            match self.r.reader.read_resolved_event_into(&mut self.buf)? {
+                (ref ns, Event::Start(ref e)) | (ref ns, Event::Empty(ref e)) if is_owl(ns) => {
+                    match e.local_name().as_ref() {
+                        b"Ontology" => {
+                            let s = get_attr_value_str(&mut self.r.reader, e, b"ontologyIRI")?;
+                            if let Some(s) = s {
+                                self.r.mapping.set_default(&s);
+                                self.r.base_iri = Some(s);
+                            }
+                            let iri = get_iri_value_for(&mut self.r, e, b"ontologyIRI")?;
+                            let viri = get_iri_value_for(&mut self.r, e, b"versionIRI")?;
+                            return Ok(Some(StreamComponent::Component(AnnotatedComponent::new(
+                                OntologyID { iri, viri },
+                                BTreeSet::new(),
+                            ))));
+                        }
+                        b"Prefix" => {
+                            let iri = get_attr_value_str(&mut self.r.reader, e, b"IRI")?;
+                            let prefix = get_attr_value_str(&mut self.r.reader, e, b"name")?;
+                            match (prefix, iri) {
+                                (Some(p), Some(i)) => {
+                                    let _ = self.r.mapping.add_prefix(&p, &i);
+                                    if p.is_empty() {
+                                        self.r.mapping.set_default(&i);
+                                    }
+                                    return Ok(Some(StreamComponent::Prefix(p, i)));
+                                }
+                                (None, _) => {
+                                    return Err(error_missing_attribute("IRI", &mut self.r));
+                                }
+                                (Some(_), None) => {
+                                    return Err(error_missing_attribute("name", &mut self.r));
+                                }
+                            }
+                        }
+                        b"Import" => {
+                            let iri = IRI::from_xml(&mut self.r, b"Import")?;
+                            return Ok(Some(StreamComponent::Component(AnnotatedComponent::new(
+                                Import(iri),
+                                BTreeSet::new(),
+                            ))));
+                        }
+                        _ => {
+                            let aa = AnnotatedComponent::from_start(&mut self.r, e)?;
+                            return Ok(Some(StreamComponent::Component(aa)));
+                        }
+                    }
+                }
+                (ref ns, Event::End(ref e)) if is_owl_name(ns, e, b"Ontology") => {
+                    return Ok(None);
+                }
+                (_, Event::Eof) => {
+                    return Err(error_eof(&self.r));
+                }
+                (_, Event::Text(ref t)) if !is_blank(t) && !self.r.lax => {
+                    return Err(error_unexpected_text(&mut self.r));
+                }
+                (_, Event::CData(ref t)) if !is_blank(t) && !self.r.lax => {
+                    return Err(error_unexpected_text(&mut self.r));
+                }
+                _ => {}
+            }
+        }
+    }
+}
+
+impl<A: ForIRI, R: BufRead, B: AsRef<Build<A>>> Iterator for Reader<A, R, B> {
+    type Item = crate::io::Result<StreamComponent<AnnotatedComponent<A>>>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.done {
+            return None;
+        }
+        match self.next_component() {
+            Ok(Some(item)) => Some(Ok(item)),
+            Ok(None) => {
+                self.done = true;
+                None
+            }
+            Err(e) => {
+                self.done = true;
+                Some(Err(e))
+            }
+        }
+    }
+}
+
+/// Stream `bufread` as `StreamComponent`s.
+pub fn read_to_stream<A: ForIRI, B: AsRef<Build<A>>, R: BufRead>(
+    bufread: R,
+    config: ParserConfiguration<A, B>,
+) -> Reader<A, R, B> {
+    Reader::new(bufread, config)
+}
+
+/// Read the whole of `bufread` into an `O`. Drains a [`Reader`] internally,
+/// so this is `read_to_stream` plus collecting every yielded item -- use
+/// `read_to_stream` directly for a large document where materializing the
+/// whole thing isn't necessary.
 pub fn read<A: ForIRI, B: AsRef<Build<A>>, O: MutableOntology<A> + Default, R: BufRead>(
     bufread: &mut R,
     config: ParserConfiguration<A, B>,
 ) -> Result<(O, PrefixMapping), HornedError> {
-    read_with_build(bufread, config)
-}
-
-pub fn read_with_build<
-    A: ForIRI,
-    B: AsRef<Build<A>>,
-    O: MutableOntology<A> + Default,
-    R: BufRead,
->(
-    bufread: R,
-    config: ParserConfiguration<A, B>,
-) -> Result<(O, PrefixMapping), HornedError> {
-    let reader: NsReader<R> = NsReader::from_reader(bufread);
+    let mut reader = Reader::new(bufread, config);
     let mut ont: O = Default::default();
-    let mapping = PrefixMapping::default();
-    let mut buf = Vec::new();
 
-    let mut r = Read {
-        reader,
-        build: config.build.as_ref(),
-        lax: config.lax,
-        mapping,
-        base_iri: None,
-    };
-
-    loop {
-        match r.reader.read_resolved_event_into(&mut buf)? {
-            (ref ns, Event::Start(ref e)) | (ref ns, Event::Empty(ref e)) if is_owl(ns) => {
-                match e.local_name().as_ref() {
-                    b"Ontology" => {
-                        let s = get_attr_value_str(&mut r.reader, e, b"ontologyIRI")?;
-                        if let Some(s) = s {
-                            r.mapping.set_default(&s);
-                            r.base_iri = Some(s);
-                        }
-
-                        ont.insert(OntologyID {
-                            iri: get_iri_value_for(&mut r, e, b"ontologyIRI")?,
-                            viri: get_iri_value_for(&mut r, e, b"versionIRI")?,
-                        });
-                    }
-                    b"Prefix" => {
-                        let iri = get_attr_value_str(&mut r.reader, e, b"IRI")?;
-                        let prefix = get_attr_value_str(&mut r.reader, e, b"name")?;
-                        match (prefix, iri) {
-                            (Some(p), Some(i)) => {
-                                let _ = r.mapping.add_prefix(&p, &i);
-                                if p.is_empty() {
-                                    r.mapping.set_default(&i);
-                                }
-                            }
-                            (None, _) => {
-                                return Err(error_missing_attribute("IRI", &mut r));
-                            }
-                            (Some(_), None) => {
-                                return Err(error_missing_attribute("name", &mut r));
-                            }
-                        }
-                    }
-                    b"Import" => {
-                        ont.insert(Import(IRI::from_xml(&mut r, b"Import")?));
-                    }
-                    _ => {
-                        let aa = AnnotatedComponent::from_start(&mut r, e)?;
-                        ont.insert(aa);
-                    }
-                }
+    for item in reader.by_ref() {
+        match item? {
+            StreamComponent::Component(aa) => {
+                ont.insert(aa);
             }
-            (ref ns, Event::End(ref e)) if is_owl_name(ns, e, b"Ontology") => {
-                break;
-            }
-            // this initially was in `read_event`.
-            (_, Event::Eof) => {
-                return Err(error_eof(&r));
-            }
-            (_, Event::Text(ref t)) if !is_blank(t) && !r.lax => {
-                return Err(error_unexpected_text(&mut r));
-            }
-            (_, Event::CData(ref t)) if !is_blank(t) && !r.lax => {
-                return Err(error_unexpected_text(&mut r));
-            }
-            _ => {}
+            // Already applied to `reader.r.mapping` as it was read.
+            StreamComponent::Prefix(..) => {}
         }
     }
-    Ok((ont, r.mapping))
+
+    Ok((ont, reader.r.mapping))
 }
 
-fn decode_expand_curie_maybe<'a, A: ForIRI, R: BufRead>(
-    r: &mut Read<A, R>,
+fn decode_expand_curie_maybe<'a, A: ForIRI, R: BufRead, B: AsRef<Build<A>>>(
+    r: &mut Read<A, R, B>,
     val: &'a [u8],
 ) -> Result<Cow<'a, str>, HornedError> {
     // Okay, so a lot of matching, but without this the borrow checker
@@ -158,8 +222,8 @@ fn decode_expand_curie_maybe<'a, A: ForIRI, R: BufRead>(
 }
 
 /// Expand a curie if there is an appropriate prefix
-fn expand_curie_maybe<'a, A: ForIRI, R: BufRead>(
-    r: &mut Read<A, R>,
+fn expand_curie_maybe<'a, A: ForIRI, R: BufRead, B: AsRef<Build<A>>>(
+    r: &mut Read<A, R, B>,
     val: Cow<'a, str>,
 ) -> Cow<'a, str> {
     match r.mapping.expand_curie_string(&val) {
@@ -180,8 +244,8 @@ fn expand_curie_maybe<'a, A: ForIRI, R: BufRead>(
 /// form; this does the same for the `<IRI>text</IRI>` *element content*
 /// form (see issue #226 -- the attribute path was fixed, this sibling
 /// path wasn't).
-fn expand_curie_or_base_maybe<'a, A: ForIRI, R: BufRead>(
-    r: &mut Read<A, R>,
+fn expand_curie_or_base_maybe<'a, A: ForIRI, R: BufRead, B: AsRef<Build<A>>>(
+    r: &mut Read<A, R, B>,
     val: Cow<'a, str>,
 ) -> Cow<'a, str> {
     if val.starts_with('#')
@@ -241,8 +305,8 @@ fn get_attr_value_str<R: BufRead>(
 }
 
 /// Returns, if present, the IRI for the given opening tag.
-fn get_iri_value<A: ForIRI, R: BufRead>(
-    r: &mut Read<A, R>,
+fn get_iri_value<A: ForIRI, R: BufRead, B: AsRef<Build<A>>>(
+    r: &mut Read<A, R, B>,
     event: &BytesStart,
 ) -> Result<Option<IRI<A>>, HornedError> {
     if let Some(raw) = get_attr_value_str(&mut r.reader, event, b"IRI")? {
@@ -258,15 +322,15 @@ fn get_iri_value<A: ForIRI, R: BufRead>(
         } else {
             expand_curie_maybe(r, Cow::Owned(raw))
         };
-        Ok(Some(r.build.iri(resolved)))
+        Ok(Some(r.build.as_ref().iri(resolved)))
     } else {
         get_iri_value_for(r, event, b"abbreviatedIRI")
     }
 }
 
 /// Returns, if present, the IRI included in the given attribute for the given opening tag.
-fn get_iri_value_for<A: ForIRI, R: BufRead>(
-    r: &mut Read<A, R>,
+fn get_iri_value_for<A: ForIRI, R: BufRead, B: AsRef<Build<A>>>(
+    r: &mut Read<A, R, B>,
     event: &BytesStart,
     iri_attr: &[u8],
 ) -> Result<Option<IRI<A>>, HornedError> {
@@ -278,7 +342,7 @@ fn get_iri_value_for<A: ForIRI, R: BufRead>(
                 let cow = Cow::Owned(st);
                 let x = expand_curie_maybe(r, cow);
                 // Into an iri
-                r.build.iri(
+                r.build.as_ref().iri(
                     // or a curie
                     x,
                 )
@@ -286,16 +350,16 @@ fn get_iri_value_for<A: ForIRI, R: BufRead>(
     )
 }
 
-fn decode_tag<A: ForIRI, R: BufRead>(
+fn decode_tag<A: ForIRI, R: BufRead, B: AsRef<Build<A>>>(
     tag: &[u8],
-    r: &mut Read<A, R>,
+    r: &mut Read<A, R, B>,
 ) -> Result<String, HornedError> {
     Ok(r.reader.decoder().decode(tag)?.to_string())
 }
 
-fn error_missing_end_tag<A: ForIRI, R: BufRead>(
+fn error_missing_end_tag<A: ForIRI, R: BufRead, B: AsRef<Build<A>>>(
     tag: &[u8],
-    r: &mut Read<A, R>,
+    r: &mut Read<A, R, B>,
     pos: u64,
 ) -> HornedError {
     match decode_tag(tag, r) {
@@ -304,37 +368,43 @@ fn error_missing_end_tag<A: ForIRI, R: BufRead>(
     }
 }
 
-fn error_missing_attribute<A: ForIRI, AT: Into<String>, R: BufRead>(
+fn error_missing_attribute<A: ForIRI, AT: Into<String>, R: BufRead, B: AsRef<Build<A>>>(
     attribute: AT,
-    r: &mut Read<A, R>,
+    r: &mut Read<A, R, B>,
 ) -> HornedError {
     let attribute = attribute.into();
     let pos = r.reader.buffer_position();
     invalid_at! {pos, "Missing Attribute: expected {attribute}"}
 }
 
-fn error_eof<A: ForIRI, R: BufRead>(r: &Read<A, R>) -> HornedError {
+fn error_eof<A: ForIRI, R: BufRead, B: AsRef<Build<A>>>(r: &Read<A, R, B>) -> HornedError {
     invalid_at! {r.reader.buffer_position(), "Unexpected EoF"}
 }
 
-fn error_unexpected_tag<A: ForIRI, R: BufRead>(tag: &[u8], r: &mut Read<A, R>) -> HornedError {
+fn error_unexpected_tag<A: ForIRI, R: BufRead, B: AsRef<Build<A>>>(
+    tag: &[u8],
+    r: &mut Read<A, R, B>,
+) -> HornedError {
     match decode_tag(tag, r) {
         Ok(tag) => invalid_at! {r.reader.buffer_position(), "Unexpected tag: found {tag}"},
         Err(e) => e,
     }
 }
 
-fn error_unexpected_end_tag<A: ForIRI, R: BufRead>(tag: &[u8], r: &mut Read<A, R>) -> HornedError {
+fn error_unexpected_end_tag<A: ForIRI, R: BufRead, B: AsRef<Build<A>>>(
+    tag: &[u8],
+    r: &mut Read<A, R, B>,
+) -> HornedError {
     match decode_tag(tag, r) {
         Ok(tag) => invalid_at! {r.reader.buffer_position(), "Unexpected end tag: expected {tag}"},
         Err(e) => e,
     }
 }
 
-fn error_unknown_entity<A: ForIRI, AA: Into<String>, R: BufRead>(
+fn error_unknown_entity<A: ForIRI, AA: Into<String>, R: BufRead, B: AsRef<Build<A>>>(
     kind: AA,
     found: &[u8],
-    r: &mut Read<A, R>,
+    r: &mut Read<A, R, B>,
 ) -> HornedError {
     match decode_tag(found, r) {
         Ok(found) => {
@@ -344,14 +414,19 @@ fn error_unknown_entity<A: ForIRI, AA: Into<String>, R: BufRead>(
     }
 }
 
-fn error_missing_element<A: ForIRI, R: BufRead>(tag: &[u8], r: &mut Read<A, R>) -> HornedError {
+fn error_missing_element<A: ForIRI, R: BufRead, B: AsRef<Build<A>>>(
+    tag: &[u8],
+    r: &mut Read<A, R, B>,
+) -> HornedError {
     match decode_tag(tag, r) {
         Ok(tag) => invalid_at! {r.reader.buffer_position(), "Missing Element: expected {tag}"},
         Err(e) => e,
     }
 }
 
-fn error_unexpected_text<A: ForIRI, R: BufRead>(r: &mut Read<A, R>) -> HornedError {
+fn error_unexpected_text<A: ForIRI, R: BufRead, B: AsRef<Build<A>>>(
+    r: &mut Read<A, R, B>,
+) -> HornedError {
     invalid_at! {r.reader.buffer_position(), "Unexpected text content"}
 }
 
@@ -382,14 +457,17 @@ fn is_owl_name(res: &ResolveResult, e: &BytesEnd, tag: &[u8]) -> bool {
 }
 
 trait FromStart<A: ForIRI>: Sized {
-    fn from_start<R: BufRead>(r: &mut Read<A, R>, e: &BytesStart) -> Result<Self, HornedError>;
+    fn from_start<R: BufRead, B: AsRef<Build<A>>>(
+        r: &mut Read<A, R, B>,
+        e: &BytesStart,
+    ) -> Result<Self, HornedError>;
 }
 
 macro_rules! from_start {
     ($type:ident, $r:ident, $e:ident, $body:tt) => {
         impl<A: ForIRI> FromStart<A> for $type<A> {
-            fn from_start<R: BufRead>(
-                $r: &mut Read<A, R>,
+            fn from_start<R: BufRead, B: AsRef<Build<A>>>(
+                $r: &mut Read<A, R, B>,
                 $e: &BytesStart,
             ) -> Result<$type<A>, HornedError>
                 $body
@@ -398,8 +476,8 @@ macro_rules! from_start {
 }
 
 /// Potentially unbalanced
-fn named_entity_from_start<A, R, T>(
-    r: &mut Read<A, R>,
+fn named_entity_from_start<A, R, T, B>(
+    r: &mut Read<A, R, B>,
     e: &BytesStart,
     tag: &[u8],
 ) -> Result<T, HornedError>
@@ -407,6 +485,7 @@ where
     A: ForIRI,
     R: BufRead,
     T: From<IRI<A>>,
+    B: AsRef<Build<A>>,
 {
     if let Some(iri) = get_iri_value(r, e)? {
         if e.local_name().as_ref() == tag {
@@ -423,8 +502,8 @@ where
     Err(error_missing_element(b"IRI", r))
 }
 
-fn from_start<A: ForIRI, R: BufRead, T: FromStart<A>>(
-    r: &mut Read<A, R>,
+fn from_start<A: ForIRI, R: BufRead, T: FromStart<A>, B: AsRef<Build<A>>>(
+    r: &mut Read<A, R, B>,
     e: &BytesStart,
 ) -> Result<T, HornedError> {
     T::from_start(r, e)
@@ -510,8 +589,8 @@ from_start! {
     }
 }
 
-fn axiom_from_start<A: ForIRI, R: BufRead>(
-    r: &mut Read<A, R>,
+fn axiom_from_start<A: ForIRI, R: BufRead, B: AsRef<Build<A>>>(
+    r: &mut Read<A, R, B>,
     e: &BytesStart,
     axiom_kind: &[u8],
 ) -> Result<Component<A>, HornedError> {
@@ -679,8 +758,13 @@ fn axiom_from_start<A: ForIRI, R: BufRead>(
     })
 }
 
-fn from_start_to_end<A: ForIRI, R: BufRead, T: FromStart<A> + std::fmt::Debug>(
-    r: &mut Read<A, R>,
+fn from_start_to_end<
+    A: ForIRI,
+    R: BufRead,
+    T: FromStart<A> + std::fmt::Debug,
+    B: AsRef<Build<A>>,
+>(
+    r: &mut Read<A, R, B>,
     e: &BytesStart,
     end_tag: &[u8],
 ) -> Result<Vec<T>, HornedError> {
@@ -689,8 +773,8 @@ fn from_start_to_end<A: ForIRI, R: BufRead, T: FromStart<A> + std::fmt::Debug>(
 }
 
 // Keep reading entities, till end_tag is reached
-fn till_end<A: ForIRI, R: BufRead, T: FromStart<A> + std::fmt::Debug>(
-    r: &mut Read<A, R>,
+fn till_end<A: ForIRI, R: BufRead, T: FromStart<A> + std::fmt::Debug, B: AsRef<Build<A>>>(
+    r: &mut Read<A, R, B>,
     end_tag: &[u8],
 ) -> Result<Vec<T>, HornedError> {
     let operands: Vec<T> = Vec::new();
@@ -698,8 +782,8 @@ fn till_end<A: ForIRI, R: BufRead, T: FromStart<A> + std::fmt::Debug>(
 }
 
 // Keep reading entities, till end_tag is reached
-fn till_end_with<A: ForIRI, R: BufRead, T: FromStart<A> + std::fmt::Debug>(
-    r: &mut Read<A, R>,
+fn till_end_with<A: ForIRI, R: BufRead, T: FromStart<A> + std::fmt::Debug, B: AsRef<Build<A>>>(
+    r: &mut Read<A, R, B>,
     end_tag: &[u8],
     mut operands: Vec<T>,
 ) -> Result<Vec<T>, HornedError> {
@@ -733,8 +817,8 @@ fn till_end_with<A: ForIRI, R: BufRead, T: FromStart<A> + std::fmt::Debug>(
 }
 
 #[allow(clippy::type_complexity)]
-fn object_cardinality_restriction<A: ForIRI, R: BufRead>(
-    r: &mut Read<A, R>,
+fn object_cardinality_restriction<A: ForIRI, R: BufRead, B: AsRef<Build<A>>>(
+    r: &mut Read<A, R, B>,
     e: &BytesStart,
     end_tag: &[u8],
 ) -> Result<(u32, ObjectPropertyExpression<A>, Box<ClassExpression<A>>), HornedError> {
@@ -749,15 +833,15 @@ fn object_cardinality_restriction<A: ForIRI, R: BufRead>(
             .map_err(|_s| HornedError::invalid("Failed to parse int"))?,
         ope,
         Box::new(match vce.len() {
-            0 => r.build.class(OWL::Thing.as_ref()).into(),
+            0 => r.build.as_ref().class(OWL::Thing.as_ref()).into(),
             1 => vce.remove(0),
             _ => return Err(error_unexpected_tag(end_tag, r)),
         }),
     ))
 }
 
-fn data_cardinality_restriction<A: ForIRI, R: BufRead>(
-    r: &mut Read<A, R>,
+fn data_cardinality_restriction<A: ForIRI, R: BufRead, B: AsRef<Build<A>>>(
+    r: &mut Read<A, R, B>,
     e: &BytesStart,
     end_tag: &[u8],
 ) -> Result<(u32, DataProperty<A>, DataRange<A>), HornedError> {
@@ -772,7 +856,11 @@ fn data_cardinality_restriction<A: ForIRI, R: BufRead>(
             .map_err(|_s| HornedError::invalid("Failed to parse int"))?,
         dp,
         match vdr.len() {
-            0 => r.build.datatype(OWL2Datatype::Literal.as_ref()).into(),
+            0 => r
+                .build
+                .as_ref()
+                .datatype(OWL2Datatype::Literal.as_ref())
+                .into(),
             1 => vdr.remove(0),
             _ => return Err(error_unexpected_tag(end_tag, r)),
         },
@@ -1006,14 +1094,13 @@ from_start! {
 }
 
 impl<A: ForIRI> FromStart<A> for AnonymousIndividual<A> {
-    fn from_start<R: BufRead>(
-        r: &mut Read<A, R>,
+    fn from_start<R: BufRead, B: AsRef<Build<A>>>(
+        r: &mut Read<A, R, B>,
         e: &BytesStart,
     ) -> Result<AnonymousIndividual<A>, HornedError> {
-        let ai: AnonymousIndividual<_> = r.build.anon(
-            get_attr_value_str(&mut r.reader, e, b"nodeID")?
-                .ok_or_else(|| error_missing_attribute("nodeID Expected", r))?,
-        );
+        let node_id = get_attr_value_str(&mut r.reader, e, b"nodeID")?
+            .ok_or_else(|| error_missing_attribute("nodeID Expected", r))?;
+        let ai: AnonymousIndividual<_> = r.build.as_ref().anon(node_id);
         Ok(ai)
     }
 }
@@ -1175,12 +1262,15 @@ from_start! {
 }
 
 trait FromXML<A: ForIRI>: Sized {
-    fn from_xml<R: BufRead>(newread: &mut Read<A, R>, end_tag: &[u8]) -> Result<Self, HornedError> {
+    fn from_xml<R: BufRead, B: AsRef<Build<A>>>(
+        newread: &mut Read<A, R, B>,
+        end_tag: &[u8],
+    ) -> Result<Self, HornedError> {
         Self::from_xml_nc(newread, end_tag)
     }
 
-    fn from_xml_nc<R: BufRead>(
-        newread: &mut Read<A, R>,
+    fn from_xml_nc<R: BufRead, B: AsRef<Build<A>>>(
+        newread: &mut Read<A, R, B>,
         end_tag: &[u8],
     ) -> Result<Self, HornedError>;
 }
@@ -1188,8 +1278,8 @@ trait FromXML<A: ForIRI>: Sized {
 macro_rules! from_xml {
     ($type:ident, $r:ident, $end:ident, $body:tt) => {
         impl<A: ForIRI> FromXML<A> for $type<A> {
-            fn from_xml_nc<R: BufRead>(
-                $r: &mut Read<A, R>,
+            fn from_xml_nc<R: BufRead, B: AsRef<Build<A>>>(
+                $r: &mut Read<A, R, B>,
                 $end: &[u8],
             ) -> Result<$type<A>, HornedError> {
                 $body
@@ -1253,7 +1343,9 @@ from_xml! {
 
 }
 
-fn from_next<A: ForIRI, R: BufRead, T: FromStart<A>>(r: &mut Read<A, R>) -> Result<T, HornedError> {
+fn from_next<A: ForIRI, R: BufRead, T: FromStart<A>, B: AsRef<Build<A>>>(
+    r: &mut Read<A, R, B>,
+) -> Result<T, HornedError> {
     let mut buf = Vec::new();
     loop {
         let e = r.reader.read_resolved_event_into(&mut buf)?;
@@ -1275,8 +1367,8 @@ fn from_next<A: ForIRI, R: BufRead, T: FromStart<A>>(r: &mut Read<A, R>) -> Resu
     }
 }
 
-fn discard_till_start<A: ForIRI, R: BufRead>(
-    r: &mut Read<A, R>,
+fn discard_till_start<A: ForIRI, R: BufRead, B: AsRef<Build<A>>>(
+    r: &mut Read<A, R, B>,
     start: &[u8],
 ) -> Result<(), HornedError> {
     let pos = r.reader.buffer_position();
@@ -1296,7 +1388,10 @@ fn discard_till_start<A: ForIRI, R: BufRead>(
     }
 }
 
-fn discard_till<A: ForIRI, R: BufRead>(r: &mut Read<A, R>, end: &[u8]) -> Result<(), HornedError> {
+fn discard_till<A: ForIRI, R: BufRead, B: AsRef<Build<A>>>(
+    r: &mut Read<A, R, B>,
+    end: &[u8],
+) -> Result<(), HornedError> {
     let pos = r.reader.buffer_position();
     let mut buf = Vec::new();
     loop {
@@ -1436,8 +1531,8 @@ from_xml! {IRI, r, end,
                 let e = r.reader.read_resolved_event_into(&mut buf)?;
                 match e {
                     (ref _ns,Event::Text(ref e)) => {
-                        iri = Some(r.build.iri
-                                   (decode_expand_curie_maybe(r, e)?));
+                        let expanded = decode_expand_curie_maybe(r, e)?;
+                        iri = Some(r.build.as_ref().iri(expanded));
                     },
                     (ref ns, Event::End(ref e))
                         if is_owl_name(ns, e, end) =>
@@ -1458,6 +1553,7 @@ from_xml! {IRI, r, end,
 pub mod test {
     use super::*;
     use crate::ontology::component_mapped::ComponentMappedOntology;
+    use crate::ontology::set::SetOntology;
     use std::collections::HashMap;
 
     pub fn read<R: BufRead>(
@@ -1469,7 +1565,7 @@ pub mod test {
         ),
         HornedError,
     > {
-        read_with_build(bufread, Default::default())
+        super::read(bufread, Default::default())
     }
 
     pub fn read_ok<R: BufRead>(
@@ -1482,6 +1578,63 @@ pub mod test {
         assert!(r.is_ok(), "Expected ontology, got failure:{:?}", r.err());
         let (o, m) = r.ok().unwrap();
         (o, m)
+    }
+
+    #[test]
+    fn read_to_stream_yields_ontology_id_then_prefixes() {
+        let ont_s = include_str!("../../ont/owl-xml/ont.owx");
+        let b = Build::new_rc();
+        let items: Vec<_> = super::read_to_stream(ont_s.as_bytes(), ParserConfiguration::new(&b))
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+
+        // The Ontology start tag (with its ontologyIRI/versionIRI attributes)
+        // comes first in document order, before any of its <Prefix> children.
+        assert!(matches!(
+            &items[0],
+            StreamComponent::Component(ac) if matches!(&ac.component, Component::OntologyID(_))
+        ));
+        let prefixes: Vec<_> = items[1..]
+            .iter()
+            .map(|item| match item {
+                StreamComponent::Prefix(p, i) => (p.clone(), i.clone()),
+                other => panic!("expected a Prefix item, got {other:?}"),
+            })
+            .collect();
+        assert_eq!(prefixes.len(), 6);
+        assert!(prefixes.contains(&("o".to_string(), "http://www.example.com/iri#".to_string())));
+    }
+
+    #[test]
+    fn read_to_stream_agrees_with_read() {
+        let ont_s = include_str!("../../ont/owl-xml/ont.owx");
+        let b = Build::new_rc();
+
+        let (drained, streamed_mapping): (SetOntology<RcStr>, _) =
+            super::read_to_stream(ont_s.as_bytes(), ParserConfiguration::new(&b)).fold(
+                (SetOntology::new_rc(), PrefixMapping::default()),
+                |(mut ont, mut mapping), item| {
+                    match item.unwrap() {
+                        StreamComponent::Component(ac) => {
+                            ont.insert(ac);
+                        }
+                        StreamComponent::Prefix(p, i) => {
+                            let _ = mapping.add_prefix(&p, &i);
+                        }
+                    }
+                    (ont, mapping)
+                },
+            );
+
+        let (via_read, read_mapping): (ComponentMappedOntology<RcStr, RcAnnotatedComponent>, _) =
+            read_ok(&mut ont_s.as_bytes());
+        let via_read: SetOntology<RcStr> = via_read.into();
+
+        assert_eq!(drained, via_read);
+        assert_eq!(
+            streamed_mapping.mappings().collect::<HashMap<_, _>>(),
+            read_mapping.mappings().collect::<HashMap<_, _>>()
+        );
     }
 
     #[test]
@@ -2632,7 +2785,7 @@ pub mod test {
                 PrefixMapping,
             ),
             HornedError,
-        > = read_with_build(&mut BROKEN_OWX.as_bytes(), Default::default());
+        > = super::read(&mut BROKEN_OWX.as_bytes(), Default::default());
 
         assert!(r.is_err(), "Expected a parse error, got {r:?}");
     }
@@ -2647,7 +2800,7 @@ pub mod test {
                 PrefixMapping,
             ),
             HornedError,
-        > = read_with_build(&mut BROKEN_OWX.as_bytes(), Default::default());
+        > = super::read(&mut BROKEN_OWX.as_bytes(), Default::default());
 
         match r {
             Err(HornedError::ValidityError(_, location)) => {
@@ -2672,7 +2825,7 @@ pub mod test {
                 PrefixMapping,
             ),
             HornedError,
-        > = read_with_build(&mut BROKEN_OWX.as_bytes(), config);
+        > = super::read(&mut BROKEN_OWX.as_bytes(), config);
 
         assert!(r.is_ok(), "Expected ontology, got failure: {:?}", r.err());
     }
@@ -2692,7 +2845,7 @@ pub mod test {
     </Declaration>
 </Ontology>"##;
         let (ont, _): (ComponentMappedOntology<RcStr, RcAnnotatedComponent>, _) =
-            read_with_build(&mut owx.as_bytes(), Default::default()).unwrap();
+            super::read(&mut owx.as_bytes(), Default::default()).unwrap();
         let dc = ont.i().declare_class().next().unwrap();
         assert_eq!(dc.0.0.to_string(), "http://ontriscal#MyClass");
     }
@@ -2721,7 +2874,7 @@ pub mod test {
     </AnnotationAssertion>
 </Ontology>"##;
         let (ont, _): (ComponentMappedOntology<RcStr, RcAnnotatedComponent>, _) =
-            read_with_build(&mut owx.as_bytes(), Default::default()).unwrap();
+            super::read(&mut owx.as_bytes(), Default::default()).unwrap();
         let assertion = ont.i().annotation_assertion().next().unwrap();
         assert_eq!(assertion.subject.to_string(), "http://ontriscal#MyClass");
     }
@@ -2740,7 +2893,7 @@ pub mod test {
     </Declaration>
 </Ontology>"##;
         let (ont, _): (ComponentMappedOntology<RcStr, RcAnnotatedComponent>, _) =
-            read_with_build(&mut owx.as_bytes(), Default::default()).unwrap();
+            super::read(&mut owx.as_bytes(), Default::default()).unwrap();
         let dc = ont.i().declare_class().next().unwrap();
         assert_eq!(dc.0.0.to_string(), "http://ex.com/o#Alzheimer's_Disease");
     }
@@ -2763,7 +2916,7 @@ pub mod test {
     </AnnotationAssertion>
 </Ontology>"##;
         let (ont, _): (ComponentMappedOntology<RcStr, RcAnnotatedComponent>, _) =
-            read_with_build(&mut owx.as_bytes(), Default::default()).unwrap();
+            super::read(&mut owx.as_bytes(), Default::default()).unwrap();
         let assertion = ont.i().annotation_assertion().next().unwrap();
         assert_eq!(
             assertion.subject.to_string(),
