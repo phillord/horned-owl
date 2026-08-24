@@ -2,6 +2,7 @@ use curie::PrefixMapping;
 
 use crate::error::HornedError;
 use crate::io::shrink_iri_longest_match;
+use crate::io::{StreamComponent, StreamOntology};
 use crate::model::*;
 use crate::ontology::component_mapped::ComponentMappedOntology;
 use crate::ontology::indexed::ForIndex;
@@ -17,28 +18,139 @@ use quick_xml::events::Event;
 use std::collections::BTreeSet;
 use std::io::Write as StdWrite;
 
-/// Write an Ontology to `write`, using the given PrefixMapping
+/// Write any `Ontology` to `write`, using the given `PrefixMapping`.
 ///
 /// The ontology is written in OWL
-/// [XML](https://www.w3.org/TR/owl2-xml-serialization/) syntax.
-pub fn write<A: ForIRI, AA: ForIndex<A>, W: StdWrite>(
+/// [XML](https://www.w3.org/TR/owl2-xml-serialization/) syntax. Converts
+/// to a `ComponentMappedOntology` then defers to [`write_cmo`]; a caller
+/// that already has one built should call `write_cmo` directly instead.
+pub fn write<A: ForIRI, O: Ontology<A>, W: StdWrite>(
+    write: W,
+    ont: &O,
+    mapping: Option<&PrefixMapping>,
+) -> Result<W, HornedError> {
+    let cmo: ComponentMappedOntology<A, AnnotatedComponent<A>> =
+        crate::io::into_component_mapped(ont);
+    write_cmo(write, &cmo, mapping)
+}
+
+/// Write a `ComponentMappedOntology` to `write`, using the given
+/// `PrefixMapping` -- the concrete, zero-conversion entry point [`write`]
+/// defers to.
+pub fn write_cmo<A: ForIRI, AA: ForIndex<A>, W: StdWrite>(
     write: W,
     ont: &ComponentMappedOntology<A, AA>,
     mapping: Option<&PrefixMapping>,
 ) -> Result<W, HornedError> {
-    let mut writer = Writer::new_with_indent(write, b' ', 4);
-
-    // Ensure we have a prefix mapping; the default is a no-op and
-    // it's easier than checking every time.
     let default_mapper = PrefixMapping::default();
-    let mapping = match mapping {
-        Some(m) => m,
-        None => &default_mapper,
-    };
+    let mapping = mapping.unwrap_or(&default_mapper);
 
-    render_ont(ont, &mut writer, mapping)?;
+    let id = ont.i().the_ontology_id_or_default();
+    let id_item = StreamComponent::Component(AnnotatedComponent::new(id, BTreeSet::new()));
 
-    Ok(writer.into_inner())
+    write_stream(
+        write,
+        std::iter::once(Ok(id_item))
+            .chain(crate::io::prefix_stream(mapping))
+            .chain(crate::io::component_stream(ont)),
+    )
+}
+
+/// Write `components` as an OWL/XML `<Ontology>...</Ontology>` document.
+///
+/// `write_stream` puts specific demands on the ordering of `components`
+/// and cannot guarantee correct output if these are not met: the
+/// `OntologyID` must come first, then `Prefix`es, then every other
+/// component. Other components are written in the same order given. Use
+/// [`write`] or [`write_cmo`] instead if this ordering can't be
+/// guaranteed.
+pub fn write_stream<A: ForIRI, AA: ForIndex<A>, W: StdWrite>(
+    write: W,
+    mut components: impl StreamOntology<A, AA>,
+) -> Result<W, HornedError> {
+    let mut w = Writer::new_with_indent(write, b' ', 4);
+    w.write_event(Event::Decl(BytesDecl::new("1.0", None, None)))?;
+
+    let mut elem = BytesStart::new("Ontology");
+    elem.push_attribute((b"xmlns" as &[u8], OWL.as_bytes()));
+
+    let first = components.next().transpose()?;
+    let mut pending = None;
+    let mut saw_ontology_id = false;
+    if let Some(StreamComponent::Component(ref ac)) = first {
+        let ac: &AnnotatedComponent<A> = ac.borrow();
+        if let Component::OntologyID(id) = &ac.component {
+            saw_ontology_id = true;
+            iri_maybe(&mut elem, "xml:base", &id.iri);
+            iri_maybe(&mut elem, "ontologyIRI", &id.iri);
+            iri_maybe(&mut elem, "versionIRI", &id.viri);
+        } else {
+            pending = first;
+        }
+    } else {
+        pending = first;
+    }
+
+    // Buffer the leading run of `Prefix` items, if any, so each can also
+    // become an `xmlns:` attribute on the opening tag below. The
+    // empty/default CURIE prefix (`name=""`) has no valid `xmlns:`
+    // spelling (`xmlns:` with no local name is not legal XML), so it's
+    // skipped here; it's still available for CURIE expansion via the
+    // `<Prefix name="" IRI="..."/>` element written further down.
+    let mut mapping = PrefixMapping::default();
+    let mut prefixes: Vec<(String, String)> = Vec::new();
+    if saw_ontology_id {
+        loop {
+            match components.next().transpose()? {
+                Some(StreamComponent::Prefix(name, iri)) => {
+                    let _ = mapping.add_prefix(&name, &iri);
+                    if name.is_empty() {
+                        mapping.set_default(&iri);
+                    } else {
+                        elem.push_attribute((format!("xmlns:{name}").as_bytes(), iri.as_bytes()));
+                    }
+                    prefixes.push((name, iri));
+                }
+                other => {
+                    pending = other;
+                    break;
+                }
+            }
+        }
+    }
+
+    let elem_end = elem.to_end();
+    let ev_end = Event::End(elem_end).into_owned();
+    w.write_event(Event::Start(elem))?;
+
+    for (name, iri) in &prefixes {
+        let mut prefix = BytesStart::new("Prefix");
+        prefix.push_attribute(("name", &name[..]));
+        prefix.push_attribute(("IRI", &iri[..]));
+        w.write_event(Event::Empty(prefix))?;
+    }
+
+    for item in pending.into_iter().map(Ok).chain(components) {
+        match item? {
+            StreamComponent::Prefix(name, iri) => {
+                let _ = mapping.add_prefix(&name, &iri);
+                if name.is_empty() {
+                    mapping.set_default(&iri);
+                }
+                let mut prefix = BytesStart::new("Prefix");
+                prefix.push_attribute(("name", &name[..]));
+                prefix.push_attribute(("IRI", &iri[..]));
+                w.write_event(Event::Empty(prefix))?;
+            }
+            StreamComponent::Component(ac) => {
+                let ac: &AnnotatedComponent<A> = ac.borrow();
+                ac.render(&mut w, &mapping)?;
+            }
+        }
+    }
+
+    w.write_event(ev_end)?;
+    Ok(w.into_inner())
 }
 
 /// Add an IRI to BytesStart as a element if necessary
@@ -223,57 +335,6 @@ macro_rules! content0 {
     ($type:ident) => {
         contents! {$type, self, &self.0}
     };
-}
-
-fn render_ont<A: ForIRI, AA: ForIndex<A>, W>(
-    o: &ComponentMappedOntology<A, AA>,
-    w: &mut Writer<W>,
-    m: &PrefixMapping,
-) -> Result<(), HornedError>
-where
-    W: StdWrite,
-{
-    // w.write_event(Event::Decl(BytesDecl::new(&b"1.0"[..], None, None)))?;
-    w.write_event(Event::Decl(BytesDecl::new("1.0", None, None)))?;
-
-    // let mut elem = BytesStart::owned_name("Ontology");
-    let mut elem = BytesStart::new("Ontology");
-    elem.push_attribute((b"xmlns" as &[u8], OWL.as_bytes()));
-
-    let id = o.i().the_ontology_id_or_default();
-    iri_maybe(&mut elem, "xml:base", &id.iri);
-
-    // Render XML Namespaces. The empty/default CURIE prefix (`name=""`) has
-    // no valid `xmlns:`-attribute spelling -- `xmlns:` with no local name
-    // is not legal XML -- and the default namespace is already bound to OWL
-    // above, so skip it here; it's still available for CURIE expansion via
-    // the `<Prefix name="" IRI="..."/>` element rendered separately below.
-    for pre in m.mappings() {
-        if pre.0.is_empty() {
-            continue;
-        }
-        elem.push_attribute((format!("xmlns:{}", pre.0).as_bytes(), pre.1.as_bytes()));
-    }
-    iri_maybe(&mut elem, "ontologyIRI", &id.iri);
-    iri_maybe(&mut elem, "versionIRI", &id.viri);
-
-    let elem_end = elem.to_end();
-    let ev_end = Event::End(elem_end).into_owned();
-
-    w.write_event(Event::Start(elem))?;
-
-    // let elem = BytesEnd::owned(b"Ontology".to_vec());
-    m.render(w, m)?;
-
-    for axk in ComponentKind::all_kinds() {
-        for ax in o.i().component_for_kind(axk) {
-            ax.render(w, m)?;
-        }
-    }
-
-    w.write_event(ev_end)?;
-
-    Ok(())
 }
 
 // Render Impl for container and collection types
