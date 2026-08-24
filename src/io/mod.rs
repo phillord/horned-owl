@@ -270,7 +270,6 @@ pub(crate) fn resolve_doc_iri<A: ForIRI, B: AsRef<Build<A>>>(
 /// Convert any `Ontology` into a `ComponentMappedOntology`, for the shared
 /// shape behind every format's generic `write(ont: &O, ...)` -- converts
 /// once, then hands the result to that format's `write_cmo`.
-#[allow(dead_code)]
 pub(crate) fn into_component_mapped<A: ForIRI, AA: ForIndex<A>, O: Ontology<A>>(
     ont: &O,
 ) -> ComponentMappedOntology<A, AA> {

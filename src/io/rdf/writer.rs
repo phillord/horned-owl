@@ -8,6 +8,7 @@ use crate::{
 
 use crate::ontology::indexed::ForIndex;
 
+use curie::PrefixMapping;
 use indexmap::indexmap;
 
 use horned_pretty_rdf::{
@@ -40,25 +41,46 @@ impl Default for RDFWriterConfiguration {
     }
 }
 
-pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
+/// Write any `Ontology` to `write`, in RDF/XML, using the given
+/// `PrefixMapping` in addition to the fixed rdf/owl/swrl prefixes this
+/// writer always emits.
+pub fn write<A: ForIRI, O: Ontology<A>, W: Write>(
     write: W,
-    ont: &ComponentMappedOntology<A, AA>,
+    ont: &O,
+    mapping: Option<&PrefixMapping>,
 ) -> Result<W, HornedError> {
-    write_with_config(write, ont, RDFWriterConfiguration::default())
+    let cmo: ComponentMappedOntology<A, AnnotatedComponent<A>> =
+        crate::io::into_component_mapped(ont);
+    write_cmo(write, &cmo, mapping)
 }
 
-/// As [`write`], but with an explicit [`RDFWriterConfiguration`].
-pub fn write_with_config<A: ForIRI, AA: ForIndex<A>, W: Write>(
+/// Write a `ComponentMappedOntology` to `write`, in RDF/XML -- the
+/// concrete, zero-conversion entry point [`write`] defers to.
+pub fn write_cmo<A: ForIRI, AA: ForIndex<A>, W: Write>(
     write: W,
     ont: &ComponentMappedOntology<A, AA>,
+    mapping: Option<&PrefixMapping>,
+) -> Result<W, HornedError> {
+    write_cmo_with_config(write, ont, mapping, RDFWriterConfiguration::default())
+}
+
+/// As [`write_cmo`], but with an explicit [`RDFWriterConfiguration`].
+pub fn write_cmo_with_config<A: ForIRI, AA: ForIndex<A>, W: Write>(
+    write: W,
+    ont: &ComponentMappedOntology<A, AA>,
+    mapping: Option<&PrefixMapping>,
     config: RDFWriterConfiguration,
 ) -> Result<W, HornedError> {
-    let p = indexmap![
-                    "http://www.w3.org/1999/02/22-rdf-syntax-ns#" => "rdf",
-                    "http://www.w3.org/2002/07/owl#" => "owl",
-                    "http://www.w3.org/2003/11/swrl#" => "swrl"
+    let mut p = indexmap![
+                    "http://www.w3.org/1999/02/22-rdf-syntax-ns#".to_string() => "rdf".to_string(),
+                    "http://www.w3.org/2002/07/owl#".to_string() => "owl".to_string(),
+                    "http://www.w3.org/2003/11/swrl#".to_string() => "swrl".to_string()
     ];
-    let p = p.into_iter().map(|(k, v)| (k.into(), v.into())).collect();
+    if let Some(mapping) = mapping {
+        for (prefix, iri) in mapping.mappings() {
+            p.insert(iri.clone(), prefix.clone());
+        }
+    }
 
     let f = PrettyRdfXmlFormatter::new(write, ChunkedRdfXmlFormatterConfig::all().prefix(p))?;
     write_to_rdf_formatter_with_config(ont, f, config)
@@ -99,7 +121,7 @@ pub fn write_to_rdf_format_with_config<A: ForIRI, AA: ForIndex<A>, W: Write>(
     };
 
     match rdf_format {
-        oxrdfio::RdfFormat::RdfXml => write_with_config(write, ont, config),
+        oxrdfio::RdfFormat::RdfXml => write_cmo_with_config(write, ont, None, config),
         other => write_to_rdf_formatter_with_config(ont, serial(write, other), config),
     }
 }
@@ -1953,12 +1975,26 @@ mod test {
 
         let temp_file = Temp::new_file().unwrap();
         let file = File::create(&temp_file).ok().unwrap();
-        write(&mut BufWriter::new(file), &ont).ok().unwrap();
+        write(&mut BufWriter::new(file), &ont, None).ok().unwrap();
 
         let file = File::open(&temp_file).ok().unwrap();
         let ont2 = read_ok(&mut BufReader::new(file));
 
         assert_eq!(ont.i().the_ontology_id(), ont2.i().the_ontology_id());
+    }
+
+    #[test]
+    fn write_cmo_merges_supplied_prefixes_with_the_fixed_set() {
+        let ont = ComponentMappedOntology::new_rc();
+        let mut mapping = PrefixMapping::default();
+        mapping.add_prefix("eg", "http://example.com/eg#").unwrap();
+
+        let mut buf = Vec::new();
+        write_cmo(&mut buf, &ont, Some(&mapping)).unwrap();
+        let s = String::from_utf8(buf).unwrap();
+
+        assert!(s.contains("xmlns:eg=\"http://example.com/eg#\""));
+        assert!(s.contains("xmlns:owl=\"http://www.w3.org/2002/07/owl#\""));
     }
 
     fn roundtrip(ont: &str) -> (SetOntology<RcStr>, SetOntology<RcStr>) {
@@ -1970,7 +2006,7 @@ mod test {
 
         let amo: ComponentMappedOntology<RcStr, Rc<AnnotatedComponent<RcStr>>> =
             ont_orig.clone().into();
-        write(&mut buf_writer, &amo).ok().unwrap();
+        write(&mut buf_writer, &amo, None).ok().unwrap();
         buf_writer.flush().ok();
 
         write(
@@ -1980,6 +2016,7 @@ mod test {
                     .unwrap(),
             ),
             &amo,
+            None,
         )
         .unwrap();
 
@@ -2025,7 +2062,7 @@ mod test {
             let amo: ComponentMappedOntology<RcStr, Rc<AnnotatedComponent<RcStr>>> =
                 ont_orig.into();
 
-            write(out, &amo).ok().unwrap();
+            write(out, &amo, None).ok().unwrap();
         }
 
         #[test]
@@ -2095,7 +2132,7 @@ mod test {
 
         let amo: ComponentMappedOntology<RcStr, Rc<AnnotatedComponent<RcStr>>> = ont_orig.into();
         let mut buf = Vec::new();
-        write(&mut buf, &amo).expect("write should not fail on an invalid-IRI-char class");
+        write(&mut buf, &amo, None).expect("write should not fail on an invalid-IRI-char class");
 
         let ont_round = read_ok(&mut &buf[..]);
         let expected_class = Class(b.iri("http://example.com/o#KB-CH%5BR%5D-8-5Cell"));
@@ -2130,7 +2167,7 @@ mod test {
         });
 
         let mut buf = Vec::new();
-        write(&mut buf, &ont).expect("write should not fail");
+        write(&mut buf, &ont, None).expect("write should not fail");
         let s = String::from_utf8(buf.clone()).unwrap();
         assert!(
             !s.contains("nodeID=\"_:"),

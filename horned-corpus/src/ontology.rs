@@ -136,12 +136,8 @@ pub fn read_source(fmt: Format, bytes: &[u8]) -> anyhow::Result<ReadOk> {
 ///
 /// Every horned-owl writer (ofn/omn/owx/rdf) takes a
 /// `&ComponentMappedOntology<A, AA>`, not a `&SetOntology`, so `model` is
-/// converted via `.into()` first. The ofn/omn/owx writers additionally take
-/// an `Option<&PrefixMapping>` to control prefix-qualified output; the rdf
-/// writer takes no such parameter at all -- it always emits full/absolute
-/// IRIs plus a small fixed prefix set (rdf/owl/swrl) hardcoded internally
-/// (see `tests/smoke.rs`'s API notes) -- so the `RdfXml` arm must not pass
-/// `prefixes` to it.
+/// converted via `.into()` first, plus an `Option<&PrefixMapping>`. The rdf
+/// writer merges `prefixes` in alongside its own fixed rdf/owl/swrl set.
 pub fn write_target(
     fmt: Format,
     model: &SetOntology<RcStr>,
@@ -160,7 +156,7 @@ pub fn write_target(
             owx::writer::write(&mut out, &cmo, Some(prefixes)).map_err(horned_err)?;
         }
         Format::RdfXml => {
-            rdf::writer::write(&mut out, &cmo).map_err(horned_err)?;
+            rdf::writer::write(&mut out, &cmo, Some(prefixes)).map_err(horned_err)?;
         }
         // Turtle is a read-only (source) format — horned-owl has no Turtle
         // writer, so it never appears as a round-trip target.
