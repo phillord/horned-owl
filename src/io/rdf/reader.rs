@@ -22,7 +22,6 @@ use crate::{
         logically_equal::{LogicallyEqualIndex, update_or_insert_logically_equal_component},
         set::{SetIndex, SetIndexIter, SetOntology},
     },
-    resolve::strict_resolve_iri,
     vocab::RDFS as VRDFS,
 };
 
@@ -30,7 +29,6 @@ use std::collections::BTreeSet;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::fmt::Debug;
-use std::io::Cursor;
 use std::{io::BufRead, marker::PhantomData};
 
 type OxTerm<'a> = ::oxrdf::Term;
@@ -646,14 +644,8 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
         iri: &IRI<A>,
         config: RDFParserConfiguration<A, B>,
     ) -> Result<Self, HornedError> {
-        OntologyParser::from_bufread(
-            &mut Cursor::new(strict_resolve_iri(
-                iri,
-                config.common.remote_body_limit,
-                config.common.local_only,
-            )?),
-            config,
-        )
+        let mut cursor = crate::io::resolve_doc_iri(iri, &config.common)?;
+        OntologyParser::from_bufread(&mut cursor, config)
     }
 
     /// Groups `triples` into `simple` (those which do not start with a BNode) and those that do.
