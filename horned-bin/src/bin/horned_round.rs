@@ -53,7 +53,8 @@ pub(crate) fn matcher(matches: &ArgMatches) -> Result<(), HornedError> {
             horned_owl::io::obo::write(stdout(), &amo, Some(&pm))
         }
         horned_owl::io::ParserOutput::RDFParser(rdfo, _ip) => {
-            horned_owl::io::rdf::writer::write(stdout(), &rdfo.into())
+            let amo: RcComponentMappedOntology = rdfo.into();
+            horned_owl::io::rdf::writer::write(stdout(), &amo, None)
         }
     }?;
     // Finish off nicely
