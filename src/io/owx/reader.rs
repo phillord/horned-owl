@@ -60,6 +60,31 @@ impl<A: ForIRI, R: BufRead, B: AsRef<Build<A>>> Reader<A, R, B> {
         }
     }
 
+    /// A discoverable alias for [`Reader::new`], matching
+    /// `OntologyParser::from_bufread`'s naming convention. Infallible,
+    /// unlike RDF's version: `OntologyParser::from_bufread` does I/O
+    /// eagerly (collecting every triple before returning `Self`), which
+    /// can fail, whereas `Reader::new` does no I/O at all until the
+    /// caller starts pulling from the iterator, so there's nothing here
+    /// that could fail up front.
+    ///
+    /// Takes `bufread` by value rather than `&mut R` (unlike RDF's
+    /// `from_bufread`): `OntologyParser::from_bufread` fully drains its
+    /// `&mut R` before returning `Self`, so it never needs to keep the
+    /// reader alive past the call and can hand it back to the caller
+    /// afterwards. `Reader` is different -- it keeps reading
+    /// incrementally for as long as the caller pulls from it, so it
+    /// must own its reader outright, exactly like `new`. A caller who
+    /// still wants `&mut`-borrow semantics (to keep using their own
+    /// reader afterwards) already gets them for free: `R` is generic
+    /// over anything implementing `BufRead`, and `&mut R2` implements
+    /// `BufRead` whenever `R2` does, so `Reader::from_bufread(&mut
+    /// my_reader, config)` works today without this taking `&mut R`
+    /// explicitly.
+    pub fn from_bufread(bufread: R, config: ParserConfiguration<A, B>) -> Self {
+        Reader::new(bufread, config)
+    }
+
     /// One pull's worth of work: read events until there's a `StreamComponent`
     /// to yield, the `</Ontology>` close tag is reached (`Ok(None)`), or an
     /// error occurs.
@@ -151,6 +176,26 @@ impl<A: ForIRI, R: BufRead, B: AsRef<Build<A>>> Iterator for Reader<A, R, B> {
                 Some(Err(e))
             }
         }
+    }
+}
+
+impl<A: ForIRI, B: AsRef<Build<A>>> Reader<A, std::io::Cursor<String>, B> {
+    /// Construct a `Reader` from a document IRI's resolved content,
+    /// matching `OntologyParser::from_doc_iri`'s naming convention. A
+    /// one-liner over the shared `resolve_doc_iri` helper
+    /// (`src/io/mod.rs`) -- unlike RDF's `from_doc_iri`, which still
+    /// inlines `strict_resolve_iri` + `Cursor::new` directly (it
+    /// predates the shared helper), this is the helper's first real
+    /// caller. Fixed to `R = Cursor<String>` rather than living in the
+    /// generic `impl<R: BufRead>` block above: the resolved content is
+    /// owned right here, so `R` can't stay generic the way it does for
+    /// `new`/`from_bufread`.
+    pub fn from_doc_iri(
+        iri: &IRI<A>,
+        config: ParserConfiguration<A, B>,
+    ) -> Result<Self, HornedError> {
+        let cursor = crate::io::resolve_doc_iri(iri, &config)?;
+        Ok(Reader::from_bufread(cursor, config))
     }
 }
 
@@ -1635,6 +1680,122 @@ pub mod test {
             streamed_mapping.mappings().collect::<HashMap<_, _>>(),
             read_mapping.mappings().collect::<HashMap<_, _>>()
         );
+    }
+
+    #[test]
+    fn reader_from_bufread_agrees_with_read() {
+        let ont_s = include_str!("../../ont/owl-xml/ont.owx");
+        let b = Build::new_rc();
+
+        let (via_from_bufread, from_bufread_mapping): (SetOntology<RcStr>, _) =
+            super::Reader::from_bufread(ont_s.as_bytes(), ParserConfiguration::new(&b)).fold(
+                (SetOntology::new_rc(), PrefixMapping::default()),
+                |(mut ont, mut mapping), item| {
+                    match item.unwrap() {
+                        StreamComponent::Component(ac) => {
+                            ont.insert(ac);
+                        }
+                        StreamComponent::Prefix(p, i) => {
+                            let _ = mapping.add_prefix(&p, &i);
+                        }
+                    }
+                    (ont, mapping)
+                },
+            );
+
+        let (via_read, read_mapping): (ComponentMappedOntology<RcStr, RcAnnotatedComponent>, _) =
+            read_ok(&mut ont_s.as_bytes());
+        let via_read: SetOntology<RcStr> = via_read.into();
+
+        assert_eq!(via_from_bufread, via_read);
+        assert_eq!(
+            from_bufread_mapping.mappings().collect::<HashMap<_, _>>(),
+            read_mapping.mappings().collect::<HashMap<_, _>>()
+        );
+    }
+
+    /// Serve `body` once from a throwaway local HTTP listener and
+    /// return the URL to fetch it from -- lets a `from_doc_iri` test
+    /// exercise a real HTTP response without depending on outside
+    /// network access.
+    fn serve_once(body: &'static str) -> String {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        std::thread::spawn(move || {
+            use std::io::{Read, Write};
+            let (mut stream, _) = listener.accept().unwrap();
+            // Discard the request -- a GET with no body, we only need
+            // to see the end of its headers before replying.
+            let mut buf = [0u8; 4096];
+            let mut seen = Vec::new();
+            loop {
+                let n = stream.read(&mut buf).unwrap();
+                seen.extend_from_slice(&buf[..n]);
+                if seen.windows(4).any(|w| w == b"\r\n\r\n") || n == 0 {
+                    break;
+                }
+            }
+            let response = format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: application/rdf+xml\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                body.len(),
+                body
+            );
+            stream.write_all(response.as_bytes()).unwrap();
+            stream.flush().unwrap();
+        });
+        format!("http://127.0.0.1:{port}/ont.owx")
+    }
+
+    /// `resolve_doc_iri` (and so `Reader::from_doc_iri`) only resolves
+    /// remotely, via `strict_resolve_iri` -- unlike the richer
+    /// `resolve::resolve_iri` used elsewhere for import-closure
+    /// resolution, it has no local-file fast path, so a `file://` IRI
+    /// always fails here with "unknown scheme" rather than being read
+    /// off disk. Exercising the success path for real therefore needs
+    /// an actual HTTP response -- `serve_once` above provides one
+    /// without depending on outside network access.
+    #[test]
+    fn reader_from_doc_iri_reads_the_resolved_content() {
+        let ont_s = include_str!("../../ont/owl-xml/ont.owx");
+        let url = serve_once(ont_s);
+
+        let b = Build::new_rc();
+        let iri = b.iri(url);
+
+        let via_doc_iri: (SetOntology<RcStr>, _) =
+            super::Reader::from_doc_iri(&iri, ParserConfiguration::new(&b))
+                .unwrap()
+                .fold(
+                    (SetOntology::new_rc(), PrefixMapping::default()),
+                    |(mut ont, mut mapping), item| {
+                        match item.unwrap() {
+                            StreamComponent::Component(ac) => {
+                                ont.insert(ac);
+                            }
+                            StreamComponent::Prefix(p, i) => {
+                                let _ = mapping.add_prefix(&p, &i);
+                            }
+                        }
+                        (ont, mapping)
+                    },
+                );
+
+        let (via_read, _): (ComponentMappedOntology<RcStr, RcAnnotatedComponent>, _) =
+            read_ok(&mut ont_s.as_bytes());
+        let via_read: SetOntology<RcStr> = via_read.into();
+
+        assert_eq!(via_doc_iri.0, via_read);
+    }
+
+    #[test]
+    fn reader_from_doc_iri_surfaces_resolve_errors() {
+        let b = Build::new_rc();
+        // Port 1 on loopback: nothing listens there, so the connection
+        // is refused -- exercises the error path without depending on
+        // outside network access.
+        let iri = b.iri("http://127.0.0.1:1/does-not-exist.owx");
+
+        assert!(super::Reader::from_doc_iri(&iri, ParserConfiguration::new(&b)).is_err());
     }
 
     #[test]

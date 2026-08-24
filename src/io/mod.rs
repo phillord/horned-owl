@@ -251,9 +251,11 @@ impl<A: ForIRI + Default> Default for RDFParserConfiguration<A, Build<A>> {
 
 /// Resolve `iri` to its content and wrap it as a `BufRead`, for a
 /// `from_doc_iri` constructor. Every format's `from_doc_iri` is a
-/// one-liner over this: `Self::from_bufread(&mut resolve_doc_iri(iri,
-/// &config)?, config)`.
-#[allow(dead_code)]
+/// one-liner over this -- `Self::from_bufread(resolve_doc_iri(iri,
+/// &config)?, config)`, or `Self::from_bufread(&mut resolve_doc_iri(iri,
+/// &config)?, config)` for a reader that fully drains its `&mut R` before
+/// returning (see `owx::reader::Reader::from_doc_iri` and
+/// `rdf::reader::OntologyParser::from_doc_iri` respectively).
 pub(crate) fn resolve_doc_iri<A: ForIRI, B: AsRef<Build<A>>>(
     iri: &IRI<A>,
     config: &ParserConfiguration<A, B>,
