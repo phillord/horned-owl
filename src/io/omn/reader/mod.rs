@@ -231,9 +231,9 @@ pub fn read_with_build<A: ForIRI, O: MutableOntology<A> + Ontology<A> + Default,
                     // needed.
                     let wrapped = format!("Ontology(\n{axioms}\n)");
                     let parsed: Result<(crate::ontology::set::SetOntology<A>, _), _> =
-                        crate::io::ofn::reader::read_with_build(
+                        crate::io::ofn::reader::read(
                             std::io::Cursor::new(wrapped.into_bytes()),
-                            build,
+                            crate::io::ParserConfiguration::new(build),
                         );
                     match parsed {
                         Ok((block_ont, _)) => {
