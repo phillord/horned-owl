@@ -26,7 +26,7 @@ fn bench_io_write(c: &mut Criterion) {
         // RDF/XML: pretty formatter (horned-pretty-rdf)
         group.bench_function(BenchmarkId::new("rdf_xml_pretty_io_write", n), |b| {
             b.iter(|| {
-                horned_owl::io::rdf::writer::write(sink(), &ont, None).ok();
+                horned_owl::io::rdf::writer::write_cmo(sink(), &ont, None).ok();
             })
         });
 
@@ -54,19 +54,19 @@ fn bench_io_write(c: &mut Criterion) {
 
         group.bench_function(BenchmarkId::new("owx_io_write", n), |b| {
             b.iter(|| {
-                horned_owl::io::owx::writer::write(sink(), &ont, None).ok();
+                horned_owl::io::owx::writer::write_cmo(sink(), &ont, None).ok();
             })
         });
 
         group.bench_function(BenchmarkId::new("ofn_io_write", n), |b| {
             b.iter(|| {
-                horned_owl::io::ofn::writer::write(sink(), &ont, None).ok();
+                horned_owl::io::ofn::writer::write_cmo(sink(), &ont, None).ok();
             })
         });
 
         group.bench_function(BenchmarkId::new("omn_io_write", n), |b| {
             b.iter(|| {
-                horned_owl::io::omn::writer::write(sink(), &ont, None).ok();
+                horned_owl::io::omn::writer::write_cmo(sink(), &ont, None).ok();
             })
         });
     }

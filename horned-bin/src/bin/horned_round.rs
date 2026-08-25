@@ -38,23 +38,23 @@ pub(crate) fn matcher(matches: &ArgMatches) -> Result<(), HornedError> {
     match res {
         horned_owl::io::ParserOutput::OFNParser(so, pm) => {
             let amo: RcComponentMappedOntology = so.into();
-            horned_owl::io::ofn::writer::write(stdout(), &amo, Some(&pm))
+            horned_owl::io::ofn::writer::write_cmo(stdout(), &amo, Some(&pm))
         }
         horned_owl::io::ParserOutput::OWXParser(so, pm) => {
             let amo: RcComponentMappedOntology = so.into();
-            horned_owl::io::owx::writer::write(stdout(), &amo, Some(&pm))
+            horned_owl::io::owx::writer::write_cmo(stdout(), &amo, Some(&pm))
         }
         horned_owl::io::ParserOutput::OMNParser(so, pm) => {
             let amo: RcComponentMappedOntology = so.into();
-            horned_owl::io::omn::write(stdout(), &amo, Some(&pm))
+            horned_owl::io::omn::writer::write_cmo(stdout(), &amo, Some(&pm))
         }
         horned_owl::io::ParserOutput::OBOParser(so, pm) => {
             let amo: RcComponentMappedOntology = so.into();
-            horned_owl::io::obo::write(stdout(), &amo, Some(&pm))
+            horned_owl::io::obo::writer::write_cmo(stdout(), &amo, Some(&pm))
         }
         horned_owl::io::ParserOutput::RDFParser(rdfo, _ip) => {
             let amo: RcComponentMappedOntology = rdfo.into();
-            horned_owl::io::rdf::writer::write(stdout(), &amo, None)
+            horned_owl::io::rdf::writer::write_cmo(stdout(), &amo, None)
         }
     }?;
     // Finish off nicely
