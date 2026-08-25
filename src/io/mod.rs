@@ -284,7 +284,6 @@ pub(crate) fn into_component_mapped<A: ForIRI, AA: ForIndex<A>, O: Ontology<A>>(
 /// type parameter so the returned iterator's `Item` matches whatever
 /// `AA` the caller is chaining/composing with (typically
 /// `AnnotatedComponent<A>`, via `component_stream`).
-#[allow(dead_code)]
 pub(crate) fn prefix_stream<'a, A: ForIRI, AA: ForIndex<A>>(
     mapping: &'a PrefixMapping,
 ) -> impl Iterator<Item = Result<StreamComponent<AA>>> + 'a {
@@ -301,7 +300,6 @@ pub(crate) fn prefix_stream<'a, A: ForIRI, AA: ForIndex<A>>(
 /// matching `StreamComponent`'s "`AA = AnnotatedComponent<A>` for now"
 /// position -- each component is cloned out (`AnnotatedComponent<A>` is
 /// `Clone`) rather than yielded by reference.
-#[allow(dead_code)]
 pub(crate) fn component_stream<'a, A: ForIRI, AA: ForIndex<A>>(
     ont: &'a ComponentMappedOntology<A, AA>,
 ) -> impl Iterator<Item = Result<StreamComponent<AnnotatedComponent<A>>>> + 'a {
