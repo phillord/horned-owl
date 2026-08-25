@@ -70,7 +70,7 @@ enum Cmd {
         #[arg(long)]
         out: PathBuf,
         /// Which formats to write and read back, comma-separated.
-        #[arg(long, default_value = "rdf,owx,ofn,omn")]
+        #[arg(long, default_value = "rdf,owx,ofn,omn,obo")]
         formats: String,
         /// Worker threads (default: one per core).
         #[arg(long)]
