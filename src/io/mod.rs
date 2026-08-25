@@ -14,7 +14,7 @@ use self::rdf::reader::{ConcreteRDFOntology, IncompleteParse};
 use crate::error::HornedError;
 use crate::ontology::indexed::ForIndex;
 use crate::{
-    model::{AnnotatedComponent, Build, ForIRI, IRI, Ontology},
+    model::{Build, ForIRI, IRI, Ontology},
     ontology::{component_mapped::ComponentMappedOntology, set::SetOntology},
 };
 
@@ -295,15 +295,15 @@ pub(crate) fn prefix_stream<'a, A: ForIRI, AA: ForIndex<A>>(
 /// `ont`'s components, in their already-correctly-kind-ordered
 /// `ComponentMappedOntology` iteration order (see "Fix the ordering bug"
 /// in the design notes), as a `StreamComponent` stream for `write_cmo`
-/// implementations that derive from `write_stream`. Fixed to
-/// `AnnotatedComponent<A>` regardless of the source ontology's own `AA`,
-/// matching `StreamComponent`'s "`AA = AnnotatedComponent<A>` for now"
-/// position -- each component is cloned out (`AnnotatedComponent<A>` is
-/// `Clone`) rather than yielded by reference.
+/// implementations that derive from `write_stream`. Yields `ont`'s own
+/// `AA` (cloned via `iter_raw`), not always `AnnotatedComponent<A>` --
+/// cheap when `AA` is `Rc`/`Arc`-backed (a pointer + refcount bump)
+/// instead of cloning the full `AnnotatedComponent<A>` struct.
 pub(crate) fn component_stream<'a, A: ForIRI, AA: ForIndex<A>>(
     ont: &'a ComponentMappedOntology<A, AA>,
-) -> impl Iterator<Item = Result<StreamComponent<AnnotatedComponent<A>>>> + 'a {
-    ont.iter()
+) -> impl Iterator<Item = Result<StreamComponent<AA>>> + 'a {
+    ont.i()
+        .iter_raw()
         .cloned()
         .map(|ac| Ok(StreamComponent::Component(ac)))
 }
@@ -551,9 +551,7 @@ mod tests {
     #[test]
     fn prefix_stream_then_component_stream_matches_write_cmo_composition() {
         use super::*;
-        use crate::model::{
-            AnnotatedComponent, Build, DeclareClass, MutableOntology, RcAnnotatedComponent, RcStr,
-        };
+        use crate::model::{Build, DeclareClass, MutableOntology, RcAnnotatedComponent, RcStr};
         use crate::ontology::set::SetOntology;
 
         let b = Build::new_rc();
@@ -567,11 +565,10 @@ mod tests {
         // OFN/OMN's composition order (Prefix before components); OWX
         // instead splits component_stream around prefix_stream to put
         // OntologyID first -- see the design notes. component_stream
-        // always yields plain AnnotatedComponent<A> (not the source
-        // ontology's own AA), so prefix_stream's own AA must match that
-        // to chain, not RcAnnotatedComponent.
+        // yields the source ontology's own AA (here RcAnnotatedComponent),
+        // so prefix_stream's own AA must match that to chain.
         let items: std::result::Result<Vec<_>, _> =
-            prefix_stream::<RcStr, AnnotatedComponent<RcStr>>(&mapping)
+            prefix_stream::<RcStr, RcAnnotatedComponent>(&mapping)
                 .chain(component_stream(&cmo))
                 .collect();
         let items = items.unwrap();

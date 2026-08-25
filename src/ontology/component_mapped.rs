@@ -88,6 +88,15 @@ impl<A: ForIRI, AA: ForIndex<A>> ComponentMappedIndex<A, AA> {
         }
     }
 
+    /// Like [`iter`](Self::iter), but yields the raw `AA` handle instead of
+    /// borrowing through it to `&AnnotatedComponent<A>` -- lets a caller
+    /// clone `AA` itself (cheap when it's `Rc`/`Arc`-backed) rather than
+    /// the full `AnnotatedComponent<A>`. Same kind order as `iter`, since
+    /// `BTreeMap::values()` already walks in key order.
+    pub(crate) fn iter_raw(&self) -> impl Iterator<Item = &AA> {
+        self.component.values().flat_map(|s| s.iter())
+    }
+
     /// Fetch the AnnotatedComponent for a given kind
     ///
     /// # Examples
