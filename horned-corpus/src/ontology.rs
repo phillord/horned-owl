@@ -3,14 +3,14 @@
 //! underlying horned-owl reader can provide.
 //!
 //! Only the RDF/XML reader can produce an incomplete parse (see
-//! `horned_owl::io::rdf::reader::IncompleteParse`); the ofn/omn/owx readers
-//! either fully succeed or return a hard error, so they always report
-//! `incomplete: None`.
+//! `horned_owl::io::rdf::reader::IncompleteParse`); the ofn/omn/owx/obo
+//! readers either fully succeed or return a hard error, so they always
+//! report `incomplete: None`.
 //!
 //! Dispatch goes through `horned_owl::io::ParserOutput` and its
 //! `.decompose()` method (see the API notes in `tests/smoke.rs`) rather than
 //! matching each format's raw tuple/struct shape by hand -- that seam
-//! normalizes ofn/omn/owx/rdf into a single
+//! normalizes ofn/omn/owx/obo/rdf into a single
 //! `(SetOntology<A>, Option<PrefixMapping>, Option<IncompleteParse<A>>)`
 //! triple.
 
@@ -18,7 +18,7 @@ use crate::model::{Format, IncompleteSummary};
 use curie::PrefixMapping;
 use horned_owl::error::HornedError;
 use horned_owl::io::{
-    ParserConfiguration, ParserOutput, RDFParserConfiguration, ofn, omn, owx, rdf,
+    ParserConfiguration, ParserOutput, RDFParserConfiguration, obo, ofn, omn, owx, rdf,
 };
 use horned_owl::model::{Build, RcAnnotatedComponent, RcStr};
 use horned_owl::ontology::component_mapped::ComponentMappedOntology;
@@ -98,6 +98,11 @@ pub fn read_source(fmt: Format, bytes: &[u8]) -> anyhow::Result<ReadOk> {
                 .map_err(horned_err)?;
             Output::owx(sop).decompose()
         }
+        Format::Obo => {
+            let sop = obo::reader::read(Cursor::new(bytes), ParserConfiguration::new(&build))
+                .map_err(horned_err)?;
+            Output::obo(sop).decompose()
+        }
         Format::RdfXml => {
             let rop = rdf::reader::read_to_rdf_ontology(
                 &mut Cursor::new(bytes),
@@ -134,7 +139,7 @@ pub fn read_source(fmt: Format, bytes: &[u8]) -> anyhow::Result<ReadOk> {
 
 /// Serialize `model` into `fmt`'s byte representation.
 ///
-/// Every horned-owl writer (ofn/omn/owx/rdf) takes a
+/// Every horned-owl writer (ofn/omn/owx/obo/rdf) takes a
 /// `&ComponentMappedOntology<A, AA>`, not a `&SetOntology`, so `model` is
 /// converted via `.into()` first, plus an `Option<&PrefixMapping>`. The rdf
 /// writer merges `prefixes` in alongside its own fixed rdf/owl/swrl set.
@@ -154,6 +159,9 @@ pub fn write_target(
         }
         Format::OwlXml => {
             owx::writer::write(&mut out, &cmo, Some(prefixes)).map_err(horned_err)?;
+        }
+        Format::Obo => {
+            obo::writer::write(&mut out, &cmo, Some(prefixes)).map_err(horned_err)?;
         }
         Format::RdfXml => {
             rdf::writer::write(&mut out, &cmo, Some(prefixes)).map_err(horned_err)?;
@@ -198,6 +206,39 @@ mod tests {
         let omn = b"Prefix: : <http://ex/>\nOntology: <http://ex/o>\nClass: <http://ex/A>\n";
         let r = read_source(Format::Omn, omn).expect("read");
         assert!(r.model.iter().count() >= 1);
+    }
+
+    #[test]
+    fn reads_obo_source() {
+        let obo = b"format-version: 1.4\nontology: ex\n\n[Term]\nid: EX:0000001\nname: A\n";
+        let r = read_source(Format::Obo, obo).expect("read");
+        assert!(r.model.iter().count() >= 1);
+        assert!(r.incomplete.is_none());
+    }
+
+    #[test]
+    fn writes_and_rereads_obo_from_obo_source() {
+        // Unlike the other targets, OBO's writer only emits a stanza for
+        // entities carrying the oboInOwl:id annotation its own reader
+        // stamps -- so this can only be exercised fairly starting from a
+        // real OBO source, not an arbitrary OWL construct read from
+        // another format (writes_and_rereads_each_target intentionally
+        // does not include Obo, for this reason).
+        let obo = b"format-version: 1.4\nontology: ex\n\n[Term]\nid: EX:0000001\nname: A\n";
+        let src = read_source(Format::Obo, obo).expect("read");
+
+        let bytes = write_target(Format::Obo, &src.model, &src.prefixes).expect("write");
+        let back = read_source(Format::Obo, &bytes).expect("reread");
+
+        assert!(
+            back.model.iter().any(|ac| matches!(
+                &ac.component,
+                horned_owl::model::Component::DeclareClass(c)
+                    if c.0.0.as_ref().ends_with("EX_0000001")
+            )),
+            "term stanza lost in OBO round trip, got: {:#?}",
+            back.model
+        );
     }
 
     #[test]
