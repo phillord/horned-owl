@@ -19,7 +19,7 @@ use curie::PrefixMapping;
 use crate::error::HornedError;
 use crate::model::{
     AnnotatedComponent, AnnotationValue, ClassExpression as CE, Component, ForIRI, Individual,
-    Literal, ObjectPropertyExpression as OPE,
+    Literal, ObjectPropertyExpression as OPE, Ontology,
 };
 use crate::ontology::component_mapped::ComponentMappedOntology;
 use crate::ontology::indexed::ForIndex;
@@ -46,8 +46,22 @@ struct Stanza {
     clauses: Vec<String>,
 }
 
-/// Write an ontology to `write` in OBO flat-file format 1.4.
-pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
+/// Write any `Ontology` to `write` in OBO flat-file format 1.4. Converts to
+/// a `ComponentMappedOntology` then defers to [`write_cmo`]; a caller that
+/// already has one built should call `write_cmo` directly instead.
+pub fn write<A: ForIRI, O: Ontology<A>, W: Write>(
+    write: W,
+    ont: &O,
+    mapping: Option<&PrefixMapping>,
+) -> Result<W, HornedError> {
+    let cmo: ComponentMappedOntology<A, AnnotatedComponent<A>> =
+        crate::io::into_component_mapped(ont);
+    write_cmo(write, &cmo, mapping)
+}
+
+/// Write a `ComponentMappedOntology` to `write` in OBO flat-file format 1.4
+/// -- the concrete, zero-conversion entry point [`write`] defers to.
+pub fn write_cmo<A: ForIRI, AA: ForIndex<A>, W: Write>(
     mut write: W,
     ont: &ComponentMappedOntology<A, AA>,
     mapping: Option<&PrefixMapping>,
