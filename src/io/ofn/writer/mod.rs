@@ -70,18 +70,12 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
         }
     }
 
-    // Write the components in the order defined by the OFN spec, which is
-    // different from all_kinds.
-    let mut other_kinds = ComponentKind::all_kinds();
-    other_kinds.retain(|k| {
-        *k != ComponentKind::OntologyID
-            && *k != ComponentKind::DocIRI
-            && *k != ComponentKind::Import
-            && *k != ComponentKind::OntologyAnnotation
-    });
-    let ordered_kinds = [ComponentKind::Import, ComponentKind::OntologyAnnotation]
+    // OntologyID and DocIRI are written specially above; every other kind,
+    // including Import and OntologyAnnotation, is already in the right
+    // order from all_kinds() (the components! macro declares them that way).
+    let ordered_kinds = ComponentKind::all_kinds()
         .into_iter()
-        .chain(other_kinds);
+        .filter(|k| *k != ComponentKind::OntologyID && *k != ComponentKind::DocIRI);
 
     for kind in ordered_kinds {
         let mut components = ont.i().component_for_kind(kind).collect::<Vec<_>>();
