@@ -3,9 +3,11 @@ use std::io::Write;
 use curie::PrefixMapping;
 
 use crate::error::HornedError;
+use crate::model::AnnotatedComponent;
 use crate::model::Component;
 use crate::model::ComponentKind;
 use crate::model::ForIRI;
+use crate::model::Ontology;
 use crate::ontology::component_mapped::ComponentMappedOntology;
 use crate::ontology::indexed::ForIndex;
 
@@ -14,12 +16,25 @@ mod as_functional;
 pub use self::as_functional::AsFunctional;
 pub use self::as_functional::Functional;
 
-/// Write an Ontology to `write`, using the given `PrefixMapping`.
-///
-/// The ontology is written in OWL
+/// Write any `Ontology` to `write`, in OWL
 /// [Functional-Style](https://www.w3.org/TR/2012/REC-owl2-syntax-20121211/)
-/// syntax.
-pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
+/// syntax, using the given `PrefixMapping`. Converts to a
+/// `ComponentMappedOntology` then defers to [`write_cmo`]; a caller that
+/// already has one built should call `write_cmo` directly instead.
+pub fn write<A: ForIRI, O: Ontology<A>, W: Write>(
+    write: W,
+    ont: &O,
+    mapping: Option<&PrefixMapping>,
+) -> Result<W, HornedError> {
+    let cmo: ComponentMappedOntology<A, AnnotatedComponent<A>> =
+        crate::io::into_component_mapped(ont);
+    write_cmo(write, &cmo, mapping)
+}
+
+/// Write a `ComponentMappedOntology` to `write`, using the given
+/// `PrefixMapping` -- the concrete, zero-conversion entry point [`write`]
+/// defers to.
+pub fn write_cmo<A: ForIRI, AA: ForIndex<A>, W: Write>(
     mut write: W,
     ont: &ComponentMappedOntology<A, AA>,
     mapping: Option<&PrefixMapping>,
