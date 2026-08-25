@@ -194,6 +194,7 @@ fn parse_formats(s: &str) -> Vec<Format> {
             "owx" => Some(Format::OwlXml),
             "ofn" => Some(Format::Ofn),
             "omn" => Some(Format::Omn),
+            "obo" => Some(Format::Obo),
             _ => None,
         })
         .collect()

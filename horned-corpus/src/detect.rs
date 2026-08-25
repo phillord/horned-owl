@@ -55,6 +55,12 @@ pub fn detect(bytes: &[u8]) -> Format {
         if l.starts_with("Prefix(") || l.starts_with("Ontology(") {
             return Format::Ofn;
         }
+        // OBO flat-file: a header clause tag (`format-version:` is the
+        // conventional first line, but not the only header tag), or a
+        // stanza header for a header-less document.
+        if l.starts_with("format-version:") || l.starts_with('[') {
+            return Format::Obo;
+        }
         break;
     }
     Format::Unknown
@@ -109,7 +115,15 @@ mod tests {
             detect(b"Prefix: : <http://ex/>\nOntology: <http://ex/o>"),
             Format::Omn
         );
-        assert_eq!(detect(b"format-version: 1.4\n[Term]"), Format::Unknown);
+        assert_eq!(detect(b"format-version: 1.4\n[Term]"), Format::Obo);
+    }
+
+    #[test]
+    fn sniffs_obo_without_a_header() {
+        assert_eq!(
+            detect(b"[Term]\nid: GO:0008150\nname: biological_process\n"),
+            Format::Obo
+        );
     }
     #[test]
     fn sniffs_turtle_and_ntriples() {
