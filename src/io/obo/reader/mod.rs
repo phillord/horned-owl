@@ -50,17 +50,10 @@ pub fn read<
     O: MutableOntology<A> + Ontology<A> + Default,
     R: BufRead,
 >(
-    bufread: R,
+    mut bufread: R,
     config: ParserConfiguration<A, B>,
 ) -> Result<(O, PrefixMapping), HornedError> {
-    read_with_build(bufread, config.build.as_ref())
-}
-
-/// Read a whole ontology, interning IRIs into the supplied `build`.
-pub fn read_with_build<A: ForIRI, O: MutableOntology<A> + Ontology<A> + Default, R: BufRead>(
-    mut bufread: R,
-    build: &Build<A>,
-) -> Result<(O, PrefixMapping), HornedError> {
+    let build = config.build.as_ref();
     // Lenient by default (see module doc): decode lossily so a stray non-UTF-8
     // byte — common in real bio-ontologies — does not abort the whole read.
     let mut bytes = Vec::new();
