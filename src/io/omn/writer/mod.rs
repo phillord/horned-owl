@@ -1164,7 +1164,7 @@ mod tests {
     /// frame and round-trips correctly (read → write → read = same components).
     #[test]
     fn complex_lhs_subclassof_emits_class_frame_and_roundtrips() {
-        use crate::io::omn::read_with_build;
+        use crate::io::omn::read;
         use std::io::BufReader;
 
         let b = Build::new_rc();
@@ -1206,15 +1206,19 @@ mod tests {
         );
 
         // Round-trip: read → write → read must yield component-equal result.
-        let (ont2, pm2): (crate::ontology::set::SetOntology<_>, PrefixMapping) =
-            read_with_build(BufReader::new(&out[..]), &b)
-                .unwrap_or_else(|e| panic!("round-trip re-parse failed: {e}\n---\n{s}"));
+        let (ont2, pm2): (crate::ontology::set::SetOntology<_>, PrefixMapping) = read(
+            BufReader::new(&out[..]),
+            crate::io::ParserConfiguration::new(&b),
+        )
+        .unwrap_or_else(|e| panic!("round-trip re-parse failed: {e}\n---\n{s}"));
         let mut out2 = Vec::<u8>::new();
         let amo2: TestOnt = ont2.into();
         write(&mut out2, &amo2, Some(&pm2)).unwrap();
-        let (ont3, _): (crate::ontology::set::SetOntology<_>, PrefixMapping) =
-            read_with_build(BufReader::new(&out2[..]), &b)
-                .unwrap_or_else(|e| panic!("second round-trip re-parse failed: {e}"));
+        let (ont3, _): (crate::ontology::set::SetOntology<_>, PrefixMapping) = read(
+            BufReader::new(&out2[..]),
+            crate::io::ParserConfiguration::new(&b),
+        )
+        .unwrap_or_else(|e| panic!("second round-trip re-parse failed: {e}"));
 
         // Component sets must be equal after one round-trip (write → read).
         let orig: std::collections::BTreeSet<_> = o.iter().map(|ac| ac.component.clone()).collect();
@@ -1406,11 +1410,13 @@ mod tests {
         );
 
         // The writer's output must re-parse without error.
-        use crate::io::omn::read_with_build;
+        use crate::io::omn::read;
         use std::io::BufReader;
-        let (parsed, _): (crate::ontology::set::SetOntology<_>, PrefixMapping) =
-            read_with_build(BufReader::new(&out[..]), &b)
-                .unwrap_or_else(|e| panic!("re-parse of writer output failed: {e}\n---\n{s}"));
+        let (parsed, _): (crate::ontology::set::SetOntology<_>, PrefixMapping) = read(
+            BufReader::new(&out[..]),
+            crate::io::ParserConfiguration::new(&b),
+        )
+        .unwrap_or_else(|e| panic!("re-parse of writer output failed: {e}\n---\n{s}"));
         let orig: std::collections::BTreeSet<_> = o.iter().map(|ac| ac.component.clone()).collect();
         let got: std::collections::BTreeSet<_> =
             parsed.iter().map(|ac| ac.component.clone()).collect();
@@ -1481,10 +1487,13 @@ mod tests {
         );
 
         // End-to-end: the reader must consume the natively-rendered anon value.
-        use crate::io::omn::read_with_build;
+        use crate::io::omn::read;
         use std::io::BufReader;
-        let (parsed, _): (SetOntology<_>, PrefixMapping) =
-            read_with_build(BufReader::new(&out[..]), &b).unwrap();
+        let (parsed, _): (SetOntology<_>, PrefixMapping) = read(
+            BufReader::new(&out[..]),
+            crate::io::ParserConfiguration::new(&b),
+        )
+        .unwrap();
         let orig: std::collections::BTreeSet<_> = o.iter().map(|ac| ac.component.clone()).collect();
         let got: std::collections::BTreeSet<_> =
             parsed.iter().map(|ac| ac.component.clone()).collect();
