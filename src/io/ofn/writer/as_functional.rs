@@ -26,7 +26,7 @@ fn needs_iri_percent_encoding(c: char) -> bool {
 
 /// Percent-encodes every character [`needs_iri_percent_encoding`] flags in
 /// `s`, leaving the rest untouched.
-fn percent_encode_iri(s: &str) -> std::borrow::Cow<'_, str> {
+pub(super) fn percent_encode_iri(s: &str) -> std::borrow::Cow<'_, str> {
     if !s.chars().any(needs_iri_percent_encoding) {
         return std::borrow::Cow::Borrowed(s);
     }
