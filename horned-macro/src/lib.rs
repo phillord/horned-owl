@@ -6,9 +6,9 @@
 //! rationale. In short: each macro checks the embedded text against the
 //! real grammar at compile time (a genuine Rust compile error on a
 //! syntax mistake), then expands to a call into the corresponding
-//! `horned_owl::io::{omn,ofn}::reader::read_with_build` -- the same,
-//! already-tested runtime reader -- rather than re-implementing any of
-//! its semantics inside the macro.
+//! `horned_owl::io::{omn,ofn}::reader::read` -- the same, already-tested
+//! runtime reader -- rather than re-implementing any of its semantics
+//! inside the macro.
 //!
 //! The document is a quoted string, not bare tokens. An earlier version
 //! of `omn!` took unquoted tokens instead (no string at all) -- see
@@ -17,8 +17,8 @@
 //! `<http://...>` IRI (Rust's lexer strips `//` as a comment before any
 //! macro sees tokens), which meant it wasn't actually accepting the
 //! real grammar, only a CURIE-only dialect of it. A quoted string has
-//! no such restriction -- the full grammar `read_with_build` already
-//! supports is available here, unrestricted.
+//! no such restriction -- the full grammar `read` already supports is
+//! available here, unrestricted.
 
 use horned_owl::io::ofn::reader::{OwlFunctionalLexer, Rule as OfnRule};
 use horned_owl::io::omn::reader::{ManchesterLexer, Rule as OmnRule};
@@ -61,7 +61,10 @@ fn expand(
     }
 
     let expanded = quote! {
-        match #reader_call(#text.as_bytes(), #build) {
+        match #reader_call(
+            #text.as_bytes(),
+            ::horned_owl::io::ParserConfiguration::new(#build),
+        ) {
             ::std::result::Result::Ok((onto, _prefixes)) => onto,
             ::std::result::Result::Err(e) => panic!(
                 "horned-macro: `{}!` passed its compile-time syntax check but failed at \
@@ -108,7 +111,7 @@ pub fn omn(input: TokenStream) -> TokenStream {
                 .map(|_| ())
                 .map_err(|e| e.to_string())
         },
-        quote! { ::horned_owl::io::omn::reader::read_with_build },
+        quote! { ::horned_owl::io::omn::reader::read },
     )
 }
 
@@ -146,6 +149,6 @@ pub fn ofn(input: TokenStream) -> TokenStream {
                 .map(|_| ())
                 .map_err(|e| e.to_string())
         },
-        quote! { ::horned_owl::io::ofn::reader::read_with_build },
+        quote! { ::horned_owl::io::ofn::reader::read },
     )
 }

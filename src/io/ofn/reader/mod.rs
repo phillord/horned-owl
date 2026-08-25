@@ -33,18 +33,11 @@ pub fn read<
     O: MutableOntology<A> + Ontology<A> + Default,
     R: BufRead,
 >(
-    bufread: R,
+    mut bufread: R,
     config: ParserConfiguration<A, B>,
 ) -> Result<(O, PrefixMapping), HornedError> {
-    read_with_build(bufread, config.build.as_ref())
-}
-
-pub fn read_with_build<A: ForIRI, O: MutableOntology<A> + Ontology<A> + Default, R: BufRead>(
-    mut bufread: R,
-    build: &Build<A>,
-) -> Result<(O, PrefixMapping), HornedError> {
     let prefixes = PrefixMapping::default();
-    let ctx = Context::new(build, &prefixes);
+    let ctx = Context::new(config.build.as_ref(), &prefixes);
 
     // FIXME: implement iterative parser (this is possible in )
     let mut doc = String::new();
