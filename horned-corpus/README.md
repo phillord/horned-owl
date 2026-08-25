@@ -126,7 +126,7 @@ The key is read from `--api-key` or the `BIOPORTAL_API_KEY` env var. A `.env.exa
 template is included; the binary does **not** load `.env` automatically, so source it first
 (`set -a; source .env; set +a`) or export the variable.
 
-- `roundtrip --formats rdf,owx,ofn,omn` restricts which target formats to write (default: all four).
+- `roundtrip --formats rdf,owx,ofn,omn,obo` restricts which target formats to write (default: all five).
 - `fetch --timeout <secs>` bounds every request (default `180`). BioPortal's `include=all`
   ontology list alone is multi-MB and routinely exceeds reqwest's 30s default, so a timeout
   is effectively required for `fetch` to complete.
