@@ -46,7 +46,8 @@ pub fn write_cmo<A: ForIRI, AA: ForIndex<A>, W: StdWrite>(
     let mapping = mapping.unwrap_or(&default_mapper);
 
     let id = ont.i().the_ontology_id_or_default();
-    let id_item = StreamComponent::Component(AnnotatedComponent::new(id, BTreeSet::new()));
+    let id_item: StreamComponent<AA> =
+        StreamComponent::Component(AnnotatedComponent::new(id, BTreeSet::new()).into());
 
     write_stream(
         write,
