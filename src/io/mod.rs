@@ -296,14 +296,14 @@ pub(crate) fn prefix_stream<'a, A: ForIRI, AA: ForIndex<A>>(
 /// `ComponentMappedOntology` iteration order (see "Fix the ordering bug"
 /// in the design notes), as a `StreamComponent` stream for `write_cmo`
 /// implementations that derive from `write_stream`. Yields `ont`'s own
-/// `AA` (cloned via `iter_raw`), not always `AnnotatedComponent<A>` --
+/// `AA` (cloned via `iter`), not always `AnnotatedComponent<A>` --
 /// cheap when `AA` is `Rc`/`Arc`-backed (a pointer + refcount bump)
 /// instead of cloning the full `AnnotatedComponent<A>` struct.
 pub(crate) fn component_stream<'a, A: ForIRI, AA: ForIndex<A>>(
     ont: &'a ComponentMappedOntology<A, AA>,
 ) -> impl Iterator<Item = Result<StreamComponent<AA>>> + 'a {
     ont.i()
-        .iter_raw()
+        .iter()
         .cloned()
         .map(|ac| Ok(StreamComponent::Component(ac)))
 }
