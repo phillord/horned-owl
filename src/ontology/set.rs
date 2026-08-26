@@ -2,7 +2,7 @@
 use std::{collections::HashSet, hash::Hash, iter::FusedIterator, rc::Rc};
 
 use super::indexed::ForIndex;
-use super::indexed::{OneIndexedOntology, OntologyIndex};
+use super::indexed::{IterableOntologyIndex, OneIndexedOntology, OntologyIndex};
 use crate::model::*;
 use std::marker::PhantomData;
 
@@ -221,6 +221,19 @@ impl<A: ForIRI, AA: ForIndex<A>> OntologyIndex<A, AA> for SetIndex<A, AA> {
     }
 }
 
+impl<A: ForIRI, AA: ForIndex<A>> IterableOntologyIndex<A, AA> for SetIndex<A, AA> {
+    type Iter<'a>
+        = std::collections::hash_set::Iter<'a, AA>
+    where
+        Self: 'a,
+        A: 'a,
+        AA: 'a;
+
+    fn iter(&self) -> Self::Iter<'_> {
+        self.0.iter()
+    }
+}
+
 impl<A, AA: Hash + Eq> Default for SetIndex<A, AA> {
     fn default() -> Self {
         SetIndex(Default::default(), Default::default())
@@ -294,11 +307,40 @@ impl<'a, A: ForIRI, AA: ForIndex<A>> IntoIterator for &'a SetIndex<A, AA> {
 #[cfg(test)]
 mod test {
     use super::{SetIndex, SetOntology};
-    use crate::{model::*, ontology::indexed::OneIndexedOntology};
+    use crate::{
+        model::*,
+        ontology::indexed::{ForIndex, IterableOntologyIndex, OneIndexedOntology, OntologyIndex},
+    };
 
     #[test]
     fn test_ontology_cons() {
         let _ = SetOntology::new_rc();
+    }
+
+    /// Generic code that only knows `I: IterableOntologyIndex` (not the
+    /// concrete `SetIndex`) can still iterate it, cloning the cheap `AA`
+    /// handle rather than the `AnnotatedComponent<A>` it wraps.
+    fn count_via_trait<A: ForIRI, AA: ForIndex<A>, I: IterableOntologyIndex<A, AA>>(
+        idx: &I,
+    ) -> usize {
+        idx.iter().count()
+    }
+
+    #[test]
+    fn set_index_is_iterable_via_the_trait() {
+        let mut idx: SetIndex<RcStr, RcAnnotatedComponent> = SetIndex::new_rc();
+        let b = Build::new_rc();
+        idx.index_insert(RcAnnotatedComponent::from(AnnotatedComponent::from(
+            DeclareClass(b.class("http://example.com/A")),
+        )));
+        idx.index_insert(RcAnnotatedComponent::from(AnnotatedComponent::from(
+            DeclareClass(b.class("http://example.com/B")),
+        )));
+
+        assert_eq!(count_via_trait(&idx), 2);
+        // The inherent `iter()` (yielding the same `&AA`) still resolves
+        // for direct calls, unaffected by the trait method of the same name.
+        assert_eq!(idx.iter().count(), 2);
     }
 
     #[test]
