@@ -137,34 +137,40 @@ pub fn read_source(fmt: Format, bytes: &[u8]) -> anyhow::Result<ReadOk> {
     })
 }
 
-/// Serialize `model` into `fmt`'s byte representation.
+/// Serialize `cmo` into `fmt`'s byte representation.
 ///
 /// Every horned-owl writer (ofn/omn/owx/obo/rdf) takes a
-/// `&ComponentMappedOntology<A, AA>`, not a `&SetOntology`, so `model` is
-/// converted via `.into()` first, plus an `Option<&PrefixMapping>`. The rdf
-/// writer merges `prefixes` in alongside its own fixed rdf/owl/swrl set.
+/// `&ComponentMappedOntology<A, AA>` plus an `Option<&PrefixMapping>`. The
+/// rdf writer merges `prefixes` in alongside its own fixed rdf/owl/swrl set.
+///
+/// Takes the `ComponentMappedOntology` directly rather than a `&SetOntology`
+/// to convert internally: a sweep over multiple target formats (see
+/// `roundtrip::run_bytes`) calls this once per format against the *same*
+/// source model, and converting per call cloned and rebuilt the whole
+/// ontology on every one of those calls. Building the `ComponentMappedOntology`
+/// once and reusing it across every target format's `write_target` call turns
+/// that into a single conversion per source ontology, not one per target.
 pub fn write_target(
     fmt: Format,
-    model: &SetOntology<RcStr>,
+    cmo: &ComponentMappedOntology<RcStr, RcAnnotatedComponent>,
     prefixes: &PrefixMapping,
 ) -> anyhow::Result<Vec<u8>> {
-    let cmo: ComponentMappedOntology<RcStr, RcAnnotatedComponent> = model.clone().into();
     let mut out: Vec<u8> = Vec::new();
     match fmt {
         Format::Ofn => {
-            ofn::writer::write_cmo(&mut out, &cmo, Some(prefixes)).map_err(horned_err)?;
+            ofn::writer::write_cmo(&mut out, cmo, Some(prefixes)).map_err(horned_err)?;
         }
         Format::Omn => {
-            omn::writer::write_cmo(&mut out, &cmo, Some(prefixes)).map_err(horned_err)?;
+            omn::writer::write_cmo(&mut out, cmo, Some(prefixes)).map_err(horned_err)?;
         }
         Format::OwlXml => {
-            owx::writer::write_cmo(&mut out, &cmo, Some(prefixes)).map_err(horned_err)?;
+            owx::writer::write_cmo(&mut out, cmo, Some(prefixes)).map_err(horned_err)?;
         }
         Format::Obo => {
-            obo::writer::write_cmo(&mut out, &cmo, Some(prefixes)).map_err(horned_err)?;
+            obo::writer::write_cmo(&mut out, cmo, Some(prefixes)).map_err(horned_err)?;
         }
         Format::RdfXml => {
-            rdf::writer::write_cmo(&mut out, &cmo, Some(prefixes)).map_err(horned_err)?;
+            rdf::writer::write_cmo(&mut out, cmo, Some(prefixes)).map_err(horned_err)?;
         }
         // Turtle is a read-only (source) format — horned-owl has no Turtle
         // writer, so it never appears as a round-trip target.
@@ -226,8 +232,9 @@ mod tests {
         // does not include Obo, for this reason).
         let obo = b"format-version: 1.4\nontology: ex\n\n[Term]\nid: EX:0000001\nname: A\n";
         let src = read_source(Format::Obo, obo).expect("read");
+        let cmo: ComponentMappedOntology<RcStr, RcAnnotatedComponent> = src.model.clone().into();
 
-        let bytes = write_target(Format::Obo, &src.model, &src.prefixes).expect("write");
+        let bytes = write_target(Format::Obo, &cmo, &src.prefixes).expect("write");
         let back = read_source(Format::Obo, &bytes).expect("reread");
 
         assert!(
@@ -255,8 +262,9 @@ mod tests {
             b"Prefix(ex:=<http://ex/>)\nOntology(<http://ex/o>\nDeclaration(Class(ex:A))\n)",
         )
         .unwrap();
+        let cmo: ComponentMappedOntology<RcStr, RcAnnotatedComponent> = src.model.clone().into();
         for t in [Format::Ofn, Format::Omn, Format::OwlXml, Format::RdfXml] {
-            let bytes = write_target(t, &src.model, &src.prefixes).expect("write");
+            let bytes = write_target(t, &cmo, &src.prefixes).expect("write");
             assert!(!bytes.is_empty(), "empty output for {t:?}");
             let back = read_source(t, &bytes).expect("reread");
             assert!(back.model.iter().count() >= 1, "lost content for {t:?}");
