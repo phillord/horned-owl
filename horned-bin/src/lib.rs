@@ -375,10 +375,11 @@ pub mod validation {
 pub mod summary {
 
     use horned_owl::{
-        model::{ComponentKind, HigherKinded},
-        ontology::component_mapped::RcComponentMappedOntology,
+        model::{AnnotatedComponent, ComponentKind, HigherKinded},
+        ontology::{component_mapped::RcComponentMappedOntology, indexed::IterableOntologyIndex},
     };
     use indexmap::map::IndexMap;
+    use std::borrow::Borrow;
 
     #[derive(Debug)]
     pub struct SummaryStatistics {
@@ -400,9 +401,30 @@ pub mod summary {
     {
         let ont: RcComponentMappedOntology = ont.into();
         SummaryStatistics {
-            logical_axiom: ont.i().iter().filter(|c| c.is_axiom()).count(),
-            annotation_axiom: ont.i().iter().map(|aa| aa.ann.len()).sum::<usize>(),
-            meta_comp: ont.i().iter().filter(|c| c.is_meta()).count(),
+            logical_axiom: ont
+                .i()
+                .iter()
+                .filter(|&c| {
+                    let c: &AnnotatedComponent<_> = c.borrow();
+                    c.is_axiom()
+                })
+                .count(),
+            annotation_axiom: ont
+                .i()
+                .iter()
+                .map(|aa| {
+                    let aa: &AnnotatedComponent<_> = aa.borrow();
+                    aa.ann.len()
+                })
+                .sum::<usize>(),
+            meta_comp: ont
+                .i()
+                .iter()
+                .filter(|&c| {
+                    let c: &AnnotatedComponent<_> = c.borrow();
+                    c.is_meta()
+                })
+                .count(),
             axiom_type: axiom_types(ont),
         }
     }

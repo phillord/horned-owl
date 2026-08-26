@@ -1076,6 +1076,7 @@ mod tests {
     use crate::ontology::component_mapped::ComponentMappedOntology;
     use crate::ontology::set::SetOntology;
     use rstest::rstest;
+    use std::borrow::Borrow;
     use std::path::PathBuf;
 
     type TestOnt = ComponentMappedOntology<
@@ -1222,8 +1223,14 @@ mod tests {
 
         // Component sets must be equal after one round-trip (write → read).
         let orig: std::collections::BTreeSet<_> = o.iter().map(|ac| ac.component.clone()).collect();
-        let got: std::collections::BTreeSet<_> =
-            amo2.i().iter().map(|ac| ac.component.clone()).collect();
+        let got: std::collections::BTreeSet<_> = amo2
+            .i()
+            .iter()
+            .map(|ac| {
+                let ac: &AnnotatedComponent<_> = ac.borrow();
+                ac.component.clone()
+            })
+            .collect();
         assert_eq!(orig, got, "round-trip mismatch:\n---written---\n{s}");
 
         // And stable after a second round-trip.

@@ -608,6 +608,7 @@ impl<A: ForIRI, AA: ForIndex<A>, F: RdfFormatter<A, W>, W: Write> Render<A, F, (
         }
 
         for cmp in self.i().iter() {
+            let cmp: &AnnotatedComponent<A> = cmp.borrow();
             cmp.render(f, ng)?;
         }
 

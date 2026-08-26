@@ -22,7 +22,7 @@ use std::{
 
 use std::marker::PhantomData;
 
-use super::indexed::{OneIndexedOntology, OntologyIndex};
+use super::indexed::{IterableOntologyIndex, OneIndexedOntology, OntologyIndex};
 
 /// Return all axioms of a specific `ComponentKind`
 #[allow(unused_macros)]
@@ -78,22 +78,16 @@ impl<A: ForIRI, AA: ForIndex<A>> ComponentMappedIndex<A, AA> {
         self.component.entry(cmk).or_default()
     }
 
-    /// Gets an iterator that visits the annotated components of the ontology.
-    pub fn iter(&self) -> ComponentMappedIter<'_, A, AA> {
-        // TODO -- what can't this just use flat_map?
-        ComponentMappedIter {
-            ont: self,
-            inner: None,
-            kinds: self.component.keys().collect(),
-        }
-    }
-
-    /// Like [`iter`](Self::iter), but yields the raw `AA` handle instead of
-    /// borrowing through it to `&AnnotatedComponent<A>` -- lets a caller
-    /// clone `AA` itself (cheap when it's `Rc`/`Arc`-backed) rather than
-    /// the full `AnnotatedComponent<A>`. Same kind order as `iter`, since
-    /// `BTreeMap::values()` already walks in key order.
-    pub(crate) fn iter_raw(&self) -> impl Iterator<Item = &AA> {
+    /// Gets an iterator that visits the raw `AA` handle of each annotated
+    /// component in the ontology, in ascending `ComponentKind` order (since
+    /// `BTreeMap::values()` already walks in key order).
+    ///
+    /// This yields `&AA` rather than borrowing through it to
+    /// `&AnnotatedComponent<A>` -- lets a caller clone `AA` itself (cheap
+    /// when it's `Rc`/`Arc`-backed) rather than the full
+    /// `AnnotatedComponent<A>`. Call [`borrow`](std::borrow::Borrow::borrow)
+    /// on a yielded item where an `&AnnotatedComponent<A>` is needed.
+    pub(crate) fn iter(&self) -> impl Iterator<Item = &AA> {
         self.component.values().flat_map(|s| s.iter())
     }
 
@@ -281,6 +275,25 @@ impl<A: ForIRI, AA: ForIndex<A>> OntologyIndex<A, AA> for ComponentMappedIndex<A
     }
 }
 
+impl<A: ForIRI, AA: ForIndex<A>> IterableOntologyIndex<A, AA> for ComponentMappedIndex<A, AA> {
+    type Iter<'a>
+        = std::iter::FlatMap<
+        std::collections::btree_map::Values<'a, ComponentKind, BTreeSet<AA>>,
+        std::collections::btree_set::Iter<'a, AA>,
+        fn(&'a BTreeSet<AA>) -> std::collections::btree_set::Iter<'a, AA>,
+    >
+    where
+        Self: 'a,
+        A: 'a,
+        AA: 'a;
+
+    fn iter(&self) -> Self::Iter<'_> {
+        self.component.values().flat_map(
+            BTreeSet::iter as fn(&BTreeSet<AA>) -> std::collections::btree_set::Iter<'_, AA>,
+        )
+    }
+}
+
 #[derive(Debug, Eq, PartialEq)]
 pub struct ComponentMappedOntology<A, AA>(OneIndexedOntology<A, AA, ComponentMappedIndex<A, AA>>);
 
@@ -420,6 +433,7 @@ impl<A: ForIRI, AA: ForIndex<A>> Extend<AnnotatedComponent<A>> for ComponentMapp
 
 #[cfg(test)]
 mod test {
+    use std::borrow::Borrow;
     use std::rc::Rc;
 
     use super::ComponentMappedOntology;
@@ -552,7 +566,7 @@ mod test {
         o.insert(decl3.clone());
 
         // Iteration is based on ascending order of axiom kinds.
-        let mut it = o.i().iter();
+        let mut it = o.i().iter().map(Borrow::<AnnotatedComponent<_>>::borrow);
         assert_eq!(
             it.next(),
             Some(&AnnotatedComponent::from(Component::DeclareClass(decl1)))
