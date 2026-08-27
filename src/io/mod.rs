@@ -128,68 +128,53 @@ impl<A: ForIRI, AA: ForIndex<A>> ParserOutput<A, AA> {
     }
 }
 
-/// Lets a `Build` be held by [`ParserConfiguration`] either by shared
-/// reference (`&Build<A>`, via the blanket `impl<T: AsRef<U>> AsRef<U> for
-/// &T`) or by value (`Build<A>` itself, via this impl) -- std has no
-/// blanket `impl<T> AsRef<T> for T`, so this is what makes the by-value
-/// case work.
+/// std has no blanket `impl<T> AsRef<T> for T`, so `ParserConfiguration`'s
+/// owned-`Build` case needs this impl to satisfy its `B: AsRef<Build<A>>`
+/// bound; the borrowed case (`&Build<A>`) already satisfies it via std's
+/// blanket `impl<T: AsRef<U>> AsRef<U> for &T`.
 impl<A: ForIRI> AsRef<Build<A>> for Build<A> {
     fn as_ref(&self) -> &Build<A> {
         self
     }
 }
 
+/// Settings shared by every format's `read`. Generic over how it holds its
+/// `Build` (`B`): `&Build<A>` to share one interning table across several
+/// parses, or an owned `Build<A>` for a one-off parse with nothing to
+/// share it with.
 #[derive(Clone, Debug)]
 pub struct ParserConfiguration<A: ForIRI, B: AsRef<Build<A>> = Build<A>> {
-    /// The `Build` used for all IRI creation during this parse. Generic
-    /// over how it's held: `&Build<A>` to share one interning table across
-    /// several parses (what every reader threads internally -- see
-    /// `OntologyParser`, `ClosureOntologyParser`), or an owned `Build<A>`
-    /// (the default, via `ParserConfiguration::default()`) for a one-off
-    /// parse with nothing to share it with. Only the `&Build<A>` form is
-    /// `Clone` -- `Build<A>` deliberately isn't, since cloning it would
-    /// silently duplicate its interning table rather than share it, so
-    /// anything that needs to clone its config (e.g. recursing through an
-    /// `owl:imports` closure) needs the shared-reference form anyway.
+    /// The `Build` used for all IRI creation during this parse. Only the
+    /// `&Build<A>` form is `Clone` -- `Build<A>` itself deliberately isn't,
+    /// since cloning it would duplicate its interning table instead of
+    /// sharing it.
     pub build: B,
     /// In lax mode, parsers tolerate content that would otherwise be a
-    /// parse error -- see individual readers for exactly what this
-    /// relaxes -- instead of rejecting it.
-    ///
-    /// Currently only the RDF and OWX readers consult this flag; the
-    /// OFN and OMN readers do not yet have a lax mode, so setting it
-    /// has no effect on those formats.
+    /// parse error instead of rejecting it -- see individual readers for
+    /// exactly what this relaxes. Only the RDF and OWX readers consult
+    /// this flag; OFN and OMN ignore it.
     pub lax: bool,
-    /// The maximum number of bytes to read from a single remote
-    /// (`http`/`https`) IRI resolution, such as when following an
-    /// `owl:imports` closure. Defaults to `u64::MAX` (no limit),
-    /// matching the unbounded behaviour of pre-3.x `ureq`. Lower this
-    /// if resolving IRIs from untrusted sources where an oversized
-    /// response could exhaust memory.
+    /// Maximum bytes to read from a single remote (`http`/`https`) IRI
+    /// resolution, e.g. following an `owl:imports` closure. Default
+    /// `u64::MAX` (no limit); lower it when resolving untrusted IRIs where
+    /// an oversized response could exhaust memory.
     pub remote_body_limit: u64,
     /// If set, no network access is attempted at all during parsing --
-    /// resolving an IRI (e.g. following an `owl:imports` closure) that
-    /// isn't available locally fails with an error instead of falling
-    /// back to a remote fetch. `remote_body_limit` still bounds a fetch
-    /// in size if one happens; this instead prevents one happening at
-    /// all. Defaults to `false`.
+    /// resolving an IRI not available locally fails instead of falling
+    /// back to a remote fetch. `remote_body_limit` only bounds a fetch's
+    /// size if one happens; this prevents one happening at all. Default
+    /// `false`.
     pub local_only: bool,
-    /// Override format detection. When set, this takes precedence over the
+    /// Overrides format detection when set, taking precedence over the
     /// file extension. `InputFormat::Guess` triggers content sniffing.
     pub input_format: Option<InputFormat>,
-    /// An OASIS XML Catalog (see the [`horned_catalog`] crate) to
-    /// consult when resolving an IRI to local content, such as when
-    /// following an `owl:imports` closure. Checked before the
-    /// heuristic path-guessing in [`crate::resolve::localize_iri`] and
-    /// before any remote fallback -- an explicit catalog mapping is a
-    /// stronger signal than either. `None` (the default) disables
-    /// catalog-based resolution entirely.
-    ///
-    /// This is an `Rc` (cloned cheaply -- a refcount bump -- each time a
-    /// parse recurses into an import) rather than a borrow, unlike `build`
-    /// above: a `Catalog` is read-only reference data with no interning
-    /// identity to preserve, so there's no reason to force every recursive
-    /// parse to share the exact same borrow the way `Build` needs to.
+    /// An OASIS XML Catalog (see the [`horned_catalog`] crate) consulted
+    /// when resolving an IRI to local content, before both the heuristic
+    /// path-guessing in [`crate::resolve::localize_iri`] and any remote
+    /// fallback. `None` (the default) disables catalog-based resolution.
+    /// An `Rc`, not a borrow like `build`: a `Catalog` is read-only with
+    /// no interning identity to preserve, so a cheap refcount-bump clone
+    /// per recursive parse is enough.
     pub catalog: Option<std::rc::Rc<horned_catalog::Catalog>>,
     _marker: std::marker::PhantomData<A>,
 }
@@ -221,14 +206,12 @@ impl<A: ForIRI + Default> Default for ParserConfiguration<A, Build<A>> {
 }
 
 /// RDF-specific parser settings, wrapping the settings shared by every
-/// format. Inverted from a `rdf: RDFParserConfiguration` field on
-/// [`ParserConfiguration`] -- RDF is the only format with a real
-/// format-specific setting, so it's the only one that needs a wrapper at
-/// all (contrast the now-deleted `OWXParserConfiguration {}`, which existed
-/// only for structural symmetry with this one, with nothing to configure).
+/// format. RDF is the only format with a format-specific setting
+/// (`format`), so it's the only one with a wrapper struct at all.
 #[derive(Clone, Debug)]
 pub struct RDFParserConfiguration<A: ForIRI, B: AsRef<Build<A>> = Build<A>> {
     pub common: ParserConfiguration<A, B>,
+    /// The RDF syntax to parse as. `None` defaults to RDF/XML.
     pub format: Option<oxrdfio::RdfFormat>,
 }
 
@@ -267,12 +250,8 @@ pub(crate) fn resolve_doc_iri<A: ForIRI, B: AsRef<Build<A>>>(
     )?))
 }
 
-/// A `StreamComponent::Prefix` for every entry in `mapping`, for `write`
-/// implementations that derive from `write_stream` (see
-/// `component_stream` below). `AA` carries no data here -- it's a plain
-/// type parameter so the returned iterator's `Item` matches whatever
-/// `AA` the caller is chaining/composing with (typically
-/// `AnnotatedComponent<A>`, via `component_stream`).
+/// `mapping`'s entries as `StreamComponent::Prefix` items. `AA` is
+/// unconstrained since `Prefix` carries no `AA`-typed payload.
 pub(crate) fn prefix_stream<'a, A: ForIRI, AA: ForIndex<A>>(
     mapping: &'a PrefixMapping,
 ) -> impl Iterator<Item = Result<StreamComponent<AA>>> + 'a {
@@ -281,13 +260,9 @@ pub(crate) fn prefix_stream<'a, A: ForIRI, AA: ForIndex<A>>(
         .map(|(name, iri)| Ok(StreamComponent::Prefix(name.to_string(), iri.to_string())))
 }
 
-/// `ont`'s components, in their already-correctly-kind-ordered
-/// `ComponentMappedOntology` iteration order (see "Fix the ordering bug"
-/// in the design notes), as a `StreamComponent` stream for `write`
-/// implementations that derive from `write_stream`. Yields `ont`'s own
-/// `AA` (cloned via `iter`), not always `AnnotatedComponent<A>` --
-/// cheap when `AA` is `Rc`/`Arc`-backed (a pointer + refcount bump)
-/// instead of cloning the full `AnnotatedComponent<A>` struct.
+/// `ont`'s components as a `StreamComponent` stream, in `ComponentKind`
+/// order. Clones `ont`'s own `AA` handle per item, not always
+/// `AnnotatedComponent<A>` -- cheap when `AA` is `Rc`/`Arc`-backed.
 pub(crate) fn component_stream<'a, A: ForIRI, AA: ForIndex<A>>(
     ont: &'a ComponentMappedOntology<A, AA>,
 ) -> impl Iterator<Item = Result<StreamComponent<AA>>> + 'a {
@@ -539,9 +514,11 @@ mod tests {
 
         // OFN/OMN's composition order (Prefix before components); OWX
         // instead splits component_stream around prefix_stream to put
-        // OntologyID first -- see the design notes. component_stream
-        // yields the source ontology's own AA (here RcAnnotatedComponent),
-        // so prefix_stream's own AA must match that to chain.
+        // OntologyID first, since OWX serializes ontologyIRI/versionIRI as
+        // XML attributes on <Ontology>, which must precede any child
+        // element. component_stream yields the source ontology's own AA
+        // (here RcAnnotatedComponent), so prefix_stream's own AA must match
+        // that to chain.
         let items: std::result::Result<Vec<_>, _> =
             prefix_stream::<RcStr, RcAnnotatedComponent>(&mapping)
                 .chain(component_stream(&cmo))
