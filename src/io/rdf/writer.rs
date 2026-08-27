@@ -42,31 +42,22 @@ impl Default for RDFWriterConfiguration {
     }
 }
 
-/// Write any `Ontology` to `write`, in RDF/XML, using the given
+/// Write a `ComponentMappedOntology` to `write`, in RDF/XML, using the given
 /// `PrefixMapping` in addition to the fixed rdf/owl/swrl prefixes this
-/// writer always emits.
-pub fn write<A: ForIRI, O: Ontology<A>, W: Write>(
-    write: W,
-    ont: &O,
-    mapping: Option<&PrefixMapping>,
-) -> Result<W, HornedError> {
-    let cmo: ComponentMappedOntology<A, AnnotatedComponent<A>> =
-        crate::io::into_component_mapped(ont);
-    write_cmo(write, &cmo, mapping)
-}
-
-/// Write a `ComponentMappedOntology` to `write`, in RDF/XML -- the
-/// concrete, zero-conversion entry point [`write`] defers to.
-pub fn write_cmo<A: ForIRI, AA: ForIndex<A>, W: Write>(
+/// writer always emits. A caller holding some other `Ontology`
+/// implementation should collect it into a `ComponentMappedOntology` first
+/// (`ont.iter().cloned().collect()`, or `ont.into_iter().collect()` if
+/// `ont` doesn't need to be kept).
+pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
     write: W,
     ont: &ComponentMappedOntology<A, AA>,
     mapping: Option<&PrefixMapping>,
 ) -> Result<W, HornedError> {
-    write_cmo_with_config(write, ont, mapping, RDFWriterConfiguration::default())
+    write_with_config(write, ont, mapping, RDFWriterConfiguration::default())
 }
 
-/// As [`write_cmo`], but with an explicit [`RDFWriterConfiguration`].
-pub fn write_cmo_with_config<A: ForIRI, AA: ForIndex<A>, W: Write>(
+/// As [`write`], but with an explicit [`RDFWriterConfiguration`].
+pub fn write_with_config<A: ForIRI, AA: ForIndex<A>, W: Write>(
     write: W,
     ont: &ComponentMappedOntology<A, AA>,
     mapping: Option<&PrefixMapping>,
@@ -122,7 +113,7 @@ pub fn write_to_rdf_format_with_config<A: ForIRI, AA: ForIndex<A>, W: Write>(
     };
 
     match rdf_format {
-        oxrdfio::RdfFormat::RdfXml => write_cmo_with_config(write, ont, None, config),
+        oxrdfio::RdfFormat::RdfXml => write_with_config(write, ont, None, config),
         other => write_to_rdf_formatter_with_config(ont, serial(write, other), config),
     }
 }
@@ -1935,7 +1926,7 @@ render! {
 /// as the subject of their triples, which isn't part of the component
 /// itself -- the first `OntologyID` seen supplies it for every `Import`/
 /// `OntologyAnnotation` that follows, so `components` must yield its
-/// `OntologyID` before any of those (the same ordering `write_cmo` already
+/// `OntologyID` before any of those (the same ordering `write` already
 /// guarantees).
 pub fn write_stream<A: ForIRI, AA: ForIndex<A>, F: RdfFormatter<A, W>, W: Write>(
     formatter: F,
@@ -2073,13 +2064,13 @@ mod test {
     }
 
     #[test]
-    fn write_cmo_merges_supplied_prefixes_with_the_fixed_set() {
+    fn write_merges_supplied_prefixes_with_the_fixed_set() {
         let ont = ComponentMappedOntology::new_rc();
         let mut mapping = PrefixMapping::default();
         mapping.add_prefix("eg", "http://example.com/eg#").unwrap();
 
         let mut buf = Vec::new();
-        write_cmo(&mut buf, &ont, Some(&mapping)).unwrap();
+        write(&mut buf, &ont, Some(&mapping)).unwrap();
         let s = String::from_utf8(buf).unwrap();
 
         assert!(s.contains("xmlns:eg=\"http://example.com/eg#\""));

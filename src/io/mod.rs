@@ -14,7 +14,7 @@ use self::rdf::reader::{ConcreteRDFOntology, IncompleteParse};
 use crate::error::HornedError;
 use crate::ontology::indexed::ForIndex;
 use crate::{
-    model::{Build, ForIRI, IRI, Ontology},
+    model::{Build, ForIRI, IRI},
     ontology::{component_mapped::ComponentMappedOntology, set::SetOntology},
 };
 
@@ -267,18 +267,7 @@ pub(crate) fn resolve_doc_iri<A: ForIRI, B: AsRef<Build<A>>>(
     )?))
 }
 
-/// Convert any `Ontology` into a `ComponentMappedOntology`, for the shared
-/// shape behind every format's generic `write(ont: &O, ...)` -- converts
-/// once, then hands the result to that format's `write_cmo`.
-pub(crate) fn into_component_mapped<A: ForIRI, AA: ForIndex<A>, O: Ontology<A>>(
-    ont: &O,
-) -> ComponentMappedOntology<A, AA> {
-    let mut cmo = ComponentMappedOntology::new();
-    cmo.extend(ont.iter().cloned());
-    cmo
-}
-
-/// A `StreamComponent::Prefix` for every entry in `mapping`, for `write_cmo`
+/// A `StreamComponent::Prefix` for every entry in `mapping`, for `write`
 /// implementations that derive from `write_stream` (see
 /// `component_stream` below). `AA` carries no data here -- it's a plain
 /// type parameter so the returned iterator's `Item` matches whatever
@@ -294,7 +283,7 @@ pub(crate) fn prefix_stream<'a, A: ForIRI, AA: ForIndex<A>>(
 
 /// `ont`'s components, in their already-correctly-kind-ordered
 /// `ComponentMappedOntology` iteration order (see "Fix the ordering bug"
-/// in the design notes), as a `StreamComponent` stream for `write_cmo`
+/// in the design notes), as a `StreamComponent` stream for `write`
 /// implementations that derive from `write_stream`. Yields `ont`'s own
 /// `AA` (cloned via `iter`), not always `AnnotatedComponent<A>` --
 /// cheap when `AA` is `Rc`/`Arc`-backed (a pointer + refcount bump)
@@ -534,22 +523,7 @@ mod tests {
     }
 
     #[test]
-    fn into_component_mapped_carries_every_component() {
-        use super::*;
-        use crate::model::{Build, DeclareClass, MutableOntology, RcStr};
-        use crate::ontology::set::SetOntology;
-
-        let b = Build::new_rc();
-        let mut so: SetOntology<RcStr> = SetOntology::new_rc();
-        so.insert(DeclareClass(b.class("http://example.com/A")));
-
-        let cmo: ComponentMappedOntology<RcStr, crate::model::RcAnnotatedComponent> =
-            into_component_mapped(&so);
-        assert_eq!(cmo.iter().count(), 1);
-    }
-
-    #[test]
-    fn prefix_stream_then_component_stream_matches_write_cmo_composition() {
+    fn prefix_stream_then_component_stream_matches_write_composition() {
         use super::*;
         use crate::model::{Build, DeclareClass, MutableOntology, RcAnnotatedComponent, RcStr};
         use crate::ontology::set::SetOntology;
@@ -557,7 +531,8 @@ mod tests {
         let b = Build::new_rc();
         let mut so: SetOntology<RcStr> = SetOntology::new_rc();
         so.insert(DeclareClass(b.class("http://example.com/A")));
-        let cmo: ComponentMappedOntology<RcStr, RcAnnotatedComponent> = into_component_mapped(&so);
+        let cmo: ComponentMappedOntology<RcStr, RcAnnotatedComponent> =
+            so.iter().cloned().collect();
 
         let mut mapping = curie::PrefixMapping::default();
         mapping.add_prefix("ex", "http://example.com/").unwrap();
