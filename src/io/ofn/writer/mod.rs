@@ -7,7 +7,6 @@ use crate::io::{StreamComponent, StreamOntology};
 use crate::model::AnnotatedComponent;
 use crate::model::Component;
 use crate::model::ForIRI;
-use crate::model::Ontology;
 use crate::ontology::component_mapped::ComponentMappedOntology;
 use crate::ontology::indexed::ForIndex;
 
@@ -17,25 +16,13 @@ pub use self::as_functional::AsFunctional;
 pub use self::as_functional::Functional;
 use self::as_functional::percent_encode_iri;
 
-/// Write any `Ontology` to `write`, in OWL
+/// Write a `ComponentMappedOntology` to `write`, in OWL
 /// [Functional-Style](https://www.w3.org/TR/2012/REC-owl2-syntax-20121211/)
-/// syntax, using the given `PrefixMapping`. Converts to a
-/// `ComponentMappedOntology` then defers to [`write_cmo`]; a caller that
-/// already has one built should call `write_cmo` directly instead.
-pub fn write<A: ForIRI, O: Ontology<A>, W: Write>(
-    write: W,
-    ont: &O,
-    mapping: Option<&PrefixMapping>,
-) -> Result<W, HornedError> {
-    let cmo: ComponentMappedOntology<A, AnnotatedComponent<A>> =
-        crate::io::into_component_mapped(ont);
-    write_cmo(write, &cmo, mapping)
-}
-
-/// Write a `ComponentMappedOntology` to `write`, using the given
-/// `PrefixMapping` -- the concrete, zero-conversion entry point [`write`]
-/// defers to.
-pub fn write_cmo<A: ForIRI, AA: ForIndex<A>, W: Write>(
+/// syntax, using the given `PrefixMapping`. A caller holding some other
+/// `Ontology` implementation should collect it into a
+/// `ComponentMappedOntology` first (`ont.iter().cloned().collect()`, or
+/// `ont.into_iter().collect()` if `ont` doesn't need to be kept).
+pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
     write: W,
     ont: &ComponentMappedOntology<A, AA>,
     mapping: Option<&PrefixMapping>,
@@ -54,8 +41,8 @@ pub fn write_cmo<A: ForIRI, AA: ForIndex<A>, W: Write>(
 /// Components are written in the order they arrive, so the caller is
 /// responsible for ordering them to match the specification. If they do
 /// not, the output may not conform to the specification, and `Prefix`
-/// handling may be broken. Use [`write`] or [`write_cmo`] instead if this
-/// ordering can't be guaranteed.
+/// handling may be broken. Use [`write`] instead if this ordering can't be
+/// guaranteed.
 pub fn write_stream<A: ForIRI, AA: ForIndex<A>, W: Write>(
     mut write: W,
     components: impl StreamOntology<A, AA>,

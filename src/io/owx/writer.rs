@@ -18,26 +18,15 @@ use quick_xml::events::Event;
 use std::collections::BTreeSet;
 use std::io::Write as StdWrite;
 
-/// Write any `Ontology` to `write`, using the given `PrefixMapping`.
+/// Write a `ComponentMappedOntology` to `write`, using the given
+/// `PrefixMapping`.
 ///
 /// The ontology is written in OWL
-/// [XML](https://www.w3.org/TR/owl2-xml-serialization/) syntax. Converts
-/// to a `ComponentMappedOntology` then defers to [`write_cmo`]; a caller
-/// that already has one built should call `write_cmo` directly instead.
-pub fn write<A: ForIRI, O: Ontology<A>, W: StdWrite>(
-    write: W,
-    ont: &O,
-    mapping: Option<&PrefixMapping>,
-) -> Result<W, HornedError> {
-    let cmo: ComponentMappedOntology<A, AnnotatedComponent<A>> =
-        crate::io::into_component_mapped(ont);
-    write_cmo(write, &cmo, mapping)
-}
-
-/// Write a `ComponentMappedOntology` to `write`, using the given
-/// `PrefixMapping` -- the concrete, zero-conversion entry point [`write`]
-/// defers to.
-pub fn write_cmo<A: ForIRI, AA: ForIndex<A>, W: StdWrite>(
+/// [XML](https://www.w3.org/TR/owl2-xml-serialization/) syntax. A caller
+/// holding some other `Ontology` implementation should collect it into a
+/// `ComponentMappedOntology` first (`ont.iter().cloned().collect()`, or
+/// `ont.into_iter().collect()` if `ont` doesn't need to be kept).
+pub fn write<A: ForIRI, AA: ForIndex<A>, W: StdWrite>(
     write: W,
     ont: &ComponentMappedOntology<A, AA>,
     mapping: Option<&PrefixMapping>,
@@ -63,8 +52,7 @@ pub fn write_cmo<A: ForIRI, AA: ForIndex<A>, W: StdWrite>(
 /// and cannot guarantee correct output if these are not met: the
 /// `OntologyID` must come first, then `Prefix`es, then every other
 /// component. Other components are written in the same order given. Use
-/// [`write`] or [`write_cmo`] instead if this ordering can't be
-/// guaranteed.
+/// [`write`] instead if this ordering can't be guaranteed.
 pub fn write_stream<A: ForIRI, AA: ForIndex<A>, W: StdWrite>(
     write: W,
     mut components: impl StreamOntology<A, AA>,

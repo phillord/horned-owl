@@ -4,7 +4,6 @@ use std::io::Write;
 use curie::PrefixMapping;
 
 use crate::error::HornedError;
-use crate::model::AnnotatedComponent;
 use crate::model::Annotation;
 use crate::model::AnnotationSubject;
 use crate::model::Atom;
@@ -12,7 +11,6 @@ use crate::model::Component;
 use crate::model::ComponentKind;
 use crate::model::ForIRI;
 use crate::model::ObjectPropertyExpression;
-use crate::model::Ontology;
 use crate::model::SubObjectPropertyExpression;
 use crate::ontology::component_mapped::ComponentMappedOntology;
 use crate::ontology::indexed::ForIndex;
@@ -53,25 +51,12 @@ struct Frame {
 // Write a whole-ontology Manchester document.
 // ---------------------------------------------------------------------------
 
-/// Write any `Ontology` to `write`, in OWL
-/// [Manchester Syntax](https://www.w3.org/TR/2012/REC-owl2-manchester-syntax-20121211/),
-/// using the given `PrefixMapping`. Converts to a `ComponentMappedOntology`
-/// then defers to [`write_cmo`]; a caller that already has one built should
-/// call `write_cmo` directly instead.
-pub fn write<A: ForIRI, O: Ontology<A>, W: Write>(
-    write: W,
-    ont: &O,
-    mapping: Option<&PrefixMapping>,
-) -> Result<W, HornedError> {
-    let cmo: ComponentMappedOntology<A, AnnotatedComponent<A>> =
-        crate::io::into_component_mapped(ont);
-    write_cmo(write, &cmo, mapping)
-}
-
 /// Write a `ComponentMappedOntology` to `write` in OWL
 /// [Manchester Syntax](https://www.w3.org/TR/2012/REC-owl2-manchester-syntax-20121211/),
-/// using the given `PrefixMapping` -- the concrete, zero-conversion entry
-/// point [`write`] defers to.
+/// using the given `PrefixMapping`. A caller holding some other `Ontology`
+/// implementation should collect it into a `ComponentMappedOntology` first
+/// (`ont.iter().cloned().collect()`, or `ont.into_iter().collect()` if
+/// `ont` doesn't need to be kept).
 ///
 /// The output is a frame-grouped document: prefix declarations, a conformant
 /// `Ontology:` header (with nested `Import:` and `Annotations:` sub-lines when
@@ -86,7 +71,7 @@ pub fn write<A: ForIRI, O: Ontology<A>, W: Write>(
 /// (general anonymous-subject class axioms, SWRL `Rule`, anonymous-subject
 /// annotation values) are serialised in **OWL functional syntax** as a stopgap.
 /// Those lines are NOT valid Manchester syntax.
-pub fn write_cmo<A: ForIRI, AA: ForIndex<A>, W: Write>(
+pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
     mut write: W,
     ont: &ComponentMappedOntology<A, AA>,
     mapping: Option<&PrefixMapping>,

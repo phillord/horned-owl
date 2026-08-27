@@ -158,19 +158,19 @@ pub fn write_target(
     let mut out: Vec<u8> = Vec::new();
     match fmt {
         Format::Ofn => {
-            ofn::writer::write_cmo(&mut out, cmo, Some(prefixes)).map_err(horned_err)?;
+            ofn::writer::write(&mut out, cmo, Some(prefixes)).map_err(horned_err)?;
         }
         Format::Omn => {
-            omn::writer::write_cmo(&mut out, cmo, Some(prefixes)).map_err(horned_err)?;
+            omn::writer::write(&mut out, cmo, Some(prefixes)).map_err(horned_err)?;
         }
         Format::OwlXml => {
-            owx::writer::write_cmo(&mut out, cmo, Some(prefixes)).map_err(horned_err)?;
+            owx::writer::write(&mut out, cmo, Some(prefixes)).map_err(horned_err)?;
         }
         Format::Obo => {
-            obo::writer::write_cmo(&mut out, cmo, Some(prefixes)).map_err(horned_err)?;
+            obo::writer::write(&mut out, cmo, Some(prefixes)).map_err(horned_err)?;
         }
         Format::RdfXml => {
-            rdf::writer::write_cmo(&mut out, cmo, Some(prefixes)).map_err(horned_err)?;
+            rdf::writer::write(&mut out, cmo, Some(prefixes)).map_err(horned_err)?;
         }
         // Turtle is a read-only (source) format — horned-owl has no Turtle
         // writer, so it never appears as a round-trip target.

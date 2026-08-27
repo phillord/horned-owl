@@ -62,10 +62,10 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: StdWrite>(
     ont: &ComponentMappedOntology<A, AA>,
 ) -> Result<W, HornedError> {
     match format {
-        "owx" => horned_owl::io::owx::writer::write_cmo(write, ont, None),
-        "ofn" => horned_owl::io::ofn::writer::write_cmo(write, ont, None),
-        "omn" => horned_owl::io::omn::writer::write_cmo(write, ont, None),
-        "obo" => horned_owl::io::obo::writer::write_cmo(write, ont, None),
+        "owx" => horned_owl::io::owx::writer::write(write, ont, None),
+        "ofn" => horned_owl::io::ofn::writer::write(write, ont, None),
+        "omn" => horned_owl::io::omn::writer::write(write, ont, None),
+        "obo" => horned_owl::io::obo::writer::write(write, ont, None),
         _ => horned_owl::io::rdf::writer::write_to_rdf_format(write, ont, format),
     }
 }
