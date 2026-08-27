@@ -62,10 +62,9 @@
 //   >
 //   // No generic O/A type params (fixed to RcStr) and no PrefixMapping in the
 //   // return -- instead an IncompleteParse<RcStr>, which callers must check via
-//   // `.is_complete()` to detect axioms the RDF reader could not map (this is the
-//   // "capturing the RDF reader's IncompleteParse" mentioned in the plan's
-//   // architecture section). Convert ConcreteRDFOntology -> SetOntology via
-//   // `.into()` per io/mod.rs's `From<ParserOutput<..>> for SetOntology<A>` impl.
+//   // `.is_complete()` to detect axioms the RDF reader could not map. Convert
+//   // ConcreteRDFOntology -> SetOntology via `.into()` per io/mod.rs's
+//   // `From<ParserOutput<..>> for SetOntology<A>` impl.
 //   pub fn rdf::writer::write<A, AA: ForIndex<A>, W: Write>(
 //       write: W,
 //       ont: &ComponentMappedOntology<A, AA>,
@@ -96,7 +95,7 @@
 // SetOntology<RcStr>, there is no ParserOutput in the picture at all here) --
 // `clippy::useless_conversion` flags both. The brief's `.into()` was not wrong (it
 // still compiles and passes) but it is dead code for this generic-O calling
-// convention; removed below to keep `cargo clippy` clean per the plan's constraint.
+// convention; removed below to keep `cargo clippy` clean.
 // Real ParserOutput-based dispatch (if Task 4/5 wants runtime format detection rather
 // than calling the right format's `reader::read` directly) would need the explicit
 // `ParserOutput::ofn((so, pm))` wrap described above, and `.into()`/`.decompose()`
