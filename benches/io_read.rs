@@ -29,13 +29,18 @@ fn bench_io_read(c: &mut Criterion) {
             b.iter(|| {
                 let f = File::open(filename.clone()).ok().unwrap();
                 let mut f = BufReader::new(f);
-                let _: (SetOntology<RcStr>, _) =
-                    horned_owl::io::rdf::reader::read::<RcStr, RcAnnotatedComponent, _, _, _>(
-                        &mut f,
-                        Default::default(),
-                    )
-                    .ok()
-                    .unwrap();
+                // read_to_rdf_ontology, not the generic read: the latter adds an
+                // extra materialize-and-reinsert pass into a fresh O, which this
+                // benchmark isn't trying to measure. See
+                // memory/project_rdf_read_generic_double_materialize.md.
+                horned_owl::io::rdf::reader::read_to_rdf_ontology::<
+                    RcStr,
+                    RcAnnotatedComponent,
+                    _,
+                    _,
+                >(&mut f, Default::default())
+                .ok()
+                .unwrap();
             })
         });
 
@@ -59,16 +64,20 @@ fn bench_io_read(c: &mut Criterion) {
             b.iter(|| {
                 let f = File::open(filename.clone()).ok().unwrap();
                 let mut f = BufReader::new(f);
-                let _: (SetOntology<RcStr>, _) =
-                    horned_owl::io::rdf::reader::read::<RcStr, RcAnnotatedComponent, _, _, _>(
-                        &mut f,
-                        RDFParserConfiguration {
-                            format: Some(oxrdfio::RdfFormat::Turtle),
-                            ..Default::default()
-                        },
-                    )
-                    .ok()
-                    .unwrap();
+                horned_owl::io::rdf::reader::read_to_rdf_ontology::<
+                    RcStr,
+                    RcAnnotatedComponent,
+                    _,
+                    _,
+                >(
+                    &mut f,
+                    RDFParserConfiguration {
+                        format: Some(oxrdfio::RdfFormat::Turtle),
+                        ..Default::default()
+                    },
+                )
+                .ok()
+                .unwrap();
             })
         });
     }
