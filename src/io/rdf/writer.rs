@@ -2014,11 +2014,10 @@ mod test {
             format: Some(oxrdfio::RdfFormat::NTriples),
             ..crate::io::ParserConfiguration::new(&build).into()
         };
-        let r = crate::io::rdf::reader::read::<RcStr, RcAnnotatedComponent, SetOntology<RcStr>, _, _>(
-            bufread, config,
-        );
+        let r = crate::io::rdf::reader::read::<RcStr, RcAnnotatedComponent, _, _>(bufread, config);
         assert!(r.is_ok(), "Expected ontology, got failure:{:?}", r.err());
         let (o, incomplete) = r.ok().unwrap();
+        let o: SetOntology<RcStr> = o.into();
 
         assert!(
             incomplete.is_complete(),
@@ -2028,12 +2027,13 @@ mod test {
     }
 
     fn read_ok<R: BufRead>(bufread: &mut R) -> SetOntology<RcStr> {
-        let r = crate::io::rdf::reader::read::<RcStr, RcAnnotatedComponent, SetOntology<RcStr>, _, _>(
+        let r = crate::io::rdf::reader::read::<RcStr, RcAnnotatedComponent, _, _>(
             bufread,
             Default::default(),
         );
         assert!(r.is_ok(), "Expected ontology, got failure:{:?}", r.err());
         let (o, incomplete) = r.ok().unwrap();
+        let o: SetOntology<RcStr> = o.into();
 
         assert!(
             incomplete.is_complete(),
@@ -2333,11 +2333,10 @@ mod test {
         // isn't guaranteed to map back to a recognised axiom shape. What
         // matters here is that the RDF/XML syntax itself is valid.)
         let b = crate::model::Build::new_rc();
-        let result =
-            crate::io::rdf::reader::read::<RcStr, RcAnnotatedComponent, SetOntology<RcStr>, _, _>(
-                &mut &buf[..],
-                crate::io::ParserConfiguration::new(&b).into(),
-            );
+        let result = crate::io::rdf::reader::read::<RcStr, RcAnnotatedComponent, _, _>(
+            &mut &buf[..],
+            crate::io::ParserConfiguration::new(&b).into(),
+        );
         assert!(
             result.is_ok(),
             "written RDF/XML must be syntactically valid to reread, got: {:?}",

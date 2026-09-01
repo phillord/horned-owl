@@ -87,12 +87,9 @@ fn family_to_vec() -> Vec<u8> {
 
 fn read_vec<A: ForIRI, AA: ForIndex<A>>(v: &[u8], b: Build<A>) -> ConcreteRDFOntology<A, AA> {
     let mut c = Cursor::new(v.to_owned());
-    horned_owl::io::rdf::reader::read_to_rdf_ontology(
-        &mut c,
-        horned_owl::io::ParserConfiguration::new(&b).into(),
-    )
-    .unwrap()
-    .0
+    horned_owl::io::rdf::reader::read(&mut c, horned_owl::io::ParserConfiguration::new(&b).into())
+        .unwrap()
+        .0
 }
 
 // A real ontology with a realistic mix of constructs (not just
