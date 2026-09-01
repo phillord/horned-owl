@@ -127,7 +127,7 @@ mod test {
         let b2 = crate::model::Build::new_rc();
         let (ont, _): (ComponentMappedOntology<RcStr, AnnotatedComponent<RcStr>>, _) =
             crate::io::ofn::reader::read(
-                std::io::Cursor::new(out),
+                &mut std::io::Cursor::new(out),
                 crate::io::ParserConfiguration::new(&b2),
             )
             .unwrap();
@@ -136,18 +136,19 @@ mod test {
 
     #[rstest]
     fn roundtrip_resource(#[files("src/ont/owl-functional/*.ofn")] resource: PathBuf) {
-        let reader = std::fs::File::open(&resource)
+        let mut reader = std::fs::File::open(&resource)
             .map(std::io::BufReader::new)
             .unwrap();
         let b = crate::model::Build::new_rc();
         let (ont, prefixes): (ComponentMappedOntology<RcStr, AnnotatedComponent<RcStr>>, _) =
-            crate::io::ofn::reader::read(reader, crate::io::ParserConfiguration::new(&b)).unwrap();
+            crate::io::ofn::reader::read(&mut reader, crate::io::ParserConfiguration::new(&b))
+                .unwrap();
 
         let mut writer = Vec::new();
         crate::io::ofn::writer::write(&mut writer, &ont, Some(&prefixes)).unwrap();
 
         let (ont2, prefixes2) = crate::io::ofn::reader::read(
-            std::io::Cursor::new(&writer),
+            &mut std::io::Cursor::new(&writer),
             crate::io::ParserConfiguration::new(&b),
         )
         .unwrap();
@@ -164,11 +165,11 @@ mod test {
     #[test]
     fn roundtrip_nested_annotation_on_annotation() {
         let resource = "src/ont/owl-functional/manual/nested-annotation-on-annotation.ofn";
-        let reader = std::fs::File::open(resource)
+        let mut reader = std::fs::File::open(resource)
             .map(std::io::BufReader::new)
             .unwrap();
         let (ont, prefixes): (ComponentMappedOntology<RcStr, AnnotatedComponent<RcStr>>, _) =
-            crate::io::ofn::reader::read(reader, Default::default()).unwrap();
+            crate::io::ofn::reader::read(&mut reader, Default::default()).unwrap();
 
         let mut writer = Vec::new();
         crate::io::ofn::writer::write(&mut writer, &ont, Some(&prefixes)).unwrap();
@@ -190,9 +191,9 @@ mod test {
         use std::path::Path;
 
         fn parse_then_output(in_file: &Path, out: &mut dyn std::io::Write) {
-            let reader = BufReader::new(File::open(in_file).unwrap());
+            let mut reader = BufReader::new(File::open(in_file).unwrap());
             let (ont, prefixes): (ComponentMappedOntology<RcStr, AnnotatedComponent<RcStr>>, _) =
-                crate::io::ofn::reader::read(reader, Default::default()).unwrap();
+                crate::io::ofn::reader::read(&mut reader, Default::default()).unwrap();
 
             write(out, &ont, Some(&prefixes)).ok().unwrap();
         }

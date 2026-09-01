@@ -43,14 +43,14 @@ use crate::io::ParserConfiguration;
 use crate::model::{Build, ForIRI, MutableOntology, Ontology};
 
 /// Read a whole ontology from an OBO document, interning IRIs into
-/// `config.build`. Mirrors [`crate::io::omn::reader::read`].
+/// `config.build`.
 pub fn read<
     A: ForIRI,
     B: AsRef<Build<A>>,
     O: MutableOntology<A> + Ontology<A> + Default,
     R: BufRead,
 >(
-    mut bufread: R,
+    bufread: &mut R,
     config: ParserConfiguration<A, B>,
 ) -> Result<(O, PrefixMapping), HornedError> {
     let build = config.build.as_ref();
@@ -136,7 +136,7 @@ mod tests {
     use crate::ontology::set::SetOntology;
 
     fn read(s: &str) -> SetOntology<RcStr> {
-        super::read::<RcStr, _, SetOntology<RcStr>, _>(s.as_bytes(), Default::default())
+        super::read::<RcStr, _, SetOntology<RcStr>, _>(&mut s.as_bytes(), Default::default())
             .unwrap()
             .0
     }

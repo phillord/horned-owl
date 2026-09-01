@@ -33,7 +33,7 @@ pub fn read<
     O: MutableOntology<A> + Ontology<A> + Default,
     R: BufRead,
 >(
-    mut bufread: R,
+    bufread: &mut R,
     config: ParserConfiguration<A, B>,
 ) -> Result<(O, PrefixMapping), HornedError> {
     let prefixes = PrefixMapping::default();

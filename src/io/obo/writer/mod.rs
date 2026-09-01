@@ -678,7 +678,7 @@ mod tests {
 
     fn read(s: &str) -> SetOntology<RcStr> {
         crate::io::obo::reader::read::<RcStr, _, SetOntology<RcStr>, _>(
-            s.as_bytes(),
+            &mut s.as_bytes(),
             Default::default(),
         )
         .unwrap()
@@ -701,7 +701,7 @@ mod tests {
             let doc = std::fs::read_to_string(&path).unwrap();
             let b = crate::model::Build::new_rc();
             let (a, prefixes) = crate::io::obo::reader::read::<RcStr, _, SetOntology<RcStr>, _>(
-                doc.as_bytes(),
+                &mut doc.as_bytes(),
                 crate::io::ParserConfiguration::new(&b),
             )
             .unwrap();

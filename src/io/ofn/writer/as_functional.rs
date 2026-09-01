@@ -1343,7 +1343,7 @@ mod tests {
 
         let reparsed: Result<(crate::ontology::set::SetOntology<RcStr>, _), _> =
             crate::io::ofn::reader::read(
-                std::io::Cursor::new(format!(
+                &mut std::io::Cursor::new(format!(
                     "Prefix(:=<http://ex/>)\nOntology(<http://ex/o>\n{ofn}\n)"
                 )),
                 Default::default(),
@@ -1394,7 +1394,7 @@ mod tests {
         let ofn = format!("{}", sub_class_of.as_functional());
         let reparsed: Result<(crate::ontology::set::SetOntology<RcStr>, _), _> =
             crate::io::ofn::reader::read(
-                std::io::Cursor::new(format!(
+                &mut std::io::Cursor::new(format!(
                     "Prefix(:=<http://ex/>)\nOntology(<http://ex/o>\n{ofn}\n)"
                 )),
                 Default::default(),

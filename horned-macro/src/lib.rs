@@ -62,7 +62,7 @@ fn expand(
 
     let expanded = quote! {
         match #reader_call(
-            #text.as_bytes(),
+            &mut #text.as_bytes(),
             ::horned_owl::io::ParserConfiguration::new(#build),
         ) {
             ::std::result::Result::Ok((onto, _prefixes)) => onto,
