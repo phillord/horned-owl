@@ -65,10 +65,11 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
 /// Like [`write`], but with two extras that let a caller reproduce ROBOT's output
 /// for an import-bearing edit file without merging the closure:
 ///
-/// * `extra_labels` — an external `entity IRI → label` map consulted for the
-///   `# Class: … (label)` banner comments when the ontology itself carries no
-///   `rdfs:label` for an entity (OWLAPI resolves banner labels across the whole
-///   closure while serialising only the root).
+/// * `extra_labels` — an external `entity IRI → label` map for the
+///   `# Class: … (label)` banner comments. It is the caller's resolution across
+///   every document the write can see (banner labels resolve across the whole
+///   loaded set while serialising only the root), so when it names an entity it
+///   takes precedence; the document's own `rdfs:label` pick covers the rest.
 /// * `import_order` — the import IRIs in the order they should be written. The
 ///   in-memory ontology is an unordered set, so it cannot preserve the document's
 ///   import order on its own; a caller that knows it (e.g. from the source file)
@@ -460,9 +461,13 @@ pub fn write_full<A: ForIRI, AA: ForIndex<A>, W: Write>(
             for iri in iris {
                 // OWLAPI banner: `# Class: <curie> (<label-or-curie>)`, then a blank.
                 let short = short_form(mapping, iri);
-                let display = labels
-                    .get(iri)
-                    .or_else(|| extra_labels.and_then(|m| m.get(iri)))
+                // `extra_labels` is the caller's resolution across every document
+                // the write can see (the document itself included), so when it
+                // names the entity it wins; the document-internal pick stands in
+                // only for entities the caller's map does not cover.
+                let display = extra_labels
+                    .and_then(|m| m.get(iri))
+                    .or_else(|| labels.get(iri))
                     .cloned()
                     .unwrap_or_else(|| short.clone());
                 writeln!(write, "# {label}: {short} ({display})")?;
