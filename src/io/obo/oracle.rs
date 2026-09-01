@@ -57,16 +57,16 @@ fn components<O: Ontology<RcStr>>(ont: &O) -> BTreeSet<String> {
 }
 
 fn read_obo(path: &Path) -> BTreeSet<String> {
-    let reader = BufReader::new(File::open(path).unwrap());
+    let mut reader = BufReader::new(File::open(path).unwrap());
     let (ont, _): (SetOntology<RcStr>, _) =
-        crate::io::obo::reader::read(reader, Default::default()).unwrap();
+        crate::io::obo::reader::read(&mut reader, Default::default()).unwrap();
     components(&ont)
 }
 
 fn read_ofn(path: &Path) -> BTreeSet<String> {
-    let reader = BufReader::new(File::open(path).unwrap());
+    let mut reader = BufReader::new(File::open(path).unwrap());
     let (ont, _): (SetOntology<RcStr>, _) =
-        crate::io::ofn::reader::read(reader, Default::default()).unwrap();
+        crate::io::ofn::reader::read(&mut reader, Default::default()).unwrap();
     components(&ont)
 }
 

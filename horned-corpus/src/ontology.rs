@@ -84,7 +84,7 @@ pub fn read_source(fmt: Format, bytes: &[u8]) -> anyhow::Result<ReadOk> {
 
     let (model, prefixes, incomplete) = match fmt {
         Format::Ofn => {
-            let sop = ofn::reader::read(Cursor::new(bytes), ParserConfiguration::new(&build))
+            let sop = ofn::reader::read(&mut Cursor::new(bytes), ParserConfiguration::new(&build))
                 .map_err(horned_err)?;
             Output::ofn(sop).decompose()
         }
@@ -99,7 +99,7 @@ pub fn read_source(fmt: Format, bytes: &[u8]) -> anyhow::Result<ReadOk> {
             Output::owx(sop).decompose()
         }
         Format::Obo => {
-            let sop = obo::reader::read(Cursor::new(bytes), ParserConfiguration::new(&build))
+            let sop = obo::reader::read(&mut Cursor::new(bytes), ParserConfiguration::new(&build))
                 .map_err(horned_err)?;
             Output::obo(sop).decompose()
         }

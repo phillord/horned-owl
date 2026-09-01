@@ -225,7 +225,7 @@ pub fn read<
                     let wrapped = format!("Ontology(\n{axioms}\n)");
                     let parsed: Result<(crate::ontology::set::SetOntology<A>, _), _> =
                         crate::io::ofn::reader::read(
-                            std::io::Cursor::new(wrapped.into_bytes()),
+                            &mut std::io::Cursor::new(wrapped.into_bytes()),
                             crate::io::ParserConfiguration::new(build),
                         );
                     match parsed {
