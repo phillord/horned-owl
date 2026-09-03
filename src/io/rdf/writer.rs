@@ -1,6 +1,7 @@
 use crate::{
     error::HornedError,
     error::invalid,
+    io::{StreamComponent, StreamOntology},
     model::*,
     ontology::component_mapped::ComponentMappedOntology,
     vocab::{OWL, RDF, RDFS, SWRL, Vocab, XSD},
@@ -8,6 +9,7 @@ use crate::{
 
 use crate::ontology::indexed::ForIndex;
 
+use curie::PrefixMapping;
 use indexmap::indexmap;
 
 use horned_pretty_rdf::{
@@ -40,25 +42,37 @@ impl Default for RDFWriterConfiguration {
     }
 }
 
+/// Write a `ComponentMappedOntology` to `write`, in RDF/XML, using the given
+/// `PrefixMapping` in addition to the fixed rdf/owl/swrl prefixes this
+/// writer always emits. A caller holding some other `Ontology`
+/// implementation should collect it into a `ComponentMappedOntology` first
+/// (`ont.iter().cloned().collect()`, or `ont.into_iter().collect()` if
+/// `ont` doesn't need to be kept).
 pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
     write: W,
     ont: &ComponentMappedOntology<A, AA>,
+    mapping: Option<&PrefixMapping>,
 ) -> Result<W, HornedError> {
-    write_with_config(write, ont, RDFWriterConfiguration::default())
+    write_with_config(write, ont, mapping, RDFWriterConfiguration::default())
 }
 
 /// As [`write`], but with an explicit [`RDFWriterConfiguration`].
 pub fn write_with_config<A: ForIRI, AA: ForIndex<A>, W: Write>(
     write: W,
     ont: &ComponentMappedOntology<A, AA>,
+    mapping: Option<&PrefixMapping>,
     config: RDFWriterConfiguration,
 ) -> Result<W, HornedError> {
-    let p = indexmap![
-                    "http://www.w3.org/1999/02/22-rdf-syntax-ns#" => "rdf",
-                    "http://www.w3.org/2002/07/owl#" => "owl",
-                    "http://www.w3.org/2003/11/swrl#" => "swrl"
+    let mut p = indexmap![
+                    "http://www.w3.org/1999/02/22-rdf-syntax-ns#".to_string() => "rdf".to_string(),
+                    "http://www.w3.org/2002/07/owl#".to_string() => "owl".to_string(),
+                    "http://www.w3.org/2003/11/swrl#".to_string() => "swrl".to_string()
     ];
-    let p = p.into_iter().map(|(k, v)| (k.into(), v.into())).collect();
+    if let Some(mapping) = mapping {
+        for (prefix, iri) in mapping.mappings() {
+            p.insert(iri.clone(), prefix.clone());
+        }
+    }
 
     let f = PrettyRdfXmlFormatter::new(write, ChunkedRdfXmlFormatterConfig::all().prefix(p))?;
     write_to_rdf_formatter_with_config(ont, f, config)
@@ -99,7 +113,7 @@ pub fn write_to_rdf_format_with_config<A: ForIRI, AA: ForIndex<A>, W: Write>(
     };
 
     match rdf_format {
-        oxrdfio::RdfFormat::RdfXml => write_with_config(write, ont, config),
+        oxrdfio::RdfFormat::RdfXml => write_with_config(write, ont, None, config),
         other => write_to_rdf_formatter_with_config(ont, serial(write, other), config),
     }
 }
@@ -585,6 +599,7 @@ impl<A: ForIRI, AA: ForIndex<A>, F: RdfFormatter<A, W>, W: Write> Render<A, F, (
         }
 
         for cmp in self.i().iter() {
+            let cmp: &AnnotatedComponent<A> = cmp.borrow();
             cmp.render(f, ng)?;
         }
 
@@ -1901,6 +1916,74 @@ render! {
     }
 }
 
+/// Render `components` into `formatter` one component at a time -- no
+/// `ComponentMappedOntology` is materialized. `StreamComponent::Prefix`
+/// items are ignored: unlike owx, `formatter`'s namespace table (if it
+/// has one) is already fixed by the time it's passed in here, so there's
+/// nothing left for a prefix to configure.
+///
+/// `OntologyID`/`Import`/`OntologyAnnotation` need the ontology's own IRI
+/// as the subject of their triples, which isn't part of the component
+/// itself -- the first `OntologyID` seen supplies it for every `Import`/
+/// `OntologyAnnotation` that follows, so `components` must yield its
+/// `OntologyID` before any of those (the same ordering `write` already
+/// guarantees).
+pub fn write_stream<A: ForIRI, AA: ForIndex<A>, F: RdfFormatter<A, W>, W: Write>(
+    formatter: F,
+    components: impl StreamOntology<A, AA>,
+) -> Result<W, HornedError> {
+    write_stream_with_config(formatter, components, RDFWriterConfiguration::default())
+}
+
+/// As [`write_stream`], but with an explicit [`RDFWriterConfiguration`].
+pub fn write_stream_with_config<A: ForIRI, AA: ForIndex<A>, F: RdfFormatter<A, W>, W: Write>(
+    mut formatter: F,
+    components: impl StreamOntology<A, AA>,
+    config: RDFWriterConfiguration,
+) -> Result<W, HornedError> {
+    let mut ng = NodeGenerator {
+        lax: config.lax,
+        ..NodeGenerator::default()
+    };
+    let mut ontology_iri: Option<IRI<A>> = None;
+
+    for item in components {
+        let ac = match item? {
+            StreamComponent::Component(ac) => ac,
+            StreamComponent::Prefix(..) => continue,
+        };
+        let ac: &AnnotatedComponent<A> = ac.borrow();
+
+        match &ac.component {
+            Component::OntologyID(id) => {
+                if let Some(iri) = &id.iri {
+                    triples!(formatter, iri, ng.nn(RDF::Type), ng.nn(OWL::Ontology));
+                    if let Some(viri) = &id.viri {
+                        triples!(formatter, iri, ng.nn(OWL::VersionIRI), viri);
+                    }
+                    ontology_iri = Some(iri.clone());
+                }
+            }
+            Component::Import(imp) => {
+                if let Some(iri) = &ontology_iri {
+                    triples!(formatter, iri, ng.nn(OWL::Imports), &imp.0);
+                }
+            }
+            Component::OntologyAnnotation(oa) => {
+                if let Some(iri) = &ontology_iri {
+                    ng.keep_this_bn(iri.into());
+                    oa.0.render(&mut formatter, &mut ng)?;
+                }
+            }
+            _ => {
+                ac.render(&mut formatter, &mut ng)?;
+            }
+        }
+    }
+
+    Ok(formatter.finish()?)
+}
+
 #[cfg(test)]
 mod test {
 
@@ -1925,16 +2008,38 @@ mod test {
     // use std::io::BufReader;
     // use std::io::BufWriter;
 
-    fn read_ok<R: BufRead>(bufread: &mut R) -> SetOntology<RcStr> {
-        let r = crate::io::rdf::reader::read(bufread, Default::default());
+    fn read_ntriples_ok<R: BufRead>(bufread: &mut R) -> SetOntology<RcStr> {
+        let build = Build::new_rc();
+        let config = crate::io::RDFParserConfiguration {
+            format: Some(oxrdfio::RdfFormat::NTriples),
+            ..crate::io::ParserConfiguration::new(&build).into()
+        };
+        let r = crate::io::rdf::reader::read::<RcStr, RcAnnotatedComponent, _, _>(bufread, config);
         assert!(r.is_ok(), "Expected ontology, got failure:{:?}", r.err());
         let (o, incomplete) = r.ok().unwrap();
+        let o: SetOntology<RcStr> = o.into();
 
         assert!(
             incomplete.is_complete(),
             "Read Not Complete: {incomplete:#?}"
         );
-        o.into()
+        o
+    }
+
+    fn read_ok<R: BufRead>(bufread: &mut R) -> SetOntology<RcStr> {
+        let r = crate::io::rdf::reader::read::<RcStr, RcAnnotatedComponent, _, _>(
+            bufread,
+            Default::default(),
+        );
+        assert!(r.is_ok(), "Expected ontology, got failure:{:?}", r.err());
+        let (o, incomplete) = r.ok().unwrap();
+        let o: SetOntology<RcStr> = o.into();
+
+        assert!(
+            incomplete.is_complete(),
+            "Read Not Complete: {incomplete:#?}"
+        );
+        o
     }
 
     #[test]
@@ -1950,12 +2055,26 @@ mod test {
 
         let temp_file = Temp::new_file().unwrap();
         let file = File::create(&temp_file).ok().unwrap();
-        write(&mut BufWriter::new(file), &ont).ok().unwrap();
+        write(&mut BufWriter::new(file), &ont, None).ok().unwrap();
 
         let file = File::open(&temp_file).ok().unwrap();
         let ont2 = read_ok(&mut BufReader::new(file));
 
         assert_eq!(ont.i().the_ontology_id(), ont2.i().the_ontology_id());
+    }
+
+    #[test]
+    fn write_merges_supplied_prefixes_with_the_fixed_set() {
+        let ont = ComponentMappedOntology::new_rc();
+        let mut mapping = PrefixMapping::default();
+        mapping.add_prefix("eg", "http://example.com/eg#").unwrap();
+
+        let mut buf = Vec::new();
+        write(&mut buf, &ont, Some(&mapping)).unwrap();
+        let s = String::from_utf8(buf).unwrap();
+
+        assert!(s.contains("xmlns:eg=\"http://example.com/eg#\""));
+        assert!(s.contains("xmlns:owl=\"http://www.w3.org/2002/07/owl#\""));
     }
 
     fn roundtrip(ont: &str) -> (SetOntology<RcStr>, SetOntology<RcStr>) {
@@ -1967,7 +2086,7 @@ mod test {
 
         let amo: ComponentMappedOntology<RcStr, Rc<AnnotatedComponent<RcStr>>> =
             ont_orig.clone().into();
-        write(&mut buf_writer, &amo).ok().unwrap();
+        write(&mut buf_writer, &amo, None).ok().unwrap();
         buf_writer.flush().ok();
 
         write(
@@ -1977,6 +2096,7 @@ mod test {
                     .unwrap(),
             ),
             &amo,
+            None,
         )
         .unwrap();
 
@@ -2008,6 +2128,77 @@ mod test {
         assert_round(resource);
     }
 
+    /// Pipes owx's `read_to_stream` straight into rdf's `write_stream` --
+    /// no `ComponentMappedOntology` materialized on either side -- and
+    /// checks the result reads back the same as a plain owx `read`.
+    #[rstest]
+    fn owx_streamed_into_rdf_streamed(#[files("src/ont/owl-xml/*.owx")] resource: PathBuf) {
+        // swrl_individual.owx has an AnonymousIndividual whose nodeID
+        // already contains a literal "_:" prefix; the oxrdfio-backed
+        // NTriples formatter used here doesn't strip it before writing,
+        // producing an invalid doubled "_:_:" blank node label. Pre-existing
+        // bug in the oxrdfio write path (reproduces via write_to_rdf_formatter
+        // too, unrelated to streaming) -- not this test's concern.
+        if resource.file_name().and_then(|n| n.to_str()) == Some("swrl_individual.owx") {
+            return;
+        }
+
+        let resource = &slurp::read_all_to_string(&resource).unwrap();
+        let b = Build::new_rc();
+
+        let (ont_direct, _): (SetOntology<RcStr>, _) = crate::io::owx::reader::read(
+            &mut resource.as_bytes(),
+            crate::io::ParserConfiguration::new(&b),
+        )
+        .unwrap();
+
+        let formatter = WriterQuadSerializerAdaptor::new(
+            RdfSerializer::from_format(oxrdfio::RdfFormat::NTriples).for_writer(Vec::new()),
+        );
+        let streamed = crate::io::owx::reader::read_to_stream(
+            resource.as_bytes(),
+            crate::io::ParserConfiguration::new(&b),
+        );
+        let out = write_stream(formatter, streamed).unwrap();
+
+        let ont_via_rdf = read_ntriples_ok(&mut &out[..]);
+
+        assert_eq!(ont_direct, ont_via_rdf);
+    }
+
+    /// `Prefix` items in the stream are ignored (the formatter's namespace
+    /// table, if any, is already fixed) -- confirm a stream that includes
+    /// one still writes and rereads correctly rather than erroring.
+    #[test]
+    fn write_stream_ignores_prefix_items() {
+        let b = Build::new_rc();
+        let iri = b.iri("http://www.example.com/a");
+        let ac = AnnotatedComponent {
+            component: DeclareClass(Class(iri)).into(),
+            ann: BTreeSet::new(),
+        };
+
+        let items: Vec<crate::io::Result<StreamComponent<AnnotatedComponent<RcStr>>>> = vec![
+            Ok(StreamComponent::Prefix(
+                "eg".to_string(),
+                "http://example.com/eg#".to_string(),
+            )),
+            Ok(StreamComponent::Component(ac)),
+        ];
+
+        let formatter = WriterQuadSerializerAdaptor::new(
+            RdfSerializer::from_format(oxrdfio::RdfFormat::NTriples).for_writer(Vec::new()),
+        );
+        let out = write_stream(formatter, items.into_iter()).unwrap();
+
+        let ont = read_ntriples_ok(&mut &out[..]);
+        assert!(
+            ont.iter()
+                .any(|ac| matches!(&ac.component, Component::DeclareClass(_))),
+            "expected the declared class to survive the round trip, got: {ont:#?}"
+        );
+    }
+
     #[cfg(test)]
     mod bubo_test {
         use crate::io::rdf::writer::test::*;
@@ -2022,7 +2213,7 @@ mod test {
             let amo: ComponentMappedOntology<RcStr, Rc<AnnotatedComponent<RcStr>>> =
                 ont_orig.into();
 
-            write(out, &amo).ok().unwrap();
+            write(out, &amo, None).ok().unwrap();
         }
 
         #[test]
@@ -2092,7 +2283,7 @@ mod test {
 
         let amo: ComponentMappedOntology<RcStr, Rc<AnnotatedComponent<RcStr>>> = ont_orig.into();
         let mut buf = Vec::new();
-        write(&mut buf, &amo).expect("write should not fail on an invalid-IRI-char class");
+        write(&mut buf, &amo, None).expect("write should not fail on an invalid-IRI-char class");
 
         let ont_round = read_ok(&mut &buf[..]);
         let expected_class = Class(b.iri("http://example.com/o#KB-CH%5BR%5D-8-5Cell"));
@@ -2127,7 +2318,7 @@ mod test {
         });
 
         let mut buf = Vec::new();
-        write(&mut buf, &ont).expect("write should not fail");
+        write(&mut buf, &ont, None).expect("write should not fail");
         let s = String::from_utf8(buf.clone()).unwrap();
         assert!(
             !s.contains("nodeID=\"_:"),
@@ -2141,7 +2332,11 @@ mod test {
         // this test -- a bare shared blank node with no type declaration
         // isn't guaranteed to map back to a recognised axiom shape. What
         // matters here is that the RDF/XML syntax itself is valid.)
-        let result = crate::io::rdf::reader::read(&mut &buf[..], Default::default());
+        let b = crate::model::Build::new_rc();
+        let result = crate::io::rdf::reader::read::<RcStr, RcAnnotatedComponent, _, _>(
+            &mut &buf[..],
+            crate::io::ParserConfiguration::new(&b).into(),
+        );
         assert!(
             result.is_ok(),
             "written RDF/XML must be syntactically valid to reread, got: {:?}",

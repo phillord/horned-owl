@@ -6,15 +6,22 @@ pub mod ofn;
 pub mod omn;
 pub mod owx;
 pub mod rdf;
+pub mod stream;
 
 use curie::PrefixMapping;
 
 use self::rdf::reader::{ConcreteRDFOntology, IncompleteParse};
+use crate::error::HornedError;
 use crate::ontology::indexed::ForIndex;
 use crate::{
-    model::ForIRI,
+    model::{Build, ForIRI, IRI},
     ontology::{component_mapped::ComponentMappedOntology, set::SetOntology},
 };
+
+pub use stream::{StreamComponent, StreamOntology};
+
+/// The result type every IO reader/writer in this module returns.
+pub type Result<T> = std::result::Result<T, HornedError>;
 
 /// Shrink `iri` against `mapping`, preferring the *longest* matching named
 /// prefix, unlike [`curie::PrefixMapping::shrink_iri`]'s insertion-order
@@ -65,7 +72,7 @@ impl std::str::FromStr for InputFormat {
 
     /// Accepts `"guess"`, `"ofn"`, `"owx"`, `"omn"`, `"obo"`, and any extension
     /// recognised by [`oxrdfio::RdfFormat::from_extension`] plus `"owl"`.
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
         match s {
             "guess" => Ok(Self::Guess),
             "ofn" => Ok(Self::OFN),
@@ -121,70 +128,148 @@ impl<A: ForIRI, AA: ForIndex<A>> ParserOutput<A, AA> {
     }
 }
 
-#[derive(Clone, Debug)]
-pub struct ParserConfiguration {
-    /// In lax mode, parsers tolerate content that would otherwise be a
-    /// parse error -- see individual readers for exactly what this
-    /// relaxes -- instead of rejecting it.
-    ///
-    /// Currently only the RDF and OWX readers consult this flag; the
-    /// OFN and OMN readers do not yet have a lax mode, so setting it
-    /// has no effect on those formats.
-    pub lax: bool,
-    /// The maximum number of bytes to read from a single remote
-    /// (`http`/`https`) IRI resolution, such as when following an
-    /// `owl:imports` closure. Defaults to `u64::MAX` (no limit),
-    /// matching the unbounded behaviour of pre-3.x `ureq`. Lower this
-    /// if resolving IRIs from untrusted sources where an oversized
-    /// response could exhaust memory.
-    pub remote_body_limit: u64,
-    /// If set, no network access is attempted at all during parsing --
-    /// resolving an IRI (e.g. following an `owl:imports` closure) that
-    /// isn't available locally fails with an error instead of falling
-    /// back to a remote fetch. `remote_body_limit` still bounds a fetch
-    /// in size if one happens; this instead prevents one happening at
-    /// all. Defaults to `false`.
-    pub local_only: bool,
-    pub rdf: RDFParserConfiguration,
-    pub owx: OWXParserConfiguration,
-    /// Override format detection. When set, this takes precedence over the
-    /// file extension. `InputFormat::Guess` triggers content sniffing.
-    pub input_format: Option<InputFormat>,
-    /// An OASIS XML Catalog (see the [`horned_catalog`] crate) to
-    /// consult when resolving an IRI to local content, such as when
-    /// following an `owl:imports` closure. Checked before the
-    /// heuristic path-guessing in [`crate::resolve::localize_iri`] and
-    /// before any remote fallback -- an explicit catalog mapping is a
-    /// stronger signal than either. `None` (the default) disables
-    /// catalog-based resolution entirely.
-    ///
-    /// This is an `Rc` rather than a plain `&Catalog` reference so that
-    /// `ParserConfiguration` doesn't need a lifetime parameter --
-    /// it's cloned (a cheap refcount bump) each time a parse recurses
-    /// into an import.
-    pub catalog: Option<std::rc::Rc<horned_catalog::Catalog>>,
+/// std has no blanket `impl<T> AsRef<T> for T`, so `ParserConfiguration`'s
+/// owned-`Build` case needs this impl to satisfy its `B: AsRef<Build<A>>`
+/// bound; the borrowed case (`&Build<A>`) already satisfies it via std's
+/// blanket `impl<T: AsRef<U>> AsRef<U> for &T`.
+impl<A: ForIRI> AsRef<Build<A>> for Build<A> {
+    fn as_ref(&self) -> &Build<A> {
+        self
+    }
 }
 
-impl Default for ParserConfiguration {
-    fn default() -> Self {
+/// Settings shared by every format's `read`. Generic over how it holds its
+/// `Build` (`B`): `&Build<A>` to share one interning table across several
+/// parses, or an owned `Build<A>` for a one-off parse with nothing to
+/// share it with.
+#[derive(Clone, Debug)]
+pub struct ParserConfiguration<A: ForIRI, B: AsRef<Build<A>> = Build<A>> {
+    /// The `Build` used for all IRI creation during this parse. Only the
+    /// `&Build<A>` form is `Clone` -- `Build<A>` itself deliberately isn't,
+    /// since cloning it would duplicate its interning table instead of
+    /// sharing it.
+    pub build: B,
+    /// In lax mode, parsers tolerate content that would otherwise be a
+    /// parse error instead of rejecting it -- see individual readers for
+    /// exactly what this relaxes. Only the RDF and OWX readers consult
+    /// this flag; OFN and OMN ignore it.
+    pub lax: bool,
+    /// Maximum bytes to read from a single remote (`http`/`https`) IRI
+    /// resolution, e.g. following an `owl:imports` closure. Default
+    /// `u64::MAX` (no limit); lower it when resolving untrusted IRIs where
+    /// an oversized response could exhaust memory.
+    pub remote_body_limit: u64,
+    /// If set, no network access is attempted at all during parsing --
+    /// resolving an IRI not available locally fails instead of falling
+    /// back to a remote fetch. `remote_body_limit` only bounds a fetch's
+    /// size if one happens; this prevents one happening at all. Default
+    /// `false`.
+    pub local_only: bool,
+    /// Overrides format detection when set, taking precedence over the
+    /// file extension. `InputFormat::Guess` triggers content sniffing.
+    pub input_format: Option<InputFormat>,
+    /// An OASIS XML Catalog (see the [`horned_catalog`] crate) consulted
+    /// when resolving an IRI to local content, before both the heuristic
+    /// path-guessing in [`crate::resolve::localize_iri`] and any remote
+    /// fallback. `None` (the default) disables catalog-based resolution.
+    /// An `Rc`, not a borrow like `build`: a `Catalog` is read-only with
+    /// no interning identity to preserve, so a cheap refcount-bump clone
+    /// per recursive parse is enough.
+    pub catalog: Option<std::rc::Rc<horned_catalog::Catalog>>,
+    _marker: std::marker::PhantomData<A>,
+}
+
+impl<A: ForIRI, B: AsRef<Build<A>>> ParserConfiguration<A, B> {
+    /// A `ParserConfiguration` using `build` and every other setting at its
+    /// default. `build` can be a shared `&Build<A>` or an owned `Build<A>`.
+    pub fn new(build: B) -> Self {
         ParserConfiguration {
+            build,
             lax: false,
             remote_body_limit: u64::MAX,
             local_only: false,
-            rdf: RDFParserConfiguration::default(),
-            owx: OWXParserConfiguration::default(),
             input_format: None,
             catalog: None,
+            _marker: std::marker::PhantomData,
         }
     }
 }
 
-#[derive(Clone, Copy, Debug, Default)]
-pub struct OWXParserConfiguration {}
+impl<A: ForIRI + Default> Default for ParserConfiguration<A, Build<A>> {
+    /// A `ParserConfiguration` with a fresh, private `Build<A>` -- for a
+    /// one-off parse that has no `Build` to share. Use
+    /// [`ParserConfiguration::new`] with a `&Build<A>` instead when the
+    /// interning table needs to be shared with other parses.
+    fn default() -> Self {
+        ParserConfiguration::new(Build::default())
+    }
+}
 
-#[derive(Clone, Copy, Debug, Default)]
-pub struct RDFParserConfiguration {
+/// RDF-specific parser settings, wrapping the settings shared by every
+/// format. RDF is the only format with a format-specific setting
+/// (`format`), so it's the only one with a wrapper struct at all.
+#[derive(Clone, Debug)]
+pub struct RDFParserConfiguration<A: ForIRI, B: AsRef<Build<A>> = Build<A>> {
+    pub common: ParserConfiguration<A, B>,
+    /// The RDF syntax to parse as. `None` defaults to RDF/XML.
     pub format: Option<oxrdfio::RdfFormat>,
+}
+
+impl<A: ForIRI, B: AsRef<Build<A>>> From<ParserConfiguration<A, B>>
+    for RDFParserConfiguration<A, B>
+{
+    fn from(common: ParserConfiguration<A, B>) -> Self {
+        RDFParserConfiguration {
+            common,
+            format: None,
+        }
+    }
+}
+
+impl<A: ForIRI + Default> Default for RDFParserConfiguration<A, Build<A>> {
+    fn default() -> Self {
+        ParserConfiguration::default().into()
+    }
+}
+
+/// Resolve `iri` to its content and wrap it as a `BufRead`, for a
+/// `from_doc_iri` constructor. Every format's `from_doc_iri` is a
+/// one-liner over this -- `Self::from_bufread(resolve_doc_iri(iri,
+/// &config)?, config)`, or `Self::from_bufread(&mut resolve_doc_iri(iri,
+/// &config)?, config)` for a reader that fully drains its `&mut R` before
+/// returning (see `owx::reader::Reader::from_doc_iri` and
+/// `rdf::reader::OntologyParser::from_doc_iri` respectively).
+pub(crate) fn resolve_doc_iri<A: ForIRI, B: AsRef<Build<A>>>(
+    iri: &IRI<A>,
+    config: &ParserConfiguration<A, B>,
+) -> Result<std::io::Cursor<String>> {
+    Ok(std::io::Cursor::new(crate::resolve::strict_resolve_iri(
+        iri,
+        config.remote_body_limit,
+        config.local_only,
+    )?))
+}
+
+/// `mapping`'s entries as `StreamComponent::Prefix` items. `AA` is
+/// unconstrained since `Prefix` carries no `AA`-typed payload.
+pub(crate) fn prefix_stream<'a, A: ForIRI, AA: ForIndex<A>>(
+    mapping: &'a PrefixMapping,
+) -> impl Iterator<Item = Result<StreamComponent<AA>>> + 'a {
+    mapping
+        .mappings()
+        .map(|(name, iri)| Ok(StreamComponent::Prefix(name.to_string(), iri.to_string())))
+}
+
+/// `ont`'s components as a `StreamComponent` stream, in `ComponentKind`
+/// order. Clones `ont`'s own `AA` handle per item, not always
+/// `AnnotatedComponent<A>` -- cheap when `AA` is `Rc`/`Arc`-backed.
+pub(crate) fn component_stream<'a, A: ForIRI, AA: ForIndex<A>>(
+    ont: &'a ComponentMappedOntology<A, AA>,
+) -> impl Iterator<Item = Result<StreamComponent<AA>>> + 'a {
+    ont.i()
+        .iter()
+        .cloned()
+        .map(|ac| Ok(StreamComponent::Component(ac)))
 }
 
 impl<A: ForIRI, AA: ForIndex<A>> ParserOutput<A, AA> {
@@ -412,6 +497,56 @@ mod tests {
         assert!(matches!(out, ParserOutput::OMNParser(_, _)));
     }
 
+    #[test]
+    fn prefix_stream_then_component_stream_matches_write_composition() {
+        use super::*;
+        use crate::model::{Build, DeclareClass, MutableOntology, RcAnnotatedComponent, RcStr};
+        use crate::ontology::set::SetOntology;
+
+        let b = Build::new_rc();
+        let mut so: SetOntology<RcStr> = SetOntology::new_rc();
+        so.insert(DeclareClass(b.class("http://example.com/A")));
+        let cmo: ComponentMappedOntology<RcStr, RcAnnotatedComponent> =
+            so.iter().cloned().collect();
+
+        let mut mapping = curie::PrefixMapping::default();
+        mapping.add_prefix("ex", "http://example.com/").unwrap();
+
+        // OFN/OMN's composition order (Prefix before components); OWX
+        // instead splits component_stream around prefix_stream to put
+        // OntologyID first, since OWX serializes ontologyIRI/versionIRI as
+        // XML attributes on <Ontology>, which must precede any child
+        // element. component_stream yields the source ontology's own AA
+        // (here RcAnnotatedComponent), so prefix_stream's own AA must match
+        // that to chain.
+        let items: std::result::Result<Vec<_>, _> =
+            prefix_stream::<RcStr, RcAnnotatedComponent>(&mapping)
+                .chain(component_stream(&cmo))
+                .collect();
+        let items = items.unwrap();
+
+        assert!(
+            matches!(&items[0], StreamComponent::Prefix(p, i) if p == "ex" && i == "http://example.com/")
+        );
+        assert!(matches!(&items[1], StreamComponent::Component(_)));
+        assert_eq!(items.len(), 2);
+    }
+
+    #[test]
+    fn resolve_doc_iri_surfaces_the_underlying_resolve_error() {
+        use super::*;
+        use crate::model::Build;
+
+        let b = Build::new_rc();
+        let config = ParserConfiguration::new(&b);
+        let iri = b.iri("file:///no/such/path/does-not-exist.owl");
+
+        // Exercises the plumbing (remote_body_limit/local_only threaded
+        // through), not network access -- a nonexistent local path is
+        // enough to confirm the error surfaces rather than panicking.
+        assert!(resolve_doc_iri(&iri, &config).is_err());
+    }
+
     // Ensure bubo exists in the dev location during tests
     pub fn bubo_ensure() -> std::path::PathBuf {
         use std::sync::OnceLock;
@@ -443,7 +578,10 @@ mod tests {
             .clone()
     }
 
-    pub fn run_bubo_reparse<F>(format: &str, parse_fn: F) -> Result<(), Box<dyn std::error::Error>>
+    pub fn run_bubo_reparse<F>(
+        format: &str,
+        parse_fn: F,
+    ) -> std::result::Result<(), Box<dyn std::error::Error>>
     where
         F: Fn(&std::path::Path, &mut dyn std::io::Write),
     {

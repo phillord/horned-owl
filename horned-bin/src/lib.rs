@@ -2,7 +2,7 @@
 
 use horned_owl::{
     error::HornedError,
-    io::{InputFormat, ParserConfiguration, ParserOutput, ResourceType},
+    io::{InputFormat, ParserConfiguration, ParserOutput, RDFParserConfiguration, ResourceType},
     model::{Build, ForIRI, IRI, MutableOntology, OntologyID, RcAnnotatedComponent, RcStr},
     ontology::{
         component_mapped::{ComponentMappedOntology, RcComponentMappedOntology},
@@ -64,13 +64,16 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: StdWrite>(
     match format {
         "owx" => horned_owl::io::owx::writer::write(write, ont, None),
         "ofn" => horned_owl::io::ofn::writer::write(write, ont, None),
-        "omn" => horned_owl::io::omn::write(write, ont, None),
-        "obo" => horned_owl::io::obo::write(write, ont, None),
+        "omn" => horned_owl::io::omn::writer::write(write, ont, None),
+        "obo" => horned_owl::io::obo::writer::write(write, ont, None),
         _ => horned_owl::io::rdf::writer::write_to_rdf_format(write, ont, format),
     }
 }
 
-pub fn path_type(path: &Path, config: &ParserConfiguration) -> Option<ResourceType> {
+pub fn path_type<A: ForIRI, B: AsRef<Build<A>>>(
+    path: &Path,
+    config: &ParserConfiguration<A, B>,
+) -> Option<ResourceType> {
     match config.input_format {
         Some(InputFormat::OFN) => return Some(ResourceType::OFN),
         Some(InputFormat::OWX) => return Some(ResourceType::OWX),
@@ -99,9 +102,9 @@ fn detect_from_path(path: &Path) -> Option<(ResourceType, Option<oxrdfio::RdfFor
     horned_owl::io::detect_format(&buf[..n])
 }
 
-pub fn parse_path(
+pub fn parse_path<B: AsRef<Build<RcStr>> + Clone>(
     path: &Path,
-    config: ParserConfiguration,
+    config: ParserConfiguration<RcStr, B>,
 ) -> Result<ParserOutput<RcStr, RcAnnotatedComponent>, HornedError> {
     Ok(match path_type(path, &config) {
         Some(ResourceType::OFN) => {
@@ -125,11 +128,10 @@ pub fn parse_path(
             ParserOutput::obo(horned_owl::io::obo::read(&mut bufreader, config)?)
         }
         Some(ResourceType::RDF) => {
-            let b = Build::new();
-            let iri = horned_owl::resolve::path_to_file_iri(&b, path);
+            let iri = horned_owl::resolve::path_to_file_iri(config.build.as_ref(), path);
             ParserOutput::rdf(horned_owl::io::rdf::closure_reader::read(
                 &iri,
-                with_detected_rdf_format(path, config),
+                with_detected_rdf_format(path, config.into()),
             )?)
         }
         None => {
@@ -140,14 +142,14 @@ pub fn parse_path(
     })
 }
 
-/// Fill in `config.rdf.format` from `path`'s extension or content, unless the
+/// Fill in `config.format` from `path`'s extension or content, unless the
 /// caller already set one explicitly.
-pub fn with_detected_rdf_format(
+pub fn with_detected_rdf_format<A: ForIRI, B: AsRef<Build<A>>>(
     path: &Path,
-    mut config: ParserConfiguration,
-) -> ParserConfiguration {
-    if config.rdf.format.is_none() {
-        config.rdf.format = match config.input_format {
+    mut config: RDFParserConfiguration<A, B>,
+) -> RDFParserConfiguration<A, B> {
+    if config.format.is_none() {
+        config.format = match config.common.input_format {
             Some(InputFormat::Rdf(fmt)) => fmt,
             Some(InputFormat::Guess) => detect_from_path(path).and_then(|(_, fmt)| fmt),
             _ => path
@@ -161,9 +163,9 @@ pub fn with_detected_rdf_format(
 }
 
 /// Parse but only as far as the imports, if that makes sense.
-pub fn parse_imports(
+pub fn parse_imports<B: AsRef<Build<RcStr>>>(
     path: &Path,
-    config: ParserConfiguration,
+    config: ParserConfiguration<RcStr, B>,
 ) -> Result<ParserOutput<RcStr, RcAnnotatedComponent>, HornedError> {
     let file = File::open(path)?;
     let mut bufreader = BufReader::new(file);
@@ -183,9 +185,8 @@ pub fn parse_imports(
             ParserOutput::obo(horned_owl::io::obo::read(&mut bufreader, config)?)
         }
         Some(ResourceType::RDF) => {
-            let b = Build::new();
-            let config = with_detected_rdf_format(path, config);
-            let mut p = horned_owl::io::rdf::reader::parser_with_build(&mut bufreader, &b, config)?;
+            let config = with_detected_rdf_format(path, config.into());
+            let mut p = horned_owl::io::rdf::reader::parser_with_build(&mut bufreader, config)?;
             p.parse_imports()?;
             ParserOutput::rdf(p.as_ontology_and_incomplete())
         }
@@ -197,9 +198,9 @@ pub fn parse_imports(
     })
 }
 
-pub fn materialize(
+pub fn materialize<B: AsRef<Build<RcStr>> + Clone>(
     file_or_iri: &str,
-    config: ParserConfiguration,
+    config: ParserConfiguration<RcStr, B>,
 ) -> Result<Vec<IRI<RcStr>>, HornedError> {
     let mut v = vec![];
     let b = Build::new();
@@ -245,9 +246,9 @@ fn ensure_local(
     Ok(local_path)
 }
 
-fn materialize_1<'a>(
+fn materialize_1<'a, B: AsRef<Build<RcStr>> + Clone>(
     file_location: &PathBuf,
-    config: ParserConfiguration,
+    config: ParserConfiguration<RcStr, B>,
     done: &'a mut Vec<IRI<RcStr>>,
     recurse: bool,
 ) -> Result<&'a mut Vec<IRI<RcStr>>, HornedError> {
@@ -256,8 +257,7 @@ fn materialize_1<'a>(
         parse_imports(Path::new(file_location), config.clone())?.into();
     let import = amont.i().import();
 
-    let b = Build::new_rc();
-    let doc_iri = path_to_file_iri(&b, file_location.as_path());
+    let doc_iri = path_to_file_iri(config.build.as_ref(), file_location.as_path());
     // Get all the imports
     for i in import {
         if !done.contains(&i.0) {
@@ -375,10 +375,11 @@ pub mod validation {
 pub mod summary {
 
     use horned_owl::{
-        model::{ComponentKind, HigherKinded},
-        ontology::component_mapped::RcComponentMappedOntology,
+        model::{AnnotatedComponent, ComponentKind, HigherKinded},
+        ontology::{component_mapped::RcComponentMappedOntology, indexed::IterableOntologyIndex},
     };
     use indexmap::map::IndexMap;
+    use std::borrow::Borrow;
 
     #[derive(Debug)]
     pub struct SummaryStatistics {
@@ -400,9 +401,30 @@ pub mod summary {
     {
         let ont: RcComponentMappedOntology = ont.into();
         SummaryStatistics {
-            logical_axiom: ont.i().iter().filter(|c| c.is_axiom()).count(),
-            annotation_axiom: ont.i().iter().map(|aa| aa.ann.len()).sum::<usize>(),
-            meta_comp: ont.i().iter().filter(|c| c.is_meta()).count(),
+            logical_axiom: ont
+                .i()
+                .iter()
+                .filter(|&c| {
+                    let c: &AnnotatedComponent<_> = c.borrow();
+                    c.is_axiom()
+                })
+                .count(),
+            annotation_axiom: ont
+                .i()
+                .iter()
+                .map(|aa| {
+                    let aa: &AnnotatedComponent<_> = aa.borrow();
+                    aa.ann.len()
+                })
+                .sum::<usize>(),
+            meta_comp: ont
+                .i()
+                .iter()
+                .filter(|&c| {
+                    let c: &AnnotatedComponent<_> = c.borrow();
+                    c.is_meta()
+                })
+                .count(),
             axiom_type: axiom_types(ont),
         }
     }
@@ -423,6 +445,7 @@ pub mod config {
     use clap::ArgAction;
     use clap::ArgMatches;
     use horned_owl::io::{InputFormat, ParserConfiguration};
+    use horned_owl::model::{Build, ForIRI};
 
     /// Add parser-config options as *global* args on the unified `horned`
     /// binary's top-level App (see `horned.rs`) -- with `global(true)`,
@@ -482,32 +505,34 @@ pub mod config {
     /// same as "not provided" reports `Ok(None)`; either way we fall back
     /// to the off/unbounded default, whereas `get_one` panics on an
     /// undefined id.
-    pub fn parser_config(matches: &ArgMatches) -> ParserConfiguration {
-        ParserConfiguration {
-            lax: matches
-                .try_get_one::<bool>("lax")
-                .ok()
-                .flatten()
-                .copied()
-                .unwrap_or(false),
-            remote_body_limit: matches
-                .try_get_one::<u64>("remote-body-limit")
-                .ok()
-                .flatten()
-                .copied()
-                .unwrap_or(u64::MAX),
-            local_only: matches
-                .try_get_one::<bool>("local-only")
-                .ok()
-                .flatten()
-                .copied()
-                .unwrap_or(false),
-            input_format: matches
-                .try_get_one::<String>("input-format")
-                .ok()
-                .flatten()
-                .and_then(|s| s.parse::<InputFormat>().ok()),
-            ..Default::default()
-        }
+    pub fn parser_config<'a, A: ForIRI>(
+        matches: &ArgMatches,
+        build: &'a Build<A>,
+    ) -> ParserConfiguration<A, &'a Build<A>> {
+        let mut config = ParserConfiguration::new(build);
+        config.lax = matches
+            .try_get_one::<bool>("lax")
+            .ok()
+            .flatten()
+            .copied()
+            .unwrap_or(false);
+        config.remote_body_limit = matches
+            .try_get_one::<u64>("remote-body-limit")
+            .ok()
+            .flatten()
+            .copied()
+            .unwrap_or(u64::MAX);
+        config.local_only = matches
+            .try_get_one::<bool>("local-only")
+            .ok()
+            .flatten()
+            .copied()
+            .unwrap_or(false);
+        config.input_format = matches
+            .try_get_one::<String>("input-format")
+            .ok()
+            .flatten()
+            .and_then(|s| s.parse::<InputFormat>().ok());
+        config
     }
 }

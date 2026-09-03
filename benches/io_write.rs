@@ -26,7 +26,7 @@ fn bench_io_write(c: &mut Criterion) {
         // RDF/XML: pretty formatter (horned-pretty-rdf)
         group.bench_function(BenchmarkId::new("rdf_xml_pretty_io_write", n), |b| {
             b.iter(|| {
-                horned_owl::io::rdf::writer::write(sink(), &ont).ok();
+                horned_owl::io::rdf::writer::write(sink(), &ont, None).ok();
             })
         });
 

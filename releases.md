@@ -1,3 +1,38 @@
+Version 4.0.0
+=============
+
+This version makes a major change to the reader/writer interface. In
+addition to providing as much regularity as possible, it also adds the
+abstract ability to stream ontologies, by simply including prefixes
+into an Iterator interface.
+
+Features:
+- Streaming read/write via a new `StreamComponent`/`StreamOntology`
+  interface: OWL/XML gains both `read_to_stream` and `write_stream`;
+  RDF/XML and Functional Syntax gain `write_stream` only (their
+  readers still need the whole document before any axiom can be
+  produced); Manchester and OBO gain neither (their writers need the
+  whole axiom set to group into frames/stanzas regardless of how the
+  input arrives).
+
+Changes:
+- `read`/`write` are now consistent in shape across every format:
+  `read(bufread, config) -> (O, ...)`, `write(w, &ComponentMappedOntology, mapping)`.
+- `read_with_build` is removed from every format; share a `Build`
+  across parses via `ParserConfiguration`'s `build` field instead.
+- The RDF/XML writer gained a `mapping: Option<&PrefixMapping>`
+  parameter, matching every other format.
+- The RDF/XML reader is now generic over the IRI backing type, rather
+  than fixed to `RcStr`.
+- Functional Syntax and OBO's readers now borrow their input
+  (`&mut R`) instead of consuming it, matching OWL/XML and RDF/XML.
+- Fixed `Import`/`OntologyAnnotation` ordering in OWL/XML output.
+
+
+Contributor:
+- Phillip Lord
+
+
 Version 3.0.0
 =============
 

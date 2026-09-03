@@ -1353,8 +1353,11 @@ mod tests {
             .replace("owl-functional", "owl-xml")
             .replace(".ofn", ".owx");
         let owx = &slurp::read_all_to_string(path).unwrap();
-        let expected =
-            crate::io::owx::reader::read(&mut Cursor::new(&owx), Default::default()).unwrap();
+        let expected = crate::io::owx::reader::read(
+            &mut Cursor::new(&owx),
+            crate::io::ParserConfiguration::new(&build),
+        )
+        .unwrap();
 
         // pretty_assertions::assert_eq!(item.1, expected.1);
         pretty_assertions::assert_eq!(item.0.0, expected.0);

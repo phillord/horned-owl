@@ -8,6 +8,7 @@ use horned_bin::{
 use horned_owl::io::ResourceType;
 
 use horned_owl::error::HornedError;
+use horned_owl::model::Build;
 
 use std::path::Path;
 
@@ -34,12 +35,11 @@ pub(crate) fn matcher(matches: &ArgMatches) -> Result<(), HornedError> {
         .value_of("INPUT")
         .ok_or_else(|| HornedError::CommandError("A file name must be specified".to_string()))?;
 
-    let config = parser_config(matches);
+    let b = Build::new();
+    let config = parser_config(matches, &b);
     let parsed = parse_path(Path::new(input), config.clone())?;
     let resource_type = parsed.resource_type();
-    let rdf_format = with_detected_rdf_format(Path::new(input), config)
-        .rdf
-        .format;
+    let rdf_format = with_detected_rdf_format(Path::new(input), config.into()).format;
     let (ont, p, i) = parsed.decompose();
 
     let summary = summarize(ont);

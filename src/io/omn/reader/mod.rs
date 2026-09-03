@@ -118,19 +118,16 @@ pub fn parse_class_expression<A: ForIRI>(
 /// The `# General axioms` block emitted by the writer for components lacking a
 /// native Manchester form is skipped with a warning — see the limitations note
 /// in the module doc.
-pub fn read<A: ForIRI, O: MutableOntology<A> + Ontology<A> + Default, R: BufRead>(
-    bufread: R,
-    _config: ParserConfiguration,
-) -> Result<(O, PrefixMapping), HornedError> {
-    let b = Build::new();
-    read_with_build(bufread, &b)
-}
-
-/// Read a whole ontology, interning IRIs into the supplied `build`.
-pub fn read_with_build<A: ForIRI, O: MutableOntology<A> + Ontology<A> + Default, R: BufRead>(
+pub fn read<
+    A: ForIRI,
+    B: AsRef<Build<A>>,
+    O: MutableOntology<A> + Ontology<A> + Default,
+    R: BufRead,
+>(
     mut bufread: R,
-    build: &Build<A>,
+    config: ParserConfiguration<A, B>,
 ) -> Result<(O, PrefixMapping), HornedError> {
+    let build = config.build.as_ref();
     let mut doc = String::new();
     bufread.read_to_string(&mut doc)?;
 
@@ -227,9 +224,9 @@ pub fn read_with_build<A: ForIRI, O: MutableOntology<A> + Ontology<A> + Default,
                     // needed.
                     let wrapped = format!("Ontology(\n{axioms}\n)");
                     let parsed: Result<(crate::ontology::set::SetOntology<A>, _), _> =
-                        crate::io::ofn::reader::read_with_build(
-                            std::io::Cursor::new(wrapped.into_bytes()),
-                            build,
+                        crate::io::ofn::reader::read(
+                            &mut std::io::Cursor::new(wrapped.into_bytes()),
+                            crate::io::ParserConfiguration::new(build),
                         );
                     match parsed {
                         Ok((block_ont, _)) => {

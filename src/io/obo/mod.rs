@@ -11,7 +11,7 @@
 //! mapping as an oracle.
 pub mod reader;
 pub mod writer;
-pub use reader::{read, read_with_build};
+pub use reader::read;
 pub use writer::write;
 
 #[cfg(test)]

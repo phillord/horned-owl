@@ -62,10 +62,9 @@
 //   >
 //   // No generic O/A type params (fixed to RcStr) and no PrefixMapping in the
 //   // return -- instead an IncompleteParse<RcStr>, which callers must check via
-//   // `.is_complete()` to detect axioms the RDF reader could not map (this is the
-//   // "capturing the RDF reader's IncompleteParse" mentioned in the plan's
-//   // architecture section). Convert ConcreteRDFOntology -> SetOntology via
-//   // `.into()` per io/mod.rs's `From<ParserOutput<..>> for SetOntology<A>` impl.
+//   // `.is_complete()` to detect axioms the RDF reader could not map. Convert
+//   // ConcreteRDFOntology -> SetOntology via `.into()` per io/mod.rs's
+//   // `From<ParserOutput<..>> for SetOntology<A>` impl.
 //   pub fn rdf::writer::write<A, AA: ForIndex<A>, W: Write>(
 //       write: W,
 //       ont: &ComponentMappedOntology<A, AA>,
@@ -96,7 +95,7 @@
 // SetOntology<RcStr>, there is no ParserOutput in the picture at all here) --
 // `clippy::useless_conversion` flags both. The brief's `.into()` was not wrong (it
 // still compiles and passes) but it is dead code for this generic-O calling
-// convention; removed below to keep `cargo clippy` clean per the plan's constraint.
+// convention; removed below to keep `cargo clippy` clean.
 // Real ParserOutput-based dispatch (if Task 4/5 wants runtime format detection rather
 // than calling the right format's `reader::read` directly) would need the explicit
 // `ParserOutput::ofn((so, pm))` wrap described above, and `.into()`/`.decompose()`
@@ -104,9 +103,10 @@
 //
 // If any of these calls do not compile, adjust src/ontology.rs (Task 4/5) to match
 // the pinned commit's real API before proceeding.
+use horned_owl::io::ParserConfiguration;
 use horned_owl::io::ofn;
 use horned_owl::io::omn;
-use horned_owl::model::{RcAnnotatedComponent, RcStr};
+use horned_owl::model::{Build, RcAnnotatedComponent, RcStr};
 use horned_owl::ontology::component_mapped::ComponentMappedOntology;
 use horned_owl::ontology::set::SetOntology;
 use std::io::Cursor;
@@ -116,9 +116,11 @@ const OFN: &str =
 
 #[test]
 fn ofn_read_to_omn_write_and_back() {
+    let build = Build::new_rc();
     // read functional
     let (so, prefixes): (SetOntology<RcStr>, _) =
-        ofn::reader::read(&mut Cursor::new(OFN), Default::default()).expect("read ofn");
+        ofn::reader::read(&mut Cursor::new(OFN), ParserConfiguration::new(&build))
+            .expect("read ofn");
     // SetOntology -> ComponentMappedOntology for writing
     let cmo: ComponentMappedOntology<RcStr, RcAnnotatedComponent> = so.clone().into();
     // write manchester
@@ -127,6 +129,7 @@ fn ofn_read_to_omn_write_and_back() {
     assert!(!out.is_empty());
     // read it back
     let (so2, _): (SetOntology<RcStr>, _) =
-        omn::reader::read(&mut Cursor::new(&out), Default::default()).expect("read omn");
+        omn::reader::read(&mut Cursor::new(&out), ParserConfiguration::new(&build))
+            .expect("read omn");
     assert!(so2.iter().count() >= 1);
 }

@@ -3,7 +3,6 @@ use std::io::BufReader;
 use std::rc::Rc;
 
 use curie::PrefixMapping;
-use horned_owl::io::ParserConfiguration;
 use horned_owl::io::omn::{read as read_omn, write as write_omn};
 use horned_owl::model::AnnotatedComponent;
 use horned_owl::ontology::component_mapped::ComponentMappedOntology;
@@ -19,7 +18,7 @@ pub type O = SetOntology<Rc<str>>;
 
 /// Parse a Manchester document string into a SetOntology + prefixes.
 pub fn read_str(s: &str) -> Result<(O, PrefixMapping), String> {
-    read_omn::<Rc<str>, O, _>(BufReader::new(s.as_bytes()), ParserConfiguration::default())
+    read_omn::<Rc<str>, _, O, _>(BufReader::new(s.as_bytes()), Default::default())
         .map_err(|e| format!("{e}"))
 }
 

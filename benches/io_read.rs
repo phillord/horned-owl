@@ -1,7 +1,7 @@
 use criterion::{AxisScale, BenchmarkId, Criterion, PlotConfiguration, criterion_group};
 use horned_bin::generate_big_owl;
-use horned_owl::io::{ParserConfiguration, RDFParserConfiguration};
-use horned_owl::model::RcStr;
+use horned_owl::io::RDFParserConfiguration;
+use horned_owl::model::{RcAnnotatedComponent, RcStr};
 use horned_owl::ontology::set::SetOntology;
 use std::fs::{File, create_dir_all};
 use std::io::BufReader;
@@ -29,7 +29,12 @@ fn bench_io_read(c: &mut Criterion) {
             b.iter(|| {
                 let f = File::open(filename.clone()).ok().unwrap();
                 let mut f = BufReader::new(f);
-                let _ = horned_owl::io::rdf::reader::read(&mut f, Default::default()).ok();
+                horned_owl::io::rdf::reader::read::<RcStr, RcAnnotatedComponent, _, _>(
+                    &mut f,
+                    Default::default(),
+                )
+                .ok()
+                .unwrap();
             })
         });
 
@@ -53,16 +58,15 @@ fn bench_io_read(c: &mut Criterion) {
             b.iter(|| {
                 let f = File::open(filename.clone()).ok().unwrap();
                 let mut f = BufReader::new(f);
-                let _ = horned_owl::io::rdf::reader::read(
+                horned_owl::io::rdf::reader::read::<RcStr, RcAnnotatedComponent, _, _>(
                     &mut f,
-                    ParserConfiguration {
-                        rdf: RDFParserConfiguration {
-                            format: Some(oxrdfio::RdfFormat::Turtle),
-                        },
+                    RDFParserConfiguration {
+                        format: Some(oxrdfio::RdfFormat::Turtle),
                         ..Default::default()
                     },
                 )
-                .ok();
+                .ok()
+                .unwrap();
             })
         });
     }

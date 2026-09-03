@@ -19,7 +19,7 @@ use curie::PrefixMapping;
 use crate::error::HornedError;
 use crate::model::{
     AnnotatedComponent, AnnotationValue, ClassExpression as CE, Component, ForIRI, Individual,
-    Literal, ObjectPropertyExpression as OPE,
+    Literal, ObjectPropertyExpression as OPE, Ontology,
 };
 use crate::ontology::component_mapped::ComponentMappedOntology;
 use crate::ontology::indexed::ForIndex;
@@ -46,7 +46,10 @@ struct Stanza {
     clauses: Vec<String>,
 }
 
-/// Write an ontology to `write` in OBO flat-file format 1.4.
+/// Write a `ComponentMappedOntology` to `write` in OBO flat-file format 1.4.
+/// A caller holding some other `Ontology` implementation should collect it
+/// into a `ComponentMappedOntology` first (`ont.iter().cloned().collect()`,
+/// or `ont.into_iter().collect()` if `ont` doesn't need to be kept).
 pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
     mut write: W,
     ont: &ComponentMappedOntology<A, AA>,
@@ -674,8 +677,8 @@ mod tests {
     use crate::ontology::set::SetOntology;
 
     fn read(s: &str) -> SetOntology<RcStr> {
-        crate::io::obo::reader::read::<RcStr, SetOntology<RcStr>, _>(
-            s.as_bytes(),
+        crate::io::obo::reader::read::<RcStr, _, SetOntology<RcStr>, _>(
+            &mut s.as_bytes(),
             Default::default(),
         )
         .unwrap()
@@ -696,9 +699,10 @@ mod tests {
                 continue;
             }
             let doc = std::fs::read_to_string(&path).unwrap();
-            let (a, prefixes) = crate::io::obo::reader::read::<RcStr, SetOntology<RcStr>, _>(
-                doc.as_bytes(),
-                Default::default(),
+            let b = crate::model::Build::new_rc();
+            let (a, prefixes) = crate::io::obo::reader::read::<RcStr, _, SetOntology<RcStr>, _>(
+                &mut doc.as_bytes(),
+                crate::io::ParserConfiguration::new(&b),
             )
             .unwrap();
             let cmo: ComponentMappedOntology<RcStr, AnnotatedComponent<RcStr>> = a.clone().into();

@@ -42,21 +42,18 @@ use crate::error::HornedError;
 use crate::io::ParserConfiguration;
 use crate::model::{Build, ForIRI, MutableOntology, Ontology};
 
-/// Read a whole ontology from an OBO document, using a fresh IRI `Build`.
-/// Mirrors [`crate::io::omn::reader::read`].
-pub fn read<A: ForIRI, O: MutableOntology<A> + Ontology<A> + Default, R: BufRead>(
-    bufread: R,
-    _config: ParserConfiguration,
+/// Read a whole ontology from an OBO document, interning IRIs into
+/// `config.build`.
+pub fn read<
+    A: ForIRI,
+    B: AsRef<Build<A>>,
+    O: MutableOntology<A> + Ontology<A> + Default,
+    R: BufRead,
+>(
+    bufread: &mut R,
+    config: ParserConfiguration<A, B>,
 ) -> Result<(O, PrefixMapping), HornedError> {
-    let b = Build::new();
-    read_with_build(bufread, &b)
-}
-
-/// Read a whole ontology, interning IRIs into the supplied `build`.
-pub fn read_with_build<A: ForIRI, O: MutableOntology<A> + Ontology<A> + Default, R: BufRead>(
-    mut bufread: R,
-    build: &Build<A>,
-) -> Result<(O, PrefixMapping), HornedError> {
+    let build = config.build.as_ref();
     // Lenient by default (see module doc): decode lossily so a stray non-UTF-8
     // byte — common in real bio-ontologies — does not abort the whole read.
     let mut bytes = Vec::new();
@@ -139,7 +136,7 @@ mod tests {
     use crate::ontology::set::SetOntology;
 
     fn read(s: &str) -> SetOntology<RcStr> {
-        super::read::<RcStr, SetOntology<RcStr>, _>(s.as_bytes(), Default::default())
+        super::read::<RcStr, _, SetOntology<RcStr>, _>(&mut s.as_bytes(), Default::default())
             .unwrap()
             .0
     }

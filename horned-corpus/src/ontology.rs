@@ -3,22 +3,24 @@
 //! underlying horned-owl reader can provide.
 //!
 //! Only the RDF/XML reader can produce an incomplete parse (see
-//! `horned_owl::io::rdf::reader::IncompleteParse`); the ofn/omn/owx readers
-//! either fully succeed or return a hard error, so they always report
-//! `incomplete: None`.
+//! `horned_owl::io::rdf::reader::IncompleteParse`); the ofn/omn/owx/obo
+//! readers either fully succeed or return a hard error, so they always
+//! report `incomplete: None`.
 //!
 //! Dispatch goes through `horned_owl::io::ParserOutput` and its
 //! `.decompose()` method (see the API notes in `tests/smoke.rs`) rather than
 //! matching each format's raw tuple/struct shape by hand -- that seam
-//! normalizes ofn/omn/owx/rdf into a single
+//! normalizes ofn/omn/owx/obo/rdf into a single
 //! `(SetOntology<A>, Option<PrefixMapping>, Option<IncompleteParse<A>>)`
 //! triple.
 
 use crate::model::{Format, IncompleteSummary};
 use curie::PrefixMapping;
 use horned_owl::error::HornedError;
-use horned_owl::io::{ParserConfiguration, ParserOutput, ofn, omn, owx, rdf};
-use horned_owl::model::{RcAnnotatedComponent, RcStr};
+use horned_owl::io::{
+    ParserConfiguration, ParserOutput, RDFParserConfiguration, obo, ofn, omn, owx, rdf,
+};
+use horned_owl::model::{Build, RcAnnotatedComponent, RcStr};
 use horned_owl::ontology::component_mapped::ComponentMappedOntology;
 use horned_owl::ontology::set::SetOntology;
 use std::io::Cursor;
@@ -78,25 +80,35 @@ pub fn read_source(fmt: Format, bytes: &[u8]) -> anyhow::Result<ReadOk> {
     // return type uses.
     type Output = ParserOutput<RcStr, RcAnnotatedComponent>;
 
+    let build = Build::new_rc();
+
     let (model, prefixes, incomplete) = match fmt {
         Format::Ofn => {
-            let sop =
-                ofn::reader::read(Cursor::new(bytes), Default::default()).map_err(horned_err)?;
+            let sop = ofn::reader::read(&mut Cursor::new(bytes), ParserConfiguration::new(&build))
+                .map_err(horned_err)?;
             Output::ofn(sop).decompose()
         }
         Format::Omn => {
-            let sop =
-                omn::reader::read(Cursor::new(bytes), Default::default()).map_err(horned_err)?;
+            let sop = omn::reader::read(Cursor::new(bytes), ParserConfiguration::new(&build))
+                .map_err(horned_err)?;
             Output::omn(sop).decompose()
         }
         Format::OwlXml => {
-            let sop = owx::reader::read(&mut Cursor::new(bytes), Default::default())
+            let sop = owx::reader::read(&mut Cursor::new(bytes), ParserConfiguration::new(&build))
                 .map_err(horned_err)?;
             Output::owx(sop).decompose()
         }
-        Format::RdfXml => {
-            let rop = rdf::reader::read(&mut Cursor::new(bytes), Default::default())
+        Format::Obo => {
+            let sop = obo::reader::read(&mut Cursor::new(bytes), ParserConfiguration::new(&build))
                 .map_err(horned_err)?;
+            Output::obo(sop).decompose()
+        }
+        Format::RdfXml => {
+            let rop = rdf::reader::read(
+                &mut Cursor::new(bytes),
+                ParserConfiguration::new(&build).into(),
+            )
+            .map_err(horned_err)?;
             Output::rdf(rop).decompose()
         }
         Format::Turtle => {
@@ -104,8 +116,10 @@ pub fn read_source(fmt: Format, bytes: &[u8]) -> anyhow::Result<ReadOk> {
             // Turtle (the config defaults to RdfXml otherwise). N-Triples is a
             // Turtle subset, so this parses both. IncompleteParse handling is
             // identical to the RdfXml path.
-            let mut config = ParserConfiguration::default();
-            config.rdf.format = Some(oxrdfio::RdfFormat::Turtle);
+            let config = RDFParserConfiguration {
+                format: Some(oxrdfio::RdfFormat::Turtle),
+                ..ParserConfiguration::new(&build).into()
+            };
             let rop = rdf::reader::read(&mut Cursor::new(bytes), config).map_err(horned_err)?;
             Output::rdf(rop).decompose()
         }
@@ -122,35 +136,40 @@ pub fn read_source(fmt: Format, bytes: &[u8]) -> anyhow::Result<ReadOk> {
     })
 }
 
-/// Serialize `model` into `fmt`'s byte representation.
+/// Serialize `cmo` into `fmt`'s byte representation.
 ///
-/// Every horned-owl writer (ofn/omn/owx/rdf) takes a
-/// `&ComponentMappedOntology<A, AA>`, not a `&SetOntology`, so `model` is
-/// converted via `.into()` first. The ofn/omn/owx writers additionally take
-/// an `Option<&PrefixMapping>` to control prefix-qualified output; the rdf
-/// writer takes no such parameter at all -- it always emits full/absolute
-/// IRIs plus a small fixed prefix set (rdf/owl/swrl) hardcoded internally
-/// (see `tests/smoke.rs`'s API notes) -- so the `RdfXml` arm must not pass
-/// `prefixes` to it.
+/// Every horned-owl writer (ofn/omn/owx/obo/rdf) takes a
+/// `&ComponentMappedOntology<A, AA>` plus an `Option<&PrefixMapping>`. The
+/// rdf writer merges `prefixes` in alongside its own fixed rdf/owl/swrl set.
+///
+/// Takes the `ComponentMappedOntology` directly rather than a `&SetOntology`
+/// to convert internally: a sweep over multiple target formats (see
+/// `roundtrip::run_bytes`) calls this once per format against the *same*
+/// source model, and converting per call cloned and rebuilt the whole
+/// ontology on every one of those calls. Building the `ComponentMappedOntology`
+/// once and reusing it across every target format's `write_target` call turns
+/// that into a single conversion per source ontology, not one per target.
 pub fn write_target(
     fmt: Format,
-    model: &SetOntology<RcStr>,
+    cmo: &ComponentMappedOntology<RcStr, RcAnnotatedComponent>,
     prefixes: &PrefixMapping,
 ) -> anyhow::Result<Vec<u8>> {
-    let cmo: ComponentMappedOntology<RcStr, RcAnnotatedComponent> = model.clone().into();
     let mut out: Vec<u8> = Vec::new();
     match fmt {
         Format::Ofn => {
-            ofn::writer::write(&mut out, &cmo, Some(prefixes)).map_err(horned_err)?;
+            ofn::writer::write(&mut out, cmo, Some(prefixes)).map_err(horned_err)?;
         }
         Format::Omn => {
-            omn::writer::write(&mut out, &cmo, Some(prefixes)).map_err(horned_err)?;
+            omn::writer::write(&mut out, cmo, Some(prefixes)).map_err(horned_err)?;
         }
         Format::OwlXml => {
-            owx::writer::write(&mut out, &cmo, Some(prefixes)).map_err(horned_err)?;
+            owx::writer::write(&mut out, cmo, Some(prefixes)).map_err(horned_err)?;
+        }
+        Format::Obo => {
+            obo::writer::write(&mut out, cmo, Some(prefixes)).map_err(horned_err)?;
         }
         Format::RdfXml => {
-            rdf::writer::write(&mut out, &cmo).map_err(horned_err)?;
+            rdf::writer::write(&mut out, cmo, Some(prefixes)).map_err(horned_err)?;
         }
         // Turtle is a read-only (source) format — horned-owl has no Turtle
         // writer, so it never appears as a round-trip target.
@@ -195,6 +214,40 @@ mod tests {
     }
 
     #[test]
+    fn reads_obo_source() {
+        let obo = b"format-version: 1.4\nontology: ex\n\n[Term]\nid: EX:0000001\nname: A\n";
+        let r = read_source(Format::Obo, obo).expect("read");
+        assert!(r.model.iter().count() >= 1);
+        assert!(r.incomplete.is_none());
+    }
+
+    #[test]
+    fn writes_and_rereads_obo_from_obo_source() {
+        // Unlike the other targets, OBO's writer only emits a stanza for
+        // entities carrying the oboInOwl:id annotation its own reader
+        // stamps -- so this can only be exercised fairly starting from a
+        // real OBO source, not an arbitrary OWL construct read from
+        // another format (writes_and_rereads_each_target intentionally
+        // does not include Obo, for this reason).
+        let obo = b"format-version: 1.4\nontology: ex\n\n[Term]\nid: EX:0000001\nname: A\n";
+        let src = read_source(Format::Obo, obo).expect("read");
+        let cmo: ComponentMappedOntology<RcStr, RcAnnotatedComponent> = src.model.clone().into();
+
+        let bytes = write_target(Format::Obo, &cmo, &src.prefixes).expect("write");
+        let back = read_source(Format::Obo, &bytes).expect("reread");
+
+        assert!(
+            back.model.iter().any(|ac| matches!(
+                &ac.component,
+                horned_owl::model::Component::DeclareClass(c)
+                    if c.0.0.as_ref().ends_with("EX_0000001")
+            )),
+            "term stanza lost in OBO round trip, got: {:#?}",
+            back.model
+        );
+    }
+
+    #[test]
     fn unknown_format_is_rejected() {
         let r = read_source(Format::Unknown, b"");
         assert!(r.is_err());
@@ -208,8 +261,9 @@ mod tests {
             b"Prefix(ex:=<http://ex/>)\nOntology(<http://ex/o>\nDeclaration(Class(ex:A))\n)",
         )
         .unwrap();
+        let cmo: ComponentMappedOntology<RcStr, RcAnnotatedComponent> = src.model.clone().into();
         for t in [Format::Ofn, Format::Omn, Format::OwlXml, Format::RdfXml] {
-            let bytes = write_target(t, &src.model, &src.prefixes).expect("write");
+            let bytes = write_target(t, &cmo, &src.prefixes).expect("write");
             assert!(!bytes.is_empty(), "empty output for {t:?}");
             let back = read_source(t, &bytes).expect("reread");
             assert!(back.model.iter().count() >= 1, "lost content for {t:?}");

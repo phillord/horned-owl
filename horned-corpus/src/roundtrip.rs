@@ -17,7 +17,8 @@ use crate::detect::detect;
 use crate::diff::diff;
 use crate::model::*;
 use crate::ontology::{ReadOk, read_source, write_target};
-use horned_owl::model::RcStr;
+use horned_owl::model::{RcAnnotatedComponent, RcStr};
+use horned_owl::ontology::component_mapped::ComponentMappedOntology;
 use horned_owl::ontology::set::SetOntology;
 use std::collections::BTreeMap;
 use std::panic::{AssertUnwindSafe, catch_unwind};
@@ -34,6 +35,7 @@ pub(crate) fn robot_ext(fmt: Format) -> &'static str {
         Format::OwlXml => "owx",
         Format::Ofn => "ofn",
         Format::Omn => "omn",
+        Format::Obo => "obo",
         Format::Turtle => "ttl",
         Format::Unknown => "owl",
     }
@@ -107,8 +109,15 @@ pub fn run_bytes(ontology: &str, bytes: &[u8], formats: &[Format]) -> Vec<Record
     };
 
     let src_canon = canonicalize(src.model.clone());
+    // Built once and reused across every target format below -- write_target
+    // takes the ComponentMappedOntology directly rather than converting on
+    // each of the (typically 4-5) calls this loop makes against the same
+    // source model.
+    let cmo: ComponentMappedOntology<RcStr, RcAnnotatedComponent> = src.model.clone().into();
     for &t in formats {
-        recs.push(Record::Case(one_case(ontology, sfmt, t, &src, &src_canon)));
+        recs.push(Record::Case(one_case(
+            ontology, sfmt, t, &src, &cmo, &src_canon,
+        )));
     }
     recs
 }
@@ -163,12 +172,11 @@ fn one_case(
     sfmt: Format,
     tfmt: Format,
     src: &ReadOk,
+    cmo: &ComponentMappedOntology<RcStr, RcAnnotatedComponent>,
     src_canon: &SetOntology<RcStr>,
 ) -> CaseResult {
     let t0 = Instant::now();
-    let write = catch_unwind(AssertUnwindSafe(|| {
-        write_target(tfmt, &src.model, &src.prefixes)
-    }));
+    let write = catch_unwind(AssertUnwindSafe(|| write_target(tfmt, cmo, &src.prefixes)));
     let write_us = Some(t0.elapsed().as_micros() as u64);
 
     let bytes = match write {

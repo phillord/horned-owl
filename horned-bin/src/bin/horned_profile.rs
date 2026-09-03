@@ -5,6 +5,7 @@ use clap::ArgMatches;
 use horned_bin::{config::parser_config, parse_path};
 
 use horned_owl::error::HornedError;
+use horned_owl::model::Build;
 use horned_profile::{Profile, ProfileReport, Violation};
 
 use std::collections::BTreeMap;
@@ -45,7 +46,8 @@ pub(crate) fn matcher(matches: &ArgMatches) -> Result<(), HornedError> {
         .value_of("INPUT")
         .ok_or_else(horned_bin::error::error_missing_input)?;
 
-    let o = parse_path(Path::new(input), parser_config(matches))?
+    let b = Build::new();
+    let o = parse_path(Path::new(input), parser_config(matches, &b))?
         .decompose()
         .0;
 

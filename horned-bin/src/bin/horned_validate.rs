@@ -5,6 +5,7 @@ use clap::ArgMatches;
 use horned_bin::{config::parser_config, parse_path};
 
 use horned_owl::error::HornedError;
+use horned_owl::model::Build;
 
 use std::path::Path;
 
@@ -32,7 +33,8 @@ pub(crate) fn matcher(matches: &ArgMatches) -> Result<(), HornedError> {
         .value_of("INPUT")
         .ok_or_else(horned_bin::error::error_missing_input)?;
 
-    let incomplete = parse_path(Path::new(input), parser_config(matches))?
+    let b = Build::new();
+    let incomplete = parse_path(Path::new(input), parser_config(matches, &b))?
         .decompose()
         .2;
 
