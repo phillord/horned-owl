@@ -1863,6 +1863,57 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> OntologyParser<'a, A
                         ).into()
                     }
                 }
+                // The writer already emits this form for more than two
+                // operands (see `members` in io/rdf/writer.rs), so without
+                // this arm horned-owl cannot read back what it writes.
+                //
+                // `retrieve_to_seq` takes a fn pointer and so cannot
+                // carry `ic`, which `distinguish_retrieve_property_kind`
+                // needs. The sequence is therefore resolved by hand, and
+                // deliberately only removed from `bnode_seq` once every
+                // member has resolved: declarations may arrive in a
+                // later pass, exactly as `retrieve_to_ce_seq` guards
+                // against.
+                [
+                    [_, Term::OWL(VOWL::Members), Term::BNode(bnodeid)], //:
+                    [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::AllDisjointProperties)],
+                ] => {
+                    ok_some! {
+                        {
+                            let terms = self.bnode_seq.get(bnodeid)?.clone();
+                            let pes: Vec<_> = terms
+                                .iter()
+                                .map(|t| self.distinguish_retrieve_property_kind(t, ic))
+                                .collect::<Option<Vec<_>>>()?;
+
+                            let mut ops = vec![];
+                            let mut dps = vec![];
+                            for pe in pes {
+                                match pe {
+                                    PropertyExpression::ObjectPropertyExpression(ope) =>
+                                        ops.push(ope),
+                                    PropertyExpression::DataProperty(dp) => dps.push(dp),
+                                    // An annotation property cannot be
+                                    // disjoint with anything in OWL 2 DL.
+                                    PropertyExpression::AnnotationProperty(_) => return None,
+                                }
+                            }
+
+                            let axiom: Component<A> = if dps.is_empty() && !ops.is_empty() {
+                                DisjointObjectProperties(ops).into()
+                            } else if ops.is_empty() && !dps.is_empty() {
+                                DisjointDataProperties(dps).into()
+                            } else {
+                                // Mixed, or empty. Leave the triples in
+                                // IncompleteParse rather than guess.
+                                return None;
+                            };
+
+                            self.bnode_seq.remove(bnodeid);
+                            axiom
+                        }
+                    }
+                }
                 _ => Ok(None),
             };
 
@@ -2757,6 +2808,72 @@ mod test {
     use crate::ontology::component_mapped::RcComponentMappedOntology;
     use pretty_assertions::assert_eq;
     use rstest::rstest;
+
+    /// The n-ary property disjointness form.
+    ///
+    /// The existing fixtures only exercise the two-operand
+    /// `owl:propertyDisjointWith` shape, so `owl:AllDisjointProperties`
+    /// went unread even though the writer emits it. `read_ok` asserts the
+    /// parse is complete, so each of these fails on a reader that leaves
+    /// the triples in `IncompleteParse`.
+    fn nary(body: &str) -> ConcreteRDFOntology<RcStr, Rc<AnnotatedComponent<RcStr>>> {
+        let doc = format!(
+            r##"<?xml version="1.0"?>
+<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+         xmlns:owl="http://www.w3.org/2002/07/owl#"
+         xml:base="http://www.example.com/iri">
+  <owl:Ontology rdf:about="http://www.example.com/iri"/>
+{body}
+</rdf:RDF>"##
+        );
+        read_ok(&mut doc.as_bytes())
+    }
+
+    #[test]
+    fn all_disjoint_object_properties() {
+        let ont: ComponentMappedOntology<RcStr, Rc<AnnotatedComponent<RcStr>>> = nary(
+            r##"  <owl:ObjectProperty rdf:about="#p"/>
+  <owl:ObjectProperty rdf:about="#q"/>
+  <owl:ObjectProperty rdf:about="#r"/>
+  <owl:AllDisjointProperties>
+    <owl:members rdf:parseType="Collection">
+      <owl:ObjectProperty rdf:about="#p"/>
+      <owl:ObjectProperty rdf:about="#q"/>
+      <owl:ObjectProperty rdf:about="#r"/>
+    </owl:members>
+  </owl:AllDisjointProperties>"##,
+        )
+        .into();
+
+        assert_eq!(ont.i().disjoint_object_properties().count(), 1);
+        assert_eq!(
+            ont.i().disjoint_object_properties().next().unwrap().0.len(),
+            3
+        );
+    }
+
+    #[test]
+    fn all_disjoint_data_properties() {
+        let ont: ComponentMappedOntology<RcStr, Rc<AnnotatedComponent<RcStr>>> = nary(
+            r##"  <owl:DatatypeProperty rdf:about="#p"/>
+  <owl:DatatypeProperty rdf:about="#q"/>
+  <owl:DatatypeProperty rdf:about="#r"/>
+  <owl:AllDisjointProperties>
+    <owl:members rdf:parseType="Collection">
+      <owl:DatatypeProperty rdf:about="#p"/>
+      <owl:DatatypeProperty rdf:about="#q"/>
+      <owl:DatatypeProperty rdf:about="#r"/>
+    </owl:members>
+  </owl:AllDisjointProperties>"##,
+        )
+        .into();
+
+        assert_eq!(ont.i().disjoint_data_properties().count(), 1);
+        assert_eq!(
+            ont.i().disjoint_data_properties().next().unwrap().0.len(),
+            3
+        );
+    }
 
     fn read_ok<R: BufRead>(
         bufread: &mut R,
