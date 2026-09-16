@@ -325,7 +325,7 @@ fn first_xml_element(s: &str) -> Option<&str> {
 
 #[cfg(test)]
 mod tests {
-    use std::{os::unix::fs::PermissionsExt, path::PathBuf};
+    use std::path::PathBuf;
 
     #[test]
     fn detect_format_rdf_xml() {
@@ -433,9 +433,6 @@ mod tests {
                         .status()
                         .expect("failed to run wget");
                     assert!(status.success(), "failed to download bubo");
-
-                    std::fs::set_permissions(&local, std::fs::Permissions::from_mode(0o755))
-                        .expect("failed to set bubo executable");
                 }
 
                 local
