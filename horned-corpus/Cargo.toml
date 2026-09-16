@@ -13,7 +13,7 @@ license = "MIT OR LGPL-3.0"
 publish = false
 
 [dependencies]
-horned-owl = { path = "../", version = "3.0.0" }
+horned-owl = { path = "../", version = "4.0.0" }
 horned-profile = { workspace = true }
 oxrdfio = { workspace = true }
 # horned_owl::io re-exports PrefixMapping only via a private `use curie::
