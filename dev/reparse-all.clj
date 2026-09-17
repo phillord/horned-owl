@@ -16,6 +16,7 @@
             "owl-rdf" (org.semanticweb.owlapi.rdf.rdfxml.parser.RDFXMLParser.)
             "owl-functional" (org.semanticweb.owlapi.functional.parser.OWLFunctionalSyntaxOWLParser.)
             "owl-manchester" (org.semanticweb.owlapi.manchestersyntax.parser.ManchesterOWLSyntaxOntologyParser.)
+            "owl-obo" (org.semanticweb.owlapi.oboformat.OBOFormatOWLAPIParser.)
             )]
       (.parse parser documentsource ontology config))
     (catch Exception e
@@ -53,8 +54,14 @@
 ;;   (swrl_built_in.omn is no longer excluded: our writer now renders a
 ;;   built-in atom's predicate as a full `<IRI>` rather than a CURIE, which
 ;;   OWL API accepts.)
+;; - import.obo / ont-with-bfo.obo: OBO's obo2owl bridge eagerly resolves
+;;   `import:` on an internal manager that ignores the SILENT config above,
+;;   aborting the whole run on the unresolvable placeholder/BFO URL. Scoped
+;;   to .obo: every other format's parser respects the SILENT config fine.
 (def known-parser-limitations
   ["anon-subobjectproperty.omn"
+   "import.obo"
+   "ont-with-bfo.obo"
    "declaration-with-annotation.omn"
    "declaration-with-two-annotation.omn"
    "inverse-transitive.omn"

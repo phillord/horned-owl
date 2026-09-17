@@ -1,0 +1,5 @@
+format-version: 1.2
+data-version: http://www.example.com/viri
+ontology: http://www.example.com/iri
+owl-axioms: \n\nOntology(\n\nSameIndividual(<http://www.example.com/iri#p> <http://www.example.com/iri#q> <http://www.example.com/iri#r> <http://www.example.com/iri#s>)\n)
+

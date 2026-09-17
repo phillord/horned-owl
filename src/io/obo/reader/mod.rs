@@ -129,6 +129,8 @@ pub fn read<
 mod tests {
     use std::collections::BTreeSet;
 
+    use rstest::rstest;
+
     use crate::model::{
         AnnotationValue, ClassExpression, Component, Individual, Literal, ObjectPropertyExpression,
         Ontology, RcStr,
@@ -622,5 +624,56 @@ mod tests {
         let ont = read(doc);
         assert!(ont.iter().any(|ac| matches!(&ac.component,
             Component::DeclareClass(d) if d.0.0.as_ref() == "http://example.org/cl/0000000")));
+    }
+
+    /// `format-version:` and the per-term `oboInOwl:id` bookkeeping have no
+    /// OWL2 counterpart at all -- they are the reader's own encoding of OBO's
+    /// serialization envelope (see [`super::from_pair`]'s `ont_ann`,
+    /// `referenced_declarations`, `builtin_labels`), not ontology content, so
+    /// they can never appear on the OWL/XML oracle side. Same category as
+    /// `ComponentKind::DocIRI`, which `normalize::simplify` already strips.
+    fn is_obo_envelope<A: crate::model::ForIRI>(ac: &crate::model::AnnotatedComponent<A>) -> bool {
+        use crate::model::AnnotationSubject;
+        const OIO: &str = "http://www.geneontology.org/formats/oboInOwl#";
+        const RDFS_LABEL: &str = "http://www.w3.org/2000/01/rdf-schema#label";
+        let format_version = format!("{OIO}hasOBOFormatVersion");
+        let id_prop = format!("{OIO}id");
+        let is_envelope_iri = |iri: &str| iri == format_version || iri == id_prop;
+
+        match &ac.component {
+            Component::OntologyAnnotation(o) => is_envelope_iri(o.0.ap.0.as_ref()),
+            Component::DeclareAnnotationProperty(d) => is_envelope_iri(d.0.0.as_ref()),
+            Component::AnnotationAssertion(a) => {
+                is_envelope_iri(a.ann.ap.0.as_ref())
+                    || (a.ann.ap.0.as_ref() == RDFS_LABEL
+                        && matches!(&a.subject, AnnotationSubject::IRI(i) if is_envelope_iri(i.as_ref())))
+            }
+            _ => false,
+        }
+    }
+
+    /// Every bubo-generated `.obo` fixture must describe the same ontology as
+    /// its `owl-xml/` sibling -- OWL/XML is the less-ambiguous oracle here,
+    /// matching how `io::rdf::reader::test::compare_two` treats it for RDF/XML.
+    #[rstest]
+    fn compare_to_xml(#[files("src/ont/owl-obo/*.obo")] resource: std::path::PathBuf) {
+        let stem = resource.file_stem().unwrap().to_str().unwrap();
+        let obo_doc = slurp::read_all_to_string(&resource).unwrap();
+        let xml_doc = slurp::read_all_to_string(format!("src/ont/owl-xml/{stem}.owx")).unwrap();
+
+        let obo_ont = read(&obo_doc);
+        let xml_ont: SetOntology<RcStr> =
+            crate::io::owx::reader::test::read_ok(&mut xml_doc.as_bytes())
+                .0
+                .into();
+
+        crate::normalize::normalize_and_assert_eq(
+            obo_ont
+                .iter()
+                .filter(|ac| !is_obo_envelope(ac))
+                .cloned()
+                .collect(),
+            xml_ont.iter().cloned().collect(),
+        );
     }
 }
