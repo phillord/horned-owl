@@ -1,9 +1,8 @@
 #!/usr/bin/env bash
 #
-# UNTRIED.  Written immediately after cutting 3.0.0 by hand, from what that
-# turned up.  It has only been dry-run, so the publishing path has never
-# actually run.  Read the dry-run output carefully before adding --execute,
-# and expect to fix this script during the next release.
+# Written immediately after cutting 3.0.0 by hand, from what that turned up.
+# Proven end-to-end cutting 4.0.0. Still read the dry-run output carefully
+# before adding --execute.
 #
 # Releases horned-owl, horned-bin, horned-macro and horned-profile, which
 # share a version.  horned-pretty-rdf and horned-catalog have their own
