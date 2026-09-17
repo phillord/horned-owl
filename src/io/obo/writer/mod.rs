@@ -78,7 +78,10 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
     let mut idspaces: Vec<(String, String)> = mapping
         .map(|m| {
             m.mappings()
-                .filter(|(p, _)| !IMPLICIT.contains(&p.as_str()))
+                // The empty/default prefix has no name to write as an
+                // `IdPrefix` token -- `idspace: <iri>` is not valid OBO
+                // and its own reader can't parse it back.
+                .filter(|(p, _)| !p.is_empty() && !IMPLICIT.contains(&p.as_str()))
                 .map(|(p, u)| (p.clone(), u.clone()))
                 .collect()
         })
@@ -746,5 +749,34 @@ mod tests {
         // and the written form uses `alt_id:`, not property_value
         let text = String::from_utf8(super::write(Vec::new(), &cmo, None).unwrap()).unwrap();
         assert!(text.contains("alt_id: GO:0002"), "got:\n{text}");
+    }
+
+    /// A source ontology's default (empty-key) prefix must not be written as
+    /// an `idspace:` clause -- `IdspaceTag ~ IdPrefix ~ Iri` has no token for
+    /// an empty prefix, so `idspace:  <iri>` is not valid OBO and the reader
+    /// can't parse it back.
+    #[test]
+    fn default_prefix_is_not_written_as_idspace() {
+        // OFN's `Prefix(:=<iri>)` is how a real reader actually records a
+        // document's default namespace (as the PrefixMapping's empty-string
+        // entry), matching what an RDF/XML or OWL/XML source's default
+        // `xmlns` also produces.
+        let doc = "Prefix(:=<http://example.org/onto#>)\n\
+                   Ontology(<http://example.org/onto>\n\
+                   Declaration(Class(:A))\n\
+                   )\n";
+        let (o, pm): (SetOntology<RcStr>, curie::PrefixMapping) =
+            crate::io::ofn::reader::read(&mut doc.as_bytes(), Default::default()).unwrap();
+
+        let cmo: ComponentMappedOntology<RcStr, AnnotatedComponent<RcStr>> = o.into();
+        let out = super::write(Vec::new(), &cmo, Some(&pm)).unwrap();
+        let text = String::from_utf8(out).unwrap();
+        assert!(!text.contains("idspace:"), "got:\n{text}");
+
+        crate::io::obo::reader::read::<RcStr, _, SetOntology<RcStr>, _>(
+            &mut text.as_bytes(),
+            Default::default(),
+        )
+        .unwrap();
     }
 }
