@@ -361,10 +361,13 @@ pub fn scan_header<A: ForIRI>(
                 default_ns = values.first().map(|v| v.as_str().trim().to_string());
             }
             Rule::OntologyTag => {
-                onto_ns = values
-                    .first()
-                    .map(|v| v.as_str().trim())
-                    .and_then(|o| (!is_http_iri(o)).then(|| format!("{OBO_BASE}{o}#")));
+                onto_ns = values.first().map(|v| v.as_str().trim()).map(|o| {
+                    if is_http_iri(o) {
+                        format!("{o}#")
+                    } else {
+                        format!("{OBO_BASE}{o}#")
+                    }
+                });
             }
             _ => {}
         }
@@ -379,6 +382,11 @@ pub fn header_to_components<A: ForIRI>(
 ) -> Result<Vec<AnnotatedComponent<A>>, HornedError> {
     let b = ctx.build;
     let mut out = Vec::new();
+    let mut onto_iri: Option<String> = None;
+    // data-version can precede or follow the ontology: clause, so its value
+    // is collected here and only turned into a versionIRI once both are
+    // known, rather than emitted eagerly like the other header clauses.
+    let mut data_version: Option<String> = None;
 
     for clause in header.into_inner() {
         if clause.as_rule() != Rule::HeaderClause {
@@ -389,16 +397,15 @@ pub fn header_to_components<A: ForIRI>(
         match tag {
             Rule::OntologyTag => {
                 if let Some(o) = val(0) {
-                    let iri = if is_http_iri(o) {
+                    onto_iri = Some(if is_http_iri(o) {
                         o.to_string()
                     } else {
                         format!("{OBO_BASE}{o}.owl")
-                    };
-                    out.push(component(OntologyID {
-                        iri: Some(b.iri(iri)),
-                        viri: None,
-                    }));
+                    });
                 }
+            }
+            Rule::DataVersionTag => {
+                data_version = val(0).map(String::from);
             }
             Rule::ImportTag => {
                 if let Some(i) = val(0) {
@@ -420,11 +427,25 @@ pub fn header_to_components<A: ForIRI>(
                     out.push(ont_ann(b, RDFS_COMMENT, &unescape(v)));
                 }
             }
-            // TODO(oracle): data-version → versionIRI; subsetdef / synonymtypedef
-            // declarations + SubAnnotationPropertyOf; treat-xrefs-* macros;
-            // property_value; date/saved-by/auto-generated-by.
+            // TODO(oracle): subsetdef / synonymtypedef declarations +
+            // SubAnnotationPropertyOf; treat-xrefs-* macros; property_value;
+            // date/saved-by/auto-generated-by.
             _ => {}
         }
+    }
+
+    if let Some(iri) = onto_iri {
+        let viri = data_version.map(|v| {
+            b.iri(if is_http_iri(&v) {
+                v
+            } else {
+                format!("{OBO_BASE}{v}")
+            })
+        });
+        out.push(component(OntologyID {
+            iri: Some(b.iri(iri)),
+            viri,
+        }));
     }
     Ok(out)
 }

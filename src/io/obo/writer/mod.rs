@@ -149,9 +149,7 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
                 s.clauses.push(line);
             }
         }
-        if let Some(line) = header_line(ac, &cz) {
-            header.push(line);
-        }
+        header.extend(header_line(ac, &cz));
     }
 
     // Emit header, then stanzas grouped Term / Typedef / Instance.
@@ -181,36 +179,44 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
 }
 
 /// Header-level component → header line, or `None`.
-fn header_line<A: ForIRI>(
-    ac: &AnnotatedComponent<A>,
-    cz: &impl Fn(&str) -> String,
-) -> Option<String> {
+fn header_line<A: ForIRI>(ac: &AnnotatedComponent<A>, cz: &impl Fn(&str) -> String) -> Vec<String> {
     match &ac.component {
         Component::OntologyID(o) => {
-            let iri = o.iri.as_ref()?.to_string();
+            let Some(iri) = o.iri.as_ref().map(|i| i.to_string()) else {
+                return vec![];
+            };
             let ont = iri
                 .strip_prefix(OBO)
                 .and_then(|r| r.strip_suffix(".owl"))
                 .map(String::from)
                 .unwrap_or(iri);
-            Some(format!("ontology: {ont}"))
+            let mut lines = vec![format!("ontology: {ont}")];
+            if let Some(viri) = &o.viri {
+                let dv = viri
+                    .to_string()
+                    .strip_prefix(OBO)
+                    .map(String::from)
+                    .unwrap_or_else(|| viri.to_string());
+                lines.push(format!("data-version: {dv}"));
+            }
+            lines
         }
-        Component::Import(i) => Some(format!("import: {}", i.0)),
+        Component::Import(i) => vec![format!("import: {}", i.0)],
         Component::OntologyAnnotation(oa) => {
             let ap = oa.0.ap.0.as_ref();
             let v = value_text(&oa.0.av, cz);
             match ap {
                 _ if ap == format!("{OIO}hasOBOFormatVersion") => {
-                    Some(format!("format-version: {v}"))
+                    vec![format!("format-version: {v}")]
                 }
                 _ if ap == format!("{OIO}default-namespace") => {
-                    Some(format!("default-namespace: {v}"))
+                    vec![format!("default-namespace: {v}")]
                 }
-                _ if ap == RDFS_COMMENT => Some(format!("remark: {v}")),
-                _ => None,
+                _ if ap == RDFS_COMMENT => vec![format!("remark: {v}")],
+                _ => vec![],
             }
         }
-        _ => None,
+        _ => vec![],
     }
 }
 
@@ -675,6 +681,8 @@ mod tests {
     use std::fs::read_dir;
     use std::path::PathBuf;
 
+    use rstest::rstest;
+
     use crate::model::{AnnotatedComponent, Ontology, RcStr};
     use crate::ontology::component_mapped::ComponentMappedOntology;
     use crate::ontology::set::SetOntology;
@@ -733,6 +741,25 @@ mod tests {
         assert!(failures.is_empty(), "round-trip failed for: {failures:?}");
     }
 
+    /// read(write(read(x))) == read(x), individually per bubo-generated
+    /// fixture -- the same property `round_trip_corpus` checks for the
+    /// hand-written oracle corpus, but one reportable case per file.
+    #[rstest]
+    fn round_trip_resource(#[files("src/ont/owl-obo/*.obo")] resource: PathBuf) {
+        let doc = std::fs::read_to_string(&resource).unwrap();
+        let b = crate::model::Build::new_rc();
+        let (a, prefixes) = crate::io::obo::reader::read::<RcStr, _, SetOntology<RcStr>, _>(
+            &mut doc.as_bytes(),
+            crate::io::ParserConfiguration::new(&b),
+        )
+        .unwrap();
+        let cmo: ComponentMappedOntology<RcStr, AnnotatedComponent<RcStr>> = a.clone().into();
+        let out = super::write(Vec::new(), &cmo, Some(&prefixes)).unwrap();
+        let bont = read(&String::from_utf8(out).unwrap());
+
+        assert_eq!(axioms(&a), axioms(&bont));
+    }
+
     /// alt_id round-trips: the writer emits `alt_id:` from hasAlternativeId and
     /// omits the materialised deprecated stub (the reader regenerates it).
     /// (Kept out of the oracle corpus: our reader emits two builtin-metadata
@@ -778,5 +805,32 @@ mod tests {
             Default::default(),
         )
         .unwrap();
+    }
+
+    #[cfg(test)]
+    mod bubo_test {
+        use crate::io::obo::writer::write;
+
+        use std::fs::File;
+        use std::io::BufReader;
+        use std::path::Path;
+
+        fn parse_then_output(in_file: &Path, out: &mut dyn std::io::Write) {
+            let mut reader = BufReader::new(File::open(in_file).unwrap());
+            let (ont, prefixes): (
+                crate::ontology::component_mapped::ComponentMappedOntology<
+                    crate::model::RcStr,
+                    crate::model::AnnotatedComponent<crate::model::RcStr>,
+                >,
+                _,
+            ) = crate::io::obo::reader::read(&mut reader, Default::default()).unwrap();
+
+            write(out, &ont, Some(&prefixes)).ok().unwrap();
+        }
+
+        #[test]
+        fn reparse_obo() -> Result<(), Box<dyn std::error::Error>> {
+            crate::io::tests::run_bubo_reparse("owl-obo", parse_then_output)
+        }
     }
 }
