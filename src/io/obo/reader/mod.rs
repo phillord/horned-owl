@@ -626,6 +626,21 @@ mod tests {
             Component::DeclareClass(d) if d.0.0.as_ref() == "http://example.org/cl/0000000")));
     }
 
+    /// `owl-axioms:` (OBO 1.4 spec 5.0.4) embeds OWL functional syntax for
+    /// anything that doesn't map onto a native OBO stanza -- #272.
+    #[test]
+    fn owl_axioms_header_tag_is_read() {
+        let doc = "ontology: http://example.org/onto\n\
+                   owl-axioms: \\n\\nOntology(\\n\\n\
+                   DifferentIndividuals(<http://example.org/onto#I> <http://example.org/onto#J>)\\n)\n";
+        let ont = read(doc);
+        assert!(
+            ont.iter().any(|ac| matches!(&ac.component,
+                Component::DifferentIndividuals(d) if d.0.len() == 2)),
+            "got: {ont:#?}"
+        );
+    }
+
     /// `format-version:` and the per-term `oboInOwl:id` bookkeeping have no
     /// OWL2 counterpart at all -- they are the reader's own encoding of OBO's
     /// serialization envelope (see [`super::from_pair`]'s `ont_ann`,
