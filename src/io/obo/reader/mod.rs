@@ -641,6 +641,28 @@ mod tests {
         );
     }
 
+    /// A class referenced only inside a `owl-axioms:`-embedded SWRL rule (no
+    /// native `[Term]` stanza of its own) must still get a synthesised
+    /// declaration, matching every other axiom-referenced entity.
+    #[test]
+    fn swrl_rule_entities_get_referenced_declarations() {
+        let doc = "ontology: http://example.org/onto\n\
+                   owl-axioms: \\n\\nOntology(\\n\\nDLSafeRule(\
+                   Body(ClassAtom(<http://example.org/onto#A> Variable(<http://example.org/onto#x>)))\
+                   Head(ClassAtom(<http://example.org/onto#B> Variable(<http://example.org/onto#x>))))\\n)\n";
+        let ont = read(doc);
+        assert!(
+            ont.iter().any(|ac| matches!(&ac.component,
+            Component::DeclareClass(d) if d.0.0.as_ref() == "http://example.org/onto#A")),
+            "got: {ont:#?}"
+        );
+        assert!(
+            ont.iter().any(|ac| matches!(&ac.component,
+            Component::DeclareClass(d) if d.0.0.as_ref() == "http://example.org/onto#B")),
+            "got: {ont:#?}"
+        );
+    }
+
     /// `format-version:` and the per-term `oboInOwl:id` bookkeeping have no
     /// OWL2 counterpart at all -- they are the reader's own encoding of OBO's
     /// serialization envelope (see [`super::from_pair`]'s `ont_ann`,

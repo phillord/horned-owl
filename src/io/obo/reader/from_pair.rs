@@ -21,11 +21,11 @@ use super::lexer::Rule;
 use crate::error::HornedError;
 use crate::model::{
     AnnotatedComponent, Annotation, AnnotationAssertion, AnnotationSubject, AnnotationValue,
-    AsymmetricObjectProperty, Build, Class, ClassAssertion, ClassExpression, Component,
+    AsymmetricObjectProperty, Atom, Build, Class, ClassAssertion, ClassExpression, Component,
     DeclareAnnotationProperty, DeclareClass, DeclareDataProperty, DeclareNamedIndividual,
     DeclareObjectProperty, DisjointClasses, EquivalentClasses, ForIRI, FunctionalObjectProperty,
-    IRI, Import, Individual, InverseFunctionalObjectProperty, InverseObjectProperties, Literal,
-    NamedIndividual, ObjectProperty, ObjectPropertyAssertion, ObjectPropertyDomain,
+    IArgument, IRI, Import, Individual, InverseFunctionalObjectProperty, InverseObjectProperties,
+    Literal, NamedIndividual, ObjectProperty, ObjectPropertyAssertion, ObjectPropertyDomain,
     ObjectPropertyExpression, ObjectPropertyRange, OntologyAnnotation, OntologyID,
     ReflexiveObjectProperty, SubAnnotationPropertyOf, SubClassOf, SubObjectPropertyExpression,
     SubObjectPropertyOf, SymmetricObjectProperty, TransitiveObjectProperty,
@@ -1425,6 +1425,12 @@ fn referenced_declarations<A: ForIRI>(
         }
     }
 
+    fn iarg<A: ForIRI>(a: &IArgument<A>, inds: &mut BTreeSet<IRI<A>>) {
+        if let IArgument::Individual(i) = a {
+            named(i, inds);
+        }
+    }
+
     for ac in comps {
         for a in &ac.ann {
             collect_aps(a, &mut aps);
@@ -1503,6 +1509,29 @@ fn referenced_declarations<A: ForIRI>(
             Component::InverseFunctionalObjectProperty(a) => op_of(&a.0, &mut ops),
             Component::AnnotationAssertion(ax) => collect_aps(&ax.ann, &mut aps),
             Component::OntologyAnnotation(oa) => collect_aps(&oa.0, &mut aps),
+            Component::Rule(r) => {
+                for atom in r.head.iter().chain(r.body.iter()) {
+                    match atom {
+                        Atom::ClassAtom { pred, arg } => {
+                            walk_ce(pred, &mut classes, &mut ops);
+                            iarg(arg, &mut inds);
+                        }
+                        Atom::ObjectPropertyAtom { pred, args } => {
+                            op_of(pred, &mut ops);
+                            iarg(&args.0, &mut inds);
+                            iarg(&args.1, &mut inds);
+                        }
+                        Atom::DataPropertyAtom { pred, .. } => {
+                            dps.insert(pred.0.clone());
+                        }
+                        Atom::DifferentIndividualsAtom(a, b) | Atom::SameIndividualAtom(a, b) => {
+                            iarg(a, &mut inds);
+                            iarg(b, &mut inds);
+                        }
+                        Atom::BuiltInAtom { .. } | Atom::DataRangeAtom { .. } => {}
+                    }
+                }
+            }
             _ => {}
         }
     }
