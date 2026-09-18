@@ -1,0 +1,8 @@
+format-version: 1.2
+data-version: http://www.example.com/viri
+ontology: http://www.example.com/iri
+owl-axioms: \n\nOntology(\n\n\nEquivalentClasses(<http://www.example.com/iri#A> ObjectSomeValuesFrom(<http://www.example.com/iri#r> <http://www.example.com/iri#B>))\nEquivalentClasses(<http://www.example.com/iri#A> ObjectSomeValuesFrom(<http://www.example.com/iri#r> <http://www.example.com/iri#C>))\nEquivalentClasses(<http://www.example.com/iri#A> ObjectSomeValuesFrom(<http://www.example.com/iri#r> <http://www.example.com/iri#D>))\n)
+
+[Term]
+id: A
+

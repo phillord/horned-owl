@@ -1,0 +1,5 @@
+format-version: 1.2
+data-version: http://www.example.com/viri
+ontology: http://www.example.com/iri
+owl-axioms: \n\nOntology(\n\nDLSafeRule(Body(ObjectPropertyAtom(<http://www.example.com/iri#r> Variable(<http://www.example.com/iri#x>) Variable(<http://www.example.com/iri#y>)))Head(ObjectPropertyAtom(<http://www.example.com/iri#s> Variable(<http://www.example.com/iri#x>) Variable(<http://www.example.com/iri#y>))))\n)
+

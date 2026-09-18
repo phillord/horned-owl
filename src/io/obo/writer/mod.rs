@@ -141,15 +141,35 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
         });
     }
 
+    // Anything neither attached to a stanza nor emitted as a header line has
+    // no native OBO representation at all (SWRL rules, complex class
+    // expressions, ...) -- collected here to fall back to the owl-axioms:
+    // escape hatch (spec 5.0.4) rather than being silently dropped.
+    // is_never_axiom_fallback excludes the component kinds that land here
+    // despite not actually being unhandled (see its own doc).
+    let mut unhandled: Vec<AnnotatedComponent<A>> = Vec::new();
+
     for ac in ont.iter() {
+        let mut wrote = false;
         for (owner_iri, line) in clause_lines(ac, &cz) {
             if let Some(key) = key_of(&owner_iri) {
                 let s = stanzas.entry(key.clone()).or_default();
                 s.id = key.1;
                 s.clauses.push(line);
+                wrote = true;
             }
         }
-        header.extend(header_line(ac, &cz));
+        let hlines = header_line(ac, &cz);
+        wrote |= !hlines.is_empty();
+        header.extend(hlines);
+
+        if !wrote && !is_never_axiom_fallback(&ac.component) {
+            unhandled.push(ac.clone());
+        }
+    }
+
+    if !unhandled.is_empty() {
+        header.push(format!("owl-axioms: {}", owl_axioms_value(&unhandled)?));
     }
 
     // Emit header, then stanzas grouped Term / Typedef / Instance.
@@ -176,6 +196,54 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
         }
     }
     Ok(write)
+}
+
+/// True for component kinds that must never be swept into the owl-axioms:
+/// fallback, even when clause_lines/header_line emit nothing for a given
+/// instance of one. Declarations are deliberately never emitted at all (the
+/// reader re-derives them from what references them, see module doc).
+/// AnnotationAssertion/OntologyAnnotation are excluded wholesale rather than
+/// case-by-case: `oboInOwl:id` is handled via the separate `ids` bookkeeping
+/// map, and builtin-property `rdfs:label`s are re-derived by the reader's
+/// `builtin_labels` pass -- both silently produce no clause today, and
+/// mistaking that for "unhandled" round-trips a spurious extra declaration
+/// (the OFN reader synthesises one for whatever the embedded fragment
+/// references) rather than the original axiom set.
+fn is_never_axiom_fallback<A: ForIRI>(c: &Component<A>) -> bool {
+    matches!(
+        c,
+        Component::DeclareClass(_)
+            | Component::DeclareObjectProperty(_)
+            | Component::DeclareDataProperty(_)
+            | Component::DeclareAnnotationProperty(_)
+            | Component::DeclareNamedIndividual(_)
+            | Component::DeclareDatatype(_)
+            | Component::AnnotationAssertion(_)
+            | Component::OntologyAnnotation(_)
+    )
+}
+
+/// Render components with no native OBO representation as an escaped,
+/// single-line OWL functional-syntax fragment for the `owl-axioms:` header
+/// tag (spec 5.0.4) -- the inverse of the reader's embedded-OFN parsing.
+fn owl_axioms_value<A: ForIRI>(comps: &[AnnotatedComponent<A>]) -> Result<String, HornedError> {
+    let ont: crate::ontology::set::SetOntology<A> = comps.iter().cloned().collect();
+    let cmo: ComponentMappedOntology<A, AnnotatedComponent<A>> = ont.into();
+    let text = String::from_utf8(crate::io::ofn::writer::write(Vec::new(), &cmo, None)?)
+        .map_err(|e| HornedError::invalid(e.to_string()))?;
+
+    let mut escaped = String::with_capacity(text.len());
+    for c in text.chars() {
+        match c {
+            '\n' => escaped.push_str("\\n"),
+            '\t' => escaped.push_str("\\t"),
+            '\\' => escaped.push_str("\\\\"),
+            '!' => escaped.push_str("\\!"),
+            '{' => escaped.push_str("\\{"),
+            _ => escaped.push(c),
+        }
+    }
+    Ok(escaped)
 }
 
 /// Header-level component → header line, or `None`.
@@ -758,6 +826,25 @@ mod tests {
         let bont = read(&String::from_utf8(out).unwrap());
 
         assert_eq!(axioms(&a), axioms(&bont));
+    }
+
+    /// A component with no native OBO representation (a SWRL rule, here)
+    /// falls back to the `owl-axioms:` escape hatch on write, the inverse of
+    /// the reader parsing that tag -- #272's other half.
+    #[test]
+    fn unrepresentable_axiom_round_trips_via_owl_axioms() {
+        let doc = "ontology: http://example.org/onto\n\
+                   owl-axioms: \\n\\nOntology(\\n\\nDLSafeRule(\
+                   Body(ClassAtom(<http://example.org/onto#A> Variable(<http://example.org/onto#x>)))\
+                   Head(ClassAtom(<http://example.org/onto#B> Variable(<http://example.org/onto#x>))))\\n)\n";
+        let a = read(doc);
+        let cmo: ComponentMappedOntology<RcStr, AnnotatedComponent<RcStr>> = a.clone().into();
+        let out = super::write(Vec::new(), &cmo, None).unwrap();
+        let text = String::from_utf8(out).unwrap();
+        assert!(text.contains("owl-axioms:"), "got:\n{text}");
+
+        let b = read(&text);
+        assert_eq!(axioms(&a), axioms(&b));
     }
 
     /// alt_id round-trips: the writer emits `alt_id:` from hasAlternativeId and
