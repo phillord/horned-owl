@@ -427,6 +427,32 @@ pub fn header_to_components<A: ForIRI>(
                     out.push(ont_ann(b, RDFS_COMMENT, &unescape(v)));
                 }
             }
+            // The OBO 1.4 escape hatch (spec 5.0.4): arbitrary OWL axioms in
+            // functional syntax, for anything that doesn't map onto a native
+            // OBO stanza. Parse failures are swallowed, not propagated -- this
+            // reader is lenient by design (see module doc), and a malformed
+            // escape-hatch payload shouldn't take down an otherwise-good read.
+            Rule::OwlAxiomsTag => {
+                if let Some(v) = val(0) {
+                    let text = unescape(v);
+                    let config = crate::io::ParserConfiguration::new(Build::<A>::new());
+                    if let Ok((embedded, _)) = crate::io::ofn::reader::read::<
+                        A,
+                        _,
+                        crate::ontology::set::SetOntology<A>,
+                        _,
+                    >(&mut text.as_bytes(), config)
+                    {
+                        // The wrapping `Ontology(...)` is always anonymous
+                        // here; its empty OntologyID is not real content.
+                        out.extend(
+                            embedded
+                                .into_iter()
+                                .filter(|ac| !matches!(ac.component, Component::OntologyID(_))),
+                        );
+                    }
+                }
+            }
             // TODO(oracle): subsetdef / synonymtypedef declarations +
             // SubAnnotationPropertyOf; treat-xrefs-* macros; property_value;
             // date/saved-by/auto-generated-by.
