@@ -33,10 +33,11 @@
 ;; entry with an extension (e.g. "swrl_individual.owx") only excludes that
 ;; one format; an entry with no extension (just a trailing ".") excludes
 ;; the base name across every format.
-;; - swrl_individual.owx / swrl_individual.ofn / swrl_individual.omn: the
-;;   anonymous individual in the SWRL atom is not valid there in owl-xml,
-;;   owl-functional, or owl-manchester syntax (swrl_individual.owl parses
-;;   fine under owl-rdf, so is not listed).
+;; - swrl_individual.owx / swrl_individual.ofn / swrl_individual.omn /
+;;   swrl_individual.obo: the anonymous individual in the SWRL atom is not
+;;   valid there in owl-xml, owl-functional, owl-manchester, or (embedded via
+;;   owl-axioms:) obo syntax (swrl_individual.owl parses fine under owl-rdf,
+;;   so is not listed).
 ;; - anon-subobjectproperty.omn / inverse-transitive.omn: our Manchester
 ;;   writer emits an inverse-headed `ObjectProperty: inverse (p)` frame,
 ;;   which OWL API's ManchesterOWLSyntaxOntologyParser does not accept as
@@ -68,7 +69,8 @@
    "swrl_data_range.omn"
    "swrl_individual.ofn"
    "swrl_individual.omn"
-   "swrl_individual.owx"])
+   "swrl_individual.owx"
+   "swrl_individual.obo"])
 
 (doall
  (keep #(when (and (.isFile %)

@@ -1,0 +1,5 @@
+format-version: 1.2
+data-version: http://www.example.com/viri
+ontology: http://www.example.com/iri
+owl-axioms: \n\nOntology(\n\nDLSafeRule(Body(ClassAtom(<http://www.example.com/iri#A> Variable(<http://www.example.com/iri#x>)))Head(ClassAtom(ObjectIntersectionOf(<http://www.example.com/iri#A> <http://www.example.com/iri#B>) Variable(<http://www.example.com/iri#x>))))\n)
+
