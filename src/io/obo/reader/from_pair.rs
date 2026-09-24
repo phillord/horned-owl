@@ -1316,9 +1316,10 @@ fn collect_aps<A: ForIRI>(a: &Annotation<A>, out: &mut BTreeSet<IRI<A>>) {
 }
 
 /// Same as `collect_aps`, but for annotations sourced from an axiom's own
-/// `{qualifier}` block (name/comment): oboformat/ROBOT never declare
-/// rdfs:label/rdfs:comment there, unlike a `name:`/`property_value:` clause's
-/// own AnnotationAssertion, which does get one (see `instance_frame_golden`).
+/// `{qualifier}` block (name/comment), or a header `remark:`: oboformat/ROBOT
+/// never declare rdfs:label/rdfs:comment there, unlike a `name:`/
+/// `property_value:` clause's own AnnotationAssertion, which does get one (see
+/// `instance_frame_golden`).
 fn collect_axiom_qualifier_aps<A: ForIRI>(a: &Annotation<A>, out: &mut BTreeSet<IRI<A>>) {
     if a.ap.0.as_ref() != RDFS_LABEL && a.ap.0.as_ref() != RDFS_COMMENT {
         out.insert(a.ap.0.clone());
@@ -1534,7 +1535,7 @@ fn referenced_declarations<A: ForIRI>(
             Component::FunctionalObjectProperty(a) => op_of(&a.0, &mut ops),
             Component::InverseFunctionalObjectProperty(a) => op_of(&a.0, &mut ops),
             Component::AnnotationAssertion(ax) => collect_aps(&ax.ann, &mut aps),
-            Component::OntologyAnnotation(oa) => collect_aps(&oa.0, &mut aps),
+            Component::OntologyAnnotation(oa) => collect_axiom_qualifier_aps(&oa.0, &mut aps),
             Component::Rule(r) => {
                 for atom in r.head.iter().chain(r.body.iter()) {
                     match atom {

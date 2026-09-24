@@ -1,0 +1,4 @@
+format-version: 1.2
+remark: First line of the comment.\nSecond line.\nThird line.
+ontology: http://www.example.com/iri
+
