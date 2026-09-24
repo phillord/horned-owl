@@ -25,9 +25,9 @@ pub struct KnownFailure {
     /// Restrict to one target format; `None` matches any target format.
     #[serde(default)]
     pub target_format: Option<Format>,
-    /// Why this case is expected to fail and where it's tracked (an issue
-    /// number, a doc, a memory name, ...). Shown verbatim in the report, so
-    /// write it for a reader who isn't already in this conversation.
+    /// Why this case is expected to fail, and the GitHub issue tracking it if
+    /// there is one. Shown verbatim in the report, so write it for a reader
+    /// who hasn't seen the original investigation.
     pub reason: String,
 }
 
