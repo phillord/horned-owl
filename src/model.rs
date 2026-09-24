@@ -277,7 +277,7 @@ impl<A: ForIRI> IRI<A> {
 /// different instances can be combined within a single ontology
 /// without consequences except for increased memory use.
 #[derive(Debug, Default)]
-pub struct Build<A: ForIRI>(
+pub struct Build<A>(
     RefCell<FxHashSet<IRI<A>>>,
     RefCell<FxHashSet<AnonymousIndividual<A>>>,
     // Last anon individual
@@ -1231,6 +1231,12 @@ macro_rules! components {
         }
 
         impl ComponentKind {
+            /// All `ComponentKind` variants, in declaration order (see the
+            /// `components!` invocation below).
+            ///
+            /// The order in this Vec is conserved and matches that
+            /// defined by the various serialization specifications
+            /// which specify an order
             pub fn all_kinds() -> Vec<ComponentKind> {
                 vec![$(ComponentKind::$name),*]
             }
@@ -1327,6 +1333,11 @@ macro_rules! components {
     }
 }
 
+// Declaration order here is significant: with no explicit discriminants,
+// derived `Ord` compares variants by declaration order, and `all_kinds()`
+// preserves that same order -- so reordering variants changes both
+// `ComponentKind`'s `Ord` and everything derived from `all_kinds()`'s
+// iteration order.
 components! {
     A,
 
@@ -1337,11 +1348,11 @@ components! {
     /// The IRI from which the ontology was actually loaded.
     Meta DocIRI(IRI<A>),
 
-    /// An annotation associated with this Ontology
-    Axiom OntologyAnnotation (Annotation<A>),
-
     /// Declares that an IRI is an import of this ontology
     Axiom Import(IRI<A>),
+
+    /// An annotation associated with this Ontology
+    Axiom OntologyAnnotation (Annotation<A>),
 
     // Declaration Components
 

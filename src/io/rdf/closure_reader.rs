@@ -1,6 +1,8 @@
 use crate::error::HornedError;
 use crate::io::IncompleteParse;
+#[cfg(test)]
 use crate::io::ParserConfiguration;
+use crate::io::RDFParserConfiguration;
 use crate::io::rdf::reader::OntologyParser;
 use crate::io::rdf::reader::RDFOntology;
 use crate::io::rdf::reader::parser_with_build;
@@ -16,9 +18,14 @@ use crate::resolve::resolve_iri;
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-pub struct ClosureOntologyParser<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> {
+pub struct ClosureOntologyParser<
+    A: ForIRI,
+    AA: ForIndex<A>,
+    O: RDFOntology<A, AA>,
+    B: AsRef<Build<A>> = Build<A>,
+> {
     // A map between the resolvable IRI of an Ontology and an OntologyParser
-    op: HashMap<IRI<A>, OntologyParser<'a, A, AA, O>>,
+    op: HashMap<IRI<A>, OntologyParser<A, AA, O, B>>,
     // A map between the resolvable IRI of an Ontology and the
     // resolvable IRIs of any Ontology that it imports.
     import_map: HashMap<IRI<A>, Vec<IRI<A>>>,
@@ -29,14 +36,14 @@ pub struct ClosureOntologyParser<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<
     // the Ontology it imports, so we need to be able to resolve
     // either back to the same entry.
     alias: HashMap<IRI<A>, IRI<A>>,
-    b: &'a Build<A>,
-    config: ParserConfiguration,
+    config: RDFParserConfiguration<A, B>,
 }
 
-impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> ClosureOntologyParser<'a, A, AA, O> {
-    pub fn new(b: &'a Build<A>, config: ParserConfiguration) -> Self {
+impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>> + Clone>
+    ClosureOntologyParser<A, AA, O, B>
+{
+    pub fn new(config: RDFParserConfiguration<A, B>) -> Self {
         ClosureOntologyParser {
-            b,
             import_map: HashMap::new(),
             op: HashMap::new(),
             alias: HashMap::new(),
@@ -45,7 +52,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> ClosureOntologyParse
     }
 
     pub fn parse_path(&mut self, pb: &PathBuf) -> Result<Vec<IRI<A>>, HornedError> {
-        let file_iri = path_to_file_iri(self.b, pb);
+        let file_iri = path_to_file_iri(self.config.common.build.as_ref(), pb);
         let s = ::std::fs::read_to_string(pb)?;
 
         // We use the IRI that we try to parse, but we don't know that
@@ -80,9 +87,9 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> ClosureOntologyParse
         let (new_doc_iri, s) = resolve_iri(
             source_iri,
             relative_doc_iri,
-            self.config.remote_body_limit,
-            self.config.local_only,
-            self.config.catalog.as_deref(),
+            self.config.common.remote_body_limit,
+            self.config.common.local_only,
+            self.config.common.catalog.as_deref(),
         )?;
         self.parse_content_from_iri(s, relative_doc_iri, new_doc_iri)
     }
@@ -112,7 +119,7 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> ClosureOntologyParse
         new_doc_iri: IRI<A>,
     ) -> Result<Vec<IRI<A>>, HornedError> {
         // Parse the contents of the string
-        let mut p = parser_with_build(&mut s.as_bytes(), self.b, self.config.clone())?;
+        let mut p = parser_with_build(&mut s.as_bytes(), self.config.clone())?;
         let imports = p.parse_imports().unwrap();
         p.parse_declarations()?;
 
@@ -230,13 +237,12 @@ impl<'a, A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>> ClosureOntologyParse
 // Returns the an Ontology and an IncompleteParse report found at a
 // given IRI or an Error
 #[allow(clippy::type_complexity)]
-pub fn read<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>>(
+pub fn read<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>> + Clone>(
     iri: &IRI<A>,
-    config: ParserConfiguration,
+    config: RDFParserConfiguration<A, B>,
 ) -> Result<(O, IncompleteParse<A>), HornedError> {
     // Do parse, then full parse of first, drop the rest
-    let b = Build::new();
-    let mut c = ClosureOntologyParser::new(&b, config);
+    let mut c = ClosureOntologyParser::new(config);
     c.parse_iri(iri, None)?;
 
     let keys: Vec<_> = c.op.keys().cloned().collect();
@@ -256,13 +262,17 @@ pub fn read<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>>(
 // Returns the import closure of an Ontology and IncompleteParse
 // report found at a given IRI or an error
 #[allow(clippy::type_complexity)]
-pub fn read_closure<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>>(
-    b: &Build<A>,
+pub fn read_to_closure<
+    A: ForIRI,
+    AA: ForIndex<A>,
+    O: RDFOntology<A, AA>,
+    B: AsRef<Build<A>> + Clone,
+>(
     iri: &IRI<A>,
-    config: ParserConfiguration,
+    config: RDFParserConfiguration<A, B>,
 ) -> Result<Vec<(O, IncompleteParse<A>)>, HornedError> {
     // Do parse, then full parse, then result the results
-    let mut c = ClosureOntologyParser::new(b, config);
+    let mut c = ClosureOntologyParser::new(config);
     c.parse_iri(iri, None)?;
     let keys: Vec<_> = c.op.keys().cloned().collect();
     for i in keys {
@@ -285,20 +295,21 @@ mod test {
         let b = Build::new_rc();
         let iri = path_to_file_iri(&b, path);
 
-        let (_, ic): (ConcreteRcRDFOntology, _) = read(&iri, Default::default()).unwrap();
+        let (_, ic): (ConcreteRcRDFOntology, _) =
+            read(&iri, ParserConfiguration::new(&b).into()).unwrap();
         assert!(ic.is_complete());
     }
 
     // import-property.owl should parse completely with full parse so
     // is a good test.
     #[test]
-    fn test_read_closure() {
+    fn test_read_to_closure() {
         let path = Path::new("src/ont/owl-rdf/withimport/import-property.owl");
         let b = Build::new_rc();
         let iri = path_to_file_iri(&b, path);
 
         let v: Vec<(ConcreteRcRDFOntology, _)> =
-            read_closure(&b, &iri, Default::default()).unwrap();
+            read_to_closure(&iri, ParserConfiguration::new(&b).into()).unwrap();
         let v: Vec<SetOntology<_>> = v
             .into_iter()
             .map(|(rdfo, ic)| {
@@ -334,18 +345,21 @@ mod test {
     // out of the box); the XML structure/escaping is 100% real
     // `catalogIndex()` output.
     #[test]
-    fn test_read_closure_relocated_import_fails_without_catalog() {
+    fn test_read_to_closure_relocated_import_fails_without_catalog() {
         let path = Path::new("src/ont/owl-rdf/withcatalog/import-property.owl");
         let b = Build::new_rc();
         let iri = path_to_file_iri(&b, path);
 
         // local_only means no network fallback can silently paper over
         // the heuristic's failure to find the relocated file.
-        let config = ParserConfiguration {
-            local_only: true,
-            ..Default::default()
+        let config = RDFParserConfiguration {
+            common: ParserConfiguration {
+                local_only: true,
+                ..ParserConfiguration::new(&b)
+            },
+            format: None,
         };
-        let result: Result<Vec<(ConcreteRcRDFOntology, _)>, _> = read_closure(&b, &iri, config);
+        let result: Result<Vec<(ConcreteRcRDFOntology, _)>, _> = read_to_closure(&iri, config);
         assert!(
             result.is_err(),
             "expected resolution to fail without a catalog, since the import was moved out of \
@@ -354,20 +368,23 @@ mod test {
     }
 
     #[test]
-    fn test_read_closure_relocated_import_succeeds_with_catalog() {
+    fn test_read_to_closure_relocated_import_succeeds_with_catalog() {
         let path = Path::new("src/ont/owl-rdf/withcatalog/import-property.owl");
         let catalog_path = Path::new("src/ont/owl-rdf/withcatalog/catalog-v001.xml");
         let b = Build::new_rc();
         let iri = path_to_file_iri(&b, path);
 
         let catalog = horned_catalog::Catalog::from_path(catalog_path).unwrap();
-        let config = ParserConfiguration {
-            local_only: true,
-            catalog: Some(std::rc::Rc::new(catalog)),
-            ..Default::default()
+        let config = RDFParserConfiguration {
+            common: ParserConfiguration {
+                local_only: true,
+                catalog: Some(std::rc::Rc::new(catalog)),
+                ..ParserConfiguration::new(&b)
+            },
+            format: None,
         };
 
-        let v: Vec<(ConcreteRcRDFOntology, _)> = read_closure(&b, &iri, config).unwrap();
+        let v: Vec<(ConcreteRcRDFOntology, _)> = read_to_closure(&iri, config).unwrap();
         let v: Vec<SetOntology<_>> = v
             .into_iter()
             .map(|(rdfo, ic)| {
@@ -382,13 +399,13 @@ mod test {
     }
 
     #[test]
-    fn test_read_closure_with_viri() {
+    fn test_read_to_closure_with_viri() {
         let path = Path::new("src/ont/owl-rdf/withimport/import-property-by-viri.owl");
         let b = Build::new_rc();
         let iri = path_to_file_iri(&b, path);
 
         let v: Vec<(ConcreteRcRDFOntology, _)> =
-            read_closure(&b, &iri, Default::default()).unwrap();
+            read_to_closure(&iri, ParserConfiguration::new(&b).into()).unwrap();
         let v: Vec<SetOntology<_>> = v
             .into_iter()
             .map(|(rdfo, ic)| {

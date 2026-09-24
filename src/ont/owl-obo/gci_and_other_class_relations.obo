@@ -1,0 +1,5 @@
+format-version: 1.2
+data-version: http://www.example.com/viri
+ontology: http://www.example.com/iri
+owl-axioms: \n\nOntology(\n\n\nEquivalentClasses(ObjectSomeValuesFrom(<http://www.example.com/iri#bearer_of> <http://www.example.com/iri#mononucleate>) ObjectSomeValuesFrom(<http://www.example.com/iri#has_part> <http://www.example.com/iri#nucleus>))\nSubClassOf(ObjectSomeValuesFrom(<http://www.example.com/iri#has_part> <http://www.example.com/iri#nucleus>) ObjectSomeValuesFrom(<http://www.example.com/iri#bearer_of> <http://www.example.com/iri#mononucleate>))\nDisjointClasses(ObjectSomeValuesFrom(<http://www.example.com/iri#bearer_of> <http://www.example.com/iri#mononucleate>) ObjectSomeValuesFrom(<http://www.example.com/iri#has_part> <http://www.example.com/iri#nucleus>))\n)
+

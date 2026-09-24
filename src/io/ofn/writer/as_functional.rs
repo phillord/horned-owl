@@ -28,6 +28,41 @@ fn write_xsd_string() -> bool {
     WRITE_XSD_STRING.load(std::sync::atomic::Ordering::Relaxed)
 }
 
+/// Whether `c` must be percent-encoded before it can appear inside an OFN
+/// `<...>` full IRI.
+///
+/// A conservative, position-independent subset of RFC 3987's illegal
+/// characters (gen-delims/unwise chars plus controls) -- under-flagging is
+/// safe here, since it only leaves already-broken input broken; the real
+/// risk is flagging too much and mangling a valid IRI. See #234.
+fn needs_iri_percent_encoding(c: char) -> bool {
+    matches!(
+        c,
+        '[' | ']' | '<' | '>' | '"' | ' ' | '\\' | '`' | '^' | '{' | '|' | '}'
+    ) || c.is_control()
+}
+
+/// Percent-encodes every character [`needs_iri_percent_encoding`] flags in
+/// `s`, leaving the rest untouched.
+pub(super) fn percent_encode_iri(s: &str) -> std::borrow::Cow<'_, str> {
+    if !s.chars().any(needs_iri_percent_encoding) {
+        return std::borrow::Cow::Borrowed(s);
+    }
+    let mut out = String::with_capacity(s.len());
+    let mut buf = [0u8; 4];
+    for c in s.chars() {
+        if needs_iri_percent_encoding(c) {
+            for b in c.encode_utf8(&mut buf).as_bytes() {
+                out.push('%');
+                out.push_str(&format!("{b:02X}"));
+            }
+        } else {
+            out.push(c);
+        }
+    }
+    std::borrow::Cow::Owned(out)
+}
+
 /// Write a string literal while escaping `"` and `\` characters.
 fn quote(mut s: &str, f: &mut Formatter<'_>) -> Result<(), Error> {
     f.write_str("\"")?;
@@ -323,6 +358,40 @@ derive_wrapper!(A, ObjectProperty<A>);
 
 // ---------------------------------------------------------------------------
 
+/// Like `derive_axiom!`, but for a single-field `Vec<T>` axiom whose OWL2
+/// functional-syntax grammar rule requires >= 2 operands. Real-world RDF can
+/// produce a shorter vec here (e.g. a degenerate `owl:AllDifferent` with one
+/// `owl:distinctMembers` entry), which is semantically vacuous -- writing it
+/// out anyway would produce `DifferentIndividuals(<one-iri>)`, syntax our
+/// own reader rejects. Drop the axiom instead of echoing unparseable output.
+macro_rules! derive_nary_axiom {
+    ($A:ident, $ty:ty, $name:ident) => {
+        impl<'a, $A: ForIRI> Display for Functional<'a, $ty, $A> {
+            fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
+                if self.0.0.len() < 2 {
+                    return Ok(());
+                }
+                if let Some(annotations) = self.2 {
+                    write!(
+                        f,
+                        concat!(stringify!($name), "({} {})"),
+                        Functional(annotations, self.1, None),
+                        Functional(&self.0.0, self.1, None)
+                    )
+                } else {
+                    write!(
+                        f,
+                        concat!(stringify!($name), "({})"),
+                        Functional(&self.0.0, self.1, None)
+                    )
+                }
+            }
+        }
+
+        impl<$A: ForIRI> AsFunctional<$A> for $ty {}
+    };
+}
+
 macro_rules! derive_axiom {
     ($A:ident, $ty:ty, $name:ident ( $($field:tt),* )) => {
         impl<'a, $A: ForIRI> Display for Functional<'a, $ty, $A> {
@@ -390,18 +459,41 @@ derive_axiom!(
 derive_axiom!(A, DataPropertyDomain<A>, DataPropertyDomain(dp, ce));
 derive_axiom!(A, DataPropertyRange<A>, DataPropertyRange(dp, dr));
 derive_axiom!(A, DatatypeDefinition<A>, DatatypeDefinition(kind, range));
-derive_axiom!(A, DifferentIndividuals<A>, DifferentIndividuals(0));
-derive_axiom!(A, DisjointClasses<A>, DisjointClasses(0));
-derive_axiom!(A, DisjointDataProperties<A>, DisjointDataProperties(0));
-derive_axiom!(A, DisjointObjectProperties<A>, DisjointObjectProperties(0));
-derive_axiom!(A, DisjointUnion<A>, DisjointUnion(0, 1));
-derive_axiom!(A, EquivalentClasses<A>, EquivalentClasses(0));
-derive_axiom!(A, EquivalentDataProperties<A>, EquivalentDataProperties(0));
-derive_axiom!(
-    A,
-    EquivalentObjectProperties<A>,
-    EquivalentObjectProperties(0)
-);
+derive_nary_axiom!(A, DifferentIndividuals<A>, DifferentIndividuals);
+derive_nary_axiom!(A, DisjointClasses<A>, DisjointClasses);
+derive_nary_axiom!(A, DisjointDataProperties<A>, DisjointDataProperties);
+derive_nary_axiom!(A, DisjointObjectProperties<A>, DisjointObjectProperties);
+derive_nary_axiom!(A, EquivalentClasses<A>, EquivalentClasses);
+derive_nary_axiom!(A, EquivalentDataProperties<A>, EquivalentDataProperties);
+derive_nary_axiom!(A, EquivalentObjectProperties<A>, EquivalentObjectProperties);
+
+impl<'a, A: ForIRI> Display for Functional<'a, DisjointUnion<A>, A> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
+        // Same >= 2 grammar minimum as the other n-ary axioms above, but on
+        // the trailing `Vec<ClassExpression>` only -- the leading `Class` is
+        // a fixed single field, not part of the n-ary operand list.
+        if self.0.1.len() < 2 {
+            return Ok(());
+        }
+        if let Some(annotations) = self.2 {
+            write!(
+                f,
+                "DisjointUnion({} {} {})",
+                Functional(annotations, self.1, None),
+                Functional(&self.0.0, self.1, None),
+                Functional(&self.0.1, self.1, None)
+            )
+        } else {
+            write!(
+                f,
+                "DisjointUnion({} {})",
+                Functional(&self.0.0, self.1, None),
+                Functional(&self.0.1, self.1, None)
+            )
+        }
+    }
+}
+impl<A: ForIRI> AsFunctional<A> for DisjointUnion<A> {}
 derive_axiom!(A, FunctionalObjectProperty<A>, FunctionalObjectProperty(0));
 derive_axiom!(A, FunctionalDataProperty<A>, FunctionalDataProperty(0));
 derive_axiom!(A, Import<A>, Import(0));
@@ -434,7 +526,7 @@ derive_axiom!(
 derive_axiom!(A, ObjectPropertyDomain<A>, ObjectPropertyDomain(ope, ce));
 derive_axiom!(A, ObjectPropertyRange<A>, ObjectPropertyRange(ope, ce));
 derive_axiom!(A, ReflexiveObjectProperty<A>, ReflexiveObjectProperty(0));
-derive_axiom!(A, SameIndividual<A>, SameIndividual(0));
+derive_nary_axiom!(A, SameIndividual<A>, SameIndividual);
 derive_axiom!(A, SubClassOf<A>, SubClassOf(sub, sup));
 derive_axiom!(
     A,
@@ -727,12 +819,21 @@ impl<A: ForIRI> Display for Functional<'_, ClassExpression<A>, A> {
         }
         match self.0 {
             Class(exp) => Functional(exp, self.1, None).fmt(f),
+            // A single-operand intersection/union is just that operand --
+            // the OFN grammar requires >= 2, so wrapping it verbatim would
+            // write output its own reader rejects (#235).
+            ObjectIntersectionOf(classes) if classes.len() == 1 => {
+                Functional(&classes[0], self.1, None).fmt(f)
+            }
             ObjectIntersectionOf(classes) => {
                 write!(
                     f,
                     "ObjectIntersectionOf({})",
                     Functional(classes, self.1, None)
                 )
+            }
+            ObjectUnionOf(classes) if classes.len() == 1 => {
+                Functional(&classes[0], self.1, None).fmt(f)
             }
             ObjectUnionOf(classes) => {
                 write!(f, "ObjectUnionOf({})", Functional(classes, self.1, None))
@@ -963,7 +1064,7 @@ impl<A: ForIRI> Display for Functional<'_, IRI<A>, A> {
                 return write!(f, "{prefix}:{local}");
             }
         }
-        write!(f, "<{}>", self.0)
+        write!(f, "<{}>", percent_encode_iri(self.0))
     }
 }
 
@@ -1137,7 +1238,7 @@ impl<A: ForIRI> AsFunctional<A> for Variable<A> {}
 impl<A: ForIRI> Display for Functional<'_, curie::PrefixMapping, A> {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
         for (name, value) in self.0.mappings() {
-            writeln!(f, "Prefix({name}:=<{value}>)")?;
+            writeln!(f, "Prefix({name}:=<{}>)", percent_encode_iri(value))?;
         }
         Ok(())
     }
@@ -1245,6 +1346,38 @@ mod tests {
     }
 
     #[test]
+    fn test_ofn_nary_individual_axiom_below_min_arity_is_dropped() {
+        // OWL2 functional syntax requires >= 2 operands for
+        // DifferentIndividuals/SameIndividual, but real-world RDF can
+        // produce a one-member `owl:AllDifferent` (e.g. a degenerate
+        // `owl:distinctMembers` list). Writing it verbatim would produce
+        // `DifferentIndividuals(<one-iri>)`, which our own reader rejects
+        // (grammar requires `Individual{2, }`) -- the axiom must be dropped
+        // instead.
+        let build = Build::new_arc();
+        let i = build.named_individual("http://example.com/i");
+
+        let different = DifferentIndividuals(vec![i.clone().into()]);
+        assert_eq!("", format!("{}", different.as_functional()));
+
+        let same = SameIndividual(vec![i.into()]);
+        assert_eq!("", format!("{}", same.as_functional()));
+    }
+
+    #[test]
+    fn test_ofn_nary_individual_axiom_at_min_arity_is_written() {
+        let build = Build::new_arc();
+        let i1 = build.named_individual("http://example.com/i1");
+        let i2 = build.named_individual("http://example.com/i2");
+
+        let different = DifferentIndividuals(vec![i1.into(), i2.into()]);
+        assert_eq!(
+            "DifferentIndividuals(<http://example.com/i1> <http://example.com/i2>)",
+            format!("{}", different.as_functional())
+        );
+    }
+
+    #[test]
     fn test_ofn_literal_language() {
         let lit = Literal::<String>::Language {
             literal: String::from("hello"),
@@ -1307,6 +1440,129 @@ mod tests {
             "Declaration(Class(<http://xmlns.com/foaf/0.1/Person>))",
             ofn
         );
+    }
+
+    // Regression test for #230: an empty/default CURIE prefix must still
+    // abbreviate with the leading colon (`:local`, not bare `local`).
+    #[test]
+    fn test_ofn_curie_empty_prefix() {
+        let build = Build::new_arc();
+        let mut prefixes = curie::PrefixMapping::default();
+        prefixes.add_prefix("", "http://identifiers.org/mamo#").ok();
+        prefixes.set_default("http://identifiers.org/mamo#");
+
+        let decl = DeclareClass(build.class("http://identifiers.org/mamo#MAMO_0000207"));
+        let ofn = format!("{}", decl.as_functional_with_prefixes(&prefixes));
+        assert_eq!("Declaration(Class(:MAMO_0000207))", ofn);
+    }
+
+    // Regression test for #230: a leftover local part starting with `#`
+    // (no trailing separator on the default-prefix IRI) falls back to the
+    // full `<IRI>` form instead of emitting an invalid local part.
+    #[test]
+    fn test_ofn_curie_empty_prefix_no_separator_falls_back_to_full_iri() {
+        let build = Build::new_arc();
+        let mut prefixes = curie::PrefixMapping::default();
+        prefixes.add_prefix("", "http://identifiers.org/mamo").ok();
+        prefixes.set_default("http://identifiers.org/mamo");
+
+        let decl = DeclareClass(build.class("http://identifiers.org/mamo#MAMO_0000207"));
+        let ofn = format!("{}", decl.as_functional_with_prefixes(&prefixes));
+        assert_eq!(
+            "Declaration(Class(<http://identifiers.org/mamo#MAMO_0000207>))",
+            ofn
+        );
+    }
+
+    // Regression test for #148: `eg` is inserted before `egc`, and both are
+    // valid OFN syntax, so the validity check alone can't save this --
+    // insertion-order-first-match would pick the wrong one.
+    #[test]
+    fn test_ofn_prefers_longest_matching_prefix() {
+        let build = Build::new_arc();
+        let mut prefixes = curie::PrefixMapping::default();
+        prefixes.add_prefix("eg", "http://example.com/AB").ok();
+        prefixes.add_prefix("egc", "http://example.com/ABC").ok();
+
+        let decl = DeclareClass(build.class("http://example.com/ABCDEF"));
+        let ofn = format!("{}", decl.as_functional_with_prefixes(&prefixes));
+        assert_eq!("Declaration(Class(egc:DEF))", ofn);
+    }
+
+    // Regression test for #234: a literal '[' or ']' (legal in an XML
+    // attribute, so real-world OWL/XML ontologies contain it, but not legal
+    // unescaped in OFN's <...> FullIRI) must be percent-encoded, in both the
+    // full-IRI form and a Prefix(name:=<...>) declaration line.
+    #[test]
+    fn test_ofn_iri_with_illegal_characters_is_percent_encoded() {
+        let build = Build::new_arc();
+
+        let decl = DeclareClass(build.class("http://example.org/KB-CH[R]-8-5"));
+        let ofn = format!("{}", decl.as_functional());
+        assert_eq!(
+            "Declaration(Class(<http://example.org/KB-CH%5BR%5D-8-5>))",
+            ofn
+        );
+
+        let reparsed: Result<(crate::ontology::set::SetOntology<RcStr>, _), _> =
+            crate::io::ofn::reader::read(
+                &mut std::io::Cursor::new(format!(
+                    "Prefix(:=<http://ex/>)\nOntology(<http://ex/o>\n{ofn}\n)"
+                )),
+                Default::default(),
+            );
+        assert!(reparsed.is_ok(), "reparse failed: {reparsed:?}");
+
+        let mut prefixes = curie::PrefixMapping::default();
+        prefixes
+            .add_prefix("R", "http://example.org/KB-CH[R]-8-5")
+            .ok();
+        let rendered = format!(
+            "{}",
+            Functional::<curie::PrefixMapping, RcStr>(&prefixes, None, None)
+        );
+        assert_eq!(
+            "Prefix(R:=<http://example.org/KB-CH%5BR%5D-8-5>)\n",
+            rendered
+        );
+    }
+
+    #[test]
+    fn test_ofn_single_operand_intersection_and_union_degrade_to_operand() {
+        // https://github.com/phillord/horned-owl/issues/235
+        // ofn.pest's ClassExpression{2,} requires >= 2 operands, but the RDF
+        // reader can build a single-operand ObjectIntersectionOf/ObjectUnionOf
+        // from a real-world (if spec-invalid) owl:intersectionOf/unionOf RDF
+        // list with only one member -- e.g. the BCS7 corpus file (turtle) has
+        // `[] a owl:Class ; rdfs:subClassOf cst:R7_Stage_IV ;
+        // owl:intersectionOf ( cst:M1 ) .`. Writing that verbatim as
+        // `ObjectIntersectionOf(<...M1>)` produces output the OFN reader's
+        // own grammar then rejects. A single-operand intersection/union is
+        // just that operand, so the writer should degrade to it directly.
+        let build = Build::new_arc();
+        let m1 = ClassExpression::Class(build.class("http://ex/M1"));
+
+        let intersection = ClassExpression::ObjectIntersectionOf(vec![m1.clone()]);
+        let ofn = format!("{}", intersection.as_functional());
+        assert_eq!("<http://ex/M1>", ofn);
+
+        let union = ClassExpression::ObjectUnionOf(vec![m1]);
+        let ofn = format!("{}", union.as_functional());
+        assert_eq!("<http://ex/M1>", ofn);
+
+        let sub_class_of = SubClassOf {
+            sup: build.class("http://ex/R7_Stage_IV").into(),
+            sub: union,
+        };
+        let ofn = format!("{}", sub_class_of.as_functional());
+        let reparsed: Result<(crate::ontology::set::SetOntology<RcStr>, _), _> =
+            crate::io::ofn::reader::read(
+                &mut std::io::Cursor::new(format!(
+                    "Prefix(:=<http://ex/>)\nOntology(<http://ex/o>\n{ofn}\n)"
+                )),
+                Default::default(),
+            );
+        assert!(reparsed.is_ok(), "reparse failed: {reparsed:?}");
     }
 
     #[test]

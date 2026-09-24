@@ -19,7 +19,7 @@ use curie::PrefixMapping;
 use crate::error::HornedError;
 use crate::model::{
     AnnotatedComponent, AnnotationValue, ClassExpression as CE, Component, ForIRI, Individual,
-    Literal, ObjectPropertyExpression as OPE,
+    Literal, ObjectPropertyExpression as OPE, Ontology,
 };
 use crate::ontology::component_mapped::ComponentMappedOntology;
 use crate::ontology::indexed::ForIndex;
@@ -46,7 +46,10 @@ struct Stanza {
     clauses: Vec<String>,
 }
 
-/// Write an ontology to `write` in OBO flat-file format 1.4.
+/// Write a `ComponentMappedOntology` to `write` in OBO flat-file format 1.4.
+/// A caller holding some other `Ontology` implementation should collect it
+/// into a `ComponentMappedOntology` first (`ont.iter().cloned().collect()`,
+/// or `ont.into_iter().collect()` if `ont` doesn't need to be kept).
 pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
     mut write: W,
     ont: &ComponentMappedOntology<A, AA>,
@@ -75,7 +78,10 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
     let mut idspaces: Vec<(String, String)> = mapping
         .map(|m| {
             m.mappings()
-                .filter(|(p, _)| !IMPLICIT.contains(&p.as_str()))
+                // The empty/default prefix has no name to write as an
+                // `IdPrefix` token -- `idspace: <iri>` is not valid OBO
+                // and its own reader can't parse it back.
+                .filter(|(p, _)| !p.is_empty() && !IMPLICIT.contains(&p.as_str()))
                 .map(|(p, u)| (p.clone(), u.clone()))
                 .collect()
         })
@@ -135,17 +141,35 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
         });
     }
 
+    // Anything neither attached to a stanza nor emitted as a header line has
+    // no native OBO representation at all (SWRL rules, complex class
+    // expressions, ...) -- collected here to fall back to the owl-axioms:
+    // escape hatch (spec 5.0.4) rather than being silently dropped.
+    // is_never_axiom_fallback excludes the component kinds that land here
+    // despite not actually being unhandled (see its own doc).
+    let mut unhandled: Vec<AnnotatedComponent<A>> = Vec::new();
+
     for ac in ont.iter() {
+        let mut wrote = false;
         for (owner_iri, line) in clause_lines(ac, &cz) {
             if let Some(key) = key_of(&owner_iri) {
                 let s = stanzas.entry(key.clone()).or_default();
                 s.id = key.1;
                 s.clauses.push(line);
+                wrote = true;
             }
         }
-        if let Some(line) = header_line(ac, &cz) {
-            header.push(line);
+        let hlines = header_line(ac, &cz);
+        wrote |= !hlines.is_empty();
+        header.extend(hlines);
+
+        if !wrote && !is_never_axiom_fallback(&ac.component) {
+            unhandled.push(ac.clone());
         }
+    }
+
+    if !unhandled.is_empty() {
+        header.push(format!("owl-axioms: {}", owl_axioms_value(&unhandled)?));
     }
 
     // Emit header, then stanzas grouped Term / Typedef / Instance.
@@ -174,37 +198,93 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
     Ok(write)
 }
 
+/// True for component kinds that must never be swept into the owl-axioms:
+/// fallback, even when clause_lines/header_line emit nothing for a given
+/// instance of one. Declarations are deliberately never emitted at all (the
+/// reader re-derives them from what references them, see module doc).
+/// AnnotationAssertion/OntologyAnnotation are excluded wholesale rather than
+/// case-by-case: `oboInOwl:id` is handled via the separate `ids` bookkeeping
+/// map, and builtin-property `rdfs:label`s are re-derived by the reader's
+/// `builtin_labels` pass -- both silently produce no clause today, and
+/// mistaking that for "unhandled" round-trips a spurious extra declaration
+/// (the OFN reader synthesises one for whatever the embedded fragment
+/// references) rather than the original axiom set.
+fn is_never_axiom_fallback<A: ForIRI>(c: &Component<A>) -> bool {
+    matches!(
+        c,
+        Component::DeclareClass(_)
+            | Component::DeclareObjectProperty(_)
+            | Component::DeclareDataProperty(_)
+            | Component::DeclareAnnotationProperty(_)
+            | Component::DeclareNamedIndividual(_)
+            | Component::DeclareDatatype(_)
+            | Component::AnnotationAssertion(_)
+            | Component::OntologyAnnotation(_)
+    )
+}
+
+/// Render components with no native OBO representation as an escaped,
+/// single-line OWL functional-syntax fragment for the `owl-axioms:` header
+/// tag (spec 5.0.4) -- the inverse of the reader's embedded-OFN parsing.
+fn owl_axioms_value<A: ForIRI>(comps: &[AnnotatedComponent<A>]) -> Result<String, HornedError> {
+    let ont: crate::ontology::set::SetOntology<A> = comps.iter().cloned().collect();
+    let cmo: ComponentMappedOntology<A, AnnotatedComponent<A>> = ont.into();
+    let text = String::from_utf8(crate::io::ofn::writer::write(Vec::new(), &cmo, None)?)
+        .map_err(|e| HornedError::invalid(e.to_string()))?;
+
+    let mut escaped = String::with_capacity(text.len());
+    for c in text.chars() {
+        match c {
+            '\n' => escaped.push_str("\\n"),
+            '\t' => escaped.push_str("\\t"),
+            '\\' => escaped.push_str("\\\\"),
+            '!' => escaped.push_str("\\!"),
+            '{' => escaped.push_str("\\{"),
+            _ => escaped.push(c),
+        }
+    }
+    Ok(escaped)
+}
+
 /// Header-level component → header line, or `None`.
-fn header_line<A: ForIRI>(
-    ac: &AnnotatedComponent<A>,
-    cz: &impl Fn(&str) -> String,
-) -> Option<String> {
+fn header_line<A: ForIRI>(ac: &AnnotatedComponent<A>, cz: &impl Fn(&str) -> String) -> Vec<String> {
     match &ac.component {
         Component::OntologyID(o) => {
-            let iri = o.iri.as_ref()?.to_string();
+            let Some(iri) = o.iri.as_ref().map(|i| i.to_string()) else {
+                return vec![];
+            };
             let ont = iri
                 .strip_prefix(OBO)
                 .and_then(|r| r.strip_suffix(".owl"))
                 .map(String::from)
                 .unwrap_or(iri);
-            Some(format!("ontology: {ont}"))
+            let mut lines = vec![format!("ontology: {ont}")];
+            if let Some(viri) = &o.viri {
+                let dv = viri
+                    .to_string()
+                    .strip_prefix(OBO)
+                    .map(String::from)
+                    .unwrap_or_else(|| viri.to_string());
+                lines.push(format!("data-version: {dv}"));
+            }
+            lines
         }
-        Component::Import(i) => Some(format!("import: {}", i.0)),
+        Component::Import(i) => vec![format!("import: {}", i.0)],
         Component::OntologyAnnotation(oa) => {
             let ap = oa.0.ap.0.as_ref();
             let v = value_text(&oa.0.av, cz);
             match ap {
                 _ if ap == format!("{OIO}hasOBOFormatVersion") => {
-                    Some(format!("format-version: {v}"))
+                    vec![format!("format-version: {v}")]
                 }
                 _ if ap == format!("{OIO}default-namespace") => {
-                    Some(format!("default-namespace: {v}"))
+                    vec![format!("default-namespace: {v}")]
                 }
-                _ if ap == RDFS_COMMENT => Some(format!("remark: {v}")),
-                _ => None,
+                _ if ap == RDFS_COMMENT => vec![format!("remark: {}", esc_unquoted(&v))],
+                _ => vec![],
             }
         }
-        _ => None,
+        _ => vec![],
     }
 }
 
@@ -278,7 +358,10 @@ fn clause_lines<A: ForIRI>(
             let CE::Class(c) = &e.0[0] else { return vec![] };
             let owner = c.0.as_ref().to_string();
             match &e.0[1] {
-                CE::Class(d) => vec![(owner, format!("equivalent_to: {}", cz(d.0.as_ref())))],
+                CE::Class(d) => {
+                    let quals = qualifiers(ac, &[], cz);
+                    vec![(owner, format!("equivalent_to: {}{quals}", cz(d.0.as_ref())))]
+                }
                 // intersection_of / union_of are multiple lines building ONE
                 // order-sensitive axiom; emit them as a single block so the
                 // stanza's clause sort keeps the operands in Vec order.
@@ -340,13 +423,13 @@ fn clause_lines<A: ForIRI>(
         }
         Component::ObjectPropertyDomain(d) => op_class(&d.ope, &d.ce, "domain", cz),
         Component::ObjectPropertyRange(r) => op_class(&r.ope, &r.ce, "range", cz),
-        Component::TransitiveObjectProperty(p) => characteristic(&p.0, "is_transitive"),
-        Component::SymmetricObjectProperty(p) => characteristic(&p.0, "is_symmetric"),
-        Component::ReflexiveObjectProperty(p) => characteristic(&p.0, "is_reflexive"),
-        Component::AsymmetricObjectProperty(p) => characteristic(&p.0, "is_asymmetric"),
-        Component::FunctionalObjectProperty(p) => characteristic(&p.0, "is_functional"),
+        Component::TransitiveObjectProperty(p) => characteristic(&p.0, "is_transitive", ac, cz),
+        Component::SymmetricObjectProperty(p) => characteristic(&p.0, "is_symmetric", ac, cz),
+        Component::ReflexiveObjectProperty(p) => characteristic(&p.0, "is_reflexive", ac, cz),
+        Component::AsymmetricObjectProperty(p) => characteristic(&p.0, "is_asymmetric", ac, cz),
+        Component::FunctionalObjectProperty(p) => characteristic(&p.0, "is_functional", ac, cz),
         Component::InverseFunctionalObjectProperty(p) => {
-            characteristic(&p.0, "is_inverse_functional")
+            characteristic(&p.0, "is_inverse_functional", ac, cz)
         }
         Component::ClassAssertion(a) => {
             if let (CE::Class(c), Individual::Named(i)) = (&a.ce, &a.i) {
@@ -405,9 +488,15 @@ fn op_class<A: ForIRI>(
     }
 }
 
-fn characteristic<A: ForIRI>(ope: &OPE<A>, tag: &str) -> Vec<(String, String)> {
+fn characteristic<A: ForIRI>(
+    ope: &OPE<A>,
+    tag: &str,
+    ac: &AnnotatedComponent<A>,
+    cz: &impl Fn(&str) -> String,
+) -> Vec<(String, String)> {
     if let OPE::ObjectProperty(p) = ope {
-        vec![(p.0.as_ref().to_string(), format!("{tag}: true"))]
+        let quals = qualifiers(ac, &[], cz);
+        vec![(p.0.as_ref().to_string(), format!("{tag}: true{quals}"))]
     } else {
         vec![]
     }
@@ -572,11 +661,18 @@ fn qualifiers<A: ForIRI>(
     }
 }
 
-/// A qualifier key: an oboInOwl-local property is written bare, else compressed.
+/// A qualifier key: an oboInOwl-local property is written bare, the two
+/// builtin synonyms shared with the top-level name:/comment: tags are
+/// written bare too (oboformat/ROBOT), else compressed.
 fn short_key(ap: &str, cz: &impl Fn(&str) -> String) -> String {
-    ap.strip_prefix(OIO)
-        .map(String::from)
-        .unwrap_or_else(|| cz(ap))
+    match ap {
+        RDFS_LABEL => "name".to_string(),
+        RDFS_COMMENT => "comment".to_string(),
+        _ => ap
+            .strip_prefix(OIO)
+            .map(String::from)
+            .unwrap_or_else(|| cz(ap)),
+    }
 }
 
 fn av_lit<A: ForIRI>(av: &AnnotationValue<A>) -> Option<String> {
@@ -674,21 +770,36 @@ mod tests {
     use std::fs::read_dir;
     use std::path::PathBuf;
 
-    use crate::model::{AnnotatedComponent, RcStr};
+    use rstest::rstest;
+
+    use crate::model::{AnnotatedComponent, Component, Ontology, RcStr};
     use crate::ontology::component_mapped::ComponentMappedOntology;
     use crate::ontology::set::SetOntology;
 
     fn read(s: &str) -> SetOntology<RcStr> {
-        crate::io::obo::reader::read::<RcStr, SetOntology<RcStr>, _>(
-            s.as_bytes(),
+        crate::io::obo::reader::read::<RcStr, _, SetOntology<RcStr>, _>(
+            &mut s.as_bytes(),
             Default::default(),
         )
         .unwrap()
         .0
     }
 
-    fn axioms(ont: &SetOntology<RcStr>) -> BTreeSet<String> {
-        ont.iter().map(|ac| format!("{ac:?}")).collect()
+    fn axioms<O: Ontology<RcStr>>(ont: &O) -> BTreeSet<String> {
+        ont.iter()
+            .map(|ac| {
+                // A rule's body and head are sets in OWL. The OFN writer
+                // behind the `owl-axioms:` fallback writes a two-atom one in
+                // OWLAPI's (swapped) order, so compare rules by their atoms
+                // sorted rather than in document order.
+                let mut ac: AnnotatedComponent<RcStr> = ac.clone();
+                if let Component::Rule(r) = &mut ac.component {
+                    r.body.sort();
+                    r.head.sort();
+                }
+                format!("{ac:?}")
+            })
+            .collect()
     }
 
     /// read(write(read(x))) == read(x) over every fixture in the oracle corpus.
@@ -701,9 +812,10 @@ mod tests {
                 continue;
             }
             let doc = std::fs::read_to_string(&path).unwrap();
-            let (a, prefixes) = crate::io::obo::reader::read::<RcStr, SetOntology<RcStr>, _>(
-                doc.as_bytes(),
-                Default::default(),
+            let b = crate::model::Build::new_rc();
+            let (a, prefixes) = crate::io::obo::reader::read::<RcStr, _, SetOntology<RcStr>, _>(
+                &mut doc.as_bytes(),
+                crate::io::ParserConfiguration::new(&b),
             )
             .unwrap();
             let cmo: ComponentMappedOntology<RcStr, AnnotatedComponent<RcStr>> = a.clone().into();
@@ -731,6 +843,44 @@ mod tests {
         assert!(failures.is_empty(), "round-trip failed for: {failures:?}");
     }
 
+    /// read(write(read(x))) == read(x), individually per bubo-generated
+    /// fixture -- the same property `round_trip_corpus` checks for the
+    /// hand-written oracle corpus, but one reportable case per file.
+    #[rstest]
+    fn round_trip_resource(#[files("src/ont/owl-obo/*.obo")] resource: PathBuf) {
+        let doc = std::fs::read_to_string(&resource).unwrap();
+        let b = crate::model::Build::new_rc();
+        let (a, prefixes) = crate::io::obo::reader::read::<RcStr, _, SetOntology<RcStr>, _>(
+            &mut doc.as_bytes(),
+            crate::io::ParserConfiguration::new(&b),
+        )
+        .unwrap();
+        let cmo: ComponentMappedOntology<RcStr, AnnotatedComponent<RcStr>> = a.clone().into();
+        let out = super::write(Vec::new(), &cmo, Some(&prefixes)).unwrap();
+        let bont = read(&String::from_utf8(out).unwrap());
+
+        assert_eq!(axioms(&a), axioms(&bont));
+    }
+
+    /// A component with no native OBO representation (a SWRL rule, here)
+    /// falls back to the `owl-axioms:` escape hatch on write, the inverse of
+    /// the reader parsing that tag -- #272's other half.
+    #[test]
+    fn unrepresentable_axiom_round_trips_via_owl_axioms() {
+        let doc = "ontology: http://example.org/onto\n\
+                   owl-axioms: \\n\\nOntology(\\n\\nDLSafeRule(\
+                   Body(ClassAtom(<http://example.org/onto#A> Variable(<http://example.org/onto#x>)))\
+                   Head(ClassAtom(<http://example.org/onto#B> Variable(<http://example.org/onto#x>))))\\n)\n";
+        let a = read(doc);
+        let cmo: ComponentMappedOntology<RcStr, AnnotatedComponent<RcStr>> = a.clone().into();
+        let out = super::write(Vec::new(), &cmo, None).unwrap();
+        let text = String::from_utf8(out).unwrap();
+        assert!(text.contains("owl-axioms:"), "got:\n{text}");
+
+        let b = read(&text);
+        assert_eq!(axioms(&a), axioms(&b));
+    }
+
     /// alt_id round-trips: the writer emits `alt_id:` from hasAlternativeId and
     /// omits the materialised deprecated stub (the reader regenerates it).
     /// (Kept out of the oracle corpus: our reader emits two builtin-metadata
@@ -747,5 +897,61 @@ mod tests {
         // and the written form uses `alt_id:`, not property_value
         let text = String::from_utf8(super::write(Vec::new(), &cmo, None).unwrap()).unwrap();
         assert!(text.contains("alt_id: GO:0002"), "got:\n{text}");
+    }
+
+    /// A source ontology's default (empty-key) prefix must not be written as
+    /// an `idspace:` clause -- `IdspaceTag ~ IdPrefix ~ Iri` has no token for
+    /// an empty prefix, so `idspace:  <iri>` is not valid OBO and the reader
+    /// can't parse it back.
+    #[test]
+    fn default_prefix_is_not_written_as_idspace() {
+        // OFN's `Prefix(:=<iri>)` is how a real reader actually records a
+        // document's default namespace (as the PrefixMapping's empty-string
+        // entry), matching what an RDF/XML or OWL/XML source's default
+        // `xmlns` also produces.
+        let doc = "Prefix(:=<http://example.org/onto#>)\n\
+                   Ontology(<http://example.org/onto>\n\
+                   Declaration(Class(:A))\n\
+                   )\n";
+        let (o, pm): (SetOntology<RcStr>, curie::PrefixMapping) =
+            crate::io::ofn::reader::read(&mut doc.as_bytes(), Default::default()).unwrap();
+
+        let cmo: ComponentMappedOntology<RcStr, AnnotatedComponent<RcStr>> = o.into();
+        let out = super::write(Vec::new(), &cmo, Some(&pm)).unwrap();
+        let text = String::from_utf8(out).unwrap();
+        assert!(!text.contains("idspace:"), "got:\n{text}");
+
+        crate::io::obo::reader::read::<RcStr, _, SetOntology<RcStr>, _>(
+            &mut text.as_bytes(),
+            Default::default(),
+        )
+        .unwrap();
+    }
+
+    #[cfg(test)]
+    mod bubo_test {
+        use crate::io::obo::writer::write;
+
+        use std::fs::File;
+        use std::io::BufReader;
+        use std::path::Path;
+
+        fn parse_then_output(in_file: &Path, out: &mut dyn std::io::Write) {
+            let mut reader = BufReader::new(File::open(in_file).unwrap());
+            let (ont, prefixes): (
+                crate::ontology::component_mapped::ComponentMappedOntology<
+                    crate::model::RcStr,
+                    crate::model::AnnotatedComponent<crate::model::RcStr>,
+                >,
+                _,
+            ) = crate::io::obo::reader::read(&mut reader, Default::default()).unwrap();
+
+            write(out, &ont, Some(&prefixes)).ok().unwrap();
+        }
+
+        #[test]
+        fn reparse_obo() -> Result<(), Box<dyn std::error::Error>> {
+            crate::io::tests::run_bubo_reparse("owl-obo", parse_then_output)
+        }
     }
 }

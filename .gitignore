@@ -11,6 +11,10 @@ Cargo.lock
 .vscode/
 .claude/
 
+# Emacs
+\#*\#
+*~
+
 # Mac OS X
 .DS_Store
 /dev/bubo-0.4.0

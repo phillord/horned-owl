@@ -51,9 +51,12 @@ struct Frame {
 // Write a whole-ontology Manchester document.
 // ---------------------------------------------------------------------------
 
-/// Write an ontology to `write` in OWL
+/// Write a `ComponentMappedOntology` to `write` in OWL
 /// [Manchester Syntax](https://www.w3.org/TR/2012/REC-owl2-manchester-syntax-20121211/),
-/// using the given `PrefixMapping`.
+/// using the given `PrefixMapping`. A caller holding some other `Ontology`
+/// implementation should collect it into a `ComponentMappedOntology` first
+/// (`ont.iter().cloned().collect()`, or `ont.into_iter().collect()` if
+/// `ont` doesn't need to be kept).
 ///
 /// The output is a frame-grouped document: prefix declarations, a conformant
 /// `Ontology:` header (with nested `Import:` and `Annotations:` sub-lines when
@@ -242,7 +245,18 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
     fn individual_subject_key<A: ForIRI>(i: &crate::model::Individual<A>) -> String {
         match i {
             crate::model::Individual::Named(ni) => ni.0.as_ref().to_string(),
-            crate::model::Individual::Anonymous(ai) => format!("_:{}", ai.0.as_ref()),
+            // Generated labels (e.g. from the RDF reader) are bare, while
+            // labels read from an OWX `nodeID` that itself already carries a
+            // literal `_:` prefix (real-world non-conformant input) must not
+            // be double-prefixed.
+            crate::model::Individual::Anonymous(ai) => {
+                let label = ai.0.as_ref();
+                if label.starts_with("_:") {
+                    label.to_string()
+                } else {
+                    format!("_:{label}")
+                }
+            }
         }
     }
 
@@ -1061,6 +1075,7 @@ mod tests {
     use crate::ontology::component_mapped::ComponentMappedOntology;
     use crate::ontology::set::SetOntology;
     use rstest::rstest;
+    use std::borrow::Borrow;
     use std::path::PathBuf;
 
     type TestOnt = ComponentMappedOntology<
@@ -1084,18 +1099,50 @@ mod tests {
         let reader = std::fs::File::open(&resource)
             .map(std::io::BufReader::new)
             .unwrap();
+        let b = crate::model::Build::new_rc();
         let (ont, prefixes): (ComponentMappedOntology<RcStr, AnnotatedComponent<RcStr>>, _) =
-            crate::io::omn::reader::read(reader, Default::default()).unwrap();
+            crate::io::omn::reader::read(reader, crate::io::ParserConfiguration::new(&b)).unwrap();
 
         let mut writer = Vec::new();
         crate::io::omn::write(&mut writer, &ont, Some(&prefixes)).unwrap();
 
         let (ont2, prefixes2): (ComponentMappedOntology<RcStr, AnnotatedComponent<RcStr>>, _) =
-            crate::io::omn::reader::read(std::io::Cursor::new(&writer), Default::default())
-                .unwrap();
+            crate::io::omn::reader::read(
+                std::io::Cursor::new(&writer),
+                crate::io::ParserConfiguration::new(&b),
+            )
+            .unwrap();
 
         assert_eq!(prefixes, prefixes2, "prefix mapping differ");
         assert_eq!(ont, ont2, "ontologies differ");
+    }
+
+    #[test]
+    fn anonymous_individual_frame_key_is_not_double_prefixed() {
+        // A ClassAssertion on an anonymous individual whose label already
+        // carries `_:` -- e.g. read from an OWX `nodeID` attribute that
+        // itself includes the literal prefix (real-world non-conformant
+        // input) -- must produce a single `_:genid1` frame subject, not
+        // `_:_:genid1` (which the OMN reader rejects).
+        let b = Build::new_rc();
+        let anon = b.anon("_:genid1");
+        let mut o = SetOntology::new_rc();
+        o.insert(ClassAssertion {
+            ce: ClassExpression::Class(b.class("http://t/C")),
+            i: Individual::Anonymous(anon),
+        });
+        let amo = into_amo(o);
+        let mut out = Vec::<u8>::new();
+        write(&mut out, &amo, None).unwrap();
+        let s = String::from_utf8(out).unwrap();
+        assert!(
+            s.contains("Individual: _:genid1"),
+            "expected a single `_:` prefix on the frame subject, got:\n{s}"
+        );
+        assert!(
+            !s.contains("_:_:"),
+            "anonymous individual label must not be double-prefixed, got:\n{s}"
+        );
     }
 
     #[test]
@@ -1145,7 +1192,7 @@ mod tests {
     /// frame and round-trips correctly (read → write → read = same components).
     #[test]
     fn complex_lhs_subclassof_emits_class_frame_and_roundtrips() {
-        use crate::io::omn::read_with_build;
+        use crate::io::omn::read;
         use std::io::BufReader;
 
         let b = Build::new_rc();
@@ -1187,20 +1234,30 @@ mod tests {
         );
 
         // Round-trip: read → write → read must yield component-equal result.
-        let (ont2, pm2): (crate::ontology::set::SetOntology<_>, PrefixMapping) =
-            read_with_build(BufReader::new(&out[..]), &b)
-                .unwrap_or_else(|e| panic!("round-trip re-parse failed: {e}\n---\n{s}"));
+        let (ont2, pm2): (crate::ontology::set::SetOntology<_>, PrefixMapping) = read(
+            BufReader::new(&out[..]),
+            crate::io::ParserConfiguration::new(&b),
+        )
+        .unwrap_or_else(|e| panic!("round-trip re-parse failed: {e}\n---\n{s}"));
         let mut out2 = Vec::<u8>::new();
         let amo2: TestOnt = ont2.into();
         write(&mut out2, &amo2, Some(&pm2)).unwrap();
-        let (ont3, _): (crate::ontology::set::SetOntology<_>, PrefixMapping) =
-            read_with_build(BufReader::new(&out2[..]), &b)
-                .unwrap_or_else(|e| panic!("second round-trip re-parse failed: {e}"));
+        let (ont3, _): (crate::ontology::set::SetOntology<_>, PrefixMapping) = read(
+            BufReader::new(&out2[..]),
+            crate::io::ParserConfiguration::new(&b),
+        )
+        .unwrap_or_else(|e| panic!("second round-trip re-parse failed: {e}"));
 
         // Component sets must be equal after one round-trip (write → read).
         let orig: std::collections::BTreeSet<_> = o.iter().map(|ac| ac.component.clone()).collect();
-        let got: std::collections::BTreeSet<_> =
-            amo2.i().iter().map(|ac| ac.component.clone()).collect();
+        let got: std::collections::BTreeSet<_> = amo2
+            .i()
+            .iter()
+            .map(|ac| {
+                let ac: &AnnotatedComponent<_> = ac.borrow();
+                ac.component.clone()
+            })
+            .collect();
         assert_eq!(orig, got, "round-trip mismatch:\n---written---\n{s}");
 
         // And stable after a second round-trip.
@@ -1387,11 +1444,13 @@ mod tests {
         );
 
         // The writer's output must re-parse without error.
-        use crate::io::omn::read_with_build;
+        use crate::io::omn::read;
         use std::io::BufReader;
-        let (parsed, _): (crate::ontology::set::SetOntology<_>, PrefixMapping) =
-            read_with_build(BufReader::new(&out[..]), &b)
-                .unwrap_or_else(|e| panic!("re-parse of writer output failed: {e}\n---\n{s}"));
+        let (parsed, _): (crate::ontology::set::SetOntology<_>, PrefixMapping) = read(
+            BufReader::new(&out[..]),
+            crate::io::ParserConfiguration::new(&b),
+        )
+        .unwrap_or_else(|e| panic!("re-parse of writer output failed: {e}\n---\n{s}"));
         let orig: std::collections::BTreeSet<_> = o.iter().map(|ac| ac.component.clone()).collect();
         let got: std::collections::BTreeSet<_> =
             parsed.iter().map(|ac| ac.component.clone()).collect();
@@ -1462,10 +1521,13 @@ mod tests {
         );
 
         // End-to-end: the reader must consume the natively-rendered anon value.
-        use crate::io::omn::read_with_build;
+        use crate::io::omn::read;
         use std::io::BufReader;
-        let (parsed, _): (SetOntology<_>, PrefixMapping) =
-            read_with_build(BufReader::new(&out[..]), &b).unwrap();
+        let (parsed, _): (SetOntology<_>, PrefixMapping) = read(
+            BufReader::new(&out[..]),
+            crate::io::ParserConfiguration::new(&b),
+        )
+        .unwrap();
         let orig: std::collections::BTreeSet<_> = o.iter().map(|ac| ac.component.clone()).collect();
         let got: std::collections::BTreeSet<_> =
             parsed.iter().map(|ac| ac.component.clone()).collect();

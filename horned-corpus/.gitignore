@@ -1,0 +1,18 @@
+# The downloaded ontology corpus: thousands of files, gigabytes, refetched
+# with `horned-corpus fetch` rather than tracked.
+/corpus/
+
+# Generated run artifacts: results, reports and run logs.
+/results*.jsonl
+/report/
+/report-*/
+/run-*.log
+/run-*.done
+/report-gen.log
+
+# local secrets: real API key lives in .env (tracked template is .env.example)
+/.env
+
+# pinned ROBOT release, downloaded on first use by robot::robot_ensure()
+/dev/robot-*.jar
+/dev/robot-*.jar.part

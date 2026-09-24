@@ -1,6 +1,6 @@
 [package]
 name = "horned-bin"
-version = "2.1.0"
+version = "4.0.0"
 
 authors = ["Phillip Lord <phillip.lord@russet.org.uk>"]
 description = "Command Line tools for OWL Ontologies"
@@ -16,10 +16,11 @@ edition = "2024"
 
 [dependencies]
 clap = "3.2.2"
-horned-owl={path="../", version = "1.4.0" }
+horned-owl={path="../", version="4.0.0"}
 indexmap={workspace=true}
 oxiri={workspace=true}
 horned-pretty-rdf={workspace=true}
+horned-profile={workspace=true}
 oxrdf={workspace=true}
 oxrdfio={workspace=true}
 
@@ -76,3 +77,7 @@ path = "src/bin/horned_unparsed.rs"
 [[bin]]
 name = "horned-validate"
 path = "src/bin/horned_validate.rs"
+
+[[bin]]
+name = "horned-profile"
+path = "src/bin/horned_profile.rs"

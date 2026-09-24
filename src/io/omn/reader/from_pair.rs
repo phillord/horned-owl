@@ -63,7 +63,7 @@ impl<'a, A: ForIRI> Context<'a, A> {
     }
 
     /// Constructor with a pre-pass declaration set.  Used by
-    /// `read_with_build` after the pre-pass has been run so that bare property
+    /// `read` after the pre-pass has been run so that bare property
     /// IRIs in HasKey / Misc / Restriction contexts can be correctly typed.
     pub fn with_decls(
         build: &'a Build<A>,
@@ -2776,7 +2776,7 @@ mod tests {
     /// the reader must flip it to a data restriction over `DataComplementOf`.
     #[test]
     fn flips_negated_declared_datatype_to_data_restriction() {
-        use crate::io::omn::reader::read_with_build;
+        use crate::io::omn::reader::read;
         use crate::model::*;
         use crate::ontology::set::SetOntology;
         use std::io::BufReader;
@@ -2791,8 +2791,11 @@ mod tests {
         // (1) flip via a `Datatype:` declaration on the negated IRI.
         let b = Build::new_rc();
         let doc = "Prefix: : <http://e/>\nDatatype: :MyType\nClass: :C\n    SubClassOf: :p some not :MyType\n";
-        let (ont, _): (SetOntology<_>, PrefixMapping) =
-            read_with_build(BufReader::new(doc.as_bytes()), &b).unwrap();
+        let (ont, _): (SetOntology<_>, PrefixMapping) = read(
+            BufReader::new(doc.as_bytes()),
+            crate::io::ParserConfiguration::new(&b),
+        )
+        .unwrap();
         assert!(
             has_sup(
                 &ont,
@@ -2811,8 +2814,11 @@ mod tests {
         let b2 = Build::new_rc();
         let doc2 =
             "Prefix: : <http://e/>\nDataProperty: :p\nClass: :C\n    SubClassOf: :p only not :X\n";
-        let (ont2, _): (SetOntology<_>, PrefixMapping) =
-            read_with_build(BufReader::new(doc2.as_bytes()), &b2).unwrap();
+        let (ont2, _): (SetOntology<_>, PrefixMapping) = read(
+            BufReader::new(doc2.as_bytes()),
+            crate::io::ParserConfiguration::new(&b2),
+        )
+        .unwrap();
         assert!(has_sup(
             &ont2,
             &ClassExpression::DataAllValuesFrom {
@@ -2826,8 +2832,11 @@ mod tests {
         // (3) no declaration anywhere: irreducibly ambiguous, stays object.
         let b3 = Build::new_rc();
         let doc3 = "Prefix: : <http://e/>\nClass: :C\n    SubClassOf: :p some not :Y\n";
-        let (ont3, _): (SetOntology<_>, PrefixMapping) =
-            read_with_build(BufReader::new(doc3.as_bytes()), &b3).unwrap();
+        let (ont3, _): (SetOntology<_>, PrefixMapping) = read(
+            BufReader::new(doc3.as_bytes()),
+            crate::io::ParserConfiguration::new(&b3),
+        )
+        .unwrap();
         assert!(ont3.iter().any(|ac| matches!(
             &ac.component,
             Component::SubClassOf(SubClassOf {
@@ -2843,7 +2852,7 @@ mod tests {
     /// `DataComplementOf` range.
     #[test]
     fn flips_negated_datatype_in_cardinality() {
-        use crate::io::omn::reader::read_with_build;
+        use crate::io::omn::reader::read;
         use crate::model::*;
         use crate::ontology::set::SetOntology;
         use std::io::BufReader;
@@ -2851,8 +2860,11 @@ mod tests {
         let b = Build::new_rc();
         let doc = "Prefix: : <http://e/>\nDatatype: :MyType\nClass: :C\n    \
                    SubClassOf: :p min 2 not :MyType\n    SubClassOf: :q exactly 1 not :MyType\n";
-        let (ont, _): (SetOntology<_>, PrefixMapping) =
-            read_with_build(BufReader::new(doc.as_bytes()), &b).unwrap();
+        let (ont, _): (SetOntology<_>, PrefixMapping) = read(
+            BufReader::new(doc.as_bytes()),
+            crate::io::ParserConfiguration::new(&b),
+        )
+        .unwrap();
         let cx = ont
             .iter()
             .filter_map(|ac| match &ac.component {
@@ -2918,8 +2930,11 @@ mod tests {
         let mut buf = Vec::<u8>::new();
         write(&mut buf, &amo, Some(&pm)).unwrap();
 
-        let (parsed, _pm): (SetOntology<_>, PrefixMapping) =
-            crate::io::omn::reader::read_with_build(BufReader::new(&buf[..]), &b).unwrap();
+        let (parsed, _pm): (SetOntology<_>, PrefixMapping) = crate::io::omn::reader::read(
+            BufReader::new(&buf[..]),
+            crate::io::ParserConfiguration::new(&b),
+        )
+        .unwrap();
 
         let orig: std::collections::BTreeSet<_> = o.iter().map(|ac| ac.component.clone()).collect();
         let got: std::collections::BTreeSet<_> =
@@ -2972,8 +2987,11 @@ mod tests {
         let mut buf = Vec::<u8>::new();
         write(&mut buf, &amo, Some(&pm)).unwrap();
 
-        let (parsed, _): (SetOntology<_>, PrefixMapping) =
-            crate::io::omn::reader::read_with_build(BufReader::new(&buf[..]), &b).unwrap();
+        let (parsed, _): (SetOntology<_>, PrefixMapping) = crate::io::omn::reader::read(
+            BufReader::new(&buf[..]),
+            crate::io::ParserConfiguration::new(&b),
+        )
+        .unwrap();
 
         let orig: std::collections::BTreeSet<_> = o.iter().map(|ac| ac.component.clone()).collect();
         let got: std::collections::BTreeSet<_> =
@@ -3036,8 +3054,11 @@ mod tests {
         let amo: TestOnt = o.clone().into();
         let mut buf = Vec::<u8>::new();
         write(&mut buf, &amo, Some(&pm)).unwrap();
-        let (parsed, _): (SetOntology<_>, PrefixMapping) =
-            crate::io::omn::reader::read_with_build(BufReader::new(&buf[..]), &b).unwrap();
+        let (parsed, _): (SetOntology<_>, PrefixMapping) = crate::io::omn::reader::read(
+            BufReader::new(&buf[..]),
+            crate::io::ParserConfiguration::new(&b),
+        )
+        .unwrap();
 
         let orig: std::collections::BTreeSet<_> = o.iter().map(|ac| ac.component.clone()).collect();
         let got: std::collections::BTreeSet<_> =
@@ -3109,8 +3130,11 @@ mod tests {
         let amo: TestOnt = o.clone().into();
         let mut buf = Vec::<u8>::new();
         write(&mut buf, &amo, Some(&pm)).unwrap();
-        let (parsed, _): (SetOntology<_>, PrefixMapping) =
-            crate::io::omn::reader::read_with_build(BufReader::new(&buf[..]), &b).unwrap();
+        let (parsed, _): (SetOntology<_>, PrefixMapping) = crate::io::omn::reader::read(
+            BufReader::new(&buf[..]),
+            crate::io::ParserConfiguration::new(&b),
+        )
+        .unwrap();
 
         let orig: std::collections::BTreeSet<_> = o.iter().map(|ac| ac.component.clone()).collect();
         let got: std::collections::BTreeSet<_> =
@@ -3153,8 +3177,11 @@ mod tests {
         let amo: TestOnt = o.clone().into();
         let mut buf = Vec::<u8>::new();
         write(&mut buf, &amo, Some(&pm)).unwrap();
-        let (parsed, _): (SetOntology<_>, PrefixMapping) =
-            crate::io::omn::reader::read_with_build(BufReader::new(&buf[..]), &b).unwrap();
+        let (parsed, _): (SetOntology<_>, PrefixMapping) = crate::io::omn::reader::read(
+            BufReader::new(&buf[..]),
+            crate::io::ParserConfiguration::new(&b),
+        )
+        .unwrap();
 
         let orig: std::collections::BTreeSet<_> = o.iter().map(|ac| ac.component.clone()).collect();
         let got: std::collections::BTreeSet<_> =
@@ -3226,8 +3253,11 @@ mod tests {
         let amo: TestOnt = o.clone().into();
         let mut buf = Vec::<u8>::new();
         write(&mut buf, &amo, Some(&pm)).unwrap();
-        let (parsed, _): (SetOntology<_>, PrefixMapping) =
-            crate::io::omn::reader::read_with_build(BufReader::new(&buf[..]), &b).unwrap();
+        let (parsed, _): (SetOntology<_>, PrefixMapping) = crate::io::omn::reader::read(
+            BufReader::new(&buf[..]),
+            crate::io::ParserConfiguration::new(&b),
+        )
+        .unwrap();
 
         let orig: std::collections::BTreeSet<_> = o.iter().map(|ac| ac.component.clone()).collect();
         let got: std::collections::BTreeSet<_> =
@@ -3261,7 +3291,7 @@ mod tests {
 
     #[test]
     fn reads_property_chain_round_trip() {
-        use crate::io::omn::{read_with_build, write};
+        use crate::io::omn::{read, write};
         use crate::ontology::component_mapped::ComponentMappedOntology;
         use crate::ontology::set::SetOntology;
         use std::io::BufReader;
@@ -3289,8 +3319,11 @@ mod tests {
         let amo: TestOnt = o.clone().into();
         let mut buf = Vec::<u8>::new();
         write(&mut buf, &amo, Some(&pm)).unwrap();
-        let (parsed, _): (SetOntology<_>, PrefixMapping) =
-            read_with_build(BufReader::new(&buf[..]), &b).unwrap();
+        let (parsed, _): (SetOntology<_>, PrefixMapping) = read(
+            BufReader::new(&buf[..]),
+            crate::io::ParserConfiguration::new(&b),
+        )
+        .unwrap();
         let orig: std::collections::BTreeSet<_> = o.iter().map(|ac| ac.component.clone()).collect();
         let got: std::collections::BTreeSet<_> =
             parsed.iter().map(|ac| ac.component.clone()).collect();
@@ -3304,7 +3337,7 @@ mod tests {
 
     #[test]
     fn reads_haskey_round_trip() {
-        use crate::io::omn::{read_with_build, write};
+        use crate::io::omn::{read, write};
         use crate::ontology::component_mapped::ComponentMappedOntology;
         use crate::ontology::set::SetOntology;
         use std::io::BufReader;
@@ -3331,8 +3364,11 @@ mod tests {
         let amo: TestOnt = o.clone().into();
         let mut buf = Vec::<u8>::new();
         write(&mut buf, &amo, Some(&pm)).unwrap();
-        let (parsed, _): (SetOntology<_>, PrefixMapping) =
-            read_with_build(BufReader::new(&buf[..]), &b).unwrap();
+        let (parsed, _): (SetOntology<_>, PrefixMapping) = read(
+            BufReader::new(&buf[..]),
+            crate::io::ParserConfiguration::new(&b),
+        )
+        .unwrap();
         let orig: std::collections::BTreeSet<_> = o.iter().map(|ac| ac.component.clone()).collect();
         let got: std::collections::BTreeSet<_> =
             parsed.iter().map(|ac| ac.component.clone()).collect();
@@ -3346,7 +3382,7 @@ mod tests {
 
     #[test]
     fn reads_import_round_trip() {
-        use crate::io::omn::{read_with_build, write};
+        use crate::io::omn::{read, write};
         use crate::ontology::component_mapped::ComponentMappedOntology;
         use crate::ontology::set::SetOntology;
         use std::io::BufReader;
@@ -3367,8 +3403,11 @@ mod tests {
         let mut buf = Vec::<u8>::new();
         write(&mut buf, &amo, Some(&pm)).unwrap();
 
-        let (parsed, _): (SetOntology<_>, PrefixMapping) =
-            read_with_build(BufReader::new(&buf[..]), &b).unwrap();
+        let (parsed, _): (SetOntology<_>, PrefixMapping) = read(
+            BufReader::new(&buf[..]),
+            crate::io::ParserConfiguration::new(&b),
+        )
+        .unwrap();
         let orig: std::collections::BTreeSet<_> = o.iter().map(|ac| ac.component.clone()).collect();
         let got: std::collections::BTreeSet<_> =
             parsed.iter().map(|ac| ac.component.clone()).collect();
@@ -3382,7 +3421,7 @@ mod tests {
 
     #[test]
     fn whole_ontology_round_trips() {
-        use crate::io::omn::{read_with_build, write};
+        use crate::io::omn::{read, write};
         use crate::model::RcAnnotatedComponent;
         use crate::ontology::component_mapped::ComponentMappedOntology;
         use crate::ontology::set::SetOntology;
@@ -3470,8 +3509,11 @@ mod tests {
         let mut buf = Vec::<u8>::new();
         write(&mut buf, &amo, Some(&pm)).unwrap();
 
-        let (parsed, parsed_pm): (SetOntology<_>, PrefixMapping) =
-            read_with_build(BufReader::new(&buf[..]), &b).unwrap();
+        let (parsed, parsed_pm): (SetOntology<_>, PrefixMapping) = read(
+            BufReader::new(&buf[..]),
+            crate::io::ParserConfiguration::new(&b),
+        )
+        .unwrap();
 
         let orig: std::collections::BTreeSet<_> = o.iter().map(|ac| ac.component.clone()).collect();
         let got: std::collections::BTreeSet<_> =
@@ -3491,7 +3533,7 @@ mod tests {
 
     #[test]
     fn reads_axiom_annotations_round_trip() {
-        use crate::io::omn::{read_with_build, write};
+        use crate::io::omn::{read, write};
         use crate::ontology::component_mapped::ComponentMappedOntology;
         use crate::ontology::set::SetOntology;
         use std::collections::BTreeSet;
@@ -3554,8 +3596,11 @@ mod tests {
         let amo: TestOnt = o.clone().into();
         let mut buf = Vec::<u8>::new();
         write(&mut buf, &amo, Some(&pm)).unwrap();
-        let (parsed, _): (SetOntology<_>, PrefixMapping) =
-            read_with_build(BufReader::new(&buf[..]), &b).unwrap();
+        let (parsed, _): (SetOntology<_>, PrefixMapping) = read(
+            BufReader::new(&buf[..]),
+            crate::io::ParserConfiguration::new(&b),
+        )
+        .unwrap();
         // compare FULL AnnotatedComponents (component + ann), not just components
         let orig: BTreeSet<_> = o.iter().cloned().collect();
         let got: BTreeSet<_> = parsed.iter().cloned().collect();
@@ -3569,7 +3614,7 @@ mod tests {
 
     #[test]
     fn reads_entity_and_ontology_annotations_round_trip() {
-        use crate::io::omn::{read_with_build, write};
+        use crate::io::omn::{read, write};
         use crate::ontology::component_mapped::ComponentMappedOntology;
         use crate::ontology::set::SetOntology;
         use std::io::BufReader;
@@ -3621,8 +3666,11 @@ mod tests {
         let amo: TestOnt = o.clone().into();
         let mut buf = Vec::<u8>::new();
         write(&mut buf, &amo, Some(&pm)).unwrap();
-        let (parsed, _): (SetOntology<_>, PrefixMapping) =
-            read_with_build(BufReader::new(&buf[..]), &b).unwrap();
+        let (parsed, _): (SetOntology<_>, PrefixMapping) = read(
+            BufReader::new(&buf[..]),
+            crate::io::ParserConfiguration::new(&b),
+        )
+        .unwrap();
         let orig: std::collections::BTreeSet<_> = o.iter().map(|ac| ac.component.clone()).collect();
         let got: std::collections::BTreeSet<_> =
             parsed.iter().map(|ac| ac.component.clone()).collect();
@@ -3636,7 +3684,7 @@ mod tests {
 
     #[test]
     fn reads_general_axioms_block() {
-        use crate::io::omn::reader::read_with_build;
+        use crate::io::omn::reader::read;
         use crate::ontology::set::SetOntology;
         use std::io::BufReader;
         let b = Build::new_rc();
@@ -3646,8 +3694,11 @@ mod tests {
         let doc = "Prefix: ex: <http://ex/>\n\nClass: ex:A\n\n# General axioms\n\
                    SubClassOf(ObjectIntersectionOf(<http://ex/A> <http://ex/B>) <http://ex/C>)\n\
                    AnnotationAssertion(<http://ex/p> <http://ex/CHEBI_1> \"tyramine\")\n";
-        let (parsed, _): (SetOntology<_>, PrefixMapping) =
-            read_with_build(BufReader::new(doc.as_bytes()), &b).unwrap();
+        let (parsed, _): (SetOntology<_>, PrefixMapping) = read(
+            BufReader::new(doc.as_bytes()),
+            crate::io::ParserConfiguration::new(&b),
+        )
+        .unwrap();
 
         // the frame parsed
         assert!(
@@ -3685,7 +3736,7 @@ mod tests {
 
     #[test]
     fn general_axioms_block_parse_failure_is_skipped_not_errored() {
-        use crate::io::omn::reader::read_with_build;
+        use crate::io::omn::reader::read;
         use crate::ontology::set::SetOntology;
         use std::io::BufReader;
         let b = Build::new_rc();
@@ -3694,9 +3745,11 @@ mod tests {
         // hard error — so the rest of the document still reads.
         let doc = "Prefix: ex: <http://ex/>\n\nClass: ex:A\n\n# General axioms\n\
                    NotARealAxiom(@@@ broken)\n";
-        let (parsed, _): (SetOntology<_>, PrefixMapping) =
-            read_with_build(BufReader::new(doc.as_bytes()), &b)
-                .expect("unparseable general-axioms block must not error the read");
+        let (parsed, _): (SetOntology<_>, PrefixMapping) = read(
+            BufReader::new(doc.as_bytes()),
+            crate::io::ParserConfiguration::new(&b),
+        )
+        .expect("unparseable general-axioms block must not error the read");
         assert!(
             parsed
                 .iter()
@@ -3713,15 +3766,17 @@ mod tests {
     /// with NO DeclareClass for the complex subject.
     #[test]
     fn reads_complex_lhs_class_frame_as_gci_subclassof() {
-        use crate::io::omn::reader::read_with_build;
+        use crate::io::omn::reader::read;
         use crate::ontology::set::SetOntology;
         use std::io::BufReader;
 
         let b = Build::new_rc();
         let src = "Prefix: : <http://e/>\nClass: :r some :C\n    SubClassOf: :D\n";
-        let (ont, _): (SetOntology<_>, PrefixMapping) =
-            read_with_build(BufReader::new(src.as_bytes()), &b)
-                .unwrap_or_else(|e| panic!("complex-LHS GCI should parse: {e}"));
+        let (ont, _): (SetOntology<_>, PrefixMapping) = read(
+            BufReader::new(src.as_bytes()),
+            crate::io::ParserConfiguration::new(&b),
+        )
+        .unwrap_or_else(|e| panic!("complex-LHS GCI should parse: {e}"));
 
         // Must contain SubClassOf(ObjectSomeValuesFrom(:r, :C), :D).
         let expected_sub = ClassExpression::ObjectSomeValuesFrom {
@@ -3763,15 +3818,17 @@ mod tests {
     /// `DeclareClass(:A)` + `SubClassOf(:A, :B)` (behaviour must be byte-identical).
     #[test]
     fn reads_atomic_class_frame_unchanged() {
-        use crate::io::omn::reader::read_with_build;
+        use crate::io::omn::reader::read;
         use crate::ontology::set::SetOntology;
         use std::io::BufReader;
 
         let b = Build::new_rc();
         let src = "Prefix: : <http://e/>\nClass: :A\n    SubClassOf: :B\n";
-        let (ont, _): (SetOntology<_>, PrefixMapping) =
-            read_with_build(BufReader::new(src.as_bytes()), &b)
-                .unwrap_or_else(|e| panic!("atomic class frame should parse: {e}"));
+        let (ont, _): (SetOntology<_>, PrefixMapping) = read(
+            BufReader::new(src.as_bytes()),
+            crate::io::ParserConfiguration::new(&b),
+        )
+        .unwrap_or_else(|e| panic!("atomic class frame should parse: {e}"));
 
         // Must have DeclareClass(:A).
         let has_declare = ont.iter().any(|ac| {
@@ -3794,15 +3851,17 @@ mod tests {
     /// Complex-LHS `EquivalentTo:` parsed as `EquivalentClasses(complexCE, X)`.
     #[test]
     fn reads_complex_lhs_class_frame_equivalentto() {
-        use crate::io::omn::reader::read_with_build;
+        use crate::io::omn::reader::read;
         use crate::ontology::set::SetOntology;
         use std::io::BufReader;
 
         let b = Build::new_rc();
         let src = "Prefix: : <http://e/>\nClass: :r some :C\n    EquivalentTo: :D\n";
-        let (ont, _): (SetOntology<_>, PrefixMapping) =
-            read_with_build(BufReader::new(src.as_bytes()), &b)
-                .unwrap_or_else(|e| panic!("complex-LHS EquivalentTo should parse: {e}"));
+        let (ont, _): (SetOntology<_>, PrefixMapping) = read(
+            BufReader::new(src.as_bytes()),
+            crate::io::ParserConfiguration::new(&b),
+        )
+        .unwrap_or_else(|e| panic!("complex-LHS EquivalentTo should parse: {e}"));
 
         let some_rc = ClassExpression::ObjectSomeValuesFrom {
             ope: ObjectPropertyExpression::ObjectProperty(b.object_property("http://e/r")),
@@ -3828,7 +3887,7 @@ mod tests {
 
     #[test]
     fn whole_ontology_with_extras_round_trips() {
-        use crate::io::omn::{read_with_build, write};
+        use crate::io::omn::{read, write};
         use crate::model::RcAnnotatedComponent;
         use crate::ontology::component_mapped::ComponentMappedOntology;
         use crate::ontology::set::SetOntology;
@@ -3926,8 +3985,11 @@ mod tests {
         let mut buf = Vec::<u8>::new();
         write(&mut buf, &amo, Some(&pm)).unwrap();
 
-        let (parsed, _): (SetOntology<_>, PrefixMapping) =
-            read_with_build(BufReader::new(&buf[..]), &b).unwrap();
+        let (parsed, _): (SetOntology<_>, PrefixMapping) = read(
+            BufReader::new(&buf[..]),
+            crate::io::ParserConfiguration::new(&b),
+        )
+        .unwrap();
 
         // compare full AnnotatedComponents (component + ann)
         let orig: BTreeSet<_> = o.iter().cloned().collect();
@@ -3945,7 +4007,7 @@ mod tests {
         // With a DEFAULT (empty) prefix the writer emits bare local names
         // (`Class: Ancestor`, not `Class: :Ancestor`); the reader must accept
         // them via the `SimpleIRI` production for the round-trip to hold.
-        use crate::io::omn::{read_with_build, write};
+        use crate::io::omn::{read, write};
         use crate::ontology::component_mapped::ComponentMappedOntology;
         use crate::ontology::set::SetOntology;
         use std::io::BufReader;
@@ -3979,8 +4041,11 @@ mod tests {
             "expected a bare default-prefix name, got:\n{s}"
         );
 
-        let (parsed, _): (SetOntology<_>, PrefixMapping) =
-            read_with_build(BufReader::new(&buf[..]), &b).unwrap();
+        let (parsed, _): (SetOntology<_>, PrefixMapping) = read(
+            BufReader::new(&buf[..]),
+            crate::io::ParserConfiguration::new(&b),
+        )
+        .unwrap();
         let orig: BTreeSet<_> = o.iter().map(|ac| ac.component.clone()).collect();
         let got: BTreeSet<_> = parsed.iter().map(|ac| ac.component.clone()).collect();
         assert_eq!(orig, got, "bare-name round-trip failed\n{s}");
@@ -3988,7 +4053,7 @@ mod tests {
 
     #[test]
     fn reads_version_iri_round_trip() {
-        use crate::io::omn::{read_with_build, write};
+        use crate::io::omn::{read, write};
         use crate::ontology::component_mapped::ComponentMappedOntology;
         use crate::ontology::set::SetOntology;
         use std::io::BufReader;
@@ -4014,8 +4079,11 @@ mod tests {
                 || s.contains("Ontology: ex:o <http://ex/o/1.0.0>"),
             "expected version IRI in header, got:\n{s}"
         );
-        let (parsed, _): (SetOntology<_>, PrefixMapping) =
-            read_with_build(BufReader::new(&buf[..]), &b).unwrap();
+        let (parsed, _): (SetOntology<_>, PrefixMapping) = read(
+            BufReader::new(&buf[..]),
+            crate::io::ParserConfiguration::new(&b),
+        )
+        .unwrap();
         let orig: std::collections::BTreeSet<_> = o.iter().map(|ac| ac.component.clone()).collect();
         let got: std::collections::BTreeSet<_> =
             parsed.iter().map(|ac| ac.component.clone()).collect();
@@ -4026,7 +4094,7 @@ mod tests {
     fn ontology_iri_then_import_no_version_iri() {
         // Guard: the optional VersionIRI must NOT greedily grab a following Import.
         // `Ontology: ex:o` (no version) then `Import: ex:i` must round-trip the Import.
-        use crate::io::omn::{read_with_build, write};
+        use crate::io::omn::{read, write};
         use crate::ontology::component_mapped::ComponentMappedOntology;
         use crate::ontology::set::SetOntology;
         use std::io::BufReader;
@@ -4047,8 +4115,11 @@ mod tests {
         let amo: TestOnt = o.clone().into();
         let mut buf = Vec::<u8>::new();
         write(&mut buf, &amo, Some(&pm)).unwrap();
-        let (parsed, _): (SetOntology<_>, PrefixMapping) =
-            read_with_build(BufReader::new(&buf[..]), &b).unwrap();
+        let (parsed, _): (SetOntology<_>, PrefixMapping) = read(
+            BufReader::new(&buf[..]),
+            crate::io::ParserConfiguration::new(&b),
+        )
+        .unwrap();
         let orig: std::collections::BTreeSet<_> = o.iter().map(|ac| ac.component.clone()).collect();
         let got: std::collections::BTreeSet<_> =
             parsed.iter().map(|ac| ac.component.clone()).collect();
@@ -4062,7 +4133,7 @@ mod tests {
 
     #[test]
     fn reads_compound_data_ranges_round_trip() {
-        use crate::io::omn::{read_with_build, write};
+        use crate::io::omn::{read, write};
         use crate::ontology::component_mapped::ComponentMappedOntology;
         use crate::ontology::set::SetOntology;
         use crate::vocab::Facet;
@@ -4133,8 +4204,11 @@ mod tests {
             s.contains('('),
             "expected parenthesized data range in writer output:\n{s}"
         );
-        let (parsed, _): (SetOntology<_>, PrefixMapping) =
-            read_with_build(BufReader::new(&buf[..]), &b).unwrap();
+        let (parsed, _): (SetOntology<_>, PrefixMapping) = read(
+            BufReader::new(&buf[..]),
+            crate::io::ParserConfiguration::new(&b),
+        )
+        .unwrap();
         let orig: std::collections::BTreeSet<_> = o.iter().map(|ac| ac.component.clone()).collect();
         let got: std::collections::BTreeSet<_> =
             parsed.iter().map(|ac| ac.component.clone()).collect();
@@ -4148,7 +4222,7 @@ mod tests {
 
     #[test]
     fn reads_datatype_definition_round_trip() {
-        use crate::io::omn::{read_with_build, write};
+        use crate::io::omn::{read, write};
         use crate::ontology::component_mapped::ComponentMappedOntology;
         use crate::ontology::set::SetOntology;
         use crate::vocab::Facet;
@@ -4185,8 +4259,11 @@ mod tests {
             s.contains("Datatype: ex:SmallInt") && s.contains("EquivalentTo:"),
             "got:\n{s}"
         );
-        let (parsed, _): (SetOntology<_>, PrefixMapping) =
-            read_with_build(BufReader::new(&buf[..]), &b).unwrap();
+        let (parsed, _): (SetOntology<_>, PrefixMapping) = read(
+            BufReader::new(&buf[..]),
+            crate::io::ParserConfiguration::new(&b),
+        )
+        .unwrap();
         let orig: std::collections::BTreeSet<_> = o.iter().map(|ac| ac.component.clone()).collect();
         let got: std::collections::BTreeSet<_> =
             parsed.iter().map(|ac| ac.component.clone()).collect();
@@ -4195,7 +4272,7 @@ mod tests {
 
     #[test]
     fn reads_misc_disjoint_complex_round_trip() {
-        use crate::io::omn::{read_with_build, write};
+        use crate::io::omn::{read, write};
         use crate::ontology::component_mapped::ComponentMappedOntology;
         use crate::ontology::set::SetOntology;
         use std::io::BufReader;
@@ -4231,8 +4308,11 @@ mod tests {
             s.contains("DisjointClasses:"),
             "expected misc DisjointClasses:, got:\n{s}"
         );
-        let (parsed, _): (SetOntology<_>, PrefixMapping) =
-            read_with_build(BufReader::new(&buf[..]), &b).unwrap();
+        let (parsed, _): (SetOntology<_>, PrefixMapping) = read(
+            BufReader::new(&buf[..]),
+            crate::io::ParserConfiguration::new(&b),
+        )
+        .unwrap();
         let orig: std::collections::BTreeSet<_> = o.iter().map(|ac| ac.component.clone()).collect();
         let got: std::collections::BTreeSet<_> =
             parsed.iter().map(|ac| ac.component.clone()).collect();
@@ -4245,7 +4325,7 @@ mod tests {
         // `DisjointProperties:`, NOT the functional `EquivalentObjectProperties:`):
         // a complex (inverse) first member has no frame subject, so these route to
         // the top-level Misc section.
-        use crate::io::omn::{read_with_build, write};
+        use crate::io::omn::{read, write};
         use crate::ontology::component_mapped::ComponentMappedOntology;
         use crate::ontology::set::SetOntology;
         use std::io::BufReader;
@@ -4278,8 +4358,11 @@ mod tests {
             s.contains("EquivalentProperties:") && s.contains("DisjointProperties:"),
             "expected native Misc property keywords, got:\n{s}"
         );
-        let (parsed, _): (SetOntology<_>, PrefixMapping) =
-            read_with_build(BufReader::new(&buf[..]), &b).unwrap();
+        let (parsed, _): (SetOntology<_>, PrefixMapping) = read(
+            BufReader::new(&buf[..]),
+            crate::io::ParserConfiguration::new(&b),
+        )
+        .unwrap();
         let orig: std::collections::BTreeSet<_> = o.iter().map(|ac| ac.component.clone()).collect();
         let got: std::collections::BTreeSet<_> =
             parsed.iter().map(|ac| ac.component.clone()).collect();
@@ -4296,7 +4379,7 @@ mod tests {
     /// greediness, so the post-comma form is the only one that exercises it.
     #[test]
     fn reads_mid_list_per_item_annotation() {
-        use crate::io::omn::reader::read_with_build;
+        use crate::io::omn::reader::read;
         use crate::ontology::set::SetOntology;
         use std::collections::BTreeSet;
         use std::io::BufReader;
@@ -4308,8 +4391,11 @@ mod tests {
                    Ontology:\n\
                    Class: :A\n    \
                    SubClassOf: :B, Annotations: ex:p \"x\" :C\n";
-        let (parsed, _): (SetOntology<_>, PrefixMapping) =
-            read_with_build(BufReader::new(doc.as_bytes()), &b).unwrap();
+        let (parsed, _): (SetOntology<_>, PrefixMapping) = read(
+            BufReader::new(doc.as_bytes()),
+            crate::io::ParserConfiguration::new(&b),
+        )
+        .unwrap();
 
         let plain = AnnotatedComponent {
             component: Component::SubClassOf(SubClassOf {
@@ -4351,7 +4437,7 @@ mod tests {
     /// every item via `merge_ann(&ann, item_ann)`.)
     #[test]
     fn leading_annotation_binds_first_item_only() {
-        use crate::io::omn::reader::read_with_build;
+        use crate::io::omn::reader::read;
         use crate::ontology::set::SetOntology;
         use std::collections::BTreeSet;
         use std::io::BufReader;
@@ -4361,8 +4447,11 @@ mod tests {
                    Ontology:\n\
                    Class: :A\n    \
                    SubClassOf: Annotations: ex:note \"x\" :B, :C\n";
-        let (parsed, _): (SetOntology<_>, PrefixMapping) =
-            read_with_build(BufReader::new(doc.as_bytes()), &b).unwrap();
+        let (parsed, _): (SetOntology<_>, PrefixMapping) = read(
+            BufReader::new(doc.as_bytes()),
+            crate::io::ParserConfiguration::new(&b),
+        )
+        .unwrap();
 
         // First item (A ⊑ B) carries the leading annotation.
         let mut ann = BTreeSet::new();
@@ -4417,7 +4506,7 @@ mod tests {
     /// annotation binds the FIRST list item only, not the whole comma-list.
     #[test]
     fn leading_annotation_on_characteristics_and_facts_binds_first_only() {
-        use crate::io::omn::reader::read_with_build;
+        use crate::io::omn::reader::read;
         use crate::ontology::set::SetOntology;
         use std::collections::BTreeSet;
         use std::io::BufReader;
@@ -4429,8 +4518,11 @@ mod tests {
                    Characteristics: Annotations: ex:note \"n\" Functional, Transitive\n\
                    Individual: ex:a\n    \
                    Facts: Annotations: ex:note \"f\" ex:r ex:b, ex:r ex:c\n";
-        let (parsed, _): (SetOntology<_>, PrefixMapping) =
-            read_with_build(BufReader::new(doc.as_bytes()), &b).unwrap();
+        let (parsed, _): (SetOntology<_>, PrefixMapping) = read(
+            BufReader::new(doc.as_bytes()),
+            crate::io::ParserConfiguration::new(&b),
+        )
+        .unwrap();
         let got: BTreeSet<_> = parsed.iter().cloned().collect();
 
         let mk_ann = |val: &str| {
@@ -4520,7 +4612,7 @@ mod tests {
     /// that the helper-signature refactor does not break the common case.
     #[test]
     fn reads_per_item_annotated_list_round_trip() {
-        use crate::io::omn::{read_with_build, write};
+        use crate::io::omn::{read, write};
         use crate::ontology::component_mapped::ComponentMappedOntology;
         use crate::ontology::set::SetOntology;
         use std::collections::BTreeSet;
@@ -4558,8 +4650,11 @@ mod tests {
         let amo: TestOnt = o.clone().into();
         let mut buf = Vec::<u8>::new();
         write(&mut buf, &amo, Some(&pm)).unwrap();
-        let (parsed, _): (SetOntology<_>, PrefixMapping) =
-            read_with_build(BufReader::new(&buf[..]), &b).unwrap();
+        let (parsed, _): (SetOntology<_>, PrefixMapping) = read(
+            BufReader::new(&buf[..]),
+            crate::io::ParserConfiguration::new(&b),
+        )
+        .unwrap();
         let orig: BTreeSet<_> = o.iter().cloned().collect();
         let got: BTreeSet<_> = parsed.iter().cloned().collect();
         assert_eq!(
@@ -4572,14 +4667,17 @@ mod tests {
 
     #[test]
     fn parses_swrl_rule() {
-        use crate::io::omn::read_with_build;
+        use crate::io::omn::read;
         use crate::ontology::set::SetOntology;
         use std::io::BufReader;
         let b = Build::new_rc();
         // Body and head are object-property atoms; `o:r(?x, ?y) -> o:s(?x, ?y)`.
         let doc = "Prefix: o: <http://ex/>\nOntology: <http://ex/o>\nRule: \n    o:r(?<http://ex/x>, ?<http://ex/y>) -> o:s(?<http://ex/x>, ?<http://ex/y>)\n";
-        let (parsed, _): (SetOntology<_>, PrefixMapping) =
-            read_with_build(BufReader::new(doc.as_bytes()), &b).unwrap();
+        let (parsed, _): (SetOntology<_>, PrefixMapping) = read(
+            BufReader::new(doc.as_bytes()),
+            crate::io::ParserConfiguration::new(&b),
+        )
+        .unwrap();
         let rule = parsed
             .iter()
             .find_map(|ac| match &ac.component {
@@ -4597,7 +4695,7 @@ mod tests {
     fn parses_swrl_atom_kinds() {
         // Disambiguation: data-property (literal 2nd arg), built-in (literal
         // 1st arg), datarange (datatype pred + literal), same-individual.
-        use crate::io::omn::read_with_build;
+        use crate::io::omn::read;
         use crate::ontology::set::SetOntology;
         use std::io::BufReader;
         let b = Build::new_rc();
@@ -4607,8 +4705,11 @@ mod tests {
             "Rule: o:d(?<http://ex/x>, \"v\") -> <http://ex/bi>(\"a\", \"b\")\n",
             "Rule: xsd:integer(\"1\") -> SameAs(o:I, o:J)\n",
         );
-        let (parsed, _): (SetOntology<_>, PrefixMapping) =
-            read_with_build(BufReader::new(doc.as_bytes()), &b).unwrap();
+        let (parsed, _): (SetOntology<_>, PrefixMapping) = read(
+            BufReader::new(doc.as_bytes()),
+            crate::io::ParserConfiguration::new(&b),
+        )
+        .unwrap();
         let mut seen = std::collections::BTreeSet::new();
         for ac in parsed.iter() {
             if let Component::Rule(r) = &ac.component {
@@ -4633,14 +4734,17 @@ mod tests {
 
     #[test]
     fn parses_inverse_object_property_frame_subject() {
-        use crate::io::omn::read_with_build;
+        use crate::io::omn::read;
         use crate::ontology::set::SetOntology;
         use std::io::BufReader;
         let b = Build::new_rc();
         // `ObjectProperty: inverse(o:r) Characteristics: Transitive`
         let doc = "Prefix: o: <http://ex/>\nOntology: <http://ex/o>\nObjectProperty: o:r\nObjectProperty: inverse (o:r)\n    Characteristics: Transitive\n";
-        let (parsed, _): (SetOntology<_>, PrefixMapping) =
-            read_with_build(BufReader::new(doc.as_bytes()), &b).unwrap();
+        let (parsed, _): (SetOntology<_>, PrefixMapping) = read(
+            BufReader::new(doc.as_bytes()),
+            crate::io::ParserConfiguration::new(&b),
+        )
+        .unwrap();
         let t = parsed
             .iter()
             .find_map(|ac| match &ac.component {
@@ -4656,14 +4760,17 @@ mod tests {
 
     #[test]
     fn parses_annotated_class_declaration() {
-        use crate::io::omn::read_with_build;
+        use crate::io::omn::read;
         use crate::ontology::set::SetOntology;
         use std::io::BufReader;
         let b = Build::new_rc();
         // Leading `Annotations:` before the subject annotates the Declaration.
         let doc = "Prefix: o: <http://ex/>\nPrefix: rdfs: <http://www.w3.org/2000/01/rdf-schema#>\nOntology: <http://ex/o>\nClass: \n    Annotations: rdfs:comment \"c\"\n  o:C\n";
-        let (parsed, _): (SetOntology<_>, PrefixMapping) =
-            read_with_build(BufReader::new(doc.as_bytes()), &b).unwrap();
+        let (parsed, _): (SetOntology<_>, PrefixMapping) = read(
+            BufReader::new(doc.as_bytes()),
+            crate::io::ParserConfiguration::new(&b),
+        )
+        .unwrap();
         let decl_ann = parsed
             .iter()
             .find_map(|ac| match &ac.component {
@@ -4676,14 +4783,17 @@ mod tests {
 
     #[test]
     fn parses_nested_annotation_on_annotation() {
-        use crate::io::omn::read_with_build;
+        use crate::io::omn::read;
         use crate::ontology::set::SetOntology;
         use std::io::BufReader;
         let b = Build::new_rc();
         // `Annotations: Annotations: ex:meta "m" ex:label "L"` — the inner annotates the outer.
         let doc = "Prefix: ex: <http://ex/>\nOntology: <http://ex/o>\nClass: ex:A\n    Annotations: Annotations: ex:meta \"m\" ex:label \"L\"\n";
-        let (parsed, _): (SetOntology<_>, PrefixMapping) =
-            read_with_build(BufReader::new(doc.as_bytes()), &b).unwrap();
+        let (parsed, _): (SetOntology<_>, PrefixMapping) = read(
+            BufReader::new(doc.as_bytes()),
+            crate::io::ParserConfiguration::new(&b),
+        )
+        .unwrap();
         // The outer `ex:label "L"` annotation on ex:A is recovered as an
         // AnnotationAssertion, and its nested `ex:meta "m"` annotation annotates
         // that assertion *axiom* — so it lands in the component's axiom
@@ -4713,14 +4823,17 @@ mod tests {
 
     #[test]
     fn nested_annotation_on_annotation_round_trips() {
-        use crate::io::omn::{read_with_build, write};
+        use crate::io::omn::{read, write};
         use crate::ontology::component_mapped::ComponentMappedOntology;
         use crate::ontology::set::SetOntology;
         use std::io::BufReader;
         let b = Build::new_rc();
         let doc = "Prefix: ex: <http://ex/>\nOntology: <http://ex/o>\nClass: ex:A\n    Annotations: Annotations: ex:meta \"m\" ex:label \"L\"\n";
-        let (parsed, pm): (SetOntology<_>, PrefixMapping) =
-            read_with_build(BufReader::new(doc.as_bytes()), &b).unwrap();
+        let (parsed, pm): (SetOntology<_>, PrefixMapping) = read(
+            BufReader::new(doc.as_bytes()),
+            crate::io::ParserConfiguration::new(&b),
+        )
+        .unwrap();
 
         // Write it back out: the nested form must appear as `Annotations: Annotations:`.
         let amo: ComponentMappedOntology<std::rc::Rc<str>, AnnotatedComponent<std::rc::Rc<str>>> =
@@ -4734,8 +4847,11 @@ mod tests {
         );
 
         // And it survives a full re-read (semantic round-trip).
-        let (reparsed, _): (SetOntology<_>, PrefixMapping) =
-            read_with_build(BufReader::new(s.as_bytes()), &b).unwrap();
+        let (reparsed, _): (SetOntology<_>, PrefixMapping) = read(
+            BufReader::new(s.as_bytes()),
+            crate::io::ParserConfiguration::new(&b),
+        )
+        .unwrap();
         // The nested annotation is an annotation on the AnnotationAssertion
         // *axiom* (`ac.ann`), so it must survive there across the round-trip.
         let axiom_ann_len = |o: &SetOntology<_>| {
@@ -4756,7 +4872,7 @@ mod tests {
 
     #[test]
     fn reads_anonymous_individuals_round_trip() {
-        use crate::io::omn::{read_with_build, write};
+        use crate::io::omn::{read, write};
         use crate::ontology::component_mapped::ComponentMappedOntology;
         use crate::ontology::set::SetOntology;
         use std::io::BufReader;
@@ -4783,8 +4899,11 @@ mod tests {
             s.contains("_:genid1"),
             "expected blank-node rendering, got:\n{s}"
         );
-        let (parsed, _): (SetOntology<_>, PrefixMapping) =
-            read_with_build(BufReader::new(&buf[..]), &b).unwrap();
+        let (parsed, _): (SetOntology<_>, PrefixMapping) = read(
+            BufReader::new(&buf[..]),
+            crate::io::ParserConfiguration::new(&b),
+        )
+        .unwrap();
         let orig: std::collections::BTreeSet<_> = o.iter().map(|ac| ac.component.clone()).collect();
         let got: std::collections::BTreeSet<_> =
             parsed.iter().map(|ac| ac.component.clone()).collect();
@@ -4805,7 +4924,7 @@ mod tests {
         // spot-checks — this locks the general-§2.5 capability in one test.
         // The component count + variant shapes were verified empirically with the
         // `omnread`/`omndump` harness before baking them in.
-        use crate::io::omn::read_with_build;
+        use crate::io::omn::read;
         use crate::ontology::set::SetOntology;
         use std::io::BufReader;
         let b = Build::new_rc();
@@ -4833,8 +4952,11 @@ Individual: ex:a
 
 DisjointClasses: ex:r some ex:A, ex:r some ex:B
 ";
-        let (parsed, _): (SetOntology<_>, PrefixMapping) =
-            read_with_build(BufReader::new(doc.as_bytes()), &b).unwrap();
+        let (parsed, _): (SetOntology<_>, PrefixMapping) = read(
+            BufReader::new(doc.as_bytes()),
+            crate::io::ParserConfiguration::new(&b),
+        )
+        .unwrap();
         let comps: Vec<_> = parsed.iter().map(|ac| ac.component.clone()).collect();
         assert_eq!(comps.len(), 13, "unexpected component count\n{comps:#?}");
 

@@ -1,0 +1,23 @@
+<?xml version="1.0"?>
+<!--
+  Minimal subset of the 2008 "Multiscale Skin Physiology Ontology"
+  (SPO_lightweight_merged.owl), extracted by hand from a copy retrieved via
+  the horned-roundtrip corpus (corpus/SPO.gz). Reproduces issue #256: the
+  ro:has_grain object property is typed with the legacy OWL 1.1 working-draft
+  term owl:AntisymmetricProperty (renamed owl:AsymmetricProperty in the OWL 2
+  REC), alongside the still-current owl:IrreflexiveProperty. Node names and
+  the triples themselves are copied verbatim from SPO.gz; only the
+  surrounding unrelated axioms have been cut.
+-->
+<rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:ro="http://purl.org/obo/owl/ro#"
+    xml:base="http://www.semanticweb.org/ontologies/2008/8/SPO_lightweight_merged.owl">
+  <owl:Ontology rdf:about=""/>
+
+  <owl:ObjectProperty rdf:about="http://purl.org/obo/owl/ro#has_grain">
+    <rdf:type rdf:resource="http://www.w3.org/2002/07/owl#AntisymmetricProperty"/>
+    <rdf:type rdf:resource="http://www.w3.org/2002/07/owl#IrreflexiveProperty"/>
+  </owl:ObjectProperty>
+</rdf:RDF>

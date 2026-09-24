@@ -1,0 +1,10 @@
+format-version: 1.2
+data-version: http://www.example.com/viri
+ontology: http://www.example.com/iri
+
+[Term]
+id: A
+equivalent_to: B
+equivalent_to: C
+equivalent_to: D
+

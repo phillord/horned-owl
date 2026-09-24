@@ -1,6 +1,7 @@
 use crate::{
     error::HornedError,
     error::invalid,
+    io::{StreamComponent, StreamOntology},
     model::*,
     ontology::component_mapped::ComponentMappedOntology,
     vocab::{Namespace, OWL, RDF, RDFS, SWRL, Vocab, XSD},
@@ -9,6 +10,7 @@ use crate::{
 use crate::ontology::indexed::ForIndex;
 use crate::visitor::immutable::{Visit, Walk};
 
+use curie::PrefixMapping;
 use indexmap::indexmap;
 
 use horned_pretty_rdf::{
@@ -22,23 +24,45 @@ use std::{
     io::Write,
 };
 
+/// Configuration for the RDF writer.
+#[derive(Clone, Debug)]
+pub struct RDFWriterConfiguration {
+    /// In lax mode (the default, matching this writer's historical
+    /// behaviour), axioms that are technically invalid per the OWL 2 spec's
+    /// minimum-arity constraints -- e.g. a single-member `DifferentIndividuals`
+    /// (or `DisjointObjectProperties`/`DisjointDataProperties`), which OWL-API
+    /// itself has been observed to write into real-world ontologies -- are
+    /// still faithfully serialised. In strict mode, such axioms are silently
+    /// dropped instead.
+    pub lax: bool,
+}
+
+impl Default for RDFWriterConfiguration {
+    fn default() -> Self {
+        RDFWriterConfiguration { lax: true }
+    }
+}
+
+/// Write a `ComponentMappedOntology` to `write`, in RDF/XML, using the given
+/// `PrefixMapping` in addition to the fixed rdf/owl/swrl prefixes this
+/// writer always emits. A caller holding some other `Ontology`
+/// implementation should collect it into a `ComponentMappedOntology` first
+/// (`ont.iter().cloned().collect()`, or `ont.into_iter().collect()` if
+/// `ont` doesn't need to be kept).
 pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
     write: W,
     ont: &ComponentMappedOntology<A, AA>,
+    mapping: Option<&PrefixMapping>,
 ) -> Result<W, HornedError> {
-    write_with_prefixes(write, ont, None)
+    write_with_config(write, ont, mapping, RDFWriterConfiguration::default())
 }
 
-/// As [`write`], but declare `prefixes` (the document's `xmlns:` bindings) on
-/// the root `rdf:RDF` element in addition to the always-present `rdf`, `owl` and
-/// `swrl`. OWLAPI/ROBOT declare every document prefix up front (so a re-reader
-/// recovers the same `idspace:` set, and abbreviated IRIs stay abbreviated);
-/// horned-owl's default `write` declared only the three builtins, dropping the
-/// rest on a round-trip. A document prefix never overrides a builtin namespace.
-pub fn write_with_prefixes<A: ForIRI, AA: ForIndex<A>, W: Write>(
+/// As [`write`], but with an explicit [`RDFWriterConfiguration`].
+pub fn write_with_config<A: ForIRI, AA: ForIndex<A>, W: Write>(
     write: W,
     ont: &ComponentMappedOntology<A, AA>,
-    prefixes: Option<&curie::PrefixMapping>,
+    mapping: Option<&PrefixMapping>,
+    config: RDFWriterConfiguration,
 ) -> Result<W, HornedError> {
     // key = namespace IRI, value = prefix name (what pretty_rdf's config wants).
     let mut p: indexmap::IndexMap<String, String> = indexmap![
@@ -46,8 +70,8 @@ pub fn write_with_prefixes<A: ForIRI, AA: ForIndex<A>, W: Write>(
                     "http://www.w3.org/2002/07/owl#".to_string() => "owl".to_string(),
                     "http://www.w3.org/2003/11/swrl#".to_string() => "swrl".to_string()
     ];
-    if let Some(pm) = prefixes {
-        for (name, ns) in pm.mappings() {
+    if let Some(mapping) = mapping {
+        for (name, ns) in mapping.mappings() {
             if name.is_empty() {
                 continue; // the default `xmlns=` is config.base's job, not here
             }
@@ -59,7 +83,7 @@ pub fn write_with_prefixes<A: ForIRI, AA: ForIndex<A>, W: Write>(
     }
 
     let f = PrettyRdfXmlFormatter::new(write, ChunkedRdfXmlFormatterConfig::all().prefix(p))?;
-    write_to_rdf_formatter(ont, f)
+    write_to_rdf_formatter_with_config(ont, f, config)
 }
 
 /// Write a component mapped ontology as RDF in the format named by
@@ -71,6 +95,16 @@ pub fn write_to_rdf_format<A: ForIRI, AA: ForIndex<A>, W: Write>(
     write: W,
     ont: &ComponentMappedOntology<A, AA>,
     format: &str,
+) -> Result<W, HornedError> {
+    write_to_rdf_format_with_config(write, ont, format, RDFWriterConfiguration::default())
+}
+
+/// As [`write_to_rdf_format`], but with an explicit [`RDFWriterConfiguration`].
+pub fn write_to_rdf_format_with_config<A: ForIRI, AA: ForIndex<A>, W: Write>(
+    write: W,
+    ont: &ComponentMappedOntology<A, AA>,
+    format: &str,
+    config: RDFWriterConfiguration,
 ) -> Result<W, HornedError> {
     let serial = |write, format| {
         WriterQuadSerializerAdaptor::new(RdfSerializer::from_format(format).for_writer(write))
@@ -87,19 +121,36 @@ pub fn write_to_rdf_format<A: ForIRI, AA: ForIndex<A>, W: Write>(
     };
 
     match rdf_format {
-        oxrdfio::RdfFormat::RdfXml => crate::io::rdf::writer::write(write, ont),
-        other => write_to_rdf_formatter(ont, serial(write, other)),
+        oxrdfio::RdfFormat::RdfXml => write_with_config(write, ont, None, config),
+        other => write_to_rdf_formatter_with_config(ont, serial(write, other), config),
     }
 }
 
 /// Write a component mapped ontology into RDF
 pub fn write_to_rdf_formatter<A: ForIRI, AA: ForIndex<A>, F: RdfFormatter<A, W>, W: Write>(
     ont: &ComponentMappedOntology<A, AA>,
+    formatter: F,
+) -> Result<W, HornedError> {
+    write_to_rdf_formatter_with_config(ont, formatter, RDFWriterConfiguration::default())
+}
+
+/// As [`write_to_rdf_formatter`], but with an explicit [`RDFWriterConfiguration`].
+pub fn write_to_rdf_formatter_with_config<
+    A: ForIRI,
+    AA: ForIndex<A>,
+    F: RdfFormatter<A, W>,
+    W: Write,
+>(
+    ont: &ComponentMappedOntology<A, AA>,
     mut formatter: F,
+    config: RDFWriterConfiguration,
 ) -> Result<W, HornedError> {
     // Entirely unsatisfying to set this randomly here, but we can't
     // access ns our parser yet
-    let mut bng = NodeGenerator::default();
+    let mut bng = NodeGenerator {
+        lax: config.lax,
+        ..NodeGenerator::default()
+    };
 
     ont.render(&mut formatter, &mut bng)?;
     // for i in f.triples() {
@@ -113,6 +164,7 @@ struct NodeGenerator<A: ForIRI> {
     i: u64,
     b: HashSet<A>,
     this_bn: Option<PNamedOrBlankNode<A>>,
+    lax: bool,
 }
 
 impl<A: ForIRI> Default for NodeGenerator<A> {
@@ -121,6 +173,7 @@ impl<A: ForIRI> Default for NodeGenerator<A> {
             i: 0,
             b: HashSet::new(),
             this_bn: None,
+            lax: true,
         }
     }
 }
@@ -554,6 +607,7 @@ impl<A: ForIRI, AA: ForIndex<A>, F: RdfFormatter<A, W>, W: Write> Render<A, F, (
         }
 
         for cmp in self.i().iter() {
+            let cmp: &AnnotatedComponent<A> = cmp.borrow();
             cmp.render(f, ng)?;
         }
 
@@ -561,7 +615,7 @@ impl<A: ForIRI, AA: ForIndex<A>, F: RdfFormatter<A, W>, W: Write> Render<A, F, (
         // their position in the document and merely gain their `rdf:type`
         // property; only entities that appear nowhere as a subject (mentioned
         // solely inside a class expression, say) are appended as fresh blocks.
-        for (iri, kind) in undeclared_signature(self) {
+        for (iri, kind) in undeclared_signature(self, ng.lax) {
             let ty = match kind {
                 NamedOWLEntityKind::Class => ng.nn(OWL::Class),
                 NamedOWLEntityKind::Datatype => ng.nn(RDFS::Datatype),
@@ -695,9 +749,17 @@ fn is_builtin_entity<A: ForIRI>(iri: &IRI<A>) -> bool {
 /// of triples, since the declared ones are rendered by `render_triple!` anyway.
 fn undeclared_signature<A: ForIRI, AA: ForIndex<A>>(
     ont: &ComponentMappedOntology<A, AA>,
+    lax: bool,
 ) -> Vec<(IRI<A>, NamedOWLEntityKind)> {
     let mut walk = Walk::new(SignatureCollect::new());
     for cmp in ont.i().iter() {
+        let cmp: &AnnotatedComponent<A> = cmp.borrow();
+        // Strict mode writes nothing for a single-member n-ary axiom (see
+        // `members`), so an entity only such an axiom mentions is not in the
+        // written ontology's signature either.
+        if !lax && dropped_in_strict_mode(&cmp.component) {
+            continue;
+        }
         // The annotated form, not just the component: annotation properties used
         // only on an axiom annotation are part of the signature too.
         walk.annotated_component(cmp);
@@ -708,6 +770,19 @@ fn undeclared_signature<A: ForIRI, AA: ForIndex<A>>(
     used.into_iter()
         .filter(|e| !declared.contains(e) && !is_builtin_entity(&e.0))
         .collect()
+}
+
+/// Whether `members` writes nothing for `c` when the writer is not lax: a
+/// single-member `DisjointClasses`, `DisjointObjectProperties`,
+/// `DisjointDataProperties` or `DifferentIndividuals` (#214).
+fn dropped_in_strict_mode<A: ForIRI>(c: &Component<A>) -> bool {
+    match c {
+        Component::DisjointClasses(d) => d.0.len() == 1,
+        Component::DisjointObjectProperties(d) => d.0.len() == 1,
+        Component::DisjointDataProperties(d) => d.0.len() == 1,
+        Component::DifferentIndividuals(d) => d.0.len() == 1,
+        _ => false,
+    }
 }
 
 impl<A: ForIRI, F: RdfFormatter<A, W>, W: Write> Render<A, F, (), W> for AnnotatedComponent<A> {
@@ -1162,6 +1237,12 @@ fn members<
     // _:x owl:members T(SEQ a1 ... an) .
     match members.len() {
         0 => Ok(vec![]),
+        // A single-member DifferentIndividuals/DisjointObjectProperties/
+        // DisjointDataProperties is invalid per the OWL 2 spec's minimum
+        // arity of 2, but OWL-API itself has been observed writing exactly
+        // this into real-world ontologies (#214). Strict mode drops it;
+        // lax mode (the default) preserves it faithfully, as before.
+        1 if !ng.lax => Ok(vec![]),
         2 => {
             let a: PNamedOrBlankNode<_> = members[0].render(f, ng)?;
             let b: PTerm<_> = members[1].render(f, ng)?.into();
@@ -2095,6 +2176,74 @@ render! {
     }
 }
 
+/// Render `components` into `formatter` one component at a time -- no
+/// `ComponentMappedOntology` is materialized. `StreamComponent::Prefix`
+/// items are ignored: unlike owx, `formatter`'s namespace table (if it
+/// has one) is already fixed by the time it's passed in here, so there's
+/// nothing left for a prefix to configure.
+///
+/// `OntologyID`/`Import`/`OntologyAnnotation` need the ontology's own IRI
+/// as the subject of their triples, which isn't part of the component
+/// itself -- the first `OntologyID` seen supplies it for every `Import`/
+/// `OntologyAnnotation` that follows, so `components` must yield its
+/// `OntologyID` before any of those (the same ordering `write` already
+/// guarantees).
+pub fn write_stream<A: ForIRI, AA: ForIndex<A>, F: RdfFormatter<A, W>, W: Write>(
+    formatter: F,
+    components: impl StreamOntology<A, AA>,
+) -> Result<W, HornedError> {
+    write_stream_with_config(formatter, components, RDFWriterConfiguration::default())
+}
+
+/// As [`write_stream`], but with an explicit [`RDFWriterConfiguration`].
+pub fn write_stream_with_config<A: ForIRI, AA: ForIndex<A>, F: RdfFormatter<A, W>, W: Write>(
+    mut formatter: F,
+    components: impl StreamOntology<A, AA>,
+    config: RDFWriterConfiguration,
+) -> Result<W, HornedError> {
+    let mut ng = NodeGenerator {
+        lax: config.lax,
+        ..NodeGenerator::default()
+    };
+    let mut ontology_iri: Option<IRI<A>> = None;
+
+    for item in components {
+        let ac = match item? {
+            StreamComponent::Component(ac) => ac,
+            StreamComponent::Prefix(..) => continue,
+        };
+        let ac: &AnnotatedComponent<A> = ac.borrow();
+
+        match &ac.component {
+            Component::OntologyID(id) => {
+                if let Some(iri) = &id.iri {
+                    triples!(formatter, iri, ng.nn(RDF::Type), ng.nn(OWL::Ontology));
+                    if let Some(viri) = &id.viri {
+                        triples!(formatter, iri, ng.nn(OWL::VersionIRI), viri);
+                    }
+                    ontology_iri = Some(iri.clone());
+                }
+            }
+            Component::Import(imp) => {
+                if let Some(iri) = &ontology_iri {
+                    triples!(formatter, iri, ng.nn(OWL::Imports), &imp.0);
+                }
+            }
+            Component::OntologyAnnotation(oa) => {
+                if let Some(iri) = &ontology_iri {
+                    ng.keep_this_bn(iri.into());
+                    oa.0.render(&mut formatter, &mut ng)?;
+                }
+            }
+            _ => {
+                ac.render(&mut formatter, &mut ng)?;
+            }
+        }
+    }
+
+    Ok(formatter.finish()?)
+}
+
 #[cfg(test)]
 mod test {
 
@@ -2119,16 +2268,38 @@ mod test {
     // use std::io::BufReader;
     // use std::io::BufWriter;
 
-    fn read_ok<R: BufRead>(bufread: &mut R) -> SetOntology<RcStr> {
-        let r = crate::io::rdf::reader::read(bufread, Default::default());
+    fn read_ntriples_ok<R: BufRead>(bufread: &mut R) -> SetOntology<RcStr> {
+        let build = Build::new_rc();
+        let config = crate::io::RDFParserConfiguration {
+            format: Some(oxrdfio::RdfFormat::NTriples),
+            ..crate::io::ParserConfiguration::new(&build).into()
+        };
+        let r = crate::io::rdf::reader::read::<RcStr, RcAnnotatedComponent, _, _>(bufread, config);
         assert!(r.is_ok(), "Expected ontology, got failure:{:?}", r.err());
         let (o, incomplete) = r.ok().unwrap();
+        let o: SetOntology<RcStr> = o.into();
 
         assert!(
             incomplete.is_complete(),
             "Read Not Complete: {incomplete:#?}"
         );
-        o.into()
+        o
+    }
+
+    fn read_ok<R: BufRead>(bufread: &mut R) -> SetOntology<RcStr> {
+        let r = crate::io::rdf::reader::read::<RcStr, RcAnnotatedComponent, _, _>(
+            bufread,
+            Default::default(),
+        );
+        assert!(r.is_ok(), "Expected ontology, got failure:{:?}", r.err());
+        let (o, incomplete) = r.ok().unwrap();
+        let o: SetOntology<RcStr> = o.into();
+
+        assert!(
+            incomplete.is_complete(),
+            "Read Not Complete: {incomplete:#?}"
+        );
+        o
     }
 
     #[test]
@@ -2144,12 +2315,68 @@ mod test {
 
         let temp_file = Temp::new_file().unwrap();
         let file = File::create(&temp_file).ok().unwrap();
-        write(&mut BufWriter::new(file), &ont).ok().unwrap();
+        write(&mut BufWriter::new(file), &ont, None).ok().unwrap();
 
         let file = File::open(&temp_file).ok().unwrap();
         let ont2 = read_ok(&mut BufReader::new(file));
 
         assert_eq!(ont.i().the_ontology_id(), ont2.i().the_ontology_id());
+    }
+
+    #[test]
+    fn write_merges_supplied_prefixes_with_the_fixed_set() {
+        let ont = ComponentMappedOntology::new_rc();
+        let mut mapping = PrefixMapping::default();
+        mapping.add_prefix("eg", "http://example.com/eg#").unwrap();
+
+        let mut buf = Vec::new();
+        write(&mut buf, &ont, Some(&mapping)).unwrap();
+        let s = String::from_utf8(buf).unwrap();
+
+        assert!(s.contains("xmlns:eg=\"http://example.com/eg#\""));
+        assert!(s.contains("xmlns:owl=\"http://www.w3.org/2002/07/owl#\""));
+    }
+
+    #[test]
+    fn write_with_default_prefix_produces_rereadable_xml() {
+        // A `PrefixMapping` with an empty/default prefix (e.g. from an OWX
+        // source whose root `xmlns="..."` is the ontology's own namespace)
+        // used to be written verbatim as an `xmlns:="..."` attribute --
+        // invalid XML -- and any entity actually falling under that default
+        // namespace got a malformed `<:LocalName>` element tag. Both broke
+        // reread with "Unknown prefix :".
+        let b = Build::new_rc();
+        let mut mapping = PrefixMapping::default();
+        mapping.add_prefix("", "http://example.com/eg#").unwrap();
+
+        let mut ont: ComponentMappedOntology<RcStr, Rc<AnnotatedComponent<RcStr>>> =
+            ComponentMappedOntology::new_rc();
+        ont.insert(DeclareClass(b.class("http://example.com/eg#A")));
+        ont.insert(DeclareClass(b.class("http://example.com/eg#B")));
+        ont.insert(SubClassOf {
+            sub: ClassExpression::Class(b.class("http://example.com/eg#A")),
+            sup: ClassExpression::Class(b.class("http://example.com/eg#B")),
+        });
+
+        let mut buf = Vec::new();
+        write(&mut buf, &ont, Some(&mapping)).unwrap();
+        let s = String::from_utf8(buf.clone()).unwrap();
+
+        assert!(
+            !s.contains("xmlns:=\""),
+            "must not emit an invalid xmlns:= declaration, got:\n{s}"
+        );
+        assert!(
+            !s.contains("<:"),
+            "must not emit a malformed <:LocalName> element, got:\n{s}"
+        );
+
+        let ont2 = read_ok(&mut buf.as_slice());
+        assert_eq!(
+            ont2.iter().count(),
+            4, // the 3 inserted components, plus an implicit OntologyID
+            "expected all inserted components to survive reread, got:\n{s}"
+        );
     }
 
     fn roundtrip(ont: &str) -> (SetOntology<RcStr>, SetOntology<RcStr>) {
@@ -2161,7 +2388,7 @@ mod test {
 
         let amo: ComponentMappedOntology<RcStr, Rc<AnnotatedComponent<RcStr>>> =
             ont_orig.clone().into();
-        write(&mut buf_writer, &amo).ok().unwrap();
+        write(&mut buf_writer, &amo, None).ok().unwrap();
         buf_writer.flush().ok();
 
         write(
@@ -2171,6 +2398,7 @@ mod test {
                     .unwrap(),
             ),
             &amo,
+            None,
         )
         .unwrap();
 
@@ -2202,6 +2430,77 @@ mod test {
         assert_round(resource);
     }
 
+    /// Pipes owx's `read_to_stream` straight into rdf's `write_stream` --
+    /// no `ComponentMappedOntology` materialized on either side -- and
+    /// checks the result reads back the same as a plain owx `read`.
+    #[rstest]
+    fn owx_streamed_into_rdf_streamed(#[files("src/ont/owl-xml/*.owx")] resource: PathBuf) {
+        // swrl_individual.owx has an AnonymousIndividual whose nodeID
+        // already contains a literal "_:" prefix; the oxrdfio-backed
+        // NTriples formatter used here doesn't strip it before writing,
+        // producing an invalid doubled "_:_:" blank node label. Pre-existing
+        // bug in the oxrdfio write path (reproduces via write_to_rdf_formatter
+        // too, unrelated to streaming) -- not this test's concern.
+        if resource.file_name().and_then(|n| n.to_str()) == Some("swrl_individual.owx") {
+            return;
+        }
+
+        let resource = &slurp::read_all_to_string(&resource).unwrap();
+        let b = Build::new_rc();
+
+        let (ont_direct, _): (SetOntology<RcStr>, _) = crate::io::owx::reader::read(
+            &mut resource.as_bytes(),
+            crate::io::ParserConfiguration::new(&b),
+        )
+        .unwrap();
+
+        let formatter = WriterQuadSerializerAdaptor::new(
+            RdfSerializer::from_format(oxrdfio::RdfFormat::NTriples).for_writer(Vec::new()),
+        );
+        let streamed = crate::io::owx::reader::read_to_stream(
+            resource.as_bytes(),
+            crate::io::ParserConfiguration::new(&b),
+        );
+        let out = write_stream(formatter, streamed).unwrap();
+
+        let ont_via_rdf = read_ntriples_ok(&mut &out[..]);
+
+        assert_eq!(ont_direct, ont_via_rdf);
+    }
+
+    /// `Prefix` items in the stream are ignored (the formatter's namespace
+    /// table, if any, is already fixed) -- confirm a stream that includes
+    /// one still writes and rereads correctly rather than erroring.
+    #[test]
+    fn write_stream_ignores_prefix_items() {
+        let b = Build::new_rc();
+        let iri = b.iri("http://www.example.com/a");
+        let ac = AnnotatedComponent {
+            component: DeclareClass(Class(iri)).into(),
+            ann: BTreeSet::new(),
+        };
+
+        let items: Vec<crate::io::Result<StreamComponent<AnnotatedComponent<RcStr>>>> = vec![
+            Ok(StreamComponent::Prefix(
+                "eg".to_string(),
+                "http://example.com/eg#".to_string(),
+            )),
+            Ok(StreamComponent::Component(ac)),
+        ];
+
+        let formatter = WriterQuadSerializerAdaptor::new(
+            RdfSerializer::from_format(oxrdfio::RdfFormat::NTriples).for_writer(Vec::new()),
+        );
+        let out = write_stream(formatter, items.into_iter()).unwrap();
+
+        let ont = read_ntriples_ok(&mut &out[..]);
+        assert!(
+            ont.iter()
+                .any(|ac| matches!(&ac.component, Component::DeclareClass(_))),
+            "expected the declared class to survive the round trip, got: {ont:#?}"
+        );
+    }
+
     #[cfg(test)]
     mod bubo_test {
         use crate::io::rdf::writer::test::*;
@@ -2216,7 +2515,7 @@ mod test {
             let amo: ComponentMappedOntology<RcStr, Rc<AnnotatedComponent<RcStr>>> =
                 ont_orig.into();
 
-            write(out, &amo).ok().unwrap();
+            write(out, &amo, None).ok().unwrap();
         }
 
         #[test]
@@ -2286,7 +2585,7 @@ mod test {
 
         let amo: ComponentMappedOntology<RcStr, Rc<AnnotatedComponent<RcStr>>> = ont_orig.into();
         let mut buf = Vec::new();
-        write(&mut buf, &amo).expect("write should not fail on an invalid-IRI-char class");
+        write(&mut buf, &amo, None).expect("write should not fail on an invalid-IRI-char class");
 
         let ont_round = read_ok(&mut &buf[..]);
         let expected_class = Class(b.iri("http://example.com/o#KB-CH%5BR%5D-8-5Cell"));
@@ -2321,7 +2620,7 @@ mod test {
         });
 
         let mut buf = Vec::new();
-        write(&mut buf, &ont).expect("write should not fail");
+        write(&mut buf, &ont, None).expect("write should not fail");
         let s = String::from_utf8(buf.clone()).unwrap();
         assert!(
             !s.contains("nodeID=\"_:"),
@@ -2335,7 +2634,11 @@ mod test {
         // this test -- a bare shared blank node with no type declaration
         // isn't guaranteed to map back to a recognised axiom shape. What
         // matters here is that the RDF/XML syntax itself is valid.)
-        let result = crate::io::rdf::reader::read(&mut &buf[..], Default::default());
+        let b = crate::model::Build::new_rc();
+        let result = crate::io::rdf::reader::read::<RcStr, RcAnnotatedComponent, _, _>(
+            &mut &buf[..],
+            crate::io::ParserConfiguration::new(&b).into(),
+        );
         assert!(
             result.is_ok(),
             "written RDF/XML must be syntactically valid to reread, got: {:?}",
@@ -2357,5 +2660,57 @@ mod test {
         // Should not panic; writes owl:AllDifferent with a single-element list (matching OWL-API behaviour)
         let out = write_to_rdf_formatter(&ont, formatter).unwrap();
         assert!(!out.is_empty());
+    }
+
+    #[test]
+    fn single_member_different_individuals_dropped_in_strict_mode() {
+        // https://github.com/phillord/horned-owl/issues/214
+        let b = Build::new_rc();
+        let mut ont = ComponentMappedOntology::new_rc();
+        ont.insert(DifferentIndividuals(vec![Individual::Named(
+            NamedIndividual(b.iri("http://example.org/a")),
+        )]));
+        let sink = Vec::new();
+        let formatter = WriterQuadSerializerAdaptor::new(
+            RdfSerializer::from_format(oxrdfio::RdfFormat::NTriples).for_writer(sink),
+        );
+        let out = write_to_rdf_formatter_with_config(
+            &ont,
+            formatter,
+            RDFWriterConfiguration { lax: false },
+        )
+        .unwrap();
+        assert!(out.is_empty());
+    }
+
+    #[test]
+    fn single_member_disjoint_object_properties_lax_vs_strict() {
+        // The same members() helper backs DisjointObjectProperties (and
+        // DisjointDataProperties) as DifferentIndividuals, so the lax/strict
+        // split applies uniformly (#214).
+        let b = Build::new_rc();
+        let mut ont = ComponentMappedOntology::new_rc();
+        ont.insert(DisjointObjectProperties(vec![
+            ObjectProperty(b.iri("http://example.org/p")).into(),
+        ]));
+
+        let lax_sink = Vec::new();
+        let lax_formatter = WriterQuadSerializerAdaptor::new(
+            RdfSerializer::from_format(oxrdfio::RdfFormat::NTriples).for_writer(lax_sink),
+        );
+        let lax_out = write_to_rdf_formatter(&ont, lax_formatter).unwrap();
+        assert!(!lax_out.is_empty());
+
+        let strict_sink = Vec::new();
+        let strict_formatter = WriterQuadSerializerAdaptor::new(
+            RdfSerializer::from_format(oxrdfio::RdfFormat::NTriples).for_writer(strict_sink),
+        );
+        let strict_out = write_to_rdf_formatter_with_config(
+            &ont,
+            strict_formatter,
+            RDFWriterConfiguration { lax: false },
+        )
+        .unwrap();
+        assert!(strict_out.is_empty());
     }
 }

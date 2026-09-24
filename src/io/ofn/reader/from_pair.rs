@@ -1369,6 +1369,30 @@ mod tests {
         pretty_assertions::assert_eq!(actual, expected);
     }
 
+    /// Every bubo-generated `.ofn` fixture must describe the same ontology as
+    /// its `owl-xml/` sibling -- OWL/XML is the less-ambiguous oracle here,
+    /// matching `io::rdf::reader::test::compare_to_xml` / the OBO equivalent.
+    #[rstest]
+    fn compare_to_xml(#[files("src/ont/owl-functional/*.ofn")] resource: PathBuf) {
+        let stem = resource.file_stem().unwrap().to_str().unwrap();
+        let ofn_doc = slurp::read_all_to_string(&resource).unwrap();
+        let xml_doc = slurp::read_all_to_string(format!("src/ont/owl-xml/{stem}.owx")).unwrap();
+
+        let ofn_ont: SetOntology<crate::model::RcStr> =
+            crate::io::ofn::reader::read(&mut ofn_doc.as_bytes(), Default::default())
+                .unwrap()
+                .0;
+        let xml_ont: SetOntology<crate::model::RcStr> =
+            crate::io::owx::reader::test::read_ok(&mut xml_doc.as_bytes())
+                .0
+                .into();
+
+        crate::normalize::normalize_and_assert_eq(
+            ofn_ont.iter().cloned().collect(),
+            xml_ont.iter().cloned().collect(),
+        );
+    }
+
     #[rstest]
     fn from_pair_resource(#[files("src/ont/owl-functional/*.ofn")] resource: PathBuf) {
         let text = &slurp::read_all_to_string(&resource).unwrap();
@@ -1393,8 +1417,11 @@ mod tests {
             .replace("owl-functional", "owl-xml")
             .replace(".ofn", ".owx");
         let owx = &slurp::read_all_to_string(path).unwrap();
-        let expected =
-            crate::io::owx::reader::read(&mut Cursor::new(&owx), Default::default()).unwrap();
+        let expected = crate::io::owx::reader::read(
+            &mut Cursor::new(&owx),
+            crate::io::ParserConfiguration::new(&build),
+        )
+        .unwrap();
 
         // pretty_assertions::assert_eq!(item.1, expected.1);
         pretty_assertions::assert_eq!(item.0.0, expected.0);

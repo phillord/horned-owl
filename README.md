@@ -1,7 +1,7 @@
 Horned OWL
 ==========
 
-[![Crates.io](https://img.shields.io/crates/v/horned-owl?style=flat-square)](https://crates.io/crates/horned-owl) [![docs.rs](https://img.shields.io/docsrs/horned-owl?style=flat-square)](https://docs.rs/horned-owl/latest/horned_owl/)
+[![Crates.io](https://img.shields.io/crates/v/horned-owl?style=flat-square)](https://crates.io/crates/horned-owl) [![docs.rs](https://img.shields.io/docsrs/horned-owl?style=flat-square)](https://docs.rs/horned-owl/latest/horned_owl/) [![DOI](https://img.shields.io/badge/DOI-10.5281%2Fzenodo.21873196-blue?style=flat-square)](https://doi.org/10.5281/zenodo.21873196)
 
 *Horned-OWL* is a library for processing and manipulating documents written using the [Web Ontology Language (OWL)](https://en.wikipedia.org/wiki/Web_Ontology_Language).
 
@@ -16,6 +16,7 @@ with millions of terms.
   + [x] OWL/XML
   + [x] Functional Syntax
   + [x] Manchester Syntax
+  + [x] OBO Flat File
 + A [visitor](https://en.wikipedia.org/wiki/Visitor_pattern) trait to navigate and manipulate ontologies
 + Traits and implementations for several types of ontologies
 
@@ -34,7 +35,7 @@ To use the latest version of the library in your Rust project, add the following
 ```toml
 [dependencies]
 ...
-horned-owl = "2.1.0"
+horned-owl = "4.0.0"
 ```
 
 

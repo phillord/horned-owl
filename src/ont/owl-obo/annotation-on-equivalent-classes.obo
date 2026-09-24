@@ -1,0 +1,16 @@
+format-version: 1.2
+data-version: http://www.example.com/viri
+ontology: http://www.example.com/iri
+
+[Term]
+id: A
+equivalent_to: D {comment="This is an annotation on an axiom"}
+
+[Term]
+id: B
+equivalent_to: D {comment="This is an annotation on an axiom"}
+
+[Term]
+id: C
+equivalent_to: D {comment="This is an annotation on an axiom"}
+

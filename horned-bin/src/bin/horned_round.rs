@@ -1,6 +1,3 @@
-extern crate clap;
-extern crate horned_owl;
-
 use clap::App;
 use clap::Arg;
 use clap::ArgMatches;
@@ -8,6 +5,7 @@ use clap::ArgMatches;
 use horned_bin::{config::parser_config, parse_path};
 
 use horned_owl::error::HornedError;
+use horned_owl::model::Build;
 use horned_owl::ontology::component_mapped::RcComponentMappedOntology;
 
 use std::{io::stdout, path::Path};
@@ -34,7 +32,8 @@ pub(crate) fn app(name: &str) -> App<'static> {
 pub(crate) fn matcher(matches: &ArgMatches) -> Result<(), HornedError> {
     let input = matches.value_of("INPUT").unwrap();
 
-    let res = parse_path(Path::new(input), parser_config(matches))?;
+    let b = Build::new();
+    let res = parse_path(Path::new(input), parser_config(matches, &b))?;
 
     match res {
         horned_owl::io::ParserOutput::OFNParser(so, pm) => {
@@ -47,14 +46,15 @@ pub(crate) fn matcher(matches: &ArgMatches) -> Result<(), HornedError> {
         }
         horned_owl::io::ParserOutput::OMNParser(so, pm) => {
             let amo: RcComponentMappedOntology = so.into();
-            horned_owl::io::omn::write(stdout(), &amo, Some(&pm))
+            horned_owl::io::omn::writer::write(stdout(), &amo, Some(&pm))
         }
         horned_owl::io::ParserOutput::OBOParser(so, pm) => {
             let amo: RcComponentMappedOntology = so.into();
-            horned_owl::io::obo::write(stdout(), &amo, Some(&pm))
+            horned_owl::io::obo::writer::write(stdout(), &amo, Some(&pm))
         }
         horned_owl::io::ParserOutput::RDFParser(rdfo, _ip) => {
-            horned_owl::io::rdf::writer::write(stdout(), &rdfo.into())
+            let amo: RcComponentMappedOntology = rdfo.into();
+            horned_owl::io::rdf::writer::write(stdout(), &amo, None)
         }
     }?;
     // Finish off nicely

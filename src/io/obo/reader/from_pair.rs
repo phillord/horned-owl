@@ -21,11 +21,11 @@ use super::lexer::Rule;
 use crate::error::HornedError;
 use crate::model::{
     AnnotatedComponent, Annotation, AnnotationAssertion, AnnotationSubject, AnnotationValue,
-    AsymmetricObjectProperty, Build, Class, ClassAssertion, ClassExpression, Component,
+    AsymmetricObjectProperty, Atom, Build, Class, ClassAssertion, ClassExpression, Component,
     DeclareAnnotationProperty, DeclareClass, DeclareDataProperty, DeclareNamedIndividual,
     DeclareObjectProperty, DisjointClasses, EquivalentClasses, ForIRI, FunctionalObjectProperty,
-    IRI, Import, Individual, InverseFunctionalObjectProperty, InverseObjectProperties, Literal,
-    NamedIndividual, ObjectProperty, ObjectPropertyAssertion, ObjectPropertyDomain,
+    IArgument, IRI, Import, Individual, InverseFunctionalObjectProperty, InverseObjectProperties,
+    Literal, NamedIndividual, ObjectProperty, ObjectPropertyAssertion, ObjectPropertyDomain,
     ObjectPropertyExpression, ObjectPropertyRange, OntologyAnnotation, OntologyID,
     ReflexiveObjectProperty, SubAnnotationPropertyOf, SubClassOf, SubObjectPropertyExpression,
     SubObjectPropertyOf, SymmetricObjectProperty, TransitiveObjectProperty,
@@ -35,6 +35,14 @@ use crate::model::{
 
 pub(crate) const OBO_BASE: &str = "http://purl.obolibrary.org/obo/";
 pub(crate) const OIO: &str = "http://www.geneontology.org/formats/oboInOwl#";
+
+/// Whether an OBO `ontology:` value is already an absolute `http(s)` IRI (used
+/// as-is) rather than a short id to expand under `OBO_BASE`. Testing a bare
+/// `http` prefix wrongly matched short ids like `httptest`/`httpfoo`, leaving a
+/// relative ontology IRI.
+fn is_http_iri(s: &str) -> bool {
+    s.starts_with("http://") || s.starts_with("https://")
+}
 const RDFS_LABEL: &str = "http://www.w3.org/2000/01/rdf-schema#label";
 const RDFS_COMMENT: &str = "http://www.w3.org/2000/01/rdf-schema#comment";
 const IAO_DEF: &str = "http://purl.obolibrary.org/obo/IAO_0000115";
@@ -188,6 +196,20 @@ fn lit_ann<A: ForIRI>(b: &Build<A>, prop: &str, value: &str) -> Annotation<A> {
     }
 }
 
+/// OBO has no syntax for a literal's language; the `name`/`comment`
+/// qualifier keys are read as English, matching what oboformat/ROBOT write
+/// on the way out to OWL.
+fn en_ann<A: ForIRI>(b: &Build<A>, prop: &str, value: &str) -> Annotation<A> {
+    Annotation {
+        ap: b.annotation_property(prop),
+        av: AnnotationValue::Literal(Literal::Language {
+            literal: value.to_string(),
+            lang: "en".to_string(),
+        }),
+        ann: Default::default(),
+    }
+}
+
 fn iri_ann<A: ForIRI>(b: &Build<A>, prop: &str, iri: IRI<A>) -> Annotation<A> {
     Annotation {
         ap: b.annotation_property(prop),
@@ -250,10 +272,11 @@ fn split_line(line: Pair<'_, Rule>) -> (Pair<'_, Rule>, Vec<(String, String)>) {
     (clause, quals)
 }
 
-/// Map a `{qualifier}` block to axiom annotations. A bare key lives in the
-/// oboInOwl namespace (`source` → `oboInOwl:source`), a CURIE key expands
-/// (matching ROBOT). Structural qualifiers (cardinality, gci_*) are consumed
-/// elsewhere and skipped here.
+/// Map a `{qualifier}` block to axiom annotations. `name`/`comment` are the
+/// builtin synonyms also used by the top-level name:/comment: tags, a bare
+/// key otherwise lives in the oboInOwl namespace (`source` →
+/// `oboInOwl:source`), and a CURIE key expands (matching ROBOT). Structural
+/// qualifiers (cardinality, gci_*) are consumed elsewhere and skipped here.
 fn qual_anns<A: ForIRI>(ctx: &Context<'_, A>, quals: &[(String, String)]) -> Vec<Annotation<A>> {
     let b = ctx.build;
     quals
@@ -270,13 +293,11 @@ fn qual_anns<A: ForIRI>(ctx: &Context<'_, A>, quals: &[(String, String)]) -> Vec
                     | "gci_filler"
             )
         })
-        .map(|(k, v)| {
-            let prop = if k.contains(':') {
-                ctx.expand(k).as_ref().to_string()
-            } else {
-                format!("{OIO}{k}")
-            };
-            lit_ann(b, &prop, v)
+        .map(|(k, v)| match k.as_str() {
+            "name" => en_ann(b, RDFS_LABEL, v),
+            "comment" => en_ann(b, RDFS_COMMENT, v),
+            _ if k.contains(':') => lit_ann(b, ctx.expand(k).as_ref(), v),
+            _ => lit_ann(b, &format!("{OIO}{k}"), v),
         })
         .collect()
 }
@@ -353,10 +374,13 @@ pub fn scan_header<A: ForIRI>(
                 default_ns = values.first().map(|v| v.as_str().trim().to_string());
             }
             Rule::OntologyTag => {
-                onto_ns = values
-                    .first()
-                    .map(|v| v.as_str().trim())
-                    .and_then(|o| (!o.starts_with("http")).then(|| format!("{OBO_BASE}{o}#")));
+                onto_ns = values.first().map(|v| v.as_str().trim()).map(|o| {
+                    if is_http_iri(o) {
+                        format!("{o}#")
+                    } else {
+                        format!("{OBO_BASE}{o}#")
+                    }
+                });
             }
             _ => {}
         }
@@ -371,6 +395,11 @@ pub fn header_to_components<A: ForIRI>(
 ) -> Result<Vec<AnnotatedComponent<A>>, HornedError> {
     let b = ctx.build;
     let mut out = Vec::new();
+    let mut onto_iri: Option<String> = None;
+    // data-version can precede or follow the ontology: clause, so its value
+    // is collected here and only turned into a versionIRI once both are
+    // known, rather than emitted eagerly like the other header clauses.
+    let mut data_version: Option<String> = None;
 
     for clause in header.into_inner() {
         if clause.as_rule() != Rule::HeaderClause {
@@ -381,16 +410,15 @@ pub fn header_to_components<A: ForIRI>(
         match tag {
             Rule::OntologyTag => {
                 if let Some(o) = val(0) {
-                    let iri = if o.starts_with("http") {
+                    onto_iri = Some(if is_http_iri(o) {
                         o.to_string()
                     } else {
                         format!("{OBO_BASE}{o}.owl")
-                    };
-                    out.push(component(OntologyID {
-                        iri: Some(b.iri(iri)),
-                        viri: None,
-                    }));
+                    });
                 }
+            }
+            Rule::DataVersionTag => {
+                data_version = val(0).map(String::from);
             }
             Rule::ImportTag => {
                 if let Some(i) = val(0) {
@@ -412,11 +440,51 @@ pub fn header_to_components<A: ForIRI>(
                     out.push(ont_ann(b, RDFS_COMMENT, &unescape(v)));
                 }
             }
-            // TODO(oracle): data-version → versionIRI; subsetdef / synonymtypedef
-            // declarations + SubAnnotationPropertyOf; treat-xrefs-* macros;
-            // property_value; date/saved-by/auto-generated-by.
+            // The OBO 1.4 escape hatch (spec 5.0.4): arbitrary OWL axioms in
+            // functional syntax, for anything that doesn't map onto a native
+            // OBO stanza. Parse failures are swallowed, not propagated -- this
+            // reader is lenient by design (see module doc), and a malformed
+            // escape-hatch payload shouldn't take down an otherwise-good read.
+            Rule::OwlAxiomsTag => {
+                if let Some(v) = val(0) {
+                    let text = unescape(v);
+                    let config = crate::io::ParserConfiguration::new(Build::<A>::new());
+                    if let Ok((embedded, _)) = crate::io::ofn::reader::read::<
+                        A,
+                        _,
+                        crate::ontology::set::SetOntology<A>,
+                        _,
+                    >(&mut text.as_bytes(), config)
+                    {
+                        // The wrapping `Ontology(...)` is always anonymous
+                        // here; its empty OntologyID is not real content.
+                        out.extend(
+                            embedded
+                                .into_iter()
+                                .filter(|ac| !matches!(ac.component, Component::OntologyID(_))),
+                        );
+                    }
+                }
+            }
+            // TODO(oracle): subsetdef / synonymtypedef declarations +
+            // SubAnnotationPropertyOf; treat-xrefs-* macros; property_value;
+            // date/saved-by/auto-generated-by.
             _ => {}
         }
+    }
+
+    if let Some(iri) = onto_iri {
+        let viri = data_version.map(|v| {
+            b.iri(if is_http_iri(&v) {
+                v
+            } else {
+                format!("{OBO_BASE}{v}")
+            })
+        });
+        out.push(component(OntologyID {
+            iri: Some(b.iri(iri)),
+            viri,
+        }));
     }
     Ok(out)
 }
@@ -1247,6 +1315,20 @@ fn collect_aps<A: ForIRI>(a: &Annotation<A>, out: &mut BTreeSet<IRI<A>>) {
     }
 }
 
+/// Same as `collect_aps`, but for annotations sourced from an axiom's own
+/// `{qualifier}` block (name/comment), or a header `remark:`: oboformat/ROBOT
+/// never declare rdfs:label/rdfs:comment there, unlike a `name:`/
+/// `property_value:` clause's own AnnotationAssertion, which does get one (see
+/// `instance_frame_golden`).
+fn collect_axiom_qualifier_aps<A: ForIRI>(a: &Annotation<A>, out: &mut BTreeSet<IRI<A>>) {
+    if a.ap.0.as_ref() != RDFS_LABEL && a.ap.0.as_ref() != RDFS_COMMENT {
+        out.insert(a.ap.0.clone());
+    }
+    for n in &a.ann {
+        collect_axiom_qualifier_aps(n, out);
+    }
+}
+
 /// oboformat/ROBOT attach a canonical `rdfs:label` to each standard oboInOwl /
 /// IAO annotation property that is actually used (e.g. `hasExactSynonym` →
 /// "has_exact_synonym"). Seeded from owlmake's `add_oboinowl_builtin_labels`.
@@ -1370,9 +1452,15 @@ fn referenced_declarations<A: ForIRI>(
         }
     }
 
+    fn iarg<A: ForIRI>(a: &IArgument<A>, inds: &mut BTreeSet<IRI<A>>) {
+        if let IArgument::Individual(i) = a {
+            named(i, inds);
+        }
+    }
+
     for ac in comps {
         for a in &ac.ann {
-            collect_aps(a, &mut aps);
+            collect_axiom_qualifier_aps(a, &mut aps);
         }
         match &ac.component {
             Component::DeclareClass(d) => {
@@ -1451,7 +1539,30 @@ fn referenced_declarations<A: ForIRI>(
             Component::FunctionalObjectProperty(a) => op_of(&a.0, &mut ops),
             Component::InverseFunctionalObjectProperty(a) => op_of(&a.0, &mut ops),
             Component::AnnotationAssertion(ax) => collect_aps(&ax.ann, &mut aps),
-            Component::OntologyAnnotation(oa) => collect_aps(&oa.0, &mut aps),
+            Component::OntologyAnnotation(oa) => collect_axiom_qualifier_aps(&oa.0, &mut aps),
+            Component::Rule(r) => {
+                for atom in r.head.iter().chain(r.body.iter()) {
+                    match atom {
+                        Atom::ClassAtom { pred, arg } => {
+                            walk_ce(pred, &mut classes, &mut ops);
+                            iarg(arg, &mut inds);
+                        }
+                        Atom::ObjectPropertyAtom { pred, args } => {
+                            op_of(pred, &mut ops);
+                            iarg(&args.0, &mut inds);
+                            iarg(&args.1, &mut inds);
+                        }
+                        Atom::DataPropertyAtom { pred, .. } => {
+                            dps.insert(pred.0.clone());
+                        }
+                        Atom::DifferentIndividualsAtom(a, b) | Atom::SameIndividualAtom(a, b) => {
+                            iarg(a, &mut inds);
+                            iarg(b, &mut inds);
+                        }
+                        Atom::BuiltInAtom { .. } | Atom::DataRangeAtom { .. } => {}
+                    }
+                }
+            }
             _ => {}
         }
     }

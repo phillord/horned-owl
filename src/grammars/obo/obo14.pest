@@ -162,7 +162,12 @@ NonCanonicalIdLocal = @{ NonWsChar* }
 
 // 2.6 Xref Lists
 
-Xref         = { Id ~ QuotedString? }
+// The `xref:` clause id gets the same relaxation for internal whitespace (e.g.
+// `KEGG COMPOUND:C00395`, `PubChem CID: 121304016`), but unlike a list item it
+// may contain `,` and `]`; it ends at a description, qualifier, comment or EOL.
+XrefClauseChar = ${ ("\\" ~ ANY) | (!"\"" ~ !"{" ~ !"!" ~ !NewlineChar ~ ANY) }
+XrefClauseId   = @{ XrefClauseChar+ }
+Xref           = { XrefClauseId ~ QuotedString? }
 
 // horned-owl local relaxation (issue #181): real dbxref ids contain internal
 // whitespace, parentheses, angle brackets and escaped punctuation (e.g.

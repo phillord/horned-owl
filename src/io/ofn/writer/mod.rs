@@ -5,6 +5,7 @@ use std::io::Write;
 use curie::PrefixMapping;
 
 use crate::error::HornedError;
+use crate::io::{StreamComponent, StreamOntology};
 use crate::model::Atom;
 use crate::model::DArgument;
 use crate::model::IArgument;
@@ -28,6 +29,7 @@ mod as_functional;
 pub use self::as_functional::set_write_xsd_string;
 pub use self::as_functional::AsFunctional;
 pub use self::as_functional::Functional;
+use self::as_functional::percent_encode_iri;
 
 const RDFS_LABEL: &str = "http://www.w3.org/2000/01/rdf-schema#label";
 
@@ -215,6 +217,7 @@ pub fn write_full<A: ForIRI, AA: ForIndex<A>, W: Write>(
     let mut label_lits: HashMap<String, Vec<(&Literal<A>, bool)>> = HashMap::new();
     let mut subject_ann_count: HashMap<String, usize> = HashMap::new();
     for ac in ont.iter() {
+        let ac: &AnnotatedComponent<A> = ac.borrow();
         if let Some((rank, iri)) = declaration_info(&ac.component) {
             // An IRI declared as more than one kind is PUNNED, and OWLAPI writes
             // its annotation assertions under whichever section comes first —
@@ -363,6 +366,7 @@ pub fn write_full<A: ForIRI, AA: ForIndex<A>, W: Write>(
         // empty `definitions.owl` carrying only `Annotation(owl:versionInfo …)`
         // still gets the Datatypes blank line from that literal's xsd:string.
         for ac in ont.iter() {
+            let ac: &AnnotatedComponent<A> = ac.borrow();
             let lit = match &ac.component {
                 Component::AnnotationAssertion(aa) => matches!(aa.ann.av, AnnotationValue::Literal(_)),
                 Component::OntologyAnnotation(oa) => {
@@ -385,6 +389,7 @@ pub fn write_full<A: ForIRI, AA: ForIndex<A>, W: Write>(
     let mut leftover: Vec<&AnnotatedComponent<A>> = Vec::new();
 
     for ac in ont.iter() {
+        let ac: &AnnotatedComponent<A> = ac.borrow();
         match &ac.component {
             // Handled in the header / leading block already.
             Component::OntologyID(_)
@@ -514,6 +519,59 @@ pub fn write_full<A: ForIRI, AA: ForIndex<A>, W: Write>(
     }
 
     write!(write, ")")?;
+
+    Ok(write)
+}
+
+/// Write `components` as an OWL Functional-Style `Ontology(...)` document.
+///
+/// Components are written in the order they arrive, so the caller is
+/// responsible for ordering them to match the specification. If they do
+/// not, the output may not conform to the specification, and `Prefix`
+/// handling may be broken. Use [`write`] instead if this ordering can't be
+/// guaranteed.
+pub fn write_stream<A: ForIRI, AA: ForIndex<A>, W: Write>(
+    mut write: W,
+    components: impl StreamOntology<A, AA>,
+) -> Result<W, HornedError> {
+    let mut mapping = PrefixMapping::default();
+    let mut ontology_opened = false;
+
+    for item in components {
+        match item? {
+            StreamComponent::Prefix(name, iri) => {
+                let _ = mapping.add_prefix(&name, &iri);
+                writeln!(write, "Prefix({name}:=<{}>)", percent_encode_iri(&iri))?;
+            }
+            StreamComponent::Component(ac) => {
+                let ac: &AnnotatedComponent<A> = ac.borrow();
+
+                if !ontology_opened {
+                    ontology_opened = true;
+                    write!(write, "Ontology(")?;
+
+                    if let Component::OntologyID(id) = &ac.component {
+                        if let Some(iri) = &id.iri {
+                            write!(write, "{}", iri.as_functional_with_prefixes(&mapping))?;
+                            if let Some(viri) = &id.viri {
+                                writeln!(write, " {}", viri.as_functional_with_prefixes(&mapping))?;
+                            } else {
+                                writeln!(write)?;
+                            }
+                        }
+                        continue;
+                    }
+                }
+
+                writeln!(write, "    {}", ac.as_functional_with_prefixes(&mapping))?;
+            }
+        }
+    }
+
+    if !ontology_opened {
+        write!(write, "Ontology(")?;
+    }
+    writeln!(write, ")")?;
 
     Ok(write)
 }
@@ -698,6 +756,7 @@ fn signature_kinds<A: ForIRI, AA: ForIndex<A>>(
 
     let mut walk = Walk::new(Scan::default());
     for ac in ont.iter() {
+        let ac: &AnnotatedComponent<A> = ac.borrow();
         walk.annotated_component(ac);
     }
     walk.into_visit().0
@@ -1292,13 +1351,13 @@ fn owlapi_ann_assertion_cmp<A: ForIRI>(
         .then_with(|| a.cmp(b))
 }
 
-/// OWLAPI's `OWLLiteralImpl.compareObjectOfSameType`: the DATATYPE IRI first,
-/// then the lexical form. An untyped literal is `xsd:string` and a
-/// language-tagged one is `rdf:PlainLiteral`. Comparing the rendered text
-/// instead put MONDO's seven `^^xsd:anyURI` ontology sources after its plain
-/// ones, where `anyURI` < `string` puts them first.
-/// Whether an untyped literal counts as `xsd:string` rather than
-/// `rdf:PlainLiteral` when ordering — see [`set_plain_literals_typed`].
+// OWLAPI's `OWLLiteralImpl.compareObjectOfSameType`: the DATATYPE IRI first,
+// then the lexical form. An untyped literal is `xsd:string` and a
+// language-tagged one is `rdf:PlainLiteral`. Comparing the rendered text
+// instead put MONDO's seven `^^xsd:anyURI` ontology sources after its plain
+// ones, where `anyURI` < `string` puts them first.
+// Whether an untyped literal counts as `xsd:string` rather than
+// `rdf:PlainLiteral` when ordering — see [`set_plain_literals_typed`].
 thread_local! {
     static PLAIN_LITERALS_TYPED: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
 }
@@ -1592,20 +1651,59 @@ mod test {
     use rstest::rstest;
     use std::path::PathBuf;
 
+    #[test]
+    fn write_stream_writes_prefixes_then_ontology() {
+        let b = crate::model::Build::new_rc();
+        let iri = b.iri("http://www.example.com/a");
+        let ac = AnnotatedComponent {
+            component: crate::model::DeclareClass(crate::model::Class(iri)).into(),
+            ann: Default::default(),
+        };
+
+        let items: Vec<crate::io::Result<StreamComponent<AnnotatedComponent<RcStr>>>> = vec![
+            Ok(StreamComponent::Prefix(
+                "eg".to_string(),
+                "http://example.com/eg#".to_string(),
+            )),
+            Ok(StreamComponent::Component(ac)),
+        ];
+
+        let mut writer = Vec::new();
+        write_stream(&mut writer, items.into_iter()).unwrap();
+        let out = String::from_utf8(writer).unwrap();
+
+        assert!(out.starts_with("Prefix(eg:=<http://example.com/eg#>)\n"));
+        assert!(out.contains("Declaration(Class(<http://www.example.com/a>))"));
+
+        let b2 = crate::model::Build::new_rc();
+        let (ont, _): (ComponentMappedOntology<RcStr, AnnotatedComponent<RcStr>>, _) =
+            crate::io::ofn::reader::read(
+                &mut std::io::Cursor::new(out),
+                crate::io::ParserConfiguration::new(&b2),
+            )
+            .unwrap();
+        assert_eq!(ont.i().declare_class().count(), 1);
+    }
+
     #[rstest]
     fn roundtrip_resource(#[files("src/ont/owl-functional/*.ofn")] resource: PathBuf) {
-        let reader = std::fs::File::open(&resource)
+        let mut reader = std::fs::File::open(&resource)
             .map(std::io::BufReader::new)
             .unwrap();
+        let b = crate::model::Build::new_rc();
         let (ont, prefixes): (ComponentMappedOntology<RcStr, AnnotatedComponent<RcStr>>, _) =
-            crate::io::ofn::reader::read(reader, Default::default()).unwrap();
+            crate::io::ofn::reader::read(&mut reader, crate::io::ParserConfiguration::new(&b))
+                .unwrap();
 
         let mut writer = Vec::new();
         crate::io::ofn::writer::write(&mut writer, &ont, Some(&prefixes)).unwrap();
 
         let (ont2, prefixes2): (ComponentMappedOntology<RcStr, AnnotatedComponent<RcStr>>, _) =
-            crate::io::ofn::reader::read(std::io::Cursor::new(&writer), Default::default())
-                .unwrap();
+            crate::io::ofn::reader::read(
+                &mut std::io::Cursor::new(&writer),
+                crate::io::ParserConfiguration::new(&b),
+            )
+            .unwrap();
 
         assert_eq!(prefixes, prefixes2, "prefix mapping differ");
         // A rule's body and head are SETS in OWL — horned stores them as `Vec` to
@@ -1640,11 +1738,11 @@ mod test {
     #[test]
     fn roundtrip_nested_annotation_on_annotation() {
         let resource = "src/ont/owl-functional/manual/nested-annotation-on-annotation.ofn";
-        let reader = std::fs::File::open(resource)
+        let mut reader = std::fs::File::open(resource)
             .map(std::io::BufReader::new)
             .unwrap();
         let (ont, prefixes): (ComponentMappedOntology<RcStr, AnnotatedComponent<RcStr>>, _) =
-            crate::io::ofn::reader::read(reader, Default::default()).unwrap();
+            crate::io::ofn::reader::read(&mut reader, Default::default()).unwrap();
 
         let mut writer = Vec::new();
         crate::io::ofn::writer::write(&mut writer, &ont, Some(&prefixes)).unwrap();
@@ -1666,9 +1764,9 @@ mod test {
         use std::path::Path;
 
         fn parse_then_output(in_file: &Path, out: &mut dyn std::io::Write) {
-            let reader = BufReader::new(File::open(in_file).unwrap());
+            let mut reader = BufReader::new(File::open(in_file).unwrap());
             let (ont, prefixes): (ComponentMappedOntology<RcStr, AnnotatedComponent<RcStr>>, _) =
-                crate::io::ofn::reader::read(reader, Default::default()).unwrap();
+                crate::io::ofn::reader::read(&mut reader, Default::default()).unwrap();
 
             write(out, &ont, Some(&prefixes)).ok().unwrap();
         }

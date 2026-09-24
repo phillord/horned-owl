@@ -107,6 +107,25 @@ pub trait OntologyIndex<A: ForIRI, AA: ForIndex<A>> {
     }
 }
 
+/// An `OntologyIndex` that can additionally be iterated, yielding its own
+/// `AA` handle rather than the `AnnotatedComponent<A>` it borrows through.
+///
+/// Cloning the yielded `&AA` is cheap when `AA` is `Rc`/`Arc`-backed (a
+/// pointer plus a refcount bump), unlike cloning the full
+/// `AnnotatedComponent<A>` it wraps. Not every `OntologyIndex` offers
+/// this naturally -- `DeclarationMappedIndex`, for instance, exists purely
+/// for fast type lookup -- so this is a separate, opt-in trait rather than
+/// part of `OntologyIndex` itself.
+pub trait IterableOntologyIndex<A: ForIRI, AA: ForIndex<A>>: OntologyIndex<A, AA> {
+    type Iter<'a>: Iterator<Item = &'a AA>
+    where
+        Self: 'a,
+        A: 'a,
+        AA: 'a;
+
+    fn iter(&self) -> Self::Iter<'_>;
+}
+
 /// A NullOntologyIndex which does nothing.
 #[derive(Default)]
 pub struct NullIndex();

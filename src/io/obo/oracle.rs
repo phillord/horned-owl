@@ -23,7 +23,7 @@ use std::io::BufReader;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use crate::model::RcStr;
+use crate::model::{Ontology, RcStr};
 use crate::ontology::set::SetOntology;
 
 /// Resolve the ROBOT command: `$HORNED_ROBOT`, else `robot` if it runs.
@@ -52,21 +52,21 @@ fn robot_convert(robot: &str, obo: &Path, ofn: &Path) {
 }
 
 /// Render an ontology as the set of its components' canonical debug strings.
-fn components(ont: &SetOntology<RcStr>) -> BTreeSet<String> {
+fn components<O: Ontology<RcStr>>(ont: &O) -> BTreeSet<String> {
     ont.iter().map(|ac| format!("{ac:?}")).collect()
 }
 
 fn read_obo(path: &Path) -> BTreeSet<String> {
-    let reader = BufReader::new(File::open(path).unwrap());
+    let mut reader = BufReader::new(File::open(path).unwrap());
     let (ont, _): (SetOntology<RcStr>, _) =
-        crate::io::obo::reader::read(reader, Default::default()).unwrap();
+        crate::io::obo::reader::read(&mut reader, Default::default()).unwrap();
     components(&ont)
 }
 
 fn read_ofn(path: &Path) -> BTreeSet<String> {
-    let reader = BufReader::new(File::open(path).unwrap());
+    let mut reader = BufReader::new(File::open(path).unwrap());
     let (ont, _): (SetOntology<RcStr>, _) =
-        crate::io::ofn::reader::read(reader, Default::default()).unwrap();
+        crate::io::ofn::reader::read(&mut reader, Default::default()).unwrap();
     components(&ont)
 }
 

@@ -1,6 +1,6 @@
 [package]
 name = "horned-owl"
-version = "1.4.0"
+version = "4.0.0"
 authors = ["Phillip Lord <phillip.lord@russet.org.uk>"]
 description = "Library for OWL Ontologies"
 
@@ -33,8 +33,8 @@ oxrdfio={workspace=true}
 ureq={version="3.3.0", optional=true}
 
 [workspace]
-members=["horned-bin", "horned-pretty-rdf", "horned-catalog", "horned-macro"]
-default-members=[".", "horned-bin", "horned-pretty-rdf", "horned-catalog", "horned-macro"]
+members=["horned-bin", "horned-pretty-rdf", "horned-catalog", "horned-macro", "horned-profile", "horned-corpus"]
+default-members=[".", "horned-bin", "horned-pretty-rdf", "horned-catalog", "horned-macro", "horned-profile", "horned-corpus"]
 
 [workspace.dependencies]
 # `features = ["std"]` is required for tier-3 wasm targets (e.g. wasm64-unknown-
@@ -45,9 +45,10 @@ default-members=[".", "horned-bin", "horned-pretty-rdf", "horned-catalog", "horn
 indexmap = { version = "1.0.2", features = ["std"] }
 mktemp="0.5.1"
 oxiri="0.2.11"
-horned-pretty-rdf={path="./horned-pretty-rdf", version="2.0.0"}
-horned-catalog={path="./horned-catalog", version="0.1.0"}
-horned-macro={path="./horned-macro", version="0.1.0"}
+horned-pretty-rdf={path="./horned-pretty-rdf", version="2.0.1"}
+horned-catalog={path="./horned-catalog", version="1.0.0"}
+horned-macro={path="./horned-macro", version="4.0.0"}
+horned-profile={path="./horned-profile", version="4.0.0"}
 oxrdf="0.3.0"
 oxrdfio="0.2.0"
 
@@ -65,7 +66,11 @@ pretty_assertions = "1.0.0"
 slurp = "1.0.1"
 rstest = "0.23"
 horned-bin = {path="horned-bin"}
-horned-macro = {workspace = true}
+# Path-only, deliberately no version: cargo strips a versionless
+# dev-dependency from the published manifest, which breaks the
+# horned-owl <-> horned-macro publish cycle (horned-macro depends on
+# horned-owl, so requiring it here at publish time is unresolvable).
+horned-macro = {path = "horned-macro"}
 
 [profile.release]
 debug = true

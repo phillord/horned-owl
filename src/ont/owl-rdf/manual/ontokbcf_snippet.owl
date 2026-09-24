@@ -1,0 +1,26 @@
+<?xml version="1.0"?>
+<!--
+  Minimal subset of the ONTOKBCF ontology
+  (http://www.owl-ontologies.com/assert.owl), extracted by hand from a copy
+  of ontokbcf.owl retrieved via the horned-roundtrip corpus
+  (corpus/ONTOKBCF.gz). Reproduces issue #255: a legacy OWL 1
+  rdf:Property-typed declaration, additionally typed owl:AnnotationProperty
+  -- both node IDs and property names copied verbatim from ontokbcf.owl;
+  only the surrounding unrelated axioms have been cut. Created with Protege
+  (OWL Plugin 3.4.5, Build 608), an OWL 1-era tool, per the file's own
+  trailing comment.
+-->
+<rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns="http://www.owl-ontologies.com/assert.owl#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+  xml:base="http://www.owl-ontologies.com/assert.owl">
+  <owl:Ontology rdf:about=""/>
+
+  <rdf:Property rdf:ID="notEmpty">
+    <rdf:type rdf:resource="http://www.w3.org/2002/07/owl#AnnotationProperty"/>
+  </rdf:Property>
+  <rdf:Property rdf:ID="empty">
+    <rdf:type rdf:resource="http://www.w3.org/2002/07/owl#AnnotationProperty"/>
+  </rdf:Property>
+</rdf:RDF>

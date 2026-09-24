@@ -42,21 +42,18 @@ use crate::error::HornedError;
 use crate::io::ParserConfiguration;
 use crate::model::{Build, ForIRI, MutableOntology, Ontology};
 
-/// Read a whole ontology from an OBO document, using a fresh IRI `Build`.
-/// Mirrors [`crate::io::omn::reader::read`].
-pub fn read<A: ForIRI, O: MutableOntology<A> + Ontology<A> + Default, R: BufRead>(
-    bufread: R,
-    _config: ParserConfiguration,
+/// Read a whole ontology from an OBO document, interning IRIs into
+/// `config.build`.
+pub fn read<
+    A: ForIRI,
+    B: AsRef<Build<A>>,
+    O: MutableOntology<A> + Ontology<A> + Default,
+    R: BufRead,
+>(
+    bufread: &mut R,
+    config: ParserConfiguration<A, B>,
 ) -> Result<(O, PrefixMapping), HornedError> {
-    let b = Build::new();
-    read_with_build(bufread, &b)
-}
-
-/// Read a whole ontology, interning IRIs into the supplied `build`.
-pub fn read_with_build<A: ForIRI, O: MutableOntology<A> + Ontology<A> + Default, R: BufRead>(
-    mut bufread: R,
-    build: &Build<A>,
-) -> Result<(O, PrefixMapping), HornedError> {
+    let build = config.build.as_ref();
     // Lenient by default (see module doc): decode lossily so a stray non-UTF-8
     // byte — common in real bio-ontologies — does not abort the whole read.
     let mut bytes = Vec::new();
@@ -132,14 +129,16 @@ pub fn read_with_build<A: ForIRI, O: MutableOntology<A> + Ontology<A> + Default,
 mod tests {
     use std::collections::BTreeSet;
 
+    use rstest::rstest;
+
     use crate::model::{
         AnnotationValue, ClassExpression, Component, Individual, Literal, ObjectPropertyExpression,
-        RcStr,
+        Ontology, RcStr,
     };
     use crate::ontology::set::SetOntology;
 
     fn read(s: &str) -> SetOntology<RcStr> {
-        super::read::<RcStr, SetOntology<RcStr>, _>(s.as_bytes(), Default::default())
+        super::read::<RcStr, _, SetOntology<RcStr>, _>(&mut s.as_bytes(), Default::default())
             .unwrap()
             .0
     }
@@ -194,7 +193,7 @@ mod tests {
 
     /// Render the instance-relevant components in a compact, stable form for
     /// golden comparison.
-    fn render_set(ont: &SetOntology<RcStr>) -> BTreeSet<String> {
+    fn render_set<O: Ontology<RcStr>>(ont: &O) -> BTreeSet<String> {
         ont.iter()
             .map(|ac| match &ac.component {
                 Component::DeclareClass(d) => {
@@ -240,7 +239,7 @@ mod tests {
             .collect()
     }
 
-    fn has_label(ont: &SetOntology<RcStr>, subj: &str, value: &str) -> bool {
+    fn has_label<O: Ontology<RcStr>>(ont: &O, subj: &str, value: &str) -> bool {
         ont.iter().any(|ac| match &ac.component {
             Component::AnnotationAssertion(a) => {
                 matches!(&a.subject, crate::model::AnnotationSubject::IRI(i) if i.as_ref() == subj)
@@ -318,6 +317,27 @@ mod tests {
                     if p.0.as_ref() == want)),
             _ => false,
         }));
+    }
+
+    #[test]
+    fn ontology_short_id_starting_with_http_is_expanded() {
+        // Regression: an `ontology:` short id that merely starts with "http"
+        // (e.g. `httptest`) must still expand to the OBO PURL, not be treated as
+        // an already-absolute IRI and left relative (`<httptest>`).
+        let ont = read("ontology: httptest\n\n[Term]\nid: GO:0001\nname: x\n");
+        let want = "http://purl.obolibrary.org/obo/httptest.owl";
+        assert!(ont.iter().any(|ac| matches!(&ac.component,
+            Component::OntologyID(o) if o.iri.as_ref().map(|i| i.as_ref()) == Some(want))));
+    }
+
+    #[test]
+    fn ontology_absolute_iri_is_used_verbatim() {
+        // A real `http(s)://` IRI is used as-is, not re-expanded.
+        let want = "http://example.org/my-onto";
+        let doc = format!("ontology: {want}\n\n[Term]\nid: GO:0001\nname: x\n");
+        let ont = read(&doc);
+        assert!(ont.iter().any(|ac| matches!(&ac.component,
+            Component::OntologyID(o) if o.iri.as_ref().map(|i| i.as_ref()) == Some(want))));
     }
 
     #[test]
@@ -604,5 +624,98 @@ mod tests {
         let ont = read(doc);
         assert!(ont.iter().any(|ac| matches!(&ac.component,
             Component::DeclareClass(d) if d.0.0.as_ref() == "http://example.org/cl/0000000")));
+    }
+
+    /// `owl-axioms:` (OBO 1.4 spec 5.0.4) embeds OWL functional syntax for
+    /// anything that doesn't map onto a native OBO stanza -- #272.
+    #[test]
+    fn owl_axioms_header_tag_is_read() {
+        let doc = "ontology: http://example.org/onto\n\
+                   owl-axioms: \\n\\nOntology(\\n\\n\
+                   DifferentIndividuals(<http://example.org/onto#I> <http://example.org/onto#J>)\\n)\n";
+        let ont = read(doc);
+        assert!(
+            ont.iter().any(|ac| matches!(&ac.component,
+                Component::DifferentIndividuals(d) if d.0.len() == 2)),
+            "got: {ont:#?}"
+        );
+    }
+
+    /// A class referenced only inside a `owl-axioms:`-embedded SWRL rule (no
+    /// native `[Term]` stanza of its own) must still get a synthesised
+    /// declaration, matching every other axiom-referenced entity.
+    #[test]
+    fn swrl_rule_entities_get_referenced_declarations() {
+        let doc = "ontology: http://example.org/onto\n\
+                   owl-axioms: \\n\\nOntology(\\n\\nDLSafeRule(\
+                   Body(ClassAtom(<http://example.org/onto#A> Variable(<http://example.org/onto#x>)))\
+                   Head(ClassAtom(<http://example.org/onto#B> Variable(<http://example.org/onto#x>))))\\n)\n";
+        let ont = read(doc);
+        assert!(
+            ont.iter().any(|ac| matches!(&ac.component,
+            Component::DeclareClass(d) if d.0.0.as_ref() == "http://example.org/onto#A")),
+            "got: {ont:#?}"
+        );
+        assert!(
+            ont.iter().any(|ac| matches!(&ac.component,
+            Component::DeclareClass(d) if d.0.0.as_ref() == "http://example.org/onto#B")),
+            "got: {ont:#?}"
+        );
+    }
+
+    /// `format-version:`, the per-term `oboInOwl:id` bookkeeping and the
+    /// canonical `rdfs:label` on each built-in oboInOwl/IAO property have no
+    /// OWL2 counterpart at all -- they are the reader's own encoding of OBO's
+    /// serialization envelope (see [`super::from_pair`]'s `ont_ann`,
+    /// `referenced_declarations`, `builtin_labels`), not ontology content, so
+    /// they can never appear on the OWL/XML oracle side. Same category as
+    /// `ComponentKind::DocIRI`, which `normalize::simplify` already strips.
+    fn is_obo_envelope<A: crate::model::ForIRI>(ac: &crate::model::AnnotatedComponent<A>) -> bool {
+        use crate::model::AnnotationSubject;
+        const OIO: &str = "http://www.geneontology.org/formats/oboInOwl#";
+        const RDFS_LABEL: &str = "http://www.w3.org/2000/01/rdf-schema#label";
+        const IAO_DEF: &str = "http://purl.obolibrary.org/obo/IAO_0000115";
+        let format_version = format!("{OIO}hasOBOFormatVersion");
+        let id_prop = format!("{OIO}id");
+        let is_envelope_iri = |iri: &str| iri == format_version || iri == id_prop;
+
+        match &ac.component {
+            Component::OntologyAnnotation(o) => is_envelope_iri(o.0.ap.0.as_ref()),
+            Component::DeclareAnnotationProperty(d) => is_envelope_iri(d.0.0.as_ref()),
+            Component::AnnotationAssertion(a) => {
+                is_envelope_iri(a.ann.ap.0.as_ref())
+                    || (a.ann.ap.0.as_ref() == RDFS_LABEL
+                        && matches!(&a.subject, AnnotationSubject::IRI(i)
+                            if is_envelope_iri(i.as_ref())
+                                || i.as_ref().starts_with(OIO)
+                                || i.as_ref() == IAO_DEF))
+            }
+            _ => false,
+        }
+    }
+
+    /// Every bubo-generated `.obo` fixture must describe the same ontology as
+    /// its `owl-xml/` sibling -- OWL/XML is the less-ambiguous oracle here,
+    /// matching how `io::rdf::reader::test::compare_two` treats it for RDF/XML.
+    #[rstest]
+    fn compare_to_xml(#[files("src/ont/owl-obo/*.obo")] resource: std::path::PathBuf) {
+        let stem = resource.file_stem().unwrap().to_str().unwrap();
+        let obo_doc = slurp::read_all_to_string(&resource).unwrap();
+        let xml_doc = slurp::read_all_to_string(format!("src/ont/owl-xml/{stem}.owx")).unwrap();
+
+        let obo_ont = read(&obo_doc);
+        let xml_ont: SetOntology<RcStr> =
+            crate::io::owx::reader::test::read_ok(&mut xml_doc.as_bytes())
+                .0
+                .into();
+
+        crate::normalize::normalize_and_assert_eq(
+            obo_ont
+                .iter()
+                .filter(|ac| !is_obo_envelope(ac))
+                .cloned()
+                .collect(),
+            xml_ont.iter().cloned().collect(),
+        );
     }
 }

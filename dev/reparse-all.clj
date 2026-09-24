@@ -16,6 +16,7 @@
             "owl-rdf" (org.semanticweb.owlapi.rdf.rdfxml.parser.RDFXMLParser.)
             "owl-functional" (org.semanticweb.owlapi.functional.parser.OWLFunctionalSyntaxOWLParser.)
             "owl-manchester" (org.semanticweb.owlapi.manchestersyntax.parser.ManchesterOWLSyntaxOntologyParser.)
+            "owl-obo" (org.semanticweb.owlapi.oboformat.OBOFormatOWLAPIParser.)
             )]
       (.parse parser documentsource ontology config))
     (catch Exception e
@@ -32,10 +33,11 @@
 ;; entry with an extension (e.g. "swrl_individual.owx") only excludes that
 ;; one format; an entry with no extension (just a trailing ".") excludes
 ;; the base name across every format.
-;; - swrl_individual.owx / swrl_individual.ofn / swrl_individual.omn: the
-;;   anonymous individual in the SWRL atom is not valid there in owl-xml,
-;;   owl-functional, or owl-manchester syntax (swrl_individual.owl parses
-;;   fine under owl-rdf, so is not listed).
+;; - swrl_individual.owx / swrl_individual.ofn / swrl_individual.omn /
+;;   swrl_individual.obo: the anonymous individual in the SWRL atom is not
+;;   valid there in owl-xml, owl-functional, owl-manchester, or (embedded via
+;;   owl-axioms:) obo syntax (swrl_individual.owl parses fine under owl-rdf,
+;;   so is not listed).
 ;; - anon-subobjectproperty.omn / inverse-transitive.omn: our Manchester
 ;;   writer emits an inverse-headed `ObjectProperty: inverse (p)` frame,
 ;;   which OWL API's ManchesterOWLSyntaxOntologyParser does not accept as
@@ -53,15 +55,22 @@
 ;;   (swrl_built_in.omn is no longer excluded: our writer now renders a
 ;;   built-in atom's predicate as a full `<IRI>` rather than a CURIE, which
 ;;   OWL API accepts.)
+;; - import.obo / ont-with-bfo.obo: OBO's obo2owl bridge eagerly resolves
+;;   `import:` on an internal manager that ignores the SILENT config above,
+;;   aborting the whole run on the unresolvable placeholder/BFO URL. Scoped
+;;   to .obo: every other format's parser respects the SILENT config fine.
 (def known-parser-limitations
   ["anon-subobjectproperty.omn"
+   "import.obo"
+   "ont-with-bfo.obo"
    "declaration-with-annotation.omn"
    "declaration-with-two-annotation.omn"
    "inverse-transitive.omn"
    "swrl_data_range.omn"
    "swrl_individual.ofn"
    "swrl_individual.omn"
-   "swrl_individual.owx"])
+   "swrl_individual.owx"
+   "swrl_individual.obo"])
 
 (doall
  (keep #(when (and (.isFile %)

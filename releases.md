@@ -1,3 +1,81 @@
+Version 4.0.0
+=============
+
+This version makes a major change to the reader/writer interface. In
+addition to providing as much regularity as possible, it also adds the
+abstract ability to stream ontologies, by simply including prefixes
+into an Iterator interface.
+
+Features:
+- Streaming read/write via a new `StreamComponent`/`StreamOntology`
+  interface: OWL/XML gains both `read_to_stream` and `write_stream`;
+  RDF/XML and Functional Syntax gain `write_stream` only (their
+  readers still need the whole document before any axiom can be
+  produced); Manchester and OBO gain neither (their writers need the
+  whole axiom set to group into frames/stanzas regardless of how the
+  input arrives).
+
+Changes:
+- `read`/`write` are now consistent in shape across every format:
+  `read(bufread, config) -> (O, ...)`, `write(w, &ComponentMappedOntology, mapping)`.
+- `read_with_build` is removed from every format; share a `Build`
+  across parses via `ParserConfiguration`'s `build` field instead.
+- The RDF/XML writer gained a `mapping: Option<&PrefixMapping>`
+  parameter, matching every other format.
+- The RDF/XML reader is now generic over the IRI backing type, rather
+  than fixed to `RcStr`.
+- Functional Syntax and OBO's readers now borrow their input
+  (`&mut R`) instead of consuming it, matching OWL/XML and RDF/XML.
+- Fixed `Import`/`OntologyAnnotation` ordering in OWL/XML output.
+
+
+Contributor:
+- Phillip Lord
+
+
+Version 3.0.0
+=============
+
+Features:
+- OBO 1.4 format support: a lenient-by-default reader and a
+  read/write-round-tripping writer
+- `horned-catalog`: OASIS XML Catalog support for resolving imports to
+  local, relocated files.
+- `horned-macro`: write Manchester and Functional Syntax directly in
+  Rust source via `omn!`/`ofn!` macros.
+- `horned-profile`: OWL 2 EL/QL/RL/DL profile conformance checking
+  both library and CLI support.
+- The RDF/XML reader now understands OWL 1 constructs
+
+Enhancements:
+- OWL/XML, Manchester, and Functional Syntax writers now prefer the
+  longest (most specific) matching prefix when abbreviating IRIs
+- The RDF writer gained a `lax`/`strict` configuration for
+  spec-invalid degenerate axioms (e.g. a single-member
+  `DifferentIndividuals`), matching real-world OWL API output in lax
+  mode (the default) while allowing strict mode to reject them.
+- The OFN writer now degrades a single-operand
+  `ObjectIntersectionOf`/`ObjectUnionOf` to its bare operand rather
+  than emitting unparseable syntax.
+- The `Ontology` interface is now used more widely replacing `SetOntolgy`
+- `horned` CLI exit-code semantics, including the parse-vs-validate
+  incomplete-parse distinction, are now documented.
+- Added `CITATION.cff` and `MAINTAINERS.md`.
+
+Bugs:
+- Fixed several RDF/XML and OWL/XML writer/reader issues found via
+  round-trip testing against a real-world ontology corpus.
+- RDF/XML and Functional Syntax writers now percent-encode characters
+  that are invalid in an IRI, so ontologies containing them can be
+  written and re-read without data loss.
+
+Contributors:
+- Phillip Lord
+- Michel Dumontier
+- Konrad Höffner
+
+
+
 Version 2.1.0
 =============
 

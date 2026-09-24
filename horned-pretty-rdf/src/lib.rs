@@ -938,11 +938,32 @@ where
         Ok(self)
     }
 
+    /// Look up the prefix registered for `iri_ns`, if any -- but never the
+    /// empty/default prefix, which has no valid `prefix:local` or
+    /// `xmlns:prefix` spelling (see `write_prefix`). A caller must treat
+    /// this the same as "no prefix registered" and fall back to a full IRI.
+    fn abbreviating_prefix(&self, iri_ns: &str) -> Option<&str> {
+        self.config
+            .prefix
+            .get(iri_ns)
+            .map(String::as_str)
+            .filter(|p| !p.is_empty())
+    }
+
     fn write_prefix(&mut self, rdf_open: &mut BytesStart<'_>) -> Result<(), io::Error> {
         if let Some(ref base) = self.config.base {
             rdf_open.push_attribute(("xmlns", &base[..]));
         }
         for i in &self.config.prefix {
+            // The empty/default prefix has no name to write as an `xmlns:`
+            // attribute -- `xmlns:="..."` is not valid XML (a default
+            // namespace uses the unqualified `xmlns="..."` form, which is
+            // `config.base`'s job, set separately above). Skip it: the
+            // element/attribute this prefix would have abbreviated is still
+            // written correctly, just as a full IRI rather than a bare name.
+            if i.1.is_empty() {
+                continue;
+            }
             let ns = format!("xmlns:{}", i.1);
             rdf_open.push_attribute((&ns[..], &i.0[..]));
         }
@@ -1002,7 +1023,7 @@ where
 
     fn bytes_start_iri<'a>(&mut self, nn: &'a PNamedNode<A>) -> BytesStart<'a> {
         let (iri_protocol_and_host, iri_qname) = nn.split_iri();
-        if let Some(iri_ns_prefix) = &self.config.prefix.get(iri_protocol_and_host) {
+        if let Some(iri_ns_prefix) = self.abbreviating_prefix(iri_protocol_and_host) {
             BytesStart::new(format!("{}:{}", iri_ns_prefix, iri_qname))
         } else {
             let mut bs = BytesStart::new(iri_qname);
@@ -1064,7 +1085,7 @@ where
                     PLiteral::Simple { value } => {
                         let (iri_protocol_and_host, iri_qname) = literal_t.predicate.split_iri();
 
-                        if let Some(iri_ns_prefix) = &self.config.prefix.get(iri_protocol_and_host)
+                        if let Some(iri_ns_prefix) = self.abbreviating_prefix(iri_protocol_and_host)
                             && folded_predicates.insert(&literal_t.predicate)
                         {
                             description_open.push_attribute((
@@ -1925,10 +1946,14 @@ r###"<?xml version="1.0" encoding="UTF-8"?>
             ).unwrap();
     }
 
-    /// I don't know if this is valid at all at the moment
-    /// nor what it should serialize as
+    /// A Collection member that also carries its own extra property (here
+    /// `rdf:value`) is valid: the formatter describes it as its own
+    /// top-level `rdf:Description`, and the Collection list just refers to
+    /// it by `rdf:about` -- no data loss, just spread across two places
+    /// instead of nested inline. (The original `rdf:datatype="string"` in
+    /// this test was itself an invalid IRI -- not a valid absolute IRI --
+    /// which is a separate, unrelated typo now fixed below.)
     #[test]
-    #[ignore]
     fn seq_longhand_with_literal() {
         xml_from_to(
                 r###"<?xml version="1.0" encoding="UTF-8"?>
@@ -1936,7 +1961,7 @@ r###"<?xml version="1.0" encoding="UTF-8"?>
     <rdf:Description rdf:about="http://example.org/basket">
         <ex:hasFruit rdf:parseType="Collection">
             <rdf:Description rdf:about="http://example.org/banana">
-                 <rdf:value rdf:datatype="string">Yellow</rdf:value>
+                 <rdf:value rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Yellow</rdf:value>
             </rdf:Description>
             <rdf:Description rdf:about="http://example.org/apple">
                  <rdf:value>Red</rdf:value>
@@ -1949,6 +1974,9 @@ r###"<?xml version="1.0" encoding="UTF-8"?>
 </rdf:RDF>"###,
         r###"<?xml version="1.0" encoding="UTF-8"?>
 <rdf:RDF xmlns="http://www.example.com/iri#" xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:ex="http://example.org/stuff/1.0/">
+    <rdf:Description rdf:about="http://example.org/banana" rdf:value="Yellow"/>
+    <rdf:Description rdf:about="http://example.org/apple" rdf:value="Red"/>
+    <rdf:Description rdf:about="http://example.org/pear" rdf:value="Green"/>
     <rdf:Description rdf:about="http://example.org/basket">
         <ex:hasFruit rdf:parseType="Collection">
             <rdf:Description rdf:about="http://example.org/banana"/>
@@ -2180,12 +2208,14 @@ r###"<?xml version="1.0" encoding="UTF-8"?>
         ).unwrap()
     }
 
-    /// I think the problem here is that the type AtomList triple is being rendered as a short cut
-    /// and when this happens the object pull in is not happening
+    /// The formatter's rdf:type-to-shorthand-element compaction (see
+    /// `example14_typed_nodes`) applies to swrl:-prefixed types too, so the
+    /// generic `rdf:Description`+`rdf:type` input compacts to `<swrl:Imp>`/
+    /// `<swrl:AtomList>`/`<swrl:ClassAtom>` on output -- a same-string
+    /// `xml_roundtrip` was never going to hold here. Not a formatter bug.
     #[test]
-    #[ignore]
     fn seq_with_pull_in_bnode() {
-        xml_roundtrip(
+        xml_from_to(
     r###"<?xml version="1.0" encoding="UTF-8"?>
 <rdf:RDF xmlns="http://www.example.com/iri#" xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#" xmlns:owl="http://www.w3.org/2002/07/owl#" xmlns:swrl="http://www.w3.org/2003/11/swrl#">
     <rdf:Description>
@@ -2216,6 +2246,32 @@ r###"<?xml version="1.0" encoding="UTF-8"?>
             </rdf:Description>
         </swrl:body>
      </rdf:Description>
+</rdf:RDF>"###,
+    r###"<?xml version="1.0" encoding="UTF-8"?>
+<rdf:RDF xmlns="http://www.example.com/iri#" xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#" xmlns:owl="http://www.w3.org/2002/07/owl#" xmlns:swrl="http://www.w3.org/2003/11/swrl#">
+    <swrl:Imp>
+        <swrl:body>
+            <swrl:AtomList>
+                <rdf:first>
+                    <swrl:ClassAtom>
+                        <swrl:classPredicate rdf:resource="http://www.example.com/iri#A1"/>
+                        <swrl:argument1 rdf:resource="http://www.example.com/iri#x"/>
+                    </swrl:ClassAtom>
+                </rdf:first>
+                <rdf:rest>
+                    <swrl:AtomList>
+                        <rdf:first>
+                            <swrl:ClassAtom>
+                                <swrl:classPredicate rdf:resource="http://www.example.com/iri#A"/>
+                                <swrl:argument1 rdf:resource="http://www.example.com/iri#x"/>
+                            </swrl:ClassAtom>
+                        </rdf:first>
+                        <rdf:rest rdf:resource="http://www.w3.org/1999/02/22-rdf-syntax-ns#nil"/>
+                    </swrl:AtomList>
+                </rdf:rest>
+            </swrl:AtomList>
+        </swrl:body>
+    </swrl:Imp>
 </rdf:RDF>"###,
             Some(
                 indexmap![

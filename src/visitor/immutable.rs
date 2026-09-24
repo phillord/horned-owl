@@ -1,6 +1,5 @@
 /// An immutable `Visit`/`Walk` for Horned-OWL Ontologies.
 use crate::model::*;
-use crate::ontology::set::SetOntology;
 use crate::vocab::Facet;
 use std::collections::BTreeSet;
 use std::marker::PhantomData;
@@ -83,7 +82,7 @@ pub trait Visit<A: ForIRI> {
     fn visit_data_range(&mut self, _: &DataRange<A>) {}
     fn visit_class_expression(&mut self, _: &ClassExpression<A>) {}
     fn visit_ontology_id(&mut self, _: &OntologyID<A>) {}
-    fn visit_set_ontology(&mut self, _: &SetOntology<A>) {}
+    fn visit_set_ontology<O: Ontology<A>>(&mut self, _: &O) {}
     fn visit_option_iri(&mut self, _: &Option<IRI<A>>) {}
     fn visit_annotation_set(&mut self, _: &BTreeSet<Annotation<A>>) {}
     fn visit_class_expression_vec(&mut self, _: &Vec<ClassExpression<A>>) {}
@@ -703,7 +702,7 @@ impl<A: ForIRI, V: Visit<A>> Walk<A, V> {
         self.option_iri(&e.viri);
     }
 
-    pub fn set_ontology(&mut self, e: &SetOntology<A>) {
+    pub fn set_ontology<O: Ontology<A>>(&mut self, e: &O) {
         self.0.visit_set_ontology(e);
         for i in e.iter() {
             self.annotated_component(i);
@@ -852,7 +851,7 @@ pub mod entity {
 
 #[cfg(test)]
 mod test {
-    use crate::io::owx::reader::read_with_build;
+    use crate::io::owx::reader::read;
     use crate::ontology::set::SetOntology;
 
     use super::*;
@@ -863,7 +862,7 @@ mod test {
     fn it_works() {}
 
     pub fn read_ok<R: BufRead>(bufread: &mut R) -> SetOntology<String> {
-        let r = read_with_build(bufread, &Build::new_string(), Default::default());
+        let r = read(bufread, Default::default());
         assert!(r.is_ok(), "Expected ontology, got failure:{:?}", r.err());
         let (o, _) = r.ok().unwrap();
 
