@@ -245,7 +245,18 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
     fn individual_subject_key<A: ForIRI>(i: &crate::model::Individual<A>) -> String {
         match i {
             crate::model::Individual::Named(ni) => ni.0.as_ref().to_string(),
-            crate::model::Individual::Anonymous(ai) => format!("_:{}", ai.0.as_ref()),
+            // Generated labels (e.g. from the RDF reader) are bare, while
+            // labels read from an OWX `nodeID` that itself already carries a
+            // literal `_:` prefix (real-world non-conformant input) must not
+            // be double-prefixed.
+            crate::model::Individual::Anonymous(ai) => {
+                let label = ai.0.as_ref();
+                if label.starts_with("_:") {
+                    label.to_string()
+                } else {
+                    format!("_:{label}")
+                }
+            }
         }
     }
 
@@ -1101,6 +1112,34 @@ mod tests {
 
         assert_eq!(prefixes, prefixes2, "prefix mapping differ");
         assert_eq!(ont, ont2, "ontologies differ");
+    }
+
+    #[test]
+    fn anonymous_individual_frame_key_is_not_double_prefixed() {
+        // A ClassAssertion on an anonymous individual whose label already
+        // carries `_:` -- e.g. read from an OWX `nodeID` attribute that
+        // itself includes the literal prefix (real-world non-conformant
+        // input) -- must produce a single `_:genid1` frame subject, not
+        // `_:_:genid1` (which the OMN reader rejects).
+        let b = Build::new_rc();
+        let anon = b.anon("_:genid1");
+        let mut o = SetOntology::new_rc();
+        o.insert(ClassAssertion {
+            ce: ClassExpression::Class(b.class("http://t/C")),
+            i: Individual::Anonymous(anon),
+        });
+        let amo = into_amo(o);
+        let mut out = Vec::<u8>::new();
+        write(&mut out, &amo, None).unwrap();
+        let s = String::from_utf8(out).unwrap();
+        assert!(
+            s.contains("Individual: _:genid1"),
+            "expected a single `_:` prefix on the frame subject, got:\n{s}"
+        );
+        assert!(
+            !s.contains("_:_:"),
+            "anonymous individual label must not be double-prefixed, got:\n{s}"
+        );
     }
 
     #[test]
