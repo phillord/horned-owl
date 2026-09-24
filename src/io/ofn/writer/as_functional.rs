@@ -302,6 +302,40 @@ derive_wrapper!(A, ObjectProperty<A>);
 
 // ---------------------------------------------------------------------------
 
+/// Like `derive_axiom!`, but for a single-field `Vec<T>` axiom whose OWL2
+/// functional-syntax grammar rule requires >= 2 operands. Real-world RDF can
+/// produce a shorter vec here (e.g. a degenerate `owl:AllDifferent` with one
+/// `owl:distinctMembers` entry), which is semantically vacuous -- writing it
+/// out anyway would produce `DifferentIndividuals(<one-iri>)`, syntax our
+/// own reader rejects. Drop the axiom instead of echoing unparseable output.
+macro_rules! derive_nary_axiom {
+    ($A:ident, $ty:ty, $name:ident) => {
+        impl<'a, $A: ForIRI> Display for Functional<'a, $ty, $A> {
+            fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
+                if self.0.0.len() < 2 {
+                    return Ok(());
+                }
+                if let Some(annotations) = self.2 {
+                    write!(
+                        f,
+                        concat!(stringify!($name), "({} {})"),
+                        Functional(annotations, self.1, None),
+                        Functional(&self.0.0, self.1, None)
+                    )
+                } else {
+                    write!(
+                        f,
+                        concat!(stringify!($name), "({})"),
+                        Functional(&self.0.0, self.1, None)
+                    )
+                }
+            }
+        }
+
+        impl<$A: ForIRI> AsFunctional<$A> for $ty {}
+    };
+}
+
 macro_rules! derive_axiom {
     ($A:ident, $ty:ty, $name:ident ( $($field:tt),* )) => {
         impl<'a, $A: ForIRI> Display for Functional<'a, $ty, $A> {
@@ -369,18 +403,41 @@ derive_axiom!(
 derive_axiom!(A, DataPropertyDomain<A>, DataPropertyDomain(dp, ce));
 derive_axiom!(A, DataPropertyRange<A>, DataPropertyRange(dp, dr));
 derive_axiom!(A, DatatypeDefinition<A>, DatatypeDefinition(kind, range));
-derive_axiom!(A, DifferentIndividuals<A>, DifferentIndividuals(0));
-derive_axiom!(A, DisjointClasses<A>, DisjointClasses(0));
-derive_axiom!(A, DisjointDataProperties<A>, DisjointDataProperties(0));
-derive_axiom!(A, DisjointObjectProperties<A>, DisjointObjectProperties(0));
-derive_axiom!(A, DisjointUnion<A>, DisjointUnion(0, 1));
-derive_axiom!(A, EquivalentClasses<A>, EquivalentClasses(0));
-derive_axiom!(A, EquivalentDataProperties<A>, EquivalentDataProperties(0));
-derive_axiom!(
-    A,
-    EquivalentObjectProperties<A>,
-    EquivalentObjectProperties(0)
-);
+derive_nary_axiom!(A, DifferentIndividuals<A>, DifferentIndividuals);
+derive_nary_axiom!(A, DisjointClasses<A>, DisjointClasses);
+derive_nary_axiom!(A, DisjointDataProperties<A>, DisjointDataProperties);
+derive_nary_axiom!(A, DisjointObjectProperties<A>, DisjointObjectProperties);
+derive_nary_axiom!(A, EquivalentClasses<A>, EquivalentClasses);
+derive_nary_axiom!(A, EquivalentDataProperties<A>, EquivalentDataProperties);
+derive_nary_axiom!(A, EquivalentObjectProperties<A>, EquivalentObjectProperties);
+
+impl<'a, A: ForIRI> Display for Functional<'a, DisjointUnion<A>, A> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
+        // Same >= 2 grammar minimum as the other n-ary axioms above, but on
+        // the trailing `Vec<ClassExpression>` only -- the leading `Class` is
+        // a fixed single field, not part of the n-ary operand list.
+        if self.0.1.len() < 2 {
+            return Ok(());
+        }
+        if let Some(annotations) = self.2 {
+            write!(
+                f,
+                "DisjointUnion({} {} {})",
+                Functional(annotations, self.1, None),
+                Functional(&self.0.0, self.1, None),
+                Functional(&self.0.1, self.1, None)
+            )
+        } else {
+            write!(
+                f,
+                "DisjointUnion({} {})",
+                Functional(&self.0.0, self.1, None),
+                Functional(&self.0.1, self.1, None)
+            )
+        }
+    }
+}
+impl<A: ForIRI> AsFunctional<A> for DisjointUnion<A> {}
 derive_axiom!(A, FunctionalObjectProperty<A>, FunctionalObjectProperty(0));
 derive_axiom!(A, FunctionalDataProperty<A>, FunctionalDataProperty(0));
 derive_axiom!(A, Import<A>, Import(0));
@@ -413,7 +470,7 @@ derive_axiom!(
 derive_axiom!(A, ObjectPropertyDomain<A>, ObjectPropertyDomain(ope, ce));
 derive_axiom!(A, ObjectPropertyRange<A>, ObjectPropertyRange(ope, ce));
 derive_axiom!(A, ReflexiveObjectProperty<A>, ReflexiveObjectProperty(0));
-derive_axiom!(A, SameIndividual<A>, SameIndividual(0));
+derive_nary_axiom!(A, SameIndividual<A>, SameIndividual);
 derive_axiom!(A, SubClassOf<A>, SubClassOf(sub, sup));
 derive_axiom!(
     A,
@@ -1225,6 +1282,38 @@ mod tests {
         // Manchester input) must not be double-prefixed.
         let anon = build.anon("_:x1");
         assert_eq!("_:x1", format!("{}", anon.as_functional()));
+    }
+
+    #[test]
+    fn test_ofn_nary_individual_axiom_below_min_arity_is_dropped() {
+        // OWL2 functional syntax requires >= 2 operands for
+        // DifferentIndividuals/SameIndividual, but real-world RDF can
+        // produce a one-member `owl:AllDifferent` (e.g. a degenerate
+        // `owl:distinctMembers` list). Writing it verbatim would produce
+        // `DifferentIndividuals(<one-iri>)`, which our own reader rejects
+        // (grammar requires `Individual{2, }`) -- the axiom must be dropped
+        // instead.
+        let build = Build::new_arc();
+        let i = build.named_individual("http://example.com/i");
+
+        let different = DifferentIndividuals(vec![i.clone().into()]);
+        assert_eq!("", format!("{}", different.as_functional()));
+
+        let same = SameIndividual(vec![i.into()]);
+        assert_eq!("", format!("{}", same.as_functional()));
+    }
+
+    #[test]
+    fn test_ofn_nary_individual_axiom_at_min_arity_is_written() {
+        let build = Build::new_arc();
+        let i1 = build.named_individual("http://example.com/i1");
+        let i2 = build.named_individual("http://example.com/i2");
+
+        let different = DifferentIndividuals(vec![i1.into(), i2.into()]);
+        assert_eq!(
+            "DifferentIndividuals(<http://example.com/i1> <http://example.com/i2>)",
+            format!("{}", different.as_functional())
+        );
     }
 
     #[test]
