@@ -656,11 +656,18 @@ fn qualifiers<A: ForIRI>(
     }
 }
 
-/// A qualifier key: an oboInOwl-local property is written bare, else compressed.
+/// A qualifier key: an oboInOwl-local property is written bare, the two
+/// builtin synonyms shared with the top-level name:/comment: tags are
+/// written bare too (oboformat/ROBOT), else compressed.
 fn short_key(ap: &str, cz: &impl Fn(&str) -> String) -> String {
-    ap.strip_prefix(OIO)
-        .map(String::from)
-        .unwrap_or_else(|| cz(ap))
+    match ap {
+        RDFS_LABEL => "name".to_string(),
+        RDFS_COMMENT => "comment".to_string(),
+        _ => ap
+            .strip_prefix(OIO)
+            .map(String::from)
+            .unwrap_or_else(|| cz(ap)),
+    }
 }
 
 fn av_lit<A: ForIRI>(av: &AnnotationValue<A>) -> Option<String> {
