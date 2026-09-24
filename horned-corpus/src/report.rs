@@ -14,6 +14,7 @@
 //! `report()` is a pure function of `records`: no I/O beyond writing the
 //! three output files, no horned-owl, no network.
 
+use crate::known_failures::{self, KnownFailure};
 use crate::model::*;
 use std::collections::{BTreeMap, HashMap};
 use std::path::Path;
@@ -22,7 +23,11 @@ use std::path::Path;
 /// `summary.json`'s `top_unknown` list and in `report.md`'s ranked section.
 const TOP_N: usize = 20;
 
-pub fn report(records: &[Record], out_dir: &Path) -> anyhow::Result<()> {
+/// `known` is the `known_failures.json` list (see `known_failures`) --
+/// matching cases are excluded from "Cases to Investigate" and listed
+/// separately in "Known Failures" instead, whether they were skipped
+/// outright by `run_bytes` or (under `--run-all`) actually attempted.
+pub fn report(records: &[Record], out_dir: &Path, known: &[KnownFailure]) -> anyhow::Result<()> {
     std::fs::create_dir_all(out_dir)?;
     // cases.csv
     let mut w = csv::Writer::from_path(out_dir.join("cases.csv"))?;
@@ -93,9 +98,9 @@ pub fn report(records: &[Record], out_dir: &Path) -> anyhow::Result<()> {
     // summary.json + report.md
     std::fs::write(
         out_dir.join("summary.json"),
-        serde_json::to_vec_pretty(&summarize(records))?,
+        serde_json::to_vec_pretty(&summarize(records, known))?,
     )?;
-    std::fs::write(out_dir.join("report.md"), render_md(records))?;
+    std::fs::write(out_dir.join("report.md"), render_md(records, known))?;
     Ok(())
 }
 
@@ -345,12 +350,20 @@ fn top_unknown(records: &[Record]) -> Vec<&CaseResult> {
     v
 }
 
+/// Whether `c` matches an entry in `known` -- see `known_failures`.
+fn is_known(c: &CaseResult, known: &[KnownFailure]) -> bool {
+    known_failures::find(known, &c.ontology, c.source_format, c.target_format).is_some()
+}
+
 /// Cases with `n_investigate() > 0` (i.e. any `Unknown` or `AnnotationLoss`
-/// diff -- both are real, reported findings, not benign), worst first (ties
-/// broken by ontology name for determinism), capped at `TOP_N`. Used by
-/// `report.md`'s "Cases to Investigate" section.
-fn top_investigate(records: &[Record]) -> Vec<&CaseResult> {
-    let mut v: Vec<&CaseResult> = cases(records).filter(|c| n_investigate(c) > 0).collect();
+/// diff -- both are real, reported findings, not benign), excluding any
+/// matching `known` (those are reported separately, see `known_cases`),
+/// worst first (ties broken by ontology name for determinism), capped at
+/// `TOP_N`. Used by `report.md`'s "Cases to Investigate" section.
+fn top_investigate<'a>(records: &'a [Record], known: &[KnownFailure]) -> Vec<&'a CaseResult> {
+    let mut v: Vec<&CaseResult> = cases(records)
+        .filter(|c| n_investigate(c) > 0 && !is_known(c, known))
+        .collect();
     v.sort_by(|a, b| {
         n_investigate(b)
             .cmp(&n_investigate(a))
@@ -360,7 +373,23 @@ fn top_investigate(records: &[Record]) -> Vec<&CaseResult> {
     v
 }
 
-fn summarize(records: &[Record]) -> serde_json::Value {
+/// Cases matching an entry in `known`, worst-outcome-first then by ontology
+/// name. Usually these are `Outcome::Skipped` (the normal `run_bytes`
+/// behaviour), but a `--run-all` run actually attempts them, so this also
+/// surfaces whichever outcome they got -- including `Ok`, meaning the known
+/// failure may no longer reproduce and the entry is worth revisiting.
+fn known_cases<'a>(records: &'a [Record], known: &[KnownFailure]) -> Vec<&'a CaseResult> {
+    let mut v: Vec<&CaseResult> = cases(records).filter(|c| is_known(c, known)).collect();
+    v.sort_by(|a, b| {
+        a.ontology
+            .cmp(&b.ontology)
+            .then(fmt(a.source_format).cmp(fmt(b.source_format)))
+            .then(fmt(a.target_format).cmp(fmt(b.target_format)))
+    });
+    v
+}
+
+fn summarize(records: &[Record], known: &[KnownFailure]) -> serde_json::Value {
     let mut reason = serde_json::Map::new();
     for (r, st) in by_reasoner(records) {
         reason.insert(
@@ -442,6 +471,22 @@ fn summarize(records: &[Record]) -> serde_json::Value {
         })
         .collect();
 
+    let known_list: Vec<serde_json::Value> = known_cases(records, known)
+        .into_iter()
+        .map(|c| {
+            let reason = known_failures::find(known, &c.ontology, c.source_format, c.target_format)
+                .map(|k| k.reason.as_str())
+                .unwrap_or_default();
+            serde_json::json!({
+                "ontology": c.ontology,
+                "source_format": fmt(c.source_format),
+                "target_format": fmt(c.target_format),
+                "outcome": out(c.outcome),
+                "reason": reason,
+            })
+        })
+        .collect();
+
     serde_json::json!({
         "total_cases": cases(records).count(),
         "by_format_pair": by_pair,
@@ -450,6 +495,7 @@ fn summarize(records: &[Record]) -> serde_json::Value {
         "category_totals": category_totals,
         "top_unknown": top,
         "by_reasoner": reason,
+        "known_failures": known_list,
     })
 }
 
@@ -592,7 +638,7 @@ fn profile_name(p: Profile) -> &'static str {
     }
 }
 
-fn render_md(records: &[Record]) -> String {
+fn render_md(records: &[Record], known: &[KnownFailure]) -> String {
     let mut s = String::new();
     // One report type per sweep -- name it for what the records actually
     // are, rather than calling a reasoning run a "Round-Trip Report".
@@ -680,6 +726,35 @@ fn render_md(records: &[Record]) -> String {
          than assuming every case in it is harmless.\n\n",
     );
 
+    s.push_str("## Known Failures\n\n");
+    s.push_str(
+        "Cases matching an entry in `known_failures.json` -- understood, tracked \
+         elsewhere, and excluded from \"Cases to Investigate\" below. Normally \
+         `Skipped` (the default `roundtrip` behaviour); a `--run-all` run instead \
+         shows whichever outcome they actually got, including `ok` if the failure \
+         no longer reproduces and the entry is worth revisiting.\n\n",
+    );
+    let kc = known_cases(records, known);
+    if kc.is_empty() {
+        s.push_str("None. \n\n");
+    } else {
+        s.push_str("| Ontology | Pair | Outcome | Reason |\n|---|---|---|---|\n");
+        for c in &kc {
+            let reason = known_failures::find(known, &c.ontology, c.source_format, c.target_format)
+                .map(|k| k.reason.as_str())
+                .unwrap_or_default();
+            s.push_str(&format!(
+                "| {} | {} -> {} | {} | {} |\n",
+                c.ontology,
+                fmt(c.source_format),
+                fmt(c.target_format),
+                out(c.outcome),
+                reason.replace('|', "\\|"),
+            ));
+        }
+        s.push('\n');
+    }
+
     s.push_str("## Cases to Investigate (Unknown + AnnotationLoss)\n\n");
     s.push_str(
         "Both `Unknown` and `AnnotationLoss` diffs are real, reported findings -- \
@@ -687,7 +762,7 @@ fn render_md(records: &[Record]) -> String {
          `AnnotationNormalization`, `BlankNodeRelabel`), they are not explained away \
          by canonicalization or reshaping and warrant manual inspection.\n\n",
     );
-    let tu = top_investigate(records);
+    let tu = top_investigate(records, known);
     if tu.is_empty() {
         s.push_str("None. \n\n");
     } else {
@@ -763,7 +838,7 @@ mod tests {
             reason_rec("a", Reasoner::Elk, ReasonOutcome::Ok, 100, Some(5)),
             reason_rec("b", Reasoner::Elk, ReasonOutcome::Timeout, 300, None),
         ];
-        let md = render_md(&recs);
+        let md = render_md(&recs, &[]);
         assert!(md.starts_with("# Reasoning Report"), "{md}");
         assert!(md.contains("| ELK | 2 | 1 | 0 | 1 | 0 |"), "{md}");
         assert!(!md.contains("Exact-Match Rates"), "{md}");
@@ -801,7 +876,7 @@ mod tests {
         assert_eq!(d.len(), 1);
         assert_eq!(d[0].0, "differs");
 
-        let md = render_md(&recs);
+        let md = render_md(&recs, &[]);
         assert!(md.contains("Disagreeing on Axiom Count"), "{md}");
         assert!(md.contains("| differs |"), "{md}");
         assert!(!md.contains("| agrees |"), "{md}");
@@ -842,7 +917,7 @@ mod tests {
             robot: None,
             agreement: BTreeMap::new(),
         })];
-        let md = render_md(&recs);
+        let md = render_md(&recs, &[]);
         assert!(md.starts_with("# Profile Report"), "{md}");
         assert!(md.contains("| EL | 1 | 1 | 100.0% |"), "{md}");
         assert!(md.contains("| DL | 1 | 0 | 0.0% |"), "{md}");
@@ -866,7 +941,7 @@ mod tests {
         })];
         let dir = std::env::temp_dir().join(format!("hrt-rep-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
-        report(&recs, &dir).unwrap();
+        report(&recs, &dir, &[]).unwrap();
         assert!(dir.join("cases.csv").exists());
         assert!(dir.join("summary.json").exists());
         assert!(dir.join("report.md").exists());
@@ -895,7 +970,7 @@ mod tests {
         })];
         let dir = std::env::temp_dir().join(format!("hrt-rep-unk-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
-        report(&recs, &dir).unwrap();
+        report(&recs, &dir, &[]).unwrap();
 
         let csv = std::fs::read_to_string(dir.join("cases.csv")).unwrap();
         let header = csv.lines().next().unwrap();

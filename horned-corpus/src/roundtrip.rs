@@ -15,6 +15,7 @@ use crate::canon::canonicalize;
 use crate::categorize::categorize;
 use crate::detect::detect;
 use crate::diff::diff;
+use crate::known_failures::{self, KnownFailure};
 use crate::model::*;
 use crate::ontology::{ReadOk, read_source, write_target};
 use horned_owl::model::{RcAnnotatedComponent, RcStr};
@@ -101,7 +102,19 @@ pub(crate) fn read_for_sweep(
 /// one `Record::Case` per entry in `formats`, in `formats` order. If the
 /// source read fails or panics, only the `Record::Source` is returned --
 /// there is nothing to round-trip without a model.
-pub fn run_bytes(ontology: &str, bytes: &[u8], formats: &[Format]) -> Vec<Record> {
+///
+/// Unless `run_all` is set, a (source, target) case matching an entry in
+/// `known` is not run at all -- it's recorded as `Outcome::Skipped` with the
+/// known reason as the error, so a routine sweep doesn't keep re-verifying
+/// (and a report doesn't keep re-surfacing) a case that's already understood
+/// and tracked elsewhere. See `known_failures`.
+pub fn run_bytes(
+    ontology: &str,
+    bytes: &[u8],
+    formats: &[Format],
+    known: &[KnownFailure],
+    run_all: bool,
+) -> Vec<Record> {
     let mut recs = Vec::new();
     let sfmt = detect(bytes);
     let Ok(src) = read_for_sweep(ontology, bytes, sfmt, &mut recs) else {
@@ -115,11 +128,30 @@ pub fn run_bytes(ontology: &str, bytes: &[u8], formats: &[Format]) -> Vec<Record
     // source model.
     let cmo: ComponentMappedOntology<RcStr, RcAnnotatedComponent> = src.model.clone().into();
     for &t in formats {
-        recs.push(Record::Case(one_case(
-            ontology, sfmt, t, &src, &cmo, &src_canon,
-        )));
+        let case = match (run_all, known_failures::find(known, ontology, sfmt, t)) {
+            (false, Some(k)) => skipped_case(ontology, sfmt, t, &k.reason),
+            _ => one_case(ontology, sfmt, t, &src, &cmo, &src_canon),
+        };
+        recs.push(Record::Case(case));
     }
     recs
+}
+
+/// A `CaseResult` for a case skipped because it matches a `known_failures`
+/// entry (see `run_bytes`), rather than one that was actually attempted.
+fn skipped_case(ontology: &str, sfmt: Format, tfmt: Format, reason: &str) -> CaseResult {
+    CaseResult {
+        ontology: ontology.into(),
+        source_format: sfmt,
+        target_format: tfmt,
+        outcome: Outcome::Skipped,
+        error: Some(format!("known failure: {reason}")),
+        exact: false,
+        diffs: Vec::new(),
+        category_counts: BTreeMap::new(),
+        write_us: None,
+        reread_us: None,
+    }
 }
 
 /// Read one ontology and check it against the OWL 2 profiles, without
@@ -294,7 +326,7 @@ mod tests {
     fn produces_source_and_case_records() {
         let ofn =
             b"Prefix(:=<http://ex/>)\nOntology(<http://ex/o>\nDeclaration(Class(<http://ex/A>))\n)";
-        let recs = run_bytes("t", ofn, &[Format::Ofn, Format::Omn]);
+        let recs = run_bytes("t", ofn, &[Format::Ofn, Format::Omn], &[], false);
         assert!(matches!(recs[0], Record::Source(_)));
         let cases = recs.iter().filter(|r| matches!(r, Record::Case(_))).count();
         assert_eq!(cases, 2);
@@ -323,7 +355,7 @@ mod tests {
   <owl:Ontology rdf:about="http://ex/o"/>
   <owl:Class rdf:about="http://ex/A"/>
 </rdf:RDF>"#;
-        let recs = run_bytes("rdf-t", rdf, &[Format::RdfXml]);
+        let recs = run_bytes("rdf-t", rdf, &[Format::RdfXml], &[], false);
         match &recs[0] {
             Record::Source(r) => {
                 assert_eq!(r.source_format, Format::RdfXml);
@@ -344,7 +376,7 @@ mod tests {
         // attempted.
         let ofn =
             b"Prefix(:=<http://ex/>)\nOntology(<http://ex/o>\nDeclaration(Class(<http://ex/A>))\n)";
-        let recs = run_bytes("t", ofn, &[Format::Unknown]);
+        let recs = run_bytes("t", ofn, &[Format::Unknown], &[], false);
         assert_eq!(recs.len(), 2, "expected source + case records");
 
         // Verify source record is Ok
@@ -377,7 +409,13 @@ mod tests {
         // Format::Unknown, and read_source(Unknown, garbage) fails. No Case
         // records are produced because the source read failed -- round-trips
         // are skipped entirely.
-        let recs = run_bytes("t", b"garbage not an ontology", &[Format::Ofn, Format::Omn]);
+        let recs = run_bytes(
+            "t",
+            b"garbage not an ontology",
+            &[Format::Ofn, Format::Omn],
+            &[],
+            false,
+        );
         assert_eq!(
             recs.len(),
             1,
@@ -391,5 +429,41 @@ mod tests {
             }
             other => panic!("expected Record::Source with ReadFail, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn known_failure_is_skipped_by_default_and_run_with_run_all() {
+        let ofn =
+            b"Prefix(:=<http://ex/>)\nOntology(<http://ex/o>\nDeclaration(Class(<http://ex/A>))\n)";
+        let known = vec![KnownFailure {
+            ontology: "t".into(),
+            source_format: None,
+            target_format: Some(Format::Omn),
+            reason: "test reason".into(),
+        }];
+
+        let recs = run_bytes("t", ofn, &[Format::Ofn, Format::Omn], &known, false);
+        // The Ofn case (not matched) still runs normally; the Omn case
+        // (matched) is skipped rather than attempted.
+        let ofn_case = recs.iter().find_map(|r| match r {
+            Record::Case(c) if c.target_format == Format::Ofn => Some(c),
+            _ => None,
+        });
+        assert_eq!(ofn_case.unwrap().outcome, Outcome::Ok);
+        let omn_case = recs.iter().find_map(|r| match r {
+            Record::Case(c) if c.target_format == Format::Omn => Some(c),
+            _ => None,
+        });
+        let omn_case = omn_case.unwrap();
+        assert_eq!(omn_case.outcome, Outcome::Skipped);
+        assert!(omn_case.error.as_deref().unwrap().contains("test reason"));
+
+        // --run-all bypasses the skip and actually attempts the case.
+        let recs_all = run_bytes("t", ofn, &[Format::Omn], &known, true);
+        let omn_case_all = recs_all.iter().find_map(|r| match r {
+            Record::Case(c) => Some(c),
+            _ => None,
+        });
+        assert_eq!(omn_case_all.unwrap().outcome, Outcome::Ok);
     }
 }

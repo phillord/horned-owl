@@ -86,6 +86,15 @@ enum Cmd {
         /// tree is now on.
         #[arg(long = "horned-owl-rev")]
         horned_owl_rev: Option<String>,
+        /// Run every (ontology, target format) case, including ones listed
+        /// in `known_failures.json`. By default those are skipped --
+        /// recorded as `Outcome::Skipped` with the known reason as the
+        /// error -- since they're understood, tracked elsewhere, and would
+        /// otherwise just add noise to a report's "new" findings on every
+        /// run. Pass this to re-check whether a known failure still fails
+        /// (e.g. after a fix attempt) or to get a full, unfiltered sweep.
+        #[arg(long = "run-all")]
+        run_all: bool,
     },
     /// Check every ontology in a corpus against the OWL 2 profiles.
     Profile {
@@ -332,15 +341,17 @@ fn main() -> anyhow::Result<()> {
             jobs,
             max_bytes,
             horned_owl_rev,
+            run_all,
         } => {
             let fmts = parse_formats(&formats);
+            let known = horned_corpus::known_failures::known_failures();
             sweep(
                 &dir,
                 &out,
                 jobs,
                 max_bytes,
                 horned_owl_rev.as_deref(),
-                |name, bytes| roundtrip::run_bytes(name, bytes, &fmts),
+                |name, bytes| roundtrip::run_bytes(name, bytes, &fmts, &known, run_all),
             )?;
         }
         Cmd::Reason {
@@ -387,7 +398,8 @@ fn main() -> anyhow::Result<()> {
                 .filter(|l| !l.is_empty())
                 .map(serde_json::from_str)
                 .collect::<Result<_, _>>()?;
-            report::report(&recs, &out_dir)?;
+            let known = horned_corpus::known_failures::known_failures();
+            report::report(&recs, &out_dir, &known)?;
         }
         Cmd::Fetch {
             out,
