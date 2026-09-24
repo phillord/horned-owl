@@ -2077,6 +2077,48 @@ mod test {
         assert!(s.contains("xmlns:owl=\"http://www.w3.org/2002/07/owl#\""));
     }
 
+    #[test]
+    fn write_with_default_prefix_produces_rereadable_xml() {
+        // A `PrefixMapping` with an empty/default prefix (e.g. from an OWX
+        // source whose root `xmlns="..."` is the ontology's own namespace)
+        // used to be written verbatim as an `xmlns:="..."` attribute --
+        // invalid XML -- and any entity actually falling under that default
+        // namespace got a malformed `<:LocalName>` element tag. Both broke
+        // reread with "Unknown prefix :".
+        let b = Build::new_rc();
+        let mut mapping = PrefixMapping::default();
+        mapping.add_prefix("", "http://example.com/eg#").unwrap();
+
+        let mut ont: ComponentMappedOntology<RcStr, Rc<AnnotatedComponent<RcStr>>> =
+            ComponentMappedOntology::new_rc();
+        ont.insert(DeclareClass(b.class("http://example.com/eg#A")));
+        ont.insert(DeclareClass(b.class("http://example.com/eg#B")));
+        ont.insert(SubClassOf {
+            sub: ClassExpression::Class(b.class("http://example.com/eg#A")),
+            sup: ClassExpression::Class(b.class("http://example.com/eg#B")),
+        });
+
+        let mut buf = Vec::new();
+        write(&mut buf, &ont, Some(&mapping)).unwrap();
+        let s = String::from_utf8(buf.clone()).unwrap();
+
+        assert!(
+            !s.contains("xmlns:=\""),
+            "must not emit an invalid xmlns:= declaration, got:\n{s}"
+        );
+        assert!(
+            !s.contains("<:"),
+            "must not emit a malformed <:LocalName> element, got:\n{s}"
+        );
+
+        let ont2 = read_ok(&mut buf.as_slice());
+        assert_eq!(
+            ont2.iter().count(),
+            4, // the 3 inserted components, plus an implicit OntologyID
+            "expected all inserted components to survive reread, got:\n{s}"
+        );
+    }
+
     fn roundtrip(ont: &str) -> (SetOntology<RcStr>, SetOntology<RcStr>) {
         let ont_orig = read_ok(&mut ont.as_bytes());
         let temp_file = Temp::new_file().unwrap();
