@@ -909,11 +909,32 @@ where
         Ok(self)
     }
 
+    /// Look up the prefix registered for `iri_ns`, if any -- but never the
+    /// empty/default prefix, which has no valid `prefix:local` or
+    /// `xmlns:prefix` spelling (see `write_prefix`). A caller must treat
+    /// this the same as "no prefix registered" and fall back to a full IRI.
+    fn abbreviating_prefix(&self, iri_ns: &str) -> Option<&str> {
+        self.config
+            .prefix
+            .get(iri_ns)
+            .map(String::as_str)
+            .filter(|p| !p.is_empty())
+    }
+
     fn write_prefix(&mut self, rdf_open: &mut BytesStart<'_>) -> Result<(), io::Error> {
         if let Some(ref base) = self.config.base {
             rdf_open.push_attribute(("xmlns", &base[..]));
         }
         for i in &self.config.prefix {
+            // The empty/default prefix has no name to write as an `xmlns:`
+            // attribute -- `xmlns:="..."` is not valid XML (a default
+            // namespace uses the unqualified `xmlns="..."` form, which is
+            // `config.base`'s job, set separately above). Skip it: the
+            // element/attribute this prefix would have abbreviated is still
+            // written correctly, just as a full IRI rather than a bare name.
+            if i.1.is_empty() {
+                continue;
+            }
             let ns = format!("xmlns:{}", i.1);
             rdf_open.push_attribute((&ns[..], &i.0[..]));
         }
@@ -973,7 +994,7 @@ where
 
     fn bytes_start_iri<'a>(&mut self, nn: &'a PNamedNode<A>) -> BytesStart<'a> {
         let (iri_protocol_and_host, iri_qname) = nn.split_iri();
-        if let Some(iri_ns_prefix) = &self.config.prefix.get(iri_protocol_and_host) {
+        if let Some(iri_ns_prefix) = self.abbreviating_prefix(iri_protocol_and_host) {
             BytesStart::new(format!("{}:{}", iri_ns_prefix, iri_qname))
         } else {
             let mut bs = BytesStart::new(iri_qname);
@@ -1035,7 +1056,7 @@ where
                     PLiteral::Simple { value } => {
                         let (iri_protocol_and_host, iri_qname) = literal_t.predicate.split_iri();
 
-                        if let Some(iri_ns_prefix) = &self.config.prefix.get(iri_protocol_and_host)
+                        if let Some(iri_ns_prefix) = self.abbreviating_prefix(iri_protocol_and_host)
                             && folded_predicates.insert(&literal_t.predicate)
                         {
                             description_open.push_attribute((
