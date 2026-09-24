@@ -663,7 +663,8 @@ mod tests {
         );
     }
 
-    /// `format-version:` and the per-term `oboInOwl:id` bookkeeping have no
+    /// `format-version:`, the per-term `oboInOwl:id` bookkeeping and the
+    /// canonical `rdfs:label` on each built-in oboInOwl/IAO property have no
     /// OWL2 counterpart at all -- they are the reader's own encoding of OBO's
     /// serialization envelope (see [`super::from_pair`]'s `ont_ann`,
     /// `referenced_declarations`, `builtin_labels`), not ontology content, so
@@ -673,6 +674,7 @@ mod tests {
         use crate::model::AnnotationSubject;
         const OIO: &str = "http://www.geneontology.org/formats/oboInOwl#";
         const RDFS_LABEL: &str = "http://www.w3.org/2000/01/rdf-schema#label";
+        const IAO_DEF: &str = "http://purl.obolibrary.org/obo/IAO_0000115";
         let format_version = format!("{OIO}hasOBOFormatVersion");
         let id_prop = format!("{OIO}id");
         let is_envelope_iri = |iri: &str| iri == format_version || iri == id_prop;
@@ -683,7 +685,10 @@ mod tests {
             Component::AnnotationAssertion(a) => {
                 is_envelope_iri(a.ann.ap.0.as_ref())
                     || (a.ann.ap.0.as_ref() == RDFS_LABEL
-                        && matches!(&a.subject, AnnotationSubject::IRI(i) if is_envelope_iri(i.as_ref())))
+                        && matches!(&a.subject, AnnotationSubject::IRI(i)
+                            if is_envelope_iri(i.as_ref())
+                                || i.as_ref().starts_with(OIO)
+                                || i.as_ref() == IAO_DEF))
             }
             _ => false,
         }
