@@ -4,6 +4,7 @@ pub mod corpus;
 pub mod detect;
 pub mod diff;
 pub mod fetch;
+pub mod known_failures;
 pub mod model;
 pub mod ontology;
 pub mod profile;

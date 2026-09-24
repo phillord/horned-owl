@@ -1,0 +1,23 @@
+[
+  {
+    "ontology": "CRENO",
+    "target_format": "rdf_xml",
+    "reason": "OWX entity referenced only via typed syntax (e.g. <Class IRI=.../> inside EquivalentClasses, no separate <Declaration>) has no DeclareClass component in the model. The RDF/XML writer only emits a type triple from an explicit Declare* component, so it writes the entity as an untyped rdf:Description; the RDF reader then can't classify it on reread (\"Unknown entity in equivalent class statement\"). See what_to_do_about_strict_and_lax.md and memory project_corpus_reread_fail_triage_sep24."
+  },
+  {
+    "ontology": "NIO",
+    "target_format": "rdf_xml",
+    "reason": "Same cause as CRENO -- see that entry."
+  },
+  {
+    "ontology": "HO",
+    "target_format": "rdf_xml",
+    "reason": "Same cause as CRENO -- see that entry."
+  },
+  {
+    "ontology": "AIDENTIFYAGE",
+    "source_format": "owl_xml",
+    "target_format": "rdf_xml",
+    "reason": "Known cross-import-punning case, deferred pending #281/#282. See memory project_full_corpus_run."
+  }
+]
