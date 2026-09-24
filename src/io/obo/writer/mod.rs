@@ -280,7 +280,7 @@ fn header_line<A: ForIRI>(ac: &AnnotatedComponent<A>, cz: &impl Fn(&str) -> Stri
                 _ if ap == format!("{OIO}default-namespace") => {
                     vec![format!("default-namespace: {v}")]
                 }
-                _ if ap == RDFS_COMMENT => vec![format!("remark: {v}")],
+                _ if ap == RDFS_COMMENT => vec![format!("remark: {}", esc_unquoted(&v))],
                 _ => vec![],
             }
         }
