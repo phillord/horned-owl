@@ -7,3 +7,7 @@ name: c
 is_a: GO:0002 {source="PMID:1"}
 relationship: part_of GO:0003 {source="PMID:2"}
 equivalent_to: GO:0004 {source="PMID:3"}
+
+[Typedef]
+id: part_of
+is_transitive: true {source="PMID:4"}

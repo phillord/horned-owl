@@ -418,13 +418,13 @@ fn clause_lines<A: ForIRI>(
         }
         Component::ObjectPropertyDomain(d) => op_class(&d.ope, &d.ce, "domain", cz),
         Component::ObjectPropertyRange(r) => op_class(&r.ope, &r.ce, "range", cz),
-        Component::TransitiveObjectProperty(p) => characteristic(&p.0, "is_transitive"),
-        Component::SymmetricObjectProperty(p) => characteristic(&p.0, "is_symmetric"),
-        Component::ReflexiveObjectProperty(p) => characteristic(&p.0, "is_reflexive"),
-        Component::AsymmetricObjectProperty(p) => characteristic(&p.0, "is_asymmetric"),
-        Component::FunctionalObjectProperty(p) => characteristic(&p.0, "is_functional"),
+        Component::TransitiveObjectProperty(p) => characteristic(&p.0, "is_transitive", ac, cz),
+        Component::SymmetricObjectProperty(p) => characteristic(&p.0, "is_symmetric", ac, cz),
+        Component::ReflexiveObjectProperty(p) => characteristic(&p.0, "is_reflexive", ac, cz),
+        Component::AsymmetricObjectProperty(p) => characteristic(&p.0, "is_asymmetric", ac, cz),
+        Component::FunctionalObjectProperty(p) => characteristic(&p.0, "is_functional", ac, cz),
         Component::InverseFunctionalObjectProperty(p) => {
-            characteristic(&p.0, "is_inverse_functional")
+            characteristic(&p.0, "is_inverse_functional", ac, cz)
         }
         Component::ClassAssertion(a) => {
             if let (CE::Class(c), Individual::Named(i)) = (&a.ce, &a.i) {
@@ -483,9 +483,15 @@ fn op_class<A: ForIRI>(
     }
 }
 
-fn characteristic<A: ForIRI>(ope: &OPE<A>, tag: &str) -> Vec<(String, String)> {
+fn characteristic<A: ForIRI>(
+    ope: &OPE<A>,
+    tag: &str,
+    ac: &AnnotatedComponent<A>,
+    cz: &impl Fn(&str) -> String,
+) -> Vec<(String, String)> {
     if let OPE::ObjectProperty(p) = ope {
-        vec![(p.0.as_ref().to_string(), format!("{tag}: true"))]
+        let quals = qualifiers(ac, &[], cz);
+        vec![(p.0.as_ref().to_string(), format!("{tag}: true{quals}"))]
     } else {
         vec![]
     }
