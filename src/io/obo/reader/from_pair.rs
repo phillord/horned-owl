@@ -196,6 +196,20 @@ fn lit_ann<A: ForIRI>(b: &Build<A>, prop: &str, value: &str) -> Annotation<A> {
     }
 }
 
+/// OBO has no syntax for a literal's language; the `name`/`comment`
+/// qualifier keys are read as English, matching what oboformat/ROBOT write
+/// on the way out to OWL.
+fn en_ann<A: ForIRI>(b: &Build<A>, prop: &str, value: &str) -> Annotation<A> {
+    Annotation {
+        ap: b.annotation_property(prop),
+        av: AnnotationValue::Literal(Literal::Language {
+            literal: value.to_string(),
+            lang: "en".to_string(),
+        }),
+        ann: Default::default(),
+    }
+}
+
 fn iri_ann<A: ForIRI>(b: &Build<A>, prop: &str, iri: IRI<A>) -> Annotation<A> {
     Annotation {
         ap: b.annotation_property(prop),
@@ -258,10 +272,11 @@ fn split_line(line: Pair<'_, Rule>) -> (Pair<'_, Rule>, Vec<(String, String)>) {
     (clause, quals)
 }
 
-/// Map a `{qualifier}` block to axiom annotations. A bare key lives in the
-/// oboInOwl namespace (`source` → `oboInOwl:source`), a CURIE key expands
-/// (matching ROBOT). Structural qualifiers (cardinality, gci_*) are consumed
-/// elsewhere and skipped here.
+/// Map a `{qualifier}` block to axiom annotations. `name`/`comment` are the
+/// builtin synonyms also used by the top-level name:/comment: tags, a bare
+/// key otherwise lives in the oboInOwl namespace (`source` →
+/// `oboInOwl:source`), and a CURIE key expands (matching ROBOT). Structural
+/// qualifiers (cardinality, gci_*) are consumed elsewhere and skipped here.
 fn qual_anns<A: ForIRI>(ctx: &Context<'_, A>, quals: &[(String, String)]) -> Vec<Annotation<A>> {
     let b = ctx.build;
     quals
@@ -278,13 +293,11 @@ fn qual_anns<A: ForIRI>(ctx: &Context<'_, A>, quals: &[(String, String)]) -> Vec
                     | "gci_filler"
             )
         })
-        .map(|(k, v)| {
-            let prop = if k.contains(':') {
-                ctx.expand(k).as_ref().to_string()
-            } else {
-                format!("{OIO}{k}")
-            };
-            lit_ann(b, &prop, v)
+        .map(|(k, v)| match k.as_str() {
+            "name" => en_ann(b, RDFS_LABEL, v),
+            "comment" => en_ann(b, RDFS_COMMENT, v),
+            _ if k.contains(':') => lit_ann(b, ctx.expand(k).as_ref(), v),
+            _ => lit_ann(b, &format!("{OIO}{k}"), v),
         })
         .collect()
 }
@@ -1302,6 +1315,19 @@ fn collect_aps<A: ForIRI>(a: &Annotation<A>, out: &mut BTreeSet<IRI<A>>) {
     }
 }
 
+/// Same as `collect_aps`, but for annotations sourced from an axiom's own
+/// `{qualifier}` block (name/comment): oboformat/ROBOT never declare
+/// rdfs:label/rdfs:comment there, unlike a `name:`/`property_value:` clause's
+/// own AnnotationAssertion, which does get one (see `instance_frame_golden`).
+fn collect_axiom_qualifier_aps<A: ForIRI>(a: &Annotation<A>, out: &mut BTreeSet<IRI<A>>) {
+    if a.ap.0.as_ref() != RDFS_LABEL && a.ap.0.as_ref() != RDFS_COMMENT {
+        out.insert(a.ap.0.clone());
+    }
+    for n in &a.ann {
+        collect_axiom_qualifier_aps(n, out);
+    }
+}
+
 /// oboformat/ROBOT attach a canonical `rdfs:label` to each standard oboInOwl /
 /// IAO annotation property that is actually used (e.g. `hasExactSynonym` →
 /// "has_exact_synonym"). Seeded from owlmake's `add_oboinowl_builtin_labels`.
@@ -1433,7 +1459,7 @@ fn referenced_declarations<A: ForIRI>(
 
     for ac in comps {
         for a in &ac.ann {
-            collect_aps(a, &mut aps);
+            collect_axiom_qualifier_aps(a, &mut aps);
         }
         match &ac.component {
             Component::DeclareClass(d) => {
