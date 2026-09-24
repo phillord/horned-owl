@@ -358,7 +358,10 @@ fn clause_lines<A: ForIRI>(
             let CE::Class(c) = &e.0[0] else { return vec![] };
             let owner = c.0.as_ref().to_string();
             match &e.0[1] {
-                CE::Class(d) => vec![(owner, format!("equivalent_to: {}", cz(d.0.as_ref())))],
+                CE::Class(d) => {
+                    let quals = qualifiers(ac, &[], cz);
+                    vec![(owner, format!("equivalent_to: {}{quals}", cz(d.0.as_ref())))]
+                }
                 // intersection_of / union_of are multiple lines building ONE
                 // order-sensitive axiom; emit them as a single block so the
                 // stanza's clause sort keeps the operands in Vec order.
