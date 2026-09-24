@@ -179,7 +179,16 @@ impl<A: ForIRI> AsManchester<A> for NamedIndividual<A> {}
 
 impl<A: ForIRI> Display for Manchester<'_, AnonymousIndividual<A>, A> {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
-        write!(f, "_:{}", self.0.0.borrow())
+        // Generated labels (e.g. from the RDF reader) are bare, while labels
+        // read from an OWX `nodeID` that itself already carries a literal
+        // `_:` prefix (real-world non-conformant input) must not be
+        // double-prefixed.
+        let label = self.0.0.borrow();
+        if label.starts_with("_:") {
+            write!(f, "{label}")
+        } else {
+            write!(f, "_:{label}")
+        }
     }
 }
 impl<A: ForIRI> AsManchester<A> for AnonymousIndividual<A> {}
@@ -944,6 +953,21 @@ mod tests {
         let mut pm = curie::PrefixMapping::default();
         pm.add_prefix("ex", "http://example.org/").unwrap();
         assert_eq!(c.as_manchester_with_prefixes(&pm).to_string(), "ex:Dog");
+    }
+
+    #[test]
+    fn anonymous_individual_label_is_not_double_prefixed() {
+        // Generated labels (e.g. from the RDF reader) are bare, so `_:` must
+        // be added. A label already carrying `_:` -- e.g. read from an OWX
+        // `nodeID` attribute that itself includes the literal prefix
+        // (real-world non-conformant input, seen in the wild) -- must not
+        // be prefixed twice.
+        let b = Build::new_rc();
+        let bare = b.anon("genid1");
+        assert_eq!(bare.as_manchester().to_string(), "_:genid1");
+
+        let already_prefixed = b.anon("_:genid1");
+        assert_eq!(already_prefixed.as_manchester().to_string(), "_:genid1");
     }
 
     #[test]
