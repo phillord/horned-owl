@@ -90,7 +90,7 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
     let cz = |iri: &str| compress(iri, onto_ns.as_deref(), &idspaces);
 
     // Pass 1: the stanza entities (those with an oboInOwl:id) and their kinds.
-    let mut ids: BTreeMap<String, String> = BTreeMap::new();
+    let mut id_values: BTreeMap<String, Vec<String>> = BTreeMap::new();
     let mut kinds: BTreeMap<String, Kind> = BTreeMap::new();
     for ac in ont.iter() {
         match &ac.component {
@@ -98,7 +98,10 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
                 if let (crate::model::AnnotationSubject::IRI(s), AnnotationValue::Literal(l)) =
                     (&a.subject, &a.ann.av)
                 {
-                    ids.insert(s.as_ref().to_string(), literal_text(l));
+                    id_values
+                        .entry(s.as_ref().to_string())
+                        .or_default()
+                        .push(literal_text(l));
                 }
             }
             Component::DeclareClass(d) => {
@@ -120,6 +123,27 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
             _ => {}
         }
     }
+
+    // An entity can carry several `oboInOwl:id` values: the reader's own stamp
+    // plus one restored from `owl-axioms:` that disagrees with the IRI. The
+    // stanza id is the one that matches the IRI, else any that is a single
+    // token, else the compressed IRI itself. The rest have no clause and are
+    // written to `owl-axioms:` below.
+    let ids: BTreeMap<String, String> = id_values
+        .into_iter()
+        .map(|(iri, values)| {
+            let compressed = cz(&iri);
+            let id = if values.contains(&compressed) {
+                compressed
+            } else {
+                values
+                    .into_iter()
+                    .find(|v| !v.is_empty() && !v.contains(char::is_whitespace))
+                    .unwrap_or(compressed)
+            };
+            (iri, id)
+        })
+        .collect();
 
     let mut stanzas: BTreeMap<(Kind, String), Stanza> = BTreeMap::new();
     let mut header: Vec<String> = Vec::new();
@@ -163,7 +187,7 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
         wrote |= !hlines.is_empty();
         header.extend(hlines);
 
-        if !wrote && !is_never_axiom_fallback(&ac.component) {
+        if !wrote && (!is_never_axiom_fallback(&ac.component) || is_unused_id(ac, &ids)) {
             unhandled.push(ac.clone());
         }
     }
@@ -221,6 +245,22 @@ fn is_never_axiom_fallback<A: ForIRI>(c: &Component<A>) -> bool {
             | Component::AnnotationAssertion(_)
             | Component::OntologyAnnotation(_)
     )
+}
+
+/// An `oboInOwl:id` assertion whose value is not the id its stanza is written
+/// with, so `annotation_clause` drops it and `owl-axioms:` must carry it.
+fn is_unused_id<A: ForIRI>(ac: &AnnotatedComponent<A>, ids: &BTreeMap<String, String>) -> bool {
+    match &ac.component {
+        Component::AnnotationAssertion(a) if a.ann.ap.0.as_ref() == format!("{OIO}id") => {
+            match (&a.subject, &a.ann.av) {
+                (crate::model::AnnotationSubject::IRI(s), AnnotationValue::Literal(l)) => {
+                    ids.get(s.as_ref()).map(String::as_str) != Some(literal_text(l).as_str())
+                }
+                _ => false,
+            }
+        }
+        _ => false,
+    }
 }
 
 /// Render components with no native OBO representation as an escaped,

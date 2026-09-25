@@ -709,13 +709,30 @@ mod tests {
                 .0
                 .into();
 
+        // The reader stamps every stanza with an `oboInOwl:id` matching its `id:`
+        // line, which the oracle lacks. One restored from `owl-axioms:` that
+        // disagrees with the IRI is content, and stays if the oracle has it.
+        let is_id_prop = |ac: &crate::model::AnnotatedComponent<RcStr>| {
+            matches!(&ac.component, Component::DeclareAnnotationProperty(d)
+                if d.0.0.as_ref() == "http://www.geneontology.org/formats/oboInOwl#id")
+        };
+        let is_oracle_id = |ac: &crate::model::AnnotatedComponent<RcStr>| {
+            matches!(&ac.component, Component::AnnotationAssertion(a)
+                if a.ann.ap.0.as_ref() == "http://www.geneontology.org/formats/oboInOwl#id")
+                && xml_ont.iter().any(|x| x == ac)
+        };
+
         crate::normalize::normalize_and_assert_eq(
             obo_ont
                 .iter()
-                .filter(|ac| !is_obo_envelope(ac))
+                .filter(|ac| !is_obo_envelope(ac) || is_oracle_id(ac))
                 .cloned()
                 .collect(),
-            xml_ont.iter().cloned().collect(),
+            xml_ont
+                .iter()
+                .filter(|ac| !is_id_prop(ac))
+                .cloned()
+                .collect(),
         );
     }
 }
