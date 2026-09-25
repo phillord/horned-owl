@@ -9,3 +9,4 @@ license = "LGPL-3.0"
 
 [dependencies]
 horned-owl = { path = "../", version = "4.0.0" }
+rustc-hash = "2"

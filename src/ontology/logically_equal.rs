@@ -3,7 +3,7 @@ use crate::model::{AnnotatedComponent, Component, ForIRI, MutableOntology, RcStr
 use crate::ontology::indexed::ForIndex;
 
 use super::indexed::{OntologyIndex, ThreeIndexedOntology, TwoIndexedOntology};
-use std::collections::HashMap;
+use rustc_hash::FxHashMap as HashMap;
 use std::rc::Rc;
 
 #[derive(Debug)]
@@ -11,13 +11,13 @@ pub struct LogicallyEqualIndex<A, AA>(HashMap<Component<A>, AA>);
 
 impl<A: ForIRI, AA: ForIndex<A>> Default for LogicallyEqualIndex<A, AA> {
     fn default() -> Self {
-        LogicallyEqualIndex(HashMap::new())
+        LogicallyEqualIndex(HashMap::default())
     }
 }
 
 impl<A: ForIRI, AA: ForIndex<A>> LogicallyEqualIndex<A, AA> {
     pub fn new() -> Self {
-        LogicallyEqualIndex(HashMap::new())
+        LogicallyEqualIndex(HashMap::default())
     }
 }
 

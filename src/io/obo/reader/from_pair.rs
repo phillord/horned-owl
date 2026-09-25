@@ -953,8 +953,8 @@ fn typedef_to_components<A: ForIRI>(
                 if let Some(other) = val(0) {
                     out.push(component_ann(
                         InverseObjectProperties(
-                            ObjectProperty(iri.clone()),
-                            ObjectProperty(ctx.expand_rel(other)),
+                            ObjectProperty(iri.clone()).into(),
+                            ObjectProperty(ctx.expand_rel(other)).into(),
                         ),
                         qa,
                     ));
@@ -1519,8 +1519,12 @@ fn referenced_declarations<A: ForIRI>(
                 }
             }
             Component::InverseObjectProperties(a) => {
-                ops.insert(a.0.0.clone());
-                ops.insert(a.1.0.clone());
+                if let Some(p) = a.0.as_property() {
+                    ops.insert(p.0.clone());
+                }
+                if let Some(p) = a.1.as_property() {
+                    ops.insert(p.0.clone());
+                }
             }
             Component::ObjectPropertyDomain(d) => {
                 op_of(&d.ope, &mut ops);

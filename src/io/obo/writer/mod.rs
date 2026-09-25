@@ -411,10 +411,15 @@ fn clause_lines<A: ForIRI>(
             }
         }
         Component::InverseObjectProperties(a) => {
-            vec![(
-                a.0.0.as_ref().to_string(),
-                format!("inverse_of: {}", cz(a.1.0.as_ref())),
-            )]
+            // OBO `inverse_of:` is only defined between named properties; an
+            // inverse *expression* on either side has no OBO form, so skip it.
+            match (a.0.as_property(), a.1.as_property()) {
+                (Some(p0), Some(p1)) => vec![(
+                    p0.0.as_ref().to_string(),
+                    format!("inverse_of: {}", cz(p1.0.as_ref())),
+                )],
+                _ => vec![],
+            }
         }
         Component::ObjectPropertyDomain(d) => op_class(&d.ope, &d.ce, "domain", cz),
         Component::ObjectPropertyRange(r) => op_class(&r.ope, &r.ce, "range", cz),
@@ -775,7 +780,7 @@ mod tests {
 
     use rstest::rstest;
 
-    use crate::model::{AnnotatedComponent, Ontology, RcStr};
+    use crate::model::{AnnotatedComponent, Component, Ontology, RcStr};
     use crate::ontology::component_mapped::ComponentMappedOntology;
     use crate::ontology::set::SetOntology;
 
@@ -789,7 +794,20 @@ mod tests {
     }
 
     fn axioms<O: Ontology<RcStr>>(ont: &O) -> BTreeSet<String> {
-        ont.iter().map(|ac| format!("{ac:?}")).collect()
+        ont.iter()
+            .map(|ac| {
+                // A rule's body and head are sets in OWL. The OFN writer
+                // behind the `owl-axioms:` fallback writes a two-atom one in
+                // OWLAPI's (swapped) order, so compare rules by their atoms
+                // sorted rather than in document order.
+                let mut ac: AnnotatedComponent<RcStr> = ac.clone();
+                if let Component::Rule(r) = &mut ac.component {
+                    r.body.sort();
+                    r.head.sort();
+                }
+                format!("{ac:?}")
+            })
+            .collect()
     }
 
     /// read(write(read(x))) == read(x) over every fixture in the oracle corpus.

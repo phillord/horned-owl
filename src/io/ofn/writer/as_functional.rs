@@ -10,6 +10,24 @@ use enum_meta::Meta;
 use crate::model::*;
 use crate::vocab::Facet;
 
+/// The datatype a bare quoted literal already denotes in OWL 2.
+const XSD_STRING: &str = "http://www.w3.org/2001/XMLSchema#string";
+
+/// Whether `^^xsd:string` is written out explicitly. OWLAPI leaves it implicit
+/// (see the `Literal::Datatype` arm below), which is what ROBOT's output shows —
+/// but the OWLAPI bundled by some other tools does render it, and reproducing
+/// such a tool's file byte for byte needs the explicit form. Off by default.
+static WRITE_XSD_STRING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Set whether the functional writer renders `^^xsd:string` explicitly.
+pub fn set_write_xsd_string(on: bool) {
+    WRITE_XSD_STRING.store(on, std::sync::atomic::Ordering::Relaxed);
+}
+
+fn write_xsd_string() -> bool {
+    WRITE_XSD_STRING.load(std::sync::atomic::Ordering::Relaxed)
+}
+
 /// Whether `c` must be percent-encoded before it can appear inside an OFN
 /// `<...>` full IRI.
 ///
@@ -48,9 +66,10 @@ pub(super) fn percent_encode_iri(s: &str) -> std::borrow::Cow<'_, str> {
 /// Write a string literal while escaping `"` and `\` characters.
 fn quote(mut s: &str, f: &mut Formatter<'_>) -> Result<(), Error> {
     f.write_str("\"")?;
-    // `char_indices` yields byte offsets so the slices below land on char
-    // boundaries even when earlier characters are multi-byte. `'"'` and `'\\'`
-    // are both single-byte ASCII, so `i + 1` is always a valid boundary too.
+    // `char_indices` yields *byte* offsets, so slicing stays on char
+    // boundaries even when the string contains multi-byte UTF-8 characters.
+    // (Using `chars().enumerate()` here gives a char index and panics when a
+    // multi-byte char precedes a `"`/`\\`, e.g. Greek letters in a definition.)
     while let Some((i, c)) = s.char_indices().find(|(_, c)| *c == '\\' || *c == '"') {
         f.write_str(&s[..i])?;
         match c {
@@ -58,7 +77,7 @@ fn quote(mut s: &str, f: &mut Formatter<'_>) -> Result<(), Error> {
             '"' => f.write_str("\\\"")?,
             _ => unreachable!(),
         }
-        s = &s[i + 1..];
+        s = &s[i + c.len_utf8()..];
     }
     f.write_str(s)?;
     f.write_str("\"")
@@ -182,6 +201,7 @@ derive_tuple2!(A, Class<A>, Vec<ClassExpression<A>>);
 derive_tuple2!(A, Datatype<A>, DataRange<A>);
 derive_tuple2!(A, ClassExpression<A>, Individual<A>);
 derive_tuple2!(A, ObjectProperty<A>, ObjectProperty<A>);
+derive_tuple2!(A, ObjectPropertyExpression<A>, ObjectPropertyExpression<A>);
 derive_tuple2!(A, ObjectPropertyExpression<A>, ClassExpression<A>);
 derive_tuple2!(A, AnnotationProperty<A>, AnnotationValue<A>);
 derive_tuple2!(A, AnnotationProperty<A>, IRI<A>);
@@ -219,14 +239,50 @@ derive_tuple3!(A, ObjectPropertyExpression<A>, Individual<A>, Individual<A>);
 
 impl<A: ForIRI> Display for Functional<'_, BTreeSet<Annotation<A>>, A> {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
-        for (i, x) in self.0.iter().enumerate() {
+        // OWLAPI renders an axiom's/entity's annotations in `compareTo` order, not
+        // the model's `BTreeSet` order. The only place the two diverge for OBO
+        // content is the annotation *value*: OWLAPI's type index orders IRI (0) <
+        // anonymous individual (1007) < literal (4008), whereas horned-owl's
+        // `AnnotationValue` enum orders literal first. Re-sort with the OWLAPI key
+        // so e.g. `Annotation(hasDbXref <orcid>)` precedes `Annotation(hasDbXref
+        // "PMID:…")`, matching ROBOT.
+        let mut anns: Vec<&Annotation<A>> = self.0.iter().collect();
+        anns.sort_by(owlapi_annotation_cmp);
+        for (i, x) in anns.iter().enumerate() {
             if i != 0 {
                 f.write_str(" ")?;
             }
-            write!(f, "{}", Functional(x, self.1, None))?;
+            write!(f, "{}", Functional(*x, self.1, None))?;
         }
         Ok(())
     }
+}
+
+/// OWLAPI's annotation-value type index: IRI < anonymous individual < literal.
+fn annotation_value_rank<A: ForIRI>(v: &AnnotationValue<A>) -> u8 {
+    match v {
+        AnnotationValue::IRI(_) => 0,
+        AnnotationValue::AnonymousIndividual(_) => 1,
+        AnnotationValue::Literal(_) => 2,
+    }
+}
+
+/// Compare two annotations the way OWLAPI's `OWLAnnotation.compareTo` does:
+/// property first, then value (by value-type index, then value content). Every
+/// leaf uses OWLAPI's own key — `IRI.compareTo` splits at the NCName suffix, and
+/// a literal compares on datatype before lexical form — so an annotation set
+/// orders the same way whether it hangs off an axiom or is an axiom itself.
+fn owlapi_annotation_cmp<A: ForIRI>(a: &&Annotation<A>, b: &&Annotation<A>) -> std::cmp::Ordering {
+    use super::{owlapi_iri_cmp, owlapi_literal_cmp};
+    owlapi_iri_cmp(a.ap.0.as_ref(), b.ap.0.as_ref())
+        .then_with(|| annotation_value_rank(&a.av).cmp(&annotation_value_rank(&b.av)))
+        .then_with(|| match (&a.av, &b.av) {
+            (AnnotationValue::IRI(x), AnnotationValue::IRI(y)) => {
+                owlapi_iri_cmp(x.as_ref(), y.as_ref())
+            }
+            (AnnotationValue::Literal(x), AnnotationValue::Literal(y)) => owlapi_literal_cmp(x, y),
+            _ => a.av.cmp(&b.av),
+        })
 }
 
 // ---------------------------------------------------------------------------
@@ -996,50 +1052,19 @@ impl<A: ForIRI> AsFunctional<A> for IArgument<A> {}
 
 // ---------------------------------------------------------------------------
 
-/// Whether `s` is usable, as-is, as an OFN `AbbreviatedIRI` local part.
-///
-/// A conservative approximation of the grammar -- under-approximating is
-/// safe, since callers fall back to the full `<IRI>` form on `false`.
-fn is_valid_ofn_local_part(s: &str) -> bool {
-    let mut chars = s.chars();
-    match chars.next() {
-        Some(c) if c.is_alphanumeric() || c == '_' => {}
-        _ => return false,
-    }
-    s.chars()
-        .all(|c| c.is_alphanumeric() || c == '_' || c == '-' || c == '.')
-}
-
-/// Abbreviate `iri` against `prefixes` as `prefix:local`, if possible.
-///
-/// Doesn't use `curie::PrefixMapping::shrink_iri`: its `Display` for a
-/// default-prefix match omits the colon OFN's grammar requires (#230), and
-/// it picks whichever prefix was inserted first rather than the longest
-/// (most specific) matching one (#148).
-///
-/// Falls back to the full `<IRI>` form when no mapping gives a valid
-/// local part.
-fn shrink_iri_for_ofn<'a>(prefixes: &'a PrefixMapping, iri: &str) -> Option<(&'a str, String)> {
-    prefixes
-        .mappings()
-        .filter_map(|(name, value)| {
-            let local = iri.strip_prefix(value.as_str())?;
-            is_valid_ofn_local_part(local).then(|| (name.as_str(), value.len(), local.to_string()))
-        })
-        .max_by_key(|(_, len, _)| *len)
-        .map(|(name, _, local)| (name, local))
-}
-
 impl<A: ForIRI> Display for Functional<'_, IRI<A>, A> {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
         if let Some(prefixes) = self.1.as_ref() {
-            match shrink_iri_for_ofn(prefixes, self.0) {
-                Some((name, local)) => write!(f, "{name}:{local}"),
-                None => write!(f, "<{}>", percent_encode_iri(self.0)),
+            // Longest-valid-match abbreviation (OWLAPI semantics), not
+            // `curie::shrink_iri`'s first-declared match — so `obo:` and a more
+            // specific `uberon:` can both be declared and each IRI abbreviates to
+            // its most specific valid CURIE, falling back to the full IRI when
+            // none is valid.
+            if let Some((prefix, local)) = super::shrink_valid(prefixes, self.0.as_ref()) {
+                return write!(f, "{prefix}:{local}");
             }
-        } else {
-            write!(f, "<{}>", percent_encode_iri(self.0))
         }
+        write!(f, "<{}>", percent_encode_iri(self.0))
     }
 }
 
@@ -1091,7 +1116,17 @@ impl<A: ForIRI> Display for Functional<'_, Literal<A>, A> {
                 datatype_iri,
             } => {
                 quote(literal, f)?;
-                write!(f, "^^{}", Functional(datatype_iri, self.1, None))
+                // `xsd:string` is the datatype a bare quoted literal already
+                // denotes in OWL 2, and OWLAPI's functional renderer leaves it
+                // implicit — ROBOT's own functional output of an OBO-parsed
+                // ontology, whose literals are all `OWLLiteralImplString`, carries
+                // no `^^xsd:string` at all. Writing it out would also preserve a
+                // distinction across the file that OWLAPI loses there, which is
+                // not the same document.
+                if datatype_iri.as_ref() != XSD_STRING || write_xsd_string() {
+                    write!(f, "^^{}", Functional(datatype_iri, self.1, None))?;
+                }
+                Ok(())
             }
         }
     }
@@ -1119,22 +1154,48 @@ impl<A: ForIRI> AsFunctional<A> for ObjectPropertyExpression<A> {}
 
 impl<A: ForIRI> Display for Functional<'_, Rule<A>, A> {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
+        // OWLAPI separates the rule's annotations and each atom with a space, and
+        // writes `Body(…)Head(…)` adjacent:
+        //
+        //     DLSafeRule(Annotation(…) Body(ClassAtom(…) ObjectPropertyAtom(…))Head(…))
+        //
+        // Everything here ran together, which put every SWRL rule in OBA's
+        // `imports/merged_import.owl` a byte off ROBOT's.
         if let Some(annotations) = self.2 {
-            write!(f, "DLSafeRule({}", Functional(annotations, self.1, None))?;
+            write!(f, "DLSafeRule({} ", Functional(annotations, self.1, None))?;
         } else {
             write!(f, "DLSafeRule(")?;
         }
 
+        // `FunctionalSyntaxObjectRenderer.write(Collection)` has a special arm for a
+        // collection of EXACTLY TWO: it takes the first element, and unless that one
+        // IS the focused object (the entity whose block is being written) it writes
+        // the SECOND first. An SWRL atom is never the focused object, so a two-atom
+        // body or head always comes out in the opposite order to the one stored.
+        //
+        // UBERON's three rules are the visible case: the RDF list in `mirror/uberon.owl`
+        // runs `BFO_0000050(x,y)`, `BSPO_0000120(y,z)` and ROBOT writes
+        // `Body(BSPO_0000120(y,z) BFO_0000050(x,y))`. Reading that back and writing it
+        // again swaps it once more, which is exactly what `robot convert` does to its
+        // own output — the quirk lives in the renderer, not in the model.
+        let write_atoms = |f: &mut Formatter<'_>, atoms: &[crate::model::Atom<A>]| {
+            let order: Vec<usize> =
+                if atoms.len() == 2 { vec![1, 0] } else { (0..atoms.len()).collect() };
+            for (i, &ix) in order.iter().enumerate() {
+                if i > 0 {
+                    f.write_char(' ')?;
+                }
+                Functional(&atoms[ix], self.1, None).fmt(f)?;
+            }
+            Ok::<(), Error>(())
+        };
+
         f.write_str("Body(")?;
-        for atom in self.0.body.iter() {
-            Functional(&atom, self.1, None).fmt(f)?;
-        }
+        write_atoms(f, &self.0.body)?;
         f.write_char(')')?;
 
         f.write_str("Head(")?;
-        for atom in self.0.head.iter() {
-            Functional(&atom, self.1, None).fmt(f)?;
-        }
+        write_atoms(f, &self.0.head)?;
         f.write_char(')')?;
         f.write_char(')')
     }
@@ -1326,18 +1387,31 @@ mod tests {
         assert_eq!(r#""hello"@en"#, &ofn);
     }
 
+    /// `xsd:string` is the datatype a bare quoted literal already has, so the
+    /// writer leaves it implicit unless `set_write_xsd_string` turns it on. The
+    /// flag is process-global, so this asserts the default rather than toggling it
+    /// underneath whatever else the test binary is running in parallel.
     #[test]
-    fn test_ofn_literal_datatype() {
+    fn test_ofn_literal_datatype_xsd_string_is_implicit() {
         let build = Build::new_arc();
         let lit = Literal::Datatype {
             literal: String::from("hello"),
             datatype_iri: build.iri("http://www.w3.org/2001/XMLSchema#string"),
         };
         let ofn = format!("{}", lit.as_functional());
-        assert_eq!(
-            r#""hello"^^<http://www.w3.org/2001/XMLSchema#string>"#,
-            &ofn
-        );
+        assert_eq!(r#""hello""#, &ofn);
+    }
+
+    /// Every other datatype is still written out.
+    #[test]
+    fn test_ofn_literal_datatype() {
+        let build = Build::new_arc();
+        let lit = Literal::Datatype {
+            literal: String::from("42"),
+            datatype_iri: build.iri("http://www.w3.org/2001/XMLSchema#integer"),
+        };
+        let ofn = format!("{}", lit.as_functional());
+        assert_eq!(r#""42"^^<http://www.w3.org/2001/XMLSchema#integer>"#, &ofn);
     }
 
     #[test]

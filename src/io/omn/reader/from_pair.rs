@@ -1609,7 +1609,10 @@ fn insert_object_property_frame<A: ForIRI, O: MutableOntology<A>>(
                         (Some(subj_iri), ObjectPropertyExpression::ObjectProperty(p)) => {
                             ont.insert(AnnotatedComponent {
                                 component: Component::InverseObjectProperties(
-                                    InverseObjectProperties(ObjectProperty(subj_iri.clone()), p),
+                                    InverseObjectProperties(
+                                        ObjectProperty(subj_iri.clone()).into(),
+                                        p.into(),
+                                    ),
                                 ),
                                 ann: item_ann,
                             });
@@ -3046,10 +3049,7 @@ mod tests {
         o.insert(SymmetricObjectProperty(ope("http://ex/r")));
         o.insert(AsymmetricObjectProperty(ope("http://ex/r")));
         o.insert(TransitiveObjectProperty(ope("http://ex/r")));
-        o.insert(InverseObjectProperties(
-            b.object_property("http://ex/r"),
-            b.object_property("http://ex/t"),
-        ));
+        o.insert(InverseObjectProperties(ope("http://ex/r"), ope("http://ex/t")));
 
         let amo: TestOnt = o.clone().into();
         let mut buf = Vec::<u8>::new();
@@ -3475,10 +3475,7 @@ mod tests {
             ce: ce("http://ex/A"),
         });
         o.insert(FunctionalObjectProperty(ope("http://ex/r")));
-        o.insert(InverseObjectProperties(
-            b.object_property("http://ex/r"),
-            b.object_property("http://ex/t"),
-        ));
+        o.insert(InverseObjectProperties(ope("http://ex/r"), ope("http://ex/t")));
         // data property axioms
         o.insert(DataPropertyRange {
             dp: b.data_property("http://ex/p"),
