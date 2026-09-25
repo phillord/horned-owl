@@ -1,0 +1,8 @@
+format-version: 1.2
+data-version: http://www.example.com/viri
+ontology: http://www.example.com/iri
+owl-axioms: \n\nOntology(\n\n\nAnnotationAssertion(<http://www.geneontology.org/formats/oboInOwl#id> <http://purl.obolibrary.org/obo/LFID_0000006> \"use of codeine\")\n)
+
+[Term]
+id: LFID:0000006
+
