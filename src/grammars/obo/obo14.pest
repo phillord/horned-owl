@@ -216,7 +216,7 @@ HeaderClause = { WhitespaceChar* ~ (
   | ImportTag ~ Import
   | SubsetdefTag ~ SubsetId ~ QuotedString
   | SynonymTypedefTag ~ SynonymTypeId ~ QuotedString ~ SynonymScope?
-  | DefaultNamespaceTag ~ NamespaceId
+  | DefaultNamespaceTag ~ UnquotedString?
   | IdspaceTag ~ IdPrefix ~ Iri ~ QuotedString?
   | NamespaceIdRuleTag ~ UnquotedString?
   | TreatXrefsAsEquivalentTag ~ IdPrefix
