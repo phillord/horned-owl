@@ -545,7 +545,15 @@ fn annotation_clause<A: ForIRI>(
         _ if ap == format!("{OIO}hasOBONamespace") => {
             format!("namespace: {}", esc_unquoted(&text?))
         }
-        _ if ap == format!("{OIO}hasAlternativeId") => format!("alt_id: {}", esc_unquoted(&text?)),
+        // An `alt_id:` value must be a single id; anything else (a list, or an id
+        // with internal whitespace) is written as a `property_value` instead.
+        _ if ap == format!("{OIO}hasAlternativeId")
+            && text
+                .as_deref()
+                .is_some_and(|t| !t.contains(char::is_whitespace)) =>
+        {
+            format!("alt_id: {}", esc_unquoted(&text?))
+        }
         _ if ap == format!("{OIO}is_metadata_tag") => "is_metadata_tag: true".to_string(),
         _ if ap == format!("{OIO}hasDbXref") => {
             format!("xref: {}{xref_desc}", esc_unquoted(&text?))
