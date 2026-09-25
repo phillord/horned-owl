@@ -283,7 +283,7 @@ TermClause = { WhitespaceChar* ~ (
     IsAnonymousTag ~ Boolean
   | NameTag ~ UnquotedString
   | NamespaceTag ~ NamespaceId
-  | AltIdTag ~ Id
+  | AltIdTag ~ UnquotedString
   | DefTag ~ Definition
   | CommentTag ~ UnquotedString
   | SubsetTag ~ SubsetId
@@ -326,7 +326,7 @@ TypedefClause = { WhitespaceChar* ~ (
     IsAnonymousTag ~ Boolean
   | NameTag ~ UnquotedString
   | NamespaceTag ~ NamespaceId
-  | AltIdTag ~ Id
+  | AltIdTag ~ UnquotedString
   | DefTag ~ Definition
   | CommentTag ~ UnquotedString
   | SubsetTag ~ SubsetId
@@ -388,7 +388,7 @@ InstanceClause = { WhitespaceChar* ~ (
     IsAnonymousTag ~ Boolean
   | NameTag ~ UnquotedString
   | NamespaceTag ~ NamespaceId
-  | AltIdTag ~ Id
+  | AltIdTag ~ UnquotedString
   | DefTag ~ Definition
   | CommentTag ~ UnquotedString
   | SubsetTag ~ SubsetId

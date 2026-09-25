@@ -761,8 +761,10 @@ fn term_to_components<A: ForIRI>(
                         &iri,
                         lit_ann(b, &format!("{OIO}hasAlternativeId"), alt.trim()),
                     ));
-                    let alt_iri = ctx.expand(alt);
-                    if alt_iri != iri {
+                    let alt_iri = ctx.expand(alt.trim());
+                    // Real files carry free text here (`CHEBI:1, CHEBI:2`), which
+                    // names no single class to deprecate.
+                    if alt_iri != iri && !alt.trim().contains(char::is_whitespace) {
                         out.push(component(DeclareClass(b.class(alt_iri.clone()))));
                         out.push(assertion(
                             &alt_iri,
