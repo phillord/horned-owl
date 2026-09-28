@@ -682,11 +682,15 @@ fn collect_dbxrefs<A: ForIRI>(
 
 /// Escape a dbxref id for the `[…]` list: `,` and `]` delimit the list and `\`
 /// is the escape char, so all three are backslash-escaped (the reader unescapes
-/// them). Without this, a dbxref containing a comma re-reads as two xrefs.
+/// them). Without this, a dbxref containing a comma re-reads as two xrefs. A
+/// raw newline or tab (real ontologies such as FYPO hold one) is escaped too,
+/// as `XrefChar` excludes it and would otherwise break the list mid-line.
 fn esc_xref(s: &str) -> String {
     s.replace('\\', "\\\\")
         .replace(',', "\\,")
         .replace(']', "\\]")
+        .replace('\n', "\\n")
+        .replace('\t', "\\t")
 }
 
 /// Trailing `{key="value"}` qualifier block from an axiom's annotations.
