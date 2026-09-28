@@ -142,7 +142,6 @@ ClassId       = { Id }
 RelationId    = { Id }
 InstanceId    = { Id }
 SynonymTypeId = { Id }
-NamespaceId   = { Id }
 SubsetId      = { Id }
 
 Iri          =  { RFC3987_Iri }
@@ -282,7 +281,7 @@ TermClauseLine = {
 TermClause = { WhitespaceChar* ~ (
     IsAnonymousTag ~ Boolean
   | NameTag ~ UnquotedString
-  | NamespaceTag ~ NamespaceId
+  | NamespaceTag ~ UnquotedString
   | AltIdTag ~ UnquotedString
   | DefTag ~ Definition
   | CommentTag ~ UnquotedString
@@ -325,7 +324,7 @@ TypedefClauseLine = {
 TypedefClause = { WhitespaceChar* ~ (
     IsAnonymousTag ~ Boolean
   | NameTag ~ UnquotedString
-  | NamespaceTag ~ NamespaceId
+  | NamespaceTag ~ UnquotedString
   | AltIdTag ~ UnquotedString
   | DefTag ~ Definition
   | CommentTag ~ UnquotedString
@@ -387,7 +386,7 @@ InstanceClauseLine = {
 InstanceClause = { WhitespaceChar* ~ (
     IsAnonymousTag ~ Boolean
   | NameTag ~ UnquotedString
-  | NamespaceTag ~ NamespaceId
+  | NamespaceTag ~ UnquotedString
   | AltIdTag ~ UnquotedString
   | DefTag ~ Definition
   | CommentTag ~ UnquotedString

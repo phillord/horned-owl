@@ -582,7 +582,15 @@ fn annotation_clause<A: ForIRI>(
         _ if ap == RDFS_LABEL => format!("name: {}", esc_unquoted(&text?)),
         _ if ap == RDFS_COMMENT => format!("comment: {}", esc_unquoted(&text?)),
         _ if ap == IAO_DEF => format!("def: \"{}\"{brack}", esc_quoted(&text?)),
-        _ if ap == format!("{OIO}hasOBONamespace") => {
+        // A `namespace:` value must be a single id; the OWL API's own OBO
+        // parser rejects one with internal whitespace (real ontologies such
+        // as DPO and FB-CV hold one anyway), so that case is written as a
+        // `property_value` instead.
+        _ if ap == format!("{OIO}hasOBONamespace")
+            && text
+                .as_deref()
+                .is_some_and(|t| !t.contains(char::is_whitespace)) =>
+        {
             format!("namespace: {}", esc_unquoted(&text?))
         }
         // An `alt_id:` value must be a single id; anything else (a list, or an id
