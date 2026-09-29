@@ -181,6 +181,22 @@ mod test {
         );
     }
 
+    // Regression test for https://github.com/phillord/horned-owl/issues/292
+    // `RFC3987_IriPathEmpty` matched the literal two-character string "0a"
+    // instead of the empty path RFC 3986 intends, so any IRI with an empty
+    // path (`urn:`, `mailto:`, `tel:`) failed to parse.
+    #[test]
+    fn read_prefix_with_empty_path_iri() {
+        let resource = "src/ont/owl-functional/manual/urn-prefix-empty-path.ofn";
+        let mut reader = std::fs::File::open(resource)
+            .map(std::io::BufReader::new)
+            .unwrap();
+        let (ont, _): (ComponentMappedOntology<RcStr, AnnotatedComponent<RcStr>>, _) =
+            crate::io::ofn::reader::read(&mut reader, Default::default()).unwrap();
+
+        assert_eq!(ont.i().declare_class().count(), 1);
+    }
+
     #[cfg(test)]
     mod bubo_test {
         use crate::io::ofn::writer::test::*;
