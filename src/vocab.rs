@@ -185,6 +185,7 @@ impl RDFS {
 vocabulary_type! {
     OWL, IRI<String>, METAOWL, [
         (OWL, AllDifferent, false),
+        (OWL, AllDisjointClasses, false),
         (OWL, AllDisjointProperties, false),
         (OWL, AllValuesFrom, true),
         (OWL, AnnotatedProperty, true),
@@ -652,6 +653,10 @@ mod tests {
         assert_eq!(
             OWL::AllDifferent.as_ref(),
             "http://www.w3.org/2002/07/owl#AllDifferent"
+        );
+        assert_eq!(
+            OWL::AllDisjointClasses.as_ref(),
+            "http://www.w3.org/2002/07/owl#AllDisjointClasses"
         );
         assert_eq!(
             OWL::AllDisjointProperties.as_ref(),
