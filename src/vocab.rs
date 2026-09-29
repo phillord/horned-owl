@@ -185,6 +185,7 @@ impl RDFS {
 vocabulary_type! {
     OWL, IRI<String>, METAOWL, [
         (OWL, AllDifferent, false),
+        (OWL, AllDisjointClasses, false),
         (OWL, AllDisjointProperties, false),
         (OWL, AllValuesFrom, true),
         (OWL, AnnotatedProperty, true),

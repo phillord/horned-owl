@@ -332,8 +332,8 @@ impl<A: ForIRI, V: VisitMut<A>> WalkMut<A, V> {
 
     pub fn inverse_object_properties(&mut self, e: &mut InverseObjectProperties<A>) {
         self.0.visit_inverse_object_properties(e);
-        self.object_property(&mut e.0);
-        self.object_property(&mut e.1);
+        self.object_property_expression(&mut e.0);
+        self.object_property_expression(&mut e.1);
     }
 
     pub fn object_property_domain(&mut self, e: &mut ObjectPropertyDomain<A>) {

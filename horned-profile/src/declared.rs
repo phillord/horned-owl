@@ -13,7 +13,9 @@
 //! or "is this IRI illegally punned" both need the full set, not the
 //! collapsed single answer.
 
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap};
+
+use rustc_hash::FxHashSet;
 use std::rc::Rc;
 
 use horned_owl::model::{AnnotatedComponent, Component, ForIRI, IRI, NamedEntityKind, Ontology};
@@ -204,7 +206,7 @@ impl<A: ForIRI> DeclaredEntities<A> {
 
     /// Returns IRIs declared as both a `Class` and a `NamedIndividual`
     /// (legal punning under OWL 2 DL).
-    pub fn class_individual_puns(&self) -> &HashSet<IRI<A>> {
+    pub fn class_individual_puns(&self) -> &FxHashSet<IRI<A>> {
         self.index.puns()
     }
 }

@@ -4,10 +4,11 @@ use crate::{
     io::{StreamComponent, StreamOntology},
     model::*,
     ontology::component_mapped::ComponentMappedOntology,
-    vocab::{OWL, RDF, RDFS, SWRL, Vocab, XSD},
+    vocab::{Namespace, OWL, RDF, RDFS, SWRL, Vocab, XSD},
 };
 
 use crate::ontology::indexed::ForIndex;
+use crate::visitor::immutable::{Visit, Walk};
 
 use curie::PrefixMapping;
 use indexmap::indexmap;
@@ -63,14 +64,21 @@ pub fn write_with_config<A: ForIRI, AA: ForIndex<A>, W: Write>(
     mapping: Option<&PrefixMapping>,
     config: RDFWriterConfiguration,
 ) -> Result<W, HornedError> {
-    let mut p = indexmap![
+    // key = namespace IRI, value = prefix name (what pretty_rdf's config wants).
+    let mut p: indexmap::IndexMap<String, String> = indexmap![
                     "http://www.w3.org/1999/02/22-rdf-syntax-ns#".to_string() => "rdf".to_string(),
                     "http://www.w3.org/2002/07/owl#".to_string() => "owl".to_string(),
                     "http://www.w3.org/2003/11/swrl#".to_string() => "swrl".to_string()
     ];
     if let Some(mapping) = mapping {
-        for (prefix, iri) in mapping.mappings() {
-            p.insert(iri.clone(), prefix.clone());
+        for (name, ns) in mapping.mappings() {
+            if name.is_empty() {
+                continue; // the default `xmlns=` is config.base's job, not here
+            }
+            // Keep the builtin binding for a namespace; add every other document
+            // prefix. First declaration of a namespace wins (matches OWLAPI's
+            // shortening choice for a namespace carrying multiple aliases).
+            p.entry(ns.to_string()).or_insert_with(|| name.to_string());
         }
     }
 
@@ -603,7 +611,177 @@ impl<A: ForIRI, AA: ForIndex<A>, F: RdfFormatter<A, W>, W: Write> Render<A, F, (
             cmp.render(f, ng)?;
         }
 
+        // Emitted last so that entities which already occur as a subject keep
+        // their position in the document and merely gain their `rdf:type`
+        // property; only entities that appear nowhere as a subject (mentioned
+        // solely inside a class expression, say) are appended as fresh blocks.
+        for (iri, kind) in undeclared_signature(self, ng.lax) {
+            let ty = match kind {
+                NamedOWLEntityKind::Class => ng.nn(OWL::Class),
+                NamedOWLEntityKind::Datatype => ng.nn(RDFS::Datatype),
+                NamedOWLEntityKind::ObjectProperty => ng.nn(OWL::ObjectProperty),
+                NamedOWLEntityKind::DataProperty => ng.nn(OWL::DatatypeProperty),
+                NamedOWLEntityKind::AnnotationProperty => ng.nn(OWL::AnnotationProperty),
+                NamedOWLEntityKind::NamedIndividual => ng.nn(OWL::NamedIndividual),
+            };
+            triples!(f, &iri, ng.nn(RDF::Type), ty);
+        }
+
         Ok(())
+    }
+}
+
+/// Gathers an ontology's entity signature alongside the entities that a
+/// `Declaration` component already types, so the writer can emit the difference
+/// (see [`undeclared_signature`]).
+struct SignatureCollect<A: ForIRI> {
+    /// Every (entity, kind) pair mentioned anywhere, in first-encounter order.
+    used: Vec<(IRI<A>, NamedOWLEntityKind)>,
+    seen: HashSet<(IRI<A>, NamedOWLEntityKind)>,
+    /// The subset carrying an explicit `Declaration`. Keyed on the pair rather
+    /// than the IRI alone so that punning still works: an IRI declared as a
+    /// class but *used* as an object property needs both type triples.
+    declared: HashSet<(IRI<A>, NamedOWLEntityKind)>,
+}
+
+impl<A: ForIRI> SignatureCollect<A> {
+    fn new() -> Self {
+        SignatureCollect {
+            used: vec![],
+            seen: HashSet::new(),
+            declared: HashSet::new(),
+        }
+    }
+
+    fn used(&mut self, iri: &IRI<A>, kind: NamedOWLEntityKind) {
+        let e = (iri.clone(), kind);
+        if self.seen.insert(e.clone()) {
+            self.used.push(e);
+        }
+    }
+}
+
+impl<A: ForIRI> Visit<A> for SignatureCollect<A> {
+    fn visit_class(&mut self, e: &Class<A>) {
+        self.used(&e.0, NamedOWLEntityKind::Class)
+    }
+    fn visit_datatype(&mut self, e: &Datatype<A>) {
+        self.used(&e.0, NamedOWLEntityKind::Datatype)
+    }
+    fn visit_object_property(&mut self, e: &ObjectProperty<A>) {
+        self.used(&e.0, NamedOWLEntityKind::ObjectProperty)
+    }
+    fn visit_data_property(&mut self, e: &DataProperty<A>) {
+        self.used(&e.0, NamedOWLEntityKind::DataProperty)
+    }
+    fn visit_annotation_property(&mut self, e: &AnnotationProperty<A>) {
+        self.used(&e.0, NamedOWLEntityKind::AnnotationProperty)
+    }
+    fn visit_named_individual(&mut self, e: &NamedIndividual<A>) {
+        self.used(&e.0, NamedOWLEntityKind::NamedIndividual)
+    }
+
+    // `Walk` descends from each `Declare*` into the entity it declares, so the
+    // visits above already record these as *used*; here we note that they are
+    // also *declared*, and hence rendered by the `render_triple!` impls below.
+    fn visit_declare_class(&mut self, e: &DeclareClass<A>) {
+        self.declared
+            .insert(((e.0).0.clone(), NamedOWLEntityKind::Class));
+    }
+    fn visit_declare_datatype(&mut self, e: &DeclareDatatype<A>) {
+        self.declared
+            .insert(((e.0).0.clone(), NamedOWLEntityKind::Datatype));
+    }
+    fn visit_declare_object_property(&mut self, e: &DeclareObjectProperty<A>) {
+        self.declared
+            .insert(((e.0).0.clone(), NamedOWLEntityKind::ObjectProperty));
+    }
+    fn visit_declare_data_property(&mut self, e: &DeclareDataProperty<A>) {
+        self.declared
+            .insert(((e.0).0.clone(), NamedOWLEntityKind::DataProperty));
+    }
+    fn visit_declare_annotation_property(&mut self, e: &DeclareAnnotationProperty<A>) {
+        self.declared
+            .insert(((e.0).0.clone(), NamedOWLEntityKind::AnnotationProperty));
+    }
+    fn visit_declare_named_individual(&mut self, e: &DeclareNamedIndividual<A>) {
+        self.declared
+            .insert(((e.0).0.clone(), NamedOWLEntityKind::NamedIndividual));
+    }
+}
+
+/// True for IRIs in the OWL/RDF/RDFS/XSD/SWRL vocabularies, whose entity type is
+/// fixed by the specification rather than by the document (`owl:Thing`,
+/// `rdfs:label`, `xsd:string`, …). OWLAPI never writes a declaration triple for
+/// these, and neither do we — doing so would add `Declaration` axioms to every
+/// re-read of an otherwise unremarkable file.
+fn is_builtin_entity<A: ForIRI>(iri: &IRI<A>) -> bool {
+    let iri: &str = iri.as_ref();
+    [
+        Namespace::OWL,
+        Namespace::RDF,
+        Namespace::RDFS,
+        Namespace::XSD,
+        Namespace::SWRL,
+    ]
+    .iter()
+    .any(|ns| iri.starts_with(ns.as_ref()))
+}
+
+/// The entities an ontology *uses* but never `Declaration`s, paired with the
+/// entity kind their usage implies.
+///
+/// In RDF an entity's type survives only as its `rdf:type` triple, and the sole
+/// component that renders one is `Declaration`. OWL does not require a
+/// declaration, however: OWLAPI (hence ROBOT) infers an entity's kind from the
+/// axioms it occurs in, so functional syntax such as CL's
+/// `EquivalentClasses(obo:GO_0051932 ObjectIntersectionOf(…))` — with no
+/// `Declaration(Class(obo:GO_0051932))` anywhere in `cl-edit.owl` — is
+/// perfectly legal. Rendered with no type triple that subject came out as a
+/// bare `<rdf:Description rdf:about="…GO_0051932">`, leaving the reverse
+/// mapping nothing to work from: reading CL's `tmp/cl-preprocess.owl` back
+/// failed with "Unknown entity in equivalent class statement", i.e. we wrote a
+/// file we could not read, silently breaking the CL release build.
+///
+/// OWLAPI's RDF renderer avoids this by emitting a declaration triple for every
+/// entity in the ontology signature regardless of whether a `Declaration` axiom
+/// exists; restricting that to the undeclared ones yields exactly the same set
+/// of triples, since the declared ones are rendered by `render_triple!` anyway.
+fn undeclared_signature<A: ForIRI, AA: ForIndex<A>>(
+    ont: &ComponentMappedOntology<A, AA>,
+    lax: bool,
+) -> Vec<(IRI<A>, NamedOWLEntityKind)> {
+    let mut walk = Walk::new(SignatureCollect::new());
+    for cmp in ont.i().iter() {
+        let cmp: &AnnotatedComponent<A> = cmp.borrow();
+        // Strict mode writes nothing for a single-member n-ary axiom (see
+        // `members`), so an entity only such an axiom mentions is not in the
+        // written ontology's signature either.
+        if !lax && dropped_in_strict_mode(&cmp.component) {
+            continue;
+        }
+        // The annotated form, not just the component: annotation properties used
+        // only on an axiom annotation are part of the signature too.
+        walk.annotated_component(cmp);
+    }
+
+    let sig = walk.into_visit();
+    let SignatureCollect { used, declared, .. } = sig;
+    used.into_iter()
+        .filter(|e| !declared.contains(e) && !is_builtin_entity(&e.0))
+        .collect()
+}
+
+/// Whether `members` writes nothing for `c` when the writer is not lax: a
+/// single-member `DisjointClasses`, `DisjointObjectProperties`,
+/// `DisjointDataProperties` or `DifferentIndividuals` (#214).
+fn dropped_in_strict_mode<A: ForIRI>(c: &Component<A>) -> bool {
+    match c {
+        Component::DisjointClasses(d) => d.0.len() == 1,
+        Component::DisjointObjectProperties(d) => d.0.len() == 1,
+        Component::DisjointDataProperties(d) => d.0.len() == 1,
+        Component::DifferentIndividuals(d) => d.0.len() == 1,
+        _ => false,
     }
 }
 
@@ -640,6 +818,17 @@ impl<A: ForIRI, F: RdfFormatter<A, W>, W: Write> Render<A, F, (), W> for Annotat
         };
 
         if !self.ann.is_empty() {
+            // A SWRL rule (`swrl:Imp`) carries its annotations directly on the rule
+            // node — OWLAPI/ROBOT do not reify rule annotations via `owl:Axiom`
+            // (and reifying the `rdf:type swrl:Imp` triple does not round-trip: the
+            // annotation is lost and the body-atom order is mangled on re-read).
+            if matches!(self.component, Component::Rule(_)) {
+                if let Annotatable::Main(t) = cmp {
+                    ng.keep_this_bn(t.subject);
+                    let _ = self.ann.render(f, ng);
+                }
+                return Ok(());
+            }
             match cmp {
                 Annotatable::Main(t) => {
                     r(t)?;
@@ -1363,6 +1552,53 @@ fn data_cardinality<A: ForIRI, F: RdfFormatter<A, W>, W: Write>(
     ))
 }
 
+/// Object-property-expression component of a canonical sort key.
+fn ope_key<A: ForIRI>(o: &ObjectPropertyExpression<A>) -> String {
+    match o {
+        ObjectPropertyExpression::ObjectProperty(p) => format!("a{}", p.0),
+        ObjectPropertyExpression::InverseObjectProperty(p) => format!("b{}", p.0),
+    }
+}
+
+/// A canonical, order-independent sort key for a class expression, used to make
+/// the RDF rdf:List serialization of `ObjectIntersectionOf`/`ObjectUnionOf`
+/// deterministic (named classes first, then existentials/universals by
+/// property then filler). Mirrors the OWL API's class-expression ordering closely
+/// enough that order-sensitive SPARQL collection patterns match.
+fn ce_sort_key<A: ForIRI>(ce: &ClassExpression<A>) -> String {
+    use ClassExpression::*;
+    match ce {
+        Class(c) => format!("01\u{1}{}", c.0),
+        ObjectIntersectionOf(_) => "02".to_string(),
+        ObjectUnionOf(_) => "03".to_string(),
+        ObjectComplementOf(b) => format!("04\u{1}{}", ce_sort_key(b)),
+        ObjectOneOf(_) => "05".to_string(),
+        ObjectSomeValuesFrom { ope, bce } => {
+            format!("06\u{1}{}\u{1}{}", ope_key(ope), ce_sort_key(bce))
+        }
+        ObjectAllValuesFrom { ope, bce } => {
+            format!("07\u{1}{}\u{1}{}", ope_key(ope), ce_sort_key(bce))
+        }
+        ObjectHasValue { ope, .. } => format!("08\u{1}{}", ope_key(ope)),
+        ObjectHasSelf(ope) => format!("09\u{1}{}", ope_key(ope)),
+        ObjectMinCardinality { n, ope, bce } => {
+            format!("10\u{1}{:020}\u{1}{}\u{1}{}", n, ope_key(ope), ce_sort_key(bce))
+        }
+        ObjectMaxCardinality { n, ope, bce } => {
+            format!("11\u{1}{:020}\u{1}{}\u{1}{}", n, ope_key(ope), ce_sort_key(bce))
+        }
+        ObjectExactCardinality { n, ope, bce } => {
+            format!("12\u{1}{:020}\u{1}{}\u{1}{}", n, ope_key(ope), ce_sort_key(bce))
+        }
+        DataSomeValuesFrom { dp, .. } => format!("13\u{1}{}", dp.0),
+        DataAllValuesFrom { dp, .. } => format!("14\u{1}{}", dp.0),
+        DataHasValue { dp, .. } => format!("15\u{1}{}", dp.0),
+        DataMinCardinality { dp, n, .. } => format!("16\u{1}{:020}\u{1}{}", n, dp.0),
+        DataMaxCardinality { dp, n, .. } => format!("17\u{1}{:020}\u{1}{}", n, dp.0),
+        DataExactCardinality { dp, n, .. } => format!("18\u{1}{:020}\u{1}{}", n, dp.0),
+    }
+}
+
 render_to_node! {
     ClassExpression, self, f, ng,
     {
@@ -1371,7 +1607,16 @@ render_to_node! {
                 Self::Class(cl) => (&cl.0).into(),
                 Self::ObjectIntersectionOf(v)=>{
                     let bn = ng.bn();
-                    let node_seq = render_vec_subject(v, f, ng)?;
+                    // Canonically order the operands (named classes first, then by
+                    // property/filler) so the emitted rdf:List is deterministic and
+                    // matches the OWL API's serialization. OWL intersection is
+                    // order-independent, but the rdf:List is order-SENSITIVE, and
+                    // SPARQL collection patterns (e.g. MONDO's cross-species
+                    // `intersectionOf ( genus restriction restriction )` inject)
+                    // only match the canonical order.
+                    let mut v = v.clone();
+                    v.sort_by(|a, b| ce_sort_key(a).cmp(&ce_sort_key(b)));
+                    let node_seq = render_vec_subject(&v, f, ng)?;
 
                     triples_to_node!(
                          f,
@@ -1381,7 +1626,9 @@ render_to_node! {
                 }
                 Self::ObjectUnionOf(v) => {
                     let bn = ng.bn();
-                    let node_seq = render_vec_subject(v, f, ng)?;
+                    let mut v = v.clone();
+                    v.sort_by(|a, b| ce_sort_key(a).cmp(&ce_sort_key(b)));
+                    let node_seq = render_vec_subject(&v, f, ng)?;
 
                     triples_to_node!(
                         f,
@@ -1592,8 +1839,16 @@ render_to_node! {
 render_to_vec! {
     DisjointClasses, self, f, ng,
     {
-        let pred = ng.nn(OWL::DisjointWith);
-        nary(f, ng, &self.0, pred)
+        // Per the OWL2 RDF mapping, two classes use `owl:disjointWith`
+        // while three or more require an `owl:AllDisjointClasses` node with
+        // an `owl:members` sequence. The previous `nary` rendering emitted a
+        // star of `owl:disjointWith` triples for n > 2, which is both
+        // semantically wrong (it omits the non-first pairs) and fails to
+        // round-trip back into a single n-ary axiom.
+        members(f, ng,
+                OWL::DisjointWith,
+                OWL::AllDisjointClasses,
+                &self.0)
     }
 }
 
@@ -1622,9 +1877,14 @@ render_to_vec! {
 render! {
     InverseObjectProperties, self, f, ng, PTriple,
     {
+        // Either side may be an inverse expression (rendered as a bnode), so
+        // render each ObjectPropertyExpression to a node rather than assuming a
+        // named property.
+        let node_a: PNamedOrBlankNode<_> = self.0.render(f, ng)?;
+        let node_b: PTerm<_> = self.1.render(f, ng)?.into();
         Ok(
             triple!(
-                f, &self.0.0, ng.nn(OWL::InverseOf), &self.1.0
+                f, node_a, ng.nn(OWL::InverseOf), node_b
             )
         )
     }

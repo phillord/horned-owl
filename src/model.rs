@@ -59,11 +59,11 @@
 //! - Rule 3:
 //! ```
 //! # use horned_owl::model::*;
-//! // InverseObjectProperty(ObjectProperty, ObjectProperty)
+//! // InverseObjectProperties(ObjectPropertyExpression, ObjectPropertyExpression)
 //! let b = Build::new_rc();
 //! let iop = InverseObjectProperties
-//!             (b.object_property("http://www.example.com/op1"),
-//!              b.object_property("http://www.example.com/op2"));
+//!             (b.object_property("http://www.example.com/op1").into(),
+//!              b.object_property("http://www.example.com/op2").into());
 //! ```
 //! - Rule 4:
 //! ```
@@ -93,6 +93,7 @@ use std::borrow::Borrow;
 use std::cell::RefCell;
 use std::cmp::Ordering;
 use std::collections::BTreeSet;
+use rustc_hash::FxHashSet;
 use std::fmt::Debug;
 use std::fmt::Display;
 use std::fmt::Formatter;
@@ -277,18 +278,23 @@ impl<A: ForIRI> IRI<A> {
 /// without consequences except for increased memory use.
 #[derive(Debug, Default)]
 pub struct Build<A>(
-    RefCell<BTreeSet<IRI<A>>>,
-    RefCell<BTreeSet<AnonymousIndividual<A>>>,
+    RefCell<FxHashSet<IRI<A>>>,
+    RefCell<FxHashSet<AnonymousIndividual<A>>>,
     // Last anon individual
     RefCell<i64>,
+    // The id the next blank node of a document being parsed takes, when that
+    // document's blank nodes are being numbered. `None` leaves a parse's own
+    // labels alone.
+    RefCell<Option<i64>>,
 );
 
 impl<A: ForIRI> Build<A> {
     pub fn new() -> Build<A> {
         Build(
-            RefCell::new(BTreeSet::new()),
-            RefCell::new(BTreeSet::new()),
+            RefCell::new(FxHashSet::default()),
+            RefCell::new(FxHashSet::default()),
             RefCell::new(0),
+            RefCell::new(None),
         )
     }
 
@@ -307,6 +313,51 @@ impl<A: ForIRI> Build<A> {
     pub fn anon_renumbered(&self) -> AnonymousIndividual<A> {
         self.2.replace_with(|&mut old| old + 1);
         self.anon(format!("anon{:06}", self.2.borrow()))
+    }
+
+    /// Number the blank nodes of documents parsed with this `Build` from `n`.
+    ///
+    /// A blank node is then known by the id it is given here — `genid<n>`,
+    /// counting up in the order a parse first meets each node — and every
+    /// document parsed with this `Build` continues the same count, so nodes from
+    /// two documents merged together keep their separate identities.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use horned_owl::model::*;
+    /// let b = Build::new_rc();
+    /// b.set_bnode_base(2_147_483_648);
+    /// assert_eq!("genid2147483648", b.next_bnode_label().unwrap());
+    /// assert_eq!("genid2147483649", b.next_bnode_label().unwrap());
+    /// assert_eq!(2_147_483_650, b.bnode_base().unwrap());
+    /// ```
+    pub fn set_bnode_base(&self, n: i64) {
+        self.3.replace(Some(n));
+    }
+
+    /// How far the blank-node count has got, or `None` when documents parsed
+    /// with this `Build` keep their own labels.
+    pub fn bnode_base(&self) -> Option<i64> {
+        *self.3.borrow()
+    }
+
+    /// The label for the next blank node a parse meets, taking one value from
+    /// the count. `None` when numbering is off.
+    pub fn next_bnode_label(&self) -> Option<String> {
+        let n = { (*self.3.borrow())? };
+        self.3.replace(Some(n + 1));
+        Some(format!("genid{n}"))
+    }
+
+    /// Take `n` ids from the count without naming anything with them — the ids
+    /// a document's own blank nodes hold, which the individuals among them are
+    /// numbered after.
+    pub fn skip_bnode_labels(&self, n: usize) {
+        let base = { *self.3.borrow() };
+        if let Some(base) = base {
+            self.3.replace(Some(base + n as i64));
+        }
     }
 
     /// Constructs a new `AnonymousIndividual`
@@ -1406,7 +1457,7 @@ components! {
     /// `s` are transitive, then `a r b` implies `b r a`.
     ///
     /// See also: [Property Characteristics](https://www.w3.org/TR/2012/REC-owl2-primer-20121211/#Property_Characteristics)
-    Axiom InverseObjectProperties(ObjectProperty<A>,ObjectProperty<A>),
+    Axiom InverseObjectProperties(ObjectPropertyExpression<A>,ObjectPropertyExpression<A>),
 
     /// The domain of the object property.
     ///
@@ -1721,9 +1772,14 @@ pub struct Annotation<A> {
 /// The value of an annotation
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum AnnotationValue<A> {
-    Literal(Literal<A>),
+    // Variant order matches OWLAPI's annotation-value type index (IRI 0 <
+    // anonymous individual 1007 < literal 4008), so the derived `Ord` — used to
+    // order annotations in the functional-syntax writer — reproduces OWLAPI's
+    // `compareTo`. Reordering only affects sort/`BTreeSet` iteration order, not
+    // equality or construction (variants are built by name).
     IRI(IRI<A>),
     AnonymousIndividual(AnonymousIndividual<A>),
+    Literal(Literal<A>),
 }
 
 impl<A: ForIRI> From<Literal<A>> for AnnotationValue<A> {

@@ -82,15 +82,50 @@ CARET    = _{ "^" }
 
 //
 NonNegativeInteger = @{ ASCII_DIGIT+ }
-LanguageTag        = ${ "@" ~ BCP47_LanguageTag }
+// The concrete-syntax LANGTAG production shared by Turtle/SPARQL/OWL 2 FS:
+// `@ [a-zA-Z]+ ('-' [a-zA-Z0-9]+)*`. The full BCP47 grammar is not used here
+// because, as a PEG, its optional 3-alpha `extlang` subtag greedily eats the
+// first three letters of a 4-alpha `script` subtag — mis-parsing well-formed
+// tags like `zh-hans` as `zh-han` + stray `s`. BCP47 well-formedness is a
+// semantic constraint on the tag, not part of this lexical production.
+LanguageTag        = ${ "@" ~ ASCII_ALPHA+ ~ ("-" ~ ASCII_ALPHANUMERIC+)* }
 QuotedString       = ${ "\"" ~ (!"\"" ~ ("\\\\" | "\\\"" | ANY))* ~ "\"" }
-NodeID             = _{ SPARQL_BlankNodeLabel }
+// A node id is the spec's `_:`-prefixed blank node label, or the bare form
+// OWLAPI/ROBOT emit for anonymous individuals (e.g. `anon000001`). `NodeID` is
+// only reached in anonymous-individual positions (annotation subject/value,
+// individual), where a colon-free token is unambiguous: abbreviated IRIs always
+// contain `:` (excluded by the `!":"` guard) and full IRIs are `<>`-delimited.
+NodeID             = _{ SPARQL_BlankNodeLabel | OwlapiNodeID }
+// The trailing lookahead keeps this bare form from swallowing the head of a
+// longer token. A node id is a WHOLE token, so what follows it must end the
+// token: whitespace or one of the terminators. An abbreviated IRI whose prefix
+// holds a non-alphanumeric — `mp-edit:Europhenome_Terms` — stops the
+// alphanumeric run at `mp` with `-` still to come, and `-` continues the token,
+// so this must not match there. A functional keyword in individual position
+// (`Variable(...)`, `ObjectSomeValuesFrom(...)`) is excluded by the same test
+// plus `(`, which is a terminator rather than a token character.
+OwlapiNodeID       = @{ ASCII_ALPHA ~ ASCII_ALPHANUMERIC* ~ !("(" | OfnTokenChar) }
 
 //
 
 FullIRI        = ${ LCHEVRON ~ RFC3987_Iri ~ RCHEVRON }
 PrefixName     =  { SPARQL_PnameNs }
-AbbreviatedIRI =  { SPARQL_PnameLn }
+// NOT the spec's `PNAME_LN`. OWLAPI's functional-syntax reader does not tokenize
+// by the OWL 2 `PN_LOCAL` production: `CustomTokenizer.readTextualToken`
+// (owlapi 4.5.29) takes every character up to one of `= " ( ) < > @ ^` or
+// whitespace, calls the run a `PNAME_LN` whenever it holds a colon that is not
+// its last character (`_:`-prefixed runs are node ids instead), and
+// `OWLFunctionalSyntaxParser.getIRI` then splits it at the FIRST colon. So the
+// local part may hold colons, slashes, `?`, `%` — anything the terminator set
+// does not stop. This is what ROBOT itself writes: FoodOn's `schema:image`
+// provenance carries `wikipedia:User:Lupin`, which the spec production cannot
+// read back.
+AbbreviatedIRI = @{ !"_:" ~ OfnPrefixChar* ~ ":" ~ OfnLocalChar+ }
+OfnPrefixChar  = _{ !":" ~ OfnTokenChar }
+// A colon only continues the token when another token character follows it:
+// a run whose LAST character is the colon is OWLAPI's `PNAME_NS`, not an IRI.
+OfnLocalChar   = _{ (":" ~ &OfnTokenChar) | (!":" ~ OfnTokenChar) }
+OfnTokenChar   = _{ !("=" | "\"" | "(" | ")" | "<" | ">" | "@" | "^" | " " | "\t" | "\n" | "\r") ~ ANY }
 IRI            =  { FullIRI | AbbreviatedIRI }
 
 //
@@ -272,7 +307,7 @@ IrreflexiveObjectProperty       = { LIT_IRREFLEXIVE_OBJECT_PROPERTY ~ LBRACKET ~
 SymmetricObjectProperty         = { LIT_SYMMETRIC_OBJECT_PROPERTY ~ LBRACKET ~ AxiomAnnotations ~ ObjectPropertyExpression ~ RBRACKET }
 AsymmetricObjectProperty        = { LIT_ASYMMETRIC_OBJECT_PROPERTY ~ LBRACKET ~ AxiomAnnotations ~ ObjectPropertyExpression ~ RBRACKET }
 TransitiveObjectProperty        = { LIT_TRANSITIVE_OBJECT_PROPERTY ~ LBRACKET ~ AxiomAnnotations ~ ObjectPropertyExpression ~ RBRACKET }
-InverseObjectProperties         = { LIT_INVERSE_OBJECT_PROPERTIES ~ LBRACKET ~ AxiomAnnotations ~ ObjectProperty{2} ~ RBRACKET }
+InverseObjectProperties         = { LIT_INVERSE_OBJECT_PROPERTIES ~ LBRACKET ~ AxiomAnnotations ~ ObjectPropertyExpression{2} ~ RBRACKET }
 
 DataPropertyAxiom = _{ SubDataPropertyOf | EquivalentDataProperties | DisjointDataProperties | DataPropertyDomain | DataPropertyRange | FunctionalDataProperty }
 

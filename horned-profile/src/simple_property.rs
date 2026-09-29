@@ -74,8 +74,8 @@ impl<A: ForIRI> SimplePropertyAnalysis<A> {
                     // p and inv(q) denote the same relation; likewise q
                     // and inv(p) -- unify their compositeness both ways,
                     // same as an EquivalentObjectProperties pair.
-                    let p: ObjectPropertyExpression<A> = iop.0.clone().into();
-                    let q: ObjectPropertyExpression<A> = iop.1.clone().into();
+                    let p: ObjectPropertyExpression<A> = iop.0.clone();
+                    let q: ObjectPropertyExpression<A> = iop.1.clone();
                     let inv_p = inverse_of(&p);
                     let inv_q = inverse_of(&q);
                     add_edge(&mut edges, p.clone(), inv_q.clone());
@@ -266,7 +266,7 @@ mod test {
         o.insert(TransitiveObjectProperty(
             ObjectPropertyExpression::ObjectProperty(p.clone()),
         ));
-        o.insert(InverseObjectProperties(p.clone(), q.clone()));
+        o.insert(InverseObjectProperties(p.clone().into(), q.clone().into()));
 
         let a = SimplePropertyAnalysis::from_ontology(&o);
         assert!(a.is_composite(&ObjectPropertyExpression::ObjectProperty(q)));

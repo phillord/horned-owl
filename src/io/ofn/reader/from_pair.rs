@@ -192,8 +192,8 @@ impl<A: ForIRI> FromPair<A> for AnnotatedComponent<A> {
             Rule::InverseObjectProperties => {
                 let mut inner = pair.into_inner();
                 let annotations = FromPair::from_pair(inner.next().unwrap(), ctx)?;
-                let r1 = ObjectProperty::from_pair(inner.next().unwrap(), ctx)?;
-                let r2 = ObjectProperty::from_pair(inner.next().unwrap(), ctx)?;
+                let r1 = ObjectPropertyExpression::from_pair(inner.next().unwrap(), ctx)?;
+                let r2 = ObjectPropertyExpression::from_pair(inner.next().unwrap(), ctx)?;
                 Ok(Self::new(InverseObjectProperties(r1, r2), annotations))
             }
             Rule::FunctionalObjectProperty => {
@@ -855,13 +855,14 @@ impl<A: ForIRI> FromPair<A> for IRI<A> {
         match inner.as_rule() {
             Rule::AbbreviatedIRI => {
                 let span = inner.as_span();
-                let mut pname = inner.into_inner().next().unwrap().into_inner();
-                let prefix = pname.next().unwrap().into_inner().next();
-                let local = pname.next().unwrap();
-                let curie = Curie::new(
-                    Some(prefix.map(|p| p.as_str()).unwrap_or_default()),
-                    local.as_str(),
-                );
+                // OWLAPI splits the token at its FIRST colon
+                // (`OWLFunctionalSyntaxParser.getIRI` is `s.indexOf(':')`), so
+                // everything after it — colons included — is the local part.
+                let (prefix, local) = inner
+                    .as_str()
+                    .split_once(':')
+                    .expect("an AbbreviatedIRI token holds a colon");
+                let curie = Curie::new(Some(prefix), local);
                 match ctx.mapping.expand_curie(&curie) {
                     Ok(s) => Ok(ctx.build.iri(s)),
                     Err(curie::ExpansionError::Invalid) => {
@@ -1187,6 +1188,45 @@ mod tests {
                 literal: String::from("color"),
                 lang: String::from("en-US"),
             }
+        );
+    }
+
+    #[test]
+    fn annotation_value_prefix_with_a_hyphen() {
+        let build = Build::default();
+        let mut prefixes = PrefixMapping::default();
+        prefixes
+            .add_prefix("oboInOwl", "http://www.geneontology.org/formats/oboInOwl#")
+            .unwrap();
+        prefixes.add_prefix("obo", "http://purl.obolibrary.org/obo/").unwrap();
+        prefixes
+            .add_prefix("mp-edit", "http://purl.obolibrary.org/obo/mp/mp-edit.owl#")
+            .unwrap();
+
+        // The VALUE position admits an anonymous individual, whose bare form is a
+        // colon-free token. `mp-edit:Europhenome_Terms` is not one: the leading
+        // alphanumeric run stops at the hyphen, and the token carries on. Reading
+        // `mp` as a node id there leaves `-edit:Europhenome_Terms` unconsumed and
+        // the axiom unparseable — which is what ROBOT's own OFN output for MP
+        // contains.
+        assert_parse_into!(
+            AnnotatedComponent<String>,
+            Rule::Axiom,
+            build,
+            prefixes,
+            "AnnotationAssertion(oboInOwl:inSubset obo:MP_0000013 mp-edit:Europhenome_Terms)",
+            AnnotatedComponent::from(AnnotationAssertion::new(
+                AnnotationSubject::IRI(build.iri("http://purl.obolibrary.org/obo/MP_0000013")),
+                Annotation {
+                    ap: build.annotation_property(
+                        "http://www.geneontology.org/formats/oboInOwl#inSubset"
+                    ),
+                    av: AnnotationValue::IRI(
+                        build.iri("http://purl.obolibrary.org/obo/mp/mp-edit.owl#Europhenome_Terms")
+                    ),
+                    ann: Default::default(),
+                },
+            ))
         );
     }
 

@@ -497,13 +497,16 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
                     }
                 }
                 Component::InverseObjectProperties(ax) => {
-                    // ax.0 and ax.1 are ObjectProperty (not expression).
-                    let clause = format!(
-                        "InverseOf: {}{}",
-                        ann_prefix(&ac.ann, pm),
-                        ax.1.as_manchester_with_prefixes(pm)
-                    );
-                    push_clause!(FrameKind::ObjectProperty, ax.0.0.as_ref(), clause);
+                    // The Manchester `InverseOf:` clause hangs off a named
+                    // object-property frame; skip a non-named inverse expression.
+                    if let Some(p0) = ax.0.as_property() {
+                        let clause = format!(
+                            "InverseOf: {}{}",
+                            ann_prefix(&ac.ann, pm),
+                            ax.1.as_manchester_with_prefixes(pm)
+                        );
+                        push_clause!(FrameKind::ObjectProperty, p0.0.as_ref(), clause);
+                    }
                 }
                 Component::ObjectPropertyDomain(ax) => {
                     let clause = format!(
