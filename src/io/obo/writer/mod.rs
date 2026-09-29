@@ -548,7 +548,7 @@ fn annotation_clause<A: ForIRI>(
     // def and synonym require a `[xref…]` list in the grammar even when empty,
     // so the bracket is always emitted (a source `def: "x" []` has no dbxref
     // annotations, but must still round-trip to `def: "x" []`).
-    let dbxrefs = collect_dbxrefs(axiom_ann);
+    let dbxrefs = collect_dbxrefs(axiom_ann, cz);
     let brack = format!(" [{}]", dbxrefs.join(", "));
     let text = av_lit(av);
     // A synonym's type (`hasSynonymType`, an IRI) sits between the scope and the
@@ -603,8 +603,11 @@ fn annotation_clause<A: ForIRI>(
             format!("alt_id: {}", esc_unquoted(&text?))
         }
         _ if ap == format!("{OIO}is_metadata_tag") => "is_metadata_tag: true".to_string(),
+        // A dbxref's value is usually a literal id string, but a source can
+        // hold it as an IRI (e.g. an ORCID URL) instead -- `av_lit` alone
+        // would drop it, so fall back to the compressed IRI text.
         _ if ap == format!("{OIO}hasDbXref") => {
-            format!("xref: {}{xref_desc}", esc_unquoted(&text?))
+            format!("xref: {}{xref_desc}", esc_unquoted(&dbxref_text(av, cz)?))
         }
         _ if ap == format!("{OIO}created_by") => format!("created_by: {}", esc_unquoted(&text?)),
         _ if ap == format!("{OIO}creation_date") => {
@@ -673,11 +676,18 @@ fn meta_quals<A: ForIRI>(
 
 fn collect_dbxrefs<A: ForIRI>(
     anns: &std::collections::BTreeSet<crate::model::Annotation<A>>,
+    cz: &impl Fn(&str) -> String,
 ) -> Vec<String> {
     anns.iter()
         .filter(|a| a.ap.0.as_ref() == format!("{OIO}hasDbXref"))
-        .filter_map(|a| av_lit(&a.av).as_deref().map(esc_xref))
+        .filter_map(|a| dbxref_text(&a.av, cz).as_deref().map(esc_xref))
         .collect()
+}
+
+/// A dbxref's text: its literal id string, or, when the source recorded it
+/// as an IRI (e.g. an ORCID URL) rather than a string, the compressed IRI.
+fn dbxref_text<A: ForIRI>(av: &AnnotationValue<A>, cz: &impl Fn(&str) -> String) -> Option<String> {
+    av_lit(av).or_else(|| av_iri(av, cz))
 }
 
 /// Escape a dbxref id for the `[…]` list: `,` and `]` delimit the list and `\`
@@ -939,6 +949,29 @@ mod tests {
         // and the written form uses `alt_id:`, not property_value
         let text = String::from_utf8(super::write(Vec::new(), &cmo, None).unwrap()).unwrap();
         assert!(text.contains("alt_id: GO:0002"), "got:\n{text}");
+    }
+
+    /// A `def:`'s dbxref is usually a literal id string, but a source can
+    /// hold `hasDbXref` as an IRI instead (e.g. ROBOT emits an ORCID URL as
+    /// `rdf:resource`, not a string) -- that must still reach the `[...]`
+    /// list rather than being silently dropped.
+    #[test]
+    fn def_dbxref_as_iri_round_trips() {
+        let doc = "Ontology(<http://example.org/onto>\n\
+                   Declaration(Class(<http://example.org/onto#A>))\n\
+                   AnnotationAssertion(<http://www.geneontology.org/formats/oboInOwl#id> <http://example.org/onto#A> \"A\")\n\
+                   AnnotationAssertion(Annotation(<http://www.geneontology.org/formats/oboInOwl#hasDbXref> <http://orcid.org/0000-0002-6601-2165>) <http://purl.obolibrary.org/obo/IAO_0000115> <http://example.org/onto#A> \"some definition\")\n\
+                   )\n";
+        let (o, pm): (SetOntology<RcStr>, curie::PrefixMapping) =
+            crate::io::ofn::reader::read(&mut doc.as_bytes(), Default::default()).unwrap();
+
+        let cmo: ComponentMappedOntology<RcStr, AnnotatedComponent<RcStr>> = o.into();
+        let out = super::write(Vec::new(), &cmo, Some(&pm)).unwrap();
+        let text = String::from_utf8(out).unwrap();
+        assert!(
+            text.contains("def: \"some definition\" [http://orcid.org/0000-0002-6601-2165]"),
+            "got:\n{text}"
+        );
     }
 
     /// A source ontology's default (empty-key) prefix must not be written as
