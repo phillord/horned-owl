@@ -25,7 +25,7 @@ RFC3987_IriPathAbempty  = ${ ("/" ~ RFC3987_IriSegment)+ }
 RFC3987_IriPathAbsolute = ${ "/" ~ (RFC3987_IriSegmentNz ~ ("/" ~ RFC3987_IriSegment)*)? }
 RFC3987_IriPathNoScheme = ${ RFC3987_IriSegmentNzNc ~ ("/" ~ RFC3987_IriSegment)* }
 RFC3987_IriPathRootless = ${ RFC3987_IriSegmentNz ~ ("/" ~ RFC3987_IriSegment)* }
-RFC3987_IriPathEmpty    = ${ "0" ~ RFC3987_IriIpChar }
+RFC3987_IriPathEmpty    = ${ "" }
 
 RFC3987_IriSegment     = @{ RFC3987_IriIpChar* }
 RFC3987_IriSegmentNz   = @{ RFC3987_IriIpChar+ }
