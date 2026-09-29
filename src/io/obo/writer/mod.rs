@@ -69,6 +69,23 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
         .and_then(|i| i.strip_prefix(OBO))
         .and_then(|r| r.strip_suffix(".owl"))
         .map(|o| format!("{OBO}{o}#"));
+    // The onto_ns the *reader* will actually derive on reread, from whatever
+    // `ontology:` line `header_line` is about to emit for this ontology's
+    // IRI (mirroring the reader's own `OntologyTag` handling) -- broader
+    // than `onto_ns` above, which only feeds `compress`'s bare-name branch
+    // for a `.owl`-suffixed obo-purl ontology IRI specifically. Used below
+    // to check whether a recorded bare id would round-trip.
+    let reader_onto_ns = onto_iri.as_deref().map(|iri| {
+        let ont = iri
+            .strip_prefix(OBO)
+            .and_then(|r| r.strip_suffix(".owl"))
+            .unwrap_or(iri);
+        if crate::io::obo::reader::from_pair::is_http_iri(ont) {
+            format!("{ont}#")
+        } else {
+            format!("{OBO}{ont}#")
+        }
+    });
 
     // The non-implicit prefixes are the document's `idspace:` declarations. They
     // must be emitted (so re-read resolves those CURIEs the same way) and used
@@ -88,9 +105,14 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
         .unwrap_or_default();
     idspaces.sort_by(|a, b| b.1.len().cmp(&a.1.len()));
     let cz = |iri: &str| compress(iri, onto_ns.as_deref(), &idspaces);
+    // For validating a candidate stanza id below: `expand_id_with` is
+    // `compress`'s inverse and takes a lookup map rather than the
+    // longest-match list `compress` needs.
+    let idspace_map: std::collections::HashMap<String, String> = idspaces.iter().cloned().collect();
 
     // Pass 1: the stanza entities (those with an oboInOwl:id) and their kinds.
     let mut id_values: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    let mut xref_values: BTreeMap<String, Vec<String>> = BTreeMap::new();
     let mut kinds: BTreeMap<String, Kind> = BTreeMap::new();
     for ac in ont.iter() {
         match &ac.component {
@@ -99,6 +121,23 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
                     (&a.subject, &a.ann.av)
                 {
                     id_values
+                        .entry(s.as_ref().to_string())
+                        .or_default()
+                        .push(literal_text(l));
+                }
+            }
+            // Gathered for the shorthand check below: a `[Typedef]` with a
+            // bare id and exactly one dbxref is oboformat's relation
+            // shorthand (see the reader's `build_rel_map`), so its bare id
+            // is safe to reuse even though it doesn't expand to the IRI
+            // directly.
+            Component::AnnotationAssertion(a)
+                if a.ann.ap.0.as_ref() == format!("{OIO}hasDbXref") =>
+            {
+                if let (crate::model::AnnotationSubject::IRI(s), AnnotationValue::Literal(l)) =
+                    (&a.subject, &a.ann.av)
+                {
+                    xref_values
                         .entry(s.as_ref().to_string())
                         .or_default()
                         .push(literal_text(l));
@@ -126,19 +165,45 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
 
     // An entity can carry several `oboInOwl:id` values: the reader's own stamp
     // plus one restored from `owl-axioms:` that disagrees with the IRI. The
-    // stanza id is the one that matches the IRI, else any that is a single
-    // token, else the compressed IRI itself. The rest have no clause and are
-    // written to `owl-axioms:` below.
+    // stanza id is the one that matches the IRI, else any single token that
+    // still expands (under this document's own idspaces/default namespace)
+    // back to the same IRI, else the compressed IRI itself. A value that
+    // fails that check is an id stamped by whatever *originally* produced
+    // this entity (e.g. a relation imported from another OBO namespace,
+    // still carrying that namespace's own bare id) -- reusing it verbatim
+    // here would silently re-home the entity under this ontology's own
+    // namespace instead. The rest have no clause and are written to
+    // `owl-axioms:` below.
+    //
+    // The one exception: a `[Typedef]`'s bare id round-trips via the
+    // reader's relation-shorthand rule instead (a bare id with exactly one
+    // dbxref resolves through that xref, not this ontology's namespace --
+    // see `build_rel_map`), so it's accepted whenever that xref itself
+    // expands back to the IRI.
     let ids: BTreeMap<String, String> = id_values
         .into_iter()
         .map(|(iri, values)| {
             let compressed = cz(&iri);
+            let expands_to_iri = |v: &str| {
+                crate::io::obo::reader::from_pair::expand_id_with(
+                    v,
+                    &idspace_map,
+                    reader_onto_ns.as_deref(),
+                ) == iri
+            };
+            let shorthand_ok = kinds.get(&iri) == Some(&Kind::Typedef)
+                && matches!(xref_values.get(&iri).map(Vec::as_slice), Some([xref]) if expands_to_iri(xref));
             let id = if values.contains(&compressed) {
                 compressed
             } else {
                 values
                     .into_iter()
-                    .find(|v| !v.is_empty() && !v.contains(char::is_whitespace))
+                    .find(|v| {
+                        !v.is_empty()
+                            && !v.contains(char::is_whitespace)
+                            && (expands_to_iri(v)
+                                || (shorthand_ok && !v.contains(':') && !v.starts_with("http")))
+                    })
                     .unwrap_or(compressed)
             };
             (iri, id)
@@ -971,6 +1036,63 @@ mod tests {
         assert!(
             text.contains("def: \"some definition\" [http://orcid.org/0000-0002-6601-2165]"),
             "got:\n{text}"
+        );
+    }
+
+    /// A relation imported from another OBO namespace (e.g. PATO's
+    /// `different_in_magnitude_relative_to`, re-declared by an importing
+    /// ontology such as PLANP) still carries PATO's own bare `oboInOwl:id`.
+    /// Writing that bare id verbatim as this ontology's stanza id would
+    /// silently re-home the relation under the writing ontology's own `#`
+    /// namespace on reread -- it must be written as the full IRI instead.
+    #[test]
+    fn foreign_namespace_id_is_not_reused_verbatim() {
+        let pato_iri = "http://purl.obolibrary.org/obo/pato#different_in_magnitude_relative_to";
+        let doc = format!(
+            "Ontology(<http://purl.obolibrary.org/obo/planp.owl>\n\
+             Declaration(ObjectProperty(<{pato_iri}>))\n\
+             AnnotationAssertion(<http://www.geneontology.org/formats/oboInOwl#id> <{pato_iri}> \"different_in_magnitude_relative_to\")\n\
+             )\n"
+        );
+        let (o, pm): (SetOntology<RcStr>, curie::PrefixMapping) =
+            crate::io::ofn::reader::read(&mut doc.as_bytes(), Default::default()).unwrap();
+
+        let cmo: ComponentMappedOntology<RcStr, AnnotatedComponent<RcStr>> = o.clone().into();
+        let out = super::write(Vec::new(), &cmo, Some(&pm)).unwrap();
+        let text = String::from_utf8(out).unwrap();
+        assert!(
+            text.contains(&format!("id: {pato_iri}")),
+            "must keep the full foreign-namespace IRI as the id, got:\n{text}"
+        );
+        assert!(
+            !text.contains("id: different_in_magnitude_relative_to"),
+            "must not re-home the relation under planp's own namespace, got:\n{text}"
+        );
+
+        // Not a full `axioms(o) == axioms(b)` round-trip: `o`'s oboInOwl:id
+        // disagrees with its own stanza id (it's PATO's stamp, not planp's),
+        // so rereading also produces the reader's usual matching-stamp
+        // bookkeeping (see `id_mismatch.obo`'s fixture for the same shape).
+        // What actually matters -- and was silently broken before this fix
+        // -- is that the relation keeps its real identity rather than
+        // reappearing under planp's own namespace.
+        let b = read(&text);
+        let has_decl = |ont: &SetOntology<RcStr>, iri: &str| {
+            ont.iter().any(|ac| {
+                matches!(&ac.component,
+                crate::model::Component::DeclareObjectProperty(d) if d.0.0.as_ref() == iri)
+            })
+        };
+        assert!(
+            has_decl(&b, pato_iri),
+            "lost the relation's real identity, got: {b:#?}"
+        );
+        assert!(
+            !has_decl(
+                &b,
+                "http://purl.obolibrary.org/obo/planp#different_in_magnitude_relative_to"
+            ),
+            "relation was silently re-homed under planp's namespace, got: {b:#?}"
         );
     }
 

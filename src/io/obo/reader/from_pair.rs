@@ -40,7 +40,7 @@ pub(crate) const OIO: &str = "http://www.geneontology.org/formats/oboInOwl#";
 /// as-is) rather than a short id to expand under `OBO_BASE`. Testing a bare
 /// `http` prefix wrongly matched short ids like `httptest`/`httpfoo`, leaving a
 /// relative ontology IRI.
-fn is_http_iri(s: &str) -> bool {
+pub(crate) fn is_http_iri(s: &str) -> bool {
     s.starts_with("http://") || s.starts_with("https://")
 }
 const RDFS_LABEL: &str = "http://www.w3.org/2000/01/rdf-schema#label";
@@ -112,7 +112,17 @@ impl<'a, A: ForIRI> Context<'a, A> {
     }
 }
 
-fn expand_id_with(id: &str, idspace: &HashMap<String, String>, onto_ns: Option<&str>) -> String {
+/// Expand a bare or `PREFIX:LOCAL` OBO id to the IRI a reader would build for
+/// it. `pub(crate)` so the writer can use it as a round-trip check: an
+/// `oboInOwl:id` literal inherited from an entity's *original* namespace is
+/// only safe to reuse verbatim as this ontology's stanza id if expanding it
+/// here, under this document's own idspaces/default namespace, gives back
+/// the same IRI (see `writer::compress`, this function's inverse).
+pub(crate) fn expand_id_with(
+    id: &str,
+    idspace: &HashMap<String, String>,
+    onto_ns: Option<&str>,
+) -> String {
     let id = id.trim();
     if id.starts_with("http://") || id.starts_with("https://") {
         return id.to_string();
