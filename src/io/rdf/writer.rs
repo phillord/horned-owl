@@ -305,13 +305,22 @@ impl<A: ForIRI> From<&NamedIndividual<A>> for PNamedOrBlankNode<A> {
 
 impl<A: ForIRI> From<&AnonymousIndividual<A>> for PTerm<A> {
     fn from(ai: &AnonymousIndividual<A>) -> Self {
-        PBlankNode::new(ai.0.clone()).into()
+        let bn: PBlankNode<A> = ai.into();
+        bn.into()
     }
 }
 
 impl<A: ForIRI> From<&AnonymousIndividual<A>> for PBlankNode<A> {
     fn from(ai: &AnonymousIndividual<A>) -> Self {
-        PBlankNode::new(ai.0.clone())
+        // OWL/XML bakes a literal "_:" into the nodeID string itself (see
+        // `AnonymousIndividual::from_start`), rather than treating it as
+        // syntax. Strip it here, once, so every serializer downstream sees a
+        // bare label instead of some formats stripping it and others (the
+        // oxrdfio-backed ones) prepending their own "_:" on top of it.
+        match ai.0.as_ref().strip_prefix("_:") {
+            Some(stripped) => PBlankNode::new(A::from_str(stripped)),
+            None => PBlankNode::new(ai.0.clone()),
+        }
     }
 }
 
@@ -1240,9 +1249,7 @@ render_to_node! {
 render_to_node! {
     AnonymousIndividual, self, _f, _ng,
     {
-        Ok(
-            PNamedOrBlankNode::BlankNode(PBlankNode::new(self.0.clone()))
-        )
+        Ok(self.into())
     }
 }
 
@@ -2175,16 +2182,6 @@ mod test {
     /// checks the result reads back the same as a plain owx `read`.
     #[rstest]
     fn owx_streamed_into_rdf_streamed(#[files("src/ont/owl-xml/*.owx")] resource: PathBuf) {
-        // swrl_individual.owx has an AnonymousIndividual whose nodeID
-        // already contains a literal "_:" prefix; the oxrdfio-backed
-        // NTriples formatter used here doesn't strip it before writing,
-        // producing an invalid doubled "_:_:" blank node label. Pre-existing
-        // bug in the oxrdfio write path (reproduces via write_to_rdf_formatter
-        // too, unrelated to streaming) -- not this test's concern.
-        if resource.file_name().and_then(|n| n.to_str()) == Some("swrl_individual.owx") {
-            return;
-        }
-
         let resource = &slurp::read_all_to_string(&resource).unwrap();
         let b = Build::new_rc();
 
@@ -2205,7 +2202,15 @@ mod test {
 
         let ont_via_rdf = read_ntriples_ok(&mut &out[..]);
 
-        assert_eq!(ont_direct, ont_via_rdf);
+        // Anonymous individuals aren't required to keep their nodeID label
+        // across an RDF round trip -- the RDF reader deliberately renumbers
+        // them (`Build::anon_renumbered`), same caveat as
+        // `reader::test::annotation_with_anonymous`. Compare up to that
+        // renumbering rather than requiring exact label equality.
+        crate::normalize::normalize_and_assert_eq(
+            ont_direct.into_iter().collect(),
+            ont_via_rdf.into_iter().collect(),
+        );
     }
 
     /// `Prefix` items in the stream are ignored (the formatter's namespace
