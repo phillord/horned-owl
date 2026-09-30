@@ -43,16 +43,29 @@ pub fn version_string() -> &'static str {
     })
 }
 
-/// The `oxrdfio::RdfFormat` that `extension` denotes, if any. `"owl"`
-/// is horned-owl's own long-standing alias for RDF/XML; every other
-/// extension is whatever [`oxrdfio::RdfFormat::from_extension`]
-/// recognises (`ttl`, `nt`, `nq`, `trig`, `json`/`jsonld`, `n3`,
-/// `rdf`, `xml`).
+/// horned-owl's long-standing default format for a bare `.owl`
+/// extension, used when content sniffing can't tell RDF/XML from
+/// OWL/XML apart (e.g. an empty or truncated file).
+const DEFAULT_OWL_RDF_FORMAT: oxrdfio::RdfFormat = oxrdfio::RdfFormat::RdfXml;
+
+/// The `oxrdfio::RdfFormat` that `extension` denotes, if any. Whatever
+/// [`oxrdfio::RdfFormat::from_extension`] recognises (`ttl`, `nt`,
+/// `nq`, `trig`, `json`/`jsonld`, `n3`, `rdf`, `xml`). `"owl"` isn't
+/// resolved here: it's used in the wild for both RDF/XML and OWL/XML,
+/// so it needs content sniffing rather than a fixed mapping -- see
+/// [`owl_extension_resource_type`].
 fn rdf_format_for_extension(extension: &str) -> Option<oxrdfio::RdfFormat> {
-    if extension == "owl" {
-        Some(oxrdfio::RdfFormat::RdfXml)
-    } else {
-        oxrdfio::RdfFormat::from_extension(extension)
+    oxrdfio::RdfFormat::from_extension(extension)
+}
+
+/// Resolve a `.owl`-extensioned file's actual [`ResourceType`] by
+/// sniffing its content, since the extension alone is ambiguous
+/// between RDF/XML and OWL/XML (see #281). Falls back to RDF, matching
+/// the long-standing default, when sniffing is inconclusive.
+fn owl_extension_resource_type(path: &Path) -> ResourceType {
+    match detect_from_path(path) {
+        Some((ResourceType::OWX, _)) => ResourceType::OWX,
+        _ => ResourceType::RDF,
     }
 }
 
@@ -88,6 +101,7 @@ pub fn path_type<A: ForIRI, B: AsRef<Build<A>>>(
         Some("owx") => Some(ResourceType::OWX),
         Some("omn") => Some(ResourceType::OMN),
         Some("obo") => Some(ResourceType::OBO),
+        Some("owl") => Some(owl_extension_resource_type(path)),
         Some(ext) if rdf_format_for_extension(ext).is_some() => Some(ResourceType::RDF),
         _ => detect_from_path(path).map(|(rt, _)| rt),
     }
@@ -152,11 +166,19 @@ pub fn with_detected_rdf_format<A: ForIRI, B: AsRef<Build<A>>>(
         config.format = match config.common.input_format {
             Some(InputFormat::Rdf(fmt)) => fmt,
             Some(InputFormat::Guess) => detect_from_path(path).and_then(|(_, fmt)| fmt),
-            _ => path
-                .extension()
-                .and_then(|s| s.to_str())
-                .and_then(rdf_format_for_extension)
-                .or_else(|| detect_from_path(path).and_then(|(_, fmt)| fmt)),
+            _ => match path.extension().and_then(|s| s.to_str()) {
+                Some("owl") => match detect_from_path(path) {
+                    // Genuinely OWL/XML: no RDF format applies, and callers
+                    // reaching this point at all (rather than dispatching to
+                    // the OWX reader via `path_type`) don't consult it.
+                    Some((ResourceType::OWX, _)) => None,
+                    Some((_, fmt)) => fmt,
+                    None => Some(DEFAULT_OWL_RDF_FORMAT),
+                },
+                ext => ext
+                    .and_then(rdf_format_for_extension)
+                    .or_else(|| detect_from_path(path).and_then(|(_, fmt)| fmt)),
+            },
         };
     }
     config
@@ -534,5 +556,86 @@ pub mod config {
             .flatten()
             .and_then(|s| s.parse::<InputFormat>().ok());
         config
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn write_owl(dir: &mktemp::Temp, content: &str) -> PathBuf {
+        let path = dir.join("test.owl");
+        std::fs::write(&path, content).unwrap();
+        path
+    }
+
+    const RDF_XML: &str = r#"<?xml version="1.0"?>
+<rdf:RDF xmlns:owl="http://www.w3.org/2002/07/owl#"
+     xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+    <owl:Ontology rdf:about="http://www.example.com/test"/>
+</rdf:RDF>
+"#;
+
+    const OWL_XML: &str = r#"<?xml version="1.0"?>
+<Ontology xmlns="http://www.w3.org/2002/07/owl#"
+     ontologyIRI="http://www.example.com/test">
+</Ontology>
+"#;
+
+    #[test]
+    fn owl_extension_resource_type_sniffs_rdf_xml() {
+        let dir = mktemp::Temp::new_dir().unwrap();
+        let path = write_owl(&dir, RDF_XML);
+        assert!(matches!(
+            owl_extension_resource_type(&path),
+            ResourceType::RDF
+        ));
+    }
+
+    #[test]
+    fn owl_extension_resource_type_sniffs_owl_xml() {
+        let dir = mktemp::Temp::new_dir().unwrap();
+        let path = write_owl(&dir, OWL_XML);
+        assert!(matches!(
+            owl_extension_resource_type(&path),
+            ResourceType::OWX
+        ));
+    }
+
+    #[test]
+    fn path_type_dispatches_owl_xml_content_under_owl_extension() {
+        let dir = mktemp::Temp::new_dir().unwrap();
+        let path = write_owl(&dir, OWL_XML);
+        let config: ParserConfiguration<RcStr> = ParserConfiguration::default();
+        assert!(matches!(path_type(&path, &config), Some(ResourceType::OWX)));
+    }
+
+    #[test]
+    fn path_type_dispatches_rdf_xml_content_under_owl_extension() {
+        let dir = mktemp::Temp::new_dir().unwrap();
+        let path = write_owl(&dir, RDF_XML);
+        let config: ParserConfiguration<RcStr> = ParserConfiguration::default();
+        assert!(matches!(path_type(&path, &config), Some(ResourceType::RDF)));
+    }
+
+    #[test]
+    fn with_detected_rdf_format_sniffs_owl_xml_content_under_owl_extension() {
+        let dir = mktemp::Temp::new_dir().unwrap();
+        let path = write_owl(&dir, OWL_XML);
+        let config: RDFParserConfiguration<RcStr> =
+            with_detected_rdf_format(&path, ParserConfiguration::default().into());
+        // OWL/XML has no oxrdfio::RdfFormat -- detection correctly finds
+        // nothing to pin here; dispatch to the right reader happens at the
+        // `path_type`/`ResourceType` level instead.
+        assert_eq!(config.format, None);
+    }
+
+    #[test]
+    fn with_detected_rdf_format_sniffs_rdf_xml_content_under_owl_extension() {
+        let dir = mktemp::Temp::new_dir().unwrap();
+        let path = write_owl(&dir, RDF_XML);
+        let config: RDFParserConfiguration<RcStr> =
+            with_detected_rdf_format(&path, ParserConfiguration::default().into());
+        assert_eq!(config.format, Some(oxrdfio::RdfFormat::RdfXml));
     }
 }
