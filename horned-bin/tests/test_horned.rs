@@ -5,6 +5,33 @@ use predicates::prelude::*; // Used for writing assertions
 use std::process::Command; // Run programs
 
 #[test]
+fn integration_parse_sniffs_owl_xml_content_under_owl_extension()
+-> Result<(), Box<dyn std::error::Error>> {
+    // #281: `.owl` is used in the wild for both RDF/XML and OWL/XML; a file
+    // with genuinely OWL/XML content and a `.owl` extension must not be
+    // force-fed to the RDF/XML reader.
+    let dir = mktemp::Temp::new_dir()?;
+    let ont_file = dir.join("owl-xml-content.owl");
+
+    std::fs::write(
+        &ont_file,
+        r#"<?xml version="1.0"?>
+<Ontology xmlns="http://www.w3.org/2002/07/owl#"
+     ontologyIRI="http://www.example.com/test">
+</Ontology>
+"#,
+    )?;
+
+    let mut cmd = Command::new(cargo::cargo_bin!("horned"));
+    cmd.arg("--local-only").arg("parse").arg(&ont_file);
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("Parse Complete"));
+
+    Ok(())
+}
+
+#[test]
 fn integration_local_only_allows_purely_local_parse() -> Result<(), Box<dyn std::error::Error>> {
     let mut cmd = Command::new(cargo::cargo_bin!("horned"));
 
