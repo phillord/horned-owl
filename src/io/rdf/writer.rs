@@ -27,12 +27,20 @@ use std::{
 #[derive(Clone, Debug)]
 pub struct RDFWriterConfiguration {
     /// In lax mode (the default, matching this writer's historical
-    /// behaviour), axioms that are technically invalid per the OWL 2 spec's
-    /// minimum-arity constraints -- e.g. a single-member `DifferentIndividuals`
-    /// (or `DisjointObjectProperties`/`DisjointDataProperties`), which OWL-API
-    /// itself has been observed to write into real-world ontologies -- are
-    /// still faithfully serialised. In strict mode, such axioms are silently
-    /// dropped instead.
+    /// behaviour):
+    /// - axioms that are technically invalid per the OWL 2 spec's
+    ///   minimum-arity constraints -- e.g. a single-member
+    ///   `DifferentIndividuals` (or `DisjointObjectProperties`/
+    ///   `DisjointDataProperties`), which OWL-API itself has been observed
+    ///   to write into real-world ontologies -- are still faithfully
+    ///   serialised.
+    /// - IRIs are written out as-is, without the RFC 3987 escaping scan
+    ///   added for #232; this is the pre-#232 (fast) behaviour.
+    ///
+    /// In strict mode: the axioms above are silently dropped instead, and
+    /// every IRI is scanned and percent-encoded where necessary to
+    /// guarantee a re-readable, spec-valid output (#232), at the cost of
+    /// that scan (#280).
     pub lax: bool,
 }
 
@@ -201,6 +209,18 @@ impl<A: ForIRI> NodeGenerator<A> {
 
     pub fn this_bn(&mut self) -> Option<PNamedOrBlankNode<A>> {
         self.this_bn.take()
+    }
+
+    /// Build a named node from a horned-owl IRI. In lax mode (the
+    /// default), this skips the RFC 3987 escaping scan entirely, matching
+    /// this writer's pre-#232 (fast) behaviour -- see #280. Strict mode
+    /// keeps the full escaping guarantee from #232 at the cost of the scan.
+    pub fn escaped(&self, iri: &IRI<A>) -> PNamedNode<A> {
+        if self.lax {
+            PNamedNode::new(iri.underlying())
+        } else {
+            escaped_named_node(iri)
+        }
     }
 }
 
@@ -589,19 +609,25 @@ impl<A: ForIRI, AA: ForIndex<A>, F: RdfFormatter<A, W>, W: Write> Render<A, F, (
     fn render(&self, f: &mut F, ng: &mut NodeGenerator<A>) -> Result<(), HornedError> {
         let ont_id = self.i().the_ontology_id_or_default();
         if let Some(iri) = &ont_id.iri {
-            triples!(f, iri, ng.nn(RDF::Type), ng.nn(OWL::Ontology));
+            let node_iri = ng.escaped(iri);
+            triples!(f, node_iri.clone(), ng.nn(RDF::Type), ng.nn(OWL::Ontology));
 
             if let Some(viri) = &ont_id.viri {
-                triples!(f, iri, ng.nn(OWL::VersionIRI), viri);
+                triples!(
+                    f,
+                    node_iri.clone(),
+                    ng.nn(OWL::VersionIRI),
+                    ng.escaped(viri)
+                );
             }
 
             let imp = self.i().import();
             for i in imp {
-                triples!(f, iri, ng.nn(OWL::Imports), &i.0);
+                triples!(f, node_iri.clone(), ng.nn(OWL::Imports), ng.escaped(&i.0));
             }
 
             let oa = self.i().ontology_annotation();
-            ng.keep_this_bn(iri.into());
+            ng.keep_this_bn(node_iri.into());
             for a in oa {
                 a.0.render(f, ng)?;
             }
@@ -665,7 +691,7 @@ impl<A: ForIRI, F: RdfFormatter<A, W>, W: Write> Render<A, F, (), W> for Annotat
 }
 
 render! {
-    Literal, self, _f, _ng, PTerm,
+    Literal, self, _f, ng, PTerm,
     {
         Ok(
             match self {
@@ -676,7 +702,7 @@ render! {
                                                                           language: lang.clone().into()}),
                 Literal::Datatype{literal, datatype_iri} =>
                     PTerm::Literal(PLiteral::Typed{value:literal.clone().into(),
-                                                           datatype:datatype_iri.into()})
+                                                           datatype:ng.escaped(datatype_iri)})
             }
         )
     }
@@ -690,9 +716,11 @@ render! {
 
         let obj: PTerm<A> = match &self.av {
             AnnotationValue::Literal(l) => l.render(f, ng)?,
-            AnnotationValue::IRI(iri) => iri.into(),
+            AnnotationValue::IRI(iri) => ng.escaped(iri).into(),
             AnnotationValue::AnonymousIndividual(an) => an.into(),
         };
+
+        let node_ap = ng.escaped(&self.ap.0);
 
         if !self.ann.is_empty() {
             let ann_bn = ng.bn();
@@ -700,14 +728,14 @@ render! {
                 f,
                 ann_bn.clone(), ng.nn(RDF::Type), ng.nn(OWL::Annotation),
                 ann_bn.clone(), ng.nn(OWL::AnnotatedSource), bn.clone(),
-                ann_bn.clone(), ng.nn(OWL::AnnotatedProperty), &self.ap.0,
+                ann_bn.clone(), ng.nn(OWL::AnnotatedProperty), node_ap.clone(),
                 ann_bn.clone(), ng.nn(OWL::AnnotatedTarget), obj.clone()
             );
             ng.keep_this_bn(ann_bn);
             self.ann.render(f, ng)?;
         }
 
-        Ok(triple!(f, bn, &self.ap.0, obj))
+        Ok(triple!(f, bn, node_ap, obj))
     }
 }
 
@@ -725,7 +753,7 @@ render! {
     AnnotationPropertyDomain, self, f, ng, PTriple,
     {
         Ok(
-            triple!(f, &self.ap.0, ng.nn(RDFS::Domain), &self.iri)
+            triple!(f, ng.escaped(&self.ap.0), ng.nn(RDFS::Domain), ng.escaped(&self.iri))
         )
     }
 }
@@ -734,7 +762,7 @@ render! {
     AnnotationPropertyRange, self, f, ng, PTriple,
     {
         Ok(
-            triple!(f, &self.ap.0, ng.nn(RDFS::Range), &self.iri)
+            triple!(f, ng.escaped(&self.ap.0), ng.nn(RDFS::Range), ng.escaped(&self.iri))
         )
     }
 }
@@ -966,7 +994,7 @@ render! {
             ObjectPropertyExpression::ObjectProperty(op) => {
                 //ObjectPropertyAssertion( OP a1 a2 ) T(a1) T(OP) T(a2) .
                 let node_from:PNamedOrBlankNode<_> = self.from.render(f, ng)?;
-                let node_op:PNamedNode<_> = (&op.0).into();
+                let node_op:PNamedNode<_> = ng.escaped(&op.0);
                 let node_to:PTerm<_> = self.to.render(f,ng)?.into();
                 Ok(
                     triple! (
@@ -978,7 +1006,7 @@ render! {
             ObjectPropertyExpression::InverseObjectProperty(op) => {
                 //ObjectPropertyAssertion( OP a1 a2 ) T(a1) T(OP) T(a2) .
                 let node_to:PNamedOrBlankNode<_> = self.to.render(f, ng)?;
-                let node_op:PNamedNode<_> = (&op.0).into();
+                let node_op:PNamedNode<_> = ng.escaped(&op.0);
                 let node_from:PTerm<_> = self.from.render(f, ng)?.into();
                 Ok(
                     triple! (
@@ -1025,7 +1053,7 @@ render_to_vec! {
         //_:x owl:targetValue T(lt) .
         let bn = ng.bn();
         let node_lt:PTerm<_> = self.to.render(f, ng)?;
-        let node_dp:PTerm<_> = (&self.dp.0).into();
+        let node_dp:PTerm<_> = ng.escaped(&self.dp.0).into();
         let node_a:PTerm<_> = self.from.render(f, ng)?.into();
 
         Ok(
@@ -1113,7 +1141,7 @@ render! {
     DataPropertyAssertion, self, f, ng, PTriple,
     {
         //T(a) T(DPE) T(lt) .
-        let node_dp:PNamedNode<_> = (&self.dp.0).into();
+        let node_dp:PNamedNode<_> = ng.escaped(&self.dp.0);
         let node_i:PNamedOrBlankNode<_> = self.from.render(f, ng)?;
         let node_lit:PTerm<_> = self.to.render(f, ng)?;
         Ok(
@@ -1139,7 +1167,7 @@ render_to_node! {
     {
         Ok(
             match self {
-                Self::Datatype(dt) => (&dt.0).into(),
+                Self::Datatype(dt) => ng.escaped(&dt.0).into(),
                 Self::DataIntersectionOf(v) => {
                     let vbn = render_vec_subject(v, f, ng)?;
                     let bn = ng.bn();
@@ -1190,7 +1218,7 @@ render_to_node! {
                     //  ...
                     // _:yn Fn ltn .
                     let bn = ng.bn();
-                    let node_dt:PTerm<_> = (&dt.0).into();
+                    let node_dt:PTerm<_> = ng.escaped(&dt.0).into();
                     let node_vft = render_vec_subject(vfr, f, ng)?;
 
                     triples_to_node!(
@@ -1222,7 +1250,7 @@ render! {
     {
         let node_dr:PTerm<_> = self.range.render(f, ng)?.into();
         Ok(
-            triple!(f, &self.kind.0, ng.nn(OWL::EquivalentClass), node_dr)
+            triple!(f, ng.escaped(&self.kind.0), ng.nn(OWL::EquivalentClass), node_dr)
         )
     }
 }
@@ -1231,7 +1259,7 @@ render! {
     SubAnnotationPropertyOf, self, f, ng, PTriple,
     {
         Ok(
-            triple!(f, &self.sub.0, ng.nn(RDFS::SubPropertyOf), &self.sup.0)
+            triple!(f, ng.escaped(&self.sub.0), ng.nn(RDFS::SubPropertyOf), ng.escaped(&self.sup.0))
         )
     }
 }
@@ -1254,10 +1282,10 @@ render_to_node! {
 }
 
 render_to_node! {
-    NamedIndividual, self, _f, _ng,
+    NamedIndividual, self, _f, ng,
     {
         Ok(
-            (&self.0).into()
+            ng.escaped(&self.0).into()
         )
     }
 }
@@ -1268,17 +1296,17 @@ render_to_node! {
         Ok(
             match self {
                 Self::AnonymousIndividual(ai) => ai.render(f, ng)?,
-                Self::IRI(iri) => iri.into(),
+                Self::IRI(iri) => ng.escaped(iri).into(),
             }
         )
     }
 }
 
 render_to_node! {
-    DataProperty, self, _f, _ng,
+    DataProperty, self, _f, ng,
     {
         Ok(
-            (&self.0).into()
+            ng.escaped(&self.0).into()
         )
     }
 }
@@ -1345,7 +1373,7 @@ fn data_cardinality<A: ForIRI, F: RdfFormatter<A, W>, W: Write>(
     // _:x owl:maxQualifiedCardinality "n"^^xsd:nonNegativeInteger .
     // _:x owl:onDataRange T(DR) .
     let bn = ng.bn();
-    let node_dp: PTerm<_> = (&dp.0).into();
+    let node_dp: PTerm<_> = ng.escaped(&dp.0).into();
     let node_n = PTerm::Literal(PLiteral::Typed {
         value: format!("{n}").into(),
         datatype: ng.nn(XSD::NonNegativeInteger),
@@ -1375,7 +1403,7 @@ render_to_node! {
     {
         Ok(
             match self {
-                Self::Class(cl) => (&cl.0).into(),
+                Self::Class(cl) => ng.escaped(&cl.0).into(),
                 Self::ObjectIntersectionOf(v)=>{
                     let bn = ng.bn();
                     let node_seq = render_vec_subject(v, f, ng)?;
@@ -1498,7 +1526,7 @@ render_to_node! {
                     //_:x owl:onProperty T(DPE) .
                     //_:x owl:someValuesFrom T(DR) .
                     let bn = ng.bn();
-                    let node_dpe:PTerm<_> = (&dp.0).into();
+                    let node_dpe:PTerm<_> = ng.escaped(&dp.0).into();
                     let node_dr:PTerm<_> = dr.render(f, ng)?.into();
                     triples_to_node!{
                         f,
@@ -1509,7 +1537,7 @@ render_to_node! {
                 }
                 Self::DataAllValuesFrom{dp, dr} => {
                     let bn = ng.bn();
-                    let node_dpe:PTerm<_> = (&dp.0).into();
+                    let node_dpe:PTerm<_> = ng.escaped(&dp.0).into();
                     let node_dr:PTerm<_> = dr.render(f, ng)?.into();
                     triples_to_node!{
                         f,
@@ -1523,7 +1551,7 @@ render_to_node! {
                     // _:x owl:onProperty T(DPE) .
                     // _:x owl:hasValue T(lt) .
                     let bn = ng.bn();
-                    let node_dp:PTerm<_> = (&dp.0).into();
+                    let node_dp:PTerm<_> = ng.escaped(&dp.0).into();
                     let node_l:PTerm<_> = l.render(f, ng)?;
 
                     triples_to_node!(
@@ -1589,8 +1617,8 @@ render_to_node! {
         Ok(
             match self {
                 Self::ObjectPropertyExpression(ope) => ope.render(f, ng)?,
-                Self::DataProperty(dp) => (&dp.0).into(),
-                Self::AnnotationProperty(ap) => (&ap.0).into()
+                Self::DataProperty(dp) => ng.escaped(&dp.0).into(),
+                Self::AnnotationProperty(ap) => ng.escaped(&ap.0).into()
             }
         )
     }
@@ -1607,7 +1635,7 @@ render_to_vec! {
 render_to_vec! {
     DisjointUnion, self, f, ng,
     {
-        let c:PNamedOrBlankNode<A> = (&self.0.0).into();
+        let c:PNamedOrBlankNode<A> = ng.escaped(&self.0.0).into();
         let v = render_vec_subject(&self.1, f, ng)?;
 
         Ok(
@@ -1631,7 +1659,7 @@ render! {
     {
         Ok(
             triple!(
-                f, &self.0.0, ng.nn(OWL::InverseOf), &self.1.0
+                f, ng.escaped(&self.0.0), ng.nn(OWL::InverseOf), ng.escaped(&self.1.0)
             )
         )
     }
@@ -1643,10 +1671,10 @@ render_to_node! {
         Ok(
             match self {
                 Self::ObjectProperty(op)
-                    => (&op.0).into(),
+                    => ng.escaped(&op.0).into(),
                 Self::InverseObjectProperty(op)
                     => {
-                        let o:PTerm<_> = (&op.0).into();
+                        let o:PTerm<_> = ng.escaped(&op.0).into();
 
                         triples_to_node!{
                             f, ng.bn(), ng.nn(OWL::InverseOf), o
@@ -1713,9 +1741,9 @@ render_to_node! {
     {
         // We need to declare the variable here because there is no
         // DeclareVariable axiom which OWL Named types have.
-        triple!{f, &self.0, ng.nn(RDF::Type), ng.nn(SWRL::Variable)};
+        triple!{f, ng.escaped(&self.0), ng.nn(RDF::Type), ng.nn(SWRL::Variable)};
         Ok(
-            (&self.0).into()
+            ng.escaped(&self.0).into()
         )
     }
 }
@@ -1879,32 +1907,32 @@ render! {
 
 render_triple! {
     DeclareClass, self, ng,
-    &self.0.0, ng.nn(RDF::Type), ng.nn(OWL::Class)
+    ng.escaped(&self.0.0), ng.nn(RDF::Type), ng.nn(OWL::Class)
 }
 
 render_triple! {
     DeclareDatatype, self, ng,
-    &self.0.0, ng.nn(RDF::Type), ng.nn(RDFS::Datatype)
+    ng.escaped(&self.0.0), ng.nn(RDF::Type), ng.nn(RDFS::Datatype)
 }
 
 render_triple! {
     DeclareObjectProperty, self, ng,
-    &self.0.0, ng.nn(RDF::Type), ng.nn(OWL::ObjectProperty)
+    ng.escaped(&self.0.0), ng.nn(RDF::Type), ng.nn(OWL::ObjectProperty)
 }
 
 render_triple! {
     DeclareDataProperty, self, ng,
-    &self.0.0, ng.nn(RDF::Type), ng.nn(OWL::DatatypeProperty)
+    ng.escaped(&self.0.0), ng.nn(RDF::Type), ng.nn(OWL::DatatypeProperty)
 }
 
 render_triple! {
     DeclareAnnotationProperty, self, ng,
-    &self.0.0, ng.nn(RDF::Type), ng.nn(OWL::AnnotationProperty)
+    ng.escaped(&self.0.0), ng.nn(RDF::Type), ng.nn(OWL::AnnotationProperty)
 }
 
 render_triple! {
     DeclareNamedIndividual, self, ng,
-    &self.0.0, ng.nn(RDF::Type), ng.nn(OWL::NamedIndividual)
+    ng.escaped(&self.0.0), ng.nn(RDF::Type), ng.nn(OWL::NamedIndividual)
 }
 
 render! {
@@ -1964,21 +1992,37 @@ pub fn write_stream_with_config<A: ForIRI, AA: ForIndex<A>, F: RdfFormatter<A, W
         match &ac.component {
             Component::OntologyID(id) => {
                 if let Some(iri) = &id.iri {
-                    triples!(formatter, iri, ng.nn(RDF::Type), ng.nn(OWL::Ontology));
+                    let node_iri = ng.escaped(iri);
+                    triples!(
+                        formatter,
+                        node_iri.clone(),
+                        ng.nn(RDF::Type),
+                        ng.nn(OWL::Ontology)
+                    );
                     if let Some(viri) = &id.viri {
-                        triples!(formatter, iri, ng.nn(OWL::VersionIRI), viri);
+                        triples!(
+                            formatter,
+                            node_iri,
+                            ng.nn(OWL::VersionIRI),
+                            ng.escaped(viri)
+                        );
                     }
                     ontology_iri = Some(iri.clone());
                 }
             }
             Component::Import(imp) => {
                 if let Some(iri) = &ontology_iri {
-                    triples!(formatter, iri, ng.nn(OWL::Imports), &imp.0);
+                    triples!(
+                        formatter,
+                        ng.escaped(iri),
+                        ng.nn(OWL::Imports),
+                        ng.escaped(&imp.0)
+                    );
                 }
             }
             Component::OntologyAnnotation(oa) => {
                 if let Some(iri) = &ontology_iri {
-                    ng.keep_this_bn(iri.into());
+                    ng.keep_this_bn(ng.escaped(iri).into());
                     oa.0.render(&mut formatter, &mut ng)?;
                 }
             }
@@ -2309,12 +2353,18 @@ mod test {
     }
 
     #[test]
-    fn iri_with_rfc3987_invalid_chars_round_trips() {
+    fn iri_with_rfc3987_invalid_chars_round_trips_in_strict_mode() {
         // Real-world ontologies (e.g. corpus file `MCCL`, see issue #232) can
         // contain IRIs with characters, like `[` and `]`, that are never
         // legal unescaped in an IRI per RFC 3987. horned-owl's OWL/XML
         // reader is lenient and accepts such text verbatim, so the writer
         // must percent-encode it to produce valid, rereadable RDF/XML.
+        //
+        // The escaping scan this needs is a measurable write-performance
+        // cost (#280), so it's gated behind strict mode rather than always
+        // on; lax mode (the default) skips it, matching pre-#232 (fast)
+        // behaviour, and so does not give this guarantee -- see
+        // `iri_with_rfc3987_invalid_chars_is_not_escaped_in_lax_mode` below.
         //
         // Note the recovered IRI is percent-encoded (`%5B`/`%5D`) rather
         // than byte-identical to the original raw `[`/`]` text -- that's
@@ -2330,7 +2380,8 @@ mod test {
 
         let amo: ComponentMappedOntology<RcStr, Rc<AnnotatedComponent<RcStr>>> = ont_orig.into();
         let mut buf = Vec::new();
-        write(&mut buf, &amo, None).expect("write should not fail on an invalid-IRI-char class");
+        write_with_config(&mut buf, &amo, None, RDFWriterConfiguration { lax: false })
+            .expect("write should not fail on an invalid-IRI-char class");
 
         let ont_round = read_ok(&mut &buf[..]);
         let expected_class = Class(b.iri("http://example.com/o#KB-CH%5BR%5D-8-5Cell"));
@@ -2341,6 +2392,28 @@ mod test {
             )),
             "rereading the written RDF/XML should recover the class declaration \
              (percent-encoded), got: {ont_round:#?}"
+        );
+    }
+
+    #[test]
+    fn iri_with_rfc3987_invalid_chars_is_not_escaped_in_lax_mode() {
+        // The flip side of `iri_with_rfc3987_invalid_chars_round_trips_in_strict_mode`:
+        // lax mode (the default, see #280) writes the IRI out as-is, so the
+        // bytes survive unescaped rather than being percent-encoded.
+        let b = Build::new_rc();
+        let mut ont_orig = SetOntology::new_rc();
+        ont_orig.insert(DeclareClass(Class(
+            b.iri("http://example.com/o#KB-CH[R]-8-5Cell"),
+        )));
+
+        let amo: ComponentMappedOntology<RcStr, Rc<AnnotatedComponent<RcStr>>> = ont_orig.into();
+        let mut buf = Vec::new();
+        write(&mut buf, &amo, None).expect("write should not fail on an invalid-IRI-char class");
+
+        let written = String::from_utf8(buf).unwrap();
+        assert!(
+            written.contains("http://example.com/o#KB-CH[R]-8-5Cell"),
+            "lax mode should write the IRI unescaped, got: {written}"
         );
     }
 
