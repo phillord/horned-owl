@@ -640,12 +640,6 @@ fn axiom_from_start<A: ForIRI, R: BufRead, B: AsRef<Build<A>>>(
     axiom_kind: &[u8],
 ) -> Result<Component<A>, HornedError> {
     Ok(match axiom_kind {
-        b"Annotation" => OntologyAnnotation(Annotation {
-            ap: from_start(r, e)?,
-            av: from_next(r)?,
-            ann: Default::default(),
-        })
-        .into(),
         b"Declaration" => {
             let ne: NamedOWLEntity<_> = from_start(r, e)?;
             ne.into()
@@ -1039,6 +1033,14 @@ from_start! {
     {
         let mut annotation: BTreeSet<Annotation<_>> = BTreeSet::new();
         let axiom_kind = e.local_name();
+        // The ontology's annotation is one annotation: the annotations nested
+        // in it are its own, not an axiom's.
+        if axiom_kind.as_ref() == b"Annotation" {
+            return Ok(AnnotatedComponent {
+                component: OntologyAnnotation(Annotation::from_xml(r, b"Annotation")?).into(),
+                ann: annotation,
+            });
+        }
         let mut buf = Vec::new();
 
         loop {
@@ -1879,6 +1881,53 @@ pub mod test {
             String::from(&ann.ap),
             "http://www.w3.org/2000/01/rdf-schema#comment"
         );
+    }
+
+    /// The ontology's annotation keeps the annotations nested in it, as an
+    /// annotation of an axiom does, and the component itself carries none.
+    #[test]
+    fn ontology_annotation_keeps_its_annotations() {
+        let ont_s = r##"<?xml version="1.0"?>
+<Ontology xmlns="http://www.w3.org/2002/07/owl#"
+     xml:base="http://example.org/r"
+     xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"
+     ontologyIRI="http://example.org/r">
+    <Prefix name="rdfs" IRI="http://www.w3.org/2000/01/rdf-schema#"/>
+    <Annotation>
+        <Annotation>
+            <Annotation>
+                <AnnotationProperty abbreviatedIRI="rdfs:comment"/>
+                <Literal>three</Literal>
+            </Annotation>
+            <AnnotationProperty abbreviatedIRI="rdfs:comment"/>
+            <Literal>two</Literal>
+        </Annotation>
+        <AnnotationProperty abbreviatedIRI="rdfs:comment"/>
+        <Literal>one</Literal>
+    </Annotation>
+    <Declaration>
+        <Class IRI="#A"/>
+    </Declaration>
+</Ontology>"##;
+        let (ont, _) = read_ok(&mut ont_s.as_bytes());
+        let anns: Vec<_> = ont
+            .i()
+            .component_for_kind(ComponentKind::OntologyAnnotation)
+            .collect();
+        assert_eq!(anns.len(), 1);
+        assert!(anns[0].ann.is_empty(), "{:?}", anns[0]);
+        let Component::OntologyAnnotation(OntologyAnnotation(one)) = &anns[0].component else {
+            panic!("{:?}", anns[0]);
+        };
+        let literal = |a: &Annotation<RcStr>| match &a.av {
+            AnnotationValue::Literal(Literal::Simple { literal }) => literal.clone(),
+            other => panic!("{other:?}"),
+        };
+        assert_eq!(literal(one), "one");
+        let two = one.ann.iter().next().expect("the annotation's annotation");
+        assert_eq!(literal(two), "two");
+        let three = two.ann.iter().next().expect("the third level");
+        assert_eq!(literal(three), "three");
     }
 
     #[test]
