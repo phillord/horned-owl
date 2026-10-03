@@ -1153,13 +1153,13 @@ type AnnItem<A, T> = (BTreeSet<Annotation<A>>, T);
 /// A leading `Annotations` pair attaches to the item that follows it; items
 /// without a preceding `Annotations` carry an empty set. Behaviour is identical
 /// to a plain list when no per-item annotations are present.
-fn parse_annotated_list<A: ForIRI, T, F>(
-    list: Pair<Rule>,
+fn parse_annotated_list<'i, A: ForIRI, T, F>(
+    list: Pair<'i, Rule>,
     ctx: &Context<'_, A>,
     mut item: F,
 ) -> Result<Vec<AnnItem<A, T>>>
 where
-    F: FnMut(Pair<Rule>, &Context<'_, A>) -> Result<T>,
+    F: FnMut(Pair<'i, Rule>, &Context<'_, A>) -> Result<T>,
 {
     let mut out = Vec::new();
     let mut pending: BTreeSet<Annotation<A>> = BTreeSet::new();
@@ -1494,10 +1494,8 @@ pub(crate) fn insert_misc<A: ForIRI, O: MutableOntology<A>>(
 fn parse_data_range_list<A: ForIRI>(
     list: Pair<Rule>,
     ctx: &Context<'_, A>,
-) -> Result<Vec<DataRange<A>>> {
-    list.into_inner()
-        .map(|p| DataRange::from_pair(p, ctx))
-        .collect()
+) -> Result<Vec<AnnItem<A, DataRange<A>>>> {
+    parse_annotated_list(list, ctx, DataRange::from_pair)
 }
 
 fn insert_object_property_frame<A: ForIRI, O: MutableOntology<A>>(
@@ -1654,10 +1652,10 @@ fn insert_object_property_frame<A: ForIRI, O: MutableOntology<A>>(
             "characteristics" => {
                 // §2.5 objectPropertyCharacteristicAnnotatedList: a LEADING
                 // clause-level annotation binds the FIRST item only.
-                let empty = BTreeSet::new();
-                for (i, ch) in body.into_inner().enumerate() {
-                    let item_ann = if i == 0 { &ann } else { &empty };
-                    insert_object_characteristic(ch.as_str(), &subject_ope, item_ann, ont)?;
+                let mut list = parse_annotated_list(body, ctx, |p, _| Ok(p))?;
+                bind_leading_to_first(ann, &mut list);
+                for (item_ann, ch) in list {
+                    insert_object_characteristic(ch.as_str(), &subject_ope, &item_ann, ont)?;
                 }
             }
             other => unreachable!("unexpected object-property clause keyword: {other}"),
@@ -1972,28 +1970,31 @@ fn insert_data_property_frame<A: ForIRI, O: MutableOntology<A>>(
                 }
             }
             "range" => {
-                for dr in parse_data_range_list(body, ctx)? {
+                // §2.5 dataRangeAnnotatedList: leading annotation binds the FIRST item only.
+                let mut list = parse_data_range_list(body, ctx)?;
+                bind_leading_to_first(ann, &mut list);
+                for (item_ann, dr) in list {
                     ont.insert(AnnotatedComponent {
                         component: Component::DataPropertyRange(DataPropertyRange {
                             dp: DataProperty(subject.clone()),
                             dr,
                         }),
-                        ann: ann.clone(),
+                        ann: item_ann,
                     });
                 }
             }
             "characteristics" => {
                 // §2.5: leading clause-level annotation binds the FIRST item only.
-                let empty = BTreeSet::new();
-                for (i, ch) in body.into_inner().enumerate() {
-                    let item_ann = if i == 0 { &ann } else { &empty };
+                let mut list = parse_annotated_list(body, ctx, |p, _| Ok(p))?;
+                bind_leading_to_first(ann, &mut list);
+                for (item_ann, ch) in list {
                     // Only Functional is valid on a data property.
                     if ch.as_str().eq_ignore_ascii_case("functional") {
                         ont.insert(AnnotatedComponent {
                             component: Component::FunctionalDataProperty(FunctionalDataProperty(
                                 DataProperty(subject.clone()),
                             )),
-                            ann: item_ann.clone(),
+                            ann: item_ann,
                         });
                     } else {
                         return Err(HornedError::invalid(
@@ -2133,10 +2134,10 @@ fn insert_individual_frame<A: ForIRI, O: MutableOntology<A>>(
             }
             "facts" => {
                 // §2.5 factAnnotatedList: leading annotation binds the FIRST item only.
-                let empty = BTreeSet::new();
-                for (i, fact) in body.into_inner().enumerate() {
-                    let item_ann = if i == 0 { &ann } else { &empty };
-                    insert_fact(fact, ctx, &subject_ind, item_ann, ont)?;
+                let mut list = parse_annotated_list(body, ctx, |p, _| Ok(p))?;
+                bind_leading_to_first(ann, &mut list);
+                for (item_ann, fact) in list {
+                    insert_fact(fact, ctx, &subject_ind, &item_ann, ont)?;
                 }
             }
             "sameas" => {
@@ -4605,6 +4606,95 @@ mod tests {
             !got.contains(&fact_ac_bad),
             "leading annotation must NOT spread to r(a,c), got:\n{got:#?}"
         );
+    }
+
+    /// `Facts:`, `Characteristics:` and a data property's `Range:` are
+    /// annotated lists: an `Annotations:` after a comma annotates the entry
+    /// it precedes, and only that one.
+    #[test]
+    fn an_annotation_after_a_comma_annotates_the_next_entry() {
+        use crate::io::omn::reader::read;
+        use crate::ontology::set::SetOntology;
+        use std::collections::BTreeSet;
+        use std::io::BufReader;
+        let b = Build::new_rc();
+        let doc = "Prefix: ex: <http://ex/>\n\
+                   Prefix: xsd: <http://www.w3.org/2001/XMLSchema#>\n\
+                   Ontology:\n\
+                   ObjectProperty: ex:r\n    \
+                   Characteristics: Functional, Annotations: ex:note \"t\" Transitive\n\
+                   DataProperty: ex:d\n    \
+                   Range: xsd:string, Annotations: ex:note \"i\" xsd:integer\n\
+                   Individual: ex:a\n    \
+                   Facts: ex:r ex:b, Annotations: ex:note \"f\" ex:r ex:c, ex:d \"x\"\n";
+        let (parsed, _): (SetOntology<_>, PrefixMapping) = read(
+            BufReader::new(doc.as_bytes()),
+            crate::io::ParserConfiguration::new(&b),
+        )
+        .unwrap();
+        let got: BTreeSet<_> = parsed.iter().cloned().collect();
+        let note = |val: &str| {
+            BTreeSet::from([Annotation {
+                ap: b.annotation_property("http://ex/note"),
+                av: AnnotationValue::Literal(Literal::Simple { literal: val.to_string() }),
+                ann: Default::default(),
+            }])
+        };
+        let r = ObjectPropertyExpression::ObjectProperty(b.object_property("http://ex/r"));
+        let d = b.data_property("http://ex/d");
+        let a = Individual::Named(b.named_individual("http://ex/a"));
+        let to = |iri: &str| Individual::Named(b.named_individual(iri));
+        let expected = [
+            AnnotatedComponent {
+                component: Component::FunctionalObjectProperty(FunctionalObjectProperty(r.clone())),
+                ann: BTreeSet::new(),
+            },
+            AnnotatedComponent {
+                component: Component::TransitiveObjectProperty(TransitiveObjectProperty(r.clone())),
+                ann: note("t"),
+            },
+            AnnotatedComponent {
+                component: Component::DataPropertyRange(DataPropertyRange {
+                    dp: d.clone(),
+                    dr: b.datatype("http://www.w3.org/2001/XMLSchema#string").into(),
+                }),
+                ann: BTreeSet::new(),
+            },
+            AnnotatedComponent {
+                component: Component::DataPropertyRange(DataPropertyRange {
+                    dp: d.clone(),
+                    dr: b.datatype("http://www.w3.org/2001/XMLSchema#integer").into(),
+                }),
+                ann: note("i"),
+            },
+            AnnotatedComponent {
+                component: Component::ObjectPropertyAssertion(ObjectPropertyAssertion {
+                    ope: r.clone(),
+                    from: a.clone(),
+                    to: to("http://ex/b"),
+                }),
+                ann: BTreeSet::new(),
+            },
+            AnnotatedComponent {
+                component: Component::ObjectPropertyAssertion(ObjectPropertyAssertion {
+                    ope: r,
+                    from: a.clone(),
+                    to: to("http://ex/c"),
+                }),
+                ann: note("f"),
+            },
+            AnnotatedComponent {
+                component: Component::DataPropertyAssertion(DataPropertyAssertion {
+                    dp: d,
+                    from: a,
+                    to: Literal::Simple { literal: "x".to_string() },
+                }),
+                ann: BTreeSet::new(),
+            },
+        ];
+        for ac in &expected {
+            assert!(got.contains(ac), "missing {ac:?} in:\n{got:#?}");
+        }
     }
 
     /// Our own writer emits one clause per per-item axiom, so an annotated and a

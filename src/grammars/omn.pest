@@ -378,9 +378,9 @@ DatatypeClause = {
 DescriptionList  = { Annotations? ~ Description ~ ( "," ~ Annotations? ~ Description )* }
 OpeList          = { Annotations? ~ ope ~ ( "," ~ Annotations? ~ ope )* }
 IriList          = { Annotations? ~ IRI ~ ( "," ~ Annotations? ~ IRI )* }
-DataRangeList    = { DataRange ~ ( "," ~ DataRange )* }
+DataRangeList    = { Annotations? ~ DataRange ~ ( "," ~ Annotations? ~ DataRange )* }
 IndividualList   = { Annotations? ~ Individual ~ ( "," ~ Annotations? ~ Individual )* }
-CharacteristicList = { Characteristic ~ ( "," ~ Characteristic )* }
+CharacteristicList = { Annotations? ~ Characteristic ~ ( "," ~ Annotations? ~ Characteristic )* }
 FunctionalKw        = ${ ^"Functional"        ~ NameBoundary }
 InverseFunctionalKw = ${ ^"InverseFunctional" ~ NameBoundary }
 ReflexiveKw         = ${ ^"Reflexive"         ~ NameBoundary }
@@ -399,7 +399,7 @@ Characteristic = {
     | TransitiveKw
 }
 
-FactList = { Fact ~ ( "," ~ Fact )* }
+FactList = { Annotations? ~ Fact ~ ( "," ~ Annotations? ~ Fact )* }
 Fact     = { NotKw? ~ ope ~ ( Literal | Individual ) }
 
 // ---- property chain and HasKey lists ----------------------------------------
