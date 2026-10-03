@@ -360,25 +360,26 @@ pub fn write_full<A: ForIRI, AA: ForIndex<A>, W: Write>(
         }
     }
     if !sig_nonempty[4] {
-        // A typed literal anywhere puts its datatype (≥ xsd:string) in the
-        // signature, so the Datatypes section is non-empty even without a
-        // datatype declaration. An ONTOLOGY annotation counts too: an otherwise
-        // empty `definitions.owl` carrying only `Annotation(owl:versionInfo …)`
-        // still gets the Datatypes blank line from that literal's xsd:string.
-        for ac in ont.iter() {
-            let ac: &AnnotatedComponent<A> = ac.borrow();
-            let lit = match &ac.component {
-                Component::AnnotationAssertion(aa) => matches!(aa.ann.av, AnnotationValue::Literal(_)),
-                Component::OntologyAnnotation(oa) => {
-                    matches!(oa.0.av, AnnotationValue::Literal(_))
-                }
-                _ => false,
-            };
-            if lit {
-                sig_nonempty[4] = true;
-                break;
+        // Every literal puts its datatype in the signature — a plain one
+        // `xsd:string`, a language-tagged one `rdf:langString` — so the
+        // Datatypes section is non-empty even without a datatype declaration,
+        // wherever the literal stands: an annotation assertion, an axiom's
+        // annotation, a class expression, a property assertion, a rule. An
+        // ONTOLOGY annotation counts too: an otherwise empty `definitions.owl`
+        // carrying only `Annotation(owl:versionInfo …)` still gets the
+        // Datatypes blank line from that literal's xsd:string.
+        use crate::visitor::immutable::{Visit, Walk};
+        struct AnyLiteral(bool);
+        impl<A: ForIRI> Visit<A> for AnyLiteral {
+            fn visit_literal(&mut self, _: &Literal<A>) {
+                self.0 = true;
             }
         }
+        let mut walk = Walk::new(AnyLiteral(false));
+        for ac in ont.iter() {
+            walk.annotated_component(ac.borrow());
+        }
+        sig_nonempty[4] = walk.into_visit().0;
     }
 
     // --- Pass 2: route each non-declaration axiom to its owning entity ---
@@ -386,6 +387,9 @@ pub fn write_full<A: ForIRI, AA: ForIndex<A>, W: Write>(
     // blocks likewise. Both are sorted on their rendering before emission.
     let mut ann_blocks: HashMap<(usize, String), Vec<&AnnotatedComponent<A>>> = HashMap::new();
     let mut axiom_blocks: HashMap<(usize, String), Vec<&AnnotatedComponent<A>>> = HashMap::new();
+    // Entities with a frame of their own that nothing is written in: the named
+    // members of an axiom written with the general ones.
+    let mut empty_frames: Vec<(usize, String)> = Vec::new();
     let mut leftover: Vec<&AnnotatedComponent<A>> = Vec::new();
 
     for ac in ont.iter() {
@@ -411,9 +415,27 @@ pub fn write_full<A: ForIRI, AA: ForIndex<A>, W: Write>(
 
             // OWLAPI writes n-ary DisjointClasses (>2 operands) and
             // DifferentIndividuals as general axioms at the end, not under an
-            // entity (writeEntity2 skips them).
-            Component::DisjointClasses(d) if d.0.len() > 2 => leftover.push(ac),
-            Component::DifferentIndividuals(_) => leftover.push(ac),
+            // entity (writeEntity2 skips them). Each named member still has a
+            // frame, opened for the axiom and left empty.
+            Component::DisjointClasses(d) if d.0.len() > 2 => {
+                for ce in &d.0 {
+                    if let ClassExpression::Class(c) = ce {
+                        empty_frames.push((0, c.0.as_ref().to_string()));
+                    }
+                }
+                leftover.push(ac)
+            }
+            Component::DifferentIndividuals(d) => {
+                for i in &d.0 {
+                    if let Individual::Named(n) = i {
+                        empty_frames.push((5, n.0.as_ref().to_string()));
+                    }
+                }
+                leftover.push(ac)
+            }
+            // A key is no axiom of its class's frame: it is written with the
+            // general axioms, and opens no frame.
+            Component::HasKey(_) => leftover.push(ac),
 
             other => match axiom_owner(other) {
                 // Store the component itself, not its rendering, so the block can
@@ -428,7 +450,7 @@ pub fn write_full<A: ForIRI, AA: ForIndex<A>, W: Write>(
     // Any entity that carries axioms is in the signature too, even without its
     // own declaration — so its section must not be skipped (which would drop the
     // axioms). Mark those ranks non-empty now that the blocks are built.
-    for (r, _) in ann_blocks.keys().chain(axiom_blocks.keys()) {
+    for (r, _) in ann_blocks.keys().chain(axiom_blocks.keys()).chain(empty_frames.iter()) {
         sig_nonempty[*r] = true;
     }
 
@@ -446,7 +468,7 @@ pub fn write_full<A: ForIRI, AA: ForIndex<A>, W: Write>(
         // `…/obo/`) precedes `…/obo/chebi/3_STAR` (namespace `…/obo/chebi/`)
         // even though `c` < `v` lexically. A `BTreeSet<&str>` got that backwards.
         let mut iris: Vec<&str> = Vec::new();
-        for (r, iri) in ann_blocks.keys().chain(axiom_blocks.keys()) {
+        for (r, iri) in ann_blocks.keys().chain(axiom_blocks.keys()).chain(empty_frames.iter()) {
             if *r == rank {
                 iris.push(iri.as_str());
             }
