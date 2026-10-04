@@ -1004,7 +1004,11 @@ impl<A: ForIRI> AsFunctional<A> for FacetRestriction<A> {}
 
 impl<A: ForIRI> Display for Functional<'_, HasKey<A>, A> {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
-        write!(f, "HasKey({} ", Functional(&self.0.ce, self.1, None))?;
+        f.write_str("HasKey(")?;
+        if let Some(annotations) = self.2 {
+            write!(f, "{} ", Functional(annotations, self.1, None))?;
+        }
+        write!(f, "{} ", Functional(&self.0.ce, self.1, None))?;
 
         f.write_str("(")?;
         let mut n = 0;

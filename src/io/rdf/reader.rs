@@ -598,6 +598,10 @@ pub struct OntologyParser<
     // Blank nodes stated `owl:inverseOf` a named property: what an inverse in
     // a list says, which two lists naming one inverse by different nodes share.
     inverse_nodes: HashMap<BNode<A>, IRI<A>>,
+    // The lists the reifications of axioms stated with a list name as their
+    // `owl:annotatedTarget`: copies of the axiom's own list, read once the
+    // axiom takes the annotations keyed by their content.
+    list_copies: Vec<BNode<A>>,
     atom: HashMap<Term<A>, Atom<A>>,
     variable: HashMap<IRI<A>, Variable<A>>,
 
@@ -651,6 +655,7 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
             ann_map: d!(),
             annotation_nodes: d!(),
             inverse_nodes: d!(),
+            list_copies: d!(),
             atom: d!(),
             variable: d!(),
             state: OntologyParserState::New,
@@ -1113,18 +1118,20 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
                     // blocks may reify the same base triple with distinct
                     // annotation sets, each a separate annotated axiom.
                     let mut key = self.config.build.as_ref().substitute_term([sb.clone(), p.clone(), ob.clone()]);
-                    // A property-chain reification often points `annotatedTarget`
-                    // at a SEPARATE Collection bnode that is structurally equal
-                    // to — but a distinct node from — the chain's own list (e.g.
-                    // ENVO serializes both as `parseType="Collection"`). Key such
-                    // annotations by the list's content so they match the axiom
-                    // regardless of which bnode carries the list.
-                    if matches!(key[1], Term::OWL(VOWL::PropertyChainAxiom)) {
-                        if let Term::BNode(ref b) = key[2] {
-                            if let Some(members) = self.bnode_seq.get(b) {
-                                key[2] = self.canon_list_term(members);
-                            }
-                        }
+                    // The reification of an axiom stated with a list — a
+                    // property chain, a disjoint union, a key — names as its
+                    // `annotatedTarget` a list of its own, equal in content to
+                    // the axiom's (both written as `parseType="Collection"`).
+                    // Its annotations are keyed by the list's content, so they
+                    // match the axiom whichever node carries the list.
+                    if matches!(
+                        key[1],
+                        Term::OWL(VOWL::PropertyChainAxiom | VOWL::DisjointUnionOf | VOWL::HasKey)
+                    ) && let Term::BNode(ref b) = key[2]
+                        && let Some(members) = self.bnode_seq.get(b)
+                    {
+                        self.list_copies.push(b.clone());
+                        key[2] = self.canon_list_term(members);
                     }
                     reified.push((key.clone(), pos));
                     let anns = self.annotations_of(&Term::BNode(k.clone()), ann)?;
@@ -1248,11 +1255,34 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
         self.simple.extend(it);
     }
 
-    /// A content-based key term for an RDF list (the members of a property
-    /// chain). Used so a reification whose `annotatedTarget` is a distinct but
-    /// structurally-equal Collection bnode still matches the axiom built from a
-    /// different list bnode of the same content. An inverse member is keyed by
-    /// the property it names, since each list states it with a node of its own.
+    /// The annotations recorded under the content of the list `id`, the
+    /// object of `[subject, pred, id]`, moved onto that triple's key, where the
+    /// axiom it states takes them; the reifications' copies of the list are
+    /// read with them.
+    fn claim_list_annotations(&mut self, subject: &Term<A>, pred: VOWL, id: &BNode<A>) {
+        let Some(members) = self.bnode_seq.get(id) else { return };
+        let canon = self.canon_list_term(members);
+        let Some(anns) = self.ann_map.remove(&[subject.clone(), Term::OWL(pred.clone()), canon.clone()]) else {
+            return;
+        };
+        self.ann_map.entry([subject.clone(), Term::OWL(pred), Term::BNode(id.clone())]).or_default().extend(anns);
+        let copies = std::mem::take(&mut self.list_copies);
+        for copy in copies {
+            let same = &copy != id && self.bnode_seq.get(&copy).is_some_and(|m| self.canon_list_term(m) == canon);
+            if same {
+                self.bnode_seq.remove(&copy);
+            } else {
+                self.list_copies.push(copy);
+            }
+        }
+    }
+
+    /// A content-based key term for an RDF list: the members of a property
+    /// chain, a disjoint union or a key. Used so a reification whose
+    /// `annotatedTarget` is a distinct but structurally-equal Collection bnode
+    /// still matches the axiom built from a different list bnode of the same
+    /// content. An inverse member is keyed by the property it names, since each
+    /// list states it with a node of its own.
     fn canon_list_term(&self, members: &[Term<A>]) -> Term<A> {
         let s: String = members
             .iter()
@@ -1264,7 +1294,7 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
             })
             .collect::<Vec<_>>()
             .join("\u{1}");
-        Term::BNode(BNode(format!("__chain__\u{1}{s}").into()))
+        Term::BNode(BNode(format!("__list__\u{1}{s}").into()))
     }
 
     /// Take the reified annotation sets recorded for a base triple. Returns one
@@ -2437,6 +2467,7 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
                     )),
                 },
                 [class, Term::OWL(VOWL::HasKey), Term::BNode(bnodeid)] => {
+                    self.claim_list_annotations(class, VOWL::HasKey, bnodeid);
                     ok_some! {
                         {
                             let vpe: Option<Vec<PropertyExpression<_>>> = self.bnode_seq
@@ -2453,10 +2484,11 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
                     }
                 }
                 [
-                    Term::Iri(iri),
+                    subject @ Term::Iri(iri),
                     Term::OWL(VOWL::DisjointUnionOf),
                     Term::BNode(bnodeid),
                 ] => {
+                    self.claim_list_annotations(subject, VOWL::DisjointUnionOf, bnodeid);
                     ok_some! {
                         DisjointUnion(
                             Class(iri.clone()),
@@ -2587,22 +2619,7 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
                     Term::OWL(VOWL::PropertyChainAxiom),
                     Term::BNode(id),
                 ] => {
-                    // If a property-chain reification stored its annotations under
-                    // the list's content key (because its annotatedTarget was a
-                    // distinct Collection bnode), relocate them onto this base
-                    // triple's key so the generic take_anns below attaches them.
-                    if let Some(members) = self.bnode_seq.get(id) {
-                        let canon = self.canon_list_term(members);
-                        let canon_key = [pr.clone(), Term::OWL(VOWL::PropertyChainAxiom), canon];
-                        if let Some(anns) = self.ann_map.remove(&canon_key) {
-                            let base_key = [
-                                pr.clone(),
-                                Term::OWL(VOWL::PropertyChainAxiom),
-                                Term::BNode(id.clone()),
-                            ];
-                            self.ann_map.entry(base_key).or_default().extend(anns);
-                        }
-                    }
+                    self.claim_list_annotations(pr, VOWL::PropertyChainAxiom, id);
                     ok_some! {{
                         let sup = self.retrieve_to_ope(pr)?;
                         let members = self.bnode_seq.get(id)?.clone();

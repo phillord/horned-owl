@@ -1,0 +1,33 @@
+Prefix(:=<http://example.org/t#>)
+Prefix(owl:=<http://www.w3.org/2002/07/owl#>)
+Prefix(rdf:=<http://www.w3.org/1999/02/22-rdf-syntax-ns#>)
+Prefix(xml:=<http://www.w3.org/XML/1998/namespace>)
+Prefix(xsd:=<http://www.w3.org/2001/XMLSchema#>)
+Prefix(rdfs:=<http://www.w3.org/2000/01/rdf-schema#>)
+
+
+Ontology(<http://example.org/t>
+
+Declaration(Class(:A))
+Declaration(Class(:B))
+Declaration(Class(:C))
+Declaration(ObjectProperty(:p))
+Declaration(ObjectProperty(:q))
+Declaration(ObjectProperty(:r))
+Declaration(DataProperty(:d))
+
+
+
+
+############################
+#   Classes
+############################
+
+# Class: :A (:A)
+
+DisjointUnion(Annotation(rdfs:comment "du") :A :B :C)
+
+
+SubObjectPropertyOf(Annotation(rdfs:comment "chain") ObjectPropertyChain(:p :q) :r)
+HasKey(Annotation(rdfs:comment "key") :A (:p) (:d))
+)

@@ -772,6 +772,22 @@ fn undeclared_signature<A: ForIRI, AA: ForIndex<A>>(
         .collect()
 }
 
+/// Whether the mapping of `c` is a node of its own, which its annotations are
+/// stated of: a rule, a negative assertion, and a disjointness or difference
+/// of other than two members.
+fn annotated_on_node<A: ForIRI>(c: &Component<A>) -> bool {
+    match c {
+        Component::Rule(_)
+        | Component::NegativeObjectPropertyAssertion(_)
+        | Component::NegativeDataPropertyAssertion(_) => true,
+        Component::DisjointClasses(d) => d.0.len() != 2,
+        Component::DisjointObjectProperties(d) => d.0.len() != 2,
+        Component::DisjointDataProperties(d) => d.0.len() != 2,
+        Component::DifferentIndividuals(d) => d.0.len() != 2,
+        _ => false,
+    }
+}
+
 /// Whether `members` writes nothing for `c` when the writer is not lax: a
 /// single-member `DisjointClasses`, `DisjointObjectProperties`,
 /// `DisjointDataProperties` or `DifferentIndividuals` (#214).
@@ -818,12 +834,19 @@ impl<A: ForIRI, F: RdfFormatter<A, W>, W: Write> Render<A, F, (), W> for Annotat
         };
 
         if !self.ann.is_empty() {
-            // A SWRL rule (`swrl:Imp`) carries its annotations directly on the rule
-            // node — OWLAPI/ROBOT do not reify rule annotations via `owl:Axiom`
-            // (and reifying the `rdf:type swrl:Imp` triple does not round-trip: the
-            // annotation is lost and the body-atom order is mangled on re-read).
-            if matches!(self.component, Component::Rule(_)) {
-                if let Annotatable::Main(t) = cmp {
+            // An axiom stated by a node of its own carries its annotations on
+            // that node, its first triple's subject: a SWRL rule's `swrl:Imp`,
+            // a negative assertion's `owl:NegativePropertyAssertion`, and the
+            // `owl:AllDisjointClasses`, `owl:AllDisjointProperties` or
+            // `owl:AllDifferent` of a disjointness or difference that is not a
+            // pair. Reifying its triples one by one instead reads back as no
+            // axiom at all.
+            if annotated_on_node(&self.component) {
+                let first = match cmp {
+                    Annotatable::Main(t) => Some(t),
+                    Annotatable::Multiple(v) => v.into_iter().next(),
+                };
+                if let Some(t) = first {
                     ng.keep_this_bn(t.subject);
                     let _ = self.ann.render(f, ng);
                 }
@@ -2712,5 +2735,46 @@ mod test {
         )
         .unwrap();
         assert!(strict_out.is_empty());
+    }
+
+    /// An annotated axiom stated by a node of its own carries its annotations
+    /// on that node, and one whose object is a list states the list once:
+    /// written and read back, each keeps its annotations.
+    #[test]
+    fn annotated_axioms_with_a_node_or_a_list_read_back() {
+        let ofn = r#"Prefix(:=<http://example.org/t#>)
+Prefix(rdfs:=<http://www.w3.org/2000/01/rdf-schema#>)
+Ontology(<http://example.org/t>
+Declaration(Class(:A))
+Declaration(Class(:B))
+Declaration(Class(:C))
+Declaration(ObjectProperty(:p))
+Declaration(ObjectProperty(:q))
+Declaration(ObjectProperty(:r))
+Declaration(DataProperty(:d))
+Declaration(DataProperty(:e))
+Declaration(DataProperty(:f))
+Declaration(NamedIndividual(:i))
+Declaration(NamedIndividual(:j))
+Declaration(NamedIndividual(:k))
+DisjointObjectProperties(Annotation(rdfs:comment "op") :p ObjectInverseOf(:q) :r)
+DisjointDataProperties(Annotation(rdfs:comment "dp") :d :e :f)
+DisjointClasses(Annotation(rdfs:comment "dc") :A :B :C)
+DifferentIndividuals(Annotation(rdfs:comment "di") :i :j :k)
+NegativeObjectPropertyAssertion(Annotation(rdfs:comment "npa") :p :i :j)
+NegativeDataPropertyAssertion(Annotation(rdfs:comment "ndpa") :d :i "x")
+DisjointUnion(Annotation(rdfs:comment "du") :A :B :C)
+HasKey(Annotation(rdfs:comment "key") :A (:p) (:d))
+SubObjectPropertyOf(Annotation(rdfs:comment "chain") ObjectPropertyChain(:p :q) :r)
+)"#;
+        let b = Build::new_rc();
+        let (ont, _): (SetOntology<RcStr>, _) =
+            crate::io::ofn::reader::read(&mut ofn.as_bytes(), crate::io::ParserConfiguration::new(&b)).unwrap();
+        let amo: ComponentMappedOntology<RcStr, Rc<AnnotatedComponent<RcStr>>> = ont.clone().into();
+        let mut rdf = Vec::new();
+        write(&mut rdf, &amo, None).unwrap();
+        let back: std::collections::HashSet<AnnotatedComponent<RcStr>> = read_ok(&mut rdf.as_slice()).into_iter().collect();
+        let lost: Vec<&AnnotatedComponent<RcStr>> = ont.iter().filter(|c| !back.contains(*c)).collect();
+        assert!(lost.is_empty(), "lost: {lost:#?}\n{}", String::from_utf8_lossy(&rdf));
     }
 }
