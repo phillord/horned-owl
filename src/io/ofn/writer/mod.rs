@@ -16,10 +16,12 @@ use crate::model::AnnotationValue;
 use crate::model::ClassExpression;
 use crate::model::Component;
 use crate::model::ComponentKind;
+use crate::model::DataRange;
 use crate::model::ForIRI;
 use crate::model::Individual;
 use crate::model::Literal;
 use crate::model::ObjectPropertyExpression;
+use crate::model::PropertyExpression;
 use crate::model::SubObjectPropertyExpression;
 use crate::ontology::component_mapped::ComponentMappedOntology;
 use crate::ontology::indexed::ForIndex;
@@ -951,10 +953,6 @@ fn owlapi_axiom_index<A: ForIRI>(comp: &Component<A>) -> u8 {
     }
 }
 
-/// Order two axioms as OWLAPI's `compareTo` does: by axiom-type index first, then
-/// by structural content (for which horned-owl's derived `Ord` already matches —
-/// e.g. a named superclass sorts before an anonymous class expression).
-
 /// OWLAPI's `OWLObjectTypeIndexProvider` index for a class expression:
 /// `CLASS_EXPRESSION_TYPE_INDEX_BASE` (3000) + the visitor's ordinal, and
 /// `ENTITY_TYPE_INDEX_BASE + 1` for a named class. Read off owlapi4's
@@ -1182,17 +1180,7 @@ fn owlapi_ope_cmp<A: ForIRI>(
 /// OWLAPI's `compareSets`: both collections are sorted, compared element-wise,
 /// and the shorter one loses only if every shared element is equal.
 fn owlapi_ce_set_cmp<A: ForIRI>(a: &[ClassExpression<A>], b: &[ClassExpression<A>]) -> Ordering {
-    let mut xa: Vec<&ClassExpression<A>> = a.iter().collect();
-    let mut xb: Vec<&ClassExpression<A>> = b.iter().collect();
-    xa.sort_by(|p, q| owlapi_ce_cmp(p, q));
-    xb.sort_by(|p, q| owlapi_ce_cmp(p, q));
-    for (p, q) in xa.iter().zip(xb.iter()) {
-        let c = owlapi_ce_cmp(p, q);
-        if c != Ordering::Equal {
-            return c;
-        }
-    }
-    xa.len().cmp(&xb.len())
+    owlapi_set_cmp(a, b, owlapi_ce_cmp)
 }
 
 /// OWLAPI's `OWLObject.compareTo` restricted to class expressions: type index
@@ -1231,61 +1219,251 @@ fn owlapi_ce_cmp<A: ForIRI>(a: &ClassExpression<A>, b: &ClassExpression<A>) -> O
             .then_with(|| n1.cmp(n2))
             .then_with(|| owlapi_ce_cmp(f1, f2)),
         (ObjectHasSelf(p1), ObjectHasSelf(p2)) => owlapi_ope_cmp(p1, p2),
-        // Anything else (individuals, data ranges, literals) keeps horned's own
-        // structural order — no MONDO general axiom reaches these arms.
+        (ObjectOneOf(x), ObjectOneOf(y)) => owlapi_set_cmp(x, y, owlapi_individual_cmp),
+        (ObjectHasValue { ope: p1, i: i1 }, ObjectHasValue { ope: p2, i: i2 }) => {
+            owlapi_ope_cmp(p1, p2).then_with(|| owlapi_individual_cmp(i1, i2))
+        }
+        (DataSomeValuesFrom { dp: p1, dr: r1 }, DataSomeValuesFrom { dp: p2, dr: r2 })
+        | (DataAllValuesFrom { dp: p1, dr: r1 }, DataAllValuesFrom { dp: p2, dr: r2 }) => {
+            owlapi_iri_cmp(p1.0.as_ref(), p2.0.as_ref()).then_with(|| owlapi_dr_cmp(r1, r2))
+        }
+        (DataHasValue { dp: p1, l: l1 }, DataHasValue { dp: p2, l: l2 }) => {
+            owlapi_iri_cmp(p1.0.as_ref(), p2.0.as_ref()).then_with(|| owlapi_literal_cmp(l1, l2))
+        }
+        (
+            DataMinCardinality { n: n1, dp: p1, dr: r1 },
+            DataMinCardinality { n: n2, dp: p2, dr: r2 },
+        )
+        | (
+            DataMaxCardinality { n: n1, dp: p1, dr: r1 },
+            DataMaxCardinality { n: n2, dp: p2, dr: r2 },
+        )
+        | (
+            DataExactCardinality { n: n1, dp: p1, dr: r1 },
+            DataExactCardinality { n: n2, dp: p2, dr: r2 },
+        ) => owlapi_iri_cmp(p1.0.as_ref(), p2.0.as_ref())
+            .then_with(|| n1.cmp(n2))
+            .then_with(|| owlapi_dr_cmp(r1, r2)),
         _ => Ordering::Equal,
     }
 }
 
+/// OWLAPI's order of individuals: a named one (type index 1005) before an
+/// anonymous one (1007), named ones by IRI and anonymous ones by node ID.
+fn owlapi_individual_cmp<A: ForIRI>(a: &Individual<A>, b: &Individual<A>) -> Ordering {
+    match (a, b) {
+        (Individual::Named(x), Individual::Named(y)) => owlapi_iri_cmp(x.0.as_ref(), y.0.as_ref()),
+        (Individual::Anonymous(x), Individual::Anonymous(y)) => x.0.as_ref().cmp(y.0.as_ref()),
+        (Individual::Named(_), Individual::Anonymous(_)) => Ordering::Less,
+        (Individual::Anonymous(_), Individual::Named(_)) => Ordering::Greater,
+    }
+}
+
+/// OWLAPI's order of property expressions: object property (1002), inverse
+/// (1003), data property (1004), annotation property (1006).
+fn owlapi_pe_cmp<A: ForIRI>(a: &PropertyExpression<A>, b: &PropertyExpression<A>) -> Ordering {
+    use PropertyExpression::*;
+    match (a, b) {
+        (ObjectPropertyExpression(x), ObjectPropertyExpression(y)) => owlapi_ope_cmp(x, y),
+        (DataProperty(x), DataProperty(y)) => owlapi_iri_cmp(x.0.as_ref(), y.0.as_ref()),
+        (AnnotationProperty(x), AnnotationProperty(y)) => owlapi_iri_cmp(x.0.as_ref(), y.0.as_ref()),
+        _ => {
+            let idx = |p: &PropertyExpression<A>| match p {
+                ObjectPropertyExpression(crate::model::ObjectPropertyExpression::ObjectProperty(_)) => 1002u32,
+                ObjectPropertyExpression(_) => 1003,
+                DataProperty(_) => 1004,
+                AnnotationProperty(_) => 1006,
+            };
+            idx(a).cmp(&idx(b))
+        }
+    }
+}
+
+/// OWLAPI's order of data ranges: a union (type index 2005, below every other
+/// data range), then a datatype (4001), complement (4002), one-of (4003),
+/// intersection (4004) and restriction (4006). A restriction compares its
+/// datatype, then its facet restrictions as a set, each by facet and then value.
+fn owlapi_dr_cmp<A: ForIRI>(a: &DataRange<A>, b: &DataRange<A>) -> Ordering {
+    use DataRange::*;
+    let idx = |d: &DataRange<A>| match d {
+        DataUnionOf(_) => 2005u32,
+        Datatype(_) => 4001,
+        DataComplementOf(_) => 4002,
+        DataOneOf(_) => 4003,
+        DataIntersectionOf(_) => 4004,
+        DatatypeRestriction(..) => 4006,
+    };
+    idx(a).cmp(&idx(b)).then_with(|| match (a, b) {
+        (Datatype(x), Datatype(y)) => owlapi_iri_cmp(x.0.as_ref(), y.0.as_ref()),
+        (DataComplementOf(x), DataComplementOf(y)) => owlapi_dr_cmp(x, y),
+        (DataOneOf(x), DataOneOf(y)) => owlapi_set_cmp(x, y, owlapi_literal_cmp),
+        (DataIntersectionOf(x), DataIntersectionOf(y)) | (DataUnionOf(x), DataUnionOf(y)) => {
+            owlapi_set_cmp(x, y, owlapi_dr_cmp)
+        }
+        (DatatypeRestriction(dx, fx), DatatypeRestriction(dy, fy)) => {
+            owlapi_iri_cmp(dx.0.as_ref(), dy.0.as_ref()).then_with(|| {
+                owlapi_set_cmp(fx, fy, |p, q| {
+                    p.f.cmp(&q.f).then_with(|| owlapi_literal_cmp(&p.l, &q.l))
+                })
+            })
+        }
+        _ => Ordering::Equal,
+    })
+}
+
+/// OWLAPI's `compareSets`: both collections sorted, compared element-wise, and
+/// the shorter one first only if every shared element is equal.
+fn owlapi_set_cmp<T>(a: &[T], b: &[T], cmp: impl Fn(&T, &T) -> Ordering) -> Ordering {
+    let mut xa: Vec<&T> = a.iter().collect();
+    let mut xb: Vec<&T> = b.iter().collect();
+    xa.sort_by(|p, q| cmp(p, q));
+    xb.sort_by(|p, q| cmp(p, q));
+    for (p, q) in xa.iter().zip(xb.iter()) {
+        let c = cmp(p, q);
+        if c != Ordering::Equal {
+            return c;
+        }
+    }
+    xa.len().cmp(&xb.len())
+}
+
 /// OWLAPI's ordering for the axioms that end up in the general (leftover)
-/// section: `SubClassOf` compares its SUBCLASS then its superclass, the n-ary
-/// class axioms compare their operand sets. Falls back to horned's derived
-/// order for anything else, which is what this used to do for everything —
-/// leaving MONDO's `imports/merged_import.owl` with ~200 lines of general class
-/// axioms in the wrong order once their content finally matched.
+/// section: by axiom type, then [`owlapi_same_type_cmp`], and where that finds
+/// two axioms equal, by horned's derived order.
 fn owlapi_general_cmp<A: ForIRI>(
     a: &&AnnotatedComponent<A>,
     b: &&AnnotatedComponent<A>,
 ) -> Ordering {
+    owlapi_axiom_index(&a.component)
+        .cmp(&owlapi_axiom_index(&b.component))
+        .then_with(|| owlapi_same_type_cmp(&a.component, &b.component))
+        .then_with(|| a.cmp(b))
+}
+
+/// OWLAPI's `compareObjectOfSameType` for two axioms of one type: their fields
+/// in the order OWLAPI compares them, each in OWLAPI's own order. An assertion
+/// compares its subject, then its property or class, then its object; a sub-class
+/// or sub-property axiom its sub-class or sub-property, then its super; a property
+/// characteristic, domain or range its property first; a key its class, then its
+/// properties; and an n-ary axiom its operands as a set. A property chain is a
+/// list, compared element-wise, then by length, then by its super-property.
+/// Axioms differing only in their own annotations compare equal.
+fn owlapi_same_type_cmp<A: ForIRI>(a: &Component<A>, b: &Component<A>) -> Ordering {
     use Component::*;
-    let c = owlapi_axiom_index(&a.component).cmp(&owlapi_axiom_index(&b.component));
-    if c != Ordering::Equal {
-        return c;
-    }
-    match (&a.component, &b.component) {
-        (SubClassOf(x), SubClassOf(y)) => owlapi_ce_cmp(&x.sub, &y.sub)
-            .then_with(|| owlapi_ce_cmp(&x.sup, &y.sup))
-            .then_with(|| a.cmp(b)),
-        (EquivalentClasses(x), EquivalentClasses(y)) => {
-            owlapi_ce_set_cmp(&x.0, &y.0).then_with(|| a.cmp(b))
+    use SubObjectPropertyExpression as SOPE;
+    let iri = |x: &crate::model::IRI<A>, y: &crate::model::IRI<A>| {
+        owlapi_iri_cmp(x.as_ref(), y.as_ref())
+    };
+    match (a, b) {
+        (SubClassOf(x), SubClassOf(y)) => {
+            owlapi_ce_cmp(&x.sub, &y.sub).then_with(|| owlapi_ce_cmp(&x.sup, &y.sup))
         }
-        (DisjointClasses(x), DisjointClasses(y)) => {
-            owlapi_ce_set_cmp(&x.0, &y.0).then_with(|| a.cmp(b))
+        (EquivalentClasses(x), EquivalentClasses(y)) => owlapi_ce_set_cmp(&x.0, &y.0),
+        (DisjointClasses(x), DisjointClasses(y)) => owlapi_ce_set_cmp(&x.0, &y.0),
+        (DisjointUnion(x), DisjointUnion(y)) => {
+            iri(&x.0 .0, &y.0 .0).then_with(|| owlapi_ce_set_cmp(&x.1, &y.1))
         }
-        // `OWLSubPropertyChainOfAxiomImpl`: the CHAIN element-wise (in order —
-        // a chain is a list, not a set), then its length, then the super
-        // property. These reach the general section because a chain axiom has
-        // no named subject to file it under.
-        (SubObjectPropertyOf(x), SubObjectPropertyOf(y)) => {
-            use crate::model::SubObjectPropertyExpression as SOPE;
-            match (&x.sub, &y.sub) {
-                (SOPE::ObjectPropertyChain(c1), SOPE::ObjectPropertyChain(c2)) => {
-                    let mut o = Ordering::Equal;
-                    for (p, q) in c1.iter().zip(c2.iter()) {
-                        o = owlapi_ope_cmp(p, q);
-                        if o != Ordering::Equal {
-                            break;
-                        }
+        (SubObjectPropertyOf(x), SubObjectPropertyOf(y)) => match (&x.sub, &y.sub) {
+            (SOPE::ObjectPropertyChain(c1), SOPE::ObjectPropertyChain(c2)) => {
+                let mut o = Ordering::Equal;
+                for (p, q) in c1.iter().zip(c2.iter()) {
+                    o = owlapi_ope_cmp(p, q);
+                    if o != Ordering::Equal {
+                        break;
                     }
-                    o.then_with(|| c1.len().cmp(&c2.len()))
-                        .then_with(|| owlapi_ope_cmp(&x.sup, &y.sup))
-                        .then_with(|| a.cmp(b))
                 }
-                _ => a.cmp(b),
+                o.then_with(|| c1.len().cmp(&c2.len()))
+                    .then_with(|| owlapi_ope_cmp(&x.sup, &y.sup))
             }
+            (SOPE::ObjectPropertyExpression(p), SOPE::ObjectPropertyExpression(q)) => {
+                owlapi_ope_cmp(p, q).then_with(|| owlapi_ope_cmp(&x.sup, &y.sup))
+            }
+            _ => Ordering::Equal,
+        },
+        (EquivalentObjectProperties(x), EquivalentObjectProperties(y)) => {
+            owlapi_set_cmp(&x.0, &y.0, owlapi_ope_cmp)
         }
-        (Rule(x), Rule(y)) => owlapi_rule_cmp(x, y).then_with(|| a.cmp(b)),
-        _ => a.cmp(b),
+        (DisjointObjectProperties(x), DisjointObjectProperties(y)) => {
+            owlapi_set_cmp(&x.0, &y.0, owlapi_ope_cmp)
+        }
+        (InverseObjectProperties(x), InverseObjectProperties(y)) => {
+            owlapi_set_cmp(&[&x.0, &x.1], &[&y.0, &y.1], |p, q| owlapi_ope_cmp(p, q))
+        }
+        (ObjectPropertyDomain(x), ObjectPropertyDomain(y)) => {
+            owlapi_ope_cmp(&x.ope, &y.ope).then_with(|| owlapi_ce_cmp(&x.ce, &y.ce))
+        }
+        (ObjectPropertyRange(x), ObjectPropertyRange(y)) => {
+            owlapi_ope_cmp(&x.ope, &y.ope).then_with(|| owlapi_ce_cmp(&x.ce, &y.ce))
+        }
+        (FunctionalObjectProperty(x), FunctionalObjectProperty(y)) => owlapi_ope_cmp(&x.0, &y.0),
+        (InverseFunctionalObjectProperty(x), InverseFunctionalObjectProperty(y)) => {
+            owlapi_ope_cmp(&x.0, &y.0)
+        }
+        (ReflexiveObjectProperty(x), ReflexiveObjectProperty(y)) => owlapi_ope_cmp(&x.0, &y.0),
+        (IrreflexiveObjectProperty(x), IrreflexiveObjectProperty(y)) => owlapi_ope_cmp(&x.0, &y.0),
+        (SymmetricObjectProperty(x), SymmetricObjectProperty(y)) => owlapi_ope_cmp(&x.0, &y.0),
+        (AsymmetricObjectProperty(x), AsymmetricObjectProperty(y)) => owlapi_ope_cmp(&x.0, &y.0),
+        (TransitiveObjectProperty(x), TransitiveObjectProperty(y)) => owlapi_ope_cmp(&x.0, &y.0),
+        (SubDataPropertyOf(x), SubDataPropertyOf(y)) => {
+            iri(&x.sub.0, &y.sub.0).then_with(|| iri(&x.sup.0, &y.sup.0))
+        }
+        (EquivalentDataProperties(x), EquivalentDataProperties(y)) => {
+            owlapi_set_cmp(&x.0, &y.0, |p, q| iri(&p.0, &q.0))
+        }
+        (DisjointDataProperties(x), DisjointDataProperties(y)) => {
+            owlapi_set_cmp(&x.0, &y.0, |p, q| iri(&p.0, &q.0))
+        }
+        (FunctionalDataProperty(x), FunctionalDataProperty(y)) => iri(&x.0 .0, &y.0 .0),
+        (DataPropertyDomain(x), DataPropertyDomain(y)) => {
+            iri(&x.dp.0, &y.dp.0).then_with(|| owlapi_ce_cmp(&x.ce, &y.ce))
+        }
+        (DataPropertyRange(x), DataPropertyRange(y)) => {
+            iri(&x.dp.0, &y.dp.0).then_with(|| owlapi_dr_cmp(&x.dr, &y.dr))
+        }
+        (DatatypeDefinition(x), DatatypeDefinition(y)) => {
+            iri(&x.kind.0, &y.kind.0).then_with(|| owlapi_dr_cmp(&x.range, &y.range))
+        }
+        (HasKey(x), HasKey(y)) => owlapi_ce_cmp(&x.ce, &y.ce)
+            .then_with(|| owlapi_set_cmp(&x.vpe, &y.vpe, owlapi_pe_cmp)),
+        (SameIndividual(x), SameIndividual(y)) => owlapi_set_cmp(&x.0, &y.0, owlapi_individual_cmp),
+        (DifferentIndividuals(x), DifferentIndividuals(y)) => {
+            owlapi_set_cmp(&x.0, &y.0, owlapi_individual_cmp)
+        }
+        (ClassAssertion(x), ClassAssertion(y)) => {
+            owlapi_individual_cmp(&x.i, &y.i).then_with(|| owlapi_ce_cmp(&x.ce, &y.ce))
+        }
+        (ObjectPropertyAssertion(x), ObjectPropertyAssertion(y)) => {
+            owlapi_individual_cmp(&x.from, &y.from)
+                .then_with(|| owlapi_ope_cmp(&x.ope, &y.ope))
+                .then_with(|| owlapi_individual_cmp(&x.to, &y.to))
+        }
+        (NegativeObjectPropertyAssertion(x), NegativeObjectPropertyAssertion(y)) => {
+            owlapi_individual_cmp(&x.from, &y.from)
+                .then_with(|| owlapi_ope_cmp(&x.ope, &y.ope))
+                .then_with(|| owlapi_individual_cmp(&x.to, &y.to))
+        }
+        (DataPropertyAssertion(x), DataPropertyAssertion(y)) => {
+            owlapi_individual_cmp(&x.from, &y.from)
+                .then_with(|| iri(&x.dp.0, &y.dp.0))
+                .then_with(|| owlapi_literal_cmp(&x.to, &y.to))
+        }
+        (NegativeDataPropertyAssertion(x), NegativeDataPropertyAssertion(y)) => {
+            owlapi_individual_cmp(&x.from, &y.from)
+                .then_with(|| iri(&x.dp.0, &y.dp.0))
+                .then_with(|| owlapi_literal_cmp(&x.to, &y.to))
+        }
+        (AnnotationAssertion(x), AnnotationAssertion(y)) => owlapi_ann_assertion_key_cmp(x, y),
+        (SubAnnotationPropertyOf(x), SubAnnotationPropertyOf(y)) => {
+            iri(&x.sub.0, &y.sub.0).then_with(|| iri(&x.sup.0, &y.sup.0))
+        }
+        (AnnotationPropertyDomain(x), AnnotationPropertyDomain(y)) => {
+            iri(&x.ap.0, &y.ap.0).then_with(|| owlapi_iri_cmp(x.iri.as_ref(), y.iri.as_ref()))
+        }
+        (AnnotationPropertyRange(x), AnnotationPropertyRange(y)) => {
+            iri(&x.ap.0, &y.ap.0).then_with(|| owlapi_iri_cmp(x.iri.as_ref(), y.iri.as_ref()))
+        }
+        (Rule(x), Rule(y)) => owlapi_rule_cmp(x, y),
+        _ => Ordering::Equal,
     }
 }
 
@@ -1346,31 +1524,49 @@ fn owlapi_ann_assertion_cmp<A: ForIRI>(
         }
     }
     let (Some(x), Some(y)) = (aa(a), aa(b)) else { return owlapi_axiom_cmp(a, b) };
-    let subj = |s: &AnnotationSubject<A>| match s {
-        AnnotationSubject::IRI(i) => i.as_ref().to_string(),
-        AnnotationSubject::AnonymousIndividual(n) => n.0.as_ref().to_string(),
+    owlapi_ann_assertion_key_cmp(x, y)
+        // Deterministic tie-break where OWLAPI's comparator returns 0 (two
+        // assertions differing only in their own annotations); OWLAPI keeps the
+        // set's iteration order there, which is not reproducible.
+        .then_with(|| a.cmp(b))
+}
+
+/// The subject, then the property, then the value. Each is an `OWLObject`, so
+/// unequal kinds compare by type index before structure: an IRI subject (0)
+/// before an anonymous one (1007), and an IRI value (0) before an anonymous
+/// individual (1007) before a literal (4000+).
+fn owlapi_ann_assertion_key_cmp<A: ForIRI>(
+    x: &crate::model::AnnotationAssertion<A>,
+    y: &crate::model::AnnotationAssertion<A>,
+) -> Ordering {
+    let subject = |p: &AnnotationSubject<A>, q: &AnnotationSubject<A>| match (p, q) {
+        (AnnotationSubject::IRI(p), AnnotationSubject::IRI(q)) => {
+            owlapi_iri_cmp(p.as_ref(), q.as_ref())
+        }
+        (AnnotationSubject::AnonymousIndividual(p), AnnotationSubject::AnonymousIndividual(q)) => {
+            p.0.as_ref().cmp(q.0.as_ref())
+        }
+        (AnnotationSubject::IRI(_), _) => Ordering::Less,
+        (_, AnnotationSubject::IRI(_)) => Ordering::Greater,
     };
-    // `OWLAnnotationValue` is an `OWLObject`, so unequal types compare by type
-    // index before structure: IRI 0, anonymous individual 1007, literal 4000+.
     let vi = |v: &AnnotationValue<A>| match v {
         AnnotationValue::IRI(_) => 0u32,
         AnnotationValue::AnonymousIndividual(_) => 1007,
         AnnotationValue::Literal(_) => 4000,
     };
-    owlapi_iri_cmp(&subj(&x.subject), &subj(&y.subject))
+    subject(&x.subject, &y.subject)
         .then_with(|| owlapi_iri_cmp(x.ann.ap.0.as_ref(), y.ann.ap.0.as_ref()))
         .then_with(|| vi(&x.ann.av).cmp(&vi(&y.ann.av)))
         .then_with(|| match (&x.ann.av, &y.ann.av) {
             (AnnotationValue::IRI(p), AnnotationValue::IRI(q)) => {
                 owlapi_iri_cmp(p.as_ref(), q.as_ref())
             }
+            (AnnotationValue::AnonymousIndividual(p), AnnotationValue::AnonymousIndividual(q)) => {
+                p.0.as_ref().cmp(q.0.as_ref())
+            }
             (AnnotationValue::Literal(p), AnnotationValue::Literal(q)) => owlapi_literal_cmp(p, q),
             _ => Ordering::Equal,
         })
-        // Deterministic tie-break where OWLAPI's comparator returns 0 (two
-        // assertions differing only in their own annotations); OWLAPI keeps the
-        // set's iteration order there, which is not reproducible.
-        .then_with(|| a.cmp(b))
 }
 
 // OWLAPI's `OWLLiteralImpl.compareObjectOfSameType`: the DATATYPE IRI first,
@@ -1447,26 +1643,23 @@ pub(super) fn owlapi_literal_cmp<A: ForIRI>(a: &Literal<A>, b: &Literal<A>) -> O
         .then_with(|| lang(a).cmp(lang(b)))
 }
 
+/// OWLAPI's ordering for the axioms of one entity's frame: by axiom type, then
+/// [`owlapi_same_type_cmp`]. Class expressions compare on OWLAPI's type index,
+/// which is NOT horned-owl's variant order: `ObjectExactCardinality` precedes
+/// `ObjectMaxCardinality` there and follows it here, so PRO's `PR_000050469`,
+/// which carries one of each over the same property and filler, needs it.
+///
+/// Where OWLAPI finds two axioms equal, a rule or class axiom keeps the order it
+/// arrived in and any other falls to horned's derived order.
 fn owlapi_axiom_cmp<A: ForIRI>(a: &&AnnotatedComponent<A>, b: &&AnnotatedComponent<A>) -> std::cmp::Ordering {
     owlapi_axiom_index(&a.component)
         .cmp(&owlapi_axiom_index(&b.component))
-        .then_with(|| match (&a.component, &b.component) {
-            (Component::Rule(x), Component::Rule(y)) => owlapi_rule_cmp(x, y),
-            // Class expressions compare on OWLAPI's type index, which is NOT
-            // horned-owl's variant order: `ObjectExactCardinality` precedes
-            // `ObjectMaxCardinality` there and follows it here. PRO's
-            // `PR_000050469` carries one of each over the same property and
-            // filler, so the derived order put its max-cardinality restriction
-            // three axioms early.
-            (Component::SubClassOf(x), Component::SubClassOf(y)) => {
-                owlapi_ce_cmp(&x.sub, &y.sub).then_with(|| owlapi_ce_cmp(&x.sup, &y.sup))
-            }
-            (Component::EquivalentClasses(x), Component::EquivalentClasses(y)) => {
-                owlapi_ce_set_cmp(&x.0, &y.0)
-            }
-            (Component::DisjointClasses(x), Component::DisjointClasses(y)) => {
-                owlapi_ce_set_cmp(&x.0, &y.0)
-            }
+        .then_with(|| owlapi_same_type_cmp(&a.component, &b.component))
+        .then_with(|| match &a.component {
+            Component::Rule(_)
+            | Component::SubClassOf(_)
+            | Component::EquivalentClasses(_)
+            | Component::DisjointClasses(_) => Ordering::Equal,
             _ => a.cmp(b),
         })
 }
@@ -1773,6 +1966,43 @@ mod test {
         assert!(
             output.contains("Annotation(Annotation("),
             "nested annotation was lost in round-trip:\n{output}"
+        );
+    }
+
+    /// The general axioms come out in OWLAPI's order: a sub-property axiom by its
+    /// sub-property before its super-property, an assertion by its subject before
+    /// its class or property, and IRIs by namespace before local name, so
+    /// `…/p_b` precedes `…/p/c`. Each pair below is one horned's derived order
+    /// writes the other way round.
+    #[test]
+    fn general_axioms_are_ordered_as_owlapi_compares_them() {
+        let input = "Prefix(:=<http://example.org/>)
+Ontology(<http://example.org/o>
+SubObjectPropertyOf(ObjectInverseOf(:i_p) :e_r)
+SubObjectPropertyOf(ObjectInverseOf(:e_q) :i_p)
+ClassAssertion(:A _:y)
+ClassAssertion(:B _:x)
+ObjectPropertyDomain(ObjectInverseOf(<http://x.org/p/c>) :A)
+ObjectPropertyDomain(ObjectInverseOf(<http://x.org/p_b>) :A)
+)";
+        let (ont, prefixes): (ComponentMappedOntology<RcStr, AnnotatedComponent<RcStr>>, _) =
+            crate::io::ofn::reader::read(&mut input.as_bytes(), Default::default()).unwrap();
+        let mut writer = Vec::new();
+        crate::io::ofn::writer::write(&mut writer, &ont, Some(&prefixes)).unwrap();
+        let output = String::from_utf8(writer).unwrap();
+        let at = |needle: &str| {
+            output.find(needle).unwrap_or_else(|| panic!("{needle} missing from:\n{output}"))
+        };
+        assert!(
+            at("SubObjectPropertyOf(ObjectInverseOf(:e_q) :i_p)")
+                < at("SubObjectPropertyOf(ObjectInverseOf(:i_p) :e_r)"),
+            "{output}"
+        );
+        assert!(at("ClassAssertion(:B _:x)") < at("ClassAssertion(:A _:y)"), "{output}");
+        assert!(
+            at("ObjectPropertyDomain(ObjectInverseOf(<http://x.org/p_b>) :A)")
+                < at("ObjectPropertyDomain(ObjectInverseOf(<http://x.org/p/c>) :A)"),
+            "{output}"
         );
     }
 
