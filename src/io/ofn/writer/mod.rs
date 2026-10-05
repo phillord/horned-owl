@@ -1091,9 +1091,9 @@ fn owlapi_bucket(hash: i32, cap: usize) -> usize {
 /// assertion lands in the lowest bucket of the subject's annotation-assertion set.
 ///
 /// The bucket rule is applied only when it is unambiguous: every label assertion
-/// is unannotated (so the annotation-collection hash is 0) and untyped (the only
-/// literal kind whose hash is reproduced here), and no two land in the same
-/// bucket.
+/// is unannotated (so the annotation-collection hash is 0) and untyped or
+/// `xsd:string` (the only literal kinds whose hash is reproduced here), and no
+/// two land in the same bucket.
 ///
 /// A within-bucket tie has NO reproducible answer. Order inside a
 /// `java.util.HashMap` bin is insertion order, and the insertion order is the
@@ -1120,6 +1120,13 @@ fn pick_banner_label<'a, A: ForIRI>(
         match l {
             Literal::Simple { literal } => Some((literal.as_str(), "")),
             Literal::Language { literal, lang } => Some((literal.as_str(), lang.as_str())),
+            // An `xsd:string` literal is the plain literal of its text, and
+            // hashes as one.
+            Literal::Datatype { literal, datatype_iri }
+                if datatype_iri.as_ref() == "http://www.w3.org/2001/XMLSchema#string" =>
+            {
+                Some((literal.as_str(), ""))
+            }
             Literal::Datatype { .. } => None,
         }
     }
@@ -2004,6 +2011,33 @@ ObjectPropertyDomain(ObjectInverseOf(<http://x.org/p_b>) :A)
                 < at("ObjectPropertyDomain(ObjectInverseOf(<http://x.org/p/c>) :A)"),
             "{output}"
         );
+    }
+
+    /// The banner names the label OWLAPI's set of the subject's assertions
+    /// reaches first, and an `xsd:string` label is the plain label of its text:
+    /// typing both labels does not change which one the banner names.
+    #[test]
+    fn an_xsd_string_label_is_picked_as_its_plain_label() {
+        let banner = |datatype: &str| -> String {
+            let input = format!(
+                "Prefix(:=<http://purl.obolibrary.org/obo/>)
+Prefix(rdfs:=<http://www.w3.org/2000/01/rdf-schema#>)
+Prefix(xsd:=<http://www.w3.org/2001/XMLSchema#>)
+Ontology(<http://example.org/o>
+Declaration(Class(:EX_0000050))
+AnnotationAssertion(rdfs:label :EX_0000050 \"part cog\"{datatype})
+AnnotationAssertion(rdfs:label :EX_0000050 \"part gear\"{datatype})
+)"
+            );
+            let (ont, prefixes): (ComponentMappedOntology<RcStr, AnnotatedComponent<RcStr>>, _) =
+                crate::io::ofn::reader::read(&mut input.as_bytes(), Default::default()).unwrap();
+            let mut writer = Vec::new();
+            crate::io::ofn::writer::write(&mut writer, &ont, Some(&prefixes)).unwrap();
+            let output = String::from_utf8(writer).unwrap();
+            output.lines().find(|l| l.starts_with("# Class:")).unwrap().to_string()
+        };
+        assert_eq!(banner(""), "# Class: :EX_0000050 (part gear)");
+        assert_eq!(banner("^^xsd:string"), banner(""));
     }
 
     #[cfg(test)]
