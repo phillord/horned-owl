@@ -767,10 +767,17 @@ fn signature_kinds<A: ForIRI, AA: ForIndex<A>>(
         }
         // A typed literal puts its datatype in the signature as surely as a
         // `DataSomeValuesFrom` does. FoodOn's only `xsd:date` is the one on its
-        // `dcterms:date` provenance, and it is declared on that alone.
+        // `dcterms:date` provenance, and it is declared on that alone. An
+        // untyped literal's datatype is `xsd:string` in a document whose untyped
+        // literals are typed (see [`set_plain_literals_typed`]), and otherwise
+        // `rdf:PlainLiteral`, as a language-tagged one's is.
         fn visit_literal(&mut self, e: &Literal<A>) {
-            if let Literal::Datatype { datatype_iri, .. } = e {
-                self.mark(datatype_iri.as_ref(), 4)
+            match e {
+                Literal::Datatype { datatype_iri, .. } => self.mark(datatype_iri.as_ref(), 4),
+                Literal::Simple { .. } if plain_literals_typed() => {
+                    self.mark("http://www.w3.org/2001/XMLSchema#string", 4)
+                }
+                _ => self.mark("http://www.w3.org/1999/02/22-rdf-syntax-ns#PlainLiteral", 4),
             }
         }
         fn visit_named_individual(&mut self, e: &NamedIndividual<A>) {
@@ -1598,6 +1605,12 @@ thread_local! {
 /// which is every ordinary parse.
 pub fn set_plain_literals_typed(on: bool) {
     PLAIN_LITERALS_TYPED.with(|c| c.set(on));
+}
+
+/// Whether this document's untyped literals are `xsd:string` (see
+/// [`set_plain_literals_typed`]).
+fn plain_literals_typed() -> bool {
+    PLAIN_LITERALS_TYPED.with(|c| c.get())
 }
 
 pub(super) fn owlapi_literal_cmp<A: ForIRI>(a: &Literal<A>, b: &Literal<A>) -> Ordering {
