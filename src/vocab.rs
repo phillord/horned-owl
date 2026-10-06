@@ -412,6 +412,75 @@ pub fn is_known_xsd_datatype<A: AsRef<str>>(iri: A) -> bool {
     XSD_DATATYPES.contains(&local)
 }
 
+/// Whether `iri` names a datatype OWLAPI's lax RDF reading knows without a
+/// declaration: one of the XSD datatypes it names, `rdfs:Literal`,
+/// `rdf:XMLLiteral`, `rdf:PlainLiteral`, `rdf:langString`, `owl:real` or
+/// `owl:rational`. Such a name is a data range wherever it fills a class or a
+/// data range.
+pub fn is_lax_builtin_datatype<A: AsRef<str>>(iri: A) -> bool {
+    const XSD: [&str; 46] = [
+        "anyType",
+        "anySimpleType",
+        "string",
+        "integer",
+        "long",
+        "int",
+        "short",
+        "byte",
+        "decimal",
+        "float",
+        "boolean",
+        "double",
+        "nonPositiveInteger",
+        "negativeInteger",
+        "nonNegativeInteger",
+        "unsignedLong",
+        "unsignedInt",
+        "positiveInteger",
+        "base64Binary",
+        "normalizedString",
+        "hexBinary",
+        "anyURI",
+        "QName",
+        "NOTATION",
+        "token",
+        "language",
+        "Name",
+        "NCName",
+        "NMTOKEN",
+        "ID",
+        "IDREF",
+        "IDREFS",
+        "ENTITY",
+        "ENTITIES",
+        "duration",
+        "dateTime",
+        "dateTimeStamp",
+        "time",
+        "date",
+        "gYearMonth",
+        "gYear",
+        "gMonthDay",
+        "gDay",
+        "gMonth",
+        "unsignedShort",
+        "unsignedByte",
+    ];
+    let iri = iri.as_ref();
+    if let Some(local) = iri.strip_prefix(Namespace::XSD.as_ref()) {
+        return XSD.contains(&local);
+    }
+    matches!(
+        iri,
+        "http://www.w3.org/2000/01/rdf-schema#Literal"
+            | "http://www.w3.org/1999/02/22-rdf-syntax-ns#XMLLiteral"
+            | "http://www.w3.org/1999/02/22-rdf-syntax-ns#PlainLiteral"
+            | "http://www.w3.org/1999/02/22-rdf-syntax-ns#langString"
+            | "http://www.w3.org/2002/07/owl#real"
+            | "http://www.w3.org/2002/07/owl#rational"
+    )
+}
+
 vocabulary_type! {
     SWRL, IRI<String>, METASWRL, [
         (SWRL, Argument1, true),

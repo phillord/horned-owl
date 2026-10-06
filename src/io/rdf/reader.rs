@@ -1010,6 +1010,39 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
             self.bnode.retain(|_, v| !v.is_empty());
         }
         self.simple.extend(add.into_iter().map(PosTriple::from));
+
+        // In lax mode, as OWLAPI reads it, a blank node that describes an
+        // expression without saying what it is takes the type its predicates
+        // imply: one with `owl:onProperty` is a restriction; one with
+        // `owl:onDatatype`, `owl:withRestrictions` or `owl:datatypeComplementOf`
+        // a data range; and one with `owl:unionOf`, `owl:intersectionOf`,
+        // `owl:complementOf` or `owl:oneOf` a class. A node typed in the OWL
+        // vocabulary or as a data range says what it is already.
+        if self.config.lax {
+            for v in self.bnode.values_mut() {
+                let typed = v.iter().any(|t| match t {
+                    [_, Term::RDF(VRDF::Type), Term::OWL(_) | Term::RDFS(VRDFS::Datatype)] => true,
+                    [_, Term::RDF(VRDF::Type), Term::Iri(i)] => i.as_ref().starts_with(crate::vocab::Namespace::OWL.as_ref()),
+                    _ => false,
+                });
+                if typed {
+                    continue;
+                }
+                let has = |ps: &[VOWL]| v.iter().any(|t| matches!(&t[1], Term::OWL(p) if ps.contains(p)));
+                let implied = if has(&[VOWL::OnProperty]) {
+                    Term::OWL(VOWL::Restriction)
+                } else if has(&[VOWL::OnDatatype, VOWL::WithRestrictions, VOWL::DatatypeComplementOf]) {
+                    Term::RDFS(VRDFS::Datatype)
+                } else if has(&[VOWL::UnionOf, VOWL::IntersectionOf, VOWL::ComplementOf, VOWL::OneOf]) {
+                    Term::OWL(VOWL::Class)
+                } else {
+                    continue;
+                };
+                let subject = v[0][0].clone();
+                v.push([subject, Term::RDF(VRDF::Type), implied]);
+                v.sort();
+            }
+        }
     }
 
     fn parse_annotations(
@@ -1648,6 +1681,21 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
         self.retrieve_to_seq(bnodeid, |slf, t| slf.term_to_individual(t))
     }
 
+    /// Retrieve the members of an `owl:oneOf` class, as
+    /// [`Self::retrieve_to_ni_seq`] does, except that in lax mode a literal
+    /// member, which names no individual, is left out, as OWLAPI leaves it.
+    fn retrieve_to_enumeration(&mut self, bnodeid: &BNode<A>) -> Option<Vec<Individual<A>>> {
+        if !self.config.lax {
+            return self.retrieve_to_ni_seq(bnodeid);
+        }
+        self.bnode_seq
+            .remove(bnodeid)?
+            .iter()
+            .filter(|t| !matches!(t, Term::Literal(_)))
+            .map(|t| self.term_to_individual(t))
+            .collect()
+    }
+
     /// Retrieve a Vec of DataRange or None.
     fn retrieve_to_dr_seq(&mut self, bnodeid: &BNode<A>) -> Option<Vec<DataRange<A>>> {
         // As with `retrieve_to_ce_seq`: `data_ranges` fills `data_range` over
@@ -1974,6 +2022,118 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
         }
     }
 
+    /// Whether a term OWLAPI's lax reading meets in a class-or-data-range
+    /// position reads as a class expression: anything it does not know as a
+    /// data range does. A declared class is one whatever else it is declared;
+    /// a built-in or declared datatype, or a blank node read as a data range,
+    /// is a data range.
+    fn is_class_expression_lax(&mut self, t: &Term<A>, ic: &[&O]) -> bool {
+        match t {
+            Term::BNode(id) => !self.data_range.contains_key(id),
+            Term::Literal(_) => false,
+            _ => match self.convert_to_iri(t) {
+                Some(iri) => match self.distinguish_declaration_kind(&iri, ic) {
+                    Some(NamedOWLEntityKind::Class) => true,
+                    Some(NamedOWLEntityKind::Datatype) => false,
+                    _ => !crate::vocab::is_lax_builtin_datatype(&iri),
+                },
+                None => true,
+            },
+        }
+    }
+
+    /// The kind of property an `owl:someValuesFrom` or `owl:allValuesFrom`
+    /// restriction over `filler` is read with. In lax mode the filler decides,
+    /// as OWLAPI reads it: over a class expression the restriction is an object
+    /// restriction, and over a data range a data restriction, whatever `pr` is
+    /// declared. A property declared an annotation property, or an inverse,
+    /// keeps its kind, and strict mode goes by the property alone.
+    fn restriction_property_kind(
+        &mut self,
+        pr: &Term<A>,
+        filler: &Term<A>,
+        ic: &[&O],
+    ) -> Option<PropertyExpression<A>> {
+        let declared = self.distinguish_retrieve_property_kind(pr, ic);
+        if !self.config.lax || matches!(pr, Term::BNode(_)) {
+            return declared;
+        }
+        match declared {
+            Some(PropertyExpression::AnnotationProperty(_)) | None => declared,
+            Some(_) => {
+                let iri = self.convert_to_iri(pr)?;
+                Some(if self.is_class_expression_lax(filler, ic) {
+                    PropertyExpression::ObjectPropertyExpression(iri.into())
+                } else {
+                    PropertyExpression::DataProperty(iri.into())
+                })
+            }
+        }
+    }
+
+    /// The kind of property an `owl:hasValue` restriction is read with. In lax
+    /// mode the value decides, as OWLAPI reads it: a literal makes it a data
+    /// restriction and anything else an object restriction. Otherwise as
+    /// [`Self::restriction_property_kind`].
+    fn has_value_property_kind(
+        &mut self,
+        pr: &Term<A>,
+        value: &Term<A>,
+        ic: &[&O],
+    ) -> Option<PropertyExpression<A>> {
+        let declared = self.distinguish_retrieve_property_kind(pr, ic);
+        if !self.config.lax || matches!(pr, Term::BNode(_)) {
+            return declared;
+        }
+        match declared {
+            Some(PropertyExpression::AnnotationProperty(_)) | None => declared,
+            Some(_) => {
+                let iri = self.convert_to_iri(pr)?;
+                Some(if matches!(value, Term::Literal(_)) {
+                    PropertyExpression::DataProperty(iri.into())
+                } else {
+                    PropertyExpression::ObjectPropertyExpression(iri.into())
+                })
+            }
+        }
+    }
+
+    /// The kind of property an `rdfs:range` statement is read with. In lax
+    /// mode, as OWLAPI reads it: a declared object property over a class
+    /// expression, a declared data property over a data range and a declared
+    /// annotation property over a named range keep their kind; any other
+    /// statement is an object property range over a class expression and a
+    /// data property range over a data range. Strict mode goes by the property
+    /// alone.
+    fn range_property_kind(
+        &mut self,
+        pr: &Term<A>,
+        range: &Term<A>,
+        ic: &[&O],
+    ) -> Option<PropertyExpression<A>> {
+        let declared = self.distinguish_retrieve_property_kind(pr, ic);
+        if !self.config.lax || matches!(pr, Term::BNode(_)) {
+            return declared;
+        }
+        let class = self.is_class_expression_lax(range, ic);
+        match declared {
+            Some(PropertyExpression::ObjectPropertyExpression(_)) if class => declared,
+            Some(PropertyExpression::DataProperty(_)) if !class => declared,
+            Some(PropertyExpression::AnnotationProperty(_)) if !matches!(range, Term::BNode(_)) => {
+                declared
+            }
+            None => None,
+            Some(_) => {
+                let iri = self.convert_to_iri(pr)?;
+                Some(if class {
+                    PropertyExpression::ObjectPropertyExpression(iri.into())
+                } else {
+                    PropertyExpression::DataProperty(iri.into())
+                })
+            }
+        }
+    }
+
     /// Process class expressions.
     fn class_expressions(&mut self, ic: &[&O]) -> Result<(), HornedError> {
         let mut parsed_new_ce = false;
@@ -1984,7 +2144,7 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
                     [_, Term::OWL(VOWL::OnProperty), pr],           //:
                     [_, Term::OWL(VOWL::SomeValuesFrom), ce_or_dr], //:
                     [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Restriction)],
-                ] => match self.distinguish_retrieve_property_kind(pr, ic) {
+                ] => match self.restriction_property_kind(pr, ce_or_dr, ic) {
                     Some(PropertyExpression::ObjectPropertyExpression(ope)) => {
                         ok_some!(ClassExpression::ObjectSomeValuesFrom {
                             ope,
@@ -2003,7 +2163,7 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
                     [_, Term::OWL(VOWL::HasValue), val],  //:
                     [_, Term::OWL(VOWL::OnProperty), pr], //:
                     [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Restriction)],
-                ] => match self.distinguish_retrieve_property_kind(pr, ic) {
+                ] => match self.has_value_property_kind(pr, val, ic) {
                     Some(PropertyExpression::ObjectPropertyExpression(ope)) => {
                         ok_some!(ClassExpression::ObjectHasValue {
                             ope,
@@ -2022,7 +2182,7 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
                     [_, Term::OWL(VOWL::AllValuesFrom), ce_or_dr], //:
                     [_, Term::OWL(VOWL::OnProperty), pr],          //:
                     [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Restriction)],
-                ] => match self.distinguish_retrieve_property_kind(pr, ic) {
+                ] => match self.restriction_property_kind(pr, ce_or_dr, ic) {
                     Some(PropertyExpression::ObjectPropertyExpression(ope)) => {
                         ok_some!(ClassExpression::ObjectAllValuesFrom {
                             ope,
@@ -2038,10 +2198,10 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
                     any => Self::error_or_none_on_annotation(any, v.position()),
                 },
                 [
-                    [_, Term::OWL(VOWL::OneOf), Term::BNode(bnodeid)], //:
+                    [_, Term::OWL(VOWL::OneOf), list @ (Term::BNode(_) | Term::RDF(VRDF::Nil) | Term::Iri(_))], //:
                     [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Class)],
                 ] => Ok(self
-                    .retrieve_to_ni_seq(bnodeid)
+                    .retrieve_to_list(list, Self::retrieve_to_enumeration)
                     .map(ClassExpression::ObjectOneOf)),
                 // Table 13 types an enumeration owl:Class. One written without
                 // the type is still an ObjectOneOf when every member is an
@@ -2655,7 +2815,7 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
                     }
                 }
                 [pr, Term::RDFS(VRDFS::Range), t] => ok_some! {
-                    match self.distinguish_retrieve_property_kind(pr, ic)? {
+                    match self.range_property_kind(pr, t, ic)? {
                         PropertyExpression::ObjectPropertyExpression(ope) => ObjectPropertyRange {
                             ope,
                             ce: self.retrieve_to_ce(t)?,
@@ -4663,6 +4823,85 @@ mod test {
                 .unwrap();
 
         dbg!(ont, incomp);
+    }
+
+    /// In lax mode, as OWLAPI reads them: a blank node that does not say what
+    /// it is is the expression its predicates describe; an
+    /// `owl:someValuesFrom`, `owl:allValuesFrom` or `owl:hasValue` restriction,
+    /// and an `rdfs:range`, take their kind from what fills them rather than
+    /// from the property's declaration; and an `owl:oneOf` class leaves out
+    /// its literal members.
+    #[test]
+    fn lax_reading_types_expressions_by_what_fills_them() {
+        use crate::io::ofn::writer::AsFunctional;
+        let ttl = r#"@prefix : <http://example.org/> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+<http://example.org/o> a owl:Ontology .
+:C a owl:Class .
+:DT a rdfs:Datatype .
+:d a owl:DatatypeProperty .
+:p a owl:ObjectProperty .
+:q a owl:ObjectProperty .
+:i a owl:NamedIndividual .
+:A1 rdfs:subClassOf [ a owl:Restriction ; owl:onProperty :d ; owl:someValuesFrom [ owl:oneOf ( "x" "y" ) ] ] .
+:A2 rdfs:subClassOf [ a owl:Restriction ; owl:onProperty :d ; owl:allValuesFrom [ owl:unionOf ( xsd:string xsd:integer ) ] ] .
+:A3 rdfs:subClassOf [ a owl:Restriction ; owl:onProperty :d ; owl:someValuesFrom xsd:string ] .
+:A4 rdfs:subClassOf [ a owl:Restriction ; owl:onProperty :p ; owl:someValuesFrom xsd:string ] .
+:A5 rdfs:subClassOf [ a owl:Restriction ; owl:onProperty :d ; owl:hasValue :i ] .
+:A6 rdfs:subClassOf [ a owl:Restriction ; owl:onProperty :p ; owl:hasValue "lit" ] .
+:A7 rdfs:subClassOf [ a owl:Restriction ; owl:onProperty :d ; owl:someValuesFrom :C ] .
+:A8 rdfs:subClassOf [ a owl:Restriction ; owl:onProperty :d ; owl:someValuesFrom :U ] .
+:A9 rdfs:subClassOf [ a owl:Restriction ; owl:onProperty :d ; owl:someValuesFrom :DT ] .
+:A10 rdfs:subClassOf [ owl:onProperty :p ; owl:someValuesFrom :C ] .
+:A11 rdfs:subClassOf [ a owl:Restriction ; owl:onProperty :d ; owl:someValuesFrom [ a rdfs:Datatype ; owl:oneOf ( "x" ) ] ] .
+:A12 rdfs:subClassOf [ a owl:Restriction ; owl:onProperty :p ; owl:allValuesFrom [ a owl:Class ; owl:oneOf ( :i "x" ) ] ] .
+:A13 rdfs:subClassOf [ a owl:Restriction ; owl:onProperty :d ; owl:someValuesFrom [ owl:datatypeComplementOf xsd:string ] ] .
+:A14 rdfs:subClassOf [ owl:onProperty :p ; owl:someValuesFrom [ a owl:Class ; owl:oneOf rdf:nil ] ] .
+:d rdfs:range [ owl:oneOf ( "a" "b" ) ] .
+:q rdfs:range xsd:string .
+"#;
+        let common: ParserConfiguration<RcStr> = ParserConfiguration { lax: true, ..Default::default() };
+        let config = RDFParserConfiguration { common, format: Some(oxrdfio::RdfFormat::Turtle) };
+        let (ont, incomplete): (ConcreteRDFOntology<RcStr, Rc<AnnotatedComponent<RcStr>>>, _) =
+            read(&mut ttl.as_bytes(), config).unwrap();
+        assert!(incomplete.is_complete(), "{incomplete:?}");
+        let mut got: Vec<String> = ont
+            .iter()
+            .filter(|ac| {
+                matches!(
+                    ac.component,
+                    Component::SubClassOf(_)
+                        | Component::ObjectPropertyRange(_)
+                        | Component::DataPropertyRange(_)
+                )
+            })
+            .map(|ac| ac.component.as_functional().to_string().replace("http://example.org/", ""))
+            .collect();
+        got.sort();
+        let xsd = |n: &str| format!("<http://www.w3.org/2001/XMLSchema#{n}>");
+        let mut want = vec![
+            "SubClassOf(<A1> ObjectSomeValuesFrom(<d> ObjectOneOf()))".to_string(),
+            format!("SubClassOf(<A2> ObjectAllValuesFrom(<d> ObjectUnionOf({} {})))", xsd("string"), xsd("integer")),
+            format!("SubClassOf(<A3> DataSomeValuesFrom(<d> {}))", xsd("string")),
+            format!("SubClassOf(<A4> DataSomeValuesFrom(<p> {}))", xsd("string")),
+            "SubClassOf(<A5> ObjectHasValue(<d> <i>))".to_string(),
+            "SubClassOf(<A6> DataHasValue(<p> \"lit\"))".to_string(),
+            "SubClassOf(<A7> ObjectSomeValuesFrom(<d> <C>))".to_string(),
+            "SubClassOf(<A8> ObjectSomeValuesFrom(<d> <U>))".to_string(),
+            "SubClassOf(<A9> DataSomeValuesFrom(<d> <DT>))".to_string(),
+            "SubClassOf(<A10> ObjectSomeValuesFrom(<p> <C>))".to_string(),
+            "SubClassOf(<A11> DataSomeValuesFrom(<d> DataOneOf(\"x\")))".to_string(),
+            "SubClassOf(<A12> ObjectAllValuesFrom(<p> ObjectOneOf(<i>)))".to_string(),
+            format!("SubClassOf(<A13> DataSomeValuesFrom(<d> DataComplementOf({})))", xsd("string")),
+            "SubClassOf(<A14> ObjectSomeValuesFrom(<p> ObjectOneOf()))".to_string(),
+            "ObjectPropertyRange(<d> ObjectOneOf())".to_string(),
+            format!("DataPropertyRange(<q> {})", xsd("string")),
+        ];
+        want.sort();
+        assert_eq!(got, want);
     }
 
     #[test]
