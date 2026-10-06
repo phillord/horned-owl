@@ -1268,6 +1268,16 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
 
     /// Retrieve a Vec of DataRange or None.
     fn retrieve_to_dr_seq(&mut self, bnodeid: &BNode<A>) -> Option<Vec<DataRange<A>>> {
+        // As for `retrieve_to_ce_seq`: `data_ranges` retries until it
+        // reaches a fixpoint, so the seq must survive until every
+        // nested data range has been parsed.
+        if !self.bnode_seq.get(bnodeid)?.iter().all(|t| match t {
+            Term::BNode(id) => self.data_range.contains_key(id),
+            _ => true,
+        }) {
+            return None;
+        }
+
         self.retrieve_to_seq(bnodeid, |slf, t| slf.retrieve_to_dr(t))
     }
 
