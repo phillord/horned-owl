@@ -143,7 +143,7 @@ pub fn parse_path<B: AsRef<Build<RcStr>> + Clone>(
         }
         Some(ResourceType::RDF) => {
             let iri = horned_owl::resolve::path_to_file_iri(config.build.as_ref(), path);
-            ParserOutput::rdf(horned_owl::io::rdf::closure_reader::read(
+            ParserOutput::rdf(horned_owl::io::closure_reader::read(
                 &iri,
                 with_detected_rdf_format(path, config.into()),
             )?)
