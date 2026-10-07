@@ -10,6 +10,7 @@ use crate::model::Build;
 use crate::model::DocIRI;
 use crate::model::ForIRI;
 use crate::model::IRI;
+use crate::ontology::declaration_mapped::DeclarationMappedIndex;
 use crate::ontology::indexed::ForIndex;
 use crate::ontology::set::SetIndex;
 use crate::resolve::path_to_file_iri;
@@ -195,7 +196,7 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>> + Clo
                             .and_then(|canonical| self.op.get(canonical))
                     })
                     .ok_or_else(|| HornedError::ImportError(i.to_string()))
-                    .map(|i| i.ontology_ref())
+                    .map(|i| <O as AsRef<DeclarationMappedIndex<A, AA>>>::as_ref(i.ontology_ref()))
             })
             .collect();
 

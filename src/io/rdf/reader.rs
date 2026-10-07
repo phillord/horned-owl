@@ -1352,7 +1352,11 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
 
     /// Give a Term, return the NamedOWLEntityKind that it represents,
     /// or a Class if we do not know.
-    fn distinguish_term_kind(&mut self, term: &Term<A>, ic: &[&O]) -> Option<NamedOWLEntityKind> {
+    fn distinguish_term_kind(
+        &mut self,
+        term: &Term<A>,
+        ic: &[&DeclarationMappedIndex<A, AA>],
+    ) -> Option<NamedOWLEntityKind> {
         match term {
             Term::Iri(iri) if crate::vocab::is_xsd_datatype(iri) => {
                 Some(NamedOWLEntityKind::Datatype)
@@ -1374,17 +1378,14 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
     fn distinguish_declaration_kind(
         &mut self,
         iri: &IRI<A>,
-        ic: &[&O],
+        ic: &[&DeclarationMappedIndex<A, AA>],
     ) -> Option<NamedOWLEntityKind> {
         // For this ontology
-        [&self.o]
-            .iter()
+        std::iter::once(<O as AsRef<DeclarationMappedIndex<A, AA>>>::as_ref(&self.o))
             // and the import closure
-            .chain(ic.iter())
+            .chain(ic.iter().copied())
             // find the first declaration
-            .find_map(|o| {
-                <O as AsRef<DeclarationMappedIndex<A, AA>>>::as_ref(o).declaration_kind(iri)
-            })
+            .find_map(|d| d.declaration_kind(iri))
     }
 
     /// Distinguish or retrieve the property kind using either a
@@ -1396,7 +1397,7 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
     fn distinguish_retrieve_property_kind(
         &mut self,
         term: &Term<A>,
-        ic: &[&O],
+        ic: &[&DeclarationMappedIndex<A, AA>],
     ) -> Option<PropertyExpression<A>> {
         match term {
             Term::OWL(vowl) => {
@@ -1436,7 +1437,7 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
         &mut self,
         a: &Term<A>,
         b: &Term<A>,
-        ic: &[&O],
+        ic: &[&DeclarationMappedIndex<A, AA>],
     ) -> Result<Option<(PropertyExpression<A>, PropertyExpression<A>)>, HornedError> {
         let mut mix_match = |a, b| match (
             Self::get_used(&self.object_property_expression, &mut self.used_bnode, a),
@@ -1490,7 +1491,7 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
         &mut self,
         a: &IRI<A>,
         b: &IRI<A>,
-        ic: &[&O],
+        ic: &[&DeclarationMappedIndex<A, AA>],
     ) -> Result<Option<(PropertyExpression<A>, PropertyExpression<A>)>, HornedError> {
         use crate::model::NamedOWLEntityKind as NEK;
         match (
@@ -1556,7 +1557,10 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
     }
 
     /// Process class expressions.
-    fn class_expressions(&mut self, ic: &[&O]) -> Result<(), HornedError> {
+    fn class_expressions(
+        &mut self,
+        ic: &[&DeclarationMappedIndex<A, AA>],
+    ) -> Result<(), HornedError> {
         let mut parsed_new_ce = false;
 
         for (this_bnode, v) in std::mem::take(&mut self.bnode) {
@@ -1840,7 +1844,7 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
         Ok(())
     }
 
-    fn axioms(&mut self, ic: &[&O]) -> Result<(), HornedError> {
+    fn axioms(&mut self, ic: &[&DeclarationMappedIndex<A, AA>]) -> Result<(), HornedError> {
         let mut single_bnodes = vec![];
 
         for (this_bnode, v) in std::mem::take(&mut self.bnode) {
@@ -2669,7 +2673,10 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
     /// ic is a Vec of references to the import closure. These RDF
     /// ontologies do not need to be completely parsed, but will be
     /// relied on to resolve declarations.
-    pub fn finish_parse(&mut self, ic: &[&O]) -> Result<(), HornedError> {
+    pub fn finish_parse(
+        &mut self,
+        ic: &[&DeclarationMappedIndex<A, AA>],
+    ) -> Result<(), HornedError> {
         // Table 10
         self.simple_annotations(false)?;
 
@@ -3071,13 +3078,16 @@ mod test {
         let (family_other, incomplete) = p.parse()?;
         assert!(incomplete.is_complete());
 
-        let mut p = parser_with_build(
-            &mut slurp_rdfont("withimport/import-property").as_bytes(),
-            ParserConfiguration::new(&b).into(),
-        )?;
+        let mut p: OntologyParser<_, Rc<AnnotatedComponent<RcStr>>, ConcreteRDFOntology<_, _>, _> =
+            parser_with_build(
+                &mut slurp_rdfont("withimport/import-property").as_bytes(),
+                ParserConfiguration::new(&b).into(),
+            )?;
         p.parse_imports()?;
         p.parse_declarations()?;
-        p.finish_parse(vec![&family_other].as_slice())?;
+        p.finish_parse(
+            vec![<_ as AsRef<DeclarationMappedIndex<_, _>>>::as_ref(&family_other)].as_slice(),
+        )?;
 
         let (_rdfont, incomplete) = p.as_ontology_and_incomplete();
         assert!(incomplete.is_complete());
