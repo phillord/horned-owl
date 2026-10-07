@@ -1,15 +1,20 @@
 use crate::error::HornedError;
 use crate::io::IncompleteParse;
+use crate::io::InputFormat;
 #[cfg(test)]
 use crate::io::ParserConfiguration;
 use crate::io::RDFParserConfiguration;
 use crate::io::rdf::reader::OntologyParser;
 use crate::io::rdf::reader::RDFOntology;
 use crate::io::rdf::reader::parser_with_build;
+use crate::io::{ResourceType, detect_format};
+use crate::model::AnnotatedComponent;
 use crate::model::Build;
+use crate::model::Component;
 use crate::model::DocIRI;
 use crate::model::ForIRI;
 use crate::model::IRI;
+use crate::model::Import;
 use crate::ontology::declaration_mapped::DeclarationMappedIndex;
 use crate::ontology::indexed::ForIndex;
 use crate::ontology::set::SetIndex;
@@ -20,9 +25,12 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 
 /// One document in the closure, in whatever state its format needs.
+#[allow(clippy::large_enum_variant)]
 enum Entry<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>> {
     /// Imports and declarations parsed; axioms await `finish_parse`.
     Rdf(OntologyParser<A, AA, O, B>),
+    /// Any other format: read completely in one go.
+    Done(O),
 }
 
 impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>> Entry<A, AA, O, B> {
@@ -30,24 +38,29 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>> Entr
     fn declaration_index(&self) -> &DeclarationMappedIndex<A, AA> {
         match self {
             Entry::Rdf(p) => <O as AsRef<DeclarationMappedIndex<A, AA>>>::as_ref(p.ontology_ref()),
+            Entry::Done(o) => <O as AsRef<DeclarationMappedIndex<A, AA>>>::as_ref(o),
         }
     }
 
     fn mut_ontology_ref(&mut self) -> &mut O {
         match self {
             Entry::Rdf(p) => p.mut_ontology_ref(),
+            Entry::Done(o) => o,
         }
     }
 
     fn finish_parse(&mut self, ic: &[&DeclarationMappedIndex<A, AA>]) -> Result<(), HornedError> {
         match self {
             Entry::Rdf(p) => p.finish_parse(ic),
+            // Nothing is left to resolve.
+            Entry::Done(_) => Ok(()),
         }
     }
 
     fn into_ontology_and_incomplete(self) -> (O, IncompleteParse<A>) {
         match self {
             Entry::Rdf(p) => p.as_ontology_and_incomplete(),
+            Entry::Done(o) => (o, IncompleteParse::default()),
         }
     }
 }
@@ -91,7 +104,7 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>> + Clo
 
         // We use the IRI that we try to parse, but we don't know that
         // this is the same as file says at this point.
-        self.parse_content_from_iri(s, None, file_iri)
+        self.parse_content_from_iri(s, true, None, file_iri)
     }
 
     /// Parse content from some IRI.
@@ -118,6 +131,17 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>> + Clo
         source_iri: &IRI<A>,
         relative_doc_iri: Option<&IRI<A>>,
     ) -> Result<Vec<IRI<A>>, HornedError> {
+        self.parse_iri_inner(source_iri, relative_doc_iri, true)
+    }
+
+    // `top_level` is true for the document the caller asked for, false
+    // for anything reached through an import.
+    fn parse_iri_inner(
+        &mut self,
+        source_iri: &IRI<A>,
+        relative_doc_iri: Option<&IRI<A>>,
+        top_level: bool,
+    ) -> Result<Vec<IRI<A>>, HornedError> {
         let (new_doc_iri, s) = resolve_iri(
             source_iri,
             relative_doc_iri,
@@ -125,7 +149,7 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>> + Clo
             self.config.common.local_only,
             self.config.common.catalog.as_deref(),
         )?;
-        self.parse_content_from_iri(s, relative_doc_iri, new_doc_iri)
+        self.parse_content_from_iri(s, top_level, relative_doc_iri, new_doc_iri)
     }
 
     /// Parse content from some IRI
@@ -138,6 +162,8 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>> + Clo
     /// # Arguments
     ///
     /// * `s` -- A string of the ontology to be parsed
+    /// * `top_level` -- whether `s` is the document the caller asked
+    ///   for, rather than one reached through an import.
     /// * `relative_doc_iri` -- The document IRI which was used to
     ///   determine the relative location of `s` if any.
     /// * `new_doc_iri` -- the IRI that `s` was actually read from
@@ -149,15 +175,24 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>> + Clo
     fn parse_content_from_iri(
         &mut self,
         s: String,
+        top_level: bool,
         relative_doc_iri: Option<&IRI<A>>,
         new_doc_iri: IRI<A>,
     ) -> Result<Vec<IRI<A>>, HornedError> {
-        // Parse the contents of the string
-        let mut p = parser_with_build(&mut s.as_bytes(), self.config.clone())?;
-        let imports = p.parse_imports()?;
-        p.parse_declarations()?;
-
-        let mut entry = Entry::Rdf(p);
+        let (mut entry, imports) = match self.resolve_format(&s, top_level) {
+            InputFormat::Rdf(format) => {
+                let mut config = self.config.clone();
+                config.format = format;
+                let mut p = parser_with_build(&mut s.as_bytes(), config)?;
+                let imports = p.parse_imports()?;
+                p.parse_declarations()?;
+                (Entry::Rdf(p), imports)
+            }
+            format => {
+                let (o, imports) = self.read_complete(&s, format)?;
+                (Entry::Done(o), imports)
+            }
+        };
 
         // push the DocIRI onto the partially parsed ontology
         let o: &mut O = entry.mut_ontology_ref();
@@ -197,11 +232,69 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>> + Clo
         // Now parse all of the imported ontologies as well
         for import in imports {
             let recursive_imports =
-                self.parse_iri(&import, relative_doc_iri.or(Some(&new_doc_iri)))?;
+                self.parse_iri_inner(&import, relative_doc_iri.or(Some(&new_doc_iri)), false)?;
             res.extend(recursive_imports);
         }
 
         Ok(res)
+    }
+
+    /// The format to parse `content` as, which is never `Guess`.
+    ///
+    /// An import is sniffed, since imports in one closure need not share
+    /// a format; if that is inconclusive, it is read as the configured
+    /// RDF format.
+    fn resolve_format(&self, content: &str, top_level: bool) -> InputFormat {
+        if top_level {
+            return InputFormat::Rdf(self.config.format);
+        }
+
+        // Enough to get past an XML declaration, comments and a DOCTYPE
+        let head = &content.as_bytes()[..content.len().min(64 * 1024)];
+        match detect_format(head) {
+            Some((ResourceType::OWX, _)) => InputFormat::OWX,
+            Some((ResourceType::OFN, _)) => InputFormat::OFN,
+            Some((ResourceType::OMN, _)) => InputFormat::OMN,
+            Some((ResourceType::OBO, _)) => InputFormat::OBO,
+            Some((ResourceType::RDF, Some(format))) => InputFormat::Rdf(Some(format)),
+            _ => InputFormat::Rdf(self.config.format),
+        }
+    }
+
+    /// Read `content`, which is not RDF, straight into an `O`, along with
+    /// the IRIs that it imports.
+    fn read_complete(
+        &self,
+        content: &str,
+        format: InputFormat,
+    ) -> Result<(O, Vec<IRI<A>>), HornedError> {
+        let config = self.config.common.clone();
+        let bytes = &mut content.as_bytes();
+        let (o, _prefixes): (O, _) = match format {
+            InputFormat::OWX => crate::io::owx::reader::read(bytes, config)?,
+            InputFormat::OFN => crate::io::ofn::reader::read(bytes, config)?,
+            InputFormat::OMN => crate::io::omn::read(bytes, config)?,
+            InputFormat::OBO => crate::io::obo::read(bytes, config)?,
+            InputFormat::Guess | InputFormat::Rdf(_) => {
+                unreachable!("read_complete is only for formats other than RDF")
+            }
+        };
+
+        let si: &SetIndex<A, AA> = o.as_ref();
+        let mut imports: Vec<IRI<A>> = si
+            .iter()
+            .filter_map(|c| {
+                let c: &AnnotatedComponent<A> = std::borrow::Borrow::borrow(c);
+                match &c.component {
+                    Component::Import(Import(iri)) => Some(iri.clone()),
+                    _ => None,
+                }
+            })
+            .collect();
+        // Sets iterate in no particular order
+        imports.sort();
+
+        Ok((o, imports))
     }
 
     // Finish the parse for the Ontology with the declared IRI.
