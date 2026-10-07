@@ -1,0 +1,9 @@
+format-version: 1.2
+data-version: http://www.example.com/viri
+import: http://www.example.com/other-property
+ontology: http://www.example.com/iri
+
+[Term]
+id: B
+relationship: other-o A
+

@@ -567,6 +567,85 @@ mod test {
         assert_eq!(v.len(), 2);
     }
 
+    // The importing document of each `src/ont/closure/` directory has an
+    // axiom over a property declared only in the imported document, so a
+    // complete parse of an RDF importer shows that the declarations of a
+    // non-RDF import reached it.
+    fn read_mixed_closure(importer: &str) -> Vec<SetOntology<crate::model::RcStr>> {
+        let b = Build::new_rc();
+        let iri = path_to_file_iri(&b, Path::new(importer));
+
+        let v: Vec<(ConcreteRcRDFOntology, _)> =
+            read_to_closure(&iri, ParserConfiguration::new(&b).into()).unwrap();
+        v.into_iter()
+            .map(|(rdfo, ic)| {
+                assert!(ic.is_complete());
+                rdfo.into()
+            })
+            .collect()
+    }
+
+    fn assert_importer_and_imported(v: Vec<SetOntology<crate::model::RcStr>>) {
+        assert_eq!(v.len(), 2);
+
+        let has_subclass = |o: &SetOntology<crate::model::RcStr>| {
+            o.iter()
+                .any(|ac| matches!(ac.component, crate::model::Component::SubClassOf(_)))
+        };
+        assert_eq!(v.iter().filter(|o| has_subclass(o)).count(), 1);
+    }
+
+    #[test]
+    fn test_rdf_imports_turtle() {
+        assert_importer_and_imported(read_mixed_closure(
+            "src/ont/closure/rdf-imports-ttl/import-property.owl",
+        ));
+    }
+
+    #[test]
+    fn test_rdf_imports_owx() {
+        assert_importer_and_imported(read_mixed_closure(
+            "src/ont/closure/rdf-imports-owx/import-property.owl",
+        ));
+    }
+
+    #[test]
+    fn test_owx_imports_rdf() {
+        assert_importer_and_imported(read_mixed_closure(
+            "src/ont/closure/owx-imports-rdf/import-property.owx",
+        ));
+    }
+
+    #[test]
+    fn test_obo_imports_rdf() {
+        assert_importer_and_imported(read_mixed_closure(
+            "src/ont/closure/obo-imports-rdf/import-property.obo",
+        ));
+    }
+
+    #[test]
+    fn test_ofn_imports_turtle() {
+        assert_importer_and_imported(read_mixed_closure(
+            "src/ont/closure/ofn-imports-ttl/import-property.ofn",
+        ));
+    }
+
+    // A format set on the configuration applies to the document asked
+    // for, not to what it imports.
+    #[test]
+    fn test_configured_format_does_not_apply_to_imports() {
+        let path = Path::new("src/ont/closure/rdf-imports-ttl/import-property.owl");
+        let b = Build::new_rc();
+        let iri = path_to_file_iri(&b, path);
+
+        let config = RDFParserConfiguration {
+            common: ParserConfiguration::new(&b),
+            format: Some(oxrdfio::RdfFormat::RdfXml),
+        };
+        let v: Vec<(ConcreteRcRDFOntology, _)> = read_to_closure(&iri, config).unwrap();
+        assert_eq!(v.len(), 2);
+    }
+
     // #[test]
     // fn test_import_with_version() {
     //     let path = Path::new("src/ont/owl-rdf/manual/annodc.owl");
