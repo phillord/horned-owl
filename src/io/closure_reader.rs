@@ -19,19 +19,52 @@ use crate::resolve::resolve_iri;
 use std::collections::HashMap;
 use std::path::PathBuf;
 
+/// One document in the closure, in whatever state its format needs.
+enum Entry<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>> {
+    /// Imports and declarations parsed; axioms await `finish_parse`.
+    Rdf(OntologyParser<A, AA, O, B>),
+}
+
+impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>> Entry<A, AA, O, B> {
+    /// The index that an ontology importing this one consults.
+    fn declaration_index(&self) -> &DeclarationMappedIndex<A, AA> {
+        match self {
+            Entry::Rdf(p) => <O as AsRef<DeclarationMappedIndex<A, AA>>>::as_ref(p.ontology_ref()),
+        }
+    }
+
+    fn mut_ontology_ref(&mut self) -> &mut O {
+        match self {
+            Entry::Rdf(p) => p.mut_ontology_ref(),
+        }
+    }
+
+    fn finish_parse(&mut self, ic: &[&DeclarationMappedIndex<A, AA>]) -> Result<(), HornedError> {
+        match self {
+            Entry::Rdf(p) => p.finish_parse(ic),
+        }
+    }
+
+    fn into_ontology_and_incomplete(self) -> (O, IncompleteParse<A>) {
+        match self {
+            Entry::Rdf(p) => p.as_ontology_and_incomplete(),
+        }
+    }
+}
+
 pub struct ClosureOntologyParser<
     A: ForIRI,
     AA: ForIndex<A>,
     O: RDFOntology<A, AA>,
     B: AsRef<Build<A>> = Build<A>,
 > {
-    // A map between the resolvable IRI of an Ontology and an OntologyParser
-    op: HashMap<IRI<A>, OntologyParser<A, AA, O, B>>,
+    // A map between the resolvable IRI of an Ontology and its parse state
+    entries: HashMap<IRI<A>, Entry<A, AA, O, B>>,
     // A map between the resolvable IRI of an Ontology and the
     // resolvable IRIs of any Ontology that it imports.
     import_map: HashMap<IRI<A>, Vec<IRI<A>>>,
     // A map between an Ontology's plain IRI and the key it is
-    // actually stored under in `op`/`import_map` (its version IRI),
+    // actually stored under in `entries`/`import_map` (its version IRI),
     // for Ontologies that have both. An `owl:imports` statement may
     // legally reference either the plain IRI or the version IRI of
     // the Ontology it imports, so we need to be able to resolve
@@ -46,7 +79,7 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>> + Clo
     pub fn new(config: RDFParserConfiguration<A, B>) -> Self {
         ClosureOntologyParser {
             import_map: HashMap::new(),
-            op: HashMap::new(),
+            entries: HashMap::new(),
             alias: HashMap::new(),
             config,
         }
@@ -124,8 +157,10 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>> + Clo
         let imports = p.parse_imports()?;
         p.parse_declarations()?;
 
+        let mut entry = Entry::Rdf(p);
+
         // push the DocIRI onto the partially parsed ontology
-        let o: &mut O = p.mut_ontology_ref();
+        let o: &mut O = entry.mut_ontology_ref();
         o.insert(DocIRI(new_doc_iri.clone()));
 
         // Find the viri_or_iri
@@ -157,7 +192,7 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>> + Clo
             self.alias.insert(iri, viri);
         }
         self.import_map.insert(storage_iri.clone(), imports.clone());
-        self.op.insert(storage_iri, p);
+        self.entries.insert(storage_iri, entry);
 
         // Now parse all of the imported ontologies as well
         for import in imports {
@@ -174,29 +209,29 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>> + Clo
     // Returns a Result with HornedError in case of failure to parse,
     // or a boolean indicating whether the `IRI` is in the import closure.
     pub fn finish_parse(&mut self, iri: &IRI<A>) -> Result<bool, HornedError> {
-        let op_pointer: *mut HashMap<_, _> = &mut self.op;
+        let entries_pointer: *mut HashMap<_, _> = &mut self.entries;
 
         // From the import map, we can extract the IRIs for the import
         // closure for the Ontology that we wish to complete the parse
         // of.
         let import_iris = self.import_map.get(iri).unwrap();
 
-        // Now we can get references to the actual ontologies. An
-        // import may reference an Ontology by its plain IRI even
-        // though it is stored under its version IRI, so fall back to
-        // the alias map if a direct lookup fails.
+        // Now we can get references to the declarations of the actual
+        // ontologies. An import may reference an Ontology by its plain
+        // IRI even though it is stored under its version IRI, so fall
+        // back to the alias map if a direct lookup fails.
         let import_closure: Result<Vec<_>, HornedError> = import_iris
             .iter()
             .map(|i| {
-                self.op
+                self.entries
                     .get(i)
                     .or_else(|| {
                         self.alias
                             .get(i)
-                            .and_then(|canonical| self.op.get(canonical))
+                            .and_then(|canonical| self.entries.get(canonical))
                     })
                     .ok_or_else(|| HornedError::ImportError(i.to_string()))
-                    .map(|i| <O as AsRef<DeclarationMappedIndex<A, AA>>>::as_ref(i.ontology_ref()))
+                    .map(|e| e.declaration_index())
             })
             .collect();
 
@@ -204,12 +239,12 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>> + Clo
         // closure, fail here
         let import_closure = import_closure?;
 
-        // The import closure references ontologies in the op
+        // The import closure references ontologies in the entries
         // HashMap. We need to modify one of the ontologies in the map
         // while retaining a reference to the others. Hence the unsafe.
         unsafe {
-            if let Some(o) = (*op_pointer).get_mut(iri) {
-                o.finish_parse(&import_closure)?;
+            if let Some(e) = (*entries_pointer).get_mut(iri) {
+                e.finish_parse(&import_closure)?;
             } else {
                 return Ok(false);
             }
@@ -228,9 +263,9 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>> + Clo
 
     // Return ontology in potentially incompletely parsed state
     pub fn as_ontology_vec_and_incomplete(self) -> Vec<(O, IncompleteParse<A>)> {
-        self.op
+        self.entries
             .into_values()
-            .map(|op| op.as_ontology_and_incomplete())
+            .map(|e| e.into_ontology_and_incomplete())
             .collect()
     }
 }
@@ -246,7 +281,7 @@ pub fn read<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>
     let mut c = ClosureOntologyParser::new(config);
     c.parse_iri(iri, None)?;
 
-    let keys: Vec<_> = c.op.keys().cloned().collect();
+    let keys: Vec<_> = c.entries.keys().cloned().collect();
     for i in keys {
         c.finish_parse(&i)?;
     }
@@ -275,7 +310,7 @@ pub fn read_to_closure<
     // Do parse, then full parse, then result the results
     let mut c = ClosureOntologyParser::new(config);
     c.parse_iri(iri, None)?;
-    let keys: Vec<_> = c.op.keys().cloned().collect();
+    let keys: Vec<_> = c.entries.keys().cloned().collect();
     for i in keys {
         c.finish_parse(&i)?;
     }
