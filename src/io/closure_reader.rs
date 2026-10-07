@@ -241,14 +241,35 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>> + Clo
 
     /// The format to parse `content` as, which is never `Guess`.
     ///
-    /// An import is sniffed, since imports in one closure need not share
-    /// a format; if that is inconclusive, it is read as the configured
-    /// RDF format.
+    /// The document the caller asked for honours the configuration. An
+    /// import is sniffed, since imports in one closure need not share a
+    /// format.
     fn resolve_format(&self, content: &str, top_level: bool) -> InputFormat {
         if top_level {
-            return InputFormat::Rdf(self.config.format);
+            match self.config.common.input_format {
+                Some(
+                    format @ (InputFormat::OFN
+                    | InputFormat::OWX
+                    | InputFormat::OMN
+                    | InputFormat::OBO),
+                ) => return format,
+                // A format set explicitly on the RDF configuration wins
+                Some(InputFormat::Rdf(format)) => {
+                    return InputFormat::Rdf(self.config.format.or(format));
+                }
+                Some(InputFormat::Guess) | None if self.config.format.is_some() => {
+                    return InputFormat::Rdf(self.config.format);
+                }
+                Some(InputFormat::Guess) | None => {}
+            }
         }
 
+        self.sniff_format(content)
+    }
+
+    /// Detect the format of `content`; if that is inconclusive, assume
+    /// the configured RDF format.
+    fn sniff_format(&self, content: &str) -> InputFormat {
         // Enough to get past an XML declaration, comments and a DOCTYPE
         let head = &content.as_bytes()[..content.len().min(64 * 1024)];
         match detect_format(head) {
