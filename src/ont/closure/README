@@ -1,0 +1,7 @@
+Closures whose documents are in different formats.
+
+Each directory pairs an importing document with an imported one, both
+copied from the bubo output in the format directories' withimport/. The
+imported document keeps its own content but is named for the importer's
+format, because that is where an import is looked for. Nothing here is
+globbed by the per-format tests.
