@@ -415,7 +415,7 @@ enum OntologyParserState {
 
 /// Represents all the parts of a set of RDF triples that were not
 /// able to be completed parsed to OWL2 structures.
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct IncompleteParse<A: ForIRI> {
     /// Simple Triples are those were subject, object and predicate
     /// are all IRIs
@@ -443,6 +443,22 @@ pub struct IncompleteParse<A: ForIRI> {
     /// Annotations that are otherwise unconnected to other parts of
     /// the Ontology
     pub ann_map: HashMap<[Term<A>; 3], BTreeSet<Annotation<A>>>,
+}
+
+// Not derived, as that would require `A: Default`
+impl<A: ForIRI> Default for IncompleteParse<A> {
+    fn default() -> Self {
+        IncompleteParse {
+            simple: Default::default(),
+            bnode: Default::default(),
+            bnode_seq: Default::default(),
+            class_expression: Default::default(),
+            object_property_expression: Default::default(),
+            data_range: Default::default(),
+            atom: Default::default(),
+            ann_map: Default::default(),
+        }
+    }
 }
 
 impl<A: ForIRI> IncompleteParse<A> {
