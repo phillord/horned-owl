@@ -121,7 +121,7 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>> + Clo
     ) -> Result<Vec<IRI<A>>, HornedError> {
         // Parse the contents of the string
         let mut p = parser_with_build(&mut s.as_bytes(), self.config.clone())?;
-        let imports = p.parse_imports().unwrap();
+        let imports = p.parse_imports()?;
         p.parse_declarations()?;
 
         // push the DocIRI onto the partially parsed ontology
