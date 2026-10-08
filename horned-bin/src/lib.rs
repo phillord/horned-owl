@@ -110,13 +110,18 @@ pub fn path_type<A: ForIRI, B: AsRef<Build<A>>>(
     }
 }
 
-/// Peek at the first 512 bytes of a file and use content sniffing as a
-/// fallback when the extension is missing or unrecognised.
+/// Peek at the first 64 KiB of a file and use content sniffing as a
+/// fallback when the extension is missing or unrecognised. The window
+/// must be large enough to get past an XML DOCTYPE with a long entity list.
 fn detect_from_path(path: &Path) -> Option<(ResourceType, Option<oxrdfio::RdfFormat>)> {
     use std::io::Read;
-    let mut buf = [0u8; 512];
-    let n = File::open(path).ok()?.read(&mut buf).ok()?;
-    horned_owl::io::detect_format(&buf[..n])
+    let mut buf = Vec::new();
+    File::open(path)
+        .ok()?
+        .take(64 * 1024)
+        .read_to_end(&mut buf)
+        .ok()?;
+    horned_owl::io::detect_format(&buf)
 }
 
 pub fn parse_path<B: AsRef<Build<RcStr>> + Clone>(
@@ -638,6 +643,25 @@ mod tests {
      ontologyIRI="http://www.example.com/test">
 </Ontology>
 "#;
+
+    #[test]
+    fn detect_from_path_gets_past_long_doctype() {
+        let entities: String = (0..40)
+            .map(|i| format!("  <!ENTITY e{i} \"http://www.example.com/entity/{i}.owl#\">\n"))
+            .collect();
+        let content = format!(
+            "<?xml version=\"1.0\"?>\n<!DOCTYPE rdf:RDF [\n{entities}]>\n{}",
+            RDF_XML.trim_start_matches("<?xml version=\"1.0\"?>\n")
+        );
+        assert!(content.find("<rdf:RDF").unwrap() > 512);
+
+        let dir = mktemp::Temp::new_dir().unwrap();
+        let path = write_owl(&dir, &content);
+        assert!(matches!(
+            detect_from_path(&path),
+            Some((ResourceType::RDF, Some(oxrdfio::RdfFormat::RdfXml)))
+        ));
+    }
 
     #[test]
     fn owl_extension_resource_type_sniffs_rdf_xml() {
