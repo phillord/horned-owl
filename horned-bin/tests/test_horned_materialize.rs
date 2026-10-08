@@ -75,3 +75,30 @@ fn integration_materialize_reads_ofn() -> Result<(), Box<dyn std::error::Error>>
 
     Ok(())
 }
+
+#[test]
+fn integration_materialize_reads_imports_by_content() -> Result<(), Box<dyn std::error::Error>> {
+    for (dir_name, importer) in [
+        ("obo-imports-rdf", "import-property.obo"),
+        ("ofn-imports-ttl", "import-property.ofn"),
+        ("owx-imports-rdf", "import-property.owx"),
+        ("rdf-imports-owx", "import-property.owl"),
+        ("rdf-imports-ttl", "import-property.owl"),
+    ] {
+        let dir = mktemp::Temp::new_dir()?;
+        let from = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../src/ont/closure")
+            .join(dir_name);
+        for entry in fs::read_dir(&from)? {
+            let entry = entry?;
+            fs::copy(entry.path(), dir.join(entry.file_name()))?;
+        }
+
+        Command::new(cargo::cargo_bin!("horned-materialize"))
+            .arg(dir.join(importer))
+            .assert()
+            .success();
+    }
+
+    Ok(())
+}
