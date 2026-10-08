@@ -305,8 +305,14 @@ fn materialize_1<'a, B: AsRef<Build<RcStr>> + Clone>(
     recurse: bool,
 ) -> Result<&'a mut Vec<IRI<RcStr>>, HornedError> {
     println!("Parsing: {}", file_location.display());
+    // An import is saved under the importer's extension, whatever its
+    // format, so trust the content over the name where we can tell.
+    let mut doc_config = config.clone();
+    if doc_config.input_format.is_none() && detect_from_path(file_location).is_some() {
+        doc_config.input_format = Some(InputFormat::Guess);
+    }
     let amont: RcComponentMappedOntology =
-        parse_imports(Path::new(file_location), config.clone())?.into();
+        parse_imports(Path::new(file_location), doc_config)?.into();
     let import = amont.i().import();
 
     let doc_iri = path_to_file_iri(config.build.as_ref(), file_location.as_path());
