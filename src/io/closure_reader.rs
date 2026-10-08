@@ -73,6 +73,9 @@ pub struct ClosureOntologyParser<
 > {
     // A map between the resolvable IRI of an Ontology and its parse state
     entries: HashMap<IRI<A>, Entry<A, AA, O, B>>,
+    // The keys of `entries` in the order they were parsed, so the
+    // document the caller asked for comes first.
+    order: Vec<IRI<A>>,
     // A map between the resolvable IRI of an Ontology and the
     // resolvable IRIs of any Ontology that it imports.
     import_map: HashMap<IRI<A>, Vec<IRI<A>>>,
@@ -93,6 +96,7 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>> + Clo
         ClosureOntologyParser {
             import_map: HashMap::new(),
             entries: HashMap::new(),
+            order: Vec::new(),
             alias: HashMap::new(),
             config,
         }
@@ -227,7 +231,9 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>> + Clo
             self.alias.insert(iri, viri);
         }
         self.import_map.insert(storage_iri.clone(), imports.clone());
-        self.entries.insert(storage_iri, entry);
+        if self.entries.insert(storage_iri.clone(), entry).is_none() {
+            self.order.push(storage_iri);
+        }
 
         // Now parse all of the imported ontologies as well
         for import in imports {
@@ -375,10 +381,12 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>> + Clo
             .collect()
     }
 
-    // Return ontology in potentially incompletely parsed state
-    pub fn as_ontology_vec_and_incomplete(self) -> Vec<(O, IncompleteParse<A>)> {
-        self.entries
-            .into_values()
+    // Return ontology in potentially incompletely parsed state, the
+    // document that was asked for first
+    pub fn as_ontology_vec_and_incomplete(mut self) -> Vec<(O, IncompleteParse<A>)> {
+        self.order
+            .iter()
+            .filter_map(|iri| self.entries.remove(iri))
             .map(|e| e.into_ontology_and_incomplete())
             .collect()
     }
@@ -410,7 +418,8 @@ pub fn read<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>
 }
 
 // Returns the import closure of an Ontology and IncompleteParse
-// report found at a given IRI or an error
+// report found at a given IRI or an error. The Ontology at the given
+// IRI is first.
 #[allow(clippy::type_complexity)]
 pub fn read_to_closure<
     A: ForIRI,
@@ -593,6 +602,47 @@ mod test {
                 .any(|ac| matches!(ac.component, crate::model::Component::SubClassOf(_)))
         };
         assert_eq!(v.iter().filter(|o| has_subclass(o)).count(), 1);
+    }
+
+    // Only the importer has a SubClassOf. Each read builds a fresh hash
+    // map with its own ordering, so repeating makes a wrong choice of
+    // document very unlikely to pass.
+    #[test]
+    fn test_read_returns_top_level_document() {
+        let b = Build::new_rc();
+        let iri = path_to_file_iri(
+            &b,
+            Path::new("src/ont/closure/rdf-imports-ttl/import-property.owl"),
+        );
+
+        for _ in 0..50 {
+            let (o, _): (ConcreteRcRDFOntology, _) =
+                read(&iri, ParserConfiguration::new(&b).into()).unwrap();
+            let o: SetOntology<crate::model::RcStr> = o.into();
+            assert!(
+                o.iter()
+                    .any(|ac| matches!(ac.component, crate::model::Component::SubClassOf(_)))
+            );
+        }
+    }
+
+    #[test]
+    fn test_read_to_closure_puts_top_level_first() {
+        let b = Build::new_rc();
+        let iri = path_to_file_iri(
+            &b,
+            Path::new("src/ont/closure/rdf-imports-ttl/import-property.owl"),
+        );
+
+        for _ in 0..50 {
+            let v: Vec<(ConcreteRcRDFOntology, _)> =
+                read_to_closure(&iri, ParserConfiguration::new(&b).into()).unwrap();
+            let o: SetOntology<crate::model::RcStr> = v.into_iter().next().unwrap().0.into();
+            assert!(
+                o.iter()
+                    .any(|ac| matches!(ac.component, crate::model::Component::SubClassOf(_)))
+            );
+        }
     }
 
     #[test]
