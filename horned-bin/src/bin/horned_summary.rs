@@ -3,7 +3,11 @@ use clap::Arg;
 use clap::ArgMatches;
 
 use horned_bin::{
-    config::parser_config, naming::name, parse_path, summary::summarize, with_detected_rdf_format,
+    config::{imports, parser_config},
+    naming::name,
+    parse_path_imports,
+    summary::summarize,
+    with_detected_rdf_format,
 };
 use horned_owl::io::ResourceType;
 
@@ -37,7 +41,7 @@ pub(crate) fn matcher(matches: &ArgMatches) -> Result<(), HornedError> {
 
     let b = Build::new();
     let config = parser_config(matches, &b);
-    let parsed = parse_path(Path::new(input), config.clone())?;
+    let parsed = parse_path_imports(Path::new(input), config.clone(), imports(matches))?;
     let resource_type = parsed.resource_type();
     let rdf_format = with_detected_rdf_format(Path::new(input), config.into()).format;
     let (ont, p, i) = parsed.decompose();

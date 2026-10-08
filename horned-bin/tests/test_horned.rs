@@ -118,3 +118,77 @@ fn integration_version_reports_on_standalone_binary_and_subcommand()
 
     Ok(())
 }
+
+// Copies a mixed-format closure from src/ont/closure and then breaks the
+// imported document, so that only a parse which follows imports notices.
+fn broken_import(
+    dir_name: &str,
+    importer: &str,
+    imported: &str,
+) -> Result<(mktemp::Temp, std::path::PathBuf), Box<dyn std::error::Error>> {
+    let dir = mktemp::Temp::new_dir()?;
+    let from = std::path::Path::new("../src/ont/closure").join(dir_name);
+    std::fs::copy(from.join(importer), dir.join(importer))?;
+    std::fs::write(dir.join(imported), "not an ontology <<<")?;
+    let importer = dir.join(importer);
+    Ok((dir, importer))
+}
+
+#[test]
+fn integration_imports_flag_reads_import_closure_of_non_rdf()
+-> Result<(), Box<dyn std::error::Error>> {
+    for (dir, importer, imported) in [
+        (
+            "owx-imports-rdf",
+            "import-property.owx",
+            "other-property.owx",
+        ),
+        (
+            "ofn-imports-ttl",
+            "import-property.ofn",
+            "other-property.ofn",
+        ),
+        (
+            "obo-imports-rdf",
+            "import-property.obo",
+            "other-property.obo",
+        ),
+    ] {
+        let (_dir, file) = broken_import(dir, importer, imported)?;
+
+        Command::new(cargo::cargo_bin!("horned"))
+            .arg("parse")
+            .arg(&file)
+            .assert()
+            .success();
+
+        Command::new(cargo::cargo_bin!("horned"))
+            .arg("--imports")
+            .arg("parse")
+            .arg(&file)
+            .assert()
+            .failure();
+    }
+
+    Ok(())
+}
+
+#[test]
+fn integration_imports_flag_parses_a_good_closure() -> Result<(), Box<dyn std::error::Error>> {
+    for file in [
+        "../src/ont/closure/owx-imports-rdf/import-property.owx",
+        "../src/ont/closure/ofn-imports-ttl/import-property.ofn",
+        "../src/ont/closure/obo-imports-rdf/import-property.obo",
+        "../src/ont/closure/rdf-imports-ttl/import-property.owl",
+    ] {
+        Command::new(cargo::cargo_bin!("horned"))
+            .arg("--imports")
+            .arg("parse")
+            .arg(file)
+            .assert()
+            .success()
+            .stdout(predicate::str::contains("Parse Complete"));
+    }
+
+    Ok(())
+}

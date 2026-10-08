@@ -2,7 +2,10 @@ use clap::App;
 use clap::Arg;
 use clap::ArgMatches;
 
-use horned_bin::{config::parser_config, parse_path};
+use horned_bin::{
+    config::{imports, parser_config},
+    parse_path_imports,
+};
 
 use horned_owl::error::HornedError;
 use horned_owl::model::Build;
@@ -47,9 +50,13 @@ pub(crate) fn matcher(matches: &ArgMatches) -> Result<(), HornedError> {
         .ok_or_else(horned_bin::error::error_missing_input)?;
 
     let b = Build::new();
-    let o = parse_path(Path::new(input), parser_config(matches, &b))?
-        .decompose()
-        .0;
+    let o = parse_path_imports(
+        Path::new(input),
+        parser_config(matches, &b),
+        imports(matches),
+    )?
+    .decompose()
+    .0;
 
     let profiles = match matches.value_of("profile").unwrap_or("all") {
         "all" => vec![Profile::OWL2DL, Profile::EL, Profile::QL, Profile::RL],

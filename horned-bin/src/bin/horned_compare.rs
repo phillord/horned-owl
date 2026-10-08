@@ -2,7 +2,12 @@ use clap::App;
 use clap::Arg;
 use clap::ArgMatches;
 
-use horned_bin::{config::parser_config, naming::name, parse_path, summary::summarize};
+use horned_bin::{
+    config::{imports, parser_config},
+    naming::name,
+    parse_path_imports,
+    summary::summarize,
+};
 use horned_owl::error::HornedError;
 use horned_owl::model::Build;
 
@@ -45,8 +50,10 @@ pub(crate) fn matcher(matches: &ArgMatches) -> Result<(), HornedError> {
         .value_of("INPUT-B")
         .ok_or_else(|| HornedError::CommandError("A file name must be specified".to_string()))?;
 
-    let (ont_a, p_a, i_a) = parse_path(Path::new(input_a), config.clone())?.decompose();
-    let (ont_b, p_b, i_b) = parse_path(Path::new(input_b), config)?.decompose();
+    let (ont_a, p_a, i_a) =
+        parse_path_imports(Path::new(input_a), config.clone(), imports(matches))?.decompose();
+    let (ont_b, p_b, i_b) =
+        parse_path_imports(Path::new(input_b), config, imports(matches))?.decompose();
 
     let summary_a = summarize(ont_a);
     let summary_b = summarize(ont_b);

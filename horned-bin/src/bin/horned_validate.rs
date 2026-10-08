@@ -2,7 +2,10 @@ use clap::App;
 use clap::Arg;
 use clap::ArgMatches;
 
-use horned_bin::{config::parser_config, parse_path};
+use horned_bin::{
+    config::{imports, parser_config},
+    parse_path_imports,
+};
 
 use horned_owl::error::HornedError;
 use horned_owl::model::Build;
@@ -34,9 +37,13 @@ pub(crate) fn matcher(matches: &ArgMatches) -> Result<(), HornedError> {
         .ok_or_else(horned_bin::error::error_missing_input)?;
 
     let b = Build::new();
-    let incomplete = parse_path(Path::new(input), parser_config(matches, &b))?
-        .decompose()
-        .2;
+    let incomplete = parse_path_imports(
+        Path::new(input),
+        parser_config(matches, &b),
+        imports(matches),
+    )?
+    .decompose()
+    .2;
 
     if let Some(incomplete) = incomplete {
         horned_bin::validation::write_incomplete(incomplete);

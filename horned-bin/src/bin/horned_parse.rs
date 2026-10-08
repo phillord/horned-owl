@@ -2,7 +2,10 @@ use clap::App;
 use clap::Arg;
 use clap::ArgMatches;
 
-use horned_bin::{config::parser_config, parse_path};
+use horned_bin::{
+    config::{imports, parser_config},
+    parse_path_imports,
+};
 
 use horned_owl::error::HornedError;
 use horned_owl::model::Build;
@@ -34,7 +37,11 @@ pub(crate) fn matcher(matches: &ArgMatches) -> Result<(), HornedError> {
     })?;
 
     let b = Build::new();
-    parse_path(Path::new(input), parser_config(matches, &b))?;
+    parse_path_imports(
+        Path::new(input),
+        parser_config(matches, &b),
+        imports(matches),
+    )?;
 
     println!("Parse Complete: {input:?}");
     Ok(())
