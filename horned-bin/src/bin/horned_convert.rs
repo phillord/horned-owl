@@ -2,7 +2,10 @@ use clap::App;
 use clap::Arg;
 use clap::ArgMatches;
 
-use horned_bin::{config::parser_config, parse_path, write};
+use horned_bin::{
+    config::{imports, parser_config},
+    parse_path_imports, write,
+};
 
 use horned_owl::error::HornedError;
 use horned_owl::model::Build;
@@ -50,7 +53,11 @@ pub(crate) fn matcher(matches: &ArgMatches) -> Result<(), HornedError> {
     let to = matches.value_of("to").unwrap();
 
     let b = Build::new();
-    let res = parse_path(Path::new(input), parser_config(matches, &b))?;
+    let res = parse_path_imports(
+        Path::new(input),
+        parser_config(matches, &b),
+        imports(matches),
+    )?;
     let amo: RcComponentMappedOntology = res.into();
 
     match matches.value_of("to-file") {

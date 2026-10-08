@@ -2,7 +2,10 @@
 
 use horned_owl::{
     error::HornedError,
-    io::{InputFormat, ParserConfiguration, ParserOutput, RDFParserConfiguration, ResourceType},
+    io::{
+        InputFormat, ParserConfiguration, ParserOutput, RDFParserConfiguration, ResourceType,
+        rdf::reader::ConcreteRcRDFOntology,
+    },
     model::{Build, ForIRI, IRI, MutableOntology, OntologyID, RcAnnotatedComponent, RcStr},
     ontology::{
         component_mapped::{ComponentMappedOntology, RcComponentMappedOntology},
@@ -154,6 +157,33 @@ pub fn parse_path<B: AsRef<Build<RcStr>> + Clone>(
             )));
         }
     })
+}
+
+/// As [`parse_path`], and when `imports` is set also read every document in
+/// the import closure, in whatever format each has, failing if any of them
+/// does not parse. RDF already reads its closure; for the other formats the
+/// result is still the single document at `path`.
+pub fn parse_path_imports<B: AsRef<Build<RcStr>> + Clone>(
+    path: &Path,
+    config: ParserConfiguration<RcStr, B>,
+    imports: bool,
+) -> Result<ParserOutput<RcStr, RcAnnotatedComponent>, HornedError> {
+    let resource_type = path_type(path, &config);
+    if imports && !matches!(resource_type, Some(ResourceType::RDF) | None) {
+        let iri = path_to_file_iri(config.build.as_ref(), path);
+        let mut closure_config = config.clone();
+        closure_config.input_format = match resource_type {
+            Some(ResourceType::OFN) => Some(InputFormat::OFN),
+            Some(ResourceType::OWX) => Some(InputFormat::OWX),
+            Some(ResourceType::OMN) => Some(InputFormat::OMN),
+            _ => Some(InputFormat::OBO),
+        };
+        horned_owl::io::closure_reader::read_to_closure::<_, _, ConcreteRcRDFOntology, _>(
+            &iri,
+            closure_config.into(),
+        )?;
+    }
+    parse_path(path, config)
 }
 
 /// Fill in `config.format` from `path`'s extension or content, unless the
@@ -508,6 +538,16 @@ pub mod config {
                 ),
         )
         .arg(
+            clap::arg!(--"imports")
+                .required(false)
+                .global(true)
+                .action(ArgAction::SetTrue)
+                .help(
+                    "Also read every document in the owl:imports closure, \
+                     whatever its format (RDF input always does)",
+                ),
+        )
+        .arg(
             clap::arg!(--"input-format" <FORMAT>)
                 .required(false)
                 .global(true)
@@ -518,6 +558,17 @@ pub mod config {
                      guess (detect from content)",
                 ),
         )
+    }
+
+    /// Whether `--imports` was given. Like the parser options, it is only
+    /// registered on the unified `horned` binary, so it is off elsewhere.
+    pub fn imports(matches: &ArgMatches) -> bool {
+        matches
+            .try_get_one::<bool>("imports")
+            .ok()
+            .flatten()
+            .copied()
+            .unwrap_or(false)
     }
 
     /// `lax`/`remote-body-limit`/`local-only` are only registered on the
