@@ -223,7 +223,7 @@ pub fn parse_imports<B: AsRef<Build<RcStr>>>(
     let mut bufreader = BufReader::new(file);
     Ok(match path_type(path, &config) {
         Some(ResourceType::OFN) => {
-            ParserOutput::ofn(horned_owl::io::owx::reader::read(&mut bufreader, config)?)
+            ParserOutput::ofn(horned_owl::io::ofn::reader::read(&mut bufreader, config)?)
         }
         Some(ResourceType::OWX) => {
             ParserOutput::owx(horned_owl::io::owx::reader::read(&mut bufreader, config)?)

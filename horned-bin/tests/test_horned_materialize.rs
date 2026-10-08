@@ -58,3 +58,20 @@ fn integration_ont_with_bfo() -> Result<(), Box<dyn std::error::Error>> {
     fs::remove_dir_all(&dir)?;
     Ok(())
 }
+
+#[test]
+fn integration_materialize_reads_ofn() -> Result<(), Box<dyn std::error::Error>> {
+    let dir = mktemp::Temp::new_dir()?;
+    let ont = dir.join("a.ofn");
+    fs::write(
+        &ont,
+        "Prefix(:=<http://example.com/a#>)\nOntology(<http://example.com/a>\nDeclaration(Class(:A))\n)\n",
+    )?;
+
+    Command::new(cargo::cargo_bin!("horned-materialize"))
+        .arg(&ont)
+        .assert()
+        .success();
+
+    Ok(())
+}
