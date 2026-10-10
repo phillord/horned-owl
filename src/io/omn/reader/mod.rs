@@ -139,12 +139,28 @@ pub fn read<
     let children: Vec<_> = document.into_inner().collect();
 
     // Pass 1: build the prefix mapping from PrefixDeclaration children.
-    let prefixes = from_pair::prefixes_from_decls(
+    let mut prefixes = from_pair::prefixes_from_decls(
         children
             .iter()
             .filter(|p| p.as_rule() == Rule::PrefixDeclaration)
             .cloned(),
     )?;
+    // A `dc:` name, where no `dc:` prefix is declared, is one of Dublin Core's
+    // elements, and the document binds `dc:` to their namespace.
+    let uses_dc = || {
+        children.iter().any(|child| {
+            child
+                .clone()
+                .into_inner()
+                .flatten()
+                .any(|p| p.as_rule() == Rule::AbbreviatedIRI && p.as_str().starts_with("dc:"))
+        })
+    };
+    if prefixes.expand_curie_string("dc:").is_err() && uses_dc() {
+        prefixes
+            .add_prefix("dc", "http://purl.org/dc/elements/1.1/")
+            .expect("dc is a valid prefix");
+    }
 
     // Pass 1.5: collect DataProperty / Datatype declarations so that HasKey
     // keys, Misc EquivalentProperties/DisjointProperties lists, and bare-IRI
@@ -180,17 +196,17 @@ pub fn read<
                     match h.as_rule() {
                         Rule::OntologyIRI => {
                             let iri_pair = h.into_inner().next().unwrap();
-                            oid.iri = Some(crate::model::IRI::from_pair(iri_pair, &ctx)?);
+                            oid.iri = Some(from_pair::written_iri(iri_pair, &ctx)?);
                             has_id = true;
                         }
                         Rule::VersionIRI => {
                             let iri_pair = h.into_inner().next().unwrap();
-                            oid.viri = Some(crate::model::IRI::from_pair(iri_pair, &ctx)?);
+                            oid.viri = Some(from_pair::written_iri(iri_pair, &ctx)?);
                             has_id = true;
                         }
                         Rule::ImportDeclaration => {
                             let iri_pair = h.into_inner().next().unwrap();
-                            ontology.insert(crate::model::Import(crate::model::IRI::from_pair(
+                            ontology.insert(crate::model::Import(from_pair::written_iri(
                                 iri_pair, &ctx,
                             )?));
                         }

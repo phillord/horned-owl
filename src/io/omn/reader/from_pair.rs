@@ -198,9 +198,22 @@ impl<A: ForIRI> FromPair<A> for IRI<A> {
                 }
             }
             Rule::FullIRI => {
-                // FullIRI = ${ "<" ~ RFC3987_Iri ~ ">" }
-                let iri = inner.into_inner().next().unwrap();
-                Ok(ctx.build.iri(iri.as_str()))
+                // A full IRI that holds a colon names the IRI it encloses; one
+                // that holds none is a local name of the default prefix, its
+                // angle brackets and all.
+                let span = inner.as_span();
+                let token = inner.as_str();
+                let text = inner.into_inner().next().unwrap().as_str();
+                if text.contains(':') {
+                    return Ok(ctx.build.iri(text));
+                }
+                match ctx.prefixes.expand_curie(&Curie::new(Some(""), token)) {
+                    Ok(s) => Ok(ctx.build.iri(s)),
+                    Err(_) => Err(HornedError::invalid_at(
+                        "Prefix not registered for prefix name: :",
+                        span,
+                    )),
+                }
             }
             Rule::SimpleIRI => {
                 // SimpleIRI = { SPARQL_PnLocal } — a bare local name resolved
@@ -222,6 +235,35 @@ impl<A: ForIRI> FromPair<A> for IRI<A> {
             rule => unreachable!("unexpected rule in IRI::from_pair: {:?}", rule),
         }
     }
+}
+
+/// The IRI an ontology header, an import or an annotation value names: a full
+/// IRI as it is written, and a name as an entity's is read.
+pub(crate) fn written_iri<A: ForIRI>(pair: Pair<Rule>, ctx: &Context<'_, A>) -> Result<IRI<A>> {
+    let inner = pair.clone().into_inner().next().unwrap();
+    if inner.as_rule() == Rule::FullIRI {
+        Ok(ctx.build.iri(inner.into_inner().next().unwrap().as_str()))
+    } else {
+        IRI::from_pair(pair, ctx)
+    }
+}
+
+/// A rule variable, `?` and an IRI. A full IRI names the IRI as it is
+/// written, but one whose namespace is `urn:swrl#` is moved to
+/// `urn:swrl:var#`; a name `n` names `urn:swrl:var#n`.
+fn variable<A: ForIRI>(pair: Pair<Rule>, ctx: &Context<'_, A>) -> Variable<A> {
+    let inner = pair.clone().into_inner().next().unwrap();
+    let iri = if inner.as_rule() == Rule::FullIRI {
+        let text = inner.into_inner().next().unwrap().as_str();
+        let split = crate::io::ofn::writer::ncname_suffix_index(text).unwrap_or(text.len());
+        match text.split_at(split) {
+            ("urn:swrl#", fragment) => format!("urn:swrl:var#{fragment}"),
+            _ => text.to_string(),
+        }
+    } else {
+        format!("urn:swrl:var#{}", pair.as_str())
+    };
+    Variable(ctx.build.iri(iri))
 }
 
 // ---------------------------------------------------------------------------
@@ -970,7 +1012,7 @@ impl<A: ForIRI> FromPair<A> for AnnotationValue<A> {
         let inner = pair.into_inner().next().unwrap();
         match inner.as_rule() {
             Rule::Literal => Ok(AnnotationValue::Literal(Literal::from_pair(inner, ctx)?)),
-            Rule::IRI => Ok(AnnotationValue::IRI(IRI::from_pair(inner, ctx)?)),
+            Rule::IRI => Ok(AnnotationValue::IRI(written_iri(inner, ctx)?)),
             Rule::AnonymousIndividual => {
                 let label = inner.as_str();
                 let id = label.strip_prefix("_:").unwrap_or(label);
@@ -1050,7 +1092,7 @@ pub(crate) fn prefixes_from_decls<'a>(
         let mut inner = decl.into_inner();
         let pname = inner.next().unwrap(); // PrefixName
         let full_iri = inner.next().unwrap(); // FullIRI
-        // FullIRI = ${ "<" ~ RFC3987_Iri ~ ">" } — its inner is the bare IRI text.
+        // A prefix's IRI is taken as it is written.
         let iri_text = full_iri.into_inner().next().unwrap().as_str();
         // PrefixName = { SPARQL_PnameNs }; SPARQL_PnameNs = ${ SPARQL_PnPrefix? ~ ":" }
         let prefix_part = pname.into_inner().next().unwrap().into_inner().next();
@@ -1743,10 +1785,7 @@ fn swrl_arg_kind<A: ForIRI>(arg: Pair<Rule>, ctx: &Context<'_, A>) -> Result<Swr
     let inner = arg.into_inner().next().unwrap();
     Ok(match inner.as_rule() {
         // `Variable = { "?" ~ IRI }`
-        Rule::Variable => SwrlArgKind::Var(Variable(IRI::from_pair(
-            inner.into_inner().next().unwrap(),
-            ctx,
-        )?)),
+        Rule::Variable => SwrlArgKind::Var(variable(inner.into_inner().next().unwrap(), ctx)),
         Rule::Literal => SwrlArgKind::Lit(Literal::from_pair(inner, ctx)?),
         Rule::Individual => SwrlArgKind::Ind(Individual::from_pair(inner, ctx)?),
         rule => unreachable!("unexpected SWRL argument: {:?}", rule),
@@ -2425,6 +2464,105 @@ Datatype: idrange:1
                 .iter()
                 .any(|c| matches!(c, Component::DatatypeDefinition(d) if d.kind == range))
         );
+    }
+
+    /// A full IRI with a colon names what it encloses, whatever characters it
+    /// holds, and one with none is a local name of the default prefix, angle
+    /// brackets and all; the ontology header, prefix declarations and
+    /// annotation values take a full IRI as it is written. A rule variable
+    /// `?n` is `urn:swrl:var#n`, and one in `urn:swrl#` moves there. An
+    /// undeclared `dc:` names Dublin Core's elements.
+    #[test]
+    fn reads_full_iris_where_they_stand() {
+        use crate::ontology::set::SetOntology;
+        use std::collections::BTreeSet;
+        use std::io::BufReader;
+
+        let doc = r#"Prefix: : <http://example.org/o#>
+Prefix: ex: <rel/>
+Prefix: rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+Ontology: <http://example.org/o> <rel/v.owl>
+AnnotationProperty: rdfs:seeAlso
+Class: :A
+    Annotations: rdfs:seeAlso <a.owl#C>, rdfs:seeAlso <http://example.org/{z}>
+Class: :B
+Class: <http://example.org/{x}>
+Class: <{y}>
+Class: <a/b:c>
+Class: ex:D
+Rule: :A(?x) -> :B(?x)
+Rule: :A(?<urn:swrl#y>) -> :B(?<urn:swrl#y>)
+Rule: :A(?<w>) -> :B(?<w>)
+Rule: :A(?ex:v) -> :B(?ex:v)
+"#;
+        let b = Build::new_rc();
+        let (o, pm): (SetOntology<RcStr>, PrefixMapping) = crate::io::omn::reader::read(
+            BufReader::new(doc.as_bytes()),
+            crate::io::ParserConfiguration::new(&b),
+        )
+        .unwrap();
+        assert_eq!(pm.expand_curie_string("ex:D").unwrap(), "rel/D");
+        let (mut classes, mut values, mut variables) = (BTreeSet::new(), BTreeSet::new(), BTreeSet::new());
+        for ac in o.iter() {
+            match &ac.component {
+                Component::OntologyID(id) => {
+                    assert_eq!(id.viri.as_deref(), Some("rel/v.owl"));
+                }
+                Component::DeclareClass(DeclareClass(c)) => {
+                    classes.insert(c.0.to_string());
+                }
+                Component::AnnotationAssertion(AnnotationAssertion { ann, .. }) => {
+                    if let AnnotationValue::IRI(i) = &ann.av {
+                        values.insert(i.to_string());
+                    }
+                }
+                Component::Rule(r) => {
+                    for atom in r.body.iter().chain(r.head.iter()) {
+                        if let Atom::ClassAtom { arg: IArgument::Variable(v), .. } = atom {
+                            variables.insert(v.0.to_string());
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+        let set = |s: &[&str]| s.iter().map(|s| s.to_string()).collect::<BTreeSet<_>>();
+        assert_eq!(
+            classes,
+            set(&[
+                "a/b:c",
+                "http://example.org/o#<{y}>",
+                "http://example.org/o#A",
+                "http://example.org/o#B",
+                "http://example.org/{x}",
+                "rel/D",
+            ])
+        );
+        assert_eq!(values, set(&["a.owl#C", "http://example.org/{z}"]));
+        assert_eq!(
+            variables,
+            set(&["urn:swrl:var#ex:v", "urn:swrl:var#x", "urn:swrl:var#y", "w"])
+        );
+
+        // An undeclared `dc:` is Dublin Core's elements namespace.
+        let doc = "Ontology: <http://example.org/o>\nAnnotationProperty: dc:title\n";
+        let (o, pm): (SetOntology<RcStr>, PrefixMapping) = crate::io::omn::reader::read(
+            BufReader::new(doc.as_bytes()),
+            crate::io::ParserConfiguration::new(&b),
+        )
+        .unwrap();
+        assert_eq!(pm.expand_curie_string("dc:").unwrap(), "http://purl.org/dc/elements/1.1/");
+        assert!(o.iter().any(|ac| matches!(&ac.component,
+            Component::DeclareAnnotationProperty(DeclareAnnotationProperty(p))
+                if &*p.0 == "http://purl.org/dc/elements/1.1/title")));
+
+        // With no default prefix, a full IRI with no colon names nothing.
+        let doc = "Ontology: <http://example.org/o>\nClass: <a.owl#C>\n";
+        let read: Result<(SetOntology<RcStr>, PrefixMapping)> = crate::io::omn::reader::read(
+            BufReader::new(doc.as_bytes()),
+            crate::io::ParserConfiguration::new(&b),
+        );
+        assert!(read.unwrap_err().to_string().contains("Prefix not registered for prefix name: :"));
     }
 
     /// §2.5 allows bare numeric literals (integer/decimal/float) wherever a

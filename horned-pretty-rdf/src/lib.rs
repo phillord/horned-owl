@@ -314,9 +314,11 @@ impl<A: AsRef<str>> PTriple<A> {
         self.predicate.iri.as_ref() == "http://www.w3.org/1999/02/22-rdf-syntax-ns#rest"
     }
 
+    /// The last cell of a list: its `rdf:rest` is `rdf:nil`. Another statement
+    /// whose object is `rdf:nil` names an empty list and is no cell.
     pub fn is_collection_end(&self) -> bool {
         if let PTerm::NamedNode(nn) = &self.object {
-            nn.iri.as_ref() == "http://www.w3.org/1999/02/22-rdf-syntax-ns#nil"
+            self.is_collection_rest() && nn.iri.as_ref() == "http://www.w3.org/1999/02/22-rdf-syntax-ns#nil"
         } else {
             false
         }

@@ -875,11 +875,22 @@ impl<A: ForIRI> FromPair<A> for IRI<A> {
             }
             Rule::FullIRI => {
                 let iri = inner.into_inner().next().unwrap();
-                Ok(ctx.build.iri(iri.as_str()))
+                Ok(ctx.build.iri(full_iri(iri.as_str(), ctx.mapping)))
             }
             rule => unreachable!("unexpected rule in IRI::from_pair: {:?}", rule),
         }
     }
+}
+
+/// The IRI a full IRI's text names: the text as it stands when it is absolute,
+/// and otherwise the text after the default prefix, or alone when none is bound.
+fn full_iri(text: &str, mapping: &PrefixMapping) -> String {
+    if is_absolute_iri(text) {
+        return text.to_string();
+    }
+    mapping
+        .expand_curie(&Curie::new(Some(""), text))
+        .unwrap_or_else(|_| text.to_string())
 }
 
 // ---------------------------------------------------------------------------
@@ -1021,19 +1032,22 @@ impl<A: ForIRI> FromPair<A> for OntologyAnnotation<A> {
 impl<A: ForIRI> FromPair<A> for PrefixMapping {
     const RULE: Rule = Rule::PrefixDeclarations;
     fn from_pair_unchecked(pair: Pair<Rule>, _ctx: &Context<'_, A>) -> Result<Self> {
-        // Build the prefix mapping and use it to build the ontology
+        // Build the prefix mapping and use it to build the ontology. Each
+        // declaration's IRI is read as any full IRI is, against the default
+        // prefix the declarations before it bind.
         let mut prefixes = Self::default();
         for inner in pair.into_inner() {
             let mut decl = inner.into_inner();
             let mut pname = decl.next().unwrap().into_inner();
             let iri = decl.next().unwrap().into_inner().next().unwrap();
+            let iri = full_iri(iri.as_str(), &prefixes);
             if let Some(prefix) = pname.next().unwrap().into_inner().next() {
                 prefixes
-                    .add_prefix(prefix.as_str(), iri.as_str())
+                    .add_prefix(prefix.as_str(), &iri)
                     .expect("grammar does not allow invalid prefixes");
             } else {
                 prefixes
-                    .add_prefix("", iri.as_str())
+                    .add_prefix("", &iri)
                     .expect("empty prefix shouldn't fail")
             }
         }
@@ -1324,6 +1338,54 @@ mod tests {
             "ex:ref",
             build.iri("http://example.com/path#ref")
         );
+
+        // A full IRI is every character up to the next `>`. With no default
+        // prefix bound, a relative one is taken as it stands.
+        for iri in ["http://example.com/{x}", "{fixtures}/a.owl#C", "a b", "a\nb", "a#b#c", "a<b", ""] {
+            let text = format!("<{iri}>");
+            assert_parse_into!(IRI<String>, Rule::IRI, build, prefixes, text, build.iri(iri));
+        }
+
+        // A relative one follows the default prefix; an absolute one, whose
+        // first colon follows only letters, digits, `.`, `+` and `-` of the
+        // Basic Multilingual Plane, stands alone.
+        prefixes.add_prefix("", "http://example.com/o#").unwrap();
+        for (iri, expected) in [
+            ("a.owl#C", "http://example.com/o#a.owl#C"),
+            ("{fixtures}/a.owl#C", "http://example.com/o#{fixtures}/a.owl#C"),
+            ("a/b:c", "http://example.com/o#a/b:c"),
+            ("a b:c", "http://example.com/o#a b:c"),
+            ("_:b", "http://example.com/o#_:b"),
+            ("\u{1D49C}:b", "http://example.com/o#\u{1D49C}:b"),
+            ("", "http://example.com/o#"),
+            ("x:y", "x:y"),
+            (":c", ":c"),
+            ("1a.b+c-d:e", "1a.b+c-d:e"),
+            ("\u{E9}t\u{E9}:b", "\u{E9}t\u{E9}:b"),
+            ("http://example.com/{x}", "http://example.com/{x}"),
+        ] {
+            let text = format!("<{iri}>");
+            assert_parse_into!(IRI<String>, Rule::IRI, build, prefixes, text, build.iri(expected));
+        }
+    }
+
+    #[test]
+    fn prefix_declarations_read_against_the_default_prefix_before_them() {
+        let build = Build::<String>::default();
+        let prefixes = PrefixMapping::default();
+        for (txt, ex) in [
+            ("Prefix(:=<http://example.com/o#>) Prefix(ex:=<rel/>) Ontology()", "http://example.com/o#rel/"),
+            ("Prefix(ex:=<rel/>) Prefix(:=<http://example.com/o#>) Ontology()", "rel/"),
+            ("Prefix(:=<base/>) Prefix(:=<more/>) Prefix(ex:=<rel/>) Ontology()", "base/more/rel/"),
+        ] {
+            let pair = OwlFunctionalLexer::lex(Rule::OntologyDocument, txt)
+                .unwrap()
+                .next()
+                .unwrap();
+            let doc: (MutableOntologyWrapper<_, SetOntology<String>>, PrefixMapping) =
+                FromPair::from_pair(pair, &Context::new(&build, &prefixes)).unwrap();
+            assert_eq!(doc.1.expand_curie_string("ex:A").unwrap(), format!("{ex}A"), "{txt}");
+        }
     }
 
     #[test]

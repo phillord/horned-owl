@@ -96,13 +96,16 @@ impl<A: ForIRI, R: BufRead, B: AsRef<Build<A>>> Reader<A, R, B> {
                 (ref ns, Event::Start(ref e)) | (ref ns, Event::Empty(ref e)) if is_owl(ns) => {
                     match e.local_name().as_ref() {
                         b"Ontology" => {
+                            // The ontology's IRIs are taken as written, never
+                            // expanded or resolved.
                             let s = get_attr_value_str(&mut self.r.reader, e, b"ontologyIRI")?;
+                            let v = get_attr_value_str(&mut self.r.reader, e, b"versionIRI")?;
+                            let iri = s.as_deref().map(|s| self.r.build.as_ref().iri(s));
+                            let viri = v.map(|v| self.r.build.as_ref().iri(v));
                             if let Some(s) = s {
                                 self.r.mapping.set_default(&s);
                                 self.r.base_iri = Some(s);
                             }
-                            let iri = get_iri_value_for(&mut self.r, e, b"ontologyIRI")?;
-                            let viri = get_iri_value_for(&mut self.r, e, b"versionIRI")?;
                             return Ok(Some(StreamComponent::Component(AnnotatedComponent::new(
                                 OntologyID { iri, viri },
                                 BTreeSet::new(),
@@ -1649,6 +1652,19 @@ pub mod test {
             .collect();
         assert_eq!(prefixes.len(), 6);
         assert!(prefixes.contains(&("o".to_string(), "http://www.example.com/iri#".to_string())));
+    }
+
+    #[test]
+    fn ontology_iris_are_taken_as_written() {
+        let ont_s = r#"<?xml version="1.0"?>
+<Ontology xmlns="http://www.w3.org/2002/07/owl#" ontologyIRI="rel/o.owl" versionIRI="rel/v.owl">
+    <Declaration><Class IRI="http://example.org/o#A"/></Declaration>
+</Ontology>"#;
+        let (o, _) = read_ok(&mut ont_s.as_bytes());
+        let o: SetOntology<RcStr> = o.into();
+        let id = o.i().the_ontology_id_or_default();
+        assert_eq!(id.iri.as_deref(), Some("rel/o.owl"));
+        assert_eq!(id.viri.as_deref(), Some("rel/v.owl"));
     }
 
     #[test]

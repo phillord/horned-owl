@@ -1,6 +1,6 @@
 // OWL Manchester Syntax — class-expression sub-grammar
-// Terminals from bcp47.pest (BCP47_LanguageTag), rfc3987.pest (RFC3987_Iri),
-// and sparql.pest (SPARQL_PnameLn / SPARQL_PnameNs).
+// Terminals from bcp47.pest (BCP47_LanguageTag) and sparql.pest
+// (SPARQL_PnameLn / SPARQL_PnameNs).
 
 WHITESPACE = _{ " " | "\t" | "\n" | "\r" }
 // COMMENT must NOT consume the `# General axioms` sentinel: that exact marker
@@ -11,7 +11,11 @@ COMMENT    = _{ !"# General axioms" ~ "#" ~ (!"\n" ~ !"\r" ~ ANY)* }
 
 QuotedString   = ${ "\"" ~ (!"\"" ~ ("\\\\" | "\\\"" | ANY))* ~ "\"" }
 LanguageTag    = ${ "@" ~ BCP47_LanguageTag }
-FullIRI        = ${ "<" ~ RFC3987_Iri ~ ">" }
+// A full IRI is every character from `<` to the next `>`, so long as none is
+// white space as Java's `Character.isWhitespace` judges it.
+FullIRI        = ${ "<" ~ FullIRIText ~ ">" }
+FullIRIText    = @{ (!(">" | JavaWhiteSpace) ~ ANY)* }
+JavaWhiteSpace = _{ '\u{09}'..'\u{0D}' | '\u{1C}'..'\u{20}' | "\u{1680}" | '\u{2000}'..'\u{2006}' | '\u{2008}'..'\u{200A}' | "\u{2028}" | "\u{2029}" | "\u{205F}" | "\u{3000}" }
 AbbreviatedIRI =  { SPARQL_PnameLn | PrefixIRI }
 // A prefix name standing alone, `idsfor:`, names the prefix's own IRI. A section
 // keyword is never one, and neither is the bare `:`.

@@ -37,6 +37,7 @@ pub mod adaptor;
 pub mod curie;
 pub mod error;
 pub mod io;
+pub(crate) mod java_char;
 pub mod model;
 pub mod normalize;
 pub mod ontology;

@@ -548,9 +548,16 @@ impl<A: ForIRI> AsManchester<A> for ClassExpression<A> {}
 // SWRL atoms and arguments (for native `Rule:` output).
 // ---------------------------------------------------------------------------
 
+/// A rule variable: `?` and its local name when its namespace is `urn:swrl:var#`
+/// or `urn:swrl#`, and `?` and its full IRI otherwise.
 impl<A: ForIRI> Display for Manchester<'_, Variable<A>, A> {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
-        write!(f, "?{}", Manchester(&self.0.0, self.1, PhantomData::<A>))
+        let iri: &str = &self.0.0;
+        let split = crate::io::ofn::writer::ncname_suffix_index(iri).unwrap_or(iri.len());
+        match iri.split_at(split) {
+            ("urn:swrl:var#" | "urn:swrl#", name) => write!(f, "?{name}"),
+            _ => write!(f, "?<{iri}>"),
+        }
     }
 }
 impl<A: ForIRI> AsManchester<A> for Variable<A> {}

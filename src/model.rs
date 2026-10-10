@@ -171,6 +171,25 @@ impl<A: ForIRI> IRI<A> {
     pub fn underlying(&self) -> A {
         self.0.clone()
     }
+
+    /// Whether this IRI is absolute, as [`is_absolute_iri`] judges it.
+    pub fn is_absolute(&self) -> bool {
+        is_absolute_iri(self.as_ref())
+    }
+}
+
+/// Whether `iri` is absolute: it has a colon, and every character before its
+/// first colon is a letter, a digit, `.`, `+` or `-`. A letter or a digit is
+/// one as Java's `Character` judges a UTF-16 code unit, so a character beyond
+/// the Basic Multilingual Plane is neither; an IRI that starts with its colon
+/// is absolute.
+pub fn is_absolute_iri(iri: &str) -> bool {
+    let Some(colon) = iri.find(':') else {
+        return false;
+    };
+    iri[..colon]
+        .encode_utf16()
+        .all(|unit| crate::java_char::is_letter_or_digit(unit) || matches!(unit, 0x2E | 0x2B | 0x2D))
 }
 
 impl<A: ForIRI> Deref for IRI<A> {
@@ -2286,6 +2305,21 @@ mod test {
         let iri = build.iri("http://www.example.com");
 
         assert_eq!(String::from(iri), "http://www.example.com");
+    }
+
+    #[test]
+    fn absolute_iris() {
+        // Letters and decimal digits of any script in the Basic Multilingual
+        // Plane, `.`, `+` and `-` may come before the first colon.
+        for iri in ["http://a", "urn:x", ":c", "1a.b+c-d:e", "\u{AA}:x", "\u{660}:x", "\u{E9}t\u{E9}:x"] {
+            assert!(is_absolute_iri(iri), "{iri}");
+        }
+        // A superscript digit, a letter number and a letter beyond the plane
+        // are neither letters nor digits.
+        for iri in ["a.owl#C", "", "a/b:c", "a b:c", "_:b", "{x}:y", "\u{B2}:x", "\u{2160}:x", "\u{1D49C}:x"] {
+            assert!(!is_absolute_iri(iri), "{iri}");
+        }
+        assert!(Build::new_rc().iri("http://a").is_absolute());
     }
 
     #[test]

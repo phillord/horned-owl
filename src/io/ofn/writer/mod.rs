@@ -33,7 +33,6 @@ pub use self::as_functional::set_write_xsd_string;
 pub use self::as_functional::AsFunctional;
 pub use self::as_functional::Functional;
 pub use self::as_functional::Style;
-use self::as_functional::percent_encode_iri;
 
 const RDFS_LABEL: &str = "http://www.w3.org/2000/01/rdf-schema#label";
 
@@ -576,7 +575,7 @@ pub fn write_stream<A: ForIRI, AA: ForIndex<A>, W: Write>(
         match item? {
             StreamComponent::Prefix(name, iri) => {
                 let _ = mapping.add_prefix(&name, &iri);
-                writeln!(write, "Prefix({name}:=<{}>)", percent_encode_iri(&iri))?;
+                writeln!(write, "Prefix({name}:=<{iri}>)")?;
             }
             StreamComponent::Component(ac) => {
                 let ac: &AnnotatedComponent<A> = ac.borrow();
@@ -1052,7 +1051,7 @@ fn xml_name_char(c: u32) -> bool {
 
 /// OWLAPI `XMLUtils.getNCNameSuffixIndex`: where the local part begins, or `None`
 /// when the whole string is the namespace.
-fn ncname_suffix_index(s: &str) -> Option<usize> {
+pub(crate) fn ncname_suffix_index(s: &str) -> Option<usize> {
     let b = s.as_bytes();
     if b.len() > 1 && b[0] == b'_' && b[1] == b':' {
         return None;

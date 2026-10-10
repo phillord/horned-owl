@@ -807,9 +807,11 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
                 // These triples define axioms and are pattern matched
                 // along with the simple triples. This makes much of
                 // my documentation slightly wrong.
-                // A chain is stated of an inverse's node as of a named property.
+                // A chain is stated of an inverse's node as of a named property,
+                // and a key of a class expression's node as of a named class.
                 [_, Term::OWL(VOWL::DisjointWith), _]
                 | [_, Term::OWL(VOWL::EquivalentClass), _]
+                | [_, Term::OWL(VOWL::HasKey), _]
                 | [_, Term::OWL(VOWL::InverseOf), _]
                 | [_, Term::OWL(VOWL::PropertyChainAxiom), _]
                 | [_, Term::RDFS(VRDFS::SubClassOf), _] => {
@@ -2986,12 +2988,19 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
                         t.position(),
                     )),
                 },
-                [class, Term::OWL(VOWL::HasKey), Term::BNode(bnodeid)] => {
-                    self.claim_list_annotations(class, VOWL::HasKey, bnodeid);
+                // The list may be empty (`rdf:nil`): a key of no properties.
+                [
+                    class,
+                    Term::OWL(VOWL::HasKey),
+                    seq @ (Term::BNode(_) | Term::RDF(VRDF::Nil) | Term::Iri(_)),
+                ] => {
+                    if let Term::BNode(bnodeid) = seq {
+                        self.claim_list_annotations(class, VOWL::HasKey, bnodeid);
+                    }
                     ok_some! {
                         {
-                            let vpe: Option<Vec<PropertyExpression<_>>> = self.bnode_seq
-                                .remove(bnodeid)?
+                            let vpe: Option<Vec<PropertyExpression<_>>> = self
+                                .retrieve_to_list(seq, |slf, id| slf.bnode_seq.remove(id))?
                                 .into_iter()
                                 .map(|pr| self.distinguish_retrieve_property_kind(&pr, ic))
                                 .collect();

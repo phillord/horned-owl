@@ -108,7 +108,11 @@ OwlapiNodeID       = @{ ASCII_ALPHA ~ ASCII_ALPHANUMERIC* ~ !("(" | OfnTokenChar
 
 //
 
-FullIRI        = ${ LCHEVRON ~ RFC3987_Iri ~ RCHEVRON }
+// A full IRI is every character between `<` and the next `>`, white space and
+// line breaks included, taken as it stands: it need be neither absolute nor
+// well formed.
+FullIRI        = ${ LCHEVRON ~ FullIRIText ~ RCHEVRON }
+FullIRIText    = @{ (!RCHEVRON ~ ANY)* }
 PrefixName     =  { SPARQL_PnameNs }
 // NOT the spec's `PNAME_LN`. OWLAPI's functional-syntax reader does not tokenize
 // by the OWL 2 `PN_LOCAL` production: `CustomTokenizer.readTextualToken`
