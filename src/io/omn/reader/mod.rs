@@ -158,7 +158,8 @@ pub fn read<
     let ctx = Context::with_decls(build, &prefixes, &declarations);
     // Of two components that differ only in typing a string `xsd:string`, the
     // ontology holds the first.
-    let mut ontology: crate::io::first_stated::FirstStated<A, O> = Default::default();
+    let mut ontology: crate::io::first_stated::FirstStated<A, O> =
+        crate::io::first_stated::FirstStated::new(config.hold_ontology_annotations);
 
     for child in children {
         match child.as_rule() {

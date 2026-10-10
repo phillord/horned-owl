@@ -1862,7 +1862,7 @@ fn parse_swrl_atom<A: ForIRI>(atom: Pair<Rule>, ctx: &Context<'_, A>) -> Result<
                 } else if second_is_lit || pred_iri.as_ref().is_some_and(|i| ctx.is_data_prop(i)) {
                     Ok(Atom::DataPropertyAtom {
                         pred: DataProperty(bare()?),
-                        args: (swrl_darg(&kinds[0])?, swrl_darg(&kinds[1])?),
+                        args: (swrl_iarg(&kinds[0])?, swrl_darg(&kinds[1])?),
                     })
                 } else {
                     Ok(Atom::ObjectPropertyAtom {

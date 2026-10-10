@@ -500,7 +500,7 @@ impl<A: ForIRI, V: Visit<A>> Walk<A, V> {
             }
             Atom::DataPropertyAtom { pred, args } => {
                 self.data_property(pred);
-                self.darg(&args.0);
+                self.iarg(&args.0);
                 self.darg(&args.1);
             }
             Atom::DataRangeAtom { pred, arg } => {

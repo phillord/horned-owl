@@ -215,10 +215,11 @@ pub fn read<A: ForIRI, B: AsRef<Build<A>>, O: MutableOntology<A> + Default, R: B
     bufread: &mut R,
     config: ParserConfiguration<A, B>,
 ) -> Result<(O, PrefixMapping), HornedError> {
-    let mut reader = Reader::new(bufread, config);
     // Of two components that differ only in typing a string `xsd:string`, the
     // ontology holds the first.
-    let mut ont: crate::io::first_stated::FirstStated<A, O> = Default::default();
+    let mut ont: crate::io::first_stated::FirstStated<A, O> =
+        crate::io::first_stated::FirstStated::new(config.hold_ontology_annotations);
+    let mut reader = Reader::new(bufread, config);
 
     for item in reader.by_ref() {
         match item? {

@@ -3,7 +3,7 @@ use std::io::BufRead;
 use curie::PrefixMapping;
 
 use crate::error::HornedError;
-use crate::io::ParserConfiguration;
+use crate::io::{HoldOntologyAnnotations, ParserConfiguration};
 use crate::model::Build;
 use crate::model::ForIRI;
 use crate::model::MutableOntology;
@@ -19,11 +19,13 @@ pub use self::lexer::{OwlFunctionalLexer, Rule};
 struct Context<'a, A: ForIRI> {
     build: &'a Build<A>,
     mapping: &'a PrefixMapping,
+    /// Which of its annotations the ontology holds.
+    hold_ontology_annotations: Option<HoldOntologyAnnotations<A>>,
 }
 
 impl<'a, A: ForIRI> Context<'a, A> {
     fn new(build: &'a Build<A>, mapping: &'a PrefixMapping) -> Self {
-        Self { build, mapping }
+        Self { build, mapping, hold_ontology_annotations: None }
     }
 }
 
@@ -37,7 +39,10 @@ pub fn read<
     config: ParserConfiguration<A, B>,
 ) -> Result<(O, PrefixMapping), HornedError> {
     let prefixes = PrefixMapping::default();
-    let ctx = Context::new(config.build.as_ref(), &prefixes);
+    let ctx = Context {
+        hold_ontology_annotations: config.hold_ontology_annotations,
+        ..Context::new(config.build.as_ref(), &prefixes)
+    };
 
     // FIXME: implement iterative parser (this is possible in )
     let mut doc = String::new();

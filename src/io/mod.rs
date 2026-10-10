@@ -15,7 +15,7 @@ use self::rdf::reader::{ConcreteRDFOntology, IncompleteParse};
 use crate::error::HornedError;
 use crate::ontology::indexed::ForIndex;
 use crate::{
-    model::{Build, ForIRI, IRI},
+    model::{Annotation, Build, ForIRI, IRI},
     ontology::{component_mapped::ComponentMappedOntology, set::SetOntology},
 };
 
@@ -139,6 +139,10 @@ impl<A: ForIRI> AsRef<Build<A>> for Build<A> {
     }
 }
 
+/// The annotations an ontology holds of itself, given every one a reader
+/// adds to it, in the order it adds them.
+pub type HoldOntologyAnnotations<A> = fn(Vec<Annotation<A>>) -> Vec<Annotation<A>>;
+
 /// Settings shared by every format's `read`. Generic over how it holds its
 /// `Build` (`B`): `&Build<A>` to share one interning table across several
 /// parses, or an owned `Build<A>` for a one-off parse with nothing to
@@ -177,6 +181,11 @@ pub struct ParserConfiguration<A: ForIRI, B: AsRef<Build<A>> = Build<A>> {
     /// no interning identity to preserve, so a cheap refcount-bump clone
     /// per recursive parse is enough.
     pub catalog: Option<std::rc::Rc<horned_catalog::Catalog>>,
+    /// Which of the annotations of the ontology a document states it holds.
+    /// `None` (the default) holds the first of any two equal ones and the
+    /// first of any two with one property and one value. The OFN, OWX, OMN
+    /// and RDF readers consult it.
+    pub hold_ontology_annotations: Option<HoldOntologyAnnotations<A>>,
     _marker: std::marker::PhantomData<A>,
 }
 
@@ -191,6 +200,7 @@ impl<A: ForIRI, B: AsRef<Build<A>>> ParserConfiguration<A, B> {
             local_only: false,
             input_format: None,
             catalog: None,
+            hold_ontology_annotations: None,
             _marker: std::marker::PhantomData,
         }
     }

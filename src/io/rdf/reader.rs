@@ -594,6 +594,8 @@ pub struct OntologyParser<
     ann_map: HashMap<[Term<A>; 3], Vec<BTreeSet<Annotation<A>>>>,
     // The owl:Annotation nodes not yet read, under the source each names: the
     // node, or the ontology's IRI, one of whose annotations each annotates.
+    // The owl:Axiom blocks reifying a statement about a named ontology are
+    // among the ontology's.
     annotation_nodes: AnnotationNodes<A>,
     // Blank nodes stated `owl:inverseOf` a named property: what an inverse in
     // a list says, which two lists naming one inverse by different nodes share.
@@ -610,6 +612,18 @@ pub struct OntologyParser<
     // expression the axiom states, and the unannotated axioms such a triple's
     // annotated axioms stand for, which go once the parse is done.
     copied_targets: HashSet<[Term<A>; 3]>,
+    // The statements about the ontology restored from the blocks that reify
+    // them: each makes its annotation bare.
+    restored_header: HashSet<[Term<A>; 3]>,
+    // The owl:Axiom blocks reifying a statement about a named ontology: the
+    // statement as each states it, and the block's node.
+    header_blocks: Vec<([Term<A>; 3], BNode<A>)>,
+    // The annotations of the ontology, in the order they are read; the
+    // ontology takes those its configuration holds once the parse is done.
+    ontology_annotations: Vec<Annotation<A>>,
+    // The bare copies of the ontology's annotations given after those it
+    // reads: a statement's, or what a header block reifies.
+    header_copies: Vec<Copy<A>>,
     bare_twins: Vec<Component<A>>,
     // The ontology's header nodes, named or blank: every subject typed
     // `owl:Ontology` and every subject and object of `owl:imports`. What any
@@ -684,6 +698,10 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
             list_copies: d!(),
             claimed_lists: d!(),
             copied_targets: d!(),
+            restored_header: d!(),
+            header_blocks: d!(),
+            ontology_annotations: d!(),
+            header_copies: d!(),
             ontology_nodes: d!(),
             ontology_node: d!(),
             bare_twins: d!(),
@@ -1223,6 +1241,29 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
 
         for (k, v) in self.take_bnode_groups() {
             let pos = v.1;
+            // A block reifying a statement about a named ontology is one of the
+            // nodes annotating the ontology, as an owl:Annotation node naming it
+            // is: the annotation it names takes the annotations of the first of
+            // them that names it, and no other. Its statement is restored when
+            // the document does not state it.
+            let header = match v.as_slice() {
+                [
+                    [_, Term::OWL(VOWL::AnnotatedProperty), p],
+                    [_, Term::OWL(VOWL::AnnotatedSource), sb @ Term::Iri(_)],
+                    [_, Term::OWL(VOWL::AnnotatedTarget), ob],
+                    [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Axiom)],
+                    ..,
+                ] if self.ontology_nodes.contains(sb) => {
+                    Some(self.config.build.as_ref().substitute_term([sb.clone(), p.clone(), ob.clone()]))
+                }
+                _ => None,
+            };
+            if let Some(key) = header {
+                self.header_blocks.push((key.clone(), k.clone()));
+                self.annotation_nodes.entry(key[0].clone()).or_default().push((k, v));
+                reified.push((key, pos));
+                continue;
+            }
             match v.as_slice() {
                 [
                     [_, Term::OWL(VOWL::AnnotatedProperty), p], //:
@@ -1328,7 +1369,10 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
     }
 
     /// `anns`, the annotations `source` states, each carrying the annotations
-    /// the `owl:Annotation` nodes naming `source` state of it.
+    /// the `owl:Annotation` nodes naming `source` state of it, or, for an
+    /// ontology, the `owl:Axiom` blocks reifying its statements too. Of several
+    /// nodes naming one annotation, the first read annotates it, and the rest
+    /// are left unread.
     fn annotate_annotations(
         &mut self,
         source: &Term<A>,
@@ -1346,7 +1390,7 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
                 [_, Term::OWL(VOWL::AnnotatedProperty), p],
                 [_, Term::OWL(VOWL::AnnotatedSource), _],
                 [_, Term::OWL(VOWL::AnnotatedTarget), ob],
-                [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Annotation)],
+                [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Annotation | VOWL::Axiom)],
                 nested @ ..,
             ] = v.as_slice()
             else {
@@ -1354,7 +1398,7 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
                 continue;
             };
             let annotated = self.annotation(&[Term::BNode(node.clone()), p.clone(), ob.clone()])?;
-            match anns.iter().position(|a| a.ap == annotated.ap && a.av == annotated.av) {
+            match anns.iter().position(|a| a.ap == annotated.ap && same_value(&a.av, &annotated.av)) {
                 Some(i) if !claimed[i] => {
                     claimed[i] = true;
                     let nested = self.annotations_of(&Term::BNode(node), nested)?;
@@ -1412,6 +1456,18 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
         let mut add: Vec<PosTriple<A>> = Vec::new();
         let mut retyped: HashMap<[Term<A>; 3], Term<A>> = HashMap::default();
         for (key, pos) in reified {
+            // A statement about the ontology is restored as it stands, and only
+            // when the document states it with neither typing of its literal;
+            // the annotation it makes is read bare.
+            if self.ontology_nodes.contains(&key[0]) {
+                let other = Self::other_string_typing(self.config.build.as_ref(), &key);
+                if !stated.contains(&key) && other.is_none_or(|o| !stated.contains(&o)) {
+                    stated.insert(key.clone());
+                    self.restored_header.insert(key.clone());
+                    add.push(PosTriple(key, pos));
+                }
+                continue;
+            }
             // A blank-node subject that describes an individual takes the
             // statement among its own; one that describes a construct, a class
             // expression, is the axiom's own node, and what it names is taken
@@ -3427,7 +3483,7 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
                         Atom::DataPropertyAtom {
                             pred: self.convert_to_dp(pred)?,
                             args: (
-                                self.retrieve_to_dargument(arg1)?,
+                                self.retrieve_to_iargument(arg1)?,
                                 self.retrieve_to_dargument(arg2)?,
                             )
                         }
@@ -3709,15 +3765,18 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
                 // declare annotation properties for ontology annotations
                 [s @ Term::Iri(iri), _, o] if self.ontology_nodes.contains(s) => {
                     let ann = BTreeSet::from([self.annotation(t.triple())?]);
-                    // Only an annotation whose value is a literal carries the
-                    // annotations stated of it; one whose value is an IRI or an
-                    // anonymous individual is read bare.
+                    // Only an annotation the document states, whose value is a
+                    // literal, carries the annotations stated of it; one whose
+                    // value is an IRI or an anonymous individual is read bare,
+                    // and so is one restored from a block that reifies it.
                     let ann = match o {
-                        Term::Literal(_) => self.annotate_annotations(&Term::Iri(iri.clone()), ann)?,
+                        Term::Literal(_) if !self.restored_header.contains(t.triple()) => {
+                            self.annotate_annotations(&Term::Iri(iri.clone()), ann)?
+                        }
                         _ => ann,
                     };
                     for ann in ann {
-                        self.o.insert(OntologyAnnotation(ann));
+                        self.ontology_annotations.push(ann);
                     }
                 }
                 [Term::Iri(iri), Term::RDFS(rdfs), _] if rdfs.is_builtin() => {
@@ -3753,7 +3812,7 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
                         _ => ann,
                     };
                     for ann in ann {
-                        self.o.insert(OntologyAnnotation(ann));
+                        self.ontology_annotations.push(ann);
                     }
                 }
                 continue;
@@ -4032,6 +4091,25 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
         for component in std::mem::take(&mut self.bare_twins) {
             self.o.remove(&AnnotatedComponent { component, ann: BTreeSet::new() });
         }
+        let mut annotations = std::mem::take(&mut self.ontology_annotations);
+        for copy in std::mem::take(&mut self.header_copies) {
+            let key = match copy {
+                Copy::Statement(key) => Some(key),
+                Copy::Block(label) => {
+                    self.header_blocks.iter().find(|(_, node)| node.0 == label).map(|(key, _)| key.clone())
+                }
+            };
+            if let Some(key) = key {
+                annotations.push(self.annotation(&key)?);
+            }
+        }
+        let annotations = match self.config.hold_ontology_annotations {
+            Some(hold) => hold(annotations),
+            None => crate::io::first_stated::first_of_each(annotations),
+        };
+        for a in annotations {
+            self.o.insert(OntologyAnnotation(a));
+        }
         self.state = OntologyParserState::Parse;
         Ok(())
     }
@@ -4206,6 +4284,47 @@ pub struct StatementOrder {
     /// `xsd:string`: a `Triple` holds that literal and the untyped one alike,
     /// and an ontology sorts them apart.
     pub typed_strings: std::collections::HashSet<usize>,
+    /// The bare copies of its annotations the reader gives an ontology after
+    /// the annotations it reads of it, in order.
+    pub header_copies: Vec<HeaderCopy>,
+}
+
+/// A bare copy of an annotation of an ontology: of the literal statement at a
+/// position, or of what the `owl:Axiom` block with a label reifies, as the
+/// block states it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum HeaderCopy {
+    Statement(usize),
+    Block(String),
+}
+
+/// A [`HeaderCopy`] as the parser reads it: the statement, or the block by
+/// its node's label.
+#[derive(Clone, Debug)]
+enum Copy<A: ForIRI> {
+    Statement([Term<A>; 3]),
+    Block(A),
+}
+
+/// Whether two annotation values are one value: a literal typed `xsd:string`
+/// is the untyped literal of its text.
+fn same_value<A: ForIRI>(a: &AnnotationValue<A>, b: &AnnotationValue<A>) -> bool {
+    const XSD_STRING: &str = "http://www.w3.org/2001/XMLSchema#string";
+    let text = |v: &AnnotationValue<A>| -> Option<String> {
+        match v {
+            AnnotationValue::Literal(Literal::Simple { literal }) => Some(literal.clone()),
+            AnnotationValue::Literal(Literal::Datatype { literal, datatype_iri })
+                if datatype_iri.as_ref() == XSD_STRING =>
+            {
+                Some(literal.clone())
+            }
+            _ => None,
+        }
+    };
+    match (text(a), text(b)) {
+        (Some(x), Some(y)) => x == y,
+        _ => a == b,
+    }
 }
 
 /// Read the statements of a document another reader has already parsed, in
@@ -4220,7 +4339,7 @@ pub fn read_statements<A: ForIRI, AA: ForIndex<A>, B: AsRef<Build<A>>>(
 ) -> Result<(ConcreteRDFOntology<A, AA>, IncompleteParse<A>), HornedError> {
     let typed_strings = &order.typed_strings;
     let build = config.build.as_ref();
-    let triples = statements
+    let triples: Vec<PosTriple<A>> = statements
         .into_iter()
         .enumerate()
         .map(|(i, t)| {
@@ -4237,7 +4356,16 @@ pub fn read_statements<A: ForIRI, AA: ForIndex<A>, B: AsRef<Build<A>>>(
             PosTriple([s, p, o], pos)
         })
         .collect();
+    let header_copies = order
+        .header_copies
+        .iter()
+        .filter_map(|copy| match copy {
+            HeaderCopy::Statement(i) => triples.get(*i).map(|t| Copy::Statement(t.0.clone())),
+            HeaderCopy::Block(label) => Some(Copy::Block(A::from(label.clone()))),
+        })
+        .collect();
     let mut parser: OntologyParser<A, AA, ConcreteRDFOntology<A, AA>, B> = OntologyParser::new(triples, config);
+    parser.header_copies = header_copies;
     parser.keep_labels = true;
     parser.axiom_rank = order.axiom_nodes.iter().enumerate().map(|(i, n)| (A::from(n.clone()), i)).collect();
     parser.annotation_rank =
@@ -4826,6 +4954,107 @@ mod test {
             let nested: Vec<_> = anns[0].ann.iter().map(|n| n.av.clone()).collect();
             assert_eq!(nested, vec![AnnotationValue::Literal(Literal::Simple { literal: expect.into() })]);
         }
+    }
+
+    #[test]
+    fn an_ontology_annotation_takes_the_annotations_of_the_first_node_naming_it() {
+        // An owl:Axiom block reifying a statement about the ontology names the
+        // annotation it makes, as an owl:Annotation node does, and a literal
+        // typed `xsd:string` names the untyped one. Of the nodes naming one
+        // annotation, the first read annotates it. An annotation whose value is
+        // an IRI is read bare, and so is one restored from its block. Each
+        // block with a literal target gives the ontology a bare copy of what it
+        // reifies, as it states it, after the annotations read.
+        use oxrdf::Literal as OxLiteral;
+        let nn = |s: &str| NamedNode::new_unchecked(s);
+        let bn = |s: &str| BlankNode::new_unchecked(s);
+        let owl = |l: &str| nn(&format!("http://www.w3.org/2002/07/owl#{l}"));
+        let rdfs = |l: &str| nn(&format!("http://www.w3.org/2000/01/rdf-schema#{l}"));
+        let rdf_type = nn("http://www.w3.org/1999/02/22-rdf-syntax-ns#type");
+        let (o, see) = (nn("http://example.com/o"), nn("http://example.com/see"));
+        let lit = OxLiteral::new_simple_literal;
+        let mut statements = vec![
+            Triple::new(o.clone(), rdf_type.clone(), owl("Ontology")),
+            Triple::new(o.clone(), rdfs("comment"), lit("c")),
+            Triple::new(o.clone(), rdfs("seeAlso"), see.clone()),
+        ];
+        let mut typed_strings = std::collections::HashSet::new();
+        let nodes: [(&str, &str, NamedNode, oxrdf::Term, bool, &str); 5] = [
+            ("ax1", "Axiom", rdfs("comment"), lit("c").into(), true, "typed block"),
+            ("ax2", "Axiom", rdfs("comment"), lit("c").into(), false, "untyped block"),
+            ("an", "Annotation", rdfs("comment"), lit("c").into(), true, "node"),
+            ("ax3", "Axiom", rdfs("seeAlso"), see.clone().into(), false, "on the IRI"),
+            ("ax4", "Axiom", owl("versionInfo"), lit("unstated").into(), false, "on the unstated"),
+        ];
+        for (node, kind, property, target, typed, label) in nodes {
+            statements.extend([
+                Triple::new(bn(node), rdf_type.clone(), owl(kind)),
+                Triple::new(bn(node), owl("annotatedSource"), o.clone()),
+                Triple::new(bn(node), owl("annotatedProperty"), property),
+            ]);
+            if typed {
+                typed_strings.insert(statements.len());
+            }
+            statements.extend([
+                Triple::new(bn(node), owl("annotatedTarget"), target),
+                Triple::new(bn(node), rdfs("label"), lit(label)),
+            ]);
+        }
+        let read = |annotation_nodes: &[&str], axiom_nodes: &[&str]| -> Vec<String> {
+            let b = Build::new_rc();
+            let order = StatementOrder {
+                axiom_nodes: axiom_nodes.iter().map(|n| n.to_string()).collect(),
+                annotation_nodes: annotation_nodes.iter().map(|n| n.to_string()).collect(),
+                typed_strings: typed_strings.clone(),
+                header_copies: axiom_nodes
+                    .iter()
+                    .filter(|n| **n != "ax3")
+                    .map(|n| HeaderCopy::Block(n.to_string()))
+                    .collect(),
+            };
+            let (ont, _) = read_statements::<RcStr, RcAnnotatedComponent, _>(
+                statements.clone(),
+                ParserConfiguration::new(&b),
+                &order,
+            )
+            .unwrap();
+            let ont: ComponentMappedOntology<RcStr, RcAnnotatedComponent> = ont.into();
+            let text = |av: &AnnotationValue<RcStr>| match av {
+                AnnotationValue::Literal(Literal::Simple { literal }) => literal.to_string(),
+                AnnotationValue::Literal(Literal::Datatype { literal, .. }) => format!("{literal}^^string"),
+                AnnotationValue::IRI(iri) => iri.to_string(),
+                av => panic!("{av:?}"),
+            };
+            let mut anns: Vec<String> = ont
+                .i()
+                .component_for_kind(ComponentKind::OntologyAnnotation)
+                .map(|ac| match &ac.component {
+                    Component::OntologyAnnotation(OntologyAnnotation(a)) => {
+                        let nested: Vec<String> = a.ann.iter().map(|n| text(&n.av)).collect();
+                        format!("{} {} {nested:?}", a.ap.0, text(&a.av))
+                    }
+                    c => panic!("{c:?}"),
+                })
+                .collect();
+            anns.sort();
+            anns
+        };
+        let comment = "http://www.w3.org/2000/01/rdf-schema#comment";
+        let rest = [
+            "http://www.w3.org/2000/01/rdf-schema#seeAlso http://example.com/see []".to_string(),
+            "http://www.w3.org/2002/07/owl#versionInfo unstated []".to_string(),
+        ];
+        // The node is read first, and the first block read states the literal
+        // untyped, as the ontology does: its copy is the annotation read, bare.
+        let mut expect = vec![format!("{comment} c [\"node\"]")];
+        expect.extend(rest.clone());
+        assert_eq!(read(&["an", "ax1", "ax2", "ax3", "ax4"], &["ax2", "ax1", "ax3", "ax4"]), expect);
+        // The typed block is read first in both orders: it annotates the
+        // annotation, and its copy, typed, stays beside it.
+        let mut expect =
+            vec![format!("{comment} c [\"typed block\"]"), format!("{comment} c^^string []")];
+        expect.extend(rest);
+        assert_eq!(read(&["ax1", "an", "ax2", "ax3", "ax4"], &["ax1", "ax2", "ax3", "ax4"]), expect);
     }
 
     #[test]

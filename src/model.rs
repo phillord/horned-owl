@@ -2115,7 +2115,7 @@ pub enum Atom<A> {
     },
     DataPropertyAtom {
         pred: DataProperty<A>,
-        args: (DArgument<A>, DArgument<A>),
+        args: (IArgument<A>, DArgument<A>),
     },
     DataRangeAtom {
         pred: DataRange<A>,

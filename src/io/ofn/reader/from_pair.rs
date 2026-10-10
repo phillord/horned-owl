@@ -548,9 +548,9 @@ impl<A: ForIRI> FromPair<A> for Atom<A> {
             Rule::AtomDataProperty => {
                 let mut pairs = inner.into_inner();
                 let pred = FromPair::from_pair(pairs.next().unwrap(), ctx)?;
-                let d1 = DArgument::from_pair(pairs.next().unwrap(), ctx)?;
-                let d2 = DArgument::from_pair(pairs.next().unwrap(), ctx)?;
-                let args = (d1, d2);
+                let i = IArgument::from_pair(pairs.next().unwrap(), ctx)?;
+                let d = DArgument::from_pair(pairs.next().unwrap(), ctx)?;
+                let args = (i, d);
                 Ok(Atom::DataPropertyAtom { pred, args })
             }
             Rule::AtomBuiltIn => {
@@ -963,7 +963,8 @@ impl<A: ForIRI, O: MutableOntology<A> + Ontology<A> + Default> FromPair<A>
 
         // Of two annotations or axioms that differ only in typing a string
         // `xsd:string`, the ontology holds the first.
-        let mut ontology: crate::io::first_stated::FirstStated<A, O> = Default::default();
+        let mut ontology: crate::io::first_stated::FirstStated<A, O> =
+            crate::io::first_stated::FirstStated::new(ctx.hold_ontology_annotations);
         let mut ontology_id = OntologyID::default();
 
         // Parse ontology IRI and Version IRI if any
@@ -1051,7 +1052,10 @@ where
     fn from_pair_unchecked(pair: Pair<Rule>, ctx: &Context<'_, A>) -> Result<Self> {
         let mut pairs = pair.into_inner();
         let prefixes = PrefixMapping::from_pair(pairs.next().unwrap(), ctx)?;
-        let context = Context::new(ctx.build, &prefixes);
+        let context = Context {
+            hold_ontology_annotations: ctx.hold_ontology_annotations,
+            ..Context::new(ctx.build, &prefixes)
+        };
         MutableOntologyWrapper::from_pair(pairs.next().unwrap(), &context)
             .map(|ont| (ont, prefixes))
     }
@@ -1349,26 +1353,43 @@ mod tests {
 
     #[test]
     fn data_property_atom() {
+        // The subject is an individual argument, a variable or an individual,
+        // and the object a data argument.
         let build = Build::<String>::new();
         let mut mapping = PrefixMapping::default();
         mapping.add_prefix("o", "https://example.com/").unwrap();
-        let txt = "DataPropertyAtom(o:d Variable(o:x) \"Literal String\")";
-
-        let expected = Atom::DataPropertyAtom {
-            pred: build.data_property("https://example.com/d"),
-            args: (
-                DArgument::Variable(build.variable("https://example.com/x")),
-                DArgument::Literal(Literal::Simple {
-                    literal: String::from("Literal String"),
-                }),
+        let cases = [
+            (
+                "DataPropertyAtom(o:d Variable(o:x) \"Literal String\")",
+                Atom::DataPropertyAtom {
+                    pred: build.data_property("https://example.com/d"),
+                    args: (
+                        IArgument::Variable(build.variable("https://example.com/x")),
+                        DArgument::Literal(Literal::Simple {
+                            literal: String::from("Literal String"),
+                        }),
+                    ),
+                },
             ),
-        };
-        let pair = OwlFunctionalLexer::lex(Rule::Atom, txt)
-            .unwrap()
-            .next()
-            .unwrap();
-        let actual = Atom::from_pair(pair, &Context::new(&build, &mapping)).unwrap();
-        pretty_assertions::assert_eq!(actual, expected);
+            (
+                "DataPropertyAtom(o:d o:i Variable(o:y))",
+                Atom::DataPropertyAtom {
+                    pred: build.data_property("https://example.com/d"),
+                    args: (
+                        IArgument::Individual(build.named_individual("https://example.com/i").into()),
+                        DArgument::Variable(build.variable("https://example.com/y")),
+                    ),
+                },
+            ),
+        ];
+        for (txt, expected) in cases {
+            let pair = OwlFunctionalLexer::lex(Rule::Atom, txt)
+                .unwrap()
+                .next()
+                .unwrap();
+            let actual = Atom::from_pair(pair, &Context::new(&build, &mapping)).unwrap();
+            pretty_assertions::assert_eq!(actual, expected, "{txt}");
+        }
     }
 
     /// Every bubo-generated `.ofn` fixture must describe the same ontology as

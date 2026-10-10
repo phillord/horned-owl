@@ -523,7 +523,7 @@ impl<A: ForIRI, V: VisitMut<A>> WalkMut<A, V> {
             }
             Atom::DataPropertyAtom { pred, args } => {
                 self.data_property(pred);
-                self.darg(&mut args.0);
+                self.iarg(&mut args.0);
                 self.darg(&mut args.1);
             }
             Atom::DataRangeAtom { pred, arg } => {
