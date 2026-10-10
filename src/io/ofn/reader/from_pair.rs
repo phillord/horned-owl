@@ -961,7 +961,9 @@ impl<A: ForIRI, O: MutableOntology<A> + Ontology<A> + Default> FromPair<A>
         let mut pairs = pair.into_inner();
         let mut pair = pairs.next().unwrap();
 
-        let mut ontology: O = Default::default();
+        // Of two annotations or axioms that differ only in typing a string
+        // `xsd:string`, the ontology holds the first.
+        let mut ontology: crate::io::first_stated::FirstStated<A, O> = Default::default();
         let mut ontology_id = OntologyID::default();
 
         // Parse ontology IRI and Version IRI if any
@@ -1000,7 +1002,7 @@ impl<A: ForIRI, O: MutableOntology<A> + Ontology<A> + Default> FromPair<A>
             }
         }
 
-        Ok(MutableOntologyWrapper(ontology, Default::default()))
+        Ok(MutableOntologyWrapper(ontology.into_inner(), Default::default()))
     }
 }
 

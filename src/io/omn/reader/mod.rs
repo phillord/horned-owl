@@ -156,7 +156,9 @@ pub fn read<
 
     // Pass 2: build the ontology under a prefix-aware, declaration-aware context.
     let ctx = Context::with_decls(build, &prefixes, &declarations);
-    let mut ontology: O = Default::default();
+    // Of two components that differ only in typing a string `xsd:string`, the
+    // ontology holds the first.
+    let mut ontology: crate::io::first_stated::FirstStated<A, O> = Default::default();
 
     for child in children {
         match child.as_rule() {
@@ -264,5 +266,5 @@ pub fn read<
         }
     }
 
-    Ok((ontology, prefixes))
+    Ok((ontology.into_inner(), prefixes))
 }

@@ -216,7 +216,9 @@ pub fn read<A: ForIRI, B: AsRef<Build<A>>, O: MutableOntology<A> + Default, R: B
     config: ParserConfiguration<A, B>,
 ) -> Result<(O, PrefixMapping), HornedError> {
     let mut reader = Reader::new(bufread, config);
-    let mut ont: O = Default::default();
+    // Of two components that differ only in typing a string `xsd:string`, the
+    // ontology holds the first.
+    let mut ont: crate::io::first_stated::FirstStated<A, O> = Default::default();
 
     for item in reader.by_ref() {
         match item? {
@@ -228,7 +230,7 @@ pub fn read<A: ForIRI, B: AsRef<Build<A>>, O: MutableOntology<A> + Default, R: B
         }
     }
 
-    Ok((ont, reader.r.mapping))
+    Ok((ont.into_inner(), reader.r.mapping))
 }
 
 fn decode_expand_curie_maybe<'a, A: ForIRI, R: BufRead, B: AsRef<Build<A>>>(
@@ -582,14 +584,11 @@ from_start! {
             // Finally, we add the unescaped string to the literal we are building.
             literal.push_str(&unescaped_str);
         }
-        // A datatype other than `rdf:PlainLiteral` types the text, and a
-        // language beside it is ignored. Otherwise the text is plain, or
-        // tagged with its language, and is never split at an `@`.
+        // A datatype other than `rdf:PlainLiteral` types the text, `xsd:string`
+        // included, and a language beside it is ignored. Otherwise the text is
+        // plain, or tagged with its language, and is never split at an `@`.
         Ok(
             match (datatype_iri, lang, literal) {
-                (Some(ref datatype_iri), _, literal)
-                    if **datatype_iri == *"http://www.w3.org/2001/XMLSchema#string" =>
-                    Literal::Simple{literal},
                 (Some(datatype_iri), _, literal)
                     if *datatype_iri != *"http://www.w3.org/1999/02/22-rdf-syntax-ns#PlainLiteral" =>
                     Literal::Datatype{literal, datatype_iri},

@@ -20,6 +20,7 @@ use crate::model::DataRange;
 use crate::model::ForIRI;
 use crate::model::Individual;
 use crate::model::Literal;
+use crate::model::NamedOWLEntityKind;
 use crate::model::ObjectPropertyExpression;
 use crate::model::PropertyExpression;
 use crate::model::SubObjectPropertyExpression;
@@ -89,23 +90,23 @@ pub fn write_with_labels<A: ForIRI, AA: ForIndex<A>, W: Write>(
     write_full(write, ont, mapping, extra_labels, import_order, None)
 }
 
-/// Like [`write_with_labels`], plus `closure_declared`: the entity IRIs declared
-/// anywhere in the ontology's imports closure.
+/// Like [`write_with_labels`], plus `declare`: the entities the document
+/// declares although the ontology does not.
 ///
-/// OWLAPI synthesises a `Declaration(...)` for every signature entity that has
-/// none of its own, but skips any entity `isDeclared(…, INCLUDED)` — declared in
-/// the closure. Serialising an import-bearing ontology therefore adds nothing,
-/// while serialising the same ontology with its imports stripped adds one
-/// declaration per entity that lost its declaring import. Pass the closure's
-/// declared entities to reproduce that exactly; pass `None` and no declarations
-/// are added to an ontology that still has imports.
+/// A document declares every entity of its signature that nothing declares,
+/// and what declares an entity, and what the signature holds, reach into the
+/// ontologies it imports. A caller that has read those names the entities
+/// here; an entity the ontology declares itself is declared once. With `None`
+/// the document declares every entity of the ontology's own signature that is
+/// not built in, not illegally punned and not declared, and none at all when
+/// the ontology imports, whose imports may declare them.
 pub fn write_full<A: ForIRI, AA: ForIndex<A>, W: Write>(
     mut write: W,
     ont: &ComponentMappedOntology<A, AA>,
     mapping: Option<&PrefixMapping>,
     extra_labels: Option<&HashMap<String, String>>,
     import_order: Option<&[String]>,
-    closure_declared: Option<&std::collections::HashSet<String>>,
+    declare: Option<&[(NamedOWLEntityKind, String)]>,
 ) -> Result<W, HornedError> {
     // Ensure we have a prefix mapping; the default is a no-op and
     // it's easier than checking every time.
@@ -160,14 +161,14 @@ pub fn write_full<A: ForIRI, AA: ForIndex<A>, W: Write>(
     {
         // The ontology is an unordered set, so `component_for_kind` yields imports
         // in IRI order. When the caller supplies the document's `import_order`,
-        // reorder to match it (ROBOT preserves the source order); otherwise keep
-        // the default order.
+        // reorder to match it; otherwise keep the default order. An import names
+        // its ontology by the full IRI, whatever prefix would abbreviate it.
         let mut imports: Vec<(String, String)> = ont
             .i()
             .component_for_kind(ComponentKind::Import)
             .filter_map(|c| match &c.component {
                 Component::Import(imp) => {
-                    Some((imp.0.as_ref().to_string(), c.as_functional_with_prefixes(mapping).to_string()))
+                    Some((imp.0.as_ref().to_string(), format!("Import(<{}>)", imp.0.as_ref())))
                 }
                 _ => None,
             })
@@ -281,47 +282,48 @@ pub fn write_full<A: ForIRI, AA: ForIndex<A>, W: Write>(
         }
     }
 
-    // `FunctionalSyntaxObjectRenderer.writeDeclarations` synthesises a
-    // `Declaration(...)` for any signature entity that has none of its own —
-    // unless the entity is built in, is illegally punned, or is declared
-    // somewhere in the imports closure. That last check is why converting an
-    // edit file adds nothing (its undeclared entities are declared in the
-    // imports) while merging the closure away and re-serialising adds one
-    // declaration per entity that lost its declaring import: `remove --select
-    // imports` on `hp-edit.owl` is followed by 2192 new declarations.
-    //
-    // `closure_declared` carries that closure when a caller has resolved it. With
-    // no closure supplied we cannot answer `isDeclared(entity, INCLUDED)` for an
-    // ontology that still has imports, so nothing is added there — matching ROBOT
-    // for every import-bearing file, and differing only for a signature entity
-    // declared in no ontology at all.
-    let has_imports = ont
-        .i()
-        .component_for_kind(ComponentKind::Import)
-        .next()
-        .is_some();
-    if !has_imports || closure_declared.is_some() {
-        let illegal = illegal_punnings(&signature);
-        for (iri, kinds) in &signature {
-            if illegal.contains(iri.as_str()) || closure_declared.is_some_and(|c| c.contains(iri)) {
-                continue;
-            }
-            for rank in 0..6 {
-                if kinds & (1 << rank) == 0
-                    || declared.contains(&(rank, iri.clone()))
-                    || is_builtin_entity(rank, iri)
-                {
-                    continue;
-                }
-                let abbreviated = match shrink_valid(mapping, iri) {
-                    Some((prefix, local)) => format!("{prefix}:{local}"),
-                    None => format!("<{iri}>"),
-                };
-                let rendered =
-                    format!("Declaration({}({abbreviated}))", DECL_KEYWORD[rank]);
-                declarations.push((rank, iri.clone(), rendered));
+    // The document declares an entity that has no declaration of its own: each
+    // the caller names, or else each of the signature that is not built in and
+    // not illegally punned, provided the ontology imports nothing that could
+    // declare it.
+    let mut undeclared: Vec<(usize, String)> = Vec::new();
+    match declare {
+        Some(entities) => {
+            for (kind, iri) in entities {
+                undeclared.push((kind_rank(*kind), iri.clone()));
             }
         }
+        None => {
+            let has_imports = ont
+                .i()
+                .component_for_kind(ComponentKind::Import)
+                .next()
+                .is_some();
+            if !has_imports {
+                let illegal = illegal_punnings(&signature);
+                for (iri, kinds) in &signature {
+                    if illegal.contains(iri.as_str()) {
+                        continue;
+                    }
+                    for rank in 0..6 {
+                        if kinds & (1 << rank) != 0 && !is_builtin_entity(rank, iri) {
+                            undeclared.push((rank, iri.clone()));
+                        }
+                    }
+                }
+            }
+        }
+    }
+    for (rank, iri) in undeclared {
+        if !declared.insert((rank, iri.clone())) {
+            continue;
+        }
+        let abbreviated = match shrink_valid(mapping, &iri) {
+            Some((prefix, local)) => format!("{prefix}:{local}"),
+            None => format!("<{iri}>"),
+        };
+        let rendered = format!("Declaration({}({abbreviated}))", DECL_KEYWORD[rank]);
+        declarations.push((rank, iri, rendered));
     }
 
     // The Declaration block is `sortOptionally(ontology.getSignature())`, i.e.
@@ -708,6 +710,18 @@ const SECTION_EMIT_ORDER: [usize; 6] = [3, 1, 2, 4, 0, 5];
 /// Where a section rank falls in [`SECTION_EMIT_ORDER`].
 fn emit_position(rank: usize) -> usize {
     SECTION_EMIT_ORDER.iter().position(|&r| r == rank).unwrap_or(usize::MAX)
+}
+
+/// The section rank of an entity kind.
+fn kind_rank(kind: NamedOWLEntityKind) -> usize {
+    match kind {
+        NamedOWLEntityKind::Class => 0,
+        NamedOWLEntityKind::ObjectProperty => 1,
+        NamedOWLEntityKind::DataProperty => 2,
+        NamedOWLEntityKind::AnnotationProperty => 3,
+        NamedOWLEntityKind::Datatype => 4,
+        NamedOWLEntityKind::NamedIndividual => 5,
+    }
 }
 
 /// The literal's lexical form (dropping any language tag / datatype).
@@ -1885,6 +1899,52 @@ mod test {
     use pretty_assertions::assert_eq;
     use rstest::rstest;
     use std::path::PathBuf;
+
+    #[test]
+    fn an_import_names_its_ontology_by_the_full_iri() {
+        use crate::model::MutableOntology;
+        let b = crate::model::Build::new_rc();
+        let mut o: ComponentMappedOntology<RcStr, AnnotatedComponent<RcStr>> = Default::default();
+        o.insert(crate::model::Import(b.iri("http://purl.obolibrary.org/obo/hp.owl")));
+        let mut mapping = PrefixMapping::default();
+        mapping.add_prefix("obo", "http://purl.obolibrary.org/obo/").unwrap();
+        let text = String::from_utf8(write(Vec::new(), &o, Some(&mapping)).unwrap()).unwrap();
+        assert!(text.contains("Import(<http://purl.obolibrary.org/obo/hp.owl>)\n"), "{text}");
+    }
+
+    #[test]
+    fn a_caller_names_the_entities_an_importing_ontology_declares() {
+        // An ontology that imports declares nothing of its own accord, and
+        // with the entities named declares each once, its own declarations
+        // included.
+        use crate::model::MutableOntology;
+        let b = crate::model::Build::new_rc();
+        let mut o: ComponentMappedOntology<RcStr, AnnotatedComponent<RcStr>> = Default::default();
+        o.insert(crate::model::Import(b.iri("http://www.example.com/other")));
+        o.insert(crate::model::DeclareClass(b.class("http://www.example.com/a#A")));
+        o.insert(crate::model::SubClassOf {
+            sub: b.class("http://www.example.com/a#A").into(),
+            sup: b.class("http://www.example.com/a#B").into(),
+        });
+        let text = |declare: Option<&[(NamedOWLEntityKind, String)]>| {
+            String::from_utf8(write_full(Vec::new(), &o, None, None, None, declare).unwrap()).unwrap()
+        };
+        let declarations = |t: &str| t.lines().filter(|l| l.starts_with("Declaration(")).map(str::to_string).collect::<Vec<_>>();
+        assert_eq!(declarations(&text(None)), ["Declaration(Class(<http://www.example.com/a#A>))"]);
+        let named = [
+            (NamedOWLEntityKind::Class, "http://www.example.com/a#A".to_string()),
+            (NamedOWLEntityKind::Class, "http://www.example.com/a#B".to_string()),
+            (NamedOWLEntityKind::Datatype, "http://www.example.com/a#d".to_string()),
+        ];
+        assert_eq!(
+            declarations(&text(Some(&named))),
+            [
+                "Declaration(Class(<http://www.example.com/a#A>))",
+                "Declaration(Class(<http://www.example.com/a#B>))",
+                "Declaration(Datatype(<http://www.example.com/a#d>))",
+            ]
+        );
+    }
 
     #[test]
     fn write_stream_writes_prefixes_then_ontology() {
