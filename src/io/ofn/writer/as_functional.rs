@@ -467,14 +467,11 @@ derive_nary_axiom!(A, EquivalentClasses<A>, EquivalentClasses);
 derive_nary_axiom!(A, EquivalentDataProperties<A>, EquivalentDataProperties);
 derive_nary_axiom!(A, EquivalentObjectProperties<A>, EquivalentObjectProperties);
 
+// A disjoint union is written whatever the number of its members: one member
+// makes `DisjointUnion(:U :B)` and none `DisjointUnion(:U )`, each of them an
+// axiom with a meaning of its own (`U ≡ B`, `U ≡ owl:Nothing`).
 impl<'a, A: ForIRI> Display for Functional<'a, DisjointUnion<A>, A> {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
-        // Same >= 2 grammar minimum as the other n-ary axioms above, but on
-        // the trailing `Vec<ClassExpression>` only -- the leading `Class` is
-        // a fixed single field, not part of the n-ary operand list.
-        if self.0.1.len() < 2 {
-            return Ok(());
-        }
         if let Some(annotations) = self.2 {
             write!(
                 f,

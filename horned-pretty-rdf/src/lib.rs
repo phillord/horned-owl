@@ -1042,13 +1042,7 @@ where
         let description_open = if let Some(typ) = mt.find_typed() {
             if let PTerm::NamedNode(nn) = &typ.object {
                 triples_rendered.push(typ);
-                let mut bs = self.bytes_start_iri(nn);
-                if let PNamedOrBlankNode::BlankNode(bn) = &typ.subject
-                    && chunk.object_count(bn) > 1
-                {
-                    bs.push_attribute(("rdf:nodeID", Self::nodeid_attr_value(bn)));
-                }
-                Some(bs)
+                Some(self.bytes_start_iri(nn))
             } else {
                 None
             }
@@ -1063,9 +1057,12 @@ where
             PNamedOrBlankNode::NamedNode(n) => {
                 description_open.push_attribute(("rdf:about", n.iri.as_ref()))
             }
-            PNamedOrBlankNode::BlankNode(_) => {
-                // Empty
+            // A blank node more than one statement refers to is named, and
+            // each of them refers to it by that name.
+            PNamedOrBlankNode::BlankNode(bn) if chunk.object_count(bn) > 1 => {
+                description_open.push_attribute(("rdf:nodeID", Self::nodeid_attr_value(bn)));
             }
+            PNamedOrBlankNode::BlankNode(_) => {}
         }
 
         // TODO: Shares lots of code with format_property
@@ -1375,6 +1372,9 @@ where
     }
 
     pub fn format_chunk(&mut self, mut chunk: PChunk<A>) -> Result<(), io::Error> {
+        // How many blank nodes have been put back in a row, each to be nested
+        // where it is the object.
+        let mut waiting = 0;
         loop {
             let optet = chunk.pop_front();
             if let Some(et) = optet {
@@ -1382,12 +1382,21 @@ where
                 if let PNamedOrBlankNode::BlankNode(bn) = et.subject() {
                     // And there is later triple which will reference this as an object
                     if chunk.object_count(bn) == 1 {
-                        // Don't render it here, but later
-                        chunk.push_back(et);
-                        continue;
+                        // Don't render it here, but later -- unless every node
+                        // left has been put back since anything was rendered.
+                        // Then they are each other's objects and no other
+                        // node's, so this one is rendered here, under a name
+                        // the node that refers to it uses.
+                        if waiting <= chunk.queue.len() {
+                            chunk.push_back(et);
+                            waiting += 1;
+                            continue;
+                        }
+                        *chunk.bnode_object_count.entry(bn.clone()).or_default() += 1;
                     }
                 }
 
+                waiting = 0;
                 self.format_removed_expanded(&et, &mut chunk)?;
             } else {
                 break;
@@ -2314,5 +2323,51 @@ r###"<?xml version="1.0" encoding="UTF-8"?>
             reparsed.err()
         );
         assert_eq!(reparsed.unwrap().len(), 2);
+    }
+
+    /// Blank nodes that are each other's objects, and no other node's, are
+    /// all written: one of them at the top level under a name the node
+    /// referring to it uses, the rest nested in it.
+    #[test]
+    fn blank_nodes_in_a_cycle_are_written() {
+        let xml = from_nt_prefix(
+            r###"_:a <http://www.w3.org/2002/07/owl#sameAs> _:b .
+_:b <http://www.example.com/iri#p> _:a .
+_:b <http://www.example.com/iri#q> "b" .
+"###,
+            indexmap![
+                "http://www.w3.org/1999/02/22-rdf-syntax-ns#" => "rdf",
+                "http://www.w3.org/2002/07/owl#" => "owl"
+            ],
+        )
+        .unwrap();
+        let reparsed: Vec<oxrdf::Triple> = RdfParser::from_format(oxrdfio::RdfFormat::RdfXml)
+            .for_reader(xml.as_bytes())
+            .map(|q| q.map(oxrdf::Triple::from))
+            .collect::<Result<_, _>>()
+            .unwrap_or_else(|e| panic!("generated XML was not re-parseable:\n{xml}\nerror: {e}"));
+        assert_eq!(reparsed.len(), 3, "{xml}");
+        let object_of = |s: &oxrdf::NamedOrBlankNode, p: &str| {
+            reparsed
+                .iter()
+                .find(|t| &t.subject == s && t.predicate.as_str() == p)
+                .map(|t| t.object.clone())
+                .unwrap_or_else(|| panic!("no {p} statement of {s}:\n{xml}"))
+        };
+        let a = reparsed
+            .iter()
+            .find(|t| t.predicate.as_str() == "http://www.w3.org/2002/07/owl#sameAs")
+            .map(|t| t.subject.clone())
+            .unwrap();
+        let oxrdf::Term::BlankNode(b) = object_of(&a, "http://www.w3.org/2002/07/owl#sameAs") else {
+            panic!("owl:sameAs names no blank node:\n{xml}")
+        };
+        let b = oxrdf::NamedOrBlankNode::BlankNode(b);
+        assert_eq!(object_of(&b, "http://www.example.com/iri#p"), a.clone().into(), "{xml}");
+        assert_eq!(
+            object_of(&b, "http://www.example.com/iri#q"),
+            oxrdf::Literal::new_simple_literal("b").into(),
+            "{xml}"
+        );
     }
 }

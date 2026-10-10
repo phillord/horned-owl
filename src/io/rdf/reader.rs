@@ -2947,16 +2947,20 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
                         }
                     }
                 }
+                // The list may be empty (`rdf:nil`): a disjoint union of no
+                // classes.
                 [
                     subject @ Term::Iri(iri),
                     Term::OWL(VOWL::DisjointUnionOf),
-                    Term::BNode(bnodeid),
+                    seq @ (Term::BNode(_) | Term::RDF(VRDF::Nil) | Term::Iri(_)),
                 ] => {
-                    self.claim_list_annotations(subject, VOWL::DisjointUnionOf, bnodeid);
+                    if let Term::BNode(bnodeid) = seq {
+                        self.claim_list_annotations(subject, VOWL::DisjointUnionOf, bnodeid);
+                    }
                     ok_some! {
                         DisjointUnion(
                             Class(iri.clone()),
-                            self.retrieve_to_ce_seq(bnodeid)?
+                            self.retrieve_to_list(seq, Self::retrieve_to_ce_seq)?
                         ).into()
                     }
                 }
@@ -5551,6 +5555,33 @@ mod test {
         let sub: Vec<_> = ont.i().sub_class_of().collect();
         assert_eq!(sub.len(), 1);
         assert!(matches!(&sub[0].sup, ClassExpression::ObjectOneOf(v) if v.len() == 2));
+    }
+
+    #[test]
+    fn a_disjoint_union_of_an_empty_list_is_read() {
+        let (ont, incomplete) = read_owl1(
+            r#"<owl:Class rdf:about="http://example.com/x#U">
+        <owl:disjointUnionOf rdf:parseType="Collection"/>
+    </owl:Class>
+    <owl:Class rdf:about="http://example.com/x#V">
+        <owl:disjointUnionOf rdf:parseType="Collection">
+            <rdf:Description rdf:about="http://example.com/x#B"/>
+        </owl:disjointUnionOf>
+    </owl:Class>"#,
+        );
+        assert!(incomplete.is_complete(), "{incomplete:?}");
+        let mut unions: Vec<(String, usize)> = ont
+            .iter()
+            .filter_map(|ac| match &ac.component {
+                Component::DisjointUnion(DisjointUnion(c, members)) => Some((c.0.to_string(), members.len())),
+                _ => None,
+            })
+            .collect();
+        unions.sort();
+        assert_eq!(
+            unions,
+            [("http://example.com/x#U".to_string(), 0), ("http://example.com/x#V".to_string(), 1)]
+        );
     }
 
     #[test]
