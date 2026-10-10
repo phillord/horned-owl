@@ -12,7 +12,11 @@ COMMENT    = _{ !"# General axioms" ~ "#" ~ (!"\n" ~ !"\r" ~ ANY)* }
 QuotedString   = ${ "\"" ~ (!"\"" ~ ("\\\\" | "\\\"" | ANY))* ~ "\"" }
 LanguageTag    = ${ "@" ~ BCP47_LanguageTag }
 FullIRI        = ${ "<" ~ RFC3987_Iri ~ ">" }
-AbbreviatedIRI =  { SPARQL_PnameLn }
+AbbreviatedIRI =  { SPARQL_PnameLn | PrefixIRI }
+// A prefix name standing alone, `idsfor:`, names the prefix's own IRI. A section
+// keyword is never one, and neither is the bare `:`.
+PrefixIRI      = ${ !SectionKeyword ~ SPARQL_PnPrefix ~ ":" ~ !SPARQL_PnLocal }
+SectionKeyword = @{ ^"DifferentIndividuals:" | ^"EquivalentProperties:" | ^"AnnotationProperty:" | ^"DisjointProperties:" | ^"EquivalentClasses:" | ^"SubPropertyChain:" | ^"Characteristics:" | ^"DisjointClasses:" | ^"DisjointUnionOf:" | ^"ObjectProperty:" | ^"SameIndividual:" | ^"DifferentFrom:" | ^"SubPropertyOf:" | ^"DataProperty:" | ^"DisjointWith:" | ^"EquivalentTo:" | ^"Annotations:" | ^"Individual:" | ^"SubClassOf:" | ^"InverseOf:" | ^"Datatype:" | ^"Ontology:" | ^"Domain:" | ^"HasKey:" | ^"Import:" | ^"Prefix:" | ^"SameAs:" | ^"Class:" | ^"Facts:" | ^"Range:" | ^"Types:" | ^"Rule:" }
 // A bare local name (no prefix), resolved against the DEFAULT (empty) prefix.
 // Tried LAST: `prefix:local` and `:local` match AbbreviatedIRI first; only a
 // colon-less name reaches SimpleIRI. Writers (ours, OWL-API, Protégé) emit bare
@@ -34,8 +38,9 @@ IRI            =  { FullIRI | AbbreviatedIRI | SimpleIRI }
 // groups is irrelevant. WITHIN the numeric group, ordered-choice requires
 // float → decimal → integer: an integer is a prefix of a decimal is a prefix of
 // a float, so the most specific must be tried first (else `2.5` matches `2` as
-// an IntegerLiteral and orphans `.5`). FloatingPointLiteral requires the §2.5
-// `f`/`F` suffix; DecimalLiteral requires a `.`; IntegerLiteral is bare digits.
+// an IntegerLiteral and orphans `.5`). A number ending in `f`/`F` is a float;
+// any other with a point, an exponent or a `d`/`D` suffix is a decimal, written
+// as it is (`.5`, `1.`, `3e2`, `1d`); bare digits are an integer.
 // OWL-API/Protégé compat: bare true/false as xsd:boolean (not strict §2.5)
 BooleanLiteral            = ${ ("true" | "false") ~ NameBoundary }
 Literal                   =  { TypedLiteral | StringLiteralWithLanguage | StringLiteralNoLanguage | BooleanLiteral | FloatingPointLiteral | DecimalLiteral | IntegerLiteral }
@@ -47,8 +52,14 @@ StringLiteralNoLanguage   =  { QuotedString }
 // (ordered-choice already handles that, but the guard documents intent and is
 // cheap). Exponent uses `e`/`E`; float suffix is `f`/`F`.
 Exponent              = @{ ("e" | "E") ~ ("+" | "-")? ~ ASCII_DIGIT+ }
-FloatingPointLiteral  = @{ ("+" | "-")? ~ ( ASCII_DIGIT+ ~ ("." ~ ASCII_DIGIT+)? | "." ~ ASCII_DIGIT+ ) ~ Exponent? ~ ("f" | "F") }
-DecimalLiteral        = @{ ("+" | "-")? ~ ASCII_DIGIT+ ~ "." ~ ASCII_DIGIT+ }
+Mantissa              = _{ ASCII_DIGIT+ ~ ("." ~ ASCII_DIGIT*)? | "." ~ ASCII_DIGIT+ }
+FloatingPointLiteral  = @{ ("+" | "-")? ~ Mantissa ~ Exponent? ~ ("f" | "F") }
+DecimalLiteral        = @{
+    ("+" | "-")? ~ ( Mantissa ~ Exponent? ~ ("d" | "D")
+                   | ASCII_DIGIT+ ~ "." ~ ASCII_DIGIT* ~ Exponent?
+                   | "." ~ ASCII_DIGIT+ ~ Exponent?
+                   | ASCII_DIGIT+ ~ Exponent )
+}
 IntegerLiteral        = @{ ("+" | "-")? ~ ASCII_DIGIT+ }
 
 // ---- entry point ------------------------------------------------------------

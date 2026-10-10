@@ -602,6 +602,12 @@ pub struct OntologyParser<
     // `owl:annotatedTarget`: copies of the axiom's own list, read once the
     // axiom takes the annotations keyed by their content.
     list_copies: Vec<BNode<A>>,
+    // The base triples restored from reifications that name, as their
+    // `owl:annotatedTarget`, a node of their own describing the class
+    // expression the axiom states, and the unannotated axioms such a triple's
+    // annotated axioms stand for, which go once the parse is done.
+    copied_targets: HashSet<[Term<A>; 3]>,
+    bare_twins: Vec<Component<A>>,
     atom: HashMap<Term<A>, Atom<A>>,
     variable: HashMap<IRI<A>, Variable<A>>,
 
@@ -609,6 +615,11 @@ pub struct OntologyParser<
     // anonymous individual each one turns out to name.
     bnode_order: HashMap<A, usize>,
     bnode_names: std::cell::RefCell<HashMap<A, AnonymousIndividual<A>>>,
+    // Whether an anonymous individual is named by its blank node's own label
+    // (see `read_statements`), and the order the axiom nodes' annotations are
+    // read in.
+    keep_labels: bool,
+    axiom_rank: HashMap<A, usize>,
 
     // How far through the parse have we got?
     state: OntologyParserState,
@@ -642,6 +653,8 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
             config,
             bnode_order,
             bnode_names: d!(),
+            keep_labels: false,
+            axiom_rank: d!(),
 
             triple,
             simple: d!(),
@@ -656,6 +669,8 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
             annotation_nodes: d!(),
             inverse_nodes: d!(),
             list_copies: d!(),
+            copied_targets: d!(),
+            bare_twins: d!(),
             atom: d!(),
             variable: d!(),
             state: OntologyParserState::New,
@@ -678,9 +693,13 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
             return i;
         }
         let b = self.config.build.as_ref();
-        let i = match b.next_bnode_label() {
-            Some(label) => b.anon(label),
-            None => b.anon_renumbered(),
+        let i = if self.keep_labels {
+            b.anon(bn.0.as_ref())
+        } else {
+            match b.next_bnode_label() {
+                Some(label) => b.anon(label),
+                None => b.anon_renumbered(),
+            }
         };
         self.bnode_names.borrow_mut().insert(bn.0.clone(), i.clone());
         i
@@ -1113,18 +1132,9 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
         // The owl:Annotation nodes first. Each annotates one annotation of the
         // source it names, and reading that source's annotations looks them up.
         for (k, v) in self.take_bnode_groups() {
-            match v.as_slice() {
-                [
-                    [_, Term::OWL(VOWL::AnnotatedProperty), _],
-                    [_, Term::OWL(VOWL::AnnotatedSource), source @ (Term::BNode(_) | Term::Iri(_))],
-                    [_, Term::OWL(VOWL::AnnotatedTarget), _],
-                    [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Annotation)],
-                    ..,
-                ] => {
-                    let source = source.clone();
-                    self.annotation_nodes.entry(source).or_default().push((k, v));
-                }
-                _ => {
+            match self.annotation_node(v) {
+                Ok((source, v)) => self.annotation_nodes.entry(source).or_default().push((k, v)),
+                Err(v) => {
                     self.bnode.insert(k, v);
                 }
             }
@@ -1179,6 +1189,47 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
 
         self.restore_reified_triples(reified);
         Ok(())
+    }
+
+    /// An `owl:Annotation` node's source, with the node's statements naming
+    /// that source alone; or the statements back, when the node is not one.
+    ///
+    /// A node can name several sources: an annotation on an axiom written as
+    /// pairwise statements is reified once per statement, and the annotation's
+    /// own annotations are written once, naming every reification. Such a node
+    /// annotates the reification whose annotations are read first, in the
+    /// order `read_statements` was given, and no other.
+    fn annotation_node(&self, mut v: VPosTriple<A>) -> Result<(Term<A>, VPosTriple<A>), VPosTriple<A>> {
+        let sources: Vec<Term<A>> = v
+            .iter()
+            .filter_map(|t| match t {
+                [_, Term::OWL(VOWL::AnnotatedSource), s @ (Term::BNode(_) | Term::Iri(_))] => Some(s.clone()),
+                _ => None,
+            })
+            .collect();
+        if sources.len() > 1 {
+            let rank = |s: &Term<A>| match s {
+                Term::BNode(b) => self.axiom_rank.get(&b.0).copied(),
+                _ => None,
+            };
+            let Some(first) = sources.iter().filter(|s| rank(s).is_some()).min_by_key(|s| rank(s)).cloned() else {
+                return Err(v);
+            };
+            v.retain(|t| !matches!(t, [_, Term::OWL(VOWL::AnnotatedSource), s] if *s != first));
+        }
+        match v.as_slice() {
+            [
+                [_, Term::OWL(VOWL::AnnotatedProperty), _],
+                [_, Term::OWL(VOWL::AnnotatedSource), source @ (Term::BNode(_) | Term::Iri(_))],
+                [_, Term::OWL(VOWL::AnnotatedTarget), _],
+                [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Annotation)],
+                ..,
+            ] => {
+                let source = source.clone();
+                Ok((source, v))
+            }
+            _ => Err(v),
+        }
     }
 
     /// The annotations `triples` state of `source`, each carrying the
@@ -1251,9 +1302,22 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
     /// triples. Without this its 51,582 mappings reach the update as nothing but
     /// anonymous individuals and the component comes out empty.
     ///
-    /// Only a triple between named things is restored: a blank-node subject or
-    /// object belongs to a construct held elsewhere — a class expression, an RDF
-    /// list — which the translation reaches by its own route.
+    /// A triple about an anonymous individual is restored too: one whose
+    /// subject is a blank node describing nothing but an individual joins that
+    /// node's statements, and one whose object is a blank node that states
+    /// nothing of its own names the individual that node is. Any other
+    /// blank-node subject or object belongs to a construct held elsewhere — a
+    /// class expression, an RDF list — which the translation reaches by its own
+    /// route.
+    ///
+    /// The exception is a reification whose `owl:annotatedTarget` is a node of
+    /// its own describing a class expression, where the axiom's triple names
+    /// another node describing the same one: an `owl:Axiom` block that spells
+    /// the axiom's class expression out again in place of naming its node. Its
+    /// triple is restored with that node as the object, so the axiom is read
+    /// from it with the block's annotations; and the unannotated axiom the
+    /// axiom's own triple states goes once the parse is done, so the axiom is
+    /// left annotated.
     fn restore_reified_triples(&mut self, reified: Vec<([Term<A>; 3], u64)>) {
         if reified.is_empty() {
             return;
@@ -1262,7 +1326,26 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
             self.simple.iter().map(|t| t.triple().clone()).collect();
         let mut add: Vec<PosTriple<A>> = Vec::new();
         for (key, pos) in reified {
-            if matches!(key[0], Term::BNode(_)) || matches!(key[2], Term::BNode(_)) {
+            if let Term::BNode(subject) = &key[0] {
+                self.restore_individual_statement(subject.clone(), key, pos);
+                continue;
+            }
+            if let Term::BNode(target) = &key[2]
+                && !self.bnode.contains_key(target)
+                && !self.bnode_seq.contains_key(target)
+                && Self::individual_object(&key)
+            {
+                if stated.insert(key.clone()) {
+                    add.push(PosTriple(key, pos));
+                }
+                continue;
+            }
+            if let Term::BNode(target) = &key[2] {
+                let construct = self.bnode.contains_key(target) && !self.bnode_seq.contains_key(target);
+                if construct && stated.insert(key.clone()) {
+                    self.copied_targets.insert(key.clone());
+                    add.push(PosTriple(key, pos));
+                }
                 continue;
             }
             if stated.insert(key.clone()) {
@@ -1286,6 +1369,48 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
             self.simple.push(t);
         }
         self.simple.extend(it);
+    }
+
+    /// Put back `triple`, a reified statement about the blank node `subject`
+    /// that the document does not state, among that node's statements, when
+    /// it and they all describe an anonymous individual. A group that is
+    /// started here takes the position of the block that named the triple.
+    fn restore_individual_statement(&mut self, subject: BNode<A>, triple: [Term<A>; 3], pos: u64) {
+        if self.bnode_seq.contains_key(&subject) || !Self::individual_statement(&triple) {
+            return;
+        }
+        let group = self.bnode.entry(subject).or_insert_with(|| VPosTriple(vec![], pos));
+        if group.0.contains(&triple) || !group.0.iter().all(Self::individual_statement) {
+            return;
+        }
+        group.0.push(triple);
+        group.0.sort();
+    }
+
+    /// Whether the object of `t` is an individual: what `owl:sameAs` and
+    /// `owl:differentFrom` relate, or the value of a property or an annotation.
+    fn individual_object(t: &[Term<A>; 3]) -> bool {
+        match t {
+            [_, Term::OWL(VOWL::SameAs | VOWL::DifferentFrom), _] => true,
+            [_, Term::RDFS(rdfs), _] => rdfs.is_builtin(),
+            [_, Term::Iri(pred), _] => !is_reserved_iri(pred),
+            _ => false,
+        }
+    }
+
+    /// Whether `t` says something of an anonymous individual: types it, makes
+    /// it the same as or different from an individual, or relates it by a
+    /// property or an annotation.
+    fn individual_statement(t: &[Term<A>; 3]) -> bool {
+        match t {
+            [_, Term::RDF(VRDF::Type), Term::Iri(cls)] => !is_reserved_iri(cls),
+            [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::NamedIndividual | VOWL::Thing | VOWL::Nothing)] => true,
+            [_, Term::RDF(VRDF::Type), Term::BNode(_)] => true,
+            [_, Term::OWL(VOWL::SameAs | VOWL::DifferentFrom), _] => true,
+            [_, Term::RDFS(rdfs), _] => rdfs.is_builtin(),
+            [_, Term::Iri(pred), _] => !is_reserved_iri(pred),
+            _ => false,
+        }
     }
 
     /// The annotations recorded under the content of the list `id`, the
@@ -1395,23 +1520,24 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
 
         for (this_bnode, v) in std::mem::take(&mut self.bnode) {
             let dr: Result<_, HornedError> = match v.as_slice() {
+                // A connective's list may be empty, `rdf:nil`.
                 [
-                    [_, Term::OWL(VOWL::IntersectionOf), Term::BNode(bnodeid)], //: rustfmt hard line!
+                    [_, Term::OWL(VOWL::IntersectionOf), list @ (Term::BNode(_) | Term::RDF(VRDF::Nil) | Term::Iri(_))], //: rustfmt hard line!
                     [_, Term::RDF(VRDF::Type), Term::RDFS(VRDFS::Datatype)],
                 ] => {
                     ok_some! {
                         DataRange::DataIntersectionOf(
-                            self.retrieve_to_dr_seq(bnodeid)?
+                            self.retrieve_to_list(list, Self::retrieve_to_dr_seq)?
                         )
                     }
                 }
                 [
-                    [_, Term::OWL(VOWL::UnionOf), Term::BNode(bnodeid)], //: rustfmt hard line!
+                    [_, Term::OWL(VOWL::UnionOf), list @ (Term::BNode(_) | Term::RDF(VRDF::Nil) | Term::Iri(_))], //: rustfmt hard line!
                     [_, Term::RDF(VRDF::Type), Term::RDFS(VRDFS::Datatype)],
                 ] => {
                     ok_some! {
                         DataRange::DataUnionOf(
-                            self.retrieve_to_dr_seq(bnodeid)?
+                            self.retrieve_to_list(list, Self::retrieve_to_dr_seq)?
                         )
                     }
                 }
@@ -1426,12 +1552,12 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
                     }
                 }
                 [
-                    [_, Term::OWL(VOWL::OneOf), Term::BNode(bnode)], //:
+                    [_, Term::OWL(VOWL::OneOf), list @ (Term::BNode(_) | Term::RDF(VRDF::Nil) | Term::Iri(_))], //:
                     [_, Term::RDF(VRDF::Type), Term::RDFS(VRDFS::Datatype)],
                 ] => {
                     ok_some! {
                         DataRange::DataOneOf(
-                            self.retrieve_to_literal_seq(bnode)?
+                            self.retrieve_to_list(list, Self::retrieve_to_literal_seq)?
                         )
                     }
                 }
@@ -1994,6 +2120,7 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
                 AnnotationProperty(a.clone()).into(),
                 AnnotationProperty(b.clone()).into(),
             ))),
+            (None, None) => Ok(None),
             _ => Err(HornedError::invalid(format!(
                 "Types of two properties do not match: {:?} and {:?}",
                 a, b
@@ -2058,8 +2185,10 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
         if !self.config.lax || matches!(pr, Term::BNode(_)) {
             return declared;
         }
+        // A property declared for annotations is read as the filler makes
+        // it, as one declared otherwise is.
         match declared {
-            Some(PropertyExpression::AnnotationProperty(_)) | None => declared,
+            None => declared,
             Some(_) => {
                 let iri = self.convert_to_iri(pr)?;
                 Some(if self.is_class_expression_lax(filler, ic) {
@@ -2086,7 +2215,7 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
             return declared;
         }
         match declared {
-            Some(PropertyExpression::AnnotationProperty(_)) | None => declared,
+            None => declared,
             Some(_) => {
                 let iri = self.convert_to_iri(pr)?;
                 Some(if matches!(value, Term::Literal(_)) {
@@ -2222,17 +2351,18 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
                     [_, Term::OWL(VOWL::OnProperty), pr],
                     [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Restriction)],
                 ] => Ok(self.retrieve_to_ope(pr).map(ClassExpression::ObjectHasSelf)),
+                // A connective's list may be empty, `rdf:nil`.
                 [
-                    [_, Term::OWL(VOWL::IntersectionOf), Term::BNode(bnodeid)], //:
+                    [_, Term::OWL(VOWL::IntersectionOf), list @ (Term::BNode(_) | Term::RDF(VRDF::Nil) | Term::Iri(_))], //:
                     [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Class)],
                 ] => Ok(self
-                    .retrieve_to_ce_seq(bnodeid)
+                    .retrieve_to_list(list, Self::retrieve_to_ce_seq)
                     .map(ClassExpression::ObjectIntersectionOf)),
                 [
-                    [_, Term::OWL(VOWL::UnionOf), Term::BNode(bnodeid)], //:
+                    [_, Term::OWL(VOWL::UnionOf), list @ (Term::BNode(_) | Term::RDF(VRDF::Nil) | Term::Iri(_))], //:
                     [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Class)],
                 ] => Ok(self
-                    .retrieve_to_ce_seq(bnodeid)
+                    .retrieve_to_list(list, Self::retrieve_to_ce_seq)
                     .map(ClassExpression::ObjectUnionOf)),
                 [
                     [_, Term::OWL(VOWL::ComplementOf), tce], //:
@@ -2422,6 +2552,38 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
                         }
                     }
                 }
+                // An unqualified cardinality with a filler all the same, the
+                // shape OWL 1.1 documents wrote, is the qualified one.
+                [
+                    [_, Term::OWL(card @ (VOWL::Cardinality | VOWL::MaxCardinality | VOWL::MinCardinality)), literal], //:
+                    [_, Term::OWL(VOWL::OnClass), tce],              //:
+                    [_, Term::OWL(VOWL::OnProperty), Term::Iri(pr)], //:
+                    [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Restriction)],
+                ] => ok_some! {{
+                    let n = self.convert_to_u32(literal)?;
+                    let ope: ObjectPropertyExpression<A> = pr.into();
+                    let bce: Box<ClassExpression<A>> = self.retrieve_to_ce(tce)?.into();
+                    match card {
+                        VOWL::Cardinality => ClassExpression::ObjectExactCardinality { n, ope, bce },
+                        VOWL::MaxCardinality => ClassExpression::ObjectMaxCardinality { n, ope, bce },
+                        _ => ClassExpression::ObjectMinCardinality { n, ope, bce },
+                    }
+                }},
+                [
+                    [_, Term::OWL(card @ (VOWL::Cardinality | VOWL::MaxCardinality | VOWL::MinCardinality)), literal], //:
+                    [_, Term::OWL(VOWL::OnDataRange), dr],           //:
+                    [_, Term::OWL(VOWL::OnProperty), Term::Iri(pr)], //:
+                    [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Restriction)],
+                ] => ok_some! {{
+                    let n = self.convert_to_u32(literal)?;
+                    let dp: DataProperty<A> = pr.into();
+                    let dr = self.retrieve_to_dr(dr)?;
+                    match card {
+                        VOWL::Cardinality => ClassExpression::DataExactCardinality { n, dp, dr },
+                        VOWL::MaxCardinality => ClassExpression::DataMaxCardinality { n, dp, dr },
+                        _ => ClassExpression::DataMinCardinality { n, dp, dr },
+                    }
+                }},
                 _a => Ok(None),
             };
 
@@ -2856,12 +3018,15 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
                         // does). Such a triple cannot be a property relation, so
                         // OWLAPI reads it as an annotation assertion. In lax mode do
                         // the same rather than failing the whole document.
-                        Ok(None) => match r {
-                            Term::Iri(sub) if self.config.lax => self
+                        Ok(None) => match (r, s) {
+                            (Term::Iri(sub), Term::Literal(_)) if self.config.lax => self
                                 .annotation(t.triple())
                                 .map(|ann| {
                                     Some(AnnotationAssertion { subject: sub.into(), ann }.into())
                                 }),
+                            // Two properties of no known kind relate nothing
+                            // the reader can state; the statement stays unread.
+                            _ if self.config.lax => Ok(None),
                             _ => Err(HornedError::invalid(
                                 "Cannot distinguish the types of {r} and {s}",
                             )),
@@ -2893,12 +3058,15 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
                         // does). Such a triple cannot be a property relation, so
                         // OWLAPI reads it as an annotation assertion. In lax mode do
                         // the same rather than failing the whole document.
-                        Ok(None) => match r {
-                            Term::Iri(sub) if self.config.lax => self
+                        Ok(None) => match (r, s) {
+                            (Term::Iri(sub), Term::Literal(_)) if self.config.lax => self
                                 .annotation(t.triple())
                                 .map(|ann| {
                                     Some(AnnotationAssertion { subject: sub.into(), ann }.into())
                                 }),
+                            // Two properties of no known kind relate nothing
+                            // the reader can state; the statement stays unread.
+                            _ if self.config.lax => Ok(None),
                             _ => Err(HornedError::invalid(
                                 "Cannot distinguish the types of {r} and {s}",
                             )),
@@ -2937,32 +3105,20 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
                 }
                 // Table 18: OWL 1 DL states `EquivalentClasses(C, CE)` for a named
                 // class `C` by attaching the connective or enumeration to `C`
-                // itself. An empty enumeration or union is owl:Nothing, an empty
-                // intersection owl:Thing, a one-member connective its member.
+                // itself. The connective holds the members its list names, however
+                // many: none, one or more.
                 [
                     x @ Term::Iri(_),
                     Term::OWL(op @ (VOWL::IntersectionOf | VOWL::UnionOf | VOWL::OneOf)),
                     seq @ (Term::BNode(_) | Term::RDF(VRDF::Nil) | Term::Iri(_)),
                 ] if self.distinguish_term_kind(x, ic) == Some(NamedOWLEntityKind::Class) => {
-                    let enumeration = matches!(op, VOWL::OneOf);
-                    let intersection = matches!(op, VOWL::IntersectionOf);
                     ok_some! {{
-                        let ce = if enumeration {
-                            let inds = self.retrieve_to_list(seq, Self::retrieve_to_ni_seq)?;
-                            if inds.is_empty() {
-                                self.config.build.as_ref().class(VOWL::Nothing).into()
-                            } else {
-                                ClassExpression::ObjectOneOf(inds)
+                        let ce = match op {
+                            VOWL::OneOf => ClassExpression::ObjectOneOf(self.retrieve_to_list(seq, Self::retrieve_to_ni_seq)?),
+                            VOWL::IntersectionOf => {
+                                ClassExpression::ObjectIntersectionOf(self.retrieve_to_list(seq, Self::retrieve_to_ce_seq)?)
                             }
-                        } else {
-                            let mut ces = self.retrieve_to_list(seq, Self::retrieve_to_ce_seq)?;
-                            match (ces.len(), intersection) {
-                                (0, true) => self.config.build.as_ref().class(VOWL::Thing).into(),
-                                (0, false) => self.config.build.as_ref().class(VOWL::Nothing).into(),
-                                (1, _) => ces.pop()?,
-                                (_, true) => ClassExpression::ObjectIntersectionOf(ces),
-                                (_, false) => ClassExpression::ObjectUnionOf(ces),
-                            }
+                            _ => ClassExpression::ObjectUnionOf(self.retrieve_to_list(seq, Self::retrieve_to_ce_seq)?),
                         };
                         EquivalentClasses(vec![self.retrieve_to_ce(x)?, ce]).into()
                     }}
@@ -3033,9 +3189,13 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
             match axiom? {
                 Some(axiom) => {
                     let axiom: Component<A> = axiom;
+                    let copied = self.copied_targets.contains(t.triple());
                     // Distinct reifications of the same base triple are distinct
                     // annotated axioms; insert each rather than merging.
                     for ann in self.take_anns(t.triple()) {
+                        if copied && !ann.is_empty() {
+                            self.bare_twins.push(axiom.clone());
+                        }
                         self.insert_distinct(AnnotatedComponent {
                             component: axiom.clone(),
                             ann,
@@ -3482,14 +3642,18 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
                     };
                     for triple in v.iter() {
                         if let [_, Term::RDF(VRDF::Type), Term::Iri(cls)] = triple {
-                            self.merge(AnnotatedComponent {
-                                component: ClassAssertion {
-                                    ce: Class(cls.clone()).into(),
-                                    i: ind.clone().into(),
+                            let component: Component<A> =
+                                ClassAssertion { ce: Class(cls.clone()).into(), i: ind.clone().into() }.into();
+                            // Each reification of the type is an annotated axiom
+                            // of its own.
+                            for ann in self.take_anns(triple) {
+                                let ac = AnnotatedComponent { component: component.clone(), ann };
+                                if ac.ann.is_empty() {
+                                    self.merge(ac);
+                                } else {
+                                    self.insert_distinct(ac);
                                 }
-                                .into(),
-                                ann: BTreeSet::new(),
-                            });
+                            }
                             continue;
                         }
                         let base = self.annotation(triple)?;
@@ -3682,6 +3846,9 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
         if self.config.lax {
             phase!("simple_annotations(lax)", self.simple_annotations(true)?);
         }
+        for component in std::mem::take(&mut self.bare_twins) {
+            self.o.remove(&AnnotatedComponent { component, ann: BTreeSet::new() });
+        }
         self.state = OntologyParserState::Parse;
         Ok(())
     }
@@ -3838,6 +4005,28 @@ pub fn parser_with_build<
     config: RDFParserConfiguration<A, B>,
 ) -> Result<OntologyParser<A, AA, O, B>, HornedError> {
     OntologyParser::from_bufread(bufread, config)
+}
+
+/// Read the statements of a document another reader has already parsed, in
+/// the order it made them.
+///
+/// Every blank node that is an anonymous individual is named by its own
+/// label. `axiom_nodes` are the document's axiom nodes, by label, in the order
+/// their annotations are read: an `owl:Annotation` node naming several of them
+/// as its source annotates the first.
+pub fn read_statements<A: ForIRI, AA: ForIndex<A>, B: AsRef<Build<A>>>(
+    statements: impl IntoIterator<Item = Triple>,
+    config: ParserConfiguration<A, B>,
+    axiom_nodes: &[String],
+) -> Result<(ConcreteRDFOntology<A, AA>, IncompleteParse<A>), HornedError> {
+    let triples = statements
+        .into_iter()
+        .map(|t| config.build.as_ref().convert_substitute_triple(t, 0))
+        .collect();
+    let mut parser: OntologyParser<A, AA, ConcreteRDFOntology<A, AA>, B> = OntologyParser::new(triples, config);
+    parser.keep_labels = true;
+    parser.axiom_rank = axiom_nodes.iter().enumerate().map(|(i, n)| (A::from(n.clone()), i)).collect();
+    parser.parse()
 }
 
 /// Read the whole of `bufread` into a `ConcreteRDFOntology`, along with
@@ -4306,6 +4495,39 @@ mod test {
     }
 
     #[test]
+    fn connectives_hold_the_members_their_lists_name() {
+        // An empty or one-member connective is that connective, a named
+        // class's (Table 18) or an anonymous one alike; an empty list is
+        // `rdf:nil`.
+        let (ont, incomplete) = read_owl1(
+            r#"<owl:Class rdf:about="http://example.com/x#B"/>
+    <owl:Class rdf:about="http://example.com/x#EmptyI"><owl:intersectionOf rdf:parseType="Collection"/></owl:Class>
+    <owl:Class rdf:about="http://example.com/x#EmptyO"><owl:oneOf rdf:parseType="Collection"/></owl:Class>
+    <owl:Class rdf:about="http://example.com/x#OneU">
+        <owl:unionOf rdf:parseType="Collection"><owl:Class rdf:about="http://example.com/x#B"/></owl:unionOf>
+    </owl:Class>
+    <owl:Class rdf:about="http://example.com/x#Sub">
+        <rdfs:subClassOf><owl:Class><owl:unionOf rdf:parseType="Collection"/></owl:Class></rdfs:subClassOf>
+    </owl:Class>
+    <owl:DatatypeProperty rdf:about="http://example.com/x#d">
+        <rdfs:range><rdfs:Datatype><owl:oneOf rdf:parseType="Collection"/></rdfs:Datatype></rdfs:range>
+    </owl:DatatypeProperty>
+    <owl:DatatypeProperty rdf:about="http://example.com/x#e">
+        <rdfs:range><rdfs:Datatype><owl:intersectionOf rdf:parseType="Collection"/></rdfs:Datatype></rdfs:range>
+    </owl:DatatypeProperty>"#,
+        );
+        assert!(incomplete.is_complete(), "{incomplete:?}");
+        let defines = |ce: &dyn Fn(&ClassExpression<RcStr>) -> bool| ont.i().equivalent_class().any(|e| e.0.iter().any(ce));
+        assert!(defines(&|ce| *ce == ClassExpression::ObjectIntersectionOf(vec![])));
+        assert!(defines(&|ce| *ce == ClassExpression::ObjectOneOf(vec![])));
+        assert!(defines(&|ce| matches!(ce, ClassExpression::ObjectUnionOf(v) if v.len() == 1)));
+        assert!(ont.i().sub_class_of().any(|sc| sc.sup == ClassExpression::ObjectUnionOf(vec![])));
+        let ranges: Vec<&DataRange<RcStr>> = ont.i().data_property_range().map(|r| &r.dr).collect();
+        assert!(ranges.contains(&&DataRange::DataOneOf(vec![])), "{ranges:?}");
+        assert!(ranges.contains(&&DataRange::DataIntersectionOf(vec![])), "{ranges:?}");
+    }
+
+    #[test]
     fn anonymous_individual_from_a_single_type_triple() {
         let (ont, incomplete) = read_owl1(
             r#"<owl:Class rdf:about="http://example.com/x#C"/>
@@ -4361,6 +4583,52 @@ mod test {
         assert_eq!(ont.i().object_property_assertion().next().unwrap().from, typed);
         assert_eq!(ont.i().data_property_assertion().next().unwrap().from, typed);
         assert!(ont.i().same_individual().next().unwrap().0.contains(&typed));
+    }
+
+    #[test]
+    fn a_reified_statement_of_an_anonymous_individual_needs_no_stated_triple() {
+        // An `owl:Axiom` block means its axiom whether or not the document
+        // states the triple it names, an anonymous individual's included: a
+        // difference whose object is a node stating nothing, and a type of a
+        // node whose other statements describe the same individual.
+        let (ont, incomplete) = read_owl1(
+            r#"<owl:Class rdf:about="http://example.com/x#C"/>
+    <owl:NamedIndividual rdf:about="http://example.com/x#i"/>
+    <rdf:Description rdf:nodeID="t"/>
+    <rdf:Description rdf:nodeID="s">
+        <rdfs:label>s</rdfs:label>
+    </rdf:Description>
+    <owl:Axiom>
+        <owl:annotatedSource rdf:resource="http://example.com/x#i"/>
+        <owl:annotatedProperty rdf:resource="http://www.w3.org/2002/07/owl#differentFrom"/>
+        <owl:annotatedTarget rdf:nodeID="t"/>
+        <rdfs:comment>different</rdfs:comment>
+    </owl:Axiom>
+    <owl:Axiom>
+        <owl:annotatedSource rdf:nodeID="s"/>
+        <owl:annotatedProperty rdf:resource="http://www.w3.org/1999/02/22-rdf-syntax-ns#type"/>
+        <owl:annotatedTarget rdf:resource="http://example.com/x#C"/>
+        <rdfs:comment>typed</rdfs:comment>
+    </owl:Axiom>"#,
+        );
+        assert!(incomplete.is_complete(), "{incomplete:?}");
+        let anonymous = |i: &Individual<RcStr>| matches!(i, Individual::Anonymous(_));
+        let annotated: Vec<_> = ont.i().iter().filter(|ac| !ac.ann.is_empty()).collect();
+        assert_eq!(annotated.len(), 2, "{annotated:?}");
+        assert!(annotated.iter().any(|ac| matches!(&ac.component,
+            Component::DifferentIndividuals(d) if d.0.len() == 2 && d.0.iter().any(anonymous))));
+        let typed = annotated
+            .iter()
+            .find_map(|ac| match &ac.component {
+                Component::ClassAssertion(ca) => Some(ca.i.clone()),
+                _ => None,
+            })
+            .expect("the class assertion");
+        let Individual::Anonymous(typed) = typed else { panic!("{typed:?}") };
+        // The node's own statement stays its individual's.
+        let subject: AnnotationSubject<RcStr> = typed.into();
+        assert!(ont.i().iter().any(|ac| matches!(&ac.component,
+            Component::AnnotationAssertion(a) if a.subject == subject)));
     }
 
     #[test]

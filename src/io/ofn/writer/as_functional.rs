@@ -526,7 +526,41 @@ derive_axiom!(
 derive_axiom!(A, ObjectPropertyDomain<A>, ObjectPropertyDomain(ope, ce));
 derive_axiom!(A, ObjectPropertyRange<A>, ObjectPropertyRange(ope, ce));
 derive_axiom!(A, ReflexiveObjectProperty<A>, ReflexiveObjectProperty(0));
-derive_nary_axiom!(A, SameIndividual<A>, SameIndividual);
+/// The positions of a collection's `len` members in the order they are
+/// written: as they stand, except that a pair is written second member first
+/// unless its first member is the entity whose frame is being written
+/// (`first_is_focus`).
+fn written_order(len: usize, first_is_focus: bool) -> Vec<usize> {
+    if len == 2 && !first_is_focus {
+        vec![1, 0]
+    } else {
+        (0..len).collect()
+    }
+}
+
+// The frame a same-individuals axiom stands in is its first named member's, so
+// a pair whose first member is anonymous is written turned round.
+impl<'a, A: ForIRI> Display for Functional<'a, SameIndividual<A>, A> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
+        let members = &self.0.0;
+        if members.len() < 2 {
+            return Ok(());
+        }
+        let order = written_order(members.len(), matches!(members[0], Individual::Named(_)));
+        let members: Vec<Individual<A>> = order.iter().map(|&i| members[i].clone()).collect();
+        match self.2 {
+            Some(annotations) => write!(
+                f,
+                "SameIndividual({} {})",
+                Functional(annotations, self.1, None),
+                Functional(&members, self.1, None)
+            ),
+            None => write!(f, "SameIndividual({})", Functional(&members, self.1, None)),
+        }
+    }
+}
+
+impl<A: ForIRI> AsFunctional<A> for SameIndividual<A> {}
 derive_axiom!(A, SubClassOf<A>, SubClassOf(sub, sup));
 derive_axiom!(
     A,
@@ -930,6 +964,10 @@ impl<A: ForIRI> Display for Functional<'_, DataRange<A>, A> {
         use DataRange::*;
         match self.0 {
             Datatype(dt) => Functional(dt, self.1, None).fmt(f),
+            // As for classes, a single-operand intersection or union is just
+            // that operand.
+            DataIntersectionOf(dts) if dts.len() == 1 => Functional(&dts[0], self.1, None).fmt(f),
+            DataUnionOf(dts) if dts.len() == 1 => Functional(&dts[0], self.1, None).fmt(f),
             DataIntersectionOf(dts) => {
                 write!(f, "DataIntersectionOf({})", Functional(dts, self.1, None))
             }
@@ -1171,20 +1209,15 @@ impl<A: ForIRI> Display for Functional<'_, Rule<A>, A> {
             write!(f, "DLSafeRule(")?;
         }
 
-        // `FunctionalSyntaxObjectRenderer.write(Collection)` has a special arm for a
-        // collection of EXACTLY TWO: it takes the first element, and unless that one
-        // IS the focused object (the entity whose block is being written) it writes
-        // the SECOND first. An SWRL atom is never the focused object, so a two-atom
-        // body or head always comes out in the opposite order to the one stored.
-        //
-        // UBERON's three rules are the visible case: the RDF list in `mirror/uberon.owl`
-        // runs `BFO_0000050(x,y)`, `BSPO_0000120(y,z)` and ROBOT writes
-        // `Body(BSPO_0000120(y,z) BFO_0000050(x,y))`. Reading that back and writing it
-        // again swaps it once more, which is exactly what `robot convert` does to its
-        // own output — the quirk lives in the renderer, not in the model.
+        // An atom is never the entity of a frame, so a two-atom body or head is
+        // written in the opposite order to the one stored ([`written_order`]).
+        // UBERON's three rules are the visible case: the RDF list in
+        // `mirror/uberon.owl` runs `BFO_0000050(x,y)`, `BSPO_0000120(y,z)`, and the
+        // body is written `Body(BSPO_0000120(y,z) BFO_0000050(x,y))`. Reading that
+        // back and writing it again swaps it once more: the order is the writer's,
+        // not the model's.
         let write_atoms = |f: &mut Formatter<'_>, atoms: &[crate::model::Atom<A>]| {
-            let order: Vec<usize> =
-                if atoms.len() == 2 { vec![1, 0] } else { (0..atoms.len()).collect() };
+            let order = written_order(atoms.len(), false);
             for (i, &ix) in order.iter().enumerate() {
                 if i > 0 {
                     f.write_char(' ')?;
@@ -1381,6 +1414,35 @@ mod tests {
         );
     }
 
+    /// A pair of same individuals whose first member is anonymous stands in no
+    /// named member's frame, and is written turned round; a pair led by a named
+    /// member, and three or more members, are written as they stand.
+    #[test]
+    fn test_ofn_same_individual_pair_led_by_anonymous_is_turned() {
+        let build = Build::new_arc();
+        let named =
+            |s: &str| Individual::from(build.named_individual(format!("http://example.com/{s}")));
+        let anon = |s: &str| Individual::from(build.anon(s));
+        let written =
+            |members: Vec<Individual<_>>| format!("{}", SameIndividual(members).as_functional());
+        assert_eq!(
+            written(vec![anon("_:a"), anon("_:b")]),
+            "SameIndividual(_:b _:a)"
+        );
+        assert_eq!(
+            written(vec![anon("_:a"), named("n")]),
+            "SameIndividual(<http://example.com/n> _:a)"
+        );
+        assert_eq!(
+            written(vec![named("n"), anon("_:a")]),
+            "SameIndividual(<http://example.com/n> _:a)"
+        );
+        assert_eq!(
+            written(vec![anon("_:a"), anon("_:b"), anon("_:c")]),
+            "SameIndividual(_:a _:b _:c)"
+        );
+    }
+
     #[test]
     fn test_ofn_literal_language() {
         let lit = Literal::<String>::Language {
@@ -1567,6 +1629,15 @@ mod tests {
                 Default::default(),
             );
         assert!(reparsed.is_ok(), "reparse failed: {reparsed:?}");
+
+        // So is a single-operand data intersection or union; an empty one
+        // keeps its keyword.
+        let integer = DataRange::Datatype(build.datatype("http://www.w3.org/2001/XMLSchema#integer"));
+        let union = DataRange::DataUnionOf(vec![integer.clone()]);
+        assert_eq!("<http://www.w3.org/2001/XMLSchema#integer>", format!("{}", union.as_functional()));
+        let intersection = DataRange::DataIntersectionOf(vec![integer]);
+        assert_eq!("<http://www.w3.org/2001/XMLSchema#integer>", format!("{}", intersection.as_functional()));
+        assert_eq!("DataUnionOf()", format!("{}", DataRange::<RcStr>::DataUnionOf(vec![]).as_functional()));
     }
 
     #[test]

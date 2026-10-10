@@ -169,16 +169,24 @@ impl<A: ForIRI> FromPair<A> for IRI<A> {
         match inner.as_rule() {
             Rule::AbbreviatedIRI => {
                 let span = inner.as_span();
-                // AbbreviatedIRI = { SPARQL_PnameLn }
+                // AbbreviatedIRI = { SPARQL_PnameLn | PrefixIRI }
                 // SPARQL_PnameLn = ${ SPARQL_PnameNs ~ SPARQL_PnLocal }
                 // SPARQL_PnameNs = ${ SPARQL_PnPrefix? ~ ":" }
-                let mut pname = inner.into_inner().next().unwrap().into_inner();
-                let prefix_part = pname.next().unwrap().into_inner().next();
-                let local = pname.next().unwrap();
-                let curie = Curie::new(
-                    Some(prefix_part.map(|p| p.as_str()).unwrap_or_default()),
-                    local.as_str(),
-                );
+                // PrefixIRI      = ${ !SectionKeyword ~ SPARQL_PnPrefix ~ ":" ~ … }
+                let name = inner.into_inner().next().unwrap();
+                let (prefix, local) = match name.as_rule() {
+                    Rule::PrefixIRI => (name.into_inner().next().unwrap().as_str(), ""),
+                    _ => {
+                        let mut pname = name.into_inner();
+                        let prefix_part = pname.next().unwrap().into_inner().next();
+                        let local = pname.next().unwrap();
+                        (
+                            prefix_part.map(|p| p.as_str()).unwrap_or_default(),
+                            local.as_str(),
+                        )
+                    }
+                };
+                let curie = Curie::new(Some(prefix), local);
                 match ctx.prefixes.expand_curie(&curie) {
                     Ok(s) => Ok(ctx.build.iri(s)),
                     Err(curie::ExpansionError::Invalid) => {
@@ -271,9 +279,17 @@ impl<A: ForIRI> FromPair<A> for Literal<A> {
             }
             // §2.5 bare numeric literals: the lexical text IS the value; the
             // datatype is fixed by the production (integer/decimal/float).
-            Rule::IntegerLiteral => Ok(Literal::Datatype {
-                literal: inner.as_str().to_string(),
-                datatype_iri: ctx.build.iri("http://www.w3.org/2001/XMLSchema#integer"),
+            // An integer is its value as a 32-bit integer prints it (`+7` and
+            // `007` are `7`); one out of that range is a decimal, as written.
+            Rule::IntegerLiteral => Ok(match inner.as_str().parse::<i32>() {
+                Ok(i) => Literal::Datatype {
+                    literal: i.to_string(),
+                    datatype_iri: ctx.build.iri("http://www.w3.org/2001/XMLSchema#integer"),
+                },
+                Err(_) => Literal::Datatype {
+                    literal: inner.as_str().to_string(),
+                    datatype_iri: ctx.build.iri("http://www.w3.org/2001/XMLSchema#decimal"),
+                },
             }),
             Rule::DecimalLiteral => Ok(Literal::Datatype {
                 literal: inner.as_str().to_string(),
@@ -2341,10 +2357,121 @@ mod tests {
         );
     }
 
+    /// A prefix name standing alone names the prefix's own IRI, wherever an IRI
+    /// may stand; a section keyword after it is still a keyword.
+    #[test]
+    fn reads_a_prefix_name_standing_alone() {
+        use crate::ontology::set::SetOntology;
+        use std::io::BufReader;
+
+        let doc = r#"Prefix: idsfor: <http://purl.obolibrary.org/obo/IAO_0000598>
+Prefix: allocatedto: <http://purl.obolibrary.org/obo/IAO_0000597>
+Prefix: idrange: <http://purl.obolibrary.org/obo/ro/idrange/>
+Prefix: xsd: <http://www.w3.org/2001/XMLSchema#>
+
+Ontology: <http://ex/idranges>
+
+Annotations:
+    idsfor: "SINK"
+
+AnnotationProperty: idsfor:
+
+AnnotationProperty: allocatedto:
+
+Datatype: idrange:1
+    Annotations:
+        allocatedto: "ONTOLOGY-CREATOR"
+    EquivalentTo:
+        xsd:integer[>= 0 , <= 999999]
+"#;
+        let b = Build::new_rc();
+        let (o, _): (SetOntology<RcStr>, PrefixMapping) = crate::io::omn::reader::read(
+            BufReader::new(doc.as_bytes()),
+            crate::io::ParserConfiguration::new(&b),
+        )
+        .unwrap();
+        let components: std::collections::BTreeSet<_> =
+            o.iter().map(|ac| ac.component.clone()).collect();
+        let idsfor = b.annotation_property("http://purl.obolibrary.org/obo/IAO_0000598");
+        let allocatedto = b.annotation_property("http://purl.obolibrary.org/obo/IAO_0000597");
+        let range = b.datatype("http://purl.obolibrary.org/obo/ro/idrange/1");
+        assert!(components.contains(&Component::from(DeclareAnnotationProperty(idsfor.clone()))));
+        assert!(
+            components.contains(&Component::from(DeclareAnnotationProperty(
+                allocatedto.clone()
+            )))
+        );
+        assert!(
+            components.contains(&Component::from(OntologyAnnotation(Annotation {
+                ap: idsfor,
+                av: AnnotationValue::Literal(Literal::Simple {
+                    literal: "SINK".into()
+                }),
+                ann: BTreeSet::new(),
+            })))
+        );
+        assert!(components.contains(&Component::from(AnnotationAssertion {
+            subject: AnnotationSubject::IRI(range.0.clone()),
+            ann: Annotation {
+                ap: allocatedto,
+                av: AnnotationValue::Literal(Literal::Simple {
+                    literal: "ONTOLOGY-CREATOR".into()
+                }),
+                ann: BTreeSet::new(),
+            },
+        })));
+        assert!(
+            components
+                .iter()
+                .any(|c| matches!(c, Component::DatatypeDefinition(d) if d.kind == range))
+        );
+    }
+
     /// §2.5 allows bare numeric literals (integer/decimal/float) wherever a
     /// `Literal` is expected — e.g. a facet value `xsd:integer[>= 0]` or a
     /// `DataOneOf { 1, 2.5, 3.0f }`. Previously these hard-failed (the `Literal`
     /// rule only had the quoted/typed/lang forms).
+    /// A bare number in the range of a 32-bit integer is an integer, its value
+    /// printed; any other is a float when it ends in `f`, and a decimal,
+    /// written as it is, when it does not.
+    #[test]
+    fn reads_bare_numbers_by_their_form() {
+        let b = Build::new_rc();
+        let pm = curie::PrefixMapping::default();
+        let ctx = Context::new(&b, &pm);
+        let one_of = ManchesterLexer::lex(
+            Rule::DataRange,
+            "{ +7, 007, -0, 99999999999, 3e2, 1.5E-3, .5, 1., 1d, 1.5D, 1.f }",
+        )
+        .unwrap()
+        .next()
+        .unwrap();
+        let parsed = DataRange::<RcStr>::from_pair(one_of, &ctx).unwrap();
+        let DataRange::DataOneOf(lits) = parsed else {
+            panic!("expected DataOneOf, got {parsed:?}");
+        };
+        let typed = |literal: &str, datatype: &str| Literal::Datatype {
+            literal: literal.to_string(),
+            datatype_iri: b.iri(format!("http://www.w3.org/2001/XMLSchema#{datatype}")),
+        };
+        assert_eq!(
+            lits,
+            vec![
+                typed("7", "integer"),
+                typed("7", "integer"),
+                typed("0", "integer"),
+                typed("99999999999", "decimal"),
+                typed("3e2", "decimal"),
+                typed("1.5E-3", "decimal"),
+                typed(".5", "decimal"),
+                typed("1.", "decimal"),
+                typed("1d", "decimal"),
+                typed("1.5D", "decimal"),
+                typed("1.f", "float"),
+            ]
+        );
+    }
+
     #[test]
     fn reads_bare_numeric_literals() {
         let b = Build::new_rc();

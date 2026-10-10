@@ -582,22 +582,21 @@ from_start! {
             // Finally, we add the unescaped string to the literal we are building.
             literal.push_str(&unescaped_str);
         }
+        // A datatype other than `rdf:PlainLiteral` types the text, and a
+        // language beside it is ignored. Otherwise the text is plain, or
+        // tagged with its language, and is never split at an `@`.
         Ok(
             match (datatype_iri, lang, literal) {
-                (None, None, literal) =>
-                    Literal::Simple{literal},
-                (Some(ref datatype_iri), None, literal)
+                (Some(ref datatype_iri), _, literal)
                     if **datatype_iri == *"http://www.w3.org/2001/XMLSchema#string" =>
                     Literal::Simple{literal},
-                (None, Some(lang), literal) =>
+                (Some(datatype_iri), _, literal)
+                    if *datatype_iri != *"http://www.w3.org/1999/02/22-rdf-syntax-ns#PlainLiteral" =>
+                    Literal::Datatype{literal, datatype_iri},
+                (_, Some(lang), literal) =>
                     Literal::Language{literal, lang},
-                (Some(ref datatype_iri), Some(ref lang), ref literal)
-                    if **datatype_iri == *"http://www.w3.org/1999/02/22-rdf-syntax-ns#PlainLiteral"
-                    => Literal::Language{literal:literal.to_string(), lang:lang.to_string()},
-                (Some(_), Some(_), _)
-                    => return Err(invalid_at!(r.reader.buffer_position(), "Broken literal")),
-                (Some(datatype_iri), None, literal)
-                    => Literal::Datatype{literal, datatype_iri},
+                (_, None, literal) =>
+                    Literal::Simple{literal},
             })
     }
 }
@@ -2312,6 +2311,45 @@ pub mod test {
             AnnotationValue::Literal(l) => assert_eq!(l.literal(), &String::from("A --> B")),
             _ => panic!("expected literal annotation value"),
         }
+    }
+
+    /// `rdf:PlainLiteral` text is plain, or tagged with the language beside
+    /// it, and is never split at an `@`; another datatype types the text, and
+    /// a language beside it is ignored.
+    #[test]
+    fn test_literal_datatype_and_language() {
+        let ont_s = r#"<?xml version="1.0"?>
+<Ontology xmlns="http://www.w3.org/2002/07/owl#" ontologyIRI="http://example.org/l">
+    <AnnotationAssertion><AnnotationProperty IRI="http://example.org/l#p"/><IRI>http://example.org/l#a</IRI><Literal datatypeIRI="http://www.w3.org/1999/02/22-rdf-syntax-ns#PlainLiteral">x@en</Literal></AnnotationAssertion>
+    <AnnotationAssertion><AnnotationProperty IRI="http://example.org/l#p"/><IRI>http://example.org/l#b</IRI><Literal datatypeIRI="http://www.w3.org/1999/02/22-rdf-syntax-ns#PlainLiteral" xml:lang="fr">y</Literal></AnnotationAssertion>
+    <AnnotationAssertion><AnnotationProperty IRI="http://example.org/l#p"/><IRI>http://example.org/l#c</IRI><Literal datatypeIRI="http://www.w3.org/2001/XMLSchema#integer" xml:lang="fr">5</Literal></AnnotationAssertion>
+</Ontology>"#;
+        let (ont, _) = read_ok(&mut ont_s.as_bytes());
+        let b = Build::new_rc();
+        let values: Vec<_> = ont
+            .i()
+            .annotation_assertion()
+            .map(|aa| aa.ann.av.clone())
+            .collect();
+        for want in [
+            Literal::Simple {
+                literal: "x@en".to_string(),
+            },
+            Literal::Language {
+                literal: "y".to_string(),
+                lang: "fr".to_string(),
+            },
+            Literal::Datatype {
+                literal: "5".to_string(),
+                datatype_iri: b.iri("http://www.w3.org/2001/XMLSchema#integer"),
+            },
+        ] {
+            assert!(
+                values.contains(&AnnotationValue::Literal(want.clone())),
+                "{want:?} not in {values:?}"
+            );
+        }
+        assert_eq!(values.len(), 3);
     }
 
     #[test]
