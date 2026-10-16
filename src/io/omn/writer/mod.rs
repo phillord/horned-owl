@@ -945,11 +945,16 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
                         .push(clause);
                 } else {
                     // Orphan: no frame heads this IRI → not Manchester-expressible.
-                    misc.push(
+                    // Written as functional syntax, which also carries the
+                    // annotations on the assertion axiom.
+                    misc.push(if ac.ann.is_empty() {
                         ac.component
                             .as_manchester_with_prefixes(mapping)
-                            .to_string(),
-                    );
+                            .to_string()
+                    } else {
+                        use crate::io::ofn::writer::AsFunctional as _;
+                        ac.as_functional().to_string()
+                    });
                 }
             } else if let AnnotationSubject::AnonymousIndividual(anon) = &aa.subject {
                 // Anonymous subject → a stand-alone `Individual: _:id` frame whose
@@ -1521,6 +1526,49 @@ mod tests {
                 ann: ann.clone(),
             });
         }
+        let amo = into_amo(o.clone());
+        let mut out = Vec::<u8>::new();
+        write(&mut out, &amo, None).unwrap();
+
+        let (parsed, _): (SetOntology<_>, PrefixMapping) = read(
+            BufReader::new(&out[..]),
+            crate::io::ParserConfiguration::new(&b),
+        )
+        .unwrap();
+        let got: std::collections::BTreeSet<_> = parsed.iter().cloned().collect();
+        let want: std::collections::BTreeSet<_> = o.iter().cloned().collect();
+        assert_eq!(got, want, "written:\n{}", String::from_utf8_lossy(&out));
+    }
+
+    /// Annotations on an AnnotationAssertion whose subject heads no frame are
+    /// kept, in the general-axioms block.
+    #[test]
+    fn orphan_annotation_assertion_keeps_axiom_annotations() {
+        use crate::io::omn::read;
+        use std::io::BufReader;
+        let b = Build::new_rc();
+        let mut o = SetOntology::new_rc();
+        let note = Annotation {
+            ap: b.annotation_property("http://www.w3.org/2000/01/rdf-schema#comment"),
+            av: crate::model::AnnotationValue::Literal(crate::model::Literal::Simple {
+                literal: "note".to_string(),
+            }),
+            ann: Default::default(),
+        };
+        o.insert(AnnotatedComponent {
+            component: AnnotationAssertion {
+                subject: AnnotationSubject::IRI(b.iri("http://ex/Undeclared")),
+                ann: Annotation {
+                    ap: b.annotation_property("http://ex/p"),
+                    av: crate::model::AnnotationValue::Literal(crate::model::Literal::Simple {
+                        literal: "v".to_string(),
+                    }),
+                    ann: Default::default(),
+                },
+            }
+            .into(),
+            ann: [note].into_iter().collect(),
+        });
         let amo = into_amo(o.clone());
         let mut out = Vec::<u8>::new();
         write(&mut out, &amo, None).unwrap();
