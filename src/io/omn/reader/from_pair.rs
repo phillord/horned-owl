@@ -1764,6 +1764,10 @@ fn swrl_iobj<A: ForIRI>(pair: Pair<Rule>, ctx: &Context<'_, A>) -> Result<IArgum
 /// Parse one `SwrlAtom`. Atom shapes are positional in Manchester syntax, so
 /// class-vs-datarange and object-vs-data-property are disambiguated by argument
 /// arity/type and the declaration pre-pass (`is_datatype` / `is_data_prop`).
+/// Predicates in this namespace are always SWRL built-ins, whatever the
+/// shape of their arguments.
+const SWRLB_NS: &str = "http://www.w3.org/2003/11/swrlb#";
+
 fn parse_swrl_atom<A: ForIRI>(atom: Pair<Rule>, ctx: &Context<'_, A>) -> Result<Atom<A>> {
     let inner = atom.into_inner().next().unwrap();
     match inner.as_rule() {
@@ -1836,8 +1840,12 @@ fn parse_swrl_atom<A: ForIRI>(atom: Pair<Rule>, ctx: &Context<'_, A>) -> Result<
             } else {
                 let first_is_lit = matches!(kinds[0], SwrlArgKind::Lit(_));
                 let second_is_lit = matches!(kinds[1], SwrlArgKind::Lit(_));
-                if first_is_lit || kinds.len() > 2 {
-                    // n-ary, or data-valued first arg -> built-in atom
+                let is_swrlb = pred_iri
+                    .as_ref()
+                    .is_some_and(|i| i.as_ref().starts_with(SWRLB_NS));
+                if first_is_lit || kinds.len() > 2 || is_swrlb {
+                    // n-ary, data-valued first arg, or a swrlb: predicate
+                    // -> built-in atom
                     Ok(Atom::BuiltInAtom {
                         pred: bare()?,
                         args: kinds.iter().map(swrl_darg).collect::<Result<_>>()?,
@@ -4733,6 +4741,33 @@ mod tests {
                 "missing atom kind {kind}; got {seen:?}"
             );
         }
+    }
+
+    #[test]
+    fn parses_swrlb_predicate_as_builtin_atom() {
+        use crate::io::omn::read;
+        use crate::ontology::set::SetOntology;
+        use std::io::BufReader;
+        let b = Build::new_rc();
+        let doc = concat!(
+            "Prefix: o: <http://ex/>\nOntology: <http://ex/o>\n",
+            "Rule: o:d(?<http://ex/x>, ?<http://ex/v>), ",
+            "<http://www.w3.org/2003/11/swrlb#greaterThan>(?<http://ex/v>, \"1\") ",
+            "-> o:C(?<http://ex/x>)\n",
+        );
+        let (parsed, _): (SetOntology<_>, PrefixMapping) = read(
+            BufReader::new(doc.as_bytes()),
+            crate::io::ParserConfiguration::new(&b),
+        )
+        .unwrap();
+        let rule = parsed
+            .iter()
+            .find_map(|ac| match &ac.component {
+                Component::Rule(r) => Some(r),
+                _ => None,
+            })
+            .expect("expected a SWRL Rule component");
+        assert!(matches!(rule.body[1], Atom::BuiltInAtom { .. }));
     }
 
     #[test]
