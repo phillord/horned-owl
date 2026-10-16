@@ -768,21 +768,53 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
         }
     }
 
+    /// Keep the triples in `simple` for which `keep` returns true.
+    ///
+    /// Like `Vec::retain`, this works in place, so the triples that stay
+    /// do not need a second Vec while the first is still alive. Unlike
+    /// it, `keep` also gets `self`, which `self.simple.retain` cannot
+    /// pass because `self.simple` is borrowed.
+    fn retain_simple(&mut self, mut keep: impl FnMut(&mut Self, &PosTriple<A>) -> bool) {
+        let mut simple = std::mem::take(&mut self.simple);
+        simple.retain(|t| keep(self, t));
+        simple.shrink_to_fit();
+        self.simple = simple;
+    }
+
+    /// `retain_simple` for a `keep` that can fail. On the first error the
+    /// triples not looked at yet stay in `simple` and the error is
+    /// returned.
+    fn try_retain_simple(
+        &mut self,
+        mut keep: impl FnMut(&mut Self, &PosTriple<A>) -> Result<bool, HornedError>,
+    ) -> Result<(), HornedError> {
+        let mut result = Ok(());
+        self.retain_simple(|s, t| {
+            if result.is_err() {
+                return true;
+            }
+            keep(s, t).unwrap_or_else(|e| {
+                result = Err(e);
+                true
+            })
+        });
+        result
+    }
+
     /// Process all import statements
     fn resolve_imports(&mut self) -> Vec<IRI<A>> {
         let mut v = vec![];
-        for t in std::mem::take(&mut self.simple) {
-            match t.0 {
-                [Term::Iri(_), Term::OWL(VOWL::Imports), Term::Iri(imp)] => {
-                    v.push(imp.clone());
-                    self.merge(AnnotatedComponent {
-                        component: Import(imp).into(),
-                        ann: BTreeSet::new(),
-                    });
-                }
-                _ => self.simple.push(t),
+        self.retain_simple(|s, t| match t.triple() {
+            [Term::Iri(_), Term::OWL(VOWL::Imports), Term::Iri(imp)] => {
+                v.push(imp.clone());
+                s.merge(AnnotatedComponent {
+                    component: Import(imp.clone()).into(),
+                    ann: BTreeSet::new(),
+                });
+                false
             }
-        }
+            _ => true,
+        });
 
         v
         // Section 3.1.2/table 4 of RDF Graphs
@@ -796,19 +828,19 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
         let mut iri: Option<IRI<_>> = None;
         let mut viri: Option<IRI<_>> = None;
 
-        for t in std::mem::take(&mut self.simple) {
-            match t.triple() {
-                [Term::Iri(s), Term::RDF(VRDF::Type), Term::OWL(VOWL::Ontology)] => {
-                    iri = Some(s.clone());
-                }
-                [Term::Iri(s), Term::OWL(VOWL::VersionIRI), Term::Iri(ob)]
-                    if iri.as_ref() == Some(s) =>
-                {
-                    viri = Some(ob.clone());
-                }
-                _ => self.simple.push(t),
+        self.simple.retain(|t| match t.triple() {
+            [Term::Iri(s), Term::RDF(VRDF::Type), Term::OWL(VOWL::Ontology)] => {
+                iri = Some(s.clone());
+                false
             }
-        }
+            [Term::Iri(s), Term::OWL(VOWL::VersionIRI), Term::Iri(ob)]
+                if iri.as_ref() == Some(s) =>
+            {
+                viri = Some(ob.clone());
+                false
+            }
+            _ => true,
+        });
 
         self.o.insert(OntologyID { iri, viri });
     }
@@ -1007,7 +1039,7 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
     /// Process named entity declaration axioms
     fn declarations(&mut self) {
         // Table 7
-        for t in std::mem::take(&mut self.simple) {
+        self.retain_simple(|s, t| {
             let entity = match t.triple() {
                 [Term::Iri(s), Term::RDF(VRDF::Type), entity] => match entity {
                     Term::OWL(VOWL::Class) => Some(Class(s.clone()).into()),
@@ -1024,16 +1056,17 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
             };
 
             if let Some(entity) = entity {
-                let ann = self.ann_map.remove(t.triple()).unwrap_or_default();
+                let ann = s.ann_map.remove(t.triple()).unwrap_or_default();
                 let ne: NamedOWLEntity<_> = entity;
-                self.merge(AnnotatedComponent {
+                s.merge(AnnotatedComponent {
                     component: ne.into(),
                     ann,
                 });
+                false
             } else {
-                self.simple.push(t);
+                true
             }
-        }
+        });
     }
 
     /// Process data ranges
@@ -1154,19 +1187,16 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
 
     /// Process ObjectPropertyExpression
     fn object_property_expressions(&mut self) {
-        for t in std::mem::take(&mut self.simple) {
-            match t.0 {
-                [Term::BNode(bn), Term::OWL(VOWL::InverseOf), Term::Iri(iri)] => {
-                    self.object_property_expression.insert(
-                        bn.clone(),
-                        ObjectPropertyExpression::InverseObjectProperty(iri.into()),
-                    );
-                }
-                _ => {
-                    self.simple.push(t);
-                }
+        self.simple.retain(|t| match t.triple() {
+            [Term::BNode(bn), Term::OWL(VOWL::InverseOf), Term::Iri(iri)] => {
+                self.object_property_expression.insert(
+                    bn.clone(),
+                    ObjectPropertyExpression::InverseObjectProperty(iri.into()),
+                );
+                false
             }
-        }
+            _ => true,
+        });
     }
 
     /// Look up a bnode in one of the resolved-object maps
@@ -2339,16 +2369,13 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
 
     fn swrl(&mut self) -> Result<(), HornedError> {
         // identify variables first
-        for t in std::mem::take(&mut self.simple) {
-            match t.triple() {
-                [Term::Iri(s), Term::RDF(VRDF::Type), Term::SWRL(VSWRL::Variable)] => {
-                    self.variable.insert(s.clone(), Variable(s.clone()));
-                }
-                _ => {
-                    self.simple.push(t);
-                }
+        self.simple.retain(|t| match t.triple() {
+            [Term::Iri(s), Term::RDF(VRDF::Type), Term::SWRL(VSWRL::Variable)] => {
+                self.variable.insert(s.clone(), Variable(s.clone()));
+                false
             }
-        }
+            _ => true,
+        });
 
         // Next identify the atoms with a big pattern matcher over bnodes
         for (bnode, triple) in std::mem::take(&mut self.bnode) {
@@ -2526,7 +2553,7 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
 
     fn simple_annotations(&mut self, parse_all: bool) -> Result<(), HornedError> {
         let ont_id = <O as AsRef<SetIndex<A, AA>>>::as_ref(&self.o).the_ontology_id_or_default();
-        for t in std::mem::take(&mut self.simple) {
+        self.try_retain_simple(|s, t| {
             let firi =
                 |s: &mut OntologyParser<A, AA, O, B>, t, iri: &IRI<_>| -> Result<(), HornedError> {
                     let ann = s.ann_map.remove(t).unwrap_or_default();
@@ -2546,25 +2573,23 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
                 // an annotation. Some versions of the OWL API do not
                 // declare annotation properties for ontology annotations
                 [Term::Iri(iri), _, _] if ont_id.iri.as_ref() == Some(iri) => {
-                    self.o
-                        .insert(OntologyAnnotation(self.annotation(t.triple())?));
+                    s.o.insert(OntologyAnnotation(s.annotation(t.triple())?));
                 }
                 [Term::Iri(iri), Term::RDFS(rdfs), _] if rdfs.is_builtin() => {
-                    firi(self, t.triple(), iri)?
+                    firi(s, t.triple(), iri)?
                 }
                 [Term::Iri(iri), Term::Iri(ap), _]
                     if parse_all
-                        || <O as AsRef<DeclarationMappedIndex<A, AA>>>::as_ref(&self.o)
+                        || <O as AsRef<DeclarationMappedIndex<A, AA>>>::as_ref(&s.o)
                             .is_annotation_property(ap)
                         || is_annotation_builtin(ap.as_ref()) =>
                 {
-                    firi(self, t.triple(), iri)?
+                    firi(s, t.triple(), iri)?
                 }
-                _ => {
-                    self.simple.push(t);
-                }
+                _ => return Ok(true),
             }
-        }
+            Ok(false)
+        })?;
         for (k, v) in std::mem::take(&mut self.bnode) {
             let fbnode =
                 |s: &mut OntologyParser<A, AA, O, B>, t, _: &BNode<A>| -> Result<_, HornedError> {
