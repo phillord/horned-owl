@@ -633,7 +633,12 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
         config: ParserConfiguration<A, B>,
         format: oxrdfio::RdfFormat,
     ) -> Result<Self, HornedError> {
-        let parser = oxrdfio::RdfParser::from_format(format);
+        let mut parser = oxrdfio::RdfParser::from_format(format);
+        if config.lax {
+            // Accept IRIs that fail RFC 3987 validation, such as the raw
+            // output of the lax RDF writer
+            parser = parser.lenient();
+        }
         let mut triples = vec![];
         let last_pos = std::cell::Cell::new(0);
 
@@ -3326,6 +3331,32 @@ mod test {
                 .unwrap_err();
 
         assert!(matches! {err, HornedError::ParserError(_,_)})
+    }
+
+    #[test]
+    fn test_lax_accepts_invalid_iri() {
+        let xml = r#"<?xml version="1.0"?>
+<rdf:RDF xmlns:owl="http://www.w3.org/2002/07/owl#"
+     xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+    <owl:Ontology rdf:about="http://www.example.com/iri"/>
+    <owl:Class rdf:about="http://www.example.com/iri#A "/>
+</rdf:RDF>
+"#;
+        let strict: Result<ConcreteRDFOntology<RcStr, Rc<AnnotatedComponent<RcStr>>>, _> =
+            read::<RcStr, RcAnnotatedComponent, _, _>(&mut xml.as_bytes(), Default::default())
+                .map(|(o, _)| o);
+        assert!(strict.is_err());
+
+        let mut config: RDFParserConfiguration<RcStr> = Default::default();
+        config.common.lax = true;
+        let (o, _) =
+            read::<RcStr, RcAnnotatedComponent, _, _>(&mut xml.as_bytes(), config).unwrap();
+        let n = o
+            .i()
+            .iter()
+            .filter(|c| matches!(c.component, crate::model::Component::DeclareClass(_)))
+            .count();
+        assert_eq!(n, 1);
     }
 
     fn read_from_format<R: BufRead>(bufread: &mut R, format: oxrdfio::RdfFormat) {
