@@ -664,40 +664,46 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
         OntologyParser::from_bufread(&mut cursor, config)
     }
 
-    /// Groups `triples` into `simple` (those which do not start with a BNode) and those that do.
+    /// Groups `triples` into those that start with a BNode, which go to
+    /// `bnode`, and the simple rest, which is returned.
+    ///
+    /// The simple triples stay where they are in `triples`, so the
+    /// returned Vec reuses its allocation instead of copying into a
+    /// second one while the first is still alive.
     fn group_triples(
-        triples: Vec<PosTriple<A>>,
-        simple: &mut Vec<PosTriple<A>>,
+        mut triples: Vec<PosTriple<A>>,
         bnode: &mut HashMap<BNode<A>, VPosTriple<A>>,
-    ) {
+    ) -> Vec<PosTriple<A>> {
         // Next group together triples on a BNode, so we have
         // HashMap<BNodeID, Vec<[SpTerm; 3]> All of which should be
         // triples should begin with the BNodeId. We should be able to
         // gather these in a single pass.
-        for t in triples {
-            match t.triple() {
-                // These triples define axioms and are pattern matched
-                // along with the simple triples. This makes much of
-                // my documentation slightly wrong.
-                [_, Term::OWL(VOWL::DisjointWith), _]
-                | [_, Term::OWL(VOWL::EquivalentClass), _]
-                | [_, Term::OWL(VOWL::InverseOf), _]
-                | [_, Term::RDFS(VRDFS::SubClassOf), _] => {
-                    simple.push(t);
-                }
-                [Term::BNode(id), _, _] => {
-                    // Are there any triples on this bnode already
-                    let v = bnode
-                        .entry(id.clone())
-                        // if there are not store the location of this as it is the first
-                        .or_insert_with(|| VPosTriple(vec![], t.1));
-                    v.push(t.as_triple())
-                }
-                _ => {
-                    simple.push(t);
-                }
+        let on_bnode = |t: &mut PosTriple<A>| match t.triple() {
+            // These triples define axioms and are pattern matched
+            // along with the simple triples. This makes much of
+            // my documentation slightly wrong.
+            [_, Term::OWL(VOWL::DisjointWith), _]
+            | [_, Term::OWL(VOWL::EquivalentClass), _]
+            | [_, Term::OWL(VOWL::InverseOf), _]
+            | [_, Term::RDFS(VRDFS::SubClassOf), _] => false,
+            [Term::BNode(_), _, _] => true,
+            _ => false,
+        };
+
+        for t in triples.extract_if(.., on_bnode) {
+            if let [Term::BNode(id), _, _] = t.triple() {
+                // Are there any triples on this bnode already
+                let v = bnode
+                    .entry(id.clone())
+                    // if there are not store the location of this as it is the first
+                    .or_insert_with(|| VPosTriple(vec![], t.1));
+                v.push(t.as_triple())
             }
         }
+
+        // Hand back the part of the buffer the bnode triples left empty
+        triples.shrink_to_fit();
+        triples
     }
 
     /// Find and group all triples on a sequence.
@@ -2602,7 +2608,7 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
         match self.state {
             OntologyParserState::New => {
                 let triple = std::mem::take(&mut self.triple);
-                Self::group_triples(triple, &mut self.simple, &mut self.bnode);
+                self.simple = Self::group_triples(triple, &mut self.bnode);
 
                 // sort the triples, so that I can get a dependable order
                 for vec in self.bnode.values_mut() {
@@ -2769,13 +2775,7 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
     /// See `parse` to ensure that this has happened.
     pub fn as_ontology_and_incomplete(mut self) -> (O, IncompleteParse<A>) {
         // Regroup so that they print out nicer
-        let mut simple = vec![];
-
-        Self::group_triples(
-            std::mem::take(&mut self.simple),
-            &mut simple,
-            &mut self.bnode,
-        );
+        let simple = Self::group_triples(std::mem::take(&mut self.simple), &mut self.bnode);
 
         let bnode: Vec<_> = self.bnode.into_values().collect();
         let bnode_seq: Vec<_> = self.bnode_seq.into_values().collect();
