@@ -312,6 +312,19 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
                         fr.decl_ann = ann_prefix(&ac.ann, pm);
                     }
                 }
+                // Only a class frame has syntax for a declaration annotation, so an
+                // annotated declaration of any other entity goes to the general
+                // axioms, which are read back as functional syntax.
+                Component::DeclareObjectProperty(_)
+                | Component::DeclareDataProperty(_)
+                | Component::DeclareAnnotationProperty(_)
+                | Component::DeclareNamedIndividual(_)
+                | Component::DeclareDatatype(_)
+                    if !ac.ann.is_empty() =>
+                {
+                    use crate::io::ofn::writer::AsFunctional as _;
+                    misc.push(ac.as_functional().to_string());
+                }
                 Component::DeclareObjectProperty(ax) => {
                     ensure_frame!(FrameKind::ObjectProperty, ax.0.0.as_ref());
                 }
@@ -1478,6 +1491,48 @@ mod tests {
             !s.contains("Class: <http://t/A>"),
             "should abbreviate when local is valid, got:\n{s}"
         );
+    }
+
+    /// Annotations on the declaration of a non-class entity are kept.
+    #[test]
+    fn annotated_non_class_declarations_round_trip() {
+        use crate::io::omn::read;
+        use std::io::BufReader;
+        let b = Build::new_rc();
+        let mut o = SetOntology::new_rc();
+        let note = Annotation {
+            ap: b.annotation_property("http://www.w3.org/2000/01/rdf-schema#comment"),
+            av: crate::model::AnnotationValue::Literal(crate::model::Literal::Simple {
+                literal: "note".to_string(),
+            }),
+            ann: Default::default(),
+        };
+        let ann: std::collections::BTreeSet<_> = [note].into_iter().collect();
+        let comps: Vec<Component<_>> = vec![
+            DeclareObjectProperty(b.object_property("http://ex/op")).into(),
+            DeclareDataProperty(b.data_property("http://ex/dp")).into(),
+            DeclareAnnotationProperty(b.annotation_property("http://ex/ap")).into(),
+            DeclareNamedIndividual(b.named_individual("http://ex/i")).into(),
+            DeclareDatatype(b.datatype("http://ex/dt")).into(),
+        ];
+        for component in comps {
+            o.insert(AnnotatedComponent {
+                component,
+                ann: ann.clone(),
+            });
+        }
+        let amo = into_amo(o.clone());
+        let mut out = Vec::<u8>::new();
+        write(&mut out, &amo, None).unwrap();
+
+        let (parsed, _): (SetOntology<_>, PrefixMapping) = read(
+            BufReader::new(&out[..]),
+            crate::io::ParserConfiguration::new(&b),
+        )
+        .unwrap();
+        let got: std::collections::BTreeSet<_> = parsed.iter().cloned().collect();
+        let want: std::collections::BTreeSet<_> = o.iter().cloned().collect();
+        assert_eq!(got, want, "written:\n{}", String::from_utf8_lossy(&out));
     }
 
     /// An AnnotationAssertion whose annotation VALUE is an AnonymousIndividual
