@@ -32,6 +32,7 @@ pub enum Outcome {
 pub enum Category {
     InferredDeclaration,
     NaryReshape,
+    Normalization,
     AnnotationNormalization,
     AnnotationLoss,
     BlankNodeRelabel,

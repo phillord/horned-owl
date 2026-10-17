@@ -1,6 +1,6 @@
 //! Diff categorization: classify each `RawDiff` item into a benign bucket
 //! (`AnnotationNormalization`, `InferredDeclaration`, `NaryReshape`,
-//! `BlankNodeRelabel`) or a reported-defect bucket (`AnnotationLoss`,
+//! `Normalization`, `BlankNodeRelabel`) or a reported-defect bucket (`AnnotationLoss`,
 //! `Unknown`) — the real-defect signal.
 //!
 //! Rules are applied in order, first match wins per item:
@@ -17,12 +17,18 @@
 //!    DisjointClasses / SameIndividual / DifferentIndividuals with exactly
 //!    2 members) whose members are a subset of a same-variant axiom in
 //!    `src`.
-//! 4. `BlankNodeRelabel` — any item still unmatched by rules 1-3 whose
+//! 4. `Normalization` — a pair (or lone item) that differs only by a
+//!    deliberate model normalisation: a typed `xsd:string` literal read back
+//!    as a simple one, a one-member `ObjectIntersectionOf`/`ObjectUnionOf`
+//!    collapsed to its member, an n-ary axiom with fewer than two members
+//!    dropped, or the empty `OntologyID` an OFN/OWX/OMN reader adds when the
+//!    source had no ontology header.
+//! 5. `BlankNodeRelabel` — any item still unmatched by rules 1-3 whose
 //!    component mentions an anonymous individual. Task 6's blank-node
 //!    canonicalization is a deterministic first cut that can leave residual
 //!    ordering differences for models with 2+ asymmetric anonymous
 //!    individuals; those must not pollute the `Unknown` signal.
-//! 5. Everything else → `Unknown`.
+//! 6. Everything else → `Unknown`.
 
 use crate::diff::{RawDiff, kind_of};
 use crate::model::{Category, DiffItem, Side};
@@ -30,11 +36,12 @@ use horned_owl::model::{
     AnnotatedComponent, AnnotationProperty, AnonymousIndividual, Class, ClassExpression, Component,
     DataProperty, Datatype, DeclareAnnotationProperty, DeclareClass, DeclareDataProperty,
     DeclareDatatype, DeclareNamedIndividual, DeclareObjectProperty, DifferentIndividuals,
-    DisjointClasses, EquivalentClasses, IRI, Individual, NamedIndividual, ObjectProperty, RcStr,
-    SameIndividual,
+    DisjointClasses, EquivalentClasses, IRI, Individual, Literal, NamedIndividual, ObjectProperty,
+    OntologyID, RcStr, SameIndividual,
 };
 use horned_owl::ontology::set::SetOntology;
 use horned_owl::visitor::immutable::{Visit, Walk};
+use horned_owl::visitor::mutable::{VisitMut, WalkMut};
 use std::collections::{BTreeSet, HashMap, HashSet, VecDeque};
 
 pub fn categorize(d: RawDiff, src: &SetOntology<RcStr>, _rt: &SetOntology<RcStr>) -> Vec<DiffItem> {
@@ -54,6 +61,16 @@ pub fn categorize(d: RawDiff, src: &SetOntology<RcStr>, _rt: &SetOntology<RcStr>
     for (i, s) in d.only_in_source.iter().enumerate() {
         lost_by_key.entry(&s.component).or_default().push_back(i);
     }
+
+    // Rule 4 pairing index over the lost items, keyed on the normalised
+    // form (annotations included).
+    let mut lost_by_norm: HashMap<AnnotatedComponent<RcStr>, VecDeque<usize>> = HashMap::new();
+    for (i, s) in d.only_in_source.iter().enumerate() {
+        lost_by_norm.entry(normalised(s)).or_default().push_back(i);
+    }
+    let src_has_id = src
+        .iter()
+        .any(|c| matches!(c.component, Component::OntologyID(_)));
 
     for g in &d.only_in_roundtrip {
         // Rule 1: pair with an unpaired lost item that shares the
@@ -84,12 +101,36 @@ pub fn categorize(d: RawDiff, src: &SetOntology<RcStr>, _rt: &SetOntology<RcStr>
             out.push(item(Side::RoundTrip, g, Category::NaryReshape));
             continue;
         }
-        // Rule 4 (fallback): BlankNodeRelabel, else Unknown.
+        // Rule 4: Normalization.
+        if let Some(i) = lost_by_norm.get_mut(&normalised(g)).and_then(|q| {
+            q.iter()
+                .position(|&i| !lost_paired[i])
+                .and_then(|p| q.remove(p))
+        }) {
+            lost_paired[i] = true;
+            out.push(item(Side::RoundTrip, g, Category::Normalization));
+            out.push(item(
+                Side::Source,
+                &d.only_in_source[i],
+                Category::Normalization,
+            ));
+            continue;
+        }
+        if !src_has_id && is_empty_ontology_id(g) {
+            out.push(item(Side::RoundTrip, g, Category::Normalization));
+            continue;
+        }
+        // Rule 5 (fallback): BlankNodeRelabel, else Unknown.
         out.push(item(Side::RoundTrip, g, fallback_category(g)));
     }
     for (i, s) in d.only_in_source.iter().enumerate() {
         if !lost_paired[i] {
-            out.push(item(Side::Source, s, fallback_category(s)));
+            let cat = if is_degenerate_nary(&s.component) {
+                Category::Normalization
+            } else {
+                fallback_category(s)
+            };
+            out.push(item(Side::Source, s, cat));
         }
     }
     out
@@ -127,6 +168,64 @@ fn fallback_category(c: &AnnotatedComponent<RcStr>) -> Category {
     } else {
         Category::Unknown
     }
+}
+
+const XSD_STRING: &str = "http://www.w3.org/2001/XMLSchema#string";
+
+/// Rewrites the deliberate normalisations of rule 4: `"x"^^xsd:string`
+/// becomes a simple literal, and a one-member `ObjectIntersectionOf` or
+/// `ObjectUnionOf` becomes its member.
+struct Normalise;
+
+impl VisitMut<RcStr> for Normalise {
+    fn visit_literal(&mut self, l: &mut Literal<RcStr>) {
+        if let Literal::Datatype {
+            literal,
+            datatype_iri,
+        } = l
+            && datatype_iri.as_ref() == XSD_STRING
+        {
+            *l = Literal::Simple {
+                literal: std::mem::take(literal),
+            };
+        }
+    }
+
+    fn visit_class_expression(&mut self, e: &mut ClassExpression<RcStr>) {
+        while let ClassExpression::ObjectIntersectionOf(v) | ClassExpression::ObjectUnionOf(v) = e
+            && v.len() == 1
+        {
+            *e = v.pop().unwrap();
+        }
+    }
+}
+
+fn normalised(c: &AnnotatedComponent<RcStr>) -> AnnotatedComponent<RcStr> {
+    let mut c = c.clone();
+    let mut walk = WalkMut::new(Normalise);
+    walk.annotated_component(&mut c);
+    c
+}
+
+/// An n-ary axiom with fewer than two members, which the OFN writer drops.
+fn is_degenerate_nary(c: &Component<RcStr>) -> bool {
+    match c {
+        Component::EquivalentClasses(EquivalentClasses(v)) => v.len() < 2,
+        Component::DisjointClasses(DisjointClasses(v)) => v.len() < 2,
+        Component::SameIndividual(SameIndividual(v)) => v.len() < 2,
+        Component::DifferentIndividuals(DifferentIndividuals(v)) => v.len() < 2,
+        _ => false,
+    }
+}
+
+fn is_empty_ontology_id(c: &AnnotatedComponent<RcStr>) -> bool {
+    matches!(
+        &c.component,
+        Component::OntologyID(OntologyID {
+            iri: None,
+            viri: None
+        })
+    )
 }
 
 /// True iff `c` is one of the six `Declare*` axiom kinds.
@@ -285,6 +384,7 @@ mod tests {
     use crate::diff::diff;
     use crate::model::Format;
     use crate::ontology::read_source;
+    use horned_owl::model::MutableOntology;
 
     fn cats(src: &str, rt: &str) -> Vec<Category> {
         let s = read_source(Format::Ofn, src.as_bytes()).unwrap().model;
@@ -364,5 +464,129 @@ mod tests {
         assert!(!cs.is_empty());
         assert!(cs.iter().all(|c| *c == Category::BlankNodeRelabel));
         assert!(!cs.contains(&Category::Unknown));
+    }
+
+    fn cats_of(
+        src: Vec<AnnotatedComponent<RcStr>>,
+        rt: Vec<AnnotatedComponent<RcStr>>,
+    ) -> Vec<Category> {
+        let mut s = SetOntology::new();
+        for c in src {
+            s.insert(c);
+        }
+        let mut r = SetOntology::new();
+        for c in rt {
+            r.insert(c);
+        }
+        let d = diff(&s, &r);
+        categorize(d, &s, &r)
+            .into_iter()
+            .map(|x| x.category)
+            .collect()
+    }
+
+    fn assert_all_normalization(cs: Vec<Category>) {
+        assert!(!cs.is_empty());
+        assert!(cs.iter().all(|c| *c == Category::Normalization), "{cs:?}");
+    }
+
+    #[test]
+    fn xsd_string_literal_read_back_as_simple_is_normalization() {
+        use horned_owl::model::{
+            Annotation, AnnotationAssertion, AnnotationSubject, AnnotationValue, Build,
+        };
+        let b = Build::new_rc();
+        let mk = |literal: Literal<RcStr>| -> AnnotatedComponent<RcStr> {
+            AnnotationAssertion {
+                subject: AnnotationSubject::IRI(b.iri("http://ex/s")),
+                ann: Annotation {
+                    ap: b.annotation_property("http://ex/p"),
+                    av: AnnotationValue::Literal(literal),
+                    ann: Default::default(),
+                },
+            }
+            .into()
+        };
+        let typed = mk(Literal::Datatype {
+            literal: "x".to_string(),
+            datatype_iri: b.iri(XSD_STRING),
+        });
+        let simple = mk(Literal::Simple {
+            literal: "x".to_string(),
+        });
+        assert_all_normalization(cats_of(vec![typed], vec![simple]));
+    }
+
+    #[test]
+    fn xsd_integer_literal_change_is_unknown() {
+        use horned_owl::model::{
+            Annotation, AnnotationAssertion, AnnotationSubject, AnnotationValue, Build,
+        };
+        let b = Build::new_rc();
+        let mk = |literal: Literal<RcStr>| -> AnnotatedComponent<RcStr> {
+            AnnotationAssertion {
+                subject: AnnotationSubject::IRI(b.iri("http://ex/s")),
+                ann: Annotation {
+                    ap: b.annotation_property("http://ex/p"),
+                    av: AnnotationValue::Literal(literal),
+                    ann: Default::default(),
+                },
+            }
+            .into()
+        };
+        let typed = mk(Literal::Datatype {
+            literal: "1".to_string(),
+            datatype_iri: b.iri("http://www.w3.org/2001/XMLSchema#integer"),
+        });
+        let simple = mk(Literal::Simple {
+            literal: "1".to_string(),
+        });
+        assert!(cats_of(vec![typed], vec![simple]).contains(&Category::Unknown));
+    }
+
+    #[test]
+    fn singleton_intersection_collapsed_to_member_is_normalization() {
+        use horned_owl::model::{Build, SubClassOf};
+        let b = Build::new_rc();
+        let a = ClassExpression::Class(b.class("http://ex/A"));
+        let bc = ClassExpression::Class(b.class("http://ex/B"));
+        let mk = |sup: ClassExpression<RcStr>| -> AnnotatedComponent<RcStr> {
+            SubClassOf {
+                sub: a.clone(),
+                sup,
+            }
+            .into()
+        };
+        assert_all_normalization(cats_of(
+            vec![mk(ClassExpression::ObjectIntersectionOf(vec![bc.clone()]))],
+            vec![mk(bc)],
+        ));
+    }
+
+    #[test]
+    fn singleton_different_individuals_dropped_is_normalization() {
+        use horned_owl::model::Build;
+        let b = Build::new_rc();
+        let c: AnnotatedComponent<RcStr> =
+            DifferentIndividuals(vec![Individual::Named(b.named_individual("http://ex/i"))]).into();
+        assert_all_normalization(cats_of(vec![c], vec![]));
+    }
+
+    #[test]
+    fn gained_empty_ontology_id_is_normalization_only_when_source_has_none() {
+        let empty: AnnotatedComponent<RcStr> = OntologyID {
+            iri: None,
+            viri: None,
+        }
+        .into();
+        assert_all_normalization(cats_of(vec![], vec![empty.clone()]));
+
+        let b = horned_owl::model::Build::new_rc();
+        let named: AnnotatedComponent<RcStr> = OntologyID {
+            iri: Some(b.iri("http://ex/o")),
+            viri: None,
+        }
+        .into();
+        assert!(cats_of(vec![named], vec![empty]).contains(&Category::Unknown));
     }
 }

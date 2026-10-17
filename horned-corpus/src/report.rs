@@ -48,6 +48,7 @@ pub fn report(records: &[Record], out_dir: &Path, known: &[KnownFailure]) -> any
         "n_unknown",
         "write_us",
         "reread_us",
+        "benign_normalised",
     ])?;
     let src_complete: HashMap<&str, bool> = records
         .iter()
@@ -90,6 +91,7 @@ pub fn report(records: &[Record], out_dir: &Path, known: &[KnownFailure]) -> any
                 cc(Category::Unknown).to_string(),
                 opt(c.write_us),
                 opt(c.reread_us),
+                cc(Category::Normalization).to_string(),
             ];
             w.write_record(&row)?;
         }
@@ -140,6 +142,7 @@ fn cat_str(c: Category) -> &'static str {
         Category::NaryReshape => "nary_reshape",
         Category::AnnotationNormalization => "annotation_normalization",
         Category::AnnotationLoss => "annotation_loss",
+        Category::Normalization => "normalization",
         Category::BlankNodeRelabel => "blank_node_relabel",
         Category::Unknown => "unknown",
     }
@@ -450,6 +453,7 @@ fn summarize(records: &[Record], known: &[KnownFailure]) -> serde_json::Value {
         Category::NaryReshape,
         Category::AnnotationNormalization,
         Category::AnnotationLoss,
+        Category::Normalization,
         Category::BlankNodeRelabel,
         Category::Unknown,
     ] {
@@ -759,7 +763,7 @@ fn render_md(records: &[Record], known: &[KnownFailure]) -> String {
     s.push_str(
         "Both `Unknown` and `AnnotationLoss` diffs are real, reported findings -- \
          unlike the benign buckets (`InferredDeclaration`, `NaryReshape`, \
-         `AnnotationNormalization`, `BlankNodeRelabel`), they are not explained away \
+         `AnnotationNormalization`, `Normalization`, `BlankNodeRelabel`), they are not explained away \
          by canonicalization or reshaping and warrant manual inspection.\n\n",
     );
     let tu = top_investigate(records, known);
@@ -978,7 +982,7 @@ mod tests {
             header,
             "ontology,source_format,target_format,outcome,source_complete,exact,\
 n_lost,n_gained,benign_inferred_decl,benign_nary,benign_annotation,\
-annotation_loss,benign_blanknode,n_unknown,write_us,reread_us"
+annotation_loss,benign_blanknode,n_unknown,write_us,reread_us,benign_normalised"
         );
         let data_line = csv.lines().nth(1).unwrap();
         let cols: Vec<&str> = data_line.split(',').collect();
