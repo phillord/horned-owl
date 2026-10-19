@@ -33,6 +33,7 @@ fn constructs_a_small_ontology() {
 }
 
 #[test]
+#[ignore = "slow trybuild compile; run by make all-tests"]
 fn ui() {
     let t = trybuild::TestCases::new();
     t.compile_fail("tests/ui/ofn_*.rs");

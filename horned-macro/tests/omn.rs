@@ -38,6 +38,7 @@ fn works_with_a_bare_iri_and_no_prefix_declaration() {
 }
 
 #[test]
+#[ignore = "slow trybuild compile; run by make all-tests"]
 fn ui() {
     // trybuild compiles tests/ui/*.rs and checks the output against the
     // matching *.stderr -- this is the "a syntax mistake is a genuine
