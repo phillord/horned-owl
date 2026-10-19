@@ -1908,6 +1908,16 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
                     }
                 }
                 [
+                    [_, Term::OWL(VOWL::Members), Term::BNode(bnodeid)], //:
+                    [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::AllDisjointClasses)],
+                ] => {
+                    ok_some! {
+                        DisjointClasses (
+                            self.retrieve_to_ce_seq(bnodeid)?
+                        ).into()
+                    }
+                }
+                [
                     [_, Term::OWL(VOWL::DistinctMembers), Term::BNode(bnodeid)], //:
                     [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::AllDifferent)],
                 ] => {

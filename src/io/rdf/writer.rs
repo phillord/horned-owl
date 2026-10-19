@@ -1627,8 +1627,10 @@ render_to_node! {
 render_to_vec! {
     DisjointClasses, self, f, ng,
     {
-        let pred = ng.nn(OWL::DisjointWith);
-        nary(f, ng, &self.0, pred)
+        // Disjointness is not transitive, so more than two members need
+        // owl:AllDisjointClasses; a star of owl:disjointWith triples from
+        // the first member loses the pairs between the others.
+        members(f, ng, OWL::DisjointWith, OWL::AllDisjointClasses, &self.0)
     }
 }
 
@@ -2112,6 +2114,44 @@ mod test {
         let ont2 = read_ok(&mut BufReader::new(file));
 
         assert_eq!(ont.i().the_ontology_id(), ont2.i().the_ontology_id());
+    }
+
+    #[test]
+    fn disjoint_classes_with_three_members_round_trip() {
+        // Disjointness is not transitive: a star of owl:disjointWith from
+        // the first member would lose the pair between the other two.
+        let b = Build::new_rc();
+        let mut ont = ComponentMappedOntology::new_rc();
+        let cs: Vec<ClassExpression<_>> = ["A", "B", "C"]
+            .iter()
+            .map(|n| ClassExpression::Class(b.class(format!("http://example.com/{n}"))))
+            .collect();
+        for c in &cs {
+            if let ClassExpression::Class(c) = c {
+                ont.insert(DeclareClass(c.clone()));
+            }
+        }
+        ont.insert(DisjointClasses(cs));
+
+        let mut buf = Vec::new();
+        write(&mut buf, &ont, None).unwrap();
+        let ont2 = read_ok(&mut BufReader::new(&buf[..]));
+
+        let disjoint = |o: &SetOntology<RcStr>| -> Vec<Component<RcStr>> {
+            o.iter()
+                .filter(|c| matches!(c.component, Component::DisjointClasses(_)))
+                .map(|c| c.component.clone())
+                .collect()
+        };
+        let want: Vec<Component<RcStr>> = vec![
+            DisjointClasses(vec![
+                ClassExpression::Class(Build::new_rc().class("http://example.com/A")),
+                ClassExpression::Class(Build::new_rc().class("http://example.com/B")),
+                ClassExpression::Class(Build::new_rc().class("http://example.com/C")),
+            ])
+            .into(),
+        ];
+        assert_eq!(disjoint(&ont2), want);
     }
 
     #[test]
