@@ -72,6 +72,11 @@ fn summarize(incomplete: &rdf::reader::IncompleteParse<RcStr>) -> Option<Incompl
 }
 
 pub fn read_source(fmt: Format, bytes: &[u8]) -> anyhow::Result<ReadOk> {
+    read_source_with(fmt, bytes, false)
+}
+
+/// As `read_source`, with the readers in lax mode when `lax` is set.
+pub fn read_source_with(fmt: Format, bytes: &[u8], lax: bool) -> anyhow::Result<ReadOk> {
     // The AA (indexed-annotated-component) type parameter is only ever
     // exercised by the RDF variant; the ofn/omn/owx variants carry a plain
     // `SetOntology` and so give the compiler nothing to infer AA from. Pin
@@ -81,34 +86,32 @@ pub fn read_source(fmt: Format, bytes: &[u8]) -> anyhow::Result<ReadOk> {
     type Output = ParserOutput<RcStr, RcAnnotatedComponent>;
 
     let build = Build::new_rc();
+    let config = || {
+        let mut c = ParserConfiguration::new(&build);
+        c.lax = lax;
+        c
+    };
 
     let (model, prefixes, incomplete) = match fmt {
         Format::Ofn => {
-            let sop = ofn::reader::read(&mut Cursor::new(bytes), ParserConfiguration::new(&build))
-                .map_err(horned_err)?;
+            let sop = ofn::reader::read(&mut Cursor::new(bytes), config()).map_err(horned_err)?;
             Output::ofn(sop).decompose()
         }
         Format::Omn => {
-            let sop = omn::reader::read(Cursor::new(bytes), ParserConfiguration::new(&build))
-                .map_err(horned_err)?;
+            let sop = omn::reader::read(Cursor::new(bytes), config()).map_err(horned_err)?;
             Output::omn(sop).decompose()
         }
         Format::OwlXml => {
-            let sop = owx::reader::read(&mut Cursor::new(bytes), ParserConfiguration::new(&build))
-                .map_err(horned_err)?;
+            let sop = owx::reader::read(&mut Cursor::new(bytes), config()).map_err(horned_err)?;
             Output::owx(sop).decompose()
         }
         Format::Obo => {
-            let sop = obo::reader::read(&mut Cursor::new(bytes), ParserConfiguration::new(&build))
-                .map_err(horned_err)?;
+            let sop = obo::reader::read(&mut Cursor::new(bytes), config()).map_err(horned_err)?;
             Output::obo(sop).decompose()
         }
         Format::RdfXml => {
-            let rop = rdf::reader::read(
-                &mut Cursor::new(bytes),
-                ParserConfiguration::new(&build).into(),
-            )
-            .map_err(horned_err)?;
+            let rop =
+                rdf::reader::read(&mut Cursor::new(bytes), config().into()).map_err(horned_err)?;
             Output::rdf(rop).decompose()
         }
         Format::Turtle => {
@@ -118,7 +121,7 @@ pub fn read_source(fmt: Format, bytes: &[u8]) -> anyhow::Result<ReadOk> {
             // identical to the RdfXml path.
             let config = RDFParserConfiguration {
                 format: Some(oxrdfio::RdfFormat::Turtle),
-                ..ParserConfiguration::new(&build).into()
+                ..config().into()
             };
             let rop = rdf::reader::read(&mut Cursor::new(bytes), config).map_err(horned_err)?;
             Output::rdf(rop).decompose()

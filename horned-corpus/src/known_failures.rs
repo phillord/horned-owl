@@ -55,6 +55,18 @@ pub fn known_failures() -> Vec<KnownFailure> {
     parse(include_str!("../known_failures.json")).expect("known_failures.json must parse")
 }
 
+/// Cases whose reread needs the reader in lax mode, because the source
+/// ontology is invalid and the writer reproduces the invalid content.
+/// Same entry shape as `known_failures.json`, in `requires_lax.json`; the
+/// `reason` says what is invalid. Keeping this a list, not a global
+/// setting, limits lax reading to the cases that need it.
+pub fn requires_lax() -> &'static [KnownFailure] {
+    static LAX: std::sync::OnceLock<Vec<KnownFailure>> = std::sync::OnceLock::new();
+    LAX.get_or_init(|| {
+        parse(include_str!("../requires_lax.json")).expect("requires_lax.json must parse")
+    })
+}
+
 /// Find the first entry (if any) covering the given case.
 pub fn find<'a>(
     known: &'a [KnownFailure],
@@ -103,6 +115,14 @@ mod tests {
         assert_eq!(v[0].ontology, "CRENO");
         assert_eq!(v[0].source_format, None);
         assert_eq!(v[0].target_format, Some(Format::RdfXml));
+    }
+
+    #[test]
+    fn requires_lax_covers_ucva_only_for_its_case() {
+        let lax = requires_lax();
+        assert!(find(lax, "UCVA", Format::OwlXml, Format::RdfXml).is_some());
+        assert!(find(lax, "UCVA", Format::OwlXml, Format::Ofn).is_none());
+        assert!(find(lax, "CRENO", Format::OwlXml, Format::RdfXml).is_none());
     }
 
     #[test]

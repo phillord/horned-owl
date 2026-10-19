@@ -17,7 +17,7 @@ use crate::detect::detect;
 use crate::diff::diff;
 use crate::known_failures::{self, KnownFailure};
 use crate::model::*;
-use crate::ontology::{ReadOk, read_source, write_target};
+use crate::ontology::{ReadOk, read_source, read_source_with, write_target};
 use horned_owl::model::{RcAnnotatedComponent, RcStr};
 use horned_owl::ontology::component_mapped::ComponentMappedOntology;
 use horned_owl::ontology::set::SetOntology;
@@ -238,7 +238,8 @@ fn one_case(
     };
 
     let t1 = Instant::now();
-    let reread = catch_unwind(AssertUnwindSafe(|| read_source(tfmt, &bytes)));
+    let lax = known_failures::find(known_failures::requires_lax(), ontology, sfmt, tfmt).is_some();
+    let reread = catch_unwind(AssertUnwindSafe(|| read_source_with(tfmt, &bytes, lax)));
     let reread_us = Some(t1.elapsed().as_micros() as u64);
 
     let rt = match reread {
