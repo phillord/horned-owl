@@ -11,7 +11,7 @@ all: bubo
 
 pre-commit: quick-test
 pre-push: all-tests
-	cargo bench --no-run
+	cargo check --benches
 
 
 
