@@ -150,17 +150,27 @@ impl<A: ForIRI, AA: ForIndex<A>> OntologyIndex<A, AA> for DeclarationMappedIndex
                     return None;
                 }
 
-                // AnnotationProperty/ObjectProperty (or DataProperty)
+                // AnnotationProperty/ObjectProperty/DataProperty
                 // punning is not legal in OWL 2 DL, but happens. We
-                // pick Object or DataProperty here, the resolution
-                // will depend on implementation details.
-                if ne == NamedEntityKind::AnnotationProperty
-                    && matches!(
-                        self.kinds.get(&iri),
-                        Some(NamedEntityKind::ObjectProperty) | Some(NamedEntityKind::DataProperty)
+                // resolve it with a fixed rule, whatever the insertion
+                // order: DataProperty beats ObjectProperty beats
+                // AnnotationProperty.
+                //
+                // DataProperty winning is a deliberate choice. It was
+                // previously the outcome by accident: insertion order
+                // decided, and the round-trip writers happen to emit
+                // Data declarations last. It is now explicit so that a
+                // reread agrees with its source however the
+                // declarations are ordered.
+                match (ne, self.kinds.get(&iri)) {
+                    (
+                        NamedEntityKind::AnnotationProperty,
+                        Some(NamedEntityKind::ObjectProperty | NamedEntityKind::DataProperty),
                     )
-                {
-                    return None;
+                    | (NamedEntityKind::ObjectProperty, Some(NamedEntityKind::DataProperty)) => {
+                        return None;
+                    }
+                    _ => {}
                 }
 
                 // Save the kind
@@ -225,6 +235,28 @@ mod test {
         assert!(d.index_insert(s.0.into()));
         assert!(d.index_insert(s.1.into()));
         assert!(d.index_insert(s.2.into()));
+    }
+
+    #[test]
+    fn test_data_property_wins_over_object_property() {
+        // Data wins deliberately, whichever declaration is inserted first
+        let b = Build::new_rc();
+        let iri = b.iri("http://www.example.com/p");
+        let data: AnnotatedComponent<RcStr> =
+            NamedOWLEntity::from(b.data_property(iri.clone())).into();
+        let object: AnnotatedComponent<RcStr> =
+            NamedOWLEntity::from(b.object_property(iri.clone())).into();
+
+        for order in [[&data, &object], [&object, &data]] {
+            let mut d = DeclarationMappedIndex::new_rc();
+            for ax in order {
+                d.index_insert(ax.clone().into());
+            }
+            assert_eq!(
+                d.declaration_kind(&iri),
+                Some(NamedOWLEntityKind::DataProperty)
+            );
+        }
     }
 
     #[test]
