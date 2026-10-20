@@ -271,7 +271,7 @@ fn one_case(
     let rt_canon = canonicalize(rt.model);
     let raw = diff(src_canon, &rt_canon);
     let exact = raw.only_in_source.is_empty() && raw.only_in_roundtrip.is_empty();
-    let diffs = categorize(raw, src_canon, &rt_canon);
+    let diffs = categorize(raw, src_canon, &rt_canon, tfmt);
 
     let mut category_counts: BTreeMap<Category, usize> = BTreeMap::new();
     for d in &diffs {

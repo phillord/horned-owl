@@ -22,7 +22,8 @@
 //!    as a simple one, a one-member `ObjectIntersectionOf`/`ObjectUnionOf`
 //!    collapsed to its member, an n-ary axiom with fewer than two members
 //!    dropped, or the empty `OntologyID` an OFN/OWX/OMN reader adds when the
-//!    source had no ontology header.
+//!    source had no ontology header, or the empty `OntologyID` the source
+//!    carries and the OMN reader deliberately does not reproduce.
 //! 5. `BlankNodeRelabel` — any item still unmatched by rules 1-3 whose
 //!    component mentions an anonymous individual. Task 6's blank-node
 //!    canonicalization is a deterministic first cut that can leave residual
@@ -31,7 +32,7 @@
 //! 6. Everything else → `Unknown`.
 
 use crate::diff::{RawDiff, kind_of};
-use crate::model::{Category, DiffItem, Side};
+use crate::model::{Category, DiffItem, Format, Side};
 use horned_owl::model::{
     AnnotatedComponent, AnnotationProperty, AnonymousIndividual, Class, ClassExpression, Component,
     DataProperty, Datatype, DeclareAnnotationProperty, DeclareClass, DeclareDataProperty,
@@ -44,7 +45,12 @@ use horned_owl::visitor::immutable::{Visit, Walk};
 use horned_owl::visitor::mutable::{VisitMut, WalkMut};
 use std::collections::{BTreeSet, HashMap, HashSet, VecDeque};
 
-pub fn categorize(d: RawDiff, src: &SetOntology<RcStr>, _rt: &SetOntology<RcStr>) -> Vec<DiffItem> {
+pub fn categorize(
+    d: RawDiff,
+    src: &SetOntology<RcStr>,
+    _rt: &SetOntology<RcStr>,
+    target: Format,
+) -> Vec<DiffItem> {
     let mut out = Vec::new();
     let mut lost_paired = vec![false; d.only_in_source.len()];
 
@@ -125,7 +131,9 @@ pub fn categorize(d: RawDiff, src: &SetOntology<RcStr>, _rt: &SetOntology<RcStr>
     }
     for (i, s) in d.only_in_source.iter().enumerate() {
         if !lost_paired[i] {
-            let cat = if is_degenerate_nary(&s.component) {
+            let cat = if is_degenerate_nary(&s.component)
+                || (target == Format::Omn && is_empty_ontology_id(s))
+            {
                 Category::Normalization
             } else {
                 fallback_category(s)
@@ -382,7 +390,6 @@ fn is_nary_reshape(gained: &AnnotatedComponent<RcStr>, nary: &NaryMembers) -> bo
 mod tests {
     use super::*;
     use crate::diff::diff;
-    use crate::model::Format;
     use crate::ontology::read_source;
     use horned_owl::model::MutableOntology;
 
@@ -390,7 +397,7 @@ mod tests {
         let s = read_source(Format::Ofn, src.as_bytes()).unwrap().model;
         let r = read_source(Format::Ofn, rt.as_bytes()).unwrap().model;
         let d = diff(&s, &r);
-        categorize(d, &s, &r)
+        categorize(d, &s, &r, Format::Ofn)
             .into_iter()
             .map(|x| x.category)
             .collect()
@@ -459,7 +466,7 @@ mod tests {
         let s = read_source(Format::Ofn, src.as_bytes()).unwrap().model;
         let r = read_source(Format::Ofn, rt.as_bytes()).unwrap().model;
         let d = diff(&s, &r);
-        let items = categorize(d, &s, &r);
+        let items = categorize(d, &s, &r, Format::Ofn);
         let cs: Vec<Category> = items.iter().map(|x| x.category).collect();
         assert!(!cs.is_empty());
         assert!(cs.iter().all(|c| *c == Category::BlankNodeRelabel));
@@ -470,6 +477,14 @@ mod tests {
         src: Vec<AnnotatedComponent<RcStr>>,
         rt: Vec<AnnotatedComponent<RcStr>>,
     ) -> Vec<Category> {
+        cats_of_target(src, rt, Format::Ofn)
+    }
+
+    fn cats_of_target(
+        src: Vec<AnnotatedComponent<RcStr>>,
+        rt: Vec<AnnotatedComponent<RcStr>>,
+        target: Format,
+    ) -> Vec<Category> {
         let mut s = SetOntology::new();
         for c in src {
             s.insert(c);
@@ -479,7 +494,7 @@ mod tests {
             r.insert(c);
         }
         let d = diff(&s, &r);
-        categorize(d, &s, &r)
+        categorize(d, &s, &r, target)
             .into_iter()
             .map(|x| x.category)
             .collect()
@@ -570,6 +585,17 @@ mod tests {
         let c: AnnotatedComponent<RcStr> =
             DifferentIndividuals(vec![Individual::Named(b.named_individual("http://ex/i"))]).into();
         assert_all_normalization(cats_of(vec![c], vec![]));
+    }
+
+    #[test]
+    fn lost_empty_ontology_id_is_normalization_only_for_omn() {
+        let empty: AnnotatedComponent<RcStr> = OntologyID {
+            iri: None,
+            viri: None,
+        }
+        .into();
+        assert_all_normalization(cats_of_target(vec![empty.clone()], vec![], Format::Omn));
+        assert!(cats_of_target(vec![empty], vec![], Format::Ofn).contains(&Category::Unknown));
     }
 
     #[test]
