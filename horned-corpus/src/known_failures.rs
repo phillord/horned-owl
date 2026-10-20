@@ -11,7 +11,7 @@
 //! behaviour, not a run's output, so it's compiled in via `include_str!`
 //! rather than read from disk at run time.
 
-use crate::model::Format;
+use crate::model::{CaseResult, Category, Format, Outcome};
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
@@ -77,9 +77,123 @@ pub fn find<'a>(
     known.iter().find(|k| k.matches(ontology, source, target))
 }
 
+/// Whether a case that was actually run still shows a real failure: it did
+/// not complete, or it round-tripped with an `Unknown` or `AnnotationLoss`
+/// diff. A skipped case was not run, so it shows nothing either way.
+pub fn still_fails(c: &CaseResult) -> bool {
+    match c.outcome {
+        Outcome::Ok => {
+            let n = |cat| c.category_counts.get(&cat).copied().unwrap_or(0);
+            n(Category::Unknown) + n(Category::AnnotationLoss) > 0
+        }
+        Outcome::Skipped => false,
+        _ => true,
+    }
+}
+
+/// What re-running a `known_failures` entry found.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum EntryStatus {
+    /// At least one case the entry covers still fails.
+    StillFails,
+    /// Every case the entry covers now passes, so the entry is stale.
+    NowPasses,
+    /// No case the entry covers was run, so nothing can be said.
+    NotChecked,
+}
+
+/// Judge each entry against `cases`, which must have been run with the
+/// known-failure skip off. An entry with wildcard formats covers several
+/// cases and is only stale when none of them fail.
+pub fn check<'a>(
+    known: &'a [KnownFailure],
+    cases: &[CaseResult],
+) -> Vec<(&'a KnownFailure, EntryStatus)> {
+    known
+        .iter()
+        .map(|k| {
+            let run: Vec<&CaseResult> = cases
+                .iter()
+                .filter(|c| {
+                    c.outcome != Outcome::Skipped
+                        && k.matches(&c.ontology, c.source_format, c.target_format)
+                })
+                .collect();
+            let status = if run.is_empty() {
+                EntryStatus::NotChecked
+            } else if run.iter().any(|c| still_fails(c)) {
+                EntryStatus::StillFails
+            } else {
+                EntryStatus::NowPasses
+            };
+            (k, status)
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn case(ontology: &str, target: Format, outcome: Outcome, unknown: usize) -> CaseResult {
+        CaseResult {
+            ontology: ontology.into(),
+            source_format: Format::OwlXml,
+            target_format: target,
+            outcome,
+            error: None,
+            exact: unknown == 0,
+            diffs: Vec::new(),
+            category_counts: if unknown > 0 {
+                [(Category::Unknown, unknown)].into()
+            } else {
+                Default::default()
+            },
+            write_us: None,
+            reread_us: None,
+        }
+    }
+
+    fn entry(ontology: &str, target: Option<Format>) -> KnownFailure {
+        KnownFailure {
+            ontology: ontology.into(),
+            source_format: None,
+            target_format: target,
+            reason: "test".into(),
+        }
+    }
+
+    #[test]
+    fn entry_is_stale_only_when_no_covered_case_fails() {
+        let known = [entry("A", Some(Format::RdfXml)), entry("B", None)];
+        let cases = [
+            case("A", Format::RdfXml, Outcome::Ok, 0),
+            // B has a wildcard target; one failing case keeps it live.
+            case("B", Format::RdfXml, Outcome::Ok, 0),
+            case("B", Format::Omn, Outcome::Ok, 3),
+        ];
+        let got: Vec<_> = check(&known, &cases).into_iter().map(|(_, s)| s).collect();
+        assert_eq!(got, [EntryStatus::NowPasses, EntryStatus::StillFails]);
+    }
+
+    #[test]
+    fn unrun_and_skipped_cases_are_not_checked() {
+        let known = [entry("A", None), entry("C", None)];
+        let cases = [case("A", Format::RdfXml, Outcome::Skipped, 0)];
+        let got: Vec<_> = check(&known, &cases).into_iter().map(|(_, s)| s).collect();
+        assert_eq!(got, [EntryStatus::NotChecked, EntryStatus::NotChecked]);
+    }
+
+    #[test]
+    fn a_failed_reread_still_fails() {
+        assert!(still_fails(&case(
+            "A",
+            Format::RdfXml,
+            Outcome::RereadFail,
+            0
+        )));
+        assert!(!still_fails(&case("A", Format::RdfXml, Outcome::Ok, 0)));
+    }
 
     #[test]
     fn wildcard_format_matches_any() {

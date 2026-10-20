@@ -96,6 +96,15 @@ enum Cmd {
         #[arg(long = "run-all")]
         run_all: bool,
     },
+    /// Re-run every case listed in `known_failures.json` and check that it
+    /// still fails. Exits non-zero if any entry now passes (so is stale and
+    /// should be deleted) or could not be run (its ontology is not in the
+    /// corpus).
+    CheckKnownFailures {
+        /// Directory of ontologies, as for `roundtrip`.
+        #[arg(long)]
+        corpus: PathBuf,
+    },
     /// Check every ontology in a corpus against the OWL 2 profiles.
     Profile {
         /// Directory of ontologies to sweep, as for `roundtrip`.
@@ -332,6 +341,40 @@ fn sweep(
     Ok(())
 }
 
+/// Run every case a `known_failures.json` entry covers, with the skip off,
+/// and print whether each entry still fails. Returns whether every entry did.
+fn check_known_failures(dir: &std::path::Path) -> anyhow::Result<bool> {
+    use horned_corpus::known_failures::{self, EntryStatus};
+
+    let known = known_failures::known_failures();
+    let fmts = parse_formats("rdf,owx,ofn,omn,obo");
+    let mut cases = Vec::new();
+    for p in corpus::entries(dir)? {
+        let name = p.file_stem().unwrap_or_default().to_string_lossy();
+        if !known.iter().any(|k| k.ontology == name) {
+            continue;
+        }
+        let bytes = corpus::read_bytes(&p)?;
+        for r in roundtrip::run_bytes(&name, &bytes, &fmts, &known, true) {
+            if let Record::Case(c) = r {
+                cases.push(c);
+            }
+        }
+    }
+
+    let mut all_fail = true;
+    for (k, status) in known_failures::check(&known, &cases) {
+        let label = match status {
+            EntryStatus::StillFails => "still fails",
+            EntryStatus::NowPasses => "NOW PASSES (stale)",
+            EntryStatus::NotChecked => "NOT CHECKED (not in corpus)",
+        };
+        println!("{:<14} {}", k.ontology, label);
+        all_fail &= status == EntryStatus::StillFails;
+    }
+    Ok(all_fail)
+}
+
 fn main() -> anyhow::Result<()> {
     match Cli::parse().cmd {
         Cmd::Roundtrip {
@@ -353,6 +396,11 @@ fn main() -> anyhow::Result<()> {
                 horned_owl_rev.as_deref(),
                 |name, bytes| roundtrip::run_bytes(name, bytes, &fmts, &known, run_all),
             )?;
+        }
+        Cmd::CheckKnownFailures { corpus: dir } => {
+            if !check_known_failures(&dir)? {
+                std::process::exit(1);
+            }
         }
         Cmd::Reason {
             corpus: dir,
