@@ -10,76 +10,138 @@
 //!
 //! ## Ordering strategy
 //!
-//! There is no canonical *graph* ordering available cheaply here (that would
-//! require full RDF-style graph canonicalization, e.g. blank-node
-//! neighborhood hashing), so this takes the simplest deterministic scheme
-//! that satisfies "same content -> same labels":
+//! Labels must not depend on the original ids, or two reads of the same
+//! document (whose readers number blank nodes differently) canonicalize
+//! differently. So the order is derived from structure alone:
 //!
-//! 1. Sort all `AnnotatedComponent`s by their derived `Ord`. This is a
-//!    total order that depends only on component content (see the caveat
-//!    below for the one place original blank-node labels leak into it).
-//! 2. Walk the sorted components in order (immutable visitor) and assign
-//!    `_:c{n}` to each previously-unseen anonymous-individual id, in
-//!    first-visit order.
-//! 3. Rewrite every `AnonymousIndividual` in place via horned-owl's mutable
-//!    visitor (`horned_owl::visitor::mutable`), which reaches anon ids
-//!    wherever they occur -- as an `Individual` operand (class/property
-//!    assertions, `ObjectOneOf`, `SameIndividual`, …) or as an
-//!    `AnnotationSubject`/`AnnotationValue`.
+//! 1. Colour refinement: each anonymous id starts with one shared colour;
+//!    every round, each component is rendered with its ids replaced by
+//!    their colours, and an id's new colour hashes its old colour with the
+//!    sorted renderings of the components mentioning it. Rounds repeat until
+//!    the number of distinct colours stops growing.
+//! 2. Components containing anonymous ids are sorted by their final
+//!    rendering, with the derived `Ord` only breaking ties.
+//! 3. Walk that order (immutable visitor) and assign `_:c{n}` to each
+//!    previously-unseen id, in first-visit order.
+//! 4. Rewrite every `AnonymousIndividual` via horned-owl's mutable visitor,
+//!    which reaches ids wherever they occur -- as an `Individual` operand
+//!    or as an `AnnotationSubject`/`AnnotationValue`.
 //!
 //! ### Caveat
 //!
-//! The derived `Ord` includes the anonymous individuals' pre-canon id
-//! strings, so it is not a *pure* content order: if a single component
-//! contains two distinct anonymous individuals whose original labels order
-//! differently relative to the rest of the component, the pre-canon label
-//! can (in adversarial cases) perturb the component's sort position, which
-//! in turn can perturb *first-visit* order and thus the final canonical
-//! labels. In practice, for the common case this task targets -- a single
-//! anonymous individual's label differing between two otherwise-identical
-//! models, or several anon ids whose relative order is determined by
-//! surrounding non-anon content -- this still produces identical output.
-//! This is a deliberate first cut (per the task brief) and not full RDF
-//! blank-node canonicalization; revisit if the round-trip harness surfaces
-//! false mismatches traceable to this.
+//! Ids that refinement cannot tell apart (structurally symmetric nodes) are
+//! ordered by the original labels, as this is not full RDF blank-node
+//! canonicalization.
 
 use horned_owl::model::{AnnotatedComponent, AnonymousIndividual, Build, MutableOntology, RcStr};
 use horned_owl::ontology::set::SetOntology;
 use horned_owl::visitor::immutable::{Visit, Walk};
 use horned_owl::visitor::mutable::{VisitMut, WalkMut};
-use std::collections::HashMap;
+use std::collections::hash_map::DefaultHasher;
+use std::collections::{BTreeSet, HashMap, HashSet};
+use std::hash::{Hash, Hasher};
 
 /// Rewrite every anonymous-individual id in `model` to a deterministic,
 /// content-derived label so structurally-equal models become `Eq`-equal
 /// regardless of their original blank-node labels.
 pub fn canonicalize(model: SetOntology<RcStr>) -> SetOntology<RcStr> {
-    // Deterministic order: the components' derived Ord.
     let mut comps: Vec<AnnotatedComponent<RcStr>> = model.iter().cloned().collect();
     comps.sort();
 
-    // First pass: assign canonical ids in first-visit order.
+    let order = structural_order(&comps);
+
+    // Assign canonical ids in first-visit order.
     let mut map: HashMap<String, String> = HashMap::new();
     {
         let mut walk = Walk::new(AnonCollector { map: &mut map });
-        for c in &comps {
-            walk.annotated_component(c);
+        for &i in &order {
+            walk.annotated_component(&comps[i]);
         }
     }
 
-    // Second pass: rewrite via a mutable visitor.
     let build: Build<RcStr> = Build::new();
-    let rewriter = AnonRewriter {
-        map: &map,
-        build: &build,
-    };
-    let mut walk: WalkMut<RcStr, AnonRewriter> = WalkMut::new(rewriter);
-
     let mut out = SetOntology::new();
     for mut c in comps {
-        walk.annotated_component(&mut c);
+        rewrite(&mut c, &map, &build);
         out.insert(c);
     }
     out
+}
+
+/// Indices into `comps` of the components containing anonymous ids, sorted
+/// by structure rather than by the ids' original labels.
+fn structural_order(comps: &[AnnotatedComponent<RcStr>]) -> Vec<usize> {
+    let anon: Vec<usize> = (0..comps.len())
+        .filter(|&i| !anon_ids(&comps[i]).is_empty())
+        .collect();
+    let ids: Vec<Vec<String>> = anon.iter().map(|&i| anon_ids(&comps[i])).collect();
+
+    let mut colour: HashMap<String, String> = ids
+        .iter()
+        .flatten()
+        .map(|id| (id.clone(), String::new()))
+        .collect();
+    let build: Build<RcStr> = Build::new();
+    let render = |colour: &HashMap<String, String>| -> Vec<String> {
+        anon.iter()
+            .map(|&i| {
+                let mut c = comps[i].clone();
+                rewrite(&mut c, colour, &build);
+                format!("{c:?}")
+            })
+            .collect()
+    };
+
+    let mut keys = render(&colour);
+    let mut classes = 1;
+    // Each round can only split colour classes, so this stops after at most
+    // one round per id; the cap bounds the cost on pathological inputs.
+    for _ in 0..32 {
+        let mut seen: HashMap<&str, Vec<&str>> = HashMap::new();
+        for (key, ids) in keys.iter().zip(&ids) {
+            for id in ids {
+                seen.entry(id.as_str()).or_default().push(key);
+            }
+        }
+        let next: HashMap<String, String> = seen
+            .into_iter()
+            .map(|(id, mut ks)| {
+                ks.sort();
+                let mut h = DefaultHasher::new();
+                colour[id].hash(&mut h);
+                ks.hash(&mut h);
+                (id.to_string(), format!("_:h{:016x}", h.finish()))
+            })
+            .collect();
+        let n = next.values().collect::<HashSet<_>>().len();
+        colour = next;
+        keys = render(&colour);
+        if n <= classes {
+            break;
+        }
+        classes = n;
+    }
+
+    let mut order: Vec<usize> = (0..anon.len()).collect();
+    order.sort_by(|&a, &b| keys[a].cmp(&keys[b]).then(anon[a].cmp(&anon[b])));
+    order.into_iter().map(|k| anon[k]).collect()
+}
+
+fn anon_ids(c: &AnnotatedComponent<RcStr>) -> Vec<String> {
+    struct Ids(BTreeSet<String>);
+    impl Visit<RcStr> for Ids {
+        fn visit_anonymous_individual(&mut self, ai: &AnonymousIndividual<RcStr>) {
+            self.0.insert(ai.as_ref().to_string());
+        }
+    }
+    let mut walk = Walk::new(Ids(BTreeSet::new()));
+    walk.annotated_component(c);
+    walk.into_visit().0.into_iter().collect()
+}
+
+fn rewrite(c: &mut AnnotatedComponent<RcStr>, map: &HashMap<String, String>, build: &Build<RcStr>) {
+    let mut walk: WalkMut<RcStr, AnonRewriter> = WalkMut::new(AnonRewriter { map, build });
+    walk.annotated_component(c);
 }
 
 /// `Visit` that assigns each previously-unseen anonymous-individual id the
@@ -153,6 +215,25 @@ mod tests {
 
         let twice = canonicalize(once.clone());
         assert_eq!(as_set(&once), as_set(&twice));
+    }
+
+    #[test]
+    fn label_order_does_not_decide_canonical_labels() {
+        // Two anonymous nodes that differ only in their annotation property:
+        // swapping which original label each carries must not change the result.
+        let src = |x: &str, y: &str| {
+            format!(
+                "Prefix(:=<http://ex/>)\nOntology(<http://ex/o>\n\
+                 AnnotationAssertion(:p _:{x} \"v\")\nAnnotationAssertion(:q _:{y} \"v\")\n)"
+            )
+        };
+        let a = read_source(Format::Ofn, src("a", "b").as_bytes())
+            .unwrap()
+            .model;
+        let b = read_source(Format::Ofn, src("b", "a").as_bytes())
+            .unwrap()
+            .model;
+        assert_eq!(as_set(&canonicalize(a)), as_set(&canonicalize(b)));
     }
 
     fn as_set(o: &SetOntology<RcStr>) -> std::collections::BTreeSet<String> {
