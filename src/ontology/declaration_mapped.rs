@@ -156,12 +156,12 @@ impl<A: ForIRI, AA: ForIndex<A>> OntologyIndex<A, AA> for DeclarationMappedIndex
                 // order: DataProperty beats ObjectProperty beats
                 // AnnotationProperty.
                 //
-                // DataProperty winning is a deliberate choice. It was
-                // previously the outcome by accident: insertion order
-                // decided, and the round-trip writers happen to emit
-                // Data declarations last. It is now explicit so that a
-                // reread agrees with its source however the
-                // declarations are ordered.
+                // The OWL specification gives no such rule, so this is
+                // our own. It began as an ad-hoc accident (insertion
+                // order decided, and the round-trip writers happened to
+                // emit Data declarations last) and is now implemented
+                // specifically, so that a reread agrees with its source
+                // however the declarations are ordered.
                 match (ne, self.kinds.get(&iri)) {
                     (
                         NamedEntityKind::AnnotationProperty,
@@ -248,6 +248,27 @@ mod test {
             NamedOWLEntity::from(b.object_property(iri.clone())).into();
 
         for order in [[&data, &object], [&object, &data]] {
+            let mut d = DeclarationMappedIndex::new_rc();
+            for ax in order {
+                d.index_insert(ax.clone().into());
+            }
+            assert_eq!(
+                d.declaration_kind(&iri),
+                Some(NamedOWLEntityKind::DataProperty)
+            );
+        }
+    }
+
+    #[test]
+    fn test_data_property_wins_over_annotation_property() {
+        let b = Build::new_rc();
+        let iri = b.iri("http://www.example.com/p");
+        let data: AnnotatedComponent<RcStr> =
+            NamedOWLEntity::from(b.data_property(iri.clone())).into();
+        let annotation: AnnotatedComponent<RcStr> =
+            NamedOWLEntity::from(b.annotation_property(iri.clone())).into();
+
+        for order in [[&data, &annotation], [&annotation, &data]] {
             let mut d = DeclarationMappedIndex::new_rc();
             for ax in order {
                 d.index_insert(ax.clone().into());
