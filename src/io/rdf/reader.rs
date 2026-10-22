@@ -2035,6 +2035,16 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
                             ))
                         }
                     }
+                    // An undeclared operand: its kind is unambiguous from the
+                    // axiom -- an owl:equivalentClass operand is a class. In lax
+                    // mode take it as one rather than aborting the whole parse.
+                    None if self.config.lax => ok_some! {
+                        EquivalentClasses(
+                            vec![
+                                self.retrieve_to_ce(a)?,
+                                self.retrieve_to_ce(b)?,
+                            ]).into()
+                    },
                     _ => Err(HornedError::invalid_at(
                         format!(
                             "Unknown entity in equivalent class statement: {:?}",
@@ -3377,6 +3387,46 @@ mod test {
                 .unwrap();
 
         dbg!(ont, incomp);
+    }
+
+    #[test]
+    fn equivalent_class_undeclared_operand_lax() {
+        // `:A owl:equivalentClass :B` with `:A` undeclared aborts in strict mode;
+        // in lax mode both operands are taken as classes (their kind is implied by
+        // the axiom) and the parse completes. See #324.
+        let doc = "@prefix owl: <http://www.w3.org/2002/07/owl#> .\n\
+                   <http://ex/A> owl:equivalentClass <http://ex/B> .\n";
+
+        // strict: the parse aborts
+        let strict: Result<(ConcreteRDFOntology<RcStr, Rc<AnnotatedComponent<RcStr>>>, _), _> =
+            OntologyParser::from_bufread_with_format(
+                &mut doc.as_bytes(),
+                Default::default(),
+                oxrdfio::RdfFormat::Turtle,
+            )
+            .unwrap()
+            .parse();
+        assert!(strict.is_err());
+
+        // lax: parses with an EquivalentClasses axiom
+        let config = ParserConfiguration {
+            lax: true,
+            ..Default::default()
+        };
+        let (ont, incomp): (ConcreteRDFOntology<RcStr, Rc<AnnotatedComponent<RcStr>>>, _) =
+            OntologyParser::from_bufread_with_format(
+                &mut doc.as_bytes(),
+                config,
+                oxrdfio::RdfFormat::Turtle,
+            )
+            .unwrap()
+            .parse()
+            .unwrap();
+        assert!(incomp.is_complete());
+        let so: SetOntology<_> = ont.into();
+        assert!(so
+            .into_iter()
+            .any(|c| matches!(c.component, Component::EquivalentClasses(_))));
     }
 
     #[test]
