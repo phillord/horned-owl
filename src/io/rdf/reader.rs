@@ -28,6 +28,7 @@ use crate::{
 use std::collections::BTreeSet;
 use std::collections::HashMap;
 use std::collections::HashSet;
+use std::collections::hash_map::Entry;
 use std::fmt::Debug;
 use std::{io::BufRead, marker::PhantomData};
 
@@ -550,6 +551,39 @@ impl<A: ForIRI> VPosTriple<A> {
     }
 }
 
+/// A value that is nearly always single, without allocating for that case.
+#[derive(Debug)]
+enum OneOrMany<T> {
+    One(T),
+    Many(Vec<T>),
+}
+
+impl<T> OneOrMany<T> {
+    /// Add `t`, returning its position.
+    fn push(&mut self, t: T) -> usize {
+        match self {
+            OneOrMany::Many(v) => {
+                v.push(t);
+                v.len() - 1
+            }
+            OneOrMany::One(_) => {
+                let OneOrMany::One(first) = std::mem::replace(self, OneOrMany::Many(vec![])) else {
+                    unreachable!()
+                };
+                *self = OneOrMany::Many(vec![first, t]);
+                1
+            }
+        }
+    }
+
+    fn get_mut(&mut self, idx: usize) -> Option<&mut T> {
+        match self {
+            OneOrMany::One(t) => (idx == 0).then_some(t),
+            OneOrMany::Many(v) => v.get_mut(idx),
+        }
+    }
+}
+
 /// An ontology parser which takes a set of RDF triples and turns them
 /// into an RDFOntology.
 #[derive(Debug)]
@@ -583,7 +617,9 @@ pub struct OntologyParser<
     // a restriction shared by two rdf:List members) -- see #254.
     used_bnode: HashSet<BNode<A>>,
     // Annotations mapped to Triples
-    ann_map: HashMap<[Term<A>; 3], BTreeSet<Annotation<A>>>,
+    // Almost always one set per triple, but axioms that differ only in
+    // their annotations share a triple and each has its own owl:Axiom.
+    ann_map: HashMap<[Term<A>; 3], OneOrMany<BTreeSet<Annotation<A>>>>,
     atom: HashMap<Term<A>, Atom<A>>,
     variable: HashMap<IRI<A>, Variable<A>>,
 
@@ -934,9 +970,52 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
         update_or_insert_logically_equal_component(&mut self.o, cmp);
     }
 
+    /// Remove and return every annotation set recorded for `key`.
+    ///
+    /// If there were no annotations, this is a single empty set.
+    fn take_annotations(&mut self, key: &[Term<A>; 3]) -> OneOrMany<BTreeSet<Annotation<A>>> {
+        self.ann_map
+            .remove(key)
+            .unwrap_or_else(|| OneOrMany::One(Default::default()))
+    }
+
+    /// Add `component` once for each annotation set.
+    ///
+    /// Axioms that differ only in their annotations are distinct, so
+    /// when there is more than one set they are inserted separately
+    /// rather than merged into a single logically equal axiom.
+    fn merge_annotated(
+        &mut self,
+        component: Component<A>,
+        mut base: BTreeSet<Annotation<A>>,
+        sets: OneOrMany<BTreeSet<Annotation<A>>>,
+    ) {
+        match sets {
+            OneOrMany::One(set) => {
+                base.extend(set);
+                self.merge(AnnotatedComponent {
+                    component,
+                    ann: base,
+                });
+            }
+            OneOrMany::Many(sets) => {
+                for set in sets {
+                    let mut ann = base.clone();
+                    ann.extend(set);
+                    self.o.insert(AnnotatedComponent {
+                        component: component.clone(),
+                        ann,
+                    });
+                }
+            }
+        }
+    }
+
     /// Process axiom annotations.
     fn axiom_annotations(&mut self) -> Result<(), HornedError> {
-        let mut bnode_to_key: HashMap<BNode<A>, [Term<A>; 3]> = HashMap::new();
+        // The key, and the position of the annotation set within the
+        // sets for that key
+        let mut bnode_to_key: HashMap<BNode<A>, ([Term<A>; 3], usize)> = HashMap::new();
 
         for (k, v) in std::mem::take(&mut self.bnode) {
             match v.as_slice() {
@@ -957,9 +1036,15 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
                         p.clone(),
                         ob.clone(),
                     ]);
-                    bnode_to_key.insert(k, key.clone());
                     let annotations = self.parse_annotations(ann)?;
-                    self.ann_map.insert(key, annotations);
+                    let idx = match self.ann_map.entry(key.clone()) {
+                        Entry::Occupied(mut e) => e.get_mut().push(annotations),
+                        Entry::Vacant(e) => {
+                            e.insert(OneOrMany::One(annotations));
+                            0
+                        }
+                    };
+                    bnode_to_key.insert(k, (key, idx));
                 }
 
                 _ => {
@@ -980,11 +1065,14 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
                     [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Annotation)],
                     nested_ann @ ..,
                 ] => {
-                    if let Some(ann_key) = bnode_to_key.get(sb_bnode).cloned() {
+                    if let Some((ann_key, idx)) = bnode_to_key.get(sb_bnode).cloned() {
                         let ref_ann =
                             self.annotation(&[Term::BNode(k.clone()), p.clone(), ob.clone()])?;
                         let nested = self.parse_annotations(nested_ann)?;
-                        if let Some(ann_set) = self.ann_map.get_mut(&ann_key)
+                        if let Some(ann_set) = self
+                            .ann_map
+                            .get_mut(&ann_key)
+                            .and_then(|sets| sets.get_mut(idx))
                             && let Some(mut target) = ann_set.take(&ref_ann)
                         {
                             target.ann = nested;
@@ -1023,12 +1111,9 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
             };
 
             if let Some(entity) = entity {
-                let ann = self.ann_map.remove(t.triple()).unwrap_or_default();
+                let sets = self.take_annotations(t.triple());
                 let ne: NamedOWLEntity<_> = entity;
-                self.merge(AnnotatedComponent {
-                    component: ne.into(),
-                    ann,
-                });
+                self.merge_annotated(ne.into(), Default::default(), sets);
             } else {
                 self.simple.push(t);
             }
@@ -2333,11 +2418,8 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
 
             match axiom? {
                 Some(axiom) => {
-                    let ann = self.ann_map.remove(t.triple()).unwrap_or_default();
-                    self.merge(AnnotatedComponent {
-                        component: axiom,
-                        ann,
-                    })
+                    let sets = self.take_annotations(t.triple());
+                    self.merge_annotated(axiom, Default::default(), sets)
                 }
                 _ => self.simple.push(t),
             }
@@ -2515,14 +2597,14 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
                     // plus any reified (owl:Axiom) annotations collected
                     // earlier by `axiom_annotations` (this is the form
                     // produced by Horned-OWL's own RDF writer).
-                    let mut ann = self.parse_annotations(&ann_triples)?;
+                    let ann = self.parse_annotations(&ann_triples)?;
                     let key = self.config.build.as_ref().substitute_term([
                         Term::BNode(bnode),
                         Term::RDF(VRDF::Type),
                         Term::SWRL(VSWRL::Imp),
                     ]);
-                    ann.extend(self.ann_map.remove(&key).unwrap_or_default());
-                    self.merge(AnnotatedComponent::new(rule, ann));
+                    let sets = self.take_annotations(&key);
+                    self.merge_annotated(rule.into(), ann, sets);
                 }
                 _ => {
                     self.bnode.insert(bnode, triple);
@@ -2538,15 +2620,13 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
         for t in std::mem::take(&mut self.simple) {
             let firi =
                 |s: &mut OntologyParser<A, AA, O, B>, t, iri: &IRI<_>| -> Result<(), HornedError> {
-                    let ann = s.ann_map.remove(t).unwrap_or_default();
-                    s.merge(AnnotatedComponent {
-                        component: AnnotationAssertion {
-                            subject: iri.into(),
-                            ann: s.annotation(t)?,
-                        }
-                        .into(),
-                        ann,
-                    });
+                    let sets = s.take_annotations(t);
+                    let component = AnnotationAssertion {
+                        subject: iri.into(),
+                        ann: s.annotation(t)?,
+                    }
+                    .into();
+                    s.merge_annotated(component, Default::default(), sets);
                     Ok(())
                 };
 
@@ -2577,16 +2657,14 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
         for (k, v) in std::mem::take(&mut self.bnode) {
             let fbnode =
                 |s: &mut OntologyParser<A, AA, O, B>, t, _: &BNode<A>| -> Result<_, HornedError> {
-                    let ann = s.ann_map.remove(t).unwrap_or_default();
+                    let sets = s.take_annotations(t);
                     let ind: AnonymousIndividual<A> = s.config.build.as_ref().anon_renumbered();
-                    s.merge(AnnotatedComponent {
-                        component: AnnotationAssertion {
-                            subject: ind.into(),
-                            ann: s.annotation(t)?,
-                        }
-                        .into(),
-                        ann,
-                    });
+                    let component = AnnotationAssertion {
+                        subject: ind.into(),
+                        ann: s.annotation(t)?,
+                    }
+                    .into();
+                    s.merge_annotated(component, Default::default(), sets);
                     Ok(())
                 };
 
@@ -2827,7 +2905,22 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
                 class_expression,
                 object_property_expression,
                 data_range,
-                ann_map: self.ann_map,
+                // `IncompleteParse::ann_map` holds one set per triple, so
+                // sets that the parser kept apart are unioned here. Only
+                // leftover annotations reach this point, and they are only
+                // printed (horned-unparsed, horned-validate); fixing it
+                // means changing the public type.
+                ann_map: self
+                    .ann_map
+                    .into_iter()
+                    .map(|(k, sets)| {
+                        let sets = match sets {
+                            OneOrMany::One(set) => vec![set],
+                            OneOrMany::Many(sets) => sets,
+                        };
+                        (k, sets.into_iter().flatten().collect())
+                    })
+                    .collect(),
                 atom: self.atom,
             },
         )
