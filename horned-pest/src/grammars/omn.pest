@@ -135,11 +135,15 @@ KnownDatatypeIRI = {
 
 // DataShapedParenthesized: a parenthesised data range is data-shaped when its
 // FIRST token after `(` is a known-datatype IRI (`xsd:integer`) or a DataOneOf
-// literal (`{"x", ...}`).  This catches `(xsd:integer and not {"x"})` without
+// literal (`{"x", ...}`), possibly after IRIs joined by `or`/`and`.  This
+// catches `(xsd:integer and not {"x"})` without
 // swallowing `(:B and :C)` (object filler, `:B` doesn't match KnownDatatypeIRI
 // or DataOneOf).  The `(` is checked but not consumed — the overall lookahead
 // is `&DataShaped`, which wraps this predicate.
-DataShapedParenthesized = _{ "(" ~ (KnownDatatypeIRI | DataOneOf) }
+DataShapedParenthesized = _{
+    "(" ~ ( !DataShapedMember ~ IRI ~ ( OrKw | AndKw ) )* ~ DataShapedMember
+}
+DataShapedMember = _{ NotKw? ~ (KnownDatatypeIRI | DataOneOf) }
 
 // DataShaped: silent predicate — the filler is unambiguously data.
 // Matches a faceted datatype restriction (`anyIRI[…]`), a known-prefix IRI, a
