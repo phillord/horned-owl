@@ -2678,6 +2678,41 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
                         _ => unreachable!("Unexpected error in equivalent property matching"),
                     }
                 }
+                [
+                    Term::Iri(x),
+                    Term::OWL(
+                        op @ (VOWL::UnionOf
+                        | VOWL::IntersectionOf
+                        | VOWL::ComplementOf
+                        | VOWL::OneOf),
+                    ),
+                    obj,
+                ] if self.iri_is_kind(x, NamedOWLEntityKind::Class, ic) =>
+                {
+                    ok_some! {
+                        EquivalentClasses(vec![
+                            Class(x.clone()).into(),
+                            match (op, obj) {
+                                (VOWL::UnionOf, Term::BNode(id)) => {
+                                    ClassExpression::ObjectUnionOf(self.retrieve_to_ce_seq(id)?)
+                                }
+                                (VOWL::IntersectionOf, Term::BNode(id)) => {
+                                    ClassExpression::ObjectIntersectionOf(
+                                        self.retrieve_to_ce_seq(id)?,
+                                    )
+                                }
+                                (VOWL::OneOf, Term::BNode(id)) => {
+                                    ClassExpression::ObjectOneOf(self.retrieve_to_ni_seq(id)?)
+                                }
+                                (VOWL::ComplementOf, c) => ClassExpression::ObjectComplementOf(
+                                    Box::new(self.retrieve_to_ce(c)?),
+                                ),
+                                _ => return None,
+                            },
+                        ])
+                        .into()
+                    }
+                }
                 [Term::Iri(sub), Term::OWL(VOWL::SameAs), Term::Iri(obj)] => {
                     Ok(Some(SameIndividual(vec![sub.into(), obj.into()]).into()))
                 }
@@ -3552,6 +3587,48 @@ mod test {
 
         let (_rdfont, incomplete) = p.as_ontology_and_incomplete();
         Ok(())
+    }
+
+    #[test]
+    fn owl1_named_class_expressions() {
+        let text = r#"@prefix : <http://example.org/owl1#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+<http://example.org/owl1> a owl:Ontology .
+:A a owl:Class .
+:B a owl:Class .
+:i a owl:NamedIndividual .
+:j a owl:NamedIndividual .
+:Union a owl:Class ; owl:unionOf ( :A :B ) .
+:Intersection a owl:Class ; owl:intersectionOf ( :A :B ) .
+:Complement a owl:Class ; owl:complementOf :A .
+:Enumeration a owl:Class ; owl:oneOf ( :i :j ) .
+"#;
+        let (ont, incomp): (ConcreteRDFOntology<RcStr, Rc<AnnotatedComponent<RcStr>>>, _) =
+            OntologyParser::from_bufread_with_format(
+                &mut text.as_bytes(),
+                Default::default(),
+                oxrdfio::RdfFormat::Turtle,
+            )
+            .unwrap()
+            .parse()
+            .unwrap_or_else(|e| panic!("{e}"));
+        assert!(incomp.is_complete(), "{incomp:?}");
+        let ont: ComponentMappedOntology<_, _> = ont.into();
+        let kinds: Vec<String> = ont
+            .i()
+            .equivalent_class()
+            .map(|e| match &e.0[1] {
+                ClassExpression::ObjectUnionOf(_) => "union",
+                ClassExpression::ObjectIntersectionOf(_) => "intersection",
+                ClassExpression::ObjectComplementOf(_) => "complement",
+                ClassExpression::ObjectOneOf(_) => "one of",
+                _ => "other",
+            })
+            .map(str::to_owned)
+            .collect::<std::collections::BTreeSet<_>>()
+            .into_iter()
+            .collect();
+        assert_eq!(kinds, ["complement", "intersection", "one of", "union"]);
     }
 
     #[test]
