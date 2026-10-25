@@ -473,21 +473,13 @@ impl<A: ForIRI> Display for Manchester<'_, ClassExpression<A>, A> {
             }
 
             DataSomeValuesFrom { dp, dr } => {
-                write!(
-                    f,
-                    "{} some {}",
-                    Manchester(dp, pm, PhantomData::<A>),
-                    Manchester(dr, pm, PhantomData::<A>)
-                )
+                write!(f, "{} some ", Manchester(dp, pm, PhantomData::<A>))?;
+                dr_operand(dr, 3, pm, f)
             }
 
             DataAllValuesFrom { dp, dr } => {
-                write!(
-                    f,
-                    "{} only {}",
-                    Manchester(dp, pm, PhantomData::<A>),
-                    Manchester(dr, pm, PhantomData::<A>)
-                )
+                write!(f, "{} only ", Manchester(dp, pm, PhantomData::<A>))?;
+                dr_operand(dr, 3, pm, f)
             }
 
             DataHasValue { dp, l } => {
@@ -500,33 +492,18 @@ impl<A: ForIRI> Display for Manchester<'_, ClassExpression<A>, A> {
             }
 
             DataMinCardinality { n, dp, dr } => {
-                write!(
-                    f,
-                    "{} min {} {}",
-                    Manchester(dp, pm, PhantomData::<A>),
-                    n,
-                    Manchester(dr, pm, PhantomData::<A>)
-                )
+                write!(f, "{} min {} ", Manchester(dp, pm, PhantomData::<A>), n)?;
+                dr_operand(dr, 3, pm, f)
             }
 
             DataMaxCardinality { n, dp, dr } => {
-                write!(
-                    f,
-                    "{} max {} {}",
-                    Manchester(dp, pm, PhantomData::<A>),
-                    n,
-                    Manchester(dr, pm, PhantomData::<A>)
-                )
+                write!(f, "{} max {} ", Manchester(dp, pm, PhantomData::<A>), n)?;
+                dr_operand(dr, 3, pm, f)
             }
 
             DataExactCardinality { n, dp, dr } => {
-                write!(
-                    f,
-                    "{} exactly {} {}",
-                    Manchester(dp, pm, PhantomData::<A>),
-                    n,
-                    Manchester(dr, pm, PhantomData::<A>)
-                )
+                write!(f, "{} exactly {} ", Manchester(dp, pm, PhantomData::<A>), n)?;
+                dr_operand(dr, 3, pm, f)
             }
         }
     }
@@ -1124,6 +1101,41 @@ mod tests {
         assert_eq!(
             m(&DataRange::DataComplementOf(Box::new(union2))),
             "not (xsd:integer or xsd:string)"
+        );
+    }
+
+    #[test]
+    fn data_restriction_filler_in_parentheses() {
+        let b = Build::new_rc();
+        let mut pm = curie::PrefixMapping::default();
+        pm.add_prefix("", "http://t/").unwrap();
+        let m = |c: &ClassExpression<_>| c.as_manchester_with_prefixes(&pm).to_string();
+        let dp = b.data_property("http://t/load");
+        let union = DataRange::DataUnionOf(vec![
+            DataRange::Datatype(b.datatype("http://t/P")),
+            DataRange::Datatype(b.datatype("http://t/Q")),
+        ]);
+        assert_eq!(
+            m(&ClassExpression::DataAllValuesFrom {
+                dp: dp.clone(),
+                dr: union.clone()
+            }),
+            "load only (P or Q)"
+        );
+        assert_eq!(
+            m(&ClassExpression::DataMinCardinality {
+                n: 1,
+                dp: dp.clone(),
+                dr: union
+            }),
+            "load min 1 (P or Q)"
+        );
+        assert_eq!(
+            m(&ClassExpression::DataSomeValuesFrom {
+                dp,
+                dr: DataRange::Datatype(b.datatype("http://t/P"))
+            }),
+            "load some P"
         );
     }
 
