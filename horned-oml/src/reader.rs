@@ -1468,7 +1468,7 @@ impl<'a, A: ForIRI, O: MutableOntology<A>> Reader<'a, A, O> {
         }
         self.out.insert(AnnotatedComponent::new(
             horned_owl::model::Rule { head, body },
-            ann,
+            ann.into(),
         ));
         Ok(())
     }

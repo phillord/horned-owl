@@ -5,6 +5,7 @@ use curie::PrefixMapping;
 
 use crate::error::HornedError;
 use crate::model::Annotation;
+use crate::model::AnnotationSet;
 use crate::model::AnnotationSubject;
 use crate::model::Atom;
 use crate::model::Component;
@@ -273,10 +274,7 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
     // Helper: produce an optional `Annotations: <entries> ` prefix string for a
     // clause when the `AnnotatedComponent` carries a non-empty annotation set.
     // Returns an empty string when there are no annotations (common case).
-    fn ann_prefix<A: ForIRI>(
-        ann: &std::collections::BTreeSet<Annotation<A>>,
-        pm: &PrefixMapping,
-    ) -> String {
+    fn ann_prefix<A: ForIRI>(ann: &AnnotationSet<A>, pm: &PrefixMapping) -> String {
         if ann.is_empty() {
             return String::new();
         }
@@ -1512,7 +1510,7 @@ mod tests {
             }),
             ann: Default::default(),
         };
-        let ann: std::collections::BTreeSet<_> = [note].into_iter().collect();
+        let ann: AnnotationSet<_> = [note].into_iter().collect();
         let comps: Vec<Component<_>> = vec![
             DeclareObjectProperty(b.object_property("http://ex/op")).into(),
             DeclareDataProperty(b.data_property("http://ex/dp")).into(),

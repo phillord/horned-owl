@@ -36,7 +36,7 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: StdWrite>(
 
     let id = ont.i().the_ontology_id_or_default();
     let id_item: StreamComponent<AA> =
-        StreamComponent::Component(AnnotatedComponent::new(id, BTreeSet::new()).into());
+        StreamComponent::Component(AnnotatedComponent::new(id, AnnotationSet::new()).into());
 
     write_stream(
         write,
@@ -328,6 +328,16 @@ macro_rules! content0 {
 
 // Render Impl for container and collection types
 impl<'a, T: Render<'a, W>, W: StdWrite> Render<'a, W> for BTreeSet<T> {
+    fn render(&self, w: &mut Writer<W>, m: &'a PrefixMapping) -> Result<(), HornedError> {
+        for item in self.iter() {
+            item.render(w, m)?;
+        }
+
+        Ok(())
+    }
+}
+
+impl<'a, A: ForIRI, W: StdWrite> Render<'a, W> for AnnotationSet<A> {
     fn render(&self, w: &mut Writer<W>, m: &'a PrefixMapping) -> Result<(), HornedError> {
         for item in self.iter() {
             item.render(w, m)?;

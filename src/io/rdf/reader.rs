@@ -24,7 +24,6 @@ use crate::{
     vocab::RDFS as VRDFS,
 };
 
-use std::collections::BTreeSet;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::collections::hash_map::Entry;
@@ -414,7 +413,7 @@ pub struct IncompleteParse<A: ForIRI> {
 
     /// Annotations that are otherwise unconnected to other parts of
     /// the Ontology
-    pub ann_map: HashMap<[Term<A>; 3], BTreeSet<Annotation<A>>>,
+    pub ann_map: HashMap<[Term<A>; 3], AnnotationSet<A>>,
 }
 
 // Not derived, as that would require `A: Default`
@@ -590,7 +589,7 @@ pub struct OntologyParser<
     // Annotations mapped to Triples
     // Almost always one set per triple, but axioms that differ only in
     // their annotations share a triple and each has its own owl:Axiom.
-    ann_map: HashMap<[Term<A>; 3], OneOrMany<BTreeSet<Annotation<A>>>>,
+    ann_map: HashMap<[Term<A>; 3], OneOrMany<AnnotationSet<A>>>,
     // Triples whose annotations have already been taken from `ann_map`,
     // so that a repeat of the triple adds nothing.
     ann_taken: HashSet<[Term<A>; 3]>,
@@ -788,7 +787,7 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
                     v.push(imp.clone());
                     self.merge(AnnotatedComponent {
                         component: Import(imp).into(),
-                        ann: BTreeSet::new(),
+                        ann: AnnotationSet::new(),
                     });
                 }
                 _ => self.simple.push(t),
@@ -892,15 +891,8 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
         self.simple.extend(new_triples);
     }
 
-    fn parse_annotations(
-        &self,
-        triples: &[[Term<A>; 3]],
-    ) -> Result<BTreeSet<Annotation<A>>, HornedError> {
-        let mut ann = BTreeSet::default();
-        for a in triples {
-            ann.insert(self.annotation(a)?);
-        }
-        Ok(ann)
+    fn parse_annotations(&self, triples: &[[Term<A>; 3]]) -> Result<AnnotationSet<A>, HornedError> {
+        triples.iter().map(|a| self.annotation(a)).collect()
     }
 
     // Process annotations
@@ -952,7 +944,7 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
     /// If there were no annotations, this is a single empty set. If the
     /// annotations were taken already, because the same triple arrived
     /// again, there are no sets, so the repeat adds no axiom.
-    fn take_annotations(&mut self, key: &[Term<A>; 3]) -> OneOrMany<BTreeSet<Annotation<A>>> {
+    fn take_annotations(&mut self, key: &[Term<A>; 3]) -> OneOrMany<AnnotationSet<A>> {
         match self.ann_map.remove(key) {
             Some(sets) => {
                 self.ann_taken.insert(key.clone());
@@ -971,8 +963,8 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
     fn merge_annotated(
         &mut self,
         component: Component<A>,
-        mut base: BTreeSet<Annotation<A>>,
-        sets: OneOrMany<BTreeSet<Annotation<A>>>,
+        mut base: AnnotationSet<A>,
+        sets: OneOrMany<AnnotationSet<A>>,
     ) {
         match sets {
             OneOrMany::One(set) => {
@@ -2177,7 +2169,7 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
             match axiom? {
                 Some(axiom) => self.merge(AnnotatedComponent {
                     component: axiom,
-                    ann: BTreeSet::new(),
+                    ann: AnnotationSet::new(),
                 }),
                 _ => {
                     if v.len() == 1 {
