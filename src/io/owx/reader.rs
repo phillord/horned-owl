@@ -644,10 +644,10 @@ from_start! {
                     if **datatype_iri == *"http://www.w3.org/2001/XMLSchema#string" =>
                     Literal::Simple{literal},
                 (None, Some(lang), literal) =>
-                    Literal::Language{literal, lang},
+                    Literal::Language{literal, lang: crate::io::language_tag(&lang)},
                 (Some(ref datatype_iri), Some(ref lang), ref literal)
                     if **datatype_iri == *"http://www.w3.org/1999/02/22-rdf-syntax-ns#PlainLiteral"
-                    => Literal::Language{literal:literal.to_string(), lang:lang.to_string()},
+                    => Literal::Language{literal:literal.to_string(), lang:crate::io::language_tag(lang)},
                 (Some(_), Some(_), _)
                     => return Err(invalid_at!(r.reader.buffer_position(), "Broken literal")),
                 (Some(datatype_iri), None, literal)

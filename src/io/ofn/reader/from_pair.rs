@@ -910,7 +910,7 @@ impl<A: ForIRI> FromPair<A> for Literal<A> {
             Rule::StringLiteralWithLanguage => {
                 let mut inner = pair.into_inner();
                 let literal = String::from_pair(inner.next().unwrap(), ctx)?;
-                let lang = inner.next().unwrap().as_str()[1..].trim().to_string();
+                let lang = crate::io::language_tag(inner.next().unwrap().as_str()[1..].trim());
                 Ok(Literal::Language { literal, lang })
             }
             Rule::StringLiteralNoLanguage => {
@@ -1161,7 +1161,7 @@ mod tests {
             r#""街道"@zh-Hans"#,
             Literal::Language {
                 literal: String::from("街道"),
-                lang: String::from("zh-Hans"),
+                lang: String::from("zh-hans"),
             }
         );
 
@@ -1173,7 +1173,7 @@ mod tests {
             r#""grad"@sr-Latn"#,
             Literal::Language {
                 literal: String::from("grad"),
-                lang: String::from("sr-Latn"),
+                lang: String::from("sr-latn"),
             }
         );
 
@@ -1185,7 +1185,7 @@ mod tests {
             r#""color"@en-US"#,
             Literal::Language {
                 literal: String::from("color"),
-                lang: String::from("en-US"),
+                lang: String::from("en-us"),
             }
         );
     }

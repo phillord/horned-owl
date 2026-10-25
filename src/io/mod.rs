@@ -336,6 +336,11 @@ pub(crate) fn skip_bom<R: std::io::BufRead>(r: &mut R) -> std::io::Result<()> {
     Ok(())
 }
 
+/// A language tag in lower case, as oxrdf gives it to the RDF readers.
+pub(crate) fn language_tag(tag: &str) -> String {
+    tag.to_ascii_lowercase()
+}
+
 /// Detect the serialization format of an OWL document from its content.
 ///
 /// The detection logic is adapted from
@@ -442,6 +447,81 @@ fn first_xml_element(s: &str) -> Option<&str> {
 #[cfg(test)]
 mod tests {
     use std::path::PathBuf;
+
+    #[test]
+    fn readers_agree_on_language_tags() {
+        use crate::io::{ParserConfiguration, RDFParserConfiguration};
+        use crate::model::*;
+        use crate::ontology::set::SetOntology;
+
+        let ofn = "Prefix(:=<http://example.org/lang#>)\n\
+                   Prefix(rdfs:=<http://www.w3.org/2000/01/rdf-schema#>)\n\
+                   Ontology(<http://example.org/lang>\n\
+                   AnnotationAssertion(rdfs:label :Street \"Strasse\"@de-CH)\n)\n";
+        let omn = "Prefix: : <http://example.org/lang#>\n\
+                   Prefix: rdfs: <http://www.w3.org/2000/01/rdf-schema#>\n\
+                   Ontology: <http://example.org/lang>\n\
+                   Class: :Street\n    Annotations: rdfs:label \"Strasse\"@de-CH\n";
+        let owx = "<?xml version=\"1.0\"?>\n<Ontology xmlns=\"http://www.w3.org/2002/07/owl#\" \
+                   ontologyIRI=\"http://example.org/lang\">\n<AnnotationAssertion>\n\
+                   <AnnotationProperty IRI=\"http://www.w3.org/2000/01/rdf-schema#label\"/>\n\
+                   <IRI>http://example.org/lang#Street</IRI>\n\
+                   <Literal xml:lang=\"de-CH\">Strasse</Literal>\n</AnnotationAssertion>\n</Ontology>\n";
+        let ttl = "@prefix : <http://example.org/lang#> .\n\
+                   @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .\n\
+                   @prefix owl: <http://www.w3.org/2002/07/owl#> .\n\
+                   <http://example.org/lang> a owl:Ontology .\n\
+                   :Street a owl:Class ; rdfs:label \"Strasse\"@de-CH .\n";
+
+        let langs = |format: &str, text: &str| -> Vec<String> {
+            let b = Build::new_rc();
+            let mut r = std::io::Cursor::new(text.as_bytes());
+            let components: Vec<Component<RcStr>> = match format {
+                "ofn" => crate::io::ofn::reader::read::<RcStr, _, SetOntology<RcStr>, _>(
+                    &mut r,
+                    ParserConfiguration::new(&b),
+                )
+                .map(|(o, _)| o.iter().map(|c| c.component.clone()).collect()),
+                "omn" => crate::io::omn::reader::read::<RcStr, _, SetOntology<RcStr>, _>(
+                    r,
+                    ParserConfiguration::new(&b),
+                )
+                .map(|(o, _)| o.iter().map(|c| c.component.clone()).collect()),
+                "owx" => crate::io::owx::reader::read::<RcStr, _, SetOntology<RcStr>, _>(
+                    &mut r,
+                    ParserConfiguration::new(&b),
+                )
+                .map(|(o, _)| o.iter().map(|c| c.component.clone()).collect()),
+                _ => {
+                    let mut config: RDFParserConfiguration<RcStr, &Build<RcStr>> =
+                        ParserConfiguration::new(&b).into();
+                    config.format = Some(oxrdfio::RdfFormat::Turtle);
+                    crate::io::rdf::reader::read::<RcStr, RcAnnotatedComponent, _, _>(
+                        &mut r, config,
+                    )
+                    .map(|(o, _)| o.i().iter().map(|c| c.component.clone()).collect())
+                }
+            }
+            .unwrap_or_else(|e| panic!("{format}: {e}"));
+            components
+                .into_iter()
+                .filter_map(|c| match c {
+                    Component::AnnotationAssertion(AnnotationAssertion {
+                        ann:
+                            Annotation {
+                                av: AnnotationValue::Literal(Literal::Language { lang, .. }),
+                                ..
+                            },
+                        ..
+                    }) => Some(lang),
+                    _ => None,
+                })
+                .collect()
+        };
+        for (format, text) in [("ofn", ofn), ("omn", omn), ("owx", owx), ("ttl", ttl)] {
+            assert_eq!(langs(format, text), vec!["de-ch".to_owned()], "{format}");
+        }
+    }
 
     #[test]
     fn detect_format_rdf_xml() {
