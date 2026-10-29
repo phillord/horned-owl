@@ -7,3 +7,5 @@
 //!
 //! This is a separate crate rather than a module of `horned-owl`, unlike
 //! the other readers and writers.
+
+pub mod parser;

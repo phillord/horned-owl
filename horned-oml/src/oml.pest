@@ -1,0 +1,253 @@
+// Grammar for the OML textual syntax, following Oml.xtext in opencaesar/oml.
+//
+// Names reflect the xtext rules. References are not resolved here: a
+// reference is an ID, a QNAME or an IRI, and resolution needs the import
+// prefixes of the enclosing ontology.
+
+WHITESPACE = _{ " " | "\t" | "\r" | "\n" }
+COMMENT    = _{ ("/*" ~ (!"*/" ~ ANY)* ~ "*/") | ("//" ~ (!("\n" | "\r") ~ ANY)*) }
+
+oml = { SOI ~ ontology ~ EOI }
+
+ontology = { annotation* ~ (vocabulary_box | description_box) }
+
+vocabulary_box = { kw_vocabulary ~ kw_bundle? ~ namespace ~ kw_as ~ id ~ "{" ~ import* ~ vocabulary_statement* ~ "}" }
+description_box = { kw_description ~ kw_bundle? ~ namespace ~ kw_as ~ id ~ "{" ~ import* ~ description_statement* ~ "}" }
+
+import = { (kw_extends | kw_uses | kw_includes) ~ namespace ~ (kw_as ~ id)? }
+
+annotation = { "@" ~ reference ~ (annotation_value ~ ("," ~ annotation_value)*)? }
+annotation_value = { literal | reference }
+
+// Vocabulary
+
+vocabulary_statement = { annotation* ~ vocabulary_term }
+vocabulary_term = _{
+    aspect | concept | relation_entity | scalar_property | scalar
+    | annotation_property | unreified_relation | rule | builtin
+}
+
+aspect = {
+    (kw_aspect ~ id | kw_ref ~ kw_aspect ~ reference)
+    ~ ("[" ~ key_axiom* ~ "]")?
+    ~ entity_specialization? ~ entity_equivalence?
+}
+
+concept = {
+    (kw_concept ~ id | kw_ref ~ kw_concept ~ reference)
+    ~ ("[" ~ instance_enumeration? ~ key_axiom* ~ "]")?
+    ~ entity_specialization? ~ entity_equivalence?
+}
+
+relation_entity = {
+    (kw_relation ~ kw_entity ~ id | kw_ref ~ kw_relation ~ kw_entity ~ reference)
+    ~ ("[" ~ from_clause? ~ to_clause? ~ forward_relation? ~ reverse_relation?
+        ~ characteristic* ~ key_axiom* ~ "]")?
+    ~ entity_specialization? ~ entity_equivalence?
+}
+
+entity_specialization = { "<" ~ (specialization_list ~ restriction_block? | restriction_block) }
+entity_equivalence = { "=" ~ entity_equivalence_axiom ~ ("," ~ entity_equivalence_axiom)* }
+entity_equivalence_axiom = { reference ~ ("&" ~ reference)* ~ restriction_block? | restriction_block }
+
+specialization_list = _{ reference ~ ("," ~ reference)* }
+restriction_block = { "[" ~ property_restriction* ~ "]" }
+
+scalar = {
+    (kw_scalar ~ id | kw_ref ~ kw_scalar ~ reference)
+    ~ ("[" ~ literal_enumeration ~ "]")?
+    ~ ("<" ~ specialization_list)?
+    ~ ("=" ~ scalar_equivalence_axiom ~ ("," ~ scalar_equivalence_axiom)*)?
+}
+
+scalar_equivalence_axiom = { reference ~ ("[" ~ facet* ~ "]")? }
+facet = {
+    kw_length ~ unsigned_integer
+    | kw_minLength ~ unsigned_integer
+    | kw_maxLength ~ unsigned_integer
+    | kw_pattern ~ string
+    | kw_language ~ id
+    | (kw_minInclusive | kw_minExclusive | kw_maxInclusive | kw_maxExclusive) ~ literal
+}
+
+annotation_property = {
+    (kw_annotation ~ kw_property ~ id | kw_ref ~ kw_annotation ~ kw_property ~ reference)
+    ~ property_specialization? ~ property_equivalence?
+}
+
+scalar_property = {
+    (kw_scalar ~ kw_property ~ id | kw_ref ~ kw_scalar ~ kw_property ~ reference)
+    ~ ("[" ~ domain_clause? ~ range_clause? ~ kw_functional? ~ "]")?
+    ~ property_specialization? ~ property_equivalence?
+}
+
+unreified_relation = {
+    (kw_relation ~ id | kw_ref ~ kw_relation ~ reference)
+    ~ ("[" ~ from_clause? ~ to_clause? ~ reverse_relation? ~ characteristic* ~ "]")?
+    ~ property_specialization? ~ property_equivalence?
+}
+
+forward_relation = { annotation* ~ kw_forward ~ id }
+reverse_relation = { annotation* ~ kw_reverse ~ id }
+
+from_clause = { kw_from ~ reference ~ ("," ~ reference)* }
+to_clause = { kw_to ~ reference ~ ("," ~ reference)* }
+domain_clause = { kw_domain ~ reference ~ ("," ~ reference)* }
+range_clause = { kw_range ~ reference ~ ("," ~ reference)* }
+
+characteristic = {
+    kw_inverse ~ kw_functional | kw_functional | kw_symmetric | kw_asymmetric
+    | kw_reflexive | kw_irreflexive | kw_transitive
+}
+
+property_specialization = { "<" ~ specialization_list }
+property_equivalence = { "=" ~ reference ~ ("," ~ reference)* }
+
+key_axiom = { kw_key ~ reference ~ ("," ~ reference)* }
+instance_enumeration = { kw_oneOf ~ reference ~ ("," ~ reference)* }
+literal_enumeration = { kw_oneOf ~ literal ~ ("," ~ literal)* }
+
+property_restriction = {
+    kw_restricts ~ (
+        (kw_all | kw_some) ~ reference ~ kw_to ~ reference
+        | reference ~ kw_to ~ (kw_self | cardinality | restriction_value)
+    )
+}
+cardinality = { (kw_exactly | kw_min | kw_max) ~ unsigned_integer ~ reference? }
+restriction_value = { literal | anonymous_instance | reference }
+
+// Rules
+
+rule = {
+    (kw_rule ~ id | kw_ref ~ kw_rule ~ reference)
+    ~ ("[" ~ (predicate ~ ("&" ~ predicate)* ~ "->" ~ predicate ~ ("&" ~ predicate)*)? ~ "]")?
+}
+
+builtin = { kw_builtin ~ id | kw_ref ~ kw_builtin ~ reference }
+
+predicate = {
+    same_as_predicate | different_from_predicate | built_in_predicate
+    | relation_entity_predicate | property_predicate | type_predicate
+}
+same_as_predicate = { kw_sameAs ~ "(" ~ argument ~ "," ~ argument ~ ")" }
+different_from_predicate = { kw_differentFrom ~ "(" ~ argument ~ "," ~ argument ~ ")" }
+built_in_predicate = { kw_builtIn ~ "(" ~ reference ~ ("," ~ argument)+ ~ ")" }
+relation_entity_predicate = { reference ~ "(" ~ argument ~ "," ~ argument ~ "," ~ argument ~ ")" }
+property_predicate = { reference ~ "(" ~ argument ~ "," ~ argument ~ ")" }
+type_predicate = { reference ~ "(" ~ argument ~ ")" }
+argument = { literal | cross_reference | id }
+
+// Descriptions
+
+description_statement = { annotation* ~ (relation_instance | concept_instance) }
+
+concept_instance = {
+    (kw_instance ~ id | kw_ref ~ kw_instance ~ reference)
+    ~ (":" ~ reference ~ ("," ~ reference)*)?
+    ~ ("[" ~ property_value_assertion* ~ "]")?
+}
+
+relation_instance = {
+    (kw_relation ~ kw_instance ~ id | kw_ref ~ kw_relation ~ kw_instance ~ reference)
+    ~ (":" ~ reference ~ ("," ~ reference)*)?
+    ~ ("[" ~ from_clause? ~ to_clause? ~ property_value_assertion* ~ "]")?
+}
+
+property_value_assertion = { reference ~ property_value ~ ("," ~ property_value)* }
+property_value = { literal | anonymous_instance | reference }
+
+anonymous_instance = _{ anonymous_relation_instance | anonymous_concept_instance }
+anonymous_relation_instance = { reference ~ "[" ~ property_value_assertion* ~ "]" }
+anonymous_concept_instance = { (":" ~ reference)? ~ "[" ~ property_value_assertion* ~ "]" }
+
+// Literals
+
+literal = { double_literal | decimal_literal | integer_literal | boolean_literal | quoted_literal }
+double_literal = @{ sign? ~ (digit+ ~ ("." ~ digit*)? | "." ~ digit+) ~ ("e" | "E") ~ sign? ~ digit+ ~ !id_char }
+decimal_literal = @{ sign? ~ (digit+ ~ ("." ~ digit*)? | "." ~ digit+) ~ !id_char }
+integer_literal = @{ sign? ~ digit+ ~ !id_char }
+boolean_literal = @{ ("true" | "false") ~ !id_char }
+quoted_literal = { string ~ (("^^" ~ reference) | ("$" ~ id))? }
+unsigned_integer = @{ digit+ ~ !id_char }
+
+string = @{
+    "\"\"\"" ~ (!"\"\"\"" ~ ANY)* ~ "\"\"\""
+    | "'''" ~ (!"'''" ~ ANY)* ~ "'''"
+    | "\"" ~ ("\\" ~ ANY | !("\"" | "\\") ~ ANY)* ~ "\""
+    | "'" ~ ("\\" ~ ANY | !("'" | "\\") ~ ANY)* ~ "'"
+}
+
+// Names and references
+
+reference = { qname | iri | id }
+cross_reference = { qname | iri }
+
+namespace = @{ "<" ~ (!(">" | " " | "#") ~ !(("#" | "/") ~ ">") ~ ANY)* ~ ("#" | "/") ~ ">" }
+iri = @{ "<" ~ (!(">" | " ") ~ ANY)* ~ ">" }
+qname = @{ idfrag ~ ":" ~ idfrag }
+id = @{ !keyword ~ idfrag }
+
+idfrag = @{ "^"? ~ id_start ~ id_char* }
+id_start = _{ ASCII_ALPHANUMERIC | "_" | "-" | "." | "~" | "%" }
+id_char = _{ id_start | "$" }
+digit = _{ ASCII_DIGIT }
+sign = _{ "+" | "-" }
+
+// Generated keyword tokens. Longest first, so that a keyword that is a prefix of another
+// (ref, reflexive) is not cut short.
+keyword = @{ ("differentFrom" | "maxExclusive" | "maxInclusive" | "minExclusive" | "minInclusive" | "description" | "irreflexive" | "annotation" | "asymmetric" | "functional" | "transitive" | "vocabulary" | "maxLength" | "minLength" | "reflexive" | "restricts" | "symmetric" | "includes" | "instance" | "language" | "property" | "relation" | "builtIn" | "builtin" | "concept" | "exactly" | "extends" | "forward" | "inverse" | "pattern" | "reverse" | "aspect" | "bundle" | "domain" | "entity" | "length" | "sameAs" | "scalar" | "false" | "oneOf" | "range" | "from" | "rule" | "self" | "some" | "true" | "uses" | "all" | "key" | "max" | "min" | "ref" | "as" | "to") ~ !id_char }
+
+kw_all = @{ "all" ~ !id_char }
+kw_annotation = @{ "annotation" ~ !id_char }
+kw_as = @{ "as" ~ !id_char }
+kw_aspect = @{ "aspect" ~ !id_char }
+kw_asymmetric = @{ "asymmetric" ~ !id_char }
+kw_builtIn = @{ "builtIn" ~ !id_char }
+kw_builtin = @{ "builtin" ~ !id_char }
+kw_bundle = @{ "bundle" ~ !id_char }
+kw_concept = @{ "concept" ~ !id_char }
+kw_description = @{ "description" ~ !id_char }
+kw_differentFrom = @{ "differentFrom" ~ !id_char }
+kw_domain = @{ "domain" ~ !id_char }
+kw_entity = @{ "entity" ~ !id_char }
+kw_exactly = @{ "exactly" ~ !id_char }
+kw_extends = @{ "extends" ~ !id_char }
+kw_false = @{ "false" ~ !id_char }
+kw_forward = @{ "forward" ~ !id_char }
+kw_from = @{ "from" ~ !id_char }
+kw_functional = @{ "functional" ~ !id_char }
+kw_includes = @{ "includes" ~ !id_char }
+kw_instance = @{ "instance" ~ !id_char }
+kw_inverse = @{ "inverse" ~ !id_char }
+kw_irreflexive = @{ "irreflexive" ~ !id_char }
+kw_key = @{ "key" ~ !id_char }
+kw_language = @{ "language" ~ !id_char }
+kw_length = @{ "length" ~ !id_char }
+kw_max = @{ "max" ~ !id_char }
+kw_maxExclusive = @{ "maxExclusive" ~ !id_char }
+kw_maxInclusive = @{ "maxInclusive" ~ !id_char }
+kw_maxLength = @{ "maxLength" ~ !id_char }
+kw_min = @{ "min" ~ !id_char }
+kw_minExclusive = @{ "minExclusive" ~ !id_char }
+kw_minInclusive = @{ "minInclusive" ~ !id_char }
+kw_minLength = @{ "minLength" ~ !id_char }
+kw_oneOf = @{ "oneOf" ~ !id_char }
+kw_pattern = @{ "pattern" ~ !id_char }
+kw_property = @{ "property" ~ !id_char }
+kw_range = @{ "range" ~ !id_char }
+kw_ref = @{ "ref" ~ !id_char }
+kw_reflexive = @{ "reflexive" ~ !id_char }
+kw_relation = @{ "relation" ~ !id_char }
+kw_restricts = @{ "restricts" ~ !id_char }
+kw_reverse = @{ "reverse" ~ !id_char }
+kw_rule = @{ "rule" ~ !id_char }
+kw_sameAs = @{ "sameAs" ~ !id_char }
+kw_scalar = @{ "scalar" ~ !id_char }
+kw_self = @{ "self" ~ !id_char }
+kw_some = @{ "some" ~ !id_char }
+kw_symmetric = @{ "symmetric" ~ !id_char }
+kw_to = @{ "to" ~ !id_char }
+kw_transitive = @{ "transitive" ~ !id_char }
+kw_true = @{ "true" ~ !id_char }
+kw_uses = @{ "uses" ~ !id_char }
+kw_vocabulary = @{ "vocabulary" ~ !id_char }
