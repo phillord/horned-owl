@@ -5,8 +5,8 @@
 # before adding --execute.
 #
 # Releases horned-owl, horned-bin, horned-macro and horned-profile, which
-# share a version.  horned-pretty-rdf and horned-catalog have their own
-# versions and are released as and when they change:
+# share a version.  horned-pretty-rdf, horned-catalog and horned-oml have
+# their own versions and are released as and when they change:
 #
 #   cargo smart-release --update-crates-index --no-changelog horned-pretty-rdf
 #

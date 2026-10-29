@@ -1,0 +1,15 @@
+[package]
+name = "horned-oml"
+version = "0.1.0"
+authors = ["Phillip Lord"]
+description = "Reader for the Ontological Modeling Language (OML), mapped to OWL, for horned-owl"
+repository = "https://github.com/phillord/horned-owl"
+edition = "2024"
+license = "LGPL-3.0"
+
+[dependencies]
+horned-owl = { path = "../", version = "4.0.0" }
+horned-catalog = { workspace = true }
+pest = "2.7.8"
+pest_derive = "2.7.8"
+thiserror = "1.0"
