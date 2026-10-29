@@ -19,9 +19,12 @@ Declaration(Class(base:Narcissist))
 Declaration(Class(base:Owns))
 Declaration(Class(base:Pair))
 Declaration(Class(base:Person))
+Declaration(Class(base:Pet))
+Declaration(Class(base:PetOwner))
 Declaration(Class(base:Thing))
 Declaration(ObjectProperty(base:adores))
 Declaration(ObjectProperty(base:bestFriend))
+Declaration(ObjectProperty(base:hasPet))
 Declaration(ObjectProperty(base:knownBy))
 Declaration(ObjectProperty(base:knows))
 Declaration(ObjectProperty(base:likedBy))
@@ -37,6 +40,7 @@ Declaration(DataProperty(base:age))
 Declaration(DataProperty(base:ageInYears))
 Declaration(DataProperty(base:id))
 Declaration(DataProperty(base:yearsOld))
+Declaration(NamedIndividual(base:_b0))
 Declaration(AnnotationProperty(base:note))
 Declaration(AnnotationProperty(<http://opencaesar.io/oml#name>))
 Declaration(AnnotationProperty(<http://opencaesar.io/oml#namespace>))
@@ -64,6 +68,12 @@ SubObjectPropertyOf(base:bestFriend base:knows)
 SymmetricObjectProperty(base:bestFriend)
 ObjectPropertyDomain(base:bestFriend base:Person)
 ObjectPropertyRange(base:bestFriend base:Person)
+
+# Object Property: <http://example.com/vocab/base#hasPet> (<http://example.com/vocab/base#hasPet>)
+
+AnnotationAssertion(<http://opencaesar.io/oml#type> base:hasPet <http://opencaesar.io/oml#UnreifiedRelation>)
+ObjectPropertyDomain(base:hasPet base:Person)
+ObjectPropertyRange(base:hasPet base:Pet)
 
 # Object Property: <http://example.com/vocab/base#knownBy> (<http://example.com/vocab/base#knownBy>)
 
@@ -206,11 +216,33 @@ SubClassOf(base:Person DataHasValue(base:id "none"))
 SubClassOf(base:Person DataMinCardinality(0 base:age xsd:integer))
 SubClassOf(base:Person DataExactCardinality(1 base:age))
 
+# Class: <http://example.com/vocab/base#Pet> (<http://example.com/vocab/base#Pet>)
+
+AnnotationAssertion(<http://opencaesar.io/oml#type> base:Pet <http://opencaesar.io/oml#Concept>)
+SubClassOf(base:Pet base:Thing)
+
+# Class: <http://example.com/vocab/base#PetOwner> (<http://example.com/vocab/base#PetOwner>)
+
+AnnotationAssertion(<http://opencaesar.io/oml#type> base:PetOwner <http://opencaesar.io/oml#Concept>)
+SubClassOf(base:PetOwner base:Person)
+SubClassOf(base:PetOwner ObjectHasValue(base:hasPet base:_b0))
+
 # Class: <http://example.com/vocab/base#Thing> (<http://example.com/vocab/base#Thing>)
 
 AnnotationAssertion(base:note base:Thing "A thing")
 AnnotationAssertion(base:note base:Thing "with two notes")
 AnnotationAssertion(<http://opencaesar.io/oml#type> base:Thing <http://opencaesar.io/oml#Aspect>)
+
+
+############################
+#   Named Individuals
+############################
+
+# Individual: <http://example.com/vocab/base#_b0> (<http://example.com/vocab/base#_b0>)
+
+AnnotationAssertion(<http://opencaesar.io/oml#type> base:_b0 <http://opencaesar.io/oml#AnonymousConceptInstance>)
+ClassAssertion(base:Pet base:_b0)
+DataPropertyAssertion(base:id base:_b0 "default")
 
 
 HasKey(base:Thing () (base:id))

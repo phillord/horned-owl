@@ -24,4 +24,16 @@ description <http://example.com/data/people#> as people {
 		to carol
 		base:id "o1"
 	]
+
+	instance dave : base:Person [
+		base:hasPet : base:Pet [
+			base:id "rex"
+		]
+		base:knows alice [
+			base:id "k1"
+		]
+		base:knownBy bob [
+			base:id "k2"
+		]
+	]
 }

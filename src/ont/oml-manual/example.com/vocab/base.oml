@@ -52,6 +52,19 @@ vocabulary <http://example.com/vocab/base#> as base {
 		restricts knows to max 2 Person
 	]
 
+	concept Pet < Thing
+
+	relation hasPet [
+		from Person
+		to Pet
+	]
+
+	concept PetOwner < Person [
+		restricts hasPet to : Pet [
+			id "default"
+		]
+	]
+
 	concept Narcissist < Person [
 		restricts knows to self
 	]

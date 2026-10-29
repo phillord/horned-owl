@@ -86,6 +86,9 @@ struct Terms {
     kinds: HashMap<String, Kind>,
     /// Relation entity to the IRI of its forward relation.
     forwards: HashMap<String, String>,
+    /// A forward or reverse relation to its relation entity, and whether it
+    /// is the forward one.
+    relations: HashMap<String, (String, bool)>,
 }
 
 /// Read an OML document into an ontology.
@@ -112,6 +115,7 @@ where
         prefixes: HashMap::new(),
         terms: Terms::default(),
         imported: RefCell::new(HashMap::new()),
+        anonymous: 0,
         out: O::default(),
     };
     reader.ontology(ontology)?;
@@ -129,6 +133,8 @@ struct Reader<'a, A: ForIRI, O> {
     terms: Terms,
     /// The terms of other ontologies, by namespace, loaded as needed.
     imported: RefCell<HashMap<String, Option<Rc<Terms>>>>,
+    /// The number of anonymous individuals made so far.
+    anonymous: usize,
     out: O,
 }
 
@@ -352,6 +358,19 @@ impl<'a, A: ForIRI, O: MutableOntology<A>> Reader<'a, A, O> {
         }
     }
 
+    /// The relation entity of a forward or reverse relation, and whether the
+    /// relation is the forward one.
+    fn relation_of(&self, relation: &str) -> Result<(String, bool), OmlError> {
+        let known = self.terms.relations.get(relation).cloned().or_else(|| {
+            self.imported(namespace_of(relation))
+                .and_then(|t| t.relations.get(relation).cloned())
+        });
+        match known {
+            Some(r) => Ok(r),
+            None => invalid(format!("{relation} is not a forward or reverse relation")),
+        }
+    }
+
     fn forward_of(&self, entity: &str) -> Result<String, OmlError> {
         let known = self.terms.forwards.get(entity).cloned().or_else(|| {
             self.imported(namespace_of(entity))
@@ -538,10 +557,12 @@ fn register(
         match (p.as_rule(), declared) {
             (Rule::forward_relation, Some(f)) => {
                 terms.kinds.insert(f.clone(), Kind::Relation);
+                terms.relations.insert(f.clone(), (iri.clone(), true));
                 forward = Some(f);
             }
             (Rule::reverse_relation, Some(r)) => {
-                terms.kinds.insert(r, Kind::Relation);
+                terms.kinds.insert(r.clone(), Kind::Relation);
+                terms.relations.insert(r, (iri.clone(), false));
             }
             _ => {}
         }
@@ -977,7 +998,14 @@ impl<'a, A: ForIRI, O: MutableOntology<A>> Reader<'a, A, O> {
                         to: Individual::Named(self.build.named_individual(to.as_str())),
                     });
                 }
-                _ => return invalid("not supported yet: anonymous instance"),
+                _ => {
+                    let (ope, to) = self.contained(&property, v)?;
+                    self.add(ObjectPropertyAssertion {
+                        ope,
+                        from: this.clone(),
+                        to,
+                    });
+                }
             }
         }
         Ok(())
@@ -1183,11 +1211,15 @@ impl<'a, A: ForIRI, O: MutableOntology<A>> Reader<'a, A, O> {
         Ok(())
     }
 
-    fn restrictions(&self, block: Pair<Rule>) -> Result<Vec<ClassExpression<A>>, OmlError> {
-        block.into_inner().map(|r| self.restriction(r)).collect()
+    fn restrictions(&mut self, block: Pair<Rule>) -> Result<Vec<ClassExpression<A>>, OmlError> {
+        let mut out = vec![];
+        for r in block.into_inner() {
+            out.push(self.restriction(r)?);
+        }
+        Ok(out)
     }
 
-    fn restriction(&self, pair: Pair<Rule>) -> Result<ClassExpression<A>, OmlError> {
+    fn restriction(&mut self, pair: Pair<Rule>) -> Result<ClassExpression<A>, OmlError> {
         let parts = inner(pair);
         let mut it = parts
             .into_iter()
@@ -1242,10 +1274,99 @@ impl<'a, A: ForIRI, O: MutableOntology<A>> Reader<'a, A, O> {
                             i: Individual::Named(self.build.named_individual(i.as_str())),
                         })
                     }
-                    _ => invalid("not supported yet: anonymous instance"),
+                    _ => {
+                        let (ope, i) = self.contained(&property, value)?;
+                        Ok(ClassExpression::ObjectHasValue { ope, i })
+                    }
                 }
             }
         }
+    }
+
+    /// The property and individual for an anonymous instance given as the
+    /// value of `property`. A relation instance is related to its owner by
+    /// the inverse of `hasSource` or `hasTarget`.
+    fn contained(
+        &mut self,
+        property: &str,
+        value: Pair<Rule>,
+    ) -> Result<(ObjectPropertyExpression<A>, Individual<A>), OmlError> {
+        if value.as_rule() == Rule::anonymous_concept_instance {
+            let i = self.anonymous(value, None)?;
+            return Ok((self.object_property(property), i));
+        }
+        let (entity, forward) = self.relation_of(property)?;
+        let (inverse, has) = if forward {
+            ("isSourceOf", "hasSource")
+        } else {
+            ("isTargetOf", "hasTarget")
+        };
+        self.add(InverseObjectProperties(
+            self.build.object_property(format!("{OML}{inverse}")),
+            self.build.object_property(format!("{OML}{has}")),
+        ));
+        let i = self.anonymous(value, Some((entity, forward)))?;
+        Ok((self.object_property(&format!("{OML}{inverse}")), i))
+    }
+
+    /// An anonymous instance, which oml2owl makes a named individual in the
+    /// ontology. `relation` is the relation entity and direction, for a
+    /// relation instance.
+    fn anonymous(
+        &mut self,
+        pair: Pair<Rule>,
+        relation: Option<(String, bool)>,
+    ) -> Result<Individual<A>, OmlError> {
+        let iri = format!("{}_b{}", self.ns, self.anonymous);
+        self.anonymous += 1;
+        self.add(DeclareNamedIndividual(
+            self.build.named_individual(iri.as_str()),
+        ));
+        let this = Individual::Named(self.build.named_individual(iri.as_str()));
+        let mut values = vec![];
+        if pair.as_rule() == Rule::anonymous_concept_instance {
+            self.type_annotation(&iri, "AnonymousConceptInstance");
+            let mut typed = false;
+            for p in pair.into_inner() {
+                if p.as_rule() == Rule::reference {
+                    let t = self.reference(p)?;
+                    self.add(ClassAssertion {
+                        ce: self.class_ce(&t),
+                        i: this.clone(),
+                    });
+                    typed = true;
+                } else {
+                    values.push(p);
+                }
+            }
+            if !typed {
+                return invalid("an anonymous concept instance needs a type");
+            }
+        } else {
+            self.type_annotation(&iri, "AnonymousRelationInstance");
+            let (entity, forward) = relation.unwrap();
+            self.add(ClassAssertion {
+                ce: self.class_ce(&entity),
+                i: this.clone(),
+            });
+            for p in pair.into_inner() {
+                if p.as_rule() == Rule::reference {
+                    let target = self.reference(p)?;
+                    let end = if forward { "hasTarget" } else { "hasSource" };
+                    self.add(ObjectPropertyAssertion {
+                        ope: self.object_property(&format!("{OML}{end}")),
+                        from: this.clone(),
+                        to: Individual::Named(self.build.named_individual(target.as_str())),
+                    });
+                } else {
+                    values.push(p);
+                }
+            }
+        }
+        for v in values {
+            self.property_values(&this, v)?;
+        }
+        Ok(this)
     }
 
     fn cardinality(
