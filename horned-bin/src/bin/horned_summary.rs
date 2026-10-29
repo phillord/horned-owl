@@ -96,6 +96,7 @@ fn format_names(
         ResourceType::OWX => ("OWL/XML", "application/owl+xml"),
         ResourceType::OMN => ("Manchester Syntax", "text/owl-manchester"),
         ResourceType::OBO => ("OBO Flat-File Format", "text/obo"),
+        ResourceType::OML => ("Ontological Modeling Language", "text/oml"),
         ResourceType::RDF => match rdf_format {
             Some(f) => (f.name(), f.media_type()),
             None => ("RDF/XML", "application/rdf+xml"),

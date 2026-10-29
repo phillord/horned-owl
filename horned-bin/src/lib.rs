@@ -104,6 +104,7 @@ pub fn path_type<A: ForIRI, B: AsRef<Build<A>>>(
         Some("owx") => Some(ResourceType::OWX),
         Some("omn") => Some(ResourceType::OMN),
         Some("obo") => Some(ResourceType::OBO),
+        Some("oml") => Some(ResourceType::OML),
         Some("owl") => Some(owl_extension_resource_type(path)),
         Some(ext) if rdf_format_for_extension(ext).is_some() => Some(ResourceType::RDF),
         _ => detect_from_path(path).map(|(rt, _)| rt),
@@ -149,6 +150,7 @@ pub fn parse_path<B: AsRef<Build<RcStr>> + Clone>(
             let mut bufreader = BufReader::new(file);
             ParserOutput::obo(horned_owl::io::obo::read(&mut bufreader, config)?)
         }
+        Some(ResourceType::OML) => parse_oml(path, &config)?,
         Some(ResourceType::RDF) => {
             let iri = horned_owl::resolve::path_to_file_iri(config.build.as_ref(), path);
             ParserOutput::rdf(horned_owl::io::closure_reader::read(
@@ -162,6 +164,27 @@ pub fn parse_path<B: AsRef<Build<RcStr>> + Clone>(
             )));
         }
     })
+}
+
+/// Read an OML file, finding its imports through the nearest catalog.
+#[cfg(feature = "oml")]
+fn parse_oml<B: AsRef<Build<RcStr>>>(
+    path: &Path,
+    config: &ParserConfiguration<RcStr, B>,
+) -> Result<ParserOutput<RcStr, RcAnnotatedComponent>, HornedError> {
+    horned_oml::reader::read_path(path, config.build.as_ref())
+        .map(ParserOutput::oml)
+        .map_err(|e| HornedError::CommandError(e.to_string()))
+}
+
+#[cfg(not(feature = "oml"))]
+fn parse_oml<B: AsRef<Build<RcStr>>>(
+    _path: &Path,
+    _config: &ParserConfiguration<RcStr, B>,
+) -> Result<ParserOutput<RcStr, RcAnnotatedComponent>, HornedError> {
+    Err(HornedError::CommandError(
+        "reading OML needs horned-bin built with the oml feature".to_string(),
+    ))
 }
 
 /// As [`parse_path`], and when `imports` is set also read every document in
@@ -241,6 +264,7 @@ pub fn parse_imports<B: AsRef<Build<RcStr>>>(
             // OBO has no imports-only parse; read the whole document.
             ParserOutput::obo(horned_owl::io::obo::read(&mut bufreader, config)?)
         }
+        Some(ResourceType::OML) => parse_oml(path, &config)?,
         Some(ResourceType::RDF) => {
             let config = with_detected_rdf_format(path, config.into());
             let mut p = horned_owl::io::rdf::reader::parser_with_build(&mut bufreader, config)?;

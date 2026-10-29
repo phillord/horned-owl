@@ -5,6 +5,7 @@
 
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::path::Path;
 use std::rc::Rc;
 
 use horned_owl::model::*;
@@ -12,7 +13,9 @@ use horned_owl::vocab::Facet;
 use pest::Parser;
 use pest::iterators::Pair;
 
+use crate::catalog::{CatalogResolver, find_catalog};
 use crate::parser::{OmlParser, Rule};
+use curie::PrefixMapping;
 
 const OML: &str = "http://opencaesar.io/oml#";
 const XSD: &str = "http://www.w3.org/2001/XMLSchema#";
@@ -106,6 +109,35 @@ where
     A: ForIRI,
     O: MutableOntology<A> + Default,
 {
+    read_full(text, build, resolver).map(|(o, _)| o)
+}
+
+/// Read the OML file at `path`. Imports are found with the nearest
+/// `catalog.xml` above it, if there is one.
+pub fn read_path<A, O>(path: &Path, build: &Build<A>) -> Result<(O, PrefixMapping), OmlError>
+where
+    A: ForIRI,
+    O: MutableOntology<A> + Default,
+{
+    let text = std::fs::read_to_string(path).map_err(|e| OmlError::Invalid(e.to_string()))?;
+    match find_catalog(path).map(CatalogResolver::from_path) {
+        Some(Ok(resolver)) => read_full(&text, build, &resolver),
+        Some(Err(e)) => Err(OmlError::Invalid(format!("catalog: {e}"))),
+        None => read_full(&text, build, &NoResolver),
+    }
+}
+
+/// As [`read_with`], also returning the prefixes of the ontology and its
+/// imports.
+pub fn read_full<A, O>(
+    text: &str,
+    build: &Build<A>,
+    resolver: &dyn Resolver,
+) -> Result<(O, PrefixMapping), OmlError>
+where
+    A: ForIRI,
+    O: MutableOntology<A> + Default,
+{
     let oml = OmlParser::parse(Rule::oml, text)?.next().unwrap();
     let ontology = oml.into_inner().next().unwrap();
     let mut reader = Reader {
@@ -119,7 +151,12 @@ where
         out: O::default(),
     };
     reader.ontology(ontology)?;
-    Ok(reader.out)
+    let mut mapping = PrefixMapping::default();
+    for (prefix, namespace) in &reader.prefixes {
+        // A prefix that curie will not take is left out.
+        let _ = mapping.add_prefix(prefix, namespace);
+    }
+    Ok((reader.out, mapping))
 }
 
 struct Reader<'a, A: ForIRI, O> {

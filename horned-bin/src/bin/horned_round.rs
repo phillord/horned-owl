@@ -59,6 +59,9 @@ pub(crate) fn matcher(matches: &ArgMatches) -> Result<(), HornedError> {
             let amo: RcComponentMappedOntology = so.into();
             horned_owl::io::obo::writer::write(stdout(), &amo, Some(&pm))
         }
+        horned_owl::io::ParserOutput::OMLParser(..) => Err(HornedError::CommandError(
+            "OML cannot be written yet".to_string(),
+        )),
         horned_owl::io::ParserOutput::RDFParser(rdfo, _ip) => {
             let amo: RcComponentMappedOntology = rdfo.into();
             horned_owl::io::rdf::writer::write(stdout(), &amo, None)

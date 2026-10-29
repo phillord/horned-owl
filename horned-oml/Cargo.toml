@@ -12,4 +12,5 @@ horned-owl = { path = "../", version = "4.0.0" }
 horned-catalog = { workspace = true }
 pest = "2.7.8"
 pest_derive = "2.7.8"
+curie = "0.1.1"
 thiserror = "1.0"

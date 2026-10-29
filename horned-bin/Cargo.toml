@@ -21,8 +21,13 @@ indexmap={workspace=true}
 oxiri={workspace=true}
 horned-pretty-rdf={workspace=true}
 horned-profile={workspace=true}
+horned-oml={workspace=true, optional=true}
 oxrdf={workspace=true}
 oxrdfio={workspace=true}
+
+[features]
+# Read OML (.oml) files.
+oml = ["dep:horned-oml"]
 
 [dev-dependencies]
 assert_cmd = "2.1.1"

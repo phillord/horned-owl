@@ -52,6 +52,8 @@ pub enum ResourceType {
     RDF,
     OMN,
     OBO,
+    /// The Ontological Modeling Language, which `horned-oml` reads.
+    OML,
 }
 
 /// The input format to use when parsing an ontology file.
@@ -95,6 +97,7 @@ pub enum ParserOutput<A: ForIRI, AA: ForIndex<A>> {
     RDFParser(ConcreteRDFOntology<A, AA>, IncompleteParse<A>),
     OMNParser(SetOntology<A>, PrefixMapping),
     OBOParser(SetOntology<A>, PrefixMapping),
+    OMLParser(SetOntology<A>, PrefixMapping),
 }
 
 impl<A: ForIRI, AA: ForIndex<A>> ParserOutput<A, AA> {
@@ -105,6 +108,7 @@ impl<A: ForIRI, AA: ForIndex<A>> ParserOutput<A, AA> {
             ParserOutput::RDFParser(..) => ResourceType::RDF,
             ParserOutput::OMNParser(..) => ResourceType::OMN,
             ParserOutput::OBOParser(..) => ResourceType::OBO,
+            ParserOutput::OMLParser(..) => ResourceType::OML,
         }
     }
 
@@ -126,6 +130,10 @@ impl<A: ForIRI, AA: ForIndex<A>> ParserOutput<A, AA> {
 
     pub fn obo(sop: (SetOntology<A>, PrefixMapping)) -> ParserOutput<A, AA> {
         ParserOutput::OBOParser(sop.0, sop.1)
+    }
+
+    pub fn oml(sop: (SetOntology<A>, PrefixMapping)) -> ParserOutput<A, AA> {
+        ParserOutput::OMLParser(sop.0, sop.1)
     }
 }
 
@@ -289,6 +297,7 @@ impl<A: ForIRI, AA: ForIndex<A>> ParserOutput<A, AA> {
             }
             ParserOutput::OMNParser(o, m) => (o, Some(m), None),
             ParserOutput::OBOParser(o, m) => (o, Some(m), None),
+            ParserOutput::OMLParser(o, m) => (o, Some(m), None),
         }
     }
 }
@@ -301,6 +310,7 @@ impl<A: ForIRI, AA: ForIndex<A>> From<ParserOutput<A, AA>> for SetOntology<A> {
             ParserOutput::RDFParser(rdfo, _) => rdfo.into(),
             ParserOutput::OMNParser(so, _) => so,
             ParserOutput::OBOParser(so, _) => so,
+            ParserOutput::OMLParser(so, _) => so,
         }
     }
 }
@@ -313,6 +323,7 @@ impl<A: ForIRI, AA: ForIndex<A>> From<ParserOutput<A, AA>> for ComponentMappedOn
             ParserOutput::RDFParser(rdfo, _) => rdfo.into(),
             ParserOutput::OMNParser(so, _) => so.into(),
             ParserOutput::OBOParser(so, _) => so.into(),
+            ParserOutput::OMLParser(so, _) => so.into(),
         }
     }
 }
