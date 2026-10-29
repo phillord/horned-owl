@@ -1,0 +1,37 @@
+vocabulary <http://example.com/vocab/extra#> as extra {
+
+	extends <http://example.com/vocab/base#> as base
+
+	@base:note "reopened"
+	ref aspect base:Thing
+
+	ref concept base:Person [
+		key base:age
+	]
+
+	ref scalar base:Percent
+
+	ref scalar property base:age
+
+	ref relation base:likes
+
+	ref annotation property base:note
+
+	@base:note "ref entity"
+	ref relation entity base:Knows
+
+	ref relation entity base:Owns
+
+	relation entity Wrote [
+		from base:Person
+		to base:Thing
+		forward wrote
+	] < base:Owns
+
+	@base:note "ref rule"
+	ref rule base:Friendly
+
+	concept Author < base:Person [
+		restricts some wrote to base:Thing
+	]
+}

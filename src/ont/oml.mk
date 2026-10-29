@@ -46,8 +46,11 @@ OML_MISSING = $(strip $(if $(wildcard $(OWL2OML)),,$(OWL2OML)) \
 	$(if $(wildcard $(OML2OWL)),,$(OML2OWL)) \
 	$(if $(wildcard $(OML_CORE)/www.w3.org),,$(OML_CORE)))
 
+## Hand-written OML, laid out by ontology IRI without the scheme.
+OML_MANUAL = $(patsubst oml-manual/%.oml,owl-from-oml-manual/%.ofn,$(shell find oml-manual -name '*.oml'))
+
 ifeq ($(OML_MISSING),)
-oml: $(OML_STEMS:%=owl-from-oml/%.ofn)
+oml: $(OML_STEMS:%=owl-from-oml/%.ofn) $(OML_MANUAL)
 else
 oml:
 	@echo "oml: skipped, not found: $(OML_MISSING)"
@@ -80,6 +83,17 @@ owl-from-oml/%.ofn: oml-from-bubo/%.oml
 	$(OML2OWL) -i $$w/catalog.xml -o $$w/owl/catalog.xml -f fss > $$w/log 2>&1; \
 	test -f $$w/owl/www.example.com/iri.fss || { cat $$w/log; exit 1; }; \
 	cp $$w/owl/www.example.com/iri.fss $@
+
+owl-from-oml-manual/%.ofn: oml-manual/%.oml
+	mkdir -p $(dir $@)
+	w=$$(mktemp -d); trap 'rm -rf "$$w"' EXIT; \
+	mkdir -p $$w/oml; \
+	cp -r oml-manual/. $$w/oml/; \
+	cp -r $(OML_CORE)/www.w3.org $(OML_CORE)/purl.org $$w/oml/; \
+	printf '%s' '$(subst ./,oml/,$(TREE_CATALOG))' > $$w/catalog.xml; \
+	$(OML2OWL) -i $$w/catalog.xml -o $$w/owl/catalog.xml -f fss > $$w/log 2>&1; \
+	test -f $$w/owl/$*.fss || { cat $$w/log; exit 1; }; \
+	cp $$w/owl/$*.fss $@
 
 ## Keep oml-from-bubo, which make would otherwise delete as an intermediate.
 .SECONDARY:

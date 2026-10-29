@@ -1,0 +1,65 @@
+Prefix(:=<http://example.com/vocab/extra#>)
+Prefix(owl:=<http://www.w3.org/2002/07/owl#>)
+Prefix(rdf:=<http://www.w3.org/1999/02/22-rdf-syntax-ns#>)
+Prefix(xml:=<http://www.w3.org/XML/1998/namespace>)
+Prefix(xsd:=<http://www.w3.org/2001/XMLSchema#>)
+Prefix(rdfs:=<http://www.w3.org/2000/01/rdf-schema#>)
+Prefix(extra:=<http://example.com/vocab/extra#>)
+
+
+Ontology(<http://example.com/vocab/extra>
+Import(<http://example.com/vocab/base>)
+Annotation(<http://opencaesar.io/oml#namespace> <http://example.com/vocab/extra#>)
+Annotation(<http://opencaesar.io/oml#prefix> "extra")
+Annotation(<http://opencaesar.io/oml#type> <http://opencaesar.io/oml#Vocabulary>)
+
+Declaration(Class(extra:Author))
+Declaration(Class(extra:Wrote))
+Declaration(ObjectProperty(extra:wrote))
+Declaration(ObjectProperty(<http://opencaesar.io/oml#hasSource>))
+Declaration(ObjectProperty(<http://opencaesar.io/oml#hasTarget>))
+Declaration(AnnotationProperty(<http://opencaesar.io/oml#namespace>))
+Declaration(AnnotationProperty(<http://opencaesar.io/oml#prefix>))
+Declaration(AnnotationProperty(<http://opencaesar.io/oml#relationEntity>))
+Declaration(AnnotationProperty(<http://opencaesar.io/oml#type>))
+
+############################
+#   Object Properties
+############################
+
+# Object Property: <http://example.com/vocab/extra#wrote> (<http://example.com/vocab/extra#wrote>)
+
+AnnotationAssertion(<http://opencaesar.io/oml#relationEntity> extra:wrote extra:Wrote)
+AnnotationAssertion(<http://opencaesar.io/oml#type> extra:wrote <http://opencaesar.io/oml#ForwardRelation>)
+SubObjectPropertyOf(extra:wrote <http://example.com/vocab/base#owns>)
+ObjectPropertyDomain(extra:wrote <http://example.com/vocab/base#Person>)
+ObjectPropertyRange(extra:wrote <http://example.com/vocab/base#Thing>)
+
+
+
+
+############################
+#   Classes
+############################
+
+# Class: <http://example.com/vocab/base#Thing> (<http://example.com/vocab/base#Thing>)
+
+AnnotationAssertion(<http://example.com/vocab/base#note> <http://example.com/vocab/base#Thing> "reopened")
+
+# Class: <http://example.com/vocab/extra#Author> (<http://example.com/vocab/extra#Author>)
+
+AnnotationAssertion(<http://opencaesar.io/oml#type> extra:Author <http://opencaesar.io/oml#Concept>)
+SubClassOf(extra:Author <http://example.com/vocab/base#Person>)
+SubClassOf(extra:Author ObjectSomeValuesFrom(extra:wrote <http://example.com/vocab/base#Thing>))
+
+# Class: <http://example.com/vocab/extra#Wrote> (<http://example.com/vocab/extra#Wrote>)
+
+AnnotationAssertion(<http://opencaesar.io/oml#type> extra:Wrote <http://opencaesar.io/oml#RelationEntity>)
+SubClassOf(extra:Wrote <http://example.com/vocab/base#Owns>)
+
+
+HasKey(<http://example.com/vocab/base#Person> () (<http://example.com/vocab/base#age>))
+DLSafeRule(Annotation(rdfs:label "wrote derivation") Body(ClassAtom(extra:Wrote Variable(<urn:swrl:var#r>)) ObjectPropertyAtom(<http://opencaesar.io/oml#hasSource> Variable(<urn:swrl:var#r>) Variable(<urn:swrl:var#s>)) ObjectPropertyAtom(<http://opencaesar.io/oml#hasTarget> Variable(<urn:swrl:var#r>) Variable(<urn:swrl:var#t>)))Head(ObjectPropertyAtom(extra:wrote Variable(<urn:swrl:var#s>) Variable(<urn:swrl:var#t>))))
+AnnotationAssertion(<http://example.com/vocab/base#note> <http://example.com/vocab/base#Friendly> "ref rule")
+AnnotationAssertion(<http://example.com/vocab/base#note> <http://example.com/vocab/base#Knows> "ref entity")
+)

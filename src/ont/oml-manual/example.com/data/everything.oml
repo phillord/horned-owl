@@ -1,0 +1,4 @@
+description bundle <http://example.com/data/everything#> as everything {
+
+	includes <http://example.com/data/people#>
+}

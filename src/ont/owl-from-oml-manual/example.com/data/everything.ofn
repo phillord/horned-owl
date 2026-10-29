@@ -1,0 +1,21 @@
+Prefix(:=<http://example.com/data/everything#>)
+Prefix(owl:=<http://www.w3.org/2002/07/owl#>)
+Prefix(rdf:=<http://www.w3.org/1999/02/22-rdf-syntax-ns#>)
+Prefix(xml:=<http://www.w3.org/XML/1998/namespace>)
+Prefix(xsd:=<http://www.w3.org/2001/XMLSchema#>)
+Prefix(rdfs:=<http://www.w3.org/2000/01/rdf-schema#>)
+Prefix(everything:=<http://example.com/data/everything#>)
+
+
+Ontology(<http://example.com/data/everything>
+Import(<http://example.com/data/people>)
+Annotation(<http://opencaesar.io/oml#namespace> <http://example.com/data/everything#>)
+Annotation(<http://opencaesar.io/oml#prefix> "everything")
+Annotation(<http://opencaesar.io/oml#type> <http://opencaesar.io/oml#DescriptionBundle>)
+
+Declaration(AnnotationProperty(<http://opencaesar.io/oml#namespace>))
+Declaration(AnnotationProperty(<http://opencaesar.io/oml#prefix>))
+Declaration(AnnotationProperty(<http://opencaesar.io/oml#type>))
+
+
+)

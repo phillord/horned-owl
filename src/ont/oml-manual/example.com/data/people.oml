@@ -1,0 +1,27 @@
+description <http://example.com/data/people#> as people {
+
+	uses <http://example.com/vocab/base#> as base
+
+	instance alice : base:Person [
+		base:age 30
+		base:id "alice"
+	]
+
+	instance bob : base:Person, base:Thing
+
+	relation instance aliceKnowsBob : base:Knows [
+		from alice
+		to bob
+	]
+
+	instance carol : base:Person [
+		base:knows alice, bob
+		base:id "carol", "c"
+	]
+
+	relation instance aliceOwnsCarol : base:Owns [
+		from alice
+		to carol
+		base:id "o1"
+	]
+}

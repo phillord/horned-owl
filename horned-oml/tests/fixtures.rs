@@ -269,3 +269,12 @@ fn library_vocabularies() {
         .collect();
     run(pairs, Some(&dir.join("oml")), &[]);
 }
+
+// Hand-written OML, for what the generated fixtures do not have: relation
+// entities, concepts, instances, rules and bundles.
+#[test]
+fn manual_fixtures() {
+    let oml = Path::new(ONT).join("oml-manual");
+    let pairs = all_pairs(&oml, &Path::new(ONT).join("owl-from-oml-manual"), "ofn");
+    run(pairs, Some(&oml), &[]);
+}

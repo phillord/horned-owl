@@ -1,0 +1,76 @@
+Prefix(:=<http://example.com/data/people#>)
+Prefix(owl:=<http://www.w3.org/2002/07/owl#>)
+Prefix(rdf:=<http://www.w3.org/1999/02/22-rdf-syntax-ns#>)
+Prefix(xml:=<http://www.w3.org/XML/1998/namespace>)
+Prefix(xsd:=<http://www.w3.org/2001/XMLSchema#>)
+Prefix(rdfs:=<http://www.w3.org/2000/01/rdf-schema#>)
+Prefix(people:=<http://example.com/data/people#>)
+
+
+Ontology(<http://example.com/data/people>
+Import(<http://example.com/vocab/base>)
+Annotation(<http://opencaesar.io/oml#namespace> <http://example.com/data/people#>)
+Annotation(<http://opencaesar.io/oml#prefix> "people")
+Annotation(<http://opencaesar.io/oml#type> <http://opencaesar.io/oml#Description>)
+
+Declaration(ObjectProperty(<http://example.com/vocab/base#knows>))
+Declaration(ObjectProperty(<http://opencaesar.io/oml#hasSource>))
+Declaration(ObjectProperty(<http://opencaesar.io/oml#hasTarget>))
+Declaration(DataProperty(<http://example.com/vocab/base#age>))
+Declaration(DataProperty(<http://example.com/vocab/base#id>))
+Declaration(NamedIndividual(people:alice))
+Declaration(NamedIndividual(people:aliceKnowsBob))
+Declaration(NamedIndividual(people:aliceOwnsCarol))
+Declaration(NamedIndividual(people:bob))
+Declaration(NamedIndividual(people:carol))
+Declaration(AnnotationProperty(<http://opencaesar.io/oml#namespace>))
+Declaration(AnnotationProperty(<http://opencaesar.io/oml#prefix>))
+Declaration(AnnotationProperty(<http://opencaesar.io/oml#type>))
+
+
+
+
+
+############################
+#   Named Individuals
+############################
+
+# Individual: <http://example.com/data/people#alice> (<http://example.com/data/people#alice>)
+
+AnnotationAssertion(<http://opencaesar.io/oml#type> people:alice <http://opencaesar.io/oml#ConceptInstance>)
+ClassAssertion(<http://example.com/vocab/base#Person> people:alice)
+DataPropertyAssertion(<http://example.com/vocab/base#age> people:alice "30"^^xsd:integer)
+DataPropertyAssertion(<http://example.com/vocab/base#id> people:alice "alice")
+
+# Individual: <http://example.com/data/people#aliceKnowsBob> (<http://example.com/data/people#aliceKnowsBob>)
+
+AnnotationAssertion(<http://opencaesar.io/oml#type> people:aliceKnowsBob <http://opencaesar.io/oml#RelationInstance>)
+ClassAssertion(<http://example.com/vocab/base#Knows> people:aliceKnowsBob)
+ObjectPropertyAssertion(<http://opencaesar.io/oml#hasSource> people:aliceKnowsBob people:alice)
+ObjectPropertyAssertion(<http://opencaesar.io/oml#hasTarget> people:aliceKnowsBob people:bob)
+
+# Individual: <http://example.com/data/people#aliceOwnsCarol> (<http://example.com/data/people#aliceOwnsCarol>)
+
+AnnotationAssertion(<http://opencaesar.io/oml#type> people:aliceOwnsCarol <http://opencaesar.io/oml#RelationInstance>)
+ClassAssertion(<http://example.com/vocab/base#Owns> people:aliceOwnsCarol)
+ObjectPropertyAssertion(<http://opencaesar.io/oml#hasSource> people:aliceOwnsCarol people:alice)
+ObjectPropertyAssertion(<http://opencaesar.io/oml#hasTarget> people:aliceOwnsCarol people:carol)
+DataPropertyAssertion(<http://example.com/vocab/base#id> people:aliceOwnsCarol "o1")
+
+# Individual: <http://example.com/data/people#bob> (<http://example.com/data/people#bob>)
+
+AnnotationAssertion(<http://opencaesar.io/oml#type> people:bob <http://opencaesar.io/oml#ConceptInstance>)
+ClassAssertion(<http://example.com/vocab/base#Person> people:bob)
+ClassAssertion(<http://example.com/vocab/base#Thing> people:bob)
+
+# Individual: <http://example.com/data/people#carol> (<http://example.com/data/people#carol>)
+
+AnnotationAssertion(<http://opencaesar.io/oml#type> people:carol <http://opencaesar.io/oml#ConceptInstance>)
+ClassAssertion(<http://example.com/vocab/base#Person> people:carol)
+ObjectPropertyAssertion(<http://example.com/vocab/base#knows> people:carol people:alice)
+ObjectPropertyAssertion(<http://example.com/vocab/base#knows> people:carol people:bob)
+DataPropertyAssertion(<http://example.com/vocab/base#id> people:carol "c")
+DataPropertyAssertion(<http://example.com/vocab/base#id> people:carol "carol")
+
+
+)

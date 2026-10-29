@@ -1,0 +1,117 @@
+vocabulary <http://example.com/vocab/base#> as base {
+
+	extends <http://www.w3.org/2001/XMLSchema#> as xsd
+
+	extends <http://www.w3.org/2003/11/swrlb#> as swrlb
+
+	annotation property note
+
+	@note "A thing", "with two notes"
+	aspect Thing [
+		key id
+	]
+
+	scalar property id [
+		domain Thing
+		range xsd:string
+		functional
+	]
+
+	scalar Percent = xsd:integer [
+		minInclusive 0
+		maxInclusive 100
+	]
+
+	scalar Code [
+		oneOf "a", "b"
+	]
+
+	scalar property age [
+		domain Person
+		range xsd:integer
+	]
+
+	scalar property yearsOld < age
+
+	scalar property ageInYears = age
+
+	concept Person < Thing [
+		restricts some knows to Person
+		restricts all knows to Person
+		restricts age to exactly 1
+		restricts age to min 0 xsd:integer
+		restricts id to "none"
+		restricts some age to xsd:integer
+	]
+
+	concept Adult = Person [
+		restricts age to min 18
+	]
+
+	concept Pair = Person & Thing [
+		restricts knows to max 2 Person
+	]
+
+	concept Narcissist < Person [
+		restricts knows to self
+	]
+
+	@note "Who knows whom"
+	relation entity Knows [
+		from Person
+		to Person
+		@note "forward"
+		forward knows
+		@note "reverse"
+		reverse knownBy
+		transitive
+	]
+
+	relation entity Owns [
+		from Person
+		to Thing
+		forward owns
+		reverse ownedBy
+		functional
+		inverse functional
+	]
+
+	relation entity BestFriend [
+		from Person
+		to Person
+		forward bestFriend
+		symmetric
+	] < Knows
+
+	relation likes [
+		from Person
+		to Thing
+		reverse likedBy
+		asymmetric
+		irreflexive
+	]
+
+	relation loves < likes
+
+	relation adores = likes
+
+	rule Friendly [
+		Person(p) & knows(p, q) -> Person(q)
+	]
+
+	rule Adulthood [
+		Person(p) & age(p, a) & builtIn(swrlb:greaterThanOrEqual, a, 18) -> Adult(p)
+	]
+
+	rule Reified [
+		Knows(a, r, b) & sameAs(a, b) -> Narcissist(a)
+	]
+
+	rule Distinct [
+		Person(a) & Person(b) & differentFrom(a, b) -> Pair(a)
+	]
+
+	rule Constants [
+		Person(p) & age(p, 30) & Percent(30) -> Adult(p)
+	]
+}

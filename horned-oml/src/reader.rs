@@ -1040,7 +1040,8 @@ impl<'a, A: ForIRI, O: MutableOntology<A>> Reader<'a, A, O> {
                 }]
             }
             Rule::built_in_predicate => {
-                let builtin = self.reference(parts.next().unwrap())?;
+                let builtin =
+                    self.reference(parts.find(|p| p.as_rule() == Rule::reference).unwrap())?;
                 let args = parts
                     .map(|a| self.dargument(a))
                     .collect::<Result<Vec<_>, _>>()?;
