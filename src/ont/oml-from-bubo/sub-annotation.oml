@@ -1,0 +1,6 @@
+vocabulary <http://www.example.com/iri#> as o {
+
+	annotation property a
+
+	annotation property b
+}

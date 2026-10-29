@@ -1,0 +1,10 @@
+vocabulary <http://www.example.com/iri#> as o {
+
+	aspect A
+
+	aspect A1
+
+	aspect B
+
+	aspect B1
+}

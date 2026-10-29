@@ -1,0 +1,22 @@
+vocabulary <http://www.example.com/iri#> as o {
+
+	aspect n1
+
+	aspect n10
+
+	aspect n2
+
+	aspect n3
+
+	aspect n4
+
+	aspect n5
+
+	aspect n6
+
+	aspect n7
+
+	aspect n8
+
+	aspect n9
+}

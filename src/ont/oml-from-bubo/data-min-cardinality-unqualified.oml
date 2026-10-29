@@ -1,0 +1,10 @@
+vocabulary <http://www.example.com/iri#> as o {
+
+	extends <http://www.w3.org/2000/01/rdf-schema#> as rdfs
+
+	aspect C < [
+		restricts d to min 1 rdfs:Literal
+	]
+
+	scalar property d
+}

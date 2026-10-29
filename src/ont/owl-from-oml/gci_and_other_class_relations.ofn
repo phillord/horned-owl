@@ -1,0 +1,50 @@
+Prefix(:=<http://www.example.com/iri#>)
+Prefix(o:=<http://www.example.com/iri#>)
+Prefix(owl:=<http://www.w3.org/2002/07/owl#>)
+Prefix(rdf:=<http://www.w3.org/1999/02/22-rdf-syntax-ns#>)
+Prefix(xml:=<http://www.w3.org/XML/1998/namespace>)
+Prefix(xsd:=<http://www.w3.org/2001/XMLSchema#>)
+Prefix(rdfs:=<http://www.w3.org/2000/01/rdf-schema#>)
+
+
+Ontology(<http://www.example.com/iri>
+Annotation(<http://opencaesar.io/oml#namespace> <http://www.example.com/iri#>)
+Annotation(<http://opencaesar.io/oml#prefix> "o")
+Annotation(<http://opencaesar.io/oml#type> <http://opencaesar.io/oml#Vocabulary>)
+
+Declaration(Class(o:mononucleate))
+Declaration(Class(o:nucleus))
+Declaration(ObjectProperty(o:bearer_of))
+Declaration(ObjectProperty(o:has_part))
+Declaration(AnnotationProperty(<http://opencaesar.io/oml#namespace>))
+Declaration(AnnotationProperty(<http://opencaesar.io/oml#prefix>))
+Declaration(AnnotationProperty(<http://opencaesar.io/oml#type>))
+
+############################
+#   Object Properties
+############################
+
+# Object Property: <http://www.example.com/iri#bearer_of> (<http://www.example.com/iri#bearer_of>)
+
+AnnotationAssertion(<http://opencaesar.io/oml#type> o:bearer_of <http://opencaesar.io/oml#UnreifiedRelation>)
+
+# Object Property: <http://www.example.com/iri#has_part> (<http://www.example.com/iri#has_part>)
+
+AnnotationAssertion(<http://opencaesar.io/oml#type> o:has_part <http://opencaesar.io/oml#UnreifiedRelation>)
+
+
+
+############################
+#   Classes
+############################
+
+# Class: <http://www.example.com/iri#mononucleate> (<http://www.example.com/iri#mononucleate>)
+
+AnnotationAssertion(<http://opencaesar.io/oml#type> o:mononucleate <http://opencaesar.io/oml#Aspect>)
+
+# Class: <http://www.example.com/iri#nucleus> (<http://www.example.com/iri#nucleus>)
+
+AnnotationAssertion(<http://opencaesar.io/oml#type> o:nucleus <http://opencaesar.io/oml#Aspect>)
+
+
+)

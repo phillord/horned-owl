@@ -1,0 +1,12 @@
+vocabulary <http://www.example.com/iri#> as o {
+
+	scalar property A
+
+	aspect C [
+		key r, s
+	]
+
+	relation r
+
+	relation s
+}

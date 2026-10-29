@@ -1,0 +1,10 @@
+vocabulary <http://www.example.com/iri#> as o {
+
+	extends <http://www.w3.org/2002/07/owl#> as owl
+
+	aspect C < [
+		restricts r to exactly 1 owl:Thing
+	]
+
+	relation r
+}

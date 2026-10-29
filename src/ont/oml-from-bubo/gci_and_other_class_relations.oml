@@ -1,0 +1,10 @@
+vocabulary <http://www.example.com/iri#> as o {
+
+	relation bearer_of
+
+	relation has_part
+
+	aspect mononucleate
+
+	aspect nucleus
+}

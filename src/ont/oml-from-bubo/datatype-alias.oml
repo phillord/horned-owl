@@ -1,0 +1,6 @@
+vocabulary <http://www.example.com/iri#> as o {
+
+	extends <http://www.w3.org/2002/07/owl#> as owl
+
+	scalar D = owl:real
+}

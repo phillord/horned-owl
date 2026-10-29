@@ -1,0 +1,8 @@
+vocabulary <http://www.example.com/iri#> as o {
+
+	aspect C [
+		key dp
+	]
+
+	scalar property dp
+}

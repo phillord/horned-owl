@@ -1,0 +1,10 @@
+vocabulary <http://www.example.com/iri#> as o {
+
+	extends <http://www.w3.org/2001/XMLSchema#> as xsd
+
+	aspect C < [
+		restricts d to exactly 1 xsd:integer
+	]
+
+	scalar property d
+}

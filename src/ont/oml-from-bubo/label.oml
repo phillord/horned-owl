@@ -1,0 +1,7 @@
+vocabulary <http://www.example.com/iri#> as o {
+
+	extends <http://www.w3.org/2000/01/rdf-schema#> as rdfs
+
+	@rdfs:label "Some Label"$en
+	aspect A
+}

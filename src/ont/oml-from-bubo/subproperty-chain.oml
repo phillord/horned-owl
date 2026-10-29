@@ -1,0 +1,8 @@
+vocabulary <http://www.example.com/iri#> as o {
+
+	relation r
+
+	relation s
+
+	relation t
+}

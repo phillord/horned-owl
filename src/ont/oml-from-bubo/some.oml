@@ -1,0 +1,10 @@
+vocabulary <http://www.example.com/iri#> as o {
+
+	aspect A
+
+	aspect B < [
+		restricts some r to A
+	]
+
+	relation r
+}

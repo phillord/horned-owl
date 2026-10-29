@@ -1,0 +1,7 @@
+vocabulary <http://www.example.com/iri#> as o {
+
+	@a "annotation"
+	aspect A
+
+	annotation property a
+}

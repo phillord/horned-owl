@@ -1,0 +1,10 @@
+vocabulary <http://www.example.com/iri#> as o {
+
+	aspect C < [
+		restricts r to max 1 D
+	]
+
+	aspect D
+
+	relation r
+}

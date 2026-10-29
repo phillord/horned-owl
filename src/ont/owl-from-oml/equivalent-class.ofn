@@ -1,0 +1,36 @@
+Prefix(:=<http://www.example.com/iri#>)
+Prefix(o:=<http://www.example.com/iri#>)
+Prefix(owl:=<http://www.w3.org/2002/07/owl#>)
+Prefix(rdf:=<http://www.w3.org/1999/02/22-rdf-syntax-ns#>)
+Prefix(xml:=<http://www.w3.org/XML/1998/namespace>)
+Prefix(xsd:=<http://www.w3.org/2001/XMLSchema#>)
+Prefix(rdfs:=<http://www.w3.org/2000/01/rdf-schema#>)
+
+
+Ontology(<http://www.example.com/iri>
+Annotation(<http://opencaesar.io/oml#namespace> <http://www.example.com/iri#>)
+Annotation(<http://opencaesar.io/oml#prefix> "o")
+Annotation(<http://opencaesar.io/oml#type> <http://opencaesar.io/oml#Vocabulary>)
+
+Declaration(Class(o:A))
+Declaration(Class(o:B))
+Declaration(AnnotationProperty(<http://opencaesar.io/oml#namespace>))
+Declaration(AnnotationProperty(<http://opencaesar.io/oml#prefix>))
+Declaration(AnnotationProperty(<http://opencaesar.io/oml#type>))
+
+
+############################
+#   Classes
+############################
+
+# Class: <http://www.example.com/iri#A> (<http://www.example.com/iri#A>)
+
+AnnotationAssertion(<http://opencaesar.io/oml#type> o:A <http://opencaesar.io/oml#Aspect>)
+EquivalentClasses(o:A o:B)
+
+# Class: <http://www.example.com/iri#B> (<http://www.example.com/iri#B>)
+
+AnnotationAssertion(<http://opencaesar.io/oml#type> o:B <http://opencaesar.io/oml#Aspect>)
+
+
+)
