@@ -9,3 +9,4 @@
 //! the other readers and writers.
 
 pub mod parser;
+pub mod reader;

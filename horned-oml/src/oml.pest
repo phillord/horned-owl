@@ -162,7 +162,7 @@ anonymous_concept_instance = { (":" ~ reference)? ~ "[" ~ property_value_asserti
 
 // Literals
 
-literal = { double_literal | decimal_literal | integer_literal | boolean_literal | quoted_literal }
+literal = { double_literal | integer_literal | decimal_literal | boolean_literal | quoted_literal }
 double_literal = @{ sign? ~ (digit+ ~ ("." ~ digit*)? | "." ~ digit+) ~ ("e" | "E") ~ sign? ~ digit+ ~ !id_char }
 decimal_literal = @{ sign? ~ (digit+ ~ ("." ~ digit*)? | "." ~ digit+) ~ !id_char }
 integer_literal = @{ sign? ~ digit+ ~ !id_char }
