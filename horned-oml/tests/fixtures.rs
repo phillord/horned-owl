@@ -68,6 +68,19 @@ fn normalize(ac: &AnnotatedComponent<RcStr>) -> AnnotatedComponent<RcStr> {
             range: DataRange::DatatypeRestriction(dt.clone(), sorted(facets.clone())),
         }
         .into(),
+        Component::DatatypeDefinition(DatatypeDefinition {
+            kind,
+            range: DataRange::DataOneOf(literals),
+        }) => DatatypeDefinition {
+            kind: kind.clone(),
+            range: DataRange::DataOneOf(sorted(literals.clone())),
+        }
+        .into(),
+        Component::Rule(horned_owl::model::Rule { head, body }) => horned_owl::model::Rule {
+            head: sorted(head.clone()),
+            body: sorted(body.clone()),
+        }
+        .into(),
         Component::SubClassOf(SubClassOf { sup, sub }) => SubClassOf {
             sup: ce(sup),
             sub: ce(sub),
@@ -123,16 +136,24 @@ fn expected(path: &Path, ns: &str) -> Set {
         .collect()
 }
 
-fn ours(path: &Path) -> Result<Set, String> {
+/// Finds imports in a directory laid out by ontology IRI without its scheme.
+fn resolver(root: Option<&Path>) -> impl Fn(&str) -> Option<String> + '_ {
+    move |iri: &str| {
+        let path = root?.join(format!("{}.oml", iri.split_once("://")?.1));
+        fs::read_to_string(path).ok()
+    }
+}
+
+fn ours(path: &Path, root: Option<&Path>) -> Result<Set, String> {
     let text = fs::read_to_string(path).unwrap();
     let build = Build::new_rc();
     let o: SetOntology<RcStr> =
-        horned_oml::reader::read(&text, &build).map_err(|e| e.to_string())?;
+        horned_oml::reader::read_with(&text, &build, &resolver(root)).map_err(|e| e.to_string())?;
     Ok(o.into_iter().map(|ac| normalize(&ac)).collect())
 }
 
-fn compare(oml: &Path, ofn: &Path) -> Result<(), String> {
-    let ours = ours(oml)?;
+fn compare(oml: &Path, ofn: &Path, root: Option<&Path>) -> Result<(), String> {
+    let ours = ours(oml, root)?;
     let theirs = expected(ofn, &namespace(&ours));
     if ours == theirs {
         return Ok(());
@@ -164,12 +185,12 @@ fn pairs(oml_dir: &Path, ofn_dir: &Path, ext: &str) -> Vec<(PathBuf, PathBuf)> {
     v
 }
 
-fn run(pairs: Vec<(PathBuf, PathBuf)>, known_failures: &[&str]) {
+fn run(pairs: Vec<(PathBuf, PathBuf)>, root: Option<&Path>, known_failures: &[&str]) {
     assert!(!pairs.is_empty());
     let mut failed = vec![];
     for (oml, ofn) in &pairs {
         let name = oml.file_stem().unwrap().to_str().unwrap().to_string();
-        match compare(oml, ofn) {
+        match compare(oml, ofn, root) {
             Ok(()) => {
                 assert!(
                     !known_failures.contains(&name.as_str()),
@@ -202,6 +223,7 @@ fn bubo_fixtures() {
             &Path::new(ONT).join("owl-from-oml"),
             "ofn",
         ),
+        None,
         &[],
     );
 }
@@ -210,7 +232,7 @@ fn bubo_fixtures() {
 fn detects_a_difference() {
     let oml = Path::new(ONT).join("oml-from-bubo/and.oml");
     let wrong = Path::new(ONT).join("owl-from-oml/class.ofn");
-    assert!(compare(&oml, &wrong).is_err());
+    assert!(compare(&oml, &wrong, None).is_err());
 }
 
 fn all_pairs(oml_dir: &Path, ofn_dir: &Path, ext: &str) -> Vec<(PathBuf, PathBuf)> {
@@ -234,7 +256,7 @@ fn all_pairs(oml_dir: &Path, ofn_dir: &Path, ext: &str) -> Vec<(PathBuf, PathBuf
 // sources) and `oracle-fss/` (the oml2owl output). The W3C vocabularies are
 // skipped as oml2owl does not convert them.
 #[test]
-#[ignore = "relation entities, instances, rules and bundles are not read yet"]
+#[ignore = "the closure of vocabulary bundles is not read yet"]
 fn library_vocabularies() {
     let Some(dir) = std::env::var_os("OML_CORPUS") else {
         eprintln!("OML_CORPUS not set, skipping");
@@ -245,5 +267,5 @@ fn library_vocabularies() {
         .into_iter()
         .filter(|(_, ofn)| ofn.exists())
         .collect();
-    run(pairs, &[]);
+    run(pairs, Some(&dir.join("oml")), &[]);
 }

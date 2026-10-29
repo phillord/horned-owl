@@ -120,8 +120,10 @@ restriction_value = { literal | anonymous_instance | reference }
 
 rule = {
     (kw_rule ~ id | kw_ref ~ kw_rule ~ reference)
-    ~ ("[" ~ (predicate ~ ("&" ~ predicate)* ~ "->" ~ predicate ~ ("&" ~ predicate)*)? ~ "]")?
+    ~ ("[" ~ (antecedent ~ "->" ~ consequent)? ~ "]")?
 }
+antecedent = { predicate ~ ("&" ~ predicate)* }
+consequent = { predicate ~ ("&" ~ predicate)* }
 
 builtin = { kw_builtin ~ id | kw_ref ~ kw_builtin ~ reference }
 

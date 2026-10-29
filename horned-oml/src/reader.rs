@@ -3,7 +3,9 @@
 //! The mapping is that of the reference `oml2owl` tool, which defines OML's
 //! semantics by translation to OWL.
 
+use std::cell::RefCell;
 use std::collections::HashMap;
+use std::rc::Rc;
 
 use horned_owl::model::*;
 use horned_owl::vocab::Facet;
@@ -42,7 +44,7 @@ fn invalid<T>(msg: impl Into<String>) -> Result<T, OmlError> {
     Err(OmlError::Invalid(msg.into()))
 }
 
-/// What a local term is, which decides how it is used elsewhere.
+/// What a term is, which decides how it is used elsewhere.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Kind {
     Aspect,
@@ -54,8 +56,49 @@ enum Kind {
     Relation,
 }
 
+/// Finds the OML source of an imported ontology.
+///
+/// Terms from other ontologies can only be used once it is known what they
+/// are, for instance whether a property is a scalar property.
+pub trait Resolver {
+    /// `iri` is the ontology IRI: its namespace without the final `#` or `/`.
+    fn load(&self, iri: &str) -> Option<String>;
+}
+
+/// Resolves nothing, so only terms declared in the document are known.
+pub struct NoResolver;
+
+impl Resolver for NoResolver {
+    fn load(&self, _: &str) -> Option<String> {
+        None
+    }
+}
+
+impl<F: Fn(&str) -> Option<String>> Resolver for F {
+    fn load(&self, iri: &str) -> Option<String> {
+        self(iri)
+    }
+}
+
+/// What is known about the terms of an ontology.
+#[derive(Default)]
+struct Terms {
+    kinds: HashMap<String, Kind>,
+    /// Relation entity to the IRI of its forward relation.
+    forwards: HashMap<String, String>,
+}
+
 /// Read an OML document into an ontology.
 pub fn read<A, O>(text: &str, build: &Build<A>) -> Result<O, OmlError>
+where
+    A: ForIRI,
+    O: MutableOntology<A> + Default,
+{
+    read_with(text, build, &NoResolver)
+}
+
+/// Read an OML document into an ontology, finding imports with `resolver`.
+pub fn read_with<A, O>(text: &str, build: &Build<A>, resolver: &dyn Resolver) -> Result<O, OmlError>
 where
     A: ForIRI,
     O: MutableOntology<A> + Default,
@@ -64,9 +107,11 @@ where
     let ontology = oml.into_inner().next().unwrap();
     let mut reader = Reader {
         build,
+        resolver,
         ns: String::new(),
         prefixes: HashMap::new(),
-        kinds: HashMap::new(),
+        terms: Terms::default(),
+        imported: RefCell::new(HashMap::new()),
         out: O::default(),
     };
     reader.ontology(ontology)?;
@@ -75,13 +120,110 @@ where
 
 struct Reader<'a, A: ForIRI, O> {
     build: &'a Build<A>,
+    resolver: &'a dyn Resolver,
     /// The namespace, with its trailing `#` or `/`.
     ns: String,
     /// Prefix to namespace, for this ontology and its imports.
     prefixes: HashMap<String, String>,
-    /// The kind of each term declared (not `ref`d) in this ontology.
-    kinds: HashMap<String, Kind>,
+    /// The terms declared in this ontology.
+    terms: Terms,
+    /// The terms of other ontologies, by namespace, loaded as needed.
+    imported: RefCell<HashMap<String, Option<Rc<Terms>>>>,
     out: O,
+}
+
+/// The parts of an ontology that are the same whatever is done with it.
+struct Header<'i> {
+    annotations: Vec<Pair<'i, Rule>>,
+    kind: &'static str,
+    ns: String,
+    prefix: String,
+    /// Namespace and prefix of each import.
+    imports: Vec<(String, Option<String>)>,
+    statements: Vec<Pair<'i, Rule>>,
+}
+
+fn header(pair: Pair<Rule>) -> Header {
+    let mut annotations = vec![];
+    let mut body = None;
+    for p in pair.into_inner() {
+        match p.as_rule() {
+            Rule::annotation => annotations.push(p),
+            _ => body = Some(p),
+        }
+    }
+    let body = body.unwrap();
+    let vocabulary = body.as_rule() == Rule::vocabulary_box;
+    let mut bundle = false;
+    let mut ns = String::new();
+    let mut prefix = String::new();
+    let mut imports = vec![];
+    let mut statements = vec![];
+    for p in body.into_inner() {
+        match p.as_rule() {
+            Rule::kw_vocabulary | Rule::kw_description | Rule::kw_as => {}
+            Rule::kw_bundle => bundle = true,
+            Rule::namespace => ns = p.as_str()[1..p.as_str().len() - 1].to_string(),
+            Rule::id => prefix = unescape_id(p.as_str()).to_string(),
+            Rule::import => {
+                let mut ns = String::new();
+                let mut prefix = None;
+                for x in p.into_inner() {
+                    match x.as_rule() {
+                        Rule::namespace => ns = x.as_str()[1..x.as_str().len() - 1].to_string(),
+                        Rule::id => prefix = Some(unescape_id(x.as_str()).to_string()),
+                        _ => {}
+                    }
+                }
+                imports.push((ns, prefix));
+            }
+            _ => statements.push(p),
+        }
+    }
+    let kind = match (vocabulary, bundle) {
+        (true, false) => "Vocabulary",
+        (true, true) => "VocabularyBundle",
+        (false, false) => "Description",
+        (false, true) => "DescriptionBundle",
+    };
+    Header {
+        annotations,
+        kind,
+        ns,
+        prefix,
+        imports,
+        statements,
+    }
+}
+
+/// The kinds of the terms an ontology declares, without translating it.
+fn terms_of(text: &str) -> Option<Terms> {
+    let oml = OmlParser::parse(Rule::oml, text).ok()?.next()?;
+    let h = header(oml.into_inner().next()?);
+    let mut terms = Terms::default();
+    for s in h.statements {
+        register(&mut terms, &h.ns, &|_| None, s);
+    }
+    Some(terms)
+}
+
+fn namespace_of(iri: &str) -> &str {
+    match iri.rfind(['#', '/']) {
+        Some(i) => &iri[..=i],
+        None => iri,
+    }
+}
+
+fn local_name(iri: &str) -> &str {
+    &iri[namespace_of(iri).len()..]
+}
+
+fn first_upper(s: &str) -> String {
+    let mut c = s.chars();
+    match c.next() {
+        Some(f) => f.to_uppercase().chain(c).collect(),
+        None => String::new(),
+    }
 }
 
 fn inner(pair: Pair<Rule>) -> Vec<Pair<Rule>> {
@@ -104,62 +246,14 @@ impl<'a, A: ForIRI, O: MutableOntology<A>> Reader<'a, A, O> {
     // Ontology
 
     fn ontology(&mut self, pair: Pair<Rule>) -> Result<(), OmlError> {
-        let mut annotations = vec![];
-        let mut body = None;
-        for p in pair.into_inner() {
-            match p.as_rule() {
-                Rule::annotation => annotations.push(p),
-                _ => body = Some(p),
+        let h = header(pair);
+        self.ns = h.ns.clone();
+        self.prefixes.insert(h.prefix.clone(), h.ns.clone());
+        for (ns, prefix) in &h.imports {
+            if let Some(prefix) = prefix {
+                self.prefixes.insert(prefix.clone(), ns.clone());
             }
         }
-        let body = body.unwrap();
-        let kind = if body.as_rule() == Rule::vocabulary_box {
-            "Vocabulary"
-        } else {
-            "Description"
-        };
-
-        let mut bundle = false;
-        let mut statements = vec![];
-        let mut imports = vec![];
-        let mut prefix = String::new();
-        for p in body.into_inner() {
-            match p.as_rule() {
-                Rule::kw_vocabulary | Rule::kw_description | Rule::kw_as => {}
-                Rule::kw_bundle => bundle = true,
-                Rule::namespace => {
-                    let t = p.as_str();
-                    self.ns = t[1..t.len() - 1].to_string();
-                }
-                Rule::id => prefix = unescape_id(p.as_str()).to_string(),
-                Rule::import => imports.push(p),
-                _ => statements.push(p),
-            }
-        }
-        self.prefixes.insert(prefix.clone(), self.ns.clone());
-        let mut import_iris = vec![];
-        for i in imports {
-            let mut ns = String::new();
-            let mut p = None;
-            for x in i.into_inner() {
-                match x.as_rule() {
-                    Rule::namespace => ns = x.as_str()[1..x.as_str().len() - 1].to_string(),
-                    Rule::id => p = Some(unescape_id(x.as_str()).to_string()),
-                    _ => {}
-                }
-            }
-            if let Some(p) = p {
-                self.prefixes.insert(p, ns.clone());
-            }
-            import_iris.push(ns);
-        }
-
-        let kind = match (kind, bundle) {
-            ("Vocabulary", false) => "Vocabulary",
-            ("Vocabulary", true) => "VocabularyBundle",
-            (_, false) => "Description",
-            (_, true) => "DescriptionBundle",
-        };
 
         let id = self.ns[..self.ns.len() - 1].to_string();
         self.add(OntologyID {
@@ -168,7 +262,7 @@ impl<'a, A: ForIRI, O: MutableOntology<A>> Reader<'a, A, O> {
         });
         self.ontology_annotation(
             "type",
-            AnnotationValue::IRI(self.iri(&format!("{OML}{kind}"))),
+            AnnotationValue::IRI(self.iri(&format!("{OML}{}", h.kind))),
         );
         self.ontology_annotation(
             "namespace",
@@ -176,25 +270,25 @@ impl<'a, A: ForIRI, O: MutableOntology<A>> Reader<'a, A, O> {
         );
         self.ontology_annotation(
             "prefix",
-            AnnotationValue::Literal(Literal::Simple { literal: prefix }),
+            AnnotationValue::Literal(Literal::Simple { literal: h.prefix }),
         );
-        for ns in import_iris {
+        for (ns, _) in &h.imports {
             let iri = &ns[..ns.len() - 1];
             if !BUILT_IN.contains(&iri) {
                 self.add(Import(self.iri(iri)));
             }
         }
-        for a in annotations {
+        for a in h.annotations {
             for ann in self.annotation(a)? {
                 self.add(OntologyAnnotation(ann));
             }
         }
 
         // Kinds first, as restrictions refer to properties by kind.
-        for s in &statements {
-            self.register(s)?;
+        for s in &h.statements {
+            self.register(s);
         }
-        for s in statements {
+        for s in h.statements {
             self.statement(s)?;
         }
         Ok(())
@@ -232,12 +326,40 @@ impl<'a, A: ForIRI, O: MutableOntology<A>> Reader<'a, A, O> {
         }
     }
 
+    fn imported(&self, ns: &str) -> Option<Rc<Terms>> {
+        if let Some(t) = self.imported.borrow().get(ns) {
+            return t.clone();
+        }
+        let loaded = self
+            .resolver
+            .load(&ns[..ns.len() - 1])
+            .and_then(|text| terms_of(&text))
+            .map(Rc::new);
+        self.imported
+            .borrow_mut()
+            .insert(ns.to_string(), loaded.clone());
+        loaded
+    }
+
     fn kind_of(&self, iri: &str) -> Result<Kind, OmlError> {
-        match self.kinds.get(iri) {
-            Some(k) => Ok(*k),
-            None => invalid(format!(
-                "cannot tell what {iri} is, as it is not declared here"
-            )),
+        let known = self.terms.kinds.get(iri).copied().or_else(|| {
+            self.imported(namespace_of(iri))
+                .and_then(|t| t.kinds.get(iri).copied())
+        });
+        match known {
+            Some(k) => Ok(k),
+            None => invalid(format!("cannot tell what {iri} is")),
+        }
+    }
+
+    fn forward_of(&self, entity: &str) -> Result<String, OmlError> {
+        let known = self.terms.forwards.get(entity).cloned().or_else(|| {
+            self.imported(namespace_of(entity))
+                .and_then(|t| t.forwards.get(entity).cloned())
+        });
+        match known {
+            Some(f) => Ok(f),
+            None => invalid(format!("cannot tell the forward relation of {entity}")),
         }
     }
 
@@ -342,47 +464,94 @@ impl<'a, A: ForIRI, O: MutableOntology<A>> Reader<'a, A, O> {
 
     // Statements
 
-    /// The kind of a statement and whether it is a `ref`.
-    fn shape(pair: &Pair<Rule>) -> Option<(Kind, bool)> {
-        let kind = match pair.as_rule() {
-            Rule::aspect => Kind::Aspect,
-            Rule::concept => Kind::Concept,
-            Rule::relation_entity => Kind::RelationEntity,
-            Rule::scalar => Kind::Scalar,
-            Rule::scalar_property => Kind::ScalarProperty,
-            Rule::annotation_property => Kind::AnnotationProperty,
-            Rule::unreified_relation => Kind::Relation,
-            _ => return None,
-        };
-        let is_ref = pair
+    fn register(&mut self, statement: &Pair<Rule>) {
+        let mut terms = std::mem::take(&mut self.terms);
+        register(
+            &mut terms,
+            &self.ns,
+            &|p| self.reference(p).ok(),
+            statement.clone(),
+        );
+        self.terms = terms;
+    }
+}
+
+/// The kind of a term and whether it is a `ref`.
+fn shape(pair: &Pair<Rule>) -> Option<(Kind, bool)> {
+    let kind = match pair.as_rule() {
+        Rule::aspect => Kind::Aspect,
+        Rule::concept => Kind::Concept,
+        Rule::relation_entity => Kind::RelationEntity,
+        Rule::scalar => Kind::Scalar,
+        Rule::scalar_property => Kind::ScalarProperty,
+        Rule::annotation_property => Kind::AnnotationProperty,
+        Rule::unreified_relation => Kind::Relation,
+        _ => return None,
+    };
+    let is_ref = pair
+        .clone()
+        .into_inner()
+        .next()
+        .is_some_and(|p| p.as_rule() == Rule::kw_ref);
+    Some((kind, is_ref))
+}
+
+/// The name (a declared `id`, or a `reference` after `ref`) of a term.
+fn name_of<'i>(pair: &Pair<'i, Rule>) -> Option<Pair<'i, Rule>> {
+    pair.clone()
+        .into_inner()
+        .find(|p| matches!(p.as_rule(), Rule::id | Rule::reference))
+}
+
+/// Note what a statement declares. `reference` resolves the name of a `ref`.
+fn register(
+    terms: &mut Terms,
+    ns: &str,
+    reference: &dyn Fn(Pair<Rule>) -> Option<String>,
+    statement: Pair<Rule>,
+) {
+    let (_, term) = split(statement);
+    let Some((kind, is_ref)) = shape(&term) else {
+        return;
+    };
+    let Some(name) = name_of(&term) else {
+        return;
+    };
+    let iri = if name.as_rule() == Rule::id {
+        format!("{ns}{}", unescape_id(name.as_str()))
+    } else {
+        match reference(name) {
+            Some(iri) => iri,
+            None => return,
+        }
+    };
+    if !is_ref {
+        terms.kinds.insert(iri.clone(), kind);
+    }
+    let mut forward = None;
+    for p in term.into_inner() {
+        let declared = p
             .clone()
             .into_inner()
-            .next()
-            .is_some_and(|p| p.as_rule() == Rule::kw_ref);
-        Some((kind, is_ref))
-    }
-
-    fn term<'i>(pair: &Pair<'i, Rule>) -> Option<Pair<'i, Rule>> {
-        pair.clone()
-            .into_inner()
-            .find(|p| matches!(p.as_rule(), Rule::id | Rule::reference))
-    }
-
-    fn register(&mut self, statement: &Pair<Rule>) -> Result<(), OmlError> {
-        let (_, term) = split(statement.clone());
-        let Some((kind, is_ref)) = Self::shape(&term) else {
-            return Ok(());
-        };
-        let name = Self::term(&term).unwrap();
-        let iri = if name.as_rule() == Rule::id {
-            format!("{}{}", self.ns, unescape_id(name.as_str()))
-        } else {
-            self.reference(name)?
-        };
-        if !is_ref {
-            self.kinds.insert(iri, kind);
+            .find(|x| x.as_rule() == Rule::id)
+            .map(|x| format!("{ns}{}", unescape_id(x.as_str())));
+        match (p.as_rule(), declared) {
+            (Rule::forward_relation, Some(f)) => {
+                terms.kinds.insert(f.clone(), Kind::Relation);
+                forward = Some(f);
+            }
+            (Rule::reverse_relation, Some(r)) => {
+                terms.kinds.insert(r, Kind::Relation);
+            }
+            _ => {}
         }
-        Ok(())
+    }
+    // A `ref` without a forward relation of its own takes that of the entity
+    // it refers to.
+    if kind == Kind::RelationEntity && (!is_ref || forward.is_some()) {
+        let forward =
+            forward.unwrap_or_else(|| format!("{ns}has{}Forward", first_upper(local_name(&iri))));
+        terms.forwards.insert(iri, forward);
     }
 }
 
@@ -443,35 +612,12 @@ fn java_double(v: f64) -> String {
     }
 }
 
+/// The text of a string, as the OML tools read it: the quotes are removed
+/// and nothing inside is treated as an escape.
 fn unquote(t: &str) -> String {
-    if let Some(s) = t
-        .strip_prefix("\"\"\"")
-        .and_then(|s| s.strip_suffix("\"\"\""))
-    {
-        return s.to_string();
-    }
-    if let Some(s) = t.strip_prefix("'''").and_then(|s| s.strip_suffix("'''")) {
-        return s.to_string();
-    }
-    let body = &t[1..t.len() - 1];
-    let mut out = String::new();
-    let mut chars = body.chars();
-    while let Some(c) = chars.next() {
-        if c != '\\' {
-            out.push(c);
-            continue;
-        }
-        match chars.next() {
-            Some('n') => out.push('\n'),
-            Some('t') => out.push('\t'),
-            Some('r') => out.push('\r'),
-            Some('b') => out.push('\u{8}'),
-            Some('f') => out.push('\u{c}'),
-            Some(c) => out.push(c),
-            None => out.push('\\'),
-        }
-    }
-    out
+    let triple = t.len() >= 6 && (t.starts_with("\"\"\"") || t.starts_with("\x27\x27\x27"));
+    let quote = if triple { 3 } else { 1 };
+    t[quote..t.len() - quote].to_string()
 }
 
 // Terms
@@ -489,15 +635,19 @@ impl<'a, A: ForIRI, O: MutableOntology<A>> Reader<'a, A, O> {
         DataRange::Datatype(self.build.datatype(iri))
     }
 
-    fn statement(&mut self, pair: Pair<Rule>) -> Result<(), OmlError> {
-        let (annotations, term) = split(pair);
-        let Some((kind, is_ref)) = Self::shape(&term) else {
-            return invalid(format!("not supported yet: {:?}", term.as_rule()));
-        };
-        let mut parts = inner(term).into_iter().filter(|p| !p.as_str().is_empty());
+    /// The IRI, whether it is a `ref`, and what follows the name.
+    fn named<'i>(
+        &self,
+        term: &Pair<'i, Rule>,
+    ) -> Result<(String, bool, Vec<Pair<'i, Rule>>), OmlError> {
+        let is_ref = term
+            .clone()
+            .into_inner()
+            .next()
+            .is_some_and(|p| p.as_rule() == Rule::kw_ref);
         let mut name = None;
         let mut rest = vec![];
-        for p in parts.by_ref() {
+        for p in term.clone().into_inner() {
             if name.is_none() && matches!(p.as_rule(), Rule::id | Rule::reference) {
                 name = Some(p);
             } else if name.is_some() {
@@ -510,13 +660,25 @@ impl<'a, A: ForIRI, O: MutableOntology<A>> Reader<'a, A, O> {
         } else {
             self.reference(name)?
         };
+        Ok((iri, is_ref, rest))
+    }
+
+    fn statement(&mut self, pair: Pair<Rule>) -> Result<(), OmlError> {
+        let (annotations, term) = split(pair);
+        let (iri, is_ref, rest) = self.named(&term)?;
+        match term.as_rule() {
+            Rule::rule => return self.rule(&iri, is_ref, annotations, rest),
+            Rule::builtin => return self.annotate(&iri, annotations),
+            _ => {}
+        }
         self.annotate(&iri, annotations)?;
-        match kind {
-            Kind::Aspect | Kind::Concept => self.entity(kind, &iri, is_ref, rest),
-            Kind::RelationEntity => invalid("not supported yet: relation entity"),
-            Kind::Scalar => self.scalar(&iri, is_ref, rest),
-            Kind::ScalarProperty => self.scalar_property(&iri, is_ref, rest),
-            Kind::AnnotationProperty => {
+        match term.as_rule() {
+            Rule::aspect => self.entity(Kind::Aspect, &iri, is_ref, rest),
+            Rule::concept => self.entity(Kind::Concept, &iri, is_ref, rest),
+            Rule::relation_entity => self.relation_entity(&iri, is_ref, rest),
+            Rule::scalar => self.scalar(&iri, is_ref, rest),
+            Rule::scalar_property => self.scalar_property(&iri, is_ref, rest),
+            Rule::annotation_property => {
                 if !is_ref {
                     self.add(DeclareAnnotationProperty(
                         self.build.annotation_property(iri.as_str()),
@@ -524,7 +686,10 @@ impl<'a, A: ForIRI, O: MutableOntology<A>> Reader<'a, A, O> {
                 }
                 Ok(())
             }
-            Kind::Relation => self.unreified_relation(&iri, is_ref, rest),
+            Rule::unreified_relation => self.unreified_relation(&iri, is_ref, rest),
+            Rule::concept_instance => self.concept_instance(&iri, is_ref, rest),
+            Rule::relation_instance => self.relation_instance(&iri, is_ref, rest),
+            r => invalid(format!("not supported yet: {r:?}")),
         }
     }
 
@@ -542,7 +707,6 @@ impl<'a, A: ForIRI, O: MutableOntology<A>> Reader<'a, A, O> {
         is_ref: bool,
         parts: Vec<Pair<Rule>>,
     ) -> Result<(), OmlError> {
-        let this = self.class_ce(iri);
         if !is_ref {
             self.add(DeclareClass(self.build.class(iri)));
             let type_name = if kind == Kind::Aspect {
@@ -553,52 +717,423 @@ impl<'a, A: ForIRI, O: MutableOntology<A>> Reader<'a, A, O> {
             self.type_annotation(iri, type_name);
         }
         for part in parts {
-            match part.as_rule() {
-                Rule::key_axiom => self.key(iri, part)?,
-                Rule::instance_enumeration => {
-                    let individuals = self
-                        .references(part)?
-                        .iter()
-                        .map(|i| Individual::Named(self.build.named_individual(i.as_str())))
-                        .collect::<Vec<_>>();
-                    if !individuals.is_empty() {
-                        self.add(EquivalentClasses(vec![
-                            this.clone(),
-                            ClassExpression::ObjectOneOf(individuals),
-                        ]));
-                    }
+            self.entity_part(iri, None, part)?;
+        }
+        Ok(())
+    }
+
+    /// Axioms from the body of an entity. `forward` is that of a relation
+    /// entity, which is specialised along with the entity.
+    fn entity_part(
+        &mut self,
+        iri: &str,
+        forward: Option<&str>,
+        part: Pair<Rule>,
+    ) -> Result<(), OmlError> {
+        let this = self.class_ce(iri);
+        match part.as_rule() {
+            Rule::key_axiom => self.key(iri, part)?,
+            Rule::instance_enumeration => {
+                let individuals = self
+                    .references(part)?
+                    .iter()
+                    .map(|i| Individual::Named(self.build.named_individual(i.as_str())))
+                    .collect::<Vec<_>>();
+                if !individuals.is_empty() {
+                    self.add(EquivalentClasses(vec![
+                        this.clone(),
+                        ClassExpression::ObjectOneOf(individuals),
+                    ]));
                 }
-                Rule::entity_specialization => {
-                    for p in part.into_inner() {
-                        match p.as_rule() {
-                            Rule::reference => {
-                                let sup = self.reference(p)?;
-                                self.add(SubClassOf {
-                                    sup: self.class_ce(&sup),
-                                    sub: this.clone(),
-                                });
-                            }
-                            Rule::restriction_block => {
-                                for r in self.restrictions(p)? {
-                                    self.add(SubClassOf {
-                                        sup: r,
-                                        sub: this.clone(),
+            }
+            Rule::entity_specialization => {
+                for p in part.into_inner() {
+                    match p.as_rule() {
+                        Rule::reference => {
+                            let sup = self.reference(p)?;
+                            self.add(SubClassOf {
+                                sup: self.class_ce(&sup),
+                                sub: this.clone(),
+                            });
+                            if let Some(forward) = forward {
+                                if self.kind_of(&sup)? == Kind::RelationEntity {
+                                    self.add(SubObjectPropertyOf {
+                                        sup: self.object_property(&self.forward_of(&sup)?),
+                                        sub: SubObjectPropertyExpression::ObjectPropertyExpression(
+                                            self.object_property(forward),
+                                        ),
                                     });
                                 }
                             }
-                            _ => {}
                         }
+                        Rule::restriction_block => {
+                            for r in self.restrictions(p)? {
+                                self.add(SubClassOf {
+                                    sup: r,
+                                    sub: this.clone(),
+                                });
+                            }
+                        }
+                        _ => {}
                     }
                 }
-                Rule::entity_equivalence => {
-                    for axiom in part.into_inner() {
-                        self.entity_equivalence(&this, axiom)?;
-                    }
+            }
+            Rule::entity_equivalence => {
+                for axiom in part.into_inner() {
+                    self.entity_equivalence(&this, axiom)?;
                 }
+            }
+            _ => {}
+        }
+        Ok(())
+    }
+
+    fn relation_entity(
+        &mut self,
+        iri: &str,
+        is_ref: bool,
+        parts: Vec<Pair<Rule>>,
+    ) -> Result<(), OmlError> {
+        let forward = self.forward_of(iri)?;
+        if !is_ref {
+            self.add(DeclareClass(self.build.class(iri)));
+            self.type_annotation(iri, "RelationEntity");
+        }
+        let mut sources = vec![];
+        let mut targets = vec![];
+        let mut flags = vec![];
+        let mut reverse = None;
+        let mut others = vec![];
+        for part in parts {
+            match part.as_rule() {
+                Rule::from_clause => sources = self.references(part)?,
+                Rule::to_clause => targets = self.references(part)?,
+                Rule::characteristic => flags.push(flag(&part)),
+                Rule::forward_relation => {
+                    let (annotations, _) = self.relation_name(part);
+                    self.annotate(&forward, annotations)?;
+                }
+                Rule::reverse_relation => reverse = Some(part),
+                _ => others.push(part),
+            }
+        }
+        if !is_ref {
+            self.add(DeclareObjectProperty(
+                self.build.object_property(forward.as_str()),
+            ));
+            self.type_annotation(&forward, "ForwardRelation");
+            let ap = self
+                .build
+                .annotation_property(format!("{OML}relationEntity"));
+            self.add(AnnotationAssertion {
+                subject: self.iri(&forward).into(),
+                ann: Annotation {
+                    ap,
+                    av: AnnotationValue::IRI(self.iri(iri)),
+                    ann: Default::default(),
+                },
+            });
+            self.derivation_rule(iri, &forward);
+        }
+        self.relation_base(&forward, &sources, &targets, &flags, false);
+        for part in others {
+            self.entity_part(iri, Some(&forward), part)?;
+        }
+        if let Some(r) = reverse {
+            self.reverse_relation(iri, &forward, &sources, &targets, &flags, r)?;
+        }
+        Ok(())
+    }
+
+    /// The forward relation holds between source and target of an instance.
+    fn derivation_rule(&mut self, entity: &str, forward: &str) {
+        let var =
+            |name: &str| IArgument::Variable(self.build.variable(format!("urn:swrl:var#{name}")));
+        let atom =
+            |ope: ObjectPropertyExpression<A>, from: &str, to: &str| Atom::ObjectPropertyAtom {
+                pred: ope,
+                args: (var(from), var(to)),
+            };
+        let body = vec![
+            Atom::ClassAtom {
+                pred: self.class_ce(entity),
+                arg: var("r"),
+            },
+            atom(self.object_property(&format!("{OML}hasSource")), "r", "s"),
+            atom(self.object_property(&format!("{OML}hasTarget")), "r", "t"),
+        ];
+        let head = vec![atom(self.object_property(forward), "s", "t")];
+        let name = forward.strip_prefix(self.ns.as_str()).unwrap_or(forward);
+        let label = Annotation {
+            ap: self
+                .build
+                .annotation_property("http://www.w3.org/2000/01/rdf-schema#label"),
+            av: AnnotationValue::Literal(Literal::Simple {
+                literal: format!("{name} derivation"),
+            }),
+            ann: Default::default(),
+        };
+        self.out.insert(AnnotatedComponent::new(
+            horned_owl::model::Rule { head, body },
+            [label].into(),
+        ));
+    }
+
+    /// The annotations and the name of a forward or reverse relation.
+    fn relation_name<'i>(&self, pair: Pair<'i, Rule>) -> (Vec<Pair<'i, Rule>>, Pair<'i, Rule>) {
+        let mut annotations = vec![];
+        let mut name = None;
+        for p in pair.into_inner() {
+            match p.as_rule() {
+                Rule::annotation => annotations.push(p),
+                Rule::id => name = Some(p),
+                _ => {}
+            }
+        }
+        (annotations, name.unwrap())
+    }
+
+    // Instances
+
+    fn concept_instance(
+        &mut self,
+        iri: &str,
+        is_ref: bool,
+        parts: Vec<Pair<Rule>>,
+    ) -> Result<(), OmlError> {
+        self.instance(iri, is_ref, "ConceptInstance");
+        self.instance_parts(iri, parts)
+    }
+
+    fn relation_instance(
+        &mut self,
+        iri: &str,
+        is_ref: bool,
+        parts: Vec<Pair<Rule>>,
+    ) -> Result<(), OmlError> {
+        self.instance(iri, is_ref, "RelationInstance");
+        self.instance_parts(iri, parts)
+    }
+
+    fn instance(&mut self, iri: &str, is_ref: bool, kind: &str) {
+        if !is_ref {
+            self.add(DeclareNamedIndividual(self.build.named_individual(iri)));
+        }
+        self.type_annotation(iri, kind);
+    }
+
+    fn instance_parts(&mut self, iri: &str, parts: Vec<Pair<Rule>>) -> Result<(), OmlError> {
+        let this = Individual::Named(self.build.named_individual(iri));
+        for part in parts {
+            match part.as_rule() {
+                Rule::reference => {
+                    let t = self.reference(part)?;
+                    self.add(ClassAssertion {
+                        ce: self.class_ce(&t),
+                        i: this.clone(),
+                    });
+                }
+                Rule::from_clause => self.source_target("hasSource", &this, part)?,
+                Rule::to_clause => self.source_target("hasTarget", &this, part)?,
+                Rule::property_value_assertion => self.property_values(&this, part)?,
                 _ => {}
             }
         }
         Ok(())
+    }
+
+    fn source_target(
+        &mut self,
+        property: &str,
+        this: &Individual<A>,
+        pair: Pair<Rule>,
+    ) -> Result<(), OmlError> {
+        for i in self.references(pair)? {
+            self.add(ObjectPropertyAssertion {
+                ope: self.object_property(&format!("{OML}{property}")),
+                from: this.clone(),
+                to: Individual::Named(self.build.named_individual(i.as_str())),
+            });
+        }
+        Ok(())
+    }
+
+    fn property_values(&mut self, this: &Individual<A>, pair: Pair<Rule>) -> Result<(), OmlError> {
+        let mut parts = pair.into_inner();
+        let property = self.reference(parts.next().unwrap())?;
+        for value in parts {
+            let v = value.into_inner().next().unwrap();
+            match v.as_rule() {
+                Rule::literal => self.add(DataPropertyAssertion {
+                    dp: self.build.data_property(property.as_str()),
+                    from: this.clone(),
+                    to: self.literal(v)?,
+                }),
+                Rule::reference => {
+                    let to = self.reference(v)?;
+                    self.add(ObjectPropertyAssertion {
+                        ope: self.object_property(&property),
+                        from: this.clone(),
+                        to: Individual::Named(self.build.named_individual(to.as_str())),
+                    });
+                }
+                _ => return invalid("not supported yet: anonymous instance"),
+            }
+        }
+        Ok(())
+    }
+
+    // Rules
+
+    fn rule(
+        &mut self,
+        iri: &str,
+        is_ref: bool,
+        annotations: Vec<Pair<Rule>>,
+        parts: Vec<Pair<Rule>>,
+    ) -> Result<(), OmlError> {
+        if is_ref {
+            return self.annotate(iri, annotations);
+        }
+        let mut ann = std::collections::BTreeSet::new();
+        for a in annotations {
+            ann.extend(self.annotation(a)?);
+        }
+        for (name, kind) in [("name", iri.to_string()), ("type", format!("{OML}Rule"))] {
+            ann.insert(Annotation {
+                ap: self.build.annotation_property(format!("{OML}{name}")),
+                av: AnnotationValue::Literal(Literal::Simple { literal: kind }),
+                ann: Default::default(),
+            });
+        }
+        let (mut body, mut head) = (vec![], vec![]);
+        for part in parts {
+            let target = if part.as_rule() == Rule::antecedent {
+                &mut body
+            } else {
+                &mut head
+            };
+            for predicate in part.into_inner() {
+                target.extend(self.atoms(predicate)?);
+            }
+        }
+        self.out.insert(AnnotatedComponent::new(
+            horned_owl::model::Rule { head, body },
+            ann,
+        ));
+        Ok(())
+    }
+
+    fn atoms(&self, predicate: Pair<Rule>) -> Result<Vec<Atom<A>>, OmlError> {
+        let p = predicate.into_inner().next().unwrap();
+        let kind = p.as_rule();
+        let mut parts = p.into_inner();
+        Ok(match kind {
+            Rule::same_as_predicate | Rule::different_from_predicate => {
+                let args: Vec<_> = parts.filter(is_argument).collect();
+                let a1 = self.iargument(args[0].clone())?;
+                let a2 = self.iargument(args[1].clone())?;
+                vec![if kind == Rule::same_as_predicate {
+                    Atom::SameIndividualAtom(a1, a2)
+                } else {
+                    Atom::DifferentIndividualsAtom(a1, a2)
+                }]
+            }
+            Rule::built_in_predicate => {
+                let builtin = self.reference(parts.next().unwrap())?;
+                let args = parts
+                    .map(|a| self.dargument(a))
+                    .collect::<Result<Vec<_>, _>>()?;
+                vec![Atom::BuiltInAtom {
+                    pred: self.iri(&builtin),
+                    args,
+                }]
+            }
+            Rule::relation_entity_predicate => {
+                let entity = self.reference(parts.next().unwrap())?;
+                let source = self.iargument(parts.next().unwrap())?;
+                let relation = self.iargument(parts.next().unwrap())?;
+                let target = self.iargument(parts.next().unwrap())?;
+                vec![
+                    Atom::ClassAtom {
+                        pred: self.class_ce(&entity),
+                        arg: relation.clone(),
+                    },
+                    Atom::ObjectPropertyAtom {
+                        pred: self.object_property(&format!("{OML}hasSource")),
+                        args: (relation.clone(), source),
+                    },
+                    Atom::ObjectPropertyAtom {
+                        pred: self.object_property(&format!("{OML}hasTarget")),
+                        args: (relation, target),
+                    },
+                ]
+            }
+            Rule::property_predicate => {
+                let property = self.reference(parts.next().unwrap())?;
+                let first = parts.next().unwrap();
+                let second = parts.next().unwrap();
+                let data = match self.kind_of(&property)? {
+                    Kind::ScalarProperty => true,
+                    Kind::AnnotationProperty => is_literal(&second),
+                    _ => false,
+                };
+                vec![if data {
+                    Atom::DataPropertyAtom {
+                        pred: self.build.data_property(property.as_str()),
+                        args: (self.dargument(first)?, self.dargument(second)?),
+                    }
+                } else {
+                    Atom::ObjectPropertyAtom {
+                        pred: self.object_property(&property),
+                        args: (self.iargument(first)?, self.iargument(second)?),
+                    }
+                }]
+            }
+            _ => {
+                let ty = self.reference(parts.next().unwrap())?;
+                let arg = parts.next().unwrap();
+                vec![if self.kind_of(&ty)? == Kind::Scalar {
+                    Atom::DataRangeAtom {
+                        pred: self.datatype(&ty),
+                        arg: self.dargument(arg)?,
+                    }
+                } else {
+                    Atom::ClassAtom {
+                        pred: self.class_ce(&ty),
+                        arg: self.iargument(arg)?,
+                    }
+                }]
+            }
+        })
+    }
+
+    fn variable(&self, id: &Pair<Rule>) -> Variable<A> {
+        self.build
+            .variable(format!("urn:swrl:var#{}", unescape_id(id.as_str())))
+    }
+
+    fn iargument(&self, pair: Pair<Rule>) -> Result<IArgument<A>, OmlError> {
+        let a = pair.into_inner().next().unwrap();
+        match a.as_rule() {
+            Rule::id => Ok(IArgument::Variable(self.variable(&a))),
+            Rule::cross_reference => {
+                let iri = self.resolve(a.into_inner().next().unwrap())?;
+                Ok(IArgument::Individual(Individual::Named(
+                    self.build.named_individual(iri.as_str()),
+                )))
+            }
+            _ => invalid("a literal is not an individual"),
+        }
+    }
+
+    fn dargument(&self, pair: Pair<Rule>) -> Result<DArgument<A>, OmlError> {
+        let a = pair.into_inner().next().unwrap();
+        match a.as_rule() {
+            Rule::id => Ok(DArgument::Variable(self.variable(&a))),
+            Rule::literal => Ok(DArgument::Literal(self.literal(a)?)),
+            _ => invalid("an individual is not a literal"),
+        }
     }
 
     fn entity_equivalence(
@@ -932,7 +1467,7 @@ impl<'a, A: ForIRI, O: MutableOntology<A>> Reader<'a, A, O> {
         }
         self.relation_base(iri, &sources, &targets, &flags, false);
         if let Some(r) = reverse {
-            self.reverse_relation(iri, &sources, &targets, &flags, r)?;
+            self.reverse_relation(iri, iri, &sources, &targets, &flags, r)?;
         }
         Ok(())
     }
@@ -986,24 +1521,14 @@ impl<'a, A: ForIRI, O: MutableOntology<A>> Reader<'a, A, O> {
 
     fn reverse_relation(
         &mut self,
+        base: &str,
         forward: &str,
         sources: &[String],
         targets: &[String],
         flags: &[String],
         pair: Pair<Rule>,
     ) -> Result<(), OmlError> {
-        let (annotations, name) = {
-            let mut annotations = vec![];
-            let mut name = None;
-            for p in pair.into_inner() {
-                match p.as_rule() {
-                    Rule::annotation => annotations.push(p),
-                    Rule::id => name = Some(p),
-                    _ => {}
-                }
-            }
-            (annotations, name.unwrap())
-        };
+        let (annotations, name) = self.relation_name(pair);
         let reverse = format!("{}{}", self.ns, unescape_id(name.as_str()));
         self.annotate(&reverse, annotations)?;
         self.add(DeclareObjectProperty(
@@ -1015,7 +1540,7 @@ impl<'a, A: ForIRI, O: MutableOntology<A>> Reader<'a, A, O> {
             subject: self.iri(&reverse).into(),
             ann: Annotation {
                 ap,
-                av: AnnotationValue::IRI(self.iri(forward)),
+                av: AnnotationValue::IRI(self.iri(base)),
                 ann: Default::default(),
             },
         });
@@ -1026,4 +1551,23 @@ impl<'a, A: ForIRI, O: MutableOntology<A>> Reader<'a, A, O> {
         self.relation_base(&reverse, sources, targets, flags, true);
         Ok(())
     }
+}
+
+fn flag(pair: &Pair<Rule>) -> String {
+    pair.as_str()
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+fn is_argument(p: &Pair<Rule>) -> bool {
+    p.as_rule() == Rule::argument
+}
+
+fn is_literal(argument: &Pair<Rule>) -> bool {
+    argument
+        .clone()
+        .into_inner()
+        .next()
+        .is_some_and(|p| p.as_rule() == Rule::literal)
 }
