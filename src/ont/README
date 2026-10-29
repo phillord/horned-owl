@@ -35,5 +35,5 @@ them. A few bubo files are skipped, with the reasons listed in `oml.mk`.
 
 `oml-manual` is OML written by hand, laid out by ontology IRI, for what the
 generated files lack: relation entities, concepts, instances, rules and
-description bundles. `owl-from-oml-manual` is the `oml2owl` output for it,
+bundles. `owl-from-oml-manual` is the `oml2owl` output for it,
 made by the same `make -f oml.mk`.

@@ -256,7 +256,6 @@ fn all_pairs(oml_dir: &Path, ofn_dir: &Path, ext: &str) -> Vec<(PathBuf, PathBuf
 // sources) and `oracle-fss/` (the oml2owl output). The W3C vocabularies are
 // skipped as oml2owl does not convert them.
 #[test]
-#[ignore = "the closure of vocabulary bundles is not read yet"]
 fn library_vocabularies() {
     let Some(dir) = std::env::var_os("OML_CORPUS") else {
         eprintln!("OML_CORPUS not set, skipping");

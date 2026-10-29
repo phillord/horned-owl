@@ -14,6 +14,7 @@ use pest::Parser;
 use pest::iterators::Pair;
 
 use crate::catalog::{CatalogResolver, find_catalog};
+use crate::closure::{Ce, Taxonomy};
 use crate::parser::{OmlParser, Rule};
 use curie::PrefixMapping;
 
@@ -92,6 +93,12 @@ struct Terms {
     /// A forward or reverse relation to its relation entity, and whether it
     /// is the forward one.
     relations: HashMap<String, (String, bool)>,
+    /// Pairs of an entity and one that it specialises or is equivalent to.
+    supers: Vec<(String, String)>,
+    /// Whether the ontology is a vocabulary.
+    vocabulary: bool,
+    /// The namespaces it imports.
+    imports: Vec<String>,
 }
 
 /// Read an OML document into an ontology.
@@ -239,15 +246,49 @@ fn header(pair: Pair<Rule>) -> Header {
     }
 }
 
-/// The kinds of the terms an ontology declares, without translating it.
+/// The terms an ontology declares, without translating it.
 fn terms_of(text: &str) -> Option<Terms> {
     let oml = OmlParser::parse(Rule::oml, text).ok()?.next()?;
     let h = header(oml.into_inner().next()?);
-    let mut terms = Terms::default();
+    let mut prefixes: HashMap<String, String> = HashMap::new();
+    prefixes.insert(h.prefix.clone(), h.ns.clone());
+    for (ns, prefix) in &h.imports {
+        if let Some(prefix) = prefix {
+            prefixes.insert(prefix.clone(), ns.clone());
+        }
+    }
+    let mut terms = Terms {
+        vocabulary: h.kind.starts_with("Vocabulary"),
+        imports: h.imports.iter().map(|(ns, _)| ns.clone()).collect(),
+        ..Terms::default()
+    };
     for s in h.statements {
-        register(&mut terms, &h.ns, &|_| None, s);
+        register(&mut terms, &h.ns, &|p| resolve_ref(&prefixes, &h.ns, p), s);
     }
     Some(terms)
+}
+
+/// The IRI a reference stands for, given the prefixes in scope.
+fn resolve_ref(prefixes: &HashMap<String, String>, ns: &str, r: Pair<Rule>) -> Option<String> {
+    let r = if r.as_rule() == Rule::reference {
+        r.into_inner().next()?
+    } else {
+        r
+    };
+    let t = r.as_str();
+    match r.as_rule() {
+        Rule::iri => Some(t[1..t.len() - 1].to_string()),
+        Rule::qname => {
+            let (p, n) = t.split_once(':')?;
+            Some(format!(
+                "{}{}",
+                prefixes.get(unescape_id(p))?,
+                unescape_id(n)
+            ))
+        }
+        Rule::id => Some(format!("{ns}{}", unescape_id(t))),
+        _ => None,
+    }
 }
 
 fn namespace_of(iri: &str) -> &str {
@@ -327,6 +368,10 @@ impl<'a, A: ForIRI, O: MutableOntology<A>> Reader<'a, A, O> {
             }
         }
 
+        if h.kind == "VocabularyBundle" {
+            self.close_bundle(&h.imports)?;
+        }
+
         // Kinds first, as restrictions refer to properties by kind.
         for s in &h.statements {
             self.register(s);
@@ -335,6 +380,76 @@ impl<'a, A: ForIRI, O: MutableOntology<A>> Reader<'a, A, O> {
             self.statement(s)?;
         }
         Ok(())
+    }
+
+    /// Close the world of the bundle: make disjoint the concepts and
+    /// relation entities that have no subclass in common.
+    fn close_bundle(&mut self, imports: &[(String, Option<String>)]) -> Result<(), OmlError> {
+        let mut scope: Vec<Rc<Terms>> = vec![];
+        let mut seen = std::collections::BTreeSet::new();
+        let mut todo: Vec<String> = imports.iter().map(|(ns, _)| ns.clone()).collect();
+        while let Some(ns) = todo.pop() {
+            if !seen.insert(ns.clone()) {
+                continue;
+            }
+            match self.imported(&ns) {
+                Some(t) => {
+                    todo.extend(t.imports.iter().cloned());
+                    scope.push(t);
+                }
+                // The W3C vocabularies only have scalars and properties.
+                None if BUILT_IN.contains(&&ns[..ns.len() - 1]) => {}
+                None => return invalid(format!("cannot find the ontology {ns}")),
+            }
+        }
+        let classes: Vec<String> = scope
+            .iter()
+            .filter(|t| t.vocabulary)
+            .flat_map(|t| t.kinds.iter())
+            .filter(|(_, k)| matches!(k, Kind::Concept | Kind::RelationEntity))
+            .map(|(iri, _)| iri.clone())
+            .collect::<std::collections::BTreeSet<_>>()
+            .into_iter()
+            .collect();
+        let edges: Vec<(String, String)> = scope
+            .iter()
+            .flat_map(|t| t.supers.iter())
+            .map(|(sub, sup)| (sup.clone(), sub.clone()))
+            .collect();
+        let taxonomy = Taxonomy::new(&classes, &edges)
+            .transitive_reduction()
+            .root_at(Ce::Universal);
+        let (subclasses, disjoint) = taxonomy.closure();
+        for (sub, sup) in subclasses {
+            self.add(SubClassOf {
+                sup: self.class_expression(&sup),
+                sub: self.class_expression(&sub),
+            });
+        }
+        for set in disjoint {
+            self.add(DisjointClasses(
+                set.iter().map(|c| self.class_expression(c)).collect(),
+            ));
+        }
+        Ok(())
+    }
+
+    fn class_expression(&self, c: &Ce) -> ClassExpression<A> {
+        match c {
+            Ce::Universal => self.class_ce("http://www.w3.org/2002/07/owl#Thing"),
+            Ce::Empty => self.class_ce("http://www.w3.org/2002/07/owl#Nothing"),
+            Ce::Unit(iri) => self.class_ce(iri),
+            Ce::Complement(e) => {
+                ClassExpression::ObjectComplementOf(Box::new(self.class_expression(e)))
+            }
+            Ce::Difference(a, b) => self.class_expression(&a.intersection(&b.complement())),
+            Ce::Intersection(s) => ClassExpression::ObjectIntersectionOf(
+                s.iter().map(|e| self.class_expression(e)).collect(),
+            ),
+            Ce::Union(s) => {
+                ClassExpression::ObjectUnionOf(s.iter().map(|e| self.class_expression(e)).collect())
+            }
+        }
     }
 
     fn ontology_annotation(&mut self, name: &str, av: AnnotationValue<A>) {
@@ -586,6 +701,21 @@ fn register(
     }
     let mut forward = None;
     for p in term.into_inner() {
+        if matches!(
+            p.as_rule(),
+            Rule::entity_specialization | Rule::entity_equivalence
+        ) {
+            for r in p
+                .clone()
+                .into_inner()
+                .flat_map(|x| std::iter::once(x.clone()).chain(x.into_inner()))
+                .filter(|x| x.as_rule() == Rule::reference)
+            {
+                if let Some(sup) = reference(r) {
+                    terms.supers.push((iri.clone(), sup));
+                }
+            }
+        }
         let declared = p
             .clone()
             .into_inner()

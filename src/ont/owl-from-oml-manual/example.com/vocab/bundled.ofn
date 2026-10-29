@@ -1,0 +1,73 @@
+Prefix(:=<http://example.com/vocab/bundled#>)
+Prefix(owl:=<http://www.w3.org/2002/07/owl#>)
+Prefix(rdf:=<http://www.w3.org/1999/02/22-rdf-syntax-ns#>)
+Prefix(xml:=<http://www.w3.org/XML/1998/namespace>)
+Prefix(xsd:=<http://www.w3.org/2001/XMLSchema#>)
+Prefix(rdfs:=<http://www.w3.org/2000/01/rdf-schema#>)
+Prefix(bundled:=<http://example.com/vocab/bundled#>)
+
+
+Ontology(<http://example.com/vocab/bundled>
+Import(<http://example.com/vocab/base>)
+Import(<http://example.com/vocab/extra>)
+Annotation(<http://opencaesar.io/oml#namespace> <http://example.com/vocab/bundled#>)
+Annotation(<http://opencaesar.io/oml#prefix> "bundled")
+Annotation(<http://opencaesar.io/oml#type> <http://opencaesar.io/oml#VocabularyBundle>)
+
+Declaration(AnnotationProperty(<http://opencaesar.io/oml#namespace>))
+Declaration(AnnotationProperty(<http://opencaesar.io/oml#prefix>))
+Declaration(AnnotationProperty(<http://opencaesar.io/oml#type>))
+
+
+############################
+#   Classes
+############################
+
+# Class: <http://example.com/vocab/base#Adult> (<http://example.com/vocab/base#Adult>)
+
+SubClassOf(<http://example.com/vocab/base#Adult> <http://example.com/vocab/base#Person>)
+
+# Class: <http://example.com/vocab/base#BestFriend> (<http://example.com/vocab/base#BestFriend>)
+
+SubClassOf(<http://example.com/vocab/base#BestFriend> <http://example.com/vocab/base#Knows>)
+
+# Class: <http://example.com/vocab/base#Knows> (<http://example.com/vocab/base#Knows>)
+
+SubClassOf(<http://example.com/vocab/base#Knows> owl:Thing)
+
+# Class: <http://example.com/vocab/base#Narcissist> (<http://example.com/vocab/base#Narcissist>)
+
+SubClassOf(<http://example.com/vocab/base#Narcissist> <http://example.com/vocab/base#Person>)
+
+# Class: <http://example.com/vocab/base#Owns> (<http://example.com/vocab/base#Owns>)
+
+SubClassOf(<http://example.com/vocab/base#Owns> owl:Thing)
+
+# Class: <http://example.com/vocab/base#Pair> (<http://example.com/vocab/base#Pair>)
+
+SubClassOf(<http://example.com/vocab/base#Pair> <http://example.com/vocab/base#Person>)
+
+# Class: <http://example.com/vocab/base#Person> (<http://example.com/vocab/base#Person>)
+
+SubClassOf(<http://example.com/vocab/base#Person> owl:Thing)
+
+# Class: <http://example.com/vocab/base#Pet> (<http://example.com/vocab/base#Pet>)
+
+SubClassOf(<http://example.com/vocab/base#Pet> owl:Thing)
+
+# Class: <http://example.com/vocab/base#PetOwner> (<http://example.com/vocab/base#PetOwner>)
+
+SubClassOf(<http://example.com/vocab/base#PetOwner> <http://example.com/vocab/base#Person>)
+
+# Class: <http://example.com/vocab/extra#Author> (<http://example.com/vocab/extra#Author>)
+
+SubClassOf(<http://example.com/vocab/extra#Author> <http://example.com/vocab/base#Person>)
+
+# Class: <http://example.com/vocab/extra#Wrote> (<http://example.com/vocab/extra#Wrote>)
+
+SubClassOf(<http://example.com/vocab/extra#Wrote> <http://example.com/vocab/base#Owns>)
+
+
+DisjointClasses(<http://example.com/vocab/base#Adult> <http://example.com/vocab/base#Narcissist> <http://example.com/vocab/base#Pair> <http://example.com/vocab/base#PetOwner> <http://example.com/vocab/extra#Author>)
+DisjointClasses(<http://example.com/vocab/base#Knows> <http://example.com/vocab/base#Owns> <http://example.com/vocab/base#Person> <http://example.com/vocab/base#Pet>)
+)

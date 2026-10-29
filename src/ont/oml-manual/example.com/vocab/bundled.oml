@@ -1,0 +1,6 @@
+vocabulary bundle <http://example.com/vocab/bundled#> as bundled {
+
+	includes <http://example.com/vocab/base#>
+
+	includes <http://example.com/vocab/extra#>
+}

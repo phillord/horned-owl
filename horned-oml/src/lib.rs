@@ -9,5 +9,6 @@
 //! the other readers and writers.
 
 pub mod catalog;
+pub mod closure;
 pub mod parser;
 pub mod reader;
