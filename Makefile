@@ -45,8 +45,10 @@ clean:
 test:
 	cargo test
 
+## horned-bin's OML support is an optional feature, so test it explicitly.
 quick-test:
 	cargo test --lib --bins --tests -- --skip integration
+	cargo test -p horned-bin --features oml --test test_horned_oml
 
 tmp:
 	mkdir tmp
@@ -123,7 +125,7 @@ triples-round-all:
 	done
 
 clippy:
-	cargo clippy --workspace --all-targets
+	cargo clippy --workspace --all-targets --features horned-bin/oml
 
 install:
 	cargo install --path horned-bin
