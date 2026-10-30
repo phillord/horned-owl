@@ -137,6 +137,8 @@ pub struct OntologyInfo {
     pub types: HashMap<String, String>,
     /// Relation entity to its forward relation.
     pub forwards: HashMap<String, String>,
+    /// Relation entity or relation to its reverse relation.
+    pub reverses: HashMap<String, String>,
 }
 
 impl OntologyInfo {
@@ -162,6 +164,17 @@ impl OntologyInfo {
                         _ => {}
                     }
                 }
+                Component::Rule(_) => {
+                    for a in &ac.ann {
+                        if let (
+                            Some("name"),
+                            AnnotationValue::Literal(Literal::Simple { literal }),
+                        ) = (oml_name(a.ap.0.as_ref()), &a.av)
+                        {
+                            declared.push((literal.clone(), "Rule"));
+                        }
+                    }
+                }
                 Component::DeclareDatatype(DeclareDatatype(x)) => {
                     declared.push((x.0.to_string(), "Scalar"));
                 }
@@ -183,6 +196,9 @@ impl OntologyInfo {
                         }
                         (Some("relationEntity"), AnnotationValue::IRI(v)) => {
                             info.forwards.insert(v.to_string(), s.to_string());
+                        }
+                        (Some("relationBase"), AnnotationValue::IRI(v)) => {
+                            info.reverses.insert(v.to_string(), s.to_string());
                         }
                         _ => {}
                     }
@@ -267,6 +283,10 @@ enum Term {
     ScalarProperty,
     AnnotationProperty,
     Relation,
+    ConceptInstance,
+    RelationInstance,
+    BuiltIn,
+    Rule,
 }
 
 struct ImportLine {
@@ -289,6 +309,10 @@ struct Writer<'a, A: ForIRI> {
     lines: RefCell<Vec<ImportLine>>,
     problems: RefCell<Vec<String>>,
     infos: RefCell<HashMap<String, Option<OntologyInfo>>>,
+    /// The numbers of the anonymous instances written, in the order written.
+    anon_log: RefCell<Vec<usize>>,
+    /// How deeply anonymous instances are nested where we are writing.
+    depth: std::cell::Cell<usize>,
 }
 
 impl<'a, A: ForIRI> Writer<'a, A> {
@@ -317,6 +341,8 @@ impl<'a, A: ForIRI> Writer<'a, A> {
             lines: RefCell::new(vec![]),
             problems: RefCell::new(vec![]),
             infos: RefCell::new(HashMap::new()),
+            anon_log: RefCell::new(vec![]),
+            depth: std::cell::Cell::new(0),
         }
     }
 
@@ -395,6 +421,8 @@ impl<'a, A: ForIRI> Writer<'a, A> {
             vec![]
         } else if kind == "Vocabulary" {
             self.vocabulary()
+        } else if kind == "Description" {
+            self.description()
         } else {
             vec![]
         };
@@ -645,20 +673,462 @@ impl<'a, A: ForIRI> Writer<'a, A> {
             }
         }
         let mut out = vec![];
+        let names: Vec<String> = terms.keys().cloned().collect();
         for (iri, term) in terms {
-            let text = match term {
-                Term::Aspect | Term::Concept | Term::RelationEntity => {
-                    self.entity(&iri, term, false)
-                }
-                Term::Scalar => self.scalar(&iri, false),
-                Term::ScalarProperty => self.scalar_property(&iri, false),
-                Term::AnnotationProperty => self.annotation_property(&iri, false),
-                Term::Relation => self.relation(&iri, false),
-            };
-            out.extend(text);
+            let (idx, text) = self.tracked(|w| match term {
+                Term::Aspect | Term::Concept | Term::RelationEntity => w.entity(&iri, term, false),
+                Term::Scalar => w.scalar(&iri, false),
+                Term::ScalarProperty => w.scalar_property(&iri, false),
+                Term::AnnotationProperty => w.annotation_property(&iri, false),
+                Term::Relation => w.relation(&iri, false),
+                _ => None,
+            });
+            out.extend(text.map(|t| (idx, iri, t)));
         }
-        out.extend(self.references_to_imported());
+        out.extend(self.rules().into_iter().map(|(iri, t)| (None, iri, t)));
+        out.extend(self.local_builtins(&names));
+        let mut statements = order_statements(out);
+        statements.extend(self.references_to_imported());
+        statements
+    }
+
+    /// The rules, which `oml2owl` makes into SWRL rules named by `oml:name`.
+    fn rules(&mut self) -> Vec<(String, String)> {
+        let mut out = vec![];
+        for i in 0..self.items.len() {
+            let ac = self.items[i];
+            let Component::Rule(rule) = &ac.component else {
+                continue;
+            };
+            if self.used[i] {
+                continue;
+            }
+            let name = ac
+                .ann
+                .iter()
+                .find_map(|a| match (oml_name(a.ap.0.as_ref()), &a.av) {
+                    (Some("name"), AnnotationValue::Literal(Literal::Simple { literal })) => {
+                        Some(literal.clone())
+                    }
+                    _ => None,
+                });
+            let Some(iri) = name else {
+                continue;
+            };
+            self.used[i] = true;
+            let mut annotations: Vec<String> = ac
+                .ann
+                .iter()
+                .filter(|a| oml_name(a.ap.0.as_ref()).is_none())
+                .filter_map(|a| self.annotation(a))
+                .collect();
+            annotations.sort();
+            let Some(name) = self.local(&iri).then(|| self.name(&iri)).flatten() else {
+                self.problem(format!("the rule {iri} is not in this ontology"));
+                continue;
+            };
+            let body = self.atoms(&rule.body);
+            let head = self.atoms(&rule.head);
+            let block = match (body, head) {
+                (Some(b), Some(h)) if !b.is_empty() && !h.is_empty() => {
+                    vec![format!("{} -> {}", b.join(" & "), h.join(" & "))]
+                }
+                (Some(b), Some(h)) if b.is_empty() && h.is_empty() => vec![],
+                _ => {
+                    self.problem(format!(
+                        "the rule {iri} needs atoms before and after the arrow"
+                    ));
+                    continue;
+                }
+            };
+            out.push((
+                iri,
+                self.statement(annotations, format!("rule {name}"), block, String::new()),
+            ));
+        }
         out
+    }
+
+    fn atoms(&self, atoms: &[Atom<A>]) -> Option<Vec<String>> {
+        let has_source = format!("{OML}hasSource");
+        let has_target = format!("{OML}hasTarget");
+        let mut out = vec![];
+        let mut i = 0;
+        while i < atoms.len() {
+            // The three atoms that a relation entity predicate stands for.
+            if let [
+                Atom::ClassAtom {
+                    pred: ClassExpression::Class(entity),
+                    arg,
+                },
+                Atom::ObjectPropertyAtom {
+                    pred: ObjectPropertyExpression::ObjectProperty(p1),
+                    args: (r1, source),
+                },
+                Atom::ObjectPropertyAtom {
+                    pred: ObjectPropertyExpression::ObjectProperty(p2),
+                    args: (r2, target),
+                },
+                ..,
+            ] = &atoms[i..]
+                && p1.0.as_ref() == has_source
+                && p2.0.as_ref() == has_target
+                && r1 == arg
+                && r2 == arg
+            {
+                out.push(format!(
+                    "{}({}, {}, {})",
+                    self.reference(entity.0.as_ref()),
+                    self.iargument(source)?,
+                    self.iargument(arg)?,
+                    self.iargument(target)?
+                ));
+                i += 3;
+                continue;
+            }
+            out.push(self.atom(&atoms[i])?);
+            i += 1;
+        }
+        Some(out)
+    }
+
+    fn atom(&self, atom: &Atom<A>) -> Option<String> {
+        Some(match atom {
+            Atom::BuiltInAtom { pred, args } => {
+                let args: Option<Vec<String>> = args.iter().map(|a| self.dargument(a)).collect();
+                format!(
+                    "builtIn({}, {})",
+                    self.reference(pred.as_ref()),
+                    args?.join(", ")
+                )
+            }
+            Atom::ClassAtom {
+                pred: ClassExpression::Class(c),
+                arg,
+            } => format!("{}({})", self.reference(c.0.as_ref()), self.iargument(arg)?),
+            Atom::DataRangeAtom {
+                pred: DataRange::Datatype(d),
+                arg,
+            } => format!("{}({})", self.reference(d.0.as_ref()), self.dargument(arg)?),
+            Atom::DataPropertyAtom { pred, args } => format!(
+                "{}({}, {})",
+                self.reference(pred.0.as_ref()),
+                self.dargument(&args.0)?,
+                self.dargument(&args.1)?
+            ),
+            Atom::ObjectPropertyAtom {
+                pred: ObjectPropertyExpression::ObjectProperty(p),
+                args,
+            } => format!(
+                "{}({}, {})",
+                self.reference(p.0.as_ref()),
+                self.iargument(&args.0)?,
+                self.iargument(&args.1)?
+            ),
+            Atom::SameIndividualAtom(a, b) => {
+                format!("sameAs({}, {})", self.iargument(a)?, self.iargument(b)?)
+            }
+            Atom::DifferentIndividualsAtom(a, b) => {
+                format!(
+                    "differentFrom({}, {})",
+                    self.iargument(a)?,
+                    self.iargument(b)?
+                )
+            }
+            other => {
+                self.problem(format!("rule atom {other:?}"));
+                return None;
+            }
+        })
+    }
+
+    fn variable(&self, v: &Variable<A>) -> Option<String> {
+        let name = v.0.as_ref().strip_prefix("urn:swrl:var#").and_then(id);
+        if name.is_none() {
+            self.problem(format!("rule variable {v:?}"));
+        }
+        name
+    }
+
+    fn iargument(&self, a: &IArgument<A>) -> Option<String> {
+        match a {
+            IArgument::Variable(v) => self.variable(v),
+            IArgument::Individual(Individual::Named(n)) => Some(self.cross_reference(n.0.as_ref())),
+            other => {
+                self.problem(format!("rule argument {other:?}"));
+                None
+            }
+        }
+    }
+
+    fn dargument(&self, a: &DArgument<A>) -> Option<String> {
+        match a {
+            DArgument::Variable(v) => self.variable(v),
+            DArgument::Literal(l) => Some(self.literal(l)),
+        }
+    }
+
+    /// A reference that cannot be a bare name, as a rule argument cannot.
+    fn cross_reference(&self, iri: &str) -> String {
+        let name = local_name(iri);
+        if namespace_of(iri) == self.info.ns {
+            if is_idfrag(name) && is_idfrag(&self.info.prefix) {
+                format!("{}:{name}", self.info.prefix)
+            } else {
+                format!("<{iri}>")
+            }
+        } else {
+            self.reference(iri)
+        }
+    }
+
+    /// `builtin` statements: all that `oml2owl` makes of one is annotations.
+    fn local_builtins(&mut self, terms: &[String]) -> Vec<(Option<usize>, String, String)> {
+        let mut keys: Vec<String> = self
+            .by_key
+            .iter()
+            .filter(|(k, ids)| self.local(k) && ids.iter().any(|&i| !self.used[i]))
+            .map(|(k, _)| k.clone())
+            .collect();
+        keys.sort();
+        let mut out = vec![];
+        for k in keys {
+            if terms.contains(&k) {
+                continue;
+            }
+            let annotations = self.annotations_of(&k);
+            if annotations.is_empty() {
+                continue;
+            }
+            let Some(name) = self.name(&k) else {
+                continue;
+            };
+            out.push((
+                None,
+                k,
+                self.statement(
+                    annotations,
+                    format!("builtin {name}"),
+                    vec![],
+                    String::new(),
+                ),
+            ));
+        }
+        out
+    }
+
+    // Descriptions
+
+    fn description(&mut self) -> Vec<String> {
+        let mut instances: BTreeMap<String, bool> = BTreeMap::new();
+        for i in 0..self.items.len() {
+            if let Component::DeclareNamedIndividual(DeclareNamedIndividual(x)) =
+                &self.items[i].component
+            {
+                let iri = x.0.to_string();
+                if self.local(&iri) && !self.is_anonymous(&iri) {
+                    self.used[i] = true;
+                    let relation =
+                        self.info.types.get(&iri).map(String::as_str) == Some("RelationInstance");
+                    instances.insert(iri, relation);
+                }
+            }
+        }
+        let mut out = vec![];
+        for (iri, relation) in instances {
+            let (idx, text) = self.tracked(|w| w.instance(&iri, relation, false));
+            out.extend(text.map(|t| (idx, iri, t)));
+        }
+        let mut statements = order_statements(out);
+        statements.extend(self.references_to_imported());
+        statements
+    }
+
+    fn is_anonymous(&self, iri: &str) -> bool {
+        match self.info.types.get(iri).map(String::as_str) {
+            Some(t) => t.starts_with("Anonymous"),
+            None => self.local(iri) && is_anonymous_name(iri),
+        }
+    }
+
+    /// Run `f`, and say which is the first anonymous instance it wrote.
+    fn tracked<R>(&mut self, f: impl FnOnce(&mut Self) -> R) -> (Option<usize>, R) {
+        let start = self.anon_log.borrow().len();
+        let r = f(self);
+        let first = self.anon_log.borrow()[start..].iter().copied().min();
+        (first, r)
+    }
+
+    fn instance(&mut self, iri: &str, relation: bool, is_ref: bool) -> Option<String> {
+        let annotations = self.annotations_of(iri);
+        let name = self.name_or_reference(iri, is_ref)?;
+        let mut types = self.grab(iri, |c| match c {
+            Component::ClassAssertion(ClassAssertion {
+                ce: ClassExpression::Class(c),
+                i: Individual::Named(n),
+            }) if n.0.as_ref() == iri => Some(c.0.to_string()),
+            _ => None,
+        });
+        types.sort();
+        let mut block = vec![];
+        if relation {
+            for (word, end) in [("from", "hasSource"), ("to", "hasTarget")] {
+                let end = format!("{OML}{end}");
+                let found = self.grab(iri, |c| match c {
+                    Component::ObjectPropertyAssertion(ObjectPropertyAssertion {
+                        ope: ObjectPropertyExpression::ObjectProperty(p),
+                        from: Individual::Named(n),
+                        to: Individual::Named(t),
+                    }) if n.0.as_ref() == iri && p.0.as_ref() == end => Some(t.0.to_string()),
+                    _ => None,
+                });
+                if !found.is_empty() {
+                    block.push(format!("{word} {}", self.references(found)));
+                }
+            }
+        }
+        block.extend(self.value_lines(iri));
+        let types = if types.is_empty() {
+            String::new()
+        } else {
+            format!(" : {}", self.references(types))
+        };
+        let word = if relation {
+            "relation instance"
+        } else {
+            "instance"
+        };
+        Some(self.statement(
+            annotations,
+            format!("{}{word} {name}{types}", ref_word(is_ref)),
+            block,
+            String::new(),
+        ))
+    }
+
+    /// The property value assertions of an instance, one line for each property.
+    fn value_lines(&mut self, owner: &str) -> Vec<String> {
+        let mut entries: Vec<(String, Option<usize>, String)> = vec![];
+        let data = self.grab(owner, |c| match c {
+            Component::DataPropertyAssertion(DataPropertyAssertion {
+                dp,
+                from: Individual::Named(n),
+                to,
+            }) if n.0.as_ref() == owner => Some((dp.0.to_string(), to.clone())),
+            _ => None,
+        });
+        for (dp, l) in data {
+            entries.push((self.reference(&dp), None, self.literal(&l)));
+        }
+        let objects = self.grab(owner, |c| match c {
+            Component::ObjectPropertyAssertion(ObjectPropertyAssertion {
+                ope: ObjectPropertyExpression::ObjectProperty(p),
+                from: Individual::Named(n),
+                to: Individual::Named(t),
+            }) if n.0.as_ref() == owner => Some((p.0.to_string(), t.0.to_string())),
+            _ => None,
+        });
+        for (p, t) in objects {
+            if self.is_anonymous(&t) {
+                let (idx, value) = self.tracked(|w| w.anonymous_value(&p, &t));
+                if let Some((property, value)) = value {
+                    entries.push((property, idx, value));
+                }
+            } else {
+                entries.push((self.reference(&p), None, self.reference(&t)));
+            }
+        }
+        entries.sort_by(|a, b| (&a.0, &a.2).cmp(&(&b.0, &b.2)));
+        let mut lines: Vec<(Option<usize>, String)> = vec![];
+        let mut i = 0;
+        while i < entries.len() {
+            let mut j = i;
+            while j < entries.len() && entries[j].0 == entries[i].0 {
+                j += 1;
+            }
+            let mut values: Vec<(Option<usize>, String)> =
+                entries[i..j].iter().map(|e| (e.1, e.2.clone())).collect();
+            reorder(&mut values);
+            let first = values.iter().filter_map(|v| v.0).min();
+            let texts: Vec<String> = values.into_iter().map(|v| v.1).collect();
+            lines.push((first, format!("{} {}", entries[i].0, texts.join(", "))));
+            i = j;
+        }
+        reorder(&mut lines);
+        lines.into_iter().map(|l| l.1).collect()
+    }
+
+    /// The property and value text for the anonymous instance `j` that is
+    /// related to its owner by `ope`. `oml2owl` relates the owner to an
+    /// anonymous relation instance by the inverse of `hasSource` or
+    /// `hasTarget`, which OML writes as the forward or reverse relation.
+    fn anonymous_value(&mut self, ope: &str, j: &str) -> Option<(String, String)> {
+        let Some(number) = anonymous_number(j) else {
+            self.problem(format!("{j} is not a numbered anonymous instance"));
+            return None;
+        };
+        self.anon_log.borrow_mut().push(number);
+        self.grab_one(j, |c| {
+            matches!(c, Component::DeclareNamedIndividual(DeclareNamedIndividual(x)) if x.0.as_ref() == j)
+        });
+        let types = self.grab(j, |c| match c {
+            Component::ClassAssertion(ClassAssertion {
+                ce: ClassExpression::Class(c),
+                i: Individual::Named(n),
+            }) if n.0.as_ref() == j => Some(c.0.to_string()),
+            _ => None,
+        });
+        let source_of = format!("{OML}isSourceOf");
+        let target_of = format!("{OML}isTargetOf");
+        let relation = ope == source_of || ope == target_of;
+        let [entity] = &types[..] else {
+            self.problem(format!("the anonymous instance {j} needs exactly one type"));
+            return None;
+        };
+        let (property, value) = if relation {
+            let (far, near) = if ope == source_of {
+                ("hasTarget", self.forward_of(entity))
+            } else {
+                ("hasSource", self.reverse_of(entity))
+            };
+            let far = format!("{OML}{far}");
+            let ends = self.grab(j, |c| match c {
+                Component::ObjectPropertyAssertion(ObjectPropertyAssertion {
+                    ope: ObjectPropertyExpression::ObjectProperty(p),
+                    from: Individual::Named(n),
+                    to: Individual::Named(t),
+                }) if n.0.as_ref() == j && p.0.as_ref() == far => Some(t.0.to_string()),
+                _ => None,
+            });
+            let (Some(near), [end]) = (near, &ends[..]) else {
+                self.problem(format!("cannot write the anonymous relation instance {j}"));
+                return None;
+            };
+            (self.reference(&near), self.reference(end))
+        } else {
+            (self.reference(ope), format!(": {}", self.reference(entity)))
+        };
+        let depth = self.depth.get();
+        self.depth.set(depth + 1);
+        let lines = self.value_lines(j);
+        self.depth.set(depth);
+        let indent = format!("\t\t{}", "\t".repeat(depth));
+        let block = if lines.is_empty() {
+            " []".to_string()
+        } else {
+            self.block(&lines, &indent)
+        };
+        Some((property, format!("{value}{block}")))
+    }
+
+    fn reverse_of(&self, entity: &str) -> Option<String> {
+        if let Some(r) = self.info.reverses.get(entity) {
+            return Some(r.clone());
+        }
+        self.import_info(namespace_of(entity), None)?
+            .reverses
+            .get(entity)
+            .cloned()
     }
 
     /// `ref` statements for what is said about terms of other ontologies.
@@ -678,23 +1148,44 @@ impl<'a, A: ForIRI> Writer<'a, A> {
                 None => targets.insert(k),
             };
         }
-        let mut out = vec![];
+        let mut out: Vec<(Option<usize>, String, String)> = vec![];
         for iri in targets {
             let Some(term) = self.imported_term(&iri) else {
                 continue;
             };
-            let text = match term {
-                Term::Aspect | Term::Concept | Term::RelationEntity => {
-                    self.entity(&iri, term, true)
-                }
-                Term::Scalar => self.scalar(&iri, true),
-                Term::ScalarProperty => self.scalar_property(&iri, true),
-                Term::AnnotationProperty => self.annotation_property(&iri, true),
-                Term::Relation => self.relation(&iri, true),
-            };
-            out.extend(text);
+            let instance = matches!(term, Term::ConceptInstance | Term::RelationInstance);
+            if instance != (self.info.kind == "Description") {
+                continue;
+            }
+            let (idx, text) = self.tracked(|w| match term {
+                Term::Aspect | Term::Concept | Term::RelationEntity => w.entity(&iri, term, true),
+                Term::Scalar => w.scalar(&iri, true),
+                Term::ScalarProperty => w.scalar_property(&iri, true),
+                Term::AnnotationProperty => w.annotation_property(&iri, true),
+                Term::Relation => w.relation(&iri, true),
+                Term::ConceptInstance => w.instance(&iri, false, true),
+                Term::RelationInstance => w.instance(&iri, true, true),
+                Term::BuiltIn => w.annotations_only(&iri, "builtin"),
+                Term::Rule => w.annotations_only(&iri, "rule"),
+            });
+            out.extend(text.map(|t| (idx, iri, t)));
         }
-        out
+        order_statements(out)
+    }
+
+    /// A `ref` statement for a built-in or rule of another ontology, which
+    /// can only be annotated.
+    fn annotations_only(&mut self, iri: &str, word: &str) -> Option<String> {
+        let annotations = self.annotations_of(iri);
+        if annotations.is_empty() {
+            return None;
+        }
+        Some(self.statement(
+            annotations,
+            format!("ref {word} {}", self.reference(iri)),
+            vec![],
+            String::new(),
+        ))
     }
 
     fn imported_entity_of_forward(&self, iri: &str) -> Option<String> {
@@ -709,6 +1200,9 @@ impl<'a, A: ForIRI> Writer<'a, A> {
     }
 
     fn imported_term(&self, iri: &str) -> Option<Term> {
+        if namespace_of(iri) == STANDARD[4].0 {
+            return Some(Term::BuiltIn);
+        }
         let info = self.import_info(namespace_of(iri), None)?;
         Some(match info.types.get(iri)?.as_str() {
             "Aspect" => Term::Aspect,
@@ -718,6 +1212,9 @@ impl<'a, A: ForIRI> Writer<'a, A> {
             "ScalarProperty" => Term::ScalarProperty,
             "AnnotationProperty" => Term::AnnotationProperty,
             "UnreifiedRelation" => Term::Relation,
+            "ConceptInstance" => Term::ConceptInstance,
+            "RelationInstance" => Term::RelationInstance,
+            "Rule" => Term::Rule,
             _ => return None,
         })
     }
@@ -1215,13 +1712,16 @@ impl<'a, A: ForIRI> Writer<'a, A> {
                     supers.push(c);
                 }
                 other => {
-                    if let Some(r) = self.restriction(&other) {
-                        restrictions.push(r);
+                    let (idx, r) = self.tracked(|w| w.restriction(&other));
+                    if let Some(r) = r {
+                        restrictions.push((idx, r));
                     }
                 }
             }
         }
-        restrictions.sort();
+        restrictions.sort_by(|a, b| a.1.cmp(&b.1));
+        reorder(&mut restrictions);
+        let restrictions: Vec<String> = restrictions.into_iter().map(|r| r.1).collect();
         let mut tail = String::new();
         if !supers.is_empty() || !restrictions.is_empty() {
             tail += " <";
@@ -1357,7 +1857,7 @@ impl<'a, A: ForIRI> Writer<'a, A> {
     }
 
     /// One side of an equivalence: classes joined with `&`, then restrictions.
-    fn equivalence_axiom(&self, other: &ClassExpression<A>) -> Option<String> {
+    fn equivalence_axiom(&mut self, other: &ClassExpression<A>) -> Option<String> {
         let parts: Vec<&ClassExpression<A>> = match other {
             ClassExpression::ObjectIntersectionOf(v) => v.iter().collect(),
             single => vec![single],
@@ -1367,11 +1867,16 @@ impl<'a, A: ForIRI> Writer<'a, A> {
         for p in parts {
             match p {
                 ClassExpression::Class(c) => classes.push(c.0.to_string()),
-                other => restrictions.push(self.restriction(other)?),
+                other => {
+                    let (idx, r) = self.tracked(|w| w.restriction(other));
+                    restrictions.push((idx, r?));
+                }
             }
         }
         classes.sort();
-        restrictions.sort();
+        restrictions.sort_by(|a, b| a.1.cmp(&b.1));
+        reorder(&mut restrictions);
+        let restrictions: Vec<String> = restrictions.into_iter().map(|r| r.1).collect();
         let mut out: Vec<String> = classes.iter().map(|c| self.reference(c)).collect();
         out.sort();
         let mut text = out.join(" & ");
@@ -1386,7 +1891,24 @@ impl<'a, A: ForIRI> Writer<'a, A> {
 
     // Restrictions
 
-    fn restriction(&self, ce: &ClassExpression<A>) -> Option<String> {
+    fn restriction(&mut self, ce: &ClassExpression<A>) -> Option<String> {
+        if let ClassExpression::ObjectHasValue {
+            ope,
+            i: Individual::Named(n),
+        } = ce
+            && self.is_anonymous(n.0.as_ref())
+        {
+            let ObjectPropertyExpression::ObjectProperty(p) = ope else {
+                self.problem("restriction on an inverse property");
+                return None;
+            };
+            let (property, value) = self.anonymous_value(p.0.as_ref(), n.0.as_ref())?;
+            return Some(format!("restricts {property} to {value}"));
+        }
+        self.plain_restriction(ce)
+    }
+
+    fn plain_restriction(&self, ce: &ClassExpression<A>) -> Option<String> {
         let p = |ope: &ObjectPropertyExpression<A>| match ope {
             ObjectPropertyExpression::ObjectProperty(p) => Some(self.reference(p.0.as_ref())),
             _ => {
@@ -1486,6 +2008,32 @@ impl<'a, A: ForIRI> Writer<'a, A> {
     }
 }
 
+/// Put the items that contain anonymous instances in the order of the numbers
+/// of their instances, as `oml2owl` numbers them in the order that it reads
+/// them, leaving the other items where they are.
+fn reorder<T: Clone>(items: &mut [(Option<usize>, T)]) {
+    let slots: Vec<usize> = (0..items.len()).filter(|&i| items[i].0.is_some()).collect();
+    let mut moved: Vec<_> = slots.iter().map(|&i| items[i].clone()).collect();
+    moved.sort_by_key(|m| m.0);
+    for (slot, m) in slots.into_iter().zip(moved) {
+        items[slot] = m;
+    }
+}
+
+/// Statements by name, except that those with anonymous instances are in
+/// the order of the instances.
+fn order_statements(mut statements: Vec<(Option<usize>, String, String)>) -> Vec<String> {
+    statements.sort_by(|a, b| a.1.cmp(&b.1));
+    let mut keyed: Vec<(Option<usize>, String)> =
+        statements.into_iter().map(|s| (s.0, s.2)).collect();
+    reorder(&mut keyed);
+    keyed.into_iter().map(|s| s.1).collect()
+}
+
+fn anonymous_number(iri: &str) -> Option<usize> {
+    local_name(iri).strip_prefix("_b")?.parse().ok()
+}
+
 fn ref_word(is_ref: bool) -> &'static str {
     if is_ref { "ref " } else { "" }
 }
@@ -1569,6 +2117,10 @@ fn flag_of<A: ForIRI>(c: &Component<A>, iri: &str) -> Option<&'static str> {
 /// Components that say nothing about this ontology: declarations of terms
 /// from elsewhere, which the OWL API adds for everything that is used.
 fn ignorable<A: ForIRI>(c: &Component<A>, ns: &str) -> bool {
+    // Made for anonymous relation instances, whether or not any are left.
+    if let Component::InverseObjectProperties(InverseObjectProperties(a, b)) = c {
+        return a.0.as_ref().starts_with(OML) && b.0.as_ref().starts_with(OML);
+    }
     let iri = match c {
         Component::DeclareClass(DeclareClass(x)) => x.0.to_string(),
         Component::DeclareObjectProperty(DeclareObjectProperty(x)) => x.0.to_string(),
@@ -1634,6 +2186,19 @@ fn keys<A: ForIRI>(c: &Component<A>) -> Vec<String> {
         Component::DatatypeDefinition(DatatypeDefinition { kind, .. }) => {
             vec![kind.0.to_string()]
         }
+        Component::DeclareNamedIndividual(DeclareNamedIndividual(x)) => vec![x.0.to_string()],
+        Component::ClassAssertion(ClassAssertion {
+            i: Individual::Named(n),
+            ..
+        }) => vec![n.0.to_string()],
+        Component::ObjectPropertyAssertion(ObjectPropertyAssertion {
+            from: Individual::Named(n),
+            ..
+        }) => vec![n.0.to_string()],
+        Component::DataPropertyAssertion(DataPropertyAssertion {
+            from: Individual::Named(n),
+            ..
+        }) => vec![n.0.to_string()],
         Component::Rule(horned_owl::model::Rule { head, .. }) => head
             .iter()
             .filter_map(|a| match a {

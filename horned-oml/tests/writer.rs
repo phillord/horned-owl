@@ -44,6 +44,11 @@ fn round_trip(path: &Path, root: Option<&Path>) -> Result<Outcome, String> {
         Err(WriteError::Unsupported(p)) => return Ok(Outcome::Refused(p.join("\n"))),
         Err(e) => return Err(e.to_string()),
     };
+    if std::env::var_os("OML_SHOW_WRITTEN")
+        .is_some_and(|v| path.to_string_lossy().contains(v.to_str().unwrap()))
+    {
+        eprintln!("{written}");
+    }
     let second = read(&written, root).map_err(|e| format!("{e}\n{written}"))?;
     let set = |o: &SetOntology<RcStr>| -> Set { o.iter().map(normalize).collect() };
     let (a, b) = (set(&first), set(&second));
