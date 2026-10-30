@@ -1,0 +1,4 @@
+vocabulary <http://example.com/invalid/unused-import#> as i {
+	extends <http://www.w3.org/2001/XMLSchema#> as xsd
+	concept C
+}

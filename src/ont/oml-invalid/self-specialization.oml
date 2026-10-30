@@ -1,0 +1,3 @@
+vocabulary <http://example.com/invalid/self-specialization#> as i {
+	concept C < C
+}

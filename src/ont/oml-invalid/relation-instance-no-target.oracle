@@ -1,0 +1,4 @@
+rejected
+Exception in thread "main" java.lang.IllegalStateException: 
+Diagnosis of Description http://example.com/invalid/relation-instance-no-target#
+	Relation instance i:r needs to specify at least one target

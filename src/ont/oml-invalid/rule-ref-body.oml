@@ -1,0 +1,9 @@
+vocabulary <http://example.com/invalid/rule-ref-body#> as i {
+	concept C
+	rule R [
+		C(x) -> C(x)
+	]
+	ref rule R [
+		C(x) -> C(x)
+	]
+}

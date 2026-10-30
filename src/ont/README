@@ -37,3 +37,7 @@ them. A few bubo files are skipped, with the reasons listed in `oml.mk`.
 generated files lack: relation entities, concepts, instances, rules and
 bundles. `owl-from-oml-manual` is the `oml2owl` output for it,
 made by the same `make -f oml.mk`.
+
+`oml-invalid` is OML that breaks one validation rule each, or only warns.
+Each `X.oracle` is the verdict of `oml2owl` on `X.oml` (`rejected` or
+`accepted`) and what it said, made by `make -f oml.mk`.

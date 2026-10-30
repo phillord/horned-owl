@@ -1,0 +1,4 @@
+rejected
+Exception in thread "main" java.lang.IllegalStateException: 
+Diagnosis of Vocabulary http://example.com/invalid/property-predicate-literal-first#
+	Property predicate cannot have a literal as a first argument

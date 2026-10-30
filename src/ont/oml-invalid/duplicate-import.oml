@@ -1,0 +1,5 @@
+vocabulary <http://example.com/invalid/duplicate-import#> as i {
+	extends <http://www.w3.org/2001/XMLSchema#> as xsd
+	extends <http://www.w3.org/2001/XMLSchema#> as xsd2
+	concept C
+}

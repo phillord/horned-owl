@@ -1,0 +1,4 @@
+vocabulary <http://example.com/invalid/self-import#> as i {
+	extends <http://example.com/invalid/self-import#> as me
+	concept C
+}

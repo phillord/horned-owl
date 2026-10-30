@@ -269,7 +269,11 @@ fn terms_of(text: &str) -> Option<Terms> {
 }
 
 /// The IRI a reference stands for, given the prefixes in scope.
-fn resolve_ref(prefixes: &HashMap<String, String>, ns: &str, r: Pair<Rule>) -> Option<String> {
+pub(crate) fn resolve_ref(
+    prefixes: &HashMap<String, String>,
+    ns: &str,
+    r: Pair<Rule>,
+) -> Option<String> {
     let r = if r.as_rule() == Rule::reference {
         r.into_inner().next()?
     } else {
@@ -314,7 +318,7 @@ fn inner(pair: Pair<Rule>) -> Vec<Pair<Rule>> {
     pair.into_inner().collect()
 }
 
-fn unescape_id(text: &str) -> &str {
+pub(crate) fn unescape_id(text: &str) -> &str {
     text.strip_prefix('^').unwrap_or(text)
 }
 

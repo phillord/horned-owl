@@ -49,8 +49,12 @@ OML_MISSING = $(strip $(if $(wildcard $(OWL2OML)),,$(OWL2OML)) \
 ## Hand-written OML, laid out by ontology IRI without the scheme.
 OML_MANUAL = $(patsubst oml-manual/%.oml,owl-from-oml-manual/%.ofn,$(shell find oml-manual -name '*.oml'))
 
+## Invalid OML. oml2owl either rejects each file or accepts it with warnings;
+## its verdict is what the validator is tested against.
+OML_INVALID = $(patsubst %.oml,%.oracle,$(wildcard oml-invalid/*.oml))
+
 ifeq ($(OML_MISSING),)
-oml: $(OML_STEMS:%=owl-from-oml/%.ofn) $(OML_MANUAL)
+oml: $(OML_STEMS:%=owl-from-oml/%.ofn) $(OML_MANUAL) $(OML_INVALID)
 else
 oml:
 	@echo "oml: skipped, not found: $(OML_MISSING)"
@@ -94,6 +98,20 @@ owl-from-oml-manual/%.ofn: oml-manual/%.oml
 	$(OML2OWL) -i $$w/catalog.xml -o $$w/owl/catalog.xml -f fss > $$w/log 2>&1; \
 	test -f $$w/owl/$*.fss || { cat $$w/log; exit 1; }; \
 	cp $$w/owl/$*.fss $@
+
+## oml2owl validates everything in its input, so each file is converted alone,
+## beside the hand-written vocabularies it may use. The first line is the
+## verdict; the rest is what oml2owl said.
+oml-invalid/%.oracle: oml-invalid/%.oml
+	w=$$(mktemp -d); trap 'rm -rf "$$w"' EXIT; \
+	mkdir -p $$w/oml/example.com/invalid; \
+	cp -r oml-manual/. $$w/oml/; \
+	cp $< $$w/oml/example.com/invalid/; \
+	cp -r $(OML_CORE)/www.w3.org $(OML_CORE)/purl.org $$w/oml/; \
+	printf '%s' '$(subst ./,oml/,$(TREE_CATALOG))' > $$w/catalog.xml; \
+	if $(OML2OWL) -i $$w/catalog.xml -o $$w/owl/catalog.xml -f fss > $$w/log 2>&1; \
+	then echo accepted > $@; else echo rejected > $@; fi; \
+	sed -n '/IllegalStateException/,/^\sat /p' $$w/log | grep -v '^\sat ' >> $@; true
 
 ## Keep oml-from-bubo, which make would otherwise delete as an intermediate.
 .SECONDARY:

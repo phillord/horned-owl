@@ -1,0 +1,5 @@
+rejected
+Exception in thread "main" java.lang.IllegalStateException: 
+Diagnosis of Vocabulary http://example.com/invalid/rule-ref-body#
+	Rule i:R cannot respecify a predeicate as antecedent
+	Rule i:R cannot respecify a predicate as consequent

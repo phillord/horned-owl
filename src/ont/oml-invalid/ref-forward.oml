@@ -1,0 +1,11 @@
+vocabulary <http://example.com/invalid/ref-forward#> as i {
+	concept C
+	relation entity E [
+		from C
+		to C
+		forward e
+	]
+	ref relation entity E [
+		forward f
+	]
+}

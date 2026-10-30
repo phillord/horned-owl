@@ -1,0 +1,11 @@
+vocabulary <http://example.com/invalid/relation-entity-predicate-literal#> as i {
+	concept C
+	relation entity E [
+		from C
+		to C
+		forward e
+	]
+	rule R [
+		E(a, "x", b) -> C(a)
+	]
+}

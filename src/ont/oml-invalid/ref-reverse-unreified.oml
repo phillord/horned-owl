@@ -1,0 +1,10 @@
+vocabulary <http://example.com/invalid/ref-reverse-unreified#> as i {
+	concept C
+	relation r [
+		from C
+		to C
+	]
+	ref relation r [
+		reverse b
+	]
+}

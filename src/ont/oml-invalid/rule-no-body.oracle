@@ -1,0 +1,4 @@
+rejected
+Exception in thread "main" java.lang.IllegalStateException: 
+Diagnosis of Vocabulary http://example.com/invalid/rule-no-body#
+	Rule i:R needs to specify some predicates as antecedent

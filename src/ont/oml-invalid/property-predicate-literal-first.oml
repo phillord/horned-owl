@@ -1,0 +1,11 @@
+vocabulary <http://example.com/invalid/property-predicate-literal-first#> as i {
+	extends <http://www.w3.org/2001/XMLSchema#> as xsd
+	concept C
+	scalar property p [
+		domain C
+		range xsd:string
+	]
+	rule R [
+		p("a", "b") -> C(x)
+	]
+}

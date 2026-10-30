@@ -1,0 +1,4 @@
+vocabulary <http://example.com/invalid/valid#> as i {
+	concept C
+	concept D < C
+}

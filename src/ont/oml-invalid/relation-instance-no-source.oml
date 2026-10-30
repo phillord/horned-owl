@@ -1,0 +1,6 @@
+description <http://example.com/invalid/relation-instance-no-source#> as i {
+	instance a
+	relation instance r [
+		to a
+	]
+}

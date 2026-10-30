@@ -1,0 +1,4 @@
+vocabulary <http://example.com/invalid/rule-no-body#> as i {
+	concept C
+	rule R
+}
