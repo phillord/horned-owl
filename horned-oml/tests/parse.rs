@@ -47,8 +47,9 @@ fn parse_library_vocabularies() {
         eprintln!("OML_CORPUS not set, skipping");
         return;
     };
-    assert!(!oml_files(Path::new(&dir)).is_empty());
-    let failures = parse_all(Path::new(&dir));
+    let dir = Path::new(&dir).join("oml");
+    assert!(!oml_files(&dir).is_empty());
+    let failures = parse_all(&dir);
     assert!(failures.is_empty(), "{}", failures.join("\n"));
 }
 
