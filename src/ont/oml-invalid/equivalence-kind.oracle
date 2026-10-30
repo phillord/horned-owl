@@ -1,0 +1,4 @@
+rejected
+Exception in thread "main" java.lang.IllegalStateException: 
+Diagnosis of Vocabulary http://example.com/invalid/equivalence-kind#
+	Entity i:A cannot be specialized by i:C

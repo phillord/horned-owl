@@ -20,8 +20,8 @@ use pest::iterators::Pair;
 use crate::catalog::{CatalogResolver, find_catalog};
 use crate::parser::{OmlParser, Rule};
 use crate::reader::{
-    BUILT_IN, NoResolver, OmlError, Resolver, Terms, header, resolve_ref, terms_from, terms_of,
-    unescape_id,
+    BUILT_IN, Kind, NoResolver, OmlError, Resolver, Terms, header, resolve_ref, shape, terms_from,
+    terms_of, unescape_id,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -69,6 +69,7 @@ pub fn validate_with(text: &str, resolver: &dyn Resolver) -> Result<Vec<Diagnost
     let oml = OmlParser::parse(Rule::oml, text)?.next().unwrap();
     let ontology = oml.into_inner().next().unwrap();
     let own = terms_from(&header(ontology.clone()));
+    let kind = own.ontology;
     let body = ontology
         .into_inner()
         .find(|p| matches!(p.as_rule(), Rule::vocabulary_box | Rule::description_box))
@@ -78,6 +79,7 @@ pub fn validate_with(text: &str, resolver: &dyn Resolver) -> Result<Vec<Diagnost
         ns: String::new(),
         prefixes: HashMap::new(),
         own,
+        kind,
         resolver,
         imported: RefCell::new(HashMap::new()),
     };
@@ -103,6 +105,8 @@ struct Checker<'r> {
     prefixes: HashMap<String, String>,
     /// The terms declared in the document.
     own: Terms,
+    /// The kind of the ontology: see [`Terms::ontology`].
+    kind: &'static str,
     resolver: &'r dyn Resolver,
     /// The terms of other ontologies, by namespace, loaded as needed.
     imported: RefCell<HashMap<String, Option<Rc<Terms>>>>,
@@ -193,6 +197,27 @@ impl Checker<'_> {
         loaded
     }
 
+    /// What a reference refers to, if that can be told.
+    fn kind(&self, reference: Option<&Pair<Rule>>) -> Option<Kind> {
+        let iri = resolve_ref(&self.prefixes, &self.ns, reference?.clone())?;
+        if let Some(k) = self.own.kinds.get(&iri) {
+            return Some(*k);
+        }
+        let ns = namespace_of(&iri);
+        if ns == self.ns {
+            return None;
+        }
+        self.imported(ns)?.kinds.get(&iri).copied()
+    }
+
+    /// Whether a reference is to a member of a standard ontology (XSD and the
+    /// like), if that can be told.
+    fn is_standard(&self, reference: &Pair<Rule>) -> Option<bool> {
+        let iri = resolve_ref(&self.prefixes, &self.ns, reference.clone())?;
+        let ns = namespace_of(&iri);
+        Some(BUILT_IN.contains(&&ns[..ns.len() - 1]))
+    }
+
     /// Report a reference to a member that its ontology does not declare.
     fn reference(&mut self, p: &Pair<Rule>) {
         let target = if p.as_rule() == Rule::reference {
@@ -222,10 +247,10 @@ impl Checker<'_> {
 
     /// Whether the ontology of `iri` declares it, if that can be told.
     fn declared(&self, iri: &str) -> Option<bool> {
-        let ns = match iri.rfind(['#', '/']) {
-            Some(i) => &iri[..=i],
-            None => return None,
-        };
+        let ns = namespace_of(iri);
+        if !ns.ends_with(['#', '/']) {
+            return None;
+        }
         if ns == self.ns {
             return Some(self.own.names.contains(iri));
         }
@@ -278,6 +303,14 @@ impl Checker<'_> {
     fn node(&mut self, p: Pair<Rule>) {
         match p.as_rule() {
             Rule::reference | Rule::cross_reference => self.reference(&p),
+            Rule::import => self.import_kind(&p),
+            Rule::concept_instance => self.type_assertions(&p, &[Kind::Concept, Kind::Aspect]),
+            Rule::anonymous_concept_instance => {
+                self.type_assertions(&p, &[Kind::Concept, Kind::Aspect])
+            }
+            Rule::property_restriction => self.self_restriction(&p),
+            Rule::type_predicate => self.type_predicate(&p),
+            Rule::quoted_literal => self.quoted_literal(&p),
             Rule::relation_entity => self.relation_entity(&p),
             Rule::unreified_relation => {
                 if is_ref(&p) && has(&p, Rule::reverse_relation) {
@@ -301,6 +334,9 @@ impl Checker<'_> {
         ) {
             self.specializes_itself(&p);
         }
+        if let Some((kind, _)) = shape(&p) {
+            self.term(&p, kind);
+        }
     }
 
     fn relation_entity(&mut self, p: &Pair<Rule>) {
@@ -321,6 +357,27 @@ impl Checker<'_> {
     }
 
     fn rule(&mut self, p: &Pair<Rule>) {
+        for consequent in p
+            .clone()
+            .into_inner()
+            .filter(|c| c.as_rule() == Rule::consequent)
+        {
+            for predicate in consequent.into_inner().flatten() {
+                if predicate.as_rule() != Rule::type_predicate {
+                    continue;
+                }
+                let scalar = predicate.clone().into_inner().next();
+                if self.kind(scalar.as_ref()) == Some(Kind::Scalar) {
+                    self.error(
+                        &predicate,
+                        format!(
+                            "Scalar {} cannot be used as a consequent predicate",
+                            scalar.unwrap().as_str()
+                        ),
+                    );
+                }
+            }
+        }
         let antecedent = has(p, Rule::antecedent);
         let consequent = has(p, Rule::consequent);
         if is_ref(p) {
@@ -362,6 +419,7 @@ impl Checker<'_> {
     }
 
     fn relation_instance(&mut self, p: &Pair<Rule>) {
+        self.type_assertions(p, &[Kind::RelationEntity, Kind::Aspect]);
         if is_ref(p) {
             return;
         }
@@ -404,15 +462,52 @@ impl Checker<'_> {
     }
 
     fn property_predicate(&mut self, p: &Pair<Rule>) {
-        let first = p
+        let mut arguments = p
             .clone()
             .into_inner()
-            .find(|a| a.as_rule() == Rule::argument);
+            .filter(|a| a.as_rule() == Rule::argument);
+        let first = arguments.next();
+        let second = arguments.next();
         if let Some(a) = first.filter(is_literal) {
             self.error(
                 &a,
                 "Property predicate cannot have a literal as a first argument".into(),
             );
+        }
+        let Some(second) = second else { return };
+        match self.kind(p.clone().into_inner().next().as_ref()) {
+            Some(Kind::ScalarProperty) if is_instance(&second) => self.error(
+                &second,
+                "Scalar property predicate cannot have a named instance as a second argument"
+                    .into(),
+            ),
+            Some(Kind::Relation) if is_literal(&second) => self.error(
+                &second,
+                "Relation predicate cannot have a literal as a second argument".into(),
+            ),
+            _ => {}
+        }
+    }
+
+    fn type_predicate(&mut self, p: &Pair<Rule>) {
+        let Some(argument) = p
+            .clone()
+            .into_inner()
+            .find(|a| a.as_rule() == Rule::argument)
+        else {
+            return;
+        };
+        match self.kind(p.clone().into_inner().next().as_ref()) {
+            Some(Kind::Scalar) if is_instance(&argument) => self.error(
+                &argument,
+                "Scalar predicate cannot have a named instance as an argument".into(),
+            ),
+            Some(Kind::Scalar) | None => {}
+            Some(_) if is_literal(&argument) => self.error(
+                &argument,
+                "Entity predicate cannot have a literal as an argument".into(),
+            ),
+            Some(_) => {}
         }
     }
 
@@ -478,4 +573,245 @@ fn import_of(import: &Pair<Rule>) -> Option<(String, Option<String>)> {
         }
     }
     Some((ns?, prefix))
+}
+
+fn namespace_of(iri: &str) -> &str {
+    match iri.rfind(['#', '/']) {
+        Some(i) => &iri[..=i],
+        None => iri,
+    }
+}
+
+fn is_instance(argument: &Pair<Rule>) -> bool {
+    argument
+        .clone()
+        .into_inner()
+        .next()
+        .is_some_and(|p| p.as_rule() == Rule::cross_reference)
+}
+
+/// The references directly under a pair, apart from a `ref` term's own name.
+fn references<'i>(p: &Pair<'i, Rule>) -> Vec<Pair<'i, Rule>> {
+    let skip = usize::from(is_ref(p));
+    p.clone()
+        .into_inner()
+        .filter(|x| x.as_rule() == Rule::reference)
+        .skip(skip)
+        .collect()
+}
+
+fn noun(kind: &str) -> &'static str {
+    match kind {
+        "Vocabulary" => "a vocabulary",
+        "VocabularyBundle" => "a vocabulary bundle",
+        "Description" => "a description",
+        _ => "a description bundle",
+    }
+}
+
+fn is_entity(kind: Kind) -> bool {
+    matches!(kind, Kind::Aspect | Kind::Concept | Kind::RelationEntity)
+}
+
+impl Checker<'_> {
+    /// The rules about a term and what it specialises or is equivalent to.
+    fn term(&mut self, term: &Pair<Rule>, kind: Kind) {
+        for part in term.clone().into_inner() {
+            match part.as_rule() {
+                Rule::entity_specialization => {
+                    for r in references(&part) {
+                        self.specialization(&r, term, kind);
+                    }
+                }
+                Rule::property_specialization => {
+                    for r in references(&part) {
+                        self.specialization(&r, term, kind);
+                    }
+                }
+                Rule::entity_equivalence => {
+                    for axiom in part.into_inner() {
+                        self.entity_equivalence(&axiom, term, kind);
+                    }
+                }
+                Rule::property_equivalence => {
+                    for r in references(&part) {
+                        if let Some(sup) = self.kind(Some(&r)) {
+                            let both = kind == Kind::Relation && sup == Kind::Relation;
+                            if !(both || sup == kind) {
+                                self.error(&r, cannot_specialize("Property", &r, term));
+                            }
+                        }
+                    }
+                }
+                Rule::scalar_equivalence_axiom => self.facets(&part),
+                _ => {}
+            }
+        }
+        if kind == Kind::Scalar {
+            self.scalar(term);
+        }
+    }
+
+    fn specialization(&mut self, sup: &Pair<Rule>, term: &Pair<Rule>, sub: Kind) {
+        let Some(sup_kind) = self.kind(Some(sup)) else {
+            return;
+        };
+        let allowed = (sup_kind == Kind::Aspect && is_entity(sub))
+            || (sup_kind == Kind::Relation && sub == Kind::Relation)
+            || sup_kind == sub;
+        if !allowed {
+            self.error(sup, cannot_specialize("Term", sup, term));
+        }
+    }
+
+    fn entity_equivalence(&mut self, axiom: &Pair<Rule>, term: &Pair<Rule>, sub: Kind) {
+        let supers = references(axiom);
+        for r in &supers {
+            let Some(sup) = self.kind(Some(r)) else {
+                continue;
+            };
+            let ok = if supers.len() == 1 {
+                sup == sub
+            } else {
+                sup == sub || (is_entity(sub) && sup == Kind::Aspect)
+            };
+            if !ok {
+                self.error(r, cannot_specialize("Entity", r, term));
+            }
+        }
+    }
+
+    /// Non-standard scalars have no specializations and no facets.
+    fn scalar(&mut self, term: &Pair<Rule>) {
+        if BUILT_IN.contains(&&self.ns[..self.ns.len().saturating_sub(1)]) {
+            return;
+        }
+        if !references(term).is_empty() {
+            self.error(
+                term,
+                format!(
+                    "Non-standard Scalar {} cannot have specializations",
+                    name(term)
+                ),
+            );
+        }
+    }
+
+    fn facets(&mut self, axiom: &Pair<Rule>) {
+        if !has(axiom, Rule::facet) {
+            return;
+        }
+        let sup = axiom
+            .clone()
+            .into_inner()
+            .find(|x| x.as_rule() == Rule::reference);
+        if let Some(sup) = sup
+            && self.is_standard(&sup) == Some(false)
+        {
+            self.error(
+                axiom,
+                "Facets can only restrict standard super scalars".into(),
+            );
+        }
+    }
+
+    fn quoted_literal(&mut self, p: &Pair<Rule>) {
+        let typed = p
+            .clone()
+            .into_inner()
+            .find(|x| x.as_rule() == Rule::reference);
+        if let Some(t) = typed
+            && self.is_standard(&t) == Some(false)
+        {
+            self.error(
+                p,
+                format!(
+                    "Quoted Literal {} is not typed by a standard scalar",
+                    p.as_str()
+                ),
+            );
+        }
+    }
+
+    /// The types of an instance must be of the kinds that fit it.
+    fn type_assertions(&mut self, instance: &Pair<Rule>, allowed: &[Kind]) {
+        for t in references(instance) {
+            if let Some(k) = self.kind(Some(&t))
+                && !allowed.contains(&k)
+            {
+                self.error(
+                    &t,
+                    format!(
+                        "Type {} cannot be a type for instance {}",
+                        t.as_str(),
+                        name(instance)
+                    ),
+                );
+            }
+        }
+    }
+
+    fn self_restriction(&mut self, p: &Pair<Rule>) {
+        if !has(p, Rule::kw_self) {
+            return;
+        }
+        let property = p
+            .clone()
+            .into_inner()
+            .find(|x| x.as_rule() == Rule::reference);
+        if let Some(property) = property
+            && self
+                .kind(Some(&property))
+                .is_some_and(|k| k != Kind::Relation)
+        {
+            self.warning(
+                p,
+                format!(
+                    "Property {} cannot be used in a self restriction (only relations are allowed)",
+                    property.as_str()
+                ),
+            );
+        }
+    }
+
+    /// An import must lead to the kind of ontology that its kind allows.
+    fn import_kind(&mut self, import: &Pair<Rule>) {
+        let Some((ns, _)) = import_of(import) else {
+            return;
+        };
+        let keyword = import.clone().into_inner().next().map(|p| p.as_rule());
+        let allowed: &[&str] = match (self.kind, keyword) {
+            ("Vocabulary", Some(Rule::kw_extends)) => &["Vocabulary"],
+            ("Vocabulary", Some(Rule::kw_uses)) => &["Description"],
+            ("VocabularyBundle", Some(Rule::kw_extends)) => &["VocabularyBundle"],
+            ("VocabularyBundle", Some(Rule::kw_includes)) => &["Vocabulary"],
+            ("Description", Some(Rule::kw_extends)) => &["Description"],
+            ("Description", Some(Rule::kw_uses)) => &["Vocabulary"],
+            ("DescriptionBundle", Some(Rule::kw_extends)) => &["DescriptionBundle"],
+            ("DescriptionBundle", Some(Rule::kw_uses)) => &["Vocabulary", "VocabularyBundle"],
+            ("DescriptionBundle", Some(Rule::kw_includes)) => &["Description"],
+            _ => return,
+        };
+        let Some(found) = self.imported(&ns) else {
+            return;
+        };
+        if !allowed.contains(&found.ontology) {
+            let nouns: Vec<&str> = allowed.iter().map(|k| noun(k)).collect();
+            self.error(
+                import,
+                format!(
+                    "Namespace <{ns}> could not be resolved to {}",
+                    nouns.join(" or ")
+                ),
+            );
+        }
+    }
+}
+
+fn cannot_specialize(what: &str, sup: &Pair<Rule>, sub: &Pair<Rule>) -> String {
+    format!(
+        "{what} {} cannot be specialized by {}",
+        sup.as_str(),
+        name(sub)
+    )
 }

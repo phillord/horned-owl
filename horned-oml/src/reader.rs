@@ -50,7 +50,7 @@ fn invalid<T>(msg: impl Into<String>) -> Result<T, OmlError> {
 
 /// What a term is, which decides how it is used elsewhere.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Kind {
+pub(crate) enum Kind {
     Aspect,
     Concept,
     RelationEntity,
@@ -87,7 +87,7 @@ impl<F: Fn(&str) -> Option<String>> Resolver for F {
 /// What is known about the terms of an ontology.
 #[derive(Default)]
 pub(crate) struct Terms {
-    kinds: HashMap<String, Kind>,
+    pub(crate) kinds: HashMap<String, Kind>,
     /// Every member the ontology declares, whatever its kind.
     pub(crate) names: HashSet<String>,
     /// Relation entity to the IRI of its forward relation.
@@ -99,6 +99,9 @@ pub(crate) struct Terms {
     supers: Vec<(String, String)>,
     /// Whether the ontology is a vocabulary.
     vocabulary: bool,
+    /// The kind of ontology: `Vocabulary`, `VocabularyBundle`, `Description` or
+    /// `DescriptionBundle`.
+    pub(crate) ontology: &'static str,
     /// The namespaces it imports.
     imports: Vec<String>,
 }
@@ -265,6 +268,7 @@ pub(crate) fn terms_from(h: &Header) -> Terms {
     }
     let mut terms = Terms {
         vocabulary: h.kind.starts_with("Vocabulary"),
+        ontology: h.kind,
         imports: h.imports.iter().map(|(ns, _)| ns.clone()).collect(),
         ..Terms::default()
     };
@@ -663,7 +667,7 @@ impl<'a, A: ForIRI, O: MutableOntology<A>> Reader<'a, A, O> {
 }
 
 /// The kind of a term and whether it is a `ref`.
-fn shape(pair: &Pair<Rule>) -> Option<(Kind, bool)> {
+pub(crate) fn shape(pair: &Pair<Rule>) -> Option<(Kind, bool)> {
     let kind = match pair.as_rule() {
         Rule::aspect => Kind::Aspect,
         Rule::concept => Kind::Concept,

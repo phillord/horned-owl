@@ -1,0 +1,7 @@
+vocabulary <http://example.com/invalid/self-restriction#> as i {
+	concept D
+	concept C < D [
+		restricts p to self
+	]
+	scalar property p
+}

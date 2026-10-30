@@ -1,0 +1,4 @@
+rejected
+Exception in thread "main" java.lang.IllegalStateException: 
+Diagnosis of Vocabulary http://example.com/invalid/import-kind#
+	Namespace <http://example.com/data/people#> could not be resolved to a vocabulary

@@ -1,0 +1,4 @@
+vocabulary <http://example.com/invalid/equivalence-kind#> as i {
+	aspect A
+	concept C = A
+}

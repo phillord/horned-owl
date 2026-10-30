@@ -1,0 +1,10 @@
+vocabulary <http://example.com/invalid/property-predicate-relation-literal#> as i {
+	concept C
+	relation r [
+		from C
+		to C
+	]
+	rule R [
+		C(x) & r(x, "a") -> C(x)
+	]
+}

@@ -1,0 +1,4 @@
+description <http://example.com/invalid/type-assertion-concept-instance#> as i {
+	uses <http://example.com/vocab/base#> as base
+	instance a : base:Knows
+}

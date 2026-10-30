@@ -1,0 +1,4 @@
+rejected
+Exception in thread "main" java.lang.IllegalStateException: 
+Diagnosis of Description http://example.com/invalid/type-assertion-concept-instance#
+	Type base:Knows cannot be a type for instance i:a

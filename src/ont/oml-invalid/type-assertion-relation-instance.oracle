@@ -1,0 +1,4 @@
+rejected
+Exception in thread "main" java.lang.IllegalStateException: 
+Diagnosis of Description http://example.com/invalid/type-assertion-relation-instance#
+	Type base:Person cannot be a type for instance i:r

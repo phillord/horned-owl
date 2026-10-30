@@ -1,0 +1,4 @@
+vocabulary <http://example.com/invalid/specialization-kind#> as i {
+	scalar S
+	concept C < S
+}

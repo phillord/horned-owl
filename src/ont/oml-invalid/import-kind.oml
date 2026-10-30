@@ -1,0 +1,4 @@
+vocabulary <http://example.com/invalid/import-kind#> as i {
+	extends <http://example.com/data/people#> as people
+	concept C
+}

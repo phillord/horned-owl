@@ -1,0 +1,4 @@
+rejected
+Exception in thread "main" java.lang.IllegalStateException: 
+Diagnosis of Vocabulary http://example.com/invalid/non-standard-scalar-specialization#
+	Non-standard Scalar i:T cannot have specializations

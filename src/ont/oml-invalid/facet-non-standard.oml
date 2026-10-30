@@ -1,0 +1,7 @@
+vocabulary <http://example.com/invalid/facet-non-standard#> as i {
+	extends <http://www.w3.org/2001/XMLSchema#> as xsd
+	scalar S = xsd:string
+	scalar T = S [
+		minLength 1
+	]
+}

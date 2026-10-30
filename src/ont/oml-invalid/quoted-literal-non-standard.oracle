@@ -1,0 +1,4 @@
+rejected
+Exception in thread "main" java.lang.IllegalStateException: 
+Diagnosis of Vocabulary http://example.com/invalid/quoted-literal-non-standard#
+	Quoted Literal "x" is not typed by a standard scalar

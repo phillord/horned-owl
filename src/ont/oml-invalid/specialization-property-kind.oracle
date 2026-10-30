@@ -1,0 +1,4 @@
+rejected
+Exception in thread "main" java.lang.IllegalStateException: 
+Diagnosis of Vocabulary http://example.com/invalid/specialization-property-kind#
+	Term i:r cannot be specialized by i:p

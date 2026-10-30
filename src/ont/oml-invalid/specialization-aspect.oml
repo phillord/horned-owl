@@ -1,0 +1,9 @@
+vocabulary <http://example.com/invalid/specialization-aspect#> as i {
+	aspect A
+	concept C < A
+	relation entity E [
+		from C
+		to C
+		forward e
+	] < A
+}

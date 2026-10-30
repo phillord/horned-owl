@@ -1,0 +1,6 @@
+vocabulary <http://example.com/invalid/type-predicate-literal#> as i {
+	concept C
+	rule R [
+		C("a") -> C(x)
+	]
+}

@@ -1,0 +1,8 @@
+description <http://example.com/invalid/type-assertion-relation-instance#> as i {
+	uses <http://example.com/vocab/base#> as base
+	instance a : base:Person
+	relation instance r : base:Person [
+		from a
+		to a
+	]
+}

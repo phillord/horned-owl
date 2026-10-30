@@ -99,6 +99,11 @@ fn reports_warnings() {
             .iter()
             .any(|m| m.contains("itself"))
     );
+    assert!(
+        warnings("self-restriction.oml")
+            .iter()
+            .any(|m| m.contains("self restriction"))
+    );
     assert!(warnings("valid.oml").is_empty());
 }
 

@@ -1,0 +1,4 @@
+vocabulary <http://example.com/invalid/non-standard-scalar-specialization#> as i {
+	scalar S
+	scalar T < S
+}

@@ -1,0 +1,6 @@
+vocabulary <http://example.com/invalid/quoted-literal-non-standard#> as i {
+	scalar S
+	annotation property note
+	@note "x"^^S
+	concept C
+}

@@ -1,0 +1,8 @@
+vocabulary <http://example.com/invalid/property-equivalence-kind#> as i {
+	concept C
+	relation r [
+		from C
+		to C
+	]
+	scalar property p = r
+}
