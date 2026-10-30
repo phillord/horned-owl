@@ -23,6 +23,16 @@ fn bench_read(c: &mut Criterion) {
             })
         });
 
+        group.bench_function(BenchmarkId::new("vocabulary_validate", n), |b| {
+            b.iter(|| {
+                assert!(
+                    horned_oml::validate::validate(&vocabulary)
+                        .unwrap()
+                        .is_empty()
+                );
+            })
+        });
+
         let description = generate::description(n, n * 10);
         let resolve = resolver(vocabulary);
         group.throughput(Throughput::Bytes(description.len() as u64));
@@ -31,6 +41,12 @@ fn bench_read(c: &mut Criterion) {
                 let build: Build<RcStr> = Build::new();
                 let _: SetOntology<RcStr> =
                     horned_oml::reader::read_with(&description, &build, &resolve).unwrap();
+            })
+        });
+        group.bench_function(BenchmarkId::new("description_validate", n), |b| {
+            b.iter(|| {
+                let found = horned_oml::validate::validate_with(&description, &resolve).unwrap();
+                assert!(found.is_empty());
             })
         });
     }
