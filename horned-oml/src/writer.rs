@@ -988,6 +988,9 @@ impl<'a, A: ForIRI> Writer<'a, A> {
             }
         }
         block.extend(self.value_lines(iri));
+        if is_ref && annotations.is_empty() && types.is_empty() && block.is_empty() {
+            return None;
+        }
         let types = if types.is_empty() {
             String::new()
         } else {
@@ -1136,7 +1139,12 @@ impl<'a, A: ForIRI> Writer<'a, A> {
         let mut keys: Vec<String> = self
             .by_key
             .iter()
-            .filter(|(k, ids)| !self.local(k) && ids.iter().any(|&i| !self.used[i]))
+            .filter(|(k, ids)| {
+                !self.local(k)
+                    && ids.iter().any(|&i| {
+                        !self.used[i] && !ignorable(&self.items[i].component, &self.info.ns)
+                    })
+            })
             .map(|(k, _)| k.clone())
             .collect();
         keys.sort();

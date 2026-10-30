@@ -10,8 +10,8 @@ use clap::{App, Arg};
 use horned_catalog::Catalog;
 use horned_oml::catalog::{CatalogResolver, oml_files};
 use horned_oml::reader::{
-    Config, OmlAnnotations, Resolver, import_closure, is_built_in_ontology, ontology_iri,
-    read_config,
+    Config, OmlAnnotations, Resolver, declare_used_entities, import_closure, is_built_in_ontology,
+    ontology_iri, read_config,
 };
 use horned_oml::validate::{Severity, validate_file};
 use horned_owl::model::{Build, RcStr};
@@ -182,6 +182,8 @@ fn run() -> Result<(), Box<dyn Error>> {
         let build = Build::new_rc();
         let (set, prefixes): (SetOntology<RcStr>, _) =
             read_config(&input.text, &build, &resolver, config)?;
+        let mut set = set;
+        declare_used_entities(&mut set);
         let ontology: RcComponentMappedOntology = set.into();
         if let Some(parent) = file.parent() {
             fs::create_dir_all(parent)?;

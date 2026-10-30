@@ -15,6 +15,7 @@ pest_derive = "2.7.8"
 curie = "0.1.1"
 thiserror = "1.0"
 clap = { version = "3.2.2", optional = true }
+oxrdfio = { workspace = true, optional = true }
 
 [dev-dependencies]
 criterion = "0.7.0"
@@ -27,9 +28,14 @@ harness = false
 [features]
 default = ["cli"]
 # The command line tools.
-cli = ["dep:clap"]
+cli = ["dep:clap", "dep:oxrdfio"]
 
 [[bin]]
 name = "horned-oml2owl"
 path = "src/bin/horned_oml2owl.rs"
+required-features = ["cli"]
+
+[[bin]]
+name = "horned-owl2oml"
+path = "src/bin/horned_owl2oml.rs"
 required-features = ["cli"]

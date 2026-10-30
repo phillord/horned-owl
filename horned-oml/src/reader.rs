@@ -2003,3 +2003,101 @@ fn is_literal(argument: &Pair<Rule>) -> bool {
         .next()
         .is_some_and(|p| p.as_rule() == Rule::literal)
 }
+
+/// Declare every entity that the axioms use and nothing declares, as the OWL
+/// API does for `oml2owl`. Strict RDF readers need these to tell what kind
+/// of property a triple is about. The entities that OWL has built in are left
+/// alone.
+pub fn declare_used_entities<A: ForIRI>(o: &mut horned_owl::ontology::set::SetOntology<A>) {
+    use horned_owl::visitor::immutable::{Visit, Walk};
+    use std::collections::BTreeSet;
+
+    struct Entities<A: ForIRI> {
+        used: [BTreeSet<IRI<A>>; 6],
+        declared: [BTreeSet<IRI<A>>; 6],
+    }
+    // Classes, datatypes, object, data and annotation properties, individuals.
+    const BUILT_IN_NAMESPACES: [&str; 4] = [
+        "http://www.w3.org/2001/XMLSchema#",
+        "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
+        "http://www.w3.org/2000/01/rdf-schema#",
+        "http://www.w3.org/2002/07/owl#",
+    ];
+    impl<A: ForIRI> Visit<A> for Entities<A> {
+        fn visit_class(&mut self, e: &Class<A>) {
+            self.used[0].insert(e.0.clone());
+        }
+        fn visit_datatype(&mut self, e: &Datatype<A>) {
+            self.used[1].insert(e.0.clone());
+        }
+        fn visit_object_property(&mut self, e: &ObjectProperty<A>) {
+            self.used[2].insert(e.0.clone());
+        }
+        fn visit_data_property(&mut self, e: &DataProperty<A>) {
+            self.used[3].insert(e.0.clone());
+        }
+        fn visit_annotation_property(&mut self, e: &AnnotationProperty<A>) {
+            self.used[4].insert(e.0.clone());
+        }
+        fn visit_named_individual(&mut self, e: &NamedIndividual<A>) {
+            self.used[5].insert(e.0.clone());
+        }
+        fn visit_declare_class(&mut self, e: &DeclareClass<A>) {
+            self.declared[0].insert(e.0.0.clone());
+        }
+        fn visit_declare_datatype(&mut self, e: &DeclareDatatype<A>) {
+            self.declared[1].insert(e.0.0.clone());
+        }
+        fn visit_declare_object_property(&mut self, e: &DeclareObjectProperty<A>) {
+            self.declared[2].insert(e.0.0.clone());
+        }
+        fn visit_declare_data_property(&mut self, e: &DeclareDataProperty<A>) {
+            self.declared[3].insert(e.0.0.clone());
+        }
+        fn visit_declare_annotation_property(&mut self, e: &DeclareAnnotationProperty<A>) {
+            self.declared[4].insert(e.0.0.clone());
+        }
+        fn visit_declare_named_individual(&mut self, e: &DeclareNamedIndividual<A>) {
+            self.declared[5].insert(e.0.0.clone());
+        }
+    }
+
+    let mut walk = Walk::new(Entities::<A> {
+        used: Default::default(),
+        declared: Default::default(),
+    });
+    for ac in o.iter() {
+        walk.annotated_component(ac);
+    }
+    let found = walk.into_visit();
+    let build = Build::<A>::new();
+    let missing = |i: usize| -> Vec<IRI<A>> {
+        found.used[i]
+            .difference(&found.declared[i])
+            .filter(|iri| {
+                let s: &str = iri.as_ref();
+                // Built in: owl:Thing, xsd:string, rdfs:label and the like.
+                !BUILT_IN_NAMESPACES.iter().any(|ns| s.starts_with(ns)) || (i == 2 || i == 3)
+            })
+            .cloned()
+            .collect()
+    };
+    for iri in missing(0) {
+        o.insert(DeclareClass(build.class(iri)));
+    }
+    for iri in missing(1) {
+        o.insert(DeclareDatatype(build.datatype(iri)));
+    }
+    for iri in missing(2) {
+        o.insert(DeclareObjectProperty(build.object_property(iri)));
+    }
+    for iri in missing(3) {
+        o.insert(DeclareDataProperty(build.data_property(iri)));
+    }
+    for iri in missing(4) {
+        o.insert(DeclareAnnotationProperty(build.annotation_property(iri)));
+    }
+    for iri in missing(5) {
+        o.insert(DeclareNamedIndividual(build.named_individual(iri)));
+    }
+}
