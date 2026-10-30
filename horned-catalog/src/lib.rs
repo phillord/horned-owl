@@ -102,6 +102,20 @@ impl Catalog {
         self.resolve_inner(iri.as_ref(), &mut visited)
     }
 
+    /// The directories (or files) that this catalog's own `rewriteURI` and
+    /// `rewriteSystem` rules map IRI prefixes to, for a caller that needs to
+    /// enumerate what a catalog covers. Chained `nextCatalog` entries are
+    /// not followed.
+    pub fn rewrite_targets(&self) -> Vec<PathBuf> {
+        self.entries
+            .iter()
+            .filter_map(|entry| match entry {
+                CatalogEntry::RewriteUri { prefix, .. } => Some(PathBuf::from(prefix)),
+                _ => None,
+            })
+            .collect()
+    }
+
     fn resolve_inner(&self, iri: &str, visited: &mut HashSet<PathBuf>) -> Option<PathBuf> {
         // Exact uri/system matches first. `uri` was already fully
         // resolved against the entry's own effective base (including
@@ -533,6 +547,22 @@ mod test {
         let catalog = Catalog::from_path(&a_path).unwrap();
         // Should terminate (not hang) and simply find nothing.
         assert_eq!(catalog.resolve("http://example.org/nothing.owl"), None);
+    }
+
+    #[test]
+    fn rewrite_targets_lists_each_rewrite_rule() {
+        let dir = tempfile::tempdir().unwrap();
+        let catalog_xml = r#"<?xml version="1.0"?>
+<catalog xmlns="urn:oasis:names:tc:entity:xmlns:xml:catalog">
+  <uri name="http://example.org/foo.owl" uri="foo.owl"/>
+  <rewriteURI uriStartString="http://example.org/a/" rewritePrefix="a/"/>
+  <rewriteURI uriStartString="http://example.org/b/" rewritePrefix="b/"/>
+</catalog>"#;
+        let catalog = Catalog::from_str(catalog_xml, dir.path()).unwrap();
+        assert_eq!(
+            catalog.rewrite_targets(),
+            vec![dir.path().join("a/"), dir.path().join("b/")]
+        );
     }
 
     #[test]
