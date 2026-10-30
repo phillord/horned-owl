@@ -31,8 +31,12 @@ impl CatalogResolver {
 
 impl Resolver for CatalogResolver {
     fn load(&self, iri: &str) -> Option<String> {
+        fs::read_to_string(self.path(iri)?).ok()
+    }
+
+    fn path(&self, iri: &str) -> Option<PathBuf> {
         let base = self.0.resolve(iri)?;
         // The extension is appended: ontology names may contain dots.
-        fs::read_to_string(format!("{}.oml", base.display())).ok()
+        Some(PathBuf::from(format!("{}.oml", base.display())))
     }
 }

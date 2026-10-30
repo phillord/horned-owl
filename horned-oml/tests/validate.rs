@@ -7,7 +7,10 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use horned_oml::validate::{Diagnostic, Severity, validate, validate_path, validate_with};
+use horned_oml::reader::Resolver;
+use horned_oml::validate::{
+    Diagnostic, Severity, validate, validate_file, validate_path, validate_with,
+};
 
 fn oml_files(dir: &Path) -> Vec<PathBuf> {
     let mut files = vec![];
@@ -30,17 +33,36 @@ fn ont(sub: &str) -> PathBuf {
 }
 
 /// The hand-written files, which import one another.
-fn resolve(iri: &str) -> Option<String> {
-    let rest = iri.strip_prefix("http://")?;
-    let path = match rest.strip_prefix("example.com/invalid/") {
-        Some(name) => ont("oml-invalid").join(format!("{name}.oml")),
-        None => ont("oml-manual").join(format!("{rest}.oml")),
-    };
-    fs::read_to_string(path).ok()
+struct Files;
+
+impl Files {
+    fn file(iri: &str) -> Option<PathBuf> {
+        let rest = iri.strip_prefix("http://")?;
+        Some(match rest.strip_prefix("example.com/invalid/") {
+            Some(name) => ont("oml-invalid").join(format!("{name}.oml")),
+            None => ont("oml-manual").join(format!("{rest}.oml")),
+        })
+    }
 }
 
+impl Resolver for Files {
+    fn load(&self, iri: &str) -> Option<String> {
+        fs::read_to_string(Self::file(iri)?).ok()
+    }
+
+    fn path(&self, iri: &str) -> Option<PathBuf> {
+        Self::file(iri)
+    }
+}
+
+/// The generated files all share one IRI, so they are not where it leads.
 fn errors(path: &Path) -> Vec<Diagnostic> {
-    validate_with(&fs::read_to_string(path).unwrap(), &resolve)
+    let result = if path.starts_with(ont("oml-from-bubo")) {
+        validate_with(&fs::read_to_string(path).unwrap(), &Files)
+    } else {
+        validate_file(path, &Files)
+    };
+    result
         .unwrap_or_else(|e| panic!("{}: {e}", path.display()))
         .into_iter()
         .filter(|d| d.severity == Severity::Error)

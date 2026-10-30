@@ -1,0 +1,6 @@
+vocabulary <http://example.com/invalid/enumeration-literal#> as i {
+	extends <http://www.w3.org/2001/XMLSchema#> as xsd
+	scalar S [
+		oneOf 1, 2
+	] = xsd:string
+}

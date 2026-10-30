@@ -1,0 +1,4 @@
+vocabulary <http://example.com/invalid/duplicate-declaration#> as i {
+	concept C
+	concept C
+}

@@ -1,0 +1,3 @@
+vocabulary <http://example.com/invalid/another-iri#> as i {
+	concept C
+}

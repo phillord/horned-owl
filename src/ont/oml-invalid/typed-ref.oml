@@ -1,0 +1,4 @@
+vocabulary <http://example.com/invalid/typed-ref#> as i {
+	concept C
+	ref aspect C
+}

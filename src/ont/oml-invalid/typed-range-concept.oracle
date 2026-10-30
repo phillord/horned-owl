@@ -1,0 +1,4 @@
+rejected
+Exception in thread "main" java.lang.IllegalStateException: 
+Diagnosis of resource file:example.com/invalid/typed-range-concept.oml
+	[5, 9]: Couldn't resolve reference to Scalar 'C'.

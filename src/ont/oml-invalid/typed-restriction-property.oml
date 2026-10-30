@@ -1,0 +1,6 @@
+vocabulary <http://example.com/invalid/typed-restriction-property#> as i {
+	concept C
+	concept D < C [
+		restricts C to self
+	]
+}

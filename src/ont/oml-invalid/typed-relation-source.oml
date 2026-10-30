@@ -1,0 +1,8 @@
+vocabulary <http://example.com/invalid/typed-relation-source#> as i {
+	scalar S
+	concept C
+	relation r [
+		from S
+		to C
+	]
+}

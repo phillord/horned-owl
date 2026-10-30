@@ -1,0 +1,5 @@
+rejected
+Exception in thread "main" java.lang.IllegalStateException: 
+Diagnosis of resource file:example.com/invalid/typed-instance-source.oml
+	[4, 8]: Couldn't resolve reference to NamedInstance 'base:Person'.
+	[5, 6]: Couldn't resolve reference to NamedInstance 'base:Person'.

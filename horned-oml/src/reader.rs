@@ -5,7 +5,7 @@
 
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
 use horned_owl::model::*;
@@ -48,7 +48,7 @@ fn invalid<T>(msg: impl Into<String>) -> Result<T, OmlError> {
     Err(OmlError::Invalid(msg.into()))
 }
 
-/// What a term is, which decides how it is used elsewhere.
+/// What a member is, which decides how it is used elsewhere.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Kind {
     Aspect,
@@ -58,6 +58,10 @@ pub(crate) enum Kind {
     ScalarProperty,
     AnnotationProperty,
     Relation,
+    ConceptInstance,
+    RelationInstance,
+    Rule,
+    BuiltIn,
 }
 
 /// Finds the OML source of an imported ontology.
@@ -67,6 +71,11 @@ pub(crate) enum Kind {
 pub trait Resolver {
     /// `iri` is the ontology IRI: its namespace without the final `#` or `/`.
     fn load(&self, iri: &str) -> Option<String>;
+
+    /// The file that holds the ontology `iri`, if the resolver knows one.
+    fn path(&self, _iri: &str) -> Option<PathBuf> {
+        None
+    }
 }
 
 /// Resolves nothing, so only terms declared in the document are known.
@@ -289,7 +298,7 @@ pub(crate) fn resolve_ref(
     ns: &str,
     r: Pair<Rule>,
 ) -> Option<String> {
-    let r = if r.as_rule() == Rule::reference {
+    let r = if matches!(r.as_rule(), Rule::reference | Rule::cross_reference) {
         r.into_inner().next()?
     } else {
         r
@@ -676,6 +685,10 @@ pub(crate) fn shape(pair: &Pair<Rule>) -> Option<(Kind, bool)> {
         Rule::scalar_property => Kind::ScalarProperty,
         Rule::annotation_property => Kind::AnnotationProperty,
         Rule::unreified_relation => Kind::Relation,
+        Rule::concept_instance => Kind::ConceptInstance,
+        Rule::relation_instance => Kind::RelationInstance,
+        Rule::rule => Kind::Rule,
+        Rule::builtin => Kind::BuiltIn,
         _ => return None,
     };
     let is_ref = pair

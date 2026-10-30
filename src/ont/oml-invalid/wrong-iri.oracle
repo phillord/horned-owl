@@ -1,0 +1,4 @@
+rejected
+Exception in thread "main" java.lang.IllegalStateException: 
+Diagnosis of Vocabulary http://example.com/invalid/another-iri#
+	Vocabulary iri 'http://example.com/invalid/another-iri' does not resolve to 'file:example.com/invalid/wrong-iri.oml'

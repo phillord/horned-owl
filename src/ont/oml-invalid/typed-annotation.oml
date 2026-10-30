@@ -1,0 +1,5 @@
+vocabulary <http://example.com/invalid/typed-annotation#> as i {
+	concept C
+	@C
+	concept D
+}

@@ -1,0 +1,4 @@
+vocabulary <http://example.com/invalid/duplicate-prefix#> as i {
+	extends <http://www.w3.org/2001/XMLSchema#> as i
+	concept C
+}

@@ -1,0 +1,10 @@
+vocabulary <http://example.com/invalid/typed-type-predicate#> as i {
+	concept C
+	relation r [
+		from C
+		to C
+	]
+	rule R [
+		r(x) -> C(x)
+	]
+}

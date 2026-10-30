@@ -1,0 +1,7 @@
+vocabulary <http://example.com/invalid/typed-range-concept#> as i {
+	concept C
+	scalar property p [
+		domain C
+		range C
+	]
+}

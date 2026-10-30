@@ -1,0 +1,4 @@
+vocabulary <http://example.com/invalid/unresolvable-import#> as i {
+	extends <http://example.com/nope#> as nope
+	concept C
+}

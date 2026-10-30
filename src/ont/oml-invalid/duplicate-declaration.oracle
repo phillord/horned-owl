@@ -1,0 +1,4 @@
+rejected
+Exception in thread "main" java.lang.IllegalStateException: 
+Diagnosis of Vocabulary http://example.com/invalid/duplicate-declaration#
+	The ID 'C' of 'Concept i:C' collides with that of 'Concept i:C'

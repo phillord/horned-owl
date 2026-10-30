@@ -1,0 +1,4 @@
+rejected
+Exception in thread "main" java.lang.IllegalStateException: 
+Diagnosis of resource file:example.com/invalid/typed-type-predicate.oml
+	[8, 3]: Couldn't resolve reference to Type 'r'.

@@ -1,0 +1,4 @@
+rejected
+Exception in thread "main" java.lang.IllegalStateException: 
+Diagnosis of resource file:example.com/invalid/typed-key.oml
+	[4, 7]: Couldn't resolve reference to Property 'C'.

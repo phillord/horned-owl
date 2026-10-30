@@ -1,0 +1,4 @@
+rejected
+Exception in thread "main" java.lang.IllegalStateException: 
+Diagnosis of Vocabulary http://example.com/invalid/relation-entity-predicate-instance#
+	Relation entity predicate cannot have a non-relation instance as a second argument

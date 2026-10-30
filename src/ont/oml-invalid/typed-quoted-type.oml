@@ -1,0 +1,6 @@
+vocabulary <http://example.com/invalid/typed-quoted-type#> as i {
+	concept C
+	annotation property note
+	@note "x"^^C
+	concept D
+}

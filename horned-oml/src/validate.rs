@@ -20,8 +20,8 @@ use pest::iterators::Pair;
 use crate::catalog::{CatalogResolver, find_catalog};
 use crate::parser::{OmlParser, Rule};
 use crate::reader::{
-    BUILT_IN, Kind, NoResolver, OmlError, Resolver, Terms, header, resolve_ref, shape, terms_from,
-    terms_of, unescape_id,
+    BUILT_IN, Kind, OmlError, Resolver, Terms, header, resolve_ref, shape, terms_from, terms_of,
+    unescape_id,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -60,12 +60,20 @@ impl fmt::Display for Diagnostic {
 /// Nothing is known of the terms of other ontologies, so references to them
 /// are not checked; see [`validate_with`].
 pub fn validate(text: &str) -> Result<Vec<Diagnostic>, OmlError> {
-    validate_with(text, &NoResolver)
+    check(text, None, None)
 }
 
 /// As [`validate`], finding the imports with `resolver`. An import that it
-/// cannot find is not an error here: what refers to it goes unchecked.
+/// cannot find is an error, unless it is one of the W3C vocabularies.
 pub fn validate_with(text: &str, resolver: &dyn Resolver) -> Result<Vec<Diagnostic>, OmlError> {
+    check(text, Some(resolver), None)
+}
+
+fn check(
+    text: &str,
+    resolver: Option<&dyn Resolver>,
+    file: Option<&Path>,
+) -> Result<Vec<Diagnostic>, OmlError> {
     let oml = OmlParser::parse(Rule::oml, text)?.next().unwrap();
     let ontology = oml.into_inner().next().unwrap();
     let own = terms_from(&header(ontology.clone()));
@@ -81,10 +89,18 @@ pub fn validate_with(text: &str, resolver: &dyn Resolver) -> Result<Vec<Diagnost
         own,
         kind,
         resolver,
+        file,
         imported: RefCell::new(HashMap::new()),
     };
     checker.ontology(body);
     Ok(checker.out)
+}
+
+/// Check the OML file at `path`, finding imports with `resolver`. As the file
+/// is known, it is also an error if its ontology IRI leads somewhere else.
+pub fn validate_file(path: &Path, resolver: &dyn Resolver) -> Result<Vec<Diagnostic>, OmlError> {
+    let text = std::fs::read_to_string(path).map_err(|e| OmlError::Invalid(e.to_string()))?;
+    check(&text, Some(resolver), Some(path))
 }
 
 /// Check the OML file at `path`. Imports are found with the nearest
@@ -92,7 +108,7 @@ pub fn validate_with(text: &str, resolver: &dyn Resolver) -> Result<Vec<Diagnost
 pub fn validate_path(path: &Path) -> Result<Vec<Diagnostic>, OmlError> {
     let text = std::fs::read_to_string(path).map_err(|e| OmlError::Invalid(e.to_string()))?;
     match find_catalog(path).map(CatalogResolver::from_path) {
-        Some(Ok(resolver)) => validate_with(&text, &resolver),
+        Some(Ok(resolver)) => check(&text, Some(&resolver), Some(path)),
         Some(Err(e)) => Err(OmlError::Invalid(format!("catalog: {e}"))),
         None => validate(&text),
     }
@@ -107,7 +123,9 @@ struct Checker<'r> {
     own: Terms,
     /// The kind of the ontology: see [`Terms::ontology`].
     kind: &'static str,
-    resolver: &'r dyn Resolver,
+    resolver: Option<&'r dyn Resolver>,
+    /// The file being checked, when it is known.
+    file: Option<&'r Path>,
     /// The terms of other ontologies, by namespace, loaded as needed.
     imported: RefCell<HashMap<String, Option<Rc<Terms>>>>,
 }
@@ -159,9 +177,13 @@ impl Checker<'_> {
     fn ontology(&mut self, body: Pair<Rule>) {
         let mut imports = vec![];
         let mut prefix = None;
+        let mut ns_pair = None;
         for p in body.clone().into_inner() {
             match p.as_rule() {
-                Rule::namespace if self.ns.is_empty() => self.ns = namespace(&p),
+                Rule::namespace if self.ns.is_empty() => {
+                    self.ns = namespace(&p);
+                    ns_pair = Some(p);
+                }
                 Rule::id if prefix.is_none() => prefix = Some(unescape_id(p.as_str()).to_string()),
                 Rule::import => imports.push(p),
                 _ => {}
@@ -175,7 +197,11 @@ impl Checker<'_> {
                 self.prefixes.insert(prefix, ns);
             }
         }
+        if let Some(ns_pair) = ns_pair {
+            self.location(&ns_pair);
+        }
         self.imports(&body, &imports);
+        self.duplicates(&body);
         for p in body.into_inner().flatten() {
             self.node(p);
         }
@@ -187,7 +213,7 @@ impl Checker<'_> {
             return t.clone();
         }
         let loaded = self
-            .resolver
+            .resolver?
             .load(&ns[..ns.len() - 1])
             .and_then(|text| terms_of(&text))
             .map(Rc::new);
@@ -301,6 +327,7 @@ impl Checker<'_> {
     }
 
     fn node(&mut self, p: Pair<Rule>) {
+        self.typed_positions(&p);
         match p.as_rule() {
             Rule::reference | Rule::cross_reference => self.reference(&p),
             Rule::import => self.import_kind(&p),
@@ -443,6 +470,21 @@ impl Checker<'_> {
     }
 
     fn relation_entity_predicate(&mut self, p: &Pair<Rule>) {
+        let second = p
+            .clone()
+            .into_inner()
+            .filter(|a| a.as_rule() == Rule::argument)
+            .nth(1);
+        if let Some(instance) = second.and_then(|a| a.into_inner().next())
+            && instance.as_rule() == Rule::cross_reference
+            && self.kind(Some(&instance)) == Some(Kind::ConceptInstance)
+        {
+            self.error(
+                &instance,
+                "Relation entity predicate cannot have a non-relation instance as a second argument"
+                    .into(),
+            );
+        }
         let ordinal = ["first", "second", "third"];
         let arguments = p
             .clone()
@@ -649,6 +691,7 @@ impl Checker<'_> {
         }
         if kind == Kind::Scalar {
             self.scalar(term);
+            self.enumeration(term);
         }
     }
 
@@ -792,10 +835,9 @@ impl Checker<'_> {
             ("DescriptionBundle", Some(Rule::kw_includes)) => &["Description"],
             _ => return,
         };
-        let Some(found) = self.imported(&ns) else {
-            return;
-        };
-        if !allowed.contains(&found.ontology) {
+        let found = self.imported(&ns);
+        let unresolved = found.is_none() && self.resolver.is_some() && !is_built_in(&ns);
+        if unresolved || found.is_some_and(|f| !allowed.contains(&f.ontology)) {
             let nouns: Vec<&str> = allowed.iter().map(|k| noun(k)).collect();
             self.error(
                 import,
@@ -814,4 +856,262 @@ fn cannot_specialize(what: &str, sup: &Pair<Rule>, sub: &Pair<Rule>) -> String {
         sup.as_str(),
         name(sub)
     )
+}
+
+fn is_built_in(ns: &str) -> bool {
+    BUILT_IN.contains(&&ns[..ns.len().saturating_sub(1)])
+}
+
+const ENTITY: &[Kind] = &[Kind::Aspect, Kind::Concept, Kind::RelationEntity];
+const TYPE: &[Kind] = &[Kind::Aspect, Kind::Concept, Kind::RelationEntity, Kind::Scalar];
+const PROPERTY: &[Kind] = &[Kind::ScalarProperty, Kind::AnnotationProperty, Kind::Relation];
+const SEMANTIC: &[Kind] = &[Kind::ScalarProperty, Kind::Relation];
+const TERM: &[Kind] = &[
+    Kind::Aspect,
+    Kind::Concept,
+    Kind::RelationEntity,
+    Kind::Scalar,
+    Kind::ScalarProperty,
+    Kind::AnnotationProperty,
+    Kind::Relation,
+];
+const NAMED_INSTANCE: &[Kind] = &[Kind::ConceptInstance, Kind::RelationInstance];
+
+/// The XSD local name of the type a literal has, when it is one of the five
+/// that a literal can have without saying so.
+fn literal_type(checker: &Checker, literal: &Pair<Rule>) -> Option<&'static str> {
+    let inner = literal.clone().into_inner().next()?;
+    match inner.as_rule() {
+        Rule::double_literal => Some("double"),
+        Rule::integer_literal => Some("integer"),
+        Rule::decimal_literal => Some("decimal"),
+        Rule::boolean_literal => Some("boolean"),
+        Rule::quoted_literal => {
+            if inner.as_str().contains('$') && !has(&inner, Rule::reference) {
+                return None;
+            }
+            match inner.into_inner().find(|x| x.as_rule() == Rule::reference) {
+                None => Some("string"),
+                Some(t) => xsd_type(checker, &t),
+            }
+        }
+        _ => None,
+    }
+}
+
+fn xsd_type(checker: &Checker, reference: &Pair<Rule>) -> Option<&'static str> {
+    let iri = resolve_ref(&checker.prefixes, &checker.ns, reference.clone())?;
+    match iri.strip_prefix("http://www.w3.org/2001/XMLSchema#")? {
+        "string" => Some("string"),
+        "integer" => Some("integer"),
+        "decimal" => Some("decimal"),
+        "double" => Some("double"),
+        "boolean" => Some("boolean"),
+        _ => None,
+    }
+}
+
+impl Checker<'_> {
+    /// Report a reference that the grammar types but which refers to a member
+    /// of another kind, which the reference tool cannot link.
+    fn typed(&mut self, r: &Pair<Rule>, allowed: &[Kind]) {
+        if let Some(k) = self.kind(Some(r))
+            && !allowed.contains(&k)
+        {
+            self.error(r, format!("Couldn't resolve reference to '{}'", r.as_str()));
+        }
+    }
+
+    /// The kinds that the grammar allows at each place a reference occurs.
+    fn typed_positions(&mut self, p: &Pair<Rule>) {
+        let direct: Vec<Pair<Rule>> = p
+            .clone()
+            .into_inner()
+            .filter(|x| x.as_rule() == Rule::reference)
+            .collect();
+        let first = |c: &mut Self, allowed: &[Kind]| {
+            if let Some(r) = direct.first() {
+                c.typed(r, allowed);
+            }
+        };
+        let all = |c: &mut Self, allowed: &[Kind]| {
+            for r in &direct {
+                c.typed(r, allowed);
+            }
+        };
+        match p.as_rule() {
+            Rule::annotation => first(self, &[Kind::AnnotationProperty]),
+            Rule::property_restriction => {
+                first(self, SEMANTIC);
+                if has(p, Rule::kw_all) || has(p, Rule::kw_some) {
+                    if let Some(r) = direct.get(1) {
+                        self.typed(r, TYPE);
+                    }
+                }
+                for c in p.clone().into_inner() {
+                    let allowed = match c.as_rule() {
+                        Rule::cardinality => TYPE,
+                        Rule::restriction_value => NAMED_INSTANCE,
+                        _ => continue,
+                    };
+                    for r in c.into_inner().filter(|x| x.as_rule() == Rule::reference) {
+                        self.typed(&r, allowed);
+                    }
+                }
+            }
+            Rule::anonymous_concept_instance => all(self, ENTITY),
+            Rule::anonymous_relation_instance => first(self, NAMED_INSTANCE),
+            Rule::property_value_assertion => first(self, SEMANTIC),
+            Rule::property_value => all(self, NAMED_INSTANCE),
+            Rule::type_predicate => first(self, TYPE),
+            Rule::relation_entity_predicate => first(self, &[Kind::RelationEntity]),
+            Rule::property_predicate => first(self, PROPERTY),
+            Rule::built_in_predicate => first(self, &[Kind::BuiltIn]),
+            Rule::argument => {
+                if let Some(c) = p
+                    .clone()
+                    .into_inner()
+                    .find(|x| x.as_rule() == Rule::cross_reference)
+                {
+                    self.typed(&c, NAMED_INSTANCE);
+                }
+            }
+            Rule::quoted_literal => first(self, &[Kind::Scalar]),
+            Rule::key_axiom => all(self, PROPERTY),
+            Rule::instance_enumeration => all(self, &[Kind::ConceptInstance]),
+            Rule::entity_specialization | Rule::property_specialization => all(self, TERM),
+            Rule::entity_equivalence_axiom => all(self, ENTITY),
+            Rule::property_equivalence => all(self, PROPERTY),
+            Rule::scalar_equivalence_axiom => first(self, &[Kind::Scalar]),
+            _ => {}
+        }
+        // Whatever a declaration is made of.
+        let Some((kind, is_ref)) = shape(p) else {
+            return;
+        };
+        if is_ref {
+            first(self, &[kind]);
+        }
+        for r in references(p) {
+            match kind {
+                Kind::Scalar => self.typed(&r, TERM),
+                Kind::ConceptInstance | Kind::RelationInstance => self.typed(&r, ENTITY),
+                _ => {}
+            }
+        }
+        for c in p.clone().into_inner() {
+            let allowed = match (c.as_rule(), kind) {
+                (Rule::from_clause | Rule::to_clause, Kind::RelationInstance) => NAMED_INSTANCE,
+                (Rule::from_clause | Rule::to_clause | Rule::domain_clause, _) => ENTITY,
+                (Rule::range_clause, _) => &[Kind::Scalar][..],
+                _ => continue,
+            };
+            for r in c.into_inner().filter(|x| x.as_rule() == Rule::reference) {
+                self.typed(&r, allowed);
+            }
+        }
+    }
+
+    /// Two members of one ontology may not have the same name.
+    fn duplicates(&mut self, body: &Pair<Rule>) {
+        let mut seen: HashSet<String> = HashSet::new();
+        for statement in body.clone().into_inner().filter(|s| {
+            matches!(
+                s.as_rule(),
+                Rule::vocabulary_statement | Rule::description_statement
+            )
+        }) {
+            let term = statement
+                .into_inner()
+                .find(|x| x.as_rule() != Rule::annotation)
+                .unwrap();
+            if is_ref(&term) {
+                continue;
+            }
+            let mut declared: Vec<Pair<Rule>> = term
+                .clone()
+                .into_inner()
+                .filter(|x| x.as_rule() == Rule::id)
+                .collect();
+            declared.extend(term.into_inner().filter_map(|x| {
+                matches!(x.as_rule(), Rule::forward_relation | Rule::reverse_relation)
+                    .then(|| x.into_inner().find(|y| y.as_rule() == Rule::id))
+                    .flatten()
+            }));
+            for id in declared {
+                if !seen.insert(unescape_id(id.as_str()).to_string()) {
+                    self.error(
+                        &id,
+                        format!(
+                            "The ID '{}' collides with that of another member",
+                            unescape_id(id.as_str())
+                        ),
+                    );
+                }
+            }
+        }
+    }
+
+    /// Each literal of an enumerated scalar must fit its super scalar.
+    fn enumeration(&mut self, term: &Pair<Rule>) {
+        let Some(enumeration) = term
+            .clone()
+            .into_inner()
+            .find(|x| x.as_rule() == Rule::literal_enumeration)
+        else {
+            return;
+        };
+        let mut supers = references(term);
+        supers.extend(
+            term.clone()
+                .into_inner()
+                .filter(|x| x.as_rule() == Rule::scalar_equivalence_axiom)
+                .filter_map(|x| x.into_inner().find(|y| y.as_rule() == Rule::reference)),
+        );
+        for sup in supers {
+            let Some(sup_type) = xsd_type(self, &sup) else {
+                continue;
+            };
+            for literal in enumeration.clone().into_inner() {
+                let Some(found) = literal_type(self, &literal) else {
+                    continue;
+                };
+                if found != sup_type && !(found == "integer" && sup_type == "decimal") {
+                    self.error(
+                        &literal,
+                        format!(
+                            "{} is not a literal of scalar {}",
+                            literal.as_str(),
+                            sup.as_str()
+                        ),
+                    );
+                }
+            }
+        }
+    }
+
+    /// The ontology must be in the file its IRI leads to.
+    fn location(&mut self, namespace: &Pair<Rule>) {
+        let (Some(resolver), Some(file)) = (self.resolver, self.file) else {
+            return;
+        };
+        let iri = &self.ns[..self.ns.len() - 1];
+        let Some(expected) = resolver.path(iri) else {
+            return;
+        };
+        let same = match (expected.canonicalize(), file.canonicalize()) {
+            (Ok(a), Ok(b)) => a == b,
+            _ => expected == file,
+        };
+        if !same {
+            self.error(
+                namespace,
+                format!(
+                    "{} iri '{iri}' does not resolve to '{}'",
+                    self.kind,
+                    file.display()
+                ),
+            );
+        }
+    }
 }

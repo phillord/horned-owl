@@ -1,0 +1,6 @@
+vocabulary <http://example.com/invalid/typed-key#> as i {
+	concept C
+	concept D [
+		key C
+	]
+}

@@ -1,0 +1,4 @@
+rejected
+Exception in thread "main" java.lang.IllegalStateException: 
+Diagnosis of resource file:example.com/invalid/typed-quoted-type.oml
+	[4, 13]: Couldn't resolve reference to Scalar 'C'.

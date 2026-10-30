@@ -1,0 +1,7 @@
+description <http://example.com/invalid/typed-instance-source#> as i {
+	uses <http://example.com/vocab/base#> as base
+	relation instance r [
+		from base:Person
+		to base:Person
+	]
+}
