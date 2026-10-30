@@ -1,0 +1,3 @@
+vocabulary <http://example.com/invalid/undeclared-term#> as i {
+	concept C < Missing
+}

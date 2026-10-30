@@ -1,0 +1,4 @@
+rejected
+Exception in thread "main" java.lang.IllegalStateException: 
+Diagnosis of resource file:example.com/invalid/undeclared-imported-term.oml
+	[3, 14]: Couldn't resolve reference to Term 'base:Missing'.

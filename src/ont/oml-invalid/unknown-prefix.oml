@@ -1,0 +1,3 @@
+vocabulary <http://example.com/invalid/unknown-prefix#> as i {
+	concept C < zzz:Person
+}

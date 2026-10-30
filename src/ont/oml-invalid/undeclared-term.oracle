@@ -1,0 +1,4 @@
+rejected
+Exception in thread "main" java.lang.IllegalStateException: 
+Diagnosis of resource file:example.com/invalid/undeclared-term.oml
+	[2, 14]: Couldn't resolve reference to Term 'Missing'.

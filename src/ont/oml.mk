@@ -111,7 +111,7 @@ oml-invalid/%.oracle: oml-invalid/%.oml
 	printf '%s' '$(subst ./,oml/,$(TREE_CATALOG))' > $$w/catalog.xml; \
 	if $(OML2OWL) -i $$w/catalog.xml -o $$w/owl/catalog.xml -f fss > $$w/log 2>&1; \
 	then echo accepted > $@; else echo rejected > $@; fi; \
-	sed -n '/IllegalStateException/,/^\sat /p' $$w/log | grep -v '^\sat ' >> $@; true
+	sed -n '/IllegalStateException/,/^\sat /p' $$w/log | grep -v '^\sat ' | sed "s#$$w/oml/##" >> $@; true
 
 ## Keep oml-from-bubo, which make would otherwise delete as an intermediate.
 .SECONDARY:

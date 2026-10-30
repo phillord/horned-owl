@@ -8,14 +8,21 @@
 //! The rules and their severities are those of `OmlValidator2` in
 //! opencaesar/oml. `oml2owl` stops on errors and drops warnings.
 
+use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::fmt;
+use std::path::Path;
+use std::rc::Rc;
 
 use pest::Parser;
 use pest::iterators::Pair;
 
+use crate::catalog::{CatalogResolver, find_catalog};
 use crate::parser::{OmlParser, Rule};
-use crate::reader::{OmlError, resolve_ref, unescape_id};
+use crate::reader::{
+    BUILT_IN, NoResolver, OmlError, Resolver, Terms, header, resolve_ref, terms_from, terms_of,
+    unescape_id,
+};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Severity {
@@ -49,24 +56,56 @@ impl fmt::Display for Diagnostic {
 }
 
 /// Check an OML document. A document that does not parse is an error.
+///
+/// Nothing is known of the terms of other ontologies, so references to them
+/// are not checked; see [`validate_with`].
 pub fn validate(text: &str) -> Result<Vec<Diagnostic>, OmlError> {
+    validate_with(text, &NoResolver)
+}
+
+/// As [`validate`], finding the imports with `resolver`. An import that it
+/// cannot find is not an error here: what refers to it goes unchecked.
+pub fn validate_with(text: &str, resolver: &dyn Resolver) -> Result<Vec<Diagnostic>, OmlError> {
     let oml = OmlParser::parse(Rule::oml, text)?.next().unwrap();
     let ontology = oml.into_inner().next().unwrap();
+    let own = terms_from(&header(ontology.clone()));
     let body = ontology
         .into_inner()
         .find(|p| matches!(p.as_rule(), Rule::vocabulary_box | Rule::description_box))
         .unwrap();
-    let mut checker = Checker::default();
+    let mut checker = Checker {
+        out: vec![],
+        ns: String::new(),
+        prefixes: HashMap::new(),
+        own,
+        resolver,
+        imported: RefCell::new(HashMap::new()),
+    };
     checker.ontology(body);
     Ok(checker.out)
 }
 
-#[derive(Default)]
-struct Checker {
+/// Check the OML file at `path`. Imports are found with the nearest
+/// `catalog.xml` above it, if there is one.
+pub fn validate_path(path: &Path) -> Result<Vec<Diagnostic>, OmlError> {
+    let text = std::fs::read_to_string(path).map_err(|e| OmlError::Invalid(e.to_string()))?;
+    match find_catalog(path).map(CatalogResolver::from_path) {
+        Some(Ok(resolver)) => validate_with(&text, &resolver),
+        Some(Err(e)) => Err(OmlError::Invalid(format!("catalog: {e}"))),
+        None => validate(&text),
+    }
+}
+
+struct Checker<'r> {
     out: Vec<Diagnostic>,
     ns: String,
     /// Prefix to namespace, for the ontology and its imports.
     prefixes: HashMap<String, String>,
+    /// The terms declared in the document.
+    own: Terms,
+    resolver: &'r dyn Resolver,
+    /// The terms of other ontologies, by namespace, loaded as needed.
+    imported: RefCell<HashMap<String, Option<Rc<Terms>>>>,
 }
 
 fn has(pair: &Pair<Rule>, kind: Rule) -> bool {
@@ -94,7 +133,7 @@ fn name(term: &Pair<Rule>) -> String {
         .unwrap_or_default()
 }
 
-impl Checker {
+impl Checker<'_> {
     fn report(&mut self, severity: Severity, at: &Pair<Rule>, message: String) {
         let (line, column) = at.as_span().start_pos().line_col();
         self.out.push(Diagnostic {
@@ -136,6 +175,64 @@ impl Checker {
         for p in body.into_inner().flatten() {
             self.node(p);
         }
+    }
+
+    /// The terms of the ontology with this namespace, if it can be found.
+    fn imported(&self, ns: &str) -> Option<Rc<Terms>> {
+        if let Some(t) = self.imported.borrow().get(ns) {
+            return t.clone();
+        }
+        let loaded = self
+            .resolver
+            .load(&ns[..ns.len() - 1])
+            .and_then(|text| terms_of(&text))
+            .map(Rc::new);
+        self.imported
+            .borrow_mut()
+            .insert(ns.to_string(), loaded.clone());
+        loaded
+    }
+
+    /// Report a reference to a member that its ontology does not declare.
+    fn reference(&mut self, p: &Pair<Rule>) {
+        let target = if p.as_rule() == Rule::reference {
+            p.clone().into_inner().next().unwrap()
+        } else {
+            p.clone()
+        };
+        let text = target.as_str();
+        let declared = match target.as_rule() {
+            Rule::id => Some(
+                self.own
+                    .names
+                    .contains(&format!("{}{}", self.ns, unescape_id(text))),
+            ),
+            // A prefix that nothing defines can never be resolved.
+            Rule::qname => match resolve_ref(&self.prefixes, &self.ns, target.clone()) {
+                Some(iri) => self.declared(&iri),
+                None => Some(false),
+            },
+            _ => resolve_ref(&self.prefixes, &self.ns, target.clone())
+                .and_then(|iri| self.declared(&iri)),
+        };
+        if declared == Some(false) {
+            self.error(p, format!("Couldn't resolve reference to '{text}'"));
+        }
+    }
+
+    /// Whether the ontology of `iri` declares it, if that can be told.
+    fn declared(&self, iri: &str) -> Option<bool> {
+        let ns = match iri.rfind(['#', '/']) {
+            Some(i) => &iri[..=i],
+            None => return None,
+        };
+        if ns == self.ns {
+            return Some(self.own.names.contains(iri));
+        }
+        if BUILT_IN.contains(&&ns[..ns.len() - 1]) {
+            return None;
+        }
+        self.imported(ns).map(|t| t.names.contains(iri))
     }
 
     fn imports(&mut self, body: &Pair<Rule>, imports: &[Pair<Rule>]) {
@@ -180,6 +277,7 @@ impl Checker {
 
     fn node(&mut self, p: Pair<Rule>) {
         match p.as_rule() {
+            Rule::reference | Rule::cross_reference => self.reference(&p),
             Rule::relation_entity => self.relation_entity(&p),
             Rule::unreified_relation => {
                 if is_ref(&p) && has(&p, Rule::reverse_relation) {

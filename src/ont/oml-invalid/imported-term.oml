@@ -1,0 +1,4 @@
+vocabulary <http://example.com/invalid/imported-term#> as i {
+	extends <http://example.com/vocab/base#> as base
+	concept C < base:Person
+}

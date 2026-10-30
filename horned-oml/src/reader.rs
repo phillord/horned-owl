@@ -4,7 +4,7 @@
 //! semantics by translation to OWL.
 
 use std::cell::RefCell;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::rc::Rc;
 
@@ -22,7 +22,7 @@ const OML: &str = "http://opencaesar.io/oml#";
 const XSD: &str = "http://www.w3.org/2001/XMLSchema#";
 
 /// Imports of these are not carried into the OWL.
-const BUILT_IN: [&str; 5] = [
+pub(crate) const BUILT_IN: [&str; 5] = [
     "http://www.w3.org/2001/XMLSchema",
     "http://www.w3.org/1999/02/22-rdf-syntax-ns",
     "http://www.w3.org/2000/01/rdf-schema",
@@ -86,8 +86,10 @@ impl<F: Fn(&str) -> Option<String>> Resolver for F {
 
 /// What is known about the terms of an ontology.
 #[derive(Default)]
-struct Terms {
+pub(crate) struct Terms {
     kinds: HashMap<String, Kind>,
+    /// Every member the ontology declares, whatever its kind.
+    pub(crate) names: HashSet<String>,
     /// Relation entity to the IRI of its forward relation.
     forwards: HashMap<String, String>,
     /// A forward or reverse relation to its relation entity, and whether it
@@ -183,17 +185,17 @@ struct Reader<'a, A: ForIRI, O> {
 }
 
 /// The parts of an ontology that are the same whatever is done with it.
-struct Header<'i> {
-    annotations: Vec<Pair<'i, Rule>>,
-    kind: &'static str,
-    ns: String,
-    prefix: String,
+pub(crate) struct Header<'i> {
+    pub(crate) annotations: Vec<Pair<'i, Rule>>,
+    pub(crate) kind: &'static str,
+    pub(crate) ns: String,
+    pub(crate) prefix: String,
     /// Namespace and prefix of each import.
-    imports: Vec<(String, Option<String>)>,
-    statements: Vec<Pair<'i, Rule>>,
+    pub(crate) imports: Vec<(String, Option<String>)>,
+    pub(crate) statements: Vec<Pair<'i, Rule>>,
 }
 
-fn header(pair: Pair<Rule>) -> Header {
+pub(crate) fn header(pair: Pair<Rule>) -> Header {
     let mut annotations = vec![];
     let mut body = None;
     for p in pair.into_inner() {
@@ -247,9 +249,13 @@ fn header(pair: Pair<Rule>) -> Header {
 }
 
 /// The terms an ontology declares, without translating it.
-fn terms_of(text: &str) -> Option<Terms> {
+pub(crate) fn terms_of(text: &str) -> Option<Terms> {
     let oml = OmlParser::parse(Rule::oml, text).ok()?.next()?;
-    let h = header(oml.into_inner().next()?);
+    Some(terms_from(&header(oml.into_inner().next()?)))
+}
+
+/// The terms declared by a parsed ontology.
+pub(crate) fn terms_from(h: &Header) -> Terms {
     let mut prefixes: HashMap<String, String> = HashMap::new();
     prefixes.insert(h.prefix.clone(), h.ns.clone());
     for (ns, prefix) in &h.imports {
@@ -262,10 +268,15 @@ fn terms_of(text: &str) -> Option<Terms> {
         imports: h.imports.iter().map(|(ns, _)| ns.clone()).collect(),
         ..Terms::default()
     };
-    for s in h.statements {
-        register(&mut terms, &h.ns, &|p| resolve_ref(&prefixes, &h.ns, p), s);
+    for s in &h.statements {
+        register(
+            &mut terms,
+            &h.ns,
+            &|p| resolve_ref(&prefixes, &h.ns, p),
+            s.clone(),
+        );
     }
-    Some(terms)
+    terms
 }
 
 /// The IRI a reference stands for, given the prefixes in scope.
@@ -686,9 +697,16 @@ fn register(
     statement: Pair<Rule>,
 ) {
     let (_, term) = split(statement);
-    let Some((kind, is_ref)) = shape(&term) else {
-        return;
-    };
+    let shaped = shape(&term);
+    let is_ref = shaped.map_or_else(
+        || {
+            term.clone()
+                .into_inner()
+                .next()
+                .is_some_and(|p| p.as_rule() == Rule::kw_ref)
+        },
+        |(_, is_ref)| is_ref,
+    );
     let Some(name) = name_of(&term) else {
         return;
     };
@@ -699,6 +717,12 @@ fn register(
             Some(iri) => iri,
             None => return,
         }
+    };
+    if !is_ref {
+        terms.names.insert(iri.clone());
+    }
+    let Some((kind, _)) = shaped else {
+        return;
     };
     if !is_ref {
         terms.kinds.insert(iri.clone(), kind);
@@ -727,11 +751,13 @@ fn register(
             .map(|x| format!("{ns}{}", unescape_id(x.as_str())));
         match (p.as_rule(), declared) {
             (Rule::forward_relation, Some(f)) => {
+                terms.names.insert(f.clone());
                 terms.kinds.insert(f.clone(), Kind::Relation);
                 terms.relations.insert(f.clone(), (iri.clone(), true));
                 forward = Some(f);
             }
             (Rule::reverse_relation, Some(r)) => {
+                terms.names.insert(r.clone());
                 terms.kinds.insert(r.clone(), Kind::Relation);
                 terms.relations.insert(r, (iri.clone(), false));
             }

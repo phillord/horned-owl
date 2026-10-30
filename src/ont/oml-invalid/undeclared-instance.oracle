@@ -1,0 +1,4 @@
+rejected
+Exception in thread "main" java.lang.IllegalStateException: 
+Diagnosis of resource file:example.com/invalid/undeclared-instance.oml
+	[4, 14]: Couldn't resolve reference to NamedInstance 'b'.

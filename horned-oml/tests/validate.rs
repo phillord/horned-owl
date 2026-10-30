@@ -7,7 +7,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use horned_oml::validate::{Diagnostic, Severity, validate};
+use horned_oml::validate::{Diagnostic, Severity, validate, validate_path, validate_with};
 
 fn oml_files(dir: &Path) -> Vec<PathBuf> {
     let mut files = vec![];
@@ -29,8 +29,18 @@ fn ont(sub: &str) -> PathBuf {
         .join(sub)
 }
 
+/// The hand-written files, which import one another.
+fn resolve(iri: &str) -> Option<String> {
+    let rest = iri.strip_prefix("http://")?;
+    let path = match rest.strip_prefix("example.com/invalid/") {
+        Some(name) => ont("oml-invalid").join(format!("{name}.oml")),
+        None => ont("oml-manual").join(format!("{rest}.oml")),
+    };
+    fs::read_to_string(path).ok()
+}
+
 fn errors(path: &Path) -> Vec<Diagnostic> {
-    validate(&fs::read_to_string(path).unwrap())
+    validate_with(&fs::read_to_string(path).unwrap(), &resolve)
         .unwrap_or_else(|e| panic!("{}: {e}", path.display()))
         .into_iter()
         .filter(|d| d.severity == Severity::Error)
@@ -109,6 +119,12 @@ fn syntax_errors_are_errors() {
     assert!(validate("vocabulary {").is_err());
 }
 
+#[test]
+fn leaves_unresolvable_imports_unchecked() {
+    let text = "vocabulary <http://e.com/v#> as v {\n\textends <http://e.com/w#> as w\n\tconcept C < w:D\n}\n";
+    assert!(validate(text).unwrap().is_empty());
+}
+
 fn no_errors_in(dir: &Path) {
     let failures: Vec<String> = oml_files(dir)
         .iter()
@@ -132,5 +148,15 @@ fn accepts_the_library_vocabularies() {
         eprintln!("OML_CORPUS not set, skipping");
         return;
     };
-    no_errors_in(&Path::new(&dir).join("oml"));
+    let failures: Vec<String> = oml_files(&Path::new(&dir).join("oml"))
+        .iter()
+        .filter_map(|p| match validate_path(p) {
+            Ok(d) => d
+                .into_iter()
+                .find(|d| d.severity == Severity::Error)
+                .map(|d| format!("{}: {d}", p.display())),
+            Err(e) => Some(format!("{}: {e}", p.display())),
+        })
+        .collect();
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
 }

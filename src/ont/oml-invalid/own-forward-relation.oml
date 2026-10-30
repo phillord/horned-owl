@@ -1,0 +1,13 @@
+vocabulary <http://example.com/invalid/own-forward-relation#> as i {
+	concept C
+	relation entity E [
+		from C
+		to C
+		forward e
+		reverse eBy
+	]
+	concept D < C [
+		restricts some e to C
+		restricts some eBy to C
+	]
+}
