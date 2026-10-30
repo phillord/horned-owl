@@ -20,8 +20,7 @@ use pest::iterators::Pair;
 use crate::catalog::{CatalogResolver, find_catalog};
 use crate::parser::{OmlParser, Rule};
 use crate::reader::{
-    BUILT_IN, Kind, OmlError, Resolver, Terms, header, resolve_ref, shape, terms_from, terms_of,
-    unescape_id,
+    BUILT_IN, Kind, OmlError, Resolver, Terms, header, resolve_ref, shape, terms_from, unescape_id,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -212,11 +211,7 @@ impl Checker<'_> {
         if let Some(t) = self.imported.borrow().get(ns) {
             return t.clone();
         }
-        let loaded = self
-            .resolver?
-            .load(&ns[..ns.len() - 1])
-            .and_then(|text| terms_of(&text))
-            .map(Rc::new);
+        let loaded = self.resolver?.terms(&ns[..ns.len() - 1]);
         self.imported
             .borrow_mut()
             .insert(ns.to_string(), loaded.clone());

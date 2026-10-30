@@ -76,6 +76,59 @@ pub trait Resolver {
     fn path(&self, _iri: &str) -> Option<PathBuf> {
         None
     }
+
+    /// The terms of the ontology `iri`. The default parses the text again
+    /// each time; see [`CachingResolver`].
+    fn terms(&self, iri: &str) -> Option<Rc<Terms>> {
+        self.load(iri).and_then(|text| terms_of(&text)).map(Rc::new)
+    }
+}
+
+/// Remembers the terms of each ontology, so that an ontology that many
+/// others import is parsed for its terms once, not once for each importer.
+pub struct CachingResolver<R> {
+    inner: R,
+    terms: RefCell<HashMap<String, Option<Rc<Terms>>>>,
+}
+
+impl<R: Resolver> CachingResolver<R> {
+    pub fn new(inner: R) -> Self {
+        CachingResolver {
+            inner,
+            terms: RefCell::new(HashMap::new()),
+        }
+    }
+
+    /// The terms of an ontology that has already been read, which are
+    /// remembered under its IRI. None if `text` does not parse.
+    pub fn terms_of_text(&self, text: &str) -> Option<Rc<Terms>> {
+        let terms = Rc::new(terms_of(text)?);
+        self.terms
+            .borrow_mut()
+            .insert(terms.iri().to_string(), Some(terms.clone()));
+        Some(terms)
+    }
+}
+
+impl<R: Resolver> Resolver for CachingResolver<R> {
+    fn load(&self, iri: &str) -> Option<String> {
+        self.inner.load(iri)
+    }
+
+    fn path(&self, iri: &str) -> Option<PathBuf> {
+        self.inner.path(iri)
+    }
+
+    fn terms(&self, iri: &str) -> Option<Rc<Terms>> {
+        if let Some(t) = self.terms.borrow().get(iri) {
+            return t.clone();
+        }
+        let found = self.inner.terms(iri);
+        self.terms
+            .borrow_mut()
+            .insert(iri.to_string(), found.clone());
+        found
+    }
 }
 
 /// Resolves nothing, so only terms declared in the document are known.
@@ -95,7 +148,9 @@ impl<F: Fn(&str) -> Option<String>> Resolver for F {
 
 /// What is known about the terms of an ontology.
 #[derive(Default)]
-pub(crate) struct Terms {
+pub struct Terms {
+    /// The namespace, with its final `#` or `/`.
+    pub(crate) ns: String,
     pub(crate) kinds: HashMap<String, Kind>,
     /// Every member the ontology declares, whatever its kind.
     pub(crate) names: HashSet<String>,
@@ -297,6 +352,13 @@ pub(crate) fn header(pair: Pair<Rule>) -> Header {
     }
 }
 
+impl Terms {
+    /// The IRI of the ontology: its namespace without the final `#` or `/`.
+    pub fn iri(&self) -> &str {
+        &self.ns[..self.ns.len() - 1]
+    }
+}
+
 /// The terms an ontology declares, without translating it.
 pub(crate) fn terms_of(text: &str) -> Option<Terms> {
     let oml = OmlParser::parse(Rule::oml, text).ok()?.next()?;
@@ -328,7 +390,7 @@ pub fn import_closure(iri: &str, resolver: &dyn Resolver) -> Vec<String> {
         if seen.contains(&next) {
             continue;
         }
-        if let Some(terms) = resolver.load(&next).and_then(|text| terms_of(&text)) {
+        if let Some(terms) = resolver.terms(&next) {
             // Reverse, so that the first import is taken first.
             todo.extend(
                 terms
@@ -355,6 +417,7 @@ pub(crate) fn terms_from(h: &Header) -> Terms {
     let mut terms = Terms {
         vocabulary: h.kind.starts_with("Vocabulary"),
         ontology: h.kind,
+        ns: h.ns.clone(),
         imports: h.imports.iter().map(|(ns, _)| ns.clone()).collect(),
         ..Terms::default()
     };
@@ -611,11 +674,7 @@ impl<'a, A: ForIRI, O: MutableOntology<A>> Reader<'a, A, O> {
         if let Some(t) = self.imported.borrow().get(ns) {
             return t.clone();
         }
-        let loaded = self
-            .resolver
-            .load(&ns[..ns.len() - 1])
-            .and_then(|text| terms_of(&text))
-            .map(Rc::new);
+        let loaded = self.resolver.terms(&ns[..ns.len() - 1]);
         self.imported
             .borrow_mut()
             .insert(ns.to_string(), loaded.clone());

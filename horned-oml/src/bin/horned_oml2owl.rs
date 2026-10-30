@@ -10,8 +10,8 @@ use clap::{App, Arg};
 use horned_catalog::Catalog;
 use horned_oml::catalog::{CatalogResolver, oml_files};
 use horned_oml::reader::{
-    Config, OmlAnnotations, Resolver, declare_used_entities, import_closure, is_built_in_ontology,
-    ontology_iri, read_config,
+    CachingResolver, Config, OmlAnnotations, Resolver, declare_used_entities, import_closure,
+    is_built_in_ontology, ontology_iri, read_config,
 };
 use horned_oml::validate::{Severity, validate_file};
 use horned_owl::model::{Build, RcStr};
@@ -141,14 +141,15 @@ fn run() -> Result<(), Box<dyn Error>> {
 
     let catalog_path = Path::new(matches.value_of("input-catalog-path").unwrap());
     let catalog = Catalog::from_path(catalog_path)?;
-    let resolver = CatalogResolver::from_path(catalog_path)?;
+    let resolver = CachingResolver::new(CatalogResolver::from_path(catalog_path)?);
 
     let inputs = match matches.value_of("root-ontology-iri") {
         Some(root) => closure_inputs(root, &resolver)?,
-        None => file_inputs(&catalog)?,
+        None => file_inputs(&catalog, &resolver)?,
     };
 
     // Everything is checked before anything is converted.
+    let started = std::time::Instant::now();
     let mut problems = vec![];
     for input in &inputs {
         if debug {
@@ -160,6 +161,9 @@ fn run() -> Result<(), Box<dyn Error>> {
                 problems.push(format!("{}: {d}", path.display()));
             }
         }
+    }
+    if debug {
+        eprintln!("Validated in {:?}", started.elapsed());
     }
     if !problems.is_empty() {
         return Err(format!("\n{}", problems.join("\n")).into());
@@ -180,15 +184,23 @@ fn run() -> Result<(), Box<dyn Error>> {
             eprintln!("Creating: {}", file.display());
         }
         let build = Build::new_rc();
+        let timer = std::time::Instant::now();
         let (set, prefixes): (SetOntology<RcStr>, _) =
             read_config(&input.text, &build, &resolver, config)?;
         let mut set = set;
         declare_used_entities(&mut set);
         let ontology: RcComponentMappedOntology = set.into();
+        if debug {
+            eprintln!("Converted in {:?}", timer.elapsed());
+        }
         if let Some(parent) = file.parent() {
             fs::create_dir_all(parent)?;
         }
+        let timer = std::time::Instant::now();
         write(extension, File::create(&file)?, &ontology, &prefixes)?;
+        if debug {
+            eprintln!("Written in {:?}", timer.elapsed());
+        }
         saved += 1;
     }
     println!("{saved} owl file(s) are saved");
@@ -206,7 +218,10 @@ fn run() -> Result<(), Box<dyn Error>> {
 }
 
 /// The root ontology and everything it imports.
-fn closure_inputs(root: &str, resolver: &CatalogResolver) -> Result<Vec<Input>, Box<dyn Error>> {
+fn closure_inputs(
+    root: &str,
+    resolver: &CachingResolver<CatalogResolver>,
+) -> Result<Vec<Input>, Box<dyn Error>> {
     let mut inputs = vec![];
     for iri in import_closure(root.trim_end_matches(['#', '/']), resolver) {
         match resolver.load(&iri) {
@@ -223,13 +238,22 @@ fn closure_inputs(root: &str, resolver: &CatalogResolver) -> Result<Vec<Input>, 
 }
 
 /// Every OML file that the catalog covers.
-fn file_inputs(catalog: &Catalog) -> Result<Vec<Input>, Box<dyn Error>> {
+fn file_inputs(
+    catalog: &Catalog,
+    resolver: &CachingResolver<CatalogResolver>,
+) -> Result<Vec<Input>, Box<dyn Error>> {
     oml_files(catalog)
         .into_iter()
         .map(|path| {
             let text = fs::read_to_string(&path)?;
+            // Parsed once for the terms that other ontologies need; a document
+            // that does not parse is parsed again for the error.
+            let iri = match resolver.terms_of_text(&text) {
+                Some(terms) => terms.iri().to_string(),
+                None => ontology_iri(&text)?,
+            };
             Ok(Input {
-                iri: ontology_iri(&text)?,
+                iri,
                 path: Some(path),
                 text,
             })
