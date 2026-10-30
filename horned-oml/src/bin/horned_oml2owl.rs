@@ -10,10 +10,10 @@ use clap::{App, Arg};
 use horned_catalog::Catalog;
 use horned_oml::catalog::{CatalogResolver, oml_files};
 use horned_oml::reader::{
-    CachingResolver, Config, OmlAnnotations, Resolver, declare_used_entities, import_closure,
-    is_built_in_ontology, ontology_iri, read_config,
+    CachingResolver, Config, OmlAnnotations, Parsed, Resolver, declare_used_entities,
+    import_closure, is_built_in_ontology, read_parsed,
 };
-use horned_oml::validate::{Severity, validate_file};
+use horned_oml::validate::{Severity, validate_parsed};
 use horned_owl::model::{Build, RcStr};
 use horned_owl::ontology::component_mapped::RcComponentMappedOntology;
 use horned_owl::ontology::set::SetOntology;
@@ -104,7 +104,6 @@ fn app() -> App<'static> {
 
 /// An ontology to convert.
 struct Input {
-    iri: String,
     path: Option<PathBuf>,
     text: String,
 }
@@ -145,18 +144,29 @@ fn run() -> Result<(), Box<dyn Error>> {
 
     let inputs = match matches.value_of("root-ontology-iri") {
         Some(root) => closure_inputs(root, &resolver)?,
-        None => file_inputs(&catalog, &resolver)?,
+        None => file_inputs(&catalog)?,
     };
+
+    // Each document is parsed once, for its terms, its checks and its
+    // conversion.
+    let parsed = inputs
+        .iter()
+        .map(|i| Parsed::new(&i.text))
+        .collect::<Result<Vec<_>, _>>()?;
+    let iris: Vec<String> = parsed
+        .iter()
+        .map(|p| resolver.terms_of_parsed(p).iri().to_string())
+        .collect();
 
     // Everything is checked before anything is converted.
     let started = std::time::Instant::now();
     let mut problems = vec![];
-    for input in &inputs {
+    for ((input, parsed), iri) in inputs.iter().zip(&parsed).zip(&iris) {
         if debug {
-            eprintln!("Validating: {}", input.iri);
+            eprintln!("Validating: {iri}");
         }
         let Some(path) = &input.path else { continue };
-        for d in validate_file(path, &resolver)? {
+        for d in validate_parsed(parsed, &resolver, path)? {
             if d.severity == Severity::Error {
                 problems.push(format!("{}: {d}", path.display()));
             }
@@ -173,11 +183,13 @@ fn run() -> Result<(), Box<dyn Error>> {
     let output_dir = output_catalog.parent().unwrap_or(Path::new("."));
     let mut schemes = BTreeSet::new();
     let mut saved = 0;
-    for input in inputs.iter().filter(|i| !is_built_in_ontology(&i.iri)) {
-        let (scheme, rest) = input
-            .iri
+    for (parsed, iri) in parsed.iter().zip(&iris) {
+        if is_built_in_ontology(iri) {
+            continue;
+        }
+        let (scheme, rest) = iri
             .split_once("://")
-            .ok_or_else(|| format!("{} is not an IRI with a scheme", input.iri))?;
+            .ok_or_else(|| format!("{iri} is not an IRI with a scheme"))?;
         schemes.insert(scheme.to_string());
         let file = output_dir.join(format!("{rest}.{extension}"));
         if debug {
@@ -186,7 +198,7 @@ fn run() -> Result<(), Box<dyn Error>> {
         let build = Build::new_rc();
         let timer = std::time::Instant::now();
         let (set, prefixes): (SetOntology<RcStr>, _) =
-            read_config(&input.text, &build, &resolver, config)?;
+            read_parsed(parsed, &build, &resolver, config)?;
         let mut set = set;
         declare_used_entities(&mut set);
         let ontology: RcComponentMappedOntology = set.into();
@@ -227,7 +239,6 @@ fn closure_inputs(
         match resolver.load(&iri) {
             Some(text) => inputs.push(Input {
                 path: resolver.path(&iri),
-                iri,
                 text,
             }),
             None if is_built_in_ontology(&iri) => {}
@@ -238,22 +249,12 @@ fn closure_inputs(
 }
 
 /// Every OML file that the catalog covers.
-fn file_inputs(
-    catalog: &Catalog,
-    resolver: &CachingResolver<CatalogResolver>,
-) -> Result<Vec<Input>, Box<dyn Error>> {
+fn file_inputs(catalog: &Catalog) -> Result<Vec<Input>, Box<dyn Error>> {
     oml_files(catalog)
         .into_iter()
         .map(|path| {
             let text = fs::read_to_string(&path)?;
-            // Parsed once for the terms that other ontologies need; a document
-            // that does not parse is parsed again for the error.
-            let iri = match resolver.terms_of_text(&text) {
-                Some(terms) => terms.iri().to_string(),
-                None => ontology_iri(&text)?,
-            };
             Ok(Input {
-                iri,
                 path: Some(path),
                 text,
             })

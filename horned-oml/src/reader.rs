@@ -100,13 +100,13 @@ impl<R: Resolver> CachingResolver<R> {
     }
 
     /// The terms of an ontology that has already been read, which are
-    /// remembered under its IRI. None if `text` does not parse.
-    pub fn terms_of_text(&self, text: &str) -> Option<Rc<Terms>> {
-        let terms = Rc::new(terms_of(text)?);
+    /// remembered under its IRI.
+    pub fn terms_of_parsed(&self, parsed: &Parsed) -> Rc<Terms> {
+        let terms = Rc::new(parsed.terms());
         self.terms
             .borrow_mut()
             .insert(terms.iri().to_string(), Some(terms.clone()));
-        Some(terms)
+        terms
     }
 }
 
@@ -249,8 +249,45 @@ where
     A: ForIRI,
     O: MutableOntology<A> + Default,
 {
-    let oml = OmlParser::parse(Rule::oml, text)?.next().unwrap();
-    let ontology = oml.into_inner().next().unwrap();
+    read_parsed(&Parsed::new(text)?, build, resolver, config)
+}
+
+/// An OML document that has been parsed, so that checking it, reading it and
+/// finding its terms can share the one parse.
+#[derive(Clone)]
+pub struct Parsed<'i> {
+    oml: Pair<'i, Rule>,
+}
+
+impl<'i> Parsed<'i> {
+    pub fn new(text: &'i str) -> Result<Self, OmlError> {
+        Ok(Parsed {
+            oml: OmlParser::parse(Rule::oml, text)?.next().unwrap(),
+        })
+    }
+
+    pub(crate) fn ontology(&self) -> Pair<'i, Rule> {
+        self.oml.clone().into_inner().next().unwrap()
+    }
+
+    /// The terms the document declares.
+    pub fn terms(&self) -> Terms {
+        terms_from(&header(self.ontology()))
+    }
+}
+
+/// As [`read_config`], from a document that is already parsed.
+pub fn read_parsed<A, O>(
+    parsed: &Parsed,
+    build: &Build<A>,
+    resolver: &dyn Resolver,
+    config: Config,
+) -> Result<(O, PrefixMapping), OmlError>
+where
+    A: ForIRI,
+    O: MutableOntology<A> + Default,
+{
+    let ontology = parsed.ontology();
     let mut reader = Reader {
         build,
         resolver,
@@ -361,8 +398,7 @@ impl Terms {
 
 /// The terms an ontology declares, without translating it.
 pub(crate) fn terms_of(text: &str) -> Option<Terms> {
-    let oml = OmlParser::parse(Rule::oml, text).ok()?.next()?;
-    Some(terms_from(&header(oml.into_inner().next()?)))
+    Some(Parsed::new(text).ok()?.terms())
 }
 
 /// Whether `iri` is one of the W3C ontologies (XSD, RDF and the like) that

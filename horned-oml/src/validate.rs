@@ -14,13 +14,13 @@ use std::fmt;
 use std::path::Path;
 use std::rc::Rc;
 
-use pest::Parser;
 use pest::iterators::Pair;
 
 use crate::catalog::{CatalogResolver, find_catalog};
-use crate::parser::{OmlParser, Rule};
+use crate::parser::Rule;
 use crate::reader::{
-    BUILT_IN, Kind, OmlError, Resolver, Terms, header, resolve_ref, shape, terms_from, unescape_id,
+    BUILT_IN, Kind, OmlError, Parsed, Resolver, Terms, header, resolve_ref, shape, terms_from,
+    unescape_id,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -73,8 +73,24 @@ fn check(
     resolver: Option<&dyn Resolver>,
     file: Option<&Path>,
 ) -> Result<Vec<Diagnostic>, OmlError> {
-    let oml = OmlParser::parse(Rule::oml, text)?.next().unwrap();
-    let ontology = oml.into_inner().next().unwrap();
+    check_parsed(&Parsed::new(text)?, resolver, file)
+}
+
+/// As [`validate_file`], for a document that is already parsed.
+pub fn validate_parsed(
+    parsed: &Parsed,
+    resolver: &dyn Resolver,
+    file: &Path,
+) -> Result<Vec<Diagnostic>, OmlError> {
+    check_parsed(parsed, Some(resolver), Some(file))
+}
+
+fn check_parsed(
+    parsed: &Parsed,
+    resolver: Option<&dyn Resolver>,
+    file: Option<&Path>,
+) -> Result<Vec<Diagnostic>, OmlError> {
+    let ontology = parsed.ontology();
     let own = terms_from(&header(ontology.clone()));
     let kind = own.ontology;
     let body = ontology

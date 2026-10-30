@@ -2,7 +2,7 @@
 
 use std::cell::Cell;
 
-use horned_oml::reader::{CachingResolver, Resolver};
+use horned_oml::reader::{CachingResolver, Parsed, Resolver};
 
 struct Counting<'a>(&'a Cell<usize>);
 
@@ -50,9 +50,8 @@ fn remembers_what_could_not_be_found() {
 fn takes_the_terms_of_a_document_already_read() {
     let loads = Cell::new(0);
     let cached = CachingResolver::new(Counting(&loads));
-    let terms = cached
-        .terms_of_text("vocabulary <http://example.com/c#> as c { concept C }")
-        .unwrap();
+    let text = "vocabulary <http://example.com/c#> as c { concept C }";
+    let terms = cached.terms_of_parsed(&Parsed::new(text).unwrap());
     assert_eq!(terms.iri(), "http://example.com/c");
     cached.terms("http://example.com/c");
     assert_eq!(loads.get(), 0);
