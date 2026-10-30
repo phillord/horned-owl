@@ -303,6 +303,46 @@ pub(crate) fn terms_of(text: &str) -> Option<Terms> {
     Some(terms_from(&header(oml.into_inner().next()?)))
 }
 
+/// Whether `iri` is one of the W3C ontologies (XSD, RDF and the like) that
+/// OML imports but does not convert.
+pub fn is_built_in_ontology(iri: &str) -> bool {
+    BUILT_IN.contains(&iri.trim_end_matches(['#', '/']))
+}
+
+/// The IRI of the ontology in an OML document: its namespace without the
+/// final `#` or `/`.
+pub fn ontology_iri(text: &str) -> Result<String, OmlError> {
+    let oml = OmlParser::parse(Rule::oml, text)?.next().unwrap();
+    let h = header(oml.into_inner().next().unwrap());
+    Ok(h.ns[..h.ns.len() - 1].to_string())
+}
+
+/// The IRIs of the ontology `iri` and everything it imports, however
+/// indirectly, found with `resolver`. The root comes first. An import that
+/// cannot be found is still listed, as the one that needs it is the one that
+/// is wrong.
+pub fn import_closure(iri: &str, resolver: &dyn Resolver) -> Vec<String> {
+    let mut seen = vec![];
+    let mut todo = vec![iri.to_string()];
+    while let Some(next) = todo.pop() {
+        if seen.contains(&next) {
+            continue;
+        }
+        if let Some(terms) = resolver.load(&next).and_then(|text| terms_of(&text)) {
+            // Reverse, so that the first import is taken first.
+            todo.extend(
+                terms
+                    .imports
+                    .iter()
+                    .rev()
+                    .map(|ns| ns[..ns.len() - 1].to_string()),
+            );
+        }
+        seen.push(next);
+    }
+    seen
+}
+
 /// The terms declared by a parsed ontology.
 pub(crate) fn terms_from(h: &Header) -> Terms {
     let mut prefixes: HashMap<String, String> = HashMap::new();

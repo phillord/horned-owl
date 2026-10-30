@@ -14,10 +14,22 @@ pest = "2.7.8"
 pest_derive = "2.7.8"
 curie = "0.1.1"
 thiserror = "1.0"
+clap = { version = "3.2.2", optional = true }
 
 [dev-dependencies]
 criterion = "0.7.0"
+tempfile = "3"
 
 [[bench]]
 name = "read"
 harness = false
+
+[features]
+default = ["cli"]
+# The command line tools.
+cli = ["dep:clap"]
+
+[[bin]]
+name = "horned-oml2owl"
+path = "src/bin/horned_oml2owl.rs"
+required-features = ["cli"]
