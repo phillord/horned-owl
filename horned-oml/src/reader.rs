@@ -148,6 +148,27 @@ where
     }
 }
 
+/// How the OWL is made, as the options of `oml2owl`.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Config {
+    /// Close the world of a vocabulary bundle with disjoint unions as well
+    /// as subclass and disjointness axioms (`-u`).
+    pub disjoint_unions: bool,
+    /// Put annotations on axioms (`-a`). `oml2owl` gives none of the axioms
+    /// that it makes any annotations to put there, so this changes nothing.
+    pub annotations_on_axioms: bool,
+    /// Whether to write the `oml:*` annotations (`-an`).
+    pub oml_annotations: OmlAnnotations,
+}
+
+/// What to do with the `oml:*` annotations that record how the OML was.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum OmlAnnotations {
+    #[default]
+    Generate,
+    Suppress,
+}
+
 /// As [`read_with`], also returning the prefixes of the ontology and its
 /// imports.
 pub fn read_full<A, O>(
@@ -159,11 +180,26 @@ where
     A: ForIRI,
     O: MutableOntology<A> + Default,
 {
+    read_config(text, build, resolver, Config::default())
+}
+
+/// As [`read_full`], with the options of `config`.
+pub fn read_config<A, O>(
+    text: &str,
+    build: &Build<A>,
+    resolver: &dyn Resolver,
+    config: Config,
+) -> Result<(O, PrefixMapping), OmlError>
+where
+    A: ForIRI,
+    O: MutableOntology<A> + Default,
+{
     let oml = OmlParser::parse(Rule::oml, text)?.next().unwrap();
     let ontology = oml.into_inner().next().unwrap();
     let mut reader = Reader {
         build,
         resolver,
+        config,
         ns: String::new(),
         prefixes: HashMap::new(),
         terms: Terms::default(),
@@ -183,6 +219,7 @@ where
 struct Reader<'a, A: ForIRI, O> {
     build: &'a Build<A>,
     resolver: &'a dyn Resolver,
+    config: Config,
     /// The namespace, with its trailing `#` or `/`.
     ns: String,
     /// Prefix to namespace, for this ontology and its imports.
@@ -447,17 +484,27 @@ impl<'a, A: ForIRI, O: MutableOntology<A>> Reader<'a, A, O> {
         let taxonomy = Taxonomy::new(&classes, &edges)
             .transitive_reduction()
             .root_at(Ce::Universal);
-        let (subclasses, disjoint) = taxonomy.closure();
-        for (sub, sup) in subclasses {
+        let closure = taxonomy.closure_with_unions();
+        for (sub, sup) in closure.subclasses {
             self.add(SubClassOf {
                 sup: self.class_expression(&sup),
                 sub: self.class_expression(&sub),
             });
         }
-        for set in disjoint {
+        for set in closure.disjoint {
             self.add(DisjointClasses(
                 set.iter().map(|c| self.class_expression(c)).collect(),
             ));
+        }
+        if self.config.disjoint_unions {
+            for (parent, children) in closure.unions {
+                if let Ce::Unit(iri) = parent {
+                    self.add(DisjointUnion(
+                        self.build.class(iri),
+                        children.iter().map(|c| self.class_expression(c)).collect(),
+                    ));
+                }
+            }
         }
         Ok(())
     }
@@ -480,7 +527,15 @@ impl<'a, A: ForIRI, O: MutableOntology<A>> Reader<'a, A, O> {
         }
     }
 
+    /// Whether the `oml:*` annotations are written.
+    fn markers(&self) -> bool {
+        self.config.oml_annotations == OmlAnnotations::Generate
+    }
+
     fn ontology_annotation(&mut self, name: &str, av: AnnotationValue<A>) {
+        if !self.markers() {
+            return;
+        }
         let ap = self.build.annotation_property(format!("{OML}{name}"));
         self.add(OntologyAnnotation(Annotation {
             ap,
@@ -602,12 +657,31 @@ impl<'a, A: ForIRI, O: MutableOntology<A>> Reader<'a, A, O> {
     }
 
     fn type_annotation(&mut self, subject: &str, kind: &str) {
+        if !self.markers() {
+            return;
+        }
         let ap = self.build.annotation_property(format!("{OML}type"));
         self.add(AnnotationAssertion {
             subject: self.iri(subject).into(),
             ann: Annotation {
                 ap,
                 av: AnnotationValue::IRI(self.iri(&format!("{OML}{kind}"))),
+                ann: Default::default(),
+            },
+        });
+    }
+
+    /// Record which relation entity or base a relation belongs to.
+    fn relation_annotation(&mut self, name: &str, relation: &str, of: &str) {
+        if !self.markers() {
+            return;
+        }
+        let ap = self.build.annotation_property(format!("{OML}{name}"));
+        self.add(AnnotationAssertion {
+            subject: self.iri(relation).into(),
+            ann: Annotation {
+                ap,
+                av: AnnotationValue::IRI(self.iri(of)),
                 ann: Default::default(),
             },
         });
@@ -1057,17 +1131,7 @@ impl<'a, A: ForIRI, O: MutableOntology<A>> Reader<'a, A, O> {
                 self.build.object_property(forward.as_str()),
             ));
             self.type_annotation(&forward, "ForwardRelation");
-            let ap = self
-                .build
-                .annotation_property(format!("{OML}relationEntity"));
-            self.add(AnnotationAssertion {
-                subject: self.iri(&forward).into(),
-                ann: Annotation {
-                    ap,
-                    av: AnnotationValue::IRI(self.iri(iri)),
-                    ann: Default::default(),
-                },
-            });
+            self.relation_annotation("relationEntity", &forward, iri);
             self.derivation_rule(iri, &forward);
         }
         self.relation_base(&forward, &sources, &targets, &flags, false);
@@ -1871,15 +1935,7 @@ impl<'a, A: ForIRI, O: MutableOntology<A>> Reader<'a, A, O> {
             self.build.object_property(reverse.as_str()),
         ));
         self.type_annotation(&reverse, "ReverseRelation");
-        let ap = self.build.annotation_property(format!("{OML}relationBase"));
-        self.add(AnnotationAssertion {
-            subject: self.iri(&reverse).into(),
-            ann: Annotation {
-                ap,
-                av: AnnotationValue::IRI(self.iri(base)),
-                ann: Default::default(),
-            },
-        });
+        self.relation_annotation("relationBase", &reverse, base);
         self.add(InverseObjectProperties(
             self.build.object_property(reverse.as_str()),
             self.build.object_property(forward),

@@ -98,6 +98,17 @@ impl Ce {
     }
 }
 
+/// The axioms that close the world of a taxonomy.
+#[derive(Default)]
+pub struct Closure {
+    /// `(subclass, superclass)`.
+    pub subclasses: Vec<(Ce, Ce)>,
+    /// Sets of classes that are made disjoint.
+    pub disjoint: Vec<BTreeSet<Ce>>,
+    /// A class and the disjoint classes that together are that class.
+    pub unions: Vec<(Ce, BTreeSet<Ce>)>,
+}
+
 /// A hierarchy of class expressions, with edges from general to specific.
 #[derive(Clone, Default)]
 pub struct Taxonomy {
@@ -305,18 +316,27 @@ impl Taxonomy {
     /// The subclass axioms `(subclass, superclass)`, and the sets of classes
     /// that are made disjoint.
     pub fn closure(&self) -> (Vec<(Ce, Ce)>, Vec<BTreeSet<Ce>>) {
+        let c = self.closure_with_unions();
+        (c.subclasses, c.disjoint)
+    }
+
+    /// As [`closure`](Self::closure), also giving each named class the set of
+    /// children that partition it.
+    pub fn closure_with_unions(&self) -> Closure {
         let tree = self.treeify();
-        let mut subclasses = vec![];
-        let mut disjoint = vec![];
+        let mut closure = Closure::default();
         for (parent, children) in &tree.children {
             for c in children {
-                subclasses.push((c.clone(), parent.clone()));
+                closure.subclasses.push((c.clone(), parent.clone()));
             }
             if children.len() > 1 {
-                disjoint.push(children.clone());
+                closure.disjoint.push(children.clone());
+            }
+            if matches!(parent, Ce::Unit(_)) && !children.is_empty() {
+                closure.unions.push((parent.clone(), children.clone()));
             }
         }
-        (subclasses, disjoint)
+        closure
     }
 }
 

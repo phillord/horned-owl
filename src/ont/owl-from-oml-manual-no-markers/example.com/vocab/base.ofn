@@ -1,0 +1,220 @@
+Prefix(:=<http://example.com/vocab/base#>)
+Prefix(owl:=<http://www.w3.org/2002/07/owl#>)
+Prefix(rdf:=<http://www.w3.org/1999/02/22-rdf-syntax-ns#>)
+Prefix(xml:=<http://www.w3.org/XML/1998/namespace>)
+Prefix(xsd:=<http://www.w3.org/2001/XMLSchema#>)
+Prefix(base:=<http://example.com/vocab/base#>)
+Prefix(rdfs:=<http://www.w3.org/2000/01/rdf-schema#>)
+
+
+Ontology(<http://example.com/vocab/base>
+
+Declaration(Class(base:Adult))
+Declaration(Class(base:BestFriend))
+Declaration(Class(base:Knows))
+Declaration(Class(base:Narcissist))
+Declaration(Class(base:Owns))
+Declaration(Class(base:Pair))
+Declaration(Class(base:Person))
+Declaration(Class(base:Pet))
+Declaration(Class(base:PetOwner))
+Declaration(Class(base:Thing))
+Declaration(ObjectProperty(base:adores))
+Declaration(ObjectProperty(base:bestFriend))
+Declaration(ObjectProperty(base:hasPet))
+Declaration(ObjectProperty(base:knownBy))
+Declaration(ObjectProperty(base:knows))
+Declaration(ObjectProperty(base:likedBy))
+Declaration(ObjectProperty(base:likes))
+Declaration(ObjectProperty(base:loves))
+Declaration(ObjectProperty(base:ownedBy))
+Declaration(ObjectProperty(base:owns))
+Declaration(ObjectProperty(<http://opencaesar.io/oml#hasSource>))
+Declaration(ObjectProperty(<http://opencaesar.io/oml#hasTarget>))
+Declaration(ObjectProperty(owl:differentFrom))
+Declaration(ObjectProperty(owl:sameAs))
+Declaration(DataProperty(base:age))
+Declaration(DataProperty(base:ageInYears))
+Declaration(DataProperty(base:id))
+Declaration(DataProperty(base:yearsOld))
+Declaration(NamedIndividual(base:_b0))
+Declaration(AnnotationProperty(base:note))
+Declaration(AnnotationProperty(<http://opencaesar.io/oml#name>))
+Declaration(AnnotationProperty(<http://opencaesar.io/oml#type>))
+Declaration(Datatype(base:Code))
+Declaration(Datatype(base:Percent))
+
+############################
+#   Object Properties
+############################
+
+# Object Property: <http://example.com/vocab/base#adores> (<http://example.com/vocab/base#adores>)
+
+EquivalentObjectProperties(base:adores base:likes)
+
+# Object Property: <http://example.com/vocab/base#bestFriend> (<http://example.com/vocab/base#bestFriend>)
+
+SubObjectPropertyOf(base:bestFriend base:knows)
+SymmetricObjectProperty(base:bestFriend)
+ObjectPropertyDomain(base:bestFriend base:Person)
+ObjectPropertyRange(base:bestFriend base:Person)
+
+# Object Property: <http://example.com/vocab/base#hasPet> (<http://example.com/vocab/base#hasPet>)
+
+ObjectPropertyDomain(base:hasPet base:Person)
+ObjectPropertyRange(base:hasPet base:Pet)
+
+# Object Property: <http://example.com/vocab/base#knownBy> (<http://example.com/vocab/base#knownBy>)
+
+AnnotationAssertion(base:note base:knownBy "reverse")
+InverseObjectProperties(base:knownBy base:knows)
+TransitiveObjectProperty(base:knownBy)
+ObjectPropertyDomain(base:knownBy base:Person)
+ObjectPropertyRange(base:knownBy base:Person)
+
+# Object Property: <http://example.com/vocab/base#knows> (<http://example.com/vocab/base#knows>)
+
+AnnotationAssertion(base:note base:knows "forward")
+TransitiveObjectProperty(base:knows)
+ObjectPropertyDomain(base:knows base:Person)
+ObjectPropertyRange(base:knows base:Person)
+
+# Object Property: <http://example.com/vocab/base#likedBy> (<http://example.com/vocab/base#likedBy>)
+
+InverseObjectProperties(base:likedBy base:likes)
+AsymmetricObjectProperty(base:likedBy)
+IrreflexiveObjectProperty(base:likedBy)
+ObjectPropertyDomain(base:likedBy base:Thing)
+ObjectPropertyRange(base:likedBy base:Person)
+
+# Object Property: <http://example.com/vocab/base#likes> (<http://example.com/vocab/base#likes>)
+
+AsymmetricObjectProperty(base:likes)
+IrreflexiveObjectProperty(base:likes)
+ObjectPropertyDomain(base:likes base:Person)
+ObjectPropertyRange(base:likes base:Thing)
+
+# Object Property: <http://example.com/vocab/base#loves> (<http://example.com/vocab/base#loves>)
+
+SubObjectPropertyOf(base:loves base:likes)
+
+# Object Property: <http://example.com/vocab/base#ownedBy> (<http://example.com/vocab/base#ownedBy>)
+
+InverseObjectProperties(base:ownedBy base:owns)
+FunctionalObjectProperty(base:ownedBy)
+InverseFunctionalObjectProperty(base:ownedBy)
+ObjectPropertyDomain(base:ownedBy base:Thing)
+ObjectPropertyRange(base:ownedBy base:Person)
+
+# Object Property: <http://example.com/vocab/base#owns> (<http://example.com/vocab/base#owns>)
+
+FunctionalObjectProperty(base:owns)
+InverseFunctionalObjectProperty(base:owns)
+ObjectPropertyDomain(base:owns base:Person)
+ObjectPropertyRange(base:owns base:Thing)
+
+
+############################
+#   Data Properties
+############################
+
+# Data Property: <http://example.com/vocab/base#age> (<http://example.com/vocab/base#age>)
+
+EquivalentDataProperties(base:age base:ageInYears)
+DataPropertyDomain(base:age base:Person)
+DataPropertyRange(base:age xsd:integer)
+
+# Data Property: <http://example.com/vocab/base#id> (<http://example.com/vocab/base#id>)
+
+FunctionalDataProperty(base:id)
+DataPropertyDomain(base:id base:Thing)
+DataPropertyRange(base:id xsd:string)
+
+# Data Property: <http://example.com/vocab/base#yearsOld> (<http://example.com/vocab/base#yearsOld>)
+
+SubDataPropertyOf(base:yearsOld base:age)
+
+
+############################
+#   Datatypes
+############################
+
+# Datatype: <http://example.com/vocab/base#Code> (<http://example.com/vocab/base#Code>)
+
+DatatypeDefinition(base:Code DataOneOf("a" "b"))
+
+# Datatype: <http://example.com/vocab/base#Percent> (<http://example.com/vocab/base#Percent>)
+
+DatatypeDefinition(base:Percent DatatypeRestriction(xsd:integer xsd:minInclusive "0"^^xsd:integer xsd:maxInclusive "100"^^xsd:integer))
+
+
+############################
+#   Classes
+############################
+
+# Class: <http://example.com/vocab/base#Adult> (<http://example.com/vocab/base#Adult>)
+
+EquivalentClasses(base:Adult ObjectIntersectionOf(base:Person DataMinCardinality(18 base:age)))
+
+# Class: <http://example.com/vocab/base#BestFriend> (<http://example.com/vocab/base#BestFriend>)
+
+SubClassOf(base:BestFriend base:Knows)
+
+# Class: <http://example.com/vocab/base#Knows> (<http://example.com/vocab/base#Knows>)
+
+AnnotationAssertion(base:note base:Knows "Who knows whom")
+
+# Class: <http://example.com/vocab/base#Narcissist> (<http://example.com/vocab/base#Narcissist>)
+
+SubClassOf(base:Narcissist base:Person)
+SubClassOf(base:Narcissist ObjectHasSelf(base:knows))
+
+# Class: <http://example.com/vocab/base#Pair> (<http://example.com/vocab/base#Pair>)
+
+EquivalentClasses(base:Pair ObjectIntersectionOf(base:Person base:Thing ObjectMaxCardinality(2 base:knows base:Person)))
+
+# Class: <http://example.com/vocab/base#Person> (<http://example.com/vocab/base#Person>)
+
+SubClassOf(base:Person base:Thing)
+SubClassOf(base:Person ObjectSomeValuesFrom(base:knows base:Person))
+SubClassOf(base:Person ObjectAllValuesFrom(base:knows base:Person))
+SubClassOf(base:Person DataSomeValuesFrom(base:age xsd:integer))
+SubClassOf(base:Person DataHasValue(base:id "none"))
+SubClassOf(base:Person DataMinCardinality(0 base:age xsd:integer))
+SubClassOf(base:Person DataExactCardinality(1 base:age))
+
+# Class: <http://example.com/vocab/base#Pet> (<http://example.com/vocab/base#Pet>)
+
+SubClassOf(base:Pet base:Thing)
+
+# Class: <http://example.com/vocab/base#PetOwner> (<http://example.com/vocab/base#PetOwner>)
+
+SubClassOf(base:PetOwner base:Person)
+SubClassOf(base:PetOwner ObjectHasValue(base:hasPet base:_b0))
+
+# Class: <http://example.com/vocab/base#Thing> (<http://example.com/vocab/base#Thing>)
+
+AnnotationAssertion(base:note base:Thing "A thing")
+AnnotationAssertion(base:note base:Thing "with two notes")
+
+
+############################
+#   Named Individuals
+############################
+
+# Individual: <http://example.com/vocab/base#_b0> (<http://example.com/vocab/base#_b0>)
+
+ClassAssertion(base:Pet base:_b0)
+DataPropertyAssertion(base:id base:_b0 "default")
+
+
+HasKey(base:Thing () (base:id))
+DLSafeRule(Annotation(<http://opencaesar.io/oml#name> "http://example.com/vocab/base#Distinct") Annotation(<http://opencaesar.io/oml#type> "http://opencaesar.io/oml#Rule") Body(ClassAtom(base:Person Variable(<urn:swrl:var#a>)) ClassAtom(base:Person Variable(<urn:swrl:var#b>)) DifferentIndividualsAtom(Variable(<urn:swrl:var#a>) Variable(<urn:swrl:var#b>)))Head(ClassAtom(base:Pair Variable(<urn:swrl:var#a>))))
+DLSafeRule(Annotation(<http://opencaesar.io/oml#name> "http://example.com/vocab/base#Friendly") Annotation(<http://opencaesar.io/oml#type> "http://opencaesar.io/oml#Rule") Body(ClassAtom(base:Person Variable(<urn:swrl:var#p>)) ObjectPropertyAtom(base:knows Variable(<urn:swrl:var#p>) Variable(<urn:swrl:var#q>)))Head(ClassAtom(base:Person Variable(<urn:swrl:var#q>))))
+DLSafeRule(Annotation(<http://opencaesar.io/oml#name> "http://example.com/vocab/base#Adulthood") Annotation(<http://opencaesar.io/oml#type> "http://opencaesar.io/oml#Rule") Body(ClassAtom(base:Person Variable(<urn:swrl:var#p>)) DataPropertyAtom(base:age Variable(<urn:swrl:var#p>) Variable(<urn:swrl:var#a>)) BuiltInAtom(<http://www.w3.org/2003/11/swrlb#greaterThanOrEqual> Variable(<urn:swrl:var#a>) "18"^^xsd:integer))Head(ClassAtom(base:Adult Variable(<urn:swrl:var#p>))))
+DLSafeRule(Annotation(<http://opencaesar.io/oml#name> "http://example.com/vocab/base#Constants") Annotation(<http://opencaesar.io/oml#type> "http://opencaesar.io/oml#Rule") Body(ClassAtom(base:Person Variable(<urn:swrl:var#p>)) DataPropertyAtom(base:age Variable(<urn:swrl:var#p>) "30"^^xsd:integer) DataRangeAtom(base:Percent "30"^^xsd:integer))Head(ClassAtom(base:Adult Variable(<urn:swrl:var#p>))))
+DLSafeRule(Annotation(rdfs:label "bestFriend derivation") Body(ClassAtom(base:BestFriend Variable(<urn:swrl:var#r>)) ObjectPropertyAtom(<http://opencaesar.io/oml#hasSource> Variable(<urn:swrl:var#r>) Variable(<urn:swrl:var#s>)) ObjectPropertyAtom(<http://opencaesar.io/oml#hasTarget> Variable(<urn:swrl:var#r>) Variable(<urn:swrl:var#t>)))Head(ObjectPropertyAtom(base:bestFriend Variable(<urn:swrl:var#s>) Variable(<urn:swrl:var#t>))))
+DLSafeRule(Annotation(<http://opencaesar.io/oml#name> "http://example.com/vocab/base#Reified") Annotation(<http://opencaesar.io/oml#type> "http://opencaesar.io/oml#Rule") Body(ClassAtom(base:Knows Variable(<urn:swrl:var#r>)) ObjectPropertyAtom(<http://opencaesar.io/oml#hasSource> Variable(<urn:swrl:var#r>) Variable(<urn:swrl:var#a>)) ObjectPropertyAtom(<http://opencaesar.io/oml#hasTarget> Variable(<urn:swrl:var#r>) Variable(<urn:swrl:var#b>)) SameIndividualAtom(Variable(<urn:swrl:var#a>) Variable(<urn:swrl:var#b>)))Head(ClassAtom(base:Narcissist Variable(<urn:swrl:var#a>))))
+DLSafeRule(Annotation(rdfs:label "knows derivation") Body(ClassAtom(base:Knows Variable(<urn:swrl:var#r>)) ObjectPropertyAtom(<http://opencaesar.io/oml#hasSource> Variable(<urn:swrl:var#r>) Variable(<urn:swrl:var#s>)) ObjectPropertyAtom(<http://opencaesar.io/oml#hasTarget> Variable(<urn:swrl:var#r>) Variable(<urn:swrl:var#t>)))Head(ObjectPropertyAtom(base:knows Variable(<urn:swrl:var#s>) Variable(<urn:swrl:var#t>))))
+DLSafeRule(Annotation(rdfs:label "owns derivation") Body(ClassAtom(base:Owns Variable(<urn:swrl:var#r>)) ObjectPropertyAtom(<http://opencaesar.io/oml#hasSource> Variable(<urn:swrl:var#r>) Variable(<urn:swrl:var#s>)) ObjectPropertyAtom(<http://opencaesar.io/oml#hasTarget> Variable(<urn:swrl:var#r>) Variable(<urn:swrl:var#t>)))Head(ObjectPropertyAtom(base:owns Variable(<urn:swrl:var#s>) Variable(<urn:swrl:var#t>))))
+)
