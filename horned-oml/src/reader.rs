@@ -935,7 +935,7 @@ fn decimal(t: &str) -> String {
     if neg { format!("-{s}") } else { s }
 }
 
-fn double(t: &str) -> Result<String, OmlError> {
+pub(crate) fn double(t: &str) -> Result<String, OmlError> {
     let v: f64 = t
         .parse()
         .map_err(|_| OmlError::Invalid(format!("bad double {t}")))?;
