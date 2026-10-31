@@ -351,13 +351,14 @@ impl<'a, A: ForIRI> Writer<'a, A> {
     }
 
     /// Take the unused components of `key` that `f` accepts. Components with
-    /// annotations of their own cannot be written, so are never taken.
+    /// annotations of their own cannot be written, so are only taken when lax,
+    /// which leaves the annotations out.
     fn grab<T>(&mut self, key: &str, f: impl Fn(&Component<A>) -> Option<T>) -> Vec<T> {
         let mut out = vec![];
         if let Some(ids) = self.by_key.get(key) {
             for &i in ids {
                 if !self.used[i]
-                    && self.items[i].ann.is_empty()
+                    && (self.config.lax || self.items[i].ann.is_empty())
                     && let Some(t) = f(&self.items[i].component)
                 {
                     self.used[i] = true;
@@ -553,7 +554,7 @@ impl<'a, A: ForIRI> Writer<'a, A> {
     // Annotations and literals
 
     fn annotation(&self, a: &Annotation<A>) -> Option<String> {
-        if !a.ann.is_empty() {
+        if !a.ann.is_empty() && !self.config.lax {
             self.problem(format!("annotation on an annotation: {a:?}"));
             return None;
         }
@@ -613,11 +614,12 @@ impl<'a, A: ForIRI> Writer<'a, A> {
 
     /// The annotations of `iri`, as lines.
     fn annotations_of(&mut self, iri: &str) -> Vec<String> {
+        let lax = self.config.lax;
         let all = self.grab(iri, |c| match c {
             Component::AnnotationAssertion(AnnotationAssertion {
                 subject: AnnotationSubject::IRI(s),
                 ann,
-            }) if ann.ann.is_empty() => Some((s.to_string(), ann.clone())),
+            }) if lax || ann.ann.is_empty() => Some((s.to_string(), ann.clone())),
             _ => None,
         });
         let mut out: Vec<String> = all
@@ -1241,7 +1243,10 @@ impl<'a, A: ForIRI> Writer<'a, A> {
 
     /// The name of a term declared here.
     fn name(&self, iri: &str) -> Option<String> {
-        let name = id(local_name(iri));
+        // A local part with a '#' or '/' in it is another namespace's name.
+        let name = (namespace_of(iri) == self.info.ns || !self.local(iri))
+            .then(|| id(local_name(iri)))
+            .flatten();
         if name.is_none() {
             self.problem(format!("{iri} cannot be written as an OML name"));
         }

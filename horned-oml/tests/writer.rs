@@ -326,3 +326,36 @@ fn refuses_what_oml_cannot_say() {
     let lax = writer::write(&o, &writer::NoImports, writer::Config { lax: true }).unwrap();
     assert!(lax.contains("concept A"), "{lax}");
 }
+
+#[test]
+fn lax_keeps_annotated_axioms_and_skips_foreign_local_names() {
+    let build = Build::new_rc();
+    let (mut o, _): (SetOntology<RcStr>, _) = read_config(
+        "vocabulary <http://example.com/v#> as v { concept A concept B }",
+        &build,
+        &|_: &str| None,
+        Config::default(),
+    )
+    .unwrap();
+    let ann = Annotation {
+        ap: build.annotation_property("http://example.com/v#note"),
+        av: AnnotationValue::Literal(Literal::Simple {
+            literal: "n".into(),
+        }),
+        ann: Default::default(),
+    };
+    o.insert(AnnotatedComponent {
+        component: SubClassOf {
+            sup: ClassExpression::Class(build.class("http://example.com/v#A")),
+            sub: ClassExpression::Class(build.class("http://example.com/v#B")),
+        }
+        .into(),
+        ann: [ann].into(),
+    });
+    o.insert(DeclareClass(
+        build.class("http://example.com/v#Direct/Indirect"),
+    ));
+    let lax = writer::write(&o, &writer::NoImports, writer::Config { lax: true }).unwrap();
+    assert!(lax.contains("concept B < A"), "{lax}");
+    assert!(!lax.contains("Indirect"), "{lax}");
+}
