@@ -848,10 +848,18 @@ impl<'a, A: ForIRI, O: MutableOntology<A>> Reader<'a, A, O> {
                 let value = unquote(parts.next().unwrap().as_str());
                 match parts.next() {
                     None => Literal::Simple { literal: value },
-                    Some(p) if p.as_rule() == Rule::reference => Literal::Datatype {
-                        literal: value,
-                        datatype_iri: self.iri(&self.reference(p)?),
-                    },
+                    Some(p) if p.as_rule() == Rule::reference => {
+                        let datatype_iri = self.iri(&self.reference(p)?);
+                        // As the OWL API does, which is what oml2owl uses.
+                        if datatype_iri.as_ref() == format!("{XSD}string") {
+                            Literal::Simple { literal: value }
+                        } else {
+                            Literal::Datatype {
+                                literal: value,
+                                datatype_iri,
+                            }
+                        }
+                    }
                     Some(p) => Literal::Language {
                         literal: value,
                         lang: unescape_id(p.as_str()).to_string(),
