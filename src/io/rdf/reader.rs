@@ -19,7 +19,7 @@ use crate::{
     ontology::{
         declaration_mapped::DeclarationMappedIndex,
         indexed::ThreeIndexedOntology,
-        logically_equal::{LogicallyEqualIndex, update_or_insert_logically_equal_component},
+        logically_equal::LogicallyEqualIndex,
         set::{SetIndex, SetIndexIter, SetOntology},
     },
     vocab::RDFS as VRDFS,
@@ -620,6 +620,9 @@ pub struct OntologyParser<
     // Almost always one set per triple, but axioms that differ only in
     // their annotations share a triple and each has its own owl:Axiom.
     ann_map: HashMap<[Term<A>; 3], OneOrMany<BTreeSet<Annotation<A>>>>,
+    // Triples whose annotations have already been taken from `ann_map`,
+    // so that a repeat of the triple adds nothing.
+    ann_taken: HashSet<[Term<A>; 3]>,
     atom: HashMap<Term<A>, Atom<A>>,
     variable: HashMap<IRI<A>, Variable<A>>,
 
@@ -647,6 +650,7 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
             data_range: d!(),
             used_bnode: d!(),
             ann_map: d!(),
+            ann_taken: d!(),
             atom: d!(),
             variable: d!(),
             state: OntologyParserState::New,
@@ -966,17 +970,25 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
     }
 
     fn merge<IAA: Into<AnnotatedComponent<A>>>(&mut self, cmp: IAA) {
-        let cmp = cmp.into();
-        update_or_insert_logically_equal_component(&mut self.o, cmp);
+        // Axioms that differ only in their annotations are distinct, so
+        // this is a plain insert; an identical axiom is already a set member.
+        self.o.insert(cmp.into());
     }
 
     /// Remove and return every annotation set recorded for `key`.
     ///
-    /// If there were no annotations, this is a single empty set.
+    /// If there were no annotations, this is a single empty set. If the
+    /// annotations were taken already, because the same triple arrived
+    /// again, there are no sets, so the repeat adds no axiom.
     fn take_annotations(&mut self, key: &[Term<A>; 3]) -> OneOrMany<BTreeSet<Annotation<A>>> {
-        self.ann_map
-            .remove(key)
-            .unwrap_or_else(|| OneOrMany::One(Default::default()))
+        match self.ann_map.remove(key) {
+            Some(sets) => {
+                self.ann_taken.insert(key.clone());
+                sets
+            }
+            None if self.ann_taken.contains(key) => OneOrMany::Many(vec![]),
+            None => OneOrMany::One(Default::default()),
+        }
     }
 
     /// Add `component` once for each annotation set.
