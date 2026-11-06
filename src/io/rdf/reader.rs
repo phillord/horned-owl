@@ -18,8 +18,7 @@ use crate::vocab::is_annotation_builtin;
 use crate::{
     ontology::{
         declaration_mapped::DeclarationMappedIndex,
-        indexed::ThreeIndexedOntology,
-        logically_equal::LogicallyEqualIndex,
+        indexed::TwoIndexedOntology,
         set::{SetIndex, SetIndexIter, SetOntology},
     },
     vocab::RDFS as VRDFS,
@@ -270,21 +269,15 @@ macro_rules! d {
     };
 }
 
-/// The RDFOntology supports logical equality and IRI->type mapping
-/// which are the two speeds ups that we need for RDF parsing.
+/// The RDFOntology supports IRI->type mapping, the speed up that we
+/// need for RDF parsing.
 pub trait RDFOntology<A: ForIRI, AA: ForIndex<A>>:
-    AsRef<LogicallyEqualIndex<A, AA>>
-    + AsRef<DeclarationMappedIndex<A, AA>>
-    + AsRef<SetIndex<A, AA>>
-    + Default
-    + Debug
-    + MutableOntology<A>
+    AsRef<DeclarationMappedIndex<A, AA>> + AsRef<SetIndex<A, AA>> + Default + Debug + MutableOntology<A>
 {
 }
 
 impl<A: ForIRI, AA: ForIndex<A>, T> RDFOntology<A, AA> for T where
-    T: AsRef<LogicallyEqualIndex<A, AA>>
-        + AsRef<DeclarationMappedIndex<A, AA>>
+    T: AsRef<DeclarationMappedIndex<A, AA>>
         + AsRef<SetIndex<A, AA>>
         + Default
         + Debug
@@ -295,13 +288,7 @@ impl<A: ForIRI, AA: ForIndex<A>, T> RDFOntology<A, AA> for T where
 #[derive(Debug)]
 #[allow(clippy::type_complexity)]
 pub struct ConcreteRDFOntology<A: ForIRI, AA: ForIndex<A>>(
-    ThreeIndexedOntology<
-        A,
-        AA,
-        SetIndex<A, AA>,
-        DeclarationMappedIndex<A, AA>,
-        LogicallyEqualIndex<A, AA>,
-    >,
+    TwoIndexedOntology<A, AA, SetIndex<A, AA>, DeclarationMappedIndex<A, AA>>,
 );
 
 impl<A: ForIRI, AA: ForIndex<A>> Default for ConcreteRDFOntology<A, AA> {
@@ -321,17 +308,7 @@ impl<A: ForIRI, AA: ForIndex<A>> ConcreteRDFOntology<A, AA> {
         self.0.j()
     }
 
-    pub fn k(&self) -> &LogicallyEqualIndex<A, AA> {
-        self.0.k()
-    }
-
-    pub fn index(
-        self,
-    ) -> (
-        SetIndex<A, AA>,
-        DeclarationMappedIndex<A, AA>,
-        LogicallyEqualIndex<A, AA>,
-    ) {
+    pub fn index(self) -> (SetIndex<A, AA>, DeclarationMappedIndex<A, AA>) {
         self.0.index()
     }
 }
@@ -353,7 +330,7 @@ impl<A: ForIRI, AA: ForIndex<A>> IntoIterator for ConcreteRDFOntology<A, AA> {
     type IntoIter = <SetIndex<A, AA> as IntoIterator>::IntoIter;
 
     fn into_iter(self) -> Self::IntoIter {
-        let (i, _, _) = self.index();
+        let (i, _) = self.index();
         i.into_iter()
     }
 }
@@ -391,12 +368,6 @@ impl<A: ForIRI, AA: ForIndex<A>> AsRef<DeclarationMappedIndex<A, AA>>
 {
     fn as_ref(&self) -> &DeclarationMappedIndex<A, AA> {
         self.j()
-    }
-}
-
-impl<A: ForIRI, AA: ForIndex<A>> AsRef<LogicallyEqualIndex<A, AA>> for ConcreteRDFOntology<A, AA> {
-    fn as_ref(&self) -> &LogicallyEqualIndex<A, AA> {
-        self.k()
     }
 }
 
