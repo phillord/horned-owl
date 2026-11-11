@@ -1095,6 +1095,15 @@ from_start! {
         let axiom_kind = e.local_name();
         let mut buf = Vec::new();
 
+        // An ontology annotation is itself the `Annotation`; its children
+        // are nested annotations, not axiom annotations.
+        if axiom_kind.as_ref() == b"Annotation" {
+            return Ok(AnnotatedComponent{
+                ann: annotation,
+                component: OntologyAnnotation(Annotation::from_xml(r, b"Annotation")?).into(),
+            });
+        }
+
         loop {
             let e = r.reader.read_resolved_event_into(&mut buf)?;
             match e {

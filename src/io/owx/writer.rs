@@ -670,7 +670,7 @@ render! {
     }
 }
 
-contents! {OntologyAnnotation, self, (&self.0.ap, &self.0.av)}
+contents! {OntologyAnnotation, self, (&self.0.ann, &self.0.ap, &self.0.av)}
 
 contents! {Import, self, String::from(&self.0)}
 

@@ -1031,6 +1031,32 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
                     bnode_to_key.insert(k, (key, idx));
                 }
 
+                // An annotation on an ontology annotation: the source is
+                // the ontology IRI, so it is keyed like an axiom annotation
+                // and taken when the ontology annotation is read.
+                [
+                    [_, Term::OWL(VOWL::AnnotatedProperty), p],
+                    [_, Term::OWL(VOWL::AnnotatedSource), sb @ Term::Iri(_)],
+                    [_, Term::OWL(VOWL::AnnotatedTarget), ob],
+                    [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Annotation)],
+                    ann @ ..,
+                ] => {
+                    let key = self.config.build.as_ref().substitute_term([
+                        sb.clone(),
+                        p.clone(),
+                        ob.clone(),
+                    ]);
+                    let annotations = self.parse_annotations(ann)?;
+                    match self.ann_map.entry(key) {
+                        Entry::Occupied(mut e) => {
+                            e.get_mut().push(annotations);
+                        }
+                        Entry::Vacant(e) => {
+                            e.insert(OneOrMany::One(annotations));
+                        }
+                    }
+                }
+
                 _ => {
                     self.bnode.insert(k, v);
                 }
@@ -2619,8 +2645,18 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
                 // an annotation. Some versions of the OWL API do not
                 // declare annotation properties for ontology annotations
                 [Term::Iri(iri), _, _] if ont_id.iri.as_ref() == Some(iri) => {
-                    self.o
-                        .insert(OntologyAnnotation(self.annotation(t.triple())?));
+                    let sets = self.take_annotations(t.triple());
+                    let annotation = self.annotation(t.triple())?;
+                    let sets = match sets {
+                        OneOrMany::One(set) => vec![set],
+                        OneOrMany::Many(sets) => sets,
+                    };
+                    for ann in sets {
+                        self.o.insert(OntologyAnnotation(Annotation {
+                            ann,
+                            ..annotation.clone()
+                        }));
+                    }
                 }
                 [Term::Iri(iri), Term::RDFS(rdfs), _] if rdfs.is_builtin() => {
                     firi(self, t.triple(), iri)?
