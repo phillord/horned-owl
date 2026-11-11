@@ -39,5 +39,10 @@
     "ontology": "BIOLINK",
     "target_format": "omn",
     "reason": "Same cause as MS -- properties such as FDA_adverse_event_level are typed as both ObjectProperty and DatatypeProperty, and the reread resolves them as DataProperty."
+  },
+  {
+    "ontology": "GBOL",
+    "target_format": "omn",
+    "reason": "The source types bibo:reviewOf and bibo:transcriptOf as ObjectProperties but makes each a subPropertyOf dc:relation, a DatatypeProperty, which OWL 2 DL forbids. The reader keeps the SubDataPropertyOf, so the OMN writer gives each a DataProperty frame as well; the reread resolves the pun as DataProperty and the restrictions on them change kind. Illegal input, so no fix is planned."
   }
 ]
