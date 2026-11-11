@@ -650,6 +650,7 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
             // output of the lax RDF writer
             parser = parser.lenient();
         }
+        crate::io::skip_bom(bufread)?;
         let mut triples = vec![];
         let last_pos = std::cell::Cell::new(0);
 

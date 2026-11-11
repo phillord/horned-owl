@@ -41,6 +41,7 @@ pub fn read<
 
     // FIXME: implement iterative parser (this is possible in )
     let mut doc = String::new();
+    crate::io::skip_bom(bufread)?;
     bufread.read_to_string(&mut doc)?;
     let pair = OwlFunctionalLexer::lex(Rule::OntologyDocument, doc.trim())?
         .next()

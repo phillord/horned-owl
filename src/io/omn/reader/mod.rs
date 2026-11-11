@@ -129,6 +129,7 @@ pub fn read<
 ) -> Result<(O, PrefixMapping), HornedError> {
     let build = config.build.as_ref();
     let mut doc = String::new();
+    crate::io::skip_bom(&mut bufread)?;
     bufread.read_to_string(&mut doc)?;
 
     let document = ManchesterLexer::lex(Rule::ManchesterDocument, doc.trim())?
