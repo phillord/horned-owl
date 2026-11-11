@@ -2656,7 +2656,19 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
         Ok(())
     }
 
-    fn simple_annotations(&mut self, parse_all: bool) -> Result<(), HornedError> {
+    /// Is `ap` declared as an annotation property in this ontology or its
+    /// import closure?
+    fn is_annotation_property(&self, ap: &IRI<A>, ic: &[&DeclarationMappedIndex<A, AA>]) -> bool {
+        std::iter::once(<O as AsRef<DeclarationMappedIndex<A, AA>>>::as_ref(&self.o))
+            .chain(ic.iter().copied())
+            .any(|d| d.is_annotation_property(ap))
+    }
+
+    fn simple_annotations(
+        &mut self,
+        parse_all: bool,
+        ic: &[&DeclarationMappedIndex<A, AA>],
+    ) -> Result<(), HornedError> {
         let ont_id = <O as AsRef<SetIndex<A, AA>>>::as_ref(&self.o).the_ontology_id_or_default();
         for t in std::mem::take(&mut self.simple) {
             let firi =
@@ -2694,8 +2706,7 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
                 }
                 [Term::Iri(iri), Term::Iri(ap), _]
                     if parse_all
-                        || <O as AsRef<DeclarationMappedIndex<A, AA>>>::as_ref(&self.o)
-                            .is_annotation_property(ap)
+                        || self.is_annotation_property(ap, ic)
                         || is_annotation_builtin(ap.as_ref()) =>
                 {
                     firi(self, t.triple(), iri)?
@@ -2725,8 +2736,7 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
                 }
                 [triple @ [Term::BNode(ind), Term::Iri(ap), _]]
                     if parse_all
-                        || <O as AsRef<DeclarationMappedIndex<A, AA>>>::as_ref(&self.o)
-                            .is_annotation_property(ap)
+                        || self.is_annotation_property(ap, ic)
                         || is_annotation_builtin(ap) =>
                 {
                     fbnode(self, triple, ind)?
@@ -2838,7 +2848,7 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
         ic: &[&DeclarationMappedIndex<A, AA>],
     ) -> Result<(), HornedError> {
         // Table 10
-        self.simple_annotations(false)?;
+        self.simple_annotations(false, ic)?;
 
         self.data_ranges()?;
 
@@ -2855,7 +2865,7 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
         self.swrl()?;
 
         if self.config.lax {
-            self.simple_annotations(true)?;
+            self.simple_annotations(true, ic)?;
         }
         self.state = OntologyParserState::Parse;
         Ok(())
