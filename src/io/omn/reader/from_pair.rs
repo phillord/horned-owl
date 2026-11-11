@@ -1781,9 +1781,12 @@ fn swrl_iobj<A: ForIRI>(pair: Pair<Rule>, ctx: &Context<'_, A>) -> Result<IArgum
 /// Parse one `SwrlAtom`. Atom shapes are positional in Manchester syntax, so
 /// class-vs-datarange and object-vs-data-property are disambiguated by argument
 /// arity/type and the declaration pre-pass (`is_datatype` / `is_data_prop`).
-/// Predicates in this namespace are always SWRL built-ins, whatever the
-/// shape of their arguments.
-const SWRLB_NS: &str = "http://www.w3.org/2003/11/swrlb#";
+/// Predicates in the `swrlb` and `sqwrl` namespaces are always SWRL built-ins,
+/// whatever the number or shape of their arguments.
+const BUILTIN_NAMESPACES: [&str; 2] = [
+    "http://www.w3.org/2003/11/swrlb#",
+    "http://sqwrl.stanford.edu/ontologies/built-ins/3.4/sqwrl.owl#",
+];
 
 fn parse_swrl_atom<A: ForIRI>(atom: Pair<Rule>, ctx: &Context<'_, A>) -> Result<Atom<A>> {
     let inner = atom.into_inner().next().unwrap();
@@ -1832,7 +1835,18 @@ fn parse_swrl_atom<A: ForIRI>(atom: Pair<Rule>, ctx: &Context<'_, A>) -> Result<
                 })
             };
 
-            if kinds.len() == 1 {
+            let is_builtin_ns = pred_iri.as_ref().is_some_and(|i| {
+                BUILTIN_NAMESPACES
+                    .iter()
+                    .any(|ns| i.as_ref().starts_with(ns))
+            });
+
+            if is_builtin_ns {
+                Ok(Atom::BuiltInAtom {
+                    pred: bare()?,
+                    args: kinds.iter().map(swrl_darg).collect::<Result<_>>()?,
+                })
+            } else if kinds.len() == 1 {
                 match &kinds[0] {
                     // datatype(lit) -> DataRangeAtom
                     SwrlArgKind::Lit(l) => Ok(Atom::DataRangeAtom {
@@ -1857,12 +1871,8 @@ fn parse_swrl_atom<A: ForIRI>(atom: Pair<Rule>, ctx: &Context<'_, A>) -> Result<
             } else {
                 let first_is_lit = matches!(kinds[0], SwrlArgKind::Lit(_));
                 let second_is_lit = matches!(kinds[1], SwrlArgKind::Lit(_));
-                let is_swrlb = pred_iri
-                    .as_ref()
-                    .is_some_and(|i| i.as_ref().starts_with(SWRLB_NS));
-                if first_is_lit || kinds.len() > 2 || is_swrlb {
-                    // n-ary, data-valued first arg, or a swrlb: predicate
-                    // -> built-in atom
+                if first_is_lit || kinds.len() > 2 {
+                    // n-ary or data-valued first arg -> built-in atom
                     Ok(Atom::BuiltInAtom {
                         pred: bare()?,
                         args: kinds.iter().map(swrl_darg).collect::<Result<_>>()?,
@@ -4785,6 +4795,33 @@ mod tests {
             })
             .expect("expected a SWRL Rule component");
         assert!(matches!(rule.body[1], Atom::BuiltInAtom { .. }));
+    }
+
+    #[test]
+    fn parses_sqwrl_predicate_as_builtin_atom() {
+        use crate::io::omn::read;
+        use crate::ontology::set::SetOntology;
+        use std::io::BufReader;
+        let b = Build::new_rc();
+        let doc = concat!(
+            "Prefix: o: <http://ex/>\nOntology: <http://ex/o>\n",
+            "Rule: o:C(?<http://ex/x>) -> ",
+            "<http://sqwrl.stanford.edu/ontologies/built-ins/3.4/sqwrl.owl#select>",
+            "(?<http://ex/x>)\n",
+        );
+        let (parsed, _): (SetOntology<_>, PrefixMapping) = read(
+            BufReader::new(doc.as_bytes()),
+            crate::io::ParserConfiguration::new(&b),
+        )
+        .unwrap();
+        let rule = parsed
+            .iter()
+            .find_map(|ac| match &ac.component {
+                Component::Rule(r) => Some(r),
+                _ => None,
+            })
+            .expect("expected a SWRL Rule component");
+        assert!(matches!(rule.head[0], Atom::BuiltInAtom { .. }));
     }
 
     #[test]
