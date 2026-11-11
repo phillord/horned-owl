@@ -309,6 +309,7 @@ fn is_never_axiom_fallback<A: ForIRI>(c: &Component<A>) -> bool {
             | Component::DeclareDatatype(_)
             | Component::AnnotationAssertion(_)
             | Component::OntologyAnnotation(_)
+            | Component::DocIRI(_)
     )
 }
 
@@ -917,6 +918,18 @@ mod tests {
 
     fn axioms<O: Ontology<RcStr>>(ont: &O) -> BTreeSet<String> {
         ont.iter().map(|ac| format!("{ac:?}")).collect()
+    }
+
+    #[test]
+    fn doc_iri_is_not_written() {
+        let b = crate::model::Build::new_rc();
+        let mut cmo = ComponentMappedOntology::<RcStr, AnnotatedComponent<RcStr>>::default();
+        crate::model::MutableOntology::insert(
+            &mut cmo,
+            crate::model::DocIRI(b.iri("file://small.owl")),
+        );
+        let out = String::from_utf8(super::write(Vec::new(), &cmo, None).unwrap()).unwrap();
+        assert!(!out.contains("small.owl"), "{out}");
     }
 
     /// read(write(read(x))) == read(x) over every fixture in the oracle corpus.

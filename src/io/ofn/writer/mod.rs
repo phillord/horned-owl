@@ -59,6 +59,11 @@ pub fn write_stream<A: ForIRI, AA: ForIndex<A>, W: Write>(
             StreamComponent::Component(ac) => {
                 let ac: &AnnotatedComponent<A> = ac.borrow();
 
+                // Functional syntax has no place for a document IRI.
+                if matches!(ac.component, Component::DocIRI(_)) {
+                    continue;
+                }
+
                 if !ontology_opened {
                     ontology_opened = true;
                     write!(write, "Ontology(")?;
@@ -94,6 +99,7 @@ mod test {
     use super::*;
 
     use crate::model::AnnotatedComponent;
+    use crate::model::MutableOntology;
     use crate::model::RcStr;
 
     use pretty_assertions::assert_eq;
@@ -132,6 +138,70 @@ mod test {
             )
             .unwrap();
         assert_eq!(ont.i().declare_class().count(), 1);
+    }
+
+    #[test]
+    fn doc_iri_is_not_written() {
+        let b = crate::model::Build::new_rc();
+        let mut o = ComponentMappedOntology::<RcStr, AnnotatedComponent<RcStr>>::default();
+        crate::model::MutableOntology::insert(
+            &mut o,
+            crate::model::OntologyID {
+                iri: Some(b.iri("http://example.org/o")),
+                viri: None,
+            },
+        );
+        o.insert(crate::model::DocIRI(b.iri("file://small.owl")));
+        o.insert(crate::model::DeclareClass(crate::model::Class(
+            b.iri("http://example.org/A"),
+        )));
+
+        let mut out = Vec::new();
+        write(&mut out, &o, None).unwrap();
+        let out = String::from_utf8(out).unwrap();
+        assert!(!out.contains("file://small.owl"), "{out}");
+
+        let b2 = crate::model::Build::new_rc();
+        let (back, _): (ComponentMappedOntology<RcStr, AnnotatedComponent<RcStr>>, _) =
+            crate::io::ofn::reader::read(
+                &mut std::io::Cursor::new(out),
+                crate::io::ParserConfiguration::new(&b2),
+            )
+            .unwrap();
+        assert!(back.i().ontology_id().next().unwrap().viri.is_none());
+    }
+
+    // The closure reader adds a DocIRI to every ontology it reads, so reading
+    // each bubo RDF fixture that way and writing OFN exercises the writer.
+    // happy_person.owl imports a remote ontology, so is left out.
+    #[rstest]
+    fn rdf_closure_to_ofn_rereads(
+        #[files("src/ont/owl-rdf/*.owl")]
+        #[exclude("happy_person")]
+        resource: PathBuf,
+    ) {
+        let b = crate::model::Build::new_rc();
+        let iri = crate::resolve::path_to_file_iri(&b, &resource);
+        let (ont, _): (crate::io::rdf::reader::ConcreteRcRDFOntology, _) =
+            crate::io::closure_reader::read(&iri, crate::io::ParserConfiguration::new(&b).into())
+                .unwrap();
+        let set: crate::ontology::set::SetOntology<RcStr> = ont.into();
+        let ont: ComponentMappedOntology<RcStr, AnnotatedComponent<RcStr>> = set.into();
+
+        let mut out = Vec::new();
+        write(&mut out, &ont, None).unwrap();
+
+        let (back, _): (ComponentMappedOntology<RcStr, AnnotatedComponent<RcStr>>, _) =
+            crate::io::ofn::reader::read(
+                &mut std::io::Cursor::new(out),
+                crate::io::ParserConfiguration::new(&b),
+            )
+            .unwrap();
+        assert_eq!(
+            ont.i().ontology_id().next().map(|o| o.viri.clone()),
+            back.i().ontology_id().next().map(|o| o.viri.clone()),
+            "version IRI changed"
+        );
     }
 
     #[rstest]
