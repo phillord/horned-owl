@@ -378,7 +378,18 @@ pub fn detect_format(bytes: &[u8]) -> Option<(ResourceType, Option<oxrdfio::RdfF
             continue;
         }
         let lower = l.to_ascii_lowercase();
-        if lower.starts_with("@prefix") || lower.starts_with("@base") {
+        // Turtle directives, in `@prefix` or SPARQL `PREFIX` form. The keyword must be
+        // followed by whitespace so that OMN `Prefix:` and OFN `Prefix(` are not caught.
+        let directive = |kw: &str| {
+            lower
+                .strip_prefix(kw)
+                .is_some_and(|r| r.starts_with(char::is_whitespace))
+        };
+        if lower.starts_with("@prefix")
+            || lower.starts_with("@base")
+            || directive("prefix")
+            || directive("base")
+        {
             return Some((ResourceType::RDF, Some(oxrdfio::RdfFormat::Turtle)));
         }
         if l.starts_with('<') && !l.starts_with("<?") && !l.starts_with("<!") && l.contains("> <") {
@@ -455,6 +466,19 @@ mod tests {
             super::detect_format(b"@prefix owl: <http://www.w3.org/2002/07/owl#> .\n").unwrap();
         assert!(matches!(rt, super::ResourceType::RDF));
         assert_eq!(fmt, Some(oxrdfio::RdfFormat::Turtle));
+    }
+
+    #[test]
+    fn detect_format_turtle_sparql_directives() {
+        for doc in [
+            "PREFIX owl: <http://www.w3.org/2002/07/owl#>\n",
+            "prefix owl: <http://www.w3.org/2002/07/owl#>\n",
+            "BASE <http://example.org/>\n",
+        ] {
+            let (rt, fmt) = super::detect_format(doc.as_bytes()).unwrap();
+            assert!(matches!(rt, super::ResourceType::RDF), "{doc}");
+            assert_eq!(fmt, Some(oxrdfio::RdfFormat::Turtle), "{doc}");
+        }
     }
 
     #[test]
