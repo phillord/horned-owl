@@ -13,6 +13,7 @@ use crate::vocab::OWL2Datatype;
 
 use std::borrow::Cow;
 use std::collections::BTreeSet;
+use std::collections::HashMap;
 use std::io::BufRead;
 
 use quick_xml::NsReader;
@@ -29,6 +30,8 @@ where
     mapping: PrefixMapping,
     reader: NsReader<R>,
     base_iri: Option<String>,
+    /// General entities declared in the internal DTD subset.
+    entities: HashMap<String, String>,
     _marker: std::marker::PhantomData<A>,
 }
 
@@ -53,6 +56,7 @@ impl<A: ForIRI, R: BufRead, B: AsRef<Build<A>>> Reader<A, R, B> {
                 lax: config.lax,
                 mapping: PrefixMapping::default(),
                 base_iri: None,
+                entities: predefined_entities(),
                 _marker: std::marker::PhantomData,
             },
             buf: Vec::new(),
@@ -96,7 +100,7 @@ impl<A: ForIRI, R: BufRead, B: AsRef<Build<A>>> Reader<A, R, B> {
                 (ref ns, Event::Start(ref e)) | (ref ns, Event::Empty(ref e)) if is_owl(ns) => {
                     match e.local_name().as_ref() {
                         b"Ontology" => {
-                            let s = get_attr_value_str(&mut self.r.reader, e, b"ontologyIRI")?;
+                            let s = get_attr_value_str(&self.r, e, b"ontologyIRI")?;
                             if let Some(s) = s {
                                 self.r.mapping.set_default(&s);
                                 self.r.base_iri = Some(s);
@@ -109,8 +113,8 @@ impl<A: ForIRI, R: BufRead, B: AsRef<Build<A>>> Reader<A, R, B> {
                             ))));
                         }
                         b"Prefix" => {
-                            let iri = get_attr_value_str(&mut self.r.reader, e, b"IRI")?;
-                            let prefix = get_attr_value_str(&mut self.r.reader, e, b"name")?;
+                            let iri = get_attr_value_str(&self.r, e, b"IRI")?;
+                            let prefix = get_attr_value_str(&self.r, e, b"name")?;
                             match (prefix, iri) {
                                 (Some(p), Some(i)) => {
                                     let _ = self.r.mapping.add_prefix(&p, &i);
@@ -142,6 +146,10 @@ impl<A: ForIRI, R: BufRead, B: AsRef<Build<A>>> Reader<A, R, B> {
                 }
                 (ref ns, Event::End(ref e)) if is_owl_name(ns, e, b"Ontology") => {
                     return Ok(None);
+                }
+                (_, Event::DocType(ref d)) => {
+                    let text = self.r.reader.decoder().decode(d)?;
+                    self.r.entities.extend(parse_entity_declarations(&text));
                 }
                 (_, Event::Eof) => {
                     return Err(error_eof(&self.r));
@@ -231,6 +239,51 @@ pub fn read<A: ForIRI, B: AsRef<Build<A>>, O: MutableOntology<A> + Default, R: B
     Ok((ont, reader.r.mapping))
 }
 
+fn predefined_entities() -> HashMap<String, String> {
+    [("lt", "<"), ("gt", ">"), ("amp", "&"), ("apos", "'"), ("quot", "\"")]
+        .into_iter()
+        .map(|(k, v)| (k.to_string(), v.to_string()))
+        .collect()
+}
+
+/// Unescape XML references, resolving entities declared in the DTD as well
+/// as the predefined ones.
+fn unescape_entities<'a>(
+    raw: &'a str,
+    entities: &HashMap<String, String>,
+) -> Result<Cow<'a, str>, quick_xml::escape::EscapeError> {
+    quick_xml::escape::unescape_with(raw, |name| entities.get(name).map(String::as_str))
+}
+
+/// The internal general entities declared in a DOCTYPE, with character
+/// references in their replacement text already resolved. Parameter and
+/// external entities are ignored.
+fn parse_entity_declarations(doctype: &str) -> Vec<(String, String)> {
+    let mut found = Vec::new();
+    let mut rest = doctype;
+    while let Some(i) = rest.find("<!ENTITY") {
+        rest = &rest[i + "<!ENTITY".len()..];
+        let decl = rest.trim_start();
+        let name_end = decl.find(char::is_whitespace).unwrap_or(decl.len());
+        let (name, after) = decl.split_at(name_end);
+        let after = after.trim_start();
+        let Some(quote) = after.chars().next().filter(|c| matches!(c, '"' | '\'')) else {
+            continue;
+        };
+        let body = &after[1..];
+        let Some(end) = body.find(quote) else {
+            break;
+        };
+        if name != "%" && !name.is_empty() {
+            let value =
+                unescape(&body[..end]).map_or_else(|_| body[..end].to_string(), |v| v.into_owned());
+            found.push((name.to_string(), value));
+        }
+        rest = &body[end + 1..];
+    }
+    found
+}
+
 fn decode_expand_curie_maybe<'a, A: ForIRI, R: BufRead, B: AsRef<Build<A>>>(
     r: &mut Read<A, R, B>,
     val: &'a [u8],
@@ -257,7 +310,7 @@ fn decode_expand_curie_maybe<'a, A: ForIRI, R: BufRead, B: AsRef<Build<A>>>(
             // As with `get_attr_value_str`, decoding alone doesn't resolve
             // XML entity/character references (e.g. `&#39;`) -- unescape
             // before expanding, same as issue #239's other call site.
-            let unescaped = unescape(&curie)
+            let unescaped = unescape_entities(&curie, &r.entities)
                 .map_err(|e| HornedError::ParserError(Box::new(e), Location::Unknown))?;
             let cur = expand_curie_or_base_maybe(r, Cow::Owned(unescaped.into_owned()));
             Ok(cur)
@@ -322,8 +375,8 @@ fn get_attr_value_bytes<'a>(
 /// ## Errors
 ///
 /// Errors are generated by `quick-xml` and as such they are converted into a `ParserError`.
-fn get_attr_value_str<R: BufRead>(
-    reader: &mut NsReader<R>,
+fn get_attr_value_str<A: ForIRI, R: BufRead, B: AsRef<Build<A>>>(
+    r: &Read<A, R, B>,
     event: &BytesStart,
     attr_key: &[u8],
 ) -> Result<Option<String>, HornedError> {
@@ -332,7 +385,8 @@ fn get_attr_value_str<R: BufRead>(
         .as_ref()
         .map(|val| {
             // Next, decode it to obtain a `str`.
-            let decoded = reader
+            let decoded = r
+                .reader
                 .decoder()
                 .decode(val)
                 .map_err(|err| HornedError::ParserError(Box::new(err), Location::Unknown))?;
@@ -342,7 +396,7 @@ fn get_attr_value_str<R: BufRead>(
             // literal `&#39;` still in it rather than becoming `Alzheimer's_Disease`
             // (see issue #239). Mirrors the same two-step handling `<Literal>`
             // text already does below.
-            unescape(&decoded)
+            unescape_entities(&decoded, &r.entities)
                 .map(|s| s.to_string())
                 .map_err(|err| HornedError::ParserError(Box::new(err), Location::Unknown))
         })
@@ -354,7 +408,7 @@ fn get_iri_value<A: ForIRI, R: BufRead, B: AsRef<Build<A>>>(
     r: &mut Read<A, R, B>,
     event: &BytesStart,
 ) -> Result<Option<IRI<A>>, HornedError> {
-    if let Some(raw) = get_attr_value_str(&mut r.reader, event, b"IRI")? {
+    if let Some(raw) = get_attr_value_str(r, event, b"IRI")? {
         // Fragment-relative IRIs (starting with '#') must be resolved against the
         // ontology base IRI, not the CURIE default: the empty prefix may end with '#',
         // which would produce a doubled '##' when concatenated with a '#local' fragment.
@@ -381,7 +435,7 @@ fn get_iri_value_for<A: ForIRI, R: BufRead, B: AsRef<Build<A>>>(
 ) -> Result<Option<IRI<A>>, HornedError> {
     Ok(
         // check for the attrib, if malformed return
-        get_attr_value_str(&mut r.reader, event, iri_attr)?
+        get_attr_value_str(r, event, iri_attr)?
             // or transform the some String
             .map(|st| {
                 let cow = Cow::Owned(st);
@@ -558,7 +612,7 @@ from_start! {
     Literal, r, e,
     {
         let datatype_iri = get_iri_value_for(r, e, b"datatypeIRI")?;
-        let lang = get_attr_value_str(&mut r.reader, e, b"xml:lang")?;
+        let lang = get_attr_value_str(r, e, b"xml:lang")?;
 
         // quick-xml only offers `r.reader.read_text()` for NsReader<'i &u8> as
         // of version 0.26.0.
@@ -577,7 +631,7 @@ from_start! {
             // For instance, "A --> B" would yield "A --&gt; B".
             let escaped_str = r.reader.decoder().decode(&buf)?;
             // Hence this next step.
-            let unescaped_str = unescape(&escaped_str)
+            let unescaped_str = unescape_entities(&escaped_str, &r.entities)
                 .map_err(|e| HornedError::ParserError(Box::new(e), Location::BytePosition(r.reader.buffer_position())))?;
             // Finally, we add the unescaped string to the literal we are building.
             literal.push_str(&unescaped_str);
@@ -867,7 +921,7 @@ fn object_cardinality_restriction<A: ForIRI, R: BufRead, B: AsRef<Build<A>>>(
     e: &BytesStart,
     end_tag: &[u8],
 ) -> Result<(u32, ObjectPropertyExpression<A>, Box<ClassExpression<A>>), HornedError> {
-    let n = get_attr_value_str(&mut r.reader, e, b"cardinality")?;
+    let n = get_attr_value_str(r, e, b"cardinality")?;
     let n = n.ok_or_else(|| error_missing_attribute("cardinality", r))?;
 
     let ope = from_next(r)?;
@@ -890,7 +944,7 @@ fn data_cardinality_restriction<A: ForIRI, R: BufRead, B: AsRef<Build<A>>>(
     e: &BytesStart,
     end_tag: &[u8],
 ) -> Result<(u32, DataProperty<A>, DataRange<A>), HornedError> {
-    let n = get_attr_value_str(&mut r.reader, e, b"cardinality")?;
+    let n = get_attr_value_str(r, e, b"cardinality")?;
     let n = n.ok_or_else(|| error_missing_attribute("cardinality", r))?;
 
     let dp = from_next(r)?;
@@ -1143,7 +1197,7 @@ impl<A: ForIRI> FromStart<A> for AnonymousIndividual<A> {
         r: &mut Read<A, R, B>,
         e: &BytesStart,
     ) -> Result<AnonymousIndividual<A>, HornedError> {
-        let node_id = get_attr_value_str(&mut r.reader, e, b"nodeID")?
+        let node_id = get_attr_value_str(r, e, b"nodeID")?
             .ok_or_else(|| error_missing_attribute("nodeID Expected", r))?;
         let ai: AnonymousIndividual<_> = r.build.as_ref().anon(node_id);
         Ok(ai)
@@ -3038,6 +3092,40 @@ pub mod test {
             super::read(&mut owx.as_bytes(), Default::default()).unwrap();
         let assertion = ont.i().annotation_assertion().next().unwrap();
         assert_eq!(assertion.subject.to_string(), "http://ontriscal#MyClass");
+    }
+
+    // Regression test for #329: general entities declared in the internal
+    // DTD subset are expanded in attributes, IRI content and literals.
+    #[test]
+    fn dtd_entities_are_expanded() {
+        let owx = r##"<?xml version="1.0"?>
+<!DOCTYPE Ontology [
+    <!ENTITY ex "http://example.org/dtd#" >
+    <!ENTITY apos 'it&#39;s'>
+    <!ENTITY % pe "ignored">
+]>
+<Ontology xmlns="http://www.w3.org/2002/07/owl#"
+     xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"
+     ontologyIRI="http://example.org/dtd">
+    <Declaration><Class IRI="&ex;A"/></Declaration>
+    <AnnotationAssertion>
+        <AnnotationProperty abbreviatedIRI="rdfs:comment"/>
+        <IRI>&ex;A</IRI>
+        <Literal>&apos;</Literal>
+    </AnnotationAssertion>
+</Ontology>"##;
+        let (ont, _): (ComponentMappedOntology<RcStr, RcAnnotatedComponent>, _) =
+            super::read(&mut owx.as_bytes(), Default::default()).unwrap();
+        let dc = ont.i().declare_class().next().unwrap();
+        assert_eq!(dc.0.0.to_string(), "http://example.org/dtd#A");
+        let aa = ont.i().annotation_assertion().next().unwrap();
+        assert_eq!(aa.subject.to_string(), "http://example.org/dtd#A");
+        assert_eq!(
+            aa.ann.av,
+            AnnotationValue::Literal(Literal::Simple {
+                literal: "it's".to_string()
+            })
+        );
     }
 
     // Regression test for #239: an XML numeric character reference (e.g.
