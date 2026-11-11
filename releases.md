@@ -1,3 +1,44 @@
+Version 5.0.0 (unreleased)
+==========================
+
+Many parser fixes since 4.0.0, plus a few interface changes to the
+readers, hence a major version.
+
+Features:
+- The import closure follows imports in any format, and the `horned`
+  tools gain `--imports`.
+- `horned-bin` reads OML, and gains `horned-oml2owl` and
+  `horned-owl2oml`.
+- The RDF reader's `lax` mode is more lenient.
+- The RDF reader reads `owl:AllDisjointProperties`.
+
+Changes:
+- `finish_parse` takes imports as declaration indexes.
+- `ClosureOntologyParser` moves to `io::closure_reader`;
+  `io::rdf::closure_reader::{read, read_to_closure}` are deprecated.
+- `ResourceType` and `ParserOutput` gain OML variants.
+- `OWL` gains `AllDisjointClasses`, which shifts the discriminants.
+- The OBO lexer `Rule` enum changes.
+- The RDF reader keeps axioms that differ only in their annotations
+  as separate axioms, as the OWL 2 structural specification requires
+  and as the other readers already do. Previously it folded them
+  together, so the result depended on triple order.
+- `RDFOntology` no longer requires `LogicallyEqualIndex`, and
+  `ConcreteRDFOntology` no longer carries it. The `logically_equal`
+  module remains as a library tool.
+- A property typed as both a data and an object property is read as a
+  data property.
+
+Fixes:
+- Many OBO reader and writer fixes.
+- The RDF/XML writer no longer loses pairs of an `AllDisjointClasses`
+  with three or more members.
+
+
+Contributor:
+- Phillip Lord
+
+
 Version 4.0.0
 =============
 
