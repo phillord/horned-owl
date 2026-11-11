@@ -995,6 +995,36 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
         }
     }
 
+    /// Point an `owl:annotatedTarget` that is a structural copy of a
+    /// property chain list at the list in the axiom itself.
+    ///
+    /// The OWL API writes the annotated target as a fresh list rather than
+    /// sharing the list node, so the key would otherwise never match the
+    /// axiom's triple. The copy is dropped as nothing else refers to it.
+    fn original_chain_list(&mut self, key: [Term<A>; 3]) -> [Term<A>; 3] {
+        let [subject, Term::OWL(VOWL::PropertyChainAxiom), Term::BNode(copy)] = &key else {
+            return key;
+        };
+        let Some(items) = self.bnode_seq.get(copy) else {
+            return key;
+        };
+        let original = self.simple.iter().find_map(|t| match t.triple() {
+            [s, Term::OWL(VOWL::PropertyChainAxiom), Term::BNode(list)]
+                if s == subject && list != copy && self.bnode_seq.get(list) == Some(items) =>
+            {
+                Some(list.clone())
+            }
+            _ => None,
+        });
+        let Some(list) = original else {
+            return key;
+        };
+        let copy = copy.clone();
+        let rewritten = [subject.clone(), key[1].clone(), Term::BNode(list)];
+        self.bnode_seq.remove(&copy);
+        rewritten
+    }
+
     /// Process axiom annotations.
     fn axiom_annotations(&mut self) -> Result<(), HornedError> {
         // The key, and the position of the annotation set within the
@@ -1020,6 +1050,7 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
                         p.clone(),
                         ob.clone(),
                     ]);
+                    let key = self.original_chain_list(key);
                     let annotations = self.parse_annotations(ann)?;
                     let idx = match self.ann_map.entry(key.clone()) {
                         Entry::Occupied(mut e) => e.get_mut().push(annotations),
