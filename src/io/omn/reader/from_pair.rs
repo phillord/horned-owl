@@ -490,6 +490,10 @@ impl<A: ForIRI> FromPair<A> for ClassExpression<A> {
             // we filter to only `Primary` children.
             // 1 Primary → unwrap, ≥2 → ObjectIntersectionOf.
             Rule::Conjunction => {
+                let first = pair.clone().into_inner().next().unwrap();
+                if first.as_rule() == Rule::ThatConjunction {
+                    return Self::from_pair_unchecked(first, ctx);
+                }
                 let mut ces: Vec<ClassExpression<A>> = pair
                     .into_inner()
                     .filter(|p| p.as_rule() == Rule::Primary)
@@ -502,11 +506,24 @@ impl<A: ForIRI> FromPair<A> for ClassExpression<A> {
                 }
             }
 
+            // ThatConjunction = { ClassIRI ~ ThatKw ~ ThatOperand ~ (AndKw ~ ThatOperand)* }
+            Rule::ThatConjunction => {
+                let ces: Vec<ClassExpression<A>> = pair
+                    .into_inner()
+                    .filter(|p| matches!(p.as_rule(), Rule::ClassIRI | Rule::ThatOperand))
+                    .map(|p| Self::from_pair_unchecked(p, ctx))
+                    .collect::<Result<_>>()?;
+                Ok(ClassExpression::ObjectIntersectionOf(ces))
+            }
+
+            Rule::ClassIRI => Class::from_pair(pair, ctx).map(ClassExpression::Class),
+
             // Primary = { NotKw? ~ (Restriction | Atomic) }
+            // ThatOperand = { NotKw? ~ Restriction }
             // `NotKw` is a compound-atomic keyword guard rule that emits a pair
             // when `not` is present. Detect negation by checking whether the
             // first inner pair is `Rule::NotKw`.
-            Rule::Primary => {
+            Rule::Primary | Rule::ThatOperand => {
                 let mut inner = pair.into_inner();
                 let first = inner.next().unwrap();
                 let (is_not, child) = if first.as_rule() == Rule::NotKw {

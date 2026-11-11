@@ -98,3 +98,36 @@ proptest! {
         let _ = read_str(&s);
     }
 }
+
+// ---------------------------------------------------------------------------
+// W3C `conjunction ::= classIRI 'that' ['not'] restriction ('and' ['not'] restriction)*`
+// ---------------------------------------------------------------------------
+
+fn equivalent_to(expr: &str) -> Vec<String> {
+    let doc = format!(
+        "Prefix: : <http://e/>\nOntology: <http://e/o>\nClass: :D\nClass: :L\n    EquivalentTo: {expr}\n"
+    );
+    let (ont, _) = read_str(&doc).unwrap_or_else(|e| panic!("{expr}: {e}"));
+    components_sorted(&ont)
+}
+
+#[test]
+fn that_is_read_as_and() {
+    for (that, and) in [
+        (":D that :r some :D", ":D and (:r some :D)"),
+        (":D that not :r some :D", ":D and (not (:r some :D))"),
+        (
+            ":D that :r some :D and not :s only :D",
+            ":D and (:r some :D) and (not (:s only :D))",
+        ),
+        (":D THAT :r some :D", ":D and (:r some :D)"),
+    ] {
+        assert_eq!(equivalent_to(that), equivalent_to(and), "{that}");
+    }
+}
+
+#[test]
+fn that_requires_restriction_operand() {
+    let doc = "Prefix: : <http://e/>\nClass: :L\n    EquivalentTo: :D that :E\n";
+    assert!(read_str(doc).is_err());
+}

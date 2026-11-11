@@ -66,6 +66,7 @@ ClassExpressionDocument = _{ SOI ~ Description ~ EOI }
 NameBoundary   = _{ !( SPARQL_PnChars | ":" ) }   // used only inside ${ } helpers
 OrKw           = ${ ^"or"      ~ NameBoundary }
 AndKw          = ${ ^"and"     ~ NameBoundary }
+ThatKw         = ${ ^"that"    ~ NameBoundary }
 NotKw          = ${ ^"not"     ~ NameBoundary }
 SomeKw         = ${ ^"some"    ~ NameBoundary }
 OnlyKw         = ${ ^"only"    ~ NameBoundary }
@@ -83,7 +84,14 @@ Description = { Conjunction ~ ( OrKw ~ Conjunction )* }
 
 // next: "and"
 
-Conjunction = { Primary ~ ( AndKw ~ Primary )* }
+// W3C also allows `ClassIRI that [not] Restriction (and [not] Restriction)*`,
+// equivalent to `and` but with restriction operands only.
+
+Conjunction = { ThatConjunction | Primary ~ ( AndKw ~ Primary )* }
+
+ThatConjunction = { ClassIRI ~ ThatKw ~ ThatOperand ~ ( AndKw ~ ThatOperand )* }
+
+ThatOperand = { NotKw? ~ Restriction }
 
 // highest: "not" prefix + restriction/atomic
 
