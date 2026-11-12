@@ -26,11 +26,6 @@
     "reason": "Cross-import punning case (#237), deferred pending #281/#282."
   },
   {
-    "ontology": "NPO",
-    "target_format": "rdf_xml",
-    "reason": "The source types npo#definition as both an AnnotationProperty and a DatatypeProperty, which OWL 2 DL forbids. Reading the source gives AnnotationAssertions, because the literal triples are read before the DatatypeProperty declaration. The writer emits both declarations, and the reread resolves the pun as DataProperty (Data beats Object beats Annotation, see DeclarationMappedIndex), so 4025 assertions change kind. Illegal input, so no fix is planned."
-  },
-  {
     "ontology": "MS",
     "target_format": "omn",
     "reason": "The source types ms#has_value_type as both an ObjectProperty and a DatatypeProperty, which OWL 2 DL forbids. The source read uses it as an object property in 1366 restrictions; the reread resolves the pun as DataProperty, so they change kind. Illegal input, so no fix is planned."
