@@ -43,7 +43,7 @@
   {
     "ontology": "NEOMARK4",
     "target_format": "ofn",
-    "reason": "The source's OWL/XML nodeID is a full IRI such as `_:http://ontofox.hegroup.org/8dr5cx6h.owl#genid1`, not a valid blank-node label. The OWL/XML reader keeps it as written, so the writer emits a label containing `:`, `/` and `#`, which the OFN reader rejects on reread. Invalid input; a reader that sanitises such ids is possible but undecided."
+    "reason": "The source's OWL/XML nodeID is a full IRI such as `_:http://ontofox.hegroup.org/8dr5cx6h.owl#genid1`, not a valid blank-node label. The OWL/XML reader keeps it as written, so the writer emits a label containing `:`, `/` and `#`, which the OFN reader rejects on reread. Invalid input, so no fix is planned."
   },
   {
     "ontology": "NEOMARK4",
