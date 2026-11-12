@@ -44,5 +44,40 @@
     "ontology": "GBOL",
     "target_format": "omn",
     "reason": "The source types bibo:reviewOf and bibo:transcriptOf as ObjectProperties but makes each a subPropertyOf dc:relation, a DatatypeProperty, which OWL 2 DL forbids. The reader keeps the SubDataPropertyOf, so the OMN writer gives each a DataProperty frame as well; the reread resolves the pun as DataProperty and the restrictions on them change kind. Illegal input, so no fix is planned."
+  },
+  {
+    "ontology": "NEOMARK4",
+    "target_format": "ofn",
+    "reason": "The source's OWL/XML nodeID is a full IRI such as `_:http://ontofox.hegroup.org/8dr5cx6h.owl#genid1`, not a valid blank-node label. The OWL/XML reader keeps it as written, so the writer emits a label containing `:`, `/` and `#`, which the OFN reader rejects on reread. Invalid input; a reader that sanitises such ids is possible but undecided."
+  },
+  {
+    "ontology": "NEOMARK4",
+    "target_format": "omn",
+    "reason": "Same cause as NEOMARK4 to OFN -- see that entry."
+  },
+  {
+    "ontology": "NEOMARK4",
+    "target_format": "rdf_xml",
+    "reason": "Same cause as NEOMARK4 to OFN -- see that entry."
+  },
+  {
+    "ontology": "MSO",
+    "target_format": "ofn",
+    "reason": "Same cause as NEOMARK4 to OFN -- see that entry."
+  },
+  {
+    "ontology": "MSO",
+    "target_format": "omn",
+    "reason": "Same cause as NEOMARK4 to OFN -- see that entry."
+  },
+  {
+    "ontology": "DOCCC",
+    "target_format": "ofn",
+    "reason": "Same cause as NEOMARK4 to OFN -- see that entry."
+  },
+  {
+    "ontology": "DOCCC",
+    "target_format": "omn",
+    "reason": "Same cause as NEOMARK4 to OFN -- see that entry."
   }
 ]
