@@ -79,5 +79,50 @@
     "ontology": "DOCCC",
     "target_format": "omn",
     "reason": "Same cause as NEOMARK4 to OFN -- see that entry."
+  },
+  {
+    "ontology": "MCCL",
+    "target_format": "rdf_xml",
+    "reason": "The source's prefix IRI and relative class IRIs contain `[` and `]` (e.g. `...#KB-CH[R]-8-5`), which RFC 3987 forbids in a path. The writers pass them through unescaped, and the RDF/XML reader rejects them on reread. Invalid input."
+  },
+  {
+    "ontology": "MCCL",
+    "target_format": "omn",
+    "reason": "Same cause as MCCL to RDF/XML -- see that entry."
+  },
+  {
+    "ontology": "MCCL",
+    "target_format": "obo",
+    "reason": "Same cause as MCCL to RDF/XML -- see that entry."
+  },
+  {
+    "ontology": "PIERO",
+    "target_format": "rdf_xml",
+    "reason": "The source has relative class IRIs such as `kcfs#atom`, which resolve against a base ending in `#` to `...turtle#kcfs#atom`, with a second fragment delimiter. The writers pass that through, and the RDF/XML reader rejects it on reread. Invalid input."
+  },
+  {
+    "ontology": "PIERO",
+    "target_format": "ofn",
+    "reason": "Same cause as PIERO to RDF/XML -- see that entry."
+  },
+  {
+    "ontology": "PIERO",
+    "target_format": "omn",
+    "reason": "Same cause as PIERO to RDF/XML -- see that entry."
+  },
+  {
+    "ontology": "ONTOMA",
+    "target_format": "ofn",
+    "reason": "The source declares a prefix whose IRI ends in commas (`...#La_douleur_vive,_atroce,`), and its name `_atroce` is not a valid OFN prefix once written. Invalid input."
+  },
+  {
+    "ontology": "ONTOMA",
+    "target_format": "omn",
+    "reason": "Same cause as ONTOMA to OFN -- see that entry."
+  },
+  {
+    "ontology": "EMO",
+    "target_format": "rdf_xml",
+    "reason": "Same cause as CRENO -- see that entry. The source uses the relative IRI `/EMO_00008` as a class with no Declaration, and reads it under the owl namespace."
   }
 ]
