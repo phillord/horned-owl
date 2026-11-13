@@ -33,6 +33,9 @@ Fixes:
 - Many OBO reader and writer fixes.
 - The RDF/XML writer no longer loses pairs of an `AllDisjointClasses`
   with three or more members.
+- The RDF/XML writer keeps the `rdf:nodeID` of untyped blank nodes
+  referenced more than once, so shared lists, and the annotated
+  property chains that use them, survive a round trip.
 
 
 Contributor:
