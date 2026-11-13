@@ -1281,6 +1281,38 @@ mod tests {
     }
 
     #[test]
+    fn iri_with_ip_literal() {
+        let build = Build::default();
+        let prefixes = PrefixMapping::default();
+        for iri in [
+            "http://[::1]/a",
+            "http://[::]/a",
+            "http://[2001:db8::7]/a",
+            "http://[1:2:3:4:5:6:7:8]/a",
+            "http://[::ffff:192.0.2.1]/a",
+            "http://[1::2:3]:8080/a",
+            "http://[v1.x]/a",
+        ] {
+            let text = format!("<{iri}>");
+            assert_parse_into!(
+                IRI<String>,
+                Rule::IRI,
+                build,
+                prefixes,
+                text,
+                build.iri(iri)
+            );
+        }
+        for text in ["<http://[]/a>", "<http://[::1v1.x]/a>"] {
+            let whole = OwlFunctionalLexer::lex(Rule::IRI, text)
+                .ok()
+                .and_then(|mut pairs| pairs.next())
+                .is_some_and(|pair| pair.as_str() == text);
+            assert!(!whole, "{text}");
+        }
+    }
+
+    #[test]
     fn ontology_document() {
         let build = Build::default();
         let prefixes = PrefixMapping::default();
