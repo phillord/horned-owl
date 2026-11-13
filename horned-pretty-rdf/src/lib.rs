@@ -1013,13 +1013,7 @@ where
         let description_open = if let Some(typ) = mt.find_typed() {
             if let PTerm::NamedNode(nn) = &typ.object {
                 triples_rendered.push(typ);
-                let mut bs = self.bytes_start_iri(nn);
-                if let PNamedOrBlankNode::BlankNode(bn) = &typ.subject
-                    && chunk.object_count(bn) > 1
-                {
-                    bs.push_attribute(("rdf:nodeID", Self::nodeid_attr_value(bn)));
-                }
-                Some(bs)
+                Some(self.bytes_start_iri(nn))
             } else {
                 None
             }
@@ -1034,8 +1028,12 @@ where
             PNamedOrBlankNode::NamedNode(n) => {
                 description_open.push_attribute(("rdf:about", n.iri.as_ref()))
             }
-            PNamedOrBlankNode::BlankNode(_) => {
-                // Empty
+            PNamedOrBlankNode::BlankNode(bn) => {
+                // Typed or not, a node referenced more than once needs
+                // its id, or the references and the node part ways.
+                if chunk.object_count(bn) > 1 {
+                    description_open.push_attribute(("rdf:nodeID", Self::nodeid_attr_value(bn)));
+                }
             }
         }
 
@@ -1713,6 +1711,26 @@ _:genid1 <http://example.org/stuff/1.0/homePage> <http://purl.org/net/dajobe/> .
             </rdf:Description>
         </ex:editor>
     </rdf:Description>
+</rdf:RDF>"###,
+            spec_prefix(),
+        );
+    }
+
+    #[test]
+    fn untyped_shared_blank_node_keeps_nodeid() {
+        nt_xml_roundtrip_prefix(
+            r###"<http://example.org/a> <http://example.org/stuff/1.0/r> _:x .
+<http://example.org/b> <http://example.org/stuff/1.0/r> _:x .
+_:x <http://example.org/stuff/1.0/fullName> "Dave Beckett" ."###,
+            r###"<?xml version="1.0" encoding="UTF-8"?>
+<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:ex="http://example.org/stuff/1.0/">
+    <rdf:Description rdf:about="http://example.org/a">
+        <ex:r rdf:nodeID="x"/>
+    </rdf:Description>
+    <rdf:Description rdf:about="http://example.org/b">
+        <ex:r rdf:nodeID="x"/>
+    </rdf:Description>
+    <rdf:Description rdf:nodeID="x" ex:fullName="Dave Beckett"/>
 </rdf:RDF>"###,
             spec_prefix(),
         );
