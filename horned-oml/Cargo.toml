@@ -1,6 +1,6 @@
 [package]
 name = "horned-oml"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["Phillip Lord"]
 description = "Reader for the Ontological Modeling Language (OML), mapped to OWL, for horned-owl"
 repository = "https://github.com/phillord/horned-owl"
