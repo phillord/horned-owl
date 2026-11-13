@@ -8,7 +8,7 @@ edition = "2024"
 license = "LGPL-3.0"
 
 [dependencies]
-horned-owl = { path = "../", version = "4.0.0" }
+horned-owl = { path = "../", version = ">=4.0.0, <6" }
 horned-catalog = { workspace = true }
 pest = "2.7.8"
 pest_derive = "2.7.8"
