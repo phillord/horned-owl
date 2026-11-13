@@ -1,5 +1,5 @@
-Version 5.0.0 (unreleased)
-==========================
+Version 5.0.0
+=============
 
 Many parser fixes since 4.0.0, plus a few interface changes to the
 readers, hence a major version.
