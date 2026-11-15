@@ -34,7 +34,7 @@ pub(crate) fn robot_ext(fmt: Format) -> &'static str {
     match fmt {
         Format::RdfXml => "rdf",
         Format::OwlXml => "owx",
-        Format::Ofn => "ofn",
+        Format::Ofn | Format::OfnNom => "ofn",
         Format::Omn => "omn",
         Format::Obo => "obo",
         Format::Turtle => "ttl",
@@ -322,6 +322,24 @@ fn case_fail(
 mod tests {
     use super::*;
     use crate::model::{Format, Outcome, Record};
+
+    #[test]
+    fn both_ofn_readers_roundtrip() {
+        let ofn =
+            b"Prefix(:=<http://ex/>)\nOntology(<http://ex/o>\nDeclaration(Class(<http://ex/A>))\n)";
+        let recs = run_bytes("t", ofn, &[Format::Ofn, Format::OfnNom], &[], false);
+        for t in [Format::Ofn, Format::OfnNom] {
+            let c = recs
+                .iter()
+                .find_map(|r| match r {
+                    Record::Case(c) if c.target_format == t => Some(c),
+                    _ => None,
+                })
+                .unwrap_or_else(|| panic!("no case for {t:?}"));
+            assert!(c.exact, "{t:?} not exact");
+            assert_eq!(c.outcome, Outcome::Ok);
+        }
+    }
 
     #[test]
     fn produces_source_and_case_records() {

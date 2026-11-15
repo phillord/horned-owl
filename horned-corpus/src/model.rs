@@ -7,6 +7,10 @@ pub enum Format {
     RdfXml,
     OwlXml,
     Ofn,
+    /// OFN read by the nom reader. Never detected as a source; as a target
+    /// it is written by the ofn writer and re-read by the nom reader, so
+    /// that both OFN readers see every ontology.
+    OfnNom,
     Omn,
     Obo,
     /// Turtle / N-Triples (read only — via the oxrdfio-backed RDF reader with

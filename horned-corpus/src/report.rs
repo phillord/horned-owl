@@ -111,6 +111,7 @@ fn fmt(f: Format) -> &'static str {
         Format::RdfXml => "rdf_xml",
         Format::OwlXml => "owl_xml",
         Format::Ofn => "ofn",
+        Format::OfnNom => "ofn_nom",
         Format::Omn => "omn",
         Format::Obo => "obo",
         Format::Turtle => "turtle",

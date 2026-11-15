@@ -97,6 +97,11 @@ pub fn read_source_with(fmt: Format, bytes: &[u8], lax: bool) -> anyhow::Result<
             let sop = ofn::reader::read(&mut Cursor::new(bytes), config()).map_err(horned_err)?;
             Output::ofn(sop).decompose()
         }
+        Format::OfnNom => {
+            let sop =
+                ofn::nom_reader::read(&mut Cursor::new(bytes), config()).map_err(horned_err)?;
+            Output::ofn(sop).decompose()
+        }
         Format::Omn => {
             let sop = omn::reader::read(Cursor::new(bytes), config()).map_err(horned_err)?;
             Output::omn(sop).decompose()
@@ -159,7 +164,7 @@ pub fn write_target(
 ) -> anyhow::Result<Vec<u8>> {
     let mut out: Vec<u8> = Vec::new();
     match fmt {
-        Format::Ofn => {
+        Format::Ofn | Format::OfnNom => {
             ofn::writer::write(&mut out, cmo, Some(prefixes)).map_err(horned_err)?;
         }
         Format::Omn => {
