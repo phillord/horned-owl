@@ -12,23 +12,47 @@ use enum_meta::Meta;
 use nom::Err;
 
 use crate::error::HornedError;
-use crate::io::ParserConfiguration;
+use crate::io::{ParserConfiguration, StreamComponent};
 use crate::model::*;
 use crate::vocab::{Facet, OWL, OWL2Datatype};
 
 mod error;
 mod lex;
+mod stream;
+
+pub use stream::{Reader, read_to_stream};
 
 use error::PErr;
 use lex::*;
 
-struct Ctx<'c, A: ForIRI> {
-    build: &'c Build<A>,
-    mapping: &'c PrefixMapping,
+pub(super) struct Ctx<'c, A: ForIRI> {
+    pub(super) build: &'c Build<A>,
+    pub(super) mapping: &'c PrefixMapping,
 }
 
-/// Read an ontology in OWL Functional Syntax.
+/// Read an ontology in OWL Functional Syntax by draining a [`Reader`].
 pub fn read<
+    A: ForIRI,
+    B: AsRef<Build<A>>,
+    O: MutableOntology<A> + Ontology<A> + Default,
+    R: BufRead,
+>(
+    bufread: &mut R,
+    config: ParserConfiguration<A, B>,
+) -> Result<(O, PrefixMapping), HornedError> {
+    let mut reader = Reader::new(bufread, config);
+    let mut ont = O::default();
+    for item in reader.by_ref() {
+        if let StreamComponent::Component(ac) = item? {
+            ont.insert(ac);
+        }
+    }
+    Ok((ont, reader.into_prefixes()))
+}
+
+/// Read an ontology in OWL Functional Syntax, parsing the whole document
+/// from memory in one go.
+pub fn read_in_memory<
     A: ForIRI,
     B: AsRef<Build<A>>,
     O: MutableOntology<A> + Ontology<A> + Default,
@@ -42,14 +66,14 @@ pub fn read<
     bufread.read_to_string(&mut doc)?;
     let doc = doc.trim();
     document(config.build.as_ref(), doc).map_err(|e| match e {
-        Err::Error(e) | Err::Failure(e) => e.into_horned(doc),
+        Err::Error(e) | Err::Failure(e) => e.into_horned(doc, error::Origin::default()),
         Err::Incomplete(_) => HornedError::invalid("incomplete input"),
     })
 }
 
 // ---------------------------------------------------------------------------
 
-type R<'a, T> = PResult<'a, T>;
+pub(super) type R<'a, T> = PResult<'a, T>;
 
 type ObjectCardinality<A> =
     fn(u32, ObjectPropertyExpression<A>, Box<ClassExpression<A>>) -> ClassExpression<A>;
@@ -63,7 +87,7 @@ fn fatal<T>(r: R<'_, T>) -> R<'_, T> {
 }
 
 /// Record the construct being parsed on a failure.
-fn within<'a, T>(kw: &'a str, r: R<'a, T>) -> R<'a, T> {
+pub(super) fn within<'a, T>(kw: &'a str, r: R<'a, T>) -> R<'a, T> {
     r.map_err(|e| match e {
         Err::Error(e) | Err::Failure(e) => Err::Failure(e.within(kw)),
         e => e,
@@ -112,16 +136,12 @@ where
     let mut prefixes = PrefixMapping::default();
     let mut i = doc;
     while peek_kw(i) == Some("Prefix") {
-        let (r, kw) = keyword(i)?;
-        let (r, p) = within(kw, fatal(pname_ns(r)))?;
-        let (r, _) = within(kw, fatal(equals(r)))?;
-        let at = sp(r);
-        let (r, iri) = within(kw, fatal(full_iri(r)))?;
-        let (r, _) = within(kw, fatal(rparen(r)))?;
-        prefixes.add_prefix(p, iri).map_err(|_| {
+        let at = sp(i);
+        let (r, (name, iri)) = prefix_decl(i)?;
+        prefixes.add_prefix(name, iri).map_err(|_| {
             Err::Failure(PErr::semantic(
                 at,
-                iri.len() + 2,
+                r.len().abs_diff(at.len()),
                 "invalid prefix declaration",
             ))
         })?;
@@ -138,6 +158,30 @@ where
         return Err(Err::Failure(PErr::expected(r, "end of input")));
     }
     Ok((ontology, prefixes))
+}
+
+/// `Prefix(name:=<iri>)`, returning the name and the IRI.
+pub(super) fn prefix_decl(i: &str) -> R<'_, (&str, &str)> {
+    let (r, kw) = keyword(i)?;
+    let (r, p) = within(kw, fatal(pname_ns(r)))?;
+    let (r, _) = within(kw, fatal(equals(r)))?;
+    let (r, iri) = within(kw, fatal(full_iri(r)))?;
+    let (r, _) = within(kw, fatal(rparen(r)))?;
+    Ok((r, (p, iri)))
+}
+
+pub(super) fn import<'a, A: ForIRI>(c: &Ctx<'_, A>, i: &'a str) -> R<'a, Import<A>> {
+    let (r, kw) = keyword(i)?;
+    let (r, x) = within(kw, iri(c, r))?;
+    let (r, _) = within(kw, rparen(r))?;
+    Ok((r, Import(x)))
+}
+
+pub(super) fn ontology_annotation<'a, A: ForIRI>(
+    c: &Ctx<'_, A>,
+    i: &'a str,
+) -> R<'a, OntologyAnnotation<A>> {
+    annotation(c, i).map(|(r, a)| (r, OntologyAnnotation(a)))
 }
 
 fn ontology<'a, A, O>(c: &Ctx<'_, A>, i: &'a str) -> R<'a, O>
@@ -162,16 +206,14 @@ where
     ontology.insert(id);
 
     while peek_kw(r) == Some("Import") {
-        let (r1, kw) = keyword(r)?;
-        let (r1, x) = within(kw, iri(c, r1))?;
-        let (r1, _) = within(kw, rparen(r1))?;
-        ontology.insert(Import(x));
+        let (r1, x) = import(c, r)?;
+        ontology.insert(x);
         r = r1;
     }
 
     while peek_kw(r) == Some("Annotation") {
-        let (r1, a) = annotation(c, r)?;
-        ontology.insert(OntologyAnnotation(a));
+        let (r1, a) = ontology_annotation(c, r)?;
+        ontology.insert(a);
         r = r1;
     }
 
@@ -189,7 +231,7 @@ where
 // ---------------------------------------------------------------------------
 // IRIs, individuals, literals
 
-fn iri<'a, A: ForIRI>(c: &Ctx<'_, A>, i: &'a str) -> R<'a, IRI<A>> {
+pub(super) fn iri<'a, A: ForIRI>(c: &Ctx<'_, A>, i: &'a str) -> R<'a, IRI<A>> {
     let start = sp(i);
     let (r, raw) = raw_iri(i)?;
     match raw {
@@ -290,7 +332,7 @@ fn annotations<'a, A: ForIRI>(c: &Ctx<'_, A>, mut i: &'a str) -> R<'a, BTreeSet<
     Ok((i, set))
 }
 
-fn annotation<'a, A: ForIRI>(c: &Ctx<'_, A>, i: &'a str) -> R<'a, Annotation<A>> {
+pub(super) fn annotation<'a, A: ForIRI>(c: &Ctx<'_, A>, i: &'a str) -> R<'a, Annotation<A>> {
     let (r, kw) = keyword(i)?;
     within(kw, annotation_body(c, r))
 }
@@ -620,7 +662,7 @@ fn dp_list<'a, A: ForIRI>(c: &Ctx<'_, A>, r: &'a str) -> R<'a, Vec<DataProperty<
     })
 }
 
-fn axiom<'a, A: ForIRI>(c: &Ctx<'_, A>, i: &'a str) -> R<'a, AnnotatedComponent<A>> {
+pub(super) fn axiom<'a, A: ForIRI>(c: &Ctx<'_, A>, i: &'a str) -> R<'a, AnnotatedComponent<A>> {
     let i = sp(i);
     if peek_kw(i).is_none() {
         return Err(Err::Failure(PErr::expected(i, "axiom or `)`")));

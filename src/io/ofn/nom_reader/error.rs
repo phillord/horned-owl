@@ -9,6 +9,41 @@ use nom::error::{ContextError, ErrorKind, ParseError};
 
 use crate::error::{HornedError, Location};
 
+/// Where the first byte of a window of text sits in the whole document.
+///
+/// A streaming reader holds only part of the document, so errors are
+/// located relative to the window and shifted by its origin.
+#[derive(Debug, Clone, Copy)]
+pub struct Origin {
+    pub offset: usize,
+    /// 1-based line.
+    pub line: usize,
+    /// 1-based character column.
+    pub col: usize,
+}
+
+impl Default for Origin {
+    fn default() -> Self {
+        Origin {
+            offset: 0,
+            line: 1,
+            col: 1,
+        }
+    }
+}
+
+impl Origin {
+    /// The origin of whatever follows `skipped`, which starts at `self`.
+    pub fn advance(self, skipped: &str) -> Origin {
+        let (line, col) = locate(skipped, self, skipped.len());
+        Origin {
+            offset: self.offset + skipped.len(),
+            line,
+            col,
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct PErr<'a> {
     /// The remaining input at the point of failure.
@@ -46,31 +81,34 @@ impl<'a> PErr<'a> {
         self
     }
 
-    pub fn into_horned(self, doc: &str) -> HornedError {
-        let offset = doc.len() - self.at.len();
+    /// Convert to a `HornedError`. `window` is the text the parser was
+    /// given, which `self.at` points into, and `origin` is where `window`
+    /// starts in the document.
+    pub fn into_horned(self, window: &str, origin: Origin) -> HornedError {
+        let off = (self.at.as_ptr() as usize)
+            .saturating_sub(window.as_ptr() as usize)
+            .min(window.len());
+        let (line, col) = locate(window, origin, off);
+        let abs = (origin.offset + off) as u64;
         if let Some((msg, len)) = self.semantic {
-            let (line, col) = line_col(doc, offset);
             let msg = format!("{msg} (line {line}, column {col})");
-            return HornedError::invalid_at(
-                msg,
-                Location::ByteSpan(offset as u64..(offset + len) as u64),
-            );
+            return HornedError::invalid_at(msg, Location::ByteSpan(abs..abs + len as u64));
         }
-        let (line, col) = line_col(doc, offset);
-        let line_text = doc[offset - (col - 1).min(offset)..]
-            .lines()
-            .next()
-            .unwrap_or("");
+        let line_start = window[..off].rfind('\n').map_or(0, |p| p + 1);
+        let line_end = window[off..]
+            .find(['\n', '\r'])
+            .map_or(window.len(), |p| off + p);
         HornedError::ParserError(
             Box::new(SyntaxError {
                 line,
                 col,
+                caret: window[line_start..off].chars().count(),
                 expected: self.expected,
                 within: self.within.map(str::to_string),
                 found: found(self.at),
-                line_text: line_text.to_string(),
+                line_text: window[line_start..line_end].to_string(),
             }),
-            Location::BytePosition(offset as u64),
+            Location::BytePosition(abs),
         )
     }
 }
@@ -86,18 +124,21 @@ fn found(at: &str) -> String {
     }
 }
 
-/// 1-based line and character column of a byte offset.
-fn line_col(doc: &str, offset: usize) -> (usize, usize) {
-    let before = &doc[..offset];
-    let line = before.matches('\n').count() + 1;
-    let start = before.rfind('\n').map(|p| p + 1).unwrap_or(0);
-    (line, before[start..].chars().count() + 1)
+/// 1-based line and character column of byte `off` in `window`.
+fn locate(window: &str, origin: Origin, off: usize) -> (usize, usize) {
+    let before = &window[..off];
+    let newlines = before.bytes().filter(|&b| b == b'\n').count();
+    match before.rfind('\n') {
+        Some(p) => (origin.line + newlines, before[p + 1..].chars().count() + 1),
+        None => (origin.line, origin.col + before.chars().count()),
+    }
 }
 
 #[derive(Debug)]
 pub struct SyntaxError {
     line: usize,
     col: usize,
+    caret: usize,
     expected: Vec<&'static str>,
     within: Option<String>,
     found: String,
@@ -115,11 +156,7 @@ impl fmt::Display for SyntaxError {
         }
         write!(f, ", found {}", self.found)?;
         let text: String = self.line_text.chars().take(120).collect();
-        write!(
-            f,
-            "\n  {text}\n  {}^",
-            " ".repeat(self.col.saturating_sub(1).min(120))
-        )
+        write!(f, "\n  {text}\n  {}^", " ".repeat(self.caret.min(120)))
     }
 }
 

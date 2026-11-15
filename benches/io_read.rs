@@ -84,6 +84,17 @@ fn bench_io_read(c: &mut Criterion) {
             })
         });
 
+        group.bench_function(BenchmarkId::new("ofn_nom_mem_io_read", n), |b| {
+            b.iter(|| {
+                let f = File::open(filename.clone()).ok().unwrap();
+                let mut f = BufReader::new(f);
+                let _: (SetOntology<RcStr>, _) =
+                    horned_owl::io::ofn::nom_reader::read_in_memory(&mut f, Default::default())
+                        .ok()
+                        .unwrap();
+            })
+        });
+
         group.bench_function(BenchmarkId::new("ofn_nom_io_read", n), |b| {
             b.iter(|| {
                 let f = File::open(filename.clone()).ok().unwrap();

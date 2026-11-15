@@ -20,7 +20,7 @@ pub fn sp(mut i: &str) -> &str {
     loop {
         i = i.trim_start_matches([' ', '\t', '\n', '\r']);
         match i.strip_prefix('#') {
-            Some(r) => i = r.find(['\n', '\r']).map_or("", |p| &r[p..]),
+            Some(r) => i = r.find(['\n', '\r']).map_or(&r[r.len()..], |p| &r[p..]),
             None => return i,
         }
     }
