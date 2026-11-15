@@ -17,11 +17,7 @@ use horned_pretty_rdf::{
     PTriple, PrettyRdfXmlFormatter, RdfFormatter, ox::WriterQuadSerializerAdaptor,
 };
 use oxrdfio::RdfSerializer;
-use std::{
-    collections::{BTreeSet, HashSet},
-    fmt::Debug,
-    io::Write,
-};
+use std::{collections::HashSet, fmt::Debug, io::Write};
 
 /// Configuration for the RDF writer.
 #[derive(Clone, Debug)]
@@ -594,7 +590,7 @@ where
 }
 
 // Written long hand rather than using `render` because the rules don't quite fit
-impl<A: ForIRI, F: RdfFormatter<A, W>, W: Write> Render<A, F, (), W> for BTreeSet<Annotation<A>> {
+impl<A: ForIRI, F: RdfFormatter<A, W>, W: Write> Render<A, F, (), W> for AnnotationSet<A> {
     fn render(&self, f: &mut F, ng: &mut NodeGenerator<A>) -> Result<(), HornedError> {
         for r in self.iter() {
             r.render(f, ng)?;
@@ -2306,7 +2302,7 @@ mod test {
         let iri = b.iri("http://www.example.com/a");
         let ac = AnnotatedComponent {
             component: DeclareClass(Class(iri)).into(),
-            ann: BTreeSet::new(),
+            ann: AnnotationSet::new(),
         };
 
         let items: Vec<crate::io::Result<StreamComponent<AnnotatedComponent<RcStr>>>> = vec![

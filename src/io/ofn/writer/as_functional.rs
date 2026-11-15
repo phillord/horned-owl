@@ -1,4 +1,3 @@
-use std::collections::BTreeSet;
 use std::fmt::Display;
 use std::fmt::Error;
 use std::fmt::Formatter;
@@ -98,7 +97,7 @@ pub struct Functional<'t, T: ?Sized, A: ForIRI>(
     /// An eventual context to use (for IRI prefixes)
     Option<&'t PrefixMapping>,
     /// An eventual set of annotations (to render inside axioms)
-    Option<&'t BTreeSet<Annotation<A>>>,
+    Option<&'t AnnotationSet<A>>,
 );
 
 impl<'t, T, A> Display for Functional<'t, &'t T, A>
@@ -217,7 +216,7 @@ derive_tuple3!(A, ObjectPropertyExpression<A>, Individual<A>, Individual<A>);
 
 // ---------------------------------------------------------------------------
 
-impl<A: ForIRI> Display for Functional<'_, BTreeSet<Annotation<A>>, A> {
+impl<A: ForIRI> Display for Functional<'_, AnnotationSet<A>, A> {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
         for (i, x) in self.0.iter().enumerate() {
             if i != 0 {
@@ -1508,7 +1507,7 @@ mod tests {
         ]);
         let annotated = AnnotatedComponent {
             component: Component::EquivalentClasses(component),
-            ann: BTreeSet::from_iter([Annotation {
+            ann: AnnotationSet::from_iter([Annotation {
                 ap: build
                     .annotation_property("http://www.geneontology.org/formats/oboInOwl#hasDbXref"),
                 av: AnnotationValue::Literal(Literal::Simple {

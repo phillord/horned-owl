@@ -1,7 +1,6 @@
 /// An immutable `Visit`/`Walk` for Horned-OWL Ontologies.
 use crate::model::*;
 use crate::vocab::Facet;
-use std::collections::BTreeSet;
 use std::marker::PhantomData;
 
 pub trait Visit<A: ForIRI> {
@@ -84,7 +83,7 @@ pub trait Visit<A: ForIRI> {
     fn visit_ontology_id(&mut self, _: &OntologyID<A>) {}
     fn visit_set_ontology<O: Ontology<A>>(&mut self, _: &O) {}
     fn visit_option_iri(&mut self, _: &Option<IRI<A>>) {}
-    fn visit_annotation_set(&mut self, _: &BTreeSet<Annotation<A>>) {}
+    fn visit_annotation_set(&mut self, _: &AnnotationSet<A>) {}
     fn visit_class_expression_vec(&mut self, _: &Vec<ClassExpression<A>>) {}
     fn visit_object_property_expression_vec(&mut self, _: &Vec<ObjectPropertyExpression<A>>) {}
     fn visit_data_property_vec(&mut self, _: &Vec<DataProperty<A>>) {}
@@ -717,7 +716,7 @@ impl<A: ForIRI, V: Visit<A>> Walk<A, V> {
     }
 
     // Collections
-    pub fn annotation_set(&mut self, e: &BTreeSet<Annotation<A>>) {
+    pub fn annotation_set(&mut self, e: &AnnotationSet<A>) {
         self.0.visit_annotation_set(e);
         for i in e.iter() {
             self.annotation(i);

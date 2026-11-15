@@ -595,7 +595,7 @@ fn meta_assertion<A: ForIRI>(
                 &format!("{OIO}hasDbXref"),
                 &unescape(parts.first()?.as_str().trim()),
             );
-            let axiom_anns: BTreeSet<Annotation<A>> = parts
+            let axiom_anns: crate::model::AnnotationSet<A> = parts
                 .get(1)
                 .map(|desc| lit_ann(b, RDFS_LABEL, &unquote(desc.as_str())))
                 .into_iter()

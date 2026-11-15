@@ -89,6 +89,10 @@
 //!     to: b.named_individual("http://www.example.com/i2").into(),
 //! };
 //! ```
+
+mod annotation_set;
+pub use annotation_set::AnnotationSet;
+
 use std::borrow::Borrow;
 use std::cell::RefCell;
 use std::cmp::Ordering;
@@ -1029,7 +1033,7 @@ pub trait HigherKinded {
 #[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
 pub struct AnnotatedComponent<A> {
     pub component: Component<A>,
-    pub ann: BTreeSet<Annotation<A>>,
+    pub ann: AnnotationSet<A>,
 }
 
 /// An convienience alias to reducing angle brackets
@@ -1039,7 +1043,7 @@ pub type RcAnnotatedComponent = Rc<AnnotatedComponent<RcStr>>;
 pub type ArcAnnotatedComponent = Arc<AnnotatedComponent<ArcStr>>;
 
 impl<A: ForIRI> AnnotatedComponent<A> {
-    pub fn new<I>(component: I, ann: BTreeSet<Annotation<A>>) -> AnnotatedComponent<A>
+    pub fn new<I>(component: I, ann: AnnotationSet<A>) -> AnnotatedComponent<A>
     where
         I: Into<Component<A>>,
     {
@@ -1070,7 +1074,7 @@ impl<A: ForIRI> From<Component<A>> for AnnotatedComponent<A> {
     fn from(component: Component<A>) -> AnnotatedComponent<A> {
         AnnotatedComponent {
             component,
-            ann: BTreeSet::new(),
+            ann: AnnotationSet::new(),
         }
     }
 }
@@ -1715,7 +1719,7 @@ impl<A: ForIRI> Literal<A> {
 pub struct Annotation<A> {
     pub ap: AnnotationProperty<A>,
     pub av: AnnotationValue<A>,
-    pub ann: BTreeSet<Annotation<A>>,
+    pub ann: AnnotationSet<A>,
 }
 
 /// The value of an annotation

@@ -608,7 +608,7 @@ fn characteristic<A: ForIRI>(
 fn annotation_clause<A: ForIRI>(
     ap: &str,
     av: &AnnotationValue<A>,
-    axiom_ann: &std::collections::BTreeSet<crate::model::Annotation<A>>,
+    axiom_ann: &crate::model::AnnotationSet<A>,
     cz: &impl Fn(&str) -> String,
 ) -> Option<String> {
     // def and synonym require a `[xref…]` list in the grammar even when empty,
@@ -717,7 +717,7 @@ fn annotation_clause<A: ForIRI>(
 /// annotation whose property is not in `consumed` (those are rendered as the
 /// clause's dbxref list / synonym type / xref description instead).
 fn meta_quals<A: ForIRI>(
-    anns: &std::collections::BTreeSet<crate::model::Annotation<A>>,
+    anns: &crate::model::AnnotationSet<A>,
     consumed: &[String],
     cz: &impl Fn(&str) -> String,
 ) -> String {
@@ -741,7 +741,7 @@ fn meta_quals<A: ForIRI>(
 }
 
 fn collect_dbxrefs<A: ForIRI>(
-    anns: &std::collections::BTreeSet<crate::model::Annotation<A>>,
+    anns: &crate::model::AnnotationSet<A>,
     cz: &impl Fn(&str) -> String,
 ) -> Vec<String> {
     anns.iter()

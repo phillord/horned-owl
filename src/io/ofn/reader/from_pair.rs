@@ -1,4 +1,3 @@
-use std::collections::BTreeSet;
 use std::marker::PhantomData;
 use std::str::FromStr;
 
@@ -457,7 +456,7 @@ impl<A: ForIRI> FromPair<A> for Annotation<A> {
     const RULE: Rule = Rule::Annotation;
     fn from_pair_unchecked(pair: Pair<Rule>, ctx: &Context<'_, A>) -> Result<Self> {
         let mut inner = pair.into_inner();
-        let ann: BTreeSet<Annotation<A>> = FromPair::from_pair(inner.next().unwrap(), ctx)?;
+        let ann: AnnotationSet<A> = FromPair::from_pair(inner.next().unwrap(), ctx)?;
 
         Ok(Annotation {
             ap: FromPair::from_pair(inner.next().unwrap(), ctx)?,
@@ -590,7 +589,7 @@ impl<A: ForIRI> FromPair<A> for Component<A> {
 
 // ---------------------------------------------------------------------------
 
-impl<A: ForIRI> FromPair<A> for BTreeSet<Annotation<A>> {
+impl<A: ForIRI> FromPair<A> for AnnotationSet<A> {
     const RULE: Rule = Rule::Annotations;
     fn from_pair_unchecked(pair: Pair<Rule>, ctx: &Context<'_, A>) -> Result<Self> {
         pair.into_inner()
