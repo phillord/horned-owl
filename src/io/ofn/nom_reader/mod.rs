@@ -2,8 +2,8 @@
 //!
 //! This builds model values directly while parsing, rather than going via a
 //! parse tree as the pest reader in [`super::reader`] does. It accepts the
-//! same language, except that IRIs and language tags are checked less
-//! strictly than by the pest grammar.
+//! same language, except that language tags are checked less strictly than
+//! by the pest grammar.
 use std::collections::BTreeSet;
 use std::io::BufRead;
 
@@ -18,6 +18,7 @@ use crate::vocab::{Facet, OWL, OWL2Datatype};
 
 mod error;
 mod lex;
+mod rfc3987;
 mod stream;
 
 pub use stream::{Reader, read_to_stream};

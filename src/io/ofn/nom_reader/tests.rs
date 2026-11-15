@@ -189,3 +189,209 @@ fn streamed_roundtrip(#[files("src/ont/owl-functional/*.ofn")] resource: PathBuf
     let (actual, _) = nom_read(std::str::from_utf8(&out).unwrap()).unwrap();
     pretty_assertions::assert_eq!(actual, expected);
 }
+
+mod grammar {
+    use crate::io::ofn::reader::lexer::{OwlFunctionalLexer, Rule};
+
+    /// A small deterministic generator, so failures reproduce.
+    struct Rng(u64);
+
+    impl Rng {
+        fn next(&mut self) -> u64 {
+            self.0 ^= self.0 << 13;
+            self.0 ^= self.0 >> 7;
+            self.0 ^= self.0 << 17;
+            self.0
+        }
+
+        fn pick<'a, T>(&mut self, items: &'a [T]) -> &'a T {
+            &items[(self.next() % items.len() as u64) as usize]
+        }
+    }
+
+    fn pest_matches(rule: Rule, text: &str) -> bool {
+        OwlFunctionalLexer::lex(rule, text)
+            .ok()
+            .and_then(|mut p| p.next())
+            .is_some_and(|p| p.as_str() == text)
+    }
+
+    #[test]
+    fn iri_same_as_pest() {
+        const TOKENS: &[&str] = &[
+            "http:",
+            "s:",
+            "x-y+z.1:",
+            "//",
+            "/",
+            "?",
+            "#",
+            "@",
+            "[",
+            "]",
+            "::",
+            ":",
+            "1",
+            "2",
+            "25",
+            "255",
+            "4",
+            "0",
+            ".",
+            "a",
+            "f",
+            "v",
+            "v1.",
+            "%41",
+            "%4",
+            "%",
+            "-",
+            "_",
+            "~",
+            "!",
+            "$",
+            "&",
+            "'",
+            "(",
+            ")",
+            "*",
+            "+",
+            ",",
+            ";",
+            "=",
+            "é",
+            "\u{a0}",
+            "\u{9f}",
+            "\u{e000}",
+            "\u{10000}",
+            "\u{1fffe}",
+            "\u{fffe}",
+            "\u{fdd0}",
+            "\u{e0000}",
+            "\u{e1000}",
+            "\u{f0000}",
+            "\u{100000}",
+            "x",
+            "1.2.3.4",
+            "1.2.3.45",
+            "::1",
+            "1:2:3:4:5:6:7:8",
+            "1::",
+            " ",
+            "\"",
+            "{",
+            "\\",
+            "^",
+            "|",
+            "`",
+            "<",
+            "\t",
+            "user:pw",
+            "host",
+            "example.com",
+        ];
+        let mut rng = Rng(0x9e3779b97f4a7c15);
+        let mut accepted = 0;
+        for n in 0..400_000 {
+            let mut s = String::new();
+            if n % 4 != 0 {
+                s.push_str(rng.pick(&["http:", "s:", "urn:", "a1+-.:"]));
+            }
+            for _ in 0..1 + rng.next() % 7 {
+                s.push_str(rng.pick(TOKENS));
+            }
+            let doc = format!("<{s}>");
+            let pest = pest_matches(Rule::FullIRI, &doc);
+            let ours = super::super::lex::full_iri(&doc).is_ok_and(|(rest, _)| rest.is_empty());
+            assert_eq!(pest, ours, "disagree on {doc:?}: pest {pest}, nom {ours}");
+            accepted += usize::from(pest);
+        }
+        // Both outcomes must be well represented for the comparison to mean anything.
+        assert!(accepted > 20_000, "only {accepted} accepted");
+        assert!(accepted < 380_000, "only {} rejected", 400_000 - accepted);
+    }
+
+    #[test]
+    fn iri_known_cases() {
+        for (s, ok) in [
+            ("http://example.com/a#b", true),
+            ("http://example.com", true),
+            ("http:", true),
+            ("urn:x:y", true),
+            ("http://[::1]/", false),
+            ("http://1.2.3.4/", true),
+            ("http://1.2.3.45/", false),
+            ("http://10.0.0.1/", true),
+            ("a b:c", false),
+            ("no-scheme", false),
+            ("http://example.com/a#b#c", false),
+            ("http://example.com/%zz", false),
+        ] {
+            let doc = format!("<{s}>");
+            assert_eq!(pest_matches(Rule::FullIRI, &doc), ok, "pest on {doc}");
+            let ours = super::super::lex::full_iri(&doc).is_ok_and(|(rest, _)| rest.is_empty());
+            assert_eq!(ours, ok, "nom on {doc}");
+        }
+    }
+
+    #[test]
+    fn prefixed_name_same_as_pest() {
+        const TOKENS: &[&str] = &[
+            "a",
+            "Z",
+            "_",
+            "-",
+            ".",
+            "0",
+            "9",
+            ":",
+            "é",
+            "\u{b7}",
+            "\u{300}",
+            "\u{2040}",
+            "\u{d7}",
+            "\u{10000}",
+            " ",
+            "%",
+            "#",
+            "(",
+            "ex",
+            "owl",
+            "\u{2fef}",
+            "\u{3000}",
+        ];
+        let mut rng = Rng(0x1234_5678_9abc_def1);
+        for _ in 0..200_000 {
+            let mut s = String::new();
+            for _ in 0..1 + rng.next() % 7 {
+                s.push_str(rng.pick(TOKENS));
+            }
+            if s.starts_with(' ') {
+                continue; // our token parsers skip leading space; the rules do not
+            }
+            let pest = pest_matches(Rule::AbbreviatedIRI, &s);
+            let ours = super::super::lex::raw_iri(&s).is_ok_and(|(rest, raw)| {
+                rest.is_empty() && matches!(raw, super::super::lex::RawIri::Prefixed(..))
+            });
+            assert_eq!(pest, ours, "disagree on {s:?}: pest {pest}, nom {ours}");
+        }
+    }
+
+    #[test]
+    fn blank_node_same_as_pest() {
+        const TOKENS: &[&str] = &["_:", "a", "0", ".", "-", "_", ":", "é", "\u{b7}", " ", "x"];
+        let mut rng = Rng(0xdead_beef_cafe_f00d);
+        for _ in 0..100_000 {
+            let mut s = String::from(*rng.pick(&["_:", "_:", ""]));
+            for _ in 0..1 + rng.next() % 6 {
+                s.push_str(rng.pick(TOKENS));
+            }
+            if s.starts_with(' ') {
+                continue;
+            }
+            let pest = pest_matches(Rule::AnonymousIndividual, &s);
+            let ours = super::super::lex::blank_node(&s).is_ok_and(|(rest, _)| rest.is_empty());
+            assert_eq!(pest, ours, "disagree on {s:?}: pest {pest}, nom {ours}");
+        }
+    }
+}
