@@ -1497,6 +1497,22 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
         }
     }
 
+    /// Is `iri` declared as `kind`, in this Ontology or any Ontology in
+    /// the import closure?
+    ///
+    /// An IRI declared as several kinds (a pun) is of each of them, whatever
+    /// order the declarations came in.
+    fn iri_is_kind(
+        &self,
+        iri: &IRI<A>,
+        kind: NamedOWLEntityKind,
+        ic: &[&DeclarationMappedIndex<A, AA>],
+    ) -> bool {
+        std::iter::once(<O as AsRef<DeclarationMappedIndex<A, AA>>>::as_ref(&self.o))
+            .chain(ic.iter().copied())
+            .any(|d| d.is_declaration_kind(iri, kind))
+    }
+
     /// Is `term` declared as `kind`, in this Ontology or any Ontology in
     /// the import closure?
     ///
@@ -1513,11 +1529,7 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
             Term::Iri(iri) if crate::vocab::is_xsd_datatype(iri) => {
                 kind == NamedOWLEntityKind::Datatype
             }
-            Term::Iri(iri) => {
-                std::iter::once(<O as AsRef<DeclarationMappedIndex<A, AA>>>::as_ref(&self.o))
-                    .chain(ic.iter().copied())
-                    .any(|d| d.is_declaration_kind(iri, kind))
-            }
+            Term::Iri(iri) => self.iri_is_kind(iri, kind, ic),
             // TODO: this might be too general. At the moment, I am
             // only using this function to distinguish between a
             // datatype and an class
@@ -2441,10 +2453,7 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
                 }
                 [Term::Iri(sub), Term::Iri(pred), t @ Term::Literal(_)] => {
                     if self.config.lax
-                        || matches!(
-                            self.distinguish_declaration_kind(pred, ic),
-                            Some(NamedOWLEntityKind::DataProperty)
-                        )
+                        || self.iri_is_kind(pred, NamedOWLEntityKind::DataProperty, ic)
                     {
                         ok_some! {
                             DataPropertyAssertion {
@@ -2459,10 +2468,7 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
                 }
                 [Term::Iri(sub), Term::Iri(pred), Term::Iri(obj)] => {
                     if self.config.lax
-                        || matches!(
-                            self.distinguish_declaration_kind(pred, ic),
-                            Some(NamedOWLEntityKind::ObjectProperty)
-                        )
+                        || self.iri_is_kind(pred, NamedOWLEntityKind::ObjectProperty, ic)
                     {
                         Ok(Some(
                             ObjectPropertyAssertion {
@@ -3545,16 +3551,29 @@ mod test {
         assert_eq!(n, 1);
     }
 
-    fn read_ttl(
+    fn read_ttl_incomplete(
         ont: &str,
         lax: bool,
-    ) -> Result<ConcreteRDFOntology<RcStr, Rc<AnnotatedComponent<RcStr>>>, HornedError> {
+    ) -> Result<
+        (
+            ConcreteRDFOntology<RcStr, Rc<AnnotatedComponent<RcStr>>>,
+            IncompleteParse<RcStr>,
+        ),
+        HornedError,
+    > {
         let b = Build::new_rc();
         let mut common = crate::io::ParserConfiguration::new(&b);
         common.lax = lax;
         let mut config: RDFParserConfiguration<RcStr, &Build<RcStr>> = common.into();
         config.format = Some(oxrdfio::RdfFormat::Turtle);
-        read(&mut ont.as_bytes(), config).map(|(ont, _)| ont)
+        read(&mut ont.as_bytes(), config)
+    }
+
+    fn read_ttl(
+        ont: &str,
+        lax: bool,
+    ) -> Result<ConcreteRDFOntology<RcStr, Rc<AnnotatedComponent<RcStr>>>, HornedError> {
+        read_ttl_incomplete(ont, lax).map(|(ont, _)| ont)
     }
 
     const PUN_HEAD: &str = r#"@prefix : <http://example.org/pun#> .
@@ -3582,6 +3601,39 @@ mod test {
                     read_ttl(&format!("{PUN_HEAD}{body}"), lax).unwrap().into();
                 assert_eq!(ont.i().equivalent_class().count(), 1, "{body}");
                 assert_eq!(ont.i().declare_object_property().count(), 1, "{body}");
+            }
+        }
+    }
+
+    const ASSERT_HEAD: &str = r#"@prefix : <http://example.org/pun#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+
+<http://example.org/pun> a owl:Ontology .
+:a a owl:NamedIndividual .
+:b a owl:NamedIndividual .
+"#;
+
+    /// An assertion on a property that is also a class is read whatever
+    /// order the declarations of the property come in.
+    #[test]
+    fn assertion_on_punned_class_and_property_is_order_independent() {
+        for (property, assertion) in
+            [("owl:DatatypeProperty", ":a :p \"x\" ."), ("owl:ObjectProperty", ":a :p :b .")]
+        {
+            for body in [
+                format!(":p a {property} .\n:p a owl:Class .\n{assertion}\n"),
+                format!(":p a owl:Class .\n:p a {property} .\n{assertion}\n"),
+            ] {
+                let (ont, incomplete) =
+                    read_ttl_incomplete(&format!("{ASSERT_HEAD}{body}"), false).unwrap();
+                assert!(incomplete.is_complete(), "{body}");
+                let ont: RcComponentMappedOntology = ont.into();
+                assert_eq!(
+                    ont.i().data_property_assertion().count()
+                        + ont.i().object_property_assertion().count(),
+                    1,
+                    "{body}"
+                );
             }
         }
     }
