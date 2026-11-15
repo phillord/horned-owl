@@ -1497,23 +1497,45 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
         }
     }
 
-    /// Give a Term, return the NamedOWLEntityKind that it represents,
-    /// or a Class if we do not know.
-    fn distinguish_term_kind(
-        &mut self,
+    /// Is `term` declared as `kind`, in this Ontology or any Ontology in
+    /// the import closure?
+    ///
+    /// An IRI declared as several kinds (a pun) is of each of them, whatever
+    /// order the declarations came in. An XSD datatype is a datatype and a
+    /// blank node is taken to be a class.
+    fn term_is_kind(
+        &self,
         term: &Term<A>,
+        kind: NamedOWLEntityKind,
         ic: &[&DeclarationMappedIndex<A, AA>],
-    ) -> Option<NamedOWLEntityKind> {
+    ) -> bool {
         match term {
             Term::Iri(iri) if crate::vocab::is_xsd_datatype(iri) => {
-                Some(NamedOWLEntityKind::Datatype)
+                kind == NamedOWLEntityKind::Datatype
             }
-            Term::Iri(iri) => self.distinguish_declaration_kind(iri, ic),
+            Term::Iri(iri) => {
+                std::iter::once(<O as AsRef<DeclarationMappedIndex<A, AA>>>::as_ref(&self.o))
+                    .chain(ic.iter().copied())
+                    .any(|d| d.is_declaration_kind(iri, kind))
+            }
             // TODO: this might be too general. At the moment, I am
             // only using this function to distinguish between a
             // datatype and an class
-            _ => Some(NamedOWLEntityKind::Class),
+            _ => kind == NamedOWLEntityKind::Class,
         }
+    }
+
+    /// What the subject of an `owl:equivalentClass` triple is, if it
+    /// is declared as something that can have one: a class, or a
+    /// datatype for a datatype definition.
+    fn equivalent_class_kind(
+        &self,
+        term: &Term<A>,
+        ic: &[&DeclarationMappedIndex<A, AA>],
+    ) -> Option<NamedOWLEntityKind> {
+        [NamedOWLEntityKind::Class, NamedOWLEntityKind::Datatype]
+            .into_iter()
+            .find(|k| self.term_is_kind(term, *k, ic))
     }
 
     /// Given an IRI work out its declaration kind, as defined in
@@ -2137,7 +2159,7 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
                 // TODO: We need to check whether these
                 // EquivalentClasses have any other EquivalentClasses
                 // and add to that axiom
-                [a, Term::OWL(VOWL::EquivalentClass), b] => match self.distinguish_term_kind(a, ic)
+                [a, Term::OWL(VOWL::EquivalentClass), b] => match self.equivalent_class_kind(a, ic)
                 {
                     Some(NamedOWLEntityKind::Class) => ok_some! {
                         EquivalentClasses(
@@ -3521,6 +3543,47 @@ mod test {
             .filter(|c| matches!(c.component, crate::model::Component::DeclareClass(_)))
             .count();
         assert_eq!(n, 1);
+    }
+
+    fn read_ttl(
+        ont: &str,
+        lax: bool,
+    ) -> Result<ConcreteRDFOntology<RcStr, Rc<AnnotatedComponent<RcStr>>>, HornedError> {
+        let b = Build::new_rc();
+        let mut common = crate::io::ParserConfiguration::new(&b);
+        common.lax = lax;
+        let mut config: RDFParserConfiguration<RcStr, &Build<RcStr>> = common.into();
+        config.format = Some(oxrdfio::RdfFormat::Turtle);
+        read(&mut ont.as_bytes(), config).map(|(ont, _)| ont)
+    }
+
+    const PUN_HEAD: &str = r#"@prefix : <http://example.org/pun#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+
+<http://example.org/pun> a owl:Ontology .
+:A a owl:Class .
+:B a owl:Class .
+"#;
+
+    const PUN_PROPERTY: &str = ":p a owl:ObjectProperty .\n";
+
+    const PUN_CLASS: &str = ":p a owl:Class ;\n    owl:equivalentClass [ a owl:Class ; owl:intersectionOf ( :A :B ) ] .\n";
+
+    /// https://github.com/phillord/horned-owl/issues/341
+    ///
+    /// A class that is also an object property is legal punning, and an
+    /// RDF graph is a set, so the result cannot depend on triple order.
+    #[test]
+    fn equivalent_class_of_punned_class_and_property_is_order_independent() {
+        for lax in [false, true] {
+            for body in [format!("{PUN_PROPERTY}{PUN_CLASS}"), format!("{PUN_CLASS}{PUN_PROPERTY}")]
+            {
+                let ont: RcComponentMappedOntology =
+                    read_ttl(&format!("{PUN_HEAD}{body}"), lax).unwrap().into();
+                assert_eq!(ont.i().equivalent_class().count(), 1, "{body}");
+                assert_eq!(ont.i().declare_object_property().count(), 1, "{body}");
+            }
+        }
     }
 
     fn read_from_format<R: BufRead>(bufread: &mut R, format: oxrdfio::RdfFormat) {
