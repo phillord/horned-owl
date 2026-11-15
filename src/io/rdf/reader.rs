@@ -1569,6 +1569,24 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
             .find_map(|d| d.declaration_kind(iri))
     }
 
+    /// Given an IRI that is used as a property, work out its declaration
+    /// kind.
+    ///
+    /// A property kind beats any other kind the IRI is declared as, so a
+    /// class that is also an object property is an object property here
+    /// whatever order its declarations came in. An IRI declared only as
+    /// something that is not a property keeps that kind.
+    fn distinguish_property_declaration_kind(
+        &mut self,
+        iri: &IRI<A>,
+        ic: &[&DeclarationMappedIndex<A, AA>],
+    ) -> Option<NamedOWLEntityKind> {
+        std::iter::once(<O as AsRef<DeclarationMappedIndex<A, AA>>>::as_ref(&self.o))
+            .chain(ic.iter().copied())
+            .find_map(|d| d.property_kind(iri))
+            .or_else(|| self.distinguish_declaration_kind(iri, ic))
+    }
+
     /// Distinguish or retrieve the property kind using either a
     /// declaration or, for BNode the presence of an
     /// ObjectPropertyExpression.
@@ -1585,7 +1603,7 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
                 let iri = self.config.build.as_ref().iri(vowl.as_ref());
                 self.distinguish_retrieve_property_kind(&Term::Iri(iri), ic)
             }
-            Term::Iri(iri) => match self.distinguish_declaration_kind(iri, ic) {
+            Term::Iri(iri) => match self.distinguish_property_declaration_kind(iri, ic) {
                 Some(NamedOWLEntityKind::AnnotationProperty) => {
                     Some(PropertyExpression::AnnotationProperty(iri.into()))
                 }
@@ -1622,7 +1640,7 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
     ) -> Result<Option<(PropertyExpression<A>, PropertyExpression<A>)>, HornedError> {
         let mut mix_match = |a, b| match (
             Self::get_used(&self.object_property_expression, &mut self.used_bnode, a),
-            self.distinguish_declaration_kind(b, ic),
+            self.distinguish_property_declaration_kind(b, ic),
         ) {
             (Some(ope), Some(NamedOWLEntityKind::ObjectProperty)) | (Some(ope), None) => {
                 Ok(Some((ope.into(), ObjectProperty(b.clone()).into())))
@@ -1676,8 +1694,8 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
     ) -> Result<Option<(PropertyExpression<A>, PropertyExpression<A>)>, HornedError> {
         use crate::model::NamedOWLEntityKind as NEK;
         match (
-            self.distinguish_declaration_kind(a, ic),
-            self.distinguish_declaration_kind(b, ic),
+            self.distinguish_property_declaration_kind(a, ic),
+            self.distinguish_property_declaration_kind(b, ic),
         ) {
             (Some(NEK::ObjectProperty), Some(NEK::ObjectProperty))
             | (Some(NEK::ObjectProperty), None)
@@ -3633,6 +3651,42 @@ mod test {
                         + ont.i().object_property_assertion().count(),
                     1,
                     "{body}"
+                );
+            }
+        }
+    }
+
+    const PROP_HEAD: &str = r#"@prefix : <http://example.org/pun#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+
+<http://example.org/pun> a owl:Ontology .
+:A a owl:Class .
+:C a owl:Class .
+:q a owl:ObjectProperty .
+"#;
+
+    /// A property that is also a class is read as a property wherever a
+    /// property is expected, whatever order its declarations come in.
+    #[test]
+    fn property_use_of_punned_class_and_property_is_order_independent() {
+        for use_of_p in [
+            ":C rdfs:subClassOf [ a owl:Restriction ; owl:onProperty :p ; owl:someValuesFrom :A ] .",
+            ":p rdfs:subPropertyOf :q .",
+            ":q rdfs:subPropertyOf :p .",
+        ] {
+            for declarations in [
+                ":p a owl:ObjectProperty .\n:p a owl:Class .\n",
+                ":p a owl:Class .\n:p a owl:ObjectProperty .\n",
+            ] {
+                let text = format!("{PROP_HEAD}{declarations}{use_of_p}\n");
+                let (ont, incomplete) = read_ttl_incomplete(&text, false).unwrap();
+                assert!(incomplete.is_complete(), "{text}");
+                let ont: RcComponentMappedOntology = ont.into();
+                assert_eq!(
+                    ont.i().sub_class_of().count() + ont.i().sub_object_property_of().count(),
+                    1,
+                    "{text}"
                 );
             }
         }
