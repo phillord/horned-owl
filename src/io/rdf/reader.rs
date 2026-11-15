@@ -1540,14 +1540,29 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
     /// What the subject of an `owl:equivalentClass` triple is, if it
     /// is declared as something that can have one: a class, or a
     /// datatype for a datatype definition.
+    ///
+    /// An undeclared subject is an error, but in lax mode it takes its
+    /// kind from the axiom: a datatype if the other side is a declared
+    /// datatype, and otherwise a class.
     fn equivalent_class_kind(
         &self,
-        term: &Term<A>,
+        a: &Term<A>,
+        b: &Term<A>,
         ic: &[&DeclarationMappedIndex<A, AA>],
     ) -> Option<NamedOWLEntityKind> {
-        [NamedOWLEntityKind::Class, NamedOWLEntityKind::Datatype]
+        let declared = [NamedOWLEntityKind::Class, NamedOWLEntityKind::Datatype]
             .into_iter()
-            .find(|k| self.term_is_kind(term, *k, ic))
+            .find(|k| self.term_is_kind(a, *k, ic));
+
+        declared.or_else(|| {
+            if !self.config.lax {
+                None
+            } else if self.term_is_kind(b, NamedOWLEntityKind::Datatype, ic) {
+                Some(NamedOWLEntityKind::Datatype)
+            } else {
+                Some(NamedOWLEntityKind::Class)
+            }
+        })
     }
 
     /// Given an IRI work out its declaration kind, as defined in
@@ -2189,7 +2204,7 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
                 // TODO: We need to check whether these
                 // EquivalentClasses have any other EquivalentClasses
                 // and add to that axiom
-                [a, Term::OWL(VOWL::EquivalentClass), b] => match self.equivalent_class_kind(a, ic)
+                [a, Term::OWL(VOWL::EquivalentClass), b] => match self.equivalent_class_kind(a, b, ic)
                 {
                     Some(NamedOWLEntityKind::Class) => ok_some! {
                         EquivalentClasses(
@@ -3706,6 +3721,40 @@ mod test {
             let ont: RcComponentMappedOntology = ont.into();
             assert_eq!(ont.i().annotation_assertion().count(), 1, "{text}");
         }
+    }
+
+    /// https://github.com/phillord/horned-owl/issues/339
+    /// https://github.com/phillord/horned-owl/issues/324
+    ///
+    /// An undeclared subject of owl:equivalentClass is an error, but
+    /// lax mode takes it to be a class as it does for rdfs:subClassOf.
+    #[test]
+    fn equivalent_class_of_undeclared_subject() {
+        for equivalent in [
+            ":X owl:equivalentClass [ a owl:Class ; owl:intersectionOf ( :A :B ) ] .",
+            ":X owl:equivalentClass :A .",
+            ":X owl:equivalentClass :Y .",
+        ] {
+            let text = format!("{PUN_HEAD}{equivalent}\n");
+
+            assert!(read_ttl(&text, false).is_err(), "{text}");
+
+            let ont: RcComponentMappedOntology = read_ttl(&text, true).unwrap().into();
+            assert_eq!(ont.i().equivalent_class().count(), 1, "{text}");
+        }
+    }
+
+    #[test]
+    fn equivalent_class_of_undeclared_subject_and_declared_datatype() {
+        let text = format!("{PUN_HEAD}:D a rdfs:Datatype .\n:X owl:equivalentClass :D .\n")
+            .replace(
+                "@prefix owl:",
+                "@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .\n@prefix owl:",
+            );
+
+        let ont: RcComponentMappedOntology = read_ttl(&text, true).unwrap().into();
+        assert_eq!(ont.i().datatype_definition().count(), 1, "{text}");
+        assert_eq!(ont.i().equivalent_class().count(), 0, "{text}");
     }
 
     fn read_from_format<R: BufRead>(bufread: &mut R, format: oxrdfio::RdfFormat) {
