@@ -594,6 +594,8 @@ pub struct OntologyParser<
     // Triples whose annotations have already been taken from `ann_map`,
     // so that a repeat of the triple adds nothing.
     ann_taken: HashSet<[Term<A>; 3]>,
+    // Extra rdf:type triples of axiom reifications
+    reification_types: Vec<VPosTriple<A>>,
     atom: HashMap<Term<A>, Atom<A>>,
     variable: HashMap<IRI<A>, Variable<A>>,
 
@@ -620,6 +622,7 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
             object_property_expression: d!(),
             data_range: d!(),
             used_bnode: d!(),
+            reification_types: d!(),
             ann_map: d!(),
             ann_taken: d!(),
             atom: d!(),
@@ -1051,7 +1054,14 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
                         ob.clone(),
                     ]);
                     let key = self.original_chain_list(key);
-                    let annotations = self.parse_annotations(ann)?;
+                    let (types, ann): (Vec<_>, Vec<_>) = ann
+                        .iter()
+                        .cloned()
+                        .partition(|t| matches!(t, [_, Term::RDF(VRDF::Type), _]));
+                    if !types.is_empty() {
+                        self.reification_types.push(VPosTriple(types, v.1));
+                    }
+                    let annotations = self.parse_annotations(&ann)?;
                     let idx = match self.ann_map.entry(key.clone()) {
                         Entry::Occupied(mut e) => e.get_mut().push(annotations),
                         Entry::Vacant(e) => {
@@ -2992,7 +3002,8 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
             &mut self.bnode,
         );
 
-        let bnode: Vec<_> = self.bnode.into_values().collect();
+        let mut bnode: Vec<_> = self.bnode.into_values().collect();
+        bnode.append(&mut self.reification_types);
         let bnode_seq: Vec<_> = self.bnode_seq.into_values().collect();
 
         // Entries in `used_bnode` were retrieved (possibly more than
@@ -3338,6 +3349,41 @@ mod test {
         let (_rdfont, incomplete) = p.as_ontology_and_incomplete();
         assert!(incomplete.is_complete());
         Ok(())
+    }
+
+    #[test]
+    fn axiom_reification_with_extra_type() {
+        let text = r#"@prefix : <http://example.org/axiom#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+<http://example.org/axiom> a owl:Ontology .
+:A a owl:Class .
+:B a owl:Class .
+:Reviewed a owl:Class .
+:A rdfs:subClassOf :B .
+[ a owl:Axiom , :Reviewed ;
+  owl:annotatedSource :A ;
+  owl:annotatedProperty rdfs:subClassOf ;
+  owl:annotatedTarget :B ;
+  rdfs:comment "checked" ] .
+"#;
+        let (ont, incomp): (ConcreteRDFOntology<RcStr, Rc<AnnotatedComponent<RcStr>>>, _) =
+            OntologyParser::from_bufread_with_format(
+                &mut text.as_bytes(),
+                Default::default(),
+                oxrdfio::RdfFormat::Turtle,
+            )
+            .unwrap()
+            .parse()
+            .unwrap_or_else(|e| panic!("{e}"));
+        assert_eq!(incomp.bnode.len(), 1, "{incomp:?}");
+        let ont: ComponentMappedOntology<_, _> = ont.into();
+        let sub: Vec<_> = ont
+            .i()
+            .component_for_kind(ComponentKind::SubClassOf)
+            .collect();
+        assert_eq!(sub.len(), 1);
+        assert_eq!(sub[0].ann.len(), 1);
     }
 
     #[test]
