@@ -103,6 +103,18 @@ impl<A: ForIRI, AA: ForIndex<A>> DeclarationMappedIndex<A, AA> {
             .find(|k| self.is_declaration_kind(iri, *k))
     }
 
+    /// Every declared IRI with every kind it is declared as, in no
+    /// particular order.
+    pub fn iter_all_kinds(&self) -> impl Iterator<Item = (&IRI<A>, BTreeSet<NamedEntityKind>)> {
+        self.kinds.iter().map(|(iri, d)| {
+            let kinds = DECLARATION_KINDS
+                .into_iter()
+                .filter(|k| d.all & bit(*k) != 0)
+                .collect();
+            (iri, kinds)
+        })
+    }
+
     /// Every kind `iri` is declared as.
     ///
     /// Empty if `iri` is not declared. Built in vocabulary has no

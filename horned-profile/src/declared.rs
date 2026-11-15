@@ -4,64 +4,34 @@
 //! (`DeclarationMappedIndex`) rather than re-deriving that logic --
 //! see `docs/horned-profile-plan.md`'s "Shared infrastructure" section.
 //!
-//! Also tracks, separately, the *full* set of declared kinds per IRI
-//! (`all_kinds`). `DeclarationMappedIndex::kind` deliberately collapses an
-//! IRI to a single "most useful" kind when it's punned (e.g. an
-//! ObjectProperty/AnnotationProperty pun always resolves to ObjectProperty,
-//! per issue #228) -- correct for its own purpose, but wrong for phase 3's
-//! needs: checking "was this IRI declared as an AnnotationProperty at all"
-//! or "is this IRI illegally punned" both need the full set, not the
-//! collapsed single answer.
+//! The index also keeps the *full* set of declared kinds per IRI
+//! (`all_kinds`). `DeclarationMappedIndex::kind` collapses an IRI to a
+//! single kind when it's punned (e.g. an ObjectProperty/AnnotationProperty
+//! pun always resolves to ObjectProperty, per issue #228), which is wrong
+//! for checking "was this IRI declared as an AnnotationProperty at all" or
+//! "is this IRI illegally punned".
 
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeSet, HashSet};
 use std::rc::Rc;
 
-use horned_owl::model::{AnnotatedComponent, Component, ForIRI, IRI, NamedEntityKind, Ontology};
+use horned_owl::model::{AnnotatedComponent, ForIRI, IRI, NamedEntityKind, Ontology};
 use horned_owl::ontology::declaration_mapped::DeclarationMappedIndex;
 use horned_owl::ontology::indexed::OntologyIndex;
 use horned_owl::vocab::{self, Namespace, OWL2Datatype};
 
 pub struct DeclaredEntities<A: ForIRI> {
     index: DeclarationMappedIndex<A, Rc<AnnotatedComponent<A>>>,
-    all_kinds: HashMap<IRI<A>, BTreeSet<NamedEntityKind>>,
 }
 
 impl<A: ForIRI> DeclaredEntities<A> {
     /// Builds a `DeclaredEntities` from every `Declare*` axiom in `o`.
-    ///
-    /// Indexes both the collapsed kind (via `DeclarationMappedIndex`, for
-    /// `kind`/`is_kind`) and the full, uncollapsed per-IRI kind set (via
-    /// `all_kinds`, for `is_declared_as`/`illegal_punnings`) in one pass.
     pub fn from_ontology<O: Ontology<A>>(o: &O) -> Self {
         let mut index = DeclarationMappedIndex::new();
-        let mut all_kinds: HashMap<IRI<A>, BTreeSet<NamedEntityKind>> = HashMap::new();
-
         for ac in o.iter() {
             index.index_insert(Rc::new(ac.clone()));
-
-            let entry = match &ac.component {
-                Component::DeclareClass(dc) => Some((dc.0.0.clone(), NamedEntityKind::Class)),
-                Component::DeclareObjectProperty(dp) => {
-                    Some((dp.0.0.clone(), NamedEntityKind::ObjectProperty))
-                }
-                Component::DeclareDataProperty(dp) => {
-                    Some((dp.0.0.clone(), NamedEntityKind::DataProperty))
-                }
-                Component::DeclareAnnotationProperty(dp) => {
-                    Some((dp.0.0.clone(), NamedEntityKind::AnnotationProperty))
-                }
-                Component::DeclareDatatype(dt) => Some((dt.0.0.clone(), NamedEntityKind::Datatype)),
-                Component::DeclareNamedIndividual(ni) => {
-                    Some((ni.0.0.clone(), NamedEntityKind::NamedIndividual))
-                }
-                _ => None,
-            };
-            if let Some((iri, kind)) = entry {
-                all_kinds.entry(iri).or_default().insert(kind);
-            }
         }
 
-        DeclaredEntities { index, all_kinds }
+        DeclaredEntities { index }
     }
 
     /// Returns the declared kind of `iri`, if declared.
@@ -74,8 +44,7 @@ impl<A: ForIRI> DeclaredEntities<A> {
         self.index.kind(iri)
     }
 
-    /// Returns `true` if `iri`'s collapsed declared kind (see `kind`) is
-    /// `kind`.
+    /// Returns `true` if `iri` is declared as `kind`, among any others.
     pub fn is_kind(&self, iri: &IRI<A>, kind: NamedEntityKind) -> bool {
         self.index.is_kind(iri, kind)
     }
@@ -84,13 +53,13 @@ impl<A: ForIRI> DeclaredEntities<A> {
     ///
     /// Empty if undeclared.
     pub fn all_kinds(&self, iri: &IRI<A>) -> BTreeSet<NamedEntityKind> {
-        self.all_kinds.get(iri).cloned().unwrap_or_default()
+        self.index.all_kinds(iri)
     }
 
     /// Returns `true` if `iri` is declared as `kind`, specifically.
     ///
-    /// Correct even when the IRI is also (illegally) punned as something
-    /// else, unlike `is_kind`. Also accepts built-in vocabulary without
+    /// Correct even when the IRI is also punned as something else, as is
+    /// `is_kind`. Also accepts built-in vocabulary without
     /// requiring a declaration axiom: `owl:Thing`/`owl:topObjectProperty`/etc. (via
     /// `vocab::to_built_in_entity`), the built-in annotation properties
     /// (`rdfs:label`/`comment`/`seeAlso`/`isDefinedBy`,
@@ -101,11 +70,7 @@ impl<A: ForIRI> DeclaredEntities<A> {
     /// last three matched by IRI string -- none has a named `vocab`
     /// constant in this codebase).
     pub fn is_declared_as(&self, iri: &IRI<A>, kind: NamedEntityKind) -> bool {
-        if self
-            .all_kinds
-            .get(iri)
-            .is_some_and(|kinds| kinds.contains(&kind))
-        {
+        if self.index.all_kinds(iri).contains(&kind) {
             return true;
         }
         if kind == NamedEntityKind::Datatype
@@ -144,8 +109,8 @@ impl<A: ForIRI> DeclaredEntities<A> {
     /// exactly as illegal as the `rdf:`/`rdfs:`/`owl:` cases.
     pub fn reserved_vocabulary_violations(&self) -> Vec<IRI<A>> {
         let mut out: Vec<IRI<A>> = self
-            .all_kinds
-            .iter()
+            .index
+            .iter_all_kinds()
             .filter(|(iri, kinds)| {
                 is_reserved_vocabulary(iri)
                     && !is_legitimately_reusable_builtin(iri)
@@ -177,7 +142,7 @@ impl<A: ForIRI> DeclaredEntities<A> {
         ];
 
         let mut out = Vec::new();
-        for (iri, kinds) in &self.all_kinds {
+        for (iri, kinds) in self.index.iter_all_kinds() {
             let mut violating: BTreeSet<NamedEntityKind> = BTreeSet::new();
 
             if kinds.contains(&NamedEntityKind::Class) && kinds.contains(&NamedEntityKind::Datatype)
