@@ -9,7 +9,7 @@ use pest::iterators::Pair;
 
 use crate::error::HornedError;
 use crate::model::*;
-use crate::vocab::{Facet, OWL, OWL2Datatype};
+use crate::vocab::{Facet, Namespace, OWL, OWL2Datatype};
 
 use super::Context;
 use super::Rule;
@@ -1048,7 +1048,20 @@ where
     fn from_pair_unchecked(pair: Pair<Rule>, ctx: &Context<'_, A>) -> Result<Self> {
         let mut pairs = pair.into_inner();
         let prefixes = PrefixMapping::from_pair(pairs.next().unwrap(), ctx)?;
-        let context = Context::new(ctx.build, &prefixes);
+        let mut expand = prefixes.clone();
+        for (name, ns) in [
+            ("owl", Namespace::OWL),
+            ("rdf", Namespace::RDF),
+            ("rdfs", Namespace::RDFS),
+            ("xsd", Namespace::XSD),
+        ] {
+            if !prefixes.mappings().any(|(p, _)| p == name) {
+                expand
+                    .add_prefix(name, ns.as_ref())
+                    .expect("predefined prefixes are valid");
+            }
+        }
+        let context = Context::new(ctx.build, &expand);
         MutableOntologyWrapper::from_pair(pairs.next().unwrap(), &context)
             .map(|ont| (ont, prefixes))
     }
@@ -1302,6 +1315,43 @@ mod tests {
         assert_eq!(
             doc.1.mappings().collect::<HashSet<_>>(),
             expected.mappings().collect::<HashSet<_>>()
+        );
+    }
+
+    #[test]
+    fn ontology_document_predefined_prefixes() {
+        let build = Build::default();
+        let prefixes = PrefixMapping::default();
+        let body = "Ontology(SubClassOf(:A owl:Thing) DataPropertyRange(:p xsd:string) \
+                    AnnotationAssertion(rdfs:label :A \"A\") AnnotationAssertion(rdfs:seeAlso :A rdf:nil))";
+        let read = |txt: &str| {
+            let pair = OwlFunctionalLexer::lex(Rule::OntologyDocument, txt)
+                .unwrap()
+                .next()
+                .unwrap();
+            let doc: (
+                MutableOntologyWrapper<_, SetOntology<String>>,
+                PrefixMapping,
+            ) = FromPair::from_pair(pair, &Context::new(&build, &prefixes)).unwrap();
+            doc
+        };
+
+        let implicit = read(&format!("Prefix(:=<http://example.com/>) {body}"));
+        let explicit = read(&format!(
+            "Prefix(:=<http://example.com/>) \
+             Prefix(owl:=<http://www.w3.org/2002/07/owl#>) \
+             Prefix(rdf:=<http://www.w3.org/1999/02/22-rdf-syntax-ns#>) \
+             Prefix(rdfs:=<http://www.w3.org/2000/01/rdf-schema#>) \
+             Prefix(xsd:=<http://www.w3.org/2001/XMLSchema#>) {body}"
+        ));
+        assert_eq!(implicit.0.0, explicit.0.0);
+        assert_eq!(
+            implicit
+                .1
+                .mappings()
+                .map(|(p, _)| p.as_str())
+                .collect::<Vec<_>>(),
+            vec![""]
         );
     }
 
