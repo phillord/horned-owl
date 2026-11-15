@@ -3,4 +3,4 @@ pub mod nom_reader;
 pub mod reader;
 pub mod writer;
 pub use reader::{parse_class_expression, read};
-pub use writer::{AsManchester, Manchester, write};
+pub use writer::{AsManchester, Manchester, write, write_stream, write_stream_chunked};

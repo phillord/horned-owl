@@ -1,15 +1,18 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::io::Write;
 
 use curie::PrefixMapping;
 
 use crate::error::HornedError;
+use crate::io::{StreamComponent, StreamOntology};
+use crate::model::AnnotatedComponent;
 use crate::model::Annotation;
 use crate::model::AnnotationSubject;
 use crate::model::Atom;
 use crate::model::Component;
 use crate::model::ComponentKind;
 use crate::model::ForIRI;
+use crate::model::MutableOntology;
 use crate::model::ObjectPropertyExpression;
 use crate::model::SubObjectPropertyExpression;
 use crate::ontology::component_mapped::ComponentMappedOntology;
@@ -79,18 +82,263 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
     let default_mapper = PrefixMapping::default();
     let mapping = mapping.unwrap_or(&default_mapper);
 
-    // -----------------------------------------------------------------------
-    // 1. Prefix declarations  (Manchester: `Prefix: prefix: <iri>`)
-    // -----------------------------------------------------------------------
     for (name, value) in mapping.mappings() {
-        writeln!(write, "Prefix: {name}: <{value}>")?;
+        write_prefix(&mut write, name, value)?;
     }
 
-    // -----------------------------------------------------------------------
-    // misc is declared early so the Ontology: header block below can push
-    // anonymous-individual-valued OntologyAnnotation components into it.
-    // -----------------------------------------------------------------------
-    let mut misc: Vec<String> = Vec::new();
+    let mut header = Header::default();
+    for ac in ont
+        .i()
+        .component_for_kind(ComponentKind::OntologyID)
+        .take(1)
+    {
+        header.add(ac);
+    }
+    for ac in ont.i().component_for_kind(ComponentKind::Import) {
+        header.add(ac);
+    }
+    for ac in ont
+        .i()
+        .component_for_kind(ComponentKind::OntologyAnnotation)
+    {
+        header.add(ac);
+    }
+    header.write(&mut write, mapping)?;
+
+    let mut general = Vec::new();
+    write_frames(&mut write, ont, mapping, &HashMap::new(), &mut general)?;
+    write_general(&mut write, &general)?;
+    Ok(write)
+}
+
+/// The number of components `write_stream` holds before it writes them.
+pub const DEFAULT_CHUNK: usize = 10_000;
+
+/// Write `components` as a Manchester Syntax document without holding the
+/// whole ontology.
+///
+/// Prefixes, the ontology id, imports and ontology annotations must come
+/// before every other component. The rest are written `DEFAULT_CHUNK` at a
+/// time, each chunk as frames grouped by entity, so an entity that is
+/// described in more than one chunk gets more than one frame. A frame is
+/// the same entity wherever it appears, so the document reads back as the
+/// same ontology, but it is longer than the output of [`write`], which
+/// groups everything. Entity annotations of an entity declared in an earlier
+/// chunk get a frame of their own. Components with no Manchester form are
+/// kept until the end for the trailing `# General axioms` block.
+pub fn write_stream<A: ForIRI, AA: ForIndex<A>, W: Write>(
+    write: W,
+    components: impl StreamOntology<A, AA>,
+) -> Result<W, HornedError> {
+    write_stream_chunked(write, components, DEFAULT_CHUNK)
+}
+
+/// As [`write_stream`], with `chunk` components held at a time.
+pub fn write_stream_chunked<A: ForIRI, AA: ForIndex<A>, W: Write>(
+    mut write: W,
+    components: impl StreamOntology<A, AA>,
+    chunk: usize,
+) -> Result<W, HornedError> {
+    let mut mapping = PrefixMapping::default();
+    let mut header = Header::default();
+    let mut header_written = false;
+    let mut started = false;
+    let mut known = KnownKinds::new();
+    let mut general = Vec::new();
+    let mut held: ComponentMappedOntology<A, AA> = ComponentMappedOntology::default();
+    let mut count = 0;
+
+    for item in components {
+        match item? {
+            StreamComponent::Prefix(name, iri) => {
+                if started {
+                    return Err(HornedError::invalid(
+                        "a prefix came after the first component of a streamed Manchester document",
+                    ));
+                }
+                let _ = mapping.add_prefix(&name, &iri);
+                write_prefix(&mut write, &name, &iri)?;
+            }
+            StreamComponent::Component(ac) => {
+                let ac: &AnnotatedComponent<A> = ac.borrow();
+                if matches!(ac.component, Component::DocIRI(_)) {
+                    continue;
+                }
+                if matches!(
+                    ac.component,
+                    Component::OntologyID(_)
+                        | Component::Import(_)
+                        | Component::OntologyAnnotation(_)
+                ) {
+                    if header_written {
+                        return Err(HornedError::invalid(
+                            "the ontology id, imports and annotations of a streamed Manchester \
+                             document must come before its other components",
+                        ));
+                    }
+                    started = true;
+                    header.add(ac);
+                    continue;
+                }
+                if !header_written {
+                    header.write(&mut write, &mapping)?;
+                    header_written = true;
+                }
+                started = true;
+                note_declaration(&mut known, &ac.component);
+                held.insert(ac.clone());
+                count += 1;
+                if count >= chunk {
+                    write_frames(&mut write, &held, &mapping, &known, &mut general)?;
+                    held = ComponentMappedOntology::default();
+                    count = 0;
+                }
+            }
+        }
+    }
+    if !header_written {
+        header.write(&mut write, &mapping)?;
+    }
+    if count > 0 {
+        write_frames(&mut write, &held, &mapping, &known, &mut general)?;
+    }
+    write_general(&mut write, &general)?;
+    Ok(write)
+}
+
+/// Remember the kind of the entity a declaration declares.
+fn note_declaration<A: ForIRI>(known: &mut KnownKinds, c: &Component<A>) {
+    let (kind, iri) = match c {
+        Component::DeclareClass(d) => (FrameKind::Class, d.0.0.as_ref()),
+        Component::DeclareObjectProperty(d) => (FrameKind::ObjectProperty, d.0.0.as_ref()),
+        Component::DeclareDataProperty(d) => (FrameKind::DataProperty, d.0.0.as_ref()),
+        Component::DeclareAnnotationProperty(d) => (FrameKind::AnnotationProperty, d.0.0.as_ref()),
+        Component::DeclareNamedIndividual(d) => (FrameKind::Individual, d.0.0.as_ref()),
+        Component::DeclareDatatype(d) => (FrameKind::Datatype, d.0.0.as_ref()),
+        _ => return,
+    };
+    known.entry(iri.to_string()).or_insert(kind);
+}
+
+fn write_prefix<W: Write>(write: &mut W, name: &str, value: &str) -> Result<(), HornedError> {
+    writeln!(write, "Prefix: {name}: <{value}>")?;
+    Ok(())
+}
+
+/// The ontology IRI, imports and ontology annotations, which go in the
+/// `Ontology:` header.
+struct Header<A: ForIRI> {
+    iri: Option<crate::model::IRI<A>>,
+    viri: Option<crate::model::IRI<A>>,
+    imports: Vec<crate::model::IRI<A>>,
+    annotations: Vec<Annotation<A>>,
+}
+
+impl<A: ForIRI> Default for Header<A> {
+    fn default() -> Self {
+        Header {
+            iri: None,
+            viri: None,
+            imports: Vec::new(),
+            annotations: Vec::new(),
+        }
+    }
+}
+
+impl<A: ForIRI> Header<A> {
+    /// Add a header component, returning whether it was one.
+    fn add(&mut self, ac: &crate::model::AnnotatedComponent<A>) -> bool {
+        match &ac.component {
+            Component::OntologyID(oid) => {
+                self.iri = oid.iri.clone();
+                self.viri = oid.viri.clone();
+            }
+            Component::Import(imp) => self.imports.push(imp.0.clone()),
+            Component::OntologyAnnotation(oa) => self.annotations.push(oa.0.clone()),
+            _ => return false,
+        }
+        true
+    }
+
+    fn write<W: Write>(&self, write: &mut W, mapping: &PrefixMapping) -> Result<(), HornedError> {
+        // §2.5 AnnotationTarget admits Literal | IRI | AnonymousIndividual, so
+        // every ontology annotation (anon values included) renders natively.
+        if self.iri.is_some() || !self.imports.is_empty() || !self.annotations.is_empty() {
+            writeln!(write)?;
+            match &self.iri {
+                Some(iri) => match &self.viri {
+                    Some(viri) => writeln!(
+                        write,
+                        "Ontology: {} {}",
+                        iri.as_manchester_with_prefixes(mapping),
+                        viri.as_manchester_with_prefixes(mapping)
+                    )?,
+                    None => writeln!(
+                        write,
+                        "Ontology: {}",
+                        iri.as_manchester_with_prefixes(mapping)
+                    )?,
+                },
+                None => writeln!(write, "Ontology:")?,
+            }
+            for imp in &self.imports {
+                writeln!(
+                    write,
+                    "    Import: {}",
+                    imp.as_manchester_with_prefixes(mapping)
+                )?;
+            }
+            for ann in &self.annotations {
+                writeln!(
+                    write,
+                    "    Annotations: {}",
+                    as_manchester::annotation_to_manchester(ann, mapping)
+                )?;
+            }
+        }
+        Ok(())
+    }
+}
+
+/// The kinds of the entities declared so far, by IRI. A streaming writer
+/// keeps these to give an entity annotation a frame even when the entity's
+/// declaration was written in an earlier chunk.
+type KnownKinds = HashMap<String, FrameKind>;
+
+fn frame_keyword(fk: &FrameKind) -> &'static str {
+    match fk {
+        FrameKind::Class => "Class",
+        FrameKind::ObjectProperty => "ObjectProperty",
+        FrameKind::DataProperty => "DataProperty",
+        FrameKind::AnnotationProperty => "AnnotationProperty",
+        FrameKind::Individual => "Individual",
+        FrameKind::Datatype => "Datatype",
+    }
+}
+
+/// The trailing block of components with no Manchester form, in functional
+/// syntax. It must be last, as the reader takes everything after its marker.
+fn write_general<W: Write>(write: &mut W, general: &[String]) -> Result<(), HornedError> {
+    if !general.is_empty() {
+        writeln!(write)?;
+        writeln!(write, "# General axioms")?;
+        for line in general {
+            writeln!(write, "{line}")?;
+        }
+    }
+    Ok(())
+}
+
+/// Write the frames, rules and `Misc` axioms of `ont`. Components that
+/// belong in the trailing general axioms block are added to `general`.
+fn write_frames<A: ForIRI, AA: ForIndex<A>, W: Write>(
+    write: &mut W,
+    ont: &ComponentMappedOntology<A, AA>,
+    mapping: &PrefixMapping,
+    known: &KnownKinds,
+    general: &mut Vec<String>,
+) -> Result<(), HornedError> {
+    let misc = general;
 
     // Native Manchester top-level `Misc:` lines (§2.5) for non-frameable n-ary
     // axioms (members not all named).  Emitted BEFORE the `# General axioms`
@@ -113,86 +361,6 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
     // annotation assertions (`Individual: _:id`). Fully rendered (incl. leading
     // blank line), emitted as native frames before the `# General axioms` block.
     let mut extra_frames: Vec<String> = Vec::new();
-
-    // -----------------------------------------------------------------------
-    // 2. Conformant Ontology: header (IRI + nested Import: + Annotations:)
-    //    W3C Manchester puts imports and ontology annotations INSIDE the
-    //    Ontology: frame, not at top level. §2.5's AnnotationTarget admits
-    //    Literal | IRI | AnonymousIndividual, so anon-valued annotations
-    //    render natively (`_:label`).
-    // -----------------------------------------------------------------------
-    {
-        let (header_iri, header_viri): (
-            Option<crate::model::IRI<A>>,
-            Option<crate::model::IRI<A>>,
-        ) = {
-            let mut id_iter = ont.i().component_for_kind(ComponentKind::OntologyID);
-            if let Some(ac) = id_iter.next()
-                && let Component::OntologyID(oid) = &ac.component
-            {
-                (oid.iri.clone(), oid.viri.clone())
-            } else {
-                (None, None)
-            }
-        };
-        let imports: Vec<crate::model::IRI<A>> = ont
-            .i()
-            .component_for_kind(ComponentKind::Import)
-            .filter_map(|ac| {
-                if let Component::Import(imp) = &ac.component {
-                    Some(imp.0.clone())
-                } else {
-                    None
-                }
-            })
-            .collect();
-        // §2.5 AnnotationTarget admits Literal | IRI | AnonymousIndividual, so
-        // every ontology annotation (anon values included) renders natively.
-        let conformant_ont_anns: Vec<Annotation<A>> = ont
-            .i()
-            .component_for_kind(ComponentKind::OntologyAnnotation)
-            .filter_map(|ac| {
-                if let Component::OntologyAnnotation(oa) = &ac.component {
-                    Some(oa.0.clone())
-                } else {
-                    None
-                }
-            })
-            .collect();
-        if header_iri.is_some() || !imports.is_empty() || !conformant_ont_anns.is_empty() {
-            writeln!(write)?;
-            match &header_iri {
-                Some(iri) => match &header_viri {
-                    Some(viri) => writeln!(
-                        write,
-                        "Ontology: {} {}",
-                        iri.as_manchester_with_prefixes(mapping),
-                        viri.as_manchester_with_prefixes(mapping)
-                    )?,
-                    None => writeln!(
-                        write,
-                        "Ontology: {}",
-                        iri.as_manchester_with_prefixes(mapping)
-                    )?,
-                },
-                None => writeln!(write, "Ontology:")?,
-            }
-            for imp in &imports {
-                writeln!(
-                    write,
-                    "    Import: {}",
-                    imp.as_manchester_with_prefixes(mapping)
-                )?;
-            }
-            for ann in &conformant_ont_anns {
-                writeln!(
-                    write,
-                    "    Annotations: {}",
-                    as_manchester::annotation_to_manchester(ann, mapping)
-                )?;
-            }
-        }
-    }
 
     // -----------------------------------------------------------------------
     // 3. Bucket axioms into frames and a misc list.
@@ -943,6 +1111,16 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
                         .expect("frame presence just confirmed by contains_key")
                         .clauses
                         .push(clause);
+                } else if let Some(fk) = known.get(subj) {
+                    // Declared in an earlier chunk of a streamed document, so
+                    // it gets another frame; frames of one entity merge on
+                    // reading.
+                    extra_frames.push(format!(
+                        "\n{}: {}\n    {}",
+                        frame_keyword(fk),
+                        as_manchester::render_iri_to_string(subj, Some(mapping)),
+                        clause
+                    ));
                 } else {
                     // Orphan: no frame heads this IRI → not Manchester-expressible.
                     // Written as functional syntax, which also carries the
@@ -972,14 +1150,6 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
     // -----------------------------------------------------------------------
     // 4. Emit frames, sorted by (FrameKind, subject_iri).
     // -----------------------------------------------------------------------
-    let frame_keyword = |fk: &FrameKind| match fk {
-        FrameKind::Class => "Class",
-        FrameKind::ObjectProperty => "ObjectProperty",
-        FrameKind::DataProperty => "DataProperty",
-        FrameKind::AnnotationProperty => "AnnotationProperty",
-        FrameKind::Individual => "Individual",
-        FrameKind::Datatype => "Datatype",
-    };
 
     for ((_fk, _iri), frame) in &frames {
         // Render the subject IRI with prefix abbreviation.
@@ -1061,24 +1231,7 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
         }
     }
 
-    // -----------------------------------------------------------------------
-    // 5. Emit misc / general axioms.
-    //    Lines here may be in OWL functional syntax (see `as_manchester.rs`
-    //    Component impl) for genuinely-inexpressible components (general
-    //    anonymous-subject class axioms, SWRL rules) — they are NOT valid
-    //    Manchester syntax.
-    // -----------------------------------------------------------------------
-    if !misc.is_empty() {
-        writeln!(write)?;
-        // # functional-syntax fallback: some lines below use OWL functional
-        // syntax (not Manchester) for Component variants lacking a native form.
-        writeln!(write, "# General axioms")?;
-        for line in &misc {
-            writeln!(write, "{line}")?;
-        }
-    }
-
-    Ok(write)
+    Ok(())
 }
 
 // ---------------------------------------------------------------------------

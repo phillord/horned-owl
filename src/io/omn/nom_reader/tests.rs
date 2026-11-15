@@ -236,3 +236,58 @@ mod grammar {
         assert!(accepted > 1000, "only {accepted} accepted");
     }
 }
+
+mod writing {
+    use super::*;
+    use crate::io::{component_stream, prefix_stream};
+    use crate::ontology::component_mapped::ComponentMappedOntology;
+
+    fn load(
+        path: &PathBuf,
+    ) -> Option<(ComponentMappedOntology<RcStr, RcStr_>, curie::PrefixMapping)> {
+        let doc = slurp::read_all_to_string(path).unwrap();
+        let (ont, pm): (SetOntology<RcStr>, _) = nom_read(&doc).ok()?;
+        Some((ont.into(), pm))
+    }
+
+    type RcStr_ = std::rc::Rc<crate::model::AnnotatedComponent<RcStr>>;
+
+    fn streamed(
+        ont: &ComponentMappedOntology<RcStr, RcStr_>,
+        pm: &curie::PrefixMapping,
+        chunk: usize,
+    ) -> String {
+        let items = prefix_stream(pm).chain(component_stream(ont));
+        let out = crate::io::omn::write_stream_chunked(Vec::new(), items, chunk).unwrap();
+        String::from_utf8(out).unwrap()
+    }
+
+    /// With room for everything the streamed document is the batch one.
+    #[rstest]
+    fn one_chunk_same_as_write(#[files("src/ont/owl-manchester/*.omn")] resource: PathBuf) {
+        let Some((ont, pm)) = load(&resource) else {
+            return;
+        };
+        let batch = crate::io::omn::write(Vec::new(), &ont, Some(&pm)).unwrap();
+        assert_eq!(
+            String::from_utf8(batch).unwrap(),
+            streamed(&ont, &pm, usize::MAX)
+        );
+    }
+
+    /// Small chunks repeat frames, which must not change what is read.
+    #[rstest]
+    fn small_chunks_read_back_the_same(#[files("src/ont/owl-manchester/*.omn")] resource: PathBuf) {
+        let Some((ont, pm)) = load(&resource) else {
+            return;
+        };
+        let batch =
+            String::from_utf8(crate::io::omn::write(Vec::new(), &ont, Some(&pm)).unwrap()).unwrap();
+        let (expected, _) = nom_read(&batch).unwrap();
+        for chunk in [1, 2, 5] {
+            let text = streamed(&ont, &pm, chunk);
+            let (got, _) = nom_read(&text).unwrap_or_else(|e| panic!("chunk {chunk}: {e}\n{text}"));
+            pretty_assertions::assert_eq!(expected, got, "chunk {chunk}:\n{text}");
+        }
+    }
+}
