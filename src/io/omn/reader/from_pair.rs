@@ -261,7 +261,7 @@ impl<A: ForIRI> FromPair<A> for Literal<A> {
                 let mut parts = inner.into_inner();
                 let literal = String::from_pair(parts.next().unwrap(), ctx)?;
                 // LanguageTag = ${ "@" ~ BCP47_LanguageTag }  — as_str includes the "@"
-                let lang = parts.next().unwrap().as_str()[1..].trim().to_string();
+                let lang = crate::io::language_tag(parts.next().unwrap().as_str()[1..].trim());
                 Ok(Literal::Language { literal, lang })
             }
             Rule::StringLiteralNoLanguage => {
