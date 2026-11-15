@@ -62,11 +62,13 @@ impl<A: ForIRI, AA: ForIndex<A>> DeclarationMappedIndex<A, AA> {
         DeclarationMappedIndex::default()
     }
 
+    /// Is `iri` an annotation property?
+    ///
+    /// True if it is declared as one and not also as a data or object
+    /// property, which beat it. Other kinds, such as a class, do not
+    /// matter.
     pub fn is_annotation_property(&self, iri: &IRI<A>) -> bool {
-        matches! {
-            self.declaration_kind(iri),
-            Some(NamedOWLEntityKind::AnnotationProperty)
-        }
+        self.property_kind(iri) == Some(NamedOWLEntityKind::AnnotationProperty)
     }
 
     /// Is `iri` declared as `kind`?
@@ -731,6 +733,29 @@ mod test {
         d.index_remove(&ni);
         assert!(!d.puns().contains(&iri));
         assert!(d.is_kind(&iri, NamedEntityKind::Class));
+    }
+
+    #[test]
+    fn test_annotation_property_pun_with_class() {
+        let b = Build::new_rc();
+        let iri = b.iri("http://www.example.com/p");
+        for order in [
+            [NamedEntityKind::AnnotationProperty, NamedEntityKind::Class],
+            [NamedEntityKind::Class, NamedEntityKind::AnnotationProperty],
+        ] {
+            let mut d = DeclarationMappedIndex::new_rc();
+            for k in order {
+                d.index_insert(decl(&b, k, "http://www.example.com/p").into());
+            }
+            assert!(d.is_annotation_property(&iri), "{order:?}");
+        }
+
+        // The other property kinds still beat it
+        let mut d = DeclarationMappedIndex::new_rc();
+        for k in [NamedEntityKind::AnnotationProperty, NamedEntityKind::ObjectProperty] {
+            d.index_insert(decl(&b, k, "http://www.example.com/p").into());
+        }
+        assert!(!d.is_annotation_property(&iri));
     }
 
     #[test]

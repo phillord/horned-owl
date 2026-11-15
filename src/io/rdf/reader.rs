@@ -3692,6 +3692,22 @@ mod test {
         }
     }
 
+    /// An annotation property that is also a class still annotates,
+    /// whatever order its declarations come in.
+    #[test]
+    fn annotation_with_punned_class_and_annotation_property() {
+        for declarations in [
+            ":p a owl:AnnotationProperty .\n:p a owl:Class .\n",
+            ":p a owl:Class .\n:p a owl:AnnotationProperty .\n",
+        ] {
+            let text = format!("{ASSERT_HEAD}{declarations}:a :p \"x\" .\n");
+            let (ont, incomplete) = read_ttl_incomplete(&text, false).unwrap();
+            assert!(incomplete.is_complete(), "{text}");
+            let ont: RcComponentMappedOntology = ont.into();
+            assert_eq!(ont.i().annotation_assertion().count(), 1, "{text}");
+        }
+    }
+
     fn read_from_format<R: BufRead>(bufread: &mut R, format: oxrdfio::RdfFormat) {
         let (ont, incomp): (ConcreteRDFOntology<RcStr, Rc<AnnotatedComponent<RcStr>>>, _) =
             OntologyParser::from_bufread_with_format(bufread, Default::default(), format)
