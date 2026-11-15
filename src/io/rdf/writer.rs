@@ -1364,6 +1364,7 @@ fn data_cardinality<A: ForIRI, F: RdfFormatter<A, W>, W: Write>(
     n: &u32,
     dp: &DataProperty<A>,
     dr: &DataRange<A>,
+    unqual: PNamedNode<A>,
     qual: PNamedNode<A>,
     f: &mut F,
     ng: &mut NodeGenerator<A>,
@@ -1378,17 +1379,28 @@ fn data_cardinality<A: ForIRI, F: RdfFormatter<A, W>, W: Write>(
         value: format!("{n}").into(),
         datatype: ng.nn(XSD::NonNegativeInteger),
     });
-    let node_dr: PTerm<_> = dr.render(f, ng)?.into();
 
     // Unqualified Only
-    Ok(triples_to_node!(
+    triples!(
         f,
         bn.clone(),
         ng.nn(RDF::Type),
         ng.nn(OWL::Restriction),
         bn.clone(),
         ng.nn(OWL::OnProperty),
-        node_dp,
+        node_dp
+    );
+
+    if let DataRange::Datatype(ref dt) = *dr
+        && dt.is(&crate::vocab::OWL2Datatype::Literal)
+    {
+        triples!(f, bn.clone(), unqual, node_n);
+        return Ok(bn);
+    }
+    let node_dr: PTerm<_> = dr.render(f, ng)?.into();
+
+    Ok(triples_to_node!(
+        f,
         bn.clone(),
         qual,
         node_n,
@@ -1562,13 +1574,13 @@ render_to_node! {
                     )
                 }
                 Self::DataMinCardinality{n, dp, dr} => {
-                    data_cardinality(n, dp, dr, ng.nn(OWL::MinQualifiedCardinality), f, ng)?
+                    data_cardinality(n, dp, dr, ng.nn(OWL::MinCardinality), ng.nn(OWL::MinQualifiedCardinality), f, ng)?
                 }
                 Self::DataMaxCardinality{n, dp, dr} => {
-                    data_cardinality(n, dp, dr, ng.nn(OWL::MaxQualifiedCardinality), f, ng)?
+                    data_cardinality(n, dp, dr, ng.nn(OWL::MaxCardinality), ng.nn(OWL::MaxQualifiedCardinality), f, ng)?
                 }
                 Self::DataExactCardinality{n, dp, dr} => {
-                    data_cardinality(n, dp, dr, ng.nn(OWL::QualifiedCardinality), f, ng)?
+                    data_cardinality(n, dp, dr, ng.nn(OWL::Cardinality), ng.nn(OWL::QualifiedCardinality), f, ng)?
                 },
             }
         )
@@ -2152,6 +2164,63 @@ mod test {
             .into(),
         ];
         assert_eq!(disjoint(&ont2), want);
+    }
+
+    #[test]
+    fn unqualified_data_cardinality_round_trip() {
+        let b = Build::new_rc();
+        let mut ont = ComponentMappedOntology::new_rc();
+        let dp = b.data_property("http://example.com/dp");
+        let c = b.class("http://example.com/C");
+        ont.insert(DeclareDataProperty(dp.clone()));
+        ont.insert(DeclareClass(c.clone()));
+        let literal =
+            DataRange::Datatype(b.datatype("http://www.w3.org/2000/01/rdf-schema#Literal"));
+        let integer = DataRange::Datatype(b.datatype("http://www.w3.org/2001/XMLSchema#integer"));
+        for ce in [
+            ClassExpression::DataExactCardinality {
+                n: 1,
+                dp: dp.clone(),
+                dr: literal.clone(),
+            },
+            ClassExpression::DataMinCardinality {
+                n: 2,
+                dp: dp.clone(),
+                dr: literal.clone(),
+            },
+            ClassExpression::DataMaxCardinality {
+                n: 3,
+                dp: dp.clone(),
+                dr: integer.clone(),
+            },
+        ] {
+            ont.insert(SubClassOf {
+                sub: ClassExpression::Class(c.clone()),
+                sup: ce,
+            });
+        }
+
+        let mut buf = Vec::new();
+        write(&mut buf, &ont, None).unwrap();
+        let text = String::from_utf8(buf.clone()).unwrap();
+        assert!(text.contains("owl:cardinality"), "{text}");
+        assert!(text.contains("owl:minCardinality"), "{text}");
+        assert!(!text.contains("owl:qualifiedCardinality"), "{text}");
+        assert!(!text.contains("owl:minQualifiedCardinality"), "{text}");
+        assert!(text.contains("owl:maxQualifiedCardinality"), "{text}");
+
+        let ont2 = read_ok(&mut BufReader::new(&buf[..]));
+        let subs = |o: &SetOntology<RcStr>| -> Vec<Component<RcStr>> {
+            let mut v: Vec<_> = o
+                .iter()
+                .filter(|c| matches!(c.component, Component::SubClassOf(_)))
+                .map(|c| c.component.clone())
+                .collect();
+            v.sort();
+            v
+        };
+        let ont: SetOntology<RcStr> = ont.into();
+        assert_eq!(subs(&ont2), subs(&ont));
     }
 
     #[test]
