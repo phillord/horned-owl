@@ -1,6 +1,7 @@
 use criterion::{AxisScale, BenchmarkId, Criterion, PlotConfiguration, criterion_group};
 use horned_owl::model::{Build, MutableOntology, RcStr};
 use horned_owl::ontology::component_mapped::RcComponentMappedOntology;
+use horned_owl::ontology::indexed::IterableOntologyIndex;
 use horned_owl::ontology::set::SetOntology;
 use horned_pretty_rdf::ox::WriterQuadSerializerAdaptor;
 use oxrdfio::RdfSerializer;
@@ -67,6 +68,17 @@ fn bench_io_write(c: &mut Criterion) {
         group.bench_function(BenchmarkId::new("omn_io_write", n), |b| {
             b.iter(|| {
                 horned_owl::io::omn::writer::write(sink(), &ont, None).ok();
+            })
+        });
+
+        group.bench_function(BenchmarkId::new("omn_stream_io_write", n), |b| {
+            b.iter(|| {
+                let items = ont
+                    .i()
+                    .iter()
+                    .cloned()
+                    .map(|ac| Ok(horned_owl::io::StreamComponent::Component(ac)));
+                horned_owl::io::omn::write_stream(sink(), items).ok();
             })
         });
     }
