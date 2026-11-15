@@ -12,6 +12,9 @@ pub enum Format {
     /// that both OFN readers see every ontology.
     OfnNom,
     Omn,
+    /// OMN written by the omn writer and re-read by the nom reader, as
+    /// `OfnNom` is for OFN.
+    OmnNom,
     Obo,
     /// Turtle / N-Triples (read only — via the oxrdfio-backed RDF reader with
     /// `RdfFormat::Turtle`; there is no Turtle *writer*, so it never appears as

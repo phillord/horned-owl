@@ -15,10 +15,10 @@ use crate::io::{ParserConfiguration, StreamComponent};
 use crate::model::*;
 use crate::vocab::{Facet, OWL, OWL2Datatype};
 
-mod bcp47;
-mod error;
-mod lex;
-mod rfc3987;
+pub(crate) mod bcp47;
+pub(crate) mod error;
+pub(crate) mod lex;
+pub(crate) mod rfc3987;
 mod stream;
 
 pub use stream::{Reader, read_to_stream};

@@ -106,6 +106,10 @@ pub fn read_source_with(fmt: Format, bytes: &[u8], lax: bool) -> anyhow::Result<
             let sop = omn::reader::read(Cursor::new(bytes), config()).map_err(horned_err)?;
             Output::omn(sop).decompose()
         }
+        Format::OmnNom => {
+            let sop = omn::nom_reader::read(Cursor::new(bytes), config()).map_err(horned_err)?;
+            Output::omn(sop).decompose()
+        }
         Format::OwlXml => {
             let sop = owx::reader::read(&mut Cursor::new(bytes), config()).map_err(horned_err)?;
             Output::owx(sop).decompose()
@@ -167,7 +171,7 @@ pub fn write_target(
         Format::Ofn | Format::OfnNom => {
             ofn::writer::write(&mut out, cmo, Some(prefixes)).map_err(horned_err)?;
         }
-        Format::Omn => {
+        Format::Omn | Format::OmnNom => {
             omn::writer::write(&mut out, cmo, Some(prefixes)).map_err(horned_err)?;
         }
         Format::OwlXml => {

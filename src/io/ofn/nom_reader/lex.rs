@@ -3,7 +3,6 @@
 //! Every token parser skips leading whitespace and comments itself.
 use nom::bytes::complete::take_while1;
 use nom::character::complete::char;
-use nom::combinator::cut;
 use nom::error::context;
 use nom::{Err, IResult, Parser};
 
@@ -83,7 +82,7 @@ pub fn equals(i: &str) -> PResult<'_, ()> {
 // ---------------------------------------------------------------------------
 // IRIs
 
-fn pn_chars_base(c: char) -> bool {
+pub(crate) fn pn_chars_base(c: char) -> bool {
     c.is_ascii_alphabetic()
         || matches!(c,
             '\u{00C0}'..='\u{00D6}'
@@ -100,11 +99,11 @@ fn pn_chars_base(c: char) -> bool {
             | '\u{10000}'..='\u{EFFFF}')
 }
 
-fn pn_chars_u(c: char) -> bool {
+pub(crate) fn pn_chars_u(c: char) -> bool {
     pn_chars_base(c) || c == '_'
 }
 
-fn pn_chars(c: char) -> bool {
+pub(crate) fn pn_chars(c: char) -> bool {
     pn_chars_u(c)
         || c == '-'
         || c.is_ascii_digit()
@@ -112,7 +111,7 @@ fn pn_chars(c: char) -> bool {
 }
 
 /// Byte length of `(("." PN_CHARS) | PN_CHARS)*` at the start of `s`.
-fn pn_tail(s: &str) -> usize {
+pub(crate) fn pn_tail(s: &str) -> usize {
     let mut chars = s.char_indices().peekable();
     let mut end = 0;
     while let Some((p, c)) = chars.next() {
@@ -134,7 +133,7 @@ fn pn_tail(s: &str) -> usize {
 }
 
 /// Byte length of a blank node label / local name.
-fn pn_local(s: &str) -> Option<usize> {
+pub(crate) fn pn_local(s: &str) -> Option<usize> {
     let c = s.chars().next()?;
     if !(pn_chars_u(c) || c.is_ascii_digit()) {
         return None;
@@ -158,7 +157,7 @@ pub fn pname_ns(i: &str) -> PResult<'_, &str> {
 }
 
 /// A prefixed name, returned as `(prefix, local, whole, rest)`.
-fn pname(i: &str) -> PResult<'_, (&str, &str, &str)> {
+pub(crate) fn pname(i: &str) -> PResult<'_, (&str, &str, &str)> {
     let start = sp(i);
     let (r, prefix) = pname_ns(i)?;
     match pn_local(r) {
