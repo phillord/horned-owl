@@ -2347,6 +2347,43 @@ mod tests {
     use rstest::rstest;
 
     #[test]
+    fn reads_data_range_after_custom_datatype() {
+        let b = Build::new_rc();
+        let mut pm = curie::PrefixMapping::default();
+        pm.add_prefix("", "http://t/").unwrap();
+        pm.add_prefix("xsd", "http://www.w3.org/2001/XMLSchema#")
+            .unwrap();
+        let ctx = Context::new(&b, &pm);
+        let ce = |text: &str| {
+            let pair = ManchesterLexer::lex(Rule::Description, text)
+                .unwrap_or_else(|e| panic!("{text}: {e}"))
+                .next()
+                .unwrap();
+            ClassExpression::<RcStr>::from_pair(pair, &ctx).unwrap()
+        };
+        assert!(matches!(
+            ce(r#":load only (:Percentage or {"0.0"^^xsd:decimal})"#),
+            ClassExpression::DataAllValuesFrom { .. }
+        ));
+        assert!(matches!(
+            ce(":load some (:Percentage and xsd:decimal)"),
+            ClassExpression::DataSomeValuesFrom { .. }
+        ));
+        assert!(matches!(
+            ce(":load some (xsd:decimal and :Percentage)"),
+            ClassExpression::DataSomeValuesFrom { .. }
+        ));
+        assert!(matches!(
+            ce(":load only (:Percentage or not xsd:decimal)"),
+            ClassExpression::DataAllValuesFrom { .. }
+        ));
+        assert!(matches!(
+            ce(":hasPart only (:Axle or :Wheel)"),
+            ClassExpression::ObjectAllValuesFrom { .. }
+        ));
+    }
+
+    #[test]
     fn parses_iri_full_and_prefixed() {
         let b = Build::new_rc();
         let mut pm = curie::PrefixMapping::default();
