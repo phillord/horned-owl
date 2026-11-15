@@ -280,22 +280,18 @@ pub fn language_tag(i: &str) -> PResult<'_, &str> {
     let Some(r) = i.strip_prefix('@') else {
         return err(i, "`@`");
     };
-    let (rest, tag) = cut(take_while1(|c: char| c.is_ascii_alphanumeric() || c == '-'))
-        .parse(r)
-        .map_err(|e: Err<PErr<'_>>| e.map(|_| PErr::expected(r, "language tag")))?;
-    let mut subtags = tag.split('-');
-    let first = subtags.next().unwrap_or("");
-    let ok = (1..=8).contains(&first.len())
-        && first.bytes().all(|b| b.is_ascii_alphabetic())
-        && subtags.all(|s| (1..=8).contains(&s.len()));
-    if ok {
-        Ok((rest, tag))
-    } else {
-        Err(Err::Failure(PErr::semantic(
-            r,
-            tag.len(),
-            "invalid language tag",
-        )))
+    match super::bcp47::language_tag_len(r) {
+        Some(n) => Ok((&r[n..], &r[..n])),
+        None => {
+            let run = r
+                .find(|c: char| !(c.is_ascii_alphanumeric() || c == '-'))
+                .unwrap_or(r.len());
+            if run == 0 {
+                err(r, "language tag")
+            } else {
+                Err(Err::Failure(PErr::semantic(r, run, "invalid language tag")))
+            }
+        }
     }
 }
 

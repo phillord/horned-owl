@@ -394,4 +394,64 @@ mod grammar {
             assert_eq!(pest, ours, "disagree on {s:?}: pest {pest}, nom {ours}");
         }
     }
+
+    #[test]
+    fn language_tag_same_as_pest() {
+        const TOKENS: &[&str] = &[
+            "en",
+            "zh",
+            "sgn",
+            "abc",
+            "Hans",
+            "Latn",
+            "scot",
+            "scotland",
+            "GB",
+            "US",
+            "419",
+            "1996",
+            "a",
+            "b",
+            "x",
+            "i",
+            "u",
+            "y",
+            "ab",
+            "abcde",
+            "abcdefgh",
+            "abcdefghi",
+            "12",
+            "1",
+            "9a",
+            "oed",
+            "min",
+            "nan",
+            "ami",
+            "lojban",
+            "-",
+            "-",
+            "-",
+            "-",
+            "BE",
+            "FR",
+            "default",
+            " ",
+            "_",
+            "é",
+        ];
+        let mut rng = Rng(0x0bcd_47ba_dc0f_fee1);
+        for _ in 0..300_000 {
+            let mut s = String::new();
+            for _ in 0..1 + rng.next() % 8 {
+                s.push_str(rng.pick(TOKENS));
+            }
+            let doc = format!("@{s}");
+            let pest = OwlFunctionalLexer::lex(Rule::LanguageTag, &doc)
+                .ok()
+                .and_then(|mut p| p.next())
+                .map(|p| p.as_str().len() - 1);
+            let ours = super::super::bcp47::language_tag_len(&s);
+            assert_eq!(pest, ours, "disagree on {s:?}: pest {pest:?}, nom {ours:?}");
+        }
+    }
 }
