@@ -781,13 +781,23 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
 
     /// Process all import statements
     fn resolve_imports(&mut self) -> Vec<IRI<A>> {
+        let ontologies: HashSet<IRI<A>> = self
+            .simple
+            .iter()
+            .filter_map(|t| match &t.0 {
+                [Term::Iri(s), Term::RDF(VRDF::Type), Term::OWL(VOWL::Ontology)] => Some(s.clone()),
+                _ => None,
+            })
+            .collect();
         let mut v = vec![];
         for t in std::mem::take(&mut self.simple) {
             match t.0 {
-                [Term::Iri(_), Term::OWL(VOWL::Imports), Term::Iri(imp)] => {
+                [Term::Iri(ref s), Term::OWL(VOWL::Imports), Term::Iri(ref imp)]
+                    if ontologies.contains(s) =>
+                {
                     v.push(imp.clone());
                     self.merge(AnnotatedComponent {
-                        component: Import(imp).into(),
+                        component: Import(imp.clone()).into(),
                         ann: BTreeSet::new(),
                     });
                 }
@@ -3765,6 +3775,38 @@ mod test {
                 .unwrap();
 
         dbg!(ont, incomp);
+    }
+
+    #[test]
+    fn imports_only_of_the_ontology() {
+        let ont = r#"@prefix : <http://www.example.com/iri#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+<http://www.example.com/iri> a owl:Ontology ;
+    owl:imports <http://www.example.com/other> .
+
+:p a owl:DatatypeProperty ;
+    owl:imports xsd:string .
+"#;
+        let (ont, _): (ConcreteRDFOntology<RcStr, Rc<AnnotatedComponent<RcStr>>>, _) =
+            OntologyParser::from_bufread_with_format(
+                &mut ont.as_bytes(),
+                Default::default(),
+                oxrdfio::RdfFormat::Turtle,
+            )
+            .unwrap()
+            .parse()
+            .unwrap();
+        let imports: Vec<String> = ont
+            .i()
+            .iter()
+            .filter_map(|c| match &c.component {
+                Component::Import(Import(iri)) => Some(iri.to_string()),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(imports, vec!["http://www.example.com/other".to_string()]);
     }
 
     #[test]
