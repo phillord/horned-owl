@@ -115,6 +115,7 @@ fn fmt(f: Format) -> &'static str {
         Format::Omn => "omn",
         Format::OmnNom => "omn_nom",
         Format::Obo => "obo",
+        Format::OboNom => "obo_nom",
         Format::Turtle => "turtle",
         Format::Unknown => "unknown",
     }

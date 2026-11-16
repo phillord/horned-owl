@@ -36,7 +36,7 @@ pub(crate) fn robot_ext(fmt: Format) -> &'static str {
         Format::OwlXml => "owx",
         Format::Ofn | Format::OfnNom => "ofn",
         Format::Omn | Format::OmnNom => "omn",
-        Format::Obo => "obo",
+        Format::Obo | Format::OboNom => "obo",
         Format::Turtle => "ttl",
         Format::Unknown => "owl",
     }

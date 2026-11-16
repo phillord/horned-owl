@@ -70,7 +70,7 @@ enum Cmd {
         #[arg(long)]
         out: PathBuf,
         /// Which formats to write and read back, comma-separated.
-        #[arg(long, default_value = "rdf,owx,ofn,ofn_nom,omn,omn_nom,obo")]
+        #[arg(long, default_value = "rdf,owx,ofn,ofn_nom,omn,omn_nom,obo,obo_nom")]
         formats: String,
         /// Worker threads (default: one per core).
         #[arg(long)]
@@ -215,6 +215,7 @@ fn parse_formats(s: &str) -> Vec<Format> {
             "omn" => Some(Format::Omn),
             "omn_nom" => Some(Format::OmnNom),
             "obo" => Some(Format::Obo),
+            "obo_nom" => Some(Format::OboNom),
             _ => None,
         })
         .collect()
@@ -349,7 +350,7 @@ fn check_known_failures(dir: &std::path::Path) -> anyhow::Result<bool> {
     use horned_corpus::known_failures::{self, EntryStatus};
 
     let known = known_failures::known_failures();
-    let fmts = parse_formats("rdf,owx,ofn,ofn_nom,omn,omn_nom,obo");
+    let fmts = parse_formats("rdf,owx,ofn,ofn_nom,omn,omn_nom,obo,obo_nom");
     let mut cases = Vec::new();
     for p in corpus::entries(dir)? {
         let name = p.file_stem().unwrap_or_default().to_string_lossy();

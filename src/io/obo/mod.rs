@@ -9,6 +9,7 @@
 //! horned-owl components; the writer renders the OBO-expressible fragment back,
 //! giving read/write round-trip. Behaviour is pinned to the OWL-API `oboformat`
 //! mapping as an oracle.
+pub mod nom_reader;
 pub mod reader;
 pub mod writer;
 pub use reader::read;

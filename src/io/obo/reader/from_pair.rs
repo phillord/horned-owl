@@ -43,14 +43,14 @@ pub(crate) const OIO: &str = "http://www.geneontology.org/formats/oboInOwl#";
 pub(crate) fn is_http_iri(s: &str) -> bool {
     s.starts_with("http://") || s.starts_with("https://")
 }
-const RDFS_LABEL: &str = "http://www.w3.org/2000/01/rdf-schema#label";
-const RDFS_COMMENT: &str = "http://www.w3.org/2000/01/rdf-schema#comment";
-const IAO_DEF: &str = "http://purl.obolibrary.org/obo/IAO_0000115";
-const IAO_TERM_REPLACED_BY: &str = "http://purl.obolibrary.org/obo/IAO_0100001";
-const IAO_OBSOLESCENCE_REASON: &str = "http://purl.obolibrary.org/obo/IAO_0000231";
-const IAO_TERMS_MERGED: &str = "http://purl.obolibrary.org/obo/IAO_0000227";
-const OWL_DEPRECATED: &str = "http://www.w3.org/2002/07/owl#deprecated";
-const XSD_BOOLEAN: &str = "http://www.w3.org/2001/XMLSchema#boolean";
+pub(crate) const RDFS_LABEL: &str = "http://www.w3.org/2000/01/rdf-schema#label";
+pub(crate) const RDFS_COMMENT: &str = "http://www.w3.org/2000/01/rdf-schema#comment";
+pub(crate) const IAO_DEF: &str = "http://purl.obolibrary.org/obo/IAO_0000115";
+pub(crate) const IAO_TERM_REPLACED_BY: &str = "http://purl.obolibrary.org/obo/IAO_0100001";
+pub(crate) const IAO_OBSOLESCENCE_REASON: &str = "http://purl.obolibrary.org/obo/IAO_0000231";
+pub(crate) const IAO_TERMS_MERGED: &str = "http://purl.obolibrary.org/obo/IAO_0000227";
+pub(crate) const OWL_DEPRECATED: &str = "http://www.w3.org/2002/07/owl#deprecated";
+pub(crate) const XSD_BOOLEAN: &str = "http://www.w3.org/2001/XMLSchema#boolean";
 
 /// The prefixes an OBO document declares implicitly (OBO 1.4 §5.9.2), matching
 /// `fastobo-owl`. `idspace:` header clauses are layered on top by [`scan_header`].
@@ -107,7 +107,7 @@ impl<'a, A: ForIRI> Context<'a, A> {
         }
     }
 
-    fn class(&self, id: &str) -> Class<A> {
+    pub(crate) fn class(&self, id: &str) -> Class<A> {
         self.build.class(self.expand(id))
     }
 }
@@ -149,7 +149,7 @@ pub(crate) fn expand_id_with(
 
 /// The namespace of a standard OBO-implicit prefix, if `pre` is one. Kept in
 /// sync with the writer's `compress` for round-trip symmetry.
-fn std_prefix(pre: &str) -> Option<&'static str> {
+pub(crate) fn std_prefix(pre: &str) -> Option<&'static str> {
     match pre {
         "xsd" => Some("http://www.w3.org/2001/XMLSchema#"),
         "rdf" => Some("http://www.w3.org/1999/02/22-rdf-syntax-ns#"),
@@ -160,7 +160,7 @@ fn std_prefix(pre: &str) -> Option<&'static str> {
 }
 
 /// Strip the surrounding quotes from a lexed `QuotedString` and unescape it.
-fn unquote(s: &str) -> String {
+pub(crate) fn unquote(s: &str) -> String {
     let inner = s
         .strip_prefix('"')
         .and_then(|s| s.strip_suffix('"'))
@@ -170,7 +170,7 @@ fn unquote(s: &str) -> String {
 
 /// Unescape an OBO string (`\n`→newline, `\t`→tab, `\W`→space; a backslash
 /// before any other char drops the backslash).
-fn unescape(s: &str) -> String {
+pub(crate) fn unescape(s: &str) -> String {
     if !s.contains('\\') {
         return s.to_string();
     }
@@ -196,7 +196,7 @@ fn unescape(s: &str) -> String {
 
 // --- small builders --------------------------------------------------------
 
-fn lit_ann<A: ForIRI>(b: &Build<A>, prop: &str, value: &str) -> Annotation<A> {
+pub(crate) fn lit_ann<A: ForIRI>(b: &Build<A>, prop: &str, value: &str) -> Annotation<A> {
     Annotation {
         ap: b.annotation_property(prop),
         av: AnnotationValue::Literal(Literal::Simple {
@@ -209,7 +209,7 @@ fn lit_ann<A: ForIRI>(b: &Build<A>, prop: &str, value: &str) -> Annotation<A> {
 /// OBO has no syntax for a literal's language; the `name`/`comment`
 /// qualifier keys are read as English, matching what oboformat/ROBOT write
 /// on the way out to OWL.
-fn en_ann<A: ForIRI>(b: &Build<A>, prop: &str, value: &str) -> Annotation<A> {
+pub(crate) fn en_ann<A: ForIRI>(b: &Build<A>, prop: &str, value: &str) -> Annotation<A> {
     Annotation {
         ap: b.annotation_property(prop),
         av: AnnotationValue::Literal(Literal::Language {
@@ -220,7 +220,7 @@ fn en_ann<A: ForIRI>(b: &Build<A>, prop: &str, value: &str) -> Annotation<A> {
     }
 }
 
-fn iri_ann<A: ForIRI>(b: &Build<A>, prop: &str, iri: IRI<A>) -> Annotation<A> {
+pub(crate) fn iri_ann<A: ForIRI>(b: &Build<A>, prop: &str, iri: IRI<A>) -> Annotation<A> {
     Annotation {
         ap: b.annotation_property(prop),
         av: AnnotationValue::IRI(iri),
@@ -228,7 +228,7 @@ fn iri_ann<A: ForIRI>(b: &Build<A>, prop: &str, iri: IRI<A>) -> Annotation<A> {
     }
 }
 
-fn assertion<A: ForIRI>(subject: &IRI<A>, ann: Annotation<A>) -> AnnotatedComponent<A> {
+pub(crate) fn assertion<A: ForIRI>(subject: &IRI<A>, ann: Annotation<A>) -> AnnotatedComponent<A> {
     AnnotatedComponent::new(
         AnnotationAssertion {
             subject: AnnotationSubject::IRI(subject.clone()),
@@ -238,13 +238,13 @@ fn assertion<A: ForIRI>(subject: &IRI<A>, ann: Annotation<A>) -> AnnotatedCompon
     )
 }
 
-fn component<A: ForIRI, C: Into<Component<A>>>(c: C) -> AnnotatedComponent<A> {
+pub(crate) fn component<A: ForIRI, C: Into<Component<A>>>(c: C) -> AnnotatedComponent<A> {
     AnnotatedComponent::new(c, Default::default())
 }
 
 /// Build a component carrying axiom-level annotations (e.g. from a trailing
 /// `{qualifier}` block).
-fn component_ann<A: ForIRI, C: Into<Component<A>>>(
+pub(crate) fn component_ann<A: ForIRI, C: Into<Component<A>>>(
     c: C,
     anns: Vec<Annotation<A>>,
 ) -> AnnotatedComponent<A> {
@@ -252,7 +252,7 @@ fn component_ann<A: ForIRI, C: Into<Component<A>>>(
 }
 
 /// Add axiom-level annotations to an already-built component.
-fn with_anns<A: ForIRI>(
+pub(crate) fn with_anns<A: ForIRI>(
     mut ac: AnnotatedComponent<A>,
     anns: Vec<Annotation<A>>,
 ) -> AnnotatedComponent<A> {
@@ -287,7 +287,10 @@ fn split_line(line: Pair<'_, Rule>) -> (Pair<'_, Rule>, Vec<(String, String)>) {
 /// key otherwise lives in the oboInOwl namespace (`source` →
 /// `oboInOwl:source`), and a CURIE key expands (matching ROBOT). Structural
 /// qualifiers (cardinality, gci_*) are consumed elsewhere and skipped here.
-fn qual_anns<A: ForIRI>(ctx: &Context<'_, A>, quals: &[(String, String)]) -> Vec<Annotation<A>> {
+pub(crate) fn qual_anns<A: ForIRI>(
+    ctx: &Context<'_, A>,
+    quals: &[(String, String)],
+) -> Vec<Annotation<A>> {
     let b = ctx.build;
     quals
         .iter()
@@ -325,7 +328,7 @@ fn clause_lines(
 /// A `gci_relation` + `gci_filler` qualifier pair turns an `is_a`/`relationship`
 /// into a General Class Inclusion: the subject becomes `C ⊓ (gci_rel some
 /// gci_filler)`. Returns that intersection subject when both are present.
-fn gci_subject<A: ForIRI>(
+pub(crate) fn gci_subject<A: ForIRI>(
     ctx: &Context<'_, A>,
     class_iri: &IRI<A>,
     quals: &[(String, String)],
@@ -499,7 +502,7 @@ pub fn header_to_components<A: ForIRI>(
     Ok(out)
 }
 
-fn ont_ann<A: ForIRI>(b: &Build<A>, prop: &str, value: &str) -> AnnotatedComponent<A> {
+pub(crate) fn ont_ann<A: ForIRI>(b: &Build<A>, prop: &str, value: &str) -> AnnotatedComponent<A> {
     component(OntologyAnnotation(lit_ann(b, prop, value)))
 }
 
@@ -696,8 +699,9 @@ fn term_to_components<A: ForIRI>(
     let mut inner = frame.into_inner();
 
     // TermFrame = "[Term]" "id:" ClassId EOL (TermClauseLine | ...)*
+    // A comment line before the `id:` line is also a pair of the frame.
     let id = inner
-        .next()
+        .find(|p| p.as_rule() != Rule::Comment)
         .ok_or_else(|| HornedError::invalid("[Term] frame without id"))?;
     let id = id.as_str().trim();
     let iri = ctx.expand(id);
@@ -881,8 +885,9 @@ fn typedef_to_components<A: ForIRI>(
     let mut out = Vec::new();
     let mut inner = frame.into_inner();
 
+    // A comment line before the `id:` line is also a pair of the frame.
     let id = inner
-        .next()
+        .find(|p| p.as_rule() != Rule::Comment)
         .ok_or_else(|| HornedError::invalid("[Typedef] frame without id"))?;
     let id = id.as_str().trim();
     // A shorthand typedef resolves to its xref IRI; its bare id survives as the
@@ -1061,8 +1066,9 @@ fn instance_to_components<A: ForIRI>(
     let mut out = Vec::new();
     let mut inner = frame.into_inner();
 
+    // A comment line before the `id:` line is also a pair of the frame.
     let id = inner
-        .next()
+        .find(|p| p.as_rule() != Rule::Comment)
         .ok_or_else(|| HornedError::invalid("[Instance] frame without id"))?;
     let id = id.as_str().trim();
     let iri = ctx.expand(id);
@@ -1127,7 +1133,7 @@ fn instance_to_components<A: ForIRI>(
 
 /// Expand a datatype id: the standard `xsd`/`rdf`/`rdfs`/`owl` prefixes map to
 /// their namespaces, everything else via the usual id expansion.
-fn expand_datatype<A: ForIRI>(dt: &str, ctx: &Context<'_, A>) -> String {
+pub(crate) fn expand_datatype<A: ForIRI>(dt: &str, ctx: &Context<'_, A>) -> String {
     match dt.split_once(':') {
         Some(("xsd", l)) => format!("http://www.w3.org/2001/XMLSchema#{l}"),
         Some(("rdf", l)) => format!("http://www.w3.org/1999/02/22-rdf-syntax-ns#{l}"),
@@ -1151,7 +1157,7 @@ fn char_tag_local(tag: Rule) -> &'static str {
 }
 
 /// An object-property expression for an OBO relation id (shorthand-aware).
-fn ope<A: ForIRI>(ctx: &Context<'_, A>, id: &str) -> ObjectPropertyExpression<A> {
+pub(crate) fn ope<A: ForIRI>(ctx: &Context<'_, A>, id: &str) -> ObjectPropertyExpression<A> {
     ObjectPropertyExpression::ObjectProperty(ObjectProperty(ctx.expand_rel(id)))
 }
 
@@ -1172,7 +1178,9 @@ pub fn build_rel_map(
             continue;
         }
         let mut inner = frame.into_inner();
-        let Some(id) = inner.next() else { continue };
+        let Some(id) = inner.find(|p| p.as_rule() != Rule::Comment) else {
+            continue;
+        };
         let id = id.as_str().trim();
         if id.contains(':') || id.starts_with("http") {
             continue; // not a bare shorthand id
@@ -1210,7 +1218,9 @@ pub fn build_metadata_tags(
             continue;
         }
         let mut inner = frame.into_inner();
-        let Some(id) = inner.next() else { continue };
+        let Some(id) = inner.find(|p| p.as_rule() != Rule::Comment) else {
+            continue;
+        };
         let id = id.as_str().trim();
         let is_meta = clauses(inner, Rule::TypedefClauseLine).any(|clause| {
             let (tag, values) = split_clause(clause);
@@ -1307,16 +1317,282 @@ pub fn finalize<A: ForIRI>(
     mut comps: Vec<AnnotatedComponent<A>>,
     b: &Build<A>,
 ) -> Vec<AnnotatedComponent<A>> {
-    // Both passes are computed over the frame-derived components only. In
-    // particular, declarations are NOT recomputed over the injected built-in
-    // labels: those label the meta-properties with `rdfs:label`, but that does
-    // not itself make `rdfs:label` declarable — ROBOT declares `rdfs:label`
-    // only when it annotates a real ontology entity (a term/typedef `name:`).
-    let labels = builtin_labels(&comps, b);
-    let decls = referenced_declarations(&comps, b);
-    comps.extend(decls);
-    comps.extend(labels);
+    let mut f = Finalizer::default();
+    for ac in &comps {
+        f.observe(ac);
+    }
+    comps.extend(f.finish(b));
     comps
+}
+
+/// The whole-document passes of [`finalize`], run incrementally so a reader
+/// that streams frames need not keep them: [`observe`](Self::observe) each
+/// component, then [`finish`](Self::finish) for the declarations and labels
+/// still owed.
+///
+/// Both passes are computed over the frame-derived components only. In
+/// particular, declarations are NOT recomputed over the injected built-in
+/// labels: those label the meta-properties with `rdfs:label`, but that does
+/// not itself make `rdfs:label` declarable — ROBOT declares `rdfs:label`
+/// only when it annotates a real ontology entity (a term/typedef `name:`).
+pub struct Finalizer<A: ForIRI> {
+    used: BTreeSet<IRI<A>>,
+    labelled: BTreeSet<IRI<A>>,
+    classes: BTreeSet<IRI<A>>,
+    ops: BTreeSet<IRI<A>>,
+    aps: BTreeSet<IRI<A>>,
+    dps: BTreeSet<IRI<A>>,
+    inds: BTreeSet<IRI<A>>,
+    declared_c: BTreeSet<IRI<A>>,
+    declared_o: BTreeSet<IRI<A>>,
+    declared_a: BTreeSet<IRI<A>>,
+    declared_d: BTreeSet<IRI<A>>,
+    declared_i: BTreeSet<IRI<A>>,
+}
+
+impl<A: ForIRI> Default for Finalizer<A> {
+    fn default() -> Self {
+        Finalizer {
+            used: Default::default(),
+            labelled: Default::default(),
+            classes: Default::default(),
+            ops: Default::default(),
+            aps: Default::default(),
+            dps: Default::default(),
+            inds: Default::default(),
+            declared_c: Default::default(),
+            declared_o: Default::default(),
+            declared_a: Default::default(),
+            declared_d: Default::default(),
+            declared_i: Default::default(),
+        }
+    }
+}
+
+impl<A: ForIRI> Finalizer<A> {
+    pub fn observe(&mut self, ac: &AnnotatedComponent<A>) {
+        self.observe_labels(ac);
+        self.observe_references(ac);
+    }
+
+    /// The declarations, then the built-in labels, to add after the last
+    /// component.
+    pub fn finish(self, b: &Build<A>) -> Vec<AnnotatedComponent<A>> {
+        let mut out = self.declarations(b);
+        out.extend(self.labels(b));
+        out
+    }
+
+    fn observe_labels(&mut self, ac: &AnnotatedComponent<A>) {
+        for a in &ac.ann {
+            collect_aps(a, &mut self.used);
+        }
+        match &ac.component {
+            Component::AnnotationAssertion(ax) => {
+                collect_aps(&ax.ann, &mut self.used);
+                if ax.ann.ap.0.as_ref() == RDFS_LABEL {
+                    if let AnnotationSubject::IRI(i) = &ax.subject {
+                        self.labelled.insert(i.clone());
+                    }
+                }
+            }
+            Component::OntologyAnnotation(oa) => collect_aps(&oa.0, &mut self.used),
+            _ => {}
+        }
+    }
+
+    /// oboformat/ROBOT attach a canonical `rdfs:label` to each standard
+    /// oboInOwl / IAO annotation property that is actually used (e.g.
+    /// `hasExactSynonym` → "has_exact_synonym"). Seeded from owlmake's
+    /// `add_oboinowl_builtin_labels`.
+    fn labels(&self, b: &Build<A>) -> Vec<AnnotatedComponent<A>> {
+        let table: [(String, &str); 19] = [
+            (format!("{OIO}hasExactSynonym"), "has_exact_synonym"),
+            (format!("{OIO}hasNarrowSynonym"), "has_narrow_synonym"),
+            (format!("{OIO}hasBroadSynonym"), "has_broad_synonym"),
+            (format!("{OIO}hasRelatedSynonym"), "has_related_synonym"),
+            (format!("{OIO}hasSynonymType"), "has_synonym_type"),
+            (format!("{OIO}hasDbXref"), "database_cross_reference"),
+            (format!("{OIO}hasOBONamespace"), "has_obo_namespace"),
+            (
+                format!("{OIO}hasOBOFormatVersion"),
+                "has_obo_format_version",
+            ),
+            (format!("{OIO}hasAlternativeId"), "has_alternative_id"),
+            (format!("{OIO}inSubset"), "in_subset"),
+            (format!("{OIO}SubsetProperty"), "subset_property"),
+            (format!("{OIO}SynonymTypeProperty"), "synonym_type_property"),
+            (format!("{OIO}consider"), "consider"),
+            (format!("{OIO}shorthand"), "shorthand"),
+            (format!("{OIO}id"), "id"),
+            (format!("{OIO}created_by"), "created by"),
+            (format!("{OIO}creation_date"), "creation date"),
+            (IAO_DEF.to_string(), "definition"),
+            (IAO_TERM_REPLACED_BY.to_string(), "term replaced by"),
+        ];
+        let mut out = Vec::new();
+        for (iri, label) in table {
+            let i = b.iri(iri.as_str());
+            if self.used.contains(&i) && !self.labelled.contains(&i) {
+                out.push(assertion(&i, lit_ann(b, RDFS_LABEL, label)));
+            }
+        }
+        out
+    }
+
+    fn observe_references(&mut self, ac: &AnnotatedComponent<A>) {
+        let (classes, ops, aps, dps, inds) = (
+            &mut self.classes,
+            &mut self.ops,
+            &mut self.aps,
+            &mut self.dps,
+            &mut self.inds,
+        );
+        for a in &ac.ann {
+            collect_axiom_qualifier_aps(a, aps);
+        }
+        match &ac.component {
+            Component::DeclareClass(d) => {
+                self.declared_c.insert(d.0.0.clone());
+            }
+            Component::DeclareObjectProperty(d) => {
+                self.declared_o.insert(d.0.0.clone());
+            }
+            Component::DeclareAnnotationProperty(d) => {
+                self.declared_a.insert(d.0.0.clone());
+            }
+            Component::DeclareDataProperty(d) => {
+                self.declared_d.insert(d.0.0.clone());
+            }
+            Component::DeclareNamedIndividual(d) => {
+                self.declared_i.insert(d.0.0.clone());
+            }
+            Component::ClassAssertion(a) => {
+                walk_ce(&a.ce, classes, ops);
+                named(&a.i, inds);
+            }
+            Component::ObjectPropertyAssertion(a) => {
+                op_of(&a.ope, ops);
+                named(&a.from, inds);
+                named(&a.to, inds);
+            }
+            Component::DataPropertyAssertion(a) => {
+                dps.insert(a.dp.0.clone());
+                named(&a.from, inds);
+            }
+            Component::SubClassOf(s) => {
+                walk_ce(&s.sub, classes, ops);
+                walk_ce(&s.sup, classes, ops);
+            }
+            Component::EquivalentClasses(e) => {
+                for ce in &e.0 {
+                    walk_ce(ce, classes, ops);
+                }
+            }
+            Component::DisjointClasses(d) => {
+                for ce in &d.0 {
+                    walk_ce(ce, classes, ops);
+                }
+            }
+            Component::SubObjectPropertyOf(s) => {
+                op_of(&s.sup, ops);
+                match &s.sub {
+                    SubObjectPropertyExpression::ObjectPropertyExpression(o) => op_of(o, ops),
+                    SubObjectPropertyExpression::ObjectPropertyChain(v) => {
+                        for o in v {
+                            op_of(o, ops);
+                        }
+                    }
+                }
+            }
+            Component::InverseObjectProperties(a) => {
+                ops.insert(a.0.0.clone());
+                ops.insert(a.1.0.clone());
+            }
+            Component::ObjectPropertyDomain(d) => {
+                op_of(&d.ope, ops);
+                walk_ce(&d.ce, classes, ops);
+            }
+            Component::ObjectPropertyRange(r) => {
+                op_of(&r.ope, ops);
+                walk_ce(&r.ce, classes, ops);
+            }
+            Component::TransitiveObjectProperty(a) => op_of(&a.0, ops),
+            Component::SymmetricObjectProperty(a) => op_of(&a.0, ops),
+            Component::ReflexiveObjectProperty(a) => op_of(&a.0, ops),
+            Component::AsymmetricObjectProperty(a) => op_of(&a.0, ops),
+            Component::FunctionalObjectProperty(a) => op_of(&a.0, ops),
+            Component::InverseFunctionalObjectProperty(a) => op_of(&a.0, ops),
+            Component::AnnotationAssertion(ax) => collect_aps(&ax.ann, aps),
+            Component::OntologyAnnotation(oa) => collect_axiom_qualifier_aps(&oa.0, aps),
+            Component::Rule(r) => {
+                for atom in r.head.iter().chain(r.body.iter()) {
+                    match atom {
+                        Atom::ClassAtom { pred, arg } => {
+                            walk_ce(pred, classes, ops);
+                            iarg(arg, inds);
+                        }
+                        Atom::ObjectPropertyAtom { pred, args } => {
+                            op_of(pred, ops);
+                            iarg(&args.0, inds);
+                            iarg(&args.1, inds);
+                        }
+                        Atom::DataPropertyAtom { pred, .. } => {
+                            dps.insert(pred.0.clone());
+                        }
+                        Atom::DifferentIndividualsAtom(a, b) | Atom::SameIndividualAtom(a, b) => {
+                            iarg(a, inds);
+                            iarg(b, inds);
+                        }
+                        Atom::BuiltInAtom { .. } | Atom::DataRangeAtom { .. } => {}
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// Declare every class / object-property / annotation-property referenced
+    /// by an axiom but not already declared — matching robot/oboformat, which
+    /// emit a Declaration for every entity in the signature. Seeded from
+    /// owlmake's `declare_referenced_entities`.
+    fn declarations(&self, b: &Build<A>) -> Vec<AnnotatedComponent<A>> {
+        let mut out = Vec::new();
+        for c in self.classes.difference(&self.declared_c) {
+            out.push(component(DeclareClass(b.class(c.clone()))));
+        }
+        for p in self.ops.difference(&self.declared_o) {
+            out.push(component(DeclareObjectProperty(
+                b.object_property(p.clone()),
+            )));
+        }
+        for p in self.aps.difference(&self.declared_a) {
+            out.push(component(DeclareAnnotationProperty(
+                b.annotation_property(p.clone()),
+            )));
+        }
+        for p in self.dps.difference(&self.declared_d) {
+            out.push(component(DeclareDataProperty(b.data_property(p.clone()))));
+        }
+        for i in self.inds.difference(&self.declared_i) {
+            out.push(component(DeclareNamedIndividual(
+                b.named_individual(i.clone()),
+            )));
+        }
+        out
+    }
+}
+
+fn named<A: ForIRI>(i: &Individual<A>, inds: &mut BTreeSet<IRI<A>>) {
+    if let Individual::Named(n) = i {
+        inds.insert(n.0.clone());
+    }
+}
+
+fn iarg<A: ForIRI>(a: &IArgument<A>, inds: &mut BTreeSet<IRI<A>>) {
+    if let IArgument::Individual(i) = a {
+        named(i, inds);
+    }
 }
 
 /// Collect every annotation-property IRI a (possibly nested) annotation uses.
@@ -1339,67 +1615,6 @@ fn collect_axiom_qualifier_aps<A: ForIRI>(a: &Annotation<A>, out: &mut BTreeSet<
     for n in &a.ann {
         collect_axiom_qualifier_aps(n, out);
     }
-}
-
-/// oboformat/ROBOT attach a canonical `rdfs:label` to each standard oboInOwl /
-/// IAO annotation property that is actually used (e.g. `hasExactSynonym` →
-/// "has_exact_synonym"). Seeded from owlmake's `add_oboinowl_builtin_labels`.
-fn builtin_labels<A: ForIRI>(
-    comps: &[AnnotatedComponent<A>],
-    b: &Build<A>,
-) -> Vec<AnnotatedComponent<A>> {
-    let mut used: BTreeSet<IRI<A>> = BTreeSet::new();
-    let mut labelled: BTreeSet<IRI<A>> = BTreeSet::new();
-    for ac in comps {
-        for a in &ac.ann {
-            collect_aps(a, &mut used);
-        }
-        match &ac.component {
-            Component::AnnotationAssertion(ax) => {
-                collect_aps(&ax.ann, &mut used);
-                if ax.ann.ap.0.as_ref() == RDFS_LABEL {
-                    if let AnnotationSubject::IRI(i) = &ax.subject {
-                        labelled.insert(i.clone());
-                    }
-                }
-            }
-            Component::OntologyAnnotation(oa) => collect_aps(&oa.0, &mut used),
-            _ => {}
-        }
-    }
-
-    let table: [(String, &str); 19] = [
-        (format!("{OIO}hasExactSynonym"), "has_exact_synonym"),
-        (format!("{OIO}hasNarrowSynonym"), "has_narrow_synonym"),
-        (format!("{OIO}hasBroadSynonym"), "has_broad_synonym"),
-        (format!("{OIO}hasRelatedSynonym"), "has_related_synonym"),
-        (format!("{OIO}hasSynonymType"), "has_synonym_type"),
-        (format!("{OIO}hasDbXref"), "database_cross_reference"),
-        (format!("{OIO}hasOBONamespace"), "has_obo_namespace"),
-        (
-            format!("{OIO}hasOBOFormatVersion"),
-            "has_obo_format_version",
-        ),
-        (format!("{OIO}hasAlternativeId"), "has_alternative_id"),
-        (format!("{OIO}inSubset"), "in_subset"),
-        (format!("{OIO}SubsetProperty"), "subset_property"),
-        (format!("{OIO}SynonymTypeProperty"), "synonym_type_property"),
-        (format!("{OIO}consider"), "consider"),
-        (format!("{OIO}shorthand"), "shorthand"),
-        (format!("{OIO}id"), "id"),
-        (format!("{OIO}created_by"), "created by"),
-        (format!("{OIO}creation_date"), "creation date"),
-        (IAO_DEF.to_string(), "definition"),
-        (IAO_TERM_REPLACED_BY.to_string(), "term replaced by"),
-    ];
-    let mut out = Vec::new();
-    for (iri, label) in table {
-        let i = b.iri(iri.as_str());
-        if used.contains(&i) && !labelled.contains(&i) {
-            out.push(assertion(&i, lit_ann(b, RDFS_LABEL, label)));
-        }
-    }
-    out
 }
 
 /// Insert the object-property IRI named by an expression (ignoring `inverse(p)`
@@ -1437,167 +1652,6 @@ fn walk_ce<A: ForIRI>(
         ClassExpression::ObjectComplementOf(x) => walk_ce(x, classes, ops),
         _ => {}
     }
-}
-
-/// Declare every class / object-property / annotation-property referenced by an
-/// axiom but not already declared — matching robot/oboformat, which emit a
-/// Declaration for every entity in the signature. Seeded from owlmake's
-/// `declare_referenced_entities`.
-fn referenced_declarations<A: ForIRI>(
-    comps: &[AnnotatedComponent<A>],
-    b: &Build<A>,
-) -> Vec<AnnotatedComponent<A>> {
-    let mut classes: BTreeSet<IRI<A>> = BTreeSet::new();
-    let mut ops: BTreeSet<IRI<A>> = BTreeSet::new();
-    let mut aps: BTreeSet<IRI<A>> = BTreeSet::new();
-    let mut dps: BTreeSet<IRI<A>> = BTreeSet::new();
-    let mut inds: BTreeSet<IRI<A>> = BTreeSet::new();
-    let mut declared_c: BTreeSet<IRI<A>> = BTreeSet::new();
-    let mut declared_o: BTreeSet<IRI<A>> = BTreeSet::new();
-    let mut declared_a: BTreeSet<IRI<A>> = BTreeSet::new();
-    let mut declared_d: BTreeSet<IRI<A>> = BTreeSet::new();
-    let mut declared_i: BTreeSet<IRI<A>> = BTreeSet::new();
-
-    fn named<A: ForIRI>(i: &Individual<A>, inds: &mut BTreeSet<IRI<A>>) {
-        if let Individual::Named(n) = i {
-            inds.insert(n.0.clone());
-        }
-    }
-
-    fn iarg<A: ForIRI>(a: &IArgument<A>, inds: &mut BTreeSet<IRI<A>>) {
-        if let IArgument::Individual(i) = a {
-            named(i, inds);
-        }
-    }
-
-    for ac in comps {
-        for a in &ac.ann {
-            collect_axiom_qualifier_aps(a, &mut aps);
-        }
-        match &ac.component {
-            Component::DeclareClass(d) => {
-                declared_c.insert(d.0.0.clone());
-            }
-            Component::DeclareObjectProperty(d) => {
-                declared_o.insert(d.0.0.clone());
-            }
-            Component::DeclareAnnotationProperty(d) => {
-                declared_a.insert(d.0.0.clone());
-            }
-            Component::DeclareDataProperty(d) => {
-                declared_d.insert(d.0.0.clone());
-            }
-            Component::DeclareNamedIndividual(d) => {
-                declared_i.insert(d.0.0.clone());
-            }
-            Component::ClassAssertion(a) => {
-                walk_ce(&a.ce, &mut classes, &mut ops);
-                named(&a.i, &mut inds);
-            }
-            Component::ObjectPropertyAssertion(a) => {
-                op_of(&a.ope, &mut ops);
-                named(&a.from, &mut inds);
-                named(&a.to, &mut inds);
-            }
-            Component::DataPropertyAssertion(a) => {
-                dps.insert(a.dp.0.clone());
-                named(&a.from, &mut inds);
-            }
-            Component::SubClassOf(s) => {
-                walk_ce(&s.sub, &mut classes, &mut ops);
-                walk_ce(&s.sup, &mut classes, &mut ops);
-            }
-            Component::EquivalentClasses(e) => {
-                for ce in &e.0 {
-                    walk_ce(ce, &mut classes, &mut ops);
-                }
-            }
-            Component::DisjointClasses(d) => {
-                for ce in &d.0 {
-                    walk_ce(ce, &mut classes, &mut ops);
-                }
-            }
-            Component::SubObjectPropertyOf(s) => {
-                op_of(&s.sup, &mut ops);
-                match &s.sub {
-                    SubObjectPropertyExpression::ObjectPropertyExpression(o) => op_of(o, &mut ops),
-                    SubObjectPropertyExpression::ObjectPropertyChain(v) => {
-                        for o in v {
-                            op_of(o, &mut ops);
-                        }
-                    }
-                }
-            }
-            Component::InverseObjectProperties(a) => {
-                ops.insert(a.0.0.clone());
-                ops.insert(a.1.0.clone());
-            }
-            Component::ObjectPropertyDomain(d) => {
-                op_of(&d.ope, &mut ops);
-                walk_ce(&d.ce, &mut classes, &mut ops);
-            }
-            Component::ObjectPropertyRange(r) => {
-                op_of(&r.ope, &mut ops);
-                walk_ce(&r.ce, &mut classes, &mut ops);
-            }
-            Component::TransitiveObjectProperty(a) => op_of(&a.0, &mut ops),
-            Component::SymmetricObjectProperty(a) => op_of(&a.0, &mut ops),
-            Component::ReflexiveObjectProperty(a) => op_of(&a.0, &mut ops),
-            Component::AsymmetricObjectProperty(a) => op_of(&a.0, &mut ops),
-            Component::FunctionalObjectProperty(a) => op_of(&a.0, &mut ops),
-            Component::InverseFunctionalObjectProperty(a) => op_of(&a.0, &mut ops),
-            Component::AnnotationAssertion(ax) => collect_aps(&ax.ann, &mut aps),
-            Component::OntologyAnnotation(oa) => collect_axiom_qualifier_aps(&oa.0, &mut aps),
-            Component::Rule(r) => {
-                for atom in r.head.iter().chain(r.body.iter()) {
-                    match atom {
-                        Atom::ClassAtom { pred, arg } => {
-                            walk_ce(pred, &mut classes, &mut ops);
-                            iarg(arg, &mut inds);
-                        }
-                        Atom::ObjectPropertyAtom { pred, args } => {
-                            op_of(pred, &mut ops);
-                            iarg(&args.0, &mut inds);
-                            iarg(&args.1, &mut inds);
-                        }
-                        Atom::DataPropertyAtom { pred, .. } => {
-                            dps.insert(pred.0.clone());
-                        }
-                        Atom::DifferentIndividualsAtom(a, b) | Atom::SameIndividualAtom(a, b) => {
-                            iarg(a, &mut inds);
-                            iarg(b, &mut inds);
-                        }
-                        Atom::BuiltInAtom { .. } | Atom::DataRangeAtom { .. } => {}
-                    }
-                }
-            }
-            _ => {}
-        }
-    }
-
-    let mut out = Vec::new();
-    for c in classes.difference(&declared_c) {
-        out.push(component(DeclareClass(b.class(c.clone()))));
-    }
-    for p in ops.difference(&declared_o) {
-        out.push(component(DeclareObjectProperty(
-            b.object_property(p.clone()),
-        )));
-    }
-    for p in aps.difference(&declared_a) {
-        out.push(component(DeclareAnnotationProperty(
-            b.annotation_property(p.clone()),
-        )));
-    }
-    for p in dps.difference(&declared_d) {
-        out.push(component(DeclareDataProperty(b.data_property(p.clone()))));
-    }
-    for i in inds.difference(&declared_i) {
-        out.push(component(DeclareNamedIndividual(
-            b.named_individual(i.clone()),
-        )));
-    }
-    out
 }
 
 /// Build the prefix mapping from a header (idspace over the implicit prefixes).

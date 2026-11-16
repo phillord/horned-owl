@@ -118,6 +118,10 @@ pub fn read_source_with(fmt: Format, bytes: &[u8], lax: bool) -> anyhow::Result<
             let sop = obo::reader::read(&mut Cursor::new(bytes), config()).map_err(horned_err)?;
             Output::obo(sop).decompose()
         }
+        Format::OboNom => {
+            let sop = obo::nom_reader::read(Cursor::new(bytes), config()).map_err(horned_err)?;
+            Output::obo(sop).decompose()
+        }
         Format::RdfXml => {
             let rop =
                 rdf::reader::read(&mut Cursor::new(bytes), config().into()).map_err(horned_err)?;
@@ -177,7 +181,7 @@ pub fn write_target(
         Format::OwlXml => {
             owx::writer::write(&mut out, cmo, Some(prefixes)).map_err(horned_err)?;
         }
-        Format::Obo => {
+        Format::Obo | Format::OboNom => {
             obo::writer::write(&mut out, cmo, Some(prefixes)).map_err(horned_err)?;
         }
         Format::RdfXml => {

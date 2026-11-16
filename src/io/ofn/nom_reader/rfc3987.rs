@@ -227,18 +227,19 @@ fn authority(s: &str, mut i: usize) -> usize {
     i
 }
 
-/// Does the text between `<` and `>` match `Iri` in full?
-pub fn is_iri(s: &str) -> bool {
+/// Length of the `Iri` that starts `s`, if one does. `Iri` ends wherever its
+/// repetitions stop, so this is a prefix match.
+pub fn iri_len(s: &str) -> Option<usize> {
     let b = s.as_bytes();
     if !b.first().is_some_and(u8::is_ascii_alphabetic) {
-        return false;
+        return None;
     }
     let mut i = 1;
     while i < b.len() && (b[i].is_ascii_alphanumeric() || matches!(b[i], b'+' | b'-' | b'.')) {
         i += 1;
     }
     if !s[i..].starts_with(':') {
-        return false;
+        return None;
     }
     i += 1;
 
@@ -258,7 +259,11 @@ pub fn is_iri(s: &str) -> bool {
             i = slash_segments(s, i + n);
         }
     }
+    Some(query_fragment(s, i))
+}
 
+/// `("?" Query)? ("#" Fragment)?` from `i`; returns the end.
+fn query_fragment(s: &str, mut i: usize) -> usize {
     if s[i..].starts_with('?') {
         i += 1;
         i += run(
@@ -279,5 +284,32 @@ pub fn is_iri(s: &str) -> bool {
             true,
         );
     }
-    i == s.len()
+    i
+}
+
+/// Length of the OBO `UrlId` that starts `s`: a scheme, `://`, an authority
+/// and at least one `/segment`, then the optional query and fragment.
+pub fn url_id_len(s: &str) -> Option<usize> {
+    let b = s.as_bytes();
+    if !b.first().is_some_and(u8::is_ascii_alphabetic) {
+        return None;
+    }
+    let mut i = 1;
+    while i < b.len() && (b[i].is_ascii_alphanumeric() || matches!(b[i], b'+' | b'-' | b'.')) {
+        i += 1;
+    }
+    if !s[i..].starts_with("://") {
+        return None;
+    }
+    i = authority(s, i + 3);
+    let after = slash_segments(s, i);
+    if after == i {
+        return None;
+    }
+    Some(query_fragment(s, after))
+}
+
+/// Does the text between `<` and `>` match `Iri` in full?
+pub fn is_iri(s: &str) -> bool {
+    iri_len(s) == Some(s.len())
 }

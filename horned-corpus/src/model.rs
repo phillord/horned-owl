@@ -16,6 +16,9 @@ pub enum Format {
     /// `OfnNom` is for OFN.
     OmnNom,
     Obo,
+    /// OBO written by the obo writer and re-read by the nom reader, as
+    /// `OfnNom` is for OFN.
+    OboNom,
     /// Turtle / N-Triples (read only — via the oxrdfio-backed RDF reader with
     /// `RdfFormat::Turtle`; there is no Turtle *writer*, so it never appears as
     /// a round-trip target).
