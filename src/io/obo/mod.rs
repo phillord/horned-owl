@@ -13,7 +13,7 @@ pub mod nom_reader;
 pub mod reader;
 pub mod writer;
 pub use reader::read;
-pub use writer::write;
+pub use writer::{write, write_stream, write_stream_chunked};
 
 #[cfg(test)]
 mod oracle;

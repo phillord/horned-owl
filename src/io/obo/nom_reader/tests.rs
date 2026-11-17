@@ -414,3 +414,77 @@ fn streaming_sees_only_earlier_typedefs() {
 fn keyword_inside_quoted_string() {
     same("ontology: t\n\n[Term]\nid: A\ndef: \"one\n[Term]\nid: B\n two\" []\n");
 }
+
+mod writing {
+    use super::*;
+    use crate::io::{component_stream, prefix_stream};
+    use crate::ontology::component_mapped::ComponentMappedOntology;
+
+    type Rc_ = std::rc::Rc<crate::model::AnnotatedComponent<RcStr>>;
+
+    fn load(path: &PathBuf) -> Option<(ComponentMappedOntology<RcStr, Rc_>, curie::PrefixMapping)> {
+        let doc = slurp::read_all_to_string(path).unwrap();
+        let (ont, pm) = nom_read(&doc).ok()?;
+        Some((ont.into(), pm))
+    }
+
+    fn batch(ont: &ComponentMappedOntology<RcStr, Rc_>, pm: &curie::PrefixMapping) -> String {
+        String::from_utf8(crate::io::obo::write(Vec::new(), ont, Some(pm)).unwrap()).unwrap()
+    }
+
+    /// With room for everything the streamed document is the batch one.
+    #[rstest]
+    fn one_chunk_same_as_write(#[files("src/ont/owl-obo/*.obo")] resource: PathBuf) {
+        let Some((ont, pm)) = load(&resource) else {
+            return;
+        };
+        let items = prefix_stream(&pm).chain(component_stream(&ont));
+        let out = crate::io::obo::write_stream_chunked(Vec::new(), items, usize::MAX).unwrap();
+        assert_eq!(batch(&ont, &pm), String::from_utf8(out).unwrap());
+    }
+
+    /// Fed in the order the reader gives, small chunks repeat stanzas,
+    /// which must not change what is read.
+    #[rstest]
+    fn small_chunks_read_back_the_same(#[files("src/ont/owl-obo/*.obo")] resource: PathBuf) {
+        let Some((ont, pm)) = load(&resource) else {
+            return;
+        };
+        let (expected, _) = nom_read(&batch(&ont, &pm)).unwrap();
+        let doc = slurp::read_all_to_string(&resource).unwrap();
+        for chunk in [1, 2, 5] {
+            let input = std::io::BufReader::new(doc.as_bytes());
+            // The writer wants the header components first.
+            let (mut items, rest): (Vec<_>, Vec<_>) =
+                super::super::Reader::<RcStr, _, _>::new(input, Default::default())
+                    .map(Result::unwrap)
+                    .partition(|i| {
+                        use crate::model::Component::*;
+                        match i {
+                            crate::io::StreamComponent::Prefix(..) => true,
+                            crate::io::StreamComponent::Component(ac) => matches!(
+                                ac.component,
+                                OntologyID(_) | Import(_) | OntologyAnnotation(_)
+                            ),
+                        }
+                    });
+            items.extend(rest);
+            let items = items.into_iter().map(Ok);
+            let out = match crate::io::obo::write_stream_chunked(Vec::new(), items, chunk) {
+                Ok(out) => out,
+                // The header is out before a component with no OBO form
+                // turns up: the batch writer puts these in `owl-axioms:`.
+                Err(e) => {
+                    assert!(
+                        batch(&ont, &pm).contains("\nowl-axioms:"),
+                        "chunk {chunk}: {e}"
+                    );
+                    continue;
+                }
+            };
+            let text = String::from_utf8(out).unwrap();
+            let (got, _) = nom_read(&text).unwrap_or_else(|e| panic!("chunk {chunk}: {e}\n{text}"));
+            pretty_assertions::assert_eq!(expected, got, "chunk {chunk}:\n{text}");
+        }
+    }
+}

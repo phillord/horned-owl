@@ -17,6 +17,7 @@ use std::io::Write;
 use curie::PrefixMapping;
 
 use crate::error::HornedError;
+use crate::io::{StreamComponent, StreamOntology};
 use crate::model::{
     AnnotatedComponent, AnnotationValue, ClassExpression as CE, Component, ForIRI, Individual,
     Literal, ObjectPropertyExpression as OPE, Ontology,
@@ -46,88 +47,105 @@ struct Stanza {
     clauses: Vec<String>,
 }
 
-/// Write a `ComponentMappedOntology` to `write` in OBO flat-file format 1.4.
-/// A caller holding some other `Ontology` implementation should collect it
-/// into a `ComponentMappedOntology` first (`ont.iter().cloned().collect()`,
-/// or `ont.into_iter().collect()` if `ont` doesn't need to be kept).
-pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
-    mut write: W,
-    ont: &ComponentMappedOntology<A, AA>,
-    mapping: Option<&PrefixMapping>,
-) -> Result<W, HornedError> {
-    // Ontology IRI drives the `#`-namespace used to compress bare-name ids.
-    let mut onto_iri: Option<String> = None;
-    for ac in ont.iter() {
-        if let Component::OntologyID(o) = &ac.component {
-            if let Some(i) = &o.iri {
-                onto_iri = Some(i.to_string());
+/// What the writer knows about the document: the namespaces that decide how
+/// IRIs are compressed, and what has been seen of each entity's id, kind and
+/// xrefs. `write` fills it from the whole ontology at once; `write_stream`
+/// adds to it as components arrive.
+struct State<A: ForIRI> {
+    onto_ns: Option<String>,
+    reader_onto_ns: Option<String>,
+    idspaces: Vec<(String, String)>,
+    idspace_map: std::collections::HashMap<String, String>,
+    id_values: BTreeMap<String, Vec<String>>,
+    xref_values: BTreeMap<String, Vec<String>>,
+    kinds: BTreeMap<String, Kind>,
+    ids: BTreeMap<String, String>,
+    /// Entities whose id, kind or xrefs changed since `ids` was last made.
+    dirty: std::collections::BTreeSet<String>,
+    header: Vec<String>,
+    unhandled: Vec<AnnotatedComponent<A>>,
+}
+
+impl<A: ForIRI> State<A> {
+    fn new(onto_iri: Option<String>, mapping: Option<&PrefixMapping>) -> Self {
+        // Ontology IRI drives the `#`-namespace used to compress bare-name ids.
+        let onto_ns = onto_iri
+            .as_deref()
+            .and_then(|i| i.strip_prefix(OBO))
+            .and_then(|r| r.strip_suffix(".owl"))
+            .map(|o| format!("{OBO}{o}#"));
+        // The onto_ns the *reader* will actually derive on reread, from whatever
+        // `ontology:` line `header_line` is about to emit for this ontology's
+        // IRI (mirroring the reader's own `OntologyTag` handling) -- broader
+        // than `onto_ns` above, which only feeds `compress`'s bare-name branch
+        // for a `.owl`-suffixed obo-purl ontology IRI specifically. Used to
+        // check whether a recorded bare id would round-trip.
+        let reader_onto_ns = onto_iri.as_deref().map(|iri| {
+            let ont = iri
+                .strip_prefix(OBO)
+                .and_then(|r| r.strip_suffix(".owl"))
+                .unwrap_or(iri);
+            if crate::io::obo::reader::from_pair::is_http_iri(ont) {
+                format!("{ont}#")
+            } else {
+                format!("{OBO}{ont}#")
             }
+        });
+
+        // The non-implicit prefixes are the document's `idspace:` declarations. They
+        // must be emitted (so re-read resolves those CURIEs the same way) and used
+        // to compress matching IRIs back to `PREFIX:local`. Longest URL first so the
+        // most specific idspace wins. Implicit OBO prefixes are never emitted.
+        const IMPLICIT: [&str; 8] = ["obo", "oboInOwl", "xsd", "rdf", "rdfs", "owl", "dc", "xml"];
+        let mut idspaces: Vec<(String, String)> = mapping
+            .map(|m| {
+                m.mappings()
+                    // The empty/default prefix has no name to write as an
+                    // `IdPrefix` token -- `idspace: <iri>` is not valid OBO
+                    // and its own reader can't parse it back.
+                    .filter(|(p, _)| !p.is_empty() && !IMPLICIT.contains(&p.as_str()))
+                    .map(|(p, u)| (p.clone(), u.clone()))
+                    .collect()
+            })
+            .unwrap_or_default();
+        idspaces.sort_by(|a, b| b.1.len().cmp(&a.1.len()));
+        // For validating a candidate stanza id: `expand_id_with` is
+        // `compress`'s inverse and takes a lookup map rather than the
+        // longest-match list `compress` needs.
+        let idspace_map = idspaces.iter().cloned().collect();
+        State {
+            onto_ns,
+            reader_onto_ns,
+            idspaces,
+            idspace_map,
+            id_values: BTreeMap::new(),
+            xref_values: BTreeMap::new(),
+            kinds: BTreeMap::new(),
+            ids: BTreeMap::new(),
+            dirty: Default::default(),
+            header: Vec::new(),
+            unhandled: Vec::new(),
         }
     }
-    let onto_ns = onto_iri
-        .as_deref()
-        .and_then(|i| i.strip_prefix(OBO))
-        .and_then(|r| r.strip_suffix(".owl"))
-        .map(|o| format!("{OBO}{o}#"));
-    // The onto_ns the *reader* will actually derive on reread, from whatever
-    // `ontology:` line `header_line` is about to emit for this ontology's
-    // IRI (mirroring the reader's own `OntologyTag` handling) -- broader
-    // than `onto_ns` above, which only feeds `compress`'s bare-name branch
-    // for a `.owl`-suffixed obo-purl ontology IRI specifically. Used below
-    // to check whether a recorded bare id would round-trip.
-    let reader_onto_ns = onto_iri.as_deref().map(|iri| {
-        let ont = iri
-            .strip_prefix(OBO)
-            .and_then(|r| r.strip_suffix(".owl"))
-            .unwrap_or(iri);
-        if crate::io::obo::reader::from_pair::is_http_iri(ont) {
-            format!("{ont}#")
-        } else {
-            format!("{OBO}{ont}#")
-        }
-    });
 
-    // The non-implicit prefixes are the document's `idspace:` declarations. They
-    // must be emitted (so re-read resolves those CURIEs the same way) and used
-    // to compress matching IRIs back to `PREFIX:local`. Longest URL first so the
-    // most specific idspace wins. Implicit OBO prefixes are never emitted.
-    const IMPLICIT: [&str; 8] = ["obo", "oboInOwl", "xsd", "rdf", "rdfs", "owl", "dc", "xml"];
-    let mut idspaces: Vec<(String, String)> = mapping
-        .map(|m| {
-            m.mappings()
-                // The empty/default prefix has no name to write as an
-                // `IdPrefix` token -- `idspace: <iri>` is not valid OBO
-                // and its own reader can't parse it back.
-                .filter(|(p, _)| !p.is_empty() && !IMPLICIT.contains(&p.as_str()))
-                .map(|(p, u)| (p.clone(), u.clone()))
-                .collect()
-        })
-        .unwrap_or_default();
-    idspaces.sort_by(|a, b| b.1.len().cmp(&a.1.len()));
-    let cz = |iri: &str| compress(iri, onto_ns.as_deref(), &idspaces);
-    // For validating a candidate stanza id below: `expand_id_with` is
-    // `compress`'s inverse and takes a lookup map rather than the
-    // longest-match list `compress` needs.
-    let idspace_map: std::collections::HashMap<String, String> = idspaces.iter().cloned().collect();
+    fn cz(&self, iri: &str) -> String {
+        compress(iri, self.onto_ns.as_deref(), &self.idspaces)
+    }
 
-    // Pass 1: the stanza entities (those with an oboInOwl:id) and their kinds.
-    let mut id_values: BTreeMap<String, Vec<String>> = BTreeMap::new();
-    let mut xref_values: BTreeMap<String, Vec<String>> = BTreeMap::new();
-    let mut kinds: BTreeMap<String, Kind> = BTreeMap::new();
-    for ac in ont.iter() {
+    /// Note the stanza entities (those with an oboInOwl:id) and their kinds.
+    fn observe(&mut self, ac: &AnnotatedComponent<A>) {
         match &ac.component {
             Component::AnnotationAssertion(a) if a.ann.ap.0.as_ref() == format!("{OIO}id") => {
                 if let (crate::model::AnnotationSubject::IRI(s), AnnotationValue::Literal(l)) =
                     (&a.subject, &a.ann.av)
                 {
-                    id_values
-                        .entry(s.as_ref().to_string())
-                        .or_default()
-                        .push(literal_text(l));
+                    let iri = s.as_ref().to_string();
+                    self.dirty.insert(iri.clone());
+                    self.id_values.entry(iri).or_default().push(literal_text(l));
                 }
             }
-            // Gathered for the shorthand check below: a `[Typedef]` with a
-            // bare id and exactly one dbxref is oboformat's relation
+            // Gathered for the shorthand check in `refresh_ids`: a `[Typedef]`
+            // with a bare id and exactly one dbxref is oboformat's relation
             // shorthand (see the reader's `build_rel_map`), so its bare id
             // is safe to reuse even though it doesn't expand to the IRI
             // directly.
@@ -137,140 +155,186 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
                 if let (crate::model::AnnotationSubject::IRI(s), AnnotationValue::Literal(l)) =
                     (&a.subject, &a.ann.av)
                 {
-                    xref_values
-                        .entry(s.as_ref().to_string())
+                    let iri = s.as_ref().to_string();
+                    self.dirty.insert(iri.clone());
+                    self.xref_values
+                        .entry(iri)
                         .or_default()
                         .push(literal_text(l));
                 }
             }
-            Component::DeclareClass(d) => {
-                kinds.insert(d.0.0.as_ref().to_string(), Kind::Term);
-            }
+            Component::DeclareClass(d) => self.set_kind(d.0.0.as_ref(), Kind::Term, true),
             Component::DeclareObjectProperty(d) => {
-                kinds.insert(d.0.0.as_ref().to_string(), Kind::Typedef);
+                self.set_kind(d.0.0.as_ref(), Kind::Typedef, true)
             }
             // An annotation property with an oboInOwl:id is a metadata-tag
             // [Typedef] (only those get a stanza); others have no id.
             Component::DeclareAnnotationProperty(d) => {
-                kinds
-                    .entry(d.0.0.as_ref().to_string())
-                    .or_insert(Kind::Typedef);
+                self.set_kind(d.0.0.as_ref(), Kind::Typedef, false)
             }
             Component::DeclareNamedIndividual(d) => {
-                kinds.insert(d.0.0.as_ref().to_string(), Kind::Instance);
+                self.set_kind(d.0.0.as_ref(), Kind::Instance, true)
             }
             _ => {}
         }
     }
 
-    // An entity can carry several `oboInOwl:id` values: the reader's own stamp
-    // plus one restored from `owl-axioms:` that disagrees with the IRI. The
-    // stanza id is the one that matches the IRI, else any single token that
-    // still expands (under this document's own idspaces/default namespace)
-    // back to the same IRI, else the compressed IRI itself. A value that
-    // fails that check is an id stamped by whatever *originally* produced
-    // this entity (e.g. a relation imported from another OBO namespace,
-    // still carrying that namespace's own bare id) -- reusing it verbatim
-    // here would silently re-home the entity under this ontology's own
-    // namespace instead. The rest have no clause and are written to
-    // `owl-axioms:` below.
-    //
-    // The one exception: a `[Typedef]`'s bare id round-trips via the
-    // reader's relation-shorthand rule instead (a bare id with exactly one
-    // dbxref resolves through that xref, not this ontology's namespace --
-    // see `build_rel_map`), so it's accepted whenever that xref itself
-    // expands back to the IRI.
-    let ids: BTreeMap<String, String> = id_values
-        .into_iter()
-        .map(|(iri, values)| {
-            let compressed = cz(&iri);
+    fn set_kind(&mut self, iri: &str, kind: Kind, overwrite: bool) {
+        if overwrite {
+            self.kinds.insert(iri.to_string(), kind);
+        } else {
+            self.kinds.entry(iri.to_string()).or_insert(kind);
+        }
+        self.dirty.insert(iri.to_string());
+    }
+
+    /// Choose the stanza id of every entity seen since the last call, and
+    /// give back those that have one.
+    ///
+    /// An entity can carry several `oboInOwl:id` values: the reader's own stamp
+    /// plus one restored from `owl-axioms:` that disagrees with the IRI. The
+    /// stanza id is the one that matches the IRI, else any single token that
+    /// still expands (under this document's own idspaces/default namespace)
+    /// back to the same IRI, else the compressed IRI itself. A value that
+    /// fails that check is an id stamped by whatever *originally* produced
+    /// this entity (e.g. a relation imported from another OBO namespace,
+    /// still carrying that namespace's own bare id) -- reusing it verbatim
+    /// here would silently re-home the entity under this ontology's own
+    /// namespace instead. The rest have no clause and are written to
+    /// `owl-axioms:`.
+    ///
+    /// The one exception: a `[Typedef]`'s bare id round-trips via the
+    /// reader's relation-shorthand rule instead (a bare id with exactly one
+    /// dbxref resolves through that xref, not this ontology's namespace --
+    /// see `build_rel_map`), so it's accepted whenever that xref itself
+    /// expands back to the IRI.
+    fn refresh_ids(&mut self) -> Vec<String> {
+        let mut fresh = Vec::new();
+        for iri in std::mem::take(&mut self.dirty) {
+            let Some(values) = self.id_values.get(&iri) else {
+                continue;
+            };
+            let compressed = self.cz(&iri);
             let expands_to_iri = |v: &str| {
                 crate::io::obo::reader::from_pair::expand_id_with(
                     v,
-                    &idspace_map,
-                    reader_onto_ns.as_deref(),
+                    &self.idspace_map,
+                    self.reader_onto_ns.as_deref(),
                 ) == iri
             };
-            let shorthand_ok = kinds.get(&iri) == Some(&Kind::Typedef)
-                && matches!(xref_values.get(&iri).map(Vec::as_slice), Some([xref]) if expands_to_iri(xref));
+            let shorthand_ok = self.kinds.get(&iri) == Some(&Kind::Typedef)
+                && matches!(self.xref_values.get(&iri).map(Vec::as_slice), Some([xref]) if expands_to_iri(xref));
             let id = if values.contains(&compressed) {
                 compressed
             } else {
                 values
-                    .into_iter()
+                    .iter()
                     .find(|v| {
                         !v.is_empty()
                             && !v.contains(char::is_whitespace)
                             && (expands_to_iri(v)
                                 || (shorthand_ok && !v.contains(':') && !v.starts_with("http")))
                     })
+                    .cloned()
                     .unwrap_or(compressed)
             };
-            (iri, id)
-        })
-        .collect();
-
-    let mut stanzas: BTreeMap<(Kind, String), Stanza> = BTreeMap::new();
-    let mut header: Vec<String> = Vec::new();
-
-    let key_of = |iri: &str| -> Option<(Kind, String)> {
-        let id = ids.get(iri)?;
-        let kind = *kinds.get(iri).unwrap_or(&Kind::Term);
-        Some((kind, id.clone()))
-    };
-
-    // Every entity with an oboInOwl:id is a stanza, even one with no further
-    // clauses (e.g. a `[Typedef]` that is just an id) — pre-create it so a bare
-    // stanza is not dropped when the clause loop finds nothing to attach.
-    for (iri, id) in &ids {
-        let kind = *kinds.get(iri).unwrap_or(&Kind::Term);
-        stanzas.entry((kind, id.clone())).or_insert_with(|| Stanza {
-            id: id.clone(),
-            clauses: Vec::new(),
-        });
+            self.ids.insert(iri.clone(), id);
+            fresh.push(iri);
+        }
+        fresh
     }
 
-    // Anything neither attached to a stanza nor emitted as a header line has
-    // no native OBO representation at all (SWRL rules, complex class
-    // expressions, ...) -- collected here to fall back to the owl-axioms:
-    // escape hatch (spec 5.0.4) rather than being silently dropped.
-    // is_never_axiom_fallback excludes the component kinds that land here
-    // despite not actually being unhandled (see its own doc).
-    let mut unhandled: Vec<AnnotatedComponent<A>> = Vec::new();
+    /// Attach the clauses of `comps` to their stanzas, and collect their
+    /// header lines and the components with no OBO form.
+    fn process<'a>(
+        &mut self,
+        comps: impl Iterator<Item = &'a AnnotatedComponent<A>>,
+        fresh: &[String],
+        stanzas: &mut BTreeMap<(Kind, String), Stanza>,
+    ) where
+        A: 'a,
+    {
+        let key_of = |iri: &str| -> Option<(Kind, String)> {
+            let id = self.ids.get(iri)?;
+            let kind = *self.kinds.get(iri).unwrap_or(&Kind::Term);
+            Some((kind, id.clone()))
+        };
 
-    for ac in ont.iter() {
-        let mut wrote = false;
-        for (owner_iri, line) in clause_lines(ac, &cz) {
-            if let Some(key) = key_of(&owner_iri) {
-                let s = stanzas.entry(key.clone()).or_default();
-                s.id = key.1;
-                s.clauses.push(line);
-                wrote = true;
+        // Every entity with an oboInOwl:id is a stanza, even one with no further
+        // clauses (e.g. a `[Typedef]` that is just an id) — pre-create it so a bare
+        // stanza is not dropped when the clause loop finds nothing to attach.
+        for iri in fresh {
+            let id = &self.ids[iri];
+            let kind = *self.kinds.get(iri).unwrap_or(&Kind::Term);
+            stanzas.entry((kind, id.clone())).or_insert_with(|| Stanza {
+                id: id.clone(),
+                clauses: Vec::new(),
+            });
+        }
+
+        let cz = |iri: &str| self.cz(iri);
+        let mut header = Vec::new();
+        // Anything neither attached to a stanza nor emitted as a header line has
+        // no native OBO representation at all (SWRL rules, complex class
+        // expressions, ...) -- collected here to fall back to the owl-axioms:
+        // escape hatch (spec 5.0.4) rather than being silently dropped.
+        // is_never_axiom_fallback excludes the component kinds that land here
+        // despite not actually being unhandled (see its own doc).
+        let mut unhandled = Vec::new();
+        for ac in comps {
+            let mut wrote = false;
+            for (owner_iri, line) in clause_lines(ac, &cz) {
+                if let Some(key) = key_of(&owner_iri) {
+                    let s = stanzas.entry(key.clone()).or_default();
+                    s.id = key.1;
+                    s.clauses.push(line);
+                    wrote = true;
+                }
+            }
+            let hlines = header_line(ac, &cz);
+            wrote |= !hlines.is_empty();
+            header.extend(hlines);
+
+            if !wrote && (!is_never_axiom_fallback(&ac.component) || is_unused_id(ac, &self.ids)) {
+                unhandled.push(ac.clone());
             }
         }
-        let hlines = header_line(ac, &cz);
-        wrote |= !hlines.is_empty();
-        header.extend(hlines);
+        self.header.extend(header);
+        self.unhandled.extend(unhandled);
+    }
 
-        if !wrote && (!is_never_axiom_fallback(&ac.component) || is_unused_id(ac, &ids)) {
-            unhandled.push(ac.clone());
+    /// The header lines, sorted and without repeats: the lines collected,
+    /// `owl-axioms:` for the components with no OBO form, and the idspaces.
+    fn take_header(&mut self) -> Result<Vec<String>, HornedError> {
+        let mut header = std::mem::take(&mut self.header);
+        if !self.unhandled.is_empty() {
+            header.push(format!(
+                "owl-axioms: {}",
+                owl_axioms_value(&self.unhandled)?
+            ));
+            self.unhandled.clear();
         }
+        for (p, u) in &self.idspaces {
+            header.push(format!("idspace: {p} {u}"));
+        }
+        header.sort();
+        header.dedup();
+        Ok(header)
     }
+}
 
-    if !unhandled.is_empty() {
-        header.push(format!("owl-axioms: {}", owl_axioms_value(&unhandled)?));
+fn ontology_iri<A: ForIRI>(c: &Component<A>) -> Option<String> {
+    match c {
+        Component::OntologyID(o) => o.iri.as_ref().map(|i| i.to_string()),
+        _ => None,
     }
+}
 
-    // Emit header, then stanzas grouped Term / Typedef / Instance.
-    for (p, u) in &idspaces {
-        header.push(format!("idspace: {p} {u}"));
-    }
-    header.sort();
-    header.dedup();
-    for h in &header {
-        writeln!(write, "{h}")?;
-    }
-    for ((kind, _), s) in &stanzas {
+fn write_stanzas<W: Write>(
+    write: &mut W,
+    stanzas: BTreeMap<(Kind, String), Stanza>,
+) -> Result<(), HornedError> {
+    for ((kind, _), mut s) in stanzas {
         let tag = match kind {
             Kind::Term => "Term",
             Kind::Typedef => "Typedef",
@@ -278,13 +342,153 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
         };
         writeln!(write, "\n[{tag}]")?;
         writeln!(write, "id: {}", s.id)?;
-        let mut clauses = s.clauses.clone();
-        clauses.sort();
-        for c in clauses {
+        s.clauses.sort();
+        for c in s.clauses {
             writeln!(write, "{c}")?;
         }
     }
+    Ok(())
+}
+
+/// Write a `ComponentMappedOntology` to `write` in OBO flat-file format 1.4.
+/// A caller holding some other `Ontology` implementation should collect it
+/// into a `ComponentMappedOntology` first (`ont.iter().cloned().collect()`,
+/// or `ont.into_iter().collect()` if `ont` doesn't need to be kept).
+pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
+    mut write: W,
+    ont: &ComponentMappedOntology<A, AA>,
+    mapping: Option<&PrefixMapping>,
+) -> Result<W, HornedError> {
+    let mut onto_iri: Option<String> = None;
+    for ac in ont.iter() {
+        if let Some(i) = ontology_iri(&ac.component) {
+            onto_iri = Some(i);
+        }
+    }
+    let mut state = State::new(onto_iri, mapping);
+    for ac in ont.iter() {
+        state.observe(ac);
+    }
+    let fresh = state.refresh_ids();
+    let mut stanzas = BTreeMap::new();
+    state.process(ont.iter(), &fresh, &mut stanzas);
+    for h in state.take_header()? {
+        writeln!(write, "{h}")?;
+    }
+    write_stanzas(&mut write, stanzas)?;
     Ok(write)
+}
+
+/// The number of components `write_stream` holds before it writes them.
+pub const DEFAULT_CHUNK: usize = 10_000;
+
+/// Write `components` as an OBO document without holding the whole ontology.
+///
+/// Prefixes must come first, then the ontology id, imports and ontology
+/// annotations, before any other component. An entity's declaration and
+/// `oboInOwl:id` must come no later than its other components, as the
+/// OBO readers give them. The rest are written `DEFAULT_CHUNK` at a time,
+/// each chunk as stanzas sorted by kind and id, so an entity described in
+/// more than one chunk gets more than one stanza. Each is the same entity,
+/// so the document reads back as the same ontology, but it is longer than
+/// the output of [`write`].
+///
+/// The header ends where the first stanza starts, so everything that goes
+/// in it, including `owl-axioms:` for components with no OBO form, has to
+/// be known by the end of the first chunk, which is not written until it
+/// holds a component other than those above. A later component that needs
+/// a header line is an error.
+pub fn write_stream<A: ForIRI, AA: ForIndex<A>, W: Write>(
+    write: W,
+    components: impl StreamOntology<A, AA>,
+) -> Result<W, HornedError> {
+    write_stream_chunked(write, components, DEFAULT_CHUNK)
+}
+
+/// As [`write_stream`], with `chunk` components held at a time.
+pub fn write_stream_chunked<A: ForIRI, AA: ForIndex<A>, W: Write>(
+    mut write: W,
+    components: impl StreamOntology<A, AA>,
+    chunk: usize,
+) -> Result<W, HornedError> {
+    let mut mapping = PrefixMapping::default();
+    let mut started = false;
+    let mut in_stanzas = false;
+    let mut state: Option<State<A>> = None;
+    let mut held: Vec<AnnotatedComponent<A>> = Vec::new();
+
+    for item in components {
+        match item? {
+            StreamComponent::Prefix(name, iri) => {
+                if started {
+                    return Err(HornedError::invalid(
+                        "a prefix came after the first component of a streamed OBO document",
+                    ));
+                }
+                let _ = mapping.add_prefix(&name, &iri);
+            }
+            StreamComponent::Component(ac) => {
+                let ac: &AnnotatedComponent<A> = ac.borrow();
+                started = true;
+                if matches!(ac.component, Component::DocIRI(_)) {
+                    continue;
+                }
+                if matches!(
+                    ac.component,
+                    Component::OntologyID(_)
+                        | Component::Import(_)
+                        | Component::OntologyAnnotation(_)
+                ) {
+                    if in_stanzas {
+                        return Err(HornedError::invalid(
+                            "the ontology id, imports and annotations of a streamed OBO \
+                             document must come before its other components",
+                        ));
+                    }
+                } else {
+                    in_stanzas = true;
+                }
+                held.push(ac.clone());
+                if in_stanzas && held.len() >= chunk {
+                    flush(&mut write, &mapping, &mut state, &mut held)?;
+                }
+            }
+        }
+    }
+    flush(&mut write, &mapping, &mut state, &mut held)?;
+    Ok(write)
+}
+
+/// Write the held components, with the header first if it is not out yet.
+fn flush<A: ForIRI, W: Write>(
+    write: &mut W,
+    mapping: &PrefixMapping,
+    state: &mut Option<State<A>>,
+    held: &mut Vec<AnnotatedComponent<A>>,
+) -> Result<(), HornedError> {
+    let first = state.is_none();
+    let st = state.get_or_insert_with(|| {
+        let iri = held.iter().rev().find_map(|p| ontology_iri(&p.component));
+        State::new(iri, Some(mapping))
+    });
+    for ac in held.iter() {
+        st.observe(ac);
+    }
+    let fresh = st.refresh_ids();
+    let mut stanzas = BTreeMap::new();
+    st.process(held.iter(), &fresh, &mut stanzas);
+    held.clear();
+    if first {
+        for h in st.take_header()? {
+            writeln!(write, "{h}")?;
+        }
+    } else if !st.header.is_empty() || !st.unhandled.is_empty() {
+        return Err(HornedError::invalid(
+            "a component of a streamed OBO document needs a header line after the \
+             first stanza was written",
+        ));
+    }
+    write_stanzas(write, stanzas)
 }
 
 /// True for component kinds that must never be swept into the owl-axioms:
