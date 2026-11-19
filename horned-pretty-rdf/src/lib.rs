@@ -1238,6 +1238,15 @@ where
                     // Just render in place
                     PTerm::BlankNode(bn) => {
                         let (mt_opt, seq_opt) = chunk.take_subject(bn);
+                        if mt_opt.is_none() && seq_opt.is_none() {
+                            // Described elsewhere, or without triples of
+                            // its own: the member is a reference.
+                            let mut description = BytesStart::new("rdf:Description");
+                            description.push_attribute(("rdf:nodeID", Self::nodeid_attr_value(bn)));
+                            self.write_start(Event::Start(description))
+                                .map_err(map_err)?;
+                            self.write_close()?;
+                        }
                         if let Some(mt) = mt_opt {
                             self.format_removed_expanded(
                                 &PExpandedTriple::PMultiTriple(mt),
@@ -1734,6 +1743,37 @@ _:x <http://example.org/stuff/1.0/fullName> "Dave Beckett" ."###,
 </rdf:RDF>"###,
             spec_prefix(),
         );
+    }
+
+    /// A blank node in two collections is described in one of them and
+    /// referred to by its `rdf:nodeID` in the other, so no member is lost.
+    #[test]
+    fn blank_node_in_two_collections_stays_in_both() {
+        let nt = r###"<http://example.org/a> <http://example.org/stuff/1.0/r> _:l1 .
+_:l1 <http://www.w3.org/1999/02/22-rdf-syntax-ns#first> _:x .
+_:l1 <http://www.w3.org/1999/02/22-rdf-syntax-ns#rest> _:l2 .
+_:l2 <http://www.w3.org/1999/02/22-rdf-syntax-ns#first> <http://example.org/b> .
+_:l2 <http://www.w3.org/1999/02/22-rdf-syntax-ns#rest> <http://www.w3.org/1999/02/22-rdf-syntax-ns#nil> .
+<http://example.org/c> <http://example.org/stuff/1.0/r> _:m1 .
+_:m1 <http://www.w3.org/1999/02/22-rdf-syntax-ns#first> _:x .
+_:m1 <http://www.w3.org/1999/02/22-rdf-syntax-ns#rest> <http://www.w3.org/1999/02/22-rdf-syntax-ns#nil> .
+_:x <http://example.org/stuff/1.0/fullName> "Dave Beckett" ."###;
+        let xml = from_nt_prefix(nt, spec_prefix()).unwrap();
+        let read: Vec<oxrdf::Triple> = RdfParser::from_format(oxrdfio::RdfFormat::RdfXml)
+            .for_reader(xml.as_bytes())
+            .map(|q| q.unwrap().into())
+            .collect();
+        assert_eq!(read.len(), 9, "{xml}");
+        let full_name = read
+            .iter()
+            .find(|t| t.predicate.as_str() == "http://example.org/stuff/1.0/fullName")
+            .expect(&xml);
+        let firsts: Vec<_> = read
+            .iter()
+            .filter(|t| t.predicate.as_str() == "http://www.w3.org/1999/02/22-rdf-syntax-ns#first")
+            .filter(|t| oxrdf::Term::from(full_name.subject.clone()) == t.object)
+            .collect();
+        assert_eq!(firsts.len(), 2, "{xml}");
     }
 
     #[test]
