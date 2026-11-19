@@ -1272,9 +1272,9 @@ mod tests {
     fn test_ofn_anonymous_individual_nodeid() {
         let build = Build::new_arc();
 
-        // Generated anonymous individuals (e.g. from the RDF reader, via
-        // `anon_renumbered`) hold a BARE label; functional syntax requires the
-        // `_:` blank-node prefix, so it must be added.
+        // Generated anonymous individuals (`Build::anon_renumbered`) hold a
+        // BARE label; functional syntax requires the `_:` blank-node prefix,
+        // so it must be added.
         let anon = build.anon("anon000007");
         assert_eq!("_:anon000007", format!("{}", anon.as_functional()));
 
