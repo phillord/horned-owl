@@ -2255,10 +2255,16 @@ mod test {
         assert_round(resource);
     }
 
+    /// A blank node without a `rdf:nodeID` gets a new label each time it is
+    /// read, so anonymous individuals compare up to renaming.
     #[rstest]
     fn roundtrip_rdf_ambiguous(#[files("src/ont/owl-rdf/ambiguous/*.owl")] resource: PathBuf) {
         let resource = &slurp::read_all_to_string(&resource).unwrap();
-        assert_round(resource);
+        let (ont_orig, ont_round) = roundtrip(resource);
+        crate::normalize::normalize_and_assert_eq(
+            ont_orig.into_iter().collect(),
+            ont_round.into_iter().collect(),
+        );
     }
 
     /// Pipes owx's `read_to_stream` straight into rdf's `write_stream` --
@@ -2287,10 +2293,9 @@ mod test {
         let ont_via_rdf = read_ntriples_ok(&mut &out[..]);
 
         // Anonymous individuals aren't required to keep their nodeID label
-        // across an RDF round trip -- the RDF reader deliberately renumbers
-        // them (`Build::anon_renumbered`), same caveat as
-        // `reader::test::annotation_with_anonymous`. Compare up to that
-        // renumbering rather than requiring exact label equality.
+        // across an RDF round trip -- a blank node written without a label
+        // gets a new one when read. Compare up to renaming rather than
+        // requiring exact label equality.
         crate::normalize::normalize_and_assert_eq(
             ont_direct.into_iter().collect(),
             ont_via_rdf.into_iter().collect(),

@@ -929,9 +929,9 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
                     ann: Default::default(),
                 })
             }
-            [_, Iri(p), Term::BNode(_)] => Ok(Annotation {
+            [_, Iri(p), Term::BNode(id)] => Ok(Annotation {
                 ap: AnnotationProperty(p.clone()),
-                av: self.config.build.as_ref().anon_renumbered().into(),
+                av: self.anonymous_individual(id).into(),
                 ann: Default::default(),
             }),
             all => Err(HornedError::invalid(format!(
@@ -1326,6 +1326,57 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
         }
     }
 
+    /// The anonymous individual of a blank node. It is named after the
+    /// node, so all triples on one node are about the same individual.
+    fn anonymous_individual(&self, id: &BNode<A>) -> AnonymousIndividual<A> {
+        self.config
+            .build
+            .as_ref()
+            .anon(format!("_:{}", id.0.as_ref()))
+    }
+
+    /// Can `t` be the class of a class assertion? Reserved vocabulary other
+    /// than `owl:Thing` and `owl:Nothing` types structures (`owl:Restriction`,
+    /// `owl:Axiom`, `swrl:ClassAtom`), not individuals.
+    fn is_class_term(t: &Term<A>) -> bool {
+        matches!(
+            t,
+            Term::Iri(_) | Term::BNode(_) | Term::OWL(VOWL::Thing | VOWL::Nothing)
+        )
+    }
+
+    /// Can the triples on a blank node describe an individual?
+    fn is_individual_node(triples: &[[Term<A>; 3]]) -> bool {
+        triples.iter().all(|t| match t {
+            [_, Term::RDF(VRDF::Type), cls] => Self::is_class_term(cls),
+            _ => true,
+        })
+    }
+
+    /// Is `id` a blank node for a structure (a class expression, property
+    /// expression, data range, list or typed construct) rather than an
+    /// anonymous individual?
+    fn is_structure(&self, id: &BNode<A>) -> bool {
+        self.class_expression.contains_key(id)
+            || self.object_property_expression.contains_key(id)
+            || self.data_range.contains_key(id)
+            || self.bnode_seq.contains_key(id)
+            || self
+                .bnode
+                .get(id)
+                .is_some_and(|v| !Self::is_individual_node(v))
+    }
+
+    /// Convert to an Individual or None: an IRI names one, a blank node
+    /// that is no structure is an anonymous one.
+    fn retrieve_to_individual(&self, t: &Term<A>) -> Option<Individual<A>> {
+        match t {
+            Term::Iri(iri) => Some(NamedIndividual(iri.clone()).into()),
+            Term::BNode(id) if !self.is_structure(id) => Some(self.anonymous_individual(id).into()),
+            _ => None,
+        }
+    }
+
     /// Retrieve or convert to an SubObjectPropertyExpression or None.
     fn retrieve_to_sope(&mut self, t: &Term<A>) -> Option<SubObjectPropertyExpression<A>> {
         self.retrieve_to_ope(t).map(Into::into)
@@ -1410,7 +1461,7 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
 
     /// Retrieve a Vec of Individual or None.
     fn retrieve_to_ni_seq(&mut self, bnodeid: &BNode<A>) -> Option<Vec<Individual<A>>> {
-        self.retrieve_to_seq(bnodeid, |slf, t| slf.convert_to_iri(t).map(Into::into))
+        self.retrieve_to_seq(bnodeid, |slf, t| slf.retrieve_to_individual(t))
     }
 
     /// Retrieve a Vec of DataRange or None.
@@ -1474,9 +1525,7 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
     /// Convert to an IArgument or None
     fn retrieve_to_iargument(&mut self, t: &Term<A>) -> Option<IArgument<A>> {
         match t {
-            Term::BNode(_) => Some(IArgument::Individual(
-                self.config.build.as_ref().anon_renumbered().into(),
-            )),
+            Term::BNode(id) => Some(IArgument::Individual(self.anonymous_individual(id).into())),
             Term::Iri(iri) => self
                 // if it is a variable return it
                 .variable
@@ -1806,7 +1855,7 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
                     Some(PropertyExpression::ObjectPropertyExpression(ope)) => {
                         ok_some!(ClassExpression::ObjectHasValue {
                             ope,
-                            i: NamedIndividual(self.convert_to_iri(val)?).into()
+                            i: self.retrieve_to_individual(val)?
                         })
                     }
                     Some(PropertyExpression::DataProperty(dp)) => {
@@ -2064,23 +2113,23 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
         for (this_bnode, v) in std::mem::take(&mut self.bnode) {
             let axiom: Result<_, HornedError> = match v.as_slice() {
                 [
-                    [_, Term::OWL(VOWL::AssertionProperty), pr],          //:
-                    [_, Term::OWL(VOWL::SourceIndividual), Term::Iri(i)], //:
-                    [_, target_type, target],                             //:
+                    [_, Term::OWL(VOWL::AssertionProperty), pr], //:
+                    [_, Term::OWL(VOWL::SourceIndividual), i],   //:
+                    [_, target_type, target],                    //:
                     [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::NegativePropertyAssertion)], //:
                 ] => match target_type {
                     Term::OWL(VOWL::TargetIndividual) => ok_some!(
                         NegativeObjectPropertyAssertion {
                             ope: self.retrieve_to_ope(pr)?,
-                            from: i.into(),
-                            to: self.convert_to_iri(target)?.into(),
+                            from: self.retrieve_to_individual(i)?,
+                            to: self.retrieve_to_individual(target)?,
                         }
                         .into()
                     ),
                     Term::OWL(VOWL::TargetValue) => ok_some!(
                         NegativeDataPropertyAssertion {
                             dp: self.convert_to_dp(pr)?,
-                            from: i.into(),
+                            from: self.retrieve_to_individual(i)?,
                             to: self.convert_to_literal(target)?,
                         }
                         .into()
@@ -2328,14 +2377,6 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
                     .retrieve_to_ope(pr)
                     .map(InverseFunctionalObjectProperty)
                     .map(Into::into)),
-                [Term::Iri(sub), Term::RDF(VRDF::Type), cls] => ok_some! {
-                    {
-                        ClassAssertion {
-                            ce: self.retrieve_to_ce(cls)?,
-                            i: NamedIndividual(sub.clone()).into()
-                        }.into()
-                    }
-                },
                 [a, Term::OWL(VOWL::DisjointWith), b] => ok_some! {
                         DisjointClasses(vec![
                             self.retrieve_to_ce(a)?,
@@ -2478,44 +2519,7 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
                         _ => unreachable!("Unexpected error in equivalent property matching"),
                     }
                 }
-                [Term::Iri(sub), Term::OWL(VOWL::SameAs), Term::Iri(obj)] => {
-                    Ok(Some(SameIndividual(vec![sub.into(), obj.into()]).into()))
-                }
-                [Term::Iri(i), Term::OWL(VOWL::DifferentFrom), Term::Iri(j)] => {
-                    Ok(Some(DifferentIndividuals(vec![i.into(), j.into()]).into()))
-                }
-                [Term::Iri(sub), Term::Iri(pred), t @ Term::Literal(_)] => {
-                    if self.config.lax
-                        || self.iri_is_kind(pred, NamedOWLEntityKind::DataProperty, ic)
-                    {
-                        ok_some! {
-                            DataPropertyAssertion {
-                                dp: pred.clone().into(),
-                                from: sub.into(),
-                                to: self.convert_to_literal(t)?
-                            }.into()
-                        }
-                    } else {
-                        Ok(None)
-                    }
-                }
-                [Term::Iri(sub), Term::Iri(pred), Term::Iri(obj)] => {
-                    if self.config.lax
-                        || self.iri_is_kind(pred, NamedOWLEntityKind::ObjectProperty, ic)
-                    {
-                        Ok(Some(
-                            ObjectPropertyAssertion {
-                                ope: ObjectProperty(pred.clone()).into(),
-                                from: sub.into(),
-                                to: obj.into(),
-                            }
-                            .into(),
-                        ))
-                    } else {
-                        Ok(None)
-                    }
-                }
-                _ => Ok(None),
+                triple => Ok(self.individual_assertion(triple, ic)),
             };
 
             match axiom? {
@@ -2527,6 +2531,106 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
             }
         }
 
+        Ok(())
+    }
+
+    /// A class, property, sameness or difference assertion about named or
+    /// anonymous individuals, or None.
+    fn individual_assertion(
+        &mut self,
+        triple: &[Term<A>; 3],
+        ic: &[&DeclarationMappedIndex<A, AA>],
+    ) -> Option<Component<A>> {
+        match triple {
+            [sub, Term::RDF(VRDF::Type), cls] if Self::is_class_term(cls) => Some(
+                ClassAssertion {
+                    ce: self.retrieve_to_ce(cls)?,
+                    i: self.retrieve_to_individual(sub)?,
+                }
+                .into(),
+            ),
+            [sub, Term::OWL(VOWL::SameAs), obj] => Some(
+                SameIndividual(vec![
+                    self.retrieve_to_individual(sub)?,
+                    self.retrieve_to_individual(obj)?,
+                ])
+                .into(),
+            ),
+            [sub, Term::OWL(VOWL::DifferentFrom), obj] => Some(
+                DifferentIndividuals(vec![
+                    self.retrieve_to_individual(sub)?,
+                    self.retrieve_to_individual(obj)?,
+                ])
+                .into(),
+            ),
+            [sub, Term::Iri(pred), t @ Term::Literal(_)]
+                if self.config.lax
+                    || self.iri_is_kind(pred, NamedOWLEntityKind::DataProperty, ic) =>
+            {
+                Some(
+                    DataPropertyAssertion {
+                        dp: pred.clone().into(),
+                        from: self.retrieve_to_individual(sub)?,
+                        to: self.convert_to_literal(t)?,
+                    }
+                    .into(),
+                )
+            }
+            [sub, Term::Iri(pred), obj]
+                if !matches!(obj, Term::Literal(_))
+                    && (self.config.lax
+                        || self.iri_is_kind(pred, NamedOWLEntityKind::ObjectProperty, ic)) =>
+            {
+                Some(
+                    ObjectPropertyAssertion {
+                        ope: ObjectProperty(pred.clone()).into(),
+                        from: self.retrieve_to_individual(sub)?,
+                        to: self.retrieve_to_individual(obj)?,
+                    }
+                    .into(),
+                )
+            }
+            _ => None,
+        }
+    }
+
+    /// Assertions and annotations about anonymous individuals: the triples
+    /// left on blank nodes once every structure has been read.
+    fn anonymous_individuals(
+        &mut self,
+        ic: &[&DeclarationMappedIndex<A, AA>],
+    ) -> Result<(), HornedError> {
+        for (k, v) in std::mem::take(&mut self.bnode) {
+            if !Self::is_individual_node(&v) {
+                self.bnode.insert(k, v);
+                continue;
+            }
+            let position = v.position();
+            let mut rest = vec![];
+            for t in v {
+                let component = if self.is_annotation(&t, false, ic) {
+                    Some(
+                        AnnotationAssertion {
+                            subject: self.anonymous_individual(&k).into(),
+                            ann: self.annotation(&t)?,
+                        }
+                        .into(),
+                    )
+                } else {
+                    self.individual_assertion(&t, ic)
+                };
+                match component {
+                    Some(component) => {
+                        let sets = self.take_annotations(&t);
+                        self.merge_annotated(component, Default::default(), sets);
+                    }
+                    None => rest.push(t),
+                }
+            }
+            if !rest.is_empty() {
+                self.bnode.insert(k, VPosTriple(rest, position));
+            }
+        }
         Ok(())
     }
 
@@ -2762,14 +2866,7 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
                         }));
                     }
                 }
-                [Term::Iri(iri), Term::RDFS(rdfs), _] if rdfs.is_builtin() => {
-                    firi(self, t.triple(), iri)?
-                }
-                [Term::Iri(iri), Term::Iri(ap), _]
-                    if parse_all
-                        || self.is_annotation_property(ap, ic)
-                        || is_annotation_builtin(ap.as_ref()) =>
-                {
+                triple @ [Term::Iri(iri), _, _] if self.is_annotation(triple, parse_all, ic) => {
                     firi(self, t.triple(), iri)?
                 }
                 _ => {
@@ -2778,29 +2875,17 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
             }
         }
         for (k, v) in std::mem::take(&mut self.bnode) {
-            let fbnode =
-                |s: &mut OntologyParser<A, AA, O, B>, t, _: &BNode<A>| -> Result<_, HornedError> {
-                    let sets = s.take_annotations(t);
-                    let ind: AnonymousIndividual<A> = s.config.build.as_ref().anon_renumbered();
+            match v.as_slice() {
+                [triple @ [Term::BNode(ind), _, _]]
+                    if self.is_annotation(triple, parse_all, ic) =>
+                {
+                    let sets = self.take_annotations(triple);
                     let component = AnnotationAssertion {
-                        subject: ind.into(),
-                        ann: s.annotation(t)?,
+                        subject: self.anonymous_individual(ind).into(),
+                        ann: self.annotation(triple)?,
                     }
                     .into();
-                    s.merge_annotated(component, Default::default(), sets);
-                    Ok(())
-                };
-
-            match v.as_slice() {
-                [triple @ [Term::BNode(ind), Term::RDFS(rdfs), _]] if rdfs.is_builtin() => {
-                    fbnode(self, triple, ind)?
-                }
-                [triple @ [Term::BNode(ind), Term::Iri(ap), _]]
-                    if parse_all
-                        || self.is_annotation_property(ap, ic)
-                        || is_annotation_builtin(ap) =>
-                {
-                    fbnode(self, triple, ind)?
+                    self.merge_annotated(component, Default::default(), sets);
                 }
                 _ => {
                     self.bnode.insert(k, v);
@@ -2809,6 +2894,23 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
         }
 
         Ok(())
+    }
+
+    /// Is `triple` an annotation assertion? With `parse_all`, every triple
+    /// with an IRI for predicate is.
+    fn is_annotation(
+        &self,
+        triple: &[Term<A>; 3],
+        parse_all: bool,
+        ic: &[&DeclarationMappedIndex<A, AA>],
+    ) -> bool {
+        match triple {
+            [_, Term::RDFS(rdfs), _] => rdfs.is_builtin(),
+            [_, Term::Iri(ap), _] => {
+                parse_all || self.is_annotation_property(ap, ic) || is_annotation_builtin(ap)
+            }
+            _ => false,
+        }
     }
 
     /// Parse all imports and add to the Ontology.
@@ -2924,6 +3026,8 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
 
         // SWRL rules
         self.swrl()?;
+
+        self.anonymous_individuals(ic)?;
 
         if self.config.lax {
             self.simple_annotations(true, ic)?;
@@ -3888,5 +3992,125 @@ o:C rdf:type owl:Class .
             !incomplete.is_complete(),
             "rdfs:Class triple should remain in the incomplete parse"
         );
+    }
+
+    const ANONYMOUS_INDIVIDUALS: &str = r#"Prefix(:=<http://example.org/anon#>)
+Prefix(rdfs:=<http://www.w3.org/2000/01/rdf-schema#>)
+Ontology(<http://example.org/anon>
+Declaration(Class(:A))
+Declaration(Class(:H))
+Declaration(Class(:O))
+Declaration(ObjectProperty(:p))
+Declaration(DataProperty(:d))
+Declaration(NamedIndividual(:b))
+ClassAssertion(:A _:x)
+ClassAssertion(Annotation(rdfs:comment "annotated") :A _:y)
+ObjectPropertyAssertion(:p _:x :b)
+ObjectPropertyAssertion(:p :b _:y)
+ObjectPropertyAssertion(:p _:x _:y)
+DataPropertyAssertion(:d _:x "1")
+NegativeObjectPropertyAssertion(:p _:y :b)
+NegativeDataPropertyAssertion(:d _:y "2")
+SameIndividual(_:x _:z)
+DifferentIndividuals(_:y :b)
+DifferentIndividuals(_:x :b _:z)
+AnnotationAssertion(rdfs:label _:x "x")
+AnnotationAssertion(rdfs:comment _:x "second")
+AnnotationAssertion(rdfs:seeAlso :b _:x)
+EquivalentClasses(:H ObjectHasValue(:p _:x))
+EquivalentClasses(:O ObjectOneOf(_:x :b))
+)"#;
+
+    fn sorted_components(o: SetOntology<RcStr>) -> Vec<AnnotatedComponent<RcStr>> {
+        let mut v = crate::normalize::simplify(o.into_iter().collect());
+        v.sort();
+        v
+    }
+
+    /// An anonymous individual can stand wherever an individual can, and
+    /// all triples on one blank node are about the same individual, so the
+    /// names compare without renumbering.
+    #[test]
+    fn anonymous_individuals_read_back_from_rdf() {
+        let b = Build::new_rc();
+        let (expected, _): (SetOntology<RcStr>, _) = crate::io::ofn::reader::read(
+            &mut ANONYMOUS_INDIVIDUALS.as_bytes(),
+            crate::io::ParserConfiguration::new(&b),
+        )
+        .unwrap();
+        let mapped: RcComponentMappedOntology = expected.clone().into();
+        let expected = sorted_components(expected);
+
+        let turtle =
+            crate::io::rdf::writer::write_to_rdf_format(Vec::new(), &mapped, "ttl").unwrap();
+        // Through oxrdfio, so that the RDF/XML does not depend on this
+        // crate's RDF/XML writer.
+        let mut rdf_xml =
+            oxrdfio::RdfSerializer::from_format(oxrdfio::RdfFormat::RdfXml).for_writer(Vec::new());
+        for quad in oxrdfio::RdfParser::from_format(oxrdfio::RdfFormat::Turtle)
+            .for_reader(turtle.as_slice())
+        {
+            rdf_xml.serialize_quad(&quad.unwrap()).unwrap();
+        }
+        let rdf_xml = rdf_xml.finish().unwrap();
+
+        for (extension, format, written) in [
+            ("rdf", oxrdfio::RdfFormat::RdfXml, &rdf_xml),
+            ("ttl", oxrdfio::RdfFormat::Turtle, &turtle),
+        ] {
+            for lax in [false, true] {
+                let b = Build::new_rc();
+                let mut common = crate::io::ParserConfiguration::new(&b);
+                common.lax = lax;
+                let mut config: RDFParserConfiguration<RcStr, &Build<RcStr>> = common.into();
+                config.format = Some(format);
+                let (ont, incomplete) =
+                    read::<RcStr, RcAnnotatedComponent, _, _>(&mut written.as_slice(), config)
+                        .unwrap();
+                assert!(
+                    incomplete.is_complete(),
+                    "{extension}, lax {lax}: {incomplete:?}"
+                );
+                assert_eq!(
+                    sorted_components(ont.into()),
+                    expected,
+                    "{extension}, lax {lax}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn inline_blank_node_is_one_anonymous_individual() {
+        let ont = read_ttl(
+            r#"@prefix : <http://example.org/anon#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+
+<http://example.org/anon> a owl:Ontology .
+:A a owl:Class .
+:p a owl:ObjectProperty .
+:d a owl:DatatypeProperty .
+:b a owl:NamedIndividual ;
+    :p [ a :A ; :d "1" ; rdfs:label "x" ] .
+"#,
+            false,
+        )
+        .unwrap();
+        let ont: ComponentMappedOntology<RcStr, RcAnnotatedComponent> = ont.into();
+
+        let Some(ObjectPropertyAssertion {
+            to: Individual::Anonymous(to),
+            ..
+        }) = ont.i().object_property_assertion().next()
+        else {
+            panic!("no object property assertion to an anonymous individual");
+        };
+        let class: Vec<_> = ont.i().class_assertion().map(|ca| &ca.i).collect();
+        let data: Vec<_> = ont.i().data_property_assertion().map(|a| &a.from).collect();
+        let label: Vec<_> = ont.i().annotation_assertion().map(|a| &a.subject).collect();
+        assert_eq!(class, [&Individual::Anonymous(to.clone())]);
+        assert_eq!(data, [&Individual::Anonymous(to.clone())]);
+        assert_eq!(label, [&AnnotationSubject::AnonymousIndividual(to.clone())]);
     }
 }
