@@ -18,9 +18,12 @@ use crate::model::{Format, IncompleteSummary};
 use curie::PrefixMapping;
 use horned_owl::error::HornedError;
 use horned_owl::io::{
-    ParserConfiguration, ParserOutput, RDFParserConfiguration, obo, ofn, omn, owx, rdf,
+    ParserConfiguration, ParserOutput, RDFParserConfiguration, StreamComponent, obo, ofn, omn, owx,
+    rdf,
 };
-use horned_owl::model::{Build, RcAnnotatedComponent, RcStr};
+use horned_owl::model::{
+    AnnotatedComponent, Build, Component, MutableOntology, RcAnnotatedComponent, RcStr,
+};
 use horned_owl::ontology::component_mapped::ComponentMappedOntology;
 use horned_owl::ontology::set::SetOntology;
 use std::io::Cursor;
@@ -71,6 +74,44 @@ fn summarize(incomplete: &rdf::reader::IncompleteParse<RcStr>) -> Option<Incompl
     })
 }
 
+/// A streaming nom `Reader`: its items, one at a time, into a
+/// `SetOntology`, with the prefixes it saw. Nothing is read ahead.
+fn drain<R>(mut reader: R) -> anyhow::Result<(SetOntology<RcStr>, PrefixMapping)>
+where
+    R: Iterator<Item = Result<StreamComponent<AnnotatedComponent<RcStr>>, HornedError>>
+        + IntoPrefixes,
+{
+    let mut ont = SetOntology::new_rc();
+    for item in reader.by_ref() {
+        if let StreamComponent::Component(ac) = item.map_err(horned_err)? {
+            ont.insert(ac);
+        }
+    }
+    Ok((ont, reader.into_prefixes()))
+}
+
+/// The prefixes a streaming `Reader` collected. Each reader has its own
+/// `into_prefixes`; this names them as one.
+trait IntoPrefixes {
+    fn into_prefixes(self) -> PrefixMapping;
+}
+
+macro_rules! into_prefixes {
+    ($($reader:path),*) => {$(
+        impl<B: AsRef<Build<RcStr>>> IntoPrefixes for $reader {
+            fn into_prefixes(self) -> PrefixMapping {
+                <$reader>::into_prefixes(self)
+            }
+        }
+    )*};
+}
+
+into_prefixes!(
+    ofn::nom_reader::Reader<RcStr, Cursor<&[u8]>, B>,
+    omn::nom_reader::Reader<RcStr, Cursor<&[u8]>, B>,
+    obo::nom_reader::Reader<RcStr, Cursor<&[u8]>, B>
+);
+
 pub fn read_source(fmt: Format, bytes: &[u8]) -> anyhow::Result<ReadOk> {
     read_source_with(fmt, bytes, false)
 }
@@ -93,7 +134,7 @@ pub fn read_source_with(fmt: Format, bytes: &[u8], lax: bool) -> anyhow::Result<
     };
 
     let (model, prefixes, incomplete) = match fmt {
-        Format::Ofn => {
+        Format::Ofn | Format::OfnStreamWrite => {
             let sop = ofn::reader::read(&mut Cursor::new(bytes), config()).map_err(horned_err)?;
             Output::ofn(sop).decompose()
         }
@@ -102,7 +143,7 @@ pub fn read_source_with(fmt: Format, bytes: &[u8], lax: bool) -> anyhow::Result<
                 ofn::nom_reader::read(&mut Cursor::new(bytes), config()).map_err(horned_err)?;
             Output::ofn(sop).decompose()
         }
-        Format::Omn => {
+        Format::Omn | Format::OmnStreamWrite => {
             let sop = omn::reader::read(Cursor::new(bytes), config()).map_err(horned_err)?;
             Output::omn(sop).decompose()
         }
@@ -110,11 +151,32 @@ pub fn read_source_with(fmt: Format, bytes: &[u8], lax: bool) -> anyhow::Result<
             let sop = omn::nom_reader::read(Cursor::new(bytes), config()).map_err(horned_err)?;
             Output::omn(sop).decompose()
         }
+        Format::OfnNomStream => {
+            let sop = drain(ofn::nom_reader::read_to_stream(
+                Cursor::new(bytes),
+                config(),
+            ))?;
+            Output::ofn(sop).decompose()
+        }
+        Format::OmnNomStream => {
+            let sop = drain(omn::nom_reader::read_to_stream(
+                Cursor::new(bytes),
+                config(),
+            ))?;
+            Output::omn(sop).decompose()
+        }
+        Format::OboNomStream => {
+            let sop = drain(obo::nom_reader::read_to_stream(
+                Cursor::new(bytes),
+                config(),
+            ))?;
+            Output::obo(sop).decompose()
+        }
         Format::OwlXml => {
             let sop = owx::reader::read(&mut Cursor::new(bytes), config()).map_err(horned_err)?;
             Output::owx(sop).decompose()
         }
-        Format::Obo => {
+        Format::Obo | Format::OboStreamWrite => {
             let sop = obo::reader::read(&mut Cursor::new(bytes), config()).map_err(horned_err)?;
             Output::obo(sop).decompose()
         }
@@ -152,6 +214,39 @@ pub fn read_source_with(fmt: Format, bytes: &[u8], lax: bool) -> anyhow::Result<
     })
 }
 
+/// `cmo` as the items a streaming writer takes: the prefixes, then the
+/// ontology id, imports and annotations, then declarations and annotation
+/// assertions (an entity's id and kind), then the rest. The streaming OMN
+/// and OBO writers need that order, and a `ComponentMappedOntology` does not
+/// give it.
+fn stream_items(
+    cmo: &ComponentMappedOntology<RcStr, RcAnnotatedComponent>,
+    prefixes: &PrefixMapping,
+) -> impl Iterator<Item = Result<StreamComponent<AnnotatedComponent<RcStr>>, HornedError>> {
+    use horned_owl::model::Ontology;
+    let rank = |c: &Component<RcStr>| match c {
+        Component::OntologyID(_) | Component::Import(_) | Component::OntologyAnnotation(_) => 0,
+        Component::DeclareClass(_)
+        | Component::DeclareObjectProperty(_)
+        | Component::DeclareDataProperty(_)
+        | Component::DeclareAnnotationProperty(_)
+        | Component::DeclareNamedIndividual(_)
+        | Component::DeclareDatatype(_)
+        | Component::AnnotationAssertion(_) => 1,
+        _ => 2,
+    };
+    let mut comps: Vec<AnnotatedComponent<RcStr>> = cmo.iter().cloned().collect();
+    comps.sort_by_key(|ac| rank(&ac.component));
+    let prefixes: Vec<_> = prefixes
+        .mappings()
+        .map(|(n, i)| StreamComponent::Prefix(n.to_string(), i.to_string()))
+        .collect();
+    prefixes
+        .into_iter()
+        .chain(comps.into_iter().map(StreamComponent::Component))
+        .map(Ok)
+}
+
 /// Serialize `cmo` into `fmt`'s byte representation.
 ///
 /// Every horned-owl writer (ofn/omn/owx/obo/rdf) takes a
@@ -172,17 +267,25 @@ pub fn write_target(
 ) -> anyhow::Result<Vec<u8>> {
     let mut out: Vec<u8> = Vec::new();
     match fmt {
-        Format::Ofn | Format::OfnNom => {
+        // `ofn::writer::write` is `write_stream` over the ontology's own
+        // component stream, so the OFN streaming targets are the same write.
+        Format::Ofn | Format::OfnNom | Format::OfnStreamWrite | Format::OfnNomStream => {
             ofn::writer::write(&mut out, cmo, Some(prefixes)).map_err(horned_err)?;
         }
         Format::Omn | Format::OmnNom => {
             omn::writer::write(&mut out, cmo, Some(prefixes)).map_err(horned_err)?;
+        }
+        Format::OmnStreamWrite | Format::OmnNomStream => {
+            omn::writer::write_stream(&mut out, stream_items(cmo, prefixes)).map_err(horned_err)?;
         }
         Format::OwlXml => {
             owx::writer::write(&mut out, cmo, Some(prefixes)).map_err(horned_err)?;
         }
         Format::Obo | Format::OboNom => {
             obo::writer::write(&mut out, cmo, Some(prefixes)).map_err(horned_err)?;
+        }
+        Format::OboStreamWrite | Format::OboNomStream => {
+            obo::writer::write_stream(&mut out, stream_items(cmo, prefixes)).map_err(horned_err)?;
         }
         Format::RdfXml => {
             rdf::writer::write(&mut out, cmo, Some(prefixes)).map_err(horned_err)?;

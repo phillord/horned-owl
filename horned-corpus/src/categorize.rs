@@ -132,7 +132,10 @@ pub fn categorize(
     for (i, s) in d.only_in_source.iter().enumerate() {
         if !lost_paired[i] {
             let cat = if is_degenerate_nary(&s.component)
-                || (matches!(target, Format::Omn | Format::OmnNom) && is_empty_ontology_id(s))
+                || (matches!(
+                    target,
+                    Format::Omn | Format::OmnNom | Format::OmnStreamWrite | Format::OmnNomStream
+                ) && is_empty_ontology_id(s))
             {
                 Category::Normalization
             } else {

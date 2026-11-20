@@ -11,14 +11,31 @@ pub enum Format {
     /// it is written by the ofn writer and re-read by the nom reader, so
     /// that both OFN readers see every ontology.
     OfnNom,
+    /// OFN: the model is written with the streaming writer (`write_stream`)
+    /// and re-read by the pest reader, which has no streaming mode and reads
+    /// the whole document into memory. Only the write is streamed. Never
+    /// detected as a source.
+    OfnStreamWrite,
+    /// OFN: written with the streaming writer and re-read by the nom
+    /// streaming `Reader`, one item at a time, without the prescan that the
+    /// nom `read` does. Never detected as a source.
+    OfnNomStream,
     Omn,
     /// OMN written by the omn writer and re-read by the nom reader, as
     /// `OfnNom` is for OFN.
     OmnNom,
+    /// As `OfnStreamWrite`, for OMN.
+    OmnStreamWrite,
+    /// As `OfnNomStream`, for OMN.
+    OmnNomStream,
     Obo,
     /// OBO written by the obo writer and re-read by the nom reader, as
     /// `OfnNom` is for OFN.
     OboNom,
+    /// As `OfnStreamWrite`, for OBO.
+    OboStreamWrite,
+    /// As `OfnNomStream`, for OBO.
+    OboNomStream,
     /// Turtle / N-Triples (read only — via the oxrdfio-backed RDF reader with
     /// `RdfFormat::Turtle`; there is no Turtle *writer*, so it never appears as
     /// a round-trip target).

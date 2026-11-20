@@ -106,16 +106,34 @@ pub fn report(records: &[Record], out_dir: &Path, known: &[KnownFailure]) -> any
     Ok(())
 }
 
+fn is_stream_target(f: Format) -> bool {
+    matches!(
+        f,
+        Format::OfnStreamWrite
+            | Format::OfnNomStream
+            | Format::OmnStreamWrite
+            | Format::OmnNomStream
+            | Format::OboStreamWrite
+            | Format::OboNomStream
+    )
+}
+
 fn fmt(f: Format) -> &'static str {
     match f {
         Format::RdfXml => "rdf_xml",
         Format::OwlXml => "owl_xml",
         Format::Ofn => "ofn",
         Format::OfnNom => "ofn_nom",
+        Format::OfnStreamWrite => "ofn_stream_write",
+        Format::OfnNomStream => "ofn_nom_stream",
         Format::Omn => "omn",
         Format::OmnNom => "omn_nom",
+        Format::OmnStreamWrite => "omn_stream_write",
+        Format::OmnNomStream => "omn_nom_stream",
         Format::Obo => "obo",
         Format::OboNom => "obo_nom",
+        Format::OboStreamWrite => "obo_stream_write",
+        Format::OboNomStream => "obo_nom_stream",
         Format::Turtle => "turtle",
         Format::Unknown => "unknown",
     }
@@ -679,6 +697,19 @@ fn render_md(records: &[Record], known: &[KnownFailure]) -> String {
 
     let total = cases(records).count();
     s.push_str(&format!("Total cases: {total}\n\n"));
+
+    // The OFN, OMN and OBO targets come in four kinds. Only the nom readers
+    // can stream a read, so the pest "streaming" kind streams the write only.
+    if cases(records).any(|c| is_stream_target(c.target_format)) {
+        s.push_str(
+            "Targets by reader and mode (`X` is `ofn`, `omn` or `obo`):\n\n\
+             | Target | Write | Read |\n|---|---|---|\n\
+             | `X` | in memory | pest, in memory |\n\
+             | `X_nom` | in memory | nom, in memory (`read`, prescans) |\n\
+             | `X_stream_write` | streaming (`write_stream`) | pest, in memory (pest has no streaming read) |\n\
+             | `X_nom_stream` | streaming (`write_stream`) | nom, streaming (`Reader`, no prescan) |\n\n",
+        );
+    }
 
     s.push_str("## Exact-Match Rates by Format Pair\n\n");
     s.push_str("| Source | Target | Cases | Exact | Exact % | OK | OK % |\n");

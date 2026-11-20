@@ -34,9 +34,9 @@ pub(crate) fn robot_ext(fmt: Format) -> &'static str {
     match fmt {
         Format::RdfXml => "rdf",
         Format::OwlXml => "owx",
-        Format::Ofn | Format::OfnNom => "ofn",
-        Format::Omn | Format::OmnNom => "omn",
-        Format::Obo | Format::OboNom => "obo",
+        Format::Ofn | Format::OfnNom | Format::OfnStreamWrite | Format::OfnNomStream => "ofn",
+        Format::Omn | Format::OmnNom | Format::OmnStreamWrite | Format::OmnNomStream => "omn",
+        Format::Obo | Format::OboNom | Format::OboStreamWrite | Format::OboNomStream => "obo",
         Format::Turtle => "ttl",
         Format::Unknown => "owl",
     }
@@ -322,6 +322,57 @@ fn case_fail(
 mod tests {
     use super::*;
     use crate::model::{Format, Outcome, Record};
+
+    /// All four kinds of each text format read back the same ontology.
+    #[test]
+    fn four_way_roundtrip() {
+        let ofn =
+            b"Prefix(:=<http://ex/>)\nOntology(<http://ex/o>\nDeclaration(Class(<http://ex/A>))\nSubClassOf(:A :B)\n)";
+        let targets = [
+            Format::Ofn,
+            Format::OfnNom,
+            Format::OfnStreamWrite,
+            Format::OfnNomStream,
+            Format::Omn,
+            Format::OmnNom,
+            Format::OmnStreamWrite,
+            Format::OmnNomStream,
+            Format::Obo,
+            Format::OboNom,
+            Format::OboStreamWrite,
+            Format::OboNomStream,
+        ];
+        let recs = run_bytes("t", ofn, &targets, &[], false);
+        for r in &recs {
+            if let Record::Case(c) = r {
+                assert_eq!(
+                    c.outcome,
+                    Outcome::Ok,
+                    "{:?}: {:?}",
+                    c.target_format,
+                    c.error
+                );
+            }
+        }
+        let batch = recs
+            .iter()
+            .filter_map(|r| match r {
+                Record::Case(c) => Some((c.target_format, c.exact)),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        for pair in [
+            (Format::Ofn, Format::OfnStreamWrite),
+            (Format::Ofn, Format::OfnNomStream),
+            (Format::Omn, Format::OmnStreamWrite),
+            (Format::Omn, Format::OmnNomStream),
+            (Format::Obo, Format::OboStreamWrite),
+            (Format::Obo, Format::OboNomStream),
+        ] {
+            let get = |f| batch.iter().find(|(t, _)| *t == f).unwrap().1;
+            assert_eq!(get(pair.0), get(pair.1), "{pair:?}");
+        }
+    }
 
     #[test]
     fn both_ofn_readers_roundtrip() {
