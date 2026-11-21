@@ -62,6 +62,11 @@ struct State<A: ForIRI> {
     ids: BTreeMap<String, String>,
     /// Entities whose id, kind or xrefs changed since `ids` was last made.
     dirty: std::collections::BTreeSet<String>,
+    /// Entities that had a clause dropped because they had no id yet. An id
+    /// arriving for one later means the stream was out of order.
+    no_id: std::collections::BTreeSet<String>,
+    /// The kind each entity's clauses were written under.
+    written_kind: BTreeMap<String, Kind>,
     header: Vec<String>,
     unhandled: Vec<AnnotatedComponent<A>>,
 }
@@ -123,6 +128,8 @@ impl<A: ForIRI> State<A> {
             kinds: BTreeMap::new(),
             ids: BTreeMap::new(),
             dirty: Default::default(),
+            no_id: Default::default(),
+            written_kind: BTreeMap::new(),
             header: Vec::new(),
             unhandled: Vec::new(),
         }
@@ -133,13 +140,20 @@ impl<A: ForIRI> State<A> {
     }
 
     /// Note the stanza entities (those with an oboInOwl:id) and their kinds.
-    fn observe(&mut self, ac: &AnnotatedComponent<A>) {
+    fn observe(&mut self, ac: &AnnotatedComponent<A>) -> Result<(), HornedError> {
         match &ac.component {
             Component::AnnotationAssertion(a) if a.ann.ap.0.as_ref() == format!("{OIO}id") => {
                 if let (crate::model::AnnotationSubject::IRI(s), AnnotationValue::Literal(l)) =
                     (&a.subject, &a.ann.av)
                 {
                     let iri = s.as_ref().to_string();
+                    if self.no_id.contains(&iri) {
+                        return Err(HornedError::invalid(format!(
+                            "the oboInOwl:id of {iri} came after a component of it was \
+                             already written, so that component was lost: a streamed OBO \
+                             document must give each entity's id before its other components"
+                        )));
+                    }
                     self.dirty.insert(iri.clone());
                     self.id_values.entry(iri).or_default().push(literal_text(l));
                 }
@@ -163,29 +177,39 @@ impl<A: ForIRI> State<A> {
                         .push(literal_text(l));
                 }
             }
-            Component::DeclareClass(d) => self.set_kind(d.0.0.as_ref(), Kind::Term, true),
+            Component::DeclareClass(d) => self.set_kind(d.0.0.as_ref(), Kind::Term, true)?,
             Component::DeclareObjectProperty(d) => {
-                self.set_kind(d.0.0.as_ref(), Kind::Typedef, true)
+                self.set_kind(d.0.0.as_ref(), Kind::Typedef, true)?
             }
             // An annotation property with an oboInOwl:id is a metadata-tag
             // [Typedef] (only those get a stanza); others have no id.
             Component::DeclareAnnotationProperty(d) => {
-                self.set_kind(d.0.0.as_ref(), Kind::Typedef, false)
+                self.set_kind(d.0.0.as_ref(), Kind::Typedef, false)?
             }
             Component::DeclareNamedIndividual(d) => {
-                self.set_kind(d.0.0.as_ref(), Kind::Instance, true)
+                self.set_kind(d.0.0.as_ref(), Kind::Instance, true)?
             }
             _ => {}
         }
+        Ok(())
     }
 
-    fn set_kind(&mut self, iri: &str, kind: Kind, overwrite: bool) {
-        if overwrite {
-            self.kinds.insert(iri.to_string(), kind);
+    fn set_kind(&mut self, iri: &str, kind: Kind, overwrite: bool) -> Result<(), HornedError> {
+        let new = if overwrite {
+            kind
         } else {
-            self.kinds.entry(iri.to_string()).or_insert(kind);
+            *self.kinds.get(iri).unwrap_or(&kind)
+        };
+        if self.written_kind.get(iri).is_some_and(|w| *w != new) {
+            return Err(HornedError::invalid(format!(
+                "the kind of {iri} came after a component of it was already written \
+                 as another kind: a streamed OBO document must give each entity's \
+                 declaration before its other components"
+            )));
         }
+        self.kinds.insert(iri.to_string(), new);
         self.dirty.insert(iri.to_string());
+        Ok(())
     }
 
     /// Choose the stanza id of every entity seen since the last call, and
@@ -281,14 +305,19 @@ impl<A: ForIRI> State<A> {
         // is_never_axiom_fallback excludes the component kinds that land here
         // despite not actually being unhandled (see its own doc).
         let mut unhandled = Vec::new();
+        let mut no_id = Vec::new();
+        let mut written = Vec::new();
         for ac in comps {
             let mut wrote = false;
             for (owner_iri, line) in clause_lines(ac, &cz) {
                 if let Some(key) = key_of(&owner_iri) {
+                    written.push((owner_iri, key.0));
                     let s = stanzas.entry(key.clone()).or_default();
                     s.id = key.1;
                     s.clauses.push(line);
                     wrote = true;
+                } else {
+                    no_id.push(owner_iri);
                 }
             }
             let hlines = header_line(ac, &cz);
@@ -301,6 +330,8 @@ impl<A: ForIRI> State<A> {
         }
         self.header.extend(header);
         self.unhandled.extend(unhandled);
+        self.no_id.extend(no_id);
+        self.written_kind.extend(written);
     }
 
     /// The header lines, sorted and without repeats: the lines collected,
@@ -367,7 +398,7 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
     }
     let mut state = State::new(onto_iri, mapping);
     for ac in ont.iter() {
-        state.observe(ac);
+        state.observe(ac)?;
     }
     let fresh = state.refresh_ids();
     let mut stanzas = BTreeMap::new();
@@ -472,7 +503,7 @@ fn flush<A: ForIRI, W: Write>(
         State::new(iri, Some(mapping))
     });
     for ac in held.iter() {
-        st.observe(ac);
+        st.observe(ac)?;
     }
     let fresh = st.refresh_ids();
     let mut stanzas = BTreeMap::new();

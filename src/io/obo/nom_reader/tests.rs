@@ -443,6 +443,29 @@ mod writing {
         assert_eq!(batch(&ont, &pm), String::from_utf8(out).unwrap());
     }
 
+    /// A component written before its entity's id is lost, so the id
+    /// arriving afterwards is an error, not a silent drop.
+    #[test]
+    fn late_id_is_an_error() {
+        use crate::model::{AnnotationAssertion, Component};
+        let doc = "ontology: t\n\n[Term]\nid: T:1\nname: a\nsynonym: \"s\" RELATED []\n";
+        let (ont, pm) = nom_read(doc).unwrap();
+        let ont: ComponentMappedOntology<RcStr, Rc_> = ont.into();
+        let is_id = |c: &Component<RcStr>| {
+            matches!(c, Component::AnnotationAssertion(AnnotationAssertion { ann, .. })
+                if ann.ap.0.as_ref().ends_with("#id"))
+        };
+        let mut comps: Vec<_> = component_stream(&ont).map(Result::unwrap).collect();
+        // Ids last.
+        comps.sort_by_key(|i| match i {
+            crate::io::StreamComponent::Component(ac) => is_id(&ac.component),
+            _ => false,
+        });
+        let items = prefix_stream(&pm).chain(comps.into_iter().map(Ok));
+        let err = crate::io::obo::write_stream_chunked(Vec::new(), items, 1).unwrap_err();
+        assert!(err.to_string().contains("oboInOwl:id"), "{err}");
+    }
+
     /// Fed in the order the reader gives, small chunks repeat stanzas,
     /// which must not change what is read.
     #[rstest]
