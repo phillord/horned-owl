@@ -215,15 +215,17 @@ pub fn read_source_with(fmt: Format, bytes: &[u8], lax: bool) -> anyhow::Result<
 }
 
 /// `cmo` as the items a streaming writer takes: the prefixes, then the
-/// ontology id, imports and annotations, then declarations and annotation
-/// assertions (an entity's id and kind), then the rest. The streaming OMN
-/// and OBO writers need that order, and a `ComponentMappedOntology` does not
-/// give it.
+/// ontology id, imports and annotations, then declarations and the
+/// `oboInOwl` id and xref assertions (an entity's kind and id), then the
+/// other annotation assertions, then the rest. The streaming OMN and OBO
+/// writers need that order, and a `ComponentMappedOntology` does not give
+/// it.
 fn stream_items(
     cmo: &ComponentMappedOntology<RcStr, RcAnnotatedComponent>,
     prefixes: &PrefixMapping,
 ) -> impl Iterator<Item = Result<StreamComponent<AnnotatedComponent<RcStr>>, HornedError>> {
     use horned_owl::model::Ontology;
+    const OIO: &str = "http://www.geneontology.org/formats/oboInOwl#";
     let rank = |c: &Component<RcStr>| match c {
         Component::OntologyID(_) | Component::Import(_) | Component::OntologyAnnotation(_) => 0,
         Component::DeclareClass(_)
@@ -231,9 +233,12 @@ fn stream_items(
         | Component::DeclareDataProperty(_)
         | Component::DeclareAnnotationProperty(_)
         | Component::DeclareNamedIndividual(_)
-        | Component::DeclareDatatype(_)
-        | Component::AnnotationAssertion(_) => 1,
-        _ => 2,
+        | Component::DeclareDatatype(_) => 1,
+        Component::AnnotationAssertion(a) if a.ann.ap.0.as_ref() == format!("{OIO}id") => 1,
+        // After the ids, as the OBO writer drops an xref it has no id for.
+        Component::AnnotationAssertion(a) if a.ann.ap.0.as_ref() == format!("{OIO}hasDbXref") => 2,
+        Component::AnnotationAssertion(_) => 3,
+        _ => 4,
     };
     let mut comps: Vec<AnnotatedComponent<RcStr>> = cmo.iter().cloned().collect();
     comps.sort_by_key(|ac| rank(&ac.component));
