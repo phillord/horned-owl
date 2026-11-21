@@ -454,12 +454,7 @@ fn main() -> anyhow::Result<()> {
             )?;
         }
         Cmd::Report { input, out_dir } => {
-            let text = std::fs::read_to_string(&input)?;
-            let recs: Vec<Record> = text
-                .lines()
-                .filter(|l| !l.is_empty())
-                .map(serde_json::from_str)
-                .collect::<Result<_, _>>()?;
+            let recs = horned_corpus::load::load_records(&input)?;
             let known = horned_corpus::known_failures::known_failures();
             report::report(&recs, &out_dir, &known)?;
         }

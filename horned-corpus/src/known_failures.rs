@@ -144,6 +144,7 @@ mod tests {
             error: None,
             exact: unknown == 0,
             diffs: Vec::new(),
+            side_counts: None,
             category_counts: if unknown > 0 {
                 [(Category::Unknown, unknown)].into()
             } else {

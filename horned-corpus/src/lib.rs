@@ -5,6 +5,7 @@ pub mod detect;
 pub mod diff;
 pub mod fetch;
 pub mod known_failures;
+pub mod load;
 pub mod model;
 pub mod ontology;
 pub mod profile;

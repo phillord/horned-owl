@@ -108,7 +108,13 @@ pub struct CaseResult {
     pub outcome: Outcome,
     pub error: Option<String>,
     pub exact: bool,
+    /// Every diff, as a sweep writes it. A report reads with `load_records`,
+    /// which keeps only the diffs it prints (see `side_counts`).
     pub diffs: Vec<DiffItem>,
+    /// The number of lost and gained diffs, when `diffs` has been cut down
+    /// to the ones a report prints. Never written to a results file.
+    #[serde(default, skip_serializing)]
+    pub side_counts: Option<(usize, usize)>,
     pub category_counts: BTreeMap<Category, usize>,
     pub write_us: Option<u64>,
     pub reread_us: Option<u64>,
@@ -243,6 +249,7 @@ mod tests {
                 category: Category::InferredDeclaration,
                 debug: "…".into(),
             }],
+            side_counts: None,
             category_counts: [(Category::InferredDeclaration, 1)].into_iter().collect(),
             write_us: Some(10),
             reread_us: Some(20),

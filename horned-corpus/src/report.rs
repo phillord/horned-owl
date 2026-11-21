@@ -60,16 +60,13 @@ pub fn report(records: &[Record], out_dir: &Path, known: &[KnownFailure]) -> any
     for r in records {
         if let Record::Case(c) = r {
             let cc = |k: Category| c.category_counts.get(&k).copied().unwrap_or(0);
-            let lost = c
-                .diffs
-                .iter()
-                .filter(|d| matches!(d.side, Side::Source))
-                .count();
-            let gained = c
-                .diffs
-                .iter()
-                .filter(|d| matches!(d.side, Side::RoundTrip))
-                .count();
+            let (lost, gained) = c.side_counts.unwrap_or_else(|| {
+                let n = |side: fn(&Side) -> bool| c.diffs.iter().filter(|d| side(&d.side)).count();
+                (
+                    n(|s| matches!(s, Side::Source)),
+                    n(|s| matches!(s, Side::RoundTrip)),
+                )
+            });
             let row: Vec<String> = vec![
                 c.ontology.clone(),
                 fmt(c.source_format).to_string(),
@@ -973,6 +970,7 @@ mod tests {
             error: None,
             exact: false,
             diffs: vec![],
+            side_counts: None,
             category_counts: Default::default(),
             write_us: Some(1),
             reread_us: Some(2),
@@ -1002,6 +1000,7 @@ mod tests {
                 category: Category::Unknown,
                 debug: "SubClassOf(...)".into(),
             }],
+            side_counts: None,
             category_counts: [(Category::Unknown, 1)].into_iter().collect(),
             write_us: Some(5),
             reread_us: Some(7),
