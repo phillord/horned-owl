@@ -1555,13 +1555,13 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
             .find(|k| self.term_is_kind(a, *k, ic));
 
         declared.or_else(|| {
-            if !self.config.lax {
-                None
-            } else if self.term_is_kind(b, NamedOWLEntityKind::Datatype, ic) {
-                Some(NamedOWLEntityKind::Datatype)
-            } else {
-                Some(NamedOWLEntityKind::Class)
-            }
+            self.config.lax.then(|| {
+                if self.term_is_kind(b, NamedOWLEntityKind::Datatype, ic) {
+                    NamedOWLEntityKind::Datatype
+                } else {
+                    NamedOWLEntityKind::Class
+                }
+            })
         })
     }
 
@@ -3746,11 +3746,10 @@ mod test {
 
     #[test]
     fn equivalent_class_of_undeclared_subject_and_declared_datatype() {
-        let text = format!("{PUN_HEAD}:D a rdfs:Datatype .\n:X owl:equivalentClass :D .\n")
-            .replace(
-                "@prefix owl:",
-                "@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .\n@prefix owl:",
-            );
+        let text = format!(
+            "{PUN_HEAD}:D a <http://www.w3.org/2000/01/rdf-schema#Datatype> .\n\
+             :X owl:equivalentClass :D .\n"
+        );
 
         let ont: RcComponentMappedOntology = read_ttl(&text, true).unwrap().into();
         assert_eq!(ont.i().datatype_definition().count(), 1, "{text}");
