@@ -240,6 +240,7 @@ mod grammar {
 mod writing {
     use super::*;
     use crate::io::{component_stream, prefix_stream};
+    use crate::model::MutableOntology;
     use crate::ontology::component_mapped::ComponentMappedOntology;
 
     fn load(
@@ -289,5 +290,29 @@ mod writing {
             let (got, _) = nom_read(&text).unwrap_or_else(|e| panic!("chunk {chunk}: {e}\n{text}"));
             pretty_assertions::assert_eq!(expected, got, "chunk {chunk}:\n{text}");
         }
+    }
+
+    /// A document written in memory can be read one item at a time, with no
+    /// prescan: data properties and datatypes come before their uses.
+    #[test]
+    fn written_document_streams_back_the_same() {
+        let ofn = "Prefix(:=<http://ex/>)\nPrefix(xsd:=<http://www.w3.org/2001/XMLSchema#>)\nOntology(<http://ex/o>\n\
+            Declaration(Class(:A))\nDeclaration(DataProperty(:p))\nDeclaration(Datatype(:dt))\n\
+            DatatypeDefinition(:dt xsd:integer)\n\
+            SubClassOf(:A DataSomeValuesFrom(:p :dt))\n\
+            SubClassOf(:A DataAllValuesFrom(:p xsd:string))\n\
+            HasKey(:A () (:p))\n)";
+        let (ont, pm): (SetOntology<RcStr>, _) =
+            crate::io::ofn::reader::read(&mut ofn.as_bytes(), Default::default()).unwrap();
+        let cmo: ComponentMappedOntology<RcStr, RcStr_> = ont.clone().into();
+        let text =
+            String::from_utf8(crate::io::omn::write(Vec::new(), &cmo, Some(&pm)).unwrap()).unwrap();
+        let mut got = SetOntology::new_rc();
+        for item in super::super::Reader::new(text.as_bytes(), Default::default()) {
+            if let StreamComponent::Component(ac) = item.unwrap() {
+                got.insert(ac);
+            }
+        }
+        pretty_assertions::assert_eq!(ont, got, "{text}");
     }
 }

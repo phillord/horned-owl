@@ -26,14 +26,18 @@ pub use as_manchester::{AsManchester, Manchester};
 // ---------------------------------------------------------------------------
 
 /// The kind of entity a frame is headed by.
+///
+/// The derived order is the order frames are written in. A reader that sees
+/// the document once only knows an IRI is a data property or datatype from
+/// its frame, so those frames come before any that use them.
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
 enum FrameKind {
-    Class,
-    ObjectProperty,
-    DataProperty,
-    AnnotationProperty,
-    Individual,
     Datatype,
+    DataProperty,
+    ObjectProperty,
+    AnnotationProperty,
+    Class,
+    Individual,
 }
 
 /// A frame accumulates clause lines for a single named entity.
