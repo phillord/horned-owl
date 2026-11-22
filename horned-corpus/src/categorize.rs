@@ -134,7 +134,11 @@ pub fn categorize(
             let cat = if is_degenerate_nary(&s.component)
                 || (matches!(
                     target,
-                    Format::Omn | Format::OmnNom | Format::OmnStreamWrite | Format::OmnNomStream
+                    Format::Omn
+                        | Format::OmnNom
+                        | Format::OmnStreamWrite
+                        | Format::OmnNomStream
+                        | Format::OmnStreamRead
                 ) && is_empty_ontology_id(s))
             {
                 Category::Normalization

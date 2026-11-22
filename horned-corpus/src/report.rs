@@ -108,10 +108,13 @@ fn is_stream_target(f: Format) -> bool {
         f,
         Format::OfnStreamWrite
             | Format::OfnNomStream
+            | Format::OfnStreamRead
             | Format::OmnStreamWrite
             | Format::OmnNomStream
+            | Format::OmnStreamRead
             | Format::OboStreamWrite
             | Format::OboNomStream
+            | Format::OboStreamRead
     )
 }
 
@@ -123,14 +126,17 @@ fn fmt(f: Format) -> &'static str {
         Format::OfnNom => "ofn_nom",
         Format::OfnStreamWrite => "ofn_stream_write",
         Format::OfnNomStream => "ofn_nom_stream",
+        Format::OfnStreamRead => "ofn_stream_read",
         Format::Omn => "omn",
         Format::OmnNom => "omn_nom",
         Format::OmnStreamWrite => "omn_stream_write",
         Format::OmnNomStream => "omn_nom_stream",
+        Format::OmnStreamRead => "omn_stream_read",
         Format::Obo => "obo",
         Format::OboNom => "obo_nom",
         Format::OboStreamWrite => "obo_stream_write",
         Format::OboNomStream => "obo_nom_stream",
+        Format::OboStreamRead => "obo_stream_read",
         Format::Turtle => "turtle",
         Format::Unknown => "unknown",
     }
@@ -660,6 +666,83 @@ fn profile_name(p: Profile) -> &'static str {
     }
 }
 
+/// The in-memory target (`X_nom`) each streaming target is held to.
+fn stream_baseline(f: Format) -> Option<Format> {
+    match f {
+        Format::OfnStreamRead | Format::OfnNomStream => Some(Format::OfnNom),
+        Format::OmnStreamRead | Format::OmnNomStream => Some(Format::OmnNom),
+        Format::OboStreamRead | Format::OboNomStream => Some(Format::OboNom),
+        _ => None,
+    }
+}
+
+/// How a case came out, for comparing a streaming run with its in-memory one.
+fn result_key(c: &CaseResult) -> (Outcome, bool, BTreeMap<Category, usize>) {
+    (c.outcome, c.exact, c.category_counts.clone())
+}
+
+/// Cases where a streaming target gives a different result from the
+/// in-memory read of the same ontology. Nothing that works in memory should
+/// fail or differ when streamed, so each is either listed in
+/// `known_failures.json` for that streaming target (with the reason it
+/// cannot stream) or reported as new.
+fn stream_divergences<'a>(
+    records: &'a [Record],
+    known: &'a [KnownFailure],
+) -> Vec<(&'a CaseResult, &'a CaseResult, Option<&'a KnownFailure>)> {
+    let base: BTreeMap<_, _> = cases(records)
+        .map(|c| ((c.ontology.as_str(), c.source_format, c.target_format), c))
+        .collect();
+    cases(records)
+        .filter_map(|c| {
+            let b = base.get(&(
+                c.ontology.as_str(),
+                c.source_format,
+                stream_baseline(c.target_format)?,
+            ))?;
+            // A skipped case was not run, so says nothing.
+            if c.outcome == Outcome::Skipped || b.outcome == Outcome::Skipped {
+                return None;
+            }
+            (result_key(c) != result_key(b)).then(|| {
+                let k = known_failures::find(known, &c.ontology, c.source_format, c.target_format);
+                (c, *b, k)
+            })
+        })
+        .collect()
+}
+
+fn render_stream_divergences(records: &[Record], known: &[KnownFailure], s: &mut String) {
+    let all = stream_divergences(records, known);
+    let new: Vec<_> = all.iter().filter(|(_, _, k)| k.is_none()).collect();
+    s.push_str("## Streaming divergences\n\n");
+    s.push_str(&format!(
+        "Cases where a streaming target differs from the in-memory nom read (`X_nom`): {} ({} new, {} known).\n\n",
+        all.len(),
+        new.len(),
+        all.len() - new.len()
+    ));
+    if !new.is_empty() {
+        s.push_str(
+            "| Ontology | Source | Target | Streamed | In memory |\n|---|---|---|---|---|\n",
+        );
+        for (c, b, _) in new.iter().take(100) {
+            s.push_str(&format!(
+                "| {} | {} | {} | {} | {} |\n",
+                c.ontology,
+                fmt(c.source_format),
+                fmt(c.target_format),
+                out(c.outcome),
+                out(b.outcome)
+            ));
+        }
+        if new.len() > 100 {
+            s.push_str(&format!("\n{} more not shown.\n", new.len() - 100));
+        }
+        s.push('\n');
+    }
+}
+
 fn render_md(records: &[Record], known: &[KnownFailure]) -> String {
     let mut s = String::new();
     // One report type per sweep -- name it for what the records actually
@@ -704,8 +787,10 @@ fn render_md(records: &[Record], known: &[KnownFailure]) -> String {
              | `X` | in memory | pest, in memory |\n\
              | `X_nom` | in memory | nom, in memory (`read`, prescans) |\n\
              | `X_stream_write` | streaming (`write_stream`) | pest, in memory (pest has no streaming read) |\n\
-             | `X_nom_stream` | streaming (`write_stream`) | nom, streaming (`Reader`, no prescan) |\n\n",
+             | `X_nom_stream` | streaming (`write_stream`) | nom, streaming (`Reader`, no prescan) |\n\
+             | `X_stream_read` | in memory | nom, streaming (`Reader`, no prescan) |\n\n",
         );
+        render_stream_divergences(records, known, &mut s);
     }
 
     s.push_str("## Exact-Match Rates by Format Pair\n\n");
@@ -863,6 +948,47 @@ mod tests {
             inferred_axioms: ax,
             error: None,
         })
+    }
+
+    fn case_rec(ont: &str, target: Format, outcome: Outcome) -> Record {
+        Record::Case(CaseResult {
+            ontology: ont.into(),
+            source_format: Format::RdfXml,
+            target_format: target,
+            outcome,
+            error: None,
+            exact: outcome == Outcome::Ok,
+            diffs: vec![],
+            side_counts: None,
+            category_counts: BTreeMap::new(),
+            write_us: None,
+            reread_us: None,
+        })
+    }
+
+    #[test]
+    fn streaming_failure_that_works_in_memory_is_a_divergence() {
+        let recs = vec![
+            case_rec("a", Format::OboNom, Outcome::Ok),
+            case_rec("a", Format::OboStreamRead, Outcome::RereadFail),
+            case_rec("b", Format::OboNom, Outcome::Ok),
+            case_rec("b", Format::OboStreamRead, Outcome::Ok),
+            case_rec("c", Format::OboNom, Outcome::RereadFail),
+            case_rec("c", Format::OboStreamRead, Outcome::RereadFail),
+        ];
+        let known = vec![];
+        let d = stream_divergences(&recs, &known);
+        assert_eq!(d.len(), 1);
+        assert_eq!(d[0].0.ontology, "a");
+        assert!(d[0].2.is_none());
+
+        let known = vec![KnownFailure {
+            ontology: "a".into(),
+            source_format: None,
+            target_format: Some(Format::OboStreamRead),
+            reason: "header line after the first stanza".into(),
+        }];
+        assert!(stream_divergences(&recs, &known)[0].2.is_some());
     }
 
     #[test]

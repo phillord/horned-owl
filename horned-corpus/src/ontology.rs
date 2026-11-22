@@ -151,21 +151,21 @@ pub fn read_source_with(fmt: Format, bytes: &[u8], lax: bool) -> anyhow::Result<
             let sop = omn::nom_reader::read(Cursor::new(bytes), config()).map_err(horned_err)?;
             Output::omn(sop).decompose()
         }
-        Format::OfnNomStream => {
+        Format::OfnNomStream | Format::OfnStreamRead => {
             let sop = drain(ofn::nom_reader::read_to_stream(
                 Cursor::new(bytes),
                 config(),
             ))?;
             Output::ofn(sop).decompose()
         }
-        Format::OmnNomStream => {
+        Format::OmnNomStream | Format::OmnStreamRead => {
             let sop = drain(omn::nom_reader::read_to_stream(
                 Cursor::new(bytes),
                 config(),
             ))?;
             Output::omn(sop).decompose()
         }
-        Format::OboNomStream => {
+        Format::OboNomStream | Format::OboStreamRead => {
             let sop = drain(obo::nom_reader::read_to_stream(
                 Cursor::new(bytes),
                 config(),
@@ -274,10 +274,14 @@ pub fn write_target(
     match fmt {
         // `ofn::writer::write` is `write_stream` over the ontology's own
         // component stream, so the OFN streaming targets are the same write.
-        Format::Ofn | Format::OfnNom | Format::OfnStreamWrite | Format::OfnNomStream => {
+        Format::Ofn
+        | Format::OfnNom
+        | Format::OfnStreamWrite
+        | Format::OfnNomStream
+        | Format::OfnStreamRead => {
             ofn::writer::write(&mut out, cmo, Some(prefixes)).map_err(horned_err)?;
         }
-        Format::Omn | Format::OmnNom => {
+        Format::Omn | Format::OmnNom | Format::OmnStreamRead => {
             omn::writer::write(&mut out, cmo, Some(prefixes)).map_err(horned_err)?;
         }
         Format::OmnStreamWrite | Format::OmnNomStream => {
@@ -286,7 +290,7 @@ pub fn write_target(
         Format::OwlXml => {
             owx::writer::write(&mut out, cmo, Some(prefixes)).map_err(horned_err)?;
         }
-        Format::Obo | Format::OboNom => {
+        Format::Obo | Format::OboNom | Format::OboStreamRead => {
             obo::writer::write(&mut out, cmo, Some(prefixes)).map_err(horned_err)?;
         }
         Format::OboStreamWrite | Format::OboNomStream => {

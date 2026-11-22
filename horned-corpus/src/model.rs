@@ -20,6 +20,10 @@ pub enum Format {
     /// streaming `Reader`, one item at a time, without the prescan that the
     /// nom `read` does. Never detected as a source.
     OfnNomStream,
+    /// OFN written by the ofn writer and re-read by the nom streaming
+    /// `Reader`: tests that a document written in memory can be streamed.
+    /// Never detected as a source.
+    OfnStreamRead,
     Omn,
     /// OMN written by the omn writer and re-read by the nom reader, as
     /// `OfnNom` is for OFN.
@@ -28,6 +32,8 @@ pub enum Format {
     OmnStreamWrite,
     /// As `OfnNomStream`, for OMN.
     OmnNomStream,
+    /// As `OfnStreamRead`, for OMN.
+    OmnStreamRead,
     Obo,
     /// OBO written by the obo writer and re-read by the nom reader, as
     /// `OfnNom` is for OFN.
@@ -36,6 +42,8 @@ pub enum Format {
     OboStreamWrite,
     /// As `OfnNomStream`, for OBO.
     OboNomStream,
+    /// As `OfnStreamRead`, for OBO.
+    OboStreamRead,
     /// Turtle / N-Triples (read only — via the oxrdfio-backed RDF reader with
     /// `RdfFormat::Turtle`; there is no Turtle *writer*, so it never appears as
     /// a round-trip target).

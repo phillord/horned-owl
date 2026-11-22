@@ -34,9 +34,21 @@ pub(crate) fn robot_ext(fmt: Format) -> &'static str {
     match fmt {
         Format::RdfXml => "rdf",
         Format::OwlXml => "owx",
-        Format::Ofn | Format::OfnNom | Format::OfnStreamWrite | Format::OfnNomStream => "ofn",
-        Format::Omn | Format::OmnNom | Format::OmnStreamWrite | Format::OmnNomStream => "omn",
-        Format::Obo | Format::OboNom | Format::OboStreamWrite | Format::OboNomStream => "obo",
+        Format::Ofn
+        | Format::OfnNom
+        | Format::OfnStreamWrite
+        | Format::OfnNomStream
+        | Format::OfnStreamRead => "ofn",
+        Format::Omn
+        | Format::OmnNom
+        | Format::OmnStreamWrite
+        | Format::OmnNomStream
+        | Format::OmnStreamRead => "omn",
+        Format::Obo
+        | Format::OboNom
+        | Format::OboStreamWrite
+        | Format::OboNomStream
+        | Format::OboStreamRead => "obo",
         Format::Turtle => "ttl",
         Format::Unknown => "owl",
     }
@@ -326,7 +338,7 @@ mod tests {
     use super::*;
     use crate::model::{Format, Outcome, Record};
 
-    /// All four kinds of each text format read back the same ontology.
+    /// All kinds of each text format read back the same ontology.
     #[test]
     fn four_way_roundtrip() {
         let ofn =
@@ -336,14 +348,17 @@ mod tests {
             Format::OfnNom,
             Format::OfnStreamWrite,
             Format::OfnNomStream,
+            Format::OfnStreamRead,
             Format::Omn,
             Format::OmnNom,
             Format::OmnStreamWrite,
             Format::OmnNomStream,
+            Format::OmnStreamRead,
             Format::Obo,
             Format::OboNom,
             Format::OboStreamWrite,
             Format::OboNomStream,
+            Format::OboStreamRead,
         ];
         let recs = run_bytes("t", ofn, &targets, &[], false);
         for r in &recs {
@@ -367,10 +382,13 @@ mod tests {
         for pair in [
             (Format::Ofn, Format::OfnStreamWrite),
             (Format::Ofn, Format::OfnNomStream),
+            (Format::Ofn, Format::OfnStreamRead),
             (Format::Omn, Format::OmnStreamWrite),
             (Format::Omn, Format::OmnNomStream),
+            (Format::Omn, Format::OmnStreamRead),
             (Format::Obo, Format::OboStreamWrite),
             (Format::Obo, Format::OboNomStream),
+            (Format::Obo, Format::OboStreamRead),
         ] {
             let get = |f| batch.iter().find(|(t, _)| *t == f).unwrap().1;
             assert_eq!(get(pair.0), get(pair.1), "{pair:?}");

@@ -72,7 +72,7 @@ enum Cmd {
         /// Which formats to write and read back, comma-separated.
         #[arg(
             long,
-            default_value = "rdf,owx,ofn,ofn_nom,ofn_stream_write,ofn_nom_stream,omn,omn_nom,omn_stream_write,omn_nom_stream,obo,obo_nom,obo_stream_write,obo_nom_stream"
+            default_value = "rdf,owx,ofn,ofn_nom,ofn_stream_write,ofn_nom_stream,ofn_stream_read,omn,omn_nom,omn_stream_write,omn_nom_stream,omn_stream_read,obo,obo_nom,obo_stream_write,obo_nom_stream,obo_stream_read"
         )]
         formats: String,
         /// Worker threads (default: one per core).
@@ -217,14 +217,17 @@ fn parse_formats(s: &str) -> Vec<Format> {
             "ofn_nom" => Some(Format::OfnNom),
             "ofn_stream_write" => Some(Format::OfnStreamWrite),
             "ofn_nom_stream" => Some(Format::OfnNomStream),
+            "ofn_stream_read" => Some(Format::OfnStreamRead),
             "omn" => Some(Format::Omn),
             "omn_nom" => Some(Format::OmnNom),
             "omn_stream_write" => Some(Format::OmnStreamWrite),
             "omn_nom_stream" => Some(Format::OmnNomStream),
+            "omn_stream_read" => Some(Format::OmnStreamRead),
             "obo" => Some(Format::Obo),
             "obo_nom" => Some(Format::OboNom),
             "obo_stream_write" => Some(Format::OboStreamWrite),
             "obo_nom_stream" => Some(Format::OboNomStream),
+            "obo_stream_read" => Some(Format::OboStreamRead),
             _ => None,
         })
         .collect()
@@ -360,7 +363,7 @@ fn check_known_failures(dir: &std::path::Path) -> anyhow::Result<bool> {
 
     let known = known_failures::known_failures();
     let fmts = parse_formats(
-        "rdf,owx,ofn,ofn_nom,ofn_stream_write,ofn_nom_stream,omn,omn_nom,omn_stream_write,omn_nom_stream,obo,obo_nom,obo_stream_write,obo_nom_stream",
+        "rdf,owx,ofn,ofn_nom,ofn_stream_write,ofn_nom_stream,ofn_stream_read,omn,omn_nom,omn_stream_write,omn_nom_stream,omn_stream_read,obo,obo_nom,obo_stream_write,obo_nom_stream,obo_stream_read",
     );
     let mut cases = Vec::new();
     for p in corpus::entries(dir)? {
