@@ -941,6 +941,10 @@ fn write_frames<A: ForIRI, AA: ForIndex<A>, W: Write>(
                                 rendered.join(", ")
                             ));
                         }
+                        // Fewer than two members is not valid OWL 2 and neither
+                        // the Manchester nor the functional reader accepts it; a
+                        // bare IRI line would corrupt the general block.
+                        members if members.len() < 2 => {}
                         _ => misc.push(ac.component.as_manchester_with_prefixes(pm).to_string()),
                     }
                 }
@@ -969,6 +973,8 @@ fn write_frames<A: ForIRI, AA: ForIndex<A>, W: Write>(
                             rendered.join(", ")
                         ));
                     }
+                    // As SameIndividual: fewer than two members cannot be read back.
+                    members if members.len() < 2 => {}
                     _ => misc.push(ac.component.as_manchester_with_prefixes(pm).to_string()),
                 },
 

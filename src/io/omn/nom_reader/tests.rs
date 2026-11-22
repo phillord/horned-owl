@@ -315,4 +315,49 @@ mod writing {
         }
         pretty_assertions::assert_eq!(ont, got, "{text}");
     }
+
+    fn orphan_assertion(
+        b: &crate::model::Build<RcStr>,
+        p: &str,
+    ) -> crate::model::AnnotationAssertion<RcStr> {
+        crate::model::AnnotationAssertion {
+            subject: b.iri("http://ex/orphan").into(),
+            ann: crate::model::Annotation {
+                ap: b.annotation_property(p),
+                av: crate::model::Literal::Simple {
+                    literal: "v".to_string(),
+                }
+                .into(),
+                ann: Default::default(),
+            },
+        }
+    }
+
+    /// A one-member DifferentIndividuals has no readable form; written after
+    /// an orphan annotation assertion it must not take the general block with
+    /// it.
+    #[test]
+    fn singleton_different_individuals_keeps_general_block() {
+        use crate::model::*;
+        let b = Build::new_rc();
+        let assertion = orphan_assertion(&b, "http://ex/p");
+        let one = |c: Component<RcStr>| {
+            Ok(StreamComponent::Component(std::rc::Rc::new(
+                AnnotatedComponent::from(c),
+            )))
+        };
+        let items = vec![
+            one(assertion.clone().into()),
+            one(
+                DifferentIndividuals(vec![Individual::Named(b.named_individual("http://ex/i"))])
+                    .into(),
+            ),
+            one(SameIndividual(vec![Individual::Named(b.named_individual("http://ex/j"))]).into()),
+        ];
+        let out = crate::io::omn::write_stream_chunked(Vec::new(), items.into_iter(), 1).unwrap();
+        let text = String::from_utf8(out).unwrap();
+        let (got, _): (SetOntology<RcStr>, _) = nom_read(&text).unwrap();
+        let comps: Vec<_> = got.iter().map(|ac| ac.component.clone()).collect();
+        assert!(comps.contains(&assertion.into()), "{text}");
+    }
 }
