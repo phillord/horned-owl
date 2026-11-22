@@ -17,7 +17,7 @@ use super::convert::*;
 use super::syntax::*;
 use crate::error::HornedError;
 use crate::io::StreamComponent;
-use crate::io::obo::reader::from_pair::{Context, Finalizer};
+use crate::io::obo::common::{Context, Finalizer};
 use crate::io::ofn::nom_reader::error::{Origin, PErr};
 use crate::model::*;
 

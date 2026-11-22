@@ -5,14 +5,14 @@
 //! the whole document at once (the relation shorthand and metadata tag
 //! scans, the final declarations and labels) is split here so a reader can
 //! do it a frame at a time: see [`Typedefs`] and
-//! [`Finalizer`](crate::io::obo::reader::from_pair::Finalizer).
+//! [`Finalizer`](crate::io::obo::common::Finalizer).
 use std::collections::{BTreeSet, HashMap};
 
 use curie::PrefixMapping;
 
 use super::syntax::*;
 use crate::error::HornedError;
-use crate::io::obo::reader::from_pair::{
+use crate::io::obo::common::{
     Context, IAO_DEF, IAO_OBSOLESCENCE_REASON, IAO_TERM_REPLACED_BY, IAO_TERMS_MERGED, OBO_BASE,
     OIO, OWL_DEPRECATED, RDFS_COMMENT, RDFS_LABEL, XSD_BOOLEAN, assertion, component,
     component_ann, expand_datatype, expand_id_with, gci_subject, iri_ann, is_http_iri, lit_ann,

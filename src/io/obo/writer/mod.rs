@@ -90,7 +90,7 @@ impl<A: ForIRI> State<A> {
                 .strip_prefix(OBO)
                 .and_then(|r| r.strip_suffix(".owl"))
                 .unwrap_or(iri);
-            if crate::io::obo::reader::from_pair::is_http_iri(ont) {
+            if crate::io::obo::common::is_http_iri(ont) {
                 format!("{ont}#")
             } else {
                 format!("{OBO}{ont}#")
@@ -240,7 +240,7 @@ impl<A: ForIRI> State<A> {
             };
             let compressed = self.cz(&iri);
             let expands_to_iri = |v: &str| {
-                crate::io::obo::reader::from_pair::expand_id_with(
+                crate::io::obo::common::expand_id_with(
                     v,
                     &self.idspace_map,
                     self.reader_onto_ns.as_deref(),
