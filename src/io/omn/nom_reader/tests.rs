@@ -316,6 +316,25 @@ mod writing {
         pretty_assertions::assert_eq!(ont, got, "{text}");
     }
 
+    /// Stream write then stream read gives what batch write then read gives.
+    fn assert_stream_matches_batch(ont: SetOntology<RcStr>) {
+        let pm = curie::PrefixMapping::default();
+        let cmo: ComponentMappedOntology<RcStr, RcStr_> = ont.into();
+        let batch =
+            String::from_utf8(crate::io::omn::write(Vec::new(), &cmo, Some(&pm)).unwrap()).unwrap();
+        let (expected, _): (SetOntology<RcStr>, _) = nom_read(&batch).unwrap();
+        for chunk in [1, usize::MAX] {
+            let text = streamed(&cmo, &pm, chunk);
+            let mut got = SetOntology::new_rc();
+            for item in super::super::Reader::new(text.as_bytes(), Default::default()) {
+                if let StreamComponent::Component(ac) = item.unwrap() {
+                    got.insert(ac);
+                }
+            }
+            pretty_assertions::assert_eq!(expected, got, "chunk {chunk}:\n{text}");
+        }
+    }
+
     fn orphan_assertion(
         b: &crate::model::Build<RcStr>,
         p: &str,
@@ -359,5 +378,40 @@ mod writing {
         let (got, _): (SetOntology<RcStr>, _) = nom_read(&text).unwrap();
         let comps: Vec<_> = got.iter().map(|ac| ac.component.clone()).collect();
         assert!(comps.contains(&assertion.into()), "{text}");
+    }
+
+    /// An annotated declaration is written to the general block, so
+    /// assertions on the entity must not become a frame that declares it again.
+    #[test]
+    fn annotated_declaration_gets_no_extra_declaration() {
+        use crate::model::*;
+        let b = Build::new_rc();
+        let mut o = SetOntology::new_rc();
+        let ap = b.annotation_property("http://ex/p");
+        o.insert(AnnotatedComponent {
+            component: DeclareAnnotationProperty(ap.clone()).into(),
+            ann: [Annotation {
+                ap: b.annotation_property("http://ex/q"),
+                av: Literal::Simple {
+                    literal: "d".to_string(),
+                }
+                .into(),
+                ann: Default::default(),
+            }]
+            .into_iter()
+            .collect(),
+        });
+        o.insert(AnnotationAssertion {
+            subject: b.iri("http://ex/p").into(),
+            ann: Annotation {
+                ap: b.annotation_property("http://ex/q"),
+                av: Literal::Simple {
+                    literal: "v".to_string(),
+                }
+                .into(),
+                ann: Default::default(),
+            },
+        });
+        assert_stream_matches_batch(o);
     }
 }

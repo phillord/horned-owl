@@ -189,7 +189,7 @@ pub fn write_stream_chunked<A: ForIRI, AA: ForIndex<A>, W: Write>(
                     header_written = true;
                 }
                 started = true;
-                note_declaration(&mut known, &ac.component);
+                note_declaration(&mut known, ac);
                 held.insert(ac.clone());
                 count += 1;
                 if count >= chunk {
@@ -211,8 +211,14 @@ pub fn write_stream_chunked<A: ForIRI, AA: ForIndex<A>, W: Write>(
 }
 
 /// Remember the kind of the entity a declaration declares.
-fn note_declaration<A: ForIRI>(known: &mut KnownKinds, c: &Component<A>) {
-    let (kind, iri) = match c {
+///
+/// An annotated declaration is written to the general block, not as a frame,
+/// so it does not make the entity known.
+fn note_declaration<A: ForIRI>(known: &mut KnownKinds, ac: &AnnotatedComponent<A>) {
+    if !ac.ann.is_empty() {
+        return;
+    }
+    let (kind, iri) = match &ac.component {
         Component::DeclareClass(d) => (FrameKind::Class, d.0.0.as_ref()),
         Component::DeclareObjectProperty(d) => (FrameKind::ObjectProperty, d.0.0.as_ref()),
         Component::DeclareDataProperty(d) => (FrameKind::DataProperty, d.0.0.as_ref()),
