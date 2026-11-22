@@ -214,41 +214,120 @@ pub fn read_source_with(fmt: Format, bytes: &[u8], lax: bool) -> anyhow::Result<
     })
 }
 
-/// `cmo` as the items a streaming writer takes: the prefixes, then the
-/// ontology id, imports and annotations, then declarations and the
-/// `oboInOwl` id and xref assertions (an entity's kind and id), then the
-/// other annotation assertions, then the rest. The streaming OMN and OBO
-/// writers need that order, and a `ComponentMappedOntology` does not give
-/// it.
-fn stream_items(
-    cmo: &ComponentMappedOntology<RcStr, RcAnnotatedComponent>,
-    prefixes: &PrefixMapping,
-) -> impl Iterator<Item = Result<StreamComponent<AnnotatedComponent<RcStr>>, HornedError>> {
-    use horned_owl::model::Ontology;
-    const OIO: &str = "http://www.geneontology.org/formats/oboInOwl#";
-    let rank = |c: &Component<RcStr>| match c {
-        Component::OntologyID(_) | Component::Import(_) | Component::OntologyAnnotation(_) => 0,
-        Component::DeclareClass(_)
-        | Component::DeclareObjectProperty(_)
-        | Component::DeclareDataProperty(_)
-        | Component::DeclareAnnotationProperty(_)
-        | Component::DeclareNamedIndividual(_)
-        | Component::DeclareDatatype(_) => 1,
-        Component::AnnotationAssertion(a) if a.ann.ap.0.as_ref() == format!("{OIO}id") => 1,
-        // After the ids, as the OBO writer drops an xref it has no id for.
-        Component::AnnotationAssertion(a) if a.ann.ap.0.as_ref() == format!("{OIO}hasDbXref") => 2,
-        Component::AnnotationAssertion(_) => 3,
-        _ => 4,
+/// The IRI a component is about, if it has a single one.
+fn subject_iri(c: &Component<RcStr>) -> Option<&str> {
+    use horned_owl::model::{
+        AnnotationSubject, ClassExpression, Individual, ObjectPropertyExpression,
+        SubObjectPropertyExpression,
     };
-    let mut comps: Vec<AnnotatedComponent<RcStr>> = cmo.iter().cloned().collect();
-    comps.sort_by_key(|ac| rank(&ac.component));
+    fn class(ce: &ClassExpression<RcStr>) -> Option<&str> {
+        match ce {
+            ClassExpression::Class(c) => Some(c.0.as_ref()),
+            _ => None,
+        }
+    }
+    fn ope(o: &ObjectPropertyExpression<RcStr>) -> Option<&str> {
+        match o {
+            ObjectPropertyExpression::ObjectProperty(p) => Some(p.0.as_ref()),
+            _ => None,
+        }
+    }
+    match c {
+        Component::DeclareClass(d) => Some(d.0.0.as_ref()),
+        Component::DeclareObjectProperty(d) => Some(d.0.0.as_ref()),
+        Component::DeclareDataProperty(d) => Some(d.0.0.as_ref()),
+        Component::DeclareAnnotationProperty(d) => Some(d.0.0.as_ref()),
+        Component::DeclareNamedIndividual(d) => Some(d.0.0.as_ref()),
+        Component::DeclareDatatype(d) => Some(d.0.0.as_ref()),
+        Component::AnnotationAssertion(a) => match &a.subject {
+            AnnotationSubject::IRI(i) => Some(i.as_ref()),
+            _ => None,
+        },
+        Component::SubClassOf(s) => class(&s.sub),
+        Component::ClassAssertion(a) => match &a.i {
+            Individual::Named(n) => Some(n.0.as_ref()),
+            _ => None,
+        },
+        Component::SubObjectPropertyOf(s) => match &s.sub {
+            SubObjectPropertyExpression::ObjectPropertyExpression(o) => ope(o),
+            _ => None,
+        },
+        Component::ObjectPropertyDomain(d) => ope(&d.ope),
+        Component::FunctionalObjectProperty(o) => ope(&o.0),
+        Component::InverseFunctionalObjectProperty(o) => ope(&o.0),
+        Component::ReflexiveObjectProperty(o) => ope(&o.0),
+        Component::IrreflexiveObjectProperty(o) => ope(&o.0),
+        Component::SymmetricObjectProperty(o) => ope(&o.0),
+        Component::AsymmetricObjectProperty(o) => ope(&o.0),
+        Component::TransitiveObjectProperty(o) => ope(&o.0),
+        Component::InverseObjectProperties(i) => Some(i.0.0.as_ref()),
+        Component::EquivalentClasses(e) => e.0.iter().find_map(class),
+        Component::DisjointClasses(e) => e.0.iter().find_map(class),
+        Component::EquivalentObjectProperties(e) => e.0.iter().find_map(ope),
+        Component::DisjointObjectProperties(e) => e.0.iter().find_map(ope),
+        Component::DisjointUnion(d) => Some(d.0.0.as_ref()),
+        Component::ObjectPropertyRange(d) => ope(&d.ope),
+        Component::SubDataPropertyOf(s) => Some(s.sub.0.as_ref()),
+        Component::SubAnnotationPropertyOf(s) => Some(s.sub.0.as_ref()),
+        _ => None,
+    }
+}
+
+/// `cmo` as the items a streaming writer takes: the prefixes, then the
+/// ontology id, imports and ontology annotations, then each entity's
+/// components together (sorted by subject IRI: its declaration and
+/// `oboInOwl` id, then xrefs, then other annotation assertions, then
+/// axioms), then components with no single subject. Real OBO and OMN files
+/// group by entity, and the streaming writers emit a new stanza whenever an
+/// entity's components are split across chunks. Only references are sorted;
+/// components are cloned as the iterator is consumed. The order is
+/// deterministic.
+fn stream_items<'a>(
+    cmo: &'a ComponentMappedOntology<RcStr, RcAnnotatedComponent>,
+    prefixes: &PrefixMapping,
+) -> impl Iterator<Item = Result<StreamComponent<AnnotatedComponent<RcStr>>, HornedError>> + 'a {
+    use horned_owl::model::Ontology;
+    const OIO_ID: &str = "http://www.geneontology.org/formats/oboInOwl#id";
+    const OIO_XREF: &str = "http://www.geneontology.org/formats/oboInOwl#hasDbXref";
+    let key = |ac: &'a AnnotatedComponent<RcStr>| {
+        let c = &ac.component;
+        match c {
+            Component::OntologyID(_) | Component::Import(_) | Component::OntologyAnnotation(_) => {
+                (0u8, "", 0u8, ac)
+            }
+            _ => match subject_iri(c) {
+                Some(s) => {
+                    let rank = match c {
+                        Component::DeclareClass(_)
+                        | Component::DeclareObjectProperty(_)
+                        | Component::DeclareDataProperty(_)
+                        | Component::DeclareAnnotationProperty(_)
+                        | Component::DeclareNamedIndividual(_)
+                        | Component::DeclareDatatype(_) => 0,
+                        Component::AnnotationAssertion(a) if a.ann.ap.0.as_ref() == OIO_ID => 1,
+                        Component::AnnotationAssertion(a) if a.ann.ap.0.as_ref() == OIO_XREF => 2,
+                        Component::AnnotationAssertion(_) => 3,
+                        _ => 4,
+                    };
+                    (1, s, rank, ac)
+                }
+                None => (2, "", 0, ac),
+            },
+        }
+    };
+    let mut keyed: Vec<_> = cmo.iter().map(key).collect();
+    keyed.sort();
     let prefixes: Vec<_> = prefixes
         .mappings()
         .map(|(n, i)| StreamComponent::Prefix(n.to_string(), i.to_string()))
         .collect();
     prefixes
         .into_iter()
-        .chain(comps.into_iter().map(StreamComponent::Component))
+        .chain(
+            keyed
+                .into_iter()
+                .map(|(_, _, _, ac)| StreamComponent::Component(ac.clone())),
+        )
         .map(Ok)
 }
 
@@ -311,6 +390,74 @@ pub fn write_target(
 mod tests {
     use super::*;
     use crate::model::Format;
+
+    #[test]
+    fn stream_items_groups_by_entity() {
+        use horned_owl::model::{
+            AnnotatedComponent, Annotation, AnnotationAssertion, AnnotationSubject,
+            ClassExpression, DeclareClass, Literal, OntologyID, SubClassOf,
+        };
+        let b = Build::new_rc();
+        let mut o = SetOntology::<RcStr>::new();
+        let xref = b.annotation_property("http://www.geneontology.org/formats/oboInOwl#hasDbXref");
+        let id = b.annotation_property("http://www.geneontology.org/formats/oboInOwl#id");
+        let rdfs = b.annotation_property("http://www.w3.org/2000/01/rdf-schema#label");
+        let ann = |ap: &horned_owl::model::AnnotationProperty<RcStr>, s: &str, v: &str| {
+            Component::AnnotationAssertion(AnnotationAssertion {
+                subject: AnnotationSubject::IRI(b.iri(s)),
+                ann: Annotation {
+                    ap: ap.clone(),
+                    av: Literal::Simple { literal: v.into() }.into(),
+                    ann: Default::default(),
+                },
+            })
+        };
+        let ents = ["http://ex/B", "http://ex/A", "http://ex/C"];
+        for e in ents {
+            let c = b.class(e);
+            // Added in the least helpful order: axiom, label, xref, id, decl.
+            o.insert(AnnotatedComponent::from(Component::SubClassOf(
+                SubClassOf {
+                    sup: ClassExpression::Class(b.class("http://ex/Z")),
+                    sub: ClassExpression::Class(c.clone()),
+                },
+            )));
+            o.insert(AnnotatedComponent::from(ann(&rdfs, e, "l")));
+            o.insert(AnnotatedComponent::from(ann(&xref, e, "X:1")));
+            o.insert(AnnotatedComponent::from(ann(&id, e, "E:1")));
+            o.insert(AnnotatedComponent::from(Component::DeclareClass(
+                DeclareClass(c),
+            )));
+        }
+        o.insert(AnnotatedComponent::from(Component::OntologyID(
+            OntologyID::default(),
+        )));
+        let cmo: ComponentMappedOntology<RcStr, RcAnnotatedComponent> = o.into();
+        let run = || -> Vec<AnnotatedComponent<RcStr>> {
+            stream_items(&cmo, &PrefixMapping::default())
+                .map(|r| match r.unwrap() {
+                    StreamComponent::Component(c) => c,
+                    _ => panic!("unexpected prefix"),
+                })
+                .collect()
+        };
+        let items = run();
+        assert_eq!(items.len(), 16);
+        assert_eq!(run(), items, "deterministic");
+        assert!(matches!(items[0].component, Component::OntologyID(_)));
+        // Contiguous per entity, in subject order, rank order within.
+        let subj: Vec<_> = items[1..]
+            .iter()
+            .map(|c| subject_iri(&c.component).unwrap().to_string())
+            .collect();
+        let expect: Vec<_> = ["A", "B", "C"]
+            .iter()
+            .flat_map(|e| std::iter::repeat_n(format!("http://ex/{e}"), 5))
+            .collect();
+        assert_eq!(subj, expect);
+        assert!(matches!(items[1].component, Component::DeclareClass(_)));
+        assert!(matches!(items[5].component, Component::SubClassOf(_)));
+    }
 
     #[test]
     fn reads_turtle_source() {
