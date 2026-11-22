@@ -18,7 +18,7 @@ use super::syntax::*;
 use crate::error::HornedError;
 use crate::io::StreamComponent;
 use crate::io::obo::common::{Context, Finalizer};
-use crate::io::ofn::nom_reader::error::{Origin, PErr};
+use crate::io::ofn::reader::error::{Origin, PErr};
 use crate::model::*;
 
 /// Parse `buf` with `parse`, reading more text while a quoted string ran

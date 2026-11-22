@@ -7,9 +7,9 @@ use curie::PrefixMapping;
 use enum_meta::Meta;
 use pest::iterators::Pair;
 
-use crate::error::HornedError;
-use crate::model::*;
-use crate::vocab::{Facet, OWL, OWL2Datatype};
+use horned_owl::error::HornedError;
+use horned_owl::model::*;
+use horned_owl::vocab::{Facet, OWL, OWL2Datatype};
 
 use super::Context;
 use super::Rule;
@@ -30,7 +30,7 @@ pub trait FromPair<A: ForIRI>: Sized {
     #[inline]
     fn from_pair(pair: Pair<Rule>, context: &Context<'_, A>) -> Result<Self> {
         if cfg!(debug_assertions) && pair.as_rule() != Self::RULE {
-            return Err(HornedError::from(pest::error::Error::new_from_span(
+            return Err(crate::pest_error(pest::error::Error::new_from_span(
                 pest::error::ErrorVariant::ParsingError {
                     positives: vec![pair.as_rule()],
                     negatives: vec![Self::RULE],
@@ -443,7 +443,10 @@ impl<A: ForIRI> FromPair<A> for AnnotatedComponent<A> {
                     .into_inner()
                     .map(|pair| FromPair::from_pair(pair, ctx))
                     .collect::<Result<Vec<_>>>()?;
-                Ok(Self::new(crate::model::Rule::new(head, body), annotations))
+                Ok(Self::new(
+                    horned_owl::model::Rule::new(head, body),
+                    annotations,
+                ))
             }
 
             _ => unreachable!("unexpected rule in AnnotatedAxiom::from_pair"),
@@ -694,7 +697,7 @@ impl<A: ForIRI> FromPair<A> for ClassExpression<A> {
                 if next.as_rule() == Rule::DataProperty {
                     Err(HornedError::invalid_at(
                         "horned-owl does not support data property chaining in `DataSomeValuesFrom`",
-                        next.as_span(),
+                        crate::span_location(next.as_span()),
                     ))
                 } else {
                     let dr = DataRange::from_pair(next, ctx)?;
@@ -708,7 +711,7 @@ impl<A: ForIRI> FromPair<A> for ClassExpression<A> {
                 if next.as_rule() == Rule::DataProperty {
                     Err(HornedError::invalid_at(
                         "horned-owl does not support data property chaining in `DataAllValuesFrom`",
-                        next.as_span(),
+                        crate::span_location(next.as_span()),
                     ))
                 } else {
                     let dr = DataRange::from_pair(next, ctx)?;
@@ -800,7 +803,7 @@ impl<A: ForIRI> FromPair<A> for Facet {
         Facet::all()
             .into_iter()
             .find(|facet| iri.as_ref() == facet.as_ref())
-            .ok_or_else(|| HornedError::invalid_at("invalid facet", span))
+            .ok_or_else(|| HornedError::invalid_at("invalid facet", crate::span_location(span)))
     }
 }
 
@@ -864,12 +867,14 @@ impl<A: ForIRI> FromPair<A> for IRI<A> {
                 );
                 match ctx.mapping.expand_curie(&curie) {
                     Ok(s) => Ok(ctx.build.iri(s)),
-                    Err(curie::ExpansionError::Invalid) => {
-                        Err(HornedError::invalid_at("undefined prefix", span))
-                    }
-                    Err(curie::ExpansionError::MissingDefault) => {
-                        Err(HornedError::invalid_at("missing default prefix", span))
-                    }
+                    Err(curie::ExpansionError::Invalid) => Err(HornedError::invalid_at(
+                        "undefined prefix",
+                        crate::span_location(span),
+                    )),
+                    Err(curie::ExpansionError::MissingDefault) => Err(HornedError::invalid_at(
+                        "missing default prefix",
+                        crate::span_location(span),
+                    )),
                 }
             }
             Rule::FullIRI => {
@@ -1121,8 +1126,8 @@ mod tests {
     use std::rc::Rc;
 
     use super::*;
-    use crate::io::ofn::reader::lexer::OwlFunctionalLexer;
-    use crate::ontology::set::SetOntology;
+    use crate::ofn::lexer::OwlFunctionalLexer;
+    use horned_owl::ontology::set::SetOntology;
 
     use rstest::rstest;
     use std::path::PathBuf;
@@ -1333,28 +1338,28 @@ mod tests {
     /// its `owl-xml/` sibling -- OWL/XML is the less-ambiguous oracle here,
     /// matching `io::rdf::reader::test::compare_to_xml` / the OBO equivalent.
     #[rstest]
-    fn compare_to_xml(#[files("src/ont/owl-functional/*.ofn")] resource: PathBuf) {
+    fn compare_to_xml(#[files("../src/ont/owl-functional/*.ofn")] resource: PathBuf) {
         let stem = resource.file_stem().unwrap().to_str().unwrap();
         let ofn_doc = slurp::read_all_to_string(&resource).unwrap();
-        let xml_doc = slurp::read_all_to_string(format!("src/ont/owl-xml/{stem}.owx")).unwrap();
+        let xml_doc = slurp::read_all_to_string(format!("../src/ont/owl-xml/{stem}.owx")).unwrap();
 
-        let ofn_ont: SetOntology<crate::model::RcStr> =
-            crate::io::ofn::reader::read(&mut ofn_doc.as_bytes(), Default::default())
+        let ofn_ont: SetOntology<horned_owl::model::RcStr> =
+            crate::ofn::read(&mut ofn_doc.as_bytes(), Default::default())
                 .unwrap()
                 .0;
-        let xml_ont: SetOntology<crate::model::RcStr> =
-            crate::io::owx::reader::test::read_ok(&mut xml_doc.as_bytes())
+        let xml_ont: SetOntology<horned_owl::model::RcStr> =
+            crate::test_support::read_ok(&mut xml_doc.as_bytes())
                 .0
                 .into();
 
-        crate::normalize::normalize_and_assert_eq(
+        horned_owl::normalize::normalize_and_assert_eq(
             ofn_ont.iter().cloned().collect(),
             xml_ont.iter().cloned().collect(),
         );
     }
 
     #[rstest]
-    fn from_pair_resource(#[files("src/ont/owl-functional/*.ofn")] resource: PathBuf) {
+    fn from_pair_resource(#[files("../src/ont/owl-functional/*.ofn")] resource: PathBuf) {
         let text = &slurp::read_all_to_string(&resource).unwrap();
         let pair = match OwlFunctionalLexer::lex(Rule::OntologyDocument, text.trim()) {
             Err(e) => panic!("parser failed: {e}"),
@@ -1377,9 +1382,9 @@ mod tests {
             .replace("owl-functional", "owl-xml")
             .replace(".ofn", ".owx");
         let owx = &slurp::read_all_to_string(path).unwrap();
-        let expected = crate::io::owx::reader::read(
+        let expected = horned_owl::io::owx::reader::read(
             &mut Cursor::new(&owx),
-            crate::io::ParserConfiguration::new(&build),
+            horned_owl::io::ParserConfiguration::new(&build),
         )
         .unwrap();
 

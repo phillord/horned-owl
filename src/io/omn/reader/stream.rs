@@ -20,7 +20,7 @@ use nom::error::ParseError;
 
 use crate::error::HornedError;
 use crate::io::StreamComponent;
-use crate::io::ofn::nom_reader::error::{Origin, PErr};
+use crate::io::ofn::reader::error::{Origin, PErr};
 use crate::model::*;
 
 use super::convert::{Conv, Declarations, Out};
@@ -445,7 +445,7 @@ impl<A: ForIRI, R: BufRead, B: AsRef<Build<A>>> Reader<A, R, B> {
         if !axioms.is_empty() {
             let wrapped = format!("Ontology(\n{axioms}\n)");
             let parsed: Result<(crate::ontology::set::SetOntology<A>, _), _> =
-                crate::io::ofn::nom_reader::read(
+                crate::io::ofn::reader::read(
                     &mut std::io::Cursor::new(wrapped.into_bytes()),
                     crate::io::ParserConfiguration::new(self.build.as_ref()),
                 );

@@ -7,7 +7,7 @@ use std::collections::{BTreeSet, HashSet};
 
 use curie::{Curie, PrefixMapping};
 
-use crate::io::ofn::nom_reader::error::PErr;
+use crate::io::ofn::reader::error::PErr;
 use crate::model::*;
 use crate::vocab::{Facet as VocabFacet, OWL};
 

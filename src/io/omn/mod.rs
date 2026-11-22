@@ -1,5 +1,4 @@
 //! OWL Manchester Syntax I/O.
-pub mod nom_reader;
 pub mod reader;
 pub mod writer;
 pub use reader::{parse_class_expression, read};

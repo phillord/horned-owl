@@ -1,7 +1,7 @@
 use pest::iterators::Pairs;
 use pest_derive::Parser;
 
-use crate::error::HornedError;
+use horned_owl::error::HornedError;
 
 /// The OWL Manchester Syntax lexer.
 #[derive(Debug, Parser)]
@@ -14,7 +14,7 @@ pub struct ManchesterLexer;
 impl ManchesterLexer {
     /// Parse an input string using the given production rule.
     pub fn lex(rule: Rule, input: &str) -> Result<Pairs<'_, Rule>, HornedError> {
-        <Self as pest::Parser<Rule>>::parse(rule, input).map_err(From::from)
+        <Self as pest::Parser<Rule>>::parse(rule, input).map_err(crate::pest_error)
     }
 }
 
@@ -87,8 +87,8 @@ mod tests {
 
     #[test]
     fn keyword_curie_collisions_do_not_misparse() {
-        use crate::io::omn::reader::parse_class_expression;
-        use crate::model::Build;
+        use crate::omn::parse_class_expression;
+        use horned_owl::model::Build;
         let b = Build::new_rc();
         let mut pm = curie::PrefixMapping::default();
         pm.add_prefix("notation", "http://ex/notation#").unwrap();
@@ -102,20 +102,20 @@ mod tests {
         // (keyword-prefix-of-name collision, closed by the `!SPARQL_PnChars` guard).
         let ce = parse_class_expression("notation:Foo", &pm, &b).unwrap();
         assert!(
-            matches!(ce, crate::model::ClassExpression::Class(_)),
+            matches!(ce, horned_owl::model::ClassExpression::Class(_)),
             "notation:Foo must be an atomic class, got {ce:?}"
         );
         // `not:Foo` must parse as the atomic class, NOT `not` + `:Foo`
         // (keyword-EQUALS-prefix collision, closed by also guarding `:`).
         let ce = parse_class_expression("not:Foo", &pm, &b).unwrap();
         assert!(
-            matches!(ce, crate::model::ClassExpression::Class(_)),
+            matches!(ce, horned_owl::model::ClassExpression::Class(_)),
             "not:Foo must be an atomic class, got {ce:?}"
         );
         // `andro:X and somers:Y` must be a 2-way intersection of two atomic classes.
         let ce = parse_class_expression("andro:X and somers:Y", &pm, &b).unwrap();
         match ce {
-            crate::model::ClassExpression::ObjectIntersectionOf(v) => assert_eq!(v.len(), 2),
+            horned_owl::model::ClassExpression::ObjectIntersectionOf(v) => assert_eq!(v.len(), 2),
             other => panic!("expected intersection of 2, got {other:?}"),
         }
     }

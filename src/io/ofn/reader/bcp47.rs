@@ -1,4 +1,4 @@
-//! Language tag recognition, a literal port of `grammars/bcp47.pest`.
+//! Language tag recognition, a literal port of `horned-pest/src/grammars/bcp47.pest`.
 //!
 //! The pest grammar is a PEG, so ordered choice commits and repetition is
 //! greedy without backtracking. This follows it step for step, so it

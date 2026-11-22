@@ -107,9 +107,9 @@ macro_rules! into_prefixes {
 }
 
 into_prefixes!(
-    ofn::nom_reader::Reader<RcStr, Cursor<&[u8]>, B>,
-    omn::nom_reader::Reader<RcStr, Cursor<&[u8]>, B>,
-    obo::nom_reader::Reader<RcStr, Cursor<&[u8]>, B>
+    ofn::reader::Reader<RcStr, Cursor<&[u8]>, B>,
+    omn::reader::Reader<RcStr, Cursor<&[u8]>, B>,
+    obo::reader::Reader<RcStr, Cursor<&[u8]>, B>
 );
 
 pub fn read_source(fmt: Format, bytes: &[u8]) -> anyhow::Result<ReadOk> {
@@ -135,41 +135,32 @@ pub fn read_source_with(fmt: Format, bytes: &[u8], lax: bool) -> anyhow::Result<
 
     let (model, prefixes, incomplete) = match fmt {
         Format::Ofn | Format::OfnStreamWrite => {
-            let sop = ofn::reader::read(&mut Cursor::new(bytes), config()).map_err(horned_err)?;
+            let sop =
+                horned_pest::ofn::read(&mut Cursor::new(bytes), config()).map_err(horned_err)?;
             Output::ofn(sop).decompose()
         }
         Format::OfnNom => {
-            let sop =
-                ofn::nom_reader::read(&mut Cursor::new(bytes), config()).map_err(horned_err)?;
+            let sop = ofn::reader::read(&mut Cursor::new(bytes), config()).map_err(horned_err)?;
             Output::ofn(sop).decompose()
         }
         Format::Omn | Format::OmnStreamWrite => {
-            let sop = omn::reader::read(Cursor::new(bytes), config()).map_err(horned_err)?;
+            let sop = horned_pest::omn::read(Cursor::new(bytes), config()).map_err(horned_err)?;
             Output::omn(sop).decompose()
         }
         Format::OmnNom => {
-            let sop = omn::nom_reader::read(Cursor::new(bytes), config()).map_err(horned_err)?;
+            let sop = omn::reader::read(Cursor::new(bytes), config()).map_err(horned_err)?;
             Output::omn(sop).decompose()
         }
         Format::OfnNomStream | Format::OfnStreamRead => {
-            let sop = drain(ofn::nom_reader::read_to_stream(
-                Cursor::new(bytes),
-                config(),
-            ))?;
+            let sop = drain(ofn::reader::read_to_stream(Cursor::new(bytes), config()))?;
             Output::ofn(sop).decompose()
         }
         Format::OmnNomStream | Format::OmnStreamRead => {
-            let sop = drain(omn::nom_reader::read_to_stream(
-                Cursor::new(bytes),
-                config(),
-            ))?;
+            let sop = drain(omn::reader::read_to_stream(Cursor::new(bytes), config()))?;
             Output::omn(sop).decompose()
         }
         Format::OboNomStream | Format::OboStreamRead => {
-            let sop = drain(obo::nom_reader::read_to_stream(
-                Cursor::new(bytes),
-                config(),
-            ))?;
+            let sop = drain(obo::reader::read_to_stream(Cursor::new(bytes), config()))?;
             Output::obo(sop).decompose()
         }
         Format::OwlXml => {
@@ -177,11 +168,12 @@ pub fn read_source_with(fmt: Format, bytes: &[u8], lax: bool) -> anyhow::Result<
             Output::owx(sop).decompose()
         }
         Format::Obo | Format::OboStreamWrite => {
-            let sop = obo::reader::read(&mut Cursor::new(bytes), config()).map_err(horned_err)?;
+            let sop =
+                horned_pest::obo::read(&mut Cursor::new(bytes), config()).map_err(horned_err)?;
             Output::obo(sop).decompose()
         }
         Format::OboNom => {
-            let sop = obo::nom_reader::read(Cursor::new(bytes), config()).map_err(horned_err)?;
+            let sop = obo::reader::read(Cursor::new(bytes), config()).map_err(horned_err)?;
             Output::obo(sop).decompose()
         }
         Format::RdfXml => {

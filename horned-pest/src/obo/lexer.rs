@@ -13,7 +13,7 @@
 use pest::iterators::Pairs;
 use pest_derive::Parser;
 
-use crate::error::HornedError;
+use horned_owl::error::HornedError;
 
 /// The OBO 1.4 lexer. Entry rule is [`Rule::OboDoc`].
 #[derive(Debug, Parser)]
@@ -26,7 +26,7 @@ pub struct OboLexer;
 impl OboLexer {
     /// Parse an input string using the given production rule.
     pub fn lex(rule: Rule, input: &str) -> Result<Pairs<'_, Rule>, HornedError> {
-        <Self as pest::Parser<Rule>>::parse(rule, input).map_err(From::from)
+        <Self as pest::Parser<Rule>>::parse(rule, input).map_err(crate::pest_error)
     }
 }
 

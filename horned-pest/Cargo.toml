@@ -1,0 +1,33 @@
+[package]
+name = "horned-pest"
+version = "0.1.0"
+authors = ["Phillip Lord <phillip.lord@russet.org.uk>"]
+description = "The original pest-based OFN, Manchester and OBO readers for horned-owl; deprecated in favour of the nom readers in horned-owl"
+readme = "README.md"
+repository = "https://github.com/phillord/horned-owl"
+keywords = ["ontology", "OWL", "parser"]
+categories = ["parsing", "science"]
+license = "LGPL-3.0"
+edition = "2024"
+rust-version = "1.88"
+
+[dependencies]
+horned-owl = {path="..", version="5.0.0", default-features=false}
+curie = "0.1.1"
+pest = "2.7.8"
+pest_derive = "2.7.8"
+log = "0.4.8"
+lazy_static = "1.4.0"
+indexmap = {workspace=true}
+enum_meta = "0.6.0"
+
+[dev-dependencies]
+pretty_assertions = "1.0.0"
+rstest = "0.23"
+slurp = "1.0.1"
+criterion = "0.7.0"
+horned-bin = {path="../horned-bin"}
+
+[[bench]]
+name = "read"
+harness = false

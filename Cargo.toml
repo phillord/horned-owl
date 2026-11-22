@@ -23,8 +23,6 @@ log = {version="0.4.8"}
 quick-xml={version="0.37.5"}
 indexmap={workspace=true}
 oxiri={workspace=true}
-pest = "2.7.8"
-pest_derive = "2.7.8"
 nom = "8.0.0"
 horned-pretty-rdf={workspace=true}
 horned-catalog={workspace=true}
@@ -33,8 +31,8 @@ oxrdfio={workspace=true}
 ureq={version="3.3.0", optional=true}
 
 [workspace]
-members=["horned-bin", "horned-pretty-rdf", "horned-catalog", "horned-macro", "horned-profile", "horned-oml", "horned-corpus"]
-default-members=[".", "horned-bin", "horned-pretty-rdf", "horned-catalog", "horned-macro", "horned-profile", "horned-oml", "horned-corpus"]
+members=["horned-bin", "horned-pretty-rdf", "horned-catalog", "horned-macro", "horned-profile", "horned-oml", "horned-corpus", "horned-pest"]
+default-members=[".", "horned-bin", "horned-pretty-rdf", "horned-catalog", "horned-macro", "horned-profile", "horned-oml", "horned-corpus", "horned-pest"]
 
 [workspace.dependencies]
 indexmap="1.0.2"
@@ -45,6 +43,7 @@ horned-catalog={path="./horned-catalog", version="1.1.0"}
 horned-macro={path="./horned-macro", version="5.0.0"}
 horned-profile={path="./horned-profile", version="5.0.0"}
 horned-oml={path="./horned-oml", version="0.1.0"}
+horned-pest={path="./horned-pest", version="0.1.0"}
 oxrdf="0.3.0"
 oxrdfio="0.2.0"
 

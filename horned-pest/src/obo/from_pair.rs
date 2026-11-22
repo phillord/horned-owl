@@ -17,11 +17,11 @@ use std::collections::{BTreeSet, HashMap};
 use curie::PrefixMapping;
 use pest::iterators::Pair;
 
-pub use crate::io::obo::common::*;
+pub use horned_owl::io::obo::common::*;
 
 use super::lexer::Rule;
-use crate::error::HornedError;
-use crate::model::{
+use horned_owl::error::HornedError;
+use horned_owl::model::{
     AnnotatedComponent, Annotation, AnnotationAssertion, AnnotationSubject, AnnotationValue,
     AsymmetricObjectProperty, Build, ClassAssertion, ClassExpression, Component,
     DeclareAnnotationProperty, DeclareClass, DeclareNamedIndividual, DeclareObjectProperty,
@@ -184,13 +184,12 @@ pub fn header_to_components<A: ForIRI>(
             Rule::OwlAxiomsTag => {
                 if let Some(v) = val(0) {
                     let text = unescape(v);
-                    let config = crate::io::ParserConfiguration::new(Build::<A>::new());
-                    if let Ok((embedded, _)) = crate::io::ofn::reader::read::<
-                        A,
-                        _,
-                        crate::ontology::set::SetOntology<A>,
-                        _,
-                    >(&mut text.as_bytes(), config)
+                    let config = horned_owl::io::ParserConfiguration::new(Build::<A>::new());
+                    if let Ok((embedded, _)) =
+                        crate::ofn::read::<A, _, horned_owl::ontology::set::SetOntology<A>, _>(
+                            &mut text.as_bytes(),
+                            config,
+                        )
                     {
                         // The wrapping `Ontology(...)` is always anonymous
                         // here; its empty OntologyID is not real content.

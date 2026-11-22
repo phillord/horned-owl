@@ -15,6 +15,7 @@ publish = false
 [dependencies]
 horned-owl = { path = "../", version = "5.0.0" }
 horned-profile = { workspace = true }
+horned-pest = { workspace = true }
 oxrdfio = { workspace = true }
 # horned_owl::io re-exports PrefixMapping only via a private `use curie::
 # PrefixMapping;` (see io/mod.rs), so it is not reachable as

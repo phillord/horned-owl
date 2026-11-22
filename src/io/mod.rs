@@ -329,7 +329,8 @@ impl<A: ForIRI, AA: ForIndex<A>> From<ParserOutput<A, AA>> for ComponentMappedOn
 }
 
 /// Consume a leading UTF-8 byte order mark, if there is one.
-pub(crate) fn skip_bom<R: std::io::BufRead>(r: &mut R) -> std::io::Result<()> {
+#[doc(hidden)]
+pub fn skip_bom<R: std::io::BufRead>(r: &mut R) -> std::io::Result<()> {
     if r.fill_buf()?.starts_with(&[0xEF, 0xBB, 0xBF]) {
         r.consume(3);
     }

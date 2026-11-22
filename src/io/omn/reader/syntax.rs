@@ -1,5 +1,5 @@
 //! The Manchester Syntax grammar as a hand-written parser, a step for step
-//! port of `grammars/omn.pest`.
+//! port of `horned-pest/src/grammars/omn.pest`.
 //!
 //! The pest grammar is a PEG, so ordered choice commits and repetition does
 //! not backtrack into itself. Each function here follows one rule and tries
@@ -12,9 +12,9 @@
 //! pest does implicitly between the elements of a non-atomic rule.
 use std::cell::RefCell;
 
-use crate::io::ofn::nom_reader::bcp47::language_tag_len;
-use crate::io::ofn::nom_reader::lex::{pn_chars, pn_local, pname, pname_ns};
-use crate::io::ofn::nom_reader::rfc3987::is_iri;
+use crate::io::ofn::reader::bcp47::language_tag_len;
+use crate::io::ofn::reader::lex::{pn_chars, pn_local, pname, pname_ns};
+use crate::io::ofn::reader::rfc3987::is_iri;
 
 /// The text left after a successful parse, and what was parsed.
 pub type Res<'a, T> = Option<(&'a str, T)>;

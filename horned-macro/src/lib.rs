@@ -20,8 +20,8 @@
 //! no such restriction -- the full grammar `read` already supports is
 //! available here, unrestricted.
 
-use horned_owl::io::ofn::reader::{OwlFunctionalLexer, Rule as OfnRule};
-use horned_owl::io::omn::reader::{ManchesterLexer, Rule as OmnRule};
+use horned_pest::ofn::{OwlFunctionalLexer, Rule as OfnRule};
+use horned_pest::omn::{ManchesterLexer, Rule as OmnRule};
 use proc_macro::TokenStream;
 use quote::quote;
 use syn::parse::{Parse, ParseStream};

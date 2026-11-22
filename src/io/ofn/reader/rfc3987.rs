@@ -1,4 +1,4 @@
-//! `<...>` IRI validation, a literal port of `grammars/rfc3987.pest`.
+//! `<...>` IRI validation, a literal port of `horned-pest/src/grammars/rfc3987.pest`.
 //!
 //! The pest grammar is a PEG, so ordered choice commits and repetition
 //! does not backtrack. This follows it step for step, so it accepts and

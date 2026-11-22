@@ -73,34 +73,23 @@ fn bench_io_read(c: &mut Criterion) {
         let filename = format!("target/bench-data/o{}.ofn", n);
         generate_if_needed(filename.clone(), n, "ofn");
 
+        group.bench_function(BenchmarkId::new("ofn_mem_io_read", n), |b| {
+            b.iter(|| {
+                let f = File::open(filename.clone()).ok().unwrap();
+                let mut f = BufReader::new(f);
+                let _: (SetOntology<RcStr>, _) =
+                    horned_owl::io::ofn::reader::read_in_memory(&mut f, Default::default())
+                        .ok()
+                        .unwrap();
+            })
+        });
+
         group.bench_function(BenchmarkId::new("ofn_io_read", n), |b| {
             b.iter(|| {
                 let f = File::open(filename.clone()).ok().unwrap();
                 let mut f = BufReader::new(f);
                 let _: (SetOntology<RcStr>, _) =
                     horned_owl::io::ofn::reader::read(&mut f, Default::default())
-                        .ok()
-                        .unwrap();
-            })
-        });
-
-        group.bench_function(BenchmarkId::new("ofn_nom_mem_io_read", n), |b| {
-            b.iter(|| {
-                let f = File::open(filename.clone()).ok().unwrap();
-                let mut f = BufReader::new(f);
-                let _: (SetOntology<RcStr>, _) =
-                    horned_owl::io::ofn::nom_reader::read_in_memory(&mut f, Default::default())
-                        .ok()
-                        .unwrap();
-            })
-        });
-
-        group.bench_function(BenchmarkId::new("ofn_nom_io_read", n), |b| {
-            b.iter(|| {
-                let f = File::open(filename.clone()).ok().unwrap();
-                let mut f = BufReader::new(f);
-                let _: (SetOntology<RcStr>, _) =
-                    horned_owl::io::ofn::nom_reader::read(&mut f, Default::default())
                         .ok()
                         .unwrap();
             })
@@ -115,17 +104,6 @@ fn bench_io_read(c: &mut Criterion) {
                 let f = BufReader::new(f);
                 let _: (SetOntology<RcStr>, _) =
                     horned_owl::io::omn::reader::read(f, Default::default())
-                        .ok()
-                        .unwrap();
-            })
-        });
-
-        group.bench_function(BenchmarkId::new("omn_nom_io_read", n), |b| {
-            b.iter(|| {
-                let f = File::open(filename.clone()).ok().unwrap();
-                let f = BufReader::new(f);
-                let _: (SetOntology<RcStr>, _) =
-                    horned_owl::io::omn::nom_reader::read(f, Default::default())
                         .ok()
                         .unwrap();
             })

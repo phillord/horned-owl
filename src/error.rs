@@ -2,7 +2,6 @@
 use std::fmt::{Display, Formatter};
 use std::ops::Range;
 
-use pest::RuleType;
 use thiserror::Error;
 
 /// The location in a file of an error
@@ -22,23 +21,6 @@ impl From<u64> for Location {
 impl From<Range<u64>> for Location {
     fn from(r: Range<u64>) -> Self {
         Location::ByteSpan(r)
-    }
-}
-
-impl From<pest::error::InputLocation> for Location {
-    fn from(l: pest::error::InputLocation) -> Self {
-        match l {
-            pest::error::InputLocation::Pos(x) => Location::BytePosition(x.try_into().unwrap()),
-            pest::error::InputLocation::Span((x, y)) => {
-                Location::ByteSpan(x.try_into().unwrap()..y.try_into().unwrap())
-            }
-        }
-    }
-}
-
-impl<'i> From<pest::Span<'i>> for Location {
-    fn from(span: pest::Span<'i>) -> Self {
-        Location::ByteSpan(span.start().try_into().unwrap()..span.end().try_into().unwrap())
     }
 }
 
@@ -120,13 +102,6 @@ impl From<quick_xml::encoding::EncodingError> for HornedError {
 impl From<oxrdfio::RdfParseError> for HornedError {
     fn from(e: oxrdfio::RdfParseError) -> Self {
         Self::ParserError(e.into(), Location::Unknown)
-    }
-}
-
-impl<R: RuleType + 'static> From<pest::error::Error<R>> for HornedError {
-    fn from(e: pest::error::Error<R>) -> Self {
-        let location = e.location.clone().into();
-        Self::ParserError(e.into(), location)
     }
 }
 

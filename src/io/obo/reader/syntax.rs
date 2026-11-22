@@ -1,4 +1,4 @@
-//! Parsers for the OBO 1.4 syntax, following `grammars/obo/obo14.pest`.
+//! Parsers for the OBO 1.4 syntax, following `horned-pest/src/grammars/obo/obo14.pest`.
 //!
 //! The pest grammar is a PEG: ordered choice commits and repetition does
 //! not backtrack. These functions do the same, rule for rule, so they
@@ -12,7 +12,7 @@
 //!
 //! Every parser takes the remaining text and returns the text after what it
 //! matched together with a value, or `None`.
-use crate::io::ofn::nom_reader::rfc3987::{iri_len, url_id_len};
+use crate::io::ofn::reader::rfc3987::{iri_len, url_id_len};
 
 pub(super) type PResult<'a, T> = Option<(&'a str, T)>;
 

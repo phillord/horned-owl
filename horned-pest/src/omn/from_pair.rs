@@ -4,9 +4,9 @@ use pest::iterators::Pair;
 use std::collections::BTreeSet;
 use std::collections::HashSet;
 
-use crate::error::HornedError;
-use crate::model::*;
-use crate::vocab::{Facet, OWL};
+use horned_owl::error::HornedError;
+use horned_owl::model::*;
+use horned_owl::vocab::{Facet, OWL};
 
 use super::Rule;
 
@@ -102,7 +102,7 @@ pub trait FromPair<A: ForIRI>: Sized {
     #[inline]
     fn from_pair(pair: Pair<Rule>, ctx: &Context<'_, A>) -> Result<Self> {
         if cfg!(debug_assertions) && pair.as_rule() != Self::RULE {
-            return Err(HornedError::from(pest::error::Error::new_from_span(
+            return Err(crate::pest_error(pest::error::Error::new_from_span(
                 pest::error::ErrorVariant::ParsingError {
                     positives: vec![pair.as_rule()],
                     negatives: vec![Self::RULE],
@@ -181,12 +181,14 @@ impl<A: ForIRI> FromPair<A> for IRI<A> {
                 );
                 match ctx.prefixes.expand_curie(&curie) {
                     Ok(s) => Ok(ctx.build.iri(s)),
-                    Err(curie::ExpansionError::Invalid) => {
-                        Err(HornedError::invalid_at("undefined prefix", span))
-                    }
-                    Err(curie::ExpansionError::MissingDefault) => {
-                        Err(HornedError::invalid_at("missing default prefix", span))
-                    }
+                    Err(curie::ExpansionError::Invalid) => Err(HornedError::invalid_at(
+                        "undefined prefix",
+                        crate::span_location(span),
+                    )),
+                    Err(curie::ExpansionError::MissingDefault) => Err(HornedError::invalid_at(
+                        "missing default prefix",
+                        crate::span_location(span),
+                    )),
                 }
             }
             Rule::FullIRI => {
@@ -202,12 +204,13 @@ impl<A: ForIRI> FromPair<A> for IRI<A> {
                 let curie = Curie::new(Some(""), inner.as_str());
                 match ctx.prefixes.expand_curie(&curie) {
                     Ok(s) => Ok(ctx.build.iri(s)),
-                    Err(curie::ExpansionError::Invalid) => {
-                        Err(HornedError::invalid_at("undefined prefix", span))
-                    }
+                    Err(curie::ExpansionError::Invalid) => Err(HornedError::invalid_at(
+                        "undefined prefix",
+                        crate::span_location(span),
+                    )),
                     Err(curie::ExpansionError::MissingDefault) => Err(HornedError::invalid_at(
                         "bare local name but no default prefix is declared",
-                        span,
+                        crate::span_location(span),
                     )),
                 }
             }
@@ -357,7 +360,7 @@ impl<A: ForIRI> FromPair<A> for FacetRestriction<A> {
         let f = facet_from_symbol(sym_str).ok_or_else(|| {
             HornedError::invalid_at(
                 format!("unknown facet symbol: {sym_str}"),
-                sym_pair.as_span(),
+                crate::span_location(sym_pair.as_span()),
             )
         })?;
         let l = Literal::from_pair(inner.next().unwrap(), ctx)?;
@@ -765,7 +768,10 @@ impl<A: ForIRI> FromPair<A> for ClassExpression<A> {
                         "min" => {
                             let card_pair = children.next().unwrap();
                             let n: u32 = card_pair.as_str().parse().map_err(|_| {
-                                HornedError::invalid_at("invalid cardinality", card_pair.as_span())
+                                HornedError::invalid_at(
+                                    "invalid cardinality",
+                                    crate::span_location(card_pair.as_span()),
+                                )
                             })?;
                             let filler_pair = children.next();
                             // Flip to data cardinality ONLY when there is an EXPLICIT filler
@@ -788,7 +794,7 @@ impl<A: ForIRI> FromPair<A> for ClassExpression<A> {
                                             }),
                                             _ => Err(HornedError::invalid_at(
                                                 "data property cannot be inverse",
-                                                r_span,
+                                                crate::span_location(r_span),
                                             )),
                                         },
                                         None => Ok(ClassExpression::ObjectMinCardinality {
@@ -809,7 +815,10 @@ impl<A: ForIRI> FromPair<A> for ClassExpression<A> {
                         "max" => {
                             let card_pair = children.next().unwrap();
                             let n: u32 = card_pair.as_str().parse().map_err(|_| {
-                                HornedError::invalid_at("invalid cardinality", card_pair.as_span())
+                                HornedError::invalid_at(
+                                    "invalid cardinality",
+                                    crate::span_location(card_pair.as_span()),
+                                )
                             })?;
                             let filler_pair = children.next();
                             match filler_pair {
@@ -826,7 +835,7 @@ impl<A: ForIRI> FromPair<A> for ClassExpression<A> {
                                             }),
                                             _ => Err(HornedError::invalid_at(
                                                 "data property cannot be inverse",
-                                                r_span,
+                                                crate::span_location(r_span),
                                             )),
                                         },
                                         None => Ok(ClassExpression::ObjectMaxCardinality {
@@ -847,7 +856,10 @@ impl<A: ForIRI> FromPair<A> for ClassExpression<A> {
                         "exactly" => {
                             let card_pair = children.next().unwrap();
                             let n: u32 = card_pair.as_str().parse().map_err(|_| {
-                                HornedError::invalid_at("invalid cardinality", card_pair.as_span())
+                                HornedError::invalid_at(
+                                    "invalid cardinality",
+                                    crate::span_location(card_pair.as_span()),
+                                )
                             })?;
                             let filler_pair = children.next();
                             match filler_pair {
@@ -864,7 +876,7 @@ impl<A: ForIRI> FromPair<A> for ClassExpression<A> {
                                             }),
                                             _ => Err(HornedError::invalid_at(
                                                 "data property cannot be inverse",
-                                                r_span,
+                                                crate::span_location(r_span),
                                             )),
                                         },
                                         None => Ok(ClassExpression::ObjectExactCardinality {
@@ -884,7 +896,7 @@ impl<A: ForIRI> FromPair<A> for ClassExpression<A> {
                         }
                         kw => Err(HornedError::invalid_at(
                             format!("unknown object restriction keyword: {kw}"),
-                            r_span,
+                            crate::span_location(r_span),
                         )),
                     }
                 } else {
@@ -909,7 +921,10 @@ impl<A: ForIRI> FromPair<A> for ClassExpression<A> {
                         "min" => {
                             let card_pair = children.next().unwrap();
                             let n: u32 = card_pair.as_str().parse().map_err(|_| {
-                                HornedError::invalid_at("invalid cardinality", card_pair.as_span())
+                                HornedError::invalid_at(
+                                    "invalid cardinality",
+                                    crate::span_location(card_pair.as_span()),
+                                )
                             })?;
                             let dr = match children.next() {
                                 Some(p) => DataRange::from_pair(p, ctx)?,
@@ -923,7 +938,10 @@ impl<A: ForIRI> FromPair<A> for ClassExpression<A> {
                         "max" => {
                             let card_pair = children.next().unwrap();
                             let n: u32 = card_pair.as_str().parse().map_err(|_| {
-                                HornedError::invalid_at("invalid cardinality", card_pair.as_span())
+                                HornedError::invalid_at(
+                                    "invalid cardinality",
+                                    crate::span_location(card_pair.as_span()),
+                                )
                             })?;
                             let dr = match children.next() {
                                 Some(p) => DataRange::from_pair(p, ctx)?,
@@ -937,7 +955,10 @@ impl<A: ForIRI> FromPair<A> for ClassExpression<A> {
                         "exactly" => {
                             let card_pair = children.next().unwrap();
                             let n: u32 = card_pair.as_str().parse().map_err(|_| {
-                                HornedError::invalid_at("invalid cardinality", card_pair.as_span())
+                                HornedError::invalid_at(
+                                    "invalid cardinality",
+                                    crate::span_location(card_pair.as_span()),
+                                )
                             })?;
                             let dr = match children.next() {
                                 Some(p) => DataRange::from_pair(p, ctx)?,
@@ -950,7 +971,7 @@ impl<A: ForIRI> FromPair<A> for ClassExpression<A> {
                         }
                         kw => Err(HornedError::invalid_at(
                             format!("unknown data restriction keyword: {kw}"),
-                            r_span,
+                            crate::span_location(r_span),
                         )),
                     }
                 }
@@ -1917,7 +1938,7 @@ fn insert_rule_frame<A: ForIRI, O: MutableOntology<A>>(
     let body = parse_swrl_atom_list(first, ctx)?;
     let head = parse_swrl_atom_list(inner.next().unwrap(), ctx)?;
     ont.insert(AnnotatedComponent {
-        component: Component::Rule(crate::model::Rule { head, body }),
+        component: Component::Rule(horned_owl::model::Rule { head, body }),
         ann,
     });
     Ok(())
@@ -2342,8 +2363,8 @@ fn insert_datatype_frame<A: ForIRI, O: MutableOntology<A>>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::io::omn::reader::lexer::ManchesterLexer;
-    use crate::model::{Build, RcStr};
+    use crate::omn::lexer::ManchesterLexer;
+    use horned_owl::model::{Build, RcStr};
     use rstest::rstest;
 
     #[test]
@@ -2393,7 +2414,7 @@ mod tests {
         match parsed {
             DataRange::DatatypeRestriction(_, facets) => {
                 assert_eq!(facets.len(), 1);
-                assert_eq!(facets[0].f, crate::vocab::Facet::MinInclusive);
+                assert_eq!(facets[0].f, horned_owl::vocab::Facet::MinInclusive);
                 assert_eq!(
                     facets[0].l,
                     Literal::Datatype {
@@ -2463,7 +2484,7 @@ mod tests {
             DataRange::DatatypeRestriction(dt, facets) => {
                 assert_eq!(dt, b.datatype("http://www.w3.org/2001/XMLSchema#integer"));
                 assert_eq!(facets.len(), 1);
-                assert_eq!(facets[0].f, crate::vocab::Facet::MinInclusive);
+                assert_eq!(facets[0].f, horned_owl::vocab::Facet::MinInclusive);
             }
             _ => panic!("expected DatatypeRestriction, got {parsed:?}"),
         }
@@ -2471,11 +2492,10 @@ mod tests {
 
     #[test]
     fn parses_class_expressions() {
-        use crate::model::*;
+        use horned_owl::model::*;
         let b = Build::new_rc();
         let pm = curie::PrefixMapping::default();
-        let p =
-            |s: &str| crate::io::omn::reader::parse_class_expression::<RcStr>(s, &pm, &b).unwrap();
+        let p = |s: &str| crate::omn::parse_class_expression::<RcStr>(s, &pm, &b).unwrap();
         let a = ClassExpression::Class(b.class("http://t/A"));
         let c = ClassExpression::Class(b.class("http://t/C"));
         let d = ClassExpression::Class(b.class("http://t/D"));
@@ -2536,11 +2556,10 @@ mod tests {
 
     #[test]
     fn parses_restriction_without_whitespace() {
-        use crate::model::*;
+        use horned_owl::model::*;
         let b = Build::new_rc();
         let pm = curie::PrefixMapping::default();
-        let p =
-            |s: &str| crate::io::omn::reader::parse_class_expression::<RcStr>(s, &pm, &b).unwrap();
+        let p = |s: &str| crate::omn::parse_class_expression::<RcStr>(s, &pm, &b).unwrap();
         let r = ObjectPropertyExpression::ObjectProperty(b.object_property("http://t/r"));
         let a = ClassExpression::Class(b.class("http://t/A"));
         // whitespace between keyword and filler is OPTIONAL in the grammar
@@ -2555,8 +2574,8 @@ mod tests {
 
     #[test]
     fn class_expression_round_trips() {
-        use crate::io::omn::AsManchester;
-        use crate::model::*;
+        use horned_owl::io::omn::AsManchester;
+        use horned_owl::model::*;
         let b = Build::new_rc();
         let pm = curie::PrefixMapping::default();
         let a = ClassExpression::Class(b.class("http://t/A"));
@@ -2633,9 +2652,8 @@ mod tests {
         ];
         for ce in &cases {
             let rendered = ce.as_manchester().to_string();
-            let parsed =
-                crate::io::omn::reader::parse_class_expression::<RcStr>(&rendered, &pm, &b)
-                    .unwrap_or_else(|e| panic!("PARSE FAILED for {rendered:?}: {e}"));
+            let parsed = crate::omn::parse_class_expression::<RcStr>(&rendered, &pm, &b)
+                .unwrap_or_else(|e| panic!("PARSE FAILED for {rendered:?}: {e}"));
             assert_eq!(
                 &parsed, ce,
                 "ROUND-TRIP MISMATCH\n  rendered: {rendered}\n  expected: {ce:?}\n  got:      {parsed:?}"
@@ -2645,13 +2663,12 @@ mod tests {
 
     #[test]
     fn parses_value_self_and_data_restriction() {
-        use crate::model::*;
+        use horned_owl::model::*;
         let b = Build::new_rc();
         let mut pm = curie::PrefixMapping::default();
         pm.add_prefix("xsd", "http://www.w3.org/2001/XMLSchema#")
             .unwrap();
-        let p =
-            |s: &str| crate::io::omn::reader::parse_class_expression::<RcStr>(s, &pm, &b).unwrap();
+        let p = |s: &str| crate::omn::parse_class_expression::<RcStr>(s, &pm, &b).unwrap();
         let r = ObjectPropertyExpression::ObjectProperty(b.object_property("http://t/r"));
         let x = Individual::Named(b.named_individual("http://t/x"));
         assert_eq!(
@@ -2693,11 +2710,10 @@ mod tests {
     /// object-arm `ObjectOneOf`.
     #[test]
     fn parses_literal_enumeration_data_restriction() {
-        use crate::model::*;
+        use horned_owl::model::*;
         let b = Build::new_rc();
         let pm = curie::PrefixMapping::default();
-        let p =
-            |s: &str| crate::io::omn::reader::parse_class_expression::<RcStr>(s, &pm, &b).unwrap();
+        let p = |s: &str| crate::omn::parse_class_expression::<RcStr>(s, &pm, &b).unwrap();
 
         let dp = b.data_property("http://t/dp");
         let one_of = DataRange::DataOneOf(vec![
@@ -2741,11 +2757,10 @@ mod tests {
     /// as object complements.
     #[test]
     fn parses_negated_data_range_restriction() {
-        use crate::model::*;
+        use horned_owl::model::*;
         let b = Build::new_rc();
         let pm = curie::PrefixMapping::default();
-        let p =
-            |s: &str| crate::io::omn::reader::parse_class_expression::<RcStr>(s, &pm, &b).unwrap();
+        let p = |s: &str| crate::omn::parse_class_expression::<RcStr>(s, &pm, &b).unwrap();
         let dp = b.data_property("http://t/dp");
         let xsd_int = "http://www.w3.org/2001/XMLSchema#integer";
         let xsd_float = "http://www.w3.org/2001/XMLSchema#float";
@@ -2808,9 +2823,9 @@ mod tests {
     /// the reader must flip it to a data restriction over `DataComplementOf`.
     #[test]
     fn flips_negated_declared_datatype_to_data_restriction() {
-        use crate::io::omn::reader::read;
-        use crate::model::*;
-        use crate::ontology::set::SetOntology;
+        use crate::omn::read;
+        use horned_owl::model::*;
+        use horned_owl::ontology::set::SetOntology;
         use std::io::BufReader;
 
         let has_sup = |ont: &SetOntology<RcStr>, want: &ClassExpression<RcStr>| {
@@ -2825,7 +2840,7 @@ mod tests {
         let doc = "Prefix: : <http://e/>\nDatatype: :MyType\nClass: :C\n    SubClassOf: :p some not :MyType\n";
         let (ont, _): (SetOntology<_>, PrefixMapping) = read(
             BufReader::new(doc.as_bytes()),
-            crate::io::ParserConfiguration::new(&b),
+            horned_owl::io::ParserConfiguration::new(&b),
         )
         .unwrap();
         assert!(
@@ -2848,7 +2863,7 @@ mod tests {
             "Prefix: : <http://e/>\nDataProperty: :p\nClass: :C\n    SubClassOf: :p only not :X\n";
         let (ont2, _): (SetOntology<_>, PrefixMapping) = read(
             BufReader::new(doc2.as_bytes()),
-            crate::io::ParserConfiguration::new(&b2),
+            horned_owl::io::ParserConfiguration::new(&b2),
         )
         .unwrap();
         assert!(has_sup(
@@ -2866,7 +2881,7 @@ mod tests {
         let doc3 = "Prefix: : <http://e/>\nClass: :C\n    SubClassOf: :p some not :Y\n";
         let (ont3, _): (SetOntology<_>, PrefixMapping) = read(
             BufReader::new(doc3.as_bytes()),
-            crate::io::ParserConfiguration::new(&b3),
+            horned_owl::io::ParserConfiguration::new(&b3),
         )
         .unwrap();
         assert!(ont3.iter().any(|ac| matches!(
@@ -2884,9 +2899,9 @@ mod tests {
     /// `DataComplementOf` range.
     #[test]
     fn flips_negated_datatype_in_cardinality() {
-        use crate::io::omn::reader::read;
-        use crate::model::*;
-        use crate::ontology::set::SetOntology;
+        use crate::omn::read;
+        use horned_owl::model::*;
+        use horned_owl::ontology::set::SetOntology;
         use std::io::BufReader;
 
         let b = Build::new_rc();
@@ -2894,7 +2909,7 @@ mod tests {
                    SubClassOf: :p min 2 not :MyType\n    SubClassOf: :q exactly 1 not :MyType\n";
         let (ont, _): (SetOntology<_>, PrefixMapping) = read(
             BufReader::new(doc.as_bytes()),
-            crate::io::ParserConfiguration::new(&b),
+            horned_owl::io::ParserConfiguration::new(&b),
         )
         .unwrap();
         let cx = ont
@@ -2935,10 +2950,10 @@ mod tests {
     /// non-boundary index and therefore never panics.
     #[test]
     fn reads_declarations_round_trip() {
-        use crate::io::omn::write;
-        use crate::model::RcAnnotatedComponent;
-        use crate::ontology::component_mapped::ComponentMappedOntology;
-        use crate::ontology::set::SetOntology;
+        use horned_owl::io::omn::write;
+        use horned_owl::model::RcAnnotatedComponent;
+        use horned_owl::ontology::component_mapped::ComponentMappedOntology;
+        use horned_owl::ontology::set::SetOntology;
         use std::io::BufReader;
         use std::rc::Rc;
 
@@ -2962,9 +2977,9 @@ mod tests {
         let mut buf = Vec::<u8>::new();
         write(&mut buf, &amo, Some(&pm)).unwrap();
 
-        let (parsed, _pm): (SetOntology<_>, PrefixMapping) = crate::io::omn::reader::read(
+        let (parsed, _pm): (SetOntology<_>, PrefixMapping) = crate::omn::read(
             BufReader::new(&buf[..]),
-            crate::io::ParserConfiguration::new(&b),
+            horned_owl::io::ParserConfiguration::new(&b),
         )
         .unwrap();
 
@@ -2976,10 +2991,10 @@ mod tests {
 
     #[test]
     fn reads_class_frame_round_trip() {
-        use crate::io::omn::write;
-        use crate::model::RcAnnotatedComponent;
-        use crate::ontology::component_mapped::ComponentMappedOntology;
-        use crate::ontology::set::SetOntology;
+        use horned_owl::io::omn::write;
+        use horned_owl::model::RcAnnotatedComponent;
+        use horned_owl::ontology::component_mapped::ComponentMappedOntology;
+        use horned_owl::ontology::set::SetOntology;
         use std::io::BufReader;
         use std::rc::Rc;
 
@@ -3019,9 +3034,9 @@ mod tests {
         let mut buf = Vec::<u8>::new();
         write(&mut buf, &amo, Some(&pm)).unwrap();
 
-        let (parsed, _): (SetOntology<_>, PrefixMapping) = crate::io::omn::reader::read(
+        let (parsed, _): (SetOntology<_>, PrefixMapping) = crate::omn::read(
             BufReader::new(&buf[..]),
-            crate::io::ParserConfiguration::new(&b),
+            horned_owl::io::ParserConfiguration::new(&b),
         )
         .unwrap();
 
@@ -3033,10 +3048,10 @@ mod tests {
 
     #[test]
     fn reads_object_property_frame_round_trip() {
-        use crate::io::omn::write;
-        use crate::model::RcAnnotatedComponent;
-        use crate::ontology::component_mapped::ComponentMappedOntology;
-        use crate::ontology::set::SetOntology;
+        use horned_owl::io::omn::write;
+        use horned_owl::model::RcAnnotatedComponent;
+        use horned_owl::ontology::component_mapped::ComponentMappedOntology;
+        use horned_owl::ontology::set::SetOntology;
         use std::io::BufReader;
         use std::rc::Rc;
 
@@ -3089,9 +3104,9 @@ mod tests {
         let amo: TestOnt = o.clone().into();
         let mut buf = Vec::<u8>::new();
         write(&mut buf, &amo, Some(&pm)).unwrap();
-        let (parsed, _): (SetOntology<_>, PrefixMapping) = crate::io::omn::reader::read(
+        let (parsed, _): (SetOntology<_>, PrefixMapping) = crate::omn::read(
             BufReader::new(&buf[..]),
-            crate::io::ParserConfiguration::new(&b),
+            horned_owl::io::ParserConfiguration::new(&b),
         )
         .unwrap();
 
@@ -3103,10 +3118,10 @@ mod tests {
 
     #[test]
     fn reads_data_property_frame_round_trip() {
-        use crate::io::omn::write;
-        use crate::model::RcAnnotatedComponent;
-        use crate::ontology::component_mapped::ComponentMappedOntology;
-        use crate::ontology::set::SetOntology;
+        use horned_owl::io::omn::write;
+        use horned_owl::model::RcAnnotatedComponent;
+        use horned_owl::ontology::component_mapped::ComponentMappedOntology;
+        use horned_owl::ontology::set::SetOntology;
         use std::io::BufReader;
         use std::rc::Rc;
 
@@ -3165,9 +3180,9 @@ mod tests {
         let amo: TestOnt = o.clone().into();
         let mut buf = Vec::<u8>::new();
         write(&mut buf, &amo, Some(&pm)).unwrap();
-        let (parsed, _): (SetOntology<_>, PrefixMapping) = crate::io::omn::reader::read(
+        let (parsed, _): (SetOntology<_>, PrefixMapping) = crate::omn::read(
             BufReader::new(&buf[..]),
-            crate::io::ParserConfiguration::new(&b),
+            horned_owl::io::ParserConfiguration::new(&b),
         )
         .unwrap();
 
@@ -3179,10 +3194,10 @@ mod tests {
 
     #[test]
     fn reads_annotation_property_frame_round_trip() {
-        use crate::io::omn::write;
-        use crate::model::RcAnnotatedComponent;
-        use crate::ontology::component_mapped::ComponentMappedOntology;
-        use crate::ontology::set::SetOntology;
+        use horned_owl::io::omn::write;
+        use horned_owl::model::RcAnnotatedComponent;
+        use horned_owl::ontology::component_mapped::ComponentMappedOntology;
+        use horned_owl::ontology::set::SetOntology;
         use std::io::BufReader;
         use std::rc::Rc;
 
@@ -3212,9 +3227,9 @@ mod tests {
         let amo: TestOnt = o.clone().into();
         let mut buf = Vec::<u8>::new();
         write(&mut buf, &amo, Some(&pm)).unwrap();
-        let (parsed, _): (SetOntology<_>, PrefixMapping) = crate::io::omn::reader::read(
+        let (parsed, _): (SetOntology<_>, PrefixMapping) = crate::omn::read(
             BufReader::new(&buf[..]),
-            crate::io::ParserConfiguration::new(&b),
+            horned_owl::io::ParserConfiguration::new(&b),
         )
         .unwrap();
 
@@ -3226,10 +3241,10 @@ mod tests {
 
     #[test]
     fn reads_individual_frame_round_trip() {
-        use crate::io::omn::write;
-        use crate::model::RcAnnotatedComponent;
-        use crate::ontology::component_mapped::ComponentMappedOntology;
-        use crate::ontology::set::SetOntology;
+        use horned_owl::io::omn::write;
+        use horned_owl::model::RcAnnotatedComponent;
+        use horned_owl::ontology::component_mapped::ComponentMappedOntology;
+        use horned_owl::ontology::set::SetOntology;
         use std::io::BufReader;
         use std::rc::Rc;
 
@@ -3288,9 +3303,9 @@ mod tests {
         let amo: TestOnt = o.clone().into();
         let mut buf = Vec::<u8>::new();
         write(&mut buf, &amo, Some(&pm)).unwrap();
-        let (parsed, _): (SetOntology<_>, PrefixMapping) = crate::io::omn::reader::read(
+        let (parsed, _): (SetOntology<_>, PrefixMapping) = crate::omn::read(
             BufReader::new(&buf[..]),
-            crate::io::ParserConfiguration::new(&b),
+            horned_owl::io::ParserConfiguration::new(&b),
         )
         .unwrap();
 
@@ -3302,11 +3317,10 @@ mod tests {
 
     #[test]
     fn parses_unicode_iri_property_no_panic() {
-        use crate::model::*;
+        use horned_owl::model::*;
         let b = Build::new_rc();
         let pm = curie::PrefixMapping::default();
-        let p =
-            |s: &str| crate::io::omn::reader::parse_class_expression::<RcStr>(s, &pm, &b).unwrap();
+        let p = |s: &str| crate::omn::parse_class_expression::<RcStr>(s, &pm, &b).unwrap();
         // `é` (U+00E9) is encoded as two bytes (0xC3 0xA9) in UTF-8.  The IRI
         // `<ab://éx>` is 12 UTF-8 bytes inside the angle brackets; byte index 7
         // (`<ab://` = 6 bytes for the bracket+scheme, then `é` starts at 6) falls
@@ -3326,9 +3340,10 @@ mod tests {
 
     #[test]
     fn reads_property_chain_round_trip() {
-        use crate::io::omn::{read, write};
-        use crate::ontology::component_mapped::ComponentMappedOntology;
-        use crate::ontology::set::SetOntology;
+        use crate::omn::read;
+        use horned_owl::io::omn::write;
+        use horned_owl::ontology::component_mapped::ComponentMappedOntology;
+        use horned_owl::ontology::set::SetOntology;
         use std::io::BufReader;
         let b = Build::new_rc();
         let mut pm = PrefixMapping::default();
@@ -3356,7 +3371,7 @@ mod tests {
         write(&mut buf, &amo, Some(&pm)).unwrap();
         let (parsed, _): (SetOntology<_>, PrefixMapping) = read(
             BufReader::new(&buf[..]),
-            crate::io::ParserConfiguration::new(&b),
+            horned_owl::io::ParserConfiguration::new(&b),
         )
         .unwrap();
         let orig: std::collections::BTreeSet<_> = o.iter().map(|ac| ac.component.clone()).collect();
@@ -3372,9 +3387,10 @@ mod tests {
 
     #[test]
     fn reads_haskey_round_trip() {
-        use crate::io::omn::{read, write};
-        use crate::ontology::component_mapped::ComponentMappedOntology;
-        use crate::ontology::set::SetOntology;
+        use crate::omn::read;
+        use horned_owl::io::omn::write;
+        use horned_owl::ontology::component_mapped::ComponentMappedOntology;
+        use horned_owl::ontology::set::SetOntology;
         use std::io::BufReader;
         let b = Build::new_rc();
         let mut pm = PrefixMapping::default();
@@ -3401,7 +3417,7 @@ mod tests {
         write(&mut buf, &amo, Some(&pm)).unwrap();
         let (parsed, _): (SetOntology<_>, PrefixMapping) = read(
             BufReader::new(&buf[..]),
-            crate::io::ParserConfiguration::new(&b),
+            horned_owl::io::ParserConfiguration::new(&b),
         )
         .unwrap();
         let orig: std::collections::BTreeSet<_> = o.iter().map(|ac| ac.component.clone()).collect();
@@ -3417,9 +3433,10 @@ mod tests {
 
     #[test]
     fn reads_import_round_trip() {
-        use crate::io::omn::{read, write};
-        use crate::ontology::component_mapped::ComponentMappedOntology;
-        use crate::ontology::set::SetOntology;
+        use crate::omn::read;
+        use horned_owl::io::omn::write;
+        use horned_owl::ontology::component_mapped::ComponentMappedOntology;
+        use horned_owl::ontology::set::SetOntology;
         use std::io::BufReader;
 
         let b = Build::new_rc();
@@ -3440,7 +3457,7 @@ mod tests {
 
         let (parsed, _): (SetOntology<_>, PrefixMapping) = read(
             BufReader::new(&buf[..]),
-            crate::io::ParserConfiguration::new(&b),
+            horned_owl::io::ParserConfiguration::new(&b),
         )
         .unwrap();
         let orig: std::collections::BTreeSet<_> = o.iter().map(|ac| ac.component.clone()).collect();
@@ -3456,10 +3473,11 @@ mod tests {
 
     #[test]
     fn whole_ontology_round_trips() {
-        use crate::io::omn::{read, write};
-        use crate::model::RcAnnotatedComponent;
-        use crate::ontology::component_mapped::ComponentMappedOntology;
-        use crate::ontology::set::SetOntology;
+        use crate::omn::read;
+        use horned_owl::io::omn::write;
+        use horned_owl::model::RcAnnotatedComponent;
+        use horned_owl::ontology::component_mapped::ComponentMappedOntology;
+        use horned_owl::ontology::set::SetOntology;
         use std::io::BufReader;
         use std::rc::Rc;
 
@@ -3549,7 +3567,7 @@ mod tests {
 
         let (parsed, parsed_pm): (SetOntology<_>, PrefixMapping) = read(
             BufReader::new(&buf[..]),
-            crate::io::ParserConfiguration::new(&b),
+            horned_owl::io::ParserConfiguration::new(&b),
         )
         .unwrap();
 
@@ -3571,9 +3589,10 @@ mod tests {
 
     #[test]
     fn reads_axiom_annotations_round_trip() {
-        use crate::io::omn::{read, write};
-        use crate::ontology::component_mapped::ComponentMappedOntology;
-        use crate::ontology::set::SetOntology;
+        use crate::omn::read;
+        use horned_owl::io::omn::write;
+        use horned_owl::ontology::component_mapped::ComponentMappedOntology;
+        use horned_owl::ontology::set::SetOntology;
         use std::collections::BTreeSet;
         use std::io::BufReader;
         let b = Build::new_rc();
@@ -3636,7 +3655,7 @@ mod tests {
         write(&mut buf, &amo, Some(&pm)).unwrap();
         let (parsed, _): (SetOntology<_>, PrefixMapping) = read(
             BufReader::new(&buf[..]),
-            crate::io::ParserConfiguration::new(&b),
+            horned_owl::io::ParserConfiguration::new(&b),
         )
         .unwrap();
         // compare FULL AnnotatedComponents (component + ann), not just components
@@ -3652,9 +3671,10 @@ mod tests {
 
     #[test]
     fn reads_entity_and_ontology_annotations_round_trip() {
-        use crate::io::omn::{read, write};
-        use crate::ontology::component_mapped::ComponentMappedOntology;
-        use crate::ontology::set::SetOntology;
+        use crate::omn::read;
+        use horned_owl::io::omn::write;
+        use horned_owl::ontology::component_mapped::ComponentMappedOntology;
+        use horned_owl::ontology::set::SetOntology;
         use std::io::BufReader;
         let b = Build::new_rc();
         let mut pm = PrefixMapping::default();
@@ -3706,7 +3726,7 @@ mod tests {
         write(&mut buf, &amo, Some(&pm)).unwrap();
         let (parsed, _): (SetOntology<_>, PrefixMapping) = read(
             BufReader::new(&buf[..]),
-            crate::io::ParserConfiguration::new(&b),
+            horned_owl::io::ParserConfiguration::new(&b),
         )
         .unwrap();
         let orig: std::collections::BTreeSet<_> = o.iter().map(|ac| ac.component.clone()).collect();
@@ -3722,8 +3742,8 @@ mod tests {
 
     #[test]
     fn reads_general_axioms_block() {
-        use crate::io::omn::reader::read;
-        use crate::ontology::set::SetOntology;
+        use crate::omn::read;
+        use horned_owl::ontology::set::SetOntology;
         use std::io::BufReader;
         let b = Build::new_rc();
         // A frame plus a trailing functional-syntax `# General axioms` block
@@ -3734,7 +3754,7 @@ mod tests {
                    AnnotationAssertion(<http://ex/p> <http://ex/CHEBI_1> \"tyramine\")\n";
         let (parsed, _): (SetOntology<_>, PrefixMapping) = read(
             BufReader::new(doc.as_bytes()),
-            crate::io::ParserConfiguration::new(&b),
+            horned_owl::io::ParserConfiguration::new(&b),
         )
         .unwrap();
 
@@ -3774,8 +3794,8 @@ mod tests {
 
     #[test]
     fn general_axioms_block_parse_failure_is_skipped_not_errored() {
-        use crate::io::omn::reader::read;
-        use crate::ontology::set::SetOntology;
+        use crate::omn::read;
+        use horned_owl::ontology::set::SetOntology;
         use std::io::BufReader;
         let b = Build::new_rc();
         // A `# General axioms` block the functional-syntax reader cannot parse
@@ -3785,7 +3805,7 @@ mod tests {
                    NotARealAxiom(@@@ broken)\n";
         let (parsed, _): (SetOntology<_>, PrefixMapping) = read(
             BufReader::new(doc.as_bytes()),
-            crate::io::ParserConfiguration::new(&b),
+            horned_owl::io::ParserConfiguration::new(&b),
         )
         .expect("unparseable general-axioms block must not error the read");
         assert!(
@@ -3804,15 +3824,15 @@ mod tests {
     /// with NO DeclareClass for the complex subject.
     #[test]
     fn reads_complex_lhs_class_frame_as_gci_subclassof() {
-        use crate::io::omn::reader::read;
-        use crate::ontology::set::SetOntology;
+        use crate::omn::read;
+        use horned_owl::ontology::set::SetOntology;
         use std::io::BufReader;
 
         let b = Build::new_rc();
         let src = "Prefix: : <http://e/>\nClass: :r some :C\n    SubClassOf: :D\n";
         let (ont, _): (SetOntology<_>, PrefixMapping) = read(
             BufReader::new(src.as_bytes()),
-            crate::io::ParserConfiguration::new(&b),
+            horned_owl::io::ParserConfiguration::new(&b),
         )
         .unwrap_or_else(|e| panic!("complex-LHS GCI should parse: {e}"));
 
@@ -3856,15 +3876,15 @@ mod tests {
     /// `DeclareClass(:A)` + `SubClassOf(:A, :B)` (behaviour must be byte-identical).
     #[test]
     fn reads_atomic_class_frame_unchanged() {
-        use crate::io::omn::reader::read;
-        use crate::ontology::set::SetOntology;
+        use crate::omn::read;
+        use horned_owl::ontology::set::SetOntology;
         use std::io::BufReader;
 
         let b = Build::new_rc();
         let src = "Prefix: : <http://e/>\nClass: :A\n    SubClassOf: :B\n";
         let (ont, _): (SetOntology<_>, PrefixMapping) = read(
             BufReader::new(src.as_bytes()),
-            crate::io::ParserConfiguration::new(&b),
+            horned_owl::io::ParserConfiguration::new(&b),
         )
         .unwrap_or_else(|e| panic!("atomic class frame should parse: {e}"));
 
@@ -3889,15 +3909,15 @@ mod tests {
     /// Complex-LHS `EquivalentTo:` parsed as `EquivalentClasses(complexCE, X)`.
     #[test]
     fn reads_complex_lhs_class_frame_equivalentto() {
-        use crate::io::omn::reader::read;
-        use crate::ontology::set::SetOntology;
+        use crate::omn::read;
+        use horned_owl::ontology::set::SetOntology;
         use std::io::BufReader;
 
         let b = Build::new_rc();
         let src = "Prefix: : <http://e/>\nClass: :r some :C\n    EquivalentTo: :D\n";
         let (ont, _): (SetOntology<_>, PrefixMapping) = read(
             BufReader::new(src.as_bytes()),
-            crate::io::ParserConfiguration::new(&b),
+            horned_owl::io::ParserConfiguration::new(&b),
         )
         .unwrap_or_else(|e| panic!("complex-LHS EquivalentTo should parse: {e}"));
 
@@ -3925,10 +3945,11 @@ mod tests {
 
     #[test]
     fn whole_ontology_with_extras_round_trips() {
-        use crate::io::omn::{read, write};
-        use crate::model::RcAnnotatedComponent;
-        use crate::ontology::component_mapped::ComponentMappedOntology;
-        use crate::ontology::set::SetOntology;
+        use crate::omn::read;
+        use horned_owl::io::omn::write;
+        use horned_owl::model::RcAnnotatedComponent;
+        use horned_owl::ontology::component_mapped::ComponentMappedOntology;
+        use horned_owl::ontology::set::SetOntology;
         use std::collections::BTreeSet;
         use std::io::BufReader;
         use std::rc::Rc;
@@ -4025,7 +4046,7 @@ mod tests {
 
         let (parsed, _): (SetOntology<_>, PrefixMapping) = read(
             BufReader::new(&buf[..]),
-            crate::io::ParserConfiguration::new(&b),
+            horned_owl::io::ParserConfiguration::new(&b),
         )
         .unwrap();
 
@@ -4045,9 +4066,10 @@ mod tests {
         // With a DEFAULT (empty) prefix the writer emits bare local names
         // (`Class: Ancestor`, not `Class: :Ancestor`); the reader must accept
         // them via the `SimpleIRI` production for the round-trip to hold.
-        use crate::io::omn::{read, write};
-        use crate::ontology::component_mapped::ComponentMappedOntology;
-        use crate::ontology::set::SetOntology;
+        use crate::omn::read;
+        use horned_owl::io::omn::write;
+        use horned_owl::ontology::component_mapped::ComponentMappedOntology;
+        use horned_owl::ontology::set::SetOntology;
         use std::io::BufReader;
 
         let b = Build::new_rc();
@@ -4081,7 +4103,7 @@ mod tests {
 
         let (parsed, _): (SetOntology<_>, PrefixMapping) = read(
             BufReader::new(&buf[..]),
-            crate::io::ParserConfiguration::new(&b),
+            horned_owl::io::ParserConfiguration::new(&b),
         )
         .unwrap();
         let orig: BTreeSet<_> = o.iter().map(|ac| ac.component.clone()).collect();
@@ -4091,9 +4113,10 @@ mod tests {
 
     #[test]
     fn reads_version_iri_round_trip() {
-        use crate::io::omn::{read, write};
-        use crate::ontology::component_mapped::ComponentMappedOntology;
-        use crate::ontology::set::SetOntology;
+        use crate::omn::read;
+        use horned_owl::io::omn::write;
+        use horned_owl::ontology::component_mapped::ComponentMappedOntology;
+        use horned_owl::ontology::set::SetOntology;
         use std::io::BufReader;
         let b = Build::new_rc();
         let mut pm = PrefixMapping::default();
@@ -4119,7 +4142,7 @@ mod tests {
         );
         let (parsed, _): (SetOntology<_>, PrefixMapping) = read(
             BufReader::new(&buf[..]),
-            crate::io::ParserConfiguration::new(&b),
+            horned_owl::io::ParserConfiguration::new(&b),
         )
         .unwrap();
         let orig: std::collections::BTreeSet<_> = o.iter().map(|ac| ac.component.clone()).collect();
@@ -4132,9 +4155,10 @@ mod tests {
     fn ontology_iri_then_import_no_version_iri() {
         // Guard: the optional VersionIRI must NOT greedily grab a following Import.
         // `Ontology: ex:o` (no version) then `Import: ex:i` must round-trip the Import.
-        use crate::io::omn::{read, write};
-        use crate::ontology::component_mapped::ComponentMappedOntology;
-        use crate::ontology::set::SetOntology;
+        use crate::omn::read;
+        use horned_owl::io::omn::write;
+        use horned_owl::ontology::component_mapped::ComponentMappedOntology;
+        use horned_owl::ontology::set::SetOntology;
         use std::io::BufReader;
         let b = Build::new_rc();
         let mut pm = PrefixMapping::default();
@@ -4155,7 +4179,7 @@ mod tests {
         write(&mut buf, &amo, Some(&pm)).unwrap();
         let (parsed, _): (SetOntology<_>, PrefixMapping) = read(
             BufReader::new(&buf[..]),
-            crate::io::ParserConfiguration::new(&b),
+            horned_owl::io::ParserConfiguration::new(&b),
         )
         .unwrap();
         let orig: std::collections::BTreeSet<_> = o.iter().map(|ac| ac.component.clone()).collect();
@@ -4171,10 +4195,11 @@ mod tests {
 
     #[test]
     fn reads_compound_data_ranges_round_trip() {
-        use crate::io::omn::{read, write};
-        use crate::ontology::component_mapped::ComponentMappedOntology;
-        use crate::ontology::set::SetOntology;
-        use crate::vocab::Facet;
+        use crate::omn::read;
+        use horned_owl::io::omn::write;
+        use horned_owl::ontology::component_mapped::ComponentMappedOntology;
+        use horned_owl::ontology::set::SetOntology;
+        use horned_owl::vocab::Facet;
         use std::io::BufReader;
         let b = Build::new_rc();
         let mut pm = PrefixMapping::default();
@@ -4244,7 +4269,7 @@ mod tests {
         );
         let (parsed, _): (SetOntology<_>, PrefixMapping) = read(
             BufReader::new(&buf[..]),
-            crate::io::ParserConfiguration::new(&b),
+            horned_owl::io::ParserConfiguration::new(&b),
         )
         .unwrap();
         let orig: std::collections::BTreeSet<_> = o.iter().map(|ac| ac.component.clone()).collect();
@@ -4260,10 +4285,11 @@ mod tests {
 
     #[test]
     fn reads_datatype_definition_round_trip() {
-        use crate::io::omn::{read, write};
-        use crate::ontology::component_mapped::ComponentMappedOntology;
-        use crate::ontology::set::SetOntology;
-        use crate::vocab::Facet;
+        use crate::omn::read;
+        use horned_owl::io::omn::write;
+        use horned_owl::ontology::component_mapped::ComponentMappedOntology;
+        use horned_owl::ontology::set::SetOntology;
+        use horned_owl::vocab::Facet;
         use std::io::BufReader;
         let b = Build::new_rc();
         let mut pm = PrefixMapping::default();
@@ -4299,7 +4325,7 @@ mod tests {
         );
         let (parsed, _): (SetOntology<_>, PrefixMapping) = read(
             BufReader::new(&buf[..]),
-            crate::io::ParserConfiguration::new(&b),
+            horned_owl::io::ParserConfiguration::new(&b),
         )
         .unwrap();
         let orig: std::collections::BTreeSet<_> = o.iter().map(|ac| ac.component.clone()).collect();
@@ -4310,9 +4336,10 @@ mod tests {
 
     #[test]
     fn reads_misc_disjoint_complex_round_trip() {
-        use crate::io::omn::{read, write};
-        use crate::ontology::component_mapped::ComponentMappedOntology;
-        use crate::ontology::set::SetOntology;
+        use crate::omn::read;
+        use horned_owl::io::omn::write;
+        use horned_owl::ontology::component_mapped::ComponentMappedOntology;
+        use horned_owl::ontology::set::SetOntology;
         use std::io::BufReader;
         let b = Build::new_rc();
         let mut pm = PrefixMapping::default();
@@ -4348,7 +4375,7 @@ mod tests {
         );
         let (parsed, _): (SetOntology<_>, PrefixMapping) = read(
             BufReader::new(&buf[..]),
-            crate::io::ParserConfiguration::new(&b),
+            horned_owl::io::ParserConfiguration::new(&b),
         )
         .unwrap();
         let orig: std::collections::BTreeSet<_> = o.iter().map(|ac| ac.component.clone()).collect();
@@ -4363,9 +4390,10 @@ mod tests {
         // `DisjointProperties:`, NOT the functional `EquivalentObjectProperties:`):
         // a complex (inverse) first member has no frame subject, so these route to
         // the top-level Misc section.
-        use crate::io::omn::{read, write};
-        use crate::ontology::component_mapped::ComponentMappedOntology;
-        use crate::ontology::set::SetOntology;
+        use crate::omn::read;
+        use horned_owl::io::omn::write;
+        use horned_owl::ontology::component_mapped::ComponentMappedOntology;
+        use horned_owl::ontology::set::SetOntology;
         use std::io::BufReader;
         let b = Build::new_rc();
         let mut pm = PrefixMapping::default();
@@ -4398,7 +4426,7 @@ mod tests {
         );
         let (parsed, _): (SetOntology<_>, PrefixMapping) = read(
             BufReader::new(&buf[..]),
-            crate::io::ParserConfiguration::new(&b),
+            horned_owl::io::ParserConfiguration::new(&b),
         )
         .unwrap();
         let orig: std::collections::BTreeSet<_> = o.iter().map(|ac| ac.component.clone()).collect();
@@ -4417,8 +4445,8 @@ mod tests {
     /// greediness, so the post-comma form is the only one that exercises it.
     #[test]
     fn reads_mid_list_per_item_annotation() {
-        use crate::io::omn::reader::read;
-        use crate::ontology::set::SetOntology;
+        use crate::omn::read;
+        use horned_owl::ontology::set::SetOntology;
         use std::collections::BTreeSet;
         use std::io::BufReader;
         let b = Build::new_rc();
@@ -4431,7 +4459,7 @@ mod tests {
                    SubClassOf: :B, Annotations: ex:p \"x\" :C\n";
         let (parsed, _): (SetOntology<_>, PrefixMapping) = read(
             BufReader::new(doc.as_bytes()),
-            crate::io::ParserConfiguration::new(&b),
+            horned_owl::io::ParserConfiguration::new(&b),
         )
         .unwrap();
 
@@ -4475,8 +4503,8 @@ mod tests {
     /// every item via `merge_ann(&ann, item_ann)`.)
     #[test]
     fn leading_annotation_binds_first_item_only() {
-        use crate::io::omn::reader::read;
-        use crate::ontology::set::SetOntology;
+        use crate::omn::read;
+        use horned_owl::ontology::set::SetOntology;
         use std::collections::BTreeSet;
         use std::io::BufReader;
         let b = Build::new_rc();
@@ -4487,7 +4515,7 @@ mod tests {
                    SubClassOf: Annotations: ex:note \"x\" :B, :C\n";
         let (parsed, _): (SetOntology<_>, PrefixMapping) = read(
             BufReader::new(doc.as_bytes()),
-            crate::io::ParserConfiguration::new(&b),
+            horned_owl::io::ParserConfiguration::new(&b),
         )
         .unwrap();
 
@@ -4544,8 +4572,8 @@ mod tests {
     /// annotation binds the FIRST list item only, not the whole comma-list.
     #[test]
     fn leading_annotation_on_characteristics_and_facts_binds_first_only() {
-        use crate::io::omn::reader::read;
-        use crate::ontology::set::SetOntology;
+        use crate::omn::read;
+        use horned_owl::ontology::set::SetOntology;
         use std::collections::BTreeSet;
         use std::io::BufReader;
         let b = Build::new_rc();
@@ -4558,7 +4586,7 @@ mod tests {
                    Facts: Annotations: ex:note \"f\" ex:r ex:b, ex:r ex:c\n";
         let (parsed, _): (SetOntology<_>, PrefixMapping) = read(
             BufReader::new(doc.as_bytes()),
-            crate::io::ParserConfiguration::new(&b),
+            horned_owl::io::ParserConfiguration::new(&b),
         )
         .unwrap();
         let got: BTreeSet<_> = parsed.iter().cloned().collect();
@@ -4650,9 +4678,10 @@ mod tests {
     /// that the helper-signature refactor does not break the common case.
     #[test]
     fn reads_per_item_annotated_list_round_trip() {
-        use crate::io::omn::{read, write};
-        use crate::ontology::component_mapped::ComponentMappedOntology;
-        use crate::ontology::set::SetOntology;
+        use crate::omn::read;
+        use horned_owl::io::omn::write;
+        use horned_owl::ontology::component_mapped::ComponentMappedOntology;
+        use horned_owl::ontology::set::SetOntology;
         use std::collections::BTreeSet;
         use std::io::BufReader;
         let b = Build::new_rc();
@@ -4690,7 +4719,7 @@ mod tests {
         write(&mut buf, &amo, Some(&pm)).unwrap();
         let (parsed, _): (SetOntology<_>, PrefixMapping) = read(
             BufReader::new(&buf[..]),
-            crate::io::ParserConfiguration::new(&b),
+            horned_owl::io::ParserConfiguration::new(&b),
         )
         .unwrap();
         let orig: BTreeSet<_> = o.iter().cloned().collect();
@@ -4705,15 +4734,15 @@ mod tests {
 
     #[test]
     fn parses_swrl_rule() {
-        use crate::io::omn::read;
-        use crate::ontology::set::SetOntology;
+        use crate::omn::read;
+        use horned_owl::ontology::set::SetOntology;
         use std::io::BufReader;
         let b = Build::new_rc();
         // Body and head are object-property atoms; `o:r(?x, ?y) -> o:s(?x, ?y)`.
         let doc = "Prefix: o: <http://ex/>\nOntology: <http://ex/o>\nRule: \n    o:r(?<http://ex/x>, ?<http://ex/y>) -> o:s(?<http://ex/x>, ?<http://ex/y>)\n";
         let (parsed, _): (SetOntology<_>, PrefixMapping) = read(
             BufReader::new(doc.as_bytes()),
-            crate::io::ParserConfiguration::new(&b),
+            horned_owl::io::ParserConfiguration::new(&b),
         )
         .unwrap();
         let rule = parsed
@@ -4733,8 +4762,8 @@ mod tests {
     fn parses_swrl_atom_kinds() {
         // Disambiguation: data-property (literal 2nd arg), built-in (literal
         // 1st arg), datarange (datatype pred + literal), same-individual.
-        use crate::io::omn::read;
-        use crate::ontology::set::SetOntology;
+        use crate::omn::read;
+        use horned_owl::ontology::set::SetOntology;
         use std::io::BufReader;
         let b = Build::new_rc();
         let doc = concat!(
@@ -4745,7 +4774,7 @@ mod tests {
         );
         let (parsed, _): (SetOntology<_>, PrefixMapping) = read(
             BufReader::new(doc.as_bytes()),
-            crate::io::ParserConfiguration::new(&b),
+            horned_owl::io::ParserConfiguration::new(&b),
         )
         .unwrap();
         let mut seen = std::collections::BTreeSet::new();
@@ -4772,8 +4801,8 @@ mod tests {
 
     #[test]
     fn parses_swrlb_predicate_as_builtin_atom() {
-        use crate::io::omn::read;
-        use crate::ontology::set::SetOntology;
+        use crate::omn::read;
+        use horned_owl::ontology::set::SetOntology;
         use std::io::BufReader;
         let b = Build::new_rc();
         let doc = concat!(
@@ -4784,7 +4813,7 @@ mod tests {
         );
         let (parsed, _): (SetOntology<_>, PrefixMapping) = read(
             BufReader::new(doc.as_bytes()),
-            crate::io::ParserConfiguration::new(&b),
+            horned_owl::io::ParserConfiguration::new(&b),
         )
         .unwrap();
         let rule = parsed
@@ -4799,8 +4828,8 @@ mod tests {
 
     #[test]
     fn parses_sqwrl_predicate_as_builtin_atom() {
-        use crate::io::omn::read;
-        use crate::ontology::set::SetOntology;
+        use crate::omn::read;
+        use horned_owl::ontology::set::SetOntology;
         use std::io::BufReader;
         let b = Build::new_rc();
         let doc = concat!(
@@ -4811,7 +4840,7 @@ mod tests {
         );
         let (parsed, _): (SetOntology<_>, PrefixMapping) = read(
             BufReader::new(doc.as_bytes()),
-            crate::io::ParserConfiguration::new(&b),
+            horned_owl::io::ParserConfiguration::new(&b),
         )
         .unwrap();
         let rule = parsed
@@ -4826,15 +4855,15 @@ mod tests {
 
     #[test]
     fn parses_inverse_object_property_frame_subject() {
-        use crate::io::omn::read;
-        use crate::ontology::set::SetOntology;
+        use crate::omn::read;
+        use horned_owl::ontology::set::SetOntology;
         use std::io::BufReader;
         let b = Build::new_rc();
         // `ObjectProperty: inverse(o:r) Characteristics: Transitive`
         let doc = "Prefix: o: <http://ex/>\nOntology: <http://ex/o>\nObjectProperty: o:r\nObjectProperty: inverse (o:r)\n    Characteristics: Transitive\n";
         let (parsed, _): (SetOntology<_>, PrefixMapping) = read(
             BufReader::new(doc.as_bytes()),
-            crate::io::ParserConfiguration::new(&b),
+            horned_owl::io::ParserConfiguration::new(&b),
         )
         .unwrap();
         let t = parsed
@@ -4852,15 +4881,15 @@ mod tests {
 
     #[test]
     fn parses_annotated_class_declaration() {
-        use crate::io::omn::read;
-        use crate::ontology::set::SetOntology;
+        use crate::omn::read;
+        use horned_owl::ontology::set::SetOntology;
         use std::io::BufReader;
         let b = Build::new_rc();
         // Leading `Annotations:` before the subject annotates the Declaration.
         let doc = "Prefix: o: <http://ex/>\nPrefix: rdfs: <http://www.w3.org/2000/01/rdf-schema#>\nOntology: <http://ex/o>\nClass: \n    Annotations: rdfs:comment \"c\"\n  o:C\n";
         let (parsed, _): (SetOntology<_>, PrefixMapping) = read(
             BufReader::new(doc.as_bytes()),
-            crate::io::ParserConfiguration::new(&b),
+            horned_owl::io::ParserConfiguration::new(&b),
         )
         .unwrap();
         let decl_ann = parsed
@@ -4875,15 +4904,15 @@ mod tests {
 
     #[test]
     fn parses_nested_annotation_on_annotation() {
-        use crate::io::omn::read;
-        use crate::ontology::set::SetOntology;
+        use crate::omn::read;
+        use horned_owl::ontology::set::SetOntology;
         use std::io::BufReader;
         let b = Build::new_rc();
         // `Annotations: Annotations: ex:meta "m" ex:label "L"` — the inner annotates the outer.
         let doc = "Prefix: ex: <http://ex/>\nOntology: <http://ex/o>\nClass: ex:A\n    Annotations: Annotations: ex:meta \"m\" ex:label \"L\"\n";
         let (parsed, _): (SetOntology<_>, PrefixMapping) = read(
             BufReader::new(doc.as_bytes()),
-            crate::io::ParserConfiguration::new(&b),
+            horned_owl::io::ParserConfiguration::new(&b),
         )
         .unwrap();
         // The outer `ex:label "L"` annotation on ex:A is recovered as an
@@ -4915,15 +4944,16 @@ mod tests {
 
     #[test]
     fn nested_annotation_on_annotation_round_trips() {
-        use crate::io::omn::{read, write};
-        use crate::ontology::component_mapped::ComponentMappedOntology;
-        use crate::ontology::set::SetOntology;
+        use crate::omn::read;
+        use horned_owl::io::omn::write;
+        use horned_owl::ontology::component_mapped::ComponentMappedOntology;
+        use horned_owl::ontology::set::SetOntology;
         use std::io::BufReader;
         let b = Build::new_rc();
         let doc = "Prefix: ex: <http://ex/>\nOntology: <http://ex/o>\nClass: ex:A\n    Annotations: Annotations: ex:meta \"m\" ex:label \"L\"\n";
         let (parsed, pm): (SetOntology<_>, PrefixMapping) = read(
             BufReader::new(doc.as_bytes()),
-            crate::io::ParserConfiguration::new(&b),
+            horned_owl::io::ParserConfiguration::new(&b),
         )
         .unwrap();
 
@@ -4941,7 +4971,7 @@ mod tests {
         // And it survives a full re-read (semantic round-trip).
         let (reparsed, _): (SetOntology<_>, PrefixMapping) = read(
             BufReader::new(s.as_bytes()),
-            crate::io::ParserConfiguration::new(&b),
+            horned_owl::io::ParserConfiguration::new(&b),
         )
         .unwrap();
         // The nested annotation is an annotation on the AnnotationAssertion
@@ -4964,9 +4994,10 @@ mod tests {
 
     #[test]
     fn reads_anonymous_individuals_round_trip() {
-        use crate::io::omn::{read, write};
-        use crate::ontology::component_mapped::ComponentMappedOntology;
-        use crate::ontology::set::SetOntology;
+        use crate::omn::read;
+        use horned_owl::io::omn::write;
+        use horned_owl::ontology::component_mapped::ComponentMappedOntology;
+        use horned_owl::ontology::set::SetOntology;
         use std::io::BufReader;
         let b = Build::new_rc();
         let mut pm = PrefixMapping::default();
@@ -4993,7 +5024,7 @@ mod tests {
         );
         let (parsed, _): (SetOntology<_>, PrefixMapping) = read(
             BufReader::new(&buf[..]),
-            crate::io::ParserConfiguration::new(&b),
+            horned_owl::io::ParserConfiguration::new(&b),
         )
         .unwrap();
         let orig: std::collections::BTreeSet<_> = o.iter().map(|ac| ac.component.clone()).collect();
@@ -5016,8 +5047,8 @@ mod tests {
         // spot-checks — this locks the general-§2.5 capability in one test.
         // The component count + variant shapes were verified empirically with the
         // `omnread`/`omndump` harness before baking them in.
-        use crate::io::omn::read;
-        use crate::ontology::set::SetOntology;
+        use crate::omn::read;
+        use horned_owl::ontology::set::SetOntology;
         use std::io::BufReader;
         let b = Build::new_rc();
         let doc = "\
@@ -5046,7 +5077,7 @@ DisjointClasses: ex:r some ex:A, ex:r some ex:B
 ";
         let (parsed, _): (SetOntology<_>, PrefixMapping) = read(
             BufReader::new(doc.as_bytes()),
-            crate::io::ParserConfiguration::new(&b),
+            horned_owl::io::ParserConfiguration::new(&b),
         )
         .unwrap();
         let comps: Vec<_> = parsed.iter().map(|ac| ac.component.clone()).collect();
@@ -5164,10 +5195,10 @@ DisjointClasses: ex:r some ex:A, ex:r some ex:B
     /// skipped). A further [`COMPARE_EXCLUSIONS`] set covers fixtures whose two
     /// serialisations encode genuinely different ontologies; see that constant.
     #[rstest]
-    fn compare_to_owx(#[files("src/ont/owl-manchester/*.omn")] resource: std::path::PathBuf) {
-        use crate::model::{ComponentKind, Kinded};
-        use crate::normalize::normalize;
-        use crate::ontology::set::SetOntology;
+    fn compare_to_owx(#[files("../src/ont/owl-manchester/*.omn")] resource: std::path::PathBuf) {
+        use horned_owl::model::{ComponentKind, Kinded};
+        use horned_owl::normalize::normalize;
+        use horned_owl::ontology::set::SetOntology;
         use std::path::Path;
 
         let stem = Path::new(&resource)
@@ -5175,7 +5206,7 @@ DisjointClasses: ex:r some ex:A, ex:r some ex:B
             .unwrap()
             .to_string_lossy()
             .into_owned();
-        let owx_path = format!("src/ont/owl-xml/{stem}.owx");
+        let owx_path = format!("../src/ont/owl-xml/{stem}.owx");
         if !Path::new(&owx_path).exists() {
             // OMN-only fixture: no independent XML oracle to compare against.
             return;
@@ -5240,15 +5271,14 @@ DisjointClasses: ex:r some ex:A, ex:r some ex:B
             .map(std::io::BufReader::new)
             .unwrap();
         let (omn_ont, _): (SetOntology<RcStr>, _) =
-            crate::io::omn::reader::read(omn_reader, Default::default())
+            crate::omn::read(omn_reader, Default::default())
                 .unwrap_or_else(|e| panic!("OMN read failed for {}: {e:?}", resource.display()));
 
         // Read the OWL/XML form through the OWX reader (the oracle).
         let owx_src = std::fs::read_to_string(&owx_path).unwrap();
-        let owx_ont: SetOntology<RcStr> =
-            crate::io::owx::reader::test::read_ok(&mut owx_src.as_bytes())
-                .0
-                .into();
+        let owx_ont: SetOntology<RcStr> = crate::test_support::read_ok(&mut owx_src.as_bytes())
+            .0
+            .into();
 
         assert_eq!(
             canon(owx_ont),

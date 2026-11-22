@@ -1,7 +1,7 @@
 use pest::iterators::Pairs;
 use pest_derive::Parser;
 
-use crate::error::HornedError;
+use horned_owl::error::HornedError;
 
 /// The OWL2 Functional-style Syntax lexer.
 #[derive(Debug, Parser)]
@@ -21,7 +21,7 @@ impl OwlFunctionalLexer {
     /// [`Rule`]: ./enum.Rule.html
     /// [`pest::Parser::parse`]: https://docs.rs/pest/latest/pest/trait.Parser.html
     pub fn lex(rule: Rule, input: &str) -> Result<Pairs<'_, Rule>, HornedError> {
-        <Self as pest::Parser<Rule>>::parse(rule, input).map_err(From::from)
+        <Self as pest::Parser<Rule>>::parse(rule, input).map_err(crate::pest_error)
     }
 }
 
@@ -33,7 +33,7 @@ pub mod test {
     use std::path::PathBuf;
 
     #[rstest]
-    fn lex_resource(#[files("src/ont/owl-functional/*.ofn")] resource: PathBuf) {
+    fn lex_resource(#[files("../src/ont/owl-functional/*.ofn")] resource: PathBuf) {
         let ont_s = slurp::read_all_to_string(&resource).unwrap();
         match OwlFunctionalLexer::lex(Rule::OntologyDocument, ont_s.trim()) {
             Ok(mut pairs) => assert_eq!(pairs.next().unwrap().as_str(), ont_s.trim()),
