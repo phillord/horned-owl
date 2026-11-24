@@ -2793,6 +2793,18 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
             .any(|d| d.is_annotation_property(ap))
     }
 
+    /// Is `ap` declared as an annotation property, whatever else it is
+    /// also declared as, in this ontology or its import closure?
+    fn is_declared_annotation_property(
+        &self,
+        ap: &IRI<A>,
+        ic: &[&DeclarationMappedIndex<A, AA>],
+    ) -> bool {
+        std::iter::once(<O as AsRef<DeclarationMappedIndex<A, AA>>>::as_ref(&self.o))
+            .chain(ic.iter().copied())
+            .any(|d| d.is_declaration_kind(ap, NamedOWLEntityKind::AnnotationProperty))
+    }
+
     fn simple_annotations(
         &mut self,
         parse_all: bool,
@@ -2843,6 +2855,13 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
                     if parse_all
                         || s.is_annotation_property(ap, ic)
                         || is_annotation_builtin(ap.as_ref()) =>
+                {
+                    firi(s, t.triple(), iri)?
+                }
+                // An object property cannot take a literal, so for an
+                // illegal pun the annotation reading is the only one.
+                [Term::Iri(iri), Term::Iri(ap), Term::Literal(_)]
+                    if s.is_declared_annotation_property(ap, ic) =>
                 {
                     firi(s, t.triple(), iri)?
                 }
@@ -3822,6 +3841,21 @@ mod test {
         let ont: RcComponentMappedOntology = read_ttl(&text, true).unwrap().into();
         assert_eq!(ont.i().datatype_definition().count(), 1, "{text}");
         assert_eq!(ont.i().equivalent_class().count(), 0, "{text}");
+    }
+
+    /// A literal-valued assertion on an annotation property that is
+    /// also an object property is an annotation assertion.
+    #[test]
+    fn annotation_with_punned_object_and_annotation_property() {
+        for declarations in [
+            ":p a owl:AnnotationProperty .\n:p a owl:ObjectProperty .\n",
+            ":p a owl:ObjectProperty .\n:p a owl:AnnotationProperty .\n",
+        ] {
+            let text = format!("{ASSERT_HEAD}{declarations}:a :p \"x\" .\n");
+            let (ont, _) = read_ttl_incomplete(&text, false).unwrap();
+            let ont: RcComponentMappedOntology = ont.into();
+            assert_eq!(ont.i().annotation_assertion().count(), 1, "{text}");
+        }
     }
 
     fn read_from_format<R: BufRead>(bufread: &mut R, format: oxrdfio::RdfFormat) {
