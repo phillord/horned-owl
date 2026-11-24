@@ -187,3 +187,34 @@ fn accepts_the_library_vocabularies() {
         .collect();
     assert!(failures.is_empty(), "{}", failures.join("\n"));
 }
+
+fn enumeration_errors(sup: &str, literals: &str) -> usize {
+    let text = format!(
+        "vocabulary <http://e.com/v#> as v {{\n\textends <http://www.w3.org/2001/XMLSchema#> as xsd\n\tscalar S [\n\t\toneOf {literals}\n\t] = xsd:{sup}\n}}\n"
+    );
+    validate(&text)
+        .unwrap()
+        .iter()
+        .filter(|d| d.severity == Severity::Error)
+        .count()
+}
+
+#[test]
+fn enumerations_follow_the_xsd_hierarchy() {
+    // derived types fit their ancestors
+    assert_eq!(enumeration_errors("string", "\"a\"^^xsd:token"), 0);
+    assert_eq!(enumeration_errors("integer", "\"1\"^^xsd:int"), 0);
+    assert_eq!(enumeration_errors("decimal", "\"1\"^^xsd:unsignedByte"), 0);
+    // a bare integer may fit a narrower integer type
+    assert_eq!(enumeration_errors("int", "1, 2"), 0);
+    assert_eq!(
+        enumeration_errors("dateTime", "\"2020-01-01T00:00:00\"^^xsd:dateTime"),
+        0
+    );
+    // unrelated types do not
+    assert_eq!(enumeration_errors("int", "\"a\""), 1);
+    assert_eq!(enumeration_errors("anyURI", "1"), 1);
+    assert_eq!(enumeration_errors("dateTime", "\"a\""), 1);
+    assert_eq!(enumeration_errors("int", "1.5"), 1);
+    assert_eq!(enumeration_errors("token", "\"a\"^^xsd:integer"), 1);
+}

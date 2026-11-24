@@ -910,15 +910,59 @@ fn literal_type(checker: &Checker, literal: &Pair<Rule>) -> Option<&'static str>
     }
 }
 
+/// The XSD built-in types that we know, each with the type it derives from.
+const XSD_TYPES: &[(&str, Option<&str>)] = &[
+    ("string", None),
+    ("normalizedString", Some("string")),
+    ("token", Some("normalizedString")),
+    ("language", Some("token")),
+    ("Name", Some("token")),
+    ("NCName", Some("Name")),
+    ("NMTOKEN", Some("token")),
+    ("decimal", None),
+    ("integer", Some("decimal")),
+    ("nonPositiveInteger", Some("integer")),
+    ("negativeInteger", Some("nonPositiveInteger")),
+    ("long", Some("integer")),
+    ("int", Some("long")),
+    ("short", Some("int")),
+    ("byte", Some("short")),
+    ("nonNegativeInteger", Some("integer")),
+    ("unsignedLong", Some("nonNegativeInteger")),
+    ("unsignedInt", Some("unsignedLong")),
+    ("unsignedShort", Some("unsignedInt")),
+    ("unsignedByte", Some("unsignedShort")),
+    ("positiveInteger", Some("nonNegativeInteger")),
+    ("double", None),
+    ("float", None),
+    ("boolean", None),
+    ("dateTime", None),
+    ("dateTimeStamp", Some("dateTime")),
+    ("anyURI", None),
+    ("hexBinary", None),
+    ("base64Binary", None),
+];
+
 fn xsd_type(checker: &Checker, reference: &Pair<Rule>) -> Option<&'static str> {
     let iri = resolve_ref(&checker.prefixes, &checker.ns, reference.clone())?;
-    match iri.strip_prefix("http://www.w3.org/2001/XMLSchema#")? {
-        "string" => Some("string"),
-        "integer" => Some("integer"),
-        "decimal" => Some("decimal"),
-        "double" => Some("double"),
-        "boolean" => Some("boolean"),
-        _ => None,
+    let name = iri.strip_prefix("http://www.w3.org/2001/XMLSchema#")?;
+    XSD_TYPES.iter().find(|(n, _)| *n == name).map(|(n, _)| *n)
+}
+
+/// Whether `ty` is `base` or is derived from it.
+fn derives_from(mut ty: &str, base: &str) -> bool {
+    loop {
+        if ty == base {
+            return true;
+        }
+        match XSD_TYPES
+            .iter()
+            .find(|(n, _)| *n == ty)
+            .and_then(|(_, p)| *p)
+        {
+            Some(parent) => ty = parent,
+            None => return false,
+        }
     }
 }
 
@@ -1087,7 +1131,11 @@ impl Checker<'_> {
                 let Some(found) = literal_type(self, &literal) else {
                     continue;
                 };
-                if found != sup_type && !(found == "integer" && sup_type == "decimal") {
+                // An integer literal may fit a narrower integer type; that
+                // depends on its value, so it is not checked.
+                let fits = derives_from(found, sup_type)
+                    || (found == "integer" && derives_from(sup_type, "integer"));
+                if !fits {
                     self.error(
                         &literal,
                         format!(
