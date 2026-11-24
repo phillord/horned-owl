@@ -255,6 +255,39 @@ fn unescape_entities<'a>(
     quick_xml::escape::unescape_with(raw, |name| entities.get(name).map(String::as_str))
 }
 
+/// Append decoded character data to `out`.
+fn push_decoded<A: ForIRI, R: BufRead, B: AsRef<Build<A>>>(
+    r: &Read<A, R, B>,
+    raw: &[u8],
+    out: &mut String,
+) -> Result<(), HornedError> {
+    out.push_str(&r.reader.decoder().decode(raw)?);
+    Ok(())
+}
+
+/// Append the replacement text of a character or general entity reference
+/// to `out`, resolving DTD-declared entities as well as predefined ones.
+fn push_general_ref<A: ForIRI, R: BufRead, B: AsRef<Build<A>>>(
+    r: &Read<A, R, B>,
+    g: &quick_xml::events::BytesRef<'_>,
+    out: &mut String,
+) -> Result<(), HornedError> {
+    let pos = r.reader.buffer_position();
+    if g.is_char_ref() {
+        match g.resolve_char_ref() {
+            Ok(Some(c)) => out.push(c),
+            _ => return Err(invalid_at!(pos, "Invalid character reference")),
+        }
+    } else {
+        let name = r.reader.decoder().decode(g)?;
+        match r.entities.get(name.as_ref()) {
+            Some(v) => out.push_str(v),
+            None => return Err(invalid_at!(pos, "Unknown entity")),
+        }
+    }
+    Ok(())
+}
+
 /// The internal general entities declared in a DOCTYPE, with character
 /// references in their replacement text already resolved. Parameter and
 /// external entities are ignored.
@@ -282,41 +315,6 @@ fn parse_entity_declarations(doctype: &str) -> Vec<(String, String)> {
         rest = &body[end + 1..];
     }
     found
-}
-
-fn decode_expand_curie_maybe<'a, A: ForIRI, R: BufRead, B: AsRef<Build<A>>>(
-    r: &mut Read<A, R, B>,
-    val: &'a [u8],
-) -> Result<Cow<'a, str>, HornedError> {
-    // Okay, so a lot of matching, but without this the borrow checker
-    // is gonna complain. This let's us do the following:
-    // - if the CURIE can be decoded without replacement, and if it is
-    //   already a complete IRI, we don't have to copy it, and we can
-    //   return it as as borrowed string.
-    // - in any other case, we need to perform a copy, otherwise the decoded
-    //   string / unabbreviated IRI is not going to live long enough.
-    #[cfg(feature = "encoding")]
-    match r.reader.decode(val) {
-        Cow::Borrowed(b) => expand_curie_maybe(r, b),
-        Cow::Owned(o) => match expand_curie_maybe(r, &o) {
-            Cow::Borrowed(b) => Cow::Owned(b.to_string()),
-            Cow::Owned(o) => Cow::Owned(o),
-        },
-    }
-
-    #[cfg(not(feature = "encoding"))]
-    match r.reader.decoder().decode(val) {
-        Ok(curie) => {
-            // As with `get_attr_value_str`, decoding alone doesn't resolve
-            // XML entity/character references (e.g. `&#39;`) -- unescape
-            // before expanding, same as issue #239's other call site.
-            let unescaped = unescape_entities(&curie, &r.entities)
-                .map_err(|e| HornedError::ParserError(Box::new(e), Location::Unknown))?;
-            let cur = expand_curie_or_base_maybe(r, Cow::Owned(unescaped.into_owned()));
-            Ok(cur)
-        }
-        Err(e) => Err(HornedError::from(e)),
-    }
 }
 
 /// Expand a curie if there is an appropriate prefix
@@ -624,17 +622,15 @@ from_start! {
         let mut literal = String::new();
         let mut buf = Vec::new();
         loop {
-            if let Event::End(event) = r.reader.read_event_into(&mut buf)?
-                && let b"Literal" = event.local_name().as_ref() { break; }
-
-            // This decoding step is not sufficient on its own.
-            // For instance, "A --> B" would yield "A --&gt; B".
-            let escaped_str = r.reader.decoder().decode(&buf)?;
-            // Hence this next step.
-            let unescaped_str = unescape_entities(&escaped_str, &r.entities)
-                .map_err(|e| HornedError::ParserError(Box::new(e), Location::BytePosition(r.reader.buffer_position())))?;
-            // Finally, we add the unescaped string to the literal we are building.
-            literal.push_str(&unescaped_str);
+            buf.clear();
+            match r.reader.read_event_into(&mut buf)? {
+                Event::End(ref event) if event.local_name().as_ref() == b"Literal" => break,
+                Event::Eof => return Err(error_eof(r)),
+                Event::Text(ref t) => push_decoded(r, t, &mut literal)?,
+                Event::CData(ref t) => push_decoded(r, t, &mut literal)?,
+                Event::GeneralRef(ref g) => push_general_ref(r, g, &mut literal)?,
+                _ => {}
+            }
         }
         Ok(
             match (datatype_iri, lang, literal) {
@@ -1633,20 +1629,28 @@ from_start! {
 
 from_xml! {IRI, r, end,
         {
-            let mut iri: Option<IRI<_>> = None;
+            let mut text: Option<String> = None;
             let mut buf = Vec::new();
             loop {
+                buf.clear();
                 let e = r.reader.read_resolved_event_into(&mut buf)?;
                 match e {
                     (ref _ns,Event::Text(ref e)) => {
-                        let expanded = decode_expand_curie_maybe(r, e)?;
-                        iri = Some(r.build.as_ref().iri(expanded));
+                        push_decoded(r, e, text.get_or_insert_with(String::new))?;
+                    },
+                    (ref _ns,Event::GeneralRef(ref g)) => {
+                        push_general_ref(r, g, text.get_or_insert_with(String::new))?;
                     },
                     (ref ns, Event::End(ref e))
                         if is_owl_name(ns, e, end) =>
                     {
-                        return iri.ok_or_else(
-                            || error_unexpected_end_tag(end, r)                        );
+                        return match text {
+                            Some(t) => {
+                                let expanded = expand_curie_or_base_maybe(r, Cow::Owned(t));
+                                Ok(r.build.as_ref().iri(expanded))
+                            }
+                            None => Err(error_unexpected_end_tag(end, r)),
+                        };
                     },
                     (_, Event::Eof) => {
                         return Err(error_eof(r));

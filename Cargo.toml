@@ -20,7 +20,7 @@ enum_meta = "0.6.0"
 thiserror = "1.0"
 lazy_static="1.4.0"
 log = {version="0.4.8"}
-quick-xml={version="0.37.5"}
+quick-xml={version="0.41"}
 indexmap={workspace=true}
 oxiri={workspace=true}
 nom = "8.0.0"

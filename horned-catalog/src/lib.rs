@@ -295,7 +295,7 @@ fn tag_name_attrs_base(
         let attr = attr?;
         let key = local_name(attr.key);
         let value = attr
-            .decode_and_unescape_value(reader.decoder())?
+            .decoded_and_normalized_value(quick_xml::XmlVersion::Implicit1_0, reader.decoder())?
             .into_owned();
         if key == "base" {
             xml_base_override = Some(PathBuf::from(&value));

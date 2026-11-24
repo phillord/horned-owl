@@ -12,7 +12,7 @@ license = "LGPL-3.0"
 
 [dependencies]
 indexmap = "1.*"
-quick-xml = "0.31.0"
+quick-xml = "0.41"
 oxrdf= "0.3.1"
 oxrdfio= "0.2.1"
 rustc-hash = "1"

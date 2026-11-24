@@ -956,7 +956,7 @@ where
 
         // If this is a start event, capture it, and hold it till the
         // next event. If the next event is a cognate close, send a Empty.
-        self.writer.write_event(event)
+        Ok(self.writer.write_event(event)?)
     }
 
     fn write_start(&mut self, event: Event<'_>) -> Result<(), quick_xml::Error> {

@@ -8,7 +8,7 @@ edition = "2024"
 license = "LGPL-3.0"
 
 [dependencies]
-quick-xml = "0.37"
+quick-xml = "0.41"
 thiserror = "1.0"
 
 [dev-dependencies]
