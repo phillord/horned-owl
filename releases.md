@@ -1,3 +1,30 @@
+Version 6.0.0
+=============
+
+The OFN, Manchester and OBO readers are now written with `nom`, and
+the original `pest` readers have moved out to a new crate,
+`horned-pest`, hence a major version.
+
+Features:
+- The OFN, Manchester and OBO readers can stream, reading one
+  component at a time.
+- Streaming writers for Manchester and OBO, alongside the existing
+  OFN one.
+- The RDF reader's `lax` mode infers the kind of a property from how it
+  is used.
+
+Changes:
+- `horned-owl` no longer depends on `pest`. The `pest` readers, with
+  their `Rule` enums and grammars, are in `horned-pest`, which is
+  deprecated in favour of the `nom` readers; it requires `pest` 2.9.7.
+- The `nom` readers are now `io::{ofn,omn,obo}::reader`.
+- `horned-macro` checks its syntax with `horned-pest`.
+
+Fixes:
+- Many Manchester and OBO writer fixes, including the order of data
+  property and datatype frames.
+
+
 Version 5.0.0
 =============
 

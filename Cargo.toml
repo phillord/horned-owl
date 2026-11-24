@@ -1,6 +1,6 @@
 [package]
 name = "horned-owl"
-version = "5.0.0"
+version = "6.0.0"
 authors = ["Phillip Lord <phillip.lord@russet.org.uk>"]
 description = "Library for OWL Ontologies"
 
@@ -40,9 +40,9 @@ mktemp="0.5.1"
 oxiri="0.2.11"
 horned-pretty-rdf={path="./horned-pretty-rdf", version="2.0.2"}
 horned-catalog={path="./horned-catalog", version="1.1.0"}
-horned-macro={path="./horned-macro", version="5.0.0"}
-horned-profile={path="./horned-profile", version="5.0.0"}
-horned-oml={path="./horned-oml", version="0.1.0"}
+horned-macro={path="./horned-macro", version="6.0.0"}
+horned-profile={path="./horned-profile", version="6.0.0"}
+horned-oml={path="./horned-oml", version="0.1.2"}
 horned-pest={path="./horned-pest", version="0.1.0"}
 oxrdf="0.3.0"
 oxrdfio="0.2.0"

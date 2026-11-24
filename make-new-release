@@ -5,9 +5,12 @@
 # before adding --execute.
 #
 # Releases horned-owl, horned-bin, horned-macro and horned-profile, which
-# share a version.  horned-pretty-rdf, horned-catalog, horned-oml and horned-pest have
-# their own versions and are released as and when they change:
-# horned-macro depends on horned-pest, so a new horned-pest goes out first.
+# share a version.  horned-pest, horned-oml, horned-pretty-rdf and
+# horned-catalog have their own versions.  horned-pest and horned-oml
+# depend on horned-owl and horned-macro depends on horned-pest, so a
+# major horned-owl release names horned-pest and horned-oml too, and
+# smart-release publishes them in dependency order.  horned-pretty-rdf and
+# horned-catalog are released as and when they change:
 #
 #   cargo smart-release --update-crates-index --no-changelog horned-pretty-rdf
 #
@@ -48,7 +51,7 @@ cargo smart-release \
     --update-crates-index --no-changelog --verbose \
     --auto-publish-of-stable-crates \
     "${EXECUTE[@]}" \
-    horned-owl horned-bin horned-macro horned-profile
+    horned-owl horned-pest horned-oml horned-bin horned-macro horned-profile
 
 # Afterwards: check crates.io really has them (`cargo search horned-owl` --
 # the exit code is not proof, 2.0.0 sat unpublished for a week), fast-forward
