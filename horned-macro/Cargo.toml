@@ -12,7 +12,7 @@ proc-macro = true
 
 [dependencies]
 horned-owl = { path = "..", version = "6.0.0" }
-horned-pest = { path = "../horned-pest", version = "0.1.0" }
+horned-pest = { path = "../horned-pest", version = "^0.1.0" }
 syn = { version = "2", features = ["full"] }
 quote = "1"
 proc-macro2 = "1"
