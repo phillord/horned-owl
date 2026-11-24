@@ -608,26 +608,29 @@ impl<A: ForIRI, AA: ForIndex<A>, F: RdfFormatter<A, W>, W: Write> Render<A, F, (
 {
     fn render(&self, f: &mut F, ng: &mut NodeGenerator<A>) -> Result<(), HornedError> {
         let ont_id = self.i().the_ontology_id_or_default();
-        if let Some(iri) = &ont_id.iri {
-            let node_iri = ng.escaped(iri);
-            triples!(f, node_iri.clone(), ng.nn(RDF::Type), ng.nn(OWL::Ontology));
+        let imp: Vec<_> = self.i().import().collect();
+        let oa: Vec<_> = self.i().ontology_annotation().collect();
 
-            if let Some(viri) = &ont_id.viri {
-                triples!(
-                    f,
-                    node_iri.clone(),
-                    ng.nn(OWL::VersionIRI),
-                    ng.escaped(viri)
-                );
+        // An anonymous ontology is a blank node, so that its imports and
+        // annotations still have a subject. With none, nothing is written.
+        let node: Option<PNamedOrBlankNode<A>> = match &ont_id.iri {
+            Some(iri) => Some(ng.escaped(iri).into()),
+            None if !imp.is_empty() || !oa.is_empty() => Some(ng.bn()),
+            None => None,
+        };
+
+        if let Some(node) = node {
+            triples!(f, node.clone(), ng.nn(RDF::Type), ng.nn(OWL::Ontology));
+
+            if let (Some(_), Some(viri)) = (&ont_id.iri, &ont_id.viri) {
+                triples!(f, node.clone(), ng.nn(OWL::VersionIRI), ng.escaped(viri));
             }
 
-            let imp = self.i().import();
             for i in imp {
-                triples!(f, node_iri.clone(), ng.nn(OWL::Imports), ng.escaped(&i.0));
+                triples!(f, node.clone(), ng.nn(OWL::Imports), ng.escaped(&i.0));
             }
 
-            let oa = self.i().ontology_annotation();
-            ng.keep_this_bn(node_iri.into());
+            ng.keep_this_bn(node);
             for a in oa {
                 a.0.render(f, ng)?;
             }
@@ -2502,6 +2505,39 @@ mod test {
             "written RDF/XML must be syntactically valid to reread, got: {:?}",
             result.err()
         );
+    }
+
+    // An ontology with no IRI still has ontology annotations and imports;
+    // they hang off a blank node owl:Ontology.
+    #[test]
+    fn anonymous_ontology_annotations_and_imports_round_trip() {
+        let b = Build::new_rc();
+        let mut ont = ComponentMappedOntology::new_rc();
+        ont.insert(Import(b.iri("http://example.com/imported")));
+        ont.insert(OntologyAnnotation(Annotation {
+            ap: AnnotationProperty(b.iri("http://example.com/p")),
+            av: Literal::Simple {
+                literal: "anon".to_string(),
+            }
+            .into(),
+            ann: Default::default(),
+        }));
+
+        let mut buf = Vec::new();
+        write(&mut buf, &ont, None).expect("write should not fail");
+
+        let b = Build::new_rc();
+        let (back, incomplete) = crate::io::rdf::reader::read::<RcStr, RcAnnotatedComponent, _, _>(
+            &mut &buf[..],
+            crate::io::ParserConfiguration::new(&b).into(),
+        )
+        .unwrap();
+        assert!(incomplete.is_complete());
+        let back: ComponentMappedOntology<RcStr, RcAnnotatedComponent> = back.into();
+
+        assert_eq!(back.i().ontology_annotation().count(), 1);
+        assert_eq!(back.i().import().count(), 1);
+        assert!(back.i().the_ontology_id_or_default().iri.is_none());
     }
 
     #[test]

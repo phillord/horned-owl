@@ -599,6 +599,8 @@ pub struct OntologyParser<
 
     // How far through the parse have we got?
     state: OntologyParserState,
+    // The blank node standing for an anonymous ontology, if the input has one.
+    ontology_bnode: Option<BNode<A>>,
     // AA is otherwise unreferenced
     p: PhantomData<AA>,
 }
@@ -625,6 +627,7 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
             atom: d!(),
             variable: d!(),
             state: OntologyParserState::New,
+            ontology_bnode: None,
             p: d!(),
         }
     }
@@ -822,7 +825,7 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
     fn resolve_imports(&mut self) -> Vec<IRI<A>> {
         let mut v = vec![];
         self.retain_simple(|s, t| match t.triple() {
-            [Term::Iri(_), Term::OWL(VOWL::Imports), Term::Iri(imp)] => {
+            [Term::Iri(_) | Term::BNode(_), Term::OWL(VOWL::Imports), Term::Iri(imp)] => {
                 v.push(imp.clone());
                 s.merge(AnnotatedComponent {
                     component: Import(imp.clone()).into(),
@@ -835,6 +838,38 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
 
         v
         // Section 3.1.2/table 4 of RDF Graphs
+    }
+
+    /// Move the triples of a blank node `owl:Ontology` into `simple`,
+    /// so that its imports and annotations are found like those of a
+    /// named ontology. Does nothing if the input names an ontology.
+    fn extract_anonymous_ontology(&mut self) {
+        let named = self.simple.iter().any(|t| {
+            matches!(
+                t.triple(),
+                [Term::Iri(_), Term::RDF(VRDF::Type), Term::OWL(VOWL::Ontology)]
+            )
+        });
+        if named {
+            return;
+        }
+
+        let key = self.bnode.iter().find_map(|(k, v)| {
+            v.iter()
+                .any(|t| matches!(t, [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Ontology)]))
+                .then(|| k.clone())
+        });
+
+        if let Some(key) = key {
+            let triples = self.bnode.remove(&key).unwrap();
+            let pos = triples.1;
+            for t in triples.0 {
+                if !matches!(t, [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Ontology)]) {
+                    self.simple.push(PosTriple(t, pos));
+                }
+            }
+            self.ontology_bnode = Some(key);
+        }
     }
 
     /// Process the header statement
@@ -2764,6 +2799,12 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
         ic: &[&DeclarationMappedIndex<A, AA>],
     ) -> Result<(), HornedError> {
         let ont_id = <O as AsRef<SetIndex<A, AA>>>::as_ref(&self.o).the_ontology_id_or_default();
+        let ont_bnode = self.ontology_bnode.clone();
+        let is_ontology = |t: &Term<A>| match t {
+            Term::Iri(iri) => ont_id.iri.as_ref() == Some(iri),
+            Term::BNode(b) => ont_bnode.as_ref() == Some(b),
+            _ => false,
+        };
         self.try_retain_simple(|s, t| {
             let firi =
                 |s: &mut OntologyParser<A, AA, O, B>, t, iri: &IRI<_>| -> Result<(), HornedError> {
@@ -2781,7 +2822,7 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
                 // Catch anything about the ontology and assume it is
                 // an annotation. Some versions of the OWL API do not
                 // declare annotation properties for ontology annotations
-                [Term::Iri(iri), _, _] if ont_id.iri.as_ref() == Some(iri) => {
+                [subject @ (Term::Iri(_) | Term::BNode(_)), _, _] if is_ontology(subject) => {
                     let sets = s.take_annotations(t.triple());
                     let annotation = s.annotation(t.triple())?;
                     let sets = match sets {
@@ -2857,6 +2898,7 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
                 }
 
                 self.stitch_seqs();
+                self.extract_anonymous_ontology();
 
                 // Table 10
                 self.axiom_annotations()?;
