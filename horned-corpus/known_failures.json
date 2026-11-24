@@ -2819,5 +2819,59 @@
     "source_format": "rdf_xml",
     "target_format": "obo_nom_stream",
     "reason": "The streaming OBO writer cannot emit an owl-axioms: header line after its first 10,000-component chunk. This ontology has more than 10,000 components and one component that needs that header line sorts after the first chunk: the oboInOwl:id assertion on ISPO_99999999, the last entity by IRI. OBO puts owl-axioms: in the header before any stanza, so this is a limit of the format, not a bug; write_stream documents it."
+  },
+  {
+    "ontology": "GO-EXT",
+    "source_format": "obo",
+    "target_format": "rdf_xml",
+    "reason": "The source has the same annotation assertion twice on one entity, once plain and once carrying an annotation (a hasExactSynonym \"forebrain dorsal-ventral pattern formation\" on GO_0021798, plain and with a hasDbXref). The annotated assertion is written as the same triple plus an owl:Axiom annotation, so in RDF the two collapse to one triple and the reread returns only the annotated assertion."
+  },
+  {
+    "ontology": "ARO",
+    "source_format": "owl_xml",
+    "target_format": "rdf_xml",
+    "reason": "Same cause as GO-EXT to RDF/XML -- see that entry (here the plain and annotated twins are hasExactSynonym assertions such as \"ddl\" on ARO_3003970, the annotated one carrying a hasSynonymType)."
+  },
+  {
+    "ontology": "FG",
+    "source_format": "owl_xml",
+    "target_format": "rdf_xml",
+    "reason": "The source types properties such as Analysis_Data_formats_stored as both an ObjectProperty and an AnnotationProperty, which OWL 2 DL forbids, and gives them a range that the OWL/XML reader reads as an AnnotationPropertyRange. In RDF the range is an ordinary rdfs:range triple, so the reread resolves the pun as ObjectProperty and reads it as an ObjectPropertyRange. Illegal input, so no fix is planned."
+  },
+  {
+    "ontology": "PESONT",
+    "source_format": "owl_xml",
+    "target_format": "rdf_xml",
+    "reason": "The source types #is_a as both an ObjectProperty and a DataProperty, which OWL 2 DL forbids, and gives it object-property domain and range axioms with class-expression fillers. The reread resolves the pun as DataProperty, so the domain changes kind and the range is not read back. Illegal input, so no fix is planned."
+  },
+  {
+    "ontology": "MSO",
+    "source_format": "owl_xml",
+    "target_format": "rdf_xml",
+    "reason": "The source types rdfs:label as both an AnnotationProperty and a DataProperty and uses it in DataPropertyAssertions, which OWL 2 DL forbids; the reread resolves the pun as an annotation, so they come back as AnnotationAssertions. Its individuals named URL:http://... have no Declaration, so the writer emits them as untyped rdf:Description and their has_uri DataPropertyAssertions are not read back (the cause of CRENO to RDF/XML). Illegal input, so no fix is planned."
+  },
+  {
+    "ontology": "ATO",
+    "source_format": "obo",
+    "target_format": "rdf_xml",
+    "reason": "The OBO reader declares a [Typedef] that is also used in property_value as both an ObjectProperty and an AnnotationProperty. The RDF round trip keeps only the ObjectProperty, so 69 AnnotationAssertions on has_rank come back as ObjectPropertyAssertions."
+  },
+  {
+    "ontology": "DPCO",
+    "source_format": "owl_xml",
+    "target_format": "rdf_xml",
+    "reason": "The source declares the XSD facets xsd:minInclusive and xsd:maxInclusive as AnnotationProperties and asserts them on classes, which OWL 2 DL forbids as they are reserved vocabulary. The RDF reader turns any facet IRI in predicate position into a facet term, which only an owl:withRestrictions list consumes, so no annotation assertion matches and the triples are not read back. Illegal input, so no fix is planned."
+  },
+  {
+    "ontology": "AFO",
+    "source_format": "rdf_xml",
+    "target_format": "ofn",
+    "reason": "The source has a SubClassOf whose superclass is an ObjectIntersectionOf with a single operand, which OWL 2 requires to have at least two. The OFN writer writes a one-operand intersection as the bare operand, so the reread is a plain SubClassOf. Invalid input, so no fix is planned."
+  },
+  {
+    "ontology": "AFO",
+    "source_format": "rdf_xml",
+    "target_format": "omn",
+    "reason": "Same cause as AFO to OFN -- see that entry; the OMN writer also writes the one-operand intersection as the bare operand."
   }
 ]
