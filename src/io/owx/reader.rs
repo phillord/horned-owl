@@ -1649,7 +1649,15 @@ from_xml! {IRI, r, end,
                                 let expanded = expand_curie_or_base_maybe(r, Cow::Owned(t));
                                 Ok(r.build.as_ref().iri(expanded))
                             }
-                            None => Err(error_unexpected_end_tag(end, r)),
+                            // The empty relative IRI is the base itself.
+                            None if r.lax => match r.base_iri.clone() {
+                                Some(base) => Ok(r.build.as_ref().iri(base)),
+                                None => Ok(r.build.as_ref().iri("")),
+                            },
+                            None => Err(invalid_at!(
+                                r.reader.buffer_position(),
+                                "Empty IRI element"
+                            )),
                         };
                     },
                     (_, Event::Eof) => {
@@ -1690,6 +1698,37 @@ pub mod test {
         assert!(r.is_ok(), "Expected ontology, got failure:{:?}", r.err());
         let (o, m) = r.ok().unwrap();
         (o, m)
+    }
+
+    const EMPTY_IRI: &str = r##"<?xml version="1.0"?>
+<Ontology xmlns="http://www.w3.org/2002/07/owl#" xml:base="http://example.com/o" ontologyIRI="http://example.com/o">
+    <Declaration><Class IRI="#A"/></Declaration>
+    <AnnotationAssertion>
+        <AnnotationProperty abbreviatedIRI="rdfs:seeAlso"/>
+        <IRI>#A</IRI>
+        <IRI></IRI>
+    </AnnotationAssertion>
+</Ontology>"##;
+
+    #[test]
+    fn empty_iri_is_an_error_in_strict_mode() {
+        let err = read(&mut EMPTY_IRI.as_bytes()).unwrap_err().to_string();
+        assert!(err.contains("Empty IRI"), "{err}");
+        assert!(err.contains("Position"), "{err}");
+    }
+
+    #[test]
+    fn empty_iri_is_the_base_in_lax_mode() {
+        let b = Build::new_rc();
+        let mut config = ParserConfiguration::new(&b);
+        config.lax = true;
+        let (ont, _): (SetOntology<RcStr>, _) =
+            super::read(&mut EMPTY_IRI.as_bytes(), config).unwrap();
+        assert!(ont.iter().any(|ac| matches!(
+            &ac.component,
+            Component::AnnotationAssertion(a)
+                if matches!(&a.ann.av, AnnotationValue::IRI(i) if i.as_ref() == "http://example.com/o")
+        )));
     }
 
     #[test]
