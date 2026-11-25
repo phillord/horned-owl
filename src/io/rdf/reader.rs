@@ -2145,6 +2145,102 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
         Ok(())
     }
 
+    /// The undeclared properties that the other triples show to be object
+    /// or data properties, for lax reading of `s p o` triples.
+    ///
+    /// Object properties are those with an inverse, a property chain, an
+    /// object-only characteristic or a class as range; data properties are
+    /// those with a datatype as range. A sub or super property of a property
+    /// of a kind has that kind too. Anything else is read as an annotation.
+    #[allow(clippy::type_complexity)]
+    fn property_kind_evidence(
+        &self,
+        ic: &[&DeclarationMappedIndex<A, AA>],
+    ) -> (HashSet<IRI<A>>, HashSet<IRI<A>>) {
+        let mut object: HashSet<IRI<A>> = HashSet::new();
+        let mut data: HashSet<IRI<A>> = HashSet::new();
+        if !self.config.lax {
+            return (object, data);
+        }
+        let mut sub_of: Vec<(IRI<A>, IRI<A>)> = vec![];
+        for t in &self.simple {
+            match t.triple() {
+                [Term::Iri(p), Term::OWL(VOWL::InverseOf), Term::Iri(q)] => {
+                    object.insert(p.clone());
+                    object.insert(q.clone());
+                }
+                [Term::Iri(p), Term::OWL(VOWL::InverseOf), _]
+                | [_, Term::OWL(VOWL::InverseOf), Term::Iri(p)]
+                | [Term::Iri(p), Term::OWL(VOWL::PropertyChainAxiom), _] => {
+                    object.insert(p.clone());
+                }
+                [
+                    Term::Iri(p),
+                    Term::RDF(VRDF::Type),
+                    Term::OWL(
+                        VOWL::SymmetricProperty
+                        | VOWL::AsymmetricProperty
+                        | VOWL::TransitiveProperty
+                        | VOWL::ReflexiveProperty
+                        | VOWL::IrreflexiveProperty
+                        | VOWL::InverseFunctionalProperty,
+                    ),
+                ] => {
+                    object.insert(p.clone());
+                }
+                [Term::Iri(p), Term::RDFS(VRDFS::Range), range] => {
+                    let is_datatype = match range {
+                        Term::Iri(r) => {
+                            r.as_ref() == "http://www.w3.org/2000/01/rdf-schema#Literal"
+                                || self.term_is_kind(range, NamedOWLEntityKind::Datatype, ic)
+                        }
+                        _ => false,
+                    };
+                    if is_datatype {
+                        data.insert(p.clone());
+                    } else if self.term_is_kind(range, NamedOWLEntityKind::Class, ic) {
+                        object.insert(p.clone());
+                    }
+                }
+                [Term::Iri(p), Term::RDFS(VRDFS::SubPropertyOf), Term::Iri(q)] => {
+                    sub_of.push((p.clone(), q.clone()));
+                }
+                _ => {}
+            }
+        }
+        let known = |iri: &IRI<A>, kind, set: &HashSet<IRI<A>>| {
+            set.contains(iri) || self.iri_is_kind(iri, kind, ic)
+        };
+        loop {
+            let mut changed = false;
+            for (p, q) in &sub_of {
+                for (a, b) in [(p, q), (q, p)] {
+                    if known(a, NamedOWLEntityKind::ObjectProperty, &object) {
+                        changed |= object.insert(b.clone());
+                    } else if known(a, NamedOWLEntityKind::DataProperty, &data) {
+                        changed |= data.insert(b.clone());
+                    }
+                }
+            }
+            if !changed {
+                break;
+            }
+        }
+        // An explicit declaration is never overridden.
+        let declared = |iri: &IRI<A>| {
+            [
+                NamedOWLEntityKind::AnnotationProperty,
+                NamedOWLEntityKind::ObjectProperty,
+                NamedOWLEntityKind::DataProperty,
+            ]
+            .into_iter()
+            .any(|k| self.iri_is_kind(iri, k, ic))
+        };
+        object.retain(|i| !declared(i));
+        data.retain(|i| !declared(i));
+        (object, data)
+    }
+
     fn axioms(&mut self, ic: &[&DeclarationMappedIndex<A, AA>]) -> Result<(), HornedError> {
         let mut single_bnodes = vec![];
 
@@ -2275,6 +2371,8 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
                 }
             }
         }
+
+        let (object_evidence, data_evidence) = self.property_kind_evidence(ic);
 
         for t in std::mem::take(&mut self.simple)
             .into_iter()
@@ -2584,8 +2682,8 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
                     Ok(Some(DifferentIndividuals(vec![i.into(), j.into()]).into()))
                 }
                 [Term::Iri(sub), Term::Iri(pred), t @ Term::Literal(_)] => {
-                    if self.config.lax
-                        || self.iri_is_kind(pred, NamedOWLEntityKind::DataProperty, ic)
+                    if self.iri_is_kind(pred, NamedOWLEntityKind::DataProperty, ic)
+                        || (self.config.lax && data_evidence.contains(pred))
                     {
                         ok_some! {
                             DataPropertyAssertion {
@@ -2599,8 +2697,8 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
                     }
                 }
                 [Term::Iri(sub), Term::Iri(pred), Term::Iri(obj)] => {
-                    if self.config.lax
-                        || self.iri_is_kind(pred, NamedOWLEntityKind::ObjectProperty, ic)
+                    if self.iri_is_kind(pred, NamedOWLEntityKind::ObjectProperty, ic)
+                        || (self.config.lax && object_evidence.contains(pred))
                     {
                         Ok(Some(
                             ObjectPropertyAssertion {
@@ -4034,6 +4132,66 @@ o:C rdf:type owl:Class .
             });
             assert!(found, "no anonymous ClassAssertion for owl:{cls}");
         }
+    }
+
+    fn read_ttl_set(ttl: &str, lax: bool) -> (SetOntology<RcStr>, bool) {
+        let (ont, incomplete) = read_ttl_incomplete(ttl, lax).unwrap();
+        (ont.into(), incomplete.is_complete())
+    }
+
+    const UNDECLARED_PROPERTIES: &str = r#"@prefix : <http://example.org/p#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+<http://example.org/p> a owl:Ontology .
+:A a owl:Class .
+:B a owl:Class .
+:a a owl:NamedIndividual .
+:b a owl:NamedIndividual .
+:a :note "A note." ;
+   :seeAlso :b ;
+   :rel :b ;
+   :size "3"^^xsd:integer ;
+   :declared :b .
+:rel owl:inverseOf :relBy .
+:size rdfs:range xsd:integer .
+:declared a owl:AnnotationProperty .
+"#;
+
+    #[test]
+    fn lax_reads_undeclared_properties_by_usage() {
+        let (ont, _) = read_ttl_set(UNDECLARED_PROPERTIES, true);
+        let annotated: Vec<_> = ont
+            .iter()
+            .filter_map(|ac| match &ac.component {
+                Component::AnnotationAssertion(a) => Some(a.ann.ap.0.to_string()),
+                _ => None,
+            })
+            .collect();
+        for p in ["note", "seeAlso", "declared"] {
+            let p = format!("http://example.org/p#{p}");
+            assert!(annotated.contains(&p), "{p} should be an annotation");
+        }
+        assert!(ont.iter().any(|ac| matches!(
+            &ac.component,
+            Component::ObjectPropertyAssertion(a) if matches!(
+                &a.ope, ObjectPropertyExpression::ObjectProperty(p) if p.0.as_ref() == "http://example.org/p#rel")
+        )));
+        assert!(ont.iter().any(|ac| matches!(
+            &ac.component,
+            Component::DataPropertyAssertion(a) if a.dp.0.as_ref() == "http://example.org/p#size"
+        )));
+        assert!(!annotated.contains(&"http://example.org/p#rel".to_string()));
+    }
+
+    #[test]
+    fn strict_leaves_undeclared_properties_unread() {
+        let (ont, complete) = read_ttl_set(UNDECLARED_PROPERTIES, false);
+        assert!(!complete);
+        assert!(!ont.iter().any(|ac| matches!(
+            &ac.component,
+            Component::ObjectPropertyAssertion(_) | Component::DataPropertyAssertion(_)
+        )));
     }
 
     #[test]
