@@ -31,6 +31,7 @@ const RDFS_LABEL: &str = "http://www.w3.org/2000/01/rdf-schema#label";
 const RDFS_COMMENT: &str = "http://www.w3.org/2000/01/rdf-schema#comment";
 const IAO_DEF: &str = "http://purl.obolibrary.org/obo/IAO_0000115";
 const IAO_REPLACED_BY: &str = "http://purl.obolibrary.org/obo/IAO_0100001";
+const IAO_OBSOLESCENCE_REASON: &str = "http://purl.obolibrary.org/obo/IAO_0000231";
 const OWL_DEPRECATED: &str = "http://www.w3.org/2002/07/owl#deprecated";
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -307,17 +308,33 @@ impl<A: ForIRI> State<A> {
         let mut unhandled = Vec::new();
         let mut no_id = Vec::new();
         let mut written = Vec::new();
+        let mut idless: BTreeMap<String, String> = BTreeMap::new();
         for ac in comps {
             let mut wrote = false;
             for (owner_iri, line) in clause_lines(ac, &cz) {
-                if let Some(key) = key_of(&owner_iri) {
+                // An annotation on an entity with no oboInOwl:id (typically an
+                // imported one) still gets a stanza, under its compressed IRI.
+                // Reading it back stamps an oboInOwl:id on the entity.
+                let keyed = key_of(&owner_iri);
+                if keyed.is_none() {
+                    no_id.push(owner_iri.clone());
+                }
+                let key = keyed.or_else(|| {
+                    (is_idless_stanza_annotation(&ac.component) && !is_builtin_property(&owner_iri))
+                        .then(|| {
+                            let kind = *self.kinds.get(&owner_iri).unwrap_or(&Kind::Term);
+                            let id = idless
+                                .entry(owner_iri.clone())
+                                .or_insert_with(|| cz(&owner_iri));
+                            (kind, id.clone())
+                        })
+                });
+                if let Some(key) = key {
                     written.push((owner_iri, key.0));
                     let s = stanzas.entry(key.clone()).or_default();
                     s.id = key.1;
                     s.clauses.push(line);
                     wrote = true;
-                } else {
-                    no_id.push(owner_iri);
                 }
             }
             let hlines = header_line(ac, &cz);
@@ -328,6 +345,7 @@ impl<A: ForIRI> State<A> {
                 unhandled.push(ac.clone());
             }
         }
+        self.ids.extend(idless);
         self.header.extend(header);
         self.unhandled.extend(unhandled);
         self.no_id.extend(no_id);
@@ -546,6 +564,25 @@ fn is_never_axiom_fallback<A: ForIRI>(c: &Component<A>) -> bool {
             | Component::OntologyAnnotation(_)
             | Component::DocIRI(_)
     )
+}
+
+/// The standard properties whose labels the reader synthesises, so they get
+/// no stanza of their own.
+fn is_builtin_property(iri: &str) -> bool {
+    iri.starts_with(OIO) || iri == IAO_DEF || iri == IAO_REPLACED_BY
+}
+
+/// An annotation assertion that earns an id-less entity a stanza. The
+/// obsolescence annotations are left out: the reader adds them to the stubs it
+/// makes for `alt_id:` and `replaced_by:`, and they must not turn into stanzas.
+fn is_idless_stanza_annotation<A: ForIRI>(c: &Component<A>) -> bool {
+    match c {
+        Component::AnnotationAssertion(a) => !matches!(
+            a.ann.ap.0.as_ref(),
+            OWL_DEPRECATED | IAO_REPLACED_BY | IAO_OBSOLESCENCE_REASON
+        ),
+        _ => false,
+    }
 }
 
 /// An `oboInOwl:id` assertion whose value is not the id its stanza is written
@@ -1165,6 +1202,56 @@ mod tests {
         );
         let out = String::from_utf8(super::write(Vec::new(), &cmo, None).unwrap()).unwrap();
         assert!(!out.contains("small.owl"), "{out}");
+    }
+
+    fn idless_ontology() -> ComponentMappedOntology<RcStr, AnnotatedComponent<RcStr>> {
+        use crate::model::*;
+        let b = Build::new_rc();
+        let mut cmo = ComponentMappedOntology::<RcStr, AnnotatedComponent<RcStr>>::default();
+        let c = b.class("http://purl.obolibrary.org/obo/GO_0000001");
+        cmo.insert(DeclareClass(c.clone()));
+        cmo.insert(AnnotationAssertion {
+            subject: AnnotationSubject::IRI(c.0.clone()),
+            ann: Annotation {
+                ap: b.annotation_property("http://www.w3.org/2000/01/rdf-schema#label"),
+                av: AnnotationValue::Literal(Literal::Simple {
+                    literal: "imported label".to_string(),
+                }),
+                ann: Default::default(),
+            },
+        });
+        cmo
+    }
+
+    /// An entity with no oboInOwl:id, such as an imported one, keeps its
+    /// annotations as a stanza.
+    #[test]
+    fn annotation_on_entity_without_id_gets_a_stanza() {
+        let out =
+            String::from_utf8(super::write(Vec::new(), &idless_ontology(), None).unwrap()).unwrap();
+        assert!(
+            out.contains("[Term]\nid: GO:0000001\nname: imported label"),
+            "{out}"
+        );
+    }
+
+    #[test]
+    fn streamed_annotation_on_entity_without_id_gets_a_stanza() {
+        use crate::io::StreamComponent;
+        let items: Vec<crate::io::Result<StreamComponent<AnnotatedComponent<RcStr>>>> =
+            idless_ontology()
+                .iter()
+                .cloned()
+                .map(|ac| Ok(StreamComponent::Component(ac)))
+                .collect();
+        let out = String::from_utf8(
+            super::write_stream_chunked(Vec::new(), items.into_iter(), 1).unwrap(),
+        )
+        .unwrap();
+        assert!(
+            out.contains("id: GO:0000001\nname: imported label"),
+            "{out}"
+        );
     }
 
     /// read(write(read(x))) == read(x) over every fixture in the oracle corpus.
