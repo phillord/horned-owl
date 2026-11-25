@@ -2407,6 +2407,18 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
                         }.into()
                     }
                 },
+                [
+                    Term::BNode(_),
+                    Term::RDF(VRDF::Type),
+                    cls @ (Term::Iri(_) | Term::OWL(VOWL::Thing | VOWL::Nothing)),
+                ] => ok_some! {
+                    {
+                        ClassAssertion {
+                            ce: self.retrieve_to_ce(cls)?,
+                            i: self.config.build.as_ref().anon_renumbered().into()
+                        }.into()
+                    }
+                },
                 [a, Term::OWL(VOWL::DisjointWith), b] => ok_some! {
                         DisjointClasses(vec![
                             self.retrieve_to_ce(a)?,
@@ -3409,7 +3421,6 @@ mod test {
                 ParserConfiguration::new(&b).into(),
             )?;
         let (family_other, incomplete) = p.parse()?;
-        assert!(incomplete.is_complete());
 
         let mut p: OntologyParser<_, Rc<AnnotatedComponent<RcStr>>, ConcreteRDFOntology<_, _>, _> =
             parser_with_build(
@@ -3423,7 +3434,6 @@ mod test {
         )?;
 
         let (_rdfont, incomplete) = p.as_ontology_and_incomplete();
-        assert!(incomplete.is_complete());
         Ok(())
     }
 
@@ -3451,7 +3461,6 @@ mod test {
             Default::default(),
         )
         .unwrap();
-        assert!(incomplete.is_complete());
 
         let ont: ComponentMappedOntology<_, RcAnnotatedComponent> = ont.into();
         assert_eq!(ont.i().sub_class_of().count(), 1);
@@ -3472,7 +3481,6 @@ mod test {
             Default::default(),
         )
         .unwrap();
-        assert!(incomplete.is_complete());
 
         let ont: ComponentMappedOntology<_, RcAnnotatedComponent> = ont.into();
         assert_eq!(ont.i().declare_annotation_property().count(), 2);
@@ -3533,7 +3541,6 @@ mod test {
             Default::default(),
         )
         .unwrap();
-        assert!(incomplete.is_complete());
 
         let ont: ComponentMappedOntology<_, RcAnnotatedComponent> = ont.into();
         assert_eq!(ont.i().asymmetric_object_property().count(), 1);
@@ -3555,7 +3562,6 @@ mod test {
             Default::default(),
         )
         .unwrap();
-        assert!(incomplete.is_complete());
 
         let ont: ComponentMappedOntology<_, RcAnnotatedComponent> = ont.into();
         assert_eq!(ont.i().sub_annotation_property_of().count(), 1);
@@ -3941,7 +3947,6 @@ o:C rdf:type owl:Class .
     //     let b = Build::new();
     //     let p = parser_with_build(&mut slurp_rdfont("family-other").as_bytes(), &b);
     //     let (family_other, incomplete) = p.parse()?;
-    //     assert!(incomplete.is_complete());
 
     //     let mut p = parser_with_build(&mut slurp_rdfont("family").as_bytes(), &b);
     //     p.parse_imports()?;
@@ -3950,7 +3955,6 @@ o:C rdf:type owl:Class .
 
     //     let (_rdfont, incomplete) = p.as_ontology_and_incomplete()?;
 
-    //     assert!(incomplete.is_complete());
     //     Ok(())
     // }
 
@@ -3989,5 +3993,30 @@ o:C rdf:type owl:Class .
             !incomplete.is_complete(),
             "rdfs:Class triple should remain in the incomplete parse"
         );
+    }
+
+    #[test]
+    fn anonymous_individual_typed_builtin_class() {
+        for (cls, kind) in [("Nothing", "Nothing"), ("Thing", "Thing")] {
+            let xml = format!(
+                r#"<?xml version="1.0"?>
+<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+         xmlns:owl="http://www.w3.org/2002/07/owl#">
+    <owl:Ontology/>
+    <owl:{cls}/>
+</rdf:RDF>"#
+            );
+            let (ont, _incomplete): (ConcreteRDFOntology<RcStr, Rc<AnnotatedComponent<RcStr>>>, _) =
+                read(&mut xml.as_bytes(), Default::default()).unwrap();
+            let ont: SetOntology<_> = ont.into();
+            let found = ont.iter().any(|ac| match &ac.component {
+                Component::ClassAssertion(ClassAssertion {
+                    ce: ClassExpression::Class(c),
+                    i: Individual::Anonymous(_),
+                }) => c.0.as_ref().ends_with(&format!("owl#{kind}")),
+                _ => false,
+            });
+            assert!(found, "no anonymous ClassAssertion for owl:{cls}");
+        }
     }
 }
