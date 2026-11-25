@@ -231,7 +231,10 @@ where
             r = r1;
         }
     }
-    ontology.insert(id);
+    // An anonymous ontology has no OntologyID.
+    if id.iri.is_some() {
+        ontology.insert(id);
+    }
 
     while peek_kw(r) == Some("Import") {
         let (r1, x) = import(c, r)?;

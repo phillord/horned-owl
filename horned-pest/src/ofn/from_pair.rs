@@ -979,7 +979,10 @@ impl<A: ForIRI, O: MutableOntology<A> + Ontology<A> + Default> FromPair<A>
                 pair = pairs.next().unwrap();
             }
         }
-        ontology.insert(ontology_id);
+        // An anonymous ontology has no OntologyID.
+        if ontology_id.iri.is_some() {
+            ontology.insert(ontology_id);
+        }
 
         // Process imports
         for p in pair.into_inner() {

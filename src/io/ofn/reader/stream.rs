@@ -415,7 +415,10 @@ impl<A: ForIRI, R: BufRead, B: AsRef<Build<A>>> Reader<A, R, B> {
                         }
                     }
                     self.phase = Phase::Imports;
-                    return Ok(Some(Self::component(id)));
+                    // An anonymous ontology has no OntologyID.
+                    if id.iri.is_some() {
+                        return Ok(Some(Self::component(id)));
+                    }
                 }
 
                 Phase::Imports | Phase::Annotations | Phase::Axioms => {

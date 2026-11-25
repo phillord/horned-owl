@@ -107,10 +107,15 @@ impl<A: ForIRI, R: BufRead, B: AsRef<Build<A>>> Reader<A, R, B> {
                             }
                             let iri = get_iri_value_for(&mut self.r, e, b"ontologyIRI")?;
                             let viri = get_iri_value_for(&mut self.r, e, b"versionIRI")?;
-                            return Ok(Some(StreamComponent::Component(AnnotatedComponent::new(
-                                OntologyID { iri, viri },
-                                BTreeSet::new(),
-                            ))));
+                            // An anonymous ontology has no OntologyID.
+                            if iri.is_some() || viri.is_some() {
+                                return Ok(Some(StreamComponent::Component(
+                                    AnnotatedComponent::new(
+                                        OntologyID { iri, viri },
+                                        BTreeSet::new(),
+                                    ),
+                                )));
+                            }
                         }
                         b"Prefix" => {
                             let iri = get_attr_value_str(&self.r, e, b"IRI")?;
