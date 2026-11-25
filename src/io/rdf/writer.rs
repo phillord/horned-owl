@@ -2302,7 +2302,7 @@ mod test {
         let ont2 = read_ok(&mut buf.as_slice());
         assert_eq!(
             ont2.iter().count(),
-            4, // the 3 inserted components, plus an implicit OntologyID
+            3,
             "expected all inserted components to survive reread, got:\n{s}"
         );
     }

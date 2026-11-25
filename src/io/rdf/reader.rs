@@ -894,7 +894,10 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
             _ => true,
         });
 
-        self.o.insert(OntologyID { iri, viri });
+        // An anonymous ontology with no version IRI has no identity to record.
+        if iri.is_some() || viri.is_some() {
+            self.o.insert(OntologyID { iri, viri });
+        }
     }
 
     /// Table 5 and Table 6 (OWL 2 Mapping to RDF Graphs S3.1.2),
@@ -3561,6 +3564,18 @@ mod test {
         assert_eq!(ont.i().annotation_assertion().count(), 1);
 
         let _aa = ont.i().annotation_assertion().next();
+    }
+
+    #[test]
+    fn anonymous_ontology_has_no_ontology_id() {
+        let rdf = r#"<?xml version="1.0"?>
+<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+         xmlns:owl="http://www.w3.org/2002/07/owl#">
+  <owl:Ontology/>
+  <owl:Class rdf:about="http://example.com/A"/>
+</rdf:RDF>"#;
+        let ont: ComponentMappedOntology<_, _> = read_ok(&mut rdf.as_bytes()).into();
+        assert_eq!(ont.i().ontology_id().count(), 0);
     }
 
     #[test]

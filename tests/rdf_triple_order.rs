@@ -18,7 +18,7 @@ type Cmo = ComponentMappedOntology<RcStr, Rc<AnnotatedComponent<RcStr>>>;
 fn nested_data_range_ontology() -> Cmo {
     let mut src = String::from(
         "Prefix(:=<http://www.example.com/o#>)\n\
-         Prefix(xsd:=<http://www.w3.org/2001/XMLSchema#>)\nOntology(\n",
+         Prefix(xsd:=<http://www.w3.org/2001/XMLSchema#>)\nOntology(<http://www.example.com/o>\n",
     );
     for i in 0..8 {
         src.push_str(&format!(
