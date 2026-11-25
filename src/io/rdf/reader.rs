@@ -834,6 +834,7 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
                 ] => Some(s.clone()),
                 _ => None,
             })
+            .chain(self.ontology_bnode.iter().map(|b| Term::BNode(b.clone())))
             .collect();
         let mut v = vec![];
         self.retain_simple(|s, t| match t.triple() {
