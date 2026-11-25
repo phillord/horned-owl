@@ -1101,8 +1101,8 @@ mod tests {
             write_us: Some(1),
             reread_us: Some(2),
         })];
-        let dir = std::env::temp_dir().join(format!("hrt-rep-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).unwrap();
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path().to_path_buf();
         report(&recs, &dir, &[]).unwrap();
         assert!(dir.join("cases.csv").exists());
         assert!(dir.join("summary.json").exists());
@@ -1131,8 +1131,8 @@ mod tests {
             write_us: Some(5),
             reread_us: Some(7),
         })];
-        let dir = std::env::temp_dir().join(format!("hrt-rep-unk-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).unwrap();
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path().to_path_buf();
         report(&recs, &dir, &[]).unwrap();
 
         let csv = std::fs::read_to_string(dir.join("cases.csv")).unwrap();

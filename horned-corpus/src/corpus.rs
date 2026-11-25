@@ -28,8 +28,8 @@ mod tests {
     use std::io::Write;
     #[test]
     fn reads_plain_and_gzip() {
-        let dir = std::env::temp_dir().join(format!("hrt-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).unwrap();
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path().to_path_buf();
         std::fs::write(dir.join("a.ofn"), b"hello").unwrap();
         let mut enc = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default());
         enc.write_all(b"world").unwrap();

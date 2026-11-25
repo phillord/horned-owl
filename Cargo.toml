@@ -56,7 +56,7 @@ encoding = ["quick-xml/encoding"]
 proptest = "1"
 horned-owl = {path=".", features = ["remote"]}
 criterion = "0.7.0"
-mktemp = {workspace = true}
+tempfile = "3"
 pretty_assertions = "1.0.0"
 slurp = "1.0.1"
 rstest = "0.23"

@@ -382,17 +382,8 @@ mod tests {
         assert!(should_retry(429, 10).is_none()); // give up after max attempts
     }
 
-    fn tmp() -> std::path::PathBuf {
-        let d = std::env::temp_dir().join(format!(
-            "hrt-fetch-test-{}-{}",
-            std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
-        ));
-        std::fs::create_dir_all(&d).unwrap();
-        d
+    fn tmp() -> tempfile::TempDir {
+        tempfile::tempdir().unwrap()
     }
 
     fn write_gz(path: &Path, contents: &[u8]) {
@@ -404,7 +395,8 @@ mod tests {
 
     #[test]
     fn manifest_entry_from_disk_reads_valid_gz_and_carries_prior() {
-        let dir = tmp();
+        let tmp_dir = tmp();
+        let dir = tmp_dir.path().to_path_buf();
         let p = dir.join("FOO.gz");
         write_gz(&p, b"hello ontology");
         let prior = ManifestEntry {
@@ -431,7 +423,8 @@ mod tests {
     // because manifest_entry_from_disk ran again.
     #[test]
     fn manifest_entry_from_disk_preserves_original_fetched_at_not_now() {
-        let dir = tmp();
+        let tmp_dir = tmp();
+        let dir = tmp_dir.path().to_path_buf();
         let p = dir.join("FOO.gz");
         write_gz(&p, b"hello ontology");
         let long_ago = 1_000_000; // 1970-01-12 -- nowhere near "now"
@@ -453,7 +446,8 @@ mod tests {
     // own mtime rather than leaving fetched_at unknown.
     #[test]
     fn manifest_entry_from_disk_falls_back_to_mtime_with_no_prior() {
-        let dir = tmp();
+        let tmp_dir = tmp();
+        let dir = tmp_dir.path().to_path_buf();
         let p = dir.join("FOO.gz");
         write_gz(&p, b"hello ontology");
         let e = manifest_entry_from_disk("FOO", &p, None).unwrap();
@@ -487,7 +481,8 @@ mod tests {
         // The exact failure an interrupted run leaves behind: bytes that
         // aren't a valid gzip stream. This is what makes a naive
         // skip-existing branch skip the file forever instead of repairing it.
-        let dir = tmp();
+        let tmp_dir = tmp();
+        let dir = tmp_dir.path().to_path_buf();
         let p = dir.join("BAR.gz");
         std::fs::write(&p, b"not a gzip stream").unwrap();
         assert!(manifest_entry_from_disk("BAR", &p, None).is_err());
@@ -495,7 +490,8 @@ mod tests {
 
     #[test]
     fn reusable_entry_routes_missing_and_corrupt_to_refetch() {
-        let dir = tmp();
+        let tmp_dir = tmp();
+        let dir = tmp_dir.path().to_path_buf();
 
         // Missing file -> None (nothing to reuse; must fetch).
         let missing = dir.join("NONE.gz");

@@ -482,36 +482,30 @@ mod tests {
     use super::*;
     use std::process::Command;
 
-    fn temp_dir(name: &str) -> std::path::PathBuf {
-        let dir = std::env::temp_dir().join(format!(
-            "horned-corpus-rev-test-{name}-{}-{}",
-            std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
-        ));
-        std::fs::create_dir_all(&dir).unwrap();
-        dir
+    fn temp_dir() -> tempfile::TempDir {
+        tempfile::tempdir().unwrap()
     }
 
     #[test]
     fn cli_override_replaces_the_whole_string() {
         // Not merely "takes priority": the override is recorded verbatim,
         // with no version prefix bolted on.
-        let dir = temp_dir("override");
+        let tmp = temp_dir();
+        let dir = tmp.path().to_path_buf();
         assert_eq!(resolve_horned_owl_rev(&dir, Some("deadbeef")), "deadbeef");
     }
 
     #[test]
     fn falls_back_to_bare_version_outside_a_repository() {
-        let dir = temp_dir("no-repo");
+        let tmp = temp_dir();
+        let dir = tmp.path().to_path_buf();
         assert_eq!(resolve_horned_owl_rev(&dir, None), horned_owl::VERSION);
     }
 
     #[test]
     fn reports_version_and_head_inside_a_repository() {
-        let dir = temp_dir("repo");
+        let tmp = temp_dir();
+        let dir = tmp.path().to_path_buf();
         // git exports GIT_DIR and friends to hook subprocesses; left in
         // place they point these commands at the outer repository rather
         // than this throwaway one, and run its hooks too.

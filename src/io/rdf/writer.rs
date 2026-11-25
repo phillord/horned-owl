@@ -2061,9 +2061,6 @@ pub fn write_stream_with_config<A: ForIRI, AA: ForIndex<A>, F: RdfFormatter<A, W
 #[cfg(test)]
 mod test {
 
-    extern crate mktemp;
-
-    use self::mktemp::Temp;
     use super::*;
     use crate::{model::Build, ontology::set::SetOntology};
 
@@ -2127,11 +2124,11 @@ mod test {
             viri: None,
         });
 
-        let temp_file = Temp::new_file().unwrap();
-        let file = File::create(&temp_file).ok().unwrap();
+        let temp_file = tempfile::NamedTempFile::new().unwrap();
+        let file = File::create(temp_file.path()).ok().unwrap();
         write(&mut BufWriter::new(file), &ont, None).ok().unwrap();
 
-        let file = File::open(&temp_file).ok().unwrap();
+        let file = File::open(temp_file.path()).ok().unwrap();
         let ont2 = read_ok(&mut BufReader::new(file));
 
         assert_eq!(ont.i().the_ontology_id(), ont2.i().the_ontology_id());
@@ -2233,9 +2230,9 @@ mod test {
 
     fn roundtrip(ont: &str) -> (SetOntology<RcStr>, SetOntology<RcStr>) {
         let ont_orig = read_ok(&mut ont.as_bytes());
-        let temp_file = Temp::new_file().unwrap();
+        let temp_file = tempfile::NamedTempFile::new().unwrap();
 
-        let file = File::create(&temp_file).ok().unwrap();
+        let file = File::create(temp_file.path()).ok().unwrap();
         let mut buf_writer = BufWriter::new(&file);
 
         let amo: ComponentMappedOntology<RcStr, Rc<AnnotatedComponent<RcStr>>> =
@@ -2243,18 +2240,7 @@ mod test {
         write(&mut buf_writer, &amo, None).ok().unwrap();
         buf_writer.flush().ok();
 
-        write(
-            &mut BufWriter::new(
-                &File::create("/tmp/last_roundtripped_file.rdf")
-                    .ok()
-                    .unwrap(),
-            ),
-            &amo,
-            None,
-        )
-        .unwrap();
-
-        let file = File::open(&temp_file).ok().unwrap();
+        let file = File::open(temp_file.path()).ok().unwrap();
         let ont_round = read_ok(&mut BufReader::new(&file));
 
         (ont_orig, ont_round)

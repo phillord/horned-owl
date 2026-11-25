@@ -1023,9 +1023,6 @@ render! {
 #[cfg(test)]
 mod test {
 
-    extern crate mktemp;
-
-    use self::mktemp::Temp;
     use super::*;
     use crate::io::ParserConfiguration;
     use crate::io::owx::reader::*;
@@ -1058,11 +1055,11 @@ mod test {
             iri: Some(iri.clone()),
             viri: None,
         });
-        let temp_file = Temp::new_file().unwrap();
-        let file = File::create(&temp_file).ok().unwrap();
+        let temp_file = tempfile::NamedTempFile::new().unwrap();
+        let file = File::create(temp_file.path()).ok().unwrap();
         write(&mut BufWriter::new(file), &ont, None).ok().unwrap();
 
-        let file = File::open(&temp_file).ok().unwrap();
+        let file = File::open(temp_file.path()).ok().unwrap();
         let (ont2, _) = read_ok(&mut BufReader::new(file));
 
         // Check ID is present and not default
@@ -1075,12 +1072,17 @@ mod test {
         );
     }
 
-    fn roundtrip_1(ont: &str) -> (RcComponentMappedOntology, PrefixMapping, Temp) {
+    fn roundtrip_1(
+        ont: &str,
+    ) -> (
+        RcComponentMappedOntology,
+        PrefixMapping,
+        tempfile::NamedTempFile,
+    ) {
         let (ont_orig, prefix_orig) = read_ok(&mut ont.as_bytes());
-        let mut temp_file = Temp::new_path();
-        temp_file.set_extension("owx");
+        let temp_file = tempfile::Builder::new().suffix(".owx").tempfile().unwrap();
 
-        let file = File::create(&temp_file).ok().unwrap();
+        let file = File::create(temp_file.path()).ok().unwrap();
         let mut buf_writer = BufWriter::new(&file);
 
         write(&mut buf_writer, &ont_orig, Some(&prefix_orig))
@@ -1093,9 +1095,7 @@ mod test {
 
     fn roundtrip_to_string(ont: &str) -> String {
         let t = roundtrip_1(ont).2;
-        let s = std::fs::read_to_string(&t);
-        t.release();
-        s.ok().unwrap()
+        std::fs::read_to_string(t.path()).ok().unwrap()
     }
 
     fn roundtrip(
@@ -1108,10 +1108,9 @@ mod test {
     ) {
         let (ont_orig, prefix_orig, temp_file) = roundtrip_1(ont);
 
-        let file = File::open(&temp_file).ok().unwrap();
+        let file = File::open(temp_file.path()).ok().unwrap();
 
         let (ont_round, prefix_round) = read_ok(&mut BufReader::new(&file));
-        temp_file.release();
 
         (ont_orig, prefix_orig, ont_round, prefix_round)
     }

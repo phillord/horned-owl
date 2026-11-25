@@ -1,15 +1,16 @@
 use horned_corpus::model::Record;
 use std::process::Command;
 
-fn tiny_corpus_dir(name: &str) -> std::path::PathBuf {
-    let dir = std::env::temp_dir().join(format!("hrt-cli-{name}-{}", std::process::id()));
+fn tiny_corpus_dir() -> tempfile::TempDir {
+    let tmp = tempfile::tempdir().unwrap();
+    let dir = tmp.path();
     std::fs::create_dir_all(dir.join("corpus")).unwrap();
     std::fs::write(
         dir.join("corpus/a.ofn"),
         b"Prefix(:=<http://ex/>)\nOntology(<http://ex/o>\nDeclaration(Class(<http://ex/A>))\n)",
     )
     .unwrap();
-    dir
+    tmp
 }
 
 fn header_of(jsonl: &std::path::Path) -> Record {
@@ -23,7 +24,8 @@ fn header_of(jsonl: &std::path::Path) -> Record {
 
 #[test]
 fn run_then_report_over_tiny_corpus() {
-    let dir = tiny_corpus_dir("basic");
+    let tmp = tiny_corpus_dir();
+    let dir = tmp.path().to_path_buf();
     let jsonl = dir.join("r.jsonl");
     let ok = Command::new(env!("CARGO_BIN_EXE_horned-corpus"))
         .args(["roundtrip", "--corpus"])
@@ -65,7 +67,8 @@ fn run_then_report_over_tiny_corpus() {
 
 #[test]
 fn run_with_explicit_horned_owl_rev_override() {
-    let dir = tiny_corpus_dir("override");
+    let tmp = tiny_corpus_dir();
+    let dir = tmp.path().to_path_buf();
     let jsonl = dir.join("r.jsonl");
     let ok = Command::new(env!("CARGO_BIN_EXE_horned-corpus"))
         .args(["roundtrip", "--corpus"])
