@@ -1104,7 +1104,23 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
         // sets for that key
         let mut bnode_to_key: HashMap<BNode<A>, ([Term<A>; 3], usize)> = HashMap::new();
 
-        for (k, v) in std::mem::take(&mut self.bnode) {
+        for (k, mut v) in std::mem::take(&mut self.bnode) {
+            // Other types on an owl:Axiom node are not annotations; they
+            // stay behind as ordinary triples, e.g. class assertions.
+            let is_axiom = v
+                .iter()
+                .any(|t| matches!(t, [_, Term::RDF(VRDF::Type), Term::OWL(VOWL::Axiom)]));
+            if is_axiom {
+                let position = v.position();
+                let (types, rest): (Vec<_>, Vec<_>) = std::mem::take(v.triple_mut())
+                    .into_iter()
+                    .partition(|t| {
+                        matches!(t, [_, Term::RDF(VRDF::Type), o] if *o != Term::OWL(VOWL::Axiom))
+                    });
+                *v.triple_mut() = rest;
+                self.simple
+                    .extend(types.into_iter().map(|t| PosTriple(t, position)));
+            }
             match v.as_slice() {
                 [
                     [_, Term::OWL(VOWL::AnnotatedProperty), p], //:
@@ -4017,6 +4033,46 @@ o:C rdf:type owl:Class .
                 _ => false,
             });
             assert!(found, "no anonymous ClassAssertion for owl:{cls}");
+        }
+    }
+
+    #[test]
+    fn extra_type_on_axiom_node() {
+        let ttl = r#"@prefix : <http://example.org/axiom#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+<http://example.org/axiom> a owl:Ontology .
+:A a owl:Class .
+:B a owl:Class .
+:Reviewed a owl:Class .
+:A rdfs:subClassOf :B .
+[ a owl:Axiom , :Reviewed ;
+  owl:annotatedSource :A ;
+  owl:annotatedProperty rdfs:subClassOf ;
+  owl:annotatedTarget :B ;
+  rdfs:comment "checked" ] .
+"#;
+        for lax in [false, true] {
+            let b = Build::new_rc();
+            let mut common = crate::io::ParserConfiguration::new(&b);
+            common.lax = lax;
+            let mut config: RDFParserConfiguration<RcStr, &Build<RcStr>> = common.into();
+            config.format = Some(oxrdfio::RdfFormat::Turtle);
+            let (ont, incomplete): (ConcreteRDFOntology<RcStr, Rc<AnnotatedComponent<RcStr>>>, _) =
+                read(&mut ttl.as_bytes(), config).unwrap();
+            assert!(incomplete.is_complete());
+            let ont: SetOntology<_> = ont.into();
+            assert!(ont.iter().any(|ac| {
+                matches!(ac.component, Component::SubClassOf(_)) && ac.ann.len() == 1
+            }));
+            // The extra type is a class assertion on the anonymous node.
+            assert!(ont.iter().any(|ac| match &ac.component {
+                Component::ClassAssertion(ClassAssertion {
+                    ce: ClassExpression::Class(c),
+                    i: Individual::Anonymous(_),
+                }) => c.0.as_ref().ends_with("#Reviewed"),
+                _ => false,
+            }));
         }
     }
 }
