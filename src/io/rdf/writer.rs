@@ -4,7 +4,7 @@ use crate::{
     io::{StreamComponent, StreamOntology},
     model::*,
     ontology::component_mapped::ComponentMappedOntology,
-    vocab::{OWL, RDF, RDFS, SWRL, Vocab, XSD},
+    vocab::{OWL, RDF, RDFS, SWRL, Vocab, XSD, is_annotation_builtin},
 };
 
 use crate::ontology::indexed::ForIndex;
@@ -636,6 +636,12 @@ impl<A: ForIRI, AA: ForIndex<A>, F: RdfFormatter<A, W>, W: Write> Render<A, F, (
             }
         }
 
+        if ng.lax {
+            for cmp in undeclared_properties(self) {
+                AnnotatedComponent::from(cmp).render(f, ng)?;
+            }
+        }
+
         for cmp in self.i().iter() {
             let cmp: &AnnotatedComponent<A> = cmp.borrow();
             cmp.render(f, ng)?;
@@ -643,6 +649,79 @@ impl<A: ForIRI, AA: ForIndex<A>, F: RdfFormatter<A, W>, W: Write> Render<A, F, (
 
         Ok(())
     }
+}
+
+/// Collects which property IRIs are declared and which are used, by kind.
+struct PropertyUsage<A: ForIRI> {
+    declared: HashSet<IRI<A>>,
+    object: BTreeSet<IRI<A>>,
+    data: BTreeSet<IRI<A>>,
+    annotation: BTreeSet<IRI<A>>,
+}
+
+impl<A: ForIRI> crate::visitor::immutable::Visit<A> for PropertyUsage<A> {
+    fn visit_declare_object_property(&mut self, d: &DeclareObjectProperty<A>) {
+        self.declared.insert(d.0.0.clone());
+    }
+    fn visit_declare_data_property(&mut self, d: &DeclareDataProperty<A>) {
+        self.declared.insert(d.0.0.clone());
+    }
+    fn visit_declare_annotation_property(&mut self, d: &DeclareAnnotationProperty<A>) {
+        self.declared.insert(d.0.0.clone());
+    }
+    fn visit_object_property(&mut self, p: &ObjectProperty<A>) {
+        self.object.insert(p.0.clone());
+    }
+    fn visit_data_property(&mut self, p: &DataProperty<A>) {
+        self.data.insert(p.0.clone());
+    }
+    fn visit_annotation_property(&mut self, p: &AnnotationProperty<A>) {
+        self.annotation.insert(p.0.clone());
+    }
+}
+
+/// Declarations for the properties that are used but never declared.
+///
+/// The kind is inferred from usage with the RDF reader's precedence: an
+/// object property beats a data property, which beats an annotation
+/// property. Properties declared as any kind are left alone.
+fn undeclared_properties<A: ForIRI, AA: ForIndex<A>>(
+    ont: &ComponentMappedOntology<A, AA>,
+) -> Vec<Component<A>> {
+    let mut walk = crate::visitor::immutable::Walk::new(PropertyUsage {
+        declared: HashSet::new(),
+        object: BTreeSet::new(),
+        data: BTreeSet::new(),
+        annotation: BTreeSet::new(),
+    });
+    for cmp in ont.i().iter() {
+        let cmp: &AnnotatedComponent<A> = cmp.borrow();
+        walk.annotated_component(cmp);
+    }
+    let u = walk.into_visit();
+
+    // Built-in vocabulary such as rdfs:label needs no declaration.
+    let open = |i: &IRI<A>| {
+        !u.declared.contains(i)
+            && Vocab::lookup(i.as_ref()).is_none()
+            && !is_annotation_builtin(i.as_ref())
+    };
+
+    let mut out = vec![];
+    for iri in u.object.iter().filter(|i| open(i)) {
+        out.push(DeclareObjectProperty(ObjectProperty(iri.clone())).into());
+    }
+    for iri in u.data.iter().filter(|i| open(i) && !u.object.contains(*i)) {
+        out.push(DeclareDataProperty(DataProperty(iri.clone())).into());
+    }
+    for iri in u
+        .annotation
+        .iter()
+        .filter(|i| open(i) && !u.object.contains(*i) && !u.data.contains(*i))
+    {
+        out.push(DeclareAnnotationProperty(AnnotationProperty(iri.clone())).into());
+    }
+    out
 }
 
 impl<A: ForIRI, F: RdfFormatter<A, W>, W: Write> Render<A, F, (), W> for AnnotatedComponent<A> {
@@ -2440,6 +2519,92 @@ mod test {
             "rereading the written RDF/XML should recover the class declaration \
              (percent-encoded), got: {ont_round:#?}"
         );
+    }
+
+    fn undeclared_property_ontology()
+    -> ComponentMappedOntology<RcStr, Rc<AnnotatedComponent<RcStr>>> {
+        let b = Build::new_rc();
+        let mut ont: ComponentMappedOntology<RcStr, Rc<AnnotatedComponent<RcStr>>> =
+            ComponentMappedOntology::new_rc();
+        let a = b.class("http://example.com/o#A");
+        ont.insert(DeclareClass(a.clone()));
+        ont.insert(SubClassOf {
+            sub: ClassExpression::Class(a.clone()),
+            sup: ClassExpression::ObjectSomeValuesFrom {
+                ope: b.object_property("http://example.com/o#op").into(),
+                bce: Box::new(ClassExpression::Class(a.clone())),
+            },
+        });
+        ont.insert(SubClassOf {
+            sub: ClassExpression::Class(a.clone()),
+            sup: ClassExpression::DataHasValue {
+                dp: b.data_property("http://example.com/o#dp"),
+                l: Literal::Simple {
+                    literal: "x".to_string(),
+                },
+            },
+        });
+        for ap in ["note", "op"] {
+            ont.insert(AnnotationAssertion {
+                subject: AnnotationSubject::IRI(a.0.clone()),
+                ann: Annotation {
+                    ap: b.annotation_property(format!("http://example.com/o#{ap}")),
+                    av: AnnotationValue::Literal(Literal::Simple {
+                        literal: "v".to_string(),
+                    }),
+                    ann: BTreeSet::new(),
+                },
+            });
+        }
+        ont
+    }
+
+    #[test]
+    fn lax_write_declares_undeclared_properties_by_usage() {
+        let ont = undeclared_property_ontology();
+        let mut buf = Vec::new();
+        write_with_config(&mut buf, &ont, None, RDFWriterConfiguration { lax: true }).unwrap();
+        // The pun leaves the literal assertion on `op` unread, so read it back
+        // in lax mode and ignore what is incomplete.
+        let build = Build::new_rc();
+        let mut common = crate::io::ParserConfiguration::new(&build);
+        common.lax = true;
+        let (round, _): (
+            crate::io::ConcreteRDFOntology<RcStr, Rc<AnnotatedComponent<RcStr>>>,
+            _,
+        ) = crate::io::rdf::reader::read(&mut &buf[..], common.into()).unwrap();
+        let round: SetOntology<RcStr> = round.into();
+        let declared = |iri: &str| {
+            round.iter().any(|ac| match &ac.component {
+                Component::DeclareObjectProperty(d) => d.0.0.as_ref() == iri,
+                _ => false,
+            })
+        };
+        assert!(declared("http://example.com/o#op"));
+        assert!(round.iter().any(|ac| matches!(
+            &ac.component,
+            Component::DeclareDataProperty(d) if d.0.0.as_ref() == "http://example.com/o#dp"
+        )));
+        assert!(round.iter().any(|ac| matches!(
+            &ac.component,
+            Component::DeclareAnnotationProperty(d) if d.0.0.as_ref() == "http://example.com/o#note"
+        )));
+        // Used as both object and annotation property, the object property wins.
+        assert!(!round.iter().any(|ac| matches!(
+            &ac.component,
+            Component::DeclareAnnotationProperty(d) if d.0.0.as_ref() == "http://example.com/o#op"
+        )));
+    }
+
+    #[test]
+    fn strict_write_does_not_declare_undeclared_properties() {
+        let ont = undeclared_property_ontology();
+        let mut buf = Vec::new();
+        write_with_config(&mut buf, &ont, None, RDFWriterConfiguration { lax: false }).unwrap();
+        let s = String::from_utf8(buf).unwrap();
+        assert!(!s.contains("ObjectProperty"), "{s}");
+        assert!(!s.contains("DatatypeProperty"), "{s}");
+        assert!(!s.contains("AnnotationProperty"), "{s}");
     }
 
     #[test]
