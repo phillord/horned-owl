@@ -1367,6 +1367,7 @@ fn data_cardinality<A: ForIRI, F: RdfFormatter<A, W>, W: Write>(
     n: &u32,
     dp: &DataProperty<A>,
     dr: &DataRange<A>,
+    unqual: PNamedNode<A>,
     qual: PNamedNode<A>,
     f: &mut F,
     ng: &mut NodeGenerator<A>,
@@ -1381,9 +1382,26 @@ fn data_cardinality<A: ForIRI, F: RdfFormatter<A, W>, W: Write>(
         value: format!("{n}").into(),
         datatype: ng.nn(XSD::NonNegativeInteger),
     });
+
+    // A range of rdfs:Literal is the unqualified form, as owl:Thing is for objects.
+    if let DataRange::Datatype(dt) = dr
+        && dt.is(&crate::vocab::OWL2Datatype::Literal)
+    {
+        return Ok(triples_to_node!(
+            f,
+            bn.clone(),
+            ng.nn(RDF::Type),
+            ng.nn(OWL::Restriction),
+            bn.clone(),
+            ng.nn(OWL::OnProperty),
+            node_dp,
+            bn,
+            unqual,
+            node_n
+        ));
+    }
     let node_dr: PTerm<_> = dr.render(f, ng)?.into();
 
-    // Unqualified Only
     Ok(triples_to_node!(
         f,
         bn.clone(),
@@ -1565,13 +1583,13 @@ render_to_node! {
                     )
                 }
                 Self::DataMinCardinality{n, dp, dr} => {
-                    data_cardinality(n, dp, dr, ng.nn(OWL::MinQualifiedCardinality), f, ng)?
+                    data_cardinality(n, dp, dr, ng.nn(OWL::MinCardinality), ng.nn(OWL::MinQualifiedCardinality), f, ng)?
                 }
                 Self::DataMaxCardinality{n, dp, dr} => {
-                    data_cardinality(n, dp, dr, ng.nn(OWL::MaxQualifiedCardinality), f, ng)?
+                    data_cardinality(n, dp, dr, ng.nn(OWL::MaxCardinality), ng.nn(OWL::MaxQualifiedCardinality), f, ng)?
                 }
                 Self::DataExactCardinality{n, dp, dr} => {
-                    data_cardinality(n, dp, dr, ng.nn(OWL::QualifiedCardinality), f, ng)?
+                    data_cardinality(n, dp, dr, ng.nn(OWL::Cardinality), ng.nn(OWL::QualifiedCardinality), f, ng)?
                 },
             }
         )
@@ -2606,5 +2624,40 @@ mod test {
         )
         .unwrap();
         assert!(strict_out.is_empty());
+    }
+
+    #[test]
+    fn unqualified_data_cardinality_written_unqualified() {
+        // https://github.com/phillord/horned-owl/issues/344
+        let b = Build::new_rc();
+        let mut ont = ComponentMappedOntology::new_rc();
+        for (n, qualified) in [(1, false), (2, true)] {
+            let dr: DataRange<RcStr> = if qualified {
+                b.datatype("http://www.w3.org/2001/XMLSchema#integer")
+                    .into()
+            } else {
+                b.datatype(crate::vocab::OWL2Datatype::Literal).into()
+            };
+            ont.insert(SubClassOf {
+                sub: b.class(format!("http://example.org/C{n}")).into(),
+                sup: ClassExpression::DataExactCardinality {
+                    n,
+                    dp: b.data_property("http://example.org/dp"),
+                    dr,
+                },
+            });
+        }
+        let formatter = WriterQuadSerializerAdaptor::new(
+            RdfSerializer::from_format(oxrdfio::RdfFormat::NTriples).for_writer(Vec::new()),
+        );
+        let out = write_to_rdf_formatter(&ont, formatter).unwrap();
+        let text = String::from_utf8(out).unwrap();
+        assert_eq!(text.matches("owl#cardinality>").count(), 1, "{text}");
+        assert_eq!(
+            text.matches("owl#qualifiedCardinality>").count(),
+            1,
+            "{text}"
+        );
+        assert_eq!(text.matches("owl#onDataRange>").count(), 1, "{text}");
     }
 }
