@@ -1,11 +1,9 @@
-//! `<...>` IRI validation, a literal port of `horned-pest/src/grammars/rfc3987.pest`.
+//! `<...>` IRI validation, a port of `horned-pest/src/grammars/rfc3987.pest`.
 //!
 //! The pest grammar is a PEG, so ordered choice commits and repetition
 //! does not backtrack. This follows it step for step, so it accepts and
-//! rejects exactly the same strings, including where that departs from the
-//! RFC: for example, an IPv4 host is matched with a single-digit octet
-//! first, so `1.2.3.45` is rejected, and an IPv6 literal must be followed
-//! by an `IPvFuture`, so `[::1]` is rejected.
+//! rejects exactly the same strings. Alternatives that the RFC leaves
+//! unordered are ordered longest first, for example `dec-octet` and `ls32`.
 
 type Idx = Option<usize>;
 
@@ -109,11 +107,19 @@ fn h16_colons(s: &str, mut i: usize, n: usize) -> Idx {
 }
 
 fn dec_octet(s: &str, i: usize) -> Idx {
-    // The first alternative, a single digit, always wins when it can.
-    s.as_bytes()
-        .get(i)
-        .is_some_and(u8::is_ascii_digit)
-        .then_some(i + 1)
+    let b = &s.as_bytes()[i..];
+    let d = |k: usize| b.get(k).is_some_and(u8::is_ascii_digit);
+    let r = |k: usize, lo: u8, hi: u8| b.get(k).is_some_and(|c| (lo..=hi).contains(c));
+    let three = (b.starts_with(b"25") && r(2, b'0', b'5'))
+        || (b.starts_with(b"2") && r(1, b'0', b'4') && d(2))
+        || (b.starts_with(b"1") && d(1) && d(2));
+    if three {
+        Some(i + 3)
+    } else if r(0, b'1', b'9') && d(1) {
+        Some(i + 2)
+    } else {
+        d(0).then_some(i + 1)
+    }
 }
 
 fn ipv4(s: &str, i: usize) -> Idx {
@@ -129,15 +135,19 @@ fn colon_dot(s: &str, i: usize) -> Idx {
 }
 
 fn ls32(s: &str, i: usize) -> Idx {
-    h16(s, i)
-        .and_then(|j| colon(s, j))
-        .and_then(|j| h16(s, j))
-        .or_else(|| ipv4(s, i))
+    ipv4(s, i).or_else(|| h16(s, i).and_then(|j| colon(s, j)).and_then(|j| h16(s, j)))
 }
 
-/// `(((H16 ":"){n} H16)?`
+/// `(((H16 ":" !":"){0,n} H16)?`
 fn opt_h16s(s: &str, i: usize, n: usize) -> usize {
-    h16_colons(s, i, n).and_then(|j| h16(s, j)).unwrap_or(i)
+    let mut j = i;
+    for _ in 0..n {
+        match h16(s, j).and_then(|k| colon(s, k)) {
+            Some(k) if !s[k..].starts_with(':') => j = k,
+            _ => break,
+        }
+    }
+    h16(s, j).unwrap_or(i)
 }
 
 fn double_colon(s: &str, i: usize) -> Idx {
@@ -196,15 +206,12 @@ fn ipv_future(s: &str, i: usize) -> Idx {
     (m > 0).then_some(j + m)
 }
 
-/// `"[" (IPv6address IPvFuture)* "]"`
+/// `"[" (IPv6address | IPvFuture) "]"`
 fn ip_literal(s: &str, i: usize) -> Idx {
     if !s[i..].starts_with('[') {
         return None;
     }
-    let mut j = i + 1;
-    while let Some(k) = ipv6(s, j).and_then(|k| ipv_future(s, k)) {
-        j = k;
-    }
+    let j = ipv6(s, i + 1).or_else(|| ipv_future(s, i + 1))?;
     s[j..].starts_with(']').then_some(j + 1)
 }
 
