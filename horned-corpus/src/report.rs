@@ -364,6 +364,25 @@ fn rate(n: usize, total: usize) -> f64 {
     }
 }
 
+/// Source reads that did not succeed, each with the `known` entry covering
+/// it (if any), ordered by ontology.
+fn source_failures<'a>(
+    records: &'a [Record],
+    known: &'a [KnownFailure],
+) -> Vec<(&'a SourceReadReport, Option<&'a KnownFailure>)> {
+    let mut v: Vec<_> = sources(records)
+        .filter(|s| s.outcome != Outcome::Ok)
+        .map(|s| {
+            (
+                s,
+                known_failures::find_source(known, &s.ontology, s.source_format),
+            )
+        })
+        .collect();
+    v.sort_by(|a, b| a.0.ontology.cmp(&b.0.ontology));
+    v
+}
+
 /// Cases with `n_unknown > 0`, worst first (ties broken by ontology name for
 /// determinism), capped at `TOP_N`.
 fn top_unknown(records: &[Record]) -> Vec<&CaseResult> {
@@ -515,7 +534,11 @@ fn summarize(records: &[Record], known: &[KnownFailure]) -> serde_json::Value {
         })
         .collect();
 
+    let sf = source_failures(records, known);
+    let sf_known = sf.iter().filter(|(_, k)| k.is_some()).count();
+
     serde_json::json!({
+        "source_read_failures": {"new": sf.len() - sf_known, "known": sf_known},
         "total_cases": cases(records).count(),
         "by_format_pair": by_pair,
         "outcomes": outcomes,
@@ -747,9 +770,11 @@ fn render_md(records: &[Record], known: &[KnownFailure]) -> String {
     let mut s = String::new();
     // One report type per sweep -- name it for what the records actually
     // are, rather than calling a reasoning run a "Round-Trip Report".
-    let has_cases = cases(records).next().is_some();
     let has_reason = reasonings(records).next().is_some();
     let has_profile = profile_checks(records).next().is_some();
+    // A round-trip run in which every source failed to read has sources only.
+    let has_cases = cases(records).next().is_some()
+        || (!has_reason && !has_profile && sources(records).next().is_some());
     s.push_str(match (has_cases, has_reason, has_profile) {
         (false, true, false) => "# Reasoning Report\n\n",
         (false, false, true) => "# Profile Report\n\n",
@@ -845,6 +870,29 @@ fn render_md(records: &[Record], known: &[KnownFailure]) -> String {
          It is reported as benign by default, but is worth manual spot-checking rather \
          than assuming every case in it is harmless.\n\n",
     );
+
+    s.push_str("## Source Read Failures\n\n");
+    let sf = source_failures(records, known);
+    if sf.is_empty() {
+        s.push_str("None. \n\n");
+    } else {
+        s.push_str("| Ontology | Source | Outcome | Status | Detail |\n|---|---|---|---|---|\n");
+        for (r, k) in &sf {
+            let (status, detail) = match k {
+                Some(k) => ("known", k.reason.as_str()),
+                None => ("new", r.error.as_deref().unwrap_or_default()),
+            };
+            s.push_str(&format!(
+                "| {} | {} | {} | {} | {} |\n",
+                r.ontology,
+                fmt(r.source_format),
+                out(r.outcome),
+                status,
+                detail.replace('|', "\\|"),
+            ));
+        }
+        s.push('\n');
+    }
 
     s.push_str("## Known Failures\n\n");
     s.push_str(
@@ -1084,6 +1132,46 @@ mod tests {
         assert!(md.contains("| DL | 1 | 0 | 0.0% |"), "{md}");
         // No --robot-ground-truth, so nothing to compare against.
         assert!(!md.contains("Agreement with ROBOT"), "{md}");
+    }
+
+    fn src_rec(o: &str, outcome: Outcome) -> Record {
+        Record::Source(SourceReadReport {
+            ontology: o.into(),
+            source_format: Format::OwlXml,
+            outcome,
+            is_complete: false,
+            incomplete: None,
+            error: Some("Broken literal".into()),
+            read_us: None,
+        })
+    }
+
+    #[test]
+    fn source_read_failure_is_known_only_when_an_entry_matches() {
+        let known = vec![KnownFailure {
+            ontology: "KNOWN".into(),
+            source_format: Some(Format::OwlXml),
+            target_format: None,
+            reason: "bad source".into(),
+        }];
+        let recs = vec![
+            src_rec("KNOWN", Outcome::ReadFail),
+            src_rec("OTHER", Outcome::ReadFail),
+            src_rec("FINE", Outcome::Ok),
+        ];
+        let f = source_failures(&recs, &known);
+        assert_eq!(f.len(), 2);
+        assert_eq!(f[0].0.ontology, "KNOWN");
+        assert!(f[0].1.is_some());
+        assert!(f[1].1.is_none());
+        let j = summarize(&recs, &known);
+        assert_eq!(j["source_read_failures"]["new"], 1);
+        assert_eq!(j["source_read_failures"]["known"], 1);
+        let md = render_md(&recs, &known);
+        assert!(
+            md.contains("| KNOWN | owl_xml | read_fail | known | bad source |"),
+            "{md}"
+        );
     }
 
     #[test]

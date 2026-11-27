@@ -2873,5 +2873,10 @@
     "source_format": "rdf_xml",
     "target_format": "omn",
     "reason": "Same cause as AFO to OFN -- see that entry; the OMN writer also writes the one-operand intersection as the bare operand."
+  },
+  {
+    "ontology": "BRIDG",
+    "source_format": "owl_xml",
+    "reason": "Invalid OWL/XML source, so it cannot be read and has no round-trip cases. Every language-tagged literal is written as <Literal datatypeIRI=\"xs:string\" xml:lang=\"en-US\">. datatypeIRI is a full IRI in OWL/XML, and the file's xs prefix lacks the trailing '#', so xs:string is not xsd:string; a language-tagged literal must be rdf:PlainLiteral, so the reader rejects it as 'Broken literal' (5225 literals, the first at byte 2937). OWL API/ROBOT 1.9.10 accepts the file only by silently dropping the language tags."
   }
 ]

@@ -11,7 +11,7 @@
 //! behaviour, not a run's output, so it's compiled in via `include_str!`
 //! rather than read from disk at run time.
 
-use crate::model::{CaseResult, Category, Format, Outcome};
+use crate::model::{CaseResult, Category, Format, Outcome, SourceReadReport};
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
@@ -38,7 +38,20 @@ impl KnownFailure {
             && self.source_format.is_none_or(|f| f == source)
             && self.target_format.is_none_or(|f| f == target)
     }
+
+    /// Whether this entry covers a failure to read `ontology` in `source`
+    /// format, which has no target. Only entries without a `target_format`
+    /// do; those with one cover round-trip cases only.
+    pub fn matches_source(&self, ontology: &str, source: Format) -> bool {
+        self.target_format.is_none()
+            && self.ontology == ontology
+            && self.source_format.is_none_or(|f| f == source)
+    }
 }
+
+/// The prefix `run_bytes` puts on the `error` of a source read failure that
+/// matches an entry, as `skipped_case` does for cases.
+pub const KNOWN_PREFIX: &str = "known failure: ";
 
 /// Parse a known-failures list from JSON text (an array of `KnownFailure`).
 fn parse(text: &str) -> anyhow::Result<Vec<KnownFailure>> {
@@ -77,6 +90,15 @@ pub fn find<'a>(
     known.iter().find(|k| k.matches(ontology, source, target))
 }
 
+/// Find the first entry (if any) covering a source read failure.
+pub fn find_source<'a>(
+    known: &'a [KnownFailure],
+    ontology: &str,
+    source: Format,
+) -> Option<&'a KnownFailure> {
+    known.iter().find(|k| k.matches_source(ontology, source))
+}
+
 /// Whether a case that was actually run still shows a real failure: it did
 /// not complete, or it round-tripped with an `Unknown` or `AnnotationLoss`
 /// diff. A skipped case was not run, so it shows nothing either way.
@@ -109,6 +131,17 @@ pub fn check<'a>(
     known: &'a [KnownFailure],
     cases: &[CaseResult],
 ) -> Vec<(&'a KnownFailure, EntryStatus)> {
+    check_with_sources(known, cases, &[])
+}
+
+/// As `check`, but an entry without a `target_format` also covers the source
+/// reads in `sources` that `matches_source`; one of those still fails unless
+/// it read `Ok`.
+pub fn check_with_sources<'a>(
+    known: &'a [KnownFailure],
+    cases: &[CaseResult],
+    sources: &[SourceReadReport],
+) -> Vec<(&'a KnownFailure, EntryStatus)> {
     known
         .iter()
         .map(|k| {
@@ -119,9 +152,15 @@ pub fn check<'a>(
                         && k.matches(&c.ontology, c.source_format, c.target_format)
                 })
                 .collect();
-            let status = if run.is_empty() {
+            let src: Vec<&SourceReadReport> = sources
+                .iter()
+                .filter(|s| k.matches_source(&s.ontology, s.source_format))
+                .collect();
+            let status = if run.is_empty() && src.is_empty() {
                 EntryStatus::NotChecked
-            } else if run.iter().any(|c| still_fails(c)) {
+            } else if run.iter().any(|c| still_fails(c))
+                || src.iter().any(|s| s.outcome != Outcome::Ok)
+            {
                 EntryStatus::StillFails
             } else {
                 EntryStatus::NowPasses
@@ -245,5 +284,55 @@ mod tests {
         let known = known_failures();
         assert!(!known.is_empty());
         assert!(find(&known, "CRENO", Format::OwlXml, Format::RdfXml).is_some());
+    }
+
+    fn src_report(ontology: &str, outcome: Outcome) -> SourceReadReport {
+        SourceReadReport {
+            ontology: ontology.into(),
+            source_format: Format::OwlXml,
+            outcome,
+            is_complete: false,
+            incomplete: None,
+            error: None,
+            read_us: None,
+        }
+    }
+
+    fn x_entry(target: Option<Format>) -> KnownFailure {
+        KnownFailure {
+            ontology: "X".into(),
+            source_format: Some(Format::OwlXml),
+            target_format: target,
+            reason: "r".into(),
+        }
+    }
+
+    #[test]
+    fn matches_source_only_without_target_format() {
+        assert!(x_entry(None).matches_source("X", Format::OwlXml));
+        assert!(!x_entry(None).matches_source("X", Format::Ofn));
+        assert!(!x_entry(None).matches_source("Y", Format::OwlXml));
+        assert!(!x_entry(Some(Format::Ofn)).matches_source("X", Format::OwlXml));
+        let all = KnownFailure {
+            source_format: None,
+            ..x_entry(None)
+        };
+        assert!(all.matches_source("X", Format::Ofn));
+    }
+
+    #[test]
+    fn check_with_sources_judges_source_reads() {
+        let known = [x_entry(None)];
+        let st = |s: &[SourceReadReport]| check_with_sources(&known, &[], s)[0].1;
+        assert_eq!(st(&[]), EntryStatus::NotChecked);
+        assert_eq!(
+            st(&[src_report("X", Outcome::ReadFail)]),
+            EntryStatus::StillFails
+        );
+        assert_eq!(st(&[src_report("X", Outcome::Ok)]), EntryStatus::NowPasses);
+        assert_eq!(
+            st(&[src_report("Y", Outcome::ReadFail)]),
+            EntryStatus::NotChecked
+        );
     }
 }

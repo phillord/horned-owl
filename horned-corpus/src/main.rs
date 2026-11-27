@@ -366,6 +366,7 @@ fn check_known_failures(dir: &std::path::Path) -> anyhow::Result<bool> {
         "rdf,owx,ofn,ofn_nom,ofn_stream_write,ofn_nom_stream,ofn_stream_read,omn,omn_nom,omn_stream_write,omn_nom_stream,omn_stream_read,obo,obo_nom,obo_stream_write,obo_nom_stream,obo_stream_read",
     );
     let mut cases = Vec::new();
+    let mut sources = Vec::new();
     for p in corpus::entries(dir)? {
         let name = p.file_stem().unwrap_or_default().to_string_lossy();
         if !known.iter().any(|k| k.ontology == name) {
@@ -373,14 +374,16 @@ fn check_known_failures(dir: &std::path::Path) -> anyhow::Result<bool> {
         }
         let bytes = corpus::read_bytes(&p)?;
         for r in roundtrip::run_bytes(&name, &bytes, &fmts, &known, true) {
-            if let Record::Case(c) = r {
-                cases.push(c);
+            match r {
+                Record::Case(c) => cases.push(c),
+                Record::Source(s) => sources.push(s),
+                _ => {}
             }
         }
     }
 
     let mut all_fail = true;
-    for (k, status) in known_failures::check(&known, &cases) {
+    for (k, status) in known_failures::check_with_sources(&known, &cases, &sources) {
         let label = match status {
             EntryStatus::StillFails => "still fails",
             EntryStatus::NowPasses => "NOW PASSES (stale)",

@@ -130,6 +130,14 @@ pub fn run_bytes(
     let mut recs = Vec::new();
     let sfmt = detect(bytes);
     let Ok(src) = read_for_sweep(ontology, bytes, sfmt, &mut recs) else {
+        if !run_all
+            && let Some(k) = known_failures::find_source(known, ontology, sfmt)
+            && let Some(Record::Source(s)) = recs.last_mut()
+            && s.outcome == Outcome::ReadFail
+        {
+            let e = s.error.take().unwrap_or_default();
+            s.error = Some(format!("{}{}: {e}", known_failures::KNOWN_PREFIX, k.reason));
+        }
         return recs;
     };
 
@@ -520,6 +528,45 @@ mod tests {
             }
             other => panic!("expected Record::Source with ReadFail, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn known_source_read_failure_is_marked_unless_run_all() {
+        let bytes = b"garbage not an ontology";
+        let known = vec![KnownFailure {
+            ontology: "t".into(),
+            source_format: Some(Format::Unknown),
+            target_format: None,
+            reason: "bad source".into(),
+        }];
+        let err = |recs: &[Record]| match &recs[0] {
+            Record::Source(r) => {
+                assert_eq!(r.outcome, Outcome::ReadFail);
+                r.error.clone().unwrap()
+            }
+            other => panic!("expected Record::Source, got {other:?}"),
+        };
+
+        let recs = run_bytes("t", bytes, &[Format::Ofn], &known, false);
+        assert!(err(&recs).starts_with("known failure: bad source: "));
+
+        let recs = run_bytes("t", bytes, &[Format::Ofn], &known, true);
+        assert!(!err(&recs).starts_with("known failure: "));
+
+        // An entry with a target_format covers cases only, and another
+        // ontology's entry does not apply.
+        let other = vec![
+            KnownFailure {
+                target_format: Some(Format::Ofn),
+                ..known[0].clone()
+            },
+            KnownFailure {
+                ontology: "u".into(),
+                ..known[0].clone()
+            },
+        ];
+        let recs = run_bytes("t", bytes, &[Format::Ofn], &other, false);
+        assert!(!err(&recs).starts_with("known failure: "));
     }
 
     #[test]
