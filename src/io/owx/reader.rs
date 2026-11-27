@@ -3284,4 +3284,66 @@ pub mod test {
             "http://ex.com/o#Alzheimer's_Disease"
         );
     }
+
+    fn read_literal(body: &str) -> String {
+        let owx = format!(
+            r##"<?xml version="1.0"?>
+<Ontology xmlns="http://www.w3.org/2002/07/owl#"
+     xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"
+     ontologyIRI="http://ex.com/o">
+    <AnnotationAssertion>
+        <AnnotationProperty abbreviatedIRI="rdfs:comment"/>
+        <IRI>http://ex.com/o#a</IRI>
+        <Literal>{body}</Literal>
+    </AnnotationAssertion>
+</Ontology>"##
+        );
+        let (ont, _): (ComponentMappedOntology<RcStr, RcAnnotatedComponent>, _) =
+            super::read(&mut owx.as_bytes(), Default::default()).unwrap();
+        match &ont.i().annotation_assertion().next().unwrap().ann.av {
+            AnnotationValue::Literal(Literal::Simple { literal }) => literal.clone(),
+            other => panic!("unexpected {other:?}"),
+        }
+    }
+
+    // Regression test for #348: CDATA content is read verbatim, ordinary
+    // text around it is still unescaped.
+    #[test]
+    fn literal_cdata_is_not_unescaped() {
+        assert_eq!(
+            read_literal("before <![CDATA[CDATA with <markup> & a #. &amp;]]> &amp; after"),
+            "before CDATA with <markup> & a #. &amp; & after"
+        );
+    }
+
+    #[test]
+    fn literal_text_is_unescaped() {
+        assert_eq!(read_literal("a &lt; b &amp;&#39;"), "a < b &'");
+    }
+
+    #[test]
+    fn literal_special_characters_round_trip_through_writer() {
+        let literal = "a ]]> b <c> & &amp; &#39; \"d\"".to_string();
+        let b = Build::new_rc();
+        let mut ont = ComponentMappedOntology::<RcStr, RcAnnotatedComponent>::new_rc();
+        ont.insert(AnnotationAssertion::new(
+            b.iri("http://ex.com/o#a").into(),
+            Annotation {
+                ap: b.annotation_property("http://www.w3.org/2000/01/rdf-schema#comment"),
+                av: Literal::Simple {
+                    literal: literal.clone(),
+                }
+                .into(),
+                ann: Default::default(),
+            },
+        ));
+        let mut out = Vec::new();
+        crate::io::owx::writer::write(&mut out, &ont, None).unwrap();
+        let (back, _): (ComponentMappedOntology<RcStr, RcAnnotatedComponent>, _) =
+            super::read(&mut out.as_slice(), Default::default()).unwrap();
+        match &back.i().annotation_assertion().next().unwrap().ann.av {
+            AnnotationValue::Literal(Literal::Simple { literal: l }) => assert_eq!(l, &literal),
+            other => panic!("unexpected {other:?}"),
+        }
+    }
 }
