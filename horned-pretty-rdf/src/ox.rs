@@ -102,6 +102,10 @@ impl From<TermRef<'_>> for PTerm<String> {
             TermRef::NamedNode(nn) => PTerm::NamedNode(nn.into()),
             TermRef::BlankNode(bn) => PTerm::BlankNode(bn.into()),
             TermRef::Literal(l) => PTerm::Literal(l.into()),
+            // Only reachable when oxrdf's `rdf-12` feature is enabled by
+            // something else in the dependency graph.
+            #[allow(unreachable_patterns)]
+            _ => panic!("RDF/XML cannot express RDF 1.2 triple terms"),
         }
     }
 }
@@ -195,5 +199,19 @@ mod test {
             r###"<http://www.w3.org/TR/rdf-syntax-grammar> <http://purl.org/dc/elements/1.1/title> "RDF1.1 XML Syntax" .
 "###,
         )
+    }
+}
+
+#[cfg(all(test, feature = "rdf-12"))]
+mod rdf12_test {
+    use super::*;
+    use oxrdf::{NamedNode, Term, Triple};
+
+    #[test]
+    #[should_panic(expected = "triple terms")]
+    fn triple_term_is_rejected() {
+        let n = NamedNode::new_unchecked("http://example.com/n");
+        let term = Term::Triple(Box::new(Triple::new(n.clone(), n.clone(), n)));
+        let _: PTerm<String> = term.as_ref().into();
     }
 }

@@ -10,6 +10,11 @@ license = "LGPL-3.0"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[features]
+# Builds against oxrdf's RDF 1.2 types so CI can check that the crate still
+# compiles when another crate in the graph enables them. Not for users.
+rdf-12 = ["oxrdfio/rdf-12"]
+
 [dependencies]
 indexmap = "1.*"
 quick-xml = "0.41"

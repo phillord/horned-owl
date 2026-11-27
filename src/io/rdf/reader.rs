@@ -189,15 +189,19 @@ impl<A: ForIRI> Build<A> {
         Term::BNode(BNode(nn.clone().into_string().into()))
     }
 
-    fn convert_to_pos_triple(&self, rio_triple: Triple, pos: u64) -> PosTriple<A> {
-        PosTriple(
+    fn convert_to_pos_triple(
+        &self,
+        rio_triple: Triple,
+        pos: u64,
+    ) -> Result<PosTriple<A>, HornedError> {
+        Ok(PosTriple(
             [
                 self.to_term_bnn(&rio_triple.subject),
                 self.to_term_nn(&rio_triple.predicate),
-                self.to_term(&rio_triple.object),
+                self.to_term(&rio_triple.object)?,
             ],
             pos,
-        )
+        ))
     }
 
     fn substitute_term(&self, term: [Term<A>; 3]) -> [Term<A>; 3] {
@@ -219,16 +223,29 @@ impl<A: ForIRI> Build<A> {
         PosTriple(term, pos)
     }
 
-    fn convert_substitute_triple(&self, rio_triple: Triple, pos: u64) -> PosTriple<A> {
-        self.substitute_triple(self.convert_to_pos_triple(rio_triple, pos))
+    fn convert_substitute_triple(
+        &self,
+        rio_triple: Triple,
+        pos: u64,
+    ) -> Result<PosTriple<A>, HornedError> {
+        Ok(self.substitute_triple(self.convert_to_pos_triple(rio_triple, pos)?))
     }
 
-    fn to_term(&self, t: &OxTerm) -> Term<A> {
-        match t {
+    fn to_term(&self, t: &OxTerm) -> Result<Term<A>, HornedError> {
+        Ok(match t {
             oxrdf::Term::NamedNode(iri) => self.to_term_nn(iri),
             oxrdf::Term::BlankNode(id) => Self::to_term_bn(id),
             oxrdf::Term::Literal(l) => self.to_term_lt(l),
-        }
+            // Only reachable when oxrdf's `rdf-12` feature is enabled by
+            // something else in the dependency graph.
+            #[allow(unreachable_patterns)]
+            _ => {
+                return Err(HornedError::ParserError(
+                    "RDF 1.2 triple terms are not supported".into(),
+                    crate::error::Location::Unknown,
+                ));
+            }
+        })
     }
 
     fn to_term_bnn(&self, subj: &NamedOrBlankNode) -> Term<A> {
@@ -667,7 +684,7 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
                 config
                     .build
                     .as_ref()
-                    .convert_substitute_triple(ox_triple, last_pos.get()),
+                    .convert_substitute_triple(ox_triple, last_pos.get())?,
             );
             //last_pos.set(parser.buffer_position().try_into().unwrap());
         }
