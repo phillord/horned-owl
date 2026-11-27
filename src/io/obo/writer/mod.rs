@@ -442,11 +442,10 @@ pub const DEFAULT_CHUNK: usize = 10_000;
 /// so the document reads back as the same ontology, but it is longer than
 /// the output of [`write`].
 ///
-/// The header ends where the first stanza starts, so everything that goes
-/// in it, including `owl-axioms:` for components with no OBO form, has to
-/// be known by the end of the first chunk, which is not written until it
-/// holds a component other than those above. A later component that needs
-/// a header line is an error.
+/// The header comes before the first stanza, and what goes in it, including
+/// `owl-axioms:` for components with no OBO form, may arrive in any chunk.
+/// So the stanzas are rendered as the chunks fill but held, as text, and
+/// written after the header once the stream ends.
 pub fn write_stream<A: ForIRI, AA: ForIndex<A>, W: Write>(
     write: W,
     components: impl StreamOntology<A, AA>,
@@ -465,6 +464,7 @@ pub fn write_stream_chunked<A: ForIRI, AA: ForIndex<A>, W: Write>(
     let mut in_stanzas = false;
     let mut state: Option<State<A>> = None;
     let mut held: Vec<AnnotatedComponent<A>> = Vec::new();
+    let mut body: Vec<u8> = Vec::new();
 
     for item in components {
         match item? {
@@ -499,23 +499,28 @@ pub fn write_stream_chunked<A: ForIRI, AA: ForIndex<A>, W: Write>(
                 }
                 held.push(ac.clone());
                 if in_stanzas && held.len() >= chunk {
-                    flush(&mut write, &mapping, &mut state, &mut held)?;
+                    flush(&mut body, &mapping, &mut state, &mut held)?;
                 }
             }
         }
     }
-    flush(&mut write, &mapping, &mut state, &mut held)?;
+    flush(&mut body, &mapping, &mut state, &mut held)?;
+    if let Some(st) = state.as_mut() {
+        for h in st.take_header()? {
+            writeln!(write, "{h}")?;
+        }
+    }
+    write.write_all(&body)?;
     Ok(write)
 }
 
-/// Write the held components, with the header first if it is not out yet.
+/// Render the held components as stanzas onto `body`, and note their header lines.
 fn flush<A: ForIRI, W: Write>(
     write: &mut W,
     mapping: &PrefixMapping,
     state: &mut Option<State<A>>,
     held: &mut Vec<AnnotatedComponent<A>>,
 ) -> Result<(), HornedError> {
-    let first = state.is_none();
     let st = state.get_or_insert_with(|| {
         let iri = held.iter().rev().find_map(|p| ontology_iri(&p.component));
         State::new(iri, Some(mapping))
@@ -527,16 +532,6 @@ fn flush<A: ForIRI, W: Write>(
     let mut stanzas = BTreeMap::new();
     st.process(held.iter(), &fresh, &mut stanzas);
     held.clear();
-    if first {
-        for h in st.take_header()? {
-            writeln!(write, "{h}")?;
-        }
-    } else if !st.header.is_empty() || !st.unhandled.is_empty() {
-        return Err(HornedError::invalid(
-            "a component of a streamed OBO document needs a header line after the \
-             first stanza was written",
-        ));
-    }
     write_stanzas(write, stanzas)
 }
 

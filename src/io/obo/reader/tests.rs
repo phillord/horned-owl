@@ -165,4 +165,39 @@ mod writing {
             pretty_assertions::assert_eq!(expected, got, "chunk {chunk}:\n{text}");
         }
     }
+
+    /// A component with no OBO form that arrives after earlier chunks went
+    /// into stanzas still reaches `owl-axioms:`, which heads the document.
+    #[rstest]
+    fn late_owl_axioms_reach_the_header(#[files("src/ont/owl-obo/*.obo")] resource: PathBuf) {
+        let Some((ont, pm)) = load(&resource) else {
+            return;
+        };
+        if !batch(&ont, &pm).contains("\nowl-axioms:") {
+            return;
+        }
+        let (expected, _) = nom_read(&batch(&ont, &pm)).unwrap();
+        // Everything but the header components is one per chunk, and the
+        // components that need the header line come last.
+        let mut comps: Vec<_> = component_stream(&ont).map(Result::unwrap).collect();
+        comps.sort_by_key(|i| match i {
+            crate::io::StreamComponent::Component(ac) => !matches!(
+                ac.component,
+                crate::model::Component::OntologyID(_)
+                    | crate::model::Component::Import(_)
+                    | crate::model::Component::OntologyAnnotation(_)
+                    | crate::model::Component::DeclareClass(_)
+                    | crate::model::Component::AnnotationAssertion(_)
+            ),
+            _ => false,
+        });
+        let items = prefix_stream(&pm).chain(comps.into_iter().map(Ok));
+        let out = crate::io::obo::write_stream_chunked(Vec::new(), items, 1).unwrap();
+        let text = String::from_utf8(out).unwrap();
+        assert!(text.contains("\nowl-axioms:"), "{text}");
+        let first_stanza = text.find("\n[").unwrap_or(text.len());
+        assert!(text.find("\nowl-axioms:").unwrap() < first_stanza, "{text}");
+        let (got, _) = nom_read(&text).unwrap_or_else(|e| panic!("{e}\n{text}"));
+        pretty_assertions::assert_eq!(expected, got, "{text}");
+    }
 }

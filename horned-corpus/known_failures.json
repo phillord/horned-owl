@@ -2281,18 +2281,6 @@
     "reason": "The streaming OBO writer cannot emit an owl-axioms: header line after its first 10,000-component chunk. This ontology has more than 10,000 components, and components with no OBO form (assertions, GCIs, disjointness, unmapped annotations) arrive after that chunk. OBO puts owl-axioms: in the header before any stanza, so this is a limit of the format, not a bug; write_stream documents it."
   },
   {
-    "ontology": "PLANP",
-    "source_format": "rdf_xml",
-    "target_format": "obo_nom_stream",
-    "reason": "The streaming OBO writer cannot emit an owl-axioms: header line after its first 10,000-component chunk. This ontology has more than 10,000 components, and components with no OBO form (assertions, GCIs, disjointness, unmapped annotations) arrive after that chunk. OBO puts owl-axioms: in the header before any stanza, so this is a limit of the format, not a bug; write_stream documents it."
-  },
-  {
-    "ontology": "PLANP",
-    "source_format": "rdf_xml",
-    "target_format": "obo_stream_write",
-    "reason": "The streaming OBO writer cannot emit an owl-axioms: header line after its first 10,000-component chunk. This ontology has more than 10,000 components, and components with no OBO form (assertions, GCIs, disjointness, unmapped annotations) arrive after that chunk. OBO puts owl-axioms: in the header before any stanza, so this is a limit of the format, not a bug; write_stream documents it."
-  },
-  {
     "ontology": "PLANTSO",
     "source_format": "rdf_xml",
     "target_format": "obo_nom_stream",
@@ -2795,30 +2783,6 @@
     "source_format": "rdf_xml",
     "target_format": "obo_stream_write",
     "reason": "The streaming OBO writer cannot emit an owl-axioms: header line after its first 10,000-component chunk. This ontology has more than 10,000 components, and components with no OBO form (assertions, GCIs, disjointness, unmapped annotations) arrive after that chunk. OBO puts owl-axioms: in the header before any stanza, so this is a limit of the format, not a bug; write_stream documents it."
-  },
-  {
-    "ontology": "MIRO",
-    "source_format": "obo",
-    "target_format": "obo_stream_write",
-    "reason": "The streaming OBO writer cannot emit an owl-axioms: header line after its first 10,000-component chunk. This ontology has more than 10,000 components and one component that needs that header line sorts after the first chunk: a second oboInOwl:id assertion on OBO_REL_realizes, the typed literal \"OBO_REL:realizes\"^^xsd:string beside a plain one, which can only be written as owl-axioms. OBO puts owl-axioms: in the header before any stanza, so this is a limit of the format, not a bug; write_stream documents it."
-  },
-  {
-    "ontology": "MIRO",
-    "source_format": "obo",
-    "target_format": "obo_nom_stream",
-    "reason": "The streaming OBO writer cannot emit an owl-axioms: header line after its first 10,000-component chunk. This ontology has more than 10,000 components and one component that needs that header line sorts after the first chunk: a second oboInOwl:id assertion on OBO_REL_realizes, the typed literal \"OBO_REL:realizes\"^^xsd:string beside a plain one, which can only be written as owl-axioms. OBO puts owl-axioms: in the header before any stanza, so this is a limit of the format, not a bug; write_stream documents it."
-  },
-  {
-    "ontology": "ISPO",
-    "source_format": "rdf_xml",
-    "target_format": "obo_stream_write",
-    "reason": "The streaming OBO writer cannot emit an owl-axioms: header line after its first 10,000-component chunk. This ontology has more than 10,000 components and one component that needs that header line sorts after the first chunk: the oboInOwl:id assertion on ISPO_99999999, the last entity by IRI. OBO puts owl-axioms: in the header before any stanza, so this is a limit of the format, not a bug; write_stream documents it."
-  },
-  {
-    "ontology": "ISPO",
-    "source_format": "rdf_xml",
-    "target_format": "obo_nom_stream",
-    "reason": "The streaming OBO writer cannot emit an owl-axioms: header line after its first 10,000-component chunk. This ontology has more than 10,000 components and one component that needs that header line sorts after the first chunk: the oboInOwl:id assertion on ISPO_99999999, the last entity by IRI. OBO puts owl-axioms: in the header before any stanza, so this is a limit of the format, not a bug; write_stream documents it."
   },
   {
     "ontology": "GO-EXT",
