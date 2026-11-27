@@ -333,6 +333,7 @@ impl<A: ForIRI, R: BufRead, B: AsRef<Build<A>>> Reader<A, R, B> {
         let ctx = Ctx {
             build: self.build.as_ref(),
             mapping: &self.mapping,
+            depth: std::cell::Cell::new(0),
         };
         match f(&ctx, &self.buf[self.pos..end]) {
             Ok((rest, v)) if sp(rest).is_empty() => Ok(v),

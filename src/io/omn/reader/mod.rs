@@ -9,7 +9,7 @@ use curie::PrefixMapping;
 
 use crate::error::HornedError;
 use crate::io::StreamComponent;
-use crate::io::ofn::reader::error::{Origin, PErr};
+use crate::io::ofn::reader::error::{Origin, PErr, too_deep_message};
 use crate::model::*;
 
 mod convert;
@@ -67,7 +67,11 @@ pub fn parse_class_expression<A: ForIRI>(
         }
         e.into_horned(s, Origin::default())
     };
-    let Some((rest, desc)) = syn.description(s) else {
+    let read = syn.description(s);
+    if let Some(at) = syn.too_deep() {
+        return Err(PErr::semantic(at, 0, too_deep_message()).into_horned(s, Origin::default()));
+    }
+    let Some((rest, desc)) = read else {
         let (at, exp) = syn.furthest().unwrap_or((s, vec![]));
         return Err(to_error(at, &exp));
     };

@@ -3,6 +3,7 @@
 //! This builds model values directly while parsing, rather than going via a
 //! parse tree as the original pest reader (the `horned-pest` crate) does. It accepts the
 //! same language.
+use std::cell::Cell;
 use std::collections::BTreeSet;
 use std::io::BufRead;
 
@@ -56,6 +57,8 @@ use lex::*;
 pub(super) struct Ctx<'c, A: ForIRI> {
     pub(super) build: &'c Build<A>,
     pub(super) mapping: &'c PrefixMapping,
+    /// How deep the expression being read is nested.
+    pub(super) depth: Cell<usize>,
 }
 
 /// Read an ontology in OWL Functional Syntax by draining a [`Reader`].
@@ -122,6 +125,28 @@ pub(super) fn within<'a, T>(kw: &'a str, r: R<'a, T>) -> R<'a, T> {
     })
 }
 
+/// `f` read one nesting level deeper; an error past [`error::MAX_NESTING`]
+/// levels, at the construct starting at `at` with the keyword `kw`.
+fn deeper<'a, A: ForIRI, T>(
+    c: &Ctx<'_, A>,
+    at: &'a str,
+    kw: &str,
+    f: impl FnOnce() -> R<'a, T>,
+) -> R<'a, T> {
+    let depth = c.depth.get();
+    if depth >= error::MAX_NESTING {
+        return Err(Err::Failure(PErr::semantic(
+            at,
+            kw.len(),
+            error::too_deep_message(),
+        )));
+    }
+    c.depth.set(depth + 1);
+    let r = f();
+    c.depth.set(depth);
+    r
+}
+
 fn unknown<'a, T>(what: &str, kw: &'a str) -> R<'a, T> {
     Err(Err::Failure(PErr::semantic(
         kw,
@@ -179,6 +204,7 @@ where
     let ctx = Ctx {
         build,
         mapping: &prefixes,
+        depth: Cell::new(0),
     };
     let (r, ontology) = fatal(ontology(&ctx, i))?;
     let r = sp(r);
@@ -364,8 +390,9 @@ fn annotations<'a, A: ForIRI>(c: &Ctx<'_, A>, mut i: &'a str) -> R<'a, BTreeSet<
 }
 
 pub(super) fn annotation<'a, A: ForIRI>(c: &Ctx<'_, A>, i: &'a str) -> R<'a, Annotation<A>> {
+    let at = sp(i);
     let (r, kw) = keyword(i)?;
-    within(kw, annotation_body(c, r))
+    deeper(c, at, kw, || within(kw, annotation_body(c, r)))
 }
 
 fn annotation_body<'a, A: ForIRI>(c: &Ctx<'_, A>, i: &'a str) -> R<'a, Annotation<A>> {
@@ -420,7 +447,7 @@ fn data_range<'a, A: ForIRI>(c: &Ctx<'_, A>, i: &'a str) -> R<'a, DataRange<A>> 
         return datatype(c, i).map(|(r, x)| (r, DataRange::Datatype(x)));
     };
     let (r, _) = keyword(i)?;
-    within(kw, data_range_body(c, kw, r, i))
+    deeper(c, i, kw, || within(kw, data_range_body(c, kw, r, i)))
 }
 
 fn data_range_body<'a, A: ForIRI>(
@@ -477,7 +504,7 @@ fn class_expression<'a, A: ForIRI>(c: &Ctx<'_, A>, i: &'a str) -> R<'a, ClassExp
         return class(c, i).map(|(r, x)| (r, ClassExpression::Class(x)));
     };
     let (r, _) = keyword(i)?;
-    within(kw, class_expression_body(c, kw, r, i))
+    deeper(c, i, kw, || within(kw, class_expression_body(c, kw, r, i)))
 }
 
 fn object_cardinality<'a, A: ForIRI>(

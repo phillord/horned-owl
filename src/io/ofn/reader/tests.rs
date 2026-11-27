@@ -170,3 +170,61 @@ fn streamed_roundtrip(#[files("src/ont/owl-functional/*.ofn")] resource: PathBuf
     let (actual, _) = nom_read(std::str::from_utf8(&out).unwrap()).unwrap();
     pretty_assertions::assert_eq!(actual, expected);
 }
+
+/// Reads `doc` on a thread with the usual 2 MiB stack.
+fn nom_read_on_small_stack(doc: String) -> Result<usize, String> {
+    std::thread::Builder::new()
+        .stack_size(2 << 20)
+        .spawn(move || {
+            nom_read(&doc)
+                .map(|(o, _)| o.iter().count())
+                .map_err(|e| e.to_string())
+        })
+        .unwrap()
+        .join()
+        .unwrap()
+}
+
+/// An axiom with a class expression, data range or annotation nested
+/// `depth` levels deep.
+fn nested_axiom(kind: &str, depth: usize) -> String {
+    let axiom = match kind {
+        "complement" => format!(
+            "SubClassOf(:A {}:B{})",
+            "ObjectComplementOf(".repeat(depth),
+            ")".repeat(depth)
+        ),
+        "some" => format!(
+            "SubClassOf(:A {}:B{})",
+            "ObjectSomeValuesFrom(:p ".repeat(depth),
+            ")".repeat(depth)
+        ),
+        "data" => format!(
+            "DataPropertyRange(:d {}xsd:string{})",
+            "DataComplementOf(".repeat(depth),
+            ")".repeat(depth)
+        ),
+        "annotation" => format!(
+            "AnnotationAssertion({}rdfs:comment \"y\"){} rdfs:label :A \"x\")",
+            "Annotation(".repeat(depth),
+            " rdfs:comment \"y\")".repeat(depth - 1)
+        ),
+        _ => unreachable!(),
+    };
+    format!(
+        "Prefix(:=<http://e.com/>) Prefix(xsd:=<http://www.w3.org/2001/XMLSchema#>)          Prefix(rdfs:=<http://www.w3.org/2000/01/rdf-schema#>) Ontology({axiom})"
+    )
+}
+
+/// Nesting deeper than the limit is an error, not a stack overflow; nesting
+/// up to the limit reads.
+#[rstest]
+fn nesting_is_limited(#[values("complement", "some", "data", "annotation")] kind: &str) {
+    let limit = super::error::MAX_NESTING;
+    assert_eq!(
+        nom_read_on_small_stack(nested_axiom(kind, limit)).map(|n| n > 0),
+        Ok(true)
+    );
+    let e = nom_read_on_small_stack(nested_axiom(kind, 100_000)).unwrap_err();
+    assert!(e.contains("nested more than"), "{e}");
+}

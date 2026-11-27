@@ -9,6 +9,17 @@ use nom::error::{ContextError, ErrorKind, ParseError};
 
 use crate::error::{HornedError, Location};
 
+/// How deep class expressions, data ranges and annotations may nest. The
+/// readers descend recursively, so deeper nesting would overflow the stack
+/// and abort the process; at this depth a debug build still fits in a
+/// thread's default 2 MiB stack.
+pub const MAX_NESTING: usize = 128;
+
+/// The message for nesting deeper than [`MAX_NESTING`].
+pub fn too_deep_message() -> String {
+    format!("nested more than {MAX_NESTING} levels deep")
+}
+
 /// Where the first byte of a window of text sits in the whole document.
 ///
 /// A streaming reader holds only part of the document, so errors are

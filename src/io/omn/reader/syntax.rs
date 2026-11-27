@@ -10,9 +10,10 @@
 //!
 //! Whitespace and comments are skipped before every token, which is what
 //! pest does implicitly between the elements of a non-atomic rule.
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 
 use crate::io::ofn::reader::bcp47::language_tag_len;
+use crate::io::ofn::reader::error::MAX_NESTING;
 use crate::io::ofn::reader::lex::{pn_chars, pn_local, pname, pname_ns};
 use crate::io::ofn::reader::rfc3987::is_iri;
 
@@ -339,6 +340,10 @@ struct Furthest<'a> {
 
 pub struct Syntax<'a> {
     furthest: RefCell<Furthest<'a>>,
+    /// How deep the expression being read is nested.
+    depth: Cell<usize>,
+    /// Where nesting first went deeper than [`MAX_NESTING`].
+    too_deep: Cell<Option<&'a str>>,
 }
 
 impl<'a> Default for Syntax<'a> {
@@ -348,6 +353,8 @@ impl<'a> Default for Syntax<'a> {
                 at: None,
                 expected: Vec::new(),
             }),
+            depth: Cell::new(0),
+            too_deep: Cell::new(None),
         }
     }
 }
@@ -390,6 +397,31 @@ impl<'a> Syntax<'a> {
     pub fn furthest(&self) -> Option<(&'a str, Vec<&'static str>)> {
         let f = self.furthest.borrow();
         f.at.map(|a| (a, f.expected.clone()))
+    }
+
+    /// Where nesting went deeper than [`MAX_NESTING`]; the text then fails to
+    /// read whatever else was tried.
+    pub fn too_deep(&self) -> Option<&'a str> {
+        self.too_deep.get()
+    }
+
+    /// `f` read one nesting level deeper; nothing past [`MAX_NESTING`]
+    /// levels.
+    fn deeper<T>(&self, i: &'a str, f: impl FnOnce() -> Res<'a, T>) -> Res<'a, T> {
+        let depth = self.depth.get();
+        if depth >= MAX_NESTING {
+            if self.too_deep.get().is_none() {
+                self.too_deep.set(Some(sp(i)));
+            }
+            return None;
+        }
+        if self.too_deep.get().is_some() {
+            return None;
+        }
+        self.depth.set(depth + 1);
+        let r = f();
+        self.depth.set(depth);
+        r
     }
 
     fn no<T>(&self, at: &'a str, what: &'static str) -> Option<T> {
@@ -744,6 +776,10 @@ impl<'a> Syntax<'a> {
 
     /// `Primary = NotKw? ~ (Restriction | Atomic)`
     fn primary(&self, i: &'a str) -> Res<'a, Prim<'a>> {
+        self.deeper(i, || self.primary_body(i))
+    }
+
+    fn primary_body(&self, i: &'a str) -> Res<'a, Prim<'a>> {
         let (r, not) = match self.kw(i, "not") {
             Some((r, _)) => (r, true),
             None => (i, false),
@@ -997,6 +1033,10 @@ impl<'a> Syntax<'a> {
     }
 
     fn data_primary(&self, i: &'a str) -> Res<'a, DataPrim<'a>> {
+        self.deeper(i, || self.data_primary_body(i))
+    }
+
+    fn data_primary_body(&self, i: &'a str) -> Res<'a, DataPrim<'a>> {
         let (r, not) = match self.kw(i, "not") {
             Some((r, _)) => (r, true),
             None => (i, false),
@@ -1083,7 +1123,13 @@ impl<'a> Syntax<'a> {
 
     /// `Annotations = ^"Annotations:" ~ AnnotationEntry ~ ("," ~ AnnotationEntry)*`
     pub fn annotations(&self, i: &'a str) -> Res<'a, Annotations<'a>> {
+        // Only after the keyword, so that looking for optional annotations
+        // at the deepest level does not count as nesting deeper.
         let (r, _) = self.ci(i, "Annotations:")?;
+        self.deeper(i, || self.annotations_body(r))
+    }
+
+    fn annotations_body(&self, r: &'a str) -> Res<'a, Annotations<'a>> {
         let (mut r, first) = self.ann_entry(r)?;
         let mut v = vec![first];
         while let Some((r2, _)) = self.punct(r, ",")
