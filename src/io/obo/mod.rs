@@ -14,7 +14,10 @@ pub mod common;
 pub mod reader;
 pub mod writer;
 pub use reader::read;
-pub use writer::{write, write_stream, write_stream_chunked};
+pub use writer::{
+    OBOStreamWriterConfiguration, StreamMode, write, write_stream, write_stream_chunked,
+    write_stream_with_config,
+};
 
 #[cfg(test)]
 mod oracle;

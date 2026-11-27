@@ -12,7 +12,8 @@
 //! by `read(write(read(x))) == read(x)` over the oracle corpus (see tests).
 
 use std::collections::BTreeMap;
-use std::io::Write;
+use std::io::{Seek, SeekFrom, Write};
+use std::path::PathBuf;
 
 use curie::PrefixMapping;
 
@@ -431,6 +432,47 @@ pub fn write<A: ForIRI, AA: ForIndex<A>, W: Write>(
 /// The number of components `write_stream` holds before it writes them.
 pub const DEFAULT_CHUNK: usize = 10_000;
 
+/// How `write_stream` handles the header, which comes before the first
+/// stanza but may need lines from any chunk.
+#[derive(Clone, Debug)]
+pub enum StreamMode {
+    /// Write each chunk's stanzas to a temporary file, then write the
+    /// header, now complete, and copy the file after it. Memory is bounded
+    /// by one chunk and the header lines. `dir` is where the file goes; the
+    /// default is the system temporary directory, which honours `TMPDIR`.
+    /// The file is removed when the writer returns, on error too.
+    Spool { dir: Option<PathBuf> },
+    /// Write the header with the first chunk and the stanzas straight
+    /// after, with no temporary file. A later component that needs a
+    /// header line, such as `owl-axioms:` for one with no OBO form, is an
+    /// error. For callers who know the ontology fits OBO.
+    FailFast,
+}
+
+impl Default for StreamMode {
+    fn default() -> Self {
+        StreamMode::Spool { dir: None }
+    }
+}
+
+/// Configuration for [`write_stream_with_config`].
+#[derive(Clone, Debug)]
+pub struct OBOStreamWriterConfiguration {
+    /// The number of components held before they are written.
+    pub chunk: usize,
+    /// How the header is handled.
+    pub mode: StreamMode,
+}
+
+impl Default for OBOStreamWriterConfiguration {
+    fn default() -> Self {
+        OBOStreamWriterConfiguration {
+            chunk: DEFAULT_CHUNK,
+            mode: StreamMode::default(),
+        }
+    }
+}
+
 /// Write `components` as an OBO document without holding the whole ontology.
 ///
 /// Prefixes must come first, then the ontology id, imports and ontology
@@ -442,29 +484,87 @@ pub const DEFAULT_CHUNK: usize = 10_000;
 /// so the document reads back as the same ontology, but it is longer than
 /// the output of [`write`].
 ///
-/// The header comes before the first stanza, and what goes in it, including
-/// `owl-axioms:` for components with no OBO form, may arrive in any chunk.
-/// So the stanzas are rendered as the chunks fill but held, as text, and
-/// written after the header once the stream ends.
+/// The header ends where the first stanza starts, and what goes in it,
+/// including `owl-axioms:` for components with no OBO form, may arrive in
+/// any chunk. This uses [`StreamMode::Spool`], which keeps the stanzas in a
+/// temporary file until the header is complete, so it needs disk space for
+/// the whole of the stanzas. Use [`write_stream_with_config`] with
+/// [`StreamMode::FailFast`] to avoid that.
 pub fn write_stream<A: ForIRI, AA: ForIndex<A>, W: Write>(
     write: W,
     components: impl StreamOntology<A, AA>,
 ) -> Result<W, HornedError> {
-    write_stream_chunked(write, components, DEFAULT_CHUNK)
+    write_stream_with_config(write, components, OBOStreamWriterConfiguration::default())
 }
 
 /// As [`write_stream`], with `chunk` components held at a time.
 pub fn write_stream_chunked<A: ForIRI, AA: ForIndex<A>, W: Write>(
-    mut write: W,
+    write: W,
     components: impl StreamOntology<A, AA>,
     chunk: usize,
 ) -> Result<W, HornedError> {
+    write_stream_with_config(
+        write,
+        components,
+        OBOStreamWriterConfiguration {
+            chunk,
+            ..Default::default()
+        },
+    )
+}
+
+/// As [`write_stream`], with an explicit [`OBOStreamWriterConfiguration`].
+pub fn write_stream_with_config<A: ForIRI, AA: ForIndex<A>, W: Write>(
+    mut write: W,
+    components: impl StreamOntology<A, AA>,
+    config: OBOStreamWriterConfiguration,
+) -> Result<W, HornedError> {
+    let chunk = config.chunk;
     let mut mapping = PrefixMapping::default();
     let mut started = false;
     let mut in_stanzas = false;
     let mut state: Option<State<A>> = None;
     let mut held: Vec<AnnotatedComponent<A>> = Vec::new();
-    let mut body: Vec<u8> = Vec::new();
+    let mut spool: Option<std::io::BufWriter<std::fs::File>> = None;
+    let mut header_out = false;
+
+    // Render the held components, and put the text where the mode says.
+    let mut flush_held = |write: &mut W,
+                          mapping: &PrefixMapping,
+                          state: &mut Option<State<A>>,
+                          held: &mut Vec<AnnotatedComponent<A>>|
+     -> Result<(), HornedError> {
+        let text = flush(mapping, state, held)?;
+        let st = state.as_mut().expect("flush sets the state");
+        match &config.mode {
+            StreamMode::Spool { dir } => {
+                if spool.is_none() {
+                    let file = match dir {
+                        Some(d) => tempfile::tempfile_in(d)?,
+                        None => tempfile::tempfile()?,
+                    };
+                    spool = Some(std::io::BufWriter::new(file));
+                }
+                spool.as_mut().expect("just set").write_all(&text)?;
+            }
+            StreamMode::FailFast => {
+                if !header_out {
+                    for h in st.take_header()? {
+                        writeln!(write, "{h}")?;
+                    }
+                    header_out = true;
+                } else if !st.header.is_empty() || !st.unhandled.is_empty() {
+                    return Err(HornedError::invalid(
+                        "a component of a streamed OBO document needs a header line after \
+                         the first stanza was written; use StreamMode::Spool, the \
+                         default, to write the header last",
+                    ));
+                }
+                write.write_all(&text)?;
+            }
+        }
+        Ok(())
+    };
 
     for item in components {
         match item? {
@@ -499,28 +599,33 @@ pub fn write_stream_chunked<A: ForIRI, AA: ForIndex<A>, W: Write>(
                 }
                 held.push(ac.clone());
                 if in_stanzas && held.len() >= chunk {
-                    flush(&mut body, &mapping, &mut state, &mut held)?;
+                    flush_held(&mut write, &mapping, &mut state, &mut held)?;
                 }
             }
         }
     }
-    flush(&mut body, &mapping, &mut state, &mut held)?;
+    flush_held(&mut write, &mapping, &mut state, &mut held)?;
     if let Some(st) = state.as_mut() {
-        for h in st.take_header()? {
-            writeln!(write, "{h}")?;
+        if !header_out {
+            for h in st.take_header()? {
+                writeln!(write, "{h}")?;
+            }
         }
     }
-    write.write_all(&body)?;
+    if let Some(spool) = spool {
+        let mut file = spool.into_inner().map_err(|e| e.into_error())?;
+        file.seek(SeekFrom::Start(0))?;
+        std::io::copy(&mut file, &mut write)?;
+    }
     Ok(write)
 }
 
-/// Render the held components as stanzas onto `body`, and note their header lines.
-fn flush<A: ForIRI, W: Write>(
-    write: &mut W,
+/// Render the held components as stanza text, and note their header lines.
+fn flush<A: ForIRI>(
     mapping: &PrefixMapping,
     state: &mut Option<State<A>>,
     held: &mut Vec<AnnotatedComponent<A>>,
-) -> Result<(), HornedError> {
+) -> Result<Vec<u8>, HornedError> {
     let st = state.get_or_insert_with(|| {
         let iri = held.iter().rev().find_map(|p| ontology_iri(&p.component));
         State::new(iri, Some(mapping))
@@ -532,7 +637,9 @@ fn flush<A: ForIRI, W: Write>(
     let mut stanzas = BTreeMap::new();
     st.process(held.iter(), &fresh, &mut stanzas);
     held.clear();
-    write_stanzas(write, stanzas)
+    let mut text = Vec::new();
+    write_stanzas(&mut text, stanzas)?;
+    Ok(text)
 }
 
 /// True for component kinds that must never be swept into the owl-axioms:

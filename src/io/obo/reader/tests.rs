@@ -200,4 +200,108 @@ mod writing {
         let (got, _) = nom_read(&text).unwrap_or_else(|e| panic!("{e}\n{text}"));
         pretty_assertions::assert_eq!(expected, got, "{text}");
     }
+
+    /// The components of `resource` in the order the reader gives them, but
+    /// with the header components first, as the writer wants.
+    fn reader_order(
+        resource: &PathBuf,
+    ) -> Vec<crate::io::StreamComponent<crate::model::AnnotatedComponent<RcStr>>> {
+        use crate::model::Component::*;
+        let doc = slurp::read_all_to_string(resource).unwrap();
+        let input = std::io::BufReader::new(doc.as_bytes());
+        let (mut items, rest): (Vec<_>, Vec<_>) =
+            super::super::Reader::<RcStr, _, _>::new(input, Default::default())
+                .map(Result::unwrap)
+                .partition(|i| match i {
+                    crate::io::StreamComponent::Prefix(..) => true,
+                    crate::io::StreamComponent::Component(ac) => matches!(
+                        ac.component,
+                        OntologyID(_) | Import(_) | OntologyAnnotation(_)
+                    ),
+                });
+        items.extend(rest);
+        items
+    }
+
+    fn fail_fast(chunk: usize) -> crate::io::obo::OBOStreamWriterConfiguration {
+        crate::io::obo::OBOStreamWriterConfiguration {
+            chunk,
+            mode: crate::io::obo::StreamMode::FailFast,
+        }
+    }
+
+    /// Fail-fast mode refuses a header line that arrives after the first
+    /// chunk, and says how to avoid that.
+    #[test]
+    fn fail_fast_errors_on_a_late_header_line() {
+        let mut errors = 0;
+        for entry in std::fs::read_dir("src/ont/owl-obo").unwrap() {
+            let path = entry.unwrap().path();
+            if path.extension().is_none_or(|e| e != "obo") {
+                continue;
+            }
+            let Some((ont, pm)) = load(&path) else {
+                continue;
+            };
+            if !batch(&ont, &pm).contains("\nowl-axioms:") {
+                continue;
+            }
+            let items = reader_order(&path).into_iter().map(Ok);
+            if let Err(e) =
+                crate::io::obo::write_stream_with_config(Vec::new(), items, fail_fast(1))
+            {
+                assert!(e.to_string().contains("StreamMode::Spool"), "{e}");
+                errors += 1;
+            }
+        }
+        assert!(errors > 0);
+    }
+
+    /// With no late header line, both modes give the same document.
+    #[rstest]
+    fn fail_fast_and_spool_agree(#[files("src/ont/owl-obo/*.obo")] resource: PathBuf) {
+        let Some((ont, pm)) = load(&resource) else {
+            return;
+        };
+        if batch(&ont, &pm).contains("\nowl-axioms:") {
+            return;
+        }
+        for chunk in [1, 5, usize::MAX] {
+            let items = || reader_order(&resource).into_iter().map(Ok);
+            let fast =
+                crate::io::obo::write_stream_with_config(Vec::new(), items(), fail_fast(chunk))
+                    .unwrap();
+            let spooled = crate::io::obo::write_stream_chunked(Vec::new(), items(), chunk).unwrap();
+            assert_eq!(fast, spooled, "chunk {chunk}");
+        }
+    }
+
+    /// The spool file is gone once the writer returns, whether it finished
+    /// or failed.
+    #[test]
+    fn spool_file_is_removed() {
+        let resource = PathBuf::from("src/ont/owl-obo/gci_and_other_class_relations.obo");
+        let dir = tempfile::tempdir().unwrap();
+        let config = || crate::io::obo::OBOStreamWriterConfiguration {
+            chunk: 1,
+            mode: crate::io::obo::StreamMode::Spool {
+                dir: Some(dir.path().to_path_buf()),
+            },
+        };
+        let items = reader_order(&resource);
+        let out = crate::io::obo::write_stream_with_config(
+            Vec::new(),
+            items.into_iter().map(Ok),
+            config(),
+        )
+        .unwrap();
+        assert!(!out.is_empty());
+        assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 0);
+
+        let mut items: Vec<_> = reader_order(&resource).into_iter().map(Ok).collect();
+        items.push(Err(crate::error::HornedError::invalid("broken stream")));
+        crate::io::obo::write_stream_with_config(Vec::new(), items.into_iter(), config())
+            .unwrap_err();
+        assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 0);
+    }
 }
