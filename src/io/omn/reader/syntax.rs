@@ -835,11 +835,38 @@ impl<'a> Syntax<'a> {
             return true;
         }
         if let Some((r2, _)) = self.punct(r, "(")
-            && (self.known_datatype(r2) || self.data_one_of(r2).is_some())
+            && self.data_shaped_parenthesized(r2)
         {
             return true;
         }
         self.data_one_of(r).is_some()
+    }
+
+    /// The rest of `DataShapedParenthesized = "(" ~ (!DataShapedMember ~ IRI
+    /// ~ (OrKw | AndKw))* ~ DataShapedMember`: a known datatype or a literal
+    /// enumeration, possibly after IRIs joined by `or`/`and`.
+    fn data_shaped_parenthesized(&self, mut i: &'a str) -> bool {
+        loop {
+            if self.data_shaped_member(i) {
+                return true;
+            }
+            match self
+                .iri(i)
+                .and_then(|(r, _)| self.kw(r, "or").or_else(|| self.kw(r, "and")))
+            {
+                Some((r, _)) => i = r,
+                None => return false,
+            }
+        }
+    }
+
+    /// `DataShapedMember = NotKw? ~ (KnownDatatypeIRI | DataOneOf)`
+    fn data_shaped_member(&self, i: &'a str) -> bool {
+        let r = match self.kw(i, "not") {
+            Some((r, _)) => r,
+            None => i,
+        };
+        self.known_datatype(r) || self.data_one_of(r).is_some()
     }
 
     /// One of the five data arms: `dp kw [Cardinality] &DataShaped DataRange`.

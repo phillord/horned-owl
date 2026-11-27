@@ -208,3 +208,31 @@ mod writing {
         assert_stream_matches_batch(o);
     }
 }
+
+/// A parenthesised filler is data when a known datatype or a literal
+/// enumeration follows IRIs joined by `or`/`and`: neither can stand in a
+/// class expression.
+#[rstest]
+#[case(
+    r#":load only (:Percentage or {"0.0"^^xsd:decimal})"#,
+    "DataAllValuesFrom"
+)]
+#[case(":load some (:Percentage and xsd:decimal)", "DataSomeValuesFrom")]
+#[case(":load some (xsd:decimal and :Percentage)", "DataSomeValuesFrom")]
+#[case(":load only (:Percentage or not xsd:decimal)", "DataAllValuesFrom")]
+#[case(":hasPart only (:Axle or :Wheel)", "ObjectAllValuesFrom")]
+fn data_range_after_custom_datatype(#[case] filler: &str, #[case] kind: &str) {
+    let doc = format!(
+        "Prefix: : <http://t/>\nPrefix: xsd: <http://www.w3.org/2001/XMLSchema#>\n\
+         Ontology: <http://t/o>\nClass: :A\n    SubClassOf: {filler}\n"
+    );
+    let (ont, _) = nom_read(&doc).unwrap_or_else(|e| panic!("{filler}: {e}"));
+    let sub = ont
+        .iter()
+        .find_map(|c| match &c.component {
+            crate::model::Component::SubClassOf(s) => Some(format!("{:?}", s.sup)),
+            _ => None,
+        })
+        .expect("a SubClassOf axiom");
+    assert!(sub.starts_with(kind), "{filler}: {sub}");
+}
