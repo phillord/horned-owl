@@ -1,0 +1,14 @@
+@prefix : <http://example.org/axiom#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+
+<http://example.org/axiom> a owl:Ontology .
+:A a owl:Class .
+:B a owl:Class .
+:Reviewed a owl:Class .
+:A rdfs:subClassOf :B .
+[ a owl:Axiom , :Reviewed ;
+  owl:annotatedSource :A ;
+  owl:annotatedProperty rdfs:subClassOf ;
+  owl:annotatedTarget :B ;
+  rdfs:comment "checked" ] .

@@ -4372,4 +4372,34 @@ o:C rdf:type owl:Class .
             }));
         }
     }
+
+    // The OWL API cannot write an extra rdf:type on an owl:Axiom node, so
+    // the Turtle is hand-written and the OWL/XML is the OWL API's lax
+    // reading of it (see src/ont/bubo/manual/axiom-extra-type.clj). Its
+    // strict mode does not annotate the SubClassOf, so is no oracle.
+    #[rstest]
+    fn axiom_extra_type_matches_xml(#[values(false, true)] lax: bool) {
+        let dir_path_buf = PathBuf::from(file!());
+        let dir = dir_path_buf.parent().unwrap().to_string_lossy();
+        let ttl = slurp::read_all_to_string(format!(
+            "{dir}/../../ont/owl-ttl/manual/axiom-extra-type.ttl"
+        ))
+        .unwrap();
+        let xml = slurp::read_all_to_string(format!(
+            "{dir}/../../ont/owl-xml/manual/axiom-extra-type.owx"
+        ))
+        .unwrap();
+
+        let (ont, incomplete) = read_ttl_incomplete(&ttl, lax).unwrap();
+        assert!(incomplete.is_complete());
+        let rdfont: SetOntology<_> = ont.into();
+        let xmlont: SetOntology<_> = crate::io::owx::reader::test::read_ok(&mut xml.as_bytes())
+            .0
+            .into();
+
+        assert_eq!(
+            normalize(rdfont.into_iter().collect()),
+            normalize(xmlont.into_iter().collect())
+        );
+    }
 }
