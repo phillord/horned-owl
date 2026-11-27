@@ -270,11 +270,14 @@ pub(super) fn iri<'a, A: ForIRI>(c: &Ctx<'_, A>, i: &'a str) -> R<'a, IRI<A>> {
         RawIri::Prefixed(prefix, local, whole) => {
             match c.mapping.expand_curie(&Curie::new(Some(prefix), local)) {
                 Ok(s) => Ok((r, c.build.iri(s))),
-                Err(curie::ExpansionError::Invalid) => Err(Err::Failure(PErr::semantic(
-                    start,
-                    whole.len(),
-                    "undefined prefix",
-                ))),
+                Err(curie::ExpansionError::Invalid) => match predefined(prefix) {
+                    Some(ns) => Ok((r, c.build.iri(format!("{ns}{local}")))),
+                    None => Err(Err::Failure(PErr::semantic(
+                        start,
+                        whole.len(),
+                        "undefined prefix",
+                    ))),
+                },
                 Err(curie::ExpansionError::MissingDefault) => Err(Err::Failure(PErr::semantic(
                     start,
                     whole.len(),
@@ -282,6 +285,18 @@ pub(super) fn iri<'a, A: ForIRI>(c: &Ctx<'_, A>, i: &'a str) -> R<'a, IRI<A>> {
                 ))),
             }
         }
+    }
+}
+
+/// The namespace of a prefix that the OWL 2 Structural Specification
+/// (section 2.4) predefines, so that a document may use it undeclared.
+fn predefined(prefix: &str) -> Option<&'static str> {
+    match prefix {
+        "owl" => Some("http://www.w3.org/2002/07/owl#"),
+        "rdf" => Some("http://www.w3.org/1999/02/22-rdf-syntax-ns#"),
+        "rdfs" => Some("http://www.w3.org/2000/01/rdf-schema#"),
+        "xsd" => Some("http://www.w3.org/2001/XMLSchema#"),
+        _ => None,
     }
 }
 

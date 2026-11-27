@@ -170,3 +170,47 @@ fn streamed_roundtrip(#[files("src/ont/owl-functional/*.ofn")] resource: PathBuf
     let (actual, _) = nom_read(std::str::from_utf8(&out).unwrap()).unwrap();
     pretty_assertions::assert_eq!(actual, expected);
 }
+
+/// `owl:`, `rdf:`, `rdfs:` and `xsd:` are predefined; the returned mapping
+/// still holds only the declared prefixes.
+#[test]
+fn predefined_prefixes() {
+    let body = "SubClassOf(:A owl:Thing) DataPropertyRange(:p xsd:string) \
+                AnnotationAssertion(rdfs:label :A \"A\") AnnotationAssertion(rdfs:seeAlso :A rdf:nil))";
+    let explicit = format!(
+        "Prefix(:=<http://example.com/>) \
+         Prefix(owl:=<http://www.w3.org/2002/07/owl#>) \
+         Prefix(rdf:=<http://www.w3.org/1999/02/22-rdf-syntax-ns#>) \
+         Prefix(rdfs:=<http://www.w3.org/2000/01/rdf-schema#>) \
+         Prefix(xsd:=<http://www.w3.org/2001/XMLSchema#>) Ontology({body}"
+    );
+    let implicit = format!("Prefix(:=<http://example.com/>) Ontology({body}");
+    let (expected, _) = nom_read(&explicit).unwrap();
+
+    let in_memory: (SetOntology<RcStr>, curie::PrefixMapping) =
+        super::read_in_memory(&mut implicit.as_bytes(), Default::default()).unwrap();
+    let streamed = nom_read(&implicit).unwrap();
+    for (ont, mapping) in [in_memory, streamed] {
+        pretty_assertions::assert_eq!(ont, expected);
+        assert_eq!(
+            mapping
+                .mappings()
+                .map(|(p, _)| p.as_str())
+                .collect::<Vec<_>>(),
+            vec![""]
+        );
+    }
+}
+
+/// A document may bind a predefined prefix to another namespace.
+#[test]
+fn predefined_prefix_can_be_redeclared() {
+    let (ont, _) =
+        nom_read("Prefix(owl:=<http://example.com/>) Ontology(Declaration(Class(owl:Thing)))")
+            .unwrap();
+    let iris: Vec<String> = ont.iter().map(|c| format!("{:?}", c.component)).collect();
+    assert!(
+        iris.iter().any(|c| c.contains("http://example.com/Thing")),
+        "{iris:?}"
+    );
+}
