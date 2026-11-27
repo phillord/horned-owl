@@ -208,3 +208,64 @@ mod writing {
         assert_stream_matches_batch(o);
     }
 }
+
+/// Reads `doc` on a thread with the usual 2 MiB stack.
+fn nom_read_on_small_stack(doc: String) -> Result<usize, String> {
+    std::thread::Builder::new()
+        .stack_size(2 << 20)
+        .spawn(move || {
+            nom_read(&doc)
+                .map(|(o, _)| o.iter().count())
+                .map_err(|e| e.to_string())
+        })
+        .unwrap()
+        .join()
+        .unwrap()
+}
+
+/// A frame with a class expression, data range or annotation nested `depth`
+/// levels deep.
+fn nested_frame(kind: &str, depth: usize) -> String {
+    let frame = match kind {
+        "not" => format!(
+            "Class: :A\n    SubClassOf: {}:B{}",
+            "not (".repeat(depth),
+            ")".repeat(depth)
+        ),
+        "some" => format!("Class: :A\n    SubClassOf: {}:B", ":p some ".repeat(depth)),
+        "data" => format!(
+            "DataProperty: :d\n    Range: {}xsd:string{}",
+            "not (".repeat(depth),
+            ")".repeat(depth)
+        ),
+        "annotation" => format!(
+            "Class: :A\n    {}rdfs:comment \"y\"{}",
+            "Annotations: ".repeat(depth),
+            " rdfs:comment \"y\"".repeat(depth - 1)
+        ),
+        _ => unreachable!(),
+    };
+    format!(
+        "Prefix: : <http://e.com/>\nPrefix: xsd: <http://www.w3.org/2001/XMLSchema#>\n\
+         Prefix: rdfs: <http://www.w3.org/2000/01/rdf-schema#>\nOntology: <http://e.com/o>\n{frame}\n"
+    )
+}
+
+/// Nesting deeper than the limit is an error, not a stack overflow; nesting
+/// up to the limit reads. Every primary counts as a level, the innermost
+/// class or datatype too.
+#[rstest]
+fn nesting_is_limited(#[values("not", "some", "data", "annotation")] kind: &str) {
+    let limit = crate::io::ofn::reader::error::MAX_NESTING;
+    let levels = if kind == "annotation" {
+        limit
+    } else {
+        limit - 1
+    };
+    assert_eq!(
+        nom_read_on_small_stack(nested_frame(kind, levels)).map(|n| n > 0),
+        Ok(true)
+    );
+    let e = nom_read_on_small_stack(nested_frame(kind, 100_000)).unwrap_err();
+    assert!(e.contains("nested more than"), "{e}");
+}

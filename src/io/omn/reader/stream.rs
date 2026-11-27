@@ -20,7 +20,7 @@ use nom::error::ParseError;
 
 use crate::error::HornedError;
 use crate::io::StreamComponent;
-use crate::io::ofn::reader::error::{Origin, PErr};
+use crate::io::ofn::reader::error::{Origin, PErr, too_deep_message};
 use crate::model::*;
 
 use super::convert::{Conv, Declarations, Out};
@@ -315,7 +315,13 @@ impl<A: ForIRI, R: BufRead, B: AsRef<Build<A>>> Reader<A, R, B> {
             };
             let slice = &text[start..end];
             let syn = Syntax::new();
-            match syn.unit(slice) {
+            let unit = syn.unit(slice);
+            if let Some(at) = syn.too_deep() {
+                return Step::Error(
+                    PErr::semantic(at, 0, too_deep_message()).into_horned(&self.buf, self.origin),
+                );
+            }
+            match unit {
                 Some((rest, unit)) if sp(rest).is_empty() => {
                     return self.convert_unit(start, end, slice, unit, build);
                 }
