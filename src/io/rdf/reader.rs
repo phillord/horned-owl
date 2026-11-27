@@ -2263,7 +2263,43 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
         let mut single_bnodes = vec![];
 
         for (this_bnode, v) in std::mem::take(&mut self.bnode) {
-            let axiom: Result<_, HornedError> = match v.as_slice() {
+            // The main node of these axioms is a blank node, so their
+            // annotations hang directly off it instead of on an owl:Axiom.
+            // Split them from the structural triples the arms below match.
+            let is_nary = v.iter().any(|t| {
+                matches!(
+                    t,
+                    [
+                        _,
+                        Term::RDF(VRDF::Type),
+                        Term::OWL(
+                            VOWL::AllDifferent
+                                | VOWL::AllDisjointClasses
+                                | VOWL::AllDisjointProperties
+                                | VOWL::NegativePropertyAssertion
+                        )
+                    ]
+                )
+            });
+            let (core, ann_triples): (Vec<_>, Vec<_>) = if is_nary {
+                v.iter().cloned().partition(|t| {
+                    matches!(
+                        t[1],
+                        Term::RDF(VRDF::Type)
+                            | Term::OWL(
+                                VOWL::Members
+                                    | VOWL::DistinctMembers
+                                    | VOWL::AssertionProperty
+                                    | VOWL::SourceIndividual
+                                    | VOWL::TargetIndividual
+                                    | VOWL::TargetValue
+                            )
+                    )
+                })
+            } else {
+                (v.to_vec(), vec![])
+            };
+            let axiom: Result<_, HornedError> = match core.as_slice() {
                 [
                     [_, Term::OWL(VOWL::AssertionProperty), pr],          //:
                     [_, Term::OWL(VOWL::SourceIndividual), Term::Iri(i)], //:
@@ -2376,10 +2412,13 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>>
             };
 
             match axiom? {
-                Some(axiom) => self.merge(AnnotatedComponent {
-                    component: axiom,
-                    ann: BTreeSet::new(),
-                }),
+                Some(axiom) => {
+                    let ann = self.parse_annotations(&ann_triples)?;
+                    self.merge(AnnotatedComponent {
+                        component: axiom,
+                        ann,
+                    })
+                }
                 _ => {
                     if v.len() == 1 {
                         single_bnodes.push(v[0].clone());
@@ -3364,6 +3403,7 @@ mod test {
         let doc = format!(
             r##"<?xml version="1.0"?>
 <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+         xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"
          xmlns:owl="http://www.w3.org/2002/07/owl#"
          xml:base="http://www.example.com/iri">
   <owl:Ontology rdf:about="http://www.example.com/iri"/>
@@ -3416,6 +3456,126 @@ mod test {
         assert_eq!(
             ont.i().disjoint_data_properties().next().unwrap().0.len(),
             3
+        );
+    }
+
+    /// Annotations that sit directly on the blank main node of an n-ary
+    /// axiom, which the OWL 2 RDF mapping uses instead of an owl:Axiom.
+    ///
+    /// bubo cannot express these: tawny splits an annotated n-ary
+    /// disjointness into pairwise axioms.
+    fn annotations_on(
+        ont: &ConcreteRDFOntology<RcStr, Rc<AnnotatedComponent<RcStr>>>,
+        kind: ComponentKind,
+    ) -> Vec<BTreeSet<Annotation<RcStr>>> {
+        ont.i()
+            .iter()
+            .filter(|ac| ac.component.kind() == kind)
+            .map(|ac| ac.ann.clone())
+            .collect()
+    }
+
+    fn comment_count(anns: &[BTreeSet<Annotation<RcStr>>]) -> Vec<usize> {
+        anns.iter().map(|a| a.len()).collect()
+    }
+
+    #[test]
+    fn annotated_all_disjoint_classes() {
+        let ont = nary(
+            r##"  <owl:Class rdf:about="#a"/>
+  <owl:Class rdf:about="#b"/>
+  <owl:Class rdf:about="#c"/>
+  <owl:AllDisjointClasses>
+    <owl:members rdf:parseType="Collection">
+      <owl:Class rdf:about="#a"/>
+      <owl:Class rdf:about="#b"/>
+      <owl:Class rdf:about="#c"/>
+    </owl:members>
+    <rdfs:comment>annotated</rdfs:comment>
+  </owl:AllDisjointClasses>"##,
+        );
+        assert_eq!(
+            comment_count(&annotations_on(&ont, ComponentKind::DisjointClasses)),
+            vec![1]
+        );
+    }
+
+    #[test]
+    fn annotated_all_different() {
+        let ont = nary(
+            r##"  <owl:NamedIndividual rdf:about="#a"/>
+  <owl:NamedIndividual rdf:about="#b"/>
+  <owl:NamedIndividual rdf:about="#c"/>
+  <owl:AllDifferent>
+    <owl:members rdf:parseType="Collection">
+      <rdf:Description rdf:about="#a"/>
+      <rdf:Description rdf:about="#b"/>
+      <rdf:Description rdf:about="#c"/>
+    </owl:members>
+    <rdfs:comment>annotated</rdfs:comment>
+  </owl:AllDifferent>"##,
+        );
+        assert_eq!(
+            comment_count(&annotations_on(&ont, ComponentKind::DifferentIndividuals)),
+            vec![1]
+        );
+    }
+
+    #[test]
+    fn annotated_all_disjoint_properties() {
+        let ont = nary(
+            r##"  <owl:ObjectProperty rdf:about="#p"/>
+  <owl:ObjectProperty rdf:about="#q"/>
+  <owl:ObjectProperty rdf:about="#r"/>
+  <owl:AllDisjointProperties>
+    <owl:members rdf:parseType="Collection">
+      <owl:ObjectProperty rdf:about="#p"/>
+      <owl:ObjectProperty rdf:about="#q"/>
+      <owl:ObjectProperty rdf:about="#r"/>
+    </owl:members>
+    <rdfs:comment>annotated</rdfs:comment>
+  </owl:AllDisjointProperties>"##,
+        );
+        assert_eq!(
+            comment_count(&annotations_on(
+                &ont,
+                ComponentKind::DisjointObjectProperties
+            )),
+            vec![1]
+        );
+    }
+
+    #[test]
+    fn annotated_negative_property_assertions() {
+        let ont = nary(
+            r##"  <owl:ObjectProperty rdf:about="#p"/>
+  <owl:DatatypeProperty rdf:about="#d"/>
+  <owl:NegativePropertyAssertion>
+    <owl:sourceIndividual rdf:resource="#s"/>
+    <owl:assertionProperty rdf:resource="#p"/>
+    <owl:targetIndividual rdf:resource="#o"/>
+    <rdfs:comment>annotated</rdfs:comment>
+  </owl:NegativePropertyAssertion>
+  <owl:NegativePropertyAssertion>
+    <owl:sourceIndividual rdf:resource="#s"/>
+    <owl:assertionProperty rdf:resource="#d"/>
+    <owl:targetValue>v</owl:targetValue>
+    <rdfs:comment>annotated</rdfs:comment>
+  </owl:NegativePropertyAssertion>"##,
+        );
+        assert_eq!(
+            comment_count(&annotations_on(
+                &ont,
+                ComponentKind::NegativeObjectPropertyAssertion
+            )),
+            vec![1]
+        );
+        assert_eq!(
+            comment_count(&annotations_on(
+                &ont,
+                ComponentKind::NegativeDataPropertyAssertion
+            )),
+            vec![1]
         );
     }
 
