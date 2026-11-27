@@ -4402,4 +4402,34 @@ o:C rdf:type owl:Class .
             normalize(xmlont.into_iter().collect())
         );
     }
+
+    // owl:bottomObjectProperty and owl:bottomDataProperty are built in, so
+    // need no declaration.
+    #[rstest]
+    fn bottom_property_restriction_is_complete(
+        #[values(false, true)] lax: bool,
+        #[values(
+            ("owl:bottomObjectProperty", "owl:Thing"),
+            ("owl:bottomDataProperty", "rdfs:Literal")
+        )]
+        case: (&str, &str),
+    ) {
+        let (prop, filler) = case;
+        let ttl = format!(
+            r#"@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+<http://example.org/o> a owl:Ontology .
+<http://example.org/A> a owl:Class ;
+  owl:equivalentClass [ a owl:Restriction ;
+    owl:onProperty {prop} ; owl:someValuesFrom {filler} ] .
+"#
+        );
+        let (ont, incomplete) = read_ttl_incomplete(&ttl, lax).unwrap();
+        assert!(incomplete.is_complete(), "{prop}: {incomplete:?}");
+        let ont: SetOntology<_> = ont.into();
+        assert!(
+            ont.iter()
+                .any(|ac| matches!(ac.component, Component::EquivalentClasses(_)))
+        );
+    }
 }

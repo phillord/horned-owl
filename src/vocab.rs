@@ -197,6 +197,8 @@ vocabulary_type! {
         (OWL, AssertionProperty, true),
         (OWL, AsymmetricProperty, false),
         (OWL, Axiom, false),
+        (OWL, BottomDataProperty, true),
+        (OWL, BottomObjectProperty, true),
         (OWL, Cardinality, true),
         (OWL, Class, false),
         (OWL, ComplementOf, true),
@@ -259,6 +261,8 @@ pub fn to_built_in_entity<A: ForIRI>(iri: &IRI<A>) -> Option<NamedOWLEntityKind>
     let ir = iri.as_ref();
     match ir {
         _ if ir == OWL::TopDataProperty.as_ref() => Some(NamedOWLEntityKind::DataProperty),
+        _ if ir == OWL::BottomDataProperty.as_ref() => Some(NamedOWLEntityKind::DataProperty),
+        _ if ir == OWL::BottomObjectProperty.as_ref() => Some(NamedOWLEntityKind::ObjectProperty),
         _ if ir == OWL::TopObjectProperty.as_ref() => Some(NamedOWLEntityKind::ObjectProperty),
         _ if ir == OWL::Thing.as_ref() => Some(NamedOWLEntityKind::Class),
         _ if ir == OWL::Nothing.as_ref() => Some(NamedOWLEntityKind::Class),
@@ -696,6 +700,14 @@ mod tests {
         );
         assert_eq!(OWL::Axiom.as_ref(), "http://www.w3.org/2002/07/owl#Axiom");
         assert_eq!(
+            OWL::BottomDataProperty.as_ref(),
+            "http://www.w3.org/2002/07/owl#bottomDataProperty"
+        );
+        assert_eq!(
+            OWL::BottomObjectProperty.as_ref(),
+            "http://www.w3.org/2002/07/owl#bottomObjectProperty"
+        );
+        assert_eq!(
             OWL::Cardinality.as_ref(),
             "http://www.w3.org/2002/07/owl#cardinality"
         );
@@ -907,6 +919,8 @@ mod tests {
         let builder = Build::new_rc();
         let iri_top_dp = builder.iri(OWL::TopDataProperty.as_ref());
         let iri_top_op = builder.iri(OWL::TopObjectProperty.as_ref());
+        let iri_bottom_dp = builder.iri(OWL::BottomDataProperty.as_ref());
+        let iri_bottom_op = builder.iri(OWL::BottomObjectProperty.as_ref());
         let iri_thing = builder.iri(OWL::Thing.as_ref());
         let iri_nothing = builder.iri(OWL::Nothing.as_ref());
         assert_eq!(
@@ -915,6 +929,14 @@ mod tests {
         );
         assert_eq!(
             to_built_in_entity(&iri_top_op),
+            Some(NamedOWLEntityKind::ObjectProperty)
+        );
+        assert_eq!(
+            to_built_in_entity(&iri_bottom_dp),
+            Some(NamedOWLEntityKind::DataProperty)
+        );
+        assert_eq!(
+            to_built_in_entity(&iri_bottom_op),
             Some(NamedOWLEntityKind::ObjectProperty)
         );
         assert_eq!(
