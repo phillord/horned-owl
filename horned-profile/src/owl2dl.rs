@@ -1034,4 +1034,27 @@ mod test {
         );
         assert!(check(&ok).is_conformant());
     }
+
+    // owl:bottomObjectProperty and owl:bottomDataProperty are built in and
+    // need no declaration.
+    #[test]
+    fn bottom_properties_need_no_declaration() {
+        use crate::{Profile, check as check_profile};
+        use horned_macro::ofn;
+        use horned_owl::model::Build;
+        let b = Build::new_rc();
+        let o: SetOntology<_> = ofn!(
+            &b,
+            "Prefix(:=<http://example.org/>)
+             Prefix(owl:=<http://www.w3.org/2002/07/owl#>)
+             Ontology(<http://example.org/>
+               Declaration(ObjectProperty(:p))
+               Declaration(DataProperty(:d))
+               SubObjectPropertyOf(owl:bottomObjectProperty :p)
+               SubDataPropertyOf(owl:bottomDataProperty :d))"
+        );
+        for p in [Profile::OWL2DL, Profile::EL, Profile::QL, Profile::RL] {
+            assert!(check_profile(&o, p).is_conformant(), "{p:?}");
+        }
+    }
 }
