@@ -115,6 +115,10 @@ fn check_axiom<A: ForIRI>(ac: &AnnotatedComponent<A>, out: &mut Vec<Violation<A>
                 "this datatype is not in RL's recognised data-range set",
             ));
         }
+        // The key's class is a subClassExpression, so not `owl:Thing`.
+        Component::HasKey(x) => {
+            check_sub(&x.ce, ac, out);
+        }
         Component::DatatypeDefinition(_) => {
             out.push(banned_axiom(
                 ac,
@@ -164,8 +168,15 @@ fn check_super<A: ForIRI>(
     }
 }
 
+/// Returns `true` if `ce` is `owl:Thing` or a legal RL subclass expression:
+/// the filler of `ObjectSomeValuesFrom` and `ObjectMaxCardinality`, where
+/// the grammar admits `owl:Thing` explicitly.
+fn is_rl_filler<A: ForIRI>(ce: &ClassExpression<A>) -> bool {
+    matches!(ce, ClassExpression::Class(c) if c.is_thing()) || is_rl_sub_class_expression(ce)
+}
+
 /// Returns `true` if `ce` is a legal RL subclass-position class
-/// expression.
+/// expression. `owl:Thing` is not (`Class other than owl:Thing`).
 ///
 /// The grammar is `C | s⊓s | s⊔s | {a1,...,an} | ∃R.s | ∃R.{a} |
 /// DataSomeValuesFrom | DataHasValue` (data range restricted to named
@@ -174,11 +185,11 @@ fn check_super<A: ForIRI>(
 /// [W3C OWL 2 Profiles §4.2.3, "Class Expressions"](https://www.w3.org/TR/owl2-profiles/#Class_Expressions_3).
 fn is_rl_sub_class_expression<A: ForIRI>(ce: &ClassExpression<A>) -> bool {
     match ce {
-        ClassExpression::Class(_) => true,
+        ClassExpression::Class(c) => !c.is_thing(),
         ClassExpression::ObjectIntersectionOf(ces) => ces.iter().all(is_rl_sub_class_expression),
         ClassExpression::ObjectUnionOf(ces) => ces.iter().all(is_rl_sub_class_expression),
         ClassExpression::ObjectOneOf(inds) => !inds.is_empty(),
-        ClassExpression::ObjectSomeValuesFrom { bce, .. } => is_rl_sub_class_expression(bce),
+        ClassExpression::ObjectSomeValuesFrom { bce, .. } => is_rl_filler(bce),
         ClassExpression::ObjectHasValue { .. } => true,
         ClassExpression::DataSomeValuesFrom { dr, .. } => is_rl_data_range(dr),
         ClassExpression::DataHasValue { .. } => true,
@@ -211,9 +222,7 @@ fn is_rl_super_class_expression<A: ForIRI>(ce: &ClassExpression<A>) -> bool {
         ClassExpression::ObjectComplementOf(inner) => is_rl_sub_class_expression(inner),
         ClassExpression::ObjectAllValuesFrom { bce, .. } => is_rl_super_class_expression(bce),
         ClassExpression::ObjectHasValue { .. } => true,
-        ClassExpression::ObjectMaxCardinality { n, bce, .. } => {
-            *n <= 1 && is_rl_sub_class_expression(bce)
-        }
+        ClassExpression::ObjectMaxCardinality { n, bce, .. } => *n <= 1 && is_rl_filler(bce),
         ClassExpression::DataAllValuesFrom { dr, .. } => is_rl_data_range(dr),
         ClassExpression::DataHasValue { .. } => true,
         ClassExpression::DataMaxCardinality { n, .. } => *n <= 1,
@@ -572,5 +581,54 @@ mod test {
         ));
 
         assert!(check(&o).is_conformant(), "{:?}", check(&o).violations());
+    }
+
+    // HasKey and sub-position classes are subClassExpressions, which
+    // exclude owl:Thing; an existential filler may still be owl:Thing.
+    #[test]
+    fn thing_in_sub_class_position_is_rejected() {
+        use horned_macro::ofn;
+        let b = Build::new_rc();
+        let bad: [SetOntology<_>; 2] = [
+            ofn!(
+                &b,
+                "Prefix(:=<http://example.org/>)
+                 Prefix(owl:=<http://www.w3.org/2002/07/owl#>)
+                 Ontology(<http://example.org/>
+                   Declaration(DataProperty(:d))
+                   HasKey(owl:Thing () (:d)))"
+            ),
+            ofn!(
+                &b,
+                "Prefix(:=<http://example.org/>)
+                 Prefix(owl:=<http://www.w3.org/2002/07/owl#>)
+                 Ontology(<http://example.org/>
+                   Declaration(Class(:A))
+                   SubClassOf(owl:Thing :A))"
+            ),
+        ];
+        for o in &bad {
+            assert!(!check(o).is_conformant());
+        }
+    }
+
+    #[test]
+    fn has_key_on_named_class_and_thing_filler_are_conformant() {
+        use horned_macro::ofn;
+        let b = Build::new_rc();
+        let o: SetOntology<_> = ofn!(
+            &b,
+            "Prefix(:=<http://example.org/>)
+             Prefix(owl:=<http://www.w3.org/2002/07/owl#>)
+             Ontology(<http://example.org/>
+               Declaration(Class(:A))
+               Declaration(Class(:B))
+               Declaration(ObjectProperty(:p))
+               Declaration(DataProperty(:d))
+               HasKey(:A () (:d))
+               SubClassOf(ObjectSomeValuesFrom(:p owl:Thing) :B)
+               SubClassOf(:A ObjectMaxCardinality(1 :p owl:Thing)))"
+        );
+        assert!(check(&o).is_conformant());
     }
 }
