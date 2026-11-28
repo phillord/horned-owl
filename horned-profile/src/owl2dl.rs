@@ -46,6 +46,7 @@ pub(crate) fn structural_violations<A: ForIRI, O: Ontology<A>>(
     violations.extend(too_few_operands_violations(o));
     violations.extend(builtin_datatype_definition_violations(o));
     violations.extend(regularity_violations(o));
+    violations.extend(ill_typed_literal_violations(o));
     violations
 }
 
@@ -378,6 +379,42 @@ fn builtin_datatype_definition_violations<A: ForIRI, O: Ontology<A>>(o: &O) -> V
                 Some(Violation::UseOfBuiltinDatatypeInDatatypeDefinition { axiom: ac.clone() })
             }
             _ => None,
+        })
+        .collect()
+}
+
+struct IllTypedLiterals(bool);
+
+impl<A: ForIRI> Visit<A> for IllTypedLiterals {
+    fn visit_literal(&mut self, l: &horned_owl::model::Literal<A>) {
+        if let horned_owl::model::Literal::Datatype {
+            literal,
+            datatype_iri,
+        } = l
+            && !crate::literals::is_well_formed(literal, datatype_iri.as_ref())
+        {
+            self.0 = true;
+        }
+    }
+}
+
+/// Returns a violation for every axiom containing a typed literal whose
+/// lexical form is not in its datatype's lexical space -- see
+/// [OWL 2 Structural Specification §5.7, "Literals"](https://www.w3.org/TR/owl2-syntax/#Literals).
+///
+/// Reported as `UseOfIllegalAxiomKind`, as the `Violation` enum has no
+/// literal-specific variant. Only some XSD datatypes are checked, see
+/// [`crate::literals`].
+fn ill_typed_literal_violations<A: ForIRI, O: Ontology<A>>(o: &O) -> Vec<Violation<A>> {
+    o.iter()
+        .filter(|ac| {
+            let mut walk = Walk::new(IllTypedLiterals(false));
+            walk.annotated_component(ac);
+            walk.into_visit().0
+        })
+        .map(|ac| Violation::UseOfIllegalAxiomKind {
+            axiom: ac.clone(),
+            reason: "literal's lexical form is not in its datatype's lexical space",
         })
         .collect()
 }
@@ -963,5 +1000,38 @@ mod test {
 
         let report = check(&o);
         assert!(report.is_conformant(), "{:?}", report.violations());
+    }
+
+    // OWL 2 DL requires a literal's lexical form to be in its datatype's
+    // lexical space, so every profile rejects an ill-typed one.
+    #[test]
+    fn ill_typed_literal_is_rejected_in_every_profile() {
+        use crate::{Profile, check as check_profile};
+        use horned_macro::ofn;
+        use horned_owl::model::Build;
+        let b = Build::new_rc();
+        let o: SetOntology<_> = ofn!(
+            &b,
+            "Prefix(:=<http://example.org/>)
+             Prefix(xsd:=<http://www.w3.org/2001/XMLSchema#>)
+             Ontology(<http://example.org/>
+               Declaration(NamedIndividual(:a))
+               Declaration(DataProperty(:d))
+               DataPropertyAssertion(:d :a \"26 dec 2014\"^^xsd:dateTime))"
+        );
+        for p in [Profile::OWL2DL, Profile::EL, Profile::QL, Profile::RL] {
+            assert!(!check_profile(&o, p).is_conformant(), "{p:?}");
+        }
+
+        let ok: SetOntology<_> = ofn!(
+            &b,
+            "Prefix(:=<http://example.org/>)
+             Prefix(xsd:=<http://www.w3.org/2001/XMLSchema#>)
+             Ontology(<http://example.org/>
+               Declaration(NamedIndividual(:a))
+               Declaration(DataProperty(:d))
+               DataPropertyAssertion(:d :a \"2014-12-26T10:00:00Z\"^^xsd:dateTime))"
+        );
+        assert!(check(&ok).is_conformant());
     }
 }

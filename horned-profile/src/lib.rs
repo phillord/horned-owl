@@ -12,6 +12,7 @@
 mod datatypes;
 pub mod declared;
 pub mod el;
+mod literals;
 pub mod owl2dl;
 pub mod ql;
 pub mod regularity;
