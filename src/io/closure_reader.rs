@@ -24,6 +24,56 @@ use crate::resolve::resolve_iri;
 use std::collections::HashMap;
 use std::path::PathBuf;
 
+/// A document-naming wrapper that keeps the original error as its source.
+#[derive(Debug)]
+struct InDocument(String, Box<dyn std::error::Error>);
+
+impl std::fmt::Display for InDocument {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "in document {}: {}", self.0, self.1)
+    }
+}
+
+impl std::error::Error for InDocument {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        Some(self.1.as_ref())
+    }
+}
+
+/// `InDocument` for `std::io::Error`, which needs a `Send + Sync` source.
+#[derive(Debug)]
+struct InDocumentIo(String, std::io::Error);
+
+impl std::fmt::Display for InDocumentIo {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "in document {}: {}", self.0, self.1)
+    }
+}
+
+impl std::error::Error for InDocumentIo {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        Some(&self.1)
+    }
+}
+
+/// Name `doc` in `e`, keeping the variant and its location.
+fn in_document(e: HornedError, doc: &str) -> HornedError {
+    let prefix = |m: String| format!("in document {doc}: {m}");
+    match e {
+        HornedError::IOError(e) => {
+            HornedError::IOError(std::io::Error::new(e.kind(), InDocumentIo(doc.into(), e)))
+        }
+        HornedError::ParserError(e, l) => {
+            HornedError::ParserError(Box::new(InDocument(doc.into(), e)), l)
+        }
+        HornedError::ValidityError(m, l) => HornedError::ValidityError(prefix(m), l),
+        HornedError::CommandError(m) => HornedError::CommandError(prefix(m)),
+        HornedError::ImportError(m) => HornedError::ImportError(prefix(m)),
+        // Has no message of its own to extend
+        HornedError::CatalogError(e) => HornedError::ImportError(prefix(e.to_string())),
+    }
+}
+
 /// One document in the closure, in whatever state its format needs.
 #[allow(clippy::large_enum_variant)]
 enum Entry<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>>> {
@@ -152,7 +202,14 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>> + Clo
             self.config.common.remote_body_limit,
             self.config.common.local_only,
             self.config.common.catalog.as_deref(),
-        )?;
+        )
+        .map_err(|e| {
+            if top_level {
+                e
+            } else {
+                in_document(e, source_iri.as_ref())
+            }
+        })?;
         self.parse_content_from_iri(s, top_level, relative_doc_iri, new_doc_iri)
     }
 
@@ -183,20 +240,28 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>> + Clo
         relative_doc_iri: Option<&IRI<A>>,
         new_doc_iri: IRI<A>,
     ) -> Result<Vec<IRI<A>>, HornedError> {
-        let (mut entry, imports) = match self.resolve_format(&s, top_level) {
+        let doc = new_doc_iri.clone();
+        let parsed = (|| match self.resolve_format(&s, top_level) {
             InputFormat::Rdf(format) => {
                 let mut config = self.config.clone();
                 config.format = format;
                 let mut p = parser_with_build(&mut s.as_bytes(), config)?;
                 let imports = p.parse_imports()?;
                 p.parse_declarations()?;
-                (Entry::Rdf(p), imports)
+                Ok((Entry::Rdf(p), imports))
             }
             format => {
                 let (o, imports) = self.read_complete(&s, format)?;
-                (Entry::Done(o), imports)
+                Ok((Entry::Done(o), imports))
             }
-        };
+        })();
+        let (mut entry, imports) = parsed.map_err(|e: HornedError| {
+            if top_level {
+                e
+            } else {
+                in_document(e, doc.as_ref())
+            }
+        })?;
 
         // push the DocIRI onto the partially parsed ontology
         let o: &mut O = entry.mut_ontology_ref();
@@ -364,7 +429,8 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>> + Clo
         // while retaining a reference to the others. Hence the unsafe.
         unsafe {
             if let Some(e) = (*entries_pointer).get_mut(iri) {
-                e.finish_parse(&import_closure)?;
+                e.finish_parse(&import_closure)
+                    .map_err(|err| in_document(err, iri.as_ref()))?;
             } else {
                 return Ok(false);
             }
