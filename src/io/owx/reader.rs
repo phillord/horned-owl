@@ -1690,6 +1690,11 @@ from_xml! {IRI, r, end,
                         seen = true;
                         push_decoded(r, e, &mut text)?;
                     },
+                    (ref _ns,Event::CData(ref e)) => {
+                        // An empty section is no text, as in `<IRI></IRI>`.
+                        seen |= !e.is_empty();
+                        push_decoded(r, e, &mut text)?;
+                    },
                     (ref _ns,Event::GeneralRef(ref g)) => {
                         seen = true;
                         push_general_ref(r, g, &mut text)?;
