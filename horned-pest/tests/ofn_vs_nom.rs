@@ -326,4 +326,45 @@ mod grammar {
             assert_eq!(pest, ours, "disagree on {s:?}: pest {pest:?}, nom {ours:?}");
         }
     }
+
+    #[test]
+    fn language_tag_known_cases() {
+        for (s, ok) in [
+            ("en", true),
+            ("en-US", true),
+            ("de-CH", true),
+            ("zh-Hans", true),
+            ("zh-Hans-CN", true),
+            ("en-scotland", true),
+            ("es-419", true),
+            ("sl-rozaj-biske", true),
+            ("en-a-bbb-x-a-ccc", true),
+            ("x-private", true),
+            ("i-klingon", true),
+            ("art-lojban", true),
+            // The ordered choice takes `en-GB` and never reaches the irregular tag.
+            ("en-GB-oed", false),
+            ("sgn-BE-FR", false),
+            ("en_US", false),
+            ("en--US", false),
+            ("en-", false),
+            ("-en", false),
+            ("", false),
+            ("e", false),
+            ("abcdefghi", false),
+            ("en-abcdefghi", false),
+            ("x-", false),
+            ("12", false),
+            ("en US", false),
+        ] {
+            let doc = format!("@{s}");
+            let pest = OwlFunctionalLexer::lex(Rule::LanguageTag, &doc)
+                .ok()
+                .and_then(|mut p| p.next())
+                .is_some_and(|p| p.as_str() == doc);
+            assert_eq!(pest, ok, "pest on {s:?}");
+            let ours = probe::language_tag_len(s) == Some(s.len());
+            assert_eq!(ours, ok, "nom on {s:?}");
+        }
+    }
 }
