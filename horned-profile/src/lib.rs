@@ -26,6 +26,28 @@ use horned_owl::model::{
     ObjectPropertyExpression, Ontology,
 };
 
+/// Returns `true` if `ac` mentions an anonymous individual in an
+/// `Individual` position (assertions, `ObjectOneOf`, `ObjectHasValue`).
+///
+/// Anonymous individuals in annotation values are not `Individual`s and are
+/// not counted.
+pub(crate) fn uses_anonymous_individual<A: ForIRI>(ac: &AnnotatedComponent<A>) -> bool {
+    use horned_owl::model::Individual;
+    use horned_owl::visitor::immutable::{Visit, Walk};
+
+    struct Finder(bool);
+    impl<A: ForIRI> Visit<A> for Finder {
+        fn visit_individual(&mut self, i: &Individual<A>) {
+            if matches!(i, Individual::Anonymous(_)) {
+                self.0 = true;
+            }
+        }
+    }
+    let mut walk = Walk::new(Finder(false));
+    walk.annotated_component(ac);
+    walk.into_visit().0
+}
+
 /// Checks `o` against `profile`.
 pub fn check<A: ForIRI, O: Ontology<A>>(o: &O, profile: Profile) -> ProfileReport<A> {
     match profile {

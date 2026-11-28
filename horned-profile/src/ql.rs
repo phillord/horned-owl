@@ -43,6 +43,12 @@ pub fn check<A: ForIRI, O: Ontology<A>>(o: &O) -> ProfileReport<A> {
 
 /// Checks `ac` against the QL profile, pushing any violations onto `out`.
 fn check_axiom<A: ForIRI>(ac: &AnnotatedComponent<A>, out: &mut Vec<Violation<A>>) {
+    // Anonymous individuals are not supported -- OWL 2 Profiles §3.2.2
+    // grammar (`Individual := NamedIndividual`).
+    if crate::uses_anonymous_individual(ac) {
+        out.push(banned(ac, "anonymous individuals are not permitted in QL"));
+    }
+
     match &ac.component {
         Component::SubClassOf(x) => {
             check_sub(&x.sub, ac, out);
@@ -721,5 +727,35 @@ mod test {
                NegativeDataPropertyAssertion(:d :a \"x\"))"
         );
         assert!(!check(&o).is_conformant());
+    }
+
+    // Anonymous individuals are excluded from the profile's grammar.
+    #[test]
+    fn anonymous_individual_is_rejected() {
+        use horned_macro::ofn;
+        let b = Build::new_rc();
+        let o: SetOntology<_> = ofn!(
+            &b,
+            "Prefix(:=<http://example.org/>)
+             Ontology(<http://example.org/>
+               Declaration(Class(:A))
+               ClassAssertion(:A _:x))"
+        );
+        assert!(!check(&o).is_conformant());
+    }
+
+    #[test]
+    fn named_individual_assertion_is_conformant() {
+        use horned_macro::ofn;
+        let b = Build::new_rc();
+        let o: SetOntology<_> = ofn!(
+            &b,
+            "Prefix(:=<http://example.org/>)
+             Ontology(<http://example.org/>
+               Declaration(Class(:A))
+               Declaration(NamedIndividual(:x))
+               ClassAssertion(:A :x))"
+        );
+        assert!(check(&o).is_conformant());
     }
 }
