@@ -208,3 +208,67 @@ mod writing {
         assert_stream_matches_batch(o);
     }
 }
+
+mod predefined_prefixes {
+    use super::*;
+
+    const BODY: &str = "Class: :A\n    SubClassOf: owl:Thing\n    Annotations: rdfs:label \"A\"^^xsd:string, rdfs:seeAlso rdf:nil\n\
+                        DataProperty: :p\n    Range: xsd:string\n";
+
+    fn doc(prefixes: &str) -> String {
+        format!(
+            "Prefix: : <http://example.com/>\n{prefixes}Ontology: <http://example.com/o>\n{BODY}"
+        )
+    }
+
+    fn declared() -> String {
+        doc("Prefix: owl: <http://www.w3.org/2002/07/owl#>\n\
+             Prefix: rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>\n\
+             Prefix: rdfs: <http://www.w3.org/2000/01/rdf-schema#>\n\
+             Prefix: xsd: <http://www.w3.org/2001/XMLSchema#>\n")
+    }
+
+    fn names(pm: &curie::PrefixMapping) -> Vec<String> {
+        pm.mappings().map(|(p, _)| p.to_string()).collect()
+    }
+
+    /// Predefined prefixes expand undeclared; the mapping holds only declared ones.
+    #[test]
+    fn expand_without_declaration() {
+        let (expected, _) = nom_read(&declared()).unwrap();
+        let implicit = doc("");
+        let batch = nom_read(&implicit).unwrap();
+        let streamed: Vec<_> = stream_all(&implicit, 7);
+        let mut ont = SetOntology::<RcStr>::default();
+        for i in streamed {
+            if let StreamComponent::Component(c) = i {
+                crate::model::MutableOntology::insert(&mut ont, c);
+            }
+        }
+        assert_eq!(batch.0, expected);
+        assert_eq!(ont, expected);
+        assert_eq!(names(&batch.1), vec![""]);
+    }
+
+    /// A declared prefix wins over the predefined one.
+    #[test]
+    fn redeclared_prefix_wins() {
+        let d = "Prefix: owl: <http://example.com/>\nOntology: <http://example.com/o>\nClass: owl:Thing\n";
+        let (ont, pm) = nom_read(d).unwrap();
+        let text = format!("{:?}", ont.iter().collect::<Vec<_>>());
+        assert!(text.contains("http://example.com/Thing"), "{text}");
+        assert!(!text.contains("owl#Thing"), "{text}");
+        assert_eq!(names(&pm), vec!["owl"]);
+    }
+
+    /// Other undeclared prefixes are still an error.
+    #[test]
+    fn unknown_prefix_errors() {
+        let d = "Ontology: <http://example.com/o>\nClass: foo:A\n";
+        let e = nom_read(d).unwrap_err().to_string();
+        assert!(e.contains("undefined prefix"), "{e}");
+        let streamed: Vec<_> =
+            super::super::Reader::<RcStr, _, _>::new(d.as_bytes(), Default::default()).collect();
+        assert!(streamed.iter().any(|i| i.is_err()));
+    }
+}

@@ -50,6 +50,18 @@ pub struct Conv<'c, 'a, A: ForIRI> {
 
 type AnnItem<A, T> = (BTreeSet<Annotation<A>>, T);
 
+/// The namespace of a prefix that the OWL 2 Structural Specification
+/// (section 2.4) predefines, so that a document may use it undeclared.
+fn predefined(prefix: &str) -> Option<&'static str> {
+    match prefix {
+        "owl" => Some("http://www.w3.org/2002/07/owl#"),
+        "rdf" => Some("http://www.w3.org/1999/02/22-rdf-syntax-ns#"),
+        "rdfs" => Some("http://www.w3.org/2000/01/rdf-schema#"),
+        "xsd" => Some("http://www.w3.org/2001/XMLSchema#"),
+        _ => None,
+    }
+}
+
 fn invalid<'a, T>(at: &'a str, msg: impl Into<String>) -> CR<'a, T> {
     Err(PErr::semantic(at, at.len().min(1), msg))
 }
@@ -103,9 +115,12 @@ impl<'c, 'a, A: ForIRI> Conv<'c, 'a, A> {
         };
         match self.prefixes.expand_curie(&curie) {
             Ok(s) => Ok(self.build.iri(s)),
-            Err(curie::ExpansionError::Invalid) => {
-                Err(PErr::semantic(x.text, x.text.len(), "undefined prefix"))
-            }
+            Err(curie::ExpansionError::Invalid) => match x.kind {
+                IriKind::Abbrev(prefix, local) if predefined(prefix).is_some() => Ok(self
+                    .build
+                    .iri(format!("{}{local}", predefined(prefix).unwrap_or_default()))),
+                _ => Err(PErr::semantic(x.text, x.text.len(), "undefined prefix")),
+            },
             Err(curie::ExpansionError::MissingDefault) => Err(PErr::semantic(
                 x.text,
                 x.text.len(),

@@ -147,16 +147,33 @@ pub fn read<
             .cloned(),
     )?;
 
+    // The OWL 2 Structural Specification (section 2.4) predefines owl:, rdf:,
+    // rdfs: and xsd:. They expand unless the document declares them; the
+    // returned mapping holds only the declared prefixes.
+    let mut expand = prefixes.clone();
+    for (name, ns) in [
+        ("owl", horned_owl::vocab::Namespace::OWL),
+        ("rdf", horned_owl::vocab::Namespace::RDF),
+        ("rdfs", horned_owl::vocab::Namespace::RDFS),
+        ("xsd", horned_owl::vocab::Namespace::XSD),
+    ] {
+        if !prefixes.mappings().any(|(p, _)| p == name) {
+            expand
+                .add_prefix(name, ns.as_ref())
+                .expect("predefined prefixes are valid");
+        }
+    }
+
     // Pass 1.5: collect DataProperty / Datatype declarations so that HasKey
     // keys, Misc EquivalentProperties/DisjointProperties lists, and bare-IRI
     // restriction fillers can be typed correctly in pass 2.  We clone the
     // pairs (pass 2 owns the originals); IRI resolution uses the prefix
     // mapping built above.
     let declarations =
-        from_pair::declarations_from_frames(children.iter().cloned(), build, &prefixes);
+        from_pair::declarations_from_frames(children.iter().cloned(), build, &expand);
 
     // Pass 2: build the ontology under a prefix-aware, declaration-aware context.
-    let ctx = Context::with_decls(build, &prefixes, &declarations);
+    let ctx = Context::with_decls(build, &expand, &declarations);
     let mut ontology: O = Default::default();
 
     for child in children {
@@ -266,4 +283,49 @@ pub fn read<
     }
 
     Ok((ontology, prefixes))
+}
+
+#[cfg(test)]
+mod predefined_prefix_tests {
+    use super::{HornedError, read};
+    use horned_owl::model::RcStr;
+    use horned_owl::ontology::set::SetOntology;
+
+    type Read = Result<(SetOntology<RcStr>, curie::PrefixMapping), HornedError>;
+
+    fn rd(doc: &str) -> Read {
+        read(doc.as_bytes(), Default::default())
+    }
+
+    const BODY: &str = "Ontology: <http://example.com/o>\nClass: :A\n    SubClassOf: owl:Thing\n    \
+                        Annotations: rdfs:label \"A\"^^xsd:string\nDataProperty: :p\n    Range: xsd:string\n";
+
+    #[test]
+    fn expand_without_declaration() {
+        let (expected, _) = rd(&format!(
+            "Prefix: : <http://example.com/>\n\
+             Prefix: owl: <http://www.w3.org/2002/07/owl#>\n\
+             Prefix: rdfs: <http://www.w3.org/2000/01/rdf-schema#>\n\
+             Prefix: xsd: <http://www.w3.org/2001/XMLSchema#>\n{BODY}"
+        ))
+        .unwrap();
+        let (ont, pm) = rd(&format!("Prefix: : <http://example.com/>\n{BODY}")).unwrap();
+        assert_eq!(ont, expected);
+        let names: Vec<_> = pm.mappings().map(|(p, _)| p.to_string()).collect();
+        assert_eq!(names, vec![""]);
+    }
+
+    #[test]
+    fn redeclared_prefix_wins() {
+        let (ont, _) =
+            rd("Prefix: owl: <http://example.com/>\nOntology: <http://example.com/o>\nClass: owl:Thing\n")
+                .unwrap();
+        let text = format!("{:?}", ont.iter().collect::<Vec<_>>());
+        assert!(text.contains("http://example.com/Thing"), "{text}");
+    }
+
+    #[test]
+    fn unknown_prefix_errors() {
+        assert!(rd("Ontology: <http://example.com/o>\nClass: foo:A\n").is_err());
+    }
 }
