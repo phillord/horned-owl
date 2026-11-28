@@ -21,7 +21,7 @@ use crate::ontology::set::SetIndex;
 use crate::resolve::path_to_file_iri;
 use crate::resolve::resolve_iri;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 
 /// A document-naming wrapper that keeps the original error as its source.
@@ -136,6 +136,10 @@ pub struct ClosureOntologyParser<
     // the Ontology it imports, so we need to be able to resolve
     // either back to the same entry.
     alias: HashMap<IRI<A>, IRI<A>>,
+    // Every IRI that a document has been asked for by or read from, so
+    // that a document reachable by several import paths, or by a cycle,
+    // is read once.
+    visited: HashSet<IRI<A>>,
     config: RDFParserConfiguration<A, B>,
 }
 
@@ -148,6 +152,7 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>> + Clo
             entries: HashMap::new(),
             order: Vec::new(),
             alias: HashMap::new(),
+            visited: HashSet::new(),
             config,
         }
     }
@@ -180,6 +185,11 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>> + Clo
     ///
     /// A `Vec` of the declared IRIs from the parsed Ontology and its
     /// import closure, or an error.
+    ///
+    /// Each document is read once, however many import paths reach it,
+    /// and import cycles are legal. Documents are ordered depth first,
+    /// by first encounter, with imports in document order (sorted, for
+    /// the formats that hold them in a set).
     pub fn parse_iri(
         &mut self,
         source_iri: &IRI<A>,
@@ -196,6 +206,11 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>> + Clo
         relative_doc_iri: Option<&IRI<A>>,
         top_level: bool,
     ) -> Result<Vec<IRI<A>>, HornedError> {
+        // Imports form a set of documents and may be cyclic: an import
+        // already in the closure, by any of its names, adds nothing.
+        if !top_level && self.in_closure(source_iri) {
+            return Ok(vec![]);
+        }
         let (new_doc_iri, s) = resolve_iri(
             source_iri,
             relative_doc_iri,
@@ -210,7 +225,21 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>> + Clo
                 in_document(e, source_iri.as_ref())
             }
         })?;
+        // A document may be reached by a name other than the one it was
+        // asked for, such as through a redirect or a catalog.
+        let seen = self.visited.contains(&new_doc_iri);
+        self.visited.insert(source_iri.clone());
+        if !top_level && seen {
+            return Ok(vec![]);
+        }
         self.parse_content_from_iri(s, top_level, relative_doc_iri, new_doc_iri)
+    }
+
+    /// Whether `iri` names a document that has been, or is being, read:
+    /// as the IRI it was requested by, the IRI it was read from, or the
+    /// ontology IRI or version IRI that it declares.
+    fn in_closure(&self, iri: &IRI<A>) -> bool {
+        self.visited.contains(iri) || self.entries.contains_key(iri) || self.alias.contains_key(iri)
     }
 
     /// Parse content from some IRI
@@ -240,6 +269,7 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>> + Clo
         relative_doc_iri: Option<&IRI<A>>,
         new_doc_iri: IRI<A>,
     ) -> Result<Vec<IRI<A>>, HornedError> {
+        self.visited.insert(new_doc_iri.clone());
         let doc = new_doc_iri.clone();
         let parsed = (|| match self.resolve_format(&s, top_level) {
             InputFormat::Rdf(format) => {
@@ -278,6 +308,12 @@ impl<A: ForIRI, AA: ForIndex<A>, O: RDFOntology<A, AA>, B: AsRef<Build<A>> + Clo
             .clone()
             .viri_or_iri()
             .unwrap_or_else(|| new_doc_iri.clone());
+
+        // Two documents may declare the same ontology; the first one
+        // read is the one in the closure.
+        if !top_level && self.entries.contains_key(&storage_iri) {
+            return Ok(vec![]);
+        }
 
         // Stuff the iri of this ontology, if we have one into a vec
         let mut res = match id.clone().viri_or_iri() {
