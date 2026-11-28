@@ -54,9 +54,14 @@ impl<A: ForIRI, R: BufRead, B: AsRef<Build<A>>> Reader<A, R, B> {
     /// A `Reader` over `bufread`. Does no I/O itself -- parsing starts on
     /// the first call to `next()`.
     pub fn new(bufread: R, config: ParserConfiguration<A, B>) -> Self {
+        let mut reader = NsReader::from_reader(bufread);
+        // `<X/>` is the same OWL/XML as `<X></X>`. Expanding it lets the
+        // element loops that read to the matching End tag (`Literal`, `IRI`)
+        // see one.
+        reader.config_mut().expand_empty_elements = true;
         Reader {
             r: Read {
-                reader: NsReader::from_reader(bufread),
+                reader,
                 build: config.build,
                 lax: config.lax,
                 mapping: PrefixMapping::default(),
