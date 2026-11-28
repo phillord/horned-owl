@@ -9,3 +9,6 @@ license = "LGPL-3.0"
 
 [dependencies]
 horned-owl = { path = "../", version = "6.0.0" }
+
+[dev-dependencies]
+horned-macro = { path = "../horned-macro", version = "6.0.0" }

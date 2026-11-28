@@ -166,6 +166,20 @@ fn check_axiom<A: ForIRI>(ac: &AnnotatedComponent<A>, out: &mut Vec<Violation<A>
         Component::SameIndividual(_) => {
             out.push(banned(ac, "SameIndividual is not permitted in QL"));
         }
+        // Negative property assertions are excluded from QL's assertion
+        // production -- OWL 2 Profiles §3.1 and §3.2.5.
+        Component::NegativeObjectPropertyAssertion(_) => {
+            out.push(banned(
+                ac,
+                "NegativeObjectPropertyAssertion is not permitted in QL",
+            ));
+        }
+        Component::NegativeDataPropertyAssertion(_) => {
+            out.push(banned(
+                ac,
+                "NegativeDataPropertyAssertion is not permitted in QL",
+            ));
+        }
         _ => {}
     }
 }
@@ -679,6 +693,33 @@ mod test {
             b.named_individual("http://example.com/j").into(),
         ]));
 
+        assert!(!check(&o).is_conformant());
+    }
+
+    // Negative property assertions are banned in QL (Profiles §3.2.5).
+    #[test]
+    fn negative_property_assertions_are_rejected() {
+        use horned_macro::ofn;
+        let b = Build::new_rc();
+        let o: SetOntology<_> = ofn!(
+            &b,
+            "Prefix(:=<http://example.org/>)
+             Ontology(<http://example.org/>
+               Declaration(ObjectProperty(:p))
+               Declaration(NamedIndividual(:a))
+               Declaration(NamedIndividual(:b))
+               NegativeObjectPropertyAssertion(:p :a :b))"
+        );
+        assert!(!check(&o).is_conformant());
+
+        let o: SetOntology<_> = ofn!(
+            &b,
+            "Prefix(:=<http://example.org/>)
+             Ontology(<http://example.org/>
+               Declaration(DataProperty(:d))
+               Declaration(NamedIndividual(:a))
+               NegativeDataPropertyAssertion(:d :a \"x\"))"
+        );
         assert!(!check(&o).is_conformant());
     }
 }
